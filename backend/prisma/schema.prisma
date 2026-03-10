@@ -72,6 +72,7 @@ model Contrato {
   status              StatusContrato @default(ATIVO)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
+  cobrancas           Cobranca[]
 
   @@map("contratos")
 }
@@ -80,4 +81,30 @@ enum StatusContrato {
   ATIVO
   SUSPENSO
   ENCERRADO
+}
+
+model Cobranca {
+  id                  String          @id @default(cuid())
+  contratoId          String
+  contrato            Contrato        @relation(fields: [contratoId], references: [id])
+  mesReferencia       Int
+  anoReferencia       Int
+  valorBruto          Decimal         @db.Decimal(10, 2)
+  percentualDesconto  Decimal         @db.Decimal(5, 2)
+  valorDesconto       Decimal         @db.Decimal(10, 2)
+  valorLiquido        Decimal         @db.Decimal(10, 2)
+  status              StatusCobranca  @default(PENDENTE)
+  dataVencimento      DateTime
+  dataPagamento       DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@map("cobrancas")
+}
+
+enum StatusCobranca {
+  PENDENTE
+  PAGO
+  VENCIDO
+  CANCELADO
 }
