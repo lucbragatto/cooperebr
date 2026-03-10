@@ -16,6 +16,7 @@ model Cooperado {
   status       StatusCooperado @default(PENDENTE)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+  ucs          Uc[]
 
   @@map("cooperados")
 }
@@ -25,4 +26,30 @@ enum StatusCooperado {
   ATIVO
   SUSPENSO
   ENCERRADO
+}
+
+model Uc {
+  id          String    @id @default(cuid())
+  numero      String    @unique
+  endereco    String
+  cidade      String
+  estado      String
+  cooperadoId String
+  cooperado   Cooperado @relation(fields: [cooperadoId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("ucs")
+}
+
+model Usina {
+  id          String   @id @default(cuid())
+  nome        String
+  potenciaKwp Decimal  @db.Decimal(10, 2)
+  cidade      String
+  estado      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("usinas")
 }
