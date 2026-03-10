@@ -17,6 +17,7 @@ model Cooperado {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   ucs          Uc[]
+  contratos    Contrato[]
 
   @@map("cooperados")
 }
@@ -29,27 +30,54 @@ enum StatusCooperado {
 }
 
 model Uc {
-  id          String    @id @default(cuid())
-  numero      String    @unique
+  id          String     @id @default(cuid())
+  numero      String     @unique
   endereco    String
   cidade      String
   estado      String
   cooperadoId String
-  cooperado   Cooperado @relation(fields: [cooperadoId], references: [id])
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  cooperado   Cooperado  @relation(fields: [cooperadoId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  contratos   Contrato[]
 
   @@map("ucs")
 }
 
 model Usina {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   nome        String
-  potenciaKwp Decimal  @db.Decimal(10, 2)
+  potenciaKwp Decimal    @db.Decimal(10, 2)
   cidade      String
   estado      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  contratos   Contrato[]
 
   @@map("usinas")
+}
+
+model Contrato {
+  id                  String         @id @default(cuid())
+  numero              String         @unique
+  cooperadoId         String
+  cooperado           Cooperado      @relation(fields: [cooperadoId], references: [id])
+  ucId                String
+  uc                  Uc             @relation(fields: [ucId], references: [id])
+  usinaId             String
+  usina               Usina          @relation(fields: [usinaId], references: [id])
+  dataInicio          DateTime
+  dataFim             DateTime?
+  percentualDesconto  Decimal        @db.Decimal(5, 2)
+  status              StatusContrato @default(ATIVO)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@map("contratos")
+}
+
+enum StatusContrato {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
 }
