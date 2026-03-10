@@ -18,6 +18,7 @@ model Cooperado {
   updatedAt    DateTime        @updatedAt
   ucs          Uc[]
   contratos    Contrato[]
+  ocorrencias  Ocorrencia[]
 
   @@map("cooperados")
 }
@@ -40,6 +41,7 @@ model Uc {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   contratos   Contrato[]
+  ocorrencias Ocorrencia[]
 
   @@map("ucs")
 }
@@ -107,4 +109,43 @@ enum StatusCobranca {
   PAGO
   VENCIDO
   CANCELADO
+}
+
+model Ocorrencia {
+  id          String            @id @default(cuid())
+  cooperadoId String
+  cooperado   Cooperado         @relation(fields: [cooperadoId], references: [id])
+  ucId        String?
+  uc          Uc?               @relation(fields: [ucId], references: [id])
+  tipo        TipoOcorrencia
+  descricao   String
+  status      StatusOcorrencia  @default(ABERTA)
+  prioridade  PrioridadeOcorrencia
+  resolucao   String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("ocorrencias")
+}
+
+enum TipoOcorrencia {
+  FALTA_ENERGIA
+  MEDICAO_INCORRETA
+  PROBLEMA_FATURA
+  SOLICITACAO
+  OUTROS
+}
+
+enum StatusOcorrencia {
+  ABERTA
+  EM_ANDAMENTO
+  RESOLVIDA
+  CANCELADA
+}
+
+enum PrioridadeOcorrencia {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
 }

@@ -7,9 +7,10 @@ import { UcsModule } from './ucs/ucs.module';
 import { UsinasModule } from './usinas/usinas.module';
 import { ContratosModule } from './contratos/contratos.module';
 import { CobrancasModule } from './cobrancas/cobrancas.module';
+import { OcorrenciasModule } from './ocorrencias/ocorrencias.module';
 
 @Module({
-  imports: [CooperadosModule, UcsModule, UsinasModule, ContratosModule, CobrancasModule],
+  imports: [CooperadosModule, UcsModule, UsinasModule, ContratosModule, CobrancasModule, OcorrenciasModule],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })
