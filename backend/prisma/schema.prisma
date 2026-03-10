@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Cooperado {
+  id           String          @id @default(cuid())
+  nomeCompleto String
+  cpf          String          @unique
+  email        String          @unique
+  telefone     String?
+  status       StatusCooperado @default(PENDENTE)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("cooperados")
+}
+
+enum StatusCooperado {
+  PENDENTE
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+}
