@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { createClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
+import { PerfilUsuario } from './perfil.enum';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
     cpf?: string;
     telefone?: string;
     senha: string;
+    perfil?: PerfilUsuario;
   }) {
     const orConditions: any[] = [{ email: data.email }];
     if (data.cpf) orConditions.push({ cpf: data.cpf });
@@ -47,20 +49,23 @@ export class AuthService {
     });
 
     if (error || !supabaseData.user) {
-      throw new ConflictException(error?.message ?? 'Erro ao criar usuário no Supabase');
+      throw new ConflictException(
+        error?.message ?? 'Erro ao criar usuário no Supabase',
+      );
     }
 
-    const usuario = await this.prisma.usuario.create({
+    const usuario = await (this.prisma.usuario.create as any)({
       data: {
         nome: data.nome,
         email: data.email,
         cpf: data.cpf,
         telefone: data.telefone,
         supabaseId: supabaseData.user.id,
+        perfil: data.perfil ?? PerfilUsuario.COOPERADO,
       },
     });
 
-    const token = this.assinarToken(usuario.id, usuario.email);
+    const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil);
     return { token, usuario: this.formatarUsuario(usuario) };
   }
 
@@ -88,20 +93,22 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    const usuario = await this.prisma.usuario.findUnique({
+    const usuario: any = await this.prisma.usuario.findUnique({
       where: { email },
     });
 
     if (!usuario) {
-      throw new InternalServerErrorException('Usuário não encontrado na base local');
+      throw new InternalServerErrorException(
+        'Usuário não encontrado na base local',
+      );
     }
 
-    const token = this.assinarToken(usuario.id, usuario.email);
+    const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil);
     return { token, usuario: this.formatarUsuario(usuario) };
   }
 
-  private assinarToken(sub: string, email: string) {
-    return this.jwtService.sign({ sub, email });
+  private assinarToken(sub: string, email: string, perfil: PerfilUsuario) {
+    return this.jwtService.sign({ sub, email, perfil });
   }
 
   private formatarUsuario(usuario: {
@@ -110,6 +117,7 @@ export class AuthService {
     email: string;
     cpf: string | null;
     telefone: string | null;
+    perfil: PerfilUsuario;
   }) {
     return {
       id: usuario.id,
@@ -117,6 +125,7 @@ export class AuthService {
       email: usuario.email,
       cpf: usuario.cpf,
       telefone: usuario.telefone,
+      perfil: usuario.perfil,
     };
   }
 }

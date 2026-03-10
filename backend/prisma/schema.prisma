@@ -8,16 +8,24 @@ datasource db {
 }
 
 model Usuario {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   nome       String
-  email      String   @unique
-  cpf        String?  @unique
-  telefone   String?  @unique
-  supabaseId String?  @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  email      String        @unique
+  cpf        String?       @unique
+  telefone   String?       @unique
+  supabaseId String?       @unique
+  perfil     PerfilUsuario @default(COOPERADO)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@map("usuarios")
+}
+
+enum PerfilUsuario {
+  SUPER_ADMIN
+  ADMIN
+  OPERADOR
+  COOPERADO
 }
 
 model Cooperado {

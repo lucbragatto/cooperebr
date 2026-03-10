@@ -1,12 +1,14 @@
-import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
+import { PerfilUsuario } from './perfil.enum';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('register')
   register(
     @Body()
@@ -16,11 +18,13 @@ export class AuthController {
       cpf?: string;
       telefone?: string;
       senha: string;
+      perfil?: PerfilUsuario;
     },
   ) {
     return this.authService.register(body);
   }
 
+  @Public()
   @Post('login')
   login(
     @Body()
@@ -32,7 +36,6 @@ export class AuthController {
     return this.authService.login(body.identificador, body.senha);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@CurrentUser() usuario: any) {
     return usuario;

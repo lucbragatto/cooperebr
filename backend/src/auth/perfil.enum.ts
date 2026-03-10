@@ -1,0 +1,6 @@
+export enum PerfilUsuario {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  ADMIN = 'ADMIN',
+  OPERADOR = 'OPERADOR',
+  COOPERADO = 'COOPERADO',
+}
