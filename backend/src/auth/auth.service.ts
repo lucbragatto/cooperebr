@@ -70,6 +70,10 @@ export class AuthService {
   }
 
   async login(identificador: string, senha: string) {
+    if (!identificador || !senha) {
+      throw new UnauthorizedException('Credenciais inválidas');
+    }
+
     let email = identificador;
 
     if (!identificador.includes('@')) {
