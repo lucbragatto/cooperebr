@@ -22,7 +22,9 @@
       "Bash(cd ../web && echo \"\" | npx shadcn@latest init --defaults 2>&1)",
       "Bash(cd ../web && echo \"=== Estrutura ===\" && ls && echo \"\" && echo \"=== components.json ===\" && cat components.json && echo \"\" && echo \"=== Dependências instaladas ===\" && node -e \"const p=require\\('./package.json'\\); console.log\\([...Object.keys\\(p.dependencies||{}\\),...Object.keys\\(p.devDependencies||{}\\)].join\\('\\\\n'\\)\\)\")",
       "Bash(cd ../web && echo \"\" | npx shadcn@latest add button input label card table badge 2>&1)",
-      "Bash(cd ../web && echo \"\" | npx shadcn@latest add select 2>&1 | tail -8)"
+      "Bash(cd ../web && echo \"\" | npx shadcn@latest add select 2>&1 | tail -8)",
+      "Bash(cd C:\\\\Users\\\\Luciano\\\\cooperebr\\\\web && npx shadcn@latest add textarea --yes 2>&1)",
+      "Bash(cd /c/Users/Luciano/cooperebr/web && npx shadcn@latest add textarea --yes 2>&1)"
     ]
   }
 }
