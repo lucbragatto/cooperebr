@@ -74,11 +74,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
           <div />
-          <div className="text-sm text-gray-600">
-            Olá, <span className="font-medium">{usuario?.nome ?? 'Usuário'}</span>
-            <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {usuario?.perfil}
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            <span>
+              Olá, <span className="font-medium">{usuario?.nome ?? 'Usuário'}</span>
             </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-gray-600 hover:text-red-600 hover:border-red-300"
+              onClick={logout}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sair
+            </Button>
           </div>
         </header>
 

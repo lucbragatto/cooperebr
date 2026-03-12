@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
-import type { Cooperado } from '@/types';
+import type { UC } from '@/types';
 import {
   Table,
   TableBody,
@@ -11,44 +12,28 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
-import Link from 'next/link';
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  ATIVO: 'default',
-  PENDENTE: 'secondary',
-  SUSPENSO: 'outline',
-  ENCERRADO: 'destructive',
-};
-
-const statusLabel: Record<string, string> = {
-  ATIVO: 'Ativo',
-  PENDENTE: 'Pendente',
-  SUSPENSO: 'Suspenso',
-  ENCERRADO: 'Encerrado',
-};
-
-export default function CooperadosPage() {
-  const [cooperados, setCooperados] = useState<Cooperado[]>([]);
+export default function UcsPage() {
+  const [ucs, setUcs] = useState<UC[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    api.get<Cooperado[]>('/cooperados')
-      .then((r) => setCooperados(r.data))
+    api.get<UC[]>('/ucs')
+      .then((r) => setUcs(r.data))
       .finally(() => setCarregando(false));
   }, []);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Cooperados</h2>
-        <Link href="/dashboard/cooperados/novo">
+        <h2 className="text-2xl font-bold text-gray-800">Unidades Consumidoras</h2>
+        <Link href="/dashboard/ucs/nova">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            Novo Cooperado
+            Nova UC
           </Button>
         </Link>
       </div>
@@ -56,18 +41,18 @@ export default function CooperadosPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
-            {carregando ? 'Carregando...' : `${cooperados.length} registros`}
+            {carregando ? 'Carregando...' : `${ucs.length} registros`}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>CPF</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Número</TableHead>
+                <TableHead>Endereço</TableHead>
+                <TableHead>Cidade</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Cooperado</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -82,28 +67,22 @@ export default function CooperadosPage() {
                     ))}
                   </TableRow>
                 ))
-              ) : cooperados.length === 0 ? (
+              ) : ucs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-gray-400 py-8">
-                    Nenhum cooperado cadastrado
+                    Nenhuma UC cadastrada
                   </TableCell>
                 </TableRow>
               ) : (
-                cooperados.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
-                    <TableCell>{c.cpf}</TableCell>
-                    <TableCell>{c.email}</TableCell>
-                    <TableCell>{c.telefone ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant[c.status]}>
-                        {statusLabel[c.status]}
-                      </Badge>
-                    </TableCell>
+                ucs.map((uc) => (
+                  <TableRow key={uc.id}>
+                    <TableCell className="font-medium">{uc.numero}</TableCell>
+                    <TableCell>{uc.endereco}</TableCell>
+                    <TableCell>{uc.cidade}</TableCell>
+                    <TableCell>{uc.estado}</TableCell>
+                    <TableCell>{uc.cooperado?.nomeCompleto ?? '—'}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Button variant="ghost" size="sm">Ver</Button>
                     </TableCell>
                   </TableRow>
                 ))

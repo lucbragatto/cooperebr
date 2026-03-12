@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma:*)",
+      "Bash(cd \"C:\\\\Users\\\\Luciano\\\\cooperebr\\\\backend\" && npm run start:dev 2>&1)",
+      "Bash(taskkill /F /IM node.exe 2>&1; echo \"done\")",
+      "Bash(taskkill //F //IM node.exe 2>&1; echo \"done\")",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(cd C:/Users/Luciano/cooperebr/backend && taskkill /f /im node.exe 2>&1; npx prisma generate 2>&1)",
+      "Bash(cd C:/Users/Luciano/cooperebr/backend && npx tsc --noEmit 2>&1)",
+      "Bash(node download-models.js)",
+      "Bash(npx tsc:*)",
+      "Bash(cp -r src/auth/facial/models dist/auth/facial/models 2>&1 && ls -lh dist/auth/facial/models/)",
+      "Bash(npm list:*)",
+      "Bash(node gerar-foto-teste.js)",
+      "Bash(git commit:*)",
+      "Bash(cd .. && npx create-next-app@latest web --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" 2>&1)",
+      "Bash(cd .. && echo \"No\" | npx create-next-app@latest web --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" 2>&1)",
+      "Bash(cd ../web && npx shadcn@latest init --defaults 2>&1)",
+      "Bash(cd ../web && echo \"\" | npx shadcn@latest init --defaults 2>&1)",
+      "Bash(cd ../web && echo \"=== Estrutura ===\" && ls && echo \"\" && echo \"=== components.json ===\" && cat components.json && echo \"\" && echo \"=== Dependências instaladas ===\" && node -e \"const p=require\\('./package.json'\\); console.log\\([...Object.keys\\(p.dependencies||{}\\),...Object.keys\\(p.devDependencies||{}\\)].join\\('\\\\n'\\)\\)\")",
+      "Bash(cd ../web && echo \"\" | npx shadcn@latest add button input label card table badge 2>&1)",
+      "Bash(cd ../web && echo \"\" | npx shadcn@latest add select 2>&1 | tail -8)"
+    ]
+  }
+}
