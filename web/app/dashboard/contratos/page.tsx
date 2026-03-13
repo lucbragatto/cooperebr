@@ -105,9 +105,9 @@ export default function ContratosPage() {
                       {new Date(c.dataInicio).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Link href={`/dashboard/contratos/${c.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))

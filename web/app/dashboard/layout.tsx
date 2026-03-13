@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { logout, getUsuario } from '@/lib/auth';
+import type { Usuario } from '@/types';
 import {
   LayoutDashboard,
   Users,
@@ -27,7 +29,9 @@ const navItems = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const usuario = getUsuario();
+  const [usuario, setUsuario] = useState<Usuario | null>(null);
+
+  useEffect(() => { setUsuario(getUsuario()); }, []);
 
   return (
     <div className="flex h-screen bg-gray-100">

@@ -24,7 +24,9 @@
       "Bash(cd ../web && echo \"\" | npx shadcn@latest add button input label card table badge 2>&1)",
       "Bash(cd ../web && echo \"\" | npx shadcn@latest add select 2>&1 | tail -8)",
       "Bash(cd C:\\\\Users\\\\Luciano\\\\cooperebr\\\\web && npx shadcn@latest add textarea --yes 2>&1)",
-      "Bash(cd /c/Users/Luciano/cooperebr/web && npx shadcn@latest add textarea --yes 2>&1)"
+      "Bash(cd /c/Users/Luciano/cooperebr/web && npx shadcn@latest add textarea --yes 2>&1)",
+      "Bash(npm run:*)",
+      "Bash(cd C:/Users/Luciano/cooperebr/web && npx tsc --noEmit 2>&1; echo \"EXIT: $?\")"
     ]
   }
 }

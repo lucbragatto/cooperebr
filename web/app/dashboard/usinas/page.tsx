@@ -80,7 +80,9 @@ export default function UsinasPage() {
                     <TableCell>{u.cidade}</TableCell>
                     <TableCell>{u.estado}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">Ver</Button>
+                      <Link href={`/dashboard/usinas/${u.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))

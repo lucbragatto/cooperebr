@@ -122,9 +122,9 @@ export default function OcorrenciasPage() {
                       {new Date(o.createdAt).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Link href={`/dashboard/ocorrencias/${o.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))

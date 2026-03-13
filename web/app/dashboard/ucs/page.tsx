@@ -82,7 +82,9 @@ export default function UcsPage() {
                     <TableCell>{uc.estado}</TableCell>
                     <TableCell>{uc.cooperado?.nomeCompleto ?? '—'}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">Ver</Button>
+                      <Link href={`/dashboard/ucs/${uc.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))

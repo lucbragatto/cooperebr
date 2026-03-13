@@ -101,9 +101,9 @@ export default function CooperadosPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Link href={`/dashboard/cooperados/${c.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))

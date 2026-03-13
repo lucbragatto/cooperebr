@@ -115,9 +115,9 @@ export default function CobrancasPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
+                      <Link href={`/dashboard/cobrancas/${c.id}`}>
+                        <Button variant="ghost" size="sm">Ver</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))
