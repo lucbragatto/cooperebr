@@ -10,6 +10,7 @@ import { ContratosModule } from './contratos/contratos.module';
 import { CobrancasModule } from './cobrancas/cobrancas.module';
 import { OcorrenciasModule } from './ocorrencias/ocorrencias.module';
 import { AuthModule } from './auth/auth.module';
+import { FaturasModule } from './faturas/faturas.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -22,6 +23,7 @@ import { RolesGuard } from './auth/roles.guard';
     CobrancasModule,
     OcorrenciasModule,
     AuthModule,
+    FaturasModule,
   ],
   controllers: [AppController],
   providers: [

@@ -30,17 +30,22 @@ enum PerfilUsuario {
 }
 
 model Cooperado {
-  id           String          @id @default(cuid())
-  nomeCompleto String
-  cpf          String          @unique
-  email        String          @unique
-  telefone     String?
-  status       StatusCooperado @default(PENDENTE)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  ucs          Uc[]
-  contratos    Contrato[]
-  ocorrencias  Ocorrencia[]
+  id                String            @id @default(cuid())
+  nomeCompleto      String
+  cpf               String            @unique
+  email             String            @unique
+  telefone          String?
+  status            StatusCooperado   @default(PENDENTE)
+  cotaKwhMensal     Decimal?          @db.Decimal(10, 2)
+  percentualUsina   Decimal?          @db.Decimal(8, 4)
+  documento         String?
+  tipoDocumento     String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  ucs               Uc[]
+  contratos         Contrato[]
+  ocorrencias       Ocorrencia[]
+  faturasProcessadas FaturaProcessada[]
 
   @@map("cooperados")
 }
@@ -53,17 +58,27 @@ enum StatusCooperado {
 }
 
 model Uc {
-  id          String     @id @default(cuid())
-  numero      String     @unique
-  endereco    String
-  cidade      String
-  estado      String
-  cooperadoId String
-  cooperado   Cooperado  @relation(fields: [cooperadoId], references: [id])
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  contratos   Contrato[]
-  ocorrencias Ocorrencia[]
+  id                  String     @id @default(cuid())
+  numero              String     @unique
+  endereco            String
+  cidade              String
+  estado              String
+  numeroUC            String?
+  codigoMedidor       String?
+  cep                 String?
+  bairro              String?
+  distribuidora       String?
+  classificacao       String?
+  modalidadeTarifaria String?
+  tensaoNominal       String?
+  tipoFornecimento    String?
+  cooperadoId         String
+  cooperado           Cooperado  @relation(fields: [cooperadoId], references: [id])
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  contratos           Contrato[]
+  ocorrencias         Ocorrencia[]
+  faturasProcessadas  FaturaProcessada[]
 
   @@map("ucs")
 }
@@ -82,21 +97,21 @@ model Usina {
 }
 
 model Contrato {
-  id                  String         @id @default(cuid())
-  numero              String         @unique
-  cooperadoId         String
-  cooperado           Cooperado      @relation(fields: [cooperadoId], references: [id])
-  ucId                String
-  uc                  Uc             @relation(fields: [ucId], references: [id])
-  usinaId             String
-  usina               Usina          @relation(fields: [usinaId], references: [id])
-  dataInicio          DateTime
-  dataFim             DateTime?
-  percentualDesconto  Decimal        @db.Decimal(5, 2)
-  status              StatusContrato @default(ATIVO)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  cobrancas           Cobranca[]
+  id                 String         @id @default(cuid())
+  numero             String         @unique
+  cooperadoId        String
+  cooperado          Cooperado      @relation(fields: [cooperadoId], references: [id])
+  ucId               String
+  uc                 Uc             @relation(fields: [ucId], references: [id])
+  usinaId            String
+  usina              Usina          @relation(fields: [usinaId], references: [id])
+  dataInicio         DateTime
+  dataFim            DateTime?
+  percentualDesconto Decimal        @db.Decimal(5, 2)
+  status             StatusContrato @default(ATIVO)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  cobrancas          Cobranca[]
 
   @@map("contratos")
 }
@@ -108,20 +123,20 @@ enum StatusContrato {
 }
 
 model Cobranca {
-  id                  String          @id @default(cuid())
-  contratoId          String
-  contrato            Contrato        @relation(fields: [contratoId], references: [id])
-  mesReferencia       Int
-  anoReferencia       Int
-  valorBruto          Decimal         @db.Decimal(10, 2)
-  percentualDesconto  Decimal         @db.Decimal(5, 2)
-  valorDesconto       Decimal         @db.Decimal(10, 2)
-  valorLiquido        Decimal         @db.Decimal(10, 2)
-  status              StatusCobranca  @default(PENDENTE)
-  dataVencimento      DateTime
-  dataPagamento       DateTime?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                 String         @id @default(cuid())
+  contratoId         String
+  contrato           Contrato       @relation(fields: [contratoId], references: [id])
+  mesReferencia      Int
+  anoReferencia      Int
+  valorBruto         Decimal        @db.Decimal(10, 2)
+  percentualDesconto Decimal        @db.Decimal(5, 2)
+  valorDesconto      Decimal        @db.Decimal(10, 2)
+  valorLiquido       Decimal        @db.Decimal(10, 2)
+  status             StatusCobranca @default(PENDENTE)
+  dataVencimento     DateTime
+  dataPagamento      DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   @@map("cobrancas")
 }
@@ -134,18 +149,18 @@ enum StatusCobranca {
 }
 
 model Ocorrencia {
-  id          String            @id @default(cuid())
+  id          String               @id @default(cuid())
   cooperadoId String
-  cooperado   Cooperado         @relation(fields: [cooperadoId], references: [id])
+  cooperado   Cooperado            @relation(fields: [cooperadoId], references: [id])
   ucId        String?
-  uc          Uc?               @relation(fields: [ucId], references: [id])
+  uc          Uc?                  @relation(fields: [ucId], references: [id])
   tipo        TipoOcorrencia
   descricao   String
-  status      StatusOcorrencia  @default(ABERTA)
+  status      StatusOcorrencia     @default(ABERTA)
   prioridade  PrioridadeOcorrencia
   resolucao   String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@map("ocorrencias")
 }
@@ -170,4 +185,41 @@ enum PrioridadeOcorrencia {
   MEDIA
   ALTA
   CRITICA
+}
+
+enum StatusFatura {
+  PENDENTE
+  APROVADA
+  REJEITADA
+}
+
+model FaturaProcessada {
+  id                  String       @id @default(cuid())
+  cooperadoId         String
+  cooperado           Cooperado    @relation(fields: [cooperadoId], references: [id])
+  ucId                String?
+  uc                  Uc?          @relation(fields: [ucId], references: [id])
+  arquivoUrl          String?
+  dadosExtraidos      Json
+  historicoConsumo    Json
+  mesesUtilizados     Int
+  mesesDescartados    Int
+  mediaKwhCalculada   Decimal      @db.Decimal(10, 2)
+  thresholdUtilizado  Decimal      @db.Decimal(5, 2)
+  status              StatusFatura @default(PENDENTE)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@map("faturas_processadas")
+}
+
+model ConfigTenant {
+  id        String   @id @default(cuid())
+  chave     String   @unique
+  valor     String
+  descricao String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("config_tenant")
 }
