@@ -26,7 +26,14 @@
       "Bash(cd C:\\\\Users\\\\Luciano\\\\cooperebr\\\\web && npx shadcn@latest add textarea --yes 2>&1)",
       "Bash(cd /c/Users/Luciano/cooperebr/web && npx shadcn@latest add textarea --yes 2>&1)",
       "Bash(npm run:*)",
-      "Bash(cd C:/Users/Luciano/cooperebr/web && npx tsc --noEmit 2>&1; echo \"EXIT: $?\")"
+      "Bash(cd C:/Users/Luciano/cooperebr/web && npx tsc --noEmit 2>&1; echo \"EXIT: $?\")",
+      "Bash(cd /c/Users/Luciano/cooperebr/backend && npx ts-node --project tsconfig.seed.json reset-senha.ts 2>&1)",
+      "Bash(cd /c/Users/Luciano/cooperebr/backend && grep -E \"^\\(SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE_KEY\\)=\" .env | while IFS='=' read -r key value; do echo \"$key=${value:0:20}...\"; done)",
+      "Bash(find /c/Users/Luciano/cooperebr -name \"*.pdf\" 2>/dev/null | head -10)",
+      "Bash(node converter-pdf.js 2>&1)",
+      "Bash(node -e \"const fs=require\\('fs'\\); const b = fs.readFileSync\\('/mnt/user-data/uploads/EDP_AP_CAROL.pdf'\\).toString\\('base64'\\); fs.writeFileSync\\('fatura-real-base64.txt', b\\); console.log\\('Tamanho:', b.length, 'primeiros 50:', b.substring\\(0,50\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const b=fs.readFileSync\\('scripts/EDP AP CAROL.pdf'\\).toString\\('base64'\\); fs.writeFileSync\\('fatura-real-base64.txt', b\\); console.log\\('Tamanho:', b.length, 'primeiros 50:', b.substring\\(0,50\\)\\);\")",
+      "Bash(node test-ocr.js 2>&1)"
     ]
   }
 }
