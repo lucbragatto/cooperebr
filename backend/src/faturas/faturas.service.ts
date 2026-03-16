@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { TipoDocumento } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
@@ -249,6 +250,7 @@ export class FaturasService {
     sucesso: boolean;
     url: string;
     tipoDocumento: string;
+    documentoId: string;
   }> {
     const ext = dto.tipoArquivo === 'pdf' ? 'pdf' : 'jpg';
     const filePath = `${dto.cooperadoId}/${dto.tipoDocumento}-${Date.now()}.${ext}`;
@@ -271,10 +273,37 @@ export class FaturasService {
       .from(BUCKET)
       .getPublicUrl(uploadData.path);
 
+    const nomeArquivo = `${dto.tipoDocumento}.${ext}`;
+
+    const doc = await this.prisma.documentoCooperado.upsert({
+      where: {
+        cooperadoId_tipo: {
+          cooperadoId: dto.cooperadoId,
+          tipo: dto.tipoDocumento as TipoDocumento,
+        },
+      },
+      update: {
+        url: urlData.publicUrl,
+        nomeArquivo,
+        tamanhoBytes: buffer.length,
+        status: 'PENDENTE',
+        motivoRejeicao: null,
+      },
+      create: {
+        cooperadoId: dto.cooperadoId,
+        tipo: dto.tipoDocumento as TipoDocumento,
+        url: urlData.publicUrl,
+        nomeArquivo,
+        tamanhoBytes: buffer.length,
+      },
+      select: { id: true },
+    });
+
     return {
       sucesso: true,
       url: urlData.publicUrl,
       tipoDocumento: dto.tipoDocumento,
+      documentoId: doc.id,
     };
   }
 

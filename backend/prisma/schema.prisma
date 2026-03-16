@@ -46,8 +46,40 @@ model Cooperado {
   contratos         Contrato[]
   ocorrencias       Ocorrencia[]
   faturasProcessadas FaturaProcessada[]
+  documentos        DocumentoCooperado[]
 
   @@map("cooperados")
+}
+
+model DocumentoCooperado {
+  id             String          @id @default(cuid())
+  cooperadoId    String
+  cooperado      Cooperado       @relation(fields: [cooperadoId], references: [id])
+  tipo           TipoDocumento
+  url            String
+  nomeArquivo    String?
+  tamanhoBytes   Int?
+  status         StatusDocumento @default(PENDENTE)
+  motivoRejeicao String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([cooperadoId, tipo])
+  @@map("documentos_cooperados")
+}
+
+enum TipoDocumento {
+  RG_FRENTE
+  RG_VERSO
+  CNH_FRENTE
+  CNH_VERSO
+  CONTRATO_SOCIAL
+}
+
+enum StatusDocumento {
+  PENDENTE
+  APROVADO
+  REPROVADO
 }
 
 enum StatusCooperado {

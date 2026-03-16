@@ -119,6 +119,12 @@ export default function CooperadoDetailPage() {
                 Processar Fatura
               </Button>
             </Link>
+            <Link href={`/dashboard/cooperados/${id}/documentos`}>
+              <Button size="sm" variant="outline">
+                <FileText className="h-4 w-4 mr-2" />
+                Documentos
+              </Button>
+            </Link>
             <Button size="sm" variant="outline" onClick={iniciarEdicao}>
               <Pencil className="h-4 w-4 mr-2" />
               Editar
