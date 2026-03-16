@@ -67,15 +67,31 @@ export class FaturasService {
   }
 
   async processarFatura(dto: ProcessarFaturaDto): Promise<{
+    faturaId: string;
     dadosExtraidos: DadosExtraidos;
     mediaKwhCalculada: number;
     mesesUtilizados: number;
     mesesDescartados: number;
     thresholdUtilizado: number;
     arquivoUrl: string;
+    plano?: { id: string; nome: string; descontoBase: number; modeloCobranca: string } | null;
   }> {
     // 1. Chamar Claude API
     try { await this.prisma.$queryRaw`SELECT 1`; } catch (e) { throw new InternalServerErrorException(`DB: ${(e as Error).message}`); }
+
+    // 1a. Buscar plano se fornecido
+    let planoInfo: { id: string; nome: string; descontoBase: number; modeloCobranca: string } | null = null;
+    if (dto.planoId) {
+      const plano = await this.prisma.plano.findUnique({ where: { id: dto.planoId } });
+      if (plano) {
+        planoInfo = {
+          id: plano.id,
+          nome: plano.nome,
+          descontoBase: Number(plano.descontoBase),
+          modeloCobranca: plano.modeloCobranca,
+        };
+      }
+    }
 
     const dadosExtraidos = await this.extrairDadosFatura(
       dto.arquivoBase64,
@@ -117,20 +133,25 @@ export class FaturasService {
     const arquivoUrl = urlData.publicUrl;
 
     // 5. Salvar em faturas_processadas
-    try { await this.prisma.faturaProcessada.create({
-      data: {
-        cooperadoId: dto.cooperadoId,
-        ucId: dto.ucId ?? null,
-        arquivoUrl,
-        dadosExtraidos: dadosExtraidos as object,
-        historicoConsumo: historico as object,
-        mesesUtilizados,
-        mesesDescartados,
-        mediaKwhCalculada: media,
-        thresholdUtilizado: threshold,
-        status: 'PENDENTE',
-      },
-    }); } catch (e) { throw new InternalServerErrorException(`Salvar fatura: ${(e as Error).message}`); }
+    let faturaId: string;
+    try {
+      const fatura = await this.prisma.faturaProcessada.create({
+        data: {
+          cooperadoId: dto.cooperadoId,
+          ucId: dto.ucId ?? null,
+          arquivoUrl,
+          dadosExtraidos: dadosExtraidos as object,
+          historicoConsumo: historico as object,
+          mesesUtilizados,
+          mesesDescartados,
+          mediaKwhCalculada: media,
+          thresholdUtilizado: threshold,
+          status: 'PENDENTE',
+        },
+        select: { id: true },
+      });
+      faturaId = fatura.id;
+    } catch (e) { throw new InternalServerErrorException(`Salvar fatura: ${(e as Error).message}`); }
 
     // 6. Atualizar cooperado
     await this.prisma.cooperado.update({
@@ -164,13 +185,23 @@ export class FaturasService {
     }
 
     return {
+      faturaId,
       dadosExtraidos,
       mediaKwhCalculada: media,
       mesesUtilizados,
       mesesDescartados,
       thresholdUtilizado: threshold,
       arquivoUrl,
+      plano: planoInfo,
     };
+  }
+
+  async aprovarFatura(id: string): Promise<{ sucesso: boolean }> {
+    await this.prisma.faturaProcessada.update({
+      where: { id },
+      data: { status: 'APROVADA' },
+    });
+    return { sucesso: true };
   }
 
   // Diagnóstico: verifica tabelas e bucket

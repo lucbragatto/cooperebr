@@ -115,3 +115,24 @@ export interface AuthResponse {
   token: string;
   usuario: Usuario;
 }
+
+export type ModeloCobranca = 'FIXO_MENSAL' | 'CREDITOS_COMPENSADOS' | 'CREDITOS_DINAMICO';
+export type TipoCampanha = 'PADRAO' | 'CAMPANHA';
+
+export interface Plano {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  modeloCobranca: ModeloCobranca;
+  descontoBase: number;
+  temPromocao: boolean;
+  descontoPromocional: number | null;
+  mesesPromocao: number | null;
+  publico: boolean;
+  ativo: boolean;
+  tipoCampanha: TipoCampanha;
+  dataInicioVigencia: string | null;
+  dataFimVigencia: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

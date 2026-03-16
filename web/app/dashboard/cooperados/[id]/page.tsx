@@ -7,7 +7,8 @@ import type { Cooperado, StatusCooperado } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, FileText, Pencil } from 'lucide-react';
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   ATIVO: 'default',
@@ -111,10 +112,18 @@ export default function CooperadoDetailPage() {
         </Button>
         <h2 className="text-2xl font-bold text-gray-800">Detalhe do Cooperado</h2>
         {cooperado && !modoEdicao && (
-          <Button size="sm" variant="outline" onClick={iniciarEdicao} className="ml-auto">
-            <Pencil className="h-4 w-4 mr-2" />
-            Editar
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Link href={`/dashboard/cooperados/${id}/fatura`}>
+              <Button size="sm" variant="outline">
+                <FileText className="h-4 w-4 mr-2" />
+                Processar Fatura
+              </Button>
+            </Link>
+            <Button size="sm" variant="outline" onClick={iniciarEdicao}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Editar
+            </Button>
+          </div>
         )}
       </div>
 

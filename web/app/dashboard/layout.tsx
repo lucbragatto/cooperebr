@@ -14,6 +14,7 @@ import {
   CreditCard,
   AlertTriangle,
   LogOut,
+  Tag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
   { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
   { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
+  { href: '/dashboard/planos', label: 'Planos', icon: Tag },
   { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
   { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
 ];
