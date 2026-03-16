@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { FaturasModule } from './faturas/faturas.module';
 import { PlanosModule } from './planos/planos.module';
 import { DocumentosModule } from './documentos/documentos.module';
+import { NotificacoesModule } from './notificacoes/notificacoes.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -28,6 +29,7 @@ import { RolesGuard } from './auth/roles.guard';
     FaturasModule,
     PlanosModule,
     DocumentosModule,
+    NotificacoesModule,
   ],
   controllers: [AppController],
   providers: [

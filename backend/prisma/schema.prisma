@@ -47,6 +47,7 @@ model Cooperado {
   ocorrencias       Ocorrencia[]
   faturasProcessadas FaturaProcessada[]
   documentos        DocumentoCooperado[]
+  notificacoes      Notificacao[]
 
   @@map("cooperados")
 }
@@ -277,6 +278,22 @@ model FaturaProcessada {
   updatedAt           DateTime     @updatedAt
 
   @@map("faturas_processadas")
+}
+
+model Notificacao {
+  id          String     @id @default(cuid())
+  tipo        String
+  titulo      String
+  mensagem    String
+  lida        Boolean    @default(false)
+  cooperadoId String?
+  cooperado   Cooperado? @relation(fields: [cooperadoId], references: [id])
+  adminId     String?
+  link        String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("notificacoes")
 }
 
 model ConfigTenant {

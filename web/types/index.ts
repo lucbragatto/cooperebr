@@ -111,6 +111,28 @@ export interface Ocorrencia {
   updatedAt: string;
 }
 
+export type TipoNotificacao =
+  | 'DOCUMENTO_ENVIADO'
+  | 'DOCUMENTO_APROVADO'
+  | 'DOCUMENTO_REPROVADO'
+  | 'TODOS_DOCS_APROVADOS'
+  | 'CONTRATO_ASSINADO'
+  | 'DOCUMENTO_PENDENTE';
+
+export interface Notificacao {
+  id: string;
+  tipo: TipoNotificacao | string;
+  titulo: string;
+  mensagem: string;
+  lida: boolean;
+  cooperadoId: string | null;
+  cooperado?: { nomeCompleto: string } | null;
+  adminId: string | null;
+  link: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthResponse {
   token: string;
   usuario: Usuario;

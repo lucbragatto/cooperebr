@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, InternalServerErrorException } from '@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
 
@@ -56,11 +57,22 @@ interface AnthropicResponse {
   content: AnthropicContent[];
 }
 
+const tipoDocumentoLabel: Record<string, string> = {
+  RG_FRENTE: 'RG (Frente)',
+  RG_VERSO: 'RG (Verso)',
+  CNH_FRENTE: 'CNH (Frente)',
+  CNH_VERSO: 'CNH (Verso)',
+  CONTRATO_SOCIAL: 'Contrato Social',
+};
+
 @Injectable()
 export class FaturasService {
   private supabase: SupabaseClient;
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private notificacoes: NotificacoesService,
+  ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!,
@@ -297,6 +309,14 @@ export class FaturasService {
         tamanhoBytes: buffer.length,
       },
       select: { id: true },
+    });
+
+    await this.notificacoes.criar({
+      tipo: 'DOCUMENTO_ENVIADO',
+      titulo: 'Novo documento enviado',
+      mensagem: `Cooperado enviou documento ${tipoDocumentoLabel[dto.tipoDocumento] ?? dto.tipoDocumento} aguardando aprovação.`,
+      cooperadoId: dto.cooperadoId,
+      link: `/dashboard/cooperados/${dto.cooperadoId}`,
     });
 
     return {
