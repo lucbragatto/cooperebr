@@ -209,6 +209,13 @@ export class FaturasService {
     };
   }
 
+  async findByCooperado(cooperadoId: string) {
+    return this.prisma.faturaProcessada.findMany({
+      where: { cooperadoId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async aprovarFatura(id: string): Promise<{ sucesso: boolean }> {
     await this.prisma.faturaProcessada.update({
       where: { id },

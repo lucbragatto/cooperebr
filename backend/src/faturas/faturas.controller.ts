@@ -10,6 +10,11 @@ import { PerfilUsuario } from '../auth/perfil.enum';
 export class FaturasController {
   constructor(private readonly faturasService: FaturasService) {}
 
+  @Get('cooperado/:cooperadoId')
+  findByCooperado(@Param('cooperadoId') cooperadoId: string): Promise<unknown> {
+    return this.faturasService.findByCooperado(cooperadoId);
+  }
+
   @Post('processar')
   processar(@Body() dto: ProcessarFaturaDto): Promise<unknown> {
     return this.faturasService.processarFatura(dto);
