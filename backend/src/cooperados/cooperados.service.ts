@@ -36,6 +36,7 @@ export class CooperadosService {
     cpf: string;
     email: string;
     telefone?: string;
+    preferenciaCobranca?: string;
   }) {
     return this.prisma.cooperado.create({ data });
   }
@@ -45,6 +46,7 @@ export class CooperadosService {
     email: string;
     telefone: string;
     status: StatusCooperado;
+    preferenciaCobranca: string;
   }>) {
     return this.prisma.cooperado.update({
       where: { id },

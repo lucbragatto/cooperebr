@@ -32,6 +32,15 @@ export class UcsService {
     cidade: string;
     estado: string;
     cooperadoId: string;
+    numeroUC?: string;
+    cep?: string;
+    bairro?: string;
+    distribuidora?: string;
+    classificacao?: string;
+    codigoMedidor?: string;
+    modalidadeTarifaria?: string;
+    tensaoNominal?: string;
+    tipoFornecimento?: string;
   }) {
     return this.prisma.uc.create({ data });
   }

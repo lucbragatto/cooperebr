@@ -209,6 +209,10 @@ export class FaturasService {
     };
   }
 
+  async extrairOcr(arquivoBase64: string, tipoArquivo: 'pdf' | 'imagem'): Promise<DadosExtraidos> {
+    return this.extrairDadosFatura(arquivoBase64, tipoArquivo);
+  }
+
   async findByCooperado(cooperadoId: string) {
     return this.prisma.faturaProcessada.findMany({
       where: { cooperadoId },

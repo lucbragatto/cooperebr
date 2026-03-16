@@ -475,9 +475,6 @@ export default function CooperadoPerfilPage() {
           <Link href={`/dashboard/cooperados/${id}/fatura`}>
             <Button variant="outline" size="sm"><FileText className="h-4 w-4 mr-2" />Processar Fatura</Button>
           </Link>
-          <Button variant="outline" size="sm" onClick={abrirEditarCooperado}>
-            <Pencil className="h-4 w-4 mr-2" />Editar
-          </Button>
         </div>
       </div>
 

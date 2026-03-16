@@ -15,6 +15,11 @@ export class FaturasController {
     return this.faturasService.findByCooperado(cooperadoId);
   }
 
+  @Post('extrair')
+  extrair(@Body() body: { arquivoBase64: string; tipoArquivo: 'pdf' | 'imagem' }): Promise<unknown> {
+    return this.faturasService.extrairOcr(body.arquivoBase64, body.tipoArquivo);
+  }
+
   @Post('processar')
   processar(@Body() dto: ProcessarFaturaDto): Promise<unknown> {
     return this.faturasService.processarFatura(dto);
