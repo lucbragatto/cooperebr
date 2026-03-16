@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
@@ -75,6 +75,8 @@ export class FaturasService {
     arquivoUrl: string;
   }> {
     // 1. Chamar Claude API
+    try { await this.prisma.$queryRaw`SELECT 1`; } catch (e) { throw new InternalServerErrorException(`DB: ${(e as Error).message}`); }
+
     const dadosExtraidos = await this.extrairDadosFatura(
       dto.arquivoBase64,
       dto.tipoArquivo,
@@ -115,7 +117,7 @@ export class FaturasService {
     const arquivoUrl = urlData.publicUrl;
 
     // 5. Salvar em faturas_processadas
-    await this.prisma.faturaProcessada.create({
+    try { await this.prisma.faturaProcessada.create({
       data: {
         cooperadoId: dto.cooperadoId,
         ucId: dto.ucId ?? null,
@@ -128,7 +130,7 @@ export class FaturasService {
         thresholdUtilizado: threshold,
         status: 'PENDENTE',
       },
-    });
+    }); } catch (e) { throw new InternalServerErrorException(`Salvar fatura: ${(e as Error).message}`); }
 
     // 6. Atualizar cooperado
     await this.prisma.cooperado.update({
@@ -169,6 +171,47 @@ export class FaturasService {
       thresholdUtilizado: threshold,
       arquivoUrl,
     };
+  }
+
+  // Diagnóstico: verifica tabelas e bucket
+  async diagnostico(): Promise<Record<string, unknown>> {
+    const resultado: Record<string, unknown> = {};
+
+    try {
+      await this.prisma.configTenant.findFirst();
+      resultado['config_tenant'] = 'OK';
+    } catch (e) {
+      resultado['config_tenant'] = `ERRO: ${(e as Error).message}`;
+    }
+
+    try {
+      await this.prisma.faturaProcessada.findFirst();
+      resultado['faturas_processadas'] = 'OK';
+    } catch (e) {
+      resultado['faturas_processadas'] = `ERRO: ${(e as Error).message}`;
+    }
+
+    try {
+      const { data, error } = await this.supabase.storage
+        .from(BUCKET)
+        .list('', { limit: 1 });
+      resultado['bucket_documentos'] = error ? `ERRO: ${error.message}` : `OK (${data?.length ?? 0} itens)`;
+    } catch (e) {
+      resultado['bucket_documentos'] = `ERRO: ${(e as Error).message}`;
+    }
+
+    try {
+      const cooperado = await this.prisma.cooperado.findFirst({
+        select: { id: true, cotaKwhMensal: true, documento: true },
+      });
+      resultado['cooperado_campos_novos'] = cooperado
+        ? `OK (cotaKwhMensal: ${cooperado.cotaKwhMensal}, documento: ${cooperado.documento})`
+        : 'sem registros';
+    } catch (e) {
+      resultado['cooperado_campos_novos'] = `ERRO: ${(e as Error).message}`;
+    }
+
+    return resultado;
   }
 
   async uploadDocumento(dto: UploadDocumentoDto): Promise<{

@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body } from '@nestjs/common';
 import { FaturasService } from './faturas.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
@@ -18,5 +18,10 @@ export class FaturasController {
   @Post('documento')
   documento(@Body() dto: UploadDocumentoDto): Promise<unknown> {
     return this.faturasService.uploadDocumento(dto);
+  }
+
+  @Get('diagnostico')
+  diagnostico(): Promise<unknown> {
+    return this.faturasService.diagnostico();
   }
 }

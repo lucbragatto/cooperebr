@@ -33,7 +33,13 @@
       "Bash(node converter-pdf.js 2>&1)",
       "Bash(node -e \"const fs=require\\('fs'\\); const b = fs.readFileSync\\('/mnt/user-data/uploads/EDP_AP_CAROL.pdf'\\).toString\\('base64'\\); fs.writeFileSync\\('fatura-real-base64.txt', b\\); console.log\\('Tamanho:', b.length, 'primeiros 50:', b.substring\\(0,50\\)\\);\")",
       "Bash(node -e \"const fs=require\\('fs'\\); const b=fs.readFileSync\\('scripts/EDP AP CAROL.pdf'\\).toString\\('base64'\\); fs.writeFileSync\\('fatura-real-base64.txt', b\\); console.log\\('Tamanho:', b.length, 'primeiros 50:', b.substring\\(0,50\\)\\);\")",
-      "Bash(node test-ocr.js 2>&1)"
+      "Bash(node test-ocr.js 2>&1)",
+      "Bash(cd /c/Users/Luciano/cooperebr/backend && node test-ocr.js 2>&1)",
+      "Bash(node test-ocr2.js 2>&1)",
+      "Bash(node -e \"const { PrismaClient } = require\\('@prisma/client'\\); const p = new PrismaClient\\(\\); console.log\\('faturaProcessada:', typeof p.faturaProcessada\\); console.log\\('configTenant:', typeof p.configTenant\\);\" 2>&1)",
+      "Bash(sleep 4 && node -e \"\nfetch\\('http://localhost:3000/faturas/diagnostico', {\n  headers: { 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbW1tM3FqY2kwMDAwdW95NDdiNXBoeXRsIiwiZW1haWwiOiJ0ZXN0ZUBjb29wZXJlYnIuY29tIiwicGVyZmlsIjoiQURNSU4iLCJpYXQiOjE3NzM0OTU2MDAsImV4cCI6MTc3NDEwMDQwMH0.TpHRVY3vzpRzaIhChe2O4n3VKE1znNphovqBAQGlu-c' }\n}\\).then\\(r => r.json\\(\\)\\).then\\(d => console.log\\(JSON.stringify\\(d, null, 2\\)\\)\\).catch\\(e => console.error\\(e.message\\)\\);\n\" 2>&1)",
+      "Bash(sleep 5 && node test-ocr2.js 2>&1)",
+      "Bash(node -e \"\nconst { PrismaClient } = require\\('@prisma/client'\\);\nconst p = new PrismaClient\\(\\);\np.cooperado.findMany\\({ select: { id: true, nomeCompleto: true, email: true } }\\)\n  .then\\(r => console.log\\(JSON.stringify\\(r, null, 2\\)\\)\\)\n  .finally\\(\\(\\) => p.\\\\$disconnect\\(\\)\\);\n\" 2>&1)"
     ]
   }
 }
