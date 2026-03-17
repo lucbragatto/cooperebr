@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param } from '@nestjs/common';
 import { FaturasService } from './faturas.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
@@ -33,6 +33,11 @@ export class FaturasController {
   @Patch(':id/aprovar')
   aprovar(@Param('id') id: string): Promise<unknown> {
     return this.faturasService.aprovarFatura(id);
+  }
+
+  @Delete(':id')
+  deletar(@Param('id') id: string): Promise<unknown> {
+    return this.faturasService.deletarFatura(id);
   }
 
   @Get('diagnostico')

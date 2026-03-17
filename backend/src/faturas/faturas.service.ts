@@ -228,6 +228,11 @@ export class FaturasService {
     return { sucesso: true };
   }
 
+  async deletarFatura(id: string): Promise<{ sucesso: boolean }> {
+    await this.prisma.faturaProcessada.delete({ where: { id } });
+    return { sucesso: true };
+  }
+
   // Diagnóstico: verifica tabelas e bucket
   async diagnostico(): Promise<Record<string, unknown>> {
     const resultado: Record<string, unknown> = {};

@@ -7,11 +7,21 @@ import type { Cooperado } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   ArrowLeft,
   Camera,
   CheckCircle,
   FileText,
   Image as ImageIcon,
+  RefreshCw,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import {
@@ -112,6 +122,17 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+interface FaturaProcessada {
+  id: string;
+  status: string;
+  dadosExtraidos: DadosExtraidos;
+  mediaKwhCalculada: number;
+  mesesUtilizados: number;
+  mesesDescartados: number;
+  thresholdUtilizado: number;
+  arquivoUrl: string;
+}
+
 export default function ProcessarFaturaPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -125,6 +146,8 @@ export default function ProcessarFaturaPage() {
   const [confirmando, setConfirmando] = useState(false);
   const [confirmado, setConfirmado] = useState(false);
   const [erro, setErro] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
+  const [showExcluirDialog, setShowExcluirDialog] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -133,6 +156,25 @@ export default function ProcessarFaturaPage() {
       .get<Cooperado>(`/cooperados/${id}`)
       .then((r) => setCooperado(r.data))
       .catch(() => setErro('Cooperado não encontrado.'));
+
+    api
+      .get<FaturaProcessada[]>(`/faturas/cooperado/${id}`)
+      .then((r) => {
+        const aprovada = r.data.find((f) => f.status === 'APROVADA');
+        if (aprovada) {
+          setResultado({
+            faturaId: aprovada.id,
+            dadosExtraidos: aprovada.dadosExtraidos,
+            mediaKwhCalculada: aprovada.mediaKwhCalculada,
+            mesesUtilizados: aprovada.mesesUtilizados,
+            mesesDescartados: aprovada.mesesDescartados,
+            thresholdUtilizado: aprovada.thresholdUtilizado,
+            arquivoUrl: aprovada.arquivoUrl,
+          });
+          setConfirmado(true);
+        }
+      })
+      .catch(() => {/* sem fatura aprovada */});
   }, [id]);
 
   function onTabChange(t: Tab) {
@@ -192,6 +234,30 @@ export default function ProcessarFaturaPage() {
       setErro('Erro ao confirmar proposta.');
     } finally {
       setConfirmando(false);
+    }
+  }
+
+  function reprocessar() {
+    setResultado(null);
+    setConfirmado(false);
+    setArquivo(null);
+    setPreview(null);
+    setErro('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function excluirFatura() {
+    if (!resultado?.faturaId) return;
+    setExcluindo(true);
+    setErro('');
+    try {
+      await api.delete(`/faturas/${resultado.faturaId}`);
+      setShowExcluirDialog(false);
+      reprocessar();
+    } catch {
+      setErro('Erro ao excluir fatura.');
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -483,12 +549,22 @@ export default function ProcessarFaturaPage() {
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3 pb-8">
+          <div className="flex items-center gap-3 pb-8 flex-wrap">
             {confirmado ? (
-              <p className="flex items-center gap-2 text-green-600 font-medium">
-                <CheckCircle className="h-5 w-5" />
-                Proposta confirmada e salva com sucesso!
-              </p>
+              <>
+                <p className="flex items-center gap-2 text-green-600 font-medium">
+                  <CheckCircle className="h-5 w-5" />
+                  Fatura aprovada e salva com sucesso!
+                </p>
+                <Button variant="outline" onClick={reprocessar}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reprocessar
+                </Button>
+                <Button variant="destructive" onClick={() => setShowExcluirDialog(true)}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              </>
             ) : (
               <Button onClick={confirmar} disabled={confirmando}>
                 <CheckCircle className="h-4 w-4 mr-2" />
@@ -505,6 +581,25 @@ export default function ProcessarFaturaPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={showExcluirDialog} onOpenChange={setShowExcluirDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir fatura</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir esta fatura? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExcluirDialog(false)} disabled={excluindo}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={excluirFatura} disabled={excluindo}>
+              {excluindo ? 'Excluindo...' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

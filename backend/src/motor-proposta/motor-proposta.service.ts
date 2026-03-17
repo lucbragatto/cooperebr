@@ -73,13 +73,15 @@ export class MotorPropostaService {
     const te = tarifa ? Number(tarifa.teNova) : 0.2;
     const tarifaUnitSemTrib = tusd + te;
 
-    // Média cooperativa: média dos cotaKwhMensal dos cooperados ativos
-    const cooperadosAtivos = await this.prisma.cooperado.findMany({
-      where: { status: 'ATIVO' },
-      select: { cotaKwhMensal: true },
+    // Média cooperativa: média do (valorLiquido / kwhContrato) das cobranças de contratos ativos
+    const cobrancasAtivas = await this.prisma.cobranca.findMany({
+      where: { contrato: { status: 'ATIVO' }, status: { not: 'CANCELADO' } },
+      select: { valorLiquido: true, contrato: { select: { kwhContrato: true } } },
     });
-    const cotas = cooperadosAtivos.map(c => Number(c.cotaKwhMensal ?? 0)).filter(v => v > 0);
-    const mediaCooperativaKwh = cotas.length > 0 ? cotas.reduce((a, b) => a + b, 0) / cotas.length : 0;
+    const taxas = cobrancasAtivas
+      .filter(c => Number(c.contrato.kwhContrato ?? 0) > 0)
+      .map(c => Number(c.valorLiquido) / Number(c.contrato.kwhContrato));
+    const mediaCooperativaKwh = taxas.length > 0 ? taxas.reduce((a, b) => a + b, 0) / taxas.length : 0;
 
     // Dados do histórico
     const historico = dto.historico ?? [];
@@ -96,7 +98,10 @@ export class MotorPropostaService {
 
     // Função de cálculo de uma opção
     const calcularOpcao = (base: 'MES_RECENTE' | 'MEDIA_12M'): OpcaoCalculo => {
-      const kwhApuradoBase = base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m;
+      const kwhBase = base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m;
+      const valorBase = base === 'MES_RECENTE' ? valorMesRecente : valorMedio12m;
+      // kwhApuradoBase = preço por kWh (R$/kWh) = valorFatura / consumoKwh
+      const kwhApuradoBase = kwhBase > 0 ? valorBase / kwhBase : 0;
       let descontoPercentual = Number(config.descontoPadrao);
       const descontoMax = Number(config.descontoMaximo);
 
@@ -104,19 +109,19 @@ export class MotorPropostaService {
       let valorCooperado = kwhApuradoBase - descontoAbsoluto;
 
       // Ajustar desconto se resultado acima da média cooperativa
-      if (config.acaoResultadoAcima === 'AUMENTAR_DESCONTO' && valorCooperado > mediaCooperativaKwh && mediaCooperativaKwh > 0) {
-        const descontoNecessario = ((tarifaUnitSemTrib - mediaCooperativaKwh) / tarifaUnitSemTrib) * 100;
+      if (config.acaoResultadoAcima === 'AUMENTAR_DESCONTO' && mediaCooperativaKwh > 0 && valorCooperado > mediaCooperativaKwh) {
+        const descontoNecessario = ((kwhApuradoBase - mediaCooperativaKwh) / tarifaUnitSemTrib) * 100;
         descontoPercentual = Math.min(descontoNecessario, descontoMax);
         descontoAbsoluto = tarifaUnitSemTrib * (descontoPercentual / 100);
-        valorCooperado = tarifaUnitSemTrib - descontoAbsoluto;
+        valorCooperado = kwhApuradoBase - descontoAbsoluto;
       }
 
-      const kwhContrato = kwhApuradoBase;
+      const kwhContrato = kwhBase; // quantidade de kWh
       const economiaAbsoluta = descontoAbsoluto;
-      const economiaPercentual = descontoPercentual;
+      const economiaPercentual = kwhApuradoBase > 0 ? (descontoAbsoluto / kwhApuradoBase) * 100 : 0;
       const economiaMensal = descontoAbsoluto * kwhContrato;
       const economiaAnual = economiaMensal * 12;
-      const mesesEquivalentes = tarifaUnitSemTrib > 0 ? economiaAnual / (tarifaUnitSemTrib * kwhContrato) : 0;
+      const mesesEquivalentes = valorBase > 0 ? economiaAnual / valorBase : 0;
 
       return {
         base,
