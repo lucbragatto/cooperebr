@@ -458,7 +458,7 @@ export default function CooperadoPerfilPage() {
   async function calcularProposta(opcaoEscolhida?: 'MES_RECENTE' | 'MEDIA_12M') {
     setCalculandoProposta(true);
     try {
-      const [faturasResp, tarifaResp] = await Promise.all([
+      const [faturasResp] = await Promise.all([
         api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`),
         api.get<{ tusdNova: number; teNova: number } | null>('/motor-proposta/tarifa-concessionaria/atual'),
       ]);

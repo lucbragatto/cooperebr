@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { CheckCircle, Loader2, Plus, XCircle } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { CheckCircle, Loader2, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
 
 interface Tarifa {
   id: string;
@@ -47,8 +50,10 @@ export default function TarifasPage() {
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [editando, setEditando] = useState<Tarifa | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [salvando, setSalvando] = useState(false);
+  const [dialogExcluir, setDialogExcluir] = useState<Tarifa | null>(null);
   const [toast, setToast] = useState<{ tipo: 'sucesso' | 'erro'; msg: string } | null>(null);
 
   function showToast(tipo: 'sucesso' | 'erro', msg: string) {
@@ -75,6 +80,29 @@ export default function TarifasPage() {
   const tarifaNova = tusdNov + teNov;
   const apuradoAuto = tarifaAntiga > 0 ? ((tarifaNova - tarifaAntiga) / tarifaAntiga) * 100 : 0;
 
+  function abrirNova() {
+    setEditando(null);
+    setForm(emptyForm);
+    setSheetOpen(true);
+  }
+
+  function abrirEditar(t: Tarifa) {
+    setEditando(t);
+    setForm({
+      concessionaria: t.concessionaria,
+      dataVigencia: t.dataVigencia.slice(0, 10),
+      tusdAnterior: String(t.tusdAnterior),
+      tusdNova: String(t.tusdNova),
+      teAnterior: String(t.teAnterior),
+      teNova: String(t.teNova),
+      percentualAnunciado: String(t.percentualAnunciado),
+      percentualApurado: String(t.percentualApurado),
+      percentualAplicado: String(t.percentualAplicado),
+      observacoes: t.observacoes ?? '',
+    });
+    setSheetOpen(true);
+  }
+
   async function salvar() {
     setSalvando(true);
     try {
@@ -90,13 +118,36 @@ export default function TarifasPage() {
         percentualAplicado: Number(form.percentualAplicado),
         observacoes: form.observacoes || undefined,
       };
-      const { data } = await api.post<Tarifa>('/motor-proposta/tarifa-concessionaria', payload);
-      setTarifas(p => [data, ...p]);
+
+      if (editando) {
+        const { data } = await api.put<Tarifa>(`/motor-proposta/tarifa-concessionaria/${editando.id}`, payload);
+        setTarifas(p => p.map(t => t.id === editando.id ? data : t));
+        showToast('sucesso', 'Tarifa atualizada com sucesso.');
+      } else {
+        const { data } = await api.post<Tarifa>('/motor-proposta/tarifa-concessionaria', payload);
+        setTarifas(p => [data, ...p]);
+        showToast('sucesso', 'Tarifa cadastrada com sucesso.');
+      }
       setSheetOpen(false);
       setForm(emptyForm);
-      showToast('sucesso', 'Tarifa cadastrada com sucesso.');
+      setEditando(null);
     } catch {
-      showToast('erro', 'Erro ao cadastrar tarifa.');
+      showToast('erro', editando ? 'Erro ao atualizar tarifa.' : 'Erro ao cadastrar tarifa.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluir() {
+    if (!dialogExcluir) return;
+    setSalvando(true);
+    try {
+      await api.delete(`/motor-proposta/tarifa-concessionaria/${dialogExcluir.id}`);
+      setTarifas(p => p.filter(t => t.id !== dialogExcluir.id));
+      setDialogExcluir(null);
+      showToast('sucesso', 'Tarifa excluída.');
+    } catch {
+      showToast('erro', 'Erro ao excluir tarifa.');
     } finally {
       setSalvando(false);
     }
@@ -113,7 +164,7 @@ export default function TarifasPage() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Tarifas da Concessionária</h2>
-        <Button size="sm" onClick={() => { setForm(emptyForm); setSheetOpen(true); }}>
+        <Button size="sm" onClick={abrirNova}>
           <Plus className="h-4 w-4 mr-2" />Nova tarifa
         </Button>
       </div>
@@ -137,6 +188,7 @@ export default function TarifasPage() {
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">% Anunc.</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">% Apur.</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">% Aplic.</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -151,6 +203,16 @@ export default function TarifasPage() {
                     <td className="px-4 py-3 text-right">{fmt5(t.percentualAnunciado)}%</td>
                     <td className="px-4 py-3 text-right">{fmt5(t.percentualApurado)}%</td>
                     <td className="px-4 py-3 text-right font-medium">{fmt5(t.percentualAplicado)}%</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => abrirEditar(t)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setDialogExcluir(t)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -159,9 +221,12 @@ export default function TarifasPage() {
         </CardContent>
       </Card>
 
+      {/* Sheet — criar / editar */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader><SheetTitle>Nova Tarifa da Concessionária</SheetTitle></SheetHeader>
+          <SheetHeader>
+            <SheetTitle>{editando ? `Editar — ${editando.concessionaria}` : 'Nova Tarifa da Concessionária'}</SheetTitle>
+          </SheetHeader>
           <div className="mt-6 space-y-4">
             <div>
               <label className={lbl}>Concessionária</label>
@@ -191,7 +256,7 @@ export default function TarifasPage() {
                 <input type="number" step="0.00001" className={cls} value={form.teNova} onChange={e => set('teNova', e.target.value)} />
               </div>
             </div>
-            {(tusdAnt > 0 || teAnt > 0) && (tarifaNova > 0) && (
+            {(tusdAnt > 0 || teAnt > 0) && tarifaNova > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-xs text-blue-800">
                 % Apurado automático: <strong>{apuradoAuto.toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}%</strong>
                 {' '}(de R$ {fmt5(tarifaAntiga)} para R$ {fmt5(tarifaNova)})
@@ -219,12 +284,33 @@ export default function TarifasPage() {
               className="flex-1"
             >
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Cadastrar
+              {editando ? 'Salvar alterações' : 'Cadastrar'}
             </Button>
             <Button variant="outline" onClick={() => setSheetOpen(false)}>Cancelar</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Dialog — confirmar exclusão */}
+      <Dialog open={!!dialogExcluir} onOpenChange={open => { if (!open) setDialogExcluir(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir tarifa</DialogTitle>
+            <DialogDescription>
+              Deseja excluir a tarifa de <strong>{dialogExcluir?.concessionaria}</strong> com vigência em{' '}
+              {dialogExcluir ? new Date(dialogExcluir.dataVigencia).toLocaleDateString('pt-BR') : ''}?
+              Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogExcluir(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={excluir} disabled={salvando}>
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

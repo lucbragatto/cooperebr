@@ -249,6 +249,17 @@ export class MotorPropostaService {
     });
   }
 
+  async atualizarTarifa(id: string, dto: TarifaConcessionariaDto) {
+    return this.prisma.tarifaConcessionaria.update({
+      where: { id },
+      data: { ...dto, dataVigencia: new Date(dto.dataVigencia) } as any,
+    });
+  }
+
+  async excluirTarifa(id: string) {
+    return this.prisma.tarifaConcessionaria.delete({ where: { id } });
+  }
+
   async historicoReajustes() {
     return this.prisma.historicoReajuste.findMany({
       orderBy: { createdAt: 'desc' },

@@ -14,6 +14,12 @@ async function bootstrap() {
     origin: ['http://localhost:3001', 'http://localhost:3000'],
     credentials: true,
   });
-  await app.listen(process.env.PORT ?? 3000);
+  const server = await app.listen(process.env.PORT ?? 3000);
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n⚠️  Porta ${process.env.PORT ?? 3000} já está em uso. Encerrando para que o watch reinicie...\n`);
+      setTimeout(() => process.exit(1), 500);
+    }
+  });
 }
 bootstrap();

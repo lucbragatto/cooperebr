@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
 import { MotorPropostaService } from './motor-proposta.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -64,6 +64,16 @@ export class MotorPropostaController {
   @Get('tarifa-concessionaria')
   listarTarifas() {
     return this.service.listarTarifas();
+  }
+
+  @Put('tarifa-concessionaria/:id')
+  atualizarTarifa(@Param('id') id: string, @Body() dto: TarifaConcessionariaDto) {
+    return this.service.atualizarTarifa(id, dto);
+  }
+
+  @Delete('tarifa-concessionaria/:id')
+  excluirTarifa(@Param('id') id: string) {
+    return this.service.excluirTarifa(id);
   }
 
   @Get('historico-reajustes')
