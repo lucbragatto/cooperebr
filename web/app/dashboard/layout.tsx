@@ -33,6 +33,7 @@ const navItems = [
   { href: '/dashboard/planos', label: 'Planos', icon: Tag },
   { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
   { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+  { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
 ];
 
 function tempoAtras(dateStr: string): string {

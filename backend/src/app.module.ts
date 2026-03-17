@@ -14,6 +14,7 @@ import { FaturasModule } from './faturas/faturas.module';
 import { PlanosModule } from './planos/planos.module';
 import { DocumentosModule } from './documentos/documentos.module';
 import { NotificacoesModule } from './notificacoes/notificacoes.module';
+import { MotorPropostaModule } from './motor-proposta/motor-proposta.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -30,6 +31,7 @@ import { RolesGuard } from './auth/roles.guard';
     PlanosModule,
     DocumentosModule,
     NotificacoesModule,
+    MotorPropostaModule,
   ],
   controllers: [AppController],
   providers: [

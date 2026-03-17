@@ -21,7 +21,40 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias';
+type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta';
+
+interface PropostaOpcao {
+  base: 'MES_RECENTE' | 'MEDIA_12M';
+  label: string;
+  kwhApuradoBase: number;
+  descontoPercentual: number;
+  descontoAbsoluto: number;
+  kwhContrato: number;
+  valorCooperado: number;
+  economiaAbsoluta: number;
+  economiaPercentual: number;
+  economiaMensal: number;
+  economiaAnual: number;
+  mesesEquivalentes: number;
+}
+interface PropostaResultado extends PropostaOpcao {
+  tarifaUnitSemTrib: number;
+  tusdUtilizada: number;
+  teUtilizada: number;
+  kwhMesRecente: number;
+  valorMesRecente: number;
+  kwhMedio12m: number;
+  valorMedio12m: number;
+  mediaCooperativaKwh: number;
+  resultadoVsMedia: number;
+  mesReferencia: string;
+}
+interface PropostaResult {
+  outlierDetectado: boolean;
+  aguardandoEscolha?: boolean;
+  opcoes?: PropostaOpcao[];
+  resultado?: PropostaResultado;
+}
 
 interface HistoricoItem { mesAno: string; consumoKwh: number; valorRS: number }
 interface DadosExtraidos {
@@ -118,6 +151,7 @@ const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'cobrancas', label: 'Cobranças', icon: CreditCard },
   { id: 'documentos', label: 'Documentos', icon: FileText },
   { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+  { id: 'proposta', label: 'Proposta', icon: Zap },
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -165,6 +199,11 @@ export default function CooperadoPerfilPage() {
   const [dataBaixa, setDataBaixa] = useState(today());
   const [formOc, setFormOc] = useState({ tipo: 'SOLICITACAO', prioridade: 'MEDIA', descricao: '', ucId: '' });
   const [formEditOc, setFormEditOc] = useState({ status: '', resolucao: '' });
+
+  // Proposta
+  const [proposta, setProposta] = useState<PropostaResult | null>(null);
+  const [calculandoProposta, setCalculandoProposta] = useState(false);
+  const [historicoProposta, setHistoricoProposta] = useState<any[]>([]);
 
   // Reprovar doc (inline)
   const [reprovarId, setReprovarId] = useState<string | null>(null);
@@ -412,6 +451,75 @@ export default function CooperadoPerfilPage() {
       showToast('sucesso', 'Ocorrência atualizada.');
     } catch { showToast('erro', 'Erro ao atualizar ocorrência.'); }
     finally { setSalvando(false); }
+  }
+
+  // ── Actions — Proposta ────────────────────────────────────────────────────
+
+  async function calcularProposta(opcaoEscolhida?: 'MES_RECENTE' | 'MEDIA_12M') {
+    setCalculandoProposta(true);
+    try {
+      const [faturasResp, tarifaResp] = await Promise.all([
+        api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`),
+        api.get<{ tusdNova: number; teNova: number } | null>('/motor-proposta/tarifa-concessionaria/atual'),
+      ]);
+      const fats = faturasResp.data;
+      const ultimaFat = fats[0] ?? null;
+      const historico = ultimaFat?.dadosExtraidos?.historicoConsumo ?? [];
+      const kwhRecente = ultimaFat?.dadosExtraidos?.consumoAtualKwh ?? 0;
+      const valorRecente = ultimaFat?.dadosExtraidos?.totalAPagar ?? 0;
+      const mesRef = ultimaFat?.dadosExtraidos?.mesReferencia ?? new Date().toISOString().slice(0, 7);
+
+      const payload: any = {
+        cooperadoId: id,
+        historico: historico.map((h: HistoricoItem) => ({
+          mesAno: h.mesAno,
+          consumoKwh: Number(h.consumoKwh),
+          valorRS: Number(h.valorRS),
+        })),
+        kwhMesRecente: Number(kwhRecente),
+        valorMesRecente: Number(valorRecente),
+        mesReferencia: mesRef,
+      };
+      if (opcaoEscolhida) payload.opcaoEscolhida = opcaoEscolhida;
+
+      const endpoint = opcaoEscolhida ? '/motor-proposta/confirmar-opcao' : '/motor-proposta/calcular';
+      const { data } = await api.post<PropostaResult>(endpoint, payload);
+      setProposta(data);
+    } catch {
+      showToast('erro', 'Erro ao calcular proposta.');
+    } finally {
+      setCalculandoProposta(false);
+    }
+  }
+
+  async function aceitarProposta() {
+    if (!proposta?.resultado) return;
+    setSalvando(true);
+    try {
+      await api.post('/motor-proposta/aceitar', {
+        cooperadoId: id,
+        resultado: proposta.resultado,
+        mesReferencia: proposta.resultado.mesReferencia,
+      });
+      showToast('sucesso', 'Proposta aceita com sucesso!');
+      setProposta(null);
+      // Recarregar histórico
+      const { data } = await api.get<any[]>(`/motor-proposta/historico/${id}`);
+      setHistoricoProposta(data);
+    } catch {
+      showToast('erro', 'Erro ao aceitar proposta.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function carregarHistoricoProposta() {
+    try {
+      const { data } = await api.get<any[]>(`/motor-proposta/historico/${id}`);
+      setHistoricoProposta(data);
+    } catch {
+      // silently ignore
+    }
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -778,6 +886,172 @@ export default function CooperadoPerfilPage() {
                 </CardContent>
               </Card>
             ))
+          )}
+        </div>
+      )}
+
+      {/* ── Aba 7: Proposta ── */}
+      {aba === 'proposta' && (
+        <div className="space-y-4">
+          {/* Estado inicial: botão calcular */}
+          {!proposta && !calculandoProposta && (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-4 py-16">
+                <Zap className="h-12 w-12 text-green-500" />
+                <div className="text-center">
+                  <p className="text-gray-700 font-medium text-lg">Motor de Proposta</p>
+                  <p className="text-gray-400 text-sm mt-1">Gere uma proposta personalizada baseada no histórico de consumo e nas configurações da cooperativa.</p>
+                </div>
+                <Button onClick={() => { carregarHistoricoProposta(); calcularProposta(); }} size="lg">
+                  <Zap className="h-4 w-4 mr-2" />Calcular proposta
+                </Button>
+                {historicoProposta.length > 0 && (
+                  <div className="w-full mt-4">
+                    <p className="text-xs text-gray-500 mb-2 font-medium">Histórico de propostas</p>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Referência</th>
+                            <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">kWh</th>
+                            <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">Economia/mês</th>
+                            <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Status</th>
+                            <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Data</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {historicoProposta.map((p: any) => (
+                            <tr key={p.id} className="hover:bg-gray-50">
+                              <td className="px-3 py-2">{p.mesReferencia}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs">{Number(p.kwhContrato).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</td>
+                              <td className="px-3 py-2 text-right text-green-700">{Number(p.economiaMensal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.status === 'ACEITA' ? 'bg-green-100 text-green-800' : p.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{p.status}</span>
+                              </td>
+                              <td className="px-3 py-2 text-gray-500 text-xs">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Carregando */}
+          {calculandoProposta && (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-4 py-16">
+                <Loader2 className="h-10 w-10 text-green-500 animate-spin" />
+                <p className="text-gray-500">Calculando proposta...</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Resultado: aguardando escolha (outlier) */}
+          {proposta?.aguardandoEscolha && proposta.opcoes && (
+            <div className="space-y-4">
+              <Card className="border-orange-200 bg-orange-50">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-5 w-5 text-orange-600" />
+                    <span className="font-medium text-orange-800">Consumo atípico detectado</span>
+                  </div>
+                  <p className="text-sm text-orange-700">O consumo do mês atual é significativamente diferente da média histórica. Escolha qual base usar para a proposta:</p>
+                </CardContent>
+              </Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {proposta.opcoes.map(opcao => (
+                  <Card key={opcao.base} className="border-2 hover:border-green-400 transition-colors">
+                    <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">{opcao.label}</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div><p className="text-xs text-gray-400">Base kWh</p><p className="font-mono font-medium">{Number(opcao.kwhApuradoBase).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                        <div><p className="text-xs text-gray-400">Desconto</p><p className="font-medium text-green-700">{Number(opcao.descontoPercentual).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}%</p></div>
+                        <div><p className="text-xs text-gray-400">Economia/mês</p><p className="font-bold text-green-700">{Number(opcao.economiaMensal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                        <div><p className="text-xs text-gray-400">Economia/ano</p><p className="font-medium">{Number(opcao.economiaAnual).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                      </div>
+                      <Button className="w-full mt-2" onClick={() => calcularProposta(opcao.base)} disabled={calculandoProposta}>
+                        Escolher esta opção
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setProposta(null)}>Recalcular</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Resultado final */}
+          {proposta?.resultado && (
+            <div className="space-y-4">
+              {proposta.outlierDetectado && (
+                <Card className="border-orange-200 bg-orange-50">
+                  <CardContent className="pt-3 pb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      <span className="text-sm text-orange-800">Consumo atípico detectado — base utilizada: <strong>{proposta.resultado.base === 'MES_RECENTE' ? 'Mês atual' : 'Média 12 meses'}</strong></span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="border-2 border-green-400">
+                <CardHeader className="bg-green-50 rounded-t-lg">
+                  <CardTitle className="text-green-800 flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5" />
+                    Proposta calculada — {proposta.resultado.mesReferencia}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 rounded p-3">
+                      <p className="text-xs text-gray-500">kWh do contrato</p>
+                      <p className="font-mono font-bold text-lg">{Number(proposta.resultado.kwhContrato).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p>
+                    </div>
+                    <div className="bg-green-50 rounded p-3">
+                      <p className="text-xs text-gray-500">Desconto</p>
+                      <p className="font-bold text-lg text-green-700">{Number(proposta.resultado.descontoPercentual).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}%</p>
+                    </div>
+                    <div className="bg-green-50 rounded p-3">
+                      <p className="text-xs text-gray-500">Economia mensal</p>
+                      <p className="font-bold text-lg text-green-700">{Number(proposta.resultado.economiaMensal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div className="bg-green-50 rounded p-3">
+                      <p className="text-xs text-gray-500">Economia anual</p>
+                      <p className="font-bold text-lg text-green-700">{Number(proposta.resultado.economiaAnual).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t pt-4">
+                    <div><p className="text-xs text-gray-400">TUSD utilizada</p><p className="font-mono">{Number(proposta.resultado.tusdUtilizada).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">TE utilizada</p><p className="font-mono">{Number(proposta.resultado.teUtilizada).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">Tarifa unit. sem trib.</p><p className="font-mono">{Number(proposta.resultado.tarifaUnitSemTrib).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">Valor cooperado</p><p className="font-mono">{Number(proposta.resultado.valorCooperado).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">kWh mês recente</p><p className="font-mono">{Number(proposta.resultado.kwhMesRecente).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">kWh médio 12m</p><p className="font-mono">{Number(proposta.resultado.kwhMedio12m).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">Média cooperativa</p><p className="font-mono">{Number(proposta.resultado.mediaCooperativaKwh).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">Resultado vs média</p><p className={`font-mono ${proposta.resultado.resultadoVsMedia > 0 ? 'text-red-600' : 'text-green-600'}`}>{Number(proposta.resultado.resultadoVsMedia).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}%</p></div>
+                    <div><p className="text-xs text-gray-400">Meses equivalentes</p><p className="font-mono">{Number(proposta.resultado.mesesEquivalentes).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</p></div>
+                    <div><p className="text-xs text-gray-400">Base utilizada</p><p className="font-medium">{proposta.resultado.base === 'MES_RECENTE' ? 'Mês atual' : 'Média 12m'}</p></div>
+                  </div>
+
+                  <div className="flex gap-3 border-t pt-4">
+                    <Button onClick={aceitarProposta} disabled={salvando} className="bg-green-600 hover:bg-green-700">
+                      {salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                      Aceitar proposta
+                    </Button>
+                    <Button variant="outline" onClick={() => setProposta(null)} disabled={salvando}>
+                      Recalcular
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       )}
