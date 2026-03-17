@@ -32,13 +32,14 @@ export class ContratosController {
   create(
     @Body()
     body: {
-      numero: string;
       cooperadoId: string;
       ucId: string;
-      usinaId: string;
+      usinaId?: string;
+      planoId?: string;
       dataInicio: Date;
       dataFim?: Date;
       percentualDesconto: number;
+      kwhContrato?: number;
     },
   ) {
     return this.contratosService.create(body);

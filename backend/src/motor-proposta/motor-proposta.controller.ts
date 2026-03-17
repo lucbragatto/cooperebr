@@ -90,4 +90,16 @@ export class MotorPropostaController {
   aplicarReajuste(@Body() dto: SimularReajusteDto) {
     return this.service.aplicarReajuste(dto);
   }
+
+  @Roles(ADMIN)
+  @Get('lista-espera')
+  getListaEspera() {
+    return this.service.getListaEspera();
+  }
+
+  @Roles(ADMIN)
+  @Post('lista-espera/:id/alocar')
+  alocarListaEspera(@Param('id') id: string, @Body('usinaId') usinaId: string) {
+    return this.service.alocarListaEspera(id, usinaId);
+  }
 }

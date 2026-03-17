@@ -28,24 +28,38 @@ export class ContratosService {
   }
 
   async create(data: {
-    numero: string;
     cooperadoId: string;
     ucId: string;
-    usinaId: string;
+    usinaId?: string;
+    planoId?: string;
     dataInicio: Date;
     dataFim?: Date;
     percentualDesconto: number;
+    kwhContrato?: number;
   }) {
-    return this.prisma.contrato.create({ data });
+    const ano = new Date().getFullYear();
+    const lastContrato = await this.prisma.contrato.findFirst({
+      where: { numero: { startsWith: `CTR-${ano}-` } },
+      orderBy: { numero: 'desc' },
+    });
+    const seq = lastContrato ? parseInt(lastContrato.numero.split('-')[2] ?? '0', 10) + 1 : 1;
+    const numero = `CTR-${ano}-${String(seq).padStart(4, '0')}`;
+
+    return this.prisma.contrato.create({
+      data: { ...data, numero },
+      include: { uc: true, usina: true, plano: true, cobrancas: true },
+    });
   }
 
   async update(id: string, data: Partial<{
     ucId: string;
     usinaId: string;
+    planoId: string;
     dataInicio: Date;
     dataFim: Date;
     percentualDesconto: number;
-    status: 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
+    kwhContrato: number;
+    status: 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
   }>) {
     return this.prisma.contrato.update({ where: { id }, data });
   }

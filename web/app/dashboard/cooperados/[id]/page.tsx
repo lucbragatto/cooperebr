@@ -121,10 +121,12 @@ const statusContratoColors: Record<string, string> = {
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
   SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
+  LISTA_ESPERA: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 const tipoDocLabel: Record<string, string> = {
   RG_FRENTE: 'RG (Frente)', RG_VERSO: 'RG (Verso)',
-  CNH_FRENTE: 'CNH (Frente)', CNH_VERSO: 'CNH (Verso)', CONTRATO_SOCIAL: 'Contrato Social',
+  CNH_FRENTE: 'CNH (Frente)', CNH_VERSO: 'CNH (Verso)',
+  CONTRATO_SOCIAL: 'Contrato Social', OUTROS: 'Outros',
 };
 const tipoOcLabel: Record<string, string> = {
   FALTA_ENERGIA: 'Falta de Energia', MEDICAO_INCORRETA: 'Medição Incorreta',
@@ -209,6 +211,16 @@ export default function CooperadoPerfilPage() {
   const [reprovarId, setReprovarId] = useState<string | null>(null);
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [docAcao, setDocAcao] = useState<string | null>(null);
+
+  // Criar contrato
+  const [sheetCriarContrato, setSheetCriarContrato] = useState(false);
+  const [planosAtivos, setPlanosAtivos] = useState<Plano[]>([]);
+  const [formCriarContrato, setFormCriarContrato] = useState({ planoId: '', ucId: '', percentualDesconto: '', dataAdesao: today(), dataEncerramento: '' });
+
+  // Upload documento
+  const [sheetUploadDoc, setSheetUploadDoc] = useState(false);
+  const [arquivoUpload, setArquivoUpload] = useState<File | null>(null);
+  const [formUploadDoc, setFormUploadDoc] = useState({ tipo: 'RG_FRENTE' });
 
   // ── Toast helper ──────────────────────────────────────────────────────────
 
@@ -453,6 +465,58 @@ export default function CooperadoPerfilPage() {
     finally { setSalvando(false); }
   }
 
+  // ── Actions — Criar Contrato ──────────────────────────────────────────────
+
+  async function abrirCriarContrato() {
+    if (!cooperado?.ucs.length) { showToast('erro', 'Cooperado sem UC vinculada.'); return; }
+    setFormCriarContrato({ planoId: '', ucId: cooperado.ucs[0]?.id ?? '', percentualDesconto: '', dataAdesao: today(), dataEncerramento: '' });
+    try {
+      const { data } = await api.get<any[]>('/planos');
+      setPlanosAtivos(data.filter((p: any) => p.ativo));
+    } catch { setPlanosAtivos([]); }
+    setSheetCriarContrato(true);
+  }
+
+  async function criarContrato() {
+    if (!cooperado || !formCriarContrato.ucId || !formCriarContrato.percentualDesconto) return;
+    setSalvando(true);
+    try {
+      const { data } = await api.post('/contratos', {
+        cooperadoId: id,
+        planoId: formCriarContrato.planoId || undefined,
+        ucId: formCriarContrato.ucId,
+        percentualDesconto: Number(formCriarContrato.percentualDesconto),
+        dataInicio: formCriarContrato.dataAdesao,
+        ...(formCriarContrato.dataEncerramento ? { dataFim: formCriarContrato.dataEncerramento } : {}),
+      });
+      setCooperado(p => p ? { ...p, contratos: [data, ...p.contratos] } : p);
+      setSheetCriarContrato(false);
+      showToast('sucesso', 'Contrato criado com sucesso.');
+    } catch { showToast('erro', 'Erro ao criar contrato.'); }
+    finally { setSalvando(false); }
+  }
+
+  // ── Actions — Upload Documento ────────────────────────────────────────────
+
+  async function uploadDocumento() {
+    if (!arquivoUpload || !formUploadDoc.tipo) return;
+    const formData = new FormData();
+    formData.append('arquivo', arquivoUpload);
+    formData.append('tipo', formUploadDoc.tipo);
+    setSalvando(true);
+    try {
+      const { data } = await api.post<DocumentoCooperado>(`/documentos/upload/${id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setCooperado(p => p ? { ...p, documentos: [...p.documentos, data] } : p);
+      setSheetUploadDoc(false);
+      setArquivoUpload(null);
+      setFormUploadDoc({ tipo: 'RG_FRENTE' });
+      showToast('sucesso', 'Documento enviado com sucesso.');
+    } catch { showToast('erro', 'Erro ao enviar documento.'); }
+    finally { setSalvando(false); }
+  }
+
   // ── Actions — Proposta ────────────────────────────────────────────────────
 
   async function calcularProposta(opcaoEscolhida?: 'MES_RECENTE' | 'MEDIA_12M') {
@@ -496,16 +560,23 @@ export default function CooperadoPerfilPage() {
     if (!proposta?.resultado) return;
     setSalvando(true);
     try {
-      await api.post('/motor-proposta/aceitar', {
+      const { data: resp } = await api.post<{ emListaEspera?: boolean }>('/motor-proposta/aceitar', {
         cooperadoId: id,
         resultado: proposta.resultado,
         mesReferencia: proposta.resultado.mesReferencia,
       });
-      showToast('sucesso', 'Proposta aceita com sucesso!');
+      const msg = resp.emListaEspera
+        ? 'Proposta aceita. Cooperado adicionado à lista de espera por falta de vaga.'
+        : 'Proposta aceita! Contrato criado automaticamente.';
+      showToast('sucesso', msg);
       setProposta(null);
-      // Recarregar histórico
-      const { data } = await api.get<any[]>(`/motor-proposta/historico/${id}`);
-      setHistoricoProposta(data);
+      // Recarregar cooperado (novo contrato) e histórico
+      const [cooperadoResp, historicoResp] = await Promise.all([
+        api.get<CooperadoCompleto>(`/cooperados/${id}`),
+        api.get<any[]>(`/motor-proposta/historico/${id}`),
+      ]);
+      setCooperado(cooperadoResp.data);
+      setHistoricoProposta(historicoResp.data);
     } catch {
       showToast('erro', 'Erro ao aceitar proposta.');
     } finally {
@@ -729,7 +800,13 @@ export default function CooperadoPerfilPage() {
       {aba === 'contrato' && (
         <div className="space-y-4">
           {cooperado.contratos.length === 0 ? (
-            <Card><CardContent className="flex flex-col items-center gap-3 py-12"><Building2 className="h-10 w-10 text-gray-300" /><p className="text-gray-500">Sem contrato ativo.</p></CardContent></Card>
+            <Card>
+              <CardContent className="flex flex-col items-center gap-4 py-12">
+                <Building2 className="h-10 w-10 text-gray-300" />
+                <p className="text-gray-500">Sem contrato ativo.</p>
+                <Button size="sm" onClick={abrirCriarContrato}><Plus className="h-4 w-4 mr-2" />Criar contrato</Button>
+              </CardContent>
+            </Card>
           ) : (
             cooperado.contratos.map(c => (
               <div key={c.id} className="space-y-4">
@@ -793,7 +870,9 @@ export default function CooperadoPerfilPage() {
       {/* ── Aba 4: Cobranças ── */}
       {aba === 'cobrancas' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            {!contrato && <p className="text-sm text-gray-500">Crie um contrato primeiro para gerar cobranças.</p>}
+            {contrato && <div />}
             <Button size="sm" onClick={() => { setFormCob({ mes: String(new Date().getMonth() + 1), ano: String(new Date().getFullYear()), valorBruto: '', percentualDesconto: String(contrato?.percentualDesconto ?? ''), dataVencimento: '' }); setSheetNovaCobranca(true); }} disabled={!contrato}>
               <Plus className="h-4 w-4 mr-2" />Nova cobrança
             </Button>
@@ -846,6 +925,11 @@ export default function CooperadoPerfilPage() {
       {/* ── Aba 5: Documentos ── */}
       {aba === 'documentos' && (
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => { setFormUploadDoc({ tipo: 'RG_FRENTE' }); setArquivoUpload(null); setSheetUploadDoc(true); }}>
+              <FilePlus className="h-4 w-4 mr-2" />Adicionar documento
+            </Button>
+          </div>
           {reprovarId && (
             <Card className="border-red-200 bg-red-50">
               <CardContent className="pt-4 space-y-3">
@@ -1121,7 +1205,7 @@ export default function CooperadoPerfilPage() {
           <div className="mt-6 space-y-4">
             <div><label className={lbl}>Status</label>
               <select className={cls} value={formContrato.status} onChange={e => setFormContrato(p => ({ ...p, status: e.target.value }))}>
-                {['ATIVO', 'SUSPENSO', 'ENCERRADO'].map(s => <option key={s} value={s}>{s}</option>)}
+                {['ATIVO', 'SUSPENSO', 'ENCERRADO', 'LISTA_ESPERA'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div><label className={lbl}>Desconto (%)</label><input type="number" step="0.01" className={cls} value={formContrato.percentualDesconto} onChange={e => setFormContrato(p => ({ ...p, percentualDesconto: e.target.value }))} /></div>
@@ -1299,6 +1383,61 @@ export default function CooperadoPerfilPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sheet — Criar Contrato */}
+      <Sheet open={sheetCriarContrato} onOpenChange={setSheetCriarContrato}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Criar Contrato</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div><label className={lbl}>Plano</label>
+              <select className={cls} value={formCriarContrato.planoId} onChange={e => {
+                const p = planosAtivos.find(pl => pl.id === e.target.value);
+                setFormCriarContrato(prev => ({ ...prev, planoId: e.target.value, percentualDesconto: p ? String(p.descontoBase) : prev.percentualDesconto }));
+              }}>
+                <option value="">Sem plano</option>
+                {planosAtivos.map(p => <option key={p.id} value={p.id}>{p.nome} ({Number(p.descontoBase).toFixed(2)}%)</option>)}
+              </select>
+            </div>
+            {cooperado.ucs.length > 0 && (
+              <div><label className={lbl}>UC</label>
+                <select className={cls} value={formCriarContrato.ucId} onChange={e => setFormCriarContrato(p => ({ ...p, ucId: e.target.value }))}>
+                  {cooperado.ucs.map(u => <option key={u.id} value={u.id}>{u.numero} — {u.cidade}</option>)}
+                </select>
+              </div>
+            )}
+            <div><label className={lbl}>Desconto (%)</label><input type="number" step="0.01" className={cls} value={formCriarContrato.percentualDesconto} onChange={e => setFormCriarContrato(p => ({ ...p, percentualDesconto: e.target.value }))} /></div>
+            <div><label className={lbl}>Data de adesão</label><input type="date" className={cls} value={formCriarContrato.dataAdesao} onChange={e => setFormCriarContrato(p => ({ ...p, dataAdesao: e.target.value }))} /></div>
+            <div><label className={lbl}>Data de encerramento (opcional)</label><input type="date" className={cls} value={formCriarContrato.dataEncerramento} onChange={e => setFormCriarContrato(p => ({ ...p, dataEncerramento: e.target.value }))} /></div>
+          </div>
+          <SheetFooter className="mt-6 flex gap-2">
+            <Button onClick={criarContrato} disabled={salvando || !formCriarContrato.ucId || !formCriarContrato.percentualDesconto} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Criar</Button>
+            <Button variant="outline" onClick={() => setSheetCriarContrato(false)}>Cancelar</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Sheet — Upload Documento */}
+      <Sheet open={sheetUploadDoc} onOpenChange={setSheetUploadDoc}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Adicionar Documento</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div><label className={lbl}>Tipo de documento</label>
+              <select className={cls} value={formUploadDoc.tipo} onChange={e => setFormUploadDoc(p => ({ ...p, tipo: e.target.value }))}>
+                {Object.entries(tipoDocLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Arquivo (PDF ou imagem)</label>
+              <input type="file" accept=".pdf,image/*" className={cls + ' py-1.5 cursor-pointer'} onChange={e => setArquivoUpload(e.target.files?.[0] ?? null)} />
+              {arquivoUpload && <p className="text-xs text-gray-500 mt-1">{arquivoUpload.name} ({(arquivoUpload.size / 1024).toFixed(0)} KB)</p>}
+            </div>
+          </div>
+          <SheetFooter className="mt-6 flex gap-2">
+            <Button onClick={uploadDocumento} disabled={salvando || !arquivoUpload} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Enviar</Button>
+            <Button variant="outline" onClick={() => setSheetUploadDoc(false)}>Cancelar</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

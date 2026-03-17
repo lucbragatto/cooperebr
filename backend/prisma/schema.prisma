@@ -50,6 +50,7 @@ model Cooperado {
   documentos        DocumentoCooperado[]
   notificacoes      Notificacao[]
   propostas         PropostaCooperado[]
+  listaEspera       ListaEspera[]
 
   @@map("cooperados")
 }
@@ -77,6 +78,7 @@ enum TipoDocumento {
   CNH_FRENTE
   CNH_VERSO
   CONTRATO_SOCIAL
+  OUTROS
 }
 
 enum StatusDocumento {
@@ -119,14 +121,15 @@ model Uc {
 }
 
 model Usina {
-  id          String     @id @default(cuid())
-  nome        String
-  potenciaKwp Decimal    @db.Decimal(10, 2)
-  cidade      String
-  estado      String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  contratos   Contrato[]
+  id             String     @id @default(cuid())
+  nome           String
+  potenciaKwp    Decimal    @db.Decimal(10, 2)
+  capacidadeKwh  Decimal?   @db.Decimal(10, 5)
+  cidade         String
+  estado         String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  contratos      Contrato[]
 
   @@map("usinas")
 }
@@ -138,17 +141,19 @@ model Contrato {
   cooperado          Cooperado      @relation(fields: [cooperadoId], references: [id])
   ucId               String
   uc                 Uc             @relation(fields: [ucId], references: [id])
-  usinaId            String
-  usina              Usina          @relation(fields: [usinaId], references: [id])
+  usinaId            String?
+  usina              Usina?         @relation(fields: [usinaId], references: [id])
   planoId            String?
   plano              Plano?         @relation(fields: [planoId], references: [id])
   dataInicio         DateTime
   dataFim            DateTime?
   percentualDesconto Decimal        @db.Decimal(5, 2)
+  kwhContrato        Decimal?       @db.Decimal(10, 5)
   status             StatusContrato @default(ATIVO)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   cobrancas          Cobranca[]
+  listaEspera        ListaEspera?
 
   @@map("contratos")
 }
@@ -190,6 +195,7 @@ enum StatusContrato {
   ATIVO
   SUSPENSO
   ENCERRADO
+  LISTA_ESPERA
 }
 
 model Cobranca {
@@ -406,4 +412,19 @@ model PropostaCooperado {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   @@map("propostas_cooperado")
+}
+
+model ListaEspera {
+  id            String    @id @default(cuid())
+  cooperadoId   String
+  cooperado     Cooperado @relation(fields: [cooperadoId], references: [id])
+  contratoId    String?   @unique
+  contrato      Contrato? @relation(fields: [contratoId], references: [id])
+  kwhNecessario Decimal   @db.Decimal(10, 5)
+  posicao       Int
+  status        String    @default("AGUARDANDO")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("lista_espera")
 }

@@ -21,6 +21,7 @@ import {
   FileX,
   FilePlus,
   Info,
+  Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -34,6 +35,7 @@ const navItems = [
   { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
   { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
+  { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
 ];
 
 function tempoAtras(dateStr: string): string {

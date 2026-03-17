@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import {
   Injectable,
   NotFoundException,
@@ -15,6 +16,7 @@ const tipoDocumentoLabel: Record<string, string> = {
   CNH_FRENTE: 'CNH (Frente)',
   CNH_VERSO: 'CNH (Verso)',
   CONTRATO_SOCIAL: 'Contrato Social',
+  OUTROS: 'Outros',
 };
 
 @Injectable()
@@ -79,6 +81,44 @@ export class DocumentosService {
     });
 
     return resultado;
+  }
+
+  async uploadAdmin(cooperadoId: string, tipo: string, arquivo: Express.Multer.File) {
+    if (!arquivo) throw new BadRequestException('Arquivo obrigatório.');
+    if (!tipo) throw new BadRequestException('Tipo de documento obrigatório.');
+
+    const ext = arquivo.originalname.split('.').pop() ?? 'bin';
+    const storagePath = `${cooperadoId}/${tipo}_admin_${Date.now()}.${ext}`;
+
+    const { error } = await this.supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, arquivo.buffer, { contentType: arquivo.mimetype });
+    if (error) throw new BadRequestException(`Erro no upload: ${error.message}`);
+
+    const { data: urlData } = this.supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+
+    const existing = await this.prisma.documentoCooperado.findUnique({
+      where: { cooperadoId_tipo: { cooperadoId, tipo: tipo as any } },
+    });
+
+    const doc = existing
+      ? await this.prisma.documentoCooperado.update({
+          where: { id: existing.id },
+          data: { url: urlData.publicUrl, nomeArquivo: arquivo.originalname, tamanhoBytes: arquivo.size, status: 'PENDENTE', motivoRejeicao: null },
+        })
+      : await this.prisma.documentoCooperado.create({
+          data: { cooperadoId, tipo: tipo as any, url: urlData.publicUrl, nomeArquivo: arquivo.originalname, tamanhoBytes: arquivo.size, status: 'PENDENTE' },
+        });
+
+    await this.notificacoes.criar({
+      tipo: 'NOVO_DOCUMENTO',
+      titulo: 'Novo documento enviado',
+      mensagem: `Documento ${tipoDocumentoLabel[tipo] ?? tipo} enviado para aprovação.`,
+      cooperadoId,
+      link: `/dashboard/cooperados/${cooperadoId}`,
+    });
+
+    return doc;
   }
 
   async remove(id: string) {

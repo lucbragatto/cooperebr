@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import type { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import type { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import type { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -40,7 +41,10 @@ export interface ResultadoCalculo {
 
 @Injectable()
 export class MotorPropostaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificacoes: NotificacoesService,
+  ) {}
 
   async getConfiguracao() {
     let config = await this.prisma.configuracaoMotor.findFirst();
@@ -97,7 +101,7 @@ export class MotorPropostaService {
       const descontoMax = Number(config.descontoMaximo);
 
       let descontoAbsoluto = tarifaUnitSemTrib * (descontoPercentual / 100);
-      let valorCooperado = tarifaUnitSemTrib - descontoAbsoluto;
+      let valorCooperado = kwhApuradoBase - descontoAbsoluto;
 
       // Ajustar desconto se resultado acima da média cooperativa
       if (config.acaoResultadoAcima === 'AUMENTAR_DESCONTO' && valorCooperado > mediaCooperativaKwh && mediaCooperativaKwh > 0) {
@@ -187,7 +191,8 @@ export class MotorPropostaService {
     const validaAte = new Date();
     validaAte.setDate(validaAte.getDate() + 30);
 
-    return this.prisma.propostaCooperado.create({
+    // 1. Gravar proposta
+    const proposta = await this.prisma.propostaCooperado.create({
       data: {
         cooperadoId: dto.cooperadoId,
         mesReferencia: dto.mesReferencia ?? r.mesReferencia,
@@ -217,7 +222,100 @@ export class MotorPropostaService {
         planoId: dto.planoId ?? null,
         validaAte,
       },
+      include: { cooperado: { select: { nomeCompleto: true } } },
     });
+
+    const nomeCooperado = (proposta as any).cooperado?.nomeCompleto ?? dto.cooperadoId;
+
+    // 2. Resolver planoId
+    let planoId: string | null = dto.planoId ?? null;
+    if (!planoId) {
+      const primeiroPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      planoId = primeiroPlano?.id ?? null;
+    }
+
+    // 3. Buscar primeira UC do cooperado
+    const primeiraUC = await this.prisma.uc.findFirst({ where: { cooperadoId: dto.cooperadoId } });
+    if (!primeiraUC) {
+      return { proposta, contrato: null, emListaEspera: false, aviso: 'Sem UC vinculada — contrato não criado automaticamente.' };
+    }
+
+    // 4. Buscar usina com capacidade disponível
+    const usinas = await this.prisma.usina.findMany({
+      where: { capacidadeKwh: { not: null } },
+      include: {
+        contratos: {
+          where: { status: 'ATIVO' },
+          select: { kwhContrato: true },
+        },
+      },
+    });
+
+    let usinaComVaga: { id: string } | null = null;
+    for (const usina of usinas) {
+      const kwhUsado = usina.contratos.reduce((acc, c) => acc + Number(c.kwhContrato ?? 0), 0);
+      const kwhDisponivel = Number(usina.capacidadeKwh) - kwhUsado;
+      if (kwhDisponivel >= r.kwhContrato) {
+        usinaComVaga = usina;
+        break;
+      }
+    }
+
+    // 5. Gerar número do contrato
+    const ano = new Date().getFullYear();
+    const lastContrato = await this.prisma.contrato.findFirst({
+      where: { numero: { startsWith: `CTR-${ano}-` } },
+      orderBy: { numero: 'desc' },
+    });
+    const seq = lastContrato ? parseInt(lastContrato.numero.split('-')[2] ?? '0', 10) + 1 : 1;
+    const numero = `CTR-${ano}-${String(seq).padStart(4, '0')}`;
+
+    // 6. Criar contrato
+    const statusContrato = usinaComVaga ? 'ATIVO' : 'LISTA_ESPERA';
+    const contrato = await this.prisma.contrato.create({
+      data: {
+        numero,
+        cooperadoId: dto.cooperadoId,
+        planoId,
+        ucId: primeiraUC.id,
+        usinaId: usinaComVaga?.id ?? null,
+        dataInicio: new Date(),
+        percentualDesconto: r.descontoPercentual,
+        kwhContrato: r.kwhContrato,
+        status: statusContrato as any,
+      },
+    });
+
+    // 7. Se lista de espera, criar entrada + notificação
+    if (statusContrato === 'LISTA_ESPERA') {
+      const posicao = await this.prisma.listaEspera.count({ where: { status: 'AGUARDANDO' } });
+      await this.prisma.listaEspera.create({
+        data: {
+          cooperadoId: dto.cooperadoId,
+          contratoId: contrato.id,
+          kwhNecessario: r.kwhContrato,
+          posicao: posicao + 1,
+          status: 'AGUARDANDO',
+        },
+      });
+      await this.notificacoes.criar({
+        tipo: 'LISTA_ESPERA',
+        titulo: 'Cooperado em lista de espera',
+        mensagem: `${nomeCooperado} aguarda vaga em usina. kWh necessário: ${r.kwhContrato}`,
+        cooperadoId: dto.cooperadoId,
+        link: `/dashboard/motor-proposta/lista-espera`,
+      });
+    } else {
+      await this.notificacoes.criar({
+        tipo: 'CONTRATO_CRIADO',
+        titulo: 'Novo contrato criado',
+        mensagem: `Contrato ${numero} criado para ${nomeCooperado}`,
+        cooperadoId: dto.cooperadoId,
+        link: `/dashboard/cooperados/${dto.cooperadoId}`,
+      });
+    }
+
+    return { proposta, contrato, emListaEspera: statusContrato === 'LISTA_ESPERA' };
   }
 
   async historico(cooperadoId: string) {
@@ -324,6 +422,46 @@ export class MotorPropostaService {
         impactoMensalTotal: simulacao.impactoMensalTotal,
       },
     });
+  }
+
+  async getListaEspera() {
+    return this.prisma.listaEspera.findMany({
+      where: { status: 'AGUARDANDO' },
+      orderBy: { posicao: 'asc' },
+      include: {
+        cooperado: { select: { id: true, nomeCompleto: true, email: true } },
+        contrato: { select: { numero: true, status: true } },
+      },
+    });
+  }
+
+  async alocarListaEspera(listaEsperaId: string, usinaId: string) {
+    const entrada = await this.prisma.listaEspera.findUnique({
+      where: { id: listaEsperaId },
+      include: {
+        contrato: { select: { numero: true } },
+        cooperado: { select: { nomeCompleto: true } },
+      },
+    });
+    if (!entrada) throw new Error('Entrada não encontrada na lista de espera.');
+    if (!entrada.contratoId) throw new Error('Entrada sem contrato associado.');
+
+    await this.prisma.contrato.update({
+      where: { id: entrada.contratoId },
+      data: { usinaId, status: 'ATIVO' },
+    });
+    await this.prisma.listaEspera.update({
+      where: { id: listaEsperaId },
+      data: { status: 'ALOCADO' },
+    });
+    await this.notificacoes.criar({
+      tipo: 'CONTRATO_ATIVADO',
+      titulo: 'Cooperado alocado em usina',
+      mensagem: `Contrato ${entrada.contrato?.numero} ativado para ${entrada.cooperado.nomeCompleto}`,
+      cooperadoId: entrada.cooperadoId,
+      link: `/dashboard/cooperados/${entrada.cooperadoId}`,
+    });
+    return { sucesso: true };
   }
 
   async dashboardStats() {
