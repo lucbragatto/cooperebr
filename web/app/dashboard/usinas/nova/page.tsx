@@ -16,6 +16,7 @@ export default function NovaUsinaPage() {
   const [form, setForm] = useState({
     nome: '',
     potenciaKwp: '',
+    capacidadeKwh: '',
     cidade: '',
     estado: '',
   });
@@ -32,7 +33,7 @@ export default function NovaUsinaPage() {
     setErro('');
     setSucesso('');
 
-    if (!form.nome.trim() || !form.potenciaKwp || !form.cidade.trim() || !form.estado.trim()) {
+    if (!form.nome.trim() || !form.potenciaKwp || !form.capacidadeKwh || !form.cidade.trim() || !form.estado.trim()) {
       setErro('Todos os campos são obrigatórios.');
       return;
     }
@@ -43,11 +44,18 @@ export default function NovaUsinaPage() {
       return;
     }
 
+    const capacidade = parseFloat(form.capacidadeKwh);
+    if (isNaN(capacidade) || capacidade <= 0) {
+      setErro('Capacidade deve ser um número positivo.');
+      return;
+    }
+
     setSalvando(true);
     try {
       await api.post('/usinas', {
         nome: form.nome,
         potenciaKwp: potencia,
+        capacidadeKwh: capacidade,
         cidade: form.cidade,
         estado: form.estado,
       });
@@ -103,6 +111,20 @@ export default function NovaUsinaPage() {
                 value={form.potenciaKwp}
                 onChange={(e) => set('potenciaKwp', e.target.value)}
                 placeholder="250.00"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="capacidadeKwh">Capacidade total (kWh/mês) *</Label>
+              <Input
+                id="capacidadeKwh"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.capacidadeKwh}
+                onChange={(e) => set('capacidadeKwh', e.target.value)}
+                placeholder="5000.00"
                 required
               />
             </div>

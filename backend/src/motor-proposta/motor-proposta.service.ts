@@ -192,6 +192,18 @@ export class MotorPropostaService {
     planoId?: string;
   }) {
     if (!dto.resultado) throw new Error('Resultado inválido');
+
+    const propostaExistente = await this.prisma.propostaCooperado.findFirst({
+      where: {
+        cooperadoId: dto.cooperadoId,
+        mesReferencia: dto.mesReferencia,
+        status: 'ACEITA',
+      },
+    });
+    if (propostaExistente) {
+      throw new Error('Já existe uma proposta aceita para este cooperado neste mês');
+    }
+
     const r = dto.resultado;
     const validaAte = new Date();
     validaAte.setDate(validaAte.getDate() + 30);

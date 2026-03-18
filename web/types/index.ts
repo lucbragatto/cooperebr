@@ -56,6 +56,7 @@ export interface Usina {
   id: string;
   nome: string;
   potenciaKwp: number;
+  capacidadeKwh?: number | null;
   cidade: string;
   estado: string;
   createdAt: string;

@@ -20,6 +20,7 @@ export class UsinasService {
   async create(data: {
     nome: string;
     potenciaKwp: number;
+    capacidadeKwh?: number;
     cidade: string;
     estado: string;
   }) {
@@ -29,6 +30,7 @@ export class UsinasService {
   async update(id: string, data: Partial<{
     nome: string;
     potenciaKwp: number;
+    capacidadeKwh: number;
     cidade: string;
     estado: string;
   }>) {

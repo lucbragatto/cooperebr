@@ -32,8 +32,8 @@ export class ContratosService {
     ucId: string;
     usinaId?: string;
     planoId?: string;
-    dataInicio: Date;
-    dataFim?: Date;
+    dataInicio: Date | string;
+    dataFim?: Date | string;
     percentualDesconto: number;
     kwhContrato?: number;
   }) {
@@ -45,8 +45,15 @@ export class ContratosService {
     const seq = lastContrato ? parseInt(lastContrato.numero.split('-')[2] ?? '0', 10) + 1 : 1;
     const numero = `CTR-${ano}-${String(seq).padStart(4, '0')}`;
 
+    const dataInicio = typeof data.dataInicio === 'string'
+      ? new Date(data.dataInicio + 'T00:00:00.000Z')
+      : data.dataInicio;
+    const dataFim = data.dataFim
+      ? (typeof data.dataFim === 'string' ? new Date(data.dataFim + 'T00:00:00.000Z') : data.dataFim)
+      : undefined;
+
     return this.prisma.contrato.create({
-      data: { ...data, numero },
+      data: { ...data, numero, dataInicio, dataFim },
       include: { uc: true, usina: true, plano: true, cobrancas: true },
     });
   }

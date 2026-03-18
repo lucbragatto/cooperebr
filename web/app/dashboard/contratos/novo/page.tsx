@@ -162,7 +162,7 @@ export default function NovoContratoPage() {
                 <SelectContent>
                   {usinas.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.nome} — {u.potenciaKwp.toFixed(2)} kWp
+                      {u.nome} — {Number(u.potenciaKwp).toFixed(2)} kWp
                     </SelectItem>
                   ))}
                 </SelectContent>

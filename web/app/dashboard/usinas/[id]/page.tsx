@@ -33,6 +33,7 @@ export default function UsinaDetailPage() {
   const [form, setForm] = useState({
     nome: '',
     potenciaKwp: '',
+    capacidadeKwh: '',
     cidade: '',
     estado: '',
   });
@@ -44,6 +45,7 @@ export default function UsinaDetailPage() {
         setForm({
           nome: r.data.nome,
           potenciaKwp: String(r.data.potenciaKwp),
+          capacidadeKwh: r.data.capacidadeKwh ? String(r.data.capacidadeKwh) : '',
           cidade: r.data.cidade,
           estado: r.data.estado,
         });
@@ -57,6 +59,7 @@ export default function UsinaDetailPage() {
     setForm({
       nome: usina.nome,
       potenciaKwp: String(usina.potenciaKwp),
+      capacidadeKwh: usina.capacidadeKwh ? String(usina.capacidadeKwh) : '',
       cidade: usina.cidade,
       estado: usina.estado,
     });
@@ -76,6 +79,7 @@ export default function UsinaDetailPage() {
       const { data } = await api.put<Usina>(`/usinas/${id}`, {
         ...form,
         potenciaKwp: parseFloat(form.potenciaKwp),
+        capacidadeKwh: form.capacidadeKwh ? parseFloat(form.capacidadeKwh) : null,
       });
       setUsina(data);
       setModoEdicao(false);
@@ -120,6 +124,7 @@ export default function UsinaDetailPage() {
             <Campo label="ID" value={usina.id} />
             <Campo label="Nome" value={usina.nome} />
             <Campo label="Potência (kWp)" value={Number(usina.potenciaKwp).toFixed(2)} />
+            <Campo label="Capacidade (kWh/mês)" value={usina.capacidadeKwh ? Number(usina.capacidadeKwh).toFixed(2) : '—'} />
             <Campo label="Cidade" value={usina.cidade} />
             <Campo label="Estado" value={usina.estado} />
             <Campo label="Criado em" value={new Date(usina.createdAt).toLocaleString('pt-BR')} />
@@ -150,6 +155,16 @@ export default function UsinaDetailPage() {
                 step="0.01"
                 value={form.potenciaKwp}
                 onChange={(e) => setForm({ ...form, potenciaKwp: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Capacidade (kWh/mês)</label>
+              <input
+                className={inputClass}
+                type="number"
+                step="0.01"
+                value={form.capacidadeKwh}
+                onChange={(e) => setForm({ ...form, capacidadeKwh: e.target.value })}
               />
             </div>
             <div>

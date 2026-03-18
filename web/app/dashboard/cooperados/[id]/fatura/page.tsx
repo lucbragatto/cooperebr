@@ -463,7 +463,7 @@ export default function ProcessarFaturaPage() {
                       strokeDasharray="6 3"
                       strokeWidth={2}
                       label={{
-                        value: `Média: ${resultado.mediaKwhCalculada.toFixed(0)} kWh`,
+                        value: `Média: ${Number(resultado.mediaKwhCalculada).toFixed(0)} kWh`,
                         position: 'insideTopRight',
                         fontSize: 11,
                         fill: '#f59e0b',
