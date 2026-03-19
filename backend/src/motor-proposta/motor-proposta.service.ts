@@ -195,15 +195,19 @@ export class MotorPropostaService {
   }) {
     if (!dto.resultado) throw new Error('Resultado inválido');
 
-    const propostaExistente = await this.prisma.propostaCooperado.findFirst({
+    // Se já existe proposta aceita para mesmo cooperado/mês, cancela a anterior
+    const propostasAnteriores = await this.prisma.propostaCooperado.findMany({
       where: {
         cooperadoId: dto.cooperadoId,
         mesReferencia: dto.mesReferencia,
         status: 'ACEITA',
       },
     });
-    if (propostaExistente) {
-      throw new Error('Já existe uma proposta aceita para este cooperado neste mês');
+    for (const pa of propostasAnteriores) {
+      await this.prisma.propostaCooperado.update({
+        where: { id: pa.id },
+        data: { status: 'CANCELADA' },
+      });
     }
 
     const r = dto.resultado;
@@ -337,6 +341,46 @@ export class MotorPropostaService {
     await this.cooperadosService.checkProntoParaAtivar(dto.cooperadoId);
 
     return { proposta, contrato, emListaEspera: statusContrato === 'LISTA_ESPERA' };
+  }
+
+  async excluirProposta(propostaId: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+    if (!proposta) throw new Error('Proposta não encontrada');
+
+    // Se a proposta estava ACEITA, cancelar contrato associado (mesmo cooperado/mês)
+    if (proposta.status === 'ACEITA') {
+      const contratos = await this.prisma.contrato.findMany({
+        where: {
+          cooperadoId: proposta.cooperadoId,
+          createdAt: { gte: new Date(proposta.createdAt.getTime() - 60000) },
+        },
+      });
+      for (const c of contratos) {
+        await this.prisma.contrato.update({
+          where: { id: c.id },
+          data: { status: 'ENCERRADO' },
+        });
+        // Remover da lista de espera se houver
+        await this.prisma.listaEspera.deleteMany({ where: { contratoId: c.id } });
+      }
+    }
+
+    await this.prisma.propostaCooperado.delete({ where: { id: propostaId } });
+    return { sucesso: true };
+  }
+
+  async editarProposta(propostaId: string, data: Partial<{
+    status: string;
+    descontoPercentual: number;
+    kwhContrato: number;
+    planoId: string;
+  }>) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+    if (!proposta) throw new Error('Proposta não encontrada');
+    return this.prisma.propostaCooperado.update({
+      where: { id: propostaId },
+      data: data as any,
+    });
   }
 
   async historico(cooperadoId: string) {

@@ -46,6 +46,16 @@ export class MotorPropostaController {
     return this.service.updateConfiguracao(dto);
   }
 
+  @Delete('proposta/:id')
+  excluirProposta(@Param('id') id: string) {
+    return this.service.excluirProposta(id);
+  }
+
+  @Put('proposta/:id')
+  editarProposta(@Param('id') id: string, @Body() body: any) {
+    return this.service.editarProposta(id, body);
+  }
+
   @Get('historico/:cooperadoId')
   historico(@Param('cooperadoId') cooperadoId: string) {
     return this.service.historico(cooperadoId);
