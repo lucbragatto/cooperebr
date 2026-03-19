@@ -22,6 +22,7 @@ import {
   FilePlus,
   Info,
   Clock,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -53,6 +54,7 @@ function IconeNotificacao({ tipo }: { tipo: string }) {
   if (tipo === 'DOCUMENTO_APROVADO') return <FileCheck className="h-4 w-4 text-green-600 shrink-0" />;
   if (tipo === 'DOCUMENTO_REPROVADO') return <FileX className="h-4 w-4 text-red-600 shrink-0" />;
   if (tipo === 'DOCUMENTO_ENVIADO') return <FilePlus className="h-4 w-4 text-blue-600 shrink-0" />;
+  if (tipo === 'COOPERADO_PRONTO') return <UserCheck className="h-4 w-4 text-green-600 shrink-0" />;
   return <Info className="h-4 w-4 text-gray-500 shrink-0" />;
 }
 

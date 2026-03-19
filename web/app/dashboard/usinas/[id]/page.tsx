@@ -6,7 +6,15 @@ import api from '@/lib/api';
 import type { Usina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, Pencil } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -37,6 +45,8 @@ export default function UsinaDetailPage() {
     cidade: '',
     estado: '',
   });
+  const [lista, setLista] = useState<any>(null);
+  const [gerandoLista, setGerandoLista] = useState(false);
 
   useEffect(() => {
     api.get<Usina>(`/usinas/${id}`)
@@ -130,6 +140,97 @@ export default function UsinaDetailPage() {
             <Campo label="Criado em" value={new Date(usina.createdAt).toLocaleString('pt-BR')} />
             <Campo label="Atualizado em" value={new Date(usina.updatedAt).toLocaleString('pt-BR')} />
           </CardContent>
+        </Card>
+      )}
+
+      {/* Lista para concessionária */}
+      {usina && !modoEdicao && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Lista para Concessionária</span>
+              <div className="flex gap-2">
+                {lista && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const header = 'Nome,CPF,Numero UC,kWh Contratado,% Usina,Data Adesao,Distribuidora,Contrato';
+                      const rows = lista.cooperados.map((c: any) =>
+                        `"${c.nomeCompleto}","${c.cpf}","${c.numeroUC}",${c.kwhContratado},${c.percentualUsina},"${new Date(c.dataAdesao).toLocaleDateString('pt-BR')}","${c.distribuidora}","${c.contrato}"`
+                      );
+                      const csv = [header, ...rows].join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      const nomeArquivo = `lista-concessionaria-${usina.nome.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 7)}.csv`;
+                      a.href = url;
+                      a.download = nomeArquivo;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    CSV
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  disabled={gerandoLista}
+                  onClick={async () => {
+                    setGerandoLista(true);
+                    try {
+                      const { data } = await api.get(`/usinas/${id}/lista-concessionaria`);
+                      setLista(data);
+                    } catch {
+                      setMensagem('Erro ao gerar lista.');
+                    } finally {
+                      setGerandoLista(false);
+                    }
+                  }}
+                >
+                  {gerandoLista ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                  {lista ? 'Atualizar' : 'Gerar lista'}
+                </Button>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          {lista && (
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CPF</TableHead>
+                    <TableHead>UC</TableHead>
+                    <TableHead>kWh</TableHead>
+                    <TableHead>% Usina</TableHead>
+                    <TableHead>Adesão</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lista.cooperados.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-gray-400 py-6">
+                        Nenhum cooperado ativo nesta usina
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    lista.cooperados.map((c: any, i: number) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
+                        <TableCell>{c.cpf}</TableCell>
+                        <TableCell>{c.numeroUC}</TableCell>
+                        <TableCell>{c.kwhContratado}</TableCell>
+                        <TableCell>{c.percentualUsina}%</TableCell>
+                        <TableCell>{new Date(c.dataAdesao).toLocaleDateString('pt-BR')}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          )}
         </Card>
       )}
 

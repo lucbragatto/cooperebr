@@ -7,6 +7,7 @@ import {
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { CooperadosService } from '../cooperados/cooperados.service';
 
 const BUCKET = 'documentos-cooperados';
 
@@ -26,6 +27,7 @@ export class DocumentosService {
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
+    private cooperadosService: CooperadosService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -56,6 +58,8 @@ export class DocumentosService {
       cooperadoId: doc.cooperadoId,
       link: `/dashboard/cooperados/${doc.cooperadoId}`,
     });
+
+    await this.cooperadosService.checkProntoParaAtivar(doc.cooperadoId);
 
     return resultado;
   }

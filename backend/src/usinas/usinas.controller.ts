@@ -15,6 +15,12 @@ export class UsinasController {
     return this.usinasService.findAll();
   }
 
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get(':id/lista-concessionaria')
+  listaConcessionaria(@Param('id') id: string) {
+    return this.usinasService.gerarListaConcessionaria(id);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
   findOne(@Param('id') id: string) {

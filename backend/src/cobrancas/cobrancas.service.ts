@@ -7,7 +7,7 @@ export class CobrancasService {
 
   async findAll() {
     return this.prisma.cobranca.findMany({
-      include: { contrato: true },
+      include: { contrato: { include: { cooperado: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -15,7 +15,7 @@ export class CobrancasService {
   async findOne(id: string) {
     return this.prisma.cobranca.findUnique({
       where: { id },
-      include: { contrato: true },
+      include: { contrato: { include: { cooperado: true } } },
     });
   }
 

@@ -4,6 +4,7 @@ import { DocumentosController } from './documentos.controller';
 import { DocumentosService } from './documentos.service';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesModule } from '../notificacoes/notificacoes.module';
+import { CooperadosModule } from '../cooperados/cooperados.module';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const multerLib = require('multer') as { memoryStorage: () => object };
@@ -11,6 +12,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
 @Module({
   imports: [
     NotificacoesModule,
+    CooperadosModule,
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [DocumentosController],

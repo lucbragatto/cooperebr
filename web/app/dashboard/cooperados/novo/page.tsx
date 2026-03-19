@@ -7,8 +7,8 @@ import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  ArrowLeft, CheckCircle, ChevronRight, FileUp, Loader2,
-  Upload, User, Zap,
+  ArrowLeft, CheckCircle, ChevronRight, FileUp, FileText, Loader2,
+  Upload, User, UserX, Zap,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,7 +32,11 @@ interface DadosOcr {
   consumoAtualKwh: number;
 }
 
-type Etapa = 1 | 2 | 3 | 4;
+type TipoCooperado = 'COM_UC' | 'SEM_UC' | '';
+type Etapa = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+// 0 = escolha tipo cooperado
+// COM_UC: 1=upload, 2=revisar, 4=sucesso UC, 3=preferência
+// SEM_UC: 5=dados pessoais, 6=upload documento, 7=sucesso
 
 // ─── CSS helpers ─────────────────────────────────────────────────────────────
 
@@ -50,17 +54,19 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Stepper indicator ────────────────────────────────────────────────────────
 
-const stepLabels = ['Upload fatura', 'Revisar dados', 'Sucesso', 'Cobrança'];
+function Stepper({ etapa, tipo }: { etapa: Etapa; tipo: TipoCooperado }) {
+  const isSemUC = tipo === 'SEM_UC';
+  const steps = isSemUC ? [5, 6, 7] : [1, 2, 4];
+  const labels = isSemUC
+    ? ['Dados pessoais', 'Documento', 'Sucesso']
+    : ['Upload fatura', 'Revisar dados', 'Sucesso'];
 
-function Stepper({ etapa }: { etapa: Etapa }) {
-  const steps = [1, 2, 4, 3] as const; // display order
-  const labels = ['Upload fatura', 'Revisar dados', 'Sucesso', 'Preferência'];
   return (
     <div className="flex items-center gap-2 mb-8">
-      {[1, 2, 4, 3].map((s, i) => {
+      {steps.map((s, i) => {
         const num = i + 1;
         const active = etapa === s;
-        const done = (etapa === 2 && s === 1) || (etapa === 4 && (s === 1 || s === 2)) || (etapa === 3 && (s === 1 || s === 2 || s === 4));
+        const done = steps.indexOf(s) < steps.indexOf(etapa as number);
         return (
           <div key={s} className="flex items-center gap-2">
             <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border-2 transition-all ${done ? 'bg-green-600 border-green-600 text-white' : active ? 'border-green-600 text-green-700 bg-green-50' : 'border-gray-300 text-gray-400'}`}>
@@ -69,7 +75,7 @@ function Stepper({ etapa }: { etapa: Etapa }) {
             <span className={`text-xs font-medium hidden sm:block ${active ? 'text-green-700' : done ? 'text-green-600' : 'text-gray-400'}`}>
               {labels[i]}
             </span>
-            {i < 3 && <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />}
+            {i < steps.length - 1 && <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />}
           </div>
         );
       })}
@@ -82,9 +88,15 @@ function Stepper({ etapa }: { etapa: Etapa }) {
 export default function NovoCooperadoPage() {
   const router = useRouter();
 
-  const [etapa, setEtapa] = useState<Etapa>(1);
+  const [tipoCooperado, setTipoCooperado] = useState<TipoCooperado>('');
+  const [etapa, setEtapa] = useState<Etapa>(0);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+
+  // SEM_UC: documento upload
+  const [docArquivo, setDocArquivo] = useState<File | null>(null);
+  const docRef = useRef<HTMLInputElement>(null);
+  const [termoAceito, setTermoAceito] = useState(false);
 
   // OCR
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -266,6 +278,58 @@ export default function NovoCooperadoPage() {
     }
   }
 
+  // ── SEM_UC: cadastrar cooperado + upload documento ────────────────────────
+
+  async function cadastrarSemUC() {
+    if (!formCoop.nomeCompleto.trim() || !formCoop.email.trim() || !formCoop.cpf.trim()) {
+      setErro('Nome, CPF e email são obrigatórios.');
+      return;
+    }
+    setErro('');
+    setLoading(true);
+    try {
+      const { data: novoCooperado } = await api.post<{ id: string }>('/cooperados', {
+        nomeCompleto: formCoop.nomeCompleto,
+        cpf: formCoop.cpf,
+        email: formCoop.email,
+        telefone: formCoop.telefone || undefined,
+        status: 'PENDENTE',
+        tipoCooperado: 'SEM_UC',
+      });
+      setCooperadoId(novoCooperado.id);
+      setEtapa(6);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErro(msg || 'Erro ao cadastrar. Verifique os dados.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function enviarDocumentoSemUC() {
+    if (!docArquivo || !cooperadoId) { setErro('Selecione o documento de identidade.'); return; }
+    if (!termoAceito) { setErro('Aceite o termo de adesão para continuar.'); return; }
+    setErro('');
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('arquivo', docArquivo);
+      formData.append('tipo', 'CNH_FRENTE');
+      await api.post(`/documentos/cooperado/${cooperadoId}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      await api.put(`/cooperados/${cooperadoId}`, {
+        termoAdesaoAceito: true,
+        termoAdesaoAceitoEm: new Date().toISOString(),
+      });
+      setEtapa(7);
+    } catch {
+      setErro('Erro ao enviar documento. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -278,9 +342,39 @@ export default function NovoCooperadoPage() {
 
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Novo cooperado</h1>
 
-      <Stepper etapa={etapa} />
+      {/* ── ETAPA 0: Escolha do tipo ─────────────────────────────────────────── */}
+      {etapa === 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-5">
+            <div>
+              <h2 className="text-base font-semibold text-gray-800 mb-1">Este cooperado possui unidade consumidora?</h2>
+              <p className="text-sm text-gray-500">Escolha o tipo de cadastro adequado.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => { setTipoCooperado('COM_UC'); setEtapa(1); }}
+                className="border-2 border-gray-200 hover:border-green-500 rounded-xl p-6 text-center transition-colors"
+              >
+                <Zap className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-gray-800">Sim, tem UC</p>
+                <p className="text-xs text-gray-500 mt-1">Fluxo com upload de fatura</p>
+              </button>
+              <button
+                onClick={() => { setTipoCooperado('SEM_UC'); setEtapa(5); }}
+                className="border-2 border-gray-200 hover:border-green-500 rounded-xl p-6 text-center transition-colors"
+              >
+                <UserX className="h-8 w-8 text-orange-500 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-gray-800">Não, sem UC</p>
+                <p className="text-xs text-gray-500 mt-1">Cadastro simplificado</p>
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* ── ETAPA 1: Upload ─────────────────────────────────────────────────── */}
+      {tipoCooperado && <Stepper etapa={etapa} tipo={tipoCooperado} />}
+
+      {/* ── ETAPA 1: Upload (COM_UC) ─────────────────────────────────────────── */}
       {etapa === 1 && (
         <Card>
           <CardContent className="pt-6 space-y-5">
@@ -537,6 +631,129 @@ export default function NovoCooperadoPage() {
               </Button>
               <Button onClick={salvarPreferencia} disabled={!preferencia || loading} className="flex-1">
                 {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : 'Salvar e finalizar'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── ETAPA 5: Dados pessoais (SEM_UC) ──────────────────────────────── */}
+      {etapa === 5 && (
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <User className="h-4 w-4 text-green-700" />
+              <h2 className="text-sm font-semibold text-gray-800">Dados do cooperado (sem UC)</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Campo label="Nome completo *">
+                  <input className={cls} value={formCoop.nomeCompleto} onChange={e => setFormCoop(p => ({ ...p, nomeCompleto: e.target.value }))} />
+                </Campo>
+              </div>
+              <Campo label="CPF/CNPJ *">
+                <input className={cls} value={formCoop.cpf} onChange={e => setFormCoop(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              </Campo>
+              <Campo label="Email *">
+                <input className={cls} type="email" value={formCoop.email} onChange={e => setFormCoop(p => ({ ...p, email: e.target.value }))} placeholder="email@exemplo.com" />
+              </Campo>
+              <Campo label="Telefone">
+                <input className={cls} value={formCoop.telefone} onChange={e => setFormCoop(p => ({ ...p, telefone: e.target.value }))} placeholder="(00) 00000-0000" />
+              </Campo>
+            </div>
+
+            {erro && <p className="text-sm text-red-600">{erro}</p>}
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => { setEtapa(0); setTipoCooperado(''); setErro(''); }}>Voltar</Button>
+              <Button onClick={cadastrarSemUC} disabled={loading} className="flex-1">
+                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : 'Continuar'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── ETAPA 6: Upload documento + Termo (SEM_UC) ─────────────────────── */}
+      {etapa === 6 && (
+        <Card>
+          <CardContent className="pt-6 space-y-5">
+            <div>
+              <h2 className="text-base font-semibold text-gray-800 mb-1">Documento de identidade</h2>
+              <p className="text-sm text-gray-500">Envie uma foto do RG ou CNH do cooperado.</p>
+            </div>
+
+            <div
+              onClick={() => docRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${docArquivo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-gray-400'}`}
+            >
+              <input
+                ref={docRef}
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={(e) => { if (e.target.files?.[0]) setDocArquivo(e.target.files[0]); }}
+              />
+              {docArquivo ? (
+                <div className="space-y-1">
+                  <FileText className="h-8 w-8 text-green-600 mx-auto" />
+                  <p className="text-sm font-medium text-green-800">{docArquivo.name}</p>
+                  <p className="text-xs text-green-600">{(docArquivo.size / 1024).toFixed(0)} KB</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Upload className="h-8 w-8 text-gray-400 mx-auto" />
+                  <p className="text-sm text-gray-600">Clique para selecionar</p>
+                </div>
+              )}
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800">Termo de adesão</h3>
+              <p className="text-xs text-gray-500">
+                Declaro que li e aceito os termos de adesão da cooperativa de energia, concordando com as regras de participação,
+                direitos e deveres do cooperado, conforme regulamento vigente.
+              </p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termoAceito}
+                  onChange={(e) => setTermoAceito(e.target.checked)}
+                  className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <span className="text-sm text-gray-700">Li e aceito o termo de adesão</span>
+              </label>
+            </div>
+
+            {erro && <p className="text-sm text-red-600">{erro}</p>}
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => { setEtapa(5); setErro(''); }}>Voltar</Button>
+              <Button onClick={enviarDocumentoSemUC} disabled={loading || !docArquivo || !termoAceito} className="flex-1">
+                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Enviando...</> : 'Finalizar cadastro'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── ETAPA 7: Sucesso (SEM_UC) ──────────────────────────────────────── */}
+      {etapa === 7 && (
+        <Card>
+          <CardContent className="pt-8 pb-8 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="flex justify-center">
+                <div className="bg-green-100 rounded-full p-4">
+                  <CheckCircle className="h-10 w-10 text-green-600" />
+                </div>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">Cooperado cadastrado com sucesso!</h2>
+              <p className="text-sm text-gray-500">{formCoop.nomeCompleto}</p>
+              <p className="text-xs text-gray-400">Tipo: Sem UC (aguardando aprovação de documentos)</p>
+            </div>
+            <div className="flex justify-center">
+              <Button onClick={() => router.push(`/dashboard/cooperados/${cooperadoId}`)}>
+                Ver perfil do cooperado
               </Button>
             </div>
           </CardContent>

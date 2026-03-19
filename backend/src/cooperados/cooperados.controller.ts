@@ -16,6 +16,12 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @Get(':id/checklist')
+  getChecklist(@Param('id') id: string) {
+    return this.cooperadosService.getChecklist(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cooperadosService.findOne(id);

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { CooperadosService } from '../cooperados/cooperados.service';
 import type { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import type { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import type { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -44,6 +45,7 @@ export class MotorPropostaService {
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
+    private cooperadosService: CooperadosService,
   ) {}
 
   async getConfiguracao() {
@@ -331,6 +333,8 @@ export class MotorPropostaService {
         link: `/dashboard/cooperados/${dto.cooperadoId}`,
       });
     }
+
+    await this.cooperadosService.checkProntoParaAtivar(dto.cooperadoId);
 
     return { proposta, contrato, emListaEspera: statusContrato === 'LISTA_ESPERA' };
   }

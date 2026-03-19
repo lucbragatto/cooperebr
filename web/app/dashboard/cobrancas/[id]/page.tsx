@@ -153,6 +153,7 @@ export default function CobrancaDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={cobranca.id} />
+            <Campo label="Cooperado" value={(cobranca as any).contrato?.cooperado?.nomeCompleto} />
             <Campo label="Contrato" value={cobranca.contrato?.numero} />
             <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
             <Campo label="Valor Bruto" value={formatBRL(cobranca.valorBruto)} />

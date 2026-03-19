@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { CooperadosController } from './cooperados.controller';
 import { CooperadosService } from './cooperados.service';
 import { PrismaService } from '../prisma.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 
 @Module({
   controllers: [CooperadosController],
-  providers: [CooperadosService, PrismaService],
+  providers: [CooperadosService, PrismaService, NotificacoesService],
+  exports: [CooperadosService],
 })
 export class CooperadosModule {}

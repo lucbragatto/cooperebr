@@ -41,6 +41,9 @@ model Cooperado {
   documento           String?
   tipoDocumento       String?
   preferenciaCobranca String?
+  tipoCooperado       String            @default("COM_UC")
+  termoAdesaoAceito   Boolean           @default(false)
+  termoAdesaoAceitoEm DateTime?
   createdAt           DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   ucs               Uc[]

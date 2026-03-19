@@ -67,6 +67,7 @@ export default function CobrancasPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Cooperado</TableHead>
                 <TableHead>Contrato</TableHead>
                 <TableHead>Mês/Ano Ref.</TableHead>
                 <TableHead>Valor Bruto</TableHead>
@@ -81,7 +82,7 @@ export default function CobrancasPage() {
               {carregando ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -90,13 +91,16 @@ export default function CobrancasPage() {
                 ))
               ) : cobrancas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={9} className="text-center text-gray-400 py-8">
                     Nenhuma cobrança cadastrada
                   </TableCell>
                 </TableRow>
               ) : (
                 cobrancas.map((c) => (
                   <TableRow key={c.id}>
+                    <TableCell className="font-medium">
+                      {(c as any).contrato?.cooperado?.nomeCompleto ?? '—'}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {c.contrato?.numero ?? '—'}
                     </TableCell>

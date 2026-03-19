@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { CooperadosService } from '../cooperados/cooperados.service';
 
 @Injectable()
 export class ContratosService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cooperadosService: CooperadosService,
+  ) {}
 
   async findAll() {
     return this.prisma.contrato.findMany({
@@ -52,10 +56,14 @@ export class ContratosService {
       ? (typeof data.dataFim === 'string' ? new Date(data.dataFim + 'T00:00:00.000Z') : data.dataFim)
       : undefined;
 
-    return this.prisma.contrato.create({
+    const contrato = await this.prisma.contrato.create({
       data: { ...data, numero, dataInicio, dataFim },
       include: { uc: true, usina: true, plano: true, cobrancas: true },
     });
+
+    await this.cooperadosService.checkProntoParaAtivar(data.cooperadoId);
+
+    return contrato;
   }
 
   async update(id: string, data: Partial<{
