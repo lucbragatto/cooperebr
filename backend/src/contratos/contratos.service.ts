@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 
@@ -40,7 +40,21 @@ export class ContratosService {
     dataFim?: Date | string;
     percentualDesconto: number;
     kwhContrato?: number;
+    modeloCobrancaOverride?: string | null;
   }) {
+    // Validar: não permitir contrato ativo/lista_espera para mesma UC
+    const contratoExistente = await this.prisma.contrato.findFirst({
+      where: {
+        ucId: data.ucId,
+        status: { in: ['PENDENTE_ATIVACAO', 'ATIVO', 'LISTA_ESPERA'] },
+      },
+    });
+    if (contratoExistente) {
+      throw new BadRequestException(
+        `Já existe contrato ${contratoExistente.status === 'ATIVO' ? 'ativo' : 'em lista de espera'} (${contratoExistente.numero}) para esta unidade consumidora.`,
+      );
+    }
+
     const ano = new Date().getFullYear();
     const lastContrato = await this.prisma.contrato.findFirst({
       where: { numero: { startsWith: `CTR-${ano}-` } },
@@ -57,7 +71,7 @@ export class ContratosService {
       : undefined;
 
     const contrato = await this.prisma.contrato.create({
-      data: { ...data, numero, dataInicio, dataFim },
+      data: { ...data, numero, dataInicio, dataFim } as any,
       include: { uc: true, usina: true, plano: true, cobrancas: true },
     });
 
@@ -75,11 +89,24 @@ export class ContratosService {
     percentualDesconto: number;
     kwhContrato: number;
     status: 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
+    modeloCobrancaOverride: string | null;
   }>) {
-    return this.prisma.contrato.update({ where: { id }, data });
+    if (data.modeloCobrancaOverride !== undefined) {
+      const modelos = ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
+      if (data.modeloCobrancaOverride !== null && !modelos.includes(data.modeloCobrancaOverride)) {
+        throw new BadRequestException(`Modelo de cobrança inválido. Valores aceitos: ${modelos.join(', ')} ou null`);
+      }
+    }
+    return this.prisma.contrato.update({ where: { id }, data: data as any });
   }
 
   async remove(id: string) {
+    const cobrancas = await this.prisma.cobranca.count({ where: { contratoId: id } });
+    if (cobrancas > 0) {
+      throw new BadRequestException(
+        `Não é possível excluir este contrato: existem ${cobrancas} cobrança(s) vinculada(s). Encerre o contrato ou exclua as cobranças primeiro.`,
+      );
+    }
     return this.prisma.contrato.delete({ where: { id } });
   }
 }
