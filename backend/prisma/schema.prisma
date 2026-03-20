@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Usuario {
@@ -124,17 +125,31 @@ model Uc {
 }
 
 model Usina {
-  id             String     @id @default(cuid())
-  nome           String
-  potenciaKwp    Decimal    @db.Decimal(10, 2)
-  capacidadeKwh  Decimal?   @db.Decimal(10, 5)
-  cidade         String
-  estado         String
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  contratos      Contrato[]
+  id                  String       @id @default(cuid())
+  nome                String
+  potenciaKwp         Decimal      @db.Decimal(10, 2)
+  capacidadeKwh       Decimal?     @db.Decimal(15, 2)
+  producaoMensalKwh   Decimal?     @db.Decimal(15, 2)
+  cidade              String
+  estado              String
+  statusHomologacao   StatusUsina  @default(CADASTRADA)
+  dataHomologacao     DateTime?
+  dataInicioProducao  DateTime?
+  observacoes              String?
+  modeloCobrancaOverride   ModeloCobranca?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+  contratos                Contrato[]
 
   @@map("usinas")
+}
+
+enum StatusUsina {
+  CADASTRADA
+  AGUARDANDO_HOMOLOGACAO
+  HOMOLOGADA
+  EM_PRODUCAO
+  SUSPENSA
 }
 
 model Contrato {
@@ -148,14 +163,17 @@ model Contrato {
   usina              Usina?         @relation(fields: [usinaId], references: [id])
   planoId            String?
   plano              Plano?         @relation(fields: [planoId], references: [id])
+  propostaId         String?
+  proposta           PropostaCooperado? @relation(fields: [propostaId], references: [id])
   dataInicio         DateTime
   dataFim            DateTime?
   percentualDesconto Decimal        @db.Decimal(5, 2)
-  kwhContrato        Decimal?       @db.Decimal(10, 5)
-  status             StatusContrato @default(ATIVO)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  cobrancas          Cobranca[]
+  kwhContrato              Decimal?        @db.Decimal(10, 5)
+  status                   StatusContrato  @default(ATIVO)
+  modeloCobrancaOverride   ModeloCobranca?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  cobrancas                Cobranca[]
   listaEspera        ListaEspera?
 
   @@map("contratos")
@@ -195,6 +213,7 @@ enum TipoCampanha {
 }
 
 enum StatusContrato {
+  PENDENTE_ATIVACAO
   ATIVO
   SUSPENSO
   ENCERRADO
@@ -414,6 +433,7 @@ model PropostaCooperado {
   validaAte             DateTime
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  contratos             Contrato[]
   @@map("propostas_cooperado")
 }
 

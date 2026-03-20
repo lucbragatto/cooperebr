@@ -257,11 +257,24 @@ export class MotorPropostaService {
       planoId = primeiroPlano?.id ?? null;
     }
 
-    // 3. Buscar primeira UC do cooperado
-    const primeiraUC = await this.prisma.uc.findFirst({ where: { cooperadoId: dto.cooperadoId } });
-    if (!primeiraUC) {
+    // 3. Buscar UC do cooperado que NÃO tenha contrato vigente
+    const ucsDoCooperado = await this.prisma.uc.findMany({
+      where: { cooperadoId: dto.cooperadoId },
+      include: {
+        contratos: {
+          where: { status: { in: ['PENDENTE_ATIVACAO', 'ATIVO', 'LISTA_ESPERA'] } },
+          select: { id: true },
+        },
+      },
+    });
+    const ucDisponivel = ucsDoCooperado.find(uc => uc.contratos.length === 0);
+    if (ucsDoCooperado.length === 0) {
       return { proposta, contrato: null, emListaEspera: false, aviso: 'Sem UC vinculada — contrato não criado automaticamente.' };
     }
+    if (!ucDisponivel) {
+      return { proposta, contrato: null, emListaEspera: false, aviso: 'Todas as UCs deste cooperado já possuem contrato ativo. Cadastre uma nova UC para criar outro contrato.' };
+    }
+    const primeiraUC = ucDisponivel;
 
     // 4. Buscar usina com capacidade disponível
     const usinas = await this.prisma.usina.findMany({
@@ -293,8 +306,8 @@ export class MotorPropostaService {
     const seq = lastContrato ? parseInt(lastContrato.numero.split('-')[2] ?? '0', 10) + 1 : 1;
     const numero = `CTR-${ano}-${String(seq).padStart(4, '0')}`;
 
-    // 6. Criar contrato
-    const statusContrato = usinaComVaga ? 'ATIVO' : 'LISTA_ESPERA';
+    // 6. Criar contrato (PENDENTE_ATIVACAO até o admin ativar o cooperado)
+    const statusContrato = usinaComVaga ? 'PENDENTE_ATIVACAO' : 'LISTA_ESPERA';
     const contrato = await this.prisma.contrato.create({
       data: {
         numero,
@@ -302,6 +315,7 @@ export class MotorPropostaService {
         planoId,
         ucId: primeiraUC.id,
         usinaId: usinaComVaga?.id ?? null,
+        propostaId: proposta.id,
         dataInicio: new Date(),
         percentualDesconto: r.descontoPercentual,
         kwhContrato: r.kwhContrato,
@@ -331,8 +345,8 @@ export class MotorPropostaService {
     } else {
       await this.notificacoes.criar({
         tipo: 'CONTRATO_CRIADO',
-        titulo: 'Novo contrato criado',
-        mensagem: `Contrato ${numero} criado para ${nomeCooperado}`,
+        titulo: 'Contrato criado — pendente ativação',
+        mensagem: `Contrato ${numero} criado para ${nomeCooperado}. Aguardando ativação do cooperado.`,
         cooperadoId: dto.cooperadoId,
         link: `/dashboard/cooperados/${dto.cooperadoId}`,
       });
@@ -511,9 +525,16 @@ export class MotorPropostaService {
     if (!entrada) throw new Error('Entrada não encontrada na lista de espera.');
     if (!entrada.contratoId) throw new Error('Entrada sem contrato associado.');
 
+    // Verificar se cooperado já está ATIVO para definir status do contrato
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: entrada.cooperadoId },
+      select: { status: true },
+    });
+    const novoStatus = cooperado?.status === 'ATIVO' ? 'ATIVO' : 'PENDENTE_ATIVACAO';
+
     await this.prisma.contrato.update({
       where: { id: entrada.contratoId },
-      data: { usinaId, status: 'ATIVO' },
+      data: { usinaId, status: novoStatus as any },
     });
     await this.prisma.listaEspera.update({
       where: { id: listaEsperaId },
@@ -522,7 +543,7 @@ export class MotorPropostaService {
     await this.notificacoes.criar({
       tipo: 'CONTRATO_ATIVADO',
       titulo: 'Cooperado alocado em usina',
-      mensagem: `Contrato ${entrada.contrato?.numero} ativado para ${entrada.cooperado.nomeCompleto}`,
+      mensagem: `Contrato ${entrada.contrato?.numero} alocado para ${entrada.cooperado.nomeCompleto}. Status: ${novoStatus === 'ATIVO' ? 'Ativo' : 'Pendente ativação'}.`,
       cooperadoId: entrada.cooperadoId,
       link: `/dashboard/cooperados/${entrada.cooperadoId}`,
     });
