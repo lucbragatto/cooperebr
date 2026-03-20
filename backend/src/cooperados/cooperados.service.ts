@@ -126,10 +126,10 @@ export class CooperadosService {
       data,
     });
 
-    // Ativação em cascata: ao ativar cooperado, contratos PENDENTE_ATIVACAO → ATIVO
+    // Ativação em cascata: ao ativar cooperado, contratos PENDENTE_ATIVACAO e SUSPENSO → ATIVO
     if (data.status === 'ATIVO') {
       const contratosAtivados = await this.prisma.contrato.updateMany({
-        where: { cooperadoId: id, status: 'PENDENTE_ATIVACAO' },
+        where: { cooperadoId: id, status: { in: ['PENDENTE_ATIVACAO', 'SUSPENSO'] } },
         data: { status: 'ATIVO' },
       });
 
