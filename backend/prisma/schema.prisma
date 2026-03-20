@@ -169,7 +169,7 @@ model Contrato {
   dataFim            DateTime?
   percentualDesconto Decimal        @db.Decimal(5, 2)
   kwhContrato              Decimal?        @db.Decimal(10, 5)
-  status                   StatusContrato  @default(ATIVO)
+  status                   StatusContrato  @default(PENDENTE_ATIVACAO)
   modeloCobrancaOverride   ModeloCobranca?
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
