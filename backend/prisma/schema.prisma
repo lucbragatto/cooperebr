@@ -159,6 +159,7 @@ model Usina {
   updatedAt              DateTime               @updatedAt
   contratos              Contrato[]
   configuracoesCobranca  ConfiguracaoCobranca[]
+  geracoesMensais        GeracaoMensal[]
 
   @@map("usinas")
 }
@@ -523,6 +524,21 @@ model ConfiguracaoCobranca {
 
   @@unique([cooperativaId, usinaId])
   @@map("configuracoes_cobranca")
+}
+
+model GeracaoMensal {
+  id          String   @id @default(cuid())
+  usinaId     String
+  usina       Usina    @relation(fields: [usinaId], references: [id])
+  competencia DateTime
+  kwhGerado   Float
+  fonte       String?
+  observacao  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([usinaId, competencia])
+  @@map("geracoes_mensais")
 }
 
 model ListaEspera {

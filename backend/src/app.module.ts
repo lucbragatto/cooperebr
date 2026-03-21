@@ -18,6 +18,7 @@ import { MotorPropostaModule } from './motor-proposta/motor-proposta.module';
 import { ConfigTenantModule } from './config-tenant/config-tenant.module';
 import { ModelosCobrancaModule } from './modelos-cobranca/modelos-cobranca.module';
 import { ConfiguracaoCobrancaModule } from './configuracao-cobranca/configuracao-cobranca.module';
+import { GeracaoMensalModule } from './geracao-mensal/geracao-mensal.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -38,6 +39,7 @@ import { RolesGuard } from './auth/roles.guard';
     ConfigTenantModule,
     ModelosCobrancaModule,
     ConfiguracaoCobrancaModule,
+    GeracaoMensalModule,
   ],
   controllers: [AppController],
   providers: [
