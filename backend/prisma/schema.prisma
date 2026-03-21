@@ -261,6 +261,16 @@ model Cobranca {
   status             StatusCobranca @default(PENDENTE)
   dataVencimento     DateTime
   dataPagamento      DateTime?
+  kwhEntregue        Float?
+  kwhConsumido       Float?
+  kwhCompensado      Float?
+  kwhSaldo           Float?
+  competencia        DateTime?
+  geracaoMensalId    String?
+  geracaoMensal      GeracaoMensal? @relation(fields: [geracaoMensalId], references: [id])
+  descontoAplicado   Float?
+  baseCalculoUsada   String?
+  fonteDesconto      String?
   cooperativaId      String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
@@ -527,15 +537,16 @@ model ConfiguracaoCobranca {
 }
 
 model GeracaoMensal {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   usinaId     String
-  usina       Usina    @relation(fields: [usinaId], references: [id])
+  usina       Usina      @relation(fields: [usinaId], references: [id])
   competencia DateTime
   kwhGerado   Float
   fonte       String?
   observacao  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  cobrancas   Cobranca[]
 
   @@unique([usinaId, competencia])
   @@map("geracoes_mensais")
