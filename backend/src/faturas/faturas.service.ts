@@ -1,8 +1,9 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { TipoDocumento } from '@prisma/client';
+import { TipoDocumento, ModeloCobranca } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
 
@@ -72,6 +73,7 @@ export class FaturasService {
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
+    private configTenant: ConfigTenantService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -220,12 +222,170 @@ export class FaturasService {
     });
   }
 
-  async aprovarFatura(id: string): Promise<{ sucesso: boolean }> {
+  async aprovarFatura(id: string): Promise<{
+    sucesso: boolean;
+    cobrancasCriadas: number;
+    avisos: string[];
+  }> {
+    const fatura = await this.prisma.faturaProcessada.findUnique({
+      where: { id },
+      include: { cooperado: true, uc: true },
+    });
+    if (!fatura) throw new BadRequestException('Fatura não encontrada');
+
     await this.prisma.faturaProcessada.update({
       where: { id },
       data: { status: 'APROVADA' },
     });
-    return { sucesso: true };
+
+    // Auto-gerar cobranças para contratos ativos do cooperado
+    const avisos: string[] = [];
+    let cobrancasCriadas = 0;
+
+    const contratos = await this.prisma.contrato.findMany({
+      where: { cooperadoId: fatura.cooperadoId, status: 'ATIVO' },
+      include: { plano: true, usina: true },
+    });
+
+    if (contratos.length === 0) {
+      avisos.push('Cooperado não possui contratos ativos. Nenhuma cobrança gerada.');
+    }
+
+    const dados = fatura.dadosExtraidos as any;
+    const mesRef = dados?.mesReferencia ?? '';
+    const [mesStr, anoStr] = mesRef.split('/');
+    const mesReferencia = parseInt(mesStr, 10);
+    const anoReferencia = parseInt(anoStr, 10);
+
+    if (!mesReferencia || !anoReferencia) {
+      avisos.push('Mês de referência não identificado na fatura. Cobranças não geradas automaticamente.');
+      return { sucesso: true, cobrancasCriadas: 0, avisos };
+    }
+
+    // Buscar proposta aceita mais recente do cooperado
+    const propostaAceita = await this.prisma.propostaCooperado.findFirst({
+      where: { cooperadoId: fatura.cooperadoId, status: 'ACEITA' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Buscar tarifa vigente (usada no fallback e no CREDITOS_DINAMICO)
+    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
+      orderBy: { dataVigencia: 'desc' },
+    });
+    const tusdVigente = tarifaVigente ? Number(tarifaVigente.tusdNova) : 0.3;
+    const teVigente = tarifaVigente ? Number(tarifaVigente.teNova) : 0.2;
+    const tarifaUnitVigente = tusdVigente + teVigente;
+
+    if (!propostaAceita) {
+      avisos.push('Sem proposta aceita encontrada. Cálculo usando tarifa vigente (TUSD+TE) como fallback.');
+    }
+
+    // Buscar dias de vencimento configurado
+    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca');
+    const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
+
+    // Dados extraídos da fatura para CREDITOS_COMPENSADOS/DINAMICO
+    const creditosRecebidosKwh = Number(dados.creditosRecebidosKwh ?? 0);
+
+    for (const contrato of contratos) {
+      // Verificar se já existe cobrança para este mês/ano/contrato
+      const existe = await this.prisma.cobranca.findFirst({
+        where: { contratoId: contrato.id, mesReferencia, anoReferencia },
+      });
+      if (existe) {
+        avisos.push(`Cobrança já existe para contrato ${contrato.numero} ref. ${mesRef}.`);
+        continue;
+      }
+
+      const kwhContrato = Number(contrato.kwhContrato ?? 0);
+      const percentualDesconto = Number(contrato.percentualDesconto);
+      const descontoDecimal = percentualDesconto / 100;
+
+      // Determinar modelo de cobrança (hierarquia: contrato → usina → config → plano → FIXO_MENSAL)
+      const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina);
+
+      // tarifaKwh = preço do kWh da concessionária (da proposta aceita ou fallback)
+      let tarifaKwh: number;
+      if (propostaAceita) {
+        tarifaKwh = Number(propostaAceita.kwhApuradoBase);
+      } else {
+        // Fallback: calcula a partir da fatura ou usa tarifa vigente
+        const consumoKwh = dados.consumoAtualKwh ?? kwhContrato;
+        const valorFatura = dados.totalAPagar ?? 0;
+        tarifaKwh = consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitVigente;
+      }
+
+      // Determinar kwhCobranca conforme modelo
+      let kwhCobranca: number;
+      let modeloUsado: string;
+
+      if (modeloCobranca === 'CREDITOS_COMPENSADOS') {
+        if (creditosRecebidosKwh > 0) {
+          kwhCobranca = Math.min(creditosRecebidosKwh, kwhContrato);
+          modeloUsado = `CREDITOS_COMPENSADOS (${kwhCobranca.toFixed(2)} kWh recebidos)`;
+        } else {
+          kwhCobranca = kwhContrato;
+          modeloUsado = 'FIXO_MENSAL (fallback — creditosRecebidosKwh não disponível na fatura)';
+        }
+
+      } else if (modeloCobranca === 'CREDITOS_DINAMICO') {
+        // No dinâmico, usa tarifa vigente atual em vez da proposta
+        tarifaKwh = tarifaUnitVigente;
+        if (creditosRecebidosKwh > 0) {
+          kwhCobranca = Math.min(creditosRecebidosKwh, kwhContrato);
+          modeloUsado = `CREDITOS_DINAMICO (${kwhCobranca.toFixed(2)} kWh, tarifa TUSD+TE=${tarifaUnitVigente.toFixed(5)})`;
+        } else {
+          kwhCobranca = kwhContrato;
+          modeloUsado = `CREDITOS_DINAMICO fixo (fallback — sem créditos, tarifa TUSD+TE=${tarifaUnitVigente.toFixed(5)})`;
+        }
+
+      } else {
+        // FIXO_MENSAL (padrão)
+        kwhCobranca = kwhContrato;
+        modeloUsado = 'FIXO_MENSAL';
+      }
+
+      // Cálculo unificado: valorLiquido = kwhCobranca × tarifaKwh × (1 - descontoDecimal)
+      const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
+      const valorDesconto = Math.round(kwhCobranca * tarifaKwh * descontoDecimal * 100) / 100;
+      const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
+
+      // Data de vencimento conforme configuração (padrão 30 dias)
+      const vencimento = new Date();
+      vencimento.setDate(vencimento.getDate() + diasVencimento);
+
+      await this.prisma.cobranca.create({
+        data: {
+          contratoId: contrato.id,
+          mesReferencia,
+          anoReferencia,
+          valorBruto,
+          percentualDesconto,
+          valorDesconto,
+          valorLiquido,
+          dataVencimento: vencimento,
+          status: 'PENDENTE',
+        },
+      });
+
+      cobrancasCriadas++;
+      avisos.push(`Contrato ${contrato.numero}: modelo ${modeloUsado}`);
+
+      const economia = valorDesconto.toFixed(2);
+      await this.notificacoes.criar({
+        tipo: 'COBRANCA_GERADA',
+        titulo: 'Nova cobrança gerada',
+        mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} gerada para contrato ${contrato.numero} ref. ${mesRef}. Você economizou R$ ${economia} este mês.`,
+        cooperadoId: fatura.cooperadoId,
+        link: `/dashboard/cobrancas`,
+      });
+    }
+
+    if (cobrancasCriadas > 0) {
+      avisos.push(`${cobrancasCriadas} cobrança(s) gerada(s) com sucesso.`);
+    }
+
+    return { sucesso: true, cobrancasCriadas, avisos };
   }
 
   async deletarFatura(id: string): Promise<{ sucesso: boolean }> {
@@ -480,5 +640,28 @@ IMPORTANTE: historicoConsumo deve conter APENAS os meses anteriores ao mês de r
       mesesUtilizados: mesesFiltrados.length,
       mesesDescartados,
     };
+  }
+
+  private async resolverModeloCobranca(
+    contrato: { modeloCobrancaOverride?: ModeloCobranca | null; plano?: { modeloCobranca: ModeloCobranca } | null },
+    usina: { modeloCobrancaOverride?: ModeloCobranca | null } | null,
+  ): Promise<ModeloCobranca> {
+    // 1. Override do contrato (maior prioridade)
+    if (contrato.modeloCobrancaOverride) return contrato.modeloCobrancaOverride;
+
+    // 2. Override da usina
+    if (usina?.modeloCobrancaOverride) return usina.modeloCobrancaOverride;
+
+    // 3. ConfigTenant global
+    const configPadrao = await this.configTenant.get('modelo_cobranca_padrao');
+    if (configPadrao && ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'].includes(configPadrao)) {
+      return configPadrao as ModeloCobranca;
+    }
+
+    // 4. Modelo do plano vinculado ao contrato
+    if (contrato.plano?.modeloCobranca) return contrato.plano.modeloCobranca;
+
+    // 5. Padrão
+    return 'FIXO_MENSAL';
   }
 }
