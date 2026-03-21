@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader2, XCircle } from 'lucide-react';
+import Link from 'next/link';
 
 interface Config {
   fonteKwh: string;
@@ -84,6 +85,10 @@ export default function ConfiguracaoMotorPage() {
           {toast.msg}
         </div>
       )}
+
+      <Link href="/dashboard/motor-proposta" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors">
+        <ArrowLeft className="h-4 w-4" />Voltar
+      </Link>
 
       <h2 className="text-2xl font-bold text-gray-800">Configuração do Motor</h2>
 

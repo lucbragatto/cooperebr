@@ -8,7 +8,8 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/com
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { CheckCircle, Loader2, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader2, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
+import Link from 'next/link';
 
 interface Tarifa {
   id: string;
@@ -161,6 +162,10 @@ export default function TarifasPage() {
           {toast.msg}
         </div>
       )}
+
+      <Link href="/dashboard/motor-proposta" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 transition-colors">
+        <ArrowLeft className="h-4 w-4" />Voltar
+      </Link>
 
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Tarifas da Concessionária</h2>
