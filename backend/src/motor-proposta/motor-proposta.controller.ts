@@ -2,10 +2,10 @@ import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common'
 import { MotorPropostaService } from './motor-proposta.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
-import type { CalcularPropostaDto } from './dto/calcular-proposta.dto';
-import type { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
-import type { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
-import type { SimularReajusteDto } from './dto/simular-reajuste.dto';
+import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
+import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
+import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
+import { SimularReajusteDto } from './dto/simular-reajuste.dto';
 
 const { ADMIN, OPERADOR } = PerfilUsuario;
 
