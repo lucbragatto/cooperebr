@@ -2,12 +2,14 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { StatusCooperado } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { UsinasService } from '../usinas/usinas.service';
 
 @Injectable()
 export class CooperadosService {
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
+    private usinasService: UsinasService,
   ) {}
 
   async findAll() {
@@ -364,12 +366,8 @@ export class CooperadosService {
     const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
 
-    // Regra ANEEL: mesma distribuidora
-    if (uc.distribuidora && usina.distribuidora && uc.distribuidora !== usina.distribuidora) {
-      throw new BadRequestException(
-        `Distribuidora da UC (${uc.distribuidora}) difere da usina (${usina.distribuidora}). Regra ANEEL exige mesma distribuidora.`,
-      );
-    }
+    // Regra ANEEL: mesma distribuidora (validação centralizada)
+    await this.usinasService.validarCompatibilidadeAneel(uc.id, usinaId);
 
     // Verificar capacidade disponível
     const capacidade = Number(usina.capacidadeKwh ?? 0);

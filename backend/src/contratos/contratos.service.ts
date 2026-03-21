@@ -1,12 +1,14 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
+import { UsinasService } from '../usinas/usinas.service';
 
 @Injectable()
 export class ContratosService {
   constructor(
     private prisma: PrismaService,
     private cooperadosService: CooperadosService,
+    private usinasService: UsinasService,
   ) {}
 
   async findAll() {
@@ -123,6 +125,11 @@ export class ContratosService {
         );
       }
 
+      // 1b. Validar regra ANEEL: mesma distribuidora UC x Usina
+      if (data.usinaId) {
+        await this.usinasService.validarCompatibilidadeAneel(data.ucId, data.usinaId);
+      }
+
       // 2. Calcular kWh mensal a partir do anual (ou vice-versa para compatibilidade)
       let kwhContratoAnual = data.kwhContratoAnual;
       let kwhContratoMensal: number | undefined;
@@ -207,6 +214,15 @@ export class ContratosService {
       const mensal = Math.round((data.kwhContratoAnual / 12) * 100) / 100;
       (data as any).kwhContratoMensal = mensal;
       (data as any).kwhContrato = mensal;
+    }
+
+    // Validar regra ANEEL se mudou usinaId
+    if (data.usinaId !== undefined) {
+      const contratoAtualAneel = await this.prisma.contrato.findUnique({ where: { id }, select: { ucId: true } });
+      const ucId = data.ucId ?? contratoAtualAneel?.ucId;
+      if (ucId) {
+        await this.usinasService.validarCompatibilidadeAneel(ucId, data.usinaId);
+      }
     }
 
     // Se mudou kwhContratoAnual ou usinaId, recalcular percentualUsina

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { ContratosService } from '../contratos/contratos.service';
+import { UsinasService } from '../usinas/usinas.service';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -48,6 +49,7 @@ export class MotorPropostaService {
     private notificacoes: NotificacoesService,
     private cooperadosService: CooperadosService,
     private contratosService: ContratosService,
+    private usinasService: UsinasService,
   ) {}
 
   async getConfiguracao() {
@@ -278,9 +280,13 @@ export class MotorPropostaService {
         return { proposta, contrato: null, emListaEspera: false, aviso: 'Todas as UCs deste cooperado já possuem contrato ativo. Cadastre uma nova UC para criar outro contrato.', nomeCooperado, numero: null };
       }
 
-      // 5. Buscar usina com capacidade disponível
+      // 5. Buscar usina com capacidade disponível (filtrando por distribuidora da UC — regra ANEEL)
+      const whereUsina: any = { capacidadeKwh: { not: null } };
+      if (ucDisponivel.distribuidora) {
+        whereUsina.distribuidora = ucDisponivel.distribuidora;
+      }
       const usinas = await tx.usina.findMany({
-        where: { capacidadeKwh: { not: null } },
+        where: whereUsina,
         include: {
           contratos: {
             where: { status: 'ATIVO' },
@@ -299,10 +305,10 @@ export class MotorPropostaService {
         }
       }
 
-      // 6. Gerar número do contrato (centralizado, dentro da tx)
+      // 7. Gerar número do contrato (centralizado, dentro da tx)
       const numero = await this.contratosService.gerarNumeroContrato(tx);
 
-      // 7. Calcular percentualUsina
+      // 8. Calcular percentualUsina
       let percentualUsina: number | null = null;
       if (usinaComVaga) {
         const capacidade = Number(
@@ -313,7 +319,7 @@ export class MotorPropostaService {
         }
       }
 
-      // 8. Criar contrato
+      // 9. Criar contrato
       const statusContrato = usinaComVaga ? 'PENDENTE_ATIVACAO' : 'LISTA_ESPERA';
       const contrato = await tx.contrato.create({
         data: {
@@ -331,7 +337,7 @@ export class MotorPropostaService {
         },
       });
 
-      // 9. Se lista de espera, criar entrada
+      // 10. Se lista de espera, criar entrada
       if (statusContrato === 'LISTA_ESPERA') {
         const posicao = await tx.listaEspera.count({ where: { status: 'AGUARDANDO' } });
         await tx.listaEspera.create({
@@ -554,8 +560,13 @@ export class MotorPropostaService {
     });
     const novoStatus = cooperado?.status === 'ATIVO' ? 'ATIVO' : 'PENDENTE_ATIVACAO';
 
-    // Calcular percentualUsina ao alocar em usina
+    // Validar regra ANEEL: mesma distribuidora UC x Usina
     const contratoCompleto = await this.prisma.contrato.findUnique({ where: { id: entrada.contratoId } });
+    if (contratoCompleto?.ucId) {
+      await this.usinasService.validarCompatibilidadeAneel(contratoCompleto.ucId, usinaId);
+    }
+
+    // Calcular percentualUsina ao alocar em usina
     const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
     let percentualUsina: number | null = null;
     if (contratoCompleto && usina && usina.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {

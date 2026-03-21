@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query } from '@nestjs/common';
 import { UsinasService } from './usinas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,8 +11,14 @@ export class UsinasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get()
-  findAll() {
-    return this.usinasService.findAll();
+  findAll(@Query('distribuidora') distribuidora?: string) {
+    return this.usinasService.findAll(distribuidora);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('disponiveis')
+  findDisponiveis(@Query('ucId') ucId: string) {
+    return this.usinasService.findDisponiveis(ucId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
