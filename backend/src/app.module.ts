@@ -15,6 +15,9 @@ import { PlanosModule } from './planos/planos.module';
 import { DocumentosModule } from './documentos/documentos.module';
 import { NotificacoesModule } from './notificacoes/notificacoes.module';
 import { MotorPropostaModule } from './motor-proposta/motor-proposta.module';
+import { ConfigTenantModule } from './config-tenant/config-tenant.module';
+import { ModelosCobrancaModule } from './modelos-cobranca/modelos-cobranca.module';
+import { ConfiguracaoCobrancaModule } from './configuracao-cobranca/configuracao-cobranca.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -32,6 +35,9 @@ import { RolesGuard } from './auth/roles.guard';
     DocumentosModule,
     NotificacoesModule,
     MotorPropostaModule,
+    ConfigTenantModule,
+    ModelosCobrancaModule,
+    ConfiguracaoCobrancaModule,
   ],
   controllers: [AppController],
   providers: [

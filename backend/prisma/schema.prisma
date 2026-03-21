@@ -8,6 +8,20 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model Cooperativa {
+  id                    String                 @id @default(cuid())
+  nome                  String
+  cnpj                  String                 @unique
+  email                 String?
+  telefone              String?
+  ativo                 Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  configuracoesCobranca ConfiguracaoCobranca[]
+
+  @@map("cooperativas")
+}
+
 model Usuario {
   id            String        @id @default(cuid())
   nome          String
@@ -17,6 +31,7 @@ model Usuario {
   supabaseId    String?       @unique
   perfil        PerfilUsuario @default(COOPERADO)
   fotoFacialUrl String?
+  cooperativaId String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -31,30 +46,30 @@ enum PerfilUsuario {
 }
 
 model Cooperado {
-  id                String            @id @default(cuid())
-  nomeCompleto      String
-  cpf               String            @unique
-  email             String            @unique
-  telefone          String?
-  status            StatusCooperado   @default(PENDENTE)
-  cotaKwhMensal     Decimal?          @db.Decimal(10, 2)
-  percentualUsina   Decimal?          @db.Decimal(8, 4)
+  id                  String               @id @default(cuid())
+  nomeCompleto        String
+  cpf                 String               @unique
+  email               String               @unique
+  telefone            String?
+  status              StatusCooperado      @default(PENDENTE)
+  cotaKwhMensal       Decimal?             @db.Decimal(10, 2)
   documento           String?
   tipoDocumento       String?
   preferenciaCobranca String?
-  tipoCooperado       String            @default("COM_UC")
-  termoAdesaoAceito   Boolean           @default(false)
+  tipoCooperado       String               @default("COM_UC")
+  termoAdesaoAceito   Boolean              @default(false)
   termoAdesaoAceitoEm DateTime?
-  createdAt           DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  ucs               Uc[]
-  contratos         Contrato[]
-  ocorrencias       Ocorrencia[]
-  faturasProcessadas FaturaProcessada[]
-  documentos        DocumentoCooperado[]
-  notificacoes      Notificacao[]
-  propostas         PropostaCooperado[]
-  listaEspera       ListaEspera[]
+  cooperativaId       String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ucs                 Uc[]
+  contratos           Contrato[]
+  ocorrencias         Ocorrencia[]
+  faturasProcessadas  FaturaProcessada[]
+  documentos          DocumentoCooperado[]
+  notificacoes        Notificacao[]
+  propostas           PropostaCooperado[]
+  listaEspera         ListaEspera[]
 
   @@map("cooperados")
 }
@@ -99,8 +114,8 @@ enum StatusCooperado {
 }
 
 model Uc {
-  id                  String     @id @default(cuid())
-  numero              String     @unique
+  id                  String             @id @default(cuid())
+  numero              String             @unique
   endereco            String
   cidade              String
   estado              String
@@ -114,9 +129,10 @@ model Uc {
   tensaoNominal       String?
   tipoFornecimento    String?
   cooperadoId         String
-  cooperado           Cooperado  @relation(fields: [cooperadoId], references: [id])
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  cooperado           Cooperado          @relation(fields: [cooperadoId], references: [id])
+  cooperativaId       String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
   contratos           Contrato[]
   ocorrencias         Ocorrencia[]
   faturasProcessadas  FaturaProcessada[]
@@ -125,21 +141,24 @@ model Uc {
 }
 
 model Usina {
-  id                  String       @id @default(cuid())
-  nome                String
-  potenciaKwp         Decimal      @db.Decimal(10, 2)
-  capacidadeKwh       Decimal?     @db.Decimal(15, 2)
-  producaoMensalKwh   Decimal?     @db.Decimal(15, 2)
-  cidade              String
-  estado              String
-  statusHomologacao   StatusUsina  @default(CADASTRADA)
-  dataHomologacao     DateTime?
-  dataInicioProducao  DateTime?
-  observacoes              String?
-  modeloCobrancaOverride   ModeloCobranca?
-  createdAt                DateTime     @default(now())
-  updatedAt                DateTime     @updatedAt
-  contratos                Contrato[]
+  id                     String                 @id @default(cuid())
+  nome                   String
+  potenciaKwp            Decimal                @db.Decimal(10, 2)
+  capacidadeKwh          Decimal?               @db.Decimal(15, 2)
+  producaoMensalKwh      Decimal?               @db.Decimal(15, 2)
+  cidade                 String
+  estado                 String
+  statusHomologacao      StatusUsina            @default(CADASTRADA)
+  dataHomologacao        DateTime?
+  dataInicioProducao     DateTime?
+  observacoes            String?
+  modeloCobrancaOverride ModeloCobranca?
+  distribuidora          String?
+  cooperativaId          String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  contratos              Contrato[]
+  configuracoesCobranca  ConfiguracaoCobranca[]
 
   @@map("usinas")
 }
@@ -153,48 +172,56 @@ enum StatusUsina {
 }
 
 model Contrato {
-  id                 String         @id @default(cuid())
-  numero             String         @unique
-  cooperadoId        String
-  cooperado          Cooperado      @relation(fields: [cooperadoId], references: [id])
-  ucId               String
-  uc                 Uc             @relation(fields: [ucId], references: [id])
-  usinaId            String?
-  usina              Usina?         @relation(fields: [usinaId], references: [id])
-  planoId            String?
-  plano              Plano?         @relation(fields: [planoId], references: [id])
-  propostaId         String?
-  proposta           PropostaCooperado? @relation(fields: [propostaId], references: [id])
-  dataInicio         DateTime
-  dataFim            DateTime?
-  percentualDesconto Decimal        @db.Decimal(5, 2)
-  kwhContrato              Decimal?        @db.Decimal(10, 5)
-  status                   StatusContrato  @default(PENDENTE_ATIVACAO)
-  modeloCobrancaOverride   ModeloCobranca?
-  createdAt                DateTime        @default(now())
-  updatedAt                DateTime        @updatedAt
-  cobrancas                Cobranca[]
-  listaEspera        ListaEspera?
+  id                     String             @id @default(cuid())
+  numero                 String             @unique
+  cooperadoId            String
+  cooperado              Cooperado          @relation(fields: [cooperadoId], references: [id])
+  ucId                   String
+  uc                     Uc                 @relation(fields: [ucId], references: [id])
+  usinaId                String?
+  usina                  Usina?             @relation(fields: [usinaId], references: [id])
+  planoId                String?
+  plano                  Plano?             @relation(fields: [planoId], references: [id])
+  propostaId             String?
+  proposta               PropostaCooperado? @relation(fields: [propostaId], references: [id])
+  dataInicio             DateTime
+  dataFim                DateTime?
+  percentualDesconto     Decimal            @db.Decimal(5, 2)
+  kwhContrato            Decimal?           @db.Decimal(10, 5)
+  percentualUsina        Decimal?           @db.Decimal(8, 4)
+  status                 StatusContrato     @default(PENDENTE_ATIVACAO)
+  modeloCobrancaOverride ModeloCobranca?
+  kwhContratoAnual       Decimal?           @db.Decimal(15, 2)
+  kwhContratoMensal      Decimal?           @db.Decimal(15, 2)
+  descontoOverride       Decimal?           @db.Decimal(5, 2)
+  baseCalculoOverride    String?
+  regrasAplicadas        Json?
+  cooperativaId          String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  cobrancas              Cobranca[]
+  listaEspera            ListaEspera?
 
   @@map("contratos")
 }
 
 model Plano {
-  id                  String         @id @default(cuid())
+  id                  String              @id @default(cuid())
   nome                String
   descricao           String?
   modeloCobranca      ModeloCobranca
-  descontoBase        Decimal        @db.Decimal(5, 2)
-  temPromocao         Boolean        @default(false)
-  descontoPromocional Decimal?       @db.Decimal(5, 2)
+  descontoBase        Decimal             @db.Decimal(5, 2)
+  temPromocao         Boolean             @default(false)
+  descontoPromocional Decimal?            @db.Decimal(5, 2)
   mesesPromocao       Int?
-  publico             Boolean        @default(true)
-  ativo               Boolean        @default(true)
-  tipoCampanha        TipoCampanha   @default(PADRAO)
+  publico             Boolean             @default(true)
+  ativo               Boolean             @default(true)
+  tipoCampanha        TipoCampanha        @default(PADRAO)
   dataInicioVigencia  DateTime?
   dataFimVigencia     DateTime?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  cooperativaId       String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   contratos           Contrato[]
   propostas           PropostaCooperado[]
 
@@ -233,6 +260,7 @@ model Cobranca {
   status             StatusCobranca @default(PENDENTE)
   dataVencimento     DateTime
   dataPagamento      DateTime?
+  cooperativaId      String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -247,18 +275,19 @@ enum StatusCobranca {
 }
 
 model Ocorrencia {
-  id          String               @id @default(cuid())
-  cooperadoId String
-  cooperado   Cooperado            @relation(fields: [cooperadoId], references: [id])
-  ucId        String?
-  uc          Uc?                  @relation(fields: [ucId], references: [id])
-  tipo        TipoOcorrencia
-  descricao   String
-  status      StatusOcorrencia     @default(ABERTA)
-  prioridade  PrioridadeOcorrencia
-  resolucao   String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id            String               @id @default(cuid())
+  cooperadoId   String
+  cooperado     Cooperado            @relation(fields: [cooperadoId], references: [id])
+  ucId          String?
+  uc            Uc?                  @relation(fields: [ucId], references: [id])
+  tipo          TipoOcorrencia
+  descricao     String
+  status        StatusOcorrencia     @default(ABERTA)
+  prioridade    PrioridadeOcorrencia
+  resolucao     String?
+  cooperativaId String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   @@map("ocorrencias")
 }
@@ -292,149 +321,208 @@ enum StatusFatura {
 }
 
 model FaturaProcessada {
-  id                  String       @id @default(cuid())
-  cooperadoId         String
-  cooperado           Cooperado    @relation(fields: [cooperadoId], references: [id])
-  ucId                String?
-  uc                  Uc?          @relation(fields: [ucId], references: [id])
-  arquivoUrl          String?
-  dadosExtraidos      Json
-  historicoConsumo    Json
-  mesesUtilizados     Int
-  mesesDescartados    Int
-  mediaKwhCalculada   Decimal      @db.Decimal(10, 2)
-  thresholdUtilizado  Decimal      @db.Decimal(5, 2)
-  status              StatusFatura @default(PENDENTE)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                 String       @id @default(cuid())
+  cooperadoId        String
+  cooperado          Cooperado    @relation(fields: [cooperadoId], references: [id])
+  ucId               String?
+  uc                 Uc?          @relation(fields: [ucId], references: [id])
+  arquivoUrl         String?
+  dadosExtraidos     Json
+  historicoConsumo   Json
+  mesesUtilizados    Int
+  mesesDescartados   Int
+  mediaKwhCalculada  Decimal      @db.Decimal(10, 2)
+  thresholdUtilizado Decimal      @db.Decimal(5, 2)
+  status             StatusFatura @default(PENDENTE)
+  cooperativaId      String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@map("faturas_processadas")
 }
 
 model Notificacao {
-  id          String     @id @default(cuid())
-  tipo        String
-  titulo      String
-  mensagem    String
-  lida        Boolean    @default(false)
-  cooperadoId String?
-  cooperado   Cooperado? @relation(fields: [cooperadoId], references: [id])
-  adminId     String?
-  link        String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  tipo          String
+  titulo        String
+  mensagem      String
+  lida          Boolean    @default(false)
+  cooperadoId   String?
+  cooperado     Cooperado? @relation(fields: [cooperadoId], references: [id])
+  adminId       String?
+  link          String?
+  cooperativaId String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@map("notificacoes")
 }
 
 model ConfigTenant {
-  id        String   @id @default(cuid())
-  chave     String   @unique
-  valor     String
-  descricao String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  chave         String   @unique
+  valor         String
+  descricao     String?
+  cooperativaId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("config_tenant")
 }
 
 model ConfiguracaoMotor {
-  id                    String   @id @default(cuid())
-  fonteKwh              String   @default("MES_RECENTE")
-  thresholdOutlier      Decimal  @default(1.50000) @db.Decimal(10, 5)
-  acaoOutlier           String   @default("OFERECER_OPCAO")
-  baseDesconto          String   @default("TARIFA_UNIT")
-  descontoPadrao        Decimal  @default(20.00000) @db.Decimal(10, 5)
-  descontoMinimo        Decimal  @default(15.00000) @db.Decimal(10, 5)
-  descontoMaximo        Decimal  @default(30.00000) @db.Decimal(10, 5)
-  acaoResultadoAcima    String   @default("AUMENTAR_DESCONTO")
-  acaoResultadoAbaixo   String   @default("USAR_FATURA")
-  indicesCorrecao       String[] @default(["IPCA"])
-  combinacaoIndices     String   @default("MAIOR")
-  limiteReajusteConces  Boolean  @default(true)
-  diaAplicacaoAnual     Int      @default(1)
-  mesAplicacaoAnual     Int      @default(1)
-  aplicacaoCorrecao     String   @default("GERAL")
-  aprovarManualmente    Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  fonteKwh             String   @default("MES_RECENTE")
+  thresholdOutlier     Decimal  @default(1.50000) @db.Decimal(10, 5)
+  acaoOutlier          String   @default("OFERECER_OPCAO")
+  baseDesconto         String   @default("TARIFA_UNIT")
+  descontoPadrao       Decimal  @default(20.00000) @db.Decimal(10, 5)
+  descontoMinimo       Decimal  @default(15.00000) @db.Decimal(10, 5)
+  descontoMaximo       Decimal  @default(30.00000) @db.Decimal(10, 5)
+  acaoResultadoAcima   String   @default("AUMENTAR_DESCONTO")
+  acaoResultadoAbaixo  String   @default("USAR_FATURA")
+  indicesCorrecao      String[] @default(["IPCA"])
+  combinacaoIndices    String   @default("MAIOR")
+  limiteReajusteConces Boolean  @default(true)
+  diaAplicacaoAnual    Int      @default(1)
+  mesAplicacaoAnual    Int      @default(1)
+  aplicacaoCorrecao    String   @default("GERAL")
+  aprovarManualmente   Boolean  @default(true)
+  cooperativaId        String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
   @@map("configuracao_motor")
 }
 
 model TarifaConcessionaria {
-  id                    String    @id @default(cuid())
-  concessionaria        String
-  dataVigencia          DateTime
-  tusdAnterior          Decimal   @db.Decimal(10, 5)
-  tusdNova              Decimal   @db.Decimal(10, 5)
-  teAnterior            Decimal   @db.Decimal(10, 5)
-  teNova                Decimal   @db.Decimal(10, 5)
-  percentualAnunciado   Decimal   @db.Decimal(10, 5)
-  percentualApurado     Decimal   @db.Decimal(10, 5)
-  percentualAplicado    Decimal   @db.Decimal(10, 5)
-  observacoes           String?
-  aprovadoPor           String?
-  aprovadoEm            DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  historico             HistoricoReajuste[]
+  id                  String              @id @default(cuid())
+  concessionaria      String
+  dataVigencia        DateTime
+  tusdAnterior        Decimal             @db.Decimal(10, 5)
+  tusdNova            Decimal             @db.Decimal(10, 5)
+  teAnterior          Decimal             @db.Decimal(10, 5)
+  teNova              Decimal             @db.Decimal(10, 5)
+  percentualAnunciado Decimal             @db.Decimal(10, 5)
+  percentualApurado   Decimal             @db.Decimal(10, 5)
+  percentualAplicado  Decimal             @db.Decimal(10, 5)
+  observacoes         String?
+  aprovadoPor         String?
+  aprovadoEm          DateTime?
+  cooperativaId       String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  historico           HistoricoReajuste[]
+
   @@map("tarifas_concessionaria")
 }
 
 model HistoricoReajuste {
-  id                    String               @id @default(cuid())
-  tarifaId              String
-  tarifa                TarifaConcessionaria @relation(fields: [tarifaId], references: [id])
-  dataAplicacao         DateTime
-  indiceUtilizado       String
-  percentualIndice      Decimal              @db.Decimal(10, 5)
-  percentualAnunciado   Decimal              @db.Decimal(10, 5)
-  percentualApurado     Decimal              @db.Decimal(10, 5)
-  percentualAplicado    Decimal              @db.Decimal(10, 5)
-  diferencaConc         Decimal              @db.Decimal(10, 5)
-  cooperadosAfetados    Int
-  valorMedioAnterior    Decimal              @db.Decimal(10, 5)
-  valorMedioNovo        Decimal              @db.Decimal(10, 5)
-  impactoMensalTotal    Decimal              @db.Decimal(10, 5)
-  createdAt             DateTime             @default(now())
+  id                  String               @id @default(cuid())
+  tarifaId            String
+  tarifa              TarifaConcessionaria @relation(fields: [tarifaId], references: [id])
+  dataAplicacao       DateTime
+  indiceUtilizado     String
+  percentualIndice    Decimal              @db.Decimal(10, 5)
+  percentualAnunciado Decimal              @db.Decimal(10, 5)
+  percentualApurado   Decimal              @db.Decimal(10, 5)
+  percentualAplicado  Decimal              @db.Decimal(10, 5)
+  diferencaConc       Decimal              @db.Decimal(10, 5)
+  cooperadosAfetados  Int
+  valorMedioAnterior  Decimal              @db.Decimal(10, 5)
+  valorMedioNovo      Decimal              @db.Decimal(10, 5)
+  impactoMensalTotal  Decimal              @db.Decimal(10, 5)
+  cooperativaId       String?
+  createdAt           DateTime             @default(now())
+
   @@map("historico_reajustes")
 }
 
 model PropostaCooperado {
-  id                    String    @id @default(cuid())
-  cooperadoId           String
-  cooperado             Cooperado @relation(fields: [cooperadoId], references: [id])
-  mesReferencia         String
-  kwhMesRecente         Decimal   @db.Decimal(10, 5)
-  valorMesRecente       Decimal   @db.Decimal(10, 5)
-  kwhMedio12m           Decimal   @db.Decimal(10, 5)
-  valorMedio12m         Decimal   @db.Decimal(10, 5)
-  outlierDetectado      Boolean   @default(false)
-  tusdUtilizada         Decimal   @db.Decimal(10, 5)
-  teUtilizada           Decimal   @db.Decimal(10, 5)
-  tarifaUnitSemTrib     Decimal   @db.Decimal(10, 5)
-  kwhApuradoBase        Decimal   @db.Decimal(10, 5)
-  baseUtilizada         String
-  descontoPercentual    Decimal   @db.Decimal(10, 5)
-  descontoAbsoluto      Decimal   @db.Decimal(10, 5)
-  kwhContrato           Decimal   @db.Decimal(10, 5)
-  valorCooperado        Decimal   @db.Decimal(10, 5)
-  economiaAbsoluta      Decimal   @db.Decimal(10, 5)
-  economiaPercentual    Decimal   @db.Decimal(10, 5)
-  economiaMensal        Decimal   @db.Decimal(10, 5)
-  economiaAnual         Decimal   @db.Decimal(10, 5)
-  mesesEquivalentes     Decimal   @db.Decimal(10, 5)
-  mediaCooperativaKwh   Decimal   @db.Decimal(10, 5)
-  resultadoVsMedia      Decimal   @db.Decimal(10, 5)
-  opcaoEscolhida        String?
-  status                String    @default("PENDENTE")
-  planoId               String?
-  plano                 Plano?    @relation(fields: [planoId], references: [id])
-  validaAte             DateTime
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  contratos             Contrato[]
+  id                  String     @id @default(cuid())
+  cooperadoId         String
+  cooperado           Cooperado  @relation(fields: [cooperadoId], references: [id])
+  mesReferencia       String
+  kwhMesRecente       Decimal    @db.Decimal(10, 5)
+  valorMesRecente     Decimal    @db.Decimal(10, 5)
+  kwhMedio12m         Decimal    @db.Decimal(10, 5)
+  valorMedio12m       Decimal    @db.Decimal(10, 5)
+  outlierDetectado    Boolean    @default(false)
+  tusdUtilizada       Decimal    @db.Decimal(10, 5)
+  teUtilizada         Decimal    @db.Decimal(10, 5)
+  tarifaUnitSemTrib   Decimal    @db.Decimal(10, 5)
+  kwhApuradoBase      Decimal    @db.Decimal(10, 5)
+  baseUtilizada       String
+  descontoPercentual  Decimal    @db.Decimal(10, 5)
+  descontoAbsoluto    Decimal    @db.Decimal(10, 5)
+  kwhContrato         Decimal    @db.Decimal(10, 5)
+  valorCooperado      Decimal    @db.Decimal(10, 5)
+  economiaAbsoluta    Decimal    @db.Decimal(10, 5)
+  economiaPercentual  Decimal    @db.Decimal(10, 5)
+  economiaMensal      Decimal    @db.Decimal(10, 5)
+  economiaAnual       Decimal    @db.Decimal(10, 5)
+  mesesEquivalentes   Decimal    @db.Decimal(10, 5)
+  mediaCooperativaKwh Decimal    @db.Decimal(10, 5)
+  resultadoVsMedia    Decimal    @db.Decimal(10, 5)
+  opcaoEscolhida      String?
+  status              String     @default("PENDENTE")
+  planoId             String?
+  plano               Plano?     @relation(fields: [planoId], references: [id])
+  validaAte           DateTime
+  cooperativaId       String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  contratos           Contrato[]
+
   @@map("propostas_cooperado")
+}
+
+model ModeloCobrancaConfig {
+  id                  String         @id @default(cuid())
+  nome                String         @unique
+  descricao           String?
+  tipo                ModeloCobranca
+  ativo               Boolean        @default(true)
+  escopo              String         @default("COOPERATIVA") // COOPERATIVA | USINA
+  usinaId             String?
+  descontoBase        Decimal        @db.Decimal(5, 2)
+  descontoMinimo      Decimal?       @db.Decimal(5, 2)
+  descontoMaximo      Decimal?       @db.Decimal(5, 2)
+  temPromocao         Boolean        @default(false)
+  descontoPromocional Decimal?       @db.Decimal(5, 2)
+  promocaoInicio      DateTime?
+  promocaoFim         DateTime?
+  temProgressivo      Boolean        @default(false)
+  descontoProgressivo Decimal?       @db.Decimal(5, 2)
+  progressivoAteCap   Decimal?       @db.Decimal(5, 2)
+  baseCalculo         String         @default("TUSD_TE") // TUSD_TE | TOTAL_FATURA | CONFIGURAVEL
+  cooperativaId       String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@map("modelos_cobranca_config")
+}
+
+enum BaseCalculo {
+  TUSD_TE
+  TOTAL_FATURA
+}
+
+model ConfiguracaoCobranca {
+  id             String      @id @default(cuid())
+  cooperativaId  String
+  cooperativa    Cooperativa @relation(fields: [cooperativaId], references: [id])
+  usinaId        String?
+  usina          Usina?      @relation(fields: [usinaId], references: [id])
+  descontoPadrao Decimal     @db.Decimal(5, 2)
+  descontoMin    Decimal     @db.Decimal(5, 2)
+  descontoMax    Decimal     @db.Decimal(5, 2)
+  baseCalculo    BaseCalculo @default(TUSD_TE)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([cooperativaId, usinaId])
+  @@map("configuracoes_cobranca")
 }
 
 model ListaEspera {
@@ -446,6 +534,7 @@ model ListaEspera {
   kwhNecessario Decimal   @db.Decimal(10, 5)
   posicao       Int
   status        String    @default("AGUARDANDO")
+  cooperativaId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
