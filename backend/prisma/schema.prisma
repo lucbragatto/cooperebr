@@ -108,6 +108,7 @@ enum StatusDocumento {
 
 enum StatusCooperado {
   PENDENTE
+  APROVADO
   ATIVO
   SUSPENSO
   ENCERRADO

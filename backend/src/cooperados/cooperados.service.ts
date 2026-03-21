@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { StatusCooperado } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
@@ -80,7 +80,7 @@ export class CooperadosService {
   }
 
   async findOne(id: string) {
-    return this.prisma.cooperado.findUnique({
+    const cooperado = await this.prisma.cooperado.findUnique({
       where: { id },
       include: {
         ucs: true,
@@ -96,6 +96,8 @@ export class CooperadosService {
         ocorrencias: { orderBy: { createdAt: 'desc' }, take: 20 },
       },
     });
+    if (!cooperado) throw new NotFoundException(`Cooperado com id ${id} não encontrado`);
+    return cooperado;
   }
 
   async create(data: {
@@ -134,19 +136,19 @@ export class CooperadosService {
       });
 
       if (contratosAtivados.count > 0) {
-        // Calcular percentualUsina: soma de kwhContrato de TODOS os contratos ativos / capacidade da usina
+        // Calcular percentualUsina por contrato (cada contrato tem sua usina)
         const contratos = await this.prisma.contrato.findMany({
           where: { cooperadoId: id, status: 'ATIVO' },
           include: { usina: true },
         });
-        const totalKwh = contratos.reduce((acc, c) => acc + Number(c.kwhContrato ?? 0), 0);
-        const usina = contratos.find(c => c.usina && Number(c.usina.capacidadeKwh ?? 0) > 0)?.usina;
-        if (usina && Number(usina.capacidadeKwh ?? 0) > 0) {
-          const percentual = (totalKwh / Number(usina.capacidadeKwh)) * 100;
-          await this.prisma.cooperado.update({
-            where: { id },
-            data: { percentualUsina: Math.round(percentual * 10000) / 10000 },
-          });
+        for (const c of contratos) {
+          if (c.usina && Number(c.usina.capacidadeKwh ?? 0) > 0 && !c.percentualUsina) {
+            const percentual = (Number(c.kwhContrato ?? 0) / Number(c.usina.capacidadeKwh)) * 100;
+            await this.prisma.contrato.update({
+              where: { id: c.id },
+              data: { percentualUsina: Math.round(percentual * 10000) / 10000 },
+            });
+          }
         }
 
         await this.notificacoes.criar({
@@ -171,9 +173,25 @@ export class CooperadosService {
   }
 
   async remove(id: string) {
-    return this.prisma.cooperado.delete({
-      where: { id },
+    const contratosAtivos = await this.prisma.contrato.count({
+      where: { cooperadoId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
     });
+    if (contratosAtivos > 0) {
+      throw new BadRequestException(
+        'Cooperado possui contratos ativos. Encerre os contratos antes de remover.',
+      );
+    }
+
+    const cobrancasPendentes = await this.prisma.cobranca.count({
+      where: { contrato: { cooperadoId: id }, status: 'PENDENTE' },
+    });
+    if (cobrancasPendentes > 0) {
+      throw new BadRequestException(
+        'Cooperado possui cobranças pendentes. Quite as cobranças antes de remover.',
+      );
+    }
+
+    return this.prisma.cooperado.delete({ where: { id } });
   }
 
   async getChecklist(cooperadoId: string) {
@@ -225,21 +243,178 @@ export class CooperadosService {
     };
   }
 
+  /**
+   * FASE 1 → APROVADO: docs aprovados + fatura processada
+   * FASE 2 → ATIVO: tem contrato ATIVO
+   */
   async checkProntoParaAtivar(cooperadoId: string) {
-    const checklist = await this.getChecklist(cooperadoId);
-    if (!checklist || !checklist.pronto || checklist.status !== 'PENDENTE') return;
-
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },
-      select: { nomeCompleto: true },
+      select: { status: true, nomeCompleto: true, tipoCooperado: true },
+    });
+    if (!cooperado) return;
+
+    // FASE 2: cooperado APROVADO com contrato ATIVO → status ATIVO
+    if (cooperado.status === 'APROVADO') {
+      const contratoAtivo = await this.prisma.contrato.count({
+        where: { cooperadoId, status: 'ATIVO' },
+      });
+      if (contratoAtivo > 0) {
+        await this.prisma.cooperado.update({
+          where: { id: cooperadoId },
+          data: { status: 'ATIVO' },
+        });
+        await this.notificacoes.criar({
+          tipo: 'COOPERADO_ATIVADO',
+          titulo: 'Cooperado ativado',
+          mensagem: `${cooperado.nomeCompleto} possui contrato ativo e foi ativado automaticamente.`,
+          cooperadoId,
+          link: `/dashboard/cooperados/${cooperadoId}`,
+        });
+        return;
+      }
+    }
+
+    // FASE 1: cooperado PENDENTE com docs + fatura OK → status APROVADO
+    if (cooperado.status === 'PENDENTE') {
+      const docAprovado = await this.prisma.documentoCooperado.count({
+        where: { cooperadoId, status: 'APROVADO' },
+      });
+      const faturaProcessada = await this.prisma.faturaProcessada.count({
+        where: { cooperadoId },
+      });
+
+      const fase1Completa = cooperado.tipoCooperado === 'SEM_UC'
+        ? docAprovado > 0
+        : docAprovado > 0 && faturaProcessada > 0;
+
+      if (fase1Completa) {
+        await this.prisma.cooperado.update({
+          where: { id: cooperadoId },
+          data: { status: 'APROVADO' },
+        });
+        await this.notificacoes.criar({
+          tipo: 'COOPERADO_APROVADO',
+          titulo: 'Cooperado aprovado — aguardando usina',
+          mensagem: `${cooperado.nomeCompleto} completou a documentação e está na fila de espera.`,
+          cooperadoId,
+          link: `/dashboard/cooperados/${cooperadoId}`,
+        });
+      }
+    }
+  }
+
+  /** Fila de espera: cooperados APROVADO sem contrato ATIVO (FIFO por updatedAt) */
+  async filaEspera() {
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: {
+        status: 'APROVADO',
+        contratos: { none: { status: 'ATIVO' } },
+      },
+      include: {
+        ucs: { select: { id: true, numero: true, distribuidora: true } },
+        faturasProcessadas: {
+          select: { mediaKwhCalculada: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'asc' },
     });
 
-    await this.notificacoes.criar({
-      tipo: 'COOPERADO_PRONTO',
-      titulo: 'Cooperado pronto para ativação',
-      mensagem: `${cooperado?.nomeCompleto} completou todos os requisitos. Clique para ativar.`,
-      cooperadoId,
-      link: `/dashboard/cooperados/${cooperadoId}`,
+    return cooperados.map(c => ({
+      id: c.id,
+      nomeCompleto: c.nomeCompleto,
+      email: c.email,
+      telefone: c.telefone,
+      uc: c.ucs[0] ?? null,
+      distribuidora: c.ucs[0]?.distribuidora ?? null,
+      consumoMedioMensal: c.faturasProcessadas[0]
+        ? Number(c.faturasProcessadas[0].mediaKwhCalculada)
+        : null,
+      dataAprovacao: c.updatedAt,
+    }));
+  }
+
+  /** Aloca cooperado APROVADO a uma usina, validando regra ANEEL (mesma distribuidora) e capacidade */
+  async alocarUsina(cooperadoId: string, usinaId: string) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      include: {
+        ucs: { select: { id: true, numero: true, distribuidora: true } },
+        contratos: { where: { status: 'ATIVO' }, select: { id: true } },
+        faturasProcessadas: {
+          select: { mediaKwhCalculada: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
     });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+    if (cooperado.status !== 'APROVADO') {
+      throw new BadRequestException('Cooperado precisa estar com status APROVADO para alocação');
+    }
+    if (cooperado.contratos.length > 0) {
+      throw new BadRequestException('Cooperado já possui contrato ativo');
+    }
+
+    const uc = cooperado.ucs[0];
+    if (!uc) throw new BadRequestException('Cooperado não possui UC cadastrada');
+
+    const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
+    if (!usina) throw new NotFoundException('Usina não encontrada');
+
+    // Regra ANEEL: mesma distribuidora
+    if (uc.distribuidora && usina.distribuidora && uc.distribuidora !== usina.distribuidora) {
+      throw new BadRequestException(
+        `Distribuidora da UC (${uc.distribuidora}) difere da usina (${usina.distribuidora}). Regra ANEEL exige mesma distribuidora.`,
+      );
+    }
+
+    // Verificar capacidade disponível
+    const capacidade = Number(usina.capacidadeKwh ?? 0);
+    if (capacidade <= 0) {
+      throw new BadRequestException('Usina sem capacidade kWh definida');
+    }
+
+    const contratosUsina = await this.prisma.contrato.aggregate({
+      where: { usinaId, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+      _sum: { kwhContratoMensal: true },
+    });
+    const kwhOcupado = Number(contratosUsina._sum.kwhContratoMensal ?? 0);
+    const percentualOcupado = (kwhOcupado / capacidade) * 100;
+
+    if (percentualOcupado >= 100) {
+      throw new BadRequestException(
+        `Usina sem capacidade disponível (${percentualOcupado.toFixed(1)}% ocupada)`,
+      );
+    }
+
+    const consumoMedio = cooperado.faturasProcessadas[0]
+      ? Number(cooperado.faturasProcessadas[0].mediaKwhCalculada)
+      : 0;
+    const kwhDisponivel = capacidade - kwhOcupado;
+
+    return {
+      cooperado: {
+        id: cooperado.id,
+        nomeCompleto: cooperado.nomeCompleto,
+        uc: uc,
+        consumoMedioMensal: consumoMedio,
+      },
+      usina: {
+        id: usina.id,
+        nome: usina.nome,
+        distribuidora: usina.distribuidora,
+        capacidadeKwh: capacidade,
+        kwhOcupado,
+        kwhDisponivel,
+        percentualOcupado: Math.round(percentualOcupado * 100) / 100,
+      },
+      alocacaoViavel: consumoMedio <= kwhDisponivel,
+      mensagem: consumoMedio <= kwhDisponivel
+        ? 'Alocação viável. Gere a proposta para prosseguir.'
+        : `Consumo médio (${consumoMedio} kWh) excede disponível (${kwhDisponivel.toFixed(2)} kWh). Considere outra usina.`,
+    };
   }
 }
