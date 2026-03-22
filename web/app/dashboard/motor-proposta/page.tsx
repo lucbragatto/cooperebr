@@ -109,12 +109,16 @@ export default function MotorPropostaPage() {
                     <td className="px-4 py-3 text-right text-green-700 font-medium">{fmtBRL(p.economiaMensal)}</td>
                     <td className="px-4 py-3 text-center"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[p.status] ?? 'bg-gray-100 text-gray-600'}`}>{p.status}</span></td>
                     <td className="px-4 py-3 text-right space-x-1">
-                      {p.status === 'ACEITA' && (
-                        <Button variant="ghost" size="sm" onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/motor-proposta/proposta/${p.id}/html`, '_blank')}>
-                          <Printer className="h-3.5 w-3.5 mr-1" />Imprimir
-                        </Button>
-                      )}
-                      <Link href={`/dashboard/cooperados/${(p.cooperado as any)['id'] || ''}`}><Button variant="ghost" size="sm">Ver</Button></Link>
+                      <Button variant="ghost" size="sm" onClick={async () => {
+                        try {
+                          const r = await api.get(`/motor-proposta/proposta/${p.id}/html`, { responseType: 'text' });
+                          const blob = new Blob([r.data], { type: 'text/html' });
+                          const url = URL.createObjectURL(blob);
+                          window.open(url, '_blank');
+                        } catch { alert('Erro ao carregar proposta'); }
+                      }}>
+                        <Printer className="h-3.5 w-3.5 mr-1" />Ver / Imprimir
+                      </Button>
                     </td>
                   </tr>
                 ))}

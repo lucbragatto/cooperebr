@@ -74,8 +74,14 @@ export class WhatsappFaturaService {
       }
     }
 
-    // 5. Buscar plano padrão
-    const plano = await this.prisma.plano.findFirst({ where: { ativo: true }, orderBy: { createdAt: 'asc' } });
+    // 5. Buscar plano padrão (configurável via ConfigTenant ou menor desconto)
+    const planoPadraoId = await this.configTenant.get('plano_padrao_whatsapp');
+    let plano = planoPadraoId
+      ? await this.prisma.plano.findFirst({ where: { id: planoPadraoId, ativo: true } })
+      : null;
+    if (!plano) {
+      plano = await this.prisma.plano.findFirst({ where: { ativo: true }, orderBy: { descontoBase: 'asc' } });
+    }
 
     // 6. Buscar ou criar lead por telefone
     const telefoneNormalizado = dto.telefone.replace(/\D/g, '');
@@ -134,27 +140,39 @@ export class WhatsappFaturaService {
 
     const tipoLabel: Record<string, string> = { MONOFASICO: 'Monofásico', BIFASICO: 'Bifásico', TRIFASICO: 'Trifásico' };
 
-    // 9. Montar mensagem WhatsApp
+    // 9. Calcular meses de economia
+    const mesesEconomia = valorFaturaMedia > 0
+      ? Math.round(economia5anos / valorFaturaMedia * 10) / 10
+      : 0;
+
+    // 10. Montar mensagem WhatsApp
     const linhas: string[] = [
       '*Analisei sua fatura* ✅',
       '',
       `*Distribuidora:* ${distribuidora}`,
       `*UC:* ${numeroUC}`,
-      `*Consumo médio:* ${Math.round(kwhMedio)} kWh/mês`,
+      `*Consumo médio real:* ${Math.round(kwhMedio).toLocaleString('pt-BR')} kWh/mês`,
+    ];
+
+    if (minimoAtivo && minimoFaturavel > 0) {
+      linhas.push(`*Consumo considerado (desc. mínimo ${(tipoLabel[tipoFornecimento] ?? tipoFornecimento).toLowerCase()}):* ${Math.round(consumoConsiderado).toLocaleString('pt-BR')} kWh/mês`);
+    }
+
+    linhas.push(
       `*Tipo:* ${tipoLabel[tipoFornecimento] ?? tipoFornecimento}`,
       '',
       `*Sua fatura média atual:* R$ ${valorFaturaMedia.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`,
       `*Com CoopereBR (${descontoPercentual.toFixed(0)}% desc.):* R$ ${valorComDesconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês`,
-    ];
-
-    if (minimoAtivo && minimoFaturavel > 0) {
-      linhas.push(`*Consumo considerado:* ${Math.round(consumoConsiderado)} kWh (descontando ${minimoFaturavel} kWh mínimo ${(tipoLabel[tipoFornecimento] ?? tipoFornecimento).toLowerCase()})`);
-    }
-
-    linhas.push(
       '',
       `💰 *Economia mensal:* R$ ${economiaMensal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       `💰 *Economia em 5 anos:* R$ ${economia5anos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    );
+
+    if (mesesEconomia > 0) {
+      linhas.push(`📅 *Equivale a:* ${mesesEconomia.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} meses de energia grátis em 5 anos`);
+    }
+
+    linhas.push(
       '',
       'Para receber a proposta completa e iniciar seu cadastro, responda *SIM*.',
     );

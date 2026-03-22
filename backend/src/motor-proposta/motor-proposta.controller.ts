@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Res } from '@nestjs/co
 import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
 import { PropostaPdfService } from './proposta-pdf.service';
+import { PdfGeneratorService } from './pdf-generator.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
@@ -17,6 +18,7 @@ export class MotorPropostaController {
   constructor(
     private readonly service: MotorPropostaService,
     private readonly propostaPdf: PropostaPdfService,
+    private readonly pdfGenerator: PdfGeneratorService,
   ) {}
 
   @Get()
@@ -66,6 +68,23 @@ export class MotorPropostaController {
     const html = await this.propostaPdf.gerarHtml(id);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
+  }
+
+  @Post('proposta/:id/enviar-pdf')
+  async enviarPdf(
+    @Param('id') id: string,
+    @Body() body: { telefoneDestino?: string },
+  ) {
+    const html = await this.propostaPdf.gerarHtml(id);
+    const pdfPath = await this.pdfGenerator.gerarPdf(html, `proposta-${id}.pdf`);
+    const telefone = body.telefoneDestino || 'não informado';
+    console.log(`PDF gerado: ${pdfPath} | Enviar para WhatsApp: ${telefone}`);
+    return {
+      sucesso: true,
+      pdfPath,
+      telefone,
+      mensagem: 'PDF gerado com sucesso. Pronto para envio.',
+    };
   }
 
   @Get('historico/:cooperadoId')
