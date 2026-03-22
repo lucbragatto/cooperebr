@@ -2,18 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import api from '@/lib/api';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Download, Loader2, Pencil } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
@@ -25,11 +26,9 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-const inputClass =
-  'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500';
-const labelClass = 'text-xs text-gray-500 mb-0.5 block';
-const selectClass =
-  'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white';
+const cls = 'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500';
+const lbl = 'text-xs text-gray-500 mb-0.5 block';
+const selCls = `${cls} bg-white`;
 
 const statusLabels: Record<StatusUsina, string> = {
   CADASTRADA: 'Cadastrada',
@@ -47,88 +46,77 @@ const statusColors: Record<StatusUsina, string> = {
   SUSPENSA: 'bg-red-100 text-red-700',
 };
 
+const usinaSchema = z.object({
+  nome: z.string().min(1, 'Nome obrigatório'),
+  potenciaKwp: z.coerce.number().positive('Deve ser maior que 0'),
+  capacidadeKwh: z.coerce.number().positive('Deve ser maior que 0').nullable(),
+  producaoMensalKwh: z.coerce.number().positive('Deve ser maior que 0').nullable(),
+  cidade: z.string().min(1, 'Cidade obrigatória'),
+  estado: z.string().min(2, 'Estado obrigatório'),
+  statusHomologacao: z.enum(['CADASTRADA', 'AGUARDANDO_HOMOLOGACAO', 'HOMOLOGADA', 'EM_PRODUCAO', 'SUSPENSA']),
+  distribuidora: z.string().nullable(),
+  observacoes: z.string().nullable(),
+});
+
+type UsinaFormData = z.infer<typeof usinaSchema>;
+
 export default function UsinaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [usina, setUsina] = useState<Usina | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
-  const [modoEdicao, setModoEdicao] = useState(false);
+  const [sheetAberto, setSheetAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
-  const [form, setForm] = useState({
-    nome: '',
-    potenciaKwp: '',
-    capacidadeKwh: '',
-    producaoMensalKwh: '',
-    cidade: '',
-    estado: '',
-    statusHomologacao: 'CADASTRADA' as StatusUsina,
-    observacoes: '',
-  });
   const [lista, setLista] = useState<any>(null);
   const [gerandoLista, setGerandoLista] = useState(false);
 
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
+    resolver: zodResolver(usinaSchema) as any,
+  });
+
   useEffect(() => {
-    api.get<Usina>(`/usinas/${id}`)
-      .then((r) => {
-        setUsina(r.data);
-        setForm({
-          nome: r.data.nome,
-          potenciaKwp: String(r.data.potenciaKwp),
-          capacidadeKwh: r.data.capacidadeKwh ? String(r.data.capacidadeKwh) : '',
-          producaoMensalKwh: r.data.producaoMensalKwh ? String(r.data.producaoMensalKwh) : '',
-          cidade: r.data.cidade,
-          estado: r.data.estado,
-          statusHomologacao: r.data.statusHomologacao || 'CADASTRADA',
-          observacoes: r.data.observacoes || '',
-        });
-      })
+    api.get<Usina & { distribuidora?: string | null }>(`/usinas/${id}`)
+      .then((r) => setUsina(r.data))
       .catch(() => setErro('Usina não encontrada.'))
       .finally(() => setCarregando(false));
   }, [id]);
 
-  function iniciarEdicao() {
+  function abrirSheet() {
     if (!usina) return;
-    setForm({
+    reset({
       nome: usina.nome,
-      potenciaKwp: String(usina.potenciaKwp),
-      capacidadeKwh: usina.capacidadeKwh ? String(usina.capacidadeKwh) : '',
-      producaoMensalKwh: usina.producaoMensalKwh ? String(usina.producaoMensalKwh) : '',
+      potenciaKwp: Number(usina.potenciaKwp),
+      capacidadeKwh: usina.capacidadeKwh ? Number(usina.capacidadeKwh) : null,
+      producaoMensalKwh: usina.producaoMensalKwh ? Number(usina.producaoMensalKwh) : null,
       cidade: usina.cidade,
       estado: usina.estado,
       statusHomologacao: usina.statusHomologacao || 'CADASTRADA',
-      observacoes: usina.observacoes || '',
+      distribuidora: (usina as any).distribuidora ?? null,
+      observacoes: usina.observacoes || null,
     });
     setMensagem('');
-    setModoEdicao(true);
+    setSheetAberto(true);
   }
 
-  function cancelar() {
-    setModoEdicao(false);
-    setMensagem('');
-  }
-
-  async function salvar() {
+  async function onSubmit(data: UsinaFormData) {
     setSalvando(true);
     setMensagem('');
     try {
-      const { data } = await api.put<Usina>(`/usinas/${id}`, {
-        nome: form.nome,
-        potenciaKwp: parseFloat(form.potenciaKwp),
-        capacidadeKwh: form.capacidadeKwh ? parseFloat(form.capacidadeKwh) : null,
-        producaoMensalKwh: form.producaoMensalKwh ? parseFloat(form.producaoMensalKwh) : null,
-        cidade: form.cidade,
-        estado: form.estado,
-        statusHomologacao: form.statusHomologacao,
-        observacoes: form.observacoes || null,
+      const { data: res } = await api.put<Usina>(`/usinas/${id}`, {
+        ...data,
+        capacidadeKwh: data.capacidadeKwh || null,
+        producaoMensalKwh: data.producaoMensalKwh || null,
+        observacoes: data.observacoes || null,
+        distribuidora: data.distribuidora || null,
       });
-      setUsina(data);
-      setModoEdicao(false);
+      setUsina(res);
+      setSheetAberto(false);
       setMensagem('Salvo com sucesso!');
     } catch (e: any) {
-      const msg = e?.response?.data?.message || 'Erro ao salvar. Tente novamente.';
-      setMensagem(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const msg = e?.response?.data?.message || 'Erro ao salvar.';
+      setMensagem(typeof msg === 'string' ? `Erro: ${msg}` : `Erro: ${JSON.stringify(msg)}`);
     } finally {
       setSalvando(false);
     }
@@ -144,8 +132,8 @@ export default function UsinaDetailPage() {
           Voltar
         </Button>
         <h2 className="text-2xl font-bold text-gray-800">Detalhe da Usina</h2>
-        {usina && !modoEdicao && (
-          <Button size="sm" variant="outline" onClick={iniciarEdicao} className="ml-auto">
+        {usina && (
+          <Button size="sm" variant="outline" onClick={abrirSheet} className="ml-auto">
             <Pencil className="h-4 w-4 mr-2" />
             Editar
           </Button>
@@ -155,12 +143,12 @@ export default function UsinaDetailPage() {
       {carregando && <p className="text-gray-500">Carregando...</p>}
       {erro && <p className="text-red-500">{erro}</p>}
       {mensagem && (
-        <p className={`mb-4 text-sm ${mensagem.startsWith('Erro') || mensagem.includes('inválid') ? 'text-red-500' : 'text-green-600'}`}>
+        <p className={`mb-4 text-sm ${mensagem.startsWith('Erro') ? 'text-red-500' : 'text-green-600'}`}>
           {mensagem}
         </p>
       )}
 
-      {usina && !modoEdicao && (
+      {usina && (
         <>
           <Card>
             <CardHeader>
@@ -179,6 +167,7 @@ export default function UsinaDetailPage() {
               <Campo label="Potencia (kWp)" value={Number(usina.potenciaKwp).toFixed(2)} />
               <Campo label="Capacidade (kWh/mes)" value={usina.capacidadeKwh ? Number(usina.capacidadeKwh).toFixed(2) : '—'} />
               <Campo label="Producao Mensal (kWh)" value={usina.producaoMensalKwh ? Number(usina.producaoMensalKwh).toFixed(2) : '—'} />
+              <Campo label="Distribuidora" value={(usina as any).distribuidora ?? '—'} />
               <Campo label="Cidade" value={usina.cidade} />
               <Campo label="Estado" value={usina.estado} />
               <Campo label="Status Homologacao" value={
@@ -285,57 +274,37 @@ export default function UsinaDetailPage() {
         </>
       )}
 
-      {usina && modoEdicao && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Editar Usina</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-6">
+      {/* Sheet — Editar Usina */}
+      <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Editar Usina</SheetTitle></SheetHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
             <div>
-              <label className={labelClass}>Nome</label>
-              <input
-                className={inputClass}
-                value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              />
+              <label className={lbl}>Nome *</label>
+              <input className={cls} {...register('nome')} />
+              {errors.nome && <p className="text-xs text-red-500 mt-1">{errors.nome.message}</p>}
             </div>
             <div>
-              <label className={labelClass}>Potencia (kWp)</label>
-              <input
-                className={inputClass}
-                type="number"
-                step="0.01"
-                value={form.potenciaKwp}
-                onChange={(e) => setForm({ ...form, potenciaKwp: e.target.value })}
-              />
+              <label className={lbl}>Potencia (kWp) *</label>
+              <input className={cls} type="number" step="0.01" {...register('potenciaKwp')} />
+              {errors.potenciaKwp && <p className="text-xs text-red-500 mt-1">{errors.potenciaKwp.message}</p>}
             </div>
             <div>
-              <label className={labelClass}>Capacidade (kWh/mes)</label>
-              <input
-                className={inputClass}
-                type="number"
-                step="0.01"
-                value={form.capacidadeKwh}
-                onChange={(e) => setForm({ ...form, capacidadeKwh: e.target.value })}
-              />
+              <label className={lbl}>Capacidade (kWh/mes)</label>
+              <input className={cls} type="number" step="0.01" {...register('capacidadeKwh')} />
+              {errors.capacidadeKwh && <p className="text-xs text-red-500 mt-1">{errors.capacidadeKwh.message}</p>}
             </div>
             <div>
-              <label className={labelClass}>Producao Mensal (kWh)</label>
-              <input
-                className={inputClass}
-                type="number"
-                step="0.01"
-                value={form.producaoMensalKwh}
-                onChange={(e) => setForm({ ...form, producaoMensalKwh: e.target.value })}
-              />
+              <label className={lbl}>Producao Mensal (kWh)</label>
+              <input className={cls} type="number" step="0.01" {...register('producaoMensalKwh')} />
             </div>
             <div>
-              <label className={labelClass}>Status Homologacao</label>
-              <select
-                className={selectClass}
-                value={form.statusHomologacao}
-                onChange={(e) => setForm({ ...form, statusHomologacao: e.target.value as StatusUsina })}
-              >
+              <label className={lbl}>Distribuidora</label>
+              <input className={cls} {...register('distribuidora')} placeholder="Ex: CEMIG, CPFL, Enel" />
+            </div>
+            <div>
+              <label className={lbl}>Status Homologacao *</label>
+              <select className={selCls} {...register('statusHomologacao')}>
                 <option value="CADASTRADA">Cadastrada</option>
                 <option value="AGUARDANDO_HOMOLOGACAO">Aguardando Homologacao</option>
                 <option value="HOMOLOGADA">Homologada pela Concessionaria</option>
@@ -344,42 +313,32 @@ export default function UsinaDetailPage() {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Cidade</label>
-              <input
-                className={inputClass}
-                value={form.cidade}
-                onChange={(e) => setForm({ ...form, cidade: e.target.value })}
-              />
+              <label className={lbl}>Cidade *</label>
+              <input className={cls} {...register('cidade')} />
+              {errors.cidade && <p className="text-xs text-red-500 mt-1">{errors.cidade.message}</p>}
             </div>
             <div>
-              <label className={labelClass}>Estado</label>
-              <input
-                className={inputClass}
-                value={form.estado}
-                onChange={(e) => setForm({ ...form, estado: e.target.value })}
-              />
+              <label className={lbl}>Estado *</label>
+              <input className={cls} {...register('estado')} />
+              {errors.estado && <p className="text-xs text-red-500 mt-1">{errors.estado.message}</p>}
             </div>
-            <div className="col-span-2">
-              <label className={labelClass}>Observacoes</label>
-              <textarea
-                className={inputClass}
-                rows={3}
-                value={form.observacoes}
-                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                placeholder="Notas sobre a usina, concessionaria, etc."
-              />
+            <div>
+              <label className={lbl}>Observacoes</label>
+              <textarea className={cls} rows={3} {...register('observacoes')} placeholder="Notas sobre a usina" />
             </div>
-            <div className="col-span-2 flex gap-3 mt-2">
-              <Button onClick={salvar} disabled={salvando}>
-                {salvando ? 'Salvando...' : 'Salvar'}
+            {mensagem && mensagem.startsWith('Erro') && (
+              <p className="text-sm text-red-500">{mensagem}</p>
+            )}
+            <SheetFooter className="flex gap-2">
+              <Button type="submit" disabled={salvando} className="flex-1">
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar
               </Button>
-              <Button variant="outline" onClick={cancelar} disabled={salvando}>
-                Cancelar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              <Button type="button" variant="outline" onClick={() => setSheetAberto(false)}>Cancelar</Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

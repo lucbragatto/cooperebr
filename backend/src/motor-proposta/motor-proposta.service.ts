@@ -567,6 +567,8 @@ export class MotorPropostaService {
       await this.usinasService.validarCompatibilidadeAneel(contratoCompleto.ucId, usinaId);
     }
 
+    const contratoId = entrada.contratoId!;
+
     // Transação SERIALIZABLE para evitar race condition no percentualUsina
     await this.prisma.$transaction(async (tx) => {
       const usina = await tx.usina.findUnique({ where: { id: usinaId } });
@@ -580,7 +582,7 @@ export class MotorPropostaService {
           where: {
             usinaId,
             status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
-            id: { not: entrada.contratoId },
+            id: { not: contratoId },
           },
           select: { percentualUsina: true, kwhContratoAnual: true, kwhContrato: true },
         });
@@ -597,7 +599,7 @@ export class MotorPropostaService {
       }
 
       await tx.contrato.update({
-        where: { id: entrada.contratoId },
+        where: { id: contratoId },
         data: { usinaId, status: novoStatus as any, percentualUsina },
       });
       await tx.listaEspera.update({

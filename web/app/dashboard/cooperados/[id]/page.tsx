@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +101,18 @@ interface CooperadoCompleto {
   documento: string | null; tipoDocumento: string | null; createdAt: string; updatedAt: string;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
+
+// ─── Zod schema — Editar Cooperado ──────────────────────────────────────────
+
+const cooperadoSchema = z.object({
+  nomeCompleto: z.string().min(1, 'Nome obrigatório'),
+  email: z.string().email('Email inválido'),
+  cpf: z.string().min(11, 'CPF/CNPJ obrigatório'),
+  telefone: z.string().optional(),
+  status: z.string().min(1),
+});
+
+type CooperadoFormData = z.infer<typeof cooperadoSchema>;
 
 // ─── Label maps ──────────────────────────────────────────────────────────────
 
@@ -205,7 +220,11 @@ export default function CooperadoPerfilPage() {
   // Checklist
   const [checklist, setChecklist] = useState<{ tipo: string; status: string; items: { label: string; ok: boolean }[]; pronto: boolean } | null>(null);
 
-  // Forms
+  // Forms — Cooperado (RHF+Zod)
+  const cooperadoForm = useForm<CooperadoFormData>({ resolver: zodResolver(cooperadoSchema) as any });
+  const formCoopErrors = cooperadoForm.formState.errors;
+
+  // Forms (legacy state-based)
   const [formCoop, setFormCoop] = useState({ nomeCompleto: '', email: '', telefone: '', cpf: '', status: '' });
   const [formContrato, setFormContrato] = useState({ status: '', percentualDesconto: '', dataFim: '' });
   const [formCob, setFormCob] = useState({ mes: '', ano: '', valorBruto: '', percentualDesconto: '', dataVencimento: '' });
@@ -295,14 +314,20 @@ export default function CooperadoPerfilPage() {
 
   function abrirEditarCooperado() {
     if (!cooperado) return;
-    setFormCoop({ nomeCompleto: cooperado.nomeCompleto, email: cooperado.email, telefone: cooperado.telefone ?? '', cpf: cooperado.cpf, status: cooperado.status });
+    cooperadoForm.reset({
+      nomeCompleto: cooperado.nomeCompleto,
+      email: cooperado.email,
+      cpf: cooperado.cpf,
+      telefone: cooperado.telefone ?? '',
+      status: cooperado.status,
+    });
     setSheetCooperado(true);
   }
 
-  async function salvarCooperado() {
+  async function salvarCooperado(formData: CooperadoFormData) {
     setSalvando(true);
     try {
-      const { data } = await api.put<CooperadoCompleto>(`/cooperados/${id}`, formCoop);
+      const { data } = await api.put<CooperadoCompleto>(`/cooperados/${id}`, formData);
       setCooperado(p => p ? { ...p, nomeCompleto: data.nomeCompleto, email: data.email, telefone: data.telefone, cpf: data.cpf, status: data.status, updatedAt: data.updatedAt } : p);
       setSheetCooperado(false);
       showToast('sucesso', 'Dados atualizados com sucesso.');
@@ -1298,25 +1323,41 @@ export default function CooperadoPerfilPage() {
           SHEETS
       ════════════════════════════════════════════════════════════════════════ */}
 
-      {/* Sheet — Editar Cooperado */}
+      {/* Sheet — Editar Cooperado (RHF + Zod) */}
       <Sheet open={sheetCooperado} onOpenChange={setSheetCooperado}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader><SheetTitle>Editar Cooperado</SheetTitle></SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div><label className={lbl}>Nome completo</label><input className={cls} value={formCoop.nomeCompleto} onChange={e => setFormCoop(p => ({ ...p, nomeCompleto: e.target.value }))} /></div>
-            <div><label className={lbl}>Email</label><input type="email" className={cls} value={formCoop.email} onChange={e => setFormCoop(p => ({ ...p, email: e.target.value }))} /></div>
-            <div><label className={lbl}>CPF</label><input className={cls} value={formCoop.cpf} onChange={e => setFormCoop(p => ({ ...p, cpf: e.target.value }))} /></div>
-            <div><label className={lbl}>Telefone</label><input className={cls} value={formCoop.telefone} onChange={e => setFormCoop(p => ({ ...p, telefone: e.target.value }))} /></div>
-            <div><label className={lbl}>Status</label>
-              <select className={cls} value={formCoop.status} onChange={e => setFormCoop(p => ({ ...p, status: e.target.value }))}>
+          <form onSubmit={cooperadoForm.handleSubmit(salvarCooperado)} className="mt-6 space-y-4">
+            <div>
+              <label className={lbl}>Nome completo *</label>
+              <input className={cls} {...cooperadoForm.register('nomeCompleto')} />
+              {formCoopErrors.nomeCompleto && <p className="text-xs text-red-500 mt-1">{formCoopErrors.nomeCompleto.message}</p>}
+            </div>
+            <div>
+              <label className={lbl}>Email *</label>
+              <input type="email" className={cls} {...cooperadoForm.register('email')} />
+              {formCoopErrors.email && <p className="text-xs text-red-500 mt-1">{formCoopErrors.email.message}</p>}
+            </div>
+            <div>
+              <label className={lbl}>CPF/CNPJ *</label>
+              <input className={cls} {...cooperadoForm.register('cpf')} />
+              {formCoopErrors.cpf && <p className="text-xs text-red-500 mt-1">{formCoopErrors.cpf.message}</p>}
+            </div>
+            <div>
+              <label className={lbl}>Telefone</label>
+              <input className={cls} {...cooperadoForm.register('telefone')} />
+            </div>
+            <div>
+              <label className={lbl}>Status</label>
+              <select className={cls} {...cooperadoForm.register('status')}>
                 {['PENDENTE', 'ATIVO', 'SUSPENSO', 'ENCERRADO'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-          </div>
-          <SheetFooter className="mt-6 flex gap-2">
-            <Button onClick={salvarCooperado} disabled={salvando} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Salvar</Button>
-            <Button variant="outline" onClick={() => setSheetCooperado(false)}>Cancelar</Button>
-          </SheetFooter>
+            <SheetFooter className="flex gap-2">
+              <Button type="submit" disabled={salvando} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Salvar</Button>
+              <Button type="button" variant="outline" onClick={() => setSheetCooperado(false)}>Cancelar</Button>
+            </SheetFooter>
+          </form>
         </SheetContent>
       </Sheet>
 
