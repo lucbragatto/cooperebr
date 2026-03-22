@@ -2,7 +2,9 @@ import { Controller, Post, Get, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
+import { Roles } from './roles.decorator';
 import { PerfilUsuario } from './perfil.enum';
+import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -10,17 +12,16 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  register(
-    @Body()
-    body: {
-      nome: string;
-      email: string;
-      cpf?: string;
-      telefone?: string;
-      senha: string;
-      perfil?: PerfilUsuario;
-    },
-  ) {
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register({
+      ...dto,
+      perfil: PerfilUsuario.COOPERADO,
+    });
+  }
+
+  @Roles(PerfilUsuario.SUPER_ADMIN)
+  @Post('register-admin')
+  registerAdmin(@Body() body: RegisterDto) {
     return this.authService.register(body);
   }
 

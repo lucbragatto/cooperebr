@@ -183,9 +183,11 @@ export default function ContratoDetailPage() {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as StatusContrato })}
               >
+                <option value="PENDENTE_ATIVACAO">Pendente Ativacao</option>
                 <option value="ATIVO">Ativo</option>
                 <option value="SUSPENSO">Suspenso</option>
                 <option value="ENCERRADO">Encerrado</option>
+                <option value="LISTA_ESPERA">Lista de Espera</option>
               </select>
             </div>
             <div className="col-span-2 flex gap-3 mt-2">

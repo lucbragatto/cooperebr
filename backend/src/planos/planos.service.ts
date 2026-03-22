@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
@@ -76,6 +76,14 @@ export class PlanosService {
 
   async remove(id: string) {
     await this.findOne(id);
+    const contratos = await this.prisma.contrato.count({
+      where: { planoId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+    });
+    if (contratos > 0) {
+      throw new BadRequestException(
+        'Não é possível excluir plano com contratos vinculados. Desvincule os contratos antes de remover.',
+      );
+    }
     await this.prisma.plano.delete({ where: { id } });
     return { sucesso: true };
   }

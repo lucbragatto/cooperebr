@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -13,10 +13,12 @@ export class UcsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.uc.findUnique({
+    const uc = await this.prisma.uc.findUnique({
       where: { id },
       include: { cooperado: true },
     });
+    if (!uc) throw new NotFoundException(`UC com id ${id} não encontrada`);
+    return uc;
   }
 
   async findByCooperado(cooperadoId: string) {
@@ -54,6 +56,14 @@ export class UcsService {
   }
 
   async remove(id: string) {
+    const contratos = await this.prisma.contrato.count({
+      where: { ucId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO', 'LISTA_ESPERA'] } },
+    });
+    if (contratos > 0) {
+      throw new BadRequestException(
+        'Não é possível excluir UC com contratos vinculados. Encerre os contratos antes de remover.',
+      );
+    }
     return this.prisma.uc.delete({ where: { id } });
   }
 }

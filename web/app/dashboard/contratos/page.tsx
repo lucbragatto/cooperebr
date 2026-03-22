@@ -18,15 +18,19 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 const statusClasses: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
-  SUSPENSO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
+  LISTA_ESPERA: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 const statusLabel: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'Pendente Ativacao',
   ATIVO: 'Ativo',
   SUSPENSO: 'Suspenso',
   ENCERRADO: 'Encerrado',
+  LISTA_ESPERA: 'Lista de Espera',
 };
 
 export default function ContratosPage() {

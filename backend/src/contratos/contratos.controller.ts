@@ -2,6 +2,8 @@ import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common'
 import { ContratosService } from './contratos.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { CreateContratoDto } from './dto/create-contrato.dto';
+import { UpdateContratoDto } from './dto/update-contrato.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -29,26 +31,14 @@ export class ContratosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
-  create(
-    @Body()
-    body: {
-      cooperadoId: string;
-      ucId: string;
-      usinaId?: string;
-      planoId?: string;
-      dataInicio: Date;
-      dataFim?: Date;
-      percentualDesconto: number;
-      kwhContrato?: number;
-    },
-  ) {
+  create(@Body() body: CreateContratoDto) {
     return this.contratosService.create(body);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.contratosService.update(id, body);
+  update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {
+    return this.contratosService.update(id, dto as any);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

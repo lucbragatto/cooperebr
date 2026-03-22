@@ -6,12 +6,13 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma.service';
 import { FacialModule } from './facial/facial.module';
+import { getJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'changeme',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
     FacialModule,

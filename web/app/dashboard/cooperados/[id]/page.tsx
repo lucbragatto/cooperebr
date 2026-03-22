@@ -81,6 +81,7 @@ interface Usina { id: string; nome: string; potenciaKwp: number | string; cidade
 interface Contrato {
   id: string; numero: string; status: string; dataInicio: string;
   dataFim: string | null; percentualDesconto: number | string;
+  kwhContrato?: number | string | null;
   plano: Plano | null; uc: UCItem | null; usina: Usina | null; cobrancas: Cobranca[];
 }
 interface DocumentoCooperado {
@@ -93,7 +94,7 @@ interface OcorrenciaItem {
 }
 interface CooperadoCompleto {
   id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null;
-  status: string; cotaKwhMensal: number | string | null; percentualUsina: number | string | null;
+  status: string; cotaKwhMensal: number | string | null;
   documento: string | null; tipoDocumento: string | null; createdAt: string; updatedAt: string;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
@@ -118,10 +119,18 @@ const statusCobColors: Record<string, string> = {
   CANCELADO: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 const statusContratoColors: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
   SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
   LISTA_ESPERA: 'bg-purple-100 text-purple-800 border-purple-200',
+};
+const statusContratoLabel: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'Pendente Ativacao',
+  ATIVO: 'Ativo',
+  SUSPENSO: 'Suspenso',
+  ENCERRADO: 'Encerrado',
+  LISTA_ESPERA: 'Lista de Espera',
 };
 const tipoDocLabel: Record<string, string> = {
   RG_FRENTE: 'RG (Frente)', RG_VERSO: 'RG (Verso)',
@@ -148,9 +157,9 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'geral', label: 'Visão Geral', icon: User },
-  { id: 'fatura', label: 'Fatura & Consumo', icon: BarChart3 },
+  { id: 'fatura', label: 'Fatura Concessionaria', icon: BarChart3 },
   { id: 'contrato', label: 'Contrato & Plano', icon: Building2 },
-  { id: 'cobrancas', label: 'Cobranças', icon: CreditCard },
+  { id: 'cobrancas', label: 'Cobrancas Cooperativa', icon: CreditCard },
   { id: 'documentos', label: 'Documentos', icon: FileText },
   { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { id: 'proposta', label: 'Proposta', icon: Zap },
@@ -192,6 +201,9 @@ export default function CooperadoPerfilPage() {
   const [dialogDarBaixa, setDialogDarBaixa] = useState<Cobranca | null>(null);
   const [dialogExcluirCobranca, setDialogExcluirCobranca] = useState<Cobranca | null>(null);
   const [dialogExcluirDoc, setDialogExcluirDoc] = useState<DocumentoCooperado | null>(null);
+
+  // Checklist
+  const [checklist, setChecklist] = useState<{ tipo: string; status: string; items: { label: string; ok: boolean }[]; pronto: boolean } | null>(null);
 
   // Forms
   const [formCoop, setFormCoop] = useState({ nomeCompleto: '', email: '', telefone: '', cpf: '', status: '' });
@@ -254,8 +266,14 @@ export default function CooperadoPerfilPage() {
   // ── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    api.get<CooperadoCompleto>(`/cooperados/${id}`)
-      .then(r => setCooperado(r.data))
+    Promise.all([
+      api.get<CooperadoCompleto>(`/cooperados/${id}`),
+      api.get(`/cooperados/${id}/checklist`),
+    ])
+      .then(([coopRes, checkRes]) => {
+        setCooperado(coopRes.data);
+        setChecklist(checkRes.data);
+      })
       .catch(() => setErro('Cooperado não encontrado.'))
       .finally(() => setCarregando(false));
   }, [id]);
@@ -271,6 +289,7 @@ export default function CooperadoPerfilPage() {
   }, [id, faturasBuscadas]);
 
   useEffect(() => { if (aba === 'fatura') buscarFaturas(); }, [aba, buscarFaturas]);
+  useEffect(() => { if (aba === 'proposta') carregarHistoricoProposta(); }, [aba]);
 
   // ── Actions — Cooperado ───────────────────────────────────────────────────
 
@@ -288,6 +307,23 @@ export default function CooperadoPerfilPage() {
       setSheetCooperado(false);
       showToast('sucesso', 'Dados atualizados com sucesso.');
     } catch { showToast('erro', 'Erro ao atualizar dados.'); }
+    finally { setSalvando(false); }
+  }
+
+  async function ativarCooperado() {
+    setSalvando(true);
+    try {
+      const { data } = await api.put<CooperadoCompleto>(`/cooperados/${id}`, { status: 'ATIVO' });
+      setCooperado(p => p ? { ...p, status: 'ATIVO', updatedAt: data.updatedAt } : p);
+      // Recarregar dados completos (contratos mudam de PENDENTE_ATIVACAO para ATIVO)
+      const [coopRes, checkRes] = await Promise.all([
+        api.get<CooperadoCompleto>(`/cooperados/${id}`),
+        api.get(`/cooperados/${id}/checklist`),
+      ]);
+      setCooperado(coopRes.data);
+      setChecklist(checkRes.data);
+      showToast('sucesso', 'Cooperado ativado! Contratos pendentes foram ativados automaticamente.');
+    } catch { showToast('erro', 'Erro ao ativar cooperado.'); }
     finally { setSalvando(false); }
   }
 
@@ -646,7 +682,7 @@ export default function CooperadoPerfilPage() {
           {cooperado.cotaKwhMensal && (
             <p className="text-sm text-green-700 font-medium">
               Cota: {Number(cooperado.cotaKwhMensal).toLocaleString('pt-BR')} kWh/mês
-              {cooperado.percentualUsina && <span className="ml-3 text-gray-500">({Number(cooperado.percentualUsina).toFixed(4)}% da usina)</span>}
+              {(() => { const soma = cooperado.contratos.filter((c: any) => c.status === 'ATIVO').reduce((acc: number, c: any) => acc + Number(c.percentualUsina ?? 0), 0); return soma > 0 ? <span className="ml-3 text-gray-500">({soma.toFixed(4)}% da usina)</span> : null; })()}
             </p>
           )}
         </div>
@@ -670,28 +706,100 @@ export default function CooperadoPerfilPage() {
 
       {/* ── Aba 1: Visão Geral ── */}
       {aba === 'geral' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          {/* Checklist + Botão Ativar */}
+          {checklist && (
+            <Card className={checklist.pronto && cooperado.status === 'PENDENTE' ? 'border-green-400 bg-green-50/30' : ''}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>Checklist de Ativacao</span>
+                  {checklist.pronto && cooperado.status === 'PENDENTE' && (
+                    <Button onClick={ativarCooperado} disabled={salvando} className="bg-green-600 hover:bg-green-700">
+                      {salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                      Ativar Cooperado
+                    </Button>
+                  )}
+                  {cooperado.status === 'ATIVO' && (
+                    <Badge className="bg-green-100 text-green-800 border-green-200">Cooperado Ativo</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {checklist.items.map((item, i) => (
+                    <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${item.ok ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                      {item.ok ? <CheckCircle className="h-4 w-4 text-green-600 shrink-0" /> : <XCircle className="h-4 w-4 text-gray-400 shrink-0" />}
+                      <span className={`text-sm ${item.ok ? 'text-green-800 font-medium' : 'text-gray-500'}`}>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Dados Pessoais</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                <Campo label="Nome completo" value={cooperado.nomeCompleto} />
+                <Campo label="CPF/CNPJ" value={cooperado.cpf} />
+                <Campo label="Email" value={cooperado.email} />
+                <Campo label="Telefone" value={cooperado.telefone} />
+                <Campo label="Documento (OCR)" value={cooperado.documento} />
+                <Campo label="Tipo documento" value={cooperado.tipoDocumento} />
+              </CardContent>
+            </Card>
+
+            {/* Dados Técnicos com usina */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">Dados Tecnicos</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4">
+                <Campo label="Cota kWh/mes" value={cooperado.cotaKwhMensal ? `${Number(cooperado.cotaKwhMensal).toLocaleString('pt-BR')} kWh` : null} />
+                <Campo label="% da usina" value={(() => { const soma = cooperado.contratos.filter((c: any) => c.status === 'ATIVO').reduce((acc: number, c: any) => acc + Number(c.percentualUsina ?? 0), 0); return soma > 0 ? `${soma.toFixed(4)}%` : null; })()} />
+                <Campo label="UCs vinculadas" value={cooperado.ucs.length || '—'} />
+                <Campo label="Contratos" value={cooperado.contratos.length || '—'} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Resumo de contratos com usina */}
+          {cooperado.contratos.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Contratos Vinculados</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Contrato</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Status</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Usina</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">kWh</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">Desconto</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Plano</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cooperado.contratos.map(c => (
+                      <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium">{c.numero}</td>
+                        <td className="px-4 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusContratoColors[c.status] ?? 'bg-gray-100'}`}>
+                            {statusContratoLabel[c.status] ?? c.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">{c.usina?.nome ?? <span className="text-gray-400">Sem usina</span>}</td>
+                        <td className="px-4 py-2 text-right font-mono">{Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')}</td>
+                        <td className="px-4 py-2 text-right">{Number(c.percentualDesconto).toFixed(2)}%</td>
+                        <td className="px-4 py-2">{c.plano ? `${c.plano.nome} (${modeloCobrancaLabel[c.plano.modeloCobranca] ?? c.plano.modeloCobranca})` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
-            <CardHeader><CardTitle className="text-base">Dados Pessoais</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Campo label="Nome completo" value={cooperado.nomeCompleto} />
-              <Campo label="CPF" value={cooperado.cpf} />
-              <Campo label="Email" value={cooperado.email} />
-              <Campo label="Telefone" value={cooperado.telefone} />
-              <Campo label="Documento (OCR)" value={cooperado.documento} />
-              <Campo label="Tipo documento" value={cooperado.tipoDocumento} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle className="text-base">Dados Técnicos</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Campo label="Cota kWh/mês" value={cooperado.cotaKwhMensal ? `${Number(cooperado.cotaKwhMensal).toLocaleString('pt-BR')} kWh` : null} />
-              <Campo label="% da usina" value={cooperado.percentualUsina ? `${Number(cooperado.percentualUsina).toFixed(4)}%` : null} />
-              <Campo label="UCs vinculadas" value={cooperado.ucs.length || '—'} />
-              <Campo label="Contratos" value={cooperado.contratos.length || '—'} />
-            </CardContent>
-          </Card>
-          <Card className="md:col-span-2">
             <CardHeader><CardTitle className="text-base">Datas</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-4">
               <Campo label="Criado em" value={new Date(cooperado.createdAt).toLocaleString('pt-BR')} />
@@ -815,7 +923,7 @@ export default function CooperadoPerfilPage() {
                     <CardTitle className="text-base flex items-center justify-between">
                       <span>Contrato {c.numero}</span>
                       <div className="flex items-center gap-2">
-                        <Badge className={statusContratoColors[c.status]}>{c.status}</Badge>
+                        <Badge className={statusContratoColors[c.status]}>{statusContratoLabel[c.status] ?? c.status}</Badge>
                         <Button size="sm" variant="outline" onClick={() => abrirEditarContrato(c)}><Pencil className="h-3.5 w-3.5 mr-1" />Editar</Button>
                         {c.status !== 'ENCERRADO' && (
                           <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => setDialogEncerrarContrato(c)}>Encerrar</Button>
@@ -977,52 +1085,66 @@ export default function CooperadoPerfilPage() {
       {/* ── Aba 7: Proposta ── */}
       {aba === 'proposta' && (
         <div className="space-y-4">
-          {/* Estado inicial: botão calcular */}
-          {!proposta && !calculandoProposta && (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-4 py-16">
-                <Zap className="h-12 w-12 text-green-500" />
-                <div className="text-center">
-                  <p className="text-gray-700 font-medium text-lg">Motor de Proposta</p>
-                  <p className="text-gray-400 text-sm mt-1">Gere uma proposta personalizada baseada no histórico de consumo e nas configurações da cooperativa.</p>
-                </div>
-                <Button onClick={() => { carregarHistoricoProposta(); calcularProposta(); }} size="lg">
-                  <Zap className="h-4 w-4 mr-2" />Calcular proposta
+          {/* Histórico de propostas — sempre visível */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>Historico de Propostas</span>
+                <Button onClick={() => calcularProposta()} disabled={calculandoProposta} size="sm">
+                  <Zap className="h-4 w-4 mr-2" />{proposta ? 'Recalcular' : 'Calcular proposta'}
                 </Button>
-                {historicoProposta.length > 0 && (
-                  <div className="w-full mt-4">
-                    <p className="text-xs text-gray-500 mb-2 font-medium">Histórico de propostas</p>
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b">
-                          <tr>
-                            <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Referência</th>
-                            <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">kWh</th>
-                            <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">Economia/mês</th>
-                            <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Status</th>
-                            <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Data</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {historicoProposta.map((p: any) => (
-                            <tr key={p.id} className="hover:bg-gray-50">
-                              <td className="px-3 py-2">{p.mesReferencia}</td>
-                              <td className="px-3 py-2 text-right font-mono text-xs">{Number(p.kwhContrato).toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}</td>
-                              <td className="px-3 py-2 text-right text-green-700">{Number(p.economiaMensal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.status === 'ACEITA' ? 'bg-green-100 text-green-800' : p.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'}`}>{p.status}</span>
-                              </td>
-                              <td className="px-3 py-2 text-gray-500 text-xs">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {historicoProposta.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">Nenhuma proposta gerada ainda.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Referencia</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">kWh</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">Desconto</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">Economia/mes</th>
+                      <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Status</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Data</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-gray-500">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {historicoProposta.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2">{p.mesReferencia}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs">{Number(p.kwhContrato).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right text-green-700">{Number(p.descontoPercentual).toFixed(2)}%</td>
+                        <td className="px-3 py-2 text-right text-green-700">{Number(p.economiaMensal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.status === 'ACEITA' ? 'bg-green-100 text-green-800' : p.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-800' : p.status === 'CANCELADA' ? 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-600'}`}>{p.status}</span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {p.status !== 'CANCELADA' && (
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-700"
+                                onClick={async () => {
+                                  try {
+                                    await api.delete(`/motor-proposta/proposta/${p.id}`);
+                                    setHistoricoProposta(prev => prev.filter(x => x.id !== p.id));
+                                    showToast('sucesso', 'Proposta excluida.');
+                                  } catch { showToast('erro', 'Erro ao excluir proposta.'); }
+                                }}>
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Carregando */}
           {calculandoProposta && (

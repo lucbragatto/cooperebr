@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import type { Cooperado } from '@/types';
 import {
   Table,
   TableBody,
@@ -14,14 +13,31 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { CheckCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  ATIVO: 'default',
-  PENDENTE: 'secondary',
-  SUSPENSO: 'outline',
-  ENCERRADO: 'destructive',
+interface CooperadoLista {
+  id: string;
+  nomeCompleto: string;
+  cpf: string;
+  email: string;
+  telefone: string | null;
+  status: string;
+  tipoCooperado: string;
+  cotaKwhMensal: number | string | null;
+  usinaVinculada: string | null;
+  statusContrato: string | null;
+  kwhContrato: number | null;
+  checklist: string;
+  checklistPronto: boolean;
+  createdAt: string;
+}
+
+const statusColors: Record<string, string> = {
+  ATIVO: 'bg-green-100 text-green-800 border-green-200',
+  PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
+  ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
 };
 
 const statusLabel: Record<string, string> = {
@@ -31,12 +47,24 @@ const statusLabel: Record<string, string> = {
   ENCERRADO: 'Encerrado',
 };
 
+const statusContratoLabel: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'Pend. Ativacao',
+  ATIVO: 'Ativo',
+  LISTA_ESPERA: 'Lista Espera',
+};
+
+const statusContratoColors: Record<string, string> = {
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800',
+  ATIVO: 'bg-green-100 text-green-800',
+  LISTA_ESPERA: 'bg-purple-100 text-purple-800',
+};
+
 export default function CooperadosPage() {
-  const [cooperados, setCooperados] = useState<Cooperado[]>([]);
+  const [cooperados, setCooperados] = useState<CooperadoLista[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    api.get<Cooperado[]>('/cooperados')
+    api.get<CooperadoLista[]>('/cooperados')
       .then((r) => setCooperados(r.data))
       .finally(() => setCarregando(false));
   }, []);
@@ -64,18 +92,19 @@ export default function CooperadosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
-                <TableHead>CPF</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Telefone</TableHead>
+                <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead>Usina</TableHead>
+                <TableHead>Contrato</TableHead>
+                <TableHead>Checklist</TableHead>
+                <TableHead className="text-right">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {carregando ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -84,21 +113,48 @@ export default function CooperadosPage() {
                 ))
               ) : cooperados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
                     Nenhum cooperado cadastrado
                   </TableCell>
                 </TableRow>
               ) : (
                 cooperados.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
-                    <TableCell>{c.cpf}</TableCell>
-                    <TableCell>{c.email}</TableCell>
-                    <TableCell>{c.telefone ?? '—'}</TableCell>
+                  <TableRow key={c.id} className={c.checklistPronto && c.status === 'PENDENTE' ? 'bg-green-50/50' : ''}>
                     <TableCell>
-                      <Badge variant={statusVariant[c.status]}>
-                        {statusLabel[c.status]}
+                      <div>
+                        <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
+                        {c.tipoCooperado === 'SEM_UC' && (
+                          <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[c.status] ?? 'bg-gray-100 text-gray-600'}>
+                        {statusLabel[c.status] ?? c.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {c.usinaVinculada ?? <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {c.statusContrato ? (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusContratoColors[c.statusContrato] ?? 'bg-gray-100'}`}>
+                          {statusContratoLabel[c.statusContrato] ?? c.statusContrato}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-sm font-mono ${c.checklistPronto ? 'text-green-700 font-bold' : 'text-gray-500'}`}>
+                          {c.checklist}
+                        </span>
+                        {c.checklistPronto && (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/dashboard/cooperados/${c.id}`}>

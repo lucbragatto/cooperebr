@@ -2,7 +2,7 @@ export type PerfilUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'OPERADOR' | 'COOPERADO';
 
 export type StatusCooperado = 'PENDENTE' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
 
-export type StatusContrato = 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
+export type StatusContrato = 'PENDENTE_ATIVACAO' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
 
 export type StatusCobranca = 'PENDENTE' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
 
@@ -52,13 +52,20 @@ export interface UC {
   updatedAt: string;
 }
 
+export type StatusUsina = 'CADASTRADA' | 'AGUARDANDO_HOMOLOGACAO' | 'HOMOLOGADA' | 'EM_PRODUCAO' | 'SUSPENSA';
+
 export interface Usina {
   id: string;
   nome: string;
   potenciaKwp: number;
   capacidadeKwh?: number | null;
+  producaoMensalKwh?: number | null;
   cidade: string;
   estado: string;
+  statusHomologacao: StatusUsina;
+  dataHomologacao?: string | null;
+  dataInicioProducao?: string | null;
+  observacoes?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +148,31 @@ export interface AuthResponse {
 
 export type ModeloCobranca = 'FIXO_MENSAL' | 'CREDITOS_COMPENSADOS' | 'CREDITOS_DINAMICO';
 export type TipoCampanha = 'PADRAO' | 'CAMPANHA';
+export type EscopoModelo = 'COOPERATIVA' | 'USINA';
+export type BaseCalculo = 'TUSD_TE' | 'TOTAL_FATURA' | 'CONFIGURAVEL';
+
+export interface ModeloCobrancaConfig {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tipo: ModeloCobranca;
+  ativo: boolean;
+  escopo: EscopoModelo;
+  usinaId: string | null;
+  descontoBase: number;
+  descontoMinimo: number | null;
+  descontoMaximo: number | null;
+  temPromocao: boolean;
+  descontoPromocional: number | null;
+  promocaoInicio: string | null;
+  promocaoFim: string | null;
+  temProgressivo: boolean;
+  descontoProgressivo: number | null;
+  progressivoAteCap: number | null;
+  baseCalculo: BaseCalculo;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Plano {
   id: string;

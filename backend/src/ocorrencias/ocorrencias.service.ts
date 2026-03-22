@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -13,10 +13,12 @@ export class OcorrenciasService {
   }
 
   async findOne(id: string) {
-    return this.prisma.ocorrencia.findUnique({
+    const ocorrencia = await this.prisma.ocorrencia.findUnique({
       where: { id },
       include: { cooperado: true, uc: true },
     });
+    if (!ocorrencia) throw new NotFoundException(`Ocorrência com id ${id} não encontrada`);
+    return ocorrencia;
   }
 
   async findByCooperado(cooperadoId: string) {

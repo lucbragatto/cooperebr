@@ -23,6 +23,7 @@ import {
   Info,
   Clock,
   UserCheck,
+  Receipt,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -35,6 +36,7 @@ const navItems = [
   { href: '/dashboard/planos', label: 'Planos', icon: Tag },
   { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
   { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+  { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
   { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
   { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
 ];
