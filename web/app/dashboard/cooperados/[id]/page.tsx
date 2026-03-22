@@ -19,7 +19,7 @@ import {
 import {
   AlertTriangle, ArrowLeft, BarChart3, Building2, CheckCircle, CreditCard,
   FileCheck, FilePlus, FileText, FileX, Loader2, Pencil, Plus, User,
-  XCircle, Zap,
+  XCircle, Zap, Upload, DollarSign, Filter,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -99,6 +99,10 @@ interface CooperadoCompleto {
   id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null;
   status: string; cotaKwhMensal: number | string | null;
   documento: string | null; tipoDocumento: string | null; createdAt: string; updatedAt: string;
+  tipoCooperado: string; tipoPessoa: string | null;
+  usinaPropriaId: string | null; percentualRepasse: number | string | null;
+  preferenciaCobranca: string | null;
+  representanteLegalNome: string | null; representanteLegalCpf: string | null; representanteLegalCargo: string | null;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
 
@@ -158,6 +162,17 @@ const tipoOcLabel: Record<string, string> = {
 };
 const modeloCobrancaLabel: Record<string, string> = {
   FIXO_MENSAL: 'Fixo Mensal', CREDITOS_COMPENSADOS: 'Créditos Compensados', CREDITOS_DINAMICO: 'Créditos Dinâmico',
+};
+const tipoCooperadoLabel: Record<string, string> = {
+  COM_UC: 'Com UC', SEM_UC: 'Sem UC', GERADOR: 'Gerador',
+  CARREGADOR_VEICULAR: 'Carregador Veicular', USUARIO_CARREGADOR: 'Usuário Carregador',
+};
+const tipoCooperadoColors: Record<string, string> = {
+  COM_UC: 'bg-green-100 text-green-800 border-green-200',
+  SEM_UC: 'bg-orange-100 text-orange-800 border-orange-200',
+  GERADOR: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  CARREGADOR_VEICULAR: 'bg-blue-100 text-blue-800 border-blue-200',
+  USUARIO_CARREGADOR: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -237,6 +252,9 @@ export default function CooperadoPerfilPage() {
   const [proposta, setProposta] = useState<PropostaResult | null>(null);
   const [calculandoProposta, setCalculandoProposta] = useState(false);
   const [historicoProposta, setHistoricoProposta] = useState<any[]>([]);
+
+  // Filtro cobranças
+  const [filtroCobStatus, setFiltroCobStatus] = useState<string>('TODOS');
 
   // Reprovar doc (inline)
   const [reprovarId, setReprovarId] = useState<string | null>(null);
@@ -698,6 +716,9 @@ export default function CooperadoPerfilPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{cooperado.nomeCompleto}</h1>
             <Badge className={statusCoopColors[cooperado.status]}>{cooperado.status}</Badge>
+            <Badge className={tipoCooperadoColors[cooperado.tipoCooperado] ?? 'bg-gray-100 text-gray-800 border-gray-200'}>
+              {tipoCooperadoLabel[cooperado.tipoCooperado] ?? cooperado.tipoCooperado}
+            </Badge>
           </div>
           <p className="text-sm text-gray-500">
             {cooperado.tipoDocumento ?? 'CPF'}: {cooperado.cpf}
@@ -712,11 +733,50 @@ export default function CooperadoPerfilPage() {
           )}
         </div>
         <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={abrirEditarCooperado}>
+            <Pencil className="h-4 w-4 mr-2" />Editar
+          </Button>
+          <Link href={`/dashboard/cooperados/${id}/fatura-mensal`}>
+            <Button variant="outline" size="sm"><Upload className="h-4 w-4 mr-2" />Upload Fatura Mensal</Button>
+          </Link>
           <Link href={`/dashboard/cooperados/${id}/fatura`}>
             <Button variant="outline" size="sm"><FileText className="h-4 w-4 mr-2" />Processar Fatura</Button>
           </Link>
         </div>
       </div>
+
+      {/* Resumo Financeiro */}
+      {(() => {
+        const todasCobrancas = cooperado.contratos.flatMap(ct => ct.cobrancas);
+        const mesAtual = new Date().getMonth() + 1;
+        const anoAtual = new Date().getFullYear();
+        const cobMes = todasCobrancas.filter(c => c.mesReferencia === mesAtual && c.anoReferencia === anoAtual);
+        const totalMes = cobMes.reduce((acc, c) => acc + Number(c.valorLiquido), 0);
+        const pagoAno = todasCobrancas.filter(c => c.anoReferencia === anoAtual && c.status === 'PAGO').reduce((acc, c) => acc + Number(c.valorLiquido), 0);
+        const economiaAno = todasCobrancas.filter(c => c.anoReferencia === anoAtual).reduce((acc, c) => acc + Number(c.valorDesconto), 0);
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="pt-5 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><CreditCard className="h-5 w-5 text-blue-600" /></div>
+                <div><p className="text-xs text-gray-500">Cobranças no mês</p><p className="text-lg font-bold text-gray-900">{formatBRL(totalMes)}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center"><DollarSign className="h-5 w-5 text-green-600" /></div>
+                <div><p className="text-xs text-gray-500">Total pago no ano</p><p className="text-lg font-bold text-gray-900">{formatBRL(pagoAno)}</p></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-5 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center"><Zap className="h-5 w-5 text-emerald-600" /></div>
+                <div><p className="text-xs text-gray-500">Economia estimada no ano</p><p className="text-lg font-bold text-green-700">{formatBRL(economiaAno)}</p></div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* Tabs nav */}
       <div className="flex gap-1 border-b overflow-x-auto">
@@ -775,7 +835,6 @@ export default function CooperadoPerfilPage() {
               </CardContent>
             </Card>
 
-            {/* Dados Técnicos com usina */}
             <Card>
               <CardHeader><CardTitle className="text-base">Dados Tecnicos</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-2 gap-4">
@@ -831,6 +890,35 @@ export default function CooperadoPerfilPage() {
               <Campo label="Atualizado em" value={new Date(cooperado.updatedAt).toLocaleString('pt-BR')} />
             </CardContent>
           </Card>
+
+          {/* UCs vinculadas */}
+          {cooperado.ucs.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">UCs Vinculadas</CardTitle></CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-gray-50">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Número</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Endereço</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Cidade/UF</th>
+                      <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Distribuidora</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cooperado.ucs.map(uc => (
+                      <tr key={uc.id} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium">{uc.numero}</td>
+                        <td className="px-4 py-2">{uc.endereco}</td>
+                        <td className="px-4 py-2">{uc.cidade}/{uc.estado}</td>
+                        <td className="px-4 py-2">{uc.distribuidora ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -1004,16 +1092,27 @@ export default function CooperadoPerfilPage() {
       {aba === 'cobrancas' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            {!contrato && <p className="text-sm text-gray-500">Crie um contrato primeiro para gerar cobranças.</p>}
-            {contrato && <div />}
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <select className="border border-gray-300 rounded-md px-2 py-1 text-sm" value={filtroCobStatus} onChange={e => setFiltroCobStatus(e.target.value)}>
+                <option value="TODOS">Todos os status</option>
+                <option value="PENDENTE">Pendente</option>
+                <option value="PAGO">Pago</option>
+                <option value="VENCIDO">Vencido</option>
+                <option value="CANCELADO">Cancelado</option>
+              </select>
+            </div>
             <Button size="sm" onClick={() => { setFormCob({ mes: String(new Date().getMonth() + 1), ano: String(new Date().getFullYear()), valorBruto: '', percentualDesconto: String(contrato?.percentualDesconto ?? ''), dataVencimento: '' }); setSheetNovaCobranca(true); }} disabled={!contrato}>
               <Plus className="h-4 w-4 mr-2" />Nova cobrança
             </Button>
           </div>
           <Card>
             <CardContent className="p-0">
-              {cobrancas.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 py-12"><CreditCard className="h-10 w-10 text-gray-300" /><p className="text-gray-500">Nenhuma cobrança gerada ainda.</p></div>
+              {(() => {
+                const todasCob = cooperado.contratos.flatMap(ct => ct.cobrancas);
+                const cobFiltradas = filtroCobStatus === 'TODOS' ? todasCob : todasCob.filter(c => c.status === filtroCobStatus);
+                return cobFiltradas.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-12"><CreditCard className="h-10 w-10 text-gray-300" /><p className="text-gray-500">{todasCob.length === 0 ? 'Nenhuma cobrança gerada ainda.' : 'Nenhuma cobrança com este status.'}</p></div>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="border-b bg-gray-50">
@@ -1028,7 +1127,7 @@ export default function CooperadoPerfilPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cobrancas.map(c => (
+                    {cobFiltradas.map(c => (
                       <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{String(c.mesReferencia).padStart(2, '0')}/{c.anoReferencia}</td>
                         <td className="px-4 py-3 text-right">{formatBRL(c.valorBruto)}</td>
@@ -1049,7 +1148,8 @@ export default function CooperadoPerfilPage() {
                     ))}
                   </tbody>
                 </table>
-              )}
+              );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -1058,7 +1158,10 @@ export default function CooperadoPerfilPage() {
       {/* ── Aba 5: Documentos ── */}
       {aba === 'documentos' && (
         <div className="space-y-3">
-          <div className="flex justify-end">
+          <div className="flex justify-between">
+            <Link href={`/dashboard/cooperados/${id}/documentos`}>
+              <Button variant="outline" size="sm"><FileText className="h-4 w-4 mr-2" />Ver todos</Button>
+            </Link>
             <Button size="sm" onClick={() => { setFormUploadDoc({ tipo: 'RG_FRENTE' }); setArquivoUpload(null); setSheetUploadDoc(true); }}>
               <FilePlus className="h-4 w-4 mr-2" />Adicionar documento
             </Button>
