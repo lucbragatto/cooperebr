@@ -453,6 +453,13 @@ export class MotorPropostaService {
     });
   }
 
+  async buscarProposta(id: string) {
+    return this.prisma.propostaCooperado.findUnique({
+      where: { id },
+      include: { cooperado: true },
+    });
+  }
+
   async historico(cooperadoId: string) {
     return this.prisma.propostaCooperado.findMany({
       where: { cooperadoId },

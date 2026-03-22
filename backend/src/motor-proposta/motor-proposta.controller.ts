@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
 import { PropostaPdfService } from './proposta-pdf.service';
 import { PdfGeneratorService } from './pdf-generator.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
@@ -19,6 +20,7 @@ export class MotorPropostaController {
     private readonly service: MotorPropostaService,
     private readonly propostaPdf: PropostaPdfService,
     private readonly pdfGenerator: PdfGeneratorService,
+    private readonly whatsappSender: WhatsappSenderService,
   ) {}
 
   @Get()
@@ -77,14 +79,47 @@ export class MotorPropostaController {
   ) {
     const html = await this.propostaPdf.gerarHtml(id);
     const pdfPath = await this.pdfGenerator.gerarPdf(html, `proposta-${id}.pdf`);
-    const telefone = body.telefoneDestino || 'não informado';
-    console.log(`PDF gerado: ${pdfPath} | Enviar para WhatsApp: ${telefone}`);
-    return {
-      sucesso: true,
-      pdfPath,
-      telefone,
-      mensagem: 'PDF gerado com sucesso. Pronto para envio.',
-    };
+
+    // Buscar telefone do cooperado se não fornecido
+    let telefone = body.telefoneDestino;
+    if (!telefone) {
+      const proposta = await this.service.buscarProposta(id);
+      telefone = proposta?.cooperado?.telefone ?? undefined;
+    }
+
+    if (!telefone) {
+      return {
+        sucesso: true,
+        pdfPath,
+        telefone: null,
+        enviadoWhatsApp: false,
+        mensagem: 'PDF gerado, mas telefone não informado. Envio WhatsApp não realizado.',
+      };
+    }
+
+    try {
+      await this.whatsappSender.enviarPdfWhatsApp(
+        telefone,
+        pdfPath,
+        'proposta-cooperebr.pdf',
+        'Segue sua proposta CoopereBR',
+      );
+      return {
+        sucesso: true,
+        pdfPath,
+        telefone,
+        enviadoWhatsApp: true,
+        mensagem: 'PDF gerado e enviado via WhatsApp com sucesso.',
+      };
+    } catch (err) {
+      return {
+        sucesso: true,
+        pdfPath,
+        telefone,
+        enviadoWhatsApp: false,
+        mensagem: `PDF gerado, mas falha no envio WhatsApp: ${err.message}`,
+      };
+    }
   }
 
   @Get('historico/:cooperadoId')
