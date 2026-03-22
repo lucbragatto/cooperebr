@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { StatusCooperado } from '@prisma/client';
+import { StatusCooperado, TipoCooperado } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
@@ -110,13 +110,15 @@ export class CooperadosService {
     telefone?: string;
     status?: StatusCooperado;
     preferenciaCobranca?: string;
-    tipoCooperado?: string;
+    tipoCooperado?: TipoCooperado;
     termoAdesaoAceito?: boolean;
     termoAdesaoAceitoEm?: Date;
     tipoPessoa?: string;
     representanteLegalNome?: string;
     representanteLegalCpf?: string;
     representanteLegalCargo?: string;
+    usinaPropriaId?: string;
+    percentualRepasse?: number;
   }) {
     return this.prisma.cooperado.create({ data });
   }
@@ -127,7 +129,7 @@ export class CooperadosService {
     telefone: string;
     status: StatusCooperado;
     preferenciaCobranca: string;
-    tipoCooperado: string;
+    tipoCooperado: TipoCooperado;
     termoAdesaoAceito: boolean;
     termoAdesaoAceitoEm: Date;
     dataInicioCreditos: Date;
@@ -136,6 +138,8 @@ export class CooperadosService {
     representanteLegalNome: string;
     representanteLegalCpf: string;
     representanteLegalCargo: string;
+    usinaPropriaId: string;
+    percentualRepasse: number;
   }>) {
     // Buscar status anterior para lógica condicional
     const anterior = await this.prisma.cooperado.findUnique({

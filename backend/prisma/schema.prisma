@@ -56,9 +56,11 @@ model Cooperado {
   documento           String?
   tipoDocumento       String?
   preferenciaCobranca String?
-  tipoCooperado       String               @default("COM_UC")
+  tipoCooperado       TipoCooperado        @default(COM_UC)
   termoAdesaoAceito   Boolean              @default(false)
   termoAdesaoAceitoEm DateTime?
+  usinaPropriaId      String?
+  percentualRepasse   Decimal?             @db.Decimal(5, 2)
   cooperativaId            String?
   dataInicioCreditos       DateTime?
   protocoloConcessionaria  String?
@@ -121,6 +123,14 @@ enum StatusCooperado {
   ATIVO
   SUSPENSO
   ENCERRADO
+}
+
+enum TipoCooperado {
+  COM_UC
+  SEM_UC
+  GERADOR
+  CARREGADOR_VEICULAR
+  USUARIO_CARREGADOR
 }
 
 model Uc {

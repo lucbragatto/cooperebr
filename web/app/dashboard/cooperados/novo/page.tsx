@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   ArrowLeft, CheckCircle, ChevronRight, FileUp, FileText, Loader2,
   Upload, User, UserX, Zap, BarChart2, AlertTriangle, Plus, X, Pencil,
+  Sun, Car, PlugZap,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,10 +57,12 @@ interface DadosOcr {
   historicoConsumo: HistoricoItem[];
 }
 
-type TipoCooperado = 'COM_UC' | 'SEM_UC' | '';
+type TipoCooperado = 'COM_UC' | 'SEM_UC' | 'GERADOR' | 'CARREGADOR_VEICULAR' | 'USUARIO_CARREGADOR' | '';
 // Etapas COM_UC: 1=upload, 2=revisar, 8=histórico, 4=sucesso, 3=preferência
-// Etapas SEM_UC: 5=dados pessoais, 6=upload documento, 7=sucesso
+// Etapas SEM_UC/GERADOR/CARREGADOR/USUARIO: 5=dados pessoais, 6=upload documento, 7=sucesso
 type Etapa = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+interface UsinaOption { id: string; nome: string; cidade: string; estado: string }
 
 // ─── CSS helpers ─────────────────────────────────────────────────────────────
 
@@ -78,7 +81,7 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 // ─── Stepper ─────────────────────────────────────────────────────────────────
 
 function Stepper({ etapa, tipo }: { etapa: Etapa; tipo: TipoCooperado }) {
-  const isSemUC = tipo === 'SEM_UC';
+  const isSemUC = tipo !== 'COM_UC';
   const steps = isSemUC ? [5, 6, 7] : [1, 2, 8, 4];
   const labels = isSemUC
     ? ['Dados pessoais', 'Documento', 'Sucesso']
@@ -130,6 +133,12 @@ export default function NovoCooperadoPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  // Tipo-specific: GERADOR
+  const [usinas, setUsinas] = useState<UsinaOption[]>([]);
+  const [usinaPropriaId, setUsinaPropriaId] = useState('');
+  // Tipo-specific: CARREGADOR_VEICULAR
+  const [percentualRepasse, setPercentualRepasse] = useState('');
+
   // SEM_UC
   const [docArquivo, setDocArquivo] = useState<File | null>(null);
   const docRef = useRef<HTMLInputElement>(null);
@@ -163,6 +172,12 @@ export default function NovoCooperadoPage() {
 
   // Mínimo faturável
   const [minimoConfig, setMinimoConfig] = useState<{ ativo: boolean; mono: number; bi: number; tri: number }>({ ativo: false, mono: 30, bi: 50, tri: 100 });
+
+  useEffect(() => {
+    if (tipoCooperado === 'GERADOR' && usinas.length === 0) {
+      api.get<UsinaOption[]>('/usinas').then(r => setUsinas(r.data)).catch(() => {});
+    }
+  }, [tipoCooperado]);
 
   useEffect(() => {
     if (etapa === 8) {
@@ -443,14 +458,17 @@ export default function NovoCooperadoPage() {
     }
     setErro(''); setLoading(true);
     try {
-      const { data: novoCooperado } = await api.post<{ id: string }>('/cooperados', {
+      const payload: Record<string, unknown> = {
         nomeCompleto: formCoop.nomeCompleto,
         cpf: formCoop.cpf,
         email: formCoop.email,
         telefone: formCoop.telefone || undefined,
         status: 'PENDENTE',
-        tipoCooperado: 'SEM_UC',
-      });
+        tipoCooperado: tipoCooperado || 'SEM_UC',
+      };
+      if (tipoCooperado === 'GERADOR' && usinaPropriaId) payload.usinaPropriaId = usinaPropriaId;
+      if (tipoCooperado === 'CARREGADOR_VEICULAR' && percentualRepasse) payload.percentualRepasse = Number(percentualRepasse);
+      const { data: novoCooperado } = await api.post<{ id: string }>('/cooperados', payload);
       setCooperadoId(novoCooperado.id);
       setEtapa(6);
     } catch (e: unknown) {
@@ -528,31 +546,32 @@ export default function NovoCooperadoPage() {
 
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Novo cooperado</h1>
 
-      {/* ── ETAPA 0 ─────────────────────────────────────────────────────────── */}
+      {/* ── ETAPA 0: Seleção do tipo de cooperado ────────────────────────── */}
       {etapa === 0 && (
         <Card>
           <CardContent className="pt-6 space-y-5">
             <div>
-              <h2 className="text-base font-semibold text-gray-800 mb-1">Este cooperado possui unidade consumidora?</h2>
-              <p className="text-sm text-gray-500">Escolha o tipo de cadastro adequado.</p>
+              <h2 className="text-base font-semibold text-gray-800 mb-1">Tipo de cooperado</h2>
+              <p className="text-sm text-gray-500">Escolha o perfil adequado para este cooperado.</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => { setTipoCooperado('COM_UC'); setEtapa(1); }}
-                className="border-2 border-gray-200 hover:border-green-500 rounded-xl p-6 text-center transition-colors"
-              >
-                <Zap className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-800">Sim, tem UC</p>
-                <p className="text-xs text-gray-500 mt-1">Fluxo com upload de fatura</p>
-              </button>
-              <button
-                onClick={() => { setTipoCooperado('SEM_UC'); setEtapa(5); }}
-                className="border-2 border-gray-200 hover:border-green-500 rounded-xl p-6 text-center transition-colors"
-              >
-                <UserX className="h-8 w-8 text-orange-500 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-800">Não, sem UC</p>
-                <p className="text-xs text-gray-500 mt-1">Cadastro simplificado</p>
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { tipo: 'COM_UC' as const, icon: Zap, color: 'text-green-600', label: 'Com UC', desc: 'Possui unidade consumidora — upload de fatura', etapaInicial: 1 as Etapa },
+                { tipo: 'SEM_UC' as const, icon: UserX, color: 'text-orange-500', label: 'Sem UC', desc: 'Sem unidade consumidora — cadastro simplificado', etapaInicial: 5 as Etapa },
+                { tipo: 'GERADOR' as const, icon: Sun, color: 'text-yellow-500', label: 'Gerador', desc: 'Cooperado que possui usina própria de geração', etapaInicial: 5 as Etapa },
+                { tipo: 'CARREGADOR_VEICULAR' as const, icon: Car, color: 'text-blue-500', label: 'Carregador Veicular', desc: 'Disponibiliza carregador EV com repasse à cooperativa', etapaInicial: 5 as Etapa },
+                { tipo: 'USUARIO_CARREGADOR' as const, icon: PlugZap, color: 'text-purple-500', label: 'Usuário Carregador', desc: 'Utiliza pontos de recarga de veículos elétricos', etapaInicial: 5 as Etapa },
+              ]).map((opt) => (
+                <button
+                  key={opt.tipo}
+                  onClick={() => { setTipoCooperado(opt.tipo); setEtapa(opt.etapaInicial); }}
+                  className="border-2 border-gray-200 hover:border-green-500 rounded-xl p-5 text-center transition-colors"
+                >
+                  <opt.icon className={`h-7 w-7 ${opt.color} mx-auto mb-2`} />
+                  <p className="text-sm font-semibold text-gray-800">{opt.label}</p>
+                  <p className="text-xs text-gray-500 mt-1 leading-snug">{opt.desc}</p>
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -1273,13 +1292,15 @@ export default function NovoCooperadoPage() {
         </Card>
       )}
 
-      {/* ── ETAPA 5: Dados pessoais (SEM_UC) ──────────────────────────────── */}
+      {/* ── ETAPA 5: Dados pessoais (SEM_UC / GERADOR / CARREGADOR / USUARIO) */}
       {etapa === 5 && (
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <User className="h-4 w-4 text-green-700" />
-              <h2 className="text-sm font-semibold text-gray-800">Dados do cooperado (sem UC)</h2>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Dados do cooperado{tipoCooperado === 'GERADOR' ? ' (Gerador)' : tipoCooperado === 'CARREGADOR_VEICULAR' ? ' (Carregador Veicular)' : tipoCooperado === 'USUARIO_CARREGADOR' ? ' (Usuário Carregador)' : ' (sem UC)'}
+              </h2>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
@@ -1296,6 +1317,28 @@ export default function NovoCooperadoPage() {
               <Campo label="Telefone">
                 <input className={cls} value={formCoop.telefone} onChange={e => setFormCoop(p => ({ ...p, telefone: e.target.value }))} placeholder="(00) 00000-0000" />
               </Campo>
+              {/* GERADOR: selecionar usina própria */}
+              {tipoCooperado === 'GERADOR' && (
+                <div className="col-span-2">
+                  <Campo label="Usina própria">
+                    <select className={cls} value={usinaPropriaId} onChange={e => setUsinaPropriaId(e.target.value)}>
+                      <option value="">Selecione a usina...</option>
+                      {usinas.map(u => (
+                        <option key={u.id} value={u.id}>{u.nome} — {u.cidade}/{u.estado}</option>
+                      ))}
+                    </select>
+                  </Campo>
+                </div>
+              )}
+              {/* CARREGADOR_VEICULAR: percentual de repasse */}
+              {tipoCooperado === 'CARREGADOR_VEICULAR' && (
+                <div className="col-span-2">
+                  <Campo label="Percentual de repasse à cooperativa (%)">
+                    <input className={cls} type="number" min="0" max="100" step="0.01" value={percentualRepasse}
+                      onChange={e => setPercentualRepasse(e.target.value)} placeholder="Ex: 15.00" />
+                  </Campo>
+                </div>
+              )}
             </div>
             {erro && <p className="text-sm text-red-600">{erro}</p>}
             <div className="flex gap-3">

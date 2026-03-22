@@ -1,5 +1,5 @@
-import { IsBoolean, IsDateString, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { StatusCooperado } from '@prisma/client';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { StatusCooperado, TipoCooperado } from '@prisma/client';
 
 export class UpdateCooperadoDto {
   @IsOptional()
@@ -23,8 +23,8 @@ export class UpdateCooperadoDto {
   preferenciaCobranca?: string;
 
   @IsOptional()
-  @IsString()
-  tipoCooperado?: string;
+  @IsEnum(TipoCooperado)
+  tipoCooperado?: TipoCooperado;
 
   @IsOptional()
   @IsBoolean()
@@ -57,4 +57,14 @@ export class UpdateCooperadoDto {
   @IsOptional()
   @IsString()
   representanteLegalCargo?: string;
+
+  @IsOptional()
+  @IsString()
+  usinaPropriaId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percentualRepasse?: number;
 }
