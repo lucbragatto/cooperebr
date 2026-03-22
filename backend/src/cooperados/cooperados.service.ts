@@ -3,6 +3,7 @@ import { StatusCooperado } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
+import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 
 @Injectable()
 export class CooperadosService {
@@ -434,6 +435,92 @@ export class CooperadosService {
       mensagem: consumoMedio <= kwhDisponivel
         ? 'Alocação viável. Gere a proposta para prosseguir.'
         : `Consumo médio (${consumoMedio} kWh) excede disponível (${kwhDisponivel.toFixed(2)} kWh). Considere outra usina.`,
+    };
+  }
+
+  /** Upload mensal de fatura — cooperado já existente */
+  async registrarFaturaMensal(cooperadoId: string, dto: FaturaMensalDto) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+    });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+
+    const dados = dto.dadosOcr as any;
+    const historicoConsumo = Array.isArray(dados.historicoConsumo)
+      ? dados.historicoConsumo
+      : [];
+    const consumoAtualKwh = Number(dados.consumoAtualKwh ?? 0);
+
+    // Calcular média com descarte de meses atípicos (threshold padrão 50%)
+    const media = this.calcularMediaConsumo(historicoConsumo, consumoAtualKwh);
+
+    // Verificar duplicata (mesma competência)
+    const existente = await this.prisma.faturaProcessada.findFirst({
+      where: {
+        cooperadoId,
+        dadosExtraidos: { path: ['mesReferencia'], equals: `${String(dto.mesReferencia).padStart(2, '0')}/${dto.anoReferencia}` },
+      },
+    });
+    if (existente) {
+      throw new BadRequestException(
+        `Já existe fatura processada para ${String(dto.mesReferencia).padStart(2, '0')}/${dto.anoReferencia}`,
+      );
+    }
+
+    const fatura = await this.prisma.faturaProcessada.create({
+      data: {
+        cooperadoId,
+        ucId: dto.ucId ?? null,
+        arquivoUrl: dto.arquivoUrl ?? null,
+        dadosExtraidos: dto.dadosOcr as object,
+        historicoConsumo: historicoConsumo as object,
+        mesesUtilizados: media.mesesUtilizados,
+        mesesDescartados: media.mesesDescartados,
+        mediaKwhCalculada: media.media,
+        thresholdUtilizado: 50,
+        status: 'APROVADA',
+      },
+    });
+
+    // Atualizar cotaKwhMensal se a nova média for diferente
+    if (media.media > 0 && media.media !== Number(cooperado.cotaKwhMensal ?? 0)) {
+      await this.prisma.cooperado.update({
+        where: { id: cooperadoId },
+        data: { cotaKwhMensal: media.media },
+      });
+    }
+
+    return {
+      faturaId: fatura.id,
+      mesReferencia: dto.mesReferencia,
+      anoReferencia: dto.anoReferencia,
+      mediaKwhCalculada: media.media,
+      mesesUtilizados: media.mesesUtilizados,
+      mesesDescartados: media.mesesDescartados,
+      cotaAtualizada: media.media > 0 && media.media !== Number(cooperado.cotaKwhMensal ?? 0),
+    };
+  }
+
+  private calcularMediaConsumo(
+    historico: Array<{ mesAno: string; consumoKwh: number }>,
+    consumoAtualKwh: number,
+  ) {
+    if (historico.length === 0) {
+      return { media: consumoAtualKwh, mesesUtilizados: 0, mesesDescartados: 0 };
+    }
+    const threshold = 50;
+    const mediaGeral =
+      historico.reduce((acc, m) => acc + m.consumoKwh, 0) / historico.length;
+    const limiteMinimo = mediaGeral * (threshold / 100);
+    const filtrados = historico.filter((m) => m.consumoKwh >= limiteMinimo);
+    if (filtrados.length === 0) {
+      return { media: consumoAtualKwh, mesesUtilizados: 0, mesesDescartados: historico.length };
+    }
+    const media = filtrados.reduce((acc, m) => acc + m.consumoKwh, 0) / filtrados.length;
+    return {
+      media: Math.round(media * 100) / 100,
+      mesesUtilizados: filtrados.length,
+      mesesDescartados: historico.length - filtrados.length,
     };
   }
 }

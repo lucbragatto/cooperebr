@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CreateCooperadoDto } from './dto/create-cooperado.dto';
 import { UpdateCooperadoDto } from './dto/update-cooperado.dto';
+import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -54,6 +55,12 @@ export class CooperadosController {
       ...(termoAdesaoAceitoEm && { termoAdesaoAceitoEm: new Date(termoAdesaoAceitoEm) }),
       ...(dataInicioCreditos && { dataInicioCreditos: new Date(dataInicioCreditos) }),
     } as any);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post(':id/fatura-mensal')
+  registrarFaturaMensal(@Param('id') id: string, @Body() dto: FaturaMensalDto) {
+    return this.cooperadosService.registrarFaturaMensal(id, dto);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
