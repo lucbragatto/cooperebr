@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
@@ -352,7 +353,7 @@ export class MotorPropostaService {
       }
 
       return { proposta, contrato, emListaEspera: statusContrato === 'LISTA_ESPERA', nomeCooperado, numero };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     // Notificações fora da transação (side effects não-críticos)
     if (result.contrato) {
@@ -566,21 +567,45 @@ export class MotorPropostaService {
       await this.usinasService.validarCompatibilidadeAneel(contratoCompleto.ucId, usinaId);
     }
 
-    // Calcular percentualUsina ao alocar em usina
-    const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
-    let percentualUsina: number | null = null;
-    if (contratoCompleto && usina && usina.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
-      percentualUsina = Math.round((Number(contratoCompleto.kwhContrato ?? 0) / Number(usina.capacidadeKwh)) * 100 * 10000) / 10000;
-    }
+    // Transação SERIALIZABLE para evitar race condition no percentualUsina
+    await this.prisma.$transaction(async (tx) => {
+      const usina = await tx.usina.findUnique({ where: { id: usinaId } });
+      let percentualUsina: number | null = null;
+      if (contratoCompleto && usina && usina.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
+        const kwhAnual = Number(contratoCompleto.kwhContrato ?? 0) * 12;
+        const capacidadeAnual = Number(usina.capacidadeKwh);
 
-    await this.prisma.contrato.update({
-      where: { id: entrada.contratoId },
-      data: { usinaId, status: novoStatus as any, percentualUsina },
-    });
-    await this.prisma.listaEspera.update({
-      where: { id: listaEsperaId },
-      data: { status: 'ALOCADO' },
-    });
+        // Validar que a usina tem espaço
+        const contratosAtivos = await tx.contrato.findMany({
+          where: {
+            usinaId,
+            status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+            id: { not: entrada.contratoId },
+          },
+          select: { percentualUsina: true, kwhContratoAnual: true, kwhContrato: true },
+        });
+        const somaPercentual = contratosAtivos.reduce((acc: number, c: any) => {
+          if (c.percentualUsina) return acc + Number(c.percentualUsina);
+          const anual = c.kwhContratoAnual ? Number(c.kwhContratoAnual) : Number(c.kwhContrato ?? 0) * 12;
+          return acc + (anual / capacidadeAnual) * 100;
+        }, 0);
+
+        percentualUsina = Math.round((kwhAnual / capacidadeAnual) * 100 * 10000) / 10000;
+        if (somaPercentual + percentualUsina > 100.0001) {
+          throw new Error(`Capacidade da usina insuficiente. Disponível: ${Math.round((100 - somaPercentual) * 10000) / 10000}%`);
+        }
+      }
+
+      await tx.contrato.update({
+        where: { id: entrada.contratoId },
+        data: { usinaId, status: novoStatus as any, percentualUsina },
+      });
+      await tx.listaEspera.update({
+        where: { id: listaEsperaId },
+        data: { status: 'ALOCADO' },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
     await this.notificacoes.criar({
       tipo: 'CONTRATO_ATIVADO',
       titulo: 'Cooperado alocado em usina',

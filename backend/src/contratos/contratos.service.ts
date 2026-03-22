@@ -1,7 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { UsinasService } from '../usinas/usinas.service';
+
+const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 @Injectable()
 export class ContratosService {
@@ -182,7 +185,7 @@ export class ContratosService {
         } as any,
         include: { uc: true, usina: true, plano: true, cobrancas: true },
       });
-    });
+    }, SERIALIZABLE_TX);
 
     // Side effect fora da transação
     await this.cooperadosService.checkProntoParaAtivar(data.cooperadoId);
@@ -225,18 +228,24 @@ export class ContratosService {
       }
     }
 
-    // Se mudou kwhContratoAnual ou usinaId, recalcular percentualUsina
-    if (data.kwhContratoAnual !== undefined || data.kwhContrato !== undefined || data.usinaId !== undefined) {
-      const contratoAtual = await this.prisma.contrato.findUnique({ where: { id } });
-      const usinaId = data.usinaId ?? contratoAtual?.usinaId;
-      const kwhContratoAnual = data.kwhContratoAnual
-        ?? (data.kwhContrato ? data.kwhContrato * 12 : null)
-        ?? (contratoAtual?.kwhContratoAnual ? Number(contratoAtual.kwhContratoAnual) : Number(contratoAtual?.kwhContrato ?? 0) * 12);
+    // Se mudou capacidade ou usina, usar transação SERIALIZABLE para evitar race condition
+    const alteraCapacidade = data.kwhContratoAnual !== undefined || data.kwhContrato !== undefined || data.usinaId !== undefined;
+    if (alteraCapacidade) {
+      return this.prisma.$transaction(async (tx) => {
+        const contratoAtual = await tx.contrato.findUnique({ where: { id } });
+        if (!contratoAtual) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+        const usinaId = data.usinaId ?? contratoAtual.usinaId;
+        const kwhContratoAnual = data.kwhContratoAnual
+          ?? (data.kwhContrato ? data.kwhContrato * 12 : null)
+          ?? (contratoAtual.kwhContratoAnual ? Number(contratoAtual.kwhContratoAnual) : Number(contratoAtual.kwhContrato ?? 0) * 12);
 
-      if (usinaId && kwhContratoAnual > 0) {
-        const percentualUsina = await this.validarCapacidadeUsina(usinaId, kwhContratoAnual, id);
-        (data as any).percentualUsina = percentualUsina;
-      }
+        if (usinaId && kwhContratoAnual > 0) {
+          const percentualUsina = await this.validarCapacidadeUsina(usinaId, kwhContratoAnual, id, tx);
+          (data as any).percentualUsina = percentualUsina;
+        }
+
+        return tx.contrato.update({ where: { id }, data: data as any });
+      }, SERIALIZABLE_TX);
     }
 
     return this.prisma.contrato.update({ where: { id }, data: data as any });
