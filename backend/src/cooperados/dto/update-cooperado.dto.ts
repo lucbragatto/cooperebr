@@ -33,4 +33,28 @@ export class UpdateCooperadoDto {
   @IsOptional()
   @IsDateString()
   termoAdesaoAceitoEm?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dataInicioCreditos?: string;
+
+  @IsOptional()
+  @IsString()
+  protocoloConcessionaria?: string;
+
+  @IsOptional()
+  @IsString()
+  tipoPessoa?: string;
+
+  @IsOptional()
+  @IsString()
+  representanteLegalNome?: string;
+
+  @IsOptional()
+  @IsString()
+  representanteLegalCpf?: string;
+
+  @IsOptional()
+  @IsString()
+  representanteLegalCargo?: string;
 }

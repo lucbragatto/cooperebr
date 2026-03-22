@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CheckCircle, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader2, XCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 
 interface Config {
@@ -75,7 +75,54 @@ export default function ConfiguracaoMotorPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-400">Carregando configuração...</div>;
+  // ── Mínimo faturável (ConfigTenant keys) ──────────────────────────────────
+  const [minimoAtivo, setMinimoAtivo] = useState(true);
+  const [minimoMono, setMinimoMono] = useState(30);
+  const [minimoBi, setMinimoBi] = useState(50);
+  const [minimoTri, setMinimoTri] = useState(100);
+  const [minimoLoaded, setMinimoLoaded] = useState(false);
+  const [salvandoMinimo, setSalvandoMinimo] = useState(false);
+
+  const carregarMinimo = useCallback(async () => {
+    try {
+      const [ativo, mono, bi, tri] = await Promise.all([
+        api.get<{ valor: string }>('/config-tenant/minimo_faturavel_ativo').then(r => r.data.valor).catch(() => 'true'),
+        api.get<{ valor: string }>('/config-tenant/minimo_monofasico').then(r => r.data.valor).catch(() => '30'),
+        api.get<{ valor: string }>('/config-tenant/minimo_bifasico').then(r => r.data.valor).catch(() => '50'),
+        api.get<{ valor: string }>('/config-tenant/minimo_trifasico').then(r => r.data.valor).catch(() => '100'),
+      ]);
+      setMinimoAtivo(ativo === 'true');
+      setMinimoMono(Number(mono) || 30);
+      setMinimoBi(Number(bi) || 50);
+      setMinimoTri(Number(tri) || 100);
+    } catch {
+      // use defaults
+    } finally {
+      setMinimoLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => { carregarMinimo(); }, [carregarMinimo]);
+
+  async function salvarMinimo() {
+    setSalvandoMinimo(true);
+    try {
+      await Promise.all([
+        api.put('/config-tenant/minimo_faturavel_ativo', { valor: minimoAtivo ? 'true' : 'false', descricao: 'Descontar mínimo faturável do consumo' }),
+        api.put('/config-tenant/minimo_monofasico', { valor: String(minimoMono), descricao: 'Mínimo faturável monofásico (kWh)' }),
+        api.put('/config-tenant/minimo_bifasico', { valor: String(minimoBi), descricao: 'Mínimo faturável bifásico (kWh)' }),
+        api.put('/config-tenant/minimo_trifasico', { valor: String(minimoTri), descricao: 'Mínimo faturável trifásico (kWh)' }),
+      ]);
+      setToast({ tipo: 'sucesso', msg: 'Configuração de mínimo faturável salva.' });
+    } catch {
+      setToast({ tipo: 'erro', msg: 'Erro ao salvar mínimo faturável.' });
+    } finally {
+      setSalvandoMinimo(false);
+      setTimeout(() => setToast(null), 3000);
+    }
+  }
+
+  if (loading || !minimoLoaded) return <div className="p-8 text-gray-400">Carregando configuração...</div>;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -229,6 +276,47 @@ export default function ConfiguracaoMotorPage() {
               </div>
               <span className="text-sm text-gray-700">Aprovar reajustes manualmente</span>
             </label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bloco 5 — Mínimo faturável ANEEL */}
+      <Card>
+        <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Consumo Mínimo Faturável (ANEEL)</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>O consumo mínimo faturável é o valor que a concessionária cobra independente do consumo real. A cooperativa só pode compensar o excedente.</span>
+          </div>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div onClick={() => setMinimoAtivo(!minimoAtivo)} className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${minimoAtivo ? 'bg-green-600' : 'bg-gray-300'}`}>
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${minimoAtivo ? 'translate-x-5' : 'translate-x-1'}`} />
+            </div>
+            <span className="text-sm text-gray-700">Descontar mínimo faturável do consumo considerado</span>
+          </label>
+
+          {minimoAtivo && (
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className={lbl}>Monofásico (kWh)</label>
+                <input className={cls} type="number" min={0} value={minimoMono} onChange={e => setMinimoMono(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className={lbl}>Bifásico (kWh)</label>
+                <input className={cls} type="number" min={0} value={minimoBi} onChange={e => setMinimoBi(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className={lbl}>Trifásico (kWh)</label>
+                <input className={cls} type="number" min={0} value={minimoTri} onChange={e => setMinimoTri(Number(e.target.value))} />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <Button onClick={salvarMinimo} disabled={salvandoMinimo} size="sm" variant="outline">
+              {salvandoMinimo ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : 'Salvar mínimo faturável'}
+            </Button>
           </div>
         </CardContent>
       </Card>

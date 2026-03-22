@@ -107,10 +107,15 @@ export class CooperadosService {
     cpf: string;
     email: string;
     telefone?: string;
+    status?: StatusCooperado;
     preferenciaCobranca?: string;
     tipoCooperado?: string;
     termoAdesaoAceito?: boolean;
     termoAdesaoAceitoEm?: Date;
+    tipoPessoa?: string;
+    representanteLegalNome?: string;
+    representanteLegalCpf?: string;
+    representanteLegalCargo?: string;
   }) {
     return this.prisma.cooperado.create({ data });
   }
@@ -124,7 +129,19 @@ export class CooperadosService {
     tipoCooperado: string;
     termoAdesaoAceito: boolean;
     termoAdesaoAceitoEm: Date;
+    dataInicioCreditos: Date;
+    protocoloConcessionaria: string;
+    tipoPessoa: string;
+    representanteLegalNome: string;
+    representanteLegalCpf: string;
+    representanteLegalCargo: string;
   }>) {
+    // Buscar status anterior para lógica condicional
+    const anterior = await this.prisma.cooperado.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+
     const cooperado = await this.prisma.cooperado.update({
       where: { id },
       data,
@@ -132,6 +149,8 @@ export class CooperadosService {
 
     // Ativação em cascata: ao ativar cooperado, contratos PENDENTE_ATIVACAO e SUSPENSO → ATIVO
     if (data.status === 'ATIVO') {
+      // Se vindo de AGUARDANDO_CONCESSIONARIA, contratos já devem ficar ATIVO diretamente
+      // (concessionária efetivou a troca), não precisa ativar contratos — eles já estão PENDENTE_ATIVACAO
       const contratosAtivados = await this.prisma.contrato.updateMany({
         where: { cooperadoId: id, status: { in: ['PENDENTE_ATIVACAO', 'SUSPENSO'] } },
         data: { status: 'ATIVO' },
@@ -156,7 +175,9 @@ export class CooperadosService {
         await this.notificacoes.criar({
           tipo: 'COOPERADO_ATIVADO',
           titulo: 'Cooperado ativado',
-          mensagem: `${cooperado.nomeCompleto} foi ativado. ${contratosAtivados.count} contrato(s) passaram para ATIVO.`,
+          mensagem: anterior?.status === 'AGUARDANDO_CONCESSIONARIA'
+            ? `${cooperado.nomeCompleto} foi ativado (concessionária efetivou). ${contratosAtivados.count} contrato(s) ativado(s).`
+            : `${cooperado.nomeCompleto} foi ativado. ${contratosAtivados.count} contrato(s) passaram para ATIVO.`,
           cooperadoId: id,
           link: `/dashboard/cooperados/${id}`,
         });

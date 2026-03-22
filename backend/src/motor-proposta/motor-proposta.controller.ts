@@ -1,5 +1,7 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
+import { PropostaPdfService } from './proposta-pdf.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
@@ -12,7 +14,10 @@ const { ADMIN, OPERADOR } = PerfilUsuario;
 @Controller('motor-proposta')
 @Roles(ADMIN, OPERADOR)
 export class MotorPropostaController {
-  constructor(private readonly service: MotorPropostaService) {}
+  constructor(
+    private readonly service: MotorPropostaService,
+    private readonly propostaPdf: PropostaPdfService,
+  ) {}
 
   @Get()
   dashboard() {
@@ -54,6 +59,13 @@ export class MotorPropostaController {
   @Put('proposta/:id')
   editarProposta(@Param('id') id: string, @Body() body: any) {
     return this.service.editarProposta(id, body);
+  }
+
+  @Get('proposta/:id/html')
+  async propostaHtml(@Param('id') id: string, @Res() res: Response) {
+    const html = await this.propostaPdf.gerarHtml(id);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
   }
 
   @Get('historico/:cooperadoId')

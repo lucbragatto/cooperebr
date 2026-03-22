@@ -42,6 +42,15 @@ interface DadosExtraidos {
   tarifaTUSD: number;
   tarifaTE: number;
   bandeiraTarifaria: 'VERDE' | 'AMARELA' | 'VERMELHA_1' | 'VERMELHA_2';
+  valorBandeira: number;
+  contribIluminacaoPublica: number;
+  icmsPercentual: number;
+  icmsValor: number;
+  pisCofinsPercentual: number;
+  pisCofinsValor: number;
+  multaJuros: number;
+  descontos: number;
+  outrosEncargos: number;
   possuiCompensacao: boolean;
   creditosRecebidosKwh: number;
   saldoTotalKwh: number;
@@ -546,6 +555,15 @@ Retorne exatamente este formato:
   "tarifaTUSD": 0.00000,
   "tarifaTE": 0.00000,
   "bandeiraTarifaria": "VERDE ou AMARELA ou VERMELHA_1 ou VERMELHA_2",
+  "valorBandeira": 0.00000,
+  "contribIluminacaoPublica": 0.00,
+  "icmsPercentual": 0.00,
+  "icmsValor": 0.00,
+  "pisCofinsPercentual": 0.00,
+  "pisCofinsValor": 0.00,
+  "multaJuros": 0.00,
+  "descontos": 0.00,
+  "outrosEncargos": 0.00,
   "possuiCompensacao": false,
   "creditosRecebidosKwh": 0,
   "saldoTotalKwh": 0,
@@ -555,7 +573,17 @@ Retorne exatamente este formato:
   ]
 }
 
-IMPORTANTE: historicoConsumo deve conter APENAS os meses anteriores ao mês de referência desta fatura (não inclua o mês atual). Se algum campo não estiver disponível, use string vazia ou zero.`;
+IMPORTANTE:
+- historicoConsumo deve conter APENAS os meses anteriores ao mês de referência desta fatura (não inclua o mês atual).
+- Para cada mês do histórico, extraia o valor total da conta em reais (campo valorRS). Este histórico normalmente aparece como gráfico ou tabela no verso ou rodapé da fatura. O valorRS deve ser o valor total da fatura daquele mês (não apenas energia, mas o total pago incluindo todos os encargos e impostos). Se não disponível na fatura, usar 0.
+- valorBandeira: adicional R$/kWh da bandeira tarifária (se verde, 0).
+- contribIluminacaoPublica: valor fixo mensal em R$ da CIP/COSIP.
+- icmsPercentual: alíquota do ICMS em % (ex: 25 para 25%). Procure na seção TRIBUTOS da fatura. No ES é tipicamente 25%, no RJ 18%, em SP 12%. Se não encontrar o percentual explícito mas encontrar o valor R$ do ICMS e a base de cálculo, calcule: (valorICMS / baseCalculo) * 100. NÃO retorne 0 se houver valor de ICMS na fatura. icmsValor: valor R$ do ICMS.
+- pisCofinsPercentual: alíquota PIS/COFINS em % (ex: 5.50). PIS normalmente 0,65% a 1,26% e COFINS 3% a 5,81%. Se encontrar os dois somados use o total. Se encontrar separados, some os dois percentuais. pisCofinsValor: valor R$ do PIS/COFINS.
+- multaJuros: valor R$ de multa/juros por atraso (0 se não houver).
+- descontos: valor R$ de descontos da concessionária (devolução, crédito, etc). Sempre positivo.
+- outrosEncargos: valor R$ de demais encargos não classificados acima.
+- Se algum campo não estiver disponível, use string vazia ou zero.`;
 
     const body = {
       model: CLAUDE_MODEL,

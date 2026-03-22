@@ -5,6 +5,7 @@ import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { ContratosService } from '../contratos/contratos.service';
 import { UsinasService } from '../usinas/usinas.service';
+import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -40,6 +41,9 @@ export interface ResultadoCalculo {
     mediaCooperativaKwh: number;
     resultadoVsMedia: number;
     mesReferencia: string;
+    consumoConsiderado?: number;
+    minimoFaturavelDescontado?: number;
+    tipoFornecimento?: string;
   };
 }
 
@@ -51,6 +55,7 @@ export class MotorPropostaService {
     private cooperadosService: CooperadosService,
     private contratosService: ContratosService,
     private usinasService: UsinasService,
+    private configTenant: ConfigTenantService,
   ) {}
 
   async getConfiguracao() {
@@ -100,6 +105,23 @@ export class MotorPropostaService {
     const kwhMedio12m = kwhs.length > 0 ? kwhs.reduce((a, b) => a + b, 0) / kwhs.length : kwhMesRecente;
     const valorMedio12m = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : valorMesRecente;
 
+    // Mínimo faturável ANEEL
+    const minimoAtivo = (await this.configTenant.get('minimo_faturavel_ativo')) === 'true';
+    const tipoFornecimento = dto.tipoFornecimento ?? null;
+    let minimoFaturavel = 0;
+    if (minimoAtivo && tipoFornecimento) {
+      const chaveMinimo: Record<string, string> = {
+        MONOFASICO: 'minimo_monofasico',
+        BIFASICO: 'minimo_bifasico',
+        TRIFASICO: 'minimo_trifasico',
+      };
+      const chave = chaveMinimo[tipoFornecimento];
+      if (chave) {
+        const val = await this.configTenant.get(chave);
+        minimoFaturavel = val ? Number(val) : 0;
+      }
+    }
+
     const threshold = Number(config.thresholdOutlier);
     const outlierDetectado = kwhMesRecente > kwhMedio12m * threshold;
 
@@ -107,6 +129,8 @@ export class MotorPropostaService {
     const calcularOpcao = (base: 'MES_RECENTE' | 'MEDIA_12M'): OpcaoCalculo => {
       const kwhBase = base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m;
       const valorBase = base === 'MES_RECENTE' ? valorMesRecente : valorMedio12m;
+      // Aplicar mínimo faturável: consumoConsiderado = MAX(0, consumo - minimo)
+      const consumoConsiderado = Math.max(0, kwhBase - minimoFaturavel);
       // kwhApuradoBase = preço por kWh (R$/kWh) = valorFatura / consumoKwh
       const kwhApuradoBase = kwhBase > 0 ? valorBase / kwhBase : 0;
       let descontoPercentual = Number(config.descontoPadrao);
@@ -123,7 +147,7 @@ export class MotorPropostaService {
         valorCooperado = kwhApuradoBase - descontoAbsoluto;
       }
 
-      const kwhContrato = kwhBase; // quantidade de kWh
+      const kwhContrato = consumoConsiderado; // quantidade de kWh (após descontar mínimo faturável)
       const economiaAbsoluta = descontoAbsoluto;
       const economiaPercentual = kwhApuradoBase > 0 ? (descontoAbsoluto / kwhApuradoBase) * 100 : 0;
       const economiaMensal = descontoAbsoluto * kwhContrato;
@@ -184,6 +208,9 @@ export class MotorPropostaService {
         mediaCooperativaKwh: round5(mediaCooperativaKwh),
         resultadoVsMedia: round5(resultadoVsMedia),
         mesReferencia: dto.mesReferencia,
+        consumoConsiderado: round5(Math.max(0, (opcao.base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m) - minimoFaturavel)),
+        minimoFaturavelDescontado: minimoFaturavel,
+        tipoFornecimento: tipoFornecimento ?? undefined,
       },
     };
   }

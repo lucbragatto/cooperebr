@@ -24,6 +24,7 @@ import {
   Clock,
   UserCheck,
   Receipt,
+  MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -39,6 +40,7 @@ const navItems = [
   { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
   { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
   { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
+  { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
 ];
 
 function tempoAtras(dateStr: string): string {

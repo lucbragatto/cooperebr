@@ -59,10 +59,16 @@ model Cooperado {
   tipoCooperado       String               @default("COM_UC")
   termoAdesaoAceito   Boolean              @default(false)
   termoAdesaoAceitoEm DateTime?
-  cooperativaId       String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  ucs                 Uc[]
+  cooperativaId            String?
+  dataInicioCreditos       DateTime?
+  protocoloConcessionaria  String?
+  representanteLegalNome   String?
+  representanteLegalCpf    String?
+  representanteLegalCargo  String?
+  tipoPessoa               String?              @default("PF")
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  ucs                      Uc[]
   contratos           Contrato[]
   ocorrencias         Ocorrencia[]
   faturasProcessadas  FaturaProcessada[]
@@ -108,6 +114,9 @@ enum StatusDocumento {
 
 enum StatusCooperado {
   PENDENTE
+  PENDENTE_VALIDACAO
+  PENDENTE_DOCUMENTOS
+  AGUARDANDO_CONCESSIONARIA
   APROVADO
   ATIVO
   SUSPENSO

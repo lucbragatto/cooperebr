@@ -33,4 +33,8 @@ export class CalcularPropostaDto {
   @IsOptional()
   @IsIn(['MES_RECENTE', 'MEDIA_12M'])
   opcaoEscolhida?: 'MES_RECENTE' | 'MEDIA_12M';
+
+  @IsOptional()
+  @IsIn(['MONOFASICO', 'BIFASICO', 'TRIFASICO'])
+  tipoFornecimento?: 'MONOFASICO' | 'BIFASICO' | 'TRIFASICO';
 }

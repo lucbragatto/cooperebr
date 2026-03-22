@@ -9,5 +9,6 @@ import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
   imports: [NotificacoesModule, ConfigTenantModule],
   controllers: [FaturasController],
   providers: [FaturasService, PrismaService],
+  exports: [FaturasService],
 })
 export class FaturasModule {}

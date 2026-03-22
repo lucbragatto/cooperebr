@@ -38,13 +38,22 @@ export class CooperadosController {
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
   create(@Body() body: CreateCooperadoDto) {
-    return this.cooperadosService.create(body);
+    const { termoAdesaoAceitoEm, ...rest } = body;
+    return this.cooperadosService.create({
+      ...rest,
+      termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
+    });
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCooperadoDto) {
-    return this.cooperadosService.update(id, dto as any);
+    const { termoAdesaoAceitoEm, dataInicioCreditos, ...rest } = dto;
+    return this.cooperadosService.update(id, {
+      ...rest,
+      ...(termoAdesaoAceitoEm && { termoAdesaoAceitoEm: new Date(termoAdesaoAceitoEm) }),
+      ...(dataInicioCreditos && { dataInicioCreditos: new Date(dataInicioCreditos) }),
+    } as any);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
