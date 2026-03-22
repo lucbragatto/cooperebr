@@ -262,6 +262,8 @@ model Cobranca {
   status             StatusCobranca @default(PENDENTE)
   dataVencimento     DateTime
   dataPagamento      DateTime?
+  valorPago          Decimal?       @db.Decimal(10, 2)
+  motivoCancelamento String?
   kwhEntregue        Float?
   kwhConsumido       Float?
   kwhCompensado      Float?

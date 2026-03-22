@@ -76,6 +76,43 @@ export class CobrancasService {
     return this.prisma.cobranca.update({ where: { id }, data });
   }
 
+  async darBaixa(id: string, dataPagamento: string, valorPago: number) {
+    const cobranca = await this.prisma.cobranca.findUnique({ where: { id } });
+    if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    if (cobranca.status === 'PAGO') {
+      throw new BadRequestException('Esta cobrança já foi paga');
+    }
+    if (cobranca.status === 'CANCELADO') {
+      throw new BadRequestException('Não é possível dar baixa em cobrança cancelada');
+    }
+    return this.prisma.cobranca.update({
+      where: { id },
+      data: {
+        status: 'PAGO',
+        dataPagamento: new Date(dataPagamento),
+        valorPago,
+      },
+    });
+  }
+
+  async cancelar(id: string, motivo: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({ where: { id } });
+    if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    if (cobranca.status === 'CANCELADO') {
+      throw new BadRequestException('Esta cobrança já está cancelada');
+    }
+    if (cobranca.status === 'PAGO') {
+      throw new BadRequestException('Não é possível cancelar cobrança já paga');
+    }
+    return this.prisma.cobranca.update({
+      where: { id },
+      data: {
+        status: 'CANCELADO',
+        motivoCancelamento: motivo,
+      },
+    });
+  }
+
   async remove(id: string) {
     return this.prisma.cobranca.delete({ where: { id } });
   }

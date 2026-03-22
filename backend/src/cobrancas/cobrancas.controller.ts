@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body } from '@nestjs/common';
 import { CobrancasService } from './cobrancas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -50,6 +50,24 @@ export class CobrancasController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: any) {
     return this.cobrancasService.update(id, body);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Patch(':id/dar-baixa')
+  darBaixa(
+    @Param('id') id: string,
+    @Body() body: { dataPagamento: string; valorPago: number },
+  ) {
+    return this.cobrancasService.darBaixa(id, body.dataPagamento, body.valorPago);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Patch(':id/cancelar')
+  cancelar(
+    @Param('id') id: string,
+    @Body() body: { motivo: string },
+  ) {
+    return this.cobrancasService.cancelar(id, body.motivo);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
