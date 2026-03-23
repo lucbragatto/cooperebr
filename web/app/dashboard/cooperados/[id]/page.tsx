@@ -123,9 +123,19 @@ type CooperadoFormData = z.infer<typeof cooperadoSchema>;
 
 const statusCoopColors: Record<string, string> = {
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
+  ATIVO_RECEBENDO_CREDITOS: 'bg-green-100 text-green-800 border-green-200',
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
+};
+const statusCoopLabel: Record<string, string> = {
+  ATIVO: 'Ativo',
+  ATIVO_RECEBENDO_CREDITOS: 'Ativo - Recebendo Creditos',
+  PENDENTE: 'Pendente',
+  PENDENTE_ATIVACAO: 'Pendente Ativacao',
+  SUSPENSO: 'Suspenso',
+  ENCERRADO: 'Encerrado',
 };
 const statusDocColors: Record<string, string> = {
   APROVADO: 'bg-green-100 text-green-800 border-green-200',
@@ -229,6 +239,8 @@ export default function CooperadoPerfilPage() {
   const [sheetEditOcorrencia, setSheetEditOcorrencia] = useState<OcorrenciaItem | null>(null);
 
   // Dialogs
+  const [dialogAtivarContrato, setDialogAtivarContrato] = useState<Contrato | null>(null);
+  const [formAtivar, setFormAtivar] = useState({ protocoloConcessionaria: '', dataInicioCreditos: today(), observacoes: '' });
   const [dialogEncerrarContrato, setDialogEncerrarContrato] = useState<Contrato | null>(null);
   const [dialogDarBaixa, setDialogDarBaixa] = useState<Cobranca | null>(null);
   const [dialogExcluirCobranca, setDialogExcluirCobranca] = useState<Cobranca | null>(null);
@@ -369,6 +381,26 @@ export default function CooperadoPerfilPage() {
       setChecklist(checkRes.data);
       showToast('sucesso', 'Cooperado ativado! Contratos pendentes foram ativados automaticamente.');
     } catch { showToast('erro', 'Erro ao ativar cooperado.'); }
+    finally { setSalvando(false); }
+  }
+
+  // ── Actions — Ativar Contrato (Fase 7) ──────────────────────────────────
+
+  async function ativarContrato() {
+    if (!dialogAtivarContrato || !formAtivar.protocoloConcessionaria || !formAtivar.dataInicioCreditos) return;
+    setSalvando(true);
+    try {
+      await api.post(`/contratos/${dialogAtivarContrato.id}/ativar`, formAtivar);
+      setDialogAtivarContrato(null);
+      // Recarregar dados completos
+      const [coopRes, checkRes] = await Promise.all([
+        api.get<CooperadoCompleto>(`/cooperados/${id}`),
+        api.get(`/cooperados/${id}/checklist`),
+      ]);
+      setCooperado(coopRes.data);
+      setChecklist(checkRes.data);
+      showToast('sucesso', 'Cooperado ativado com sucesso!');
+    } catch { showToast('erro', 'Erro ao ativar contrato.'); }
     finally { setSalvando(false); }
   }
 
@@ -717,7 +749,7 @@ export default function CooperadoPerfilPage() {
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{cooperado.nomeCompleto}</h1>
-            <Badge className={statusCoopColors[cooperado.status]}>{cooperado.status}</Badge>
+            <Badge className={statusCoopColors[cooperado.status]}>{statusCoopLabel[cooperado.status] ?? cooperado.status}</Badge>
             <Badge className={tipoCooperadoColors[cooperado.tipoCooperado] ?? 'bg-gray-100 text-gray-800 border-gray-200'}>
               {tipoCooperadoLabel[cooperado.tipoCooperado] ?? cooperado.tipoCooperado}
             </Badge>
@@ -806,13 +838,13 @@ export default function CooperadoPerfilPage() {
                       Ativar Cooperado
                     </Button>
                   )}
-                  {cooperado.status === 'ATIVO' && (
-                    <Badge className="bg-green-100 text-green-800 border-green-200">Cooperado Ativo</Badge>
+                  {(cooperado.status === 'ATIVO' || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS') && (
+                    <Badge className="bg-green-100 text-green-800 border-green-200">{cooperado.status === 'ATIVO_RECEBENDO_CREDITOS' ? 'Ativo - Recebendo Creditos' : 'Cooperado Ativo'}</Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                   {checklist.items.map((item, i) => (
                     <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${item.ok ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
                       {item.ok ? <CheckCircle className="h-4 w-4 text-green-600 shrink-0" /> : <XCircle className="h-4 w-4 text-gray-400 shrink-0" />}
@@ -1039,6 +1071,11 @@ export default function CooperadoPerfilPage() {
                       <span>Contrato {c.numero}</span>
                       <div className="flex items-center gap-2">
                         <Badge className={statusContratoColors[c.status]}>{statusContratoLabel[c.status] ?? c.status}</Badge>
+                        {c.status === 'PENDENTE_ATIVACAO' && (
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { setFormAtivar({ protocoloConcessionaria: '', dataInicioCreditos: today(), observacoes: '' }); setDialogAtivarContrato(c); }}>
+                            <Zap className="h-3.5 w-3.5 mr-1" />Ativar
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => abrirEditarContrato(c)}><Pencil className="h-3.5 w-3.5 mr-1" />Editar</Button>
                         {c.status !== 'ENCERRADO' && (
                           <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => setDialogEncerrarContrato(c)}>Encerrar</Button>
@@ -1594,6 +1631,36 @@ export default function CooperadoPerfilPage() {
       {/* ════════════════════════════════════════════════════════════════════════
           DIALOGS
       ════════════════════════════════════════════════════════════════════════ */}
+
+      {/* Dialog — Ativar Contrato */}
+      <Dialog open={!!dialogAtivarContrato} onOpenChange={v => !v && setDialogAtivarContrato(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ativar Contrato {dialogAtivarContrato?.numero}</DialogTitle>
+            <DialogDescription>Informe os dados da concessionaria para ativar os creditos do cooperado.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className={lbl}>Protocolo da Concessionaria *</label>
+              <input type="text" className={cls} placeholder="Ex: PROT-2026-12345" value={formAtivar.protocoloConcessionaria} onChange={e => setFormAtivar(p => ({ ...p, protocoloConcessionaria: e.target.value }))} />
+            </div>
+            <div>
+              <label className={lbl}>Data de Inicio dos Creditos *</label>
+              <input type="date" className={cls} value={formAtivar.dataInicioCreditos} onChange={e => setFormAtivar(p => ({ ...p, dataInicioCreditos: e.target.value }))} />
+            </div>
+            <div>
+              <label className={lbl}>Observacoes (opcional)</label>
+              <textarea className={cls} rows={3} placeholder="Observacoes sobre a ativacao..." value={formAtivar.observacoes} onChange={e => setFormAtivar(p => ({ ...p, observacoes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogAtivarContrato(null)}>Cancelar</Button>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={ativarContrato} disabled={salvando || !formAtivar.protocoloConcessionaria || !formAtivar.dataInicioCreditos}>
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}Confirmar Ativacao
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog — Encerrar Contrato */}
       <Dialog open={!!dialogEncerrarContrato} onOpenChange={v => !v && setDialogEncerrarContrato(null)}>

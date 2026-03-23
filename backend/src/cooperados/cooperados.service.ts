@@ -59,10 +59,11 @@ export class CooperadosService {
       const contratoOk = c._count.contratos > 0;
       const propostaOk = (propMap.get(c.id) ?? 0) > 0;
 
-      const checklistTotal = isSemUC ? 2 : 4;
+      const ativoRecebendo = c.status === 'ATIVO_RECEBENDO_CREDITOS';
+      const checklistTotal = isSemUC ? 2 : 5;
       const checklistFeito = isSemUC
         ? (docOk ? 1 : 0) + (c.termoAdesaoAceito ? 1 : 0)
-        : (faturaOk ? 1 : 0) + (docOk ? 1 : 0) + (contratoOk ? 1 : 0) + (propostaOk ? 1 : 0);
+        : (faturaOk ? 1 : 0) + (docOk ? 1 : 0) + (contratoOk ? 1 : 0) + (propostaOk ? 1 : 0) + (ativoRecebendo ? 1 : 0);
 
       return {
         id: c.id,
@@ -261,6 +262,7 @@ export class CooperadosService {
     const proposta = await this.prisma.propostaCooperado.count({
       where: { cooperadoId, status: 'ACEITA' },
     });
+    const ativoRecebendo = cooperado.status === 'ATIVO_RECEBENDO_CREDITOS';
 
     return {
       tipo: 'COM_UC',
@@ -270,6 +272,7 @@ export class CooperadosService {
         { label: 'Documento aprovado', ok: docAprovado > 0 },
         { label: 'Contrato criado', ok: contrato > 0 },
         { label: 'Proposta aceita', ok: proposta > 0 },
+        { label: 'Ativo — Recebendo creditos', ok: ativoRecebendo },
       ],
       pronto: faturaProcessada > 0 && docAprovado > 0 && contrato > 0 && proposta > 0,
     };

@@ -30,6 +30,12 @@ export class ContratosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post(':id/ativar')
+  ativar(@Param('id') id: string, @Body() body: { protocoloConcessionaria: string; dataInicioCreditos: string; observacoes?: string }) {
+    return this.contratosService.ativar(id, body);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
   create(@Body() body: CreateContratoDto) {
     return this.contratosService.create(body);

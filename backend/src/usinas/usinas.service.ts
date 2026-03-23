@@ -251,7 +251,7 @@ export class UsinasService {
 
     // Check waiting list
     const espera = await this.prisma.listaEspera.findMany({
-      where: { cooperativaId: usina.cooperativaId, status: 'AGUARDANDO' },
+      where: { cooperativaId: usina.cooperativaId, status: { in: ['AGUARDANDO', 'PENDENTE'] } },
       include: { cooperado: true, contrato: true },
       orderBy: { posicao: 'asc' },
     });
@@ -303,7 +303,7 @@ export class UsinasService {
     if (!usina) throw new NotFoundException('Usina não encontrada');
 
     const contratos = await this.prisma.contrato.findMany({
-      where: { usinaId, status: 'ATIVO' },
+      where: { usinaId, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
       include: {
         cooperado: true,
         uc: true,
@@ -338,6 +338,7 @@ export class UsinasService {
           dataAdesao: c.dataInicio,
           distribuidora: (c.uc as any)?.distribuidora ?? '',
           contrato: c.numero,
+          statusContrato: c.status,
         };
       }),
     };

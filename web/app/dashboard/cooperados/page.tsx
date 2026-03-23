@@ -35,14 +35,18 @@ interface CooperadoLista {
 
 const statusColors: Record<string, string> = {
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
+  ATIVO_RECEBENDO_CREDITOS: 'bg-green-100 text-green-800 border-green-200',
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
 };
 
 const statusLabel: Record<string, string> = {
   ATIVO: 'Ativo',
+  ATIVO_RECEBENDO_CREDITOS: 'Ativo',
   PENDENTE: 'Pendente',
+  PENDENTE_ATIVACAO: 'Pendente Ativacao',
   SUSPENSO: 'Suspenso',
   ENCERRADO: 'Encerrado',
 };

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { UsinasService } from '../usinas/usinas.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 
 const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
@@ -12,6 +13,7 @@ export class ContratosService {
     private prisma: PrismaService,
     private cooperadosService: CooperadosService,
     private usinasService: UsinasService,
+    private notificacoes: NotificacoesService,
   ) {}
 
   async findAll(cooperativaId?: string) {
@@ -263,5 +265,48 @@ export class ContratosService {
       );
     }
     return this.prisma.contrato.delete({ where: { id } });
+  }
+
+  async ativar(id: string, data: {
+    protocoloConcessionaria: string;
+    dataInicioCreditos: string;
+    observacoes?: string;
+  }) {
+    const contrato = await this.prisma.contrato.findUnique({
+      where: { id },
+      include: { cooperado: true },
+    });
+    if (!contrato) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+    if (contrato.status !== 'PENDENTE_ATIVACAO') {
+      throw new BadRequestException(`Contrato ${contrato.numero} não está com status PENDENTE_ATIVACAO (atual: ${contrato.status})`);
+    }
+
+    // 1. Atualizar contrato → ATIVO
+    const contratoAtualizado = await this.prisma.contrato.update({
+      where: { id },
+      data: { status: 'ATIVO' },
+      include: { cooperado: true, uc: true, usina: true },
+    });
+
+    // 2. Atualizar cooperado → ATIVO_RECEBENDO_CREDITOS + dados da concessionária
+    await this.prisma.cooperado.update({
+      where: { id: contrato.cooperadoId },
+      data: {
+        status: 'ATIVO_RECEBENDO_CREDITOS',
+        protocoloConcessionaria: data.protocoloConcessionaria,
+        dataInicioCreditos: new Date(data.dataInicioCreditos + 'T00:00:00.000Z'),
+      },
+    });
+
+    // 3. Notificar cooperado
+    await this.notificacoes.criar({
+      tipo: 'COOPERADO_ATIVADO',
+      titulo: 'Créditos de energia ativos!',
+      mensagem: 'Seus créditos de energia estão ativos! Você já está recebendo créditos da usina.',
+      cooperadoId: contrato.cooperadoId,
+      link: `/dashboard/cooperados/${contrato.cooperadoId}`,
+    });
+
+    return contratoAtualizado;
   }
 }

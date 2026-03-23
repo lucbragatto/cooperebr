@@ -246,13 +246,14 @@ export default function UsinaDetailPage() {
                     <TableHead>UC</TableHead>
                     <TableHead>kWh Contratado</TableHead>
                     <TableHead>% Usina</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Data Adesão</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {cooperadosAlocados.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-gray-400 py-6">
+                      <TableCell colSpan={6} className="text-center text-gray-400 py-6">
                         Nenhum cooperado alocado nesta usina
                       </TableCell>
                     </TableRow>
@@ -263,6 +264,11 @@ export default function UsinaDetailPage() {
                         <TableCell>{c.numeroUC}</TableCell>
                         <TableCell>{c.kwhContratado}</TableCell>
                         <TableCell>{c.percentualUsina}%</TableCell>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.statusContrato === 'ATIVO' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {c.statusContrato === 'ATIVO' ? 'Ativo' : 'Pend. Ativacao'}
+                          </span>
+                        </TableCell>
                         <TableCell>{new Date(c.dataAdesao).toLocaleDateString('pt-BR')}</TableCell>
                       </TableRow>
                     ))
