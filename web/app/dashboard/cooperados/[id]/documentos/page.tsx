@@ -81,15 +81,6 @@ function isCnpj(doc: string): boolean {
   return doc.replace(/\D/g, '').length === 14;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -212,20 +203,22 @@ export default function DocumentosCooperadoPage() {
     if (!card.arquivo) return;
     patchCard(tipo, { enviando: true, erroEnvio: '' });
     try {
-      const arquivoBase64 = await fileToBase64(card.arquivo);
-      const tipoArquivo = card.arquivo.type === 'application/pdf' ? 'pdf' : 'imagem';
-      const { data } = await api.post<{ documentoId: string; url: string }>(
-        '/faturas/documento',
-        { cooperadoId: id, tipoDocumento: tipo, arquivoBase64, tipoArquivo },
+      const formData = new FormData();
+      formData.append('arquivo', card.arquivo);
+      formData.append('tipo', tipo);
+      const { data } = await api.post<DocumentoSalvo>(
+        `/documentos/upload/${id}`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
       );
       setSalvos((prev) => ({
         ...prev,
         [tipo]: {
-          id: data.documentoId,
-          tipo,
+          id: data.id,
+          tipo: data.tipo,
           url: data.url,
-          nomeArquivo: card.arquivo!.name,
-          status: 'PENDENTE' as StatusDocumento,
+          nomeArquivo: data.nomeArquivo ?? card.arquivo!.name,
+          status: (data.status ?? 'PENDENTE') as StatusDocumento,
           motivoRejeicao: null,
         },
       }));
