@@ -1075,3 +1075,18 @@ model BeneficioIndicacao {
 
   @@map("beneficios_indicacao")
 }
+
+// ─── WhatsApp Bot ───────────────────────────────────────────────────────────
+
+model ConversaWhatsapp {
+  id            String   @id @default(cuid())
+  telefone      String   @unique
+  estado        String   @default("INICIAL")
+  dadosTemp     Json?
+  cooperativaId String?
+  cooperadoId   String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@map("conversas_whatsapp")
+}
