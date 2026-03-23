@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma.service';
@@ -34,6 +35,7 @@ import { RolesGuard } from './auth/roles.guard';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     ScheduleModule.forRoot(),
     CooperadosModule,
     UcsModule,
@@ -67,6 +69,7 @@ import { RolesGuard } from './auth/roles.guard';
     PrismaService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

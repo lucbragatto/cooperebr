@@ -18,7 +18,10 @@ export class AsaasService {
   // ─── Criptografia ──────────────────────────────────────────
 
   private getEncryptKey(): Buffer {
-    const key = process.env.ASAAS_ENCRYPT_KEY || process.env.NEXTAUTH_SECRET || 'cooperebr_default_key_32chars!!';
+    const key = process.env.ASAAS_ENCRYPT_KEY;
+    if (!key) {
+      throw new Error('ASAAS_ENCRYPT_KEY não configurada. Defina no .env');
+    }
     return crypto.createHash('sha256').update(key).digest();
   }
 
@@ -317,21 +320,18 @@ export class AsaasService {
   // ─── Webhook ─────────────────────────────────────────────
 
   async processarWebhook(payload: any, token: string) {
-    // Validar token do webhook — busca configs que tenham webhookToken configurado
-    const configsComToken = await this.prisma.asaasConfig.findMany({
-      where: { webhookToken: { not: null } },
+    // Validar token do webhook
+    if (!token) {
+      throw new UnauthorizedException('Token de webhook ausente');
+    }
+
+    const config = await this.prisma.asaasConfig.findFirst({
+      where: { webhookToken: token },
     });
 
-    if (configsComToken.length > 0) {
-      // Há configs com token — exigir que o token recebido bata com alguma
-      const config = configsComToken.find((c) => c.webhookToken === token);
-      if (!config) {
-        this.logger.warn('Webhook Asaas recebido com token inválido — rejeitando');
-        throw new UnauthorizedException('Token de webhook inválido');
-      }
-    } else {
-      // Nenhuma config tem webhookToken — aceitar com aviso
-      this.logger.warn('Webhook Asaas recebido mas nenhuma config tem webhookToken configurado — aceitando sem validação');
+    if (!config) {
+      this.logger.warn('Webhook Asaas recebido com token inválido — rejeitando');
+      throw new UnauthorizedException('Token de webhook inválido');
     }
 
     const event = payload.event;
@@ -341,6 +341,9 @@ export class AsaasService {
       this.logger.warn('Webhook sem payment ID');
       return { received: true };
     }
+
+    // Idempotency: usar combinação event+payment.id como chave
+    const eventId = `${event}_${payment.id}`;
 
     this.logger.log(`Webhook Asaas: ${event} para payment ${payment.id}`);
 
@@ -366,6 +369,12 @@ export class AsaasService {
     });
 
     if (asaasCobranca) {
+      // Verificar idempotency — ignorar se já processamos este evento
+      if (asaasCobranca.ultimoWebhookEventId === eventId) {
+        this.logger.log(`Webhook duplicado ignorado: ${eventId}`);
+        return { received: true, skipped: 'duplicado' };
+      }
+
       await this.prisma.asaasCobranca.update({
         where: { id: asaasCobranca.id },
         data: {
@@ -373,6 +382,7 @@ export class AsaasService {
           linkPagamento: payment.invoiceUrl || asaasCobranca.linkPagamento,
           boletoUrl: payment.bankSlipUrl || asaasCobranca.boletoUrl,
           nossoNumero: payment.nossoNumero || asaasCobranca.nossoNumero,
+          ultimoWebhookEventId: eventId,
         },
       });
 

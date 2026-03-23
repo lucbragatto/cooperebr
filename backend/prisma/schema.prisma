@@ -964,9 +964,10 @@ model AsaasCobranca {
   pixQrCode      String?
   pixCopiaECola  String?
   nossoNumero    String?
-  formaPagamento String    // BOLETO | PIX | CREDIT_CARD
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  formaPagamento          String    // BOLETO | PIX | CREDIT_CARD
+  ultimoWebhookEventId    String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@index([cooperadoId])
   @@index([status])

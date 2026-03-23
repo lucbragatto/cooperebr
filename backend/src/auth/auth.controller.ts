@@ -1,4 +1,6 @@
 import { Controller, Post, Get, Body, UnauthorizedException } from '@nestjs/common';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
@@ -11,6 +13,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register({
@@ -26,6 +29,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('login')
   login(
     @Body()
@@ -38,12 +42,18 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @Post('criar-super-admin')
   criarSuperAdmin(
     @Body() body: { nome: string; email: string; senha: string; secretKey: string },
   ) {
-    const envSecret = process.env.SECRET_KEY || process.env.SUPER_ADMIN_SECRET_KEY;
-    if (!envSecret || body.secretKey !== envSecret) {
+    const envSecret = process.env.SUPER_ADMIN_SECRET_KEY;
+    if (!envSecret) {
+      throw new UnauthorizedException('Endpoint desabilitado');
+    }
+    const expected = Buffer.from(envSecret);
+    const received = Buffer.from(body.secretKey || '');
+    if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) {
       throw new UnauthorizedException('Secret key inválida');
     }
     return this.authService.register({

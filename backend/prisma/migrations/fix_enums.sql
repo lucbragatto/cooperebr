@@ -1,0 +1,10 @@
+-- Fix #4: Adicionar valores faltantes ao enum StatusContrato
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'PENDENTE_ATIVACAO';
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'EM_APROVACAO';
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'AGUARDANDO_ASSINATURA';
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'ASSINATURA_SOLICITADA';
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'APROVADO';
+ALTER TYPE "StatusContrato" ADD VALUE IF NOT EXISTS 'LISTA_ESPERA';
+
+-- Fix #5: Adicionar valor faltante ao enum TipoOcorrencia
+ALTER TYPE "TipoOcorrencia" ADD VALUE IF NOT EXISTS 'FALHA_USINA';
