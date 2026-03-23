@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ConfiguracaoCobrancaService } from '../configuracao-cobranca/configuracao-cobranca.service';
+import { AsaasService } from '../asaas/asaas.service';
 
 export interface CobrancaCalculo {
   contratoId: string;
@@ -20,24 +21,31 @@ export interface CobrancaCalculo {
 
 @Injectable()
 export class CobrancasService {
+  private readonly logger = new Logger(CobrancasService.name);
+
   constructor(
     private prisma: PrismaService,
     private configuracaoCobrancaService: ConfiguracaoCobrancaService,
+    private asaasService: AsaasService,
   ) {}
 
-  async findAll() {
+  async findAll(cooperativaId?: string) {
     return this.prisma.cobranca.findMany({
+      where: cooperativaId ? { cooperativaId } : undefined,
       include: { contrato: { include: { cooperado: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, cooperativaId?: string) {
     const cobranca = await this.prisma.cobranca.findUnique({
       where: { id },
       include: { contrato: { include: { cooperado: true } } },
     });
     if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    if (cooperativaId && cobranca.cooperativaId !== cooperativaId) {
+      throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    }
     return cobranca;
   }
 
@@ -180,5 +188,43 @@ export class CobrancasService {
       valorDesconto,
       valorLiquido,
     };
+  }
+
+  /**
+   * Após criar uma cobrança, emite automaticamente no Asaas se a cooperativa
+   * tiver config ativa e o cooperado tiver forma de pagamento compatível.
+   */
+  async emitirNoAsaasSeConfigurado(
+    cobrancaId: string,
+    cooperativaId: string,
+    cooperadoId: string,
+    dados: { valor: number; vencimento: Date; descricao: string },
+  ) {
+    if (!cooperativaId) return null;
+
+    try {
+      const config = await this.asaasService.getConfig(cooperativaId);
+      if (!config) return null;
+
+      // Buscar forma de pagamento do cooperado
+      const formaPagamento = await this.prisma.formaPagamentoCooperado.findUnique({
+        where: { cooperadoId },
+      });
+
+      const formasAsaas = ['BOLETO', 'PIX', 'CARTAO_CREDITO', 'CREDIT_CARD'];
+      const tipo = formaPagamento?.tipo;
+      if (!tipo || !formasAsaas.includes(tipo)) return null;
+
+      return await this.asaasService.emitirCobranca(cooperadoId, cooperativaId, {
+        valor: dados.valor,
+        vencimento: dados.vencimento.toISOString().split('T')[0],
+        descricao: dados.descricao,
+        formaPagamento: tipo,
+        cobrancaId,
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao emitir cobrança Asaas automaticamente: ${err.message}`);
+      return null;
+    }
   }
 }

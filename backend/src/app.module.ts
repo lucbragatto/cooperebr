@@ -21,6 +21,12 @@ import { ModelosCobrancaModule } from './modelos-cobranca/modelos-cobranca.modul
 import { ConfiguracaoCobrancaModule } from './configuracao-cobranca/configuracao-cobranca.module';
 import { GeracaoMensalModule } from './geracao-mensal/geracao-mensal.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { PrestadoresModule } from './prestadores/prestadores.module';
+import { MonitoramentoUsinasModule } from './monitoramento-usinas/monitoramento-usinas.module';
+import { FinanceiroModule } from './financeiro/financeiro.module';
+import { IntegracaoBancariaModule } from './integracao-bancaria/integracao-bancaria.module';
+import { CooperativasModule } from './cooperativas/cooperativas.module';
+import { AsaasModule } from './asaas/asaas.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -44,6 +50,12 @@ import { RolesGuard } from './auth/roles.guard';
     ConfiguracaoCobrancaModule,
     GeracaoMensalModule,
     WhatsappModule,
+    PrestadoresModule,
+    MonitoramentoUsinasModule,
+    FinanceiroModule,
+    IntegracaoBancariaModule,
+    CooperativasModule,
+    AsaasModule,
   ],
   controllers: [AppController],
   providers: [

@@ -25,11 +25,14 @@ import {
   UserCheck,
   Receipt,
   MessageCircle,
+  Building2,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/cooperativas', label: 'Cooperativas', icon: Building2 },
   { href: '/dashboard/cooperados', label: 'Cooperados', icon: Users },
   { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
   { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
@@ -41,6 +44,7 @@ const navItems = [
   { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
   { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
   { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
 ];
 
 function tempoAtras(dateStr: string): string {

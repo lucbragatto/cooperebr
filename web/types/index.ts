@@ -2,7 +2,7 @@ export type PerfilUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'OPERADOR' | 'COOPERADO';
 
 export type StatusCooperado = 'PENDENTE' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
 
-export type StatusContrato = 'PENDENTE_ATIVACAO' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
+export type StatusContrato = 'PENDENTE_ATIVACAO' | 'EM_APROVACAO' | 'AGUARDANDO_ASSINATURA' | 'ASSINATURA_SOLICITADA' | 'APROVADO' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
 
 export type StatusCobranca = 'PENDENTE' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
 
@@ -66,6 +66,14 @@ export interface Usina {
   dataHomologacao?: string | null;
   dataInicioProducao?: string | null;
   observacoes?: string | null;
+  distribuidora?: string | null;
+  cooperativaId?: string | null;
+  proprietarioNome?: string | null;
+  proprietarioCpfCnpj?: string | null;
+  proprietarioTelefone?: string | null;
+  proprietarioEmail?: string | null;
+  proprietarioTipo?: string;
+  proprietarioCooperadoId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -83,6 +91,11 @@ export interface Contrato {
   dataFim: string | null;
   percentualDesconto: number;
   status: StatusContrato;
+  kwhContratoAnual?: number | null;
+  kwhContratoMensal?: number | null;
+  kwhContrato?: number | null;
+  percentualUsina?: number | null;
+  descontoOverride?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -170,6 +183,45 @@ export interface ModeloCobrancaConfig {
   descontoProgressivo: number | null;
   progressivoAteCap: number | null;
   baseCalculo: BaseCalculo;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Asaas ─────────────────────────────────────────────────
+
+export type StatusAsaasCobranca =
+  | 'PENDING'
+  | 'RECEIVED'
+  | 'CONFIRMED'
+  | 'OVERDUE'
+  | 'REFUNDED'
+  | 'CANCELLED';
+
+export interface AsaasConfig {
+  id: string;
+  cooperativaId: string;
+  apiKey: string | null;
+  apiKeyDefinida: boolean;
+  ambiente: string;
+  webhookToken: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AsaasCobranca {
+  id: string;
+  cobrancaId: string | null;
+  cooperadoId: string;
+  asaasId: string;
+  status: StatusAsaasCobranca;
+  valor: number;
+  vencimento: string;
+  linkPagamento: string | null;
+  boletoUrl: string | null;
+  pixQrCode: string | null;
+  pixCopiaECola: string | null;
+  nossoNumero: string | null;
+  formaPagamento: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -21,10 +21,11 @@ import {
   FileCheck, FilePlus, FileText, FileX, Loader2, Pencil, Plus, User,
   XCircle, Zap, Upload, DollarSign, Filter,
 } from 'lucide-react';
+import AsaasTab from './asaas-tab';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta';
+type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta' | 'asaas';
 
 interface PropostaOpcao {
   base: 'MES_RECENTE' | 'MEDIA_12M';
@@ -193,6 +194,7 @@ const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'documentos', label: 'Documentos', icon: FileText },
   { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { id: 'proposta', label: 'Proposta', icon: Zap },
+  { id: 'asaas', label: 'Cobranças Asaas', icon: DollarSign },
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -1585,6 +1587,9 @@ export default function CooperadoPerfilPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* ─── Aba Cobranças Asaas ─────────────────────────────────────────── */}
+      {aba === 'asaas' && <AsaasTab cooperadoId={id} />}
 
       {/* ════════════════════════════════════════════════════════════════════════
           DIALOGS
