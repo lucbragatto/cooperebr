@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
@@ -35,6 +35,23 @@ export class AuthController {
     },
   ) {
     return this.authService.login(body.identificador, body.senha);
+  }
+
+  @Public()
+  @Post('criar-super-admin')
+  criarSuperAdmin(
+    @Body() body: { nome: string; email: string; senha: string; secretKey: string },
+  ) {
+    const envSecret = process.env.SECRET_KEY || process.env.SUPER_ADMIN_SECRET_KEY;
+    if (!envSecret || body.secretKey !== envSecret) {
+      throw new UnauthorizedException('Secret key inválida');
+    }
+    return this.authService.register({
+      nome: body.nome,
+      email: body.email,
+      senha: body.senha,
+      perfil: PerfilUsuario.SUPER_ADMIN,
+    });
   }
 
   @Get('me')

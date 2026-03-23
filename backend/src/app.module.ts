@@ -27,6 +27,7 @@ import { FinanceiroModule } from './financeiro/financeiro.module';
 import { IntegracaoBancariaModule } from './integracao-bancaria/integracao-bancaria.module';
 import { CooperativasModule } from './cooperativas/cooperativas.module';
 import { AsaasModule } from './asaas/asaas.module';
+import { SaasModule } from './saas/saas.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -56,6 +57,7 @@ import { RolesGuard } from './auth/roles.guard';
     IntegracaoBancariaModule,
     CooperativasModule,
     AsaasModule,
+    SaasModule,
   ],
   controllers: [AppController],
   providers: [

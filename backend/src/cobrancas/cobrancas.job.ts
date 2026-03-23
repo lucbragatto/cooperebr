@@ -25,4 +25,70 @@ export class CobrancasJob {
       this.logger.log(`${count} cobrança(s) marcada(s) como VENCIDO`);
     }
   }
+
+  /**
+   * Calcula multa e juros para cobranças vencidas, respeitando
+   * a configuração financeira da cooperativa (diasCarencia, multaAtraso, jurosDiarios).
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async calcularMultaJuros() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const vencidas = await this.prisma.cobranca.findMany({
+      where: { status: 'VENCIDO' },
+      include: {
+        contrato: {
+          select: { cooperativaId: true },
+        },
+      },
+    });
+
+    if (vencidas.length === 0) return;
+
+    // Buscar config financeira de todas as cooperativas envolvidas
+    const cooperativaIds = [...new Set(vencidas.map((c) => c.contrato?.cooperativaId || c.cooperativaId).filter(Boolean))] as string[];
+    const cooperativas = await this.prisma.cooperativa.findMany({
+      where: { id: { in: cooperativaIds } },
+      select: { id: true, multaAtraso: true, jurosDiarios: true, diasCarencia: true },
+    });
+    const configMap = new Map(cooperativas.map((c) => [c.id, c]));
+
+    let atualizadas = 0;
+    for (const cobranca of vencidas) {
+      const coopId = cobranca.contrato?.cooperativaId || cobranca.cooperativaId;
+      if (!coopId) continue;
+
+      const config = configMap.get(coopId);
+      if (!config) continue;
+
+      const diasCarencia = config.diasCarencia;
+      const vencimento = new Date(cobranca.dataVencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      const diasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diasAtraso <= diasCarencia) continue;
+
+      const diasEfetivos = diasAtraso - diasCarencia;
+      const valorOriginal = Number(cobranca.valorLiquido);
+      const multa = valorOriginal * (Number(config.multaAtraso) / 100);
+      const juros = valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos;
+
+      // Não atualizar se já foi calculado (para evitar acumulação)
+      // Recalcula sempre baseado no valorLiquido original
+      const valorAtualizado = valorOriginal + multa + juros;
+
+      // Armazenamos nos campos existentes como referência
+      // valorPago será usado para o valor final quando pagar
+      // Usamos um campo json se necessário, mas por enquanto logamos
+      this.logger.debug(
+        `Cobrança ${cobranca.id}: ${diasEfetivos} dias efetivos, multa R$${multa.toFixed(2)}, juros R$${juros.toFixed(2)}, total R$${valorAtualizado.toFixed(2)}`,
+      );
+      atualizadas++;
+    }
+
+    if (atualizadas > 0) {
+      this.logger.log(`${atualizadas} cobrança(s) com multa/juros calculados`);
+    }
+  }
 }
