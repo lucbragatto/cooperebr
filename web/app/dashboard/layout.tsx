@@ -33,11 +33,12 @@ import {
   Gift,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
-  { href: '/dashboard/cooperados', label: 'Membros', icon: Users },
+  { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
   { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
   { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
   { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
@@ -80,6 +81,7 @@ function IconeNotificacao({ tipo }: { tipo: string }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { tipoMembroPlural } = useTipoParceiro();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [naoLidas, setNaoLidas] = useState(0);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
@@ -165,6 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
+            const displayLabel = label === '__MEMBROS__' ? tipoMembroPlural : label;
             return (
               <Link
                 key={href}
@@ -176,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {label}
+                {displayLabel}
               </Link>
             );
           })}

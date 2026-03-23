@@ -32,9 +32,10 @@ interface Step7Props {
   contratoData: Step6Data;
   tipoMembro: string;
   tipoMembroPlural: string;
+  tipoParceiro: string;
 }
 
-export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData, propostaData, documentosData, contratoData, tipoMembro, tipoMembroPlural }: Step7Props) {
+export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData, propostaData, documentosData, contratoData, tipoMembro, tipoMembroPlural, tipoParceiro }: Step7Props) {
   const router = useRouter();
   const ocr = faturaData.ocr;
 
@@ -89,6 +90,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         telefone: dadosPessoais.telefone || undefined,
         status: 'PENDENTE',
         tipoPessoa: dadosPessoais.tipoPessoa,
+        tipoMembro: tipoMembro,
         representanteLegalNome: dadosPessoais.representanteLegalNome || undefined,
         representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
         representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,

@@ -110,6 +110,11 @@ export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
         <span className="ml-auto text-xs text-gray-400">Pré-preenchidos pela fatura</span>
       </div>
 
+      {/* Tipo de membro (informativo) */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+        Este membro será cadastrado como: <span className="font-semibold">{tipoMembro}</span>
+      </div>
+
       {/* Tipo pessoa */}
       <div className="flex gap-2">
         {(['PF', 'PJ'] as const).map(t => (

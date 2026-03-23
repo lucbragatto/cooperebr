@@ -19,10 +19,11 @@ import {
 import {
   AlertTriangle, ArrowLeft, BarChart3, Building2, CheckCircle, CreditCard,
   FileCheck, FileDown, FilePlus, FileText, FileX, Loader2, Mail, MessageCircle,
-  Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter, Gift, Copy, Link,
+  Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter, Gift, Copy, Link as LinkIcon,
 } from 'lucide-react';
 import AsaasTab from './asaas-tab';
 import FaturaUploadOCR from '@/components/FaturaUploadOCR';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -310,6 +311,7 @@ function IndicacoesTab({ cooperadoId, codigoIndicacao }: { cooperadoId: string; 
 
 export default function CooperadoPerfilPage() {
   const { id } = useParams<{ id: string }>();
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
 
   // Core data
   const [cooperado, setCooperado] = useState<CooperadoCompleto | null>(null);
@@ -424,7 +426,7 @@ export default function CooperadoPerfilPage() {
         setCooperado(coopRes.data);
         setChecklist(checkRes.data);
       })
-      .catch(() => setErro('Cooperado não encontrado.'))
+      .catch(() => setErro('Registro não encontrado.'))
       .finally(() => setCarregando(false));
   }, [id]);
 
@@ -478,8 +480,8 @@ export default function CooperadoPerfilPage() {
       ]);
       setCooperado(coopRes.data);
       setChecklist(checkRes.data);
-      showToast('sucesso', 'Cooperado ativado! Contratos pendentes foram ativados automaticamente.');
-    } catch { showToast('erro', 'Erro ao ativar cooperado.'); }
+      showToast('sucesso', `${tipoMembro} ativado! Contratos pendentes foram ativados automaticamente.`);
+    } catch { showToast('erro', `Erro ao ativar ${tipoMembro.toLowerCase()}.`); }
     finally { setSalvando(false); }
   }
 
@@ -498,7 +500,7 @@ export default function CooperadoPerfilPage() {
       ]);
       setCooperado(coopRes.data);
       setChecklist(checkRes.data);
-      showToast('sucesso', 'Cooperado ativado com sucesso!');
+      showToast('sucesso', `${tipoMembro} ativado com sucesso!`);
     } catch { showToast('erro', 'Erro ao ativar contrato.'); }
     finally { setSalvando(false); }
   }
@@ -680,7 +682,7 @@ export default function CooperadoPerfilPage() {
   // ── Actions — Criar Contrato ──────────────────────────────────────────────
 
   async function abrirCriarContrato() {
-    if (!cooperado?.ucs.length) { showToast('erro', 'Cooperado sem UC vinculada.'); return; }
+    if (!cooperado?.ucs.length) { showToast('erro', `${tipoMembro} sem UC vinculada.`); return; }
     setFormCriarContrato({ planoId: '', ucId: cooperado.ucs[0]?.id ?? '', percentualDesconto: '', dataAdesao: today(), dataEncerramento: '' });
     try {
       const { data } = await api.get<any[]>('/planos');
@@ -820,7 +822,7 @@ export default function CooperadoPerfilPage() {
   );
   if (erro || !cooperado) return (
     <div className="flex flex-col items-center py-20 gap-4">
-      <p className="text-red-500">{erro || 'Cooperado não encontrado.'}</p>
+      <p className="text-red-500">{erro || `${tipoMembro} não encontrado.`}</p>
       <Link href="/dashboard/cooperados"><Button variant="outline"><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Button></Link>
     </div>
   );
@@ -840,7 +842,7 @@ export default function CooperadoPerfilPage() {
 
       {/* Back */}
       <Link href="/dashboard/cooperados" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-800 transition-colors">
-        <ArrowLeft className="h-4 w-4 mr-1" />Cooperados
+        <ArrowLeft className="h-4 w-4 mr-1" />{tipoMembroPlural}
       </Link>
 
       {/* Header */}
@@ -934,11 +936,11 @@ export default function CooperadoPerfilPage() {
                   {checklist.pronto && cooperado.status === 'PENDENTE' && (
                     <Button onClick={ativarCooperado} disabled={salvando} className="bg-green-600 hover:bg-green-700">
                       {salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                      Ativar Cooperado
+                      Ativar {tipoMembro}
                     </Button>
                   )}
                   {(cooperado.status === 'ATIVO' || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS') && (
-                    <Badge className="bg-green-100 text-green-800 border-green-200">{cooperado.status === 'ATIVO_RECEBENDO_CREDITOS' ? 'Ativo - Recebendo Creditos' : 'Cooperado Ativo'}</Badge>
+                    <Badge className="bg-green-100 text-green-800 border-green-200">{cooperado.status === 'ATIVO_RECEBENDO_CREDITOS' ? 'Ativo - Recebendo Creditos' : `${tipoMembro} Ativo`}</Badge>
                   )}
                 </CardTitle>
               </CardHeader>

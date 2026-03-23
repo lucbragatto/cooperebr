@@ -14,6 +14,7 @@ import {
   Zap,
   BarChart2,
 } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 interface HistoricoItem {
   mesAno: string;
@@ -92,6 +93,7 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export default function FaturaMensalPage() {
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -110,7 +112,7 @@ export default function FaturaMensalPage() {
   useEffect(() => {
     api.get(`/cooperados/${id}`)
       .then((r) => setNomeCooperado(r.data.nomeCompleto))
-      .catch(() => setErro('Cooperado não encontrado.'));
+      .catch(() => setErro(`${tipoMembro} não encontrado.`));
   }, [id]);
 
   function onDrop(e: React.DragEvent) {
@@ -219,7 +221,7 @@ export default function FaturaMensalPage() {
       });
       setPropostaGerada(true);
     } catch {
-      setErro('Erro ao gerar proposta. Verifique se o cooperado possui fatura processada.');
+      setErro(`Erro ao gerar proposta. Verifique se o ${tipoMembro.toLowerCase()} possui fatura processada.`);
     } finally {
       setGerandoProposta(false);
     }
@@ -270,7 +272,7 @@ export default function FaturaMensalPage() {
             </div>
             {resultado.cotaAtualizada && (
               <p className="text-sm text-green-600 font-medium">
-                Cota kWh mensal do cooperado atualizada para {resultado.mediaKwhCalculada.toLocaleString('pt-BR')} kWh.
+                Cota kWh mensal do {tipoMembro.toLowerCase()} atualizada para {resultado.mediaKwhCalculada.toLocaleString('pt-BR')} kWh.
               </p>
             )}
             <div className="flex justify-center gap-3 pt-2">
@@ -342,7 +344,7 @@ export default function FaturaMensalPage() {
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <Campo label="Titular (na fatura)" value={dadosExtraidos.titular} />
-                <Campo label="Cooperado" value={nomeCooperado} />
+                <Campo label={tipoMembro} value={nomeCooperado} />
                 <Campo label="UC" value={dadosExtraidos.numeroUC} />
                 <Campo label="Distribuidora" value={dadosExtraidos.distribuidora} />
                 <Campo label="Mês referência" value={dadosExtraidos.mesReferencia} />
@@ -433,7 +435,7 @@ export default function FaturaMensalPage() {
           {erro && <p className="text-sm text-red-600">{erro}</p>}
 
           {propostaGerada && (
-            <p className="text-sm text-green-600 font-medium">Proposta gerada com sucesso! Confira na aba Proposta do perfil do cooperado.</p>
+            <p className="text-sm text-green-600 font-medium">Proposta gerada com sucesso! Confira na aba Proposta do perfil do {tipoMembro.toLowerCase()}.</p>
           )}
 
           <div className="flex gap-3 pb-8">

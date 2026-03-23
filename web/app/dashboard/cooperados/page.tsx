@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 interface CooperadoLista {
   id: string;
@@ -66,6 +67,7 @@ const statusContratoColors: Record<string, string> = {
 export default function CooperadosPage() {
   const [cooperados, setCooperados] = useState<CooperadoLista[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
 
   useEffect(() => {
     api.get<CooperadoLista[]>('/cooperados')
@@ -76,11 +78,11 @@ export default function CooperadosPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Cooperados</h2>
+        <h2 className="text-2xl font-bold text-gray-800">{tipoMembroPlural}</h2>
         <Link href="/dashboard/cooperados/novo">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            Novo Cooperado
+            Novo {tipoMembro}
           </Button>
         </Link>
       </div>
@@ -118,7 +120,7 @@ export default function CooperadosPage() {
               ) : cooperados.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                    Nenhum cooperado cadastrado
+                    Nenhum {tipoMembro.toLowerCase()} cadastrado
                   </TableCell>
                 </TableRow>
               ) : (
