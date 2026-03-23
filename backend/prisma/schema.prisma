@@ -40,6 +40,7 @@ model Cooperativa {
   modelosDocumento      ModeloDocumento[]
   configIndicacao       ConfigIndicacao?
   indicacoes            Indicacao[]
+  usuarios              Usuario[]
 
   @@map("cooperativas")
 }
@@ -54,6 +55,7 @@ model Usuario {
   perfil        PerfilUsuario @default(COOPERADO)
   fotoFacialUrl String?
   cooperativaId String?
+  cooperativa   Cooperativa?  @relation(fields: [cooperativaId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -349,6 +351,9 @@ model Cobranca {
   baseCalculoUsada   String?
   fonteDesconto      String?
   cooperativaId      String?
+  cobrancasBancarias CobrancaBancaria[]
+  asaasCobrancas     AsaasCobranca[]
+  beneficiosIndicacao BeneficioIndicacao[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -675,7 +680,8 @@ model Prestador {
   ativo         Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  ocorrencias   Ocorrencia[]
+  ocorrencias              Ocorrencia[]
+  usinaMonitoramentoConfigs UsinaMonitoramentoConfig[]
 
   @@map("prestadores")
 }
@@ -693,6 +699,7 @@ model UsinaMonitoramentoConfig {
   sungrowAppKey     String?
   sungrowPlantId    String?
   prestadorPadraoId String?
+  prestadorPadrao   Prestador? @relation(fields: [prestadorPadraoId], references: [id])
   prioridadeAlerta  String  @default("ALTA")
   cooperativaId     String?
   createdAt         DateTime @default(now())
@@ -885,6 +892,7 @@ model ConfiguracaoBancaria {
 model CobrancaBancaria {
   id                String               @id @default(cuid())
   cobrancaId        String?              // id da cobranca no sistema CoopereBR
+  cobranca          Cobranca?            @relation(fields: [cobrancaId], references: [id])
   cooperadoId       String
   cooperado         Cooperado            @relation(fields: [cooperadoId], references: [id])
   configuracaoId    String
@@ -942,6 +950,7 @@ model AsaasCustomer {
 model AsaasCobranca {
   id             String    @id @default(cuid())
   cobrancaId     String?   // FK para Cobranca existente
+  cobranca       Cobranca? @relation(fields: [cobrancaId], references: [id])
   cooperadoId    String
   cooperado      Cooperado @relation(fields: [cooperadoId], references: [id])
   asaasId        String    // ID da cobrança no Asaas (pay_xxx)
@@ -1058,6 +1067,7 @@ model BeneficioIndicacao {
   mesReferencia  String    // '2026-03'
   status         String    @default("PENDENTE") // PENDENTE | APLICADO | PARCIAL | CANCELADO
   cobrancaId     String?
+  cobranca       Cobranca? @relation(fields: [cobrancaId], references: [id])
   createdAt      DateTime  @default(now())
 
   @@map("beneficios_indicacao")

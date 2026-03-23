@@ -10,6 +10,7 @@ interface CriarNotificacaoDto {
   cooperadoId?: string;
   adminId?: string;
   link?: string;
+  cooperativaId?: string;
 }
 
 @Injectable()

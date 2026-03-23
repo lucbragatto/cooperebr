@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers, UnauthorizedException, Logger } from '@nestjs/common';
 import { IntegracaoBancariaService } from './integracao-bancaria.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -8,7 +8,20 @@ const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
 @Controller('integracao-bancaria')
 export class IntegracaoBancariaController {
+  private readonly logger = new Logger(IntegracaoBancariaController.name);
+
   constructor(private readonly service: IntegracaoBancariaService) {}
+
+  private validateWebhookToken(token?: string) {
+    const expectedToken = process.env.WEBHOOK_BANCO_TOKEN;
+    if (!expectedToken) {
+      this.logger.warn('WEBHOOK_BANCO_TOKEN não configurado — aceitando webhook sem validação');
+      return;
+    }
+    if (token !== expectedToken) {
+      throw new UnauthorizedException('Token de webhook inválido');
+    }
+  }
 
   // ── Cobranças ─────────────────────────────────────────────
 
@@ -69,15 +82,24 @@ export class IntegracaoBancariaController {
 
   @Public()
   @Post('webhook/bb')
-  webhookBB(@Body() payload: any) {
-    // Processar assíncronamente, sempre retornar 200
+  webhookBB(
+    @Body() payload: any,
+    @Query('token') token?: string,
+    @Headers('x-webhook-token') headerToken?: string,
+  ) {
+    this.validateWebhookToken(token || headerToken);
     this.service.processarWebhookBB(payload);
     return { received: true };
   }
 
   @Public()
   @Post('webhook/sicoob')
-  webhookSicoob(@Body() payload: any) {
+  webhookSicoob(
+    @Body() payload: any,
+    @Query('token') token?: string,
+    @Headers('x-webhook-token') headerToken?: string,
+  ) {
+    this.validateWebhookToken(token || headerToken);
     this.service.processarWebhookSicoob(payload);
     return { received: true };
   }

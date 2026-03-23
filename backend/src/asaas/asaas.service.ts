@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
@@ -316,13 +317,21 @@ export class AsaasService {
   // ─── Webhook ─────────────────────────────────────────────
 
   async processarWebhook(payload: any, token: string) {
-    // Validar token do webhook — busca config que corresponda
-    const config = await this.prisma.asaasConfig.findFirst({
-      where: { webhookToken: token },
+    // Validar token do webhook — busca configs que tenham webhookToken configurado
+    const configsComToken = await this.prisma.asaasConfig.findMany({
+      where: { webhookToken: { not: null } },
     });
-    if (!config) {
-      this.logger.warn('Webhook recebido com token inválido');
-      throw new BadRequestException('Token de webhook inválido');
+
+    if (configsComToken.length > 0) {
+      // Há configs com token — exigir que o token recebido bata com alguma
+      const config = configsComToken.find((c) => c.webhookToken === token);
+      if (!config) {
+        this.logger.warn('Webhook Asaas recebido com token inválido — rejeitando');
+        throw new UnauthorizedException('Token de webhook inválido');
+      }
+    } else {
+      // Nenhuma config tem webhookToken — aceitar com aviso
+      this.logger.warn('Webhook Asaas recebido mas nenhuma config tem webhookToken configurado — aceitando sem validação');
     }
 
     const event = payload.event;
