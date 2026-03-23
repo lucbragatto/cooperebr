@@ -67,18 +67,28 @@ export class CobrancasService {
     dataVencimento: Date;
     dataPagamento?: Date;
   }, cooperativaId?: string) {
-    const cobranca = await this.prisma.cobranca.create({ data });
+    // Buscar contrato para obter cooperativaId e dados do cooperado
+    const contrato = await this.prisma.contrato.findUnique({
+      where: { id: data.contratoId },
+      include: { cooperado: true },
+    });
+
+    // Resolver cooperativaId: parâmetro > contrato
+    const resolvedCoopId = cooperativaId || contrato?.cooperativaId || undefined;
+
+    const cobranca = await this.prisma.cobranca.create({
+      data: {
+        ...data,
+        ...(resolvedCoopId ? { cooperativaId: resolvedCoopId } : {}),
+      },
+    });
 
     // Emitir automaticamente no Asaas se configurado
-    if (cooperativaId) {
-      const contrato = await this.prisma.contrato.findUnique({
-        where: { id: data.contratoId },
-        select: { cooperadoId: true },
-      });
-      if (contrato?.cooperadoId) {
+    if (resolvedCoopId && contrato?.cooperadoId) {
+      try {
         await this.emitirNoAsaasSeConfigurado(
           cobranca.id,
-          cooperativaId,
+          resolvedCoopId,
           contrato.cooperadoId,
           {
             valor: data.valorLiquido,
@@ -86,6 +96,8 @@ export class CobrancasService {
             descricao: `Cobrança ${data.mesReferencia}/${data.anoReferencia}`,
           },
         );
+      } catch (err) {
+        this.logger.warn(`Falha ao emitir Asaas na criação da cobrança: ${err.message}`);
       }
     }
 
@@ -107,7 +119,10 @@ export class CobrancasService {
   }
 
   async darBaixa(id: string, dataPagamento: string, valorPago: number) {
-    const cobranca = await this.prisma.cobranca.findUnique({ where: { id } });
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id },
+      include: { contrato: { include: { cooperado: true } } },
+    });
     if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
     if (cobranca.status === 'PAGO') {
       throw new BadRequestException('Esta cobrança já foi paga');
@@ -115,14 +130,43 @@ export class CobrancasService {
     if (cobranca.status === 'CANCELADO') {
       throw new BadRequestException('Não é possível dar baixa em cobrança cancelada');
     }
-    return this.prisma.cobranca.update({
+
+    const dtPagamento = new Date(dataPagamento);
+    const valorFinal = valorPago ?? Number(cobranca.valorLiquido);
+
+    const cobrancaAtualizada = await this.prisma.cobranca.update({
       where: { id },
       data: {
         status: 'PAGO',
-        dataPagamento: new Date(dataPagamento),
-        valorPago,
+        dataPagamento: dtPagamento,
+        valorPago: valorFinal,
       },
     });
+
+    // Criar LancamentoCaixa automático
+    try {
+      const nomeCooperado = cobranca.contrato?.cooperado?.nomeCompleto || 'Cooperado';
+      const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+      const competencia = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
+
+      await this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
+          valor: valorFinal,
+          competencia,
+          dataPagamento: dtPagamento,
+          status: 'REALIZADO',
+          cooperativaId: cobranca.cooperativaId || cobranca.contrato?.cooperativaId || undefined,
+          cooperadoId: cobranca.contrato?.cooperadoId || undefined,
+          observacoes: `Ref. cobrança ${cobranca.id}`,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao criar LancamentoCaixa na baixa: ${err.message}`);
+    }
+
+    return cobrancaAtualizada;
   }
 
   async cancelar(id: string, motivo: string) {

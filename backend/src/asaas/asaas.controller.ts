@@ -39,16 +39,9 @@ export class AsaasController {
   async getConfig(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId) return null;
-    const config = await this.asaasService.getConfig(cooperativaId);
+    const config = await this.asaasService.getConfigMasked(cooperativaId);
     if (!config) return null;
-    // Mascarar a apiKey para o frontend
-    return {
-      ...config,
-      apiKey: config.apiKey
-        ? config.apiKey.substring(0, 10) + '...' + config.apiKey.slice(-4)
-        : null,
-      apiKeyDefinida: !!config.apiKey,
-    };
+    return { ...config, apiKeyDefinida: !!config.apiKey };
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

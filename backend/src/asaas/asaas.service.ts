@@ -6,12 +6,50 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import axios, { AxiosInstance } from 'axios';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AsaasService {
   private readonly logger = new Logger(AsaasService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  // ─── Criptografia ──────────────────────────────────────────
+
+  private getEncryptKey(): Buffer {
+    const key = process.env.ASAAS_ENCRYPT_KEY || process.env.NEXTAUTH_SECRET || 'cooperebr_default_key_32chars!!';
+    return crypto.createHash('sha256').update(key).digest();
+  }
+
+  encrypt(text: string): string {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.getEncryptKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return [iv.toString('hex'), encrypted.toString('hex'), tag.toString('hex')].join(':');
+  }
+
+  decrypt(encrypted: string): string {
+    const parts = encrypted.split(':');
+    if (parts.length !== 3) return encrypted; // não está criptografado (legado)
+    const [ivHex, encHex, tagHex] = parts;
+    try {
+      const decipher = crypto.createDecipheriv(
+        'aes-256-gcm',
+        this.getEncryptKey(),
+        Buffer.from(ivHex, 'hex'),
+      );
+      decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+      return decipher.update(Buffer.from(encHex, 'hex')) + decipher.final('utf8');
+    } catch {
+      return encrypted; // fallback: retorna como está (pode ser plain text legado)
+    }
+  }
+
+  maskApiKey(apiKey: string): string {
+    if (!apiKey || apiKey.length <= 4) return '****';
+    return '****' + apiKey.slice(-4);
+  }
 
   // ─── Config ──────────────────────────────────────────────
 
@@ -23,17 +61,25 @@ export class AsaasService {
     return config;
   }
 
+  async getConfigMasked(cooperativaId: string) {
+    const config = await this.getConfig(cooperativaId);
+    if (!config) return null;
+    const decrypted = this.decrypt(config.apiKey);
+    return { ...config, apiKey: this.maskApiKey(decrypted) };
+  }
+
   async salvarConfig(cooperativaId: string, data: { apiKey: string; ambiente: string; webhookToken?: string }) {
+    const encryptedKey = this.encrypt(data.apiKey);
     return this.prisma.asaasConfig.upsert({
       where: { cooperativaId },
       update: {
-        apiKey: data.apiKey,
+        apiKey: encryptedKey,
         ambiente: data.ambiente,
         webhookToken: data.webhookToken,
       },
       create: {
         cooperativaId,
-        apiKey: data.apiKey,
+        apiKey: encryptedKey,
         ambiente: data.ambiente,
         webhookToken: data.webhookToken,
       },
@@ -48,6 +94,8 @@ export class AsaasService {
       throw new BadRequestException('Configuração Asaas não encontrada para esta cooperativa');
     }
 
+    const decryptedKey = this.decrypt(config.apiKey);
+
     const baseURL =
       config.ambiente === 'PRODUCAO'
         ? 'https://www.asaas.com/api/v3'
@@ -55,7 +103,7 @@ export class AsaasService {
 
     return axios.create({
       baseURL,
-      headers: { access_token: config.apiKey },
+      headers: { access_token: decryptedKey },
       timeout: 30000,
     });
   }
