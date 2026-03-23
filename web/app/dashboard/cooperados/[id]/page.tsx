@@ -18,10 +18,11 @@ import {
 } from '@/components/ui/sheet';
 import {
   AlertTriangle, ArrowLeft, BarChart3, Building2, CheckCircle, CreditCard,
-  FileCheck, FilePlus, FileText, FileX, Loader2, Pencil, Plus, User,
-  XCircle, Zap, Upload, DollarSign, Filter,
+  FileCheck, FileDown, FilePlus, FileText, FileX, Loader2, Mail, MessageCircle,
+  Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter,
 } from 'lucide-react';
 import AsaasTab from './asaas-tab';
+import FaturaUploadOCR from '@/components/FaturaUploadOCR';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -958,97 +959,13 @@ export default function CooperadoPerfilPage() {
 
       {/* ── Aba 2: Fatura & Consumo ── */}
       {aba === 'fatura' && (
-        <div className="space-y-4">
-          {carregandoFaturas ? (
-            <Card><CardContent className="py-8"><div className="h-4 bg-gray-200 animate-pulse rounded w-full" /></CardContent></Card>
-          ) : faturas.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-4 py-12">
-                <BarChart3 className="h-10 w-10 text-gray-300" />
-                <p className="text-gray-500">Nenhuma fatura processada ainda.</p>
-                <Link href={`/dashboard/cooperados/${id}/fatura`}><Button><FilePlus className="h-4 w-4 mr-2" />Processar primeira fatura</Button></Link>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {ultimaFatura && ultimaFatura.dadosExtraidos && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <span>Fatura mais recente</span>
-                      <Badge className={ultimaFatura.status === 'APROVADA' ? 'bg-green-100 text-green-800 border-green-200' : ultimaFatura.status === 'REJEITADA' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'}>{ultimaFatura.status}</Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <Campo label="Titular (na fatura)" value={ultimaFatura.dadosExtraidos.titular} />
-                    <Campo label="Documento" value={`${ultimaFatura.dadosExtraidos.tipoDocumento}: ${ultimaFatura.dadosExtraidos.documento}`} />
-                    <Campo label="Mês referência" value={ultimaFatura.dadosExtraidos.mesReferencia} />
-                    <Campo label="Endereço" value={[ultimaFatura.dadosExtraidos.enderecoInstalacao, ultimaFatura.dadosExtraidos.cidade, ultimaFatura.dadosExtraidos.estado].filter(Boolean).join(', ')} />
-                    <Campo label="UC" value={ultimaFatura.dadosExtraidos.numeroUC} />
-                    <Campo label="Distribuidora" value={ultimaFatura.dadosExtraidos.distribuidora} />
-                    <Campo label="Consumo atual (kWh)" value={Number(ultimaFatura.dadosExtraidos.consumoAtualKwh).toLocaleString('pt-BR')} />
-                    <Campo label="Total a pagar" value={formatBRL(ultimaFatura.dadosExtraidos.totalAPagar)} />
-                    <Campo label="Média calculada" value={`${Number(ultimaFatura.mediaKwhCalculada).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kWh`} />
-                  </CardContent>
-                </Card>
-              )}
-              {ultimaFatura?.dadosExtraidos?.historicoConsumo?.length > 0 && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">Histórico de Consumo</CardTitle></CardHeader>
-                  <CardContent className="overflow-x-auto p-0">
-                    <table className="w-full text-sm">
-                      <thead className="border-b bg-gray-50">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Mês/Ano</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">Consumo (kWh)</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">Valor (R$)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ultimaFatura.dadosExtraidos.historicoConsumo.map(h => (
-                          <tr key={h.mesAno} className="border-b last:border-0 hover:bg-gray-50">
-                            <td className="px-4 py-2 text-gray-800">{h.mesAno}</td>
-                            <td className="px-4 py-2 text-right">{Number(h.consumoKwh).toLocaleString('pt-BR')}</td>
-                            <td className="px-4 py-2 text-right">{Number(h.valorRS) > 0 ? formatBRL(h.valorRS) : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
-              )}
-              {faturas.length > 1 && (
-                <Card>
-                  <CardHeader><CardTitle className="text-base">Todas as Faturas</CardTitle></CardHeader>
-                  <CardContent className="overflow-x-auto p-0">
-                    <table className="w-full text-sm">
-                      <thead className="border-b bg-gray-50">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs text-gray-500 font-medium">Processada em</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">Média (kWh)</th>
-                          <th className="text-right px-4 py-2 text-xs text-gray-500 font-medium">Meses usados</th>
-                          <th className="text-center px-4 py-2 text-xs text-gray-500 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {faturas.map(f => (
-                          <tr key={f.id} className="border-b last:border-0 hover:bg-gray-50">
-                            <td className="px-4 py-2 text-gray-800">{new Date(f.createdAt).toLocaleDateString('pt-BR')}</td>
-                            <td className="px-4 py-2 text-right">{Number(f.mediaKwhCalculada).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                            <td className="px-4 py-2 text-right">{f.mesesUtilizados}</td>
-                            <td className="px-4 py-2 text-center">
-                              <Badge className={f.status === 'APROVADA' ? 'bg-green-100 text-green-800 border-green-200' : f.status === 'REJEITADA' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'}>{f.status}</Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
-        </div>
+        <FaturaUploadOCR
+          cooperadoId={id}
+          onFaturaProcessada={() => {
+            // Recarregar faturas ao processar nova
+            api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {});
+          }}
+        />
       )}
 
       {/* ── Aba 3: Contrato & Plano ── */}
@@ -1291,8 +1208,44 @@ export default function CooperadoPerfilPage() {
                         <td className="px-3 py-2 text-gray-500 text-xs">{new Date(p.createdAt).toLocaleDateString('pt-BR')}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-green-700 hover:text-green-900" title="Gerar PDF"
+                              onClick={async () => {
+                                try {
+                                  const { data } = await api.post(`/motor-proposta/proposta/${p.id}/enviar-pdf`, {});
+                                  if (data.pdfPath) {
+                                    window.open(`/motor-proposta/proposta/${p.id}/html`, '_blank');
+                                  }
+                                  showToast('sucesso', data.mensagem || 'PDF gerado.');
+                                } catch { showToast('erro', 'Erro ao gerar PDF.'); }
+                              }}>
+                              <FileDown className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-green-600 hover:text-green-800" title="Enviar WhatsApp"
+                              onClick={async () => {
+                                try {
+                                  const { data } = await api.post(`/motor-proposta/proposta/${p.id}/enviar-aprovacao`, {
+                                    canal: 'whatsapp',
+                                    destino: cooperado.telefone || '',
+                                  });
+                                  showToast('sucesso', data.link ? 'Link de aprovacao enviado por WhatsApp.' : 'Enviado por WhatsApp.');
+                                } catch { showToast('erro', 'Erro ao enviar por WhatsApp.'); }
+                              }}>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:text-blue-800" title="Enviar Email"
+                              onClick={async () => {
+                                try {
+                                  const { data } = await api.post(`/motor-proposta/proposta/${p.id}/enviar-aprovacao`, {
+                                    canal: 'email',
+                                    destino: cooperado.email || '',
+                                  });
+                                  showToast('sucesso', data.link ? 'Link de aprovacao enviado por email.' : 'Enviado por email.');
+                                } catch { showToast('erro', 'Erro ao enviar por email.'); }
+                              }}>
+                              <Mail className="h-3.5 w-3.5" />
+                            </Button>
                             {p.status !== 'CANCELADA' && (
-                              <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-700"
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-700" title="Excluir"
                                 onClick={async () => {
                                   try {
                                     await api.delete(`/motor-proposta/proposta/${p.id}`);
@@ -1413,7 +1366,7 @@ export default function CooperadoPerfilPage() {
                     <div><p className="text-xs text-gray-400">Base utilizada</p><p className="font-medium">{proposta.resultado.base === 'MES_RECENTE' ? 'Mês atual' : 'Média 12m'}</p></div>
                   </div>
 
-                  <div className="flex gap-3 border-t pt-4">
+                  <div className="flex gap-3 border-t pt-4 flex-wrap">
                     <Button onClick={aceitarProposta} disabled={salvando} className="bg-green-600 hover:bg-green-700">
                       {salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
                       Aceitar proposta
@@ -1422,6 +1375,46 @@ export default function CooperadoPerfilPage() {
                       Recalcular
                     </Button>
                   </div>
+
+                  {/* Botoes de envio — visivel apos proposta salva no historico */}
+                  {historicoProposta.length > 0 && (() => {
+                    const ultimaProposta = historicoProposta[0];
+                    return (
+                      <div className="flex gap-2 border-t pt-4 flex-wrap">
+                        <Button size="sm" variant="outline" onClick={async () => {
+                          try {
+                            await api.post(`/motor-proposta/proposta/${ultimaProposta.id}/enviar-pdf`, {});
+                            window.open(`/api/motor-proposta/proposta/${ultimaProposta.id}/html`, '_blank');
+                            showToast('sucesso', 'PDF gerado com sucesso.');
+                          } catch { showToast('erro', 'Erro ao gerar PDF.'); }
+                        }}>
+                          <FileDown className="h-4 w-4 mr-2" />Gerar PDF
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-green-700 border-green-300 hover:bg-green-50" onClick={async () => {
+                          try {
+                            await api.post(`/motor-proposta/proposta/${ultimaProposta.id}/enviar-aprovacao`, {
+                              canal: 'whatsapp',
+                              destino: cooperado.telefone || '',
+                            });
+                            showToast('sucesso', 'Proposta enviada por WhatsApp.');
+                          } catch { showToast('erro', 'Erro ao enviar por WhatsApp.'); }
+                        }}>
+                          <MessageCircle className="h-4 w-4 mr-2" />Enviar por WhatsApp
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-blue-700 border-blue-300 hover:bg-blue-50" onClick={async () => {
+                          try {
+                            await api.post(`/motor-proposta/proposta/${ultimaProposta.id}/enviar-aprovacao`, {
+                              canal: 'email',
+                              destino: cooperado.email || '',
+                            });
+                            showToast('sucesso', 'Proposta enviada por email.');
+                          } catch { showToast('erro', 'Erro ao enviar por email.'); }
+                        }}>
+                          <Mail className="h-4 w-4 mr-2" />Enviar por Email
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </div>

@@ -1296,8 +1296,8 @@ export default function NovoCooperadoPage() {
                       </div>
                     </div>
                     <div className="text-center pt-2 border-t border-green-200">
-                      <p className="text-sm text-green-800">
-                        Equivale a <span className="font-bold text-lg">{simulacao.mesesGratis}</span> meses de energia grátis
+                      <p className="text-sm text-green-800 whitespace-normal break-words" style={{ textWrap: 'balance' }}>
+                        Equivale a <span className="font-bold text-base">{simulacao.mesesGratis}</span> meses de energia grátis
                       </p>
                     </div>
                   </div>
