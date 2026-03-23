@@ -186,9 +186,14 @@ function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: 
                 </TableCell>
                 <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
                 <TableCell>
-                  <Badge className={st?.color ?? 'bg-gray-100 text-gray-600'}>
-                    {st?.label ?? c.status}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge className={st?.color ?? 'bg-gray-100 text-gray-600'}>
+                      {st?.label ?? c.status}
+                    </Badge>
+                    {(c as any).reajusteRecente && (
+                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Reajustado</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-sm">
                   {c.usinaVinculada ?? <span className="text-gray-400">&mdash;</span>}

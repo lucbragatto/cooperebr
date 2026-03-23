@@ -512,34 +512,46 @@ export class MotorPropostaService {
     const tarifa = await this.prisma.tarifaConcessionaria.findUnique({ where: { id: dto.tarifaId } });
     if (!tarifa) throw new Error('Tarifa não encontrada');
 
-    const cooperados = await this.prisma.cooperado.findMany({
+    // Buscar contratos ativos com kWhContratoMensal (fonte confiável de kWh)
+    const contratos = await this.prisma.contrato.findMany({
       where: { status: 'ATIVO' },
-      select: { id: true, nomeCompleto: true, cotaKwhMensal: true },
+      select: {
+        id: true,
+        cooperadoId: true,
+        kwhContratoMensal: true,
+        kwhContrato: true,
+        cooperado: { select: { id: true, nomeCompleto: true, cotaKwhMensal: true } },
+      },
     });
 
     const tarifaAntiga = Number(tarifa.tusdAnterior) + Number(tarifa.teAnterior);
     const tarifaNova = Number(tarifa.tusdNova) + Number(tarifa.teNova);
     const fatorReajuste = tarifaNova / (tarifaAntiga || 1);
 
-    const afetados = cooperados.filter(c => Number(c.cotaKwhMensal ?? 0) > 0);
-    const valorMedioAnterior = tarifaAntiga;
-    const valorMedioNovo = tarifaNova;
-    const impactoMensalTotal = afetados.reduce((acc, c) => acc + Number(c.cotaKwhMensal ?? 0) * (tarifaNova - tarifaAntiga), 0);
+    // kWh vem do contrato (kwhContratoMensal ou kwhContrato) ou do cooperado (cotaKwhMensal)
+    const afetados = contratos
+      .map(c => {
+        const kwh = Number(c.kwhContratoMensal ?? 0) || Number(c.kwhContrato ?? 0) || Number(c.cooperado.cotaKwhMensal ?? 0);
+        return { ...c, kwh };
+      })
+      .filter(c => c.kwh > 0);
+
+    const impactoMensalTotal = afetados.reduce((acc, c) => acc + c.kwh * (tarifaNova - tarifaAntiga), 0);
 
     return {
       cooperadosAfetados: afetados.length,
-      valorMedioAnterior: round5(valorMedioAnterior),
-      valorMedioNovo: round5(valorMedioNovo),
+      valorMedioAnterior: round5(tarifaAntiga),
+      valorMedioNovo: round5(tarifaNova),
       fatorReajuste: round5(fatorReajuste),
       impactoMensalTotal: round5(impactoMensalTotal),
       percentualAplicado: Number(tarifa.percentualAplicado),
       contratos: afetados.map(c => ({
-        cooperadoId: c.id,
-        nome: c.nomeCompleto,
-        kwhContrato: Number(c.cotaKwhMensal ?? 0),
-        valorAnterior: round5(Number(c.cotaKwhMensal ?? 0) * tarifaAntiga),
-        valorNovo: round5(Number(c.cotaKwhMensal ?? 0) * tarifaNova),
-        impacto: round5(Number(c.cotaKwhMensal ?? 0) * (tarifaNova - tarifaAntiga)),
+        cooperadoId: c.cooperado.id,
+        nome: c.cooperado.nomeCompleto,
+        kwhContrato: c.kwh,
+        valorAnterior: round5(c.kwh * tarifaAntiga),
+        valorNovo: round5(c.kwh * tarifaNova),
+        impacto: round5(c.kwh * (tarifaNova - tarifaAntiga)),
       })),
     };
   }
@@ -548,6 +560,22 @@ export class MotorPropostaService {
     const simulacao = await this.simularReajuste(dto);
     const tarifa = await this.prisma.tarifaConcessionaria.findUnique({ where: { id: dto.tarifaId } });
     if (!tarifa) throw new Error('Tarifa não encontrada');
+
+    // Marcar contratos dos cooperados afetados com data e índice do reajuste
+    const indiceLabel = `${dto.indiceUtilizado} ${dto.percentualIndice}%`;
+    const cooperadoIds = simulacao.contratos.map((c: any) => c.cooperadoId);
+    if (cooperadoIds.length > 0) {
+      await this.prisma.contrato.updateMany({
+        where: {
+          cooperadoId: { in: cooperadoIds },
+          status: 'ATIVO',
+        },
+        data: {
+          ultimoReajusteEm: new Date(),
+          ultimoReajusteIndice: indiceLabel,
+        },
+      });
+    }
 
     return this.prisma.historicoReajuste.create({
       data: {

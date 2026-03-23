@@ -35,7 +35,7 @@ import { RolesGuard } from './auth/roles.guard';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     ScheduleModule.forRoot(),
     CooperadosModule,
     UcsModule,

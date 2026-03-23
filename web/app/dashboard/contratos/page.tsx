@@ -19,6 +19,7 @@ import Link from 'next/link';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
   PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -45,11 +46,13 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function ContratosPage() {
+  const { tipoMembro } = useTipoParceiro();
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [dialogAberto, setDialogAberto] = useState(false);
   const [erro, setErro] = useState('');
+  const [filtroReajuste, setFiltroReajuste] = useState(false);
 
   useEffect(() => {
     api.get<Contrato[]>('/contratos')
@@ -70,16 +73,31 @@ export default function ContratosPage() {
     }
   }
 
+  const trintaDiasAtras = new Date();
+  trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+  const contratosFiltrados = filtroReajuste
+    ? contratos.filter((c: any) => c.ultimoReajusteEm && new Date(c.ultimoReajusteEm) >= trintaDiasAtras)
+    : contratos;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Contratos</h2>
-        <Link href="/dashboard/contratos/novo">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Contrato
+        <div className="flex items-center gap-2">
+          <Button
+            variant={filtroReajuste ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setFiltroReajuste(!filtroReajuste)}
+          >
+            Reajustados recentemente
           </Button>
-        </Link>
+          <Link href="/dashboard/contratos/novo">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Contrato
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {erro && <p className="text-sm text-red-500 mb-4">{erro}</p>}
@@ -95,7 +113,7 @@ export default function ContratosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Número</TableHead>
-                <TableHead>Cooperado</TableHead>
+                <TableHead>{tipoMembro}</TableHead>
                 <TableHead>UC</TableHead>
                 <TableHead>Usina</TableHead>
                 <TableHead>Desconto (%)</TableHead>
@@ -122,7 +140,7 @@ export default function ContratosPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                contratos.map((c) => (
+                contratosFiltrados.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.numero}</TableCell>
                     <TableCell>{c.cooperado?.nomeCompleto ?? '—'}</TableCell>
@@ -130,9 +148,14 @@ export default function ContratosPage() {
                     <TableCell>{c.usina?.nome ?? '—'}</TableCell>
                     <TableCell>{c.percentualDesconto}%</TableCell>
                     <TableCell>
-                      <Badge className={statusClasses[c.status]}>
-                        {statusLabel[c.status]}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge className={statusClasses[c.status]}>
+                          {statusLabel[c.status]}
+                        </Badge>
+                        {(c as any).ultimoReajusteEm && new Date((c as any).ultimoReajusteEm) >= trintaDiasAtras && (
+                          <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Reajustado</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {new Date(c.dataInicio).toLocaleDateString('pt-BR')}

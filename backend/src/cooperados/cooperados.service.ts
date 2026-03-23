@@ -91,6 +91,7 @@ export class CooperadosService {
         usinaVinculada: contrato?.usina?.nome ?? null,
         statusContrato: contrato?.status ?? null,
         kwhContrato: contrato ? Number(contrato.kwhContrato ?? 0) : null,
+        reajusteRecente: contrato?.ultimoReajusteEm ? new Date(contrato.ultimoReajusteEm).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000 : false,
         checklist: `${checklistFeito}/${checklistTotal}`,
         checklistPronto: checklistFeito === checklistTotal,
         checklistItems,

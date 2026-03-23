@@ -273,6 +273,8 @@ model Contrato {
   baseCalculoOverride    String?
   regrasAplicadas        Json?
   cooperativaId          String?
+  ultimoReajusteEm       DateTime?
+  ultimoReajusteIndice   String?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   cobrancas              Cobranca[]

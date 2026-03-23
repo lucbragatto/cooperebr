@@ -5,8 +5,9 @@ import { PrismaService } from '../prisma.service';
 export class UcsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(cooperativaId?: string) {
     return this.prisma.uc.findMany({
+      where: cooperativaId ? { cooperado: { cooperativaId } } : undefined,
       include: { cooperado: true },
       orderBy: { createdAt: 'desc' },
     });

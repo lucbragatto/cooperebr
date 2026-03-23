@@ -35,9 +35,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
-const navItems = [
+// Itens visíveis para SUPER_ADMIN e ADMIN
+const navItemsBase = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
   { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
   { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
   { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
@@ -52,6 +52,11 @@ const navItems = [
   { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
   { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
   { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
+];
+
+// Itens exclusivos SUPER_ADMIN (antes dos demais)
+const superAdminOnlyItems = [
+  { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
 ];
 
 const superAdminItems = [
@@ -165,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {[...(usuario?.perfil === 'SUPER_ADMIN' ? superAdminOnlyItems : []), ...navItemsBase].map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             const displayLabel = label === '__MEMBROS__' ? tipoMembroPlural : label;
             return (
