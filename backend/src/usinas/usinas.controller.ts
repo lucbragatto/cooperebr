@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { UsinasService } from './usinas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,8 +11,8 @@ export class UsinasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get()
-  findAll(@Query('distribuidora') distribuidora?: string) {
-    return this.usinasService.findAll(distribuidora);
+  findAll(@Req() req: any, @Query('distribuidora') distribuidora?: string) {
+    return this.usinasService.findAll(distribuidora, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -27,23 +27,21 @@ export class UsinasController {
     return this.usinasService.gerarListaConcessionaria(id);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post(':id/verificar-espera')
+  verificarEspera(@Param('id') id: string) {
+    return this.usinasService.verificarListaEspera(id);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usinasService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.usinasService.findOne(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
-  create(
-    @Body()
-    body: {
-      nome: string;
-      potenciaKwp: number;
-      cidade: string;
-      estado: string;
-    },
-  ) {
+  create(@Body() body: any) {
     return this.usinasService.create(body);
   }
 

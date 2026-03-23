@@ -67,6 +67,7 @@ export default function UsinasPage() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Potencia (kWp)</TableHead>
                 <TableHead>Capacidade (kWh)</TableHead>
+                <TableHead>Proprietário</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Estado</TableHead>
@@ -77,7 +78,7 @@ export default function UsinasPage() {
               {carregando ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -86,7 +87,7 @@ export default function UsinasPage() {
                 ))
               ) : usinas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
                     Nenhuma usina cadastrada
                   </TableCell>
                 </TableRow>
@@ -98,6 +99,7 @@ export default function UsinasPage() {
                       <TableCell className="font-medium">{u.nome}</TableCell>
                       <TableCell>{Number(u.potenciaKwp).toFixed(2)}</TableCell>
                       <TableCell>{u.capacidadeKwh ? Number(u.capacidadeKwh).toFixed(2) : '—'}</TableCell>
+                      <TableCell>{(u as any).proprietarioNome || '—'}</TableCell>
                       <TableCell>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[st] ?? 'bg-gray-100'}`}>
                           {statusLabels[st] ?? st}

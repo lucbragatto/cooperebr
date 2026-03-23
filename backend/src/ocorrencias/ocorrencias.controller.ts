@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Req } from '@nestjs/common';
 import { OcorrenciasService } from './ocorrencias.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,14 +11,14 @@ export class OcorrenciasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
-  findAll() {
-    return this.ocorrenciasService.findAll();
+  findAll(@Req() req: any) {
+    return this.ocorrenciasService.findAll(req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ocorrenciasService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.ocorrenciasService.findOne(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)

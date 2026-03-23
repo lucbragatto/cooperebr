@@ -56,6 +56,11 @@ const usinaSchema = z.object({
   statusHomologacao: z.enum(['CADASTRADA', 'AGUARDANDO_HOMOLOGACAO', 'HOMOLOGADA', 'EM_PRODUCAO', 'SUSPENSA']),
   distribuidora: z.string().nullable(),
   observacoes: z.string().nullable(),
+  proprietarioNome: z.string().nullable(),
+  proprietarioCpfCnpj: z.string().nullable(),
+  proprietarioTelefone: z.string().nullable(),
+  proprietarioEmail: z.string().nullable(),
+  proprietarioTipo: z.enum(['PF', 'PJ']),
 });
 
 type UsinaFormData = z.infer<typeof usinaSchema>;
@@ -71,6 +76,8 @@ export default function UsinaDetailPage() {
   const [mensagem, setMensagem] = useState('');
   const [lista, setLista] = useState<any>(null);
   const [gerandoLista, setGerandoLista] = useState(false);
+  const [cooperadosAlocados, setCooperadosAlocados] = useState<any[]>([]);
+  const [capacidadeInfo, setCapacidadeInfo] = useState<{usado: number; total: number} | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
     resolver: zodResolver(usinaSchema) as any,
@@ -82,6 +89,18 @@ export default function UsinaDetailPage() {
       .catch(() => setErro('Usina não encontrada.'))
       .finally(() => setCarregando(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!usina) return;
+    api.get(`/usinas/${id}/lista-concessionaria`)
+      .then((r) => {
+        setCooperadosAlocados(r.data.cooperados || []);
+        const total = Number(r.data.usina?.capacidadeKwh || 0);
+        const usado = (r.data.cooperados || []).reduce((acc: number, c: any) => acc + Number(c.kwhContratado || 0), 0);
+        setCapacidadeInfo({ usado, total });
+      })
+      .catch(() => { /* silently ignore */ });
+  }, [usina, id]);
 
   function abrirSheet() {
     if (!usina) return;
@@ -95,6 +114,11 @@ export default function UsinaDetailPage() {
       statusHomologacao: usina.statusHomologacao || 'CADASTRADA',
       distribuidora: (usina as any).distribuidora ?? null,
       observacoes: usina.observacoes || null,
+      proprietarioNome: (usina as any).proprietarioNome ?? null,
+      proprietarioCpfCnpj: (usina as any).proprietarioCpfCnpj ?? null,
+      proprietarioTelefone: (usina as any).proprietarioTelefone ?? null,
+      proprietarioEmail: (usina as any).proprietarioEmail ?? null,
+      proprietarioTipo: (usina as any).proprietarioTipo ?? 'PF',
     });
     setMensagem('');
     setSheetAberto(true);
@@ -110,6 +134,11 @@ export default function UsinaDetailPage() {
         producaoMensalKwh: data.producaoMensalKwh || null,
         observacoes: data.observacoes || null,
         distribuidora: data.distribuidora || null,
+        proprietarioNome: data.proprietarioNome || null,
+        proprietarioCpfCnpj: data.proprietarioCpfCnpj || null,
+        proprietarioTelefone: data.proprietarioTelefone || null,
+        proprietarioEmail: data.proprietarioEmail || null,
+        proprietarioTipo: data.proprietarioTipo,
       });
       setUsina(res);
       setSheetAberto(false);
@@ -177,9 +206,69 @@ export default function UsinaDetailPage() {
               } />
               <Campo label="Data Homologacao" value={usina.dataHomologacao ? new Date(usina.dataHomologacao).toLocaleDateString('pt-BR') : '—'} />
               <Campo label="Inicio Producao" value={usina.dataInicioProducao ? new Date(usina.dataInicioProducao).toLocaleDateString('pt-BR') : '—'} />
+              {(usina as any).proprietarioNome && (
+                <>
+                  <Campo label="Proprietário" value={(usina as any).proprietarioNome} />
+                  <Campo label="CPF/CNPJ Proprietário" value={(usina as any).proprietarioCpfCnpj} />
+                  <Campo label="Tipo" value={(usina as any).proprietarioTipo === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'} />
+                </>
+              )}
               {usina.observacoes && <Campo label="Observacoes" value={usina.observacoes} />}
               <Campo label="Criado em" value={new Date(usina.createdAt).toLocaleString('pt-BR')} />
               <Campo label="Atualizado em" value={new Date(usina.updatedAt).toLocaleString('pt-BR')} />
+            </CardContent>
+          </Card>
+
+          {/* Cooperados Alocados */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">Cooperados Alocados</CardTitle>
+              {capacidadeInfo && capacidadeInfo.total > 0 && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Capacidade utilizada</span>
+                    <span>{capacidadeInfo.usado.toFixed(0)} / {capacidadeInfo.total.toFixed(0)} kWh ({capacidadeInfo.total > 0 ? ((capacidadeInfo.usado / capacidadeInfo.total) * 100).toFixed(1) : 0}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className="bg-green-600 h-2.5 rounded-full transition-all"
+                      style={{ width: `${Math.min((capacidadeInfo.usado / capacidadeInfo.total) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>UC</TableHead>
+                    <TableHead>kWh Contratado</TableHead>
+                    <TableHead>% Usina</TableHead>
+                    <TableHead>Data Adesão</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cooperadosAlocados.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-gray-400 py-6">
+                        Nenhum cooperado alocado nesta usina
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    cooperadosAlocados.map((c: any, i: number) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
+                        <TableCell>{c.numeroUC}</TableCell>
+                        <TableCell>{c.kwhContratado}</TableCell>
+                        <TableCell>{c.percentualUsina}%</TableCell>
+                        <TableCell>{new Date(c.dataAdesao).toLocaleDateString('pt-BR')}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
 
@@ -325,6 +414,31 @@ export default function UsinaDetailPage() {
             <div>
               <label className={lbl}>Observacoes</label>
               <textarea className={cls} rows={3} {...register('observacoes')} placeholder="Notas sobre a usina" />
+            </div>
+            <hr className="my-2" />
+            <p className="text-xs font-semibold text-gray-600">Proprietário</p>
+            <div>
+              <label className={lbl}>Tipo</label>
+              <select className={selCls} {...register('proprietarioTipo')}>
+                <option value="PF">Pessoa Física</option>
+                <option value="PJ">Pessoa Jurídica</option>
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Nome</label>
+              <input className={cls} {...register('proprietarioNome')} />
+            </div>
+            <div>
+              <label className={lbl}>CPF/CNPJ</label>
+              <input className={cls} {...register('proprietarioCpfCnpj')} />
+            </div>
+            <div>
+              <label className={lbl}>Telefone</label>
+              <input className={cls} {...register('proprietarioTelefone')} />
+            </div>
+            <div>
+              <label className={lbl}>Email</label>
+              <input className={cls} {...register('proprietarioEmail')} />
             </div>
             {mensagem && mensagem.startsWith('Erro') && (
               <p className="text-sm text-red-500">{mensagem}</p>

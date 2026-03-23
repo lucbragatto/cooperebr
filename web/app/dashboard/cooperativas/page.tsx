@@ -1,70 +1,51 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
-import type { Contrato } from '@/types';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Eye, Pencil, Plus, Trash2 } from 'lucide-react';
-import Link from 'next/link';
+import { Plus, Pencil, Trash2, Eye } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 
-const statusClasses: Record<string, string> = {
-  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  EM_APROVACAO: 'bg-blue-100 text-blue-700 border-blue-200',
-  AGUARDANDO_ASSINATURA: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  ASSINATURA_SOLICITADA: 'bg-cyan-100 text-cyan-700 border-cyan-200',
-  APROVADO: 'bg-teal-100 text-teal-700 border-teal-200',
-  ATIVO: 'bg-green-100 text-green-800 border-green-200',
-  SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
-  ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
-  LISTA_ESPERA: 'bg-purple-100 text-purple-800 border-purple-200',
-};
+interface Cooperativa {
+  id: string;
+  nome: string;
+  cnpj: string;
+  email: string | null;
+  telefone: string | null;
+  cidade: string | null;
+  estado: string | null;
+  ativo: boolean;
+  qtdUsinas: number;
+  qtdCooperados: number;
+}
 
-const statusLabel: Record<string, string> = {
-  PENDENTE_ATIVACAO: 'Pendente Ativação',
-  EM_APROVACAO: 'Em Aprovação',
-  AGUARDANDO_ASSINATURA: 'Aguard. Assinatura',
-  ASSINATURA_SOLICITADA: 'Assinatura Solicitada',
-  APROVADO: 'Aprovado',
-  ATIVO: 'Ativo',
-  SUSPENSO: 'Suspenso',
-  ENCERRADO: 'Encerrado',
-  LISTA_ESPERA: 'Lista de Espera',
-};
-
-export default function ContratosPage() {
-  const [contratos, setContratos] = useState<Contrato[]>([]);
+export default function CooperativasPage() {
+  const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [dialogAberto, setDialogAberto] = useState(false);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
-    api.get<Contrato[]>('/contratos')
-      .then((r) => setContratos(r.data))
+    api.get<Cooperativa[]>('/cooperativas')
+      .then((r) => setCooperativas(r.data))
       .finally(() => setCarregando(false));
   }, []);
 
   async function handleExcluir() {
     if (!excluindo) return;
     try {
-      await api.delete(`/contratos/${excluindo}`);
-      setContratos((prev) => prev.filter((c) => c.id !== excluindo));
+      await api.delete(`/cooperativas/${excluindo}`);
+      setCooperativas((prev) => prev.filter((c) => c.id !== excluindo));
       setDialogAberto(false);
       setExcluindo(null);
-      setErro('');
     } catch (e: any) {
       setErro(e?.response?.data?.message || 'Erro ao excluir.');
     }
@@ -73,11 +54,11 @@ export default function ContratosPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Contratos</h2>
-        <Link href="/dashboard/contratos/novo">
+        <h2 className="text-2xl font-bold text-gray-800">Cooperativas</h2>
+        <Link href="/dashboard/cooperativas/nova">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            Novo Contrato
+            Nova Cooperativa
           </Button>
         </Link>
       </div>
@@ -87,61 +68,51 @@ export default function ContratosPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
-            {carregando ? 'Carregando...' : `${contratos.length} registros`}
+            {carregando ? 'Carregando...' : `${cooperativas.length} registros`}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Número</TableHead>
-                <TableHead>Cooperado</TableHead>
-                <TableHead>UC</TableHead>
-                <TableHead>Usina</TableHead>
-                <TableHead>Desconto (%)</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data Início</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>CNPJ</TableHead>
+                <TableHead>Cidade/UF</TableHead>
+                <TableHead>Usinas</TableHead>
+                <TableHead>Cooperados Ativos</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {carregando ? (
-                Array.from({ length: 5 }).map((_, i) => (
+                Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
-              ) : contratos.length === 0 ? (
+              ) : cooperativas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
-                    Nenhum contrato cadastrado
+                  <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                    Nenhuma cooperativa cadastrada
                   </TableCell>
                 </TableRow>
               ) : (
-                contratos.map((c) => (
+                cooperativas.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.numero}</TableCell>
-                    <TableCell>{c.cooperado?.nomeCompleto ?? '—'}</TableCell>
-                    <TableCell>{c.uc?.numero ?? '—'}</TableCell>
-                    <TableCell>{c.usina?.nome ?? '—'}</TableCell>
-                    <TableCell>{c.percentualDesconto}%</TableCell>
-                    <TableCell>
-                      <Badge className={statusClasses[c.status]}>
-                        {statusLabel[c.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(c.dataInicio).toLocaleDateString('pt-BR')}
-                    </TableCell>
+                    <TableCell className="font-medium">{c.nome}</TableCell>
+                    <TableCell>{c.cnpj}</TableCell>
+                    <TableCell>{c.cidade ? `${c.cidade}/${c.estado}` : '—'}</TableCell>
+                    <TableCell>{c.qtdUsinas}</TableCell>
+                    <TableCell>{c.qtdCooperados}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Link href={`/dashboard/contratos/${c.id}`}>
+                      <Link href={`/dashboard/cooperativas/${c.id}`}>
                         <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
                       </Link>
-                      <Link href={`/dashboard/contratos/${c.id}`}>
+                      <Link href={`/dashboard/cooperativas/${c.id}/editar`}>
                         <Button variant="ghost" size="sm"><Pencil className="h-4 w-4" /></Button>
                       </Link>
                       <Button
@@ -166,7 +137,7 @@ export default function ContratosPage() {
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
             <DialogDescription>
-              Tem certeza que deseja excluir este contrato? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir esta cooperativa? Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           {erro && <p className="text-sm text-red-500">{erro}</p>}

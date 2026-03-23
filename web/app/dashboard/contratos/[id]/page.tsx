@@ -16,15 +16,23 @@ import {
 } from '@/components/ui/sheet';
 
 const statusClasses: Record<string, string> = {
-  PENDENTE_ATIVACAO: 'bg-blue-100 text-blue-800 border-blue-200',
+  PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  EM_APROVACAO: 'bg-blue-100 text-blue-700 border-blue-200',
+  AGUARDANDO_ASSINATURA: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  ASSINATURA_SOLICITADA: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  APROVADO: 'bg-teal-100 text-teal-700 border-teal-200',
   ATIVO: 'bg-green-100 text-green-800 border-green-200',
-  SUSPENSO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  SUSPENSO: 'bg-orange-100 text-orange-800 border-orange-200',
   ENCERRADO: 'bg-red-100 text-red-800 border-red-200',
   LISTA_ESPERA: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 const statusLabel: Record<string, string> = {
-  PENDENTE_ATIVACAO: 'Pendente Ativacao',
+  PENDENTE_ATIVACAO: 'Pendente Ativação',
+  EM_APROVACAO: 'Em Aprovação',
+  AGUARDANDO_ASSINATURA: 'Aguard. Assinatura',
+  ASSINATURA_SOLICITADA: 'Assinatura Solicitada',
+  APROVADO: 'Aprovado',
   ATIVO: 'Ativo',
   SUSPENSO: 'Suspenso',
   ENCERRADO: 'Encerrado',
@@ -48,7 +56,7 @@ const contratoSchema = z.object({
   percentualDesconto: z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
   descontoOverride: z.coerce.number().min(0).max(100).nullable(),
   dataFim: z.string().optional(),
-  status: z.enum(['PENDENTE_ATIVACAO', 'ATIVO', 'SUSPENSO', 'ENCERRADO', 'LISTA_ESPERA']),
+  status: z.enum(['PENDENTE_ATIVACAO', 'EM_APROVACAO', 'AGUARDANDO_ASSINATURA', 'ASSINATURA_SOLICITADA', 'APROVADO', 'ATIVO', 'SUSPENSO', 'ENCERRADO', 'LISTA_ESPERA']),
 });
 
 type ContratoFormData = z.infer<typeof contratoSchema>;
@@ -198,7 +206,11 @@ export default function ContratoDetailPage() {
             <div>
               <label className={lbl}>Status *</label>
               <select className={`${cls} bg-white`} {...register('status')}>
-                <option value="PENDENTE_ATIVACAO">Pendente Ativacao</option>
+                <option value="PENDENTE_ATIVACAO">Pendente Ativação</option>
+                <option value="EM_APROVACAO">Em Aprovação</option>
+                <option value="AGUARDANDO_ASSINATURA">Aguard. Assinatura</option>
+                <option value="ASSINATURA_SOLICITADA">Assinatura Solicitada</option>
+                <option value="APROVADO">Aprovado</option>
                 <option value="ATIVO">Ativo</option>
                 <option value="SUSPENSO">Suspenso</option>
                 <option value="ENCERRADO">Encerrado</option>

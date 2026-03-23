@@ -14,19 +14,23 @@ export class ContratosService {
     private usinasService: UsinasService,
   ) {}
 
-  async findAll() {
+  async findAll(cooperativaId?: string) {
     return this.prisma.contrato.findMany({
+      where: cooperativaId ? { cooperativaId } : undefined,
       include: { cooperado: true, uc: true, usina: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, cooperativaId?: string) {
     const contrato = await this.prisma.contrato.findUnique({
       where: { id },
       include: { cooperado: true, uc: true, usina: true },
     });
     if (!contrato) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+    if (cooperativaId && contrato.cooperativaId !== cooperativaId) {
+      throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+    }
     return contrato;
   }
 
@@ -202,7 +206,7 @@ export class ContratosService {
     percentualDesconto: number;
     kwhContratoAnual: number;
     kwhContrato: number;
-    status: 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
+    status: string;
     modeloCobrancaOverride: string | null;
   }>) {
     if (data.modeloCobrancaOverride !== undefined) {

@@ -1,18 +1,20 @@
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateContratoDto {
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   cooperadoId!: string;
 
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   ucId!: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   usinaId?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   planoId?: string;
 
   @IsDateString()

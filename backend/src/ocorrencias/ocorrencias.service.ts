@@ -5,19 +5,23 @@ import { PrismaService } from '../prisma.service';
 export class OcorrenciasService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(cooperativaId?: string) {
     return this.prisma.ocorrencia.findMany({
+      where: cooperativaId ? { cooperativaId } : undefined,
       include: { cooperado: true, uc: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, cooperativaId?: string) {
     const ocorrencia = await this.prisma.ocorrencia.findUnique({
       where: { id },
       include: { cooperado: true, uc: true },
     });
     if (!ocorrencia) throw new NotFoundException(`Ocorrência com id ${id} não encontrada`);
+    if (cooperativaId && ocorrencia.cooperativaId !== cooperativaId) {
+      throw new NotFoundException(`Ocorrência com id ${id} não encontrada`);
+    }
     return ocorrencia;
   }
 
@@ -32,7 +36,7 @@ export class OcorrenciasService {
   async create(data: {
     cooperadoId: string;
     ucId?: string;
-    tipo: 'FALTA_ENERGIA' | 'MEDICAO_INCORRETA' | 'PROBLEMA_FATURA' | 'SOLICITACAO' | 'OUTROS';
+    tipo: 'FALTA_ENERGIA' | 'MEDICAO_INCORRETA' | 'PROBLEMA_FATURA' | 'SOLICITACAO' | 'FALHA_USINA' | 'OUTROS';
     descricao: string;
     prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
   }) {
@@ -41,7 +45,7 @@ export class OcorrenciasService {
 
   async update(id: string, data: Partial<{
     ucId: string;
-    tipo: 'FALTA_ENERGIA' | 'MEDICAO_INCORRETA' | 'PROBLEMA_FATURA' | 'SOLICITACAO' | 'OUTROS';
+    tipo: 'FALTA_ENERGIA' | 'MEDICAO_INCORRETA' | 'PROBLEMA_FATURA' | 'SOLICITACAO' | 'FALHA_USINA' | 'OUTROS';
     descricao: string;
     status: 'ABERTA' | 'EM_ANDAMENTO' | 'RESOLVIDA' | 'CANCELADA';
     prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';

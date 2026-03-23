@@ -22,6 +22,7 @@
     "test:api": "ts-node -r dotenv/config --project tsconfig.seed.json test/api-test.ts"
   },
   "dependencies": {
+    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
@@ -31,6 +32,7 @@
     "@prisma/client": "^6.19.2",
     "@supabase/supabase-js": "^2.99.1",
     "@tensorflow/tfjs-node": "^4.22.0",
+    "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
     "canvas": "^3.2.1",
     "class-transformer": "^0.5.1",

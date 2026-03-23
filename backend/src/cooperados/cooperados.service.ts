@@ -13,8 +13,9 @@ export class CooperadosService {
     private usinasService: UsinasService,
   ) {}
 
-  async findAll() {
+  async findAll(cooperativaId?: string) {
     const cooperados = await this.prisma.cooperado.findMany({
+      where: cooperativaId ? { cooperativaId } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
         contratos: {
@@ -82,7 +83,7 @@ export class CooperadosService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, cooperativaId?: string) {
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id },
       include: {
@@ -100,6 +101,9 @@ export class CooperadosService {
       },
     });
     if (!cooperado) throw new NotFoundException(`Cooperado com id ${id} não encontrado`);
+    if (cooperativaId && cooperado.cooperativaId !== cooperativaId) {
+      throw new NotFoundException(`Cooperado com id ${id} não encontrado`);
+    }
     return cooperado;
   }
 
@@ -333,11 +337,12 @@ export class CooperadosService {
   }
 
   /** Fila de espera: cooperados APROVADO sem contrato ATIVO (FIFO por updatedAt) */
-  async filaEspera() {
+  async filaEspera(cooperativaId?: string) {
     const cooperados = await this.prisma.cooperado.findMany({
       where: {
         status: 'APROVADO',
         contratos: { none: { status: 'ATIVO' } },
+        ...(cooperativaId ? { cooperativaId } : {}),
       },
       include: {
         ucs: { select: { id: true, numero: true, distribuidora: true } },

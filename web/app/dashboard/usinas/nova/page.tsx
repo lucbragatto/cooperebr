@@ -19,6 +19,11 @@ export default function NovaUsinaPage() {
     capacidadeKwh: '',
     cidade: '',
     estado: '',
+    proprietarioNome: '',
+    proprietarioCpfCnpj: '',
+    proprietarioTelefone: '',
+    proprietarioEmail: '',
+    proprietarioTipo: 'PF',
   });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -52,13 +57,19 @@ export default function NovaUsinaPage() {
 
     setSalvando(true);
     try {
-      await api.post('/usinas', {
+      const payload: any = {
         nome: form.nome,
         potenciaKwp: potencia,
         capacidadeKwh: capacidade,
         cidade: form.cidade,
         estado: form.estado,
-      });
+      };
+      if (form.proprietarioNome) payload.proprietarioNome = form.proprietarioNome;
+      if (form.proprietarioCpfCnpj) payload.proprietarioCpfCnpj = form.proprietarioCpfCnpj;
+      if (form.proprietarioTelefone) payload.proprietarioTelefone = form.proprietarioTelefone;
+      if (form.proprietarioEmail) payload.proprietarioEmail = form.proprietarioEmail;
+      if (form.proprietarioTipo) payload.proprietarioTipo = form.proprietarioTipo;
+      await api.post('/usinas', payload);
       setSucesso('Usina cadastrada com sucesso!');
       setTimeout(() => router.push('/dashboard/usinas'), 1000);
     } catch {
@@ -81,7 +92,7 @@ export default function NovaUsinaPage() {
         <h2 className="text-2xl font-bold text-gray-800">Nova Usina</h2>
       </div>
 
-      <Card className="max-w-lg">
+      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
             Dados da usina
@@ -151,6 +162,37 @@ export default function NovaUsinaPage() {
                   required
                 />
               </div>
+            </div>
+
+            <hr className="my-2" />
+            <p className="text-sm font-medium text-gray-600">Proprietário da Usina</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Tipo</Label>
+                <select className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" value={form.proprietarioTipo} onChange={(e) => set('proprietarioTipo', e.target.value)}>
+                  <option value="PF">Pessoa Física</option>
+                  <option value="PJ">Pessoa Jurídica</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Nome do Proprietário</Label>
+                <Input value={form.proprietarioNome} onChange={(e) => set('proprietarioNome', e.target.value)} placeholder="Nome completo" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>CPF/CNPJ</Label>
+                <Input value={form.proprietarioCpfCnpj} onChange={(e) => set('proprietarioCpfCnpj', e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Telefone</Label>
+                <Input value={form.proprietarioTelefone} onChange={(e) => set('proprietarioTelefone', e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input value={form.proprietarioEmail} onChange={(e) => set('proprietarioEmail', e.target.value)} type="email" />
             </div>
 
             {erro && <p className="text-sm text-red-600">{erro}</p>}

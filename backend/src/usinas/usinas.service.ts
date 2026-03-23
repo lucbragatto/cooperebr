@@ -5,9 +5,13 @@ import { PrismaService } from '../prisma.service';
 export class UsinasService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(distribuidora?: string) {
+  async findAll(distribuidora?: string, cooperativaId?: string) {
+    const where: any = {};
+    if (distribuidora) where.distribuidora = distribuidora;
+    if (cooperativaId) where.cooperativaId = cooperativaId;
     return this.prisma.usina.findMany({
-      where: distribuidora ? { distribuidora } : undefined,
+      where: Object.keys(where).length > 0 ? where : undefined,
+      include: { proprietarioCooperado: { select: { id: true, nomeCompleto: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -84,9 +88,15 @@ export class UsinasService {
     }
   }
 
-  async findOne(id: string) {
-    const usina = await this.prisma.usina.findUnique({ where: { id } });
+  async findOne(id: string, cooperativaId?: string) {
+    const usina = await this.prisma.usina.findUnique({
+      where: { id },
+      include: { proprietarioCooperado: { select: { id: true, nomeCompleto: true } } },
+    });
     if (!usina) throw new NotFoundException('Usina não encontrada');
+    if (cooperativaId && usina.cooperativaId !== cooperativaId) {
+      throw new NotFoundException('Usina não encontrada');
+    }
     return usina;
   }
 
@@ -100,6 +110,14 @@ export class UsinasService {
     statusHomologacao?: string;
     observacoes?: string;
     modeloCobrancaOverride?: string | null;
+    distribuidora?: string;
+    cooperativaId?: string;
+    proprietarioNome?: string;
+    proprietarioCpfCnpj?: string;
+    proprietarioTelefone?: string;
+    proprietarioEmail?: string;
+    proprietarioTipo?: string;
+    proprietarioCooperadoId?: string;
   }) {
     return this.prisma.usina.create({ data: data as any });
   }
@@ -116,6 +134,12 @@ export class UsinasService {
     dataInicioProducao: string;
     observacoes: string;
     modeloCobrancaOverride: string | null;
+    proprietarioNome: string | null;
+    proprietarioCpfCnpj: string | null;
+    proprietarioTelefone: string | null;
+    proprietarioEmail: string | null;
+    proprietarioTipo: string;
+    proprietarioCooperadoId: string | null;
   }>) {
     const usina = await this.prisma.usina.findUnique({ where: { id } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
@@ -185,6 +209,12 @@ export class UsinasService {
       }
     }
 
+    // Proprietário
+    const propFields = ['proprietarioNome', 'proprietarioCpfCnpj', 'proprietarioTelefone', 'proprietarioEmail', 'proprietarioTipo', 'proprietarioCooperadoId'] as const;
+    for (const f of propFields) {
+      if ((data as any)[f] !== undefined) updateData[f] = (data as any)[f];
+    }
+
     return this.prisma.usina.update({ where: { id }, data: updateData });
   }
 
@@ -198,6 +228,74 @@ export class UsinasService {
       );
     }
     return this.prisma.usina.delete({ where: { id } });
+  }
+
+  async verificarListaEspera(usinaId: string) {
+    const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
+    if (!usina || !usina.capacidadeKwh) return { promovidos: [] };
+
+    const capacidadeAnual = Number(usina.capacidadeKwh);
+
+    // Calculate current usage
+    const contratosAtivos = await this.prisma.contrato.findMany({
+      where: { usinaId, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+      select: { kwhContratoAnual: true, kwhContrato: true, percentualUsina: true },
+    });
+    const somaPercentual = contratosAtivos.reduce((acc: number, c: any) => {
+      if (c.percentualUsina) return acc + Number(c.percentualUsina);
+      const anual = c.kwhContratoAnual ? Number(c.kwhContratoAnual) : Number(c.kwhContrato ?? 0) * 12;
+      return acc + (capacidadeAnual > 0 ? (anual / capacidadeAnual) * 100 : 0);
+    }, 0);
+    const disponivel = 100 - somaPercentual;
+    const kwhDisponivel = (disponivel / 100) * capacidadeAnual;
+
+    // Check waiting list
+    const espera = await this.prisma.listaEspera.findMany({
+      where: { cooperativaId: usina.cooperativaId, status: 'AGUARDANDO' },
+      include: { cooperado: true, contrato: true },
+      orderBy: { posicao: 'asc' },
+    });
+
+    const promovidos: string[] = [];
+    let kwhRestante = kwhDisponivel;
+
+    for (const item of espera) {
+      const kwhNecessario = Number(item.kwhNecessario);
+      if (kwhNecessario <= kwhRestante) {
+        // Promote
+        await this.prisma.listaEspera.update({
+          where: { id: item.id },
+          data: { status: 'PROMOVIDO' },
+        });
+        if (item.contratoId) {
+          await this.prisma.contrato.update({
+            where: { id: item.contratoId },
+            data: { status: 'PENDENTE_ATIVACAO', usinaId },
+          });
+        }
+        // Update cooperado status
+        await this.prisma.cooperado.update({
+          where: { id: item.cooperadoId },
+          data: { status: 'AGUARDANDO_CONCESSIONARIA' },
+        });
+        // Create notification
+        await this.prisma.notificacao.create({
+          data: {
+            tipo: 'LISTA_ESPERA_PROMOVIDO',
+            titulo: 'Vaga disponível na usina',
+            mensagem: `${item.cooperado.nomeCompleto} foi promovido da lista de espera para a usina ${usina.nome}.`,
+            cooperadoId: item.cooperadoId,
+            cooperativaId: usina.cooperativaId,
+          },
+        });
+        promovidos.push(item.cooperado.nomeCompleto);
+        kwhRestante -= kwhNecessario;
+      } else {
+        break; // FIFO — stop at first that doesn't fit
+      }
+    }
+
+    return { promovidos, kwhDisponivel, kwhRestante };
   }
 
   async gerarListaConcessionaria(usinaId: string) {

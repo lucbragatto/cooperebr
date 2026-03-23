@@ -59,7 +59,8 @@
       "Bash(cmd //c \"taskkill /PID 10860 /F\" 2>&1)",
       "Bash(cmd //c \"taskkill /PID 716 /F\" 2>&1)",
       "Bash(taskkill //F //PID 8488)",
-      "Bash(taskkill //F //PID 4744)"
+      "Bash(taskkill //F //PID 4744)",
+      "Bash(taskkill:*)"
     ]
   }
 }
