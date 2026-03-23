@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
+import Step1Dados from './steps/Step1Dados';
+import Step2Usina from './steps/Step2Usina';
+import Step3Espera from './steps/Step3Espera';
+import Step4PlanoSaas from './steps/Step4PlanoSaas';
+import Step5Cobranca from './steps/Step5Cobranca';
 import Step6Asaas from './steps/Step6Asaas';
 import Step7Banco from './steps/Step7Banco';
 import Step8Documentos from './steps/Step8Documentos';
@@ -56,31 +61,16 @@ function Stepper({ etapa }: { etapa: number }) {
   );
 }
 
-// Placeholder component for steps 1-5 (to be replaced by the other agent's implementation)
-function StepPlaceholder({ step, label }: { step: number; label: string }) {
-  return (
-    <div className="p-8 text-center border-2 border-dashed border-neutral-300 rounded-lg">
-      <p className="text-neutral-400 text-sm">Passo {step}: {label}</p>
-      <p className="text-xs text-neutral-300 mt-2">Implementado em outro modulo</p>
-    </div>
-  );
-}
-
 export default function NovoParceiro() {
   const router = useRouter();
   const [etapa, setEtapa] = useState(0);
 
-  // Steps 1-5 data (to be populated by other agent's components)
-  const [dadosParceiro, setDadosParceiro] = useState<any>({
-    nome: '', tipoParceiro: 'COOPERATIVA', cnpj: '', email: '', telefone: '',
-    endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
-  });
-  const [dadosUsina, setDadosUsina] = useState<any>({
-    nome: '', potenciaKwp: '', cidade: '', estado: '', statusHomologacao: 'CADASTRADA',
-  });
-  const [dadosListaEspera, setDadosListaEspera] = useState<any>({ membros: 0 });
-  const [dadosPlanoSaas, setDadosPlanoSaas] = useState<any>({ id: '', nome: '', valor: 0 });
-  const [dadosModeloCobranca, setDadosModeloCobranca] = useState<any>({ tipo: '', detalhes: '' });
+  // Steps 1-5 data — updated only on step submit (not per keystroke)
+  const [dadosParceiro, setDadosParceiro] = useState<any>({});
+  const [dadosUsina, setDadosUsina] = useState<any>({});
+  const [dadosListaEspera, setDadosListaEspera] = useState<any>({});
+  const [dadosPlanoSaas, setDadosPlanoSaas] = useState<any>({});
+  const [dadosModeloCobranca, setDadosModeloCobranca] = useState<any>({});
 
   // Steps 6-9 data
   const [dadosAsaas, setDadosAsaas] = useState({
@@ -126,6 +116,10 @@ export default function NovoParceiro() {
     setDadosDocumentos((prev) => ({ ...prev, ...partial }));
   }
 
+  function avancar() {
+    setEtapa((e) => Math.min(8, e + 1));
+  }
+
   async function handleAtivarParceiro() {
     // 1. Criar cooperativa
     const { data: cooperativa } = await api.post('/cooperativas', {
@@ -135,12 +129,18 @@ export default function NovoParceiro() {
     const cooperativaId = cooperativa.id;
 
     // 2. Criar usina se configurada
-    if (dadosUsina.nome) {
+    if (dadosUsina.modo === 'nova' && dadosUsina.nome) {
       await api.post('/usinas', {
-        ...dadosUsina,
+        nome: dadosUsina.nome,
         potenciaKwp: Number(dadosUsina.potenciaKwp) || 0,
+        cidade: dadosUsina.cidade,
+        estado: dadosUsina.estado,
+        distribuidora: dadosUsina.distribuidora,
+        statusHomologacao: dadosUsina.statusHomologacao,
         cooperativaId,
       });
+    } else if (dadosUsina.modo === 'existente' && dadosUsina.usinaId) {
+      await api.put(`/usinas/${dadosUsina.usinaId}`, { cooperativaId });
     }
 
     // 3. Configurar Asaas se tem API key
@@ -177,17 +177,61 @@ export default function NovoParceiro() {
     if (dadosPlanoSaas.id) {
       await api.put(`/cooperativas/${cooperativaId}`, {
         planoSaasId: dadosPlanoSaas.id,
+        diaVencimentoSaas: dadosPlanoSaas.diaVencimento,
+        statusSaas: dadosPlanoSaas.statusInicial,
+      });
+    }
+
+    // 6. Configurar modelo de cobrança se selecionado
+    if (dadosModeloCobranca.tipo) {
+      await api.put(`/cooperativas/${cooperativaId}`, {
+        modeloCobranca: dadosModeloCobranca.tipo,
+        valorFixo: dadosModeloCobranca.valorFixo ? Number(dadosModeloCobranca.valorFixo) : undefined,
+        valorKwh: dadosModeloCobranca.valorKwh ? Number(dadosModeloCobranca.valorKwh) : undefined,
+        percentualDesconto: dadosModeloCobranca.percentualDesconto ? Number(dadosModeloCobranca.percentualDesconto) : undefined,
+        descontoPadrao: dadosModeloCobranca.descontoPadrao ? Number(dadosModeloCobranca.descontoPadrao) : undefined,
+        multaAtraso: dadosModeloCobranca.multaAtraso ? Number(dadosModeloCobranca.multaAtraso) : undefined,
+        jurosDiarios: dadosModeloCobranca.jurosDiarios ? Number(dadosModeloCobranca.jurosDiarios) : undefined,
       });
     }
   }
 
   function renderStep() {
     switch (etapa) {
-      case 0: return <StepPlaceholder step={1} label="Dados do Parceiro" />;
-      case 1: return <StepPlaceholder step={2} label="Usina" />;
-      case 2: return <StepPlaceholder step={3} label="Lista de Espera" />;
-      case 3: return <StepPlaceholder step={4} label="Plano SaaS" />;
-      case 4: return <StepPlaceholder step={5} label="Modelo de Cobranca" />;
+      case 0:
+        return (
+          <Step1Dados
+            defaultValues={dadosParceiro}
+            onSubmit={(dados) => { setDadosParceiro(dados); avancar(); }}
+          />
+        );
+      case 1:
+        return (
+          <Step2Usina
+            defaultValues={dadosUsina}
+            onSubmit={(dados) => { setDadosUsina(dados); avancar(); }}
+          />
+        );
+      case 2:
+        return (
+          <Step3Espera
+            onSubmit={(dados) => { setDadosListaEspera(dados); avancar(); }}
+          />
+        );
+      case 3:
+        return (
+          <Step4PlanoSaas
+            defaultValues={dadosPlanoSaas}
+            onSubmit={(dados) => { setDadosPlanoSaas(dados); avancar(); }}
+          />
+        );
+      case 4:
+        return (
+          <Step5Cobranca
+            defaultValues={dadosModeloCobranca}
+            onSubmit={(dados) => { setDadosModeloCobranca(dados); avancar(); }}
+          />
+        );
       case 5: return <Step6Asaas data={dadosAsaas} onChange={updateAsaas} />;
       case 6: return <Step7Banco data={dadosBanco} onChange={updateBanco} />;
       case 7: return <Step8Documentos data={dadosDocumentos} onChange={updateDocumentos} />;
@@ -211,6 +255,10 @@ export default function NovoParceiro() {
     }
   }
 
+  // Steps 1-5 have their own "Próximo" button inside the component
+  // Steps 6-8 use the external navigation buttons
+  const showExternalNav = etapa >= 5 && etapa < 8;
+
   return (
     <div className="max-w-3xl mx-auto p-6">
       <div className="flex items-center justify-between mb-4">
@@ -226,21 +274,23 @@ export default function NovoParceiro() {
         {renderStep()}
       </div>
 
-      {etapa < 8 && (
-        <div className="flex justify-between mt-6">
+      {/* Back button always available (except step 0), external Next only for steps 6-8 */}
+      {etapa > 0 && (
+        <div className={`flex ${showExternalNav ? 'justify-between' : 'justify-start'} mt-6`}>
           <button
             onClick={() => setEtapa((e) => Math.max(0, e - 1))}
-            disabled={etapa === 0}
-            className="px-5 py-2.5 text-sm font-medium text-neutral-600 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 text-sm font-medium text-neutral-600 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50"
           >
             Anterior
           </button>
-          <button
-            onClick={() => setEtapa((e) => Math.min(8, e + 1))}
-            className="px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
-          >
-            {etapa === 7 ? 'Revisar' : 'Proximo'}
-          </button>
+          {showExternalNav && (
+            <button
+              onClick={() => setEtapa((e) => Math.min(8, e + 1))}
+              className="px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+            >
+              {etapa === 7 ? 'Revisar' : 'Proximo'}
+            </button>
+          )}
         </div>
       )}
     </div>
