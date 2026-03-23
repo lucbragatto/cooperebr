@@ -1,6 +1,8 @@
-import { Controller, Post, Body, Get, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, Logger, Req } from '@nestjs/common';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
+import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
+import { WhatsappMlmService } from './whatsapp-mlm.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -16,6 +18,8 @@ export class WhatsappFaturaController {
   constructor(
     private readonly service: WhatsappFaturaService,
     private readonly bot: WhatsappBotService,
+    private readonly cobrancaService: WhatsappCobrancaService,
+    private readonly mlmService: WhatsappMlmService,
     private readonly sender: WhatsappSenderService,
     private readonly prisma: PrismaService,
   ) {}
@@ -41,7 +45,6 @@ export class WhatsappFaturaController {
     },
   ) {
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);
-    // Processar de forma assíncrona para responder rápido ao Baileys
     this.bot.processarMensagem(body).catch((err) => {
       this.logger.error(`Erro ao processar mensagem: ${err.message}`);
     });
@@ -63,5 +66,38 @@ export class WhatsappFaturaController {
       orderBy: { updatedAt: 'desc' },
       take: 50,
     });
+  }
+
+  // ─── Fluxo 2: Cobrança mensal via WhatsApp ──────────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('disparar-cobrancas')
+  async dispararCobrancas(
+    @Req() req: any,
+    @Body() body: { mesReferencia?: string },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.cobrancaService.enviarCobrancasDoMes(cooperativaId, body.mesReferencia);
+  }
+
+  // ─── Fluxo 3: MLM viral via WhatsApp ─────────────────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('disparar-convites-indicacao')
+  async dispararConvitesIndicacao(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      return { error: 'Cooperativa não identificada' };
+    }
+    return this.mlmService.enviarConvitesIndicacao(cooperativaId);
+  }
+
+  // Endpoint para processar entrada de indicado (chamado pela landing page)
+  @Public()
+  @Post('entrada-indicado')
+  async entradaIndicado(
+    @Body() body: { telefone: string; codigoRef: string },
+  ) {
+    return this.mlmService.processarEntradaIndicado(body.telefone, body.codigoRef);
   }
 }
