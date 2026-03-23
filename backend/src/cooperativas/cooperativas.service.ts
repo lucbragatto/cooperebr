@@ -1,13 +1,25 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { getLabelMembro } from './tipo-parceiro.helper';
 
 @Injectable()
 export class CooperativasService {
   constructor(private prisma: PrismaService) {}
 
+  private enriquecer(cooperativa: any) {
+    const label = getLabelMembro(cooperativa.tipoParceiro);
+    return {
+      ...cooperativa,
+      tipoMembro: label.singular,
+      tipoMembroPlural: label.plural,
+      iconeParceiro: label.icone,
+    };
+  }
+
   async findAll() {
     const cooperativas = await this.prisma.cooperativa.findMany({
       orderBy: { nome: 'asc' },
+      include: { planoSaas: true },
     });
 
     return Promise.all(
@@ -18,7 +30,7 @@ export class CooperativasService {
             where: { cooperativaId: c.id, status: { in: ['ATIVO', 'APROVADO'] } },
           }),
         ]);
-        return { ...c, qtdUsinas, qtdCooperados };
+        return this.enriquecer({ ...c, qtdUsinas, qtdCooperados });
       }),
     );
   }
@@ -26,12 +38,12 @@ export class CooperativasService {
   async findOne(id: string) {
     const cooperativa = await this.prisma.cooperativa.findUnique({
       where: { id },
-      include: { usinas: true },
+      include: { usinas: true, planoSaas: true },
     });
     if (!cooperativa) {
       throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
     }
-    return cooperativa;
+    return this.enriquecer(cooperativa);
   }
 
   async create(data: {
@@ -46,6 +58,7 @@ export class CooperativasService {
     estado?: string;
     cep?: string;
     ativo?: boolean;
+    tipoParceiro?: string;
   }) {
     const existe = await this.prisma.cooperativa.findUnique({
       where: { cnpj: data.cnpj },
@@ -53,7 +66,8 @@ export class CooperativasService {
     if (existe) {
       throw new BadRequestException(`Já existe uma cooperativa com o CNPJ ${data.cnpj}`);
     }
-    return this.prisma.cooperativa.create({ data });
+    const created = await this.prisma.cooperativa.create({ data });
+    return this.enriquecer(created);
   }
 
   async update(
@@ -70,13 +84,46 @@ export class CooperativasService {
       estado: string;
       cep: string;
       ativo: boolean;
+      tipoParceiro: string;
+      planoSaasId: string;
+      diaVencimentoSaas: number;
+      statusSaas: string;
+      multaAtraso: number;
+      jurosDiarios: number;
+      diasCarencia: number;
     }>,
   ) {
     const cooperativa = await this.prisma.cooperativa.findUnique({ where: { id } });
     if (!cooperativa) {
       throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
     }
-    return this.prisma.cooperativa.update({ where: { id }, data });
+    const updated = await this.prisma.cooperativa.update({ where: { id }, data });
+    return this.enriquecer(updated);
+  }
+
+  async getFinanceiro(id: string) {
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id },
+      select: { id: true, nome: true, multaAtraso: true, jurosDiarios: true, diasCarencia: true },
+    });
+    if (!coop) throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
+    return {
+      id: coop.id,
+      nome: coop.nome,
+      multaAtraso: Number(coop.multaAtraso),
+      jurosDiarios: Number(coop.jurosDiarios),
+      diasCarencia: coop.diasCarencia,
+    };
+  }
+
+  async updateFinanceiro(id: string, data: { multaAtraso?: number; jurosDiarios?: number; diasCarencia?: number }) {
+    const coop = await this.prisma.cooperativa.findUnique({ where: { id } });
+    if (!coop) throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
+    return this.prisma.cooperativa.update({
+      where: { id },
+      data,
+      select: { id: true, multaAtraso: true, jurosDiarios: true, diasCarencia: true },
+    });
   }
 
   async remove(id: string) {

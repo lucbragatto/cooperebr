@@ -179,7 +179,7 @@ export default function DashboardPage() {
 
   const alertCards = [
     {
-      label: 'Cooperados prontos pra ativar',
+      label: 'Membros prontos pra ativar',
       value: data?.cooperadosProntos ?? 0,
       icon: Users,
       href: '/dashboard/cooperados?filter=pronto',
@@ -227,7 +227,7 @@ export default function DashboardPage() {
 
   const kpiCards = [
     {
-      label: 'Cooperados Ativos',
+      label: 'Membros Ativos',
       value: data?.totalCooperadosAtivos ?? 0,
       format: (v: number) => v.toString(),
       icon: Users,
@@ -262,7 +262,7 @@ export default function DashboardPage() {
 
   const quickAccessCards = [
     {
-      label: 'Novo Cooperado',
+      label: 'Novo Membro',
       icon: UserPlus,
       href: '/dashboard/cooperados/novo',
       color: 'text-green-600',

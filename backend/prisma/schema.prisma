@@ -21,11 +21,22 @@ model Cooperativa {
   estado                String?
   cep                   String?
   ativo                 Boolean                @default(true)
+  tipoParceiro          String                 @default("COOPERATIVA") // COOPERATIVA | CONSORCIO | ASSOCIACAO | CONDOMINIO
+  // Multa e juros
+  multaAtraso           Decimal                @default(2.0) @db.Decimal(5, 2)
+  jurosDiarios          Decimal                @default(0.033) @db.Decimal(5, 3)
+  diasCarencia          Int                    @default(3)
+  // SaaS
+  planoSaasId           String?
+  planoSaas             PlanoSaas?             @relation(fields: [planoSaasId], references: [id])
+  diaVencimentoSaas     Int                    @default(10)
+  statusSaas            String                 @default("ATIVO") // ATIVO | INADIMPLENTE | SUSPENSO | TRIAL
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   configuracoesCobranca ConfiguracaoCobranca[]
   usinas                Usina[]                @relation("CooperativaUsinas")
   asaasConfig           AsaasConfig?
+  faturasSaas           FaturaSaas[]
 
   @@map("cooperativas")
 }
@@ -940,4 +951,39 @@ model AsaasCobranca {
   @@index([cooperadoId])
   @@index([status])
   @@map("asaas_cobrancas")
+}
+
+model PlanoSaas {
+  id                String        @id @default(cuid())
+  nome              String        // Ex: Starter, Growth, Enterprise
+  descricao         String?
+  taxaSetup         Decimal       @default(0) @db.Decimal(10, 2)
+  mensalidadeBase   Decimal       @default(0) @db.Decimal(10, 2)
+  limiteMembros     Int?          // null = ilimitado
+  percentualReceita Decimal       @default(0) @db.Decimal(5, 2) // % da receita dos membros
+  ativo             Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  cooperativas      Cooperativa[]
+
+  @@map("planos_saas")
+}
+
+model FaturaSaas {
+  id              String       @id @default(cuid())
+  cooperativaId   String
+  cooperativa     Cooperativa  @relation(fields: [cooperativaId], references: [id])
+  competencia     DateTime     // mês de referência
+  valorBase       Decimal      @db.Decimal(10, 2)
+  valorReceita    Decimal      @default(0) @db.Decimal(10, 2) // % sobre receita
+  valorTotal      Decimal      @db.Decimal(10, 2)
+  status          String       @default("PENDENTE") // PENDENTE | PAGO | VENCIDO | CANCELADO
+  dataVencimento  DateTime
+  dataPagamento   DateTime?
+  asaasCobrancaId String?      // ID da cobrança no Asaas, se emitida
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([cooperativaId, competencia])
+  @@map("faturas_saas")
 }

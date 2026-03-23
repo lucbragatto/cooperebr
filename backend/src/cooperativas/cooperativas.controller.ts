@@ -1,13 +1,35 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Request } from '@nestjs/common';
 import { CooperativasService } from './cooperativas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { getTiposDisponiveis } from './tipo-parceiro.helper';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
 @Controller('cooperativas')
 export class CooperativasController {
   constructor(private readonly cooperativasService: CooperativasService) {}
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('tipos')
+  tipos() {
+    return getTiposDisponiveis();
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('financeiro/:id')
+  getFinanceiro(@Param('id') id: string) {
+    return this.cooperativasService.getFinanceiro(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Patch('financeiro/:id')
+  updateFinanceiro(
+    @Param('id') id: string,
+    @Body() body: { multaAtraso?: number; jurosDiarios?: number; diasCarencia?: number },
+  ) {
+    return this.cooperativasService.updateFinanceiro(id, body);
+  }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()
@@ -37,6 +59,7 @@ export class CooperativasController {
       estado?: string;
       cep?: string;
       ativo?: boolean;
+      tipoParceiro?: string;
     },
   ) {
     return this.cooperativasService.create(body);
@@ -59,9 +82,19 @@ export class CooperativasController {
       estado?: string;
       cep?: string;
       ativo?: boolean;
+      tipoParceiro?: string;
     },
   ) {
     return this.cooperativasService.update(id, body);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Patch(':id/plano')
+  vincularPlano(
+    @Param('id') id: string,
+    @Body() body: { planoSaasId: string | null },
+  ) {
+    return this.cooperativasService.update(id, { planoSaasId: body.planoSaasId ?? undefined });
   }
 
   @Roles(SUPER_ADMIN)

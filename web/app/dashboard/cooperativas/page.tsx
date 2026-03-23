@@ -8,10 +8,18 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Eye } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+
+const BADGE_TIPO: Record<string, { label: string; icone: string }> = {
+  COOPERATIVA: { label: 'Cooperativa', icone: '🏢' },
+  CONSORCIO: { label: 'Consórcio', icone: '🤝' },
+  ASSOCIACAO: { label: 'Associação', icone: '🏛️' },
+  CONDOMINIO: { label: 'Condomínio', icone: '🏘️' },
+};
 
 interface Cooperativa {
   id: string;
@@ -22,6 +30,9 @@ interface Cooperativa {
   cidade: string | null;
   estado: string | null;
   ativo: boolean;
+  tipoParceiro: string;
+  tipoMembro: string;
+  tipoMembroPlural: string;
   qtdUsinas: number;
   qtdCooperados: number;
 }
@@ -54,11 +65,11 @@ export default function CooperativasPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Cooperativas</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Parceiros</h2>
         <Link href="/dashboard/cooperativas/nova">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            Nova Cooperativa
+            Novo Parceiro
           </Button>
         </Link>
       </div>
@@ -76,10 +87,11 @@ export default function CooperativasPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Cidade/UF</TableHead>
                 <TableHead>Usinas</TableHead>
-                <TableHead>Cooperados Ativos</TableHead>
+                <TableHead>Membros Ativos</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -87,7 +99,7 @@ export default function CooperativasPage() {
               {carregando ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -96,36 +108,44 @@ export default function CooperativasPage() {
                 ))
               ) : cooperativas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-400 py-8">
-                    Nenhuma cooperativa cadastrada
+                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
+                    Nenhum parceiro cadastrado
                   </TableCell>
                 </TableRow>
               ) : (
-                cooperativas.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.nome}</TableCell>
-                    <TableCell>{c.cnpj}</TableCell>
-                    <TableCell>{c.cidade ? `${c.cidade}/${c.estado}` : '—'}</TableCell>
-                    <TableCell>{c.qtdUsinas}</TableCell>
-                    <TableCell>{c.qtdCooperados}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Link href={`/dashboard/cooperativas/${c.id}`}>
-                        <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
-                      </Link>
-                      <Link href={`/dashboard/cooperativas/${c.id}/editar`}>
-                        <Button variant="ghost" size="sm"><Pencil className="h-4 w-4" /></Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => { setExcluindo(c.id); setDialogAberto(true); setErro(''); }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                cooperativas.map((c) => {
+                  const badge = BADGE_TIPO[c.tipoParceiro] || { label: c.tipoParceiro, icone: '👤' };
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.nome}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="gap-1">
+                          <span>{badge.icone}</span> {badge.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{c.cnpj}</TableCell>
+                      <TableCell>{c.cidade ? `${c.cidade}/${c.estado}` : '—'}</TableCell>
+                      <TableCell>{c.qtdUsinas}</TableCell>
+                      <TableCell>{c.qtdCooperados}</TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Link href={`/dashboard/cooperativas/${c.id}`}>
+                          <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>
+                        </Link>
+                        <Link href={`/dashboard/cooperativas/${c.id}/editar`}>
+                          <Button variant="ghost" size="sm"><Pencil className="h-4 w-4" /></Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700"
+                          onClick={() => { setExcluindo(c.id); setDialogAberto(true); setErro(''); }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -137,7 +157,7 @@ export default function CooperativasPage() {
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
             <DialogDescription>
-              Tem certeza que deseja excluir esta cooperativa? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir este parceiro? Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           {erro && <p className="text-sm text-red-500">{erro}</p>}

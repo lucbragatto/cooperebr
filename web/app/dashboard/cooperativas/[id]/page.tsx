@@ -12,6 +12,13 @@ import {
 } from '@/components/ui/table';
 import { ArrowLeft, Pencil } from 'lucide-react';
 
+const BADGE_TIPO: Record<string, { label: string; icone: string }> = {
+  COOPERATIVA: { label: 'Cooperativa', icone: '🏢' },
+  CONSORCIO: { label: 'Consórcio', icone: '🤝' },
+  ASSOCIACAO: { label: 'Associação', icone: '🏛️' },
+  CONDOMINIO: { label: 'Condomínio', icone: '🏘️' },
+};
+
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -34,6 +41,12 @@ interface Cooperativa {
   estado: string | null;
   cep: string | null;
   ativo: boolean;
+  tipoParceiro: string;
+  tipoMembro: string;
+  tipoMembroPlural: string;
+  planoSaas?: { id: string; nome: string; mensalidadeBase: number } | null;
+  statusSaas?: string;
+  diaVencimentoSaas?: number;
   usinas: any[];
   createdAt: string;
   updatedAt: string;
@@ -49,9 +62,11 @@ export default function CooperativaDetailPage() {
   useEffect(() => {
     api.get<Cooperativa>(`/cooperativas/${id}`)
       .then((r) => setCoop(r.data))
-      .catch(() => setErro('Cooperativa não encontrada.'))
+      .catch(() => setErro('Parceiro não encontrado.'))
       .finally(() => setCarregando(false));
   }, [id]);
+
+  const badge = coop ? (BADGE_TIPO[coop.tipoParceiro] || { label: coop.tipoParceiro, icone: '👤' }) : null;
 
   return (
     <div>
@@ -60,7 +75,7 @@ export default function CooperativaDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar
         </Button>
-        <h2 className="text-2xl font-bold text-gray-800">Detalhe da Cooperativa</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Detalhe do Parceiro</h2>
         {coop && (
           <Link href={`/dashboard/cooperativas/${id}/editar`} className="ml-auto">
             <Button size="sm" variant="outline">
@@ -81,8 +96,13 @@ export default function CooperativaDetailPage() {
               <CardTitle className="flex items-center gap-3">
                 {coop.nome}
                 <Badge className={coop.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
-                  {coop.ativo ? 'Ativa' : 'Inativa'}
+                  {coop.ativo ? 'Ativo' : 'Inativo'}
                 </Badge>
+                {badge && (
+                  <Badge variant="outline" className="gap-1">
+                    <span>{badge.icone}</span> {badge.label}
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
@@ -98,6 +118,29 @@ export default function CooperativaDetailPage() {
               <Campo label="Criado em" value={new Date(coop.createdAt).toLocaleString('pt-BR')} />
             </CardContent>
           </Card>
+
+          {/* Plano SaaS */}
+          {coop.planoSaas && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Plano SaaS</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <Campo label="Plano" value={coop.planoSaas.nome} />
+                <Campo label="Mensalidade" value={`R$ ${Number(coop.planoSaas.mensalidadeBase).toFixed(2)}`} />
+                <Campo label="Dia Vencimento" value={coop.diaVencimentoSaas ?? 10} />
+                <Campo label="Status SaaS" value={
+                  <Badge variant="outline" className={
+                    coop.statusSaas === 'ATIVO' ? 'bg-green-50 text-green-700' :
+                    coop.statusSaas === 'INADIMPLENTE' ? 'bg-red-50 text-red-700' :
+                    'bg-yellow-50 text-yellow-700'
+                  }>
+                    {coop.statusSaas}
+                  </Badge>
+                } />
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="mt-6">
             <CardHeader>

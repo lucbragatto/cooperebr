@@ -27,13 +27,16 @@ import {
   MessageCircle,
   Building2,
   Settings,
+  Shield,
+  DollarSign,
+  Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/cooperativas', label: 'Cooperativas', icon: Building2 },
-  { href: '/dashboard/cooperados', label: 'Cooperados', icon: Users },
+  { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
+  { href: '/dashboard/cooperados', label: 'Membros', icon: Users },
   { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
   { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
   { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
@@ -45,6 +48,12 @@ const navItems = [
   { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
   { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
+  { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
+];
+
+const superAdminItems = [
+  { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
+  { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
 ];
 
 function tempoAtras(dateStr: string): string {
@@ -151,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             return (
@@ -169,6 +178,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             );
           })}
+
+          {/* Gestão Global — visível apenas para SUPER_ADMIN */}
+          {usuario?.perfil === 'SUPER_ADMIN' && (
+            <>
+              <div className="pt-3 pb-1 px-3">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                  <Globe className="h-3 w-3" />
+                  Gestão Global
+                </p>
+              </div>
+              {superAdminItems.map(({ href, label, icon: Icon }) => {
+                const active = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-purple-50 text-purple-700'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         <div className="px-3 py-4 border-t">

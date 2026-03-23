@@ -9,6 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+
+const TIPOS = [
+  { valor: 'COOPERATIVA', label: '🏢 Cooperativa' },
+  { valor: 'CONSORCIO', label: '🤝 Consórcio' },
+  { valor: 'ASSOCIACAO', label: '🏛️ Associação' },
+  { valor: 'CONDOMINIO', label: '🏘️ Condomínio' },
+];
 
 export default function EditarCooperativaPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +26,7 @@ export default function EditarCooperativaPage() {
   const [form, setForm] = useState({
     nome: '', cnpj: '', telefone: '', email: '',
     endereco: '', numero: '', bairro: '', cidade: '', estado: '', cep: '',
+    tipoParceiro: 'COOPERATIVA',
   });
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -29,8 +40,9 @@ export default function EditarCooperativaPage() {
         nome: c.nome || '', cnpj: c.cnpj || '', telefone: c.telefone || '', email: c.email || '',
         endereco: c.endereco || '', numero: c.numero || '', bairro: c.bairro || '',
         cidade: c.cidade || '', estado: c.estado || '', cep: c.cep || '',
+        tipoParceiro: c.tipoParceiro || 'COOPERATIVA',
       });
-    }).catch(() => setErro('Cooperativa não encontrada.'))
+    }).catch(() => setErro('Parceiro não encontrado.'))
       .finally(() => setCarregando(false));
   }, [id]);
 
@@ -50,7 +62,7 @@ export default function EditarCooperativaPage() {
     setSalvando(true);
     try {
       await api.put(`/cooperativas/${id}`, form);
-      setSucesso('Cooperativa atualizada com sucesso!');
+      setSucesso('Parceiro atualizado com sucesso!');
       setTimeout(() => router.push(`/dashboard/cooperativas/${id}`), 1000);
     } catch (e: any) {
       setErro(e?.response?.data?.message || 'Erro ao atualizar.');
@@ -68,12 +80,12 @@ export default function EditarCooperativaPage() {
           <ArrowLeft className="h-4 w-4 mr-1" />
           Voltar
         </Button>
-        <h2 className="text-2xl font-bold text-gray-800">Editar Cooperativa</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Editar Parceiro</h2>
       </div>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle className="text-base font-medium text-gray-600">Dados da cooperativa</CardTitle>
+          <CardTitle className="text-base font-medium text-gray-600">Dados do parceiro</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -87,15 +99,30 @@ export default function EditarCooperativaPage() {
                 <Input value={form.cnpj} onChange={(e) => set('cnpj', e.target.value)} required />
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Tipo de organização</Label>
+                <Select value={form.tipoParceiro} onValueChange={(v) => set('tipoParceiro', v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS.map((t) => (
+                      <SelectItem key={t.valor} value={t.valor}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1">
                 <Label>Telefone</Label>
                 <Input value={form.telefone} onChange={(e) => set('telefone', e.target.value)} />
               </div>
-              <div className="space-y-1">
-                <Label>Email</Label>
-                <Input value={form.email} onChange={(e) => set('email', e.target.value)} type="email" />
-              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input value={form.email} onChange={(e) => set('email', e.target.value)} type="email" />
             </div>
 
             <hr className="my-2" />
