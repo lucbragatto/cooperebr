@@ -567,9 +567,12 @@ export class MotorPropostaService {
     });
   }
 
-  async getListaEspera() {
+  async getListaEspera(cooperativaId?: string) {
     return this.prisma.listaEspera.findMany({
-      where: { status: 'AGUARDANDO' },
+      where: {
+        status: 'AGUARDANDO',
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
       orderBy: { posicao: 'asc' },
       include: {
         cooperado: { select: { id: true, nomeCompleto: true, email: true } },
@@ -867,21 +870,23 @@ export class MotorPropostaService {
     }));
   }
 
-  async dashboardStats() {
+  async dashboardStats(cooperativaId?: string) {
+    const coopFilter = cooperativaId ? { cooperado: { cooperativaId } } : {};
     const tarifa = await this.tarifaAtual();
     const propostas = await this.prisma.propostaCooperado.findMany({
+      where: coopFilter,
       orderBy: { createdAt: 'desc' },
       take: 10,
       include: { cooperado: { select: { nomeCompleto: true } }, plano: { select: { nome: true } } },
     });
-    const pendentes = await this.prisma.propostaCooperado.count({ where: { status: 'PENDENTE' } });
+    const pendentes = await this.prisma.propostaCooperado.count({ where: { status: 'PENDENTE', ...coopFilter } });
     const now = new Date();
     const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
     const aceitasNoMes = await this.prisma.propostaCooperado.count({
-      where: { status: 'ACEITA', createdAt: { gte: inicioMes } },
+      where: { status: 'ACEITA', createdAt: { gte: inicioMes }, ...coopFilter },
     });
     const cooperadosAtivos = await this.prisma.cooperado.findMany({
-      where: { status: 'ATIVO' },
+      where: { status: 'ATIVO', ...(cooperativaId ? { cooperativaId } : {}) },
       select: { cotaKwhMensal: true },
     });
     const cotas = cooperadosAtivos.map(c => Number(c.cotaKwhMensal ?? 0)).filter(v => v > 0);

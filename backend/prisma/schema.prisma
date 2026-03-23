@@ -41,6 +41,7 @@ model Cooperativa {
   configIndicacao       ConfigIndicacao?
   indicacoes            Indicacao[]
   usuarios              Usuario[]
+  cooperados            Cooperado[]
 
   @@map("cooperativas")
 }
@@ -86,6 +87,7 @@ model Cooperado {
   usinaPropriaId      String?
   percentualRepasse   Decimal?             @db.Decimal(5, 2)
   cooperativaId            String?
+  cooperativa              Cooperativa?           @relation(fields: [cooperativaId], references: [id])
   dataInicioCreditos       DateTime?
   protocoloConcessionaria  String?
   representanteLegalNome   String?

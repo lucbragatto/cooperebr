@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Controller, Get, Post, Put, Delete, Body, Param, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
@@ -14,10 +14,10 @@ import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
 import { SimularReajusteDto } from './dto/simular-reajuste.dto';
 
-const { ADMIN, OPERADOR } = PerfilUsuario;
+const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
 @Controller('motor-proposta')
-@Roles(ADMIN, OPERADOR)
+@Roles(SUPER_ADMIN, ADMIN, OPERADOR)
 export class MotorPropostaController {
   constructor(
     private readonly service: MotorPropostaService,
@@ -27,8 +27,8 @@ export class MotorPropostaController {
   ) {}
 
   @Get()
-  dashboard() {
-    return this.service.dashboardStats();
+  dashboard(@Req() req: any) {
+    return this.service.dashboardStats(req.user?.cooperativaId);
   }
 
   @Post('calcular')
@@ -46,13 +46,13 @@ export class MotorPropostaController {
     return this.service.aceitar(body);
   }
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Get('configuracao')
   getConfiguracao() {
     return this.service.getConfiguracao();
   }
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Put('configuracao')
   updateConfiguracao(@Body() dto: ConfiguracaoMotorDto) {
     return this.service.updateConfiguracao(dto);
@@ -170,13 +170,13 @@ export class MotorPropostaController {
     return this.service.aplicarReajuste(dto);
   }
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Get('lista-espera')
-  getListaEspera() {
-    return this.service.getListaEspera();
+  getListaEspera(@Req() req: any) {
+    return this.service.getListaEspera(req.user?.cooperativaId);
   }
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Post('lista-espera/:id/alocar')
   alocarListaEspera(@Param('id') id: string, @Body('usinaId') usinaId: string) {
     return this.service.alocarListaEspera(id, usinaId);
@@ -204,7 +204,7 @@ export class MotorPropostaController {
     return this.service.aprovarRemoto(body.token, body.nome, body.aceite);
   }
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Post('proposta/:id/aprovar-presencial')
   aprovarPresencial(@Param('id') id: string) {
     return this.service.aprovarPresencial(id);
@@ -234,7 +234,7 @@ export class MotorPropostaController {
 
   // ── Modelos de documento ──────────────────────────────────
 
-  @Roles(ADMIN)
+  @Roles(SUPER_ADMIN, ADMIN)
   @Post('upload-modelo')
   @UseInterceptors(FileInterceptor('arquivo'))
   uploadModelo(

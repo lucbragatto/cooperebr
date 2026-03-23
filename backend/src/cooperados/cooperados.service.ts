@@ -18,6 +18,7 @@ export class CooperadosService {
       where: cooperativaId ? { cooperativaId } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
+        cooperativa: cooperativaId ? false : { select: { nome: true, tipoParceiro: true } },
         contratos: {
           where: { status: { in: ['PENDENTE_ATIVACAO', 'ATIVO', 'LISTA_ESPERA'] } },
           include: { usina: { select: { nome: true } } },
@@ -94,6 +95,12 @@ export class CooperadosService {
         checklistPronto: checklistFeito === checklistTotal,
         checklistItems,
         createdAt: c.createdAt,
+        // SUPER_ADMIN: info do parceiro (quando sem filtro cooperativaId)
+        ...(!cooperativaId && (c as any).cooperativa ? {
+          nomeParceiro: (c as any).cooperativa.nome,
+          tipoParceiro: (c as any).cooperativa.tipoParceiro,
+          cooperativaId: c.cooperativaId,
+        } : {}),
       };
     });
   }

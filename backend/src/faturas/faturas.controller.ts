@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Req, BadRequestException, NotFoundException } from '@nestjs/common';
 import { FaturasService } from './faturas.service';
 import { PrismaService } from '../prisma.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
@@ -7,7 +7,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
 @Controller('faturas')
-@Roles(PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
+@Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
 export class FaturasController {
   constructor(
     private readonly faturasService: FaturasService,

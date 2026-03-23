@@ -13,9 +13,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle } from 'lucide-react';
+import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
+import { getUsuario } from '@/lib/auth';
 
 interface ChecklistItem {
   label: string;
@@ -38,6 +39,9 @@ interface CooperadoLista {
   checklistPronto: boolean;
   checklistItems: ChecklistItem[];
   createdAt: string;
+  nomeParceiro?: string;
+  tipoParceiro?: string;
+  cooperativaId?: string;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -135,16 +139,116 @@ function ChecklistTooltip({ checklist, items }: { checklist: string; items?: Che
   );
 }
 
+function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: CooperadoLista[]; carregando: boolean; tipoMembro: string }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nome</TableHead>
+          <TableHead>CPF/CNPJ</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Usina</TableHead>
+          <TableHead>Contrato</TableHead>
+          <TableHead>Checklist</TableHead>
+          <TableHead className="text-right">Acoes</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {carregando ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <TableRow key={i}>
+              {Array.from({ length: 7 }).map((_, j) => (
+                <TableCell key={j}>
+                  <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))
+        ) : cooperados.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center text-gray-400 py-8">
+              Nenhum {tipoMembro.toLowerCase()} cadastrado
+            </TableCell>
+          </TableRow>
+        ) : (
+          cooperados.map((c) => {
+            const st = STATUS_CONFIG[c.status];
+            const ct = c.statusContrato ? CONTRATO_CONFIG[c.statusContrato] : null;
+            return (
+              <TableRow key={c.id} className={c.checklistPronto && c.status === 'PENDENTE' ? 'bg-green-50/50' : ''}>
+                <TableCell>
+                  <div>
+                    <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
+                    {c.tipoCooperado === 'SEM_UC' && (
+                      <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
+                <TableCell>
+                  <Badge className={st?.color ?? 'bg-gray-100 text-gray-600'}>
+                    {st?.label ?? c.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {c.usinaVinculada ?? <span className="text-gray-400">&mdash;</span>}
+                </TableCell>
+                <TableCell>
+                  {ct ? (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ct.color}`}>
+                      {ct.label}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 text-sm">&mdash;</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <ChecklistTooltip checklist={c.checklist} items={c.checklistItems} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <AcoesDropdown cooperado={c} />
+                </TableCell>
+              </TableRow>
+            );
+          })
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function CooperadosPage() {
   const [cooperados, setCooperados] = useState<CooperadoLista[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [filtroParceiro, setFiltroParceiro] = useState<string | null>(null);
   const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
+
+  const usuario = getUsuario();
+  const isSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
 
   useEffect(() => {
     api.get<CooperadoLista[]>('/cooperados')
       .then((r) => setCooperados(r.data))
       .finally(() => setCarregando(false));
   }, []);
+
+  // Agrupar por parceiro para SUPER_ADMIN
+  const parceiros = isSuperAdmin
+    ? Array.from(
+        cooperados.reduce((map, c) => {
+          const key = c.cooperativaId ?? 'sem-parceiro';
+          if (!map.has(key)) {
+            map.set(key, { nome: c.nomeParceiro ?? 'Sem parceiro', tipo: c.tipoParceiro ?? '', count: 0 });
+          }
+          map.get(key)!.count++;
+          return map;
+        }, new Map<string, { nome: string; tipo: string; count: number }>()),
+      ).map(([id, info]) => ({ id, ...info }))
+    : [];
+
+  const cooperadosFiltrados = filtroParceiro
+    ? cooperados.filter(c => c.cooperativaId === filtroParceiro)
+    : cooperados;
 
   return (
     <div>
@@ -158,86 +262,55 @@ export default function CooperadosPage() {
         </Link>
       </div>
 
+      {/* SUPER_ADMIN: cards de resumo por parceiro */}
+      {isSuperAdmin && !carregando && parceiros.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <button
+            onClick={() => setFiltroParceiro(null)}
+            className={`text-left rounded-lg border p-3 transition-colors ${
+              filtroParceiro === null ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Todos</span>
+            </div>
+            <span className="text-2xl font-bold text-gray-900">{cooperados.length}</span>
+            <span className="text-xs text-gray-500 ml-1">membros</span>
+          </button>
+          {parceiros.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setFiltroParceiro(p.id)}
+              className={`text-left rounded-lg border p-3 transition-colors ${
+                filtroParceiro === p.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Building2 className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">{p.nome}</span>
+              </div>
+              <span className="text-2xl font-bold text-gray-900">{p.count}</span>
+              <span className="text-xs text-gray-500 ml-1">membros</span>
+              <Badge className="ml-2 text-[10px] bg-gray-100 text-gray-500">{p.tipo}</Badge>
+            </button>
+          ))}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
-            {carregando ? 'Carregando...' : `${cooperados.length} registros`}
+            {carregando ? 'Carregando...' : `${cooperadosFiltrados.length} registros`}
+            {filtroParceiro && parceiros.find(p => p.id === filtroParceiro) && (
+              <span className="ml-2 text-sm text-blue-600">
+                — {parceiros.find(p => p.id === filtroParceiro)!.nome}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>CPF/CNPJ</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Usina</TableHead>
-                <TableHead>Contrato</TableHead>
-                <TableHead>Checklist</TableHead>
-                <TableHead className="text-right">Acoes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {carregando ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
-                      <TableCell key={j}>
-                        <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : cooperados.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                    Nenhum {tipoMembro.toLowerCase()} cadastrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                cooperados.map((c) => {
-                  const st = STATUS_CONFIG[c.status];
-                  const ct = c.statusContrato ? CONTRATO_CONFIG[c.statusContrato] : null;
-                  return (
-                    <TableRow key={c.id} className={c.checklistPronto && c.status === 'PENDENTE' ? 'bg-green-50/50' : ''}>
-                      <TableCell>
-                        <div>
-                          <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
-                          {c.tipoCooperado === 'SEM_UC' && (
-                            <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
-                      <TableCell>
-                        <Badge className={st?.color ?? 'bg-gray-100 text-gray-600'}>
-                          {st?.label ?? c.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {c.usinaVinculada ?? <span className="text-gray-400">&mdash;</span>}
-                      </TableCell>
-                      <TableCell>
-                        {ct ? (
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ct.color}`}>
-                            {ct.label}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-sm">&mdash;</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <ChecklistTooltip checklist={c.checklist} items={c.checklistItems} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <AcoesDropdown cooperado={c} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+          <TabelaCooperados cooperados={cooperadosFiltrados} carregando={carregando} tipoMembro={tipoMembro} />
         </CardContent>
       </Card>
     </div>
