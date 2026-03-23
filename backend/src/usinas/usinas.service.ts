@@ -252,7 +252,7 @@ export class UsinasService {
     // Check waiting list
     const espera = await this.prisma.listaEspera.findMany({
       where: { cooperativaId: usina.cooperativaId, status: { in: ['AGUARDANDO', 'PENDENTE'] } },
-      include: { cooperado: true, contrato: true },
+      include: { cooperado: { include: { ucs: { take: 1, select: { id: true } } } }, contrato: true },
       orderBy: { posicao: 'asc' },
     });
 
@@ -271,6 +271,30 @@ export class UsinasService {
           await this.prisma.contrato.update({
             where: { id: item.contratoId },
             data: { status: 'PENDENTE_ATIVACAO', usinaId },
+          });
+        } else {
+          // Membro promovido sem contrato — criar contrato PENDENTE_ATIVACAO
+          const ucId = item.cooperado.ucs?.[0]?.id;
+          if (!ucId) continue; // Sem UC, não pode criar contrato
+          const novoContrato = await this.prisma.contrato.create({
+            data: {
+              numero: `CTR-${Date.now()}-${item.cooperadoId.slice(-4)}`,
+              cooperadoId: item.cooperadoId,
+              ucId,
+              usinaId,
+              dataInicio: new Date(),
+              percentualDesconto: 0,
+              status: 'PENDENTE_ATIVACAO',
+              kwhContrato: item.kwhNecessario,
+              kwhContratoMensal: item.kwhNecessario,
+              kwhContratoAnual: Number(item.kwhNecessario) * 12,
+              cooperativaId: usina.cooperativaId,
+            },
+          });
+          // Vincular contrato à lista de espera
+          await this.prisma.listaEspera.update({
+            where: { id: item.id },
+            data: { contratoId: novoContrato.id },
           });
         }
         // Update cooperado status

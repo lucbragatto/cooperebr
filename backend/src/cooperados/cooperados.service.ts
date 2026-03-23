@@ -65,6 +65,19 @@ export class CooperadosService {
         ? (docOk ? 1 : 0) + (c.termoAdesaoAceito ? 1 : 0)
         : (faturaOk ? 1 : 0) + (docOk ? 1 : 0) + (contratoOk ? 1 : 0) + (propostaOk ? 1 : 0) + (ativoRecebendo ? 1 : 0);
 
+      const checklistItems = isSemUC
+        ? [
+            { label: 'Documento aprovado', ok: docOk },
+            { label: 'Termo de adesão aceito', ok: !!c.termoAdesaoAceito },
+          ]
+        : [
+            { label: 'Fatura processada', ok: faturaOk },
+            { label: 'Documento aprovado', ok: docOk },
+            { label: 'Contrato criado', ok: contratoOk },
+            { label: 'Proposta aceita', ok: propostaOk },
+            { label: 'Ativo — Recebendo créditos', ok: ativoRecebendo },
+          ];
+
       return {
         id: c.id,
         nomeCompleto: c.nomeCompleto,
@@ -79,6 +92,7 @@ export class CooperadosService {
         kwhContrato: contrato ? Number(contrato.kwhContrato ?? 0) : null,
         checklist: `${checklistFeito}/${checklistTotal}`,
         checklistPronto: checklistFeito === checklistTotal,
+        checklistItems,
         createdAt: c.createdAt,
       };
     });
