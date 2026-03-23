@@ -579,7 +579,7 @@ IMPORTANTE:
 - valorBandeira: adicional R$/kWh da bandeira tarifária (se verde, 0).
 - contribIluminacaoPublica: valor fixo mensal em R$ da CIP/COSIP.
 - icmsPercentual: alíquota do ICMS em % (ex: 25 para 25%). Procure na seção TRIBUTOS da fatura. No ES é tipicamente 25%, no RJ 18%, em SP 12%. Se não encontrar o percentual explícito mas encontrar o valor R$ do ICMS e a base de cálculo, calcule: (valorICMS / baseCalculo) * 100. NÃO retorne 0 se houver valor de ICMS na fatura. icmsValor: valor R$ do ICMS.
-- pisCofinsPercentual: alíquota PIS/COFINS em % (ex: 5.50). PIS normalmente 0,65% a 1,26% e COFINS 3% a 5,81%. Se encontrar os dois somados use o total. Se encontrar separados, some os dois percentuais. pisCofinsValor: valor R$ do PIS/COFINS.
+- pisCofinsPercentual: some os percentuais de PIS e COFINS. PIS varia de 0,65% a 1,26% e COFINS de 3% a 5,81%. Na EDP-ES tipicamente PIS=1,26% e COFINS=5,81% totalizando 7,07%. Procure na tabela de tributos os valores de PIS e COFINS separados e some. Se encontrar apenas o valor em R$ (ex: PIS R$0,78 e COFINS R$3,19), calcule o percentual: ((PIS_RS + COFINS_RS) / baseCalculo) * 100. pisCofinsValor: valor R$ do PIS/COFINS.
 - multaJuros: valor R$ de multa/juros por atraso (0 se não houver).
 - descontos: valor R$ de descontos da concessionária (devolução, crédito, etc). Sempre positivo.
 - outrosEncargos: valor R$ de demais encargos não classificados acima.

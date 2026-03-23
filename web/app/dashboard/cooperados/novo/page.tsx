@@ -157,21 +157,45 @@ export default function NovoCooperadoPage() {
 
   // Histórico editável (step 8)
   const [historicoEditado, setHistoricoEditado] = useState<HistoricoItemEditavel[]>([]);
-  const [editandoIdx, setEditandoIdx] = useState<number | null>(null);
+  // editandoIdx removido - inputs sempre editáveis
   const [adicionandoMes, setAdicionandoMes] = useState(false);
   const [novoMesAno, setNovoMesAno] = useState('');
   const [novoKwh, setNovoKwh] = useState(0);
 
   // Componentes do kWh selecionados (step 8)
   const [componentesMarcados, setComponentesMarcados] = useState<Set<string>>(
-    new Set(['tarifaTUSD', 'tarifaTE', 'valorBandeira', 'contribIluminacaoPublica', 'multaJuros', 'outrosEncargos', 'descontos']),
+    new Set(['tarifaTUSD', 'tarifaTE', 'valorBandeira', 'icms', 'pisCofins', 'contribIluminacaoPublica', 'multaJuros', 'outrosEncargos', 'descontos']),
   );
+
+  // Valores editáveis dos componentes do kWh (sobrescrevem OCR)
+  const [componentesEditados, setComponentesEditados] = useState<Record<string, number>>({});
+
+  function atualizarComponenteValor(key: string, valor: number) {
+    setComponentesEditados(prev => ({ ...prev, [key]: valor }));
+  }
+
+  function getComponenteValor(key: string, ocrValor: number): number {
+    return componentesEditados[key] !== undefined ? componentesEditados[key] : ocrValor;
+  }
 
   // Base para aplicação do desconto
   const [baseDesconto, setBaseDesconto] = useState<'KWH' | 'VALOR_FATURA'>('KWH');
 
   // Mínimo faturável
   const [minimoConfig, setMinimoConfig] = useState<{ ativo: boolean; mono: number; bi: number; tri: number }>({ ativo: false, mono: 30, bi: 50, tri: 100 });
+
+  // Planos e simulação (step 8)
+  interface PlanoOption { id: string; nome: string; descontoBase: string; modeloCobranca: string; temPromocao: boolean; descontoPromocional: string | null; mesesPromocao: number | null }
+  const [planosAtivos, setPlanosAtivos] = useState<PlanoOption[]>([]);
+  const [planoSelecionadoId, setPlanoSelecionadoId] = useState('');
+  const [simulacao, setSimulacao] = useState<{
+    faturaAtual: number;
+    faturaCooperebr: number;
+    desconto: number;
+    economiaMensal: number;
+    economia5anos: number;
+    mesesGratis: number;
+  } | null>(null);
 
   useEffect(() => {
     if (tipoCooperado === 'GERADOR' && usinas.length === 0) {
@@ -189,6 +213,8 @@ export default function NovoCooperadoPage() {
       ]).then(([ativo, mono, bi, tri]) => {
         setMinimoConfig({ ativo: ativo === 'true', mono: Number(mono) || 30, bi: Number(bi) || 50, tri: Number(tri) || 100 });
       });
+      // Buscar planos ativos
+      api.get<PlanoOption[]>('/planos/ativos').then(r => setPlanosAtivos(r.data)).catch(() => {});
     }
   }, [etapa]);
 
@@ -261,6 +287,15 @@ export default function NovoCooperadoPage() {
         classificacao: data.classificacao || '',
         codigoMedidor: data.codigoMedidor || '',
       });
+      // Inicializar valores editáveis dos componentes
+      setComponentesEditados({
+        icmsValor: data.icmsValor ?? 0,
+        icmsPercentual: data.icmsPercentual ?? 0,
+        pisCofinsValor: data.pisCofinsValor ?? 0,
+        pisCofinsPercentual: data.pisCofinsPercentual ?? 0,
+        contribIluminacaoPublica: data.contribIluminacaoPublica ?? 0,
+        outrosEncargos: data.outrosEncargos ?? 0,
+      });
       // Criar cópia editável do histórico e detectar suspeitos
       const histEditavel: HistoricoItemEditavel[] = (data.historicoConsumo ?? []).map((h: HistoricoItem) => ({ ...h }));
       setHistoricoEditado(histEditavel);
@@ -310,12 +345,12 @@ export default function NovoCooperadoPage() {
     if (componentesMarcados.has('tarifaTUSD')) valor += ocr.tarifaTUSD ?? 0;
     if (componentesMarcados.has('tarifaTE')) valor += ocr.tarifaTE ?? 0;
     if (componentesMarcados.has('valorBandeira')) valor += ocr.valorBandeira ?? 0;
-    // Impostos/encargos por kWh: dividir valor total pelo consumo
-    if (componentesMarcados.has('icms')) valor += (ocr.icmsValor ?? 0) / consumo;
-    if (componentesMarcados.has('pisCofins')) valor += (ocr.pisCofinsValor ?? 0) / consumo;
-    if (componentesMarcados.has('contribIluminacaoPublica')) valor += (ocr.contribIluminacaoPublica ?? 0) / consumo;
+    // Impostos/encargos por kWh: dividir valor total pelo consumo (usando valores editados)
+    if (componentesMarcados.has('icms')) valor += getComponenteValor('icmsValor', ocr.icmsValor ?? 0) / consumo;
+    if (componentesMarcados.has('pisCofins')) valor += getComponenteValor('pisCofinsValor', ocr.pisCofinsValor ?? 0) / consumo;
+    if (componentesMarcados.has('contribIluminacaoPublica')) valor += getComponenteValor('contribIluminacaoPublica', ocr.contribIluminacaoPublica ?? 0) / consumo;
     if (componentesMarcados.has('multaJuros')) valor += (ocr.multaJuros ?? 0) / consumo;
-    if (componentesMarcados.has('outrosEncargos')) valor += (ocr.outrosEncargos ?? 0) / consumo;
+    if (componentesMarcados.has('outrosEncargos')) valor += getComponenteValor('outrosEncargos', ocr.outrosEncargos ?? 0) / consumo;
     if (componentesMarcados.has('descontos')) valor -= (ocr.descontos ?? 0) / consumo;
     return Math.max(0, valor);
   }
@@ -362,6 +397,40 @@ export default function NovoCooperadoPage() {
     setHistoricoEditado(prev => prev.map((item, i) => i === idx ? { ...item, consumoKwh: valor } : item));
   }
 
+  // ── Gerar simulação de proposta ─────────────────────────────────────────
+
+  function gerarSimulacao() {
+    if (!planoSelecionadoId) return;
+    const plano = planosAtivos.find(p => p.id === planoSelecionadoId);
+    if (!plano) return;
+
+    const desconto = Number(plano.descontoBase) / 100;
+    const { mediaValorRS } = calcularEstatisticas();
+    const valorBrutoKwh = calcularValorBrutoKwh();
+    const { mediaKwh } = calcularEstatisticas();
+
+    let faturaAtual: number;
+    if (baseDesconto === 'VALOR_FATURA' && mediaValorRS > 0) {
+      faturaAtual = mediaValorRS;
+    } else {
+      faturaAtual = valorBrutoKwh * mediaKwh;
+    }
+
+    const economiaMensal = faturaAtual * desconto;
+    const faturaCooperebr = faturaAtual - economiaMensal;
+    const economia5anos = economiaMensal * 60;
+    const mesesGratis = faturaAtual > 0 ? Math.round(economia5anos / faturaAtual) : 0;
+
+    setSimulacao({
+      faturaAtual,
+      faturaCooperebr,
+      desconto: Number(plano.descontoBase),
+      economiaMensal,
+      economia5anos,
+      mesesGratis,
+    });
+  }
+
   // ── Step 8 → 4: criar cooperado + UC ──────────────────────────────────────
 
   async function confirmarCadastro() {
@@ -404,6 +473,24 @@ export default function NovoCooperadoPage() {
       });
 
       const { mediaKwh } = calcularEstatisticas();
+
+      // Se houver simulação gerada, salvar a proposta automaticamente
+      if (simulacao && planoSelecionadoId && cid) {
+        const selecionados = historicoEditado.filter((_, i) => mesesSelecionados.has(i));
+        try {
+          await api.post('/motor-proposta/calcular', {
+            cooperadoId: cid,
+            historico: selecionados.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
+            kwhMesRecente: ocr?.consumoAtualKwh ?? Math.round(mediaKwh),
+            valorMesRecente: ocr?.totalAPagar ?? 0,
+            mesReferencia: selecionados[selecionados.length - 1]?.mesAno ?? '',
+            tipoFornecimento: ocr?.tipoFornecimento || undefined,
+          });
+        } catch {
+          // Proposta é complementar, não bloqueia o cadastro
+        }
+      }
+
       setUcsCount(prev => prev + 1);
       setUltimaUC({
         endereco: formUC.endereco,
@@ -765,7 +852,6 @@ export default function NovoCooperadoPage() {
                     {historicoEditado.map((item, idx) => {
                       const sel = mesesSelecionados.has(idx);
                       const isSuspeito = suspeitos.has(idx);
-                      const isEditing = editandoIdx === idx;
                       return (
                         <div
                           key={idx}
@@ -793,27 +879,14 @@ export default function NovoCooperadoPage() {
                             )}
                           </div>
                           <div className={`col-span-4 text-sm text-right ${sel ? 'text-gray-900' : 'text-gray-400'}`}>
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                className={`w-full text-right text-sm border rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-green-500 ${
-                                  isSuspeito && !sel ? 'border-orange-400' : 'border-gray-300'
-                                }`}
-                                value={item.consumoKwh}
-                                onChange={(e) => atualizarConsumoMes(idx, Number(e.target.value))}
-                                onBlur={() => setEditandoIdx(null)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') setEditandoIdx(null); }}
-                                autoFocus
-                              />
-                            ) : (
-                              <span
-                                onClick={() => setEditandoIdx(idx)}
-                                className="cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 inline-block"
-                                title="Clique para editar"
-                              >
-                                {item.consumoKwh.toLocaleString('pt-BR')}
-                              </span>
-                            )}
+                            <input
+                              type="number"
+                              className={`border rounded px-2 py-0.5 text-sm w-24 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none ${
+                                isSuspeito ? 'border-amber-400' : 'border-gray-200'
+                              }`}
+                              value={item.consumoKwh}
+                              onChange={(e) => atualizarConsumoMes(idx, Number(e.target.value))}
+                            />
                           </div>
                           <div className={`col-span-3 text-sm text-right ${sel ? 'text-gray-700' : 'text-gray-400'}`}>
                             {item.valorRS > 0 ? `R$ ${item.valorRS.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
@@ -906,21 +979,21 @@ export default function NovoCooperadoPage() {
 
                 {(() => {
                   const consumo = ocr?.consumoAtualKwh || 1;
-                  const icmsPct = ocr?.icmsPercentual ?? 0;
-                  const pisCofPct = ocr?.pisCofinsPercentual ?? 0;
-                  const tusdTeSemImpostos = (icmsPct + pisCofPct) > 0
-                    ? ((ocr?.tarifaTUSD ?? 0) + (ocr?.tarifaTE ?? 0)) / (1 + icmsPct / 100 + pisCofPct / 100)
-                    : (ocr?.tarifaTUSD ?? 0) + (ocr?.tarifaTE ?? 0);
+                  const tusdTe = (ocr?.tarifaTUSD ?? 0) + (ocr?.tarifaTE ?? 0);
+                  const icmsPctEdit = getComponenteValor('icmsPercentual', ocr?.icmsPercentual ?? 0);
+                  const pisCofPctEdit = getComponenteValor('pisCofinsPercentual', ocr?.pisCofinsPercentual ?? 0);
 
-                  const componentes: { key: string; label: string; valor: number; tipo: 'kwh' | 'fixo'; informativo?: string }[] = [
+                  // Editable keys and their OCR defaults
+                  type CompItem = { key: string; label: string; valor: number; tipo: 'kwh' | 'fixo'; editKey?: string; pctKey?: string };
+                  const componentes: CompItem[] = [
                     { key: 'tarifaTUSD', label: 'TUSD', valor: ocr?.tarifaTUSD ?? 0, tipo: 'kwh' },
                     { key: 'tarifaTE', label: 'TE', valor: ocr?.tarifaTE ?? 0, tipo: 'kwh' },
                     { key: 'valorBandeira', label: `Bandeira (${ocr?.bandeiraTarifaria ?? '—'})`, valor: ocr?.valorBandeira ?? 0, tipo: 'kwh' },
-                    { key: 'icms', label: `ICMS (${icmsPct.toFixed(1)}%)`, valor: ocr?.icmsValor ?? 0, tipo: 'fixo', informativo: 'Já incluído na TUSD/TE' },
-                    { key: 'pisCofins', label: `PIS/COFINS (${pisCofPct.toFixed(1)}%)`, valor: ocr?.pisCofinsValor ?? 0, tipo: 'fixo', informativo: 'Já incluído na TUSD/TE' },
-                    { key: 'contribIluminacaoPublica', label: 'CIP/COSIP', valor: ocr?.contribIluminacaoPublica ?? 0, tipo: 'fixo' },
+                    { key: 'icms', label: 'ICMS', valor: getComponenteValor('icmsValor', ocr?.icmsValor ?? 0), tipo: 'fixo', editKey: 'icmsValor', pctKey: 'icmsPercentual' },
+                    { key: 'pisCofins', label: 'PIS/COFINS', valor: getComponenteValor('pisCofinsValor', ocr?.pisCofinsValor ?? 0), tipo: 'fixo', editKey: 'pisCofinsValor', pctKey: 'pisCofinsPercentual' },
+                    { key: 'contribIluminacaoPublica', label: 'CIP/COSIP', valor: getComponenteValor('contribIluminacaoPublica', ocr?.contribIluminacaoPublica ?? 0), tipo: 'fixo', editKey: 'contribIluminacaoPublica' },
                     { key: 'multaJuros', label: 'Multa/Juros', valor: ocr?.multaJuros ?? 0, tipo: 'fixo' },
-                    { key: 'outrosEncargos', label: 'Outros encargos', valor: ocr?.outrosEncargos ?? 0, tipo: 'fixo' },
+                    { key: 'outrosEncargos', label: 'Outros encargos', valor: getComponenteValor('outrosEncargos', ocr?.outrosEncargos ?? 0), tipo: 'fixo', editKey: 'outrosEncargos' },
                     { key: 'descontos', label: 'Descontos (−)', valor: ocr?.descontos ?? 0, tipo: 'fixo' },
                   ];
 
@@ -928,17 +1001,22 @@ export default function NovoCooperadoPage() {
                     <div className="border border-gray-200 rounded-lg overflow-hidden">
                       <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase">
                         <div className="col-span-1"></div>
-                        <div className="col-span-5">Componente</div>
-                        <div className="col-span-3 text-right">Valor</div>
+                        <div className="col-span-3">Componente</div>
+                        <div className="col-span-2 text-right">%</div>
+                        <div className="col-span-3 text-right">Valor (R$)</div>
                         <div className="col-span-3 text-right">R$/kWh</div>
                       </div>
                       {componentes.map(c => {
                         const sel = componentesMarcados.has(c.key);
                         const porKwh = c.tipo === 'kwh' ? c.valor : c.valor / consumo;
+                        const isEditable = !!c.editKey;
+                        const hasPct = !!c.pctKey;
+                        const pctValue = c.pctKey === 'icmsPercentual' ? icmsPctEdit : c.pctKey === 'pisCofinsPercentual' ? pisCofPctEdit : 0;
+
                         return (
-                          <label
+                          <div
                             key={c.key}
-                            className={`grid grid-cols-12 gap-2 px-4 py-2 cursor-pointer transition-colors border-b border-gray-100 last:border-0 ${sel ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                            className={`grid grid-cols-12 gap-2 px-4 py-2 transition-colors border-b border-gray-100 last:border-0 ${sel ? 'bg-green-50' : 'hover:bg-gray-50'}`}
                           >
                             <div className="col-span-1 flex items-center">
                               <input
@@ -948,34 +1026,64 @@ export default function NovoCooperadoPage() {
                                 className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                               />
                             </div>
-                            <div className={`col-span-5 text-sm ${sel ? 'text-gray-900' : 'text-gray-400'}`}>
+                            <div className={`col-span-3 text-sm flex items-center ${sel ? 'text-gray-900' : 'text-gray-400'}`}>
                               {c.label}
-                              {c.informativo && (
-                                <span className="ml-1 text-xs text-amber-600 italic" title={c.informativo}>
-                                  ({c.informativo})
+                              {c.key === 'pisCofins' && pisCofPctEdit === 0 && (
+                                <span className="ml-1 text-xs text-amber-600 italic" title="Não identificado na fatura - verifique">
+                                  !
                                 </span>
                               )}
                             </div>
-                            <div className={`col-span-3 text-sm text-right ${sel ? 'text-gray-700' : 'text-gray-400'}`}>
-                              {c.tipo === 'kwh'
-                                ? `R$ ${c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}/kWh`
-                                : `R$ ${c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                            <div className="col-span-2 text-sm text-right flex items-center justify-end">
+                              {hasPct ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    className="border border-gray-200 rounded px-1.5 py-0.5 text-sm w-16 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none"
+                                    value={pctValue}
+                                    onChange={(e) => {
+                                      const newPct = Number(e.target.value);
+                                      atualizarComponenteValor(c.pctKey!, newPct);
+                                      // Recalculate valor: (TUSD+TE) * pct/100 * consumo
+                                      const newValor = tusdTe * (newPct / 100) * consumo;
+                                      atualizarComponenteValor(c.editKey!, newValor);
+                                    }}
+                                  />
+                                  <span className="text-xs text-gray-400">%</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </div>
-                            <div className={`col-span-3 text-sm text-right ${sel ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
+                            <div className={`col-span-3 text-sm text-right flex items-center justify-end ${c.key === 'pisCofins' && pisCofPctEdit === 0 ? 'text-amber-600 font-medium' : sel ? 'text-gray-700' : 'text-gray-400'}`}>
+                              {isEditable ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-400">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="border border-gray-200 rounded px-1.5 py-0.5 text-sm w-24 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none"
+                                    value={c.valor}
+                                    onChange={(e) => {
+                                      const newVal = Number(e.target.value);
+                                      atualizarComponenteValor(c.editKey!, newVal);
+                                      // Recalculate R$/kWh automatically
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                c.tipo === 'kwh'
+                                  ? `R$ ${c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}/kWh`
+                                  : `R$ ${c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                              )}
+                            </div>
+                            <div className={`col-span-3 text-sm text-right flex items-center justify-end ${sel ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
                               {c.key === 'descontos' ? '−' : ''}{porKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}
                             </div>
-                          </label>
+                          </div>
                         );
                       })}
-                      {/* Linha informativa: TUSD+TE sem impostos */}
-                      <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 border-t border-gray-200">
-                        <div className="col-span-1"></div>
-                        <div className="col-span-5 text-sm text-gray-500 italic">TUSD+TE sem impostos</div>
-                        <div className="col-span-3 text-sm text-right text-gray-500 italic">informativo</div>
-                        <div className="col-span-3 text-sm text-right text-gray-500 italic font-medium">
-                          {tusdTeSemImpostos.toLocaleString('pt-BR', { minimumFractionDigits: 5, maximumFractionDigits: 5 })}
-                        </div>
-                      </div>
                     </div>
                   );
                 })()}
@@ -1098,6 +1206,78 @@ export default function NovoCooperadoPage() {
                   <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm text-gray-600">
                     <span>Consumo atual (mês de referência)</span>
                     <span className="font-medium text-gray-900">{ocr.consumoAtualKwh.toLocaleString('pt-BR')} kWh</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Simulação de proposta */}
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileText className="h-4 w-4 text-green-700" />
+                  <h2 className="text-sm font-semibold text-gray-800">Simulação de Proposta</h2>
+                </div>
+
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className={lbl}>Plano</label>
+                    <select
+                      className={cls}
+                      value={planoSelecionadoId}
+                      onChange={e => { setPlanoSelecionadoId(e.target.value); setSimulacao(null); }}
+                    >
+                      <option value="">Selecione um plano...</option>
+                      {planosAtivos.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome} ({Number(p.descontoBase)}% desc.)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    onClick={gerarSimulacao}
+                    disabled={!planoSelecionadoId}
+                    variant="outline"
+                  >
+                    <BarChart2 className="h-4 w-4 mr-2" />
+                    Gerar simulação
+                  </Button>
+                </div>
+
+                {simulacao && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500">Fatura atual estimada</p>
+                        <p className="text-lg font-bold text-gray-900">
+                          {simulacao.faturaAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-green-700">Com CoopereBR ({simulacao.desconto}% desc.)</p>
+                        <p className="text-lg font-bold text-green-800">
+                          {simulacao.faturaCooperebr.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Economia mensal</p>
+                        <p className="text-lg font-bold text-green-700">
+                          {simulacao.economiaMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Economia em 5 anos</p>
+                        <p className="text-lg font-bold text-green-700">
+                          {simulacao.economia5anos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-center pt-2 border-t border-green-200">
+                      <p className="text-sm text-green-800">
+                        Equivale a <span className="font-bold text-lg">{simulacao.mesesGratis}</span> meses de energia grátis
+                      </p>
+                    </div>
                   </div>
                 )}
               </CardContent>
