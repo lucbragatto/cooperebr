@@ -503,6 +503,20 @@ model PropostaCooperado {
   plano               Plano?     @relation(fields: [planoId], references: [id])
   validaAte           DateTime
   cooperativaId       String?
+
+  // Aprovação remota
+  tokenAprovacao      String?    @unique
+  aprovadoEm          DateTime?
+  aprovadoPor         String?
+  modoAprovacao       String?    // REMOTO_WHATSAPP | REMOTO_EMAIL | PRESENCIAL_ADMIN
+
+  // Assinatura digital
+  termoAdesaoAssinadoEm   DateTime?
+  termoAdesaoAssinadoPor  String?
+  procuracaoAssinadaEm    DateTime?
+  procuracaoAssinadaPor   String?
+  tokenAssinatura         String?    @unique
+
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   contratos           Contrato[]

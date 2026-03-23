@@ -5,6 +5,7 @@ import { PropostaPdfService } from './proposta-pdf.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { Roles } from '../auth/roles.decorator';
+import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
@@ -177,5 +178,55 @@ export class MotorPropostaController {
   @Post('lista-espera/:id/alocar')
   alocarListaEspera(@Param('id') id: string, @Body('usinaId') usinaId: string) {
     return this.service.alocarListaEspera(id, usinaId);
+  }
+
+  // ── Aprovação remota ──────────────────────────────────────────
+
+  @Post('proposta/:id/enviar-aprovacao')
+  enviarAprovacao(
+    @Param('id') id: string,
+    @Body() body: { canal: 'whatsapp' | 'email'; destino: string },
+  ) {
+    return this.service.enviarAprovacao(id, body.canal, body.destino);
+  }
+
+  @Public()
+  @Get('proposta-por-token/:token')
+  buscarPropostaPorToken(@Param('token') token: string) {
+    return this.service.buscarPropostaPorToken(token);
+  }
+
+  @Public()
+  @Post('aprovar')
+  aprovarRemoto(@Body() body: { token: string; nome: string; aceite: boolean }) {
+    return this.service.aprovarRemoto(body.token, body.nome, body.aceite);
+  }
+
+  @Roles(ADMIN)
+  @Post('proposta/:id/aprovar-presencial')
+  aprovarPresencial(@Param('id') id: string) {
+    return this.service.aprovarPresencial(id);
+  }
+
+  // ── Assinatura digital ──────────────────────────────────────────
+
+  @Post('proposta/:id/enviar-assinatura')
+  enviarAssinatura(@Param('id') id: string) {
+    return this.service.enviarAssinatura(id);
+  }
+
+  @Public()
+  @Get('documento-por-token/:token')
+  buscarDocumentoPorToken(@Param('token') token: string) {
+    return this.service.buscarDocumentoPorToken(token);
+  }
+
+  @Public()
+  @Post('assinar')
+  assinarDocumento(
+    @Body() body: { token: string; tipoDocumento: 'TERMO' | 'PROCURACAO'; nomeAssinante: string; aceite: boolean },
+  ) {
+    if (!body.aceite) return { sucesso: false, mensagem: 'Aceite é obrigatório' };
+    return this.service.assinarDocumento(body.token, body.tipoDocumento, body.nomeAssinante);
   }
 }

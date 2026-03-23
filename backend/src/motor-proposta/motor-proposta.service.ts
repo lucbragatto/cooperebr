@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
@@ -650,6 +651,147 @@ export class MotorPropostaService {
       link: `/dashboard/cooperados/${entrada.cooperadoId}`,
     });
     return { sucesso: true };
+  }
+
+  // ── Aprovação remota ──────────────────────────────────────────────
+
+  async enviarAprovacao(propostaId: string, canal: 'whatsapp' | 'email', destino: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: { cooperado: { select: { nomeCompleto: true } } },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    const token = randomUUID();
+    await this.prisma.propostaCooperado.update({
+      where: { id: propostaId },
+      data: { tokenAprovacao: token },
+    });
+
+    const link = `http://localhost:3001/aprovar-proposta?token=${token}`;
+    const modoAprovacao = canal === 'whatsapp' ? 'REMOTO_WHATSAPP' : 'REMOTO_EMAIL';
+
+    console.log(`[APROVAÇÃO] Link para ${destino} (${canal}): ${link}`);
+
+    return { sucesso: true, link, token, canal, destino, modoAprovacao };
+  }
+
+  async buscarPropostaPorToken(token: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { tokenAprovacao: token },
+      include: { cooperado: { select: { nomeCompleto: true, cpf: true, email: true, telefone: true } } },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada ou token inválido');
+    return proposta;
+  }
+
+  async aprovarRemoto(token: string, nome: string, aceite: boolean) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { tokenAprovacao: token },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada ou token inválido');
+    if (proposta.status !== 'PENDENTE' && proposta.status !== 'ACEITA') {
+      throw new BadRequestException(`Proposta já está com status: ${proposta.status}`);
+    }
+
+    const novoStatus = aceite ? 'ACEITA' : 'RECUSADA';
+    await this.prisma.propostaCooperado.update({
+      where: { id: proposta.id },
+      data: {
+        status: novoStatus,
+        aprovadoEm: new Date(),
+        aprovadoPor: nome,
+        modoAprovacao: 'REMOTO_WHATSAPP',
+        tokenAprovacao: null, // invalidar token após uso
+      },
+    });
+
+    return { sucesso: true, propostaId: proposta.id, cooperadoId: proposta.cooperadoId, status: novoStatus };
+  }
+
+  async aprovarPresencial(propostaId: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    await this.prisma.propostaCooperado.update({
+      where: { id: propostaId },
+      data: {
+        status: 'ACEITA',
+        aprovadoEm: new Date(),
+        aprovadoPor: 'ADMIN',
+        modoAprovacao: 'PRESENCIAL_ADMIN',
+      },
+    });
+
+    return { sucesso: true, propostaId, status: 'ACEITA' };
+  }
+
+  // ── Assinatura digital ──────────────────────────────────────────
+
+  async enviarAssinatura(propostaId: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    const token = randomUUID();
+    await this.prisma.propostaCooperado.update({
+      where: { id: propostaId },
+      data: { tokenAssinatura: token },
+    });
+
+    const link = `http://localhost:3001/assinar?token=${token}`;
+    console.log(`[ASSINATURA] Link: ${link}`);
+
+    return { sucesso: true, link, token };
+  }
+
+  async buscarDocumentoPorToken(token: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { tokenAssinatura: token },
+      include: { cooperado: { select: { nomeCompleto: true, cpf: true, email: true, telefone: true } } },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada ou token inválido');
+    return proposta;
+  }
+
+  async assinarDocumento(token: string, tipoDocumento: 'TERMO' | 'PROCURACAO', nomeAssinante: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { tokenAssinatura: token },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada ou token inválido');
+
+    const data: any = {};
+    if (tipoDocumento === 'TERMO') {
+      data.termoAdesaoAssinadoEm = new Date();
+      data.termoAdesaoAssinadoPor = nomeAssinante;
+    } else {
+      data.procuracaoAssinadaEm = new Date();
+      data.procuracaoAssinadaPor = nomeAssinante;
+    }
+
+    await this.prisma.propostaCooperado.update({
+      where: { id: proposta.id },
+      data,
+    });
+
+    // Verificar se ambos foram assinados
+    const updated = await this.prisma.propostaCooperado.findUnique({ where: { id: proposta.id } });
+    const ambosAssinados = updated?.termoAdesaoAssinadoEm && updated?.procuracaoAssinadaEm;
+
+    if (ambosAssinados) {
+      // Invalidar token após ambas assinaturas
+      await this.prisma.propostaCooperado.update({
+        where: { id: proposta.id },
+        data: { tokenAssinatura: null },
+      });
+    }
+
+    return {
+      sucesso: true,
+      propostaId: proposta.id,
+      cooperadoId: proposta.cooperadoId,
+      tipoDocumento,
+      ambosAssinados,
+    };
   }
 
   async dashboardStats() {
