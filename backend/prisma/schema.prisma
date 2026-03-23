@@ -37,6 +37,7 @@ model Cooperativa {
   usinas                Usina[]                @relation("CooperativaUsinas")
   asaasConfig           AsaasConfig?
   faturasSaas           FaturaSaas[]
+  modelosDocumento      ModeloDocumento[]
 
   @@map("cooperativas")
 }
@@ -986,4 +987,19 @@ model FaturaSaas {
 
   @@unique([cooperativaId, competencia])
   @@map("faturas_saas")
+}
+
+model ModeloDocumento {
+  id            String       @id @default(cuid())
+  cooperativaId String?
+  cooperativa   Cooperativa? @relation(fields: [cooperativaId], references: [id])
+  tipo          String       // CONTRATO | PROCURACAO
+  nome          String
+  conteudo      String       @db.Text
+  variaveis     String[]
+  ativo         Boolean      @default(true)
+  isPadrao      Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+
+  @@map("modelos_documento")
 }

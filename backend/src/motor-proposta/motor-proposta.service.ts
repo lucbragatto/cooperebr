@@ -794,6 +794,79 @@ export class MotorPropostaService {
     };
   }
 
+  // ── Modelos de documento ──────────────────────────────────
+
+  async uploadModelo(
+    arquivo: Express.Multer.File,
+    tipo: string,
+    nome: string,
+    cooperativaId?: string,
+  ) {
+    if (!arquivo) throw new BadRequestException('Arquivo é obrigatório');
+    if (!['CONTRATO', 'PROCURACAO'].includes(tipo)) {
+      throw new BadRequestException('Tipo deve ser CONTRATO ou PROCURACAO');
+    }
+
+    // Extrair texto do arquivo
+    const conteudo = arquivo.buffer.toString('utf-8');
+
+    // Identificar variáveis no padrão {{VARIAVEL}}
+    const matches = conteudo.match(/\{\{([A-Z_]+)\}\}/g) || [];
+    const variaveis = [...new Set(matches.map((m) => m.replace(/[{}]/g, '')))];
+
+    const modelo = await this.prisma.modeloDocumento.create({
+      data: {
+        tipo,
+        nome,
+        conteudo,
+        variaveis,
+        cooperativaId: cooperativaId || null,
+        isPadrao: false,
+        ativo: true,
+      },
+    });
+
+    return {
+      id: modelo.id,
+      variaveis,
+      preview: conteudo.substring(0, 500),
+    };
+  }
+
+  async getModelosPadrao() {
+    const modelos = await this.prisma.modeloDocumento.findMany({
+      where: { isPadrao: true, ativo: true },
+      orderBy: { tipo: 'asc' },
+    });
+
+    if (modelos.length === 0) {
+      // Retornar templates hardcoded se não existirem no banco
+      return [
+        {
+          id: 'modelo-contrato-padrao',
+          tipo: 'CONTRATO',
+          nome: 'Contrato Padrão CoopereBR',
+          variaveis: ['TIPO_PARCEIRO', 'NOME_COOPERADO', 'CPF_CNPJ', 'UC', 'DISTRIBUIDORA', 'NOME_PARCEIRO', 'CNPJ_PARCEIRO', 'NOME_USINA', 'POTENCIA_USINA', 'DESCONTO', 'COTA_KWH', 'DATA_INICIO', 'DIA_VENCIMENTO', 'DATA'],
+          isPadrao: true,
+          preview: 'Contrato de adesão padrão para cooperativas de energia solar com cláusulas de desconto, cota de energia e vigência.',
+        },
+        {
+          id: 'modelo-procuracao-padrao',
+          tipo: 'PROCURACAO',
+          nome: 'Procuração Padrão CoopereBR',
+          variaveis: ['NOME_COOPERADO', 'CPF_CNPJ', 'UC', 'DISTRIBUIDORA', 'NOME_PARCEIRO', 'CNPJ_PARCEIRO', 'NOME_USINA', 'POTENCIA_USINA', 'REPRESENTANTE_LEGAL', 'DATA'],
+          isPadrao: true,
+          preview: 'Procuração para representação junto à concessionária para adesão ao sistema de compensação de energia elétrica.',
+        },
+      ];
+    }
+
+    return modelos.map((m) => ({
+      ...m,
+      preview: m.conteudo.substring(0, 500),
+    }));
+  }
+
   async dashboardStats() {
     const tarifa = await this.tarifaAtual();
     const propostas = await this.prisma.propostaCooperado.findMany({

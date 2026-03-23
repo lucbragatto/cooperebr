@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Res } from '@nestjs/common';
+/// <reference types="multer" />
+import { Controller, Get, Post, Put, Delete, Body, Param, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
 import { PropostaPdfService } from './proposta-pdf.service';
@@ -228,5 +230,25 @@ export class MotorPropostaController {
   ) {
     if (!body.aceite) return { sucesso: false, mensagem: 'Aceite é obrigatório' };
     return this.service.assinarDocumento(body.token, body.tipoDocumento, body.nomeAssinante);
+  }
+
+  // ── Modelos de documento ──────────────────────────────────
+
+  @Roles(ADMIN)
+  @Post('upload-modelo')
+  @UseInterceptors(FileInterceptor('arquivo'))
+  uploadModelo(
+    @UploadedFile() arquivo: Express.Multer.File,
+    @Body('tipo') tipo: string,
+    @Body('nome') nome: string,
+    @Body('cooperativaId') cooperativaId?: string,
+  ) {
+    return this.service.uploadModelo(arquivo, tipo, nome, cooperativaId);
+  }
+
+  @Roles(ADMIN, OPERADOR)
+  @Get('modelos-padrao')
+  modelosPadrao() {
+    return this.service.getModelosPadrao();
   }
 }
