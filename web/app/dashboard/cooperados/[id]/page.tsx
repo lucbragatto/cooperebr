@@ -971,7 +971,7 @@ export default function CooperadoPerfilPage() {
             </Card>
           ) : (
             <>
-              {ultimaFatura && (
+              {ultimaFatura && ultimaFatura.dadosExtraidos && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base flex items-center justify-between">
@@ -992,7 +992,7 @@ export default function CooperadoPerfilPage() {
                   </CardContent>
                 </Card>
               )}
-              {ultimaFatura?.dadosExtraidos.historicoConsumo?.length > 0 && (
+              {ultimaFatura?.dadosExtraidos?.historicoConsumo?.length > 0 && (
                 <Card>
                   <CardHeader><CardTitle className="text-base">Histórico de Consumo</CardTitle></CardHeader>
                   <CardContent className="overflow-x-auto p-0">
@@ -1009,7 +1009,7 @@ export default function CooperadoPerfilPage() {
                           <tr key={h.mesAno} className="border-b last:border-0 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-800">{h.mesAno}</td>
                             <td className="px-4 py-2 text-right">{Number(h.consumoKwh).toLocaleString('pt-BR')}</td>
-                            <td className="px-4 py-2 text-right">{formatBRL(h.valorRS)}</td>
+                            <td className="px-4 py-2 text-right">{Number(h.valorRS) > 0 ? formatBRL(h.valorRS) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>

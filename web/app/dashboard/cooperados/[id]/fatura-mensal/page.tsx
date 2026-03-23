@@ -8,13 +8,18 @@ import { Button } from '@/components/ui/button';
 import {
   ArrowLeft,
   CheckCircle,
-  FileText,
   FileUp,
   Loader2,
   Upload,
   Zap,
   BarChart2,
 } from 'lucide-react';
+
+interface HistoricoItem {
+  mesAno: string;
+  consumoKwh: number;
+  valorRS: number;
+}
 
 interface DadosExtraidos {
   titular: string;
@@ -33,7 +38,7 @@ interface DadosExtraidos {
   possuiCompensacao: boolean;
   creditosRecebidosKwh: number;
   saldoTotalKwh: number;
-  historicoConsumo: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
+  historicoConsumo: HistoricoItem[];
   [key: string]: unknown;
 }
 
@@ -52,6 +57,27 @@ function Campo({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <p className="text-xs text-gray-500 mb-0.5">{label}</p>
       <p className="text-sm font-medium text-gray-800">{value ?? '—'}</p>
+    </div>
+  );
+}
+
+function CampoEditavel({ label, value, onChange, type = 'number', step }: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  type?: string;
+  step?: string;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+      <input
+        type={type}
+        step={step}
+        className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
     </div>
   );
 }
@@ -77,6 +103,8 @@ export default function FaturaMensalPage() {
   const [salvando, setSalvando] = useState(false);
   const [resultado, setResultado] = useState<FaturaMensalResult | null>(null);
   const [erro, setErro] = useState('');
+  const [gerandoProposta, setGerandoProposta] = useState(false);
+  const [propostaGerada, setPropostaGerada] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -97,6 +125,20 @@ export default function FaturaMensalPage() {
     setDadosExtraidos(null);
     setResultado(null);
     setErro('');
+    setPropostaGerada(false);
+  }
+
+  function atualizarDados(campo: string, valor: unknown) {
+    setDadosExtraidos(prev => prev ? { ...prev, [campo]: valor } : prev);
+  }
+
+  function atualizarHistorico(idx: number, campo: 'consumoKwh' | 'valorRS', valor: number) {
+    setDadosExtraidos(prev => {
+      if (!prev) return prev;
+      const hist = [...prev.historicoConsumo];
+      hist[idx] = { ...hist[idx], [campo]: valor };
+      return { ...prev, historicoConsumo: hist };
+    });
   }
 
   async function extrair() {
@@ -149,17 +191,57 @@ export default function FaturaMensalPage() {
     }
   }
 
+  async function gerarProposta() {
+    if (!dadosExtraidos) return;
+    const historico = dadosExtraidos.historicoConsumo ?? [];
+    const mediaKwh = historico.length > 0
+      ? historico.reduce((acc, h) => acc + h.consumoKwh, 0) / historico.length
+      : dadosExtraidos.consumoAtualKwh ?? 0;
+
+    if (mediaKwh <= 0) {
+      setErro('Dados insuficientes para gerar proposta (kWh médio = 0).');
+      return;
+    }
+
+    setGerandoProposta(true);
+    setErro('');
+    try {
+      await api.post('/motor-proposta/calcular', {
+        cooperadoId: id,
+        historico: historico.map(h => ({
+          mesAno: h.mesAno,
+          consumoKwh: Number(h.consumoKwh),
+          valorRS: Number(h.valorRS),
+        })),
+        kwhMesRecente: Number(dadosExtraidos.consumoAtualKwh ?? Math.round(mediaKwh)),
+        valorMesRecente: Number(dadosExtraidos.totalAPagar ?? 0),
+        mesReferencia: dadosExtraidos.mesReferencia ?? '',
+      });
+      setPropostaGerada(true);
+    } catch {
+      setErro('Erro ao gerar proposta. Verifique se o cooperado possui fatura processada.');
+    } finally {
+      setGerandoProposta(false);
+    }
+  }
+
   function reset() {
     setArquivo(null);
     setDadosExtraidos(null);
     setResultado(null);
     setErro('');
+    setPropostaGerada(false);
     if (fileRef.current) fileRef.current.value = '';
   }
 
   const bandeiraLabel: Record<string, string> = {
     VERDE: 'Verde', AMARELA: 'Amarela', VERMELHA_1: 'Vermelha 1', VERMELHA_2: 'Vermelha 2',
   };
+
+  // Calcular média kWh para habilitar botão Gerar Proposta
+  const mediaKwhCalc = dadosExtraidos?.historicoConsumo?.length
+    ? dadosExtraidos.historicoConsumo.reduce((acc, h) => acc + h.consumoKwh, 0) / dadosExtraidos.historicoConsumo.length
+    : (dadosExtraidos?.consumoAtualKwh ?? 0);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -259,7 +341,8 @@ export default function FaturaMensalPage() {
                 <h2 className="text-sm font-semibold text-gray-800">Dados da fatura</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Campo label="Titular" value={dadosExtraidos.titular} />
+                <Campo label="Titular (na fatura)" value={dadosExtraidos.titular} />
+                <Campo label="Cooperado" value={nomeCooperado} />
                 <Campo label="UC" value={dadosExtraidos.numeroUC} />
                 <Campo label="Distribuidora" value={dadosExtraidos.distribuidora} />
                 <Campo label="Mês referência" value={dadosExtraidos.mesReferencia} />
@@ -279,31 +362,67 @@ export default function FaturaMensalPage() {
                 <Campo label="TUSD (R$/kWh)" value={dadosExtraidos.tarifaTUSD?.toFixed(5)} />
                 <Campo label="TE (R$/kWh)" value={dadosExtraidos.tarifaTE?.toFixed(5)} />
                 <Campo label="Bandeira" value={bandeiraLabel[dadosExtraidos.bandeiraTarifaria] ?? dadosExtraidos.bandeiraTarifaria} />
-                <Campo label="Compensação" value={dadosExtraidos.possuiCompensacao ? 'Sim' : 'Não'} />
-                <Campo label="Créditos recebidos (kWh)" value={dadosExtraidos.creditosRecebidosKwh} />
-                <Campo label="Saldo total (kWh)" value={dadosExtraidos.saldoTotalKwh} />
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Compensação de créditos</p>
+                  <select
+                    className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={dadosExtraidos.possuiCompensacao ? 'sim' : 'nao'}
+                    onChange={(e) => atualizarDados('possuiCompensacao', e.target.value === 'sim')}
+                  >
+                    <option value="sim">Sim</option>
+                    <option value="nao">Não</option>
+                  </select>
+                </div>
+                <CampoEditavel
+                  label="Créditos recebidos (kWh)"
+                  value={dadosExtraidos.creditosRecebidosKwh ?? 0}
+                  onChange={(v) => atualizarDados('creditosRecebidosKwh', v)}
+                  step="0.01"
+                />
+                <CampoEditavel
+                  label="Saldo total (kWh)"
+                  value={dadosExtraidos.saldoTotalKwh ?? 0}
+                  onChange={(v) => atualizarDados('saldoTotalKwh', v)}
+                  step="0.01"
+                />
               </div>
             </CardContent>
           </Card>
 
-          {dadosExtraidos.historicoConsumo?.length > 0 && (
+          {(dadosExtraidos.historicoConsumo?.length ?? 0) > 0 && (
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <BarChart2 className="h-4 w-4 text-green-700" />
                   <h2 className="text-sm font-semibold text-gray-800">Histórico de consumo</h2>
+                  <span className="ml-auto text-xs text-gray-500">Edite os valores se necessário</span>
                 </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="grid grid-cols-3 gap-2 px-3 py-1.5 bg-gray-50 border-b text-xs font-medium text-gray-500">
                     <div>Mês</div>
                     <div className="text-right">kWh</div>
-                    <div className="text-right">R$</div>
+                    <div className="text-right">Valor (R$)</div>
                   </div>
                   {dadosExtraidos.historicoConsumo.map((h, i) => (
-                    <div key={i} className="grid grid-cols-3 gap-2 px-3 py-1.5 border-b border-gray-100 last:border-0 text-xs">
+                    <div key={i} className="grid grid-cols-3 gap-2 px-3 py-1.5 border-b border-gray-100 last:border-0 text-xs items-center">
                       <div>{h.mesAno}</div>
-                      <div className="text-right">{h.consumoKwh?.toLocaleString('pt-BR')}</div>
-                      <div className="text-right">{h.valorRS > 0 ? `R$ ${h.valorRS.toFixed(2)}` : '—'}</div>
+                      <div className="text-right">
+                        <input
+                          type="number"
+                          className="border border-gray-200 rounded px-2 py-0.5 text-xs w-20 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none"
+                          value={h.consumoKwh}
+                          onChange={(e) => atualizarHistorico(i, 'consumoKwh', Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="text-right">
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="border border-gray-200 rounded px-2 py-0.5 text-xs w-24 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none"
+                          value={h.valorRS}
+                          onChange={(e) => atualizarHistorico(i, 'valorRS', Number(e.target.value))}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -313,8 +432,27 @@ export default function FaturaMensalPage() {
 
           {erro && <p className="text-sm text-red-600">{erro}</p>}
 
+          {propostaGerada && (
+            <p className="text-sm text-green-600 font-medium">Proposta gerada com sucesso! Confira na aba Proposta do perfil do cooperado.</p>
+          )}
+
           <div className="flex gap-3 pb-8">
             <Button variant="outline" onClick={reset}>Cancelar</Button>
+            {mediaKwhCalc > 0 && (
+              <Button
+                variant="outline"
+                onClick={gerarProposta}
+                disabled={gerandoProposta || propostaGerada}
+              >
+                {gerandoProposta ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando...</>
+                ) : propostaGerada ? (
+                  <><CheckCircle className="h-4 w-4 mr-2" />Proposta gerada</>
+                ) : (
+                  'Gerar Proposta'
+                )}
+              </Button>
+            )}
             <Button onClick={confirmarSalvar} disabled={salvando} className="flex-1">
               {salvando ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</>

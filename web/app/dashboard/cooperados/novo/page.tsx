@@ -161,6 +161,7 @@ export default function NovoCooperadoPage() {
   const [adicionandoMes, setAdicionandoMes] = useState(false);
   const [novoMesAno, setNovoMesAno] = useState('');
   const [novoKwh, setNovoKwh] = useState(0);
+  const [novoValorRS, setNovoValorRS] = useState(0);
 
   // Componentes do kWh selecionados (step 8)
   const [componentesMarcados, setComponentesMarcados] = useState<Set<string>>(
@@ -374,11 +375,12 @@ export default function NovoCooperadoPage() {
   function adicionarMesEstimado() {
     if (!novoMesAno || novoKwh <= 0) return;
     const novoIdx = historicoEditado.length;
-    setHistoricoEditado(prev => [...prev, { mesAno: novoMesAno, consumoKwh: novoKwh, valorRS: 0, estimado: true }]);
+    setHistoricoEditado(prev => [...prev, { mesAno: novoMesAno, consumoKwh: novoKwh, valorRS: novoValorRS, estimado: true }]);
     setMesesSelecionados(prev => new Set([...prev, novoIdx]));
     setAdicionandoMes(false);
     setNovoMesAno('');
     setNovoKwh(0);
+    setNovoValorRS(0);
   }
 
   function removerMesEstimado(idx: number) {
@@ -395,6 +397,10 @@ export default function NovoCooperadoPage() {
 
   function atualizarConsumoMes(idx: number, valor: number) {
     setHistoricoEditado(prev => prev.map((item, i) => i === idx ? { ...item, consumoKwh: valor } : item));
+  }
+
+  function atualizarValorMes(idx: number, valor: number) {
+    setHistoricoEditado(prev => prev.map((item, i) => i === idx ? { ...item, valorRS: valor } : item));
   }
 
   // ── Gerar simulação de proposta ─────────────────────────────────────────
@@ -889,7 +895,13 @@ export default function NovoCooperadoPage() {
                             />
                           </div>
                           <div className={`col-span-3 text-sm text-right ${sel ? 'text-gray-700' : 'text-gray-400'}`}>
-                            {item.valorRS > 0 ? `R$ ${item.valorRS.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={`border rounded px-2 py-0.5 text-sm w-24 text-right focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none border-gray-200`}
+                              value={item.valorRS}
+                              onChange={(e) => atualizarValorMes(idx, Number(e.target.value))}
+                            />
                           </div>
                         </div>
                       );
@@ -911,17 +923,27 @@ export default function NovoCooperadoPage() {
                             {mesesDisponiveis.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </div>
-                        <div className="col-span-4 text-right">
+                        <div className="col-span-3 text-right">
                           <input
                             type="number"
                             className="w-full text-right text-sm border border-gray-300 rounded px-2 py-0.5"
                             placeholder="kWh"
                             value={novoKwh || ''}
                             onChange={(e) => setNovoKwh(Number(e.target.value))}
+                          />
+                        </div>
+                        <div className="col-span-2 text-right">
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="w-full text-right text-sm border border-gray-300 rounded px-2 py-0.5"
+                            placeholder="R$"
+                            value={novoValorRS || ''}
+                            onChange={(e) => setNovoValorRS(Number(e.target.value))}
                             onKeyDown={(e) => { if (e.key === 'Enter') adicionarMesEstimado(); }}
                           />
                         </div>
-                        <div className="col-span-3 flex items-center justify-end gap-1">
+                        <div className="col-span-2 flex items-center justify-end gap-1">
                           <button onClick={adicionarMesEstimado} disabled={!novoMesAno || novoKwh <= 0}
                             className="text-xs text-green-700 hover:underline disabled:text-gray-400 disabled:no-underline">
                             OK
