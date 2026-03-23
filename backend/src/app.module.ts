@@ -28,6 +28,7 @@ import { IntegracaoBancariaModule } from './integracao-bancaria/integracao-banca
 import { CooperativasModule } from './cooperativas/cooperativas.module';
 import { AsaasModule } from './asaas/asaas.module';
 import { SaasModule } from './saas/saas.module';
+import { IndicacoesModule } from './indicacoes/indicacoes.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -58,6 +59,7 @@ import { RolesGuard } from './auth/roles.guard';
     CooperativasModule,
     AsaasModule,
     SaasModule,
+    IndicacoesModule,
   ],
   controllers: [AppController],
   providers: [

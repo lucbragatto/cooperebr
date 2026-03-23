@@ -19,14 +19,14 @@ import {
 import {
   AlertTriangle, ArrowLeft, BarChart3, Building2, CheckCircle, CreditCard,
   FileCheck, FileDown, FilePlus, FileText, FileX, Loader2, Mail, MessageCircle,
-  Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter,
+  Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter, Gift, Copy, Link,
 } from 'lucide-react';
 import AsaasTab from './asaas-tab';
 import FaturaUploadOCR from '@/components/FaturaUploadOCR';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta' | 'asaas';
+type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta' | 'asaas' | 'indicacoes';
 
 interface PropostaOpcao {
   base: 'MES_RECENTE' | 'MEDIA_12M';
@@ -105,6 +105,7 @@ interface CooperadoCompleto {
   usinaPropriaId: string | null; percentualRepasse: number | string | null;
   preferenciaCobranca: string | null;
   representanteLegalNome: string | null; representanteLegalCpf: string | null; representanteLegalCargo: string | null;
+  codigoIndicacao?: string; cooperadoIndicadorId?: string | null;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
 
@@ -206,7 +207,104 @@ const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { id: 'proposta', label: 'Proposta', icon: Zap },
   { id: 'asaas', label: 'Cobranças Asaas', icon: DollarSign },
+  { id: 'indicacoes', label: 'Indicações', icon: Gift },
 ];
+
+// ─── Indicações Tab ──────────────────────────────────────────────────────────
+
+function IndicacoesTab({ cooperadoId, codigoIndicacao }: { cooperadoId: string; codigoIndicacao?: string }) {
+  const [beneficios, setBeneficios] = useState<any[]>([]);
+  const [copiado, setCopiado] = useState(false);
+
+  useEffect(() => {
+    api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`)
+      .then(({ data }) => setBeneficios(data))
+      .catch(() => {});
+  }, [cooperadoId]);
+
+  const link = `https://app.cooperebr.com.br/indicar?ref=${codigoIndicacao || ''}`;
+  const totalAplicado = beneficios.reduce((s, b) => s + Number(b.valorAplicado), 0);
+  const totalPendente = beneficios.filter(b => b.status === 'PENDENTE' || b.status === 'PARCIAL').reduce((s, b) => s + Number(b.saldoRestante), 0);
+
+  function copiar() {
+    navigator.clipboard.writeText(link);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Gift className="h-4 w-4 text-green-600" />Programa de Indicações</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+            <div className="flex-1">
+              <p className="text-xs text-gray-500 mb-1">Código único de indicação</p>
+              <p className="text-sm font-mono font-bold text-green-700">{codigoIndicacao || '—'}</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-gray-500 mb-1">Link de indicação</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-mono text-gray-600 truncate">{link}</p>
+                <button onClick={copiar} className="shrink-0 p-1.5 rounded hover:bg-gray-200 transition-colors" title="Copiar link">
+                  {copiado ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-500" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 bg-green-50 rounded-lg">
+              <p className="text-xs text-gray-500">Total aplicado</p>
+              <p className="text-lg font-bold text-green-700">R$ {totalAplicado.toFixed(2)}</p>
+            </div>
+            <div className="p-3 bg-amber-50 rounded-lg">
+              <p className="text-xs text-gray-500">Pendente de aplicação</p>
+              <p className="text-lg font-bold text-amber-700">R$ {totalPendente.toFixed(2)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {beneficios.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Benefícios recebidos</CardTitle></CardHeader>
+          <CardContent>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Indicado</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Tipo</th>
+                    <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">Valor</th>
+                    <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">Aplicado</th>
+                    <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {beneficios.map((b: any) => (
+                    <tr key={b.id} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2">{b.indicacao?.cooperadoIndicado?.nomeCompleto ?? '—'}</td>
+                      <td className="px-4 py-2 text-xs">{b.tipo === 'PERCENTUAL_FATURA' ? '% Fatura' : 'R$/kWh'}</td>
+                      <td className="px-4 py-2 text-right">R$ {Number(b.valorCalculado).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">R$ {Number(b.valorAplicado).toFixed(2)}</td>
+                      <td className="px-4 py-2">
+                        <Badge variant="outline" className={`text-xs ${
+                          b.status === 'APLICADO' ? 'bg-green-100 text-green-800' :
+                          b.status === 'PARCIAL' ? 'bg-amber-100 text-amber-800' : ''
+                        }`}>{b.status}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -1620,6 +1718,9 @@ export default function CooperadoPerfilPage() {
 
       {/* ─── Aba Cobranças Asaas ─────────────────────────────────────────── */}
       {aba === 'asaas' && <AsaasTab cooperadoId={id} />}
+
+      {/* ─── Aba Indicações ───────────────────────────────────────────────── */}
+      {aba === 'indicacoes' && <IndicacoesTab cooperadoId={id} codigoIndicacao={cooperado?.codigoIndicacao} />}
 
       {/* ════════════════════════════════════════════════════════════════════════
           DIALOGS

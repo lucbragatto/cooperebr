@@ -38,6 +38,8 @@ model Cooperativa {
   asaasConfig           AsaasConfig?
   faturasSaas           FaturaSaas[]
   modelosDocumento      ModeloDocumento[]
+  configIndicacao       ConfigIndicacao?
+  indicacoes            Indicacao[]
 
   @@map("cooperativas")
 }
@@ -107,6 +109,12 @@ model Cooperado {
   usinasProprietario  Usina[]              @relation("UsinaProprietario")
   asaasCustomer       AsaasCustomer?
   asaasCobrancas      AsaasCobranca[]
+  // Indicações MLM
+  codigoIndicacao         String               @unique @default(cuid())
+  cooperadoIndicadorId    String?
+  indicacoesFeitas        Indicacao[]          @relation("IndicacoesFeitas")
+  indicacoesRecebidas     Indicacao[]          @relation("IndicacoesRecebidas")
+  beneficiosIndicacao     BeneficioIndicacao[]
 
   @@map("cooperados")
 }
@@ -1002,4 +1010,55 @@ model ModeloDocumento {
   createdAt     DateTime     @default(now())
 
   @@map("modelos_documento")
+}
+
+// ─── MLM Indicações em Cascata ──────────────────────────────────────────────
+
+model ConfigIndicacao {
+  id            String      @id @default(cuid())
+  cooperativaId String      @unique
+  cooperativa   Cooperativa @relation(fields: [cooperativaId], references: [id])
+  ativo         Boolean     @default(true)
+  maxNiveis     Int         @default(2)
+  modalidade    String      @default("PERCENTUAL_PRIMEIRA_FATURA") // PERCENTUAL_PRIMEIRA_FATURA | REAIS_KWH_RECORRENTE | AMBOS
+  niveisConfig  Json        // [{ nivel: 1, percentual: 5.0, reaisKwh: 0 }, ...]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("config_indicacoes")
+}
+
+model Indicacao {
+  id                   String               @id @default(cuid())
+  cooperativaId        String
+  cooperativa          Cooperativa          @relation(fields: [cooperativaId], references: [id])
+  cooperadoIndicadorId String
+  cooperadoIndicador   Cooperado            @relation("IndicacoesFeitas", fields: [cooperadoIndicadorId], references: [id])
+  cooperadoIndicadoId  String
+  cooperadoIndicado    Cooperado            @relation("IndicacoesRecebidas", fields: [cooperadoIndicadoId], references: [id])
+  nivel                Int                  @default(1)
+  status               String               @default("PENDENTE") // PENDENTE | PRIMEIRA_FATURA_PAGA | CANCELADO
+  primeiraFaturaPagaEm DateTime?
+  createdAt            DateTime             @default(now())
+  beneficios           BeneficioIndicacao[]
+
+  @@map("indicacoes")
+}
+
+model BeneficioIndicacao {
+  id             String    @id @default(cuid())
+  indicacaoId    String
+  indicacao      Indicacao @relation(fields: [indicacaoId], references: [id])
+  cooperadoId    String
+  cooperado      Cooperado @relation(fields: [cooperadoId], references: [id])
+  tipo           String    // PERCENTUAL_FATURA | REAIS_KWH
+  valorCalculado Decimal   @db.Decimal(10, 2)
+  valorAplicado  Decimal   @default(0) @db.Decimal(10, 2)
+  saldoRestante  Decimal   @default(0) @db.Decimal(10, 2)
+  mesReferencia  String    // '2026-03'
+  status         String    @default("PENDENTE") // PENDENTE | APLICADO | PARCIAL | CANCELADO
+  cobrancaId     String?
+  createdAt      DateTime  @default(now())
+
+  @@map("beneficios_indicacao")
 }

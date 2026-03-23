@@ -1,6 +1,7 @@
 'use client';
 
-import { User } from 'lucide-react';
+import { useEffect } from 'react';
+import { User, Gift } from 'lucide-react';
 
 export interface Step2Data {
   nomeCompleto: string;
@@ -17,6 +18,7 @@ export interface Step2Data {
   representanteLegalCpf: string;
   representanteLegalCargo: string;
   formaPagamento: string;
+  codigoIndicacao: string;
 }
 
 interface Step2Props {
@@ -81,6 +83,14 @@ function validarCNPJ(cnpj: string): boolean {
 }
 
 export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
+  // Pré-preencher código de indicação do localStorage (vindo do ?ref= na landing page)
+  useEffect(() => {
+    if (!data.codigoIndicacao) {
+      const ref = typeof window !== 'undefined' ? localStorage.getItem('codigoIndicacao') : null;
+      if (ref) onChange({ codigoIndicacao: ref });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const isPJ = data.tipoPessoa === 'PJ';
   const docNums = data.cpf.replace(/\D/g, '');
   const docValido = isPJ ? (docNums.length < 14 || validarCNPJ(data.cpf)) : (docNums.length < 11 || validarCPF(data.cpf));
@@ -176,6 +186,23 @@ export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
           <option value="CONSIGNADO">Consignado</option>
         </select>
       </Campo>
+
+      {/* Código de indicação */}
+      <div className="border border-green-200 rounded-lg p-4 bg-green-50/50">
+        <div className="flex items-center gap-2 mb-2">
+          <Gift className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium text-green-800">Indicação</span>
+        </div>
+        <Campo label="Código de indicação (opcional)">
+          <input
+            className={cls}
+            value={data.codigoIndicacao}
+            onChange={e => onChange({ codigoIndicacao: e.target.value })}
+            placeholder="Ex: clxxxxxxxxxxxxxxxxxx"
+          />
+          <p className="text-xs text-gray-500 mt-1">Se este membro foi indicado, insira o código do indicador</p>
+        </Campo>
+      </div>
     </div>
   );
 }

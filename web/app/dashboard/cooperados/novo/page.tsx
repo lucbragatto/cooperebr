@@ -101,6 +101,7 @@ export default function NovoMembroWizard() {
     representanteLegalCpf: '',
     representanteLegalCargo: '',
     formaPagamento: 'BOLETO',
+    codigoIndicacao: '',
   });
 
   const [step3, setStep3] = useState<Step3Data>({
