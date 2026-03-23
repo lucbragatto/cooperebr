@@ -66,8 +66,30 @@ export class CobrancasService {
     valorLiquido: number;
     dataVencimento: Date;
     dataPagamento?: Date;
-  }) {
-    return this.prisma.cobranca.create({ data });
+  }, cooperativaId?: string) {
+    const cobranca = await this.prisma.cobranca.create({ data });
+
+    // Emitir automaticamente no Asaas se configurado
+    if (cooperativaId) {
+      const contrato = await this.prisma.contrato.findUnique({
+        where: { id: data.contratoId },
+        select: { cooperadoId: true },
+      });
+      if (contrato?.cooperadoId) {
+        await this.emitirNoAsaasSeConfigurado(
+          cobranca.id,
+          cooperativaId,
+          contrato.cooperadoId,
+          {
+            valor: data.valorLiquido,
+            vencimento: data.dataVencimento,
+            descricao: `Cobrança ${data.mesReferencia}/${data.anoReferencia}`,
+          },
+        );
+      }
+    }
+
+    return cobranca;
   }
 
   async update(id: string, data: Partial<{

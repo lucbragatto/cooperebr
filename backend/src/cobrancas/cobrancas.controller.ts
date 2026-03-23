@@ -30,6 +30,7 @@ export class CobrancasController {
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
   create(
+    @Req() req: any,
     @Body()
     body: {
       contratoId: string;
@@ -43,7 +44,7 @@ export class CobrancasController {
       dataPagamento?: Date;
     },
   ) {
-    return this.cobrancasService.create(body);
+    return this.cobrancasService.create(body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
