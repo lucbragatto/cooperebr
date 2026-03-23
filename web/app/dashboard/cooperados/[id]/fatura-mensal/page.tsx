@@ -3,14 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   ArrowLeft,
   CheckCircle,
   FileText,
+  FileUp,
   Loader2,
   Upload,
+  Zap,
+  BarChart2,
 } from 'lucide-react';
 
 interface DadosExtraidos {
@@ -201,16 +204,17 @@ export default function FaturaMensalPage() {
       {/* Upload */}
       {!resultado && !dadosExtraidos && (
         <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Selecionar fatura do mês</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="pt-6 space-y-5">
+            <div>
+              <h2 className="text-base font-semibold text-gray-800 mb-1">Upload da fatura de energia</h2>
+              <p className="text-sm text-gray-500">A IA vai extrair os dados automaticamente.</p>
+            </div>
             <div
               onClick={() => fileRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
               onDragLeave={() => setDrag(false)}
               onDrop={onDrop}
-              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                drag ? 'border-green-500 bg-green-50' : arquivo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-              }`}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${drag ? 'border-green-500 bg-green-50' : arquivo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'}`}
             >
               <input
                 ref={fileRef}
@@ -220,14 +224,14 @@ export default function FaturaMensalPage() {
                 onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
               />
               {arquivo ? (
-                <div className="space-y-1">
-                  <FileText className="h-8 w-8 text-green-600 mx-auto" />
+                <div className="space-y-2">
+                  <FileUp className="h-10 w-10 text-green-600 mx-auto" />
                   <p className="text-sm font-medium text-green-800">{arquivo.name}</p>
                   <p className="text-xs text-green-600">{(arquivo.size / 1024).toFixed(0)} KB — clique para trocar</p>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  <Upload className="h-8 w-8 text-gray-400 mx-auto" />
+                <div className="space-y-2">
+                  <Upload className="h-10 w-10 text-gray-400 mx-auto" />
                   <p className="text-sm text-gray-600">Arraste ou <span className="text-green-700 font-medium">clique para selecionar</span></p>
                   <p className="text-xs text-gray-400">PDF ou imagem (JPG, PNG)</p>
                 </div>
@@ -238,7 +242,7 @@ export default function FaturaMensalPage() {
               {extraindo ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Extraindo dados com IA...</>
               ) : (
-                <><Upload className="h-4 w-4 mr-2" />Extrair dados da fatura</>
+                'Analisar fatura'
               )}
             </Button>
           </CardContent>
@@ -247,29 +251,48 @@ export default function FaturaMensalPage() {
 
       {/* Dados extraídos — confirmação */}
       {dadosExtraidos && !resultado && (
-        <>
+        <div className="space-y-5">
           <Card>
-            <CardHeader><CardTitle>Dados Extraídos</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <Campo label="Titular" value={dadosExtraidos.titular} />
-              <Campo label="UC" value={dadosExtraidos.numeroUC} />
-              <Campo label="Distribuidora" value={dadosExtraidos.distribuidora} />
-              <Campo label="Mês referência" value={dadosExtraidos.mesReferencia} />
-              <Campo label="Consumo atual (kWh)" value={dadosExtraidos.consumoAtualKwh?.toLocaleString('pt-BR')} />
-              <Campo label="Total a pagar" value={dadosExtraidos.totalAPagar?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
-              <Campo label="TUSD (R$/kWh)" value={dadosExtraidos.tarifaTUSD?.toFixed(5)} />
-              <Campo label="TE (R$/kWh)" value={dadosExtraidos.tarifaTE?.toFixed(5)} />
-              <Campo label="Bandeira" value={bandeiraLabel[dadosExtraidos.bandeiraTarifaria] ?? dadosExtraidos.bandeiraTarifaria} />
-              <Campo label="Compensação" value={dadosExtraidos.possuiCompensacao ? 'Sim' : 'Não'} />
-              <Campo label="Créditos recebidos (kWh)" value={dadosExtraidos.creditosRecebidosKwh} />
-              <Campo label="Saldo total (kWh)" value={dadosExtraidos.saldoTotalKwh} />
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="h-4 w-4 text-green-700" />
+                <h2 className="text-sm font-semibold text-gray-800">Dados da fatura</h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <Campo label="Titular" value={dadosExtraidos.titular} />
+                <Campo label="UC" value={dadosExtraidos.numeroUC} />
+                <Campo label="Distribuidora" value={dadosExtraidos.distribuidora} />
+                <Campo label="Mês referência" value={dadosExtraidos.mesReferencia} />
+                <Campo label="Consumo atual (kWh)" value={dadosExtraidos.consumoAtualKwh?.toLocaleString('pt-BR')} />
+                <Campo label="Total a pagar" value={dadosExtraidos.totalAPagar?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="h-4 w-4 text-green-700" />
+                <h2 className="text-sm font-semibold text-gray-800">Tarifas e bandeira</h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <Campo label="TUSD (R$/kWh)" value={dadosExtraidos.tarifaTUSD?.toFixed(5)} />
+                <Campo label="TE (R$/kWh)" value={dadosExtraidos.tarifaTE?.toFixed(5)} />
+                <Campo label="Bandeira" value={bandeiraLabel[dadosExtraidos.bandeiraTarifaria] ?? dadosExtraidos.bandeiraTarifaria} />
+                <Campo label="Compensação" value={dadosExtraidos.possuiCompensacao ? 'Sim' : 'Não'} />
+                <Campo label="Créditos recebidos (kWh)" value={dadosExtraidos.creditosRecebidosKwh} />
+                <Campo label="Saldo total (kWh)" value={dadosExtraidos.saldoTotalKwh} />
+              </div>
             </CardContent>
           </Card>
 
           {dadosExtraidos.historicoConsumo?.length > 0 && (
             <Card>
-              <CardHeader><CardTitle>Histórico de Consumo</CardTitle></CardHeader>
-              <CardContent>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <BarChart2 className="h-4 w-4 text-green-700" />
+                  <h2 className="text-sm font-semibold text-gray-800">Histórico de consumo</h2>
+                </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="grid grid-cols-3 gap-2 px-3 py-1.5 bg-gray-50 border-b text-xs font-medium text-gray-500">
                     <div>Mês</div>
@@ -288,17 +311,19 @@ export default function FaturaMensalPage() {
             </Card>
           )}
 
+          {erro && <p className="text-sm text-red-600">{erro}</p>}
+
           <div className="flex gap-3 pb-8">
-            <Button onClick={confirmarSalvar} disabled={salvando}>
+            <Button variant="outline" onClick={reset}>Cancelar</Button>
+            <Button onClick={confirmarSalvar} disabled={salvando} className="flex-1">
               {salvando ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</>
               ) : (
-                <><CheckCircle className="h-4 w-4 mr-2" />Confirmar e salvar</>
+                'Confirmar e salvar'
               )}
             </Button>
-            <Button variant="outline" onClick={reset}>Cancelar</Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
