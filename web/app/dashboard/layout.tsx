@@ -31,6 +31,7 @@ import {
   DollarSign,
   Globe,
   Gift,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -51,6 +52,7 @@ const navItemsBase = [
   { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
   { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
+  { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
   { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
   { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
 ];
