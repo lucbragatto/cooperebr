@@ -5,6 +5,8 @@ import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { ModeloMensagemService } from './modelo-mensagem.service';
+import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 
 interface MensagemRecebida {
   telefone: string;
@@ -25,7 +27,28 @@ export class WhatsappBotService {
     private configTenant: ConfigTenantService,
     private indicacoes: IndicacoesService,
     private sender: WhatsappSenderService,
+    private modelos: ModeloMensagemService,
+    private fluxoMotor: WhatsappFluxoMotorService,
   ) {}
+
+  /** Busca texto do banco de mensagens ou usa fallback hardcoded */
+  private async msg(nome: string, variaveis: Record<string, string> = {}, fallback: string): Promise<string> {
+    try {
+      const modelo = await this.modelos.findByNome(nome);
+      if (modelo) {
+        this.modelos.incrementarUso(modelo.id);
+        return this.modelos.renderizar(modelo, variaveis);
+      }
+    } catch (err) {
+      this.logger.warn(`Fallback para mensagem '${nome}': ${err.message}`);
+    }
+    // Fallback: substituir variáveis manualmente no texto hardcoded
+    let texto = fallback;
+    for (const [k, v] of Object.entries(variaveis)) {
+      texto = texto.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
+    }
+    return texto;
+  }
 
   async processarMensagem(msg: MensagemRecebida): Promise<void> {
     const { telefone } = msg;
@@ -60,20 +83,25 @@ export class WhatsappBotService {
     const corpoLower = corpo.toLowerCase();
     if (['cancelar', 'cancel'].includes(corpoLower)) {
       await this.resetarConversa(telefone);
-      await this.sender.enviarMensagem(
-        telefone,
-        'Tudo bem! Se quiser começar novamente, é só mandar a foto da sua conta de luz. 😊',
-      );
+      const texto = await this.msg('cancelar', {}, 'Tudo bem! Se quiser começar novamente, é só mandar a foto da sua conta de luz. 😊');
+      await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
     if (['ajuda', 'duvida', 'dúvida', 'problema', 'erro', 'help'].includes(corpoLower)) {
-      await this.sender.enviarMensagem(
-        telefone,
-        'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
-      );
+      const texto = await this.msg('ajuda', {}, 'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸');
+      await this.sender.enviarMensagem(telefone, texto);
       return;
     }
+
+    // TODO: reativar quando motor dinâmico for corrigido para processar apenas etapa atual
+    // Motor dinâmico desativado — enviava todas as mensagens de uma vez sem esperar resposta
+    // try {
+    //   const processou = await this.fluxoMotor.processarComFluxoDinamico(msg, conversa);
+    //   if (processou) return;
+    // } catch (err) {
+    //   this.logger.warn(`Erro no motor dinâmico, fallback hardcoded: ${err.message}`);
+    // }
 
     try {
       switch (conversa.estado) {
@@ -116,14 +144,13 @@ export class WhatsappBotService {
       ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
 
     if (!isMidia) {
-      await this.sender.enviarMensagem(
-        telefone,
-        '👋 Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸',
-      );
+      const texto = await this.msg('boas_vindas', {}, '👋 Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸');
+      await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, '📄 Recebi sua fatura! Analisando os dados... Aguarde um momento. ⏳');
+    const textoProcessando = await this.msg('processando_fatura', {}, '📄 Recebi sua fatura! Analisando os dados... Aguarde um momento. ⏳');
+    await this.sender.enviarMensagem(telefone, textoProcessando);
 
     // OCR
     const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
@@ -519,10 +546,8 @@ export class WhatsappBotService {
 
     await this.finalizarConversa(conversa.id);
 
-    await this.sender.enviarMensagem(
-      telefone,
-      '🎉 Perfeito! Seu pré-cadastro foi criado com sucesso!\n\nNossa equipe entrará em contato em breve para finalizar. Qualquer dúvida é só perguntar! 💚',
-    );
+    const textoSucesso = await this.msg('cadastro_sucesso', {}, '🎉 Perfeito! Seu pré-cadastro foi criado com sucesso!\n\nNossa equipe entrará em contato em breve para finalizar. Qualquer dúvida é só perguntar! 💚');
+    await this.sender.enviarMensagem(telefone, textoSucesso);
   }
 
   // ─── Estado CONCLUIDO ────────────────────────────────────────────────────
