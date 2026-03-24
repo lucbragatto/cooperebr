@@ -17,9 +17,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 export default function NovaUcPage() {
   const router = useRouter();
+  const { tipoMembro } = useTipoParceiro();
 
   const [form, setForm] = useState({
     numero: '',
@@ -133,7 +135,7 @@ export default function NovaUcPage() {
             </div>
 
             <div className="space-y-1">
-              <Label>Cooperado *</Label>
+              <Label>{tipoMembro} *</Label>
               <Select onValueChange={(v: string | null) => set('cooperadoId', v ?? '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um cooperado" />

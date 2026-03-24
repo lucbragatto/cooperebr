@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const TIPOS = [
   { value: 'FALTA_ENERGIA', label: 'Falta de Energia' },
@@ -33,6 +34,7 @@ const PRIORIDADES = [
 ];
 
 export default function NovaOcorrenciaPage() {
+  const { tipoMembro } = useTipoParceiro();
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -71,7 +73,7 @@ export default function NovaOcorrenciaPage() {
     setSucesso('');
 
     if (!form.cooperadoId || !form.tipo || !form.prioridade || !form.descricao.trim()) {
-      setErro('Cooperado, tipo, prioridade e descrição são obrigatórios.');
+      setErro(`${tipoMembro}, tipo, prioridade e descrição são obrigatórios.`);
       return;
     }
 
@@ -114,7 +116,7 @@ export default function NovaOcorrenciaPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <Label>Cooperado *</Label>
+              <Label>{tipoMembro} *</Label>
               <Select onValueChange={(v: string | null) => handleCooperadoChange(v ?? '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um cooperado" />

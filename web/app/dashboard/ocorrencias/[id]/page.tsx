@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const prioridadeClasses: Record<string, string> = {
   ALTA: 'bg-red-100 text-red-800 border-red-200',
@@ -52,6 +53,7 @@ const inputClass =
 const labelClass = 'text-xs text-gray-500 mb-0.5 block';
 
 export default function OcorrenciaDetailPage() {
+  const { tipoMembro } = useTipoParceiro();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [ocorrencia, setOcorrencia] = useState<Ocorrencia | null>(null);
@@ -147,7 +149,7 @@ export default function OcorrenciaDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={ocorrencia.id} />
-            <Campo label="Cooperado" value={ocorrencia.cooperado?.nomeCompleto} />
+            <Campo label={tipoMembro} value={ocorrencia.cooperado?.nomeCompleto} />
             <Campo label="UC" value={ocorrencia.uc?.numero} />
             <Campo label="Tipo" value={tipoLabel[ocorrencia.tipo] ?? ocorrencia.tipo} />
             <Campo label="Prioridade" value={prioridadeLabel[ocorrencia.prioridade] ?? ocorrencia.prioridade} />

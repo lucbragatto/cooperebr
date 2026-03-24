@@ -7,6 +7,7 @@ import type { UC } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -24,6 +25,7 @@ const labelClass = 'text-xs text-gray-500 mb-0.5 block';
 export default function UCDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { tipoMembro } = useTipoParceiro();
   const [uc, setUc] = useState<UC | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -119,8 +121,8 @@ export default function UCDetailPage() {
             <Campo label="Endereço" value={uc.endereco} />
             <Campo label="Cidade" value={uc.cidade} />
             <Campo label="Estado" value={uc.estado} />
-            <Campo label="Cooperado" value={uc.cooperado?.nomeCompleto} />
-            <Campo label="ID do Cooperado" value={uc.cooperadoId} />
+            <Campo label={tipoMembro} value={uc.cooperado?.nomeCompleto} />
+            <Campo label={`ID do ${tipoMembro}`} value={uc.cooperadoId} />
             <Campo label="Criado em" value={new Date(uc.createdAt).toLocaleString('pt-BR')} />
             <Campo label="Atualizado em" value={new Date(uc.updatedAt).toLocaleString('pt-BR')} />
           </CardContent>

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const prioridadeClasses: Record<string, string> = {
   ALTA: 'bg-red-100 text-red-800 border-red-200',
@@ -47,6 +48,7 @@ const tipoLabel: Record<string, string> = {
 };
 
 export default function OcorrenciasPage() {
+  const { tipoMembro } = useTipoParceiro();
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -78,7 +80,7 @@ export default function OcorrenciasPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cooperado</TableHead>
+                <TableHead>{tipoMembro}</TableHead>
                 <TableHead>UC</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Prioridade</TableHead>

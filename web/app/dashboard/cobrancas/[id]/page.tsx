@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil, CheckCircle } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -43,6 +44,7 @@ const labelClass = 'text-xs text-gray-500 mb-0.5 block';
 export default function CobrancaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { tipoMembro } = useTipoParceiro();
   const [cobranca, setCobranca] = useState<Cobranca | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -153,7 +155,7 @@ export default function CobrancaDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={cobranca.id} />
-            <Campo label="Cooperado" value={(cobranca as any).contrato?.cooperado?.nomeCompleto} />
+            <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado?.nomeCompleto} />
             <Campo label="Contrato" value={cobranca.contrato?.numero} />
             <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
             <Campo label="Valor Bruto" value={formatBRL(cobranca.valorBruto)} />

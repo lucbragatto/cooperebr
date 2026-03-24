@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { ArrowLeft, CheckCircle, Loader2, Play, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 interface Tarifa {
   id: string;
@@ -68,6 +69,7 @@ function fmtBRL(v: number | undefined | null) {
 }
 
 export default function ReajustesPage() {
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
   const [historico, setHistorico] = useState<HistoricoReajuste[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +170,7 @@ export default function ReajustesPage() {
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Índice</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">% Índice</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">% Aplicado</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Cooperados</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">{tipoMembroPlural}</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Impacto mensal</th>
                 </tr>
               </thead>
@@ -231,7 +233,7 @@ export default function ReajustesPage() {
                 <CardHeader className="px-0 pb-2"><CardTitle className="text-sm font-semibold text-gray-700">Resultado da simulação</CardTitle></CardHeader>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="bg-gray-50 rounded p-2">
-                    <p className="text-xs text-gray-500">Cooperados afetados</p>
+                    <p className="text-xs text-gray-500">{tipoMembroPlural} afetados</p>
                     <p className="font-bold text-lg">{simulacao.cooperadosAfetados}</p>
                   </div>
                   <div className="bg-gray-50 rounded p-2">
@@ -253,7 +255,7 @@ export default function ReajustesPage() {
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 border-b sticky top-0">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-500">Cooperado</th>
+                          <th className="text-left px-3 py-2 font-medium text-gray-500">{tipoMembro}</th>
                           <th className="text-right px-3 py-2 font-medium text-gray-500">kWh</th>
                           <th className="text-right px-3 py-2 font-medium text-gray-500">Ant.</th>
                           <th className="text-right px-3 py-2 font-medium text-gray-500">Novo</th>
@@ -293,7 +295,7 @@ export default function ReajustesPage() {
           <DialogHeader>
             <DialogTitle>Confirmar aplicação do reajuste?</DialogTitle>
             <DialogDescription>
-              Esta ação registrará o reajuste no histórico e afetará {simulacao?.cooperadosAfetados ?? 0} cooperados,
+              Esta ação registrará o reajuste no histórico e afetará {simulacao?.cooperadosAfetados ?? 0} {tipoMembroPlural.toLowerCase()},
               com impacto mensal estimado de {fmtBRL(simulacao?.impactoMensalTotal)}.
               Esta ação não pode ser desfeita.
             </DialogDescription>

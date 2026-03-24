@@ -9,6 +9,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 interface EntradaEspera {
   id: string;
@@ -29,6 +30,7 @@ interface Usina {
 }
 
 export default function ListaEsperaPage() {
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
   const [lista, setLista] = useState<EntradaEspera[]>([]);
   const [usinas, setUsinas] = useState<Usina[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -62,9 +64,9 @@ export default function ListaEsperaPage() {
       setLista(prev => prev.filter(e => e.id !== dialogAlocar.id));
       setDialogAlocar(null);
       setUsinaEscolhida('');
-      showToast('sucesso', `Cooperado alocado com sucesso.`);
+      showToast('sucesso', `${tipoMembro} alocado com sucesso.`);
     } catch {
-      showToast('erro', 'Erro ao alocar cooperado.');
+      showToast('erro', `Erro ao alocar ${tipoMembro.toLowerCase()}.`);
     } finally {
       setSalvando(false);
     }
@@ -82,7 +84,7 @@ export default function ListaEsperaPage() {
 
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Lista de Espera</h1>
-        <p className="text-sm text-gray-500 mt-1">Cooperados aguardando vaga em usina.</p>
+        <p className="text-sm text-gray-500 mt-1">{tipoMembroPlural} aguardando vaga em usina.</p>
       </div>
 
       <Card>
@@ -99,14 +101,14 @@ export default function ListaEsperaPage() {
             </div>
           ) : lista.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-12">
-              <p className="text-gray-500">Nenhum cooperado na lista de espera.</p>
+              <p className="text-gray-500">Nenhum {tipoMembro.toLowerCase()} na lista de espera.</p>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="border-b bg-gray-50">
                 <tr>
                   <th className="text-center px-4 py-3 text-xs text-gray-500 font-medium w-12">#</th>
-                  <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Cooperado</th>
+                  <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">{tipoMembro}</th>
                   <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Contrato</th>
                   <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">kWh necessário</th>
                   <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Data entrada</th>

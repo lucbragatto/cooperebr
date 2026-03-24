@@ -17,9 +17,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 export default function NovoContratoPage() {
   const router = useRouter();
+  const { tipoMembro } = useTipoParceiro();
 
   const [form, setForm] = useState({
     cooperadoId: '',
@@ -111,7 +113,7 @@ export default function NovoContratoPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <Label>Cooperado *</Label>
+              <Label>{tipoMembro} *</Label>
               <Select onValueChange={(v: string | null) => handleCooperadoChange(v ?? '')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um cooperado" />

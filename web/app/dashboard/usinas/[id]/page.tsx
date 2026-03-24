@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '@/lib/api';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ type UsinaFormData = z.infer<typeof usinaSchema>;
 export default function UsinaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
   const [usina, setUsina] = useState<Usina | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -222,7 +224,7 @@ export default function UsinaDetailPage() {
           {/* Cooperados Alocados */}
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle className="text-base">Cooperados Alocados</CardTitle>
+              <CardTitle className="text-base">{tipoMembroPlural} Alocados</CardTitle>
               {capacidadeInfo && capacidadeInfo.total > 0 && (
                 <div className="mt-2">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -254,7 +256,7 @@ export default function UsinaDetailPage() {
                   {cooperadosAlocados.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-gray-400 py-6">
-                        Nenhum cooperado alocado nesta usina
+                        {`Nenhum ${tipoMembro.toLowerCase()} alocado nesta usina`}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -346,7 +348,7 @@ export default function UsinaDetailPage() {
                     {lista.cooperados.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-gray-400 py-6">
-                          Nenhum cooperado ativo nesta usina
+                          {`Nenhum ${tipoMembro.toLowerCase()} ativo nesta usina`}
                         </TableCell>
                       </TableRow>
                     ) : (

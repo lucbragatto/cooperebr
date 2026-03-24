@@ -60,7 +60,22 @@
       "Bash(cmd //c \"taskkill /PID 716 /F\" 2>&1)",
       "Bash(taskkill //F //PID 8488)",
       "Bash(taskkill //F //PID 4744)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(findstr :3000)",
+      "Bash(grep -n \"cooperativaId.*String$\\\\|cooperativaId.*String?\" \"C:\\\\Users\\\\Luciano\\\\cooperebr\\\\backend\\\\prisma\\\\schema.prisma\")",
+      "Bash(grep -n \"as any\" /c/Users/Luciano/cooperebr/web/app/dashboard/cooperados/[id]/page.tsx)",
+      "Bash(grep -r \"helmet\\\\|rate.*limit\\\\|throttle\\\\|rateLimit\" /c/Users/Luciano/cooperebr/backend/src --include=*.ts)",
+      "Bash(npm install:*)",
+      "Bash(cmd.exe /c \"taskkill /F /IM node.exe\")",
+      "Bash(timeout 6 bash -c \"echo > /dev/tcp/aws-1-sa-east-1.pooler.supabase.com/6543\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(npm ls:*)",
+      "Bash(npm view:*)",
+      "Bash(rm:*)",
+      "Bash(/dev/null cd:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, UnauthorizedException, HttpCode } from '@nestjs/common';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
@@ -30,6 +30,7 @@ export class AuthController {
 
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 30 } })
+  @HttpCode(200)
   @Post('login')
   login(
     @Body()

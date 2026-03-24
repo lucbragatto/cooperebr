@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -36,6 +37,7 @@ function formatBRL(value: number) {
 }
 
 export default function CobrancasPage() {
+  const { tipoMembro } = useTipoParceiro();
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -67,7 +69,7 @@ export default function CobrancasPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cooperado</TableHead>
+                <TableHead>{tipoMembro}</TableHead>
                 <TableHead>Contrato</TableHead>
                 <TableHead>Mês/Ano Ref.</TableHead>
                 <TableHead>Valor Bruto</TableHead>

@@ -14,6 +14,7 @@ import { ArrowLeft, Loader2, Pencil } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
   PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -64,6 +65,7 @@ type ContratoFormData = z.infer<typeof contratoSchema>;
 export default function ContratoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { tipoMembro } = useTipoParceiro();
   const [contrato, setContrato] = useState<(Contrato & { kwhContratoAnual?: number | null; kwhContratoMensal?: number | null; kwhContrato?: number | null; descontoOverride?: number | null; percentualUsina?: number | null }) | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -157,7 +159,7 @@ export default function ContratoDetailPage() {
           <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
             <Campo label="ID" value={contrato.id} />
             <Campo label="Numero" value={contrato.numero} />
-            <Campo label="Cooperado" value={contrato.cooperado?.nomeCompleto} />
+            <Campo label={tipoMembro} value={contrato.cooperado?.nomeCompleto} />
             <Campo label="UC" value={contrato.uc?.numero} />
             <Campo label="Usina" value={contrato.usina?.nome} />
             <Campo label="Desconto (%)" value={`${contrato.percentualDesconto}%`} />

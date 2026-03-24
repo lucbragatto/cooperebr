@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarChart3, CheckCircle, FileSignature, Mail, MessageSquare, Printer, Send, Settings, TrendingUp, UserCheck } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 interface DashStats {
   mediaCooperativaKwh: number;
@@ -51,6 +52,7 @@ function fmtBRL(v: number | undefined | null) {
 }
 
 export default function MotorPropostaPage() {
+  const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
   const [stats, setStats] = useState<DashStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -180,7 +182,7 @@ export default function MotorPropostaPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Cooperado</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">{tipoMembro}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Referência</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">kWh contrato</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Economia/mês</th>

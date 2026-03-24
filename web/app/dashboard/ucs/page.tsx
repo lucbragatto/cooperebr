@@ -15,8 +15,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
+import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 export default function UcsPage() {
+  const { tipoMembro } = useTipoParceiro();
   const [ucs, setUcs] = useState<UC[]>([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -52,7 +54,7 @@ export default function UcsPage() {
                 <TableHead>Endereço</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Cooperado</TableHead>
+                <TableHead>{tipoMembro}</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
