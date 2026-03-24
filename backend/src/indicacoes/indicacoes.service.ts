@@ -9,6 +9,7 @@ export class IndicacoesService {
   // ─── Config ──────────────────────────────────────────────────────────────────
 
   async getConfig(cooperativaId: string) {
+    if (!cooperativaId) return null;
     return this.prisma.configIndicacao.findUnique({
       where: { cooperativaId },
     });
@@ -272,6 +273,7 @@ export class IndicacoesService {
   }
 
   async getArvore(cooperativaId: string) {
+    if (!cooperativaId) return [];
     const indicacoes = await this.prisma.indicacao.findMany({
       where: { cooperativaId },
       include: {
@@ -321,6 +323,7 @@ export class IndicacoesService {
   }
 
   async getRelatorio(cooperativaId: string) {
+    if (!cooperativaId) return { indicacoes: [], beneficios: [], resumo: {} };
     const [indicacoes, beneficios] = await Promise.all([
       this.prisma.indicacao.findMany({
         where: { cooperativaId },
