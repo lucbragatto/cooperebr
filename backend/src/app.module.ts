@@ -30,6 +30,8 @@ import { CooperativasModule } from './cooperativas/cooperativas.module';
 import { AsaasModule } from './asaas/asaas.module';
 import { SaasModule } from './saas/saas.module';
 import { IndicacoesModule } from './indicacoes/indicacoes.module';
+import { ModelosMensagemModule } from './modelos-mensagem/modelos-mensagem.module';
+import { FluxoEtapasModule } from './fluxo-etapas/fluxo-etapas.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -62,6 +64,8 @@ import { RolesGuard } from './auth/roles.guard';
     AsaasModule,
     SaasModule,
     IndicacoesModule,
+    ModelosMensagemModule,
+    FluxoEtapasModule,
   ],
   controllers: [AppController],
   providers: [
