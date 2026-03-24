@@ -334,7 +334,7 @@ export class IndicacoesService {
       }),
       this.prisma.beneficioIndicacao.findMany({
         where: {
-          indicacao: { cooperativaId },
+          cooperado: { cooperativaId },
         },
         include: {
           cooperado: { select: { nomeCompleto: true } },
