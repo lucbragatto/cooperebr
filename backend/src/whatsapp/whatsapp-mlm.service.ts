@@ -29,13 +29,21 @@ export class WhatsappMlmService {
     }
   }
 
-  async enviarConvitesIndicacao(cooperativaId: string) {
+  async enviarConvitesIndicacao(
+    cooperativaId: string,
+    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[] },
+  ) {
+    const modo = opcoes?.modo ?? 'todos';
+    const targetCooperativaId = modo === 'parceiro' && opcoes?.parceiroId
+      ? opcoes.parceiroId
+      : cooperativaId;
+
     // Buscar config de indicação
     const config = await this.prisma.configIndicacao.findUnique({
-      where: { cooperativaId },
+      where: { cooperativaId: targetCooperativaId },
     });
     if (!config || !config.ativo) {
-      this.logger.warn(`Config indicação não encontrada ou inativa para cooperativa ${cooperativaId}`);
+      this.logger.warn(`Config indicação não encontrada ou inativa para cooperativa ${targetCooperativaId}`);
       return { total: 0, enviados: 0, erros: 0 };
     }
 
@@ -44,14 +52,22 @@ export class WhatsappMlmService {
     const percentualNivel1 = niveisConfig?.find(n => n.nivel === 1)?.percentual ?? 5;
 
     // Buscar cooperados ativos com telefone
-    const cooperados = await this.prisma.cooperado.findMany({
-      where: {
-        cooperativaId,
-        telefone: { not: null },
-        contratos: {
-          some: { status: 'ATIVO' },
-        },
+    const whereCooperado: any = {
+      cooperativaId: targetCooperativaId,
+      telefone: { not: null },
+      contratos: {
+        some: { status: 'ATIVO' },
       },
+    };
+
+    // Filtrar por telefones específicos
+    if (modo === 'lista' && opcoes?.telefones?.length) {
+      const telefonesNorm = opcoes.telefones.map((t) => this.formatarTelefone(t));
+      whereCooperado.telefone = { in: telefonesNorm };
+    }
+
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: whereCooperado,
       select: {
         id: true,
         nomeCompleto: true,

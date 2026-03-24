@@ -74,22 +74,42 @@ export class WhatsappFaturaController {
   @Post('disparar-cobrancas')
   async dispararCobrancas(
     @Req() req: any,
-    @Body() body: { mesReferencia?: string },
+    @Body() body: {
+      mesReferencia?: string;
+      modo?: 'todos' | 'parceiro' | 'lista';
+      parceiroId?: string;
+      telefones?: string[];
+    },
   ) {
     const cooperativaId = req.user?.cooperativaId;
-    return this.cobrancaService.enviarCobrancasDoMes(cooperativaId, body.mesReferencia);
+    return this.cobrancaService.enviarCobrancasDoMes(cooperativaId, body.mesReferencia, {
+      modo: body.modo,
+      parceiroId: body.parceiroId,
+      telefones: body.telefones,
+    });
   }
 
   // ─── Fluxo 3: MLM viral via WhatsApp ─────────────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('disparar-convites-indicacao')
-  async dispararConvitesIndicacao(@Req() req: any) {
+  async dispararConvitesIndicacao(
+    @Req() req: any,
+    @Body() body: {
+      modo?: 'todos' | 'parceiro' | 'lista';
+      parceiroId?: string;
+      telefones?: string[];
+    },
+  ) {
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId) {
       return { error: 'Cooperativa não identificada' };
     }
-    return this.mlmService.enviarConvitesIndicacao(cooperativaId);
+    return this.mlmService.enviarConvitesIndicacao(cooperativaId, {
+      modo: body.modo,
+      parceiroId: body.parceiroId,
+      telefones: body.telefones,
+    });
   }
 
   // Endpoint para processar entrada de indicado (chamado pela landing page)

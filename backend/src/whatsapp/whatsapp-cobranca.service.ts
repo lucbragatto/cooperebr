@@ -24,7 +24,11 @@ export class WhatsappCobrancaService {
     await this.enviarCobrancasDoMes();
   }
 
-  async enviarCobrancasDoMes(cooperativaId?: string, mesReferencia?: string) {
+  async enviarCobrancasDoMes(
+    cooperativaId?: string,
+    mesReferencia?: string,
+    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[] },
+  ) {
     const agora = new Date();
     const mes = mesReferencia
       ? parseInt(mesReferencia.split('/')[0] || mesReferencia.split('-')[0])
@@ -33,6 +37,8 @@ export class WhatsappCobrancaService {
       ? parseInt(mesReferencia.split('/')[1] || mesReferencia.split('-')[1])
       : agora.getFullYear();
 
+    const modo = opcoes?.modo ?? 'todos';
+
     // Buscar cobranças PENDENTE do mês que ainda não foram enviadas por WhatsApp
     const where: any = {
       status: 'PENDENTE',
@@ -40,7 +46,21 @@ export class WhatsappCobrancaService {
       anoReferencia: ano,
       whatsappEnviadoEm: null,
     };
-    if (cooperativaId) where.cooperativaId = cooperativaId;
+    if (modo === 'parceiro' && opcoes?.parceiroId) {
+      where.cooperativaId = opcoes.parceiroId;
+    } else if (cooperativaId) {
+      where.cooperativaId = cooperativaId;
+    }
+
+    // Filtrar por telefones específicos
+    if (modo === 'lista' && opcoes?.telefones?.length) {
+      const telefonesNorm = opcoes.telefones.map((t) => this.formatarTelefone(t));
+      where.contrato = {
+        cooperado: {
+          telefone: { in: telefonesNorm },
+        },
+      };
+    }
 
     const cobrancas = await this.prisma.cobranca.findMany({
       where,
