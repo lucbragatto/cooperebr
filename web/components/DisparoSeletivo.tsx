@@ -104,7 +104,7 @@ export default function DisparoSeletivo({
         parceiroId: modo === 'parceiro' ? parceiroId : undefined,
         telefones: modo === 'lista' ? telefones : undefined,
       });
-      setResultado(res);
+      setResultado({ total: res.total ?? 0, enviados: res.enviados ?? 0, erros: res.erros ?? 0 });
     } catch {
       setResultado({ total: 0, enviados: 0, erros: -1 });
     } finally {

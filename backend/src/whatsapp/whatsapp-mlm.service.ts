@@ -132,7 +132,31 @@ export class WhatsappMlmService {
       }
     }
 
-    const resultado = { total: cooperados.length, enviados, erros, cooperativaId };
+    // Modo lista: enviar mensagem genérica para telefones avulsos (não encontrados como cooperados ativos)
+    let qtdAvulsos = 0;
+    if (modo === 'lista' && opcoes?.telefones?.length) {
+      const telefonesEncontrados = new Set(cooperados.map((c) => this.formatarTelefone(c.telefone!)));
+      const telefonesAvulsos = opcoes.telefones
+        .map((t) => this.formatarTelefone(t))
+        .filter((t) => !telefonesEncontrados.has(t));
+      qtdAvulsos = telefonesAvulsos.length;
+
+      for (const telefone of telefonesAvulsos) {
+        try {
+          const msgAvulso =
+            'Olá! Conheça a CoopereBR e economize até 20% na sua conta de luz todos os meses, sem investimento. Para ver quanto você economizaria, mande uma foto da sua última conta de energia! 💡';
+          await this.sender.enviarMensagem(telefone, msgAvulso);
+          enviados++;
+          this.logger.log(`Convite avulso enviado para ${telefone}`);
+          await this.delay(2000);
+        } catch (err) {
+          erros++;
+          this.logger.error(`Erro ao enviar convite avulso para ${telefone}: ${err.message}`);
+        }
+      }
+    }
+
+    const resultado = { total: cooperados.length + qtdAvulsos, enviados, erros, cooperativaId };
     this.logger.log(`Resultado envio convites MLM: ${JSON.stringify(resultado)}`);
     return resultado;
   }
