@@ -1116,6 +1116,38 @@ model MensagemWhatsapp {
   @@map("mensagens_whatsapp")
 }
 
+model ModeloMensagem {
+  id            String   @id @default(cuid())
+  cooperativaId String?
+  nome          String   // nome interno ex: 'Boas-vindas fatura'
+  categoria     String   // 'BOT' | 'COBRANCA' | 'MLM' | 'MANUAL'
+  conteudo      String   // suporta variáveis {{nome}}, {{economia}}, {{link}}, {{desconto}}, {{mes}}
+  ativo         Boolean  @default(true)
+  usosCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("modelos_mensagem")
+}
+
+model FluxoEtapa {
+  id               String   @id @default(cuid())
+  cooperativaId    String?
+  nome             String   // nome do fluxo ex: 'Fluxo captação fatura'
+  ordem            Int      // ordem no fluxo
+  estado           String   // mapeia para estado da ConversaWhatsapp
+  modeloMensagemId String?  // mensagem a enviar ao entrar neste estado
+  gatilhos         Json     // array de { resposta: 'OK', proximoEstado: 'AGUARDANDO_PROPOSTA' }
+  timeoutHoras     Int?     // horas sem resposta → acionar mensagem de follow-up
+  modeloFollowupId String?
+  acaoAutomatica   String?  // 'CRIAR_LEAD' | 'GERAR_PROPOSTA' | 'NOTIFICAR_EQUIPE'
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("fluxo_etapas")
+}
+
 model ListaContatos {
   id            String   @id @default(cuid())
   nome          String
