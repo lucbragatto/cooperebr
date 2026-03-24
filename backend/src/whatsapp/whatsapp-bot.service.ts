@@ -31,6 +31,21 @@ export class WhatsappBotService {
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim();
 
+    // Registrar mensagem recebida
+    try {
+      await this.prisma.mensagemWhatsapp.create({
+        data: {
+          telefone,
+          direcao: 'ENTRADA',
+          tipo: msg.tipo ?? 'texto',
+          conteudo: corpo || null,
+          status: 'RECEBIDA',
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao registrar mensagem recebida: ${err.message}`);
+    }
+
     // Buscar ou criar conversa
     let conversa = await this.prisma.conversaWhatsapp.findUnique({
       where: { telefone },

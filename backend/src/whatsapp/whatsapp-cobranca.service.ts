@@ -141,7 +141,11 @@ export class WhatsappCobrancaService {
 
         mensagem += `\n_Dúvidas? Responda esta mensagem._`;
 
-        await this.sender.enviarMensagem(telefone, mensagem);
+        await this.sender.enviarMensagem(telefone, mensagem, {
+          tipoDisparo: 'COBRANCA',
+          cooperadoId: cooperado.id,
+          cooperativaId: cobranca.cooperativaId ?? undefined,
+        });
 
         // Marcar como enviado
         await this.prisma.cobranca.update({

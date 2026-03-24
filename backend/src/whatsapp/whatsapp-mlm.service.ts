@@ -112,7 +112,7 @@ export class WhatsappMlmService {
         mensagem += `📲 *Seu link personalizado:*\n${link}\n\n`;
         mensagem += `Encaminhe para seus contatos agora e comece a economizar ainda mais! 💚`;
 
-        await this.sender.enviarMensagem(telefone, mensagem);
+        await this.sender.enviarMensagem(telefone, mensagem, { tipoDisparo: 'MLM', cooperadoId: cooperado.id, cooperativaId });
 
         // Registrar envio
         await this.prisma.conversaWhatsapp.upsert({
@@ -145,7 +145,7 @@ export class WhatsappMlmService {
         try {
           const msgAvulso =
             'Olá! Conheça a CoopereBR e economize até 20% na sua conta de luz todos os meses, sem investimento. Para ver quanto você economizaria, mande uma foto da sua última conta de energia! 💡';
-          await this.sender.enviarMensagem(telefone, msgAvulso);
+          await this.sender.enviarMensagem(telefone, msgAvulso, { tipoDisparo: 'MLM', cooperativaId });
           enviados++;
           this.logger.log(`Convite avulso enviado para ${telefone}`);
           await this.delay(2000);
@@ -200,7 +200,7 @@ export class WhatsappMlmService {
     mensagem += `🌱 Economize até ${percentual}% na sua conta de luz todos os meses.\n\n`;
     mensagem += `Para ver quanto você economizaria, *mande uma foto da sua última conta de energia!* 📸`;
 
-    await this.sender.enviarMensagem(telefoneNorm, mensagem);
+    await this.sender.enviarMensagem(telefoneNorm, mensagem, { tipoDisparo: 'MLM' });
 
     return { ok: true, telefone: telefoneNorm };
   }
