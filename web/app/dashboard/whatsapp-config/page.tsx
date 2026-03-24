@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/table';
 import {
   MessageSquare, Bot, Plus, Pencil, Trash2, Send, Eye, ChevronUp, ChevronDown,
-  ArrowLeft,
+  ArrowLeft, Zap, Wrench, Play,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -495,6 +495,10 @@ function AbaFluxo() {
   const [editando, setEditando] = useState<FluxoEtapa | null>(null);
   const [previewAberto, setPreviewAberto] = useState(false);
   const [previewData, setPreviewData] = useState<FluxoEtapa[]>([]);
+  const [testarAberto, setTestarAberto] = useState(false);
+  const [telefoneTeste, setTelefoneTeste] = useState('');
+  const [testando, setTestando] = useState(false);
+  const [testeLog, setTesteLog] = useState<string[]>([]);
 
   const carregar = useCallback(async () => {
     try {
@@ -546,12 +550,66 @@ function AbaFluxo() {
     return modelos.find((m) => m.id === id)?.nome ?? '—';
   };
 
+  const getModeloPreview = (etapa: FluxoEtapa): string | null => {
+    const modelo = etapa.modeloMensagem ?? modelos.find((m) => m.id === etapa.modeloMensagemId);
+    if (!modelo) return null;
+    const text = modelo.conteudo;
+    return text.length > 100 ? text.slice(0, 100) + '...' : text;
+  };
+
+  const isMotorDinamico = (etapa: FluxoEtapa): boolean => {
+    return etapa.ativo && !!etapa.modeloMensagemId && Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0;
+  };
+
+  const handleTestarFluxo = async () => {
+    if (!telefoneTeste) return;
+    setTestando(true);
+    setTesteLog([]);
+    const logs: string[] = [];
+
+    try {
+      // Simular o fluxo completo enviando mensagens na sequência
+      const etapasAtivas = etapas.filter((e) => e.ativo).sort((a, b) => a.ordem - b.ordem);
+
+      for (const etapa of etapasAtivas) {
+        const modelo = etapa.modeloMensagem ?? modelos.find((m) => m.id === etapa.modeloMensagemId);
+        if (modelo) {
+          logs.push(`#${etapa.ordem} ${etapa.nome}: enviando "${modelo.nome}"...`);
+          setTesteLog([...logs]);
+          try {
+            await api.post(`/modelos-mensagem/${modelo.id}/testar`, { telefone: telefoneTeste });
+            logs[logs.length - 1] = `✓ #${etapa.ordem} ${etapa.nome}: "${modelo.nome}" enviada`;
+          } catch {
+            logs[logs.length - 1] = `✗ #${etapa.ordem} ${etapa.nome}: falha ao enviar`;
+          }
+          setTesteLog([...logs]);
+        } else {
+          logs.push(`— #${etapa.ordem} ${etapa.nome}: sem mensagem vinculada`);
+          setTesteLog([...logs]);
+        }
+      }
+
+      logs.push('\n✅ Simulação concluída!');
+      setTesteLog([...logs]);
+    } catch {
+      logs.push('\n✗ Erro ao simular fluxo');
+      setTesteLog([...logs]);
+    } finally {
+      setTestando(false);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
-        <Button variant="outline" onClick={handlePreview}>
-          <Eye className="w-4 h-4 mr-1" /> Visualizar fluxo completo
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handlePreview}>
+            <Eye className="w-4 h-4 mr-1" /> Visualizar fluxo
+          </Button>
+          <Button variant="outline" onClick={() => { setTestarAberto(true); setTesteLog([]); }}>
+            <Play className="w-4 h-4 mr-1" /> Testar fluxo
+          </Button>
+        </div>
         <Button onClick={() => { setEditando(null); setModalAberto(true); }} className="bg-green-600 hover:bg-green-700 text-white">
           <Plus className="w-4 h-4 mr-1" /> Nova etapa
         </Button>
@@ -563,64 +621,84 @@ function AbaFluxo() {
         <div className="p-8 text-center text-gray-500">Nenhuma etapa configurada</div>
       ) : (
         <div className="space-y-3">
-          {etapas.map((etapa, idx) => (
-            <Card key={etapa.id} className="border-l-4 border-l-green-500">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">
-                        #{etapa.ordem}
-                      </span>
-                      <span className="font-medium text-gray-800">{etapa.nome}</span>
-                      <Badge variant="outline">{etapa.estado}</Badge>
-                      {!etapa.ativo && <Badge variant="secondary">Inativo</Badge>}
-                    </div>
+          {etapas.map((etapa, idx) => {
+            const dinamico = isMotorDinamico(etapa);
+            const preview = getModeloPreview(etapa);
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600">
-                      <div>
-                        <span className="text-xs text-gray-400">Mensagem:</span>{' '}
-                        {getModeloNome(etapa.modeloMensagemId)}
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-400">Ação:</span>{' '}
-                        {etapa.acaoAutomatica ?? '—'}
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-400">Timeout:</span>{' '}
-                        {etapa.timeoutHoras ? `${etapa.timeoutHoras}h` : '—'}
-                      </div>
-                    </div>
-
-                    {Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {etapa.gatilhos.map((g: Gatilho, gi: number) => (
-                          <span key={gi} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                            &quot;{g.resposta}&quot; → {g.proximoEstado}
+            return (
+              <Card key={etapa.id} className={`border-l-4 ${dinamico ? 'border-l-amber-400' : 'border-l-gray-400'}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                          #{etapa.ordem}
+                        </span>
+                        <span className="font-medium text-gray-800">{etapa.nome}</span>
+                        <Badge variant="outline">{etapa.estado}</Badge>
+                        {dinamico ? (
+                          <span title="Motor dinâmico" className="inline-flex items-center gap-0.5 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                            <Zap className="w-3 h-3" /> Dinâmico
                           </span>
-                        ))}
+                        ) : (
+                          <span title="Fallback hardcoded" className="inline-flex items-center gap-0.5 text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                            <Wrench className="w-3 h-3" /> Hardcoded
+                          </span>
+                        )}
+                        {!etapa.ativo && <Badge variant="secondary">Inativo</Badge>}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex flex-col gap-1 ml-2">
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'up')} disabled={idx === 0}>
-                      <ChevronUp className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'down')} disabled={idx === etapas.length - 1}>
-                      <ChevronDown className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => { setEditando(etapa); setModalAberto(true); }}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(etapa.id)} className="text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                      {preview && (
+                        <div className="bg-gray-50 rounded p-2 text-xs text-gray-600 font-mono whitespace-pre-wrap border border-gray-200">
+                          {preview}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-gray-600">
+                        <div>
+                          <span className="text-xs text-gray-400">Mensagem:</span>{' '}
+                          {getModeloNome(etapa.modeloMensagemId)}
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-400">Ação:</span>{' '}
+                          {etapa.acaoAutomatica ?? '—'}
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-400">Timeout:</span>{' '}
+                          {etapa.timeoutHoras ? `${etapa.timeoutHoras}h` : '—'}
+                        </div>
+                      </div>
+
+                      {Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {etapa.gatilhos.map((g: Gatilho, gi: number) => (
+                            <span key={gi} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                              &quot;{g.resposta}&quot; → {g.proximoEstado}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-1 ml-2">
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'up')} disabled={idx === 0}>
+                        <ChevronUp className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'down')} disabled={idx === etapas.length - 1}>
+                        <ChevronDown className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => { setEditando(etapa); setModalAberto(true); }}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(etapa.id)} className="text-red-600">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -657,8 +735,15 @@ function AbaFluxo() {
                     <Badge variant="outline">{etapa.estado}</Badge>
                   </div>
                   {etapa.modeloMensagem && (
-                    <div className="text-xs text-gray-500 ml-8">
-                      📨 {etapa.modeloMensagem.nome}
+                    <div className="ml-8 space-y-1">
+                      <div className="text-xs text-gray-500">
+                        📨 {etapa.modeloMensagem.nome}
+                      </div>
+                      <div className="bg-gray-50 rounded p-2 text-xs text-gray-600 font-mono whitespace-pre-wrap border border-gray-200">
+                        {etapa.modeloMensagem.conteudo.length > 120
+                          ? etapa.modeloMensagem.conteudo.slice(0, 120) + '...'
+                          : etapa.modeloMensagem.conteudo}
+                      </div>
                     </div>
                   )}
                   {etapa.acaoAutomatica && (
@@ -682,6 +767,49 @@ function AbaFluxo() {
               <p className="text-center text-gray-500 py-8">Nenhuma etapa ativa configurada</p>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal testar fluxo */}
+      <Dialog open={testarAberto} onOpenChange={(open) => { if (!open) { setTestarAberto(false); setTesteLog([]); setTelefoneTeste(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Testar fluxo completo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Telefone (com DDD)</Label>
+              <Input
+                placeholder="5511999999999"
+                value={telefoneTeste}
+                onChange={(e) => setTelefoneTeste(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Envia todas as mensagens do fluxo em sequência para o telefone informado.
+                As variáveis serão substituídas por valores de exemplo.
+              </p>
+            </div>
+
+            {testeLog.length > 0 && (
+              <div className="bg-gray-900 text-green-400 rounded p-3 font-mono text-xs max-h-48 overflow-y-auto space-y-0.5">
+                {testeLog.map((log, i) => (
+                  <div key={i}>{log}</div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTestarAberto(false); setTesteLog([]); setTelefoneTeste(''); }}>
+              Fechar
+            </Button>
+            <Button
+              onClick={handleTestarFluxo}
+              disabled={testando || !telefoneTeste}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {testando ? 'Simulando...' : 'Iniciar teste'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

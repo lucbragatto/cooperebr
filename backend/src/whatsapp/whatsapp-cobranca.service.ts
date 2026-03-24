@@ -27,7 +27,7 @@ export class WhatsappCobrancaService {
   async enviarCobrancasDoMes(
     cooperativaId?: string,
     mesReferencia?: string,
-    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[] },
+    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[]; limiteEnvios?: number },
   ) {
     const agora = new Date();
     const mes = mesReferencia
@@ -77,10 +77,14 @@ export class WhatsappCobrancaService {
 
     this.logger.log(`Encontradas ${cobrancas.length} cobranças pendentes para envio WhatsApp (${mes}/${ano})`);
 
+    const limite = opcoes?.limiteEnvios ?? 30;
+    const listaLimitada = cobrancas.slice(0, limite);
+    const limitado = cobrancas.length > limite;
+
     let enviados = 0;
     let erros = 0;
 
-    for (const cobranca of cobrancas) {
+    for (const cobranca of listaLimitada) {
       const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) {
         this.logger.warn(`Cobrança ${cobranca.id}: cooperado sem telefone — pulando`);
@@ -156,15 +160,23 @@ export class WhatsappCobrancaService {
         enviados++;
         this.logger.log(`WhatsApp cobrança enviada para ${cooperado.nomeCompleto} (${telefone})`);
 
-        // Pausa de 2s entre mensagens para não ser bloqueado
-        await this.delay(2000);
+        // Pausa aleatória entre mensagens para evitar bloqueio
+        await this.delayAleatorio();
       } catch (err) {
         erros++;
         this.logger.error(`Erro ao enviar cobrança ${cobranca.id}: ${err.message}`);
       }
     }
 
-    const resultado = { total: cobrancas.length, enviados, erros, mes, ano };
+    const resultado = {
+      total: cobrancas.length,
+      enviados,
+      erros,
+      mes,
+      ano,
+      limitado,
+      ...(limitado ? { totalNaoEnviados: cobrancas.length - limite } : {}),
+    };
     this.logger.log(`Resultado envio cobranças: ${JSON.stringify(resultado)}`);
     return resultado;
   }
@@ -179,7 +191,8 @@ export class WhatsappCobrancaService {
     return digits;
   }
 
-  private delay(ms: number): Promise<void> {
+  private delayAleatorio(): Promise<void> {
+    const ms = 3000 + Math.random() * 5000; // entre 3s e 8s
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

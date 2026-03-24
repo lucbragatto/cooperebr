@@ -1,26 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, X, Plus, Users, Building2 } from 'lucide-react';
+import { Loader2, X, Plus, Users, Building2, ChevronDown, ChevronUp, Search, AlertTriangle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const cls = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500';
 const lbl = 'block text-xs font-medium text-gray-600 mb-1';
 
-type Modo = 'todos' | 'parceiro' | 'lista';
+type Modo = 'todos' | 'parceiro' | 'lista' | 'cooperados';
 
 interface Parceiro {
   id: string;
   nome: string;
 }
 
+interface CooperadoDisparo {
+  id: string;
+  nomeCompleto: string;
+  telefone: string;
+  status: string;
+  parceiro: { id: string; nome: string } | null;
+}
+
 interface ResultadoDisparo {
   total: number;
   enviados: number;
   erros: number;
+  limitado?: boolean;
+  totalNaoEnviados?: number;
 }
 
 interface DisparoSeletivoProps {
@@ -28,9 +38,16 @@ interface DisparoSeletivoProps {
   descricao?: string;
   icon: LucideIcon;
   isConnected: boolean;
-  onDisparo: (params: { modo: Modo; parceiroId?: string; telefones?: string[] }) => Promise<ResultadoDisparo>;
+  onDisparo: (params: { modo: Modo; parceiroId?: string; telefones?: string[]; limiteEnvios?: number }) => Promise<ResultadoDisparo>;
   children?: React.ReactNode;
 }
+
+const STATUS_BADGE: Record<string, string> = {
+  ATIVO: 'bg-green-100 text-green-800',
+  PENDENTE: 'bg-yellow-100 text-yellow-800',
+  SEM_CONTRATO: 'bg-gray-100 text-gray-600',
+  INATIVO: 'bg-red-100 text-red-800',
+};
 
 export default function DisparoSeletivo({
   titulo,
@@ -50,6 +67,16 @@ export default function DisparoSeletivo({
   const [resultado, setResultado] = useState<ResultadoDisparo | null>(null);
   const [loadingParceiros, setLoadingParceiros] = useState(false);
 
+  // Cooperados mode state
+  const [cooperados, setCooperados] = useState<CooperadoDisparo[]>([]);
+  const [loadingCooperados, setLoadingCooperados] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [buscaCooperado, setBuscaCooperado] = useState('');
+
+  // Advanced settings
+  const [mostrarAvancado, setMostrarAvancado] = useState(false);
+  const [limiteEnvios, setLimiteEnvios] = useState(30);
+
   // Buscar parceiros quando modo = 'parceiro'
   useEffect(() => {
     if (modo === 'parceiro' && parceiros.length === 0) {
@@ -60,6 +87,42 @@ export default function DisparoSeletivo({
         .finally(() => setLoadingParceiros(false));
     }
   }, [modo, parceiros.length]);
+
+  // Buscar cooperados quando modo = 'cooperados'
+  useEffect(() => {
+    if (modo === 'cooperados' && cooperados.length === 0) {
+      setLoadingCooperados(true);
+      api.get<CooperadoDisparo[]>('/whatsapp/cooperados-para-disparo')
+        .then(({ data }) => setCooperados(data))
+        .catch(() => setCooperados([]))
+        .finally(() => setLoadingCooperados(false));
+    }
+  }, [modo, cooperados.length]);
+
+  const cooperadosFiltrados = useMemo(() => {
+    if (!buscaCooperado.trim()) return cooperados;
+    const termo = buscaCooperado.toLowerCase();
+    return cooperados.filter(
+      (c) => c.nomeCompleto.toLowerCase().includes(termo) || c.telefone.includes(termo),
+    );
+  }, [cooperados, buscaCooperado]);
+
+  const toggleCooperado = useCallback((id: string) => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleTodos = useCallback(() => {
+    if (selecionados.size === cooperadosFiltrados.length) {
+      setSelecionados(new Set());
+    } else {
+      setSelecionados(new Set(cooperadosFiltrados.map((c) => c.id)));
+    }
+  }, [cooperadosFiltrados, selecionados.size]);
 
   const adicionarTelefone = useCallback(() => {
     const tel = telefoneInput.replace(/\D/g, '').trim();
@@ -77,6 +140,7 @@ export default function DisparoSeletivo({
     todos: 'Todos os cooperados',
     parceiro: 'Por parceiro/cooperativa',
     lista: 'Por telefone (lista manual)',
+    cooperados: 'Selecionar cooperados',
   };
 
   const podeDisparar =
@@ -84,7 +148,8 @@ export default function DisparoSeletivo({
     !loading &&
     (modo === 'todos' ||
       (modo === 'parceiro' && parceiroId) ||
-      (modo === 'lista' && telefones.length > 0));
+      (modo === 'lista' && telefones.length > 0) ||
+      (modo === 'cooperados' && selecionados.size > 0));
 
   const resumoAlvo = (): string => {
     if (modo === 'parceiro') {
@@ -92,6 +157,7 @@ export default function DisparoSeletivo({
       return p ? `cooperados de "${p.nome}"` : 'cooperados do parceiro selecionado';
     }
     if (modo === 'lista') return `${telefones.length} telefone(s) selecionado(s)`;
+    if (modo === 'cooperados') return `${selecionados.size} cooperado(s) selecionado(s)`;
     return 'todos os cooperados';
   };
 
@@ -99,12 +165,25 @@ export default function DisparoSeletivo({
     setLoading(true);
     setResultado(null);
     try {
-      const res = await onDisparo({
-        modo,
-        parceiroId: modo === 'parceiro' ? parceiroId : undefined,
-        telefones: modo === 'lista' ? telefones : undefined,
-      });
-      setResultado({ total: res.total ?? 0, enviados: res.enviados ?? 0, erros: res.erros ?? 0 });
+      let params: { modo: Modo; parceiroId?: string; telefones?: string[]; limiteEnvios?: number };
+
+      if (modo === 'cooperados') {
+        // Converter selecionados em lista de telefones
+        const tels = cooperados
+          .filter((c) => selecionados.has(c.id))
+          .map((c) => c.telefone);
+        params = { modo: 'lista', telefones: tels, limiteEnvios };
+      } else {
+        params = {
+          modo,
+          parceiroId: modo === 'parceiro' ? parceiroId : undefined,
+          telefones: modo === 'lista' ? telefones : undefined,
+          limiteEnvios,
+        };
+      }
+
+      const res = await onDisparo(params);
+      setResultado(res);
     } catch {
       setResultado({ total: 0, enviados: 0, erros: -1 });
     } finally {
@@ -219,6 +298,111 @@ export default function DisparoSeletivo({
           </div>
         )}
 
+        {/* Seleção de cooperados */}
+        {modo === 'cooperados' && (
+          <div>
+            {loadingCooperados ? (
+              <div className="flex items-center gap-2 text-xs text-gray-400 py-4">
+                <Loader2 className="h-3 w-3 animate-spin" /> Carregando cooperados...
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Busca */}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    className={`${cls} pl-8`}
+                    value={buscaCooperado}
+                    onChange={(e) => setBuscaCooperado(e.target.value)}
+                    placeholder="Buscar por nome ou telefone..."
+                  />
+                </div>
+
+                {/* Selecionar/Desmarcar todos + contador */}
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={toggleTodos}
+                    className="text-xs text-green-700 hover:text-green-900 font-medium"
+                  >
+                    {selecionados.size === cooperadosFiltrados.length && cooperadosFiltrados.length > 0
+                      ? 'Desmarcar todos'
+                      : 'Selecionar todos'}
+                  </button>
+                  <span className="text-xs text-gray-500">
+                    {selecionados.size} selecionado{selecionados.size !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                {/* Aviso se muitos selecionados */}
+                {selecionados.size > 30 && (
+                  <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-md p-2 text-xs text-yellow-800">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>Muitas mensagens de uma vez podem gerar bloqueio. Recomendamos no máximo 30 por hora.</span>
+                  </div>
+                )}
+
+                {/* Lista de cooperados */}
+                <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                  {cooperadosFiltrados.length === 0 ? (
+                    <div className="text-xs text-gray-400 text-center py-4">Nenhum cooperado encontrado</div>
+                  ) : (
+                    cooperadosFiltrados.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selecionados.has(c.id)}
+                          onChange={() => toggleCooperado(c.id)}
+                          className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="flex-1 truncate">
+                          {c.nomeCompleto}{' '}
+                          <span className="text-gray-400 text-xs">({c.telefone})</span>
+                        </span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_BADGE[c.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {c.status}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Configurações avançadas */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setMostrarAvancado(!mostrarAvancado)}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+          >
+            {mostrarAvancado ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            Configurações avançadas
+          </button>
+          {mostrarAvancado && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-md border border-gray-200 space-y-2">
+              <label className={lbl}>Limite de envios por sessão</label>
+              <input
+                type="number"
+                className={cls}
+                value={limiteEnvios}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value) || 1;
+                  setLimiteEnvios(Math.max(1, Math.min(100, v)));
+                }}
+                min={1}
+                max={100}
+              />
+              <p className="text-xs text-gray-400">Limite recomendado: 30/hora para evitar bloqueio pelo WhatsApp</p>
+            </div>
+          )}
+        </div>
+
         {/* Botão / Confirmação */}
         {!confirm ? (
           <Button
@@ -268,12 +452,16 @@ export default function DisparoSeletivo({
             className={`text-xs p-2 rounded ${
               resultado.erros === -1
                 ? 'bg-red-50 text-red-600'
-                : 'bg-green-50 text-green-700'
+                : resultado.limitado
+                  ? 'bg-yellow-50 text-yellow-800'
+                  : 'bg-green-50 text-green-700'
             }`}
           >
             {resultado.erros === -1
               ? 'Erro ao disparar. Verifique os logs.'
-              : `Resultado: ${resultado.enviados} enviados de ${resultado.total} | ${resultado.erros} erros`}
+              : resultado.limitado
+                ? `Envio limitado: ${resultado.enviados} mensagens enviadas. Restam ${resultado.totalNaoEnviados ?? 0}. Aguarde antes de enviar novamente.`
+                : `Resultado: ${resultado.enviados} enviados de ${resultado.total} | ${resultado.erros} erros`}
           </div>
         )}
       </CardContent>

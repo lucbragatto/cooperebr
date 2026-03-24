@@ -13,14 +13,14 @@ const mensagens = [
   {
     id: 'msg-processando-fatura',
     nome: 'processando_fatura',
-    descricao: 'Enviada ao receber fatura para OCR',
+    //Enviada ao receber fatura para OCR',
     categoria: 'BOT',
     conteudo: '📄 Recebi sua fatura! Analisando os dados... Aguarde um momento. ⏳',
   },
   {
     id: 'msg-confirmacao-dados',
     nome: 'confirmacao_dados',
-    descricao: 'Template de confirmação dos dados extraídos da fatura',
+    //Template de confirmação dos dados extraídos da fatura',
     categoria: 'BOT',
     conteudo:
       '📊 *Dados extraídos da sua fatura:*\n\n{{historico}}\n\n_Algum dado incorreto? Corrija no formato:_\n_02/26 350 kwh R$ 287,50_\n\n_Tudo certo? Responda *OK*_',
@@ -28,7 +28,7 @@ const mensagens = [
   {
     id: 'msg-simulacao-resultado',
     nome: 'simulacao_resultado',
-    descricao: 'Resultado da simulação de economia',
+    //Resultado da simulação de economia',
     categoria: 'BOT',
     conteudo:
       '🌱 *Sua simulação CoopereBR:*\n\n📊 Fatura média atual: R$ {{valorFaturaMedia}}\n💚 Com a CoopereBR: R$ {{valorComDesconto}} (-{{desconto}}%)\n💵 Economia mensal: R$ {{economiaMensal}}\n📅 Economia anual: R$ {{economiaAnual}}\n{{mesesGratis}}\nQuer receber a proposta completa em PDF?\nResponda *SIM*',
@@ -36,7 +36,7 @@ const mensagens = [
   {
     id: 'msg-proposta-pdf',
     nome: 'proposta_pdf',
-    descricao: 'Proposta resumo enviada como texto (PDF futuro)',
+    //Proposta resumo enviada como texto (PDF futuro)',
     categoria: 'BOT',
     conteudo:
       '📋 *PROPOSTA COOPEREBR*\n━━━━━━━━━━━━━━━━━━━━\n\n👤 *{{titular}}*\n📍 {{endereco}}\n🔌 UC: {{uc}}\n\n📊 *Dados da simulação:*\n• Consumo considerado: {{kwhContrato}} kWh/mês\n• Desconto: {{desconto}}%\n• Economia mensal: R$ {{economiaMensal}}\n• Economia anual: R$ {{economiaAnual}}\n\n━━━━━━━━━━━━━━━━━━━━\n_Proposta válida por 30 dias_',
@@ -44,7 +44,7 @@ const mensagens = [
   {
     id: 'msg-confirmacao-cadastro',
     nome: 'confirmacao_cadastro',
-    descricao: 'Confirmação de dados para cadastro do cooperado',
+    //Confirmação de dados para cadastro do cooperado',
     categoria: 'BOT',
     conteudo:
       '✅ *Seus dados para cadastro:*\n\n👤 {{titular}}\n📍 {{endereco}}\n🔌 UC: {{uc}}\n\nEstá correto? Responda *CONFIRMO* para prosseguir\nou me diga o que precisa corrigir.',
@@ -52,7 +52,7 @@ const mensagens = [
   {
     id: 'msg-cadastro-sucesso',
     nome: 'cadastro_sucesso',
-    descricao: 'Mensagem final de pré-cadastro criado',
+    //Mensagem final de pré-cadastro criado',
     categoria: 'BOT',
     conteudo:
       '🎉 Perfeito! Seu pré-cadastro foi criado com sucesso!\n\nNossa equipe entrará em contato em breve para finalizar. Qualquer dúvida é só perguntar! 💚',
@@ -60,7 +60,7 @@ const mensagens = [
   {
     id: 'msg-ajuda',
     nome: 'ajuda',
-    descricao: 'Resposta para ajuda/help/dúvida',
+    //Resposta para ajuda/help/dúvida',
     categoria: 'BOT',
     conteudo:
       'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
@@ -68,7 +68,7 @@ const mensagens = [
   {
     id: 'msg-cancelar',
     nome: 'cancelar',
-    descricao: 'Resposta para cancelar/cancel',
+    //Resposta para cancelar/cancel',
     categoria: 'BOT',
     conteudo: 'Tudo bem! Se quiser começar novamente, é só mandar a foto da sua conta de luz. 😊',
   },

@@ -4,6 +4,7 @@ import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
 import { WhatsappMlmService } from './whatsapp-mlm.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { ModeloMensagemService } from './modelo-mensagem.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -22,6 +23,7 @@ export class WhatsappFaturaController {
     private readonly mlmService: WhatsappMlmService,
     private readonly sender: WhatsappSenderService,
     private readonly prisma: PrismaService,
+    private readonly modeloMensagem: ModeloMensagemService,
   ) {}
 
   @Roles(ADMIN, OPERADOR)
@@ -168,6 +170,49 @@ export class WhatsappFaturaController {
     return { telefones: lista.telefones, nome: lista.nome };
   }
 
+  // ─── Cooperados para disparo seletivo ─────────────────────────────────────
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('cooperados-para-disparo')
+  async getCooperadosParaDisparo(
+    @Req() req: any,
+    @Query('status') status?: string,
+    @Query('parceiroId') parceiroId?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const where: any = {
+      telefone: { not: null },
+    };
+    if (parceiroId) {
+      where.cooperativaId = parceiroId;
+    } else if (cooperativaId) {
+      where.cooperativaId = cooperativaId;
+    }
+    if (status && status !== 'TODOS') {
+      where.contratos = { some: { status } };
+    }
+
+    const cooperados = await this.prisma.cooperado.findMany({
+      where,
+      select: {
+        id: true,
+        nomeCompleto: true,
+        telefone: true,
+        contratos: { select: { status: true }, take: 1 },
+        cooperativa: { select: { id: true, nome: true } },
+      },
+      orderBy: { nomeCompleto: 'asc' },
+    });
+
+    return cooperados.map((c) => ({
+      id: c.id,
+      nomeCompleto: c.nomeCompleto,
+      telefone: c.telefone,
+      status: c.contratos?.[0]?.status ?? 'SEM_CONTRATO',
+      parceiro: c.cooperativa ? { id: c.cooperativa.id, nome: c.cooperativa.nome } : null,
+    }));
+  }
+
   // ─── Enviar mensagem manual ────────────────────────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN)
@@ -188,6 +233,7 @@ export class WhatsappFaturaController {
       modo?: 'todos' | 'parceiro' | 'lista';
       parceiroId?: string;
       telefones?: string[];
+      limiteEnvios?: number;
     },
   ) {
     const cooperativaId = req.user?.cooperativaId;
@@ -195,6 +241,7 @@ export class WhatsappFaturaController {
       modo: body.modo,
       parceiroId: body.parceiroId,
       telefones: body.telefones,
+      limiteEnvios: body.limiteEnvios,
     });
   }
 
@@ -208,6 +255,7 @@ export class WhatsappFaturaController {
       modo?: 'todos' | 'parceiro' | 'lista';
       parceiroId?: string;
       telefones?: string[];
+      limiteEnvios?: number;
     },
   ) {
     const cooperativaId = req.user?.cooperativaId;
@@ -218,6 +266,7 @@ export class WhatsappFaturaController {
       modo: body.modo,
       parceiroId: body.parceiroId,
       telefones: body.telefones,
+      limiteEnvios: body.limiteEnvios,
     });
   }
 
@@ -228,5 +277,99 @@ export class WhatsappFaturaController {
     @Body() body: { telefone: string; codigoRef: string },
   ) {
     return this.mlmService.processarEntradaIndicado(body.telefone, body.codigoRef);
+  }
+
+  // ─── Modelos de mensagem ──────────────────────────────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('modelos')
+  async getModelos(@Req() req: any, @Query('categoria') categoria?: string) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.modeloMensagem.findAll(cooperativaId, categoria);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('modelos')
+  async criarModelo(
+    @Req() req: any,
+    @Body() body: { nome: string; categoria: string; conteudo: string; ativo?: boolean },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.modeloMensagem.create({ ...body, cooperativaId });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Put('modelos/:id')
+  async atualizarModelo(
+    @Param('id') id: string,
+    @Body() body: { nome?: string; categoria?: string; conteudo?: string; ativo?: boolean },
+  ) {
+    return this.modeloMensagem.update(id, body);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Delete('modelos/:id')
+  async deletarModelo(@Param('id') id: string) {
+    return this.modeloMensagem.delete(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('modelos/:id/testar')
+  async testarModelo(
+    @Param('id') id: string,
+    @Body() body: { telefone: string; variaveis?: Record<string, string> },
+  ) {
+    const modelo = await this.prisma.modeloMensagem.findUnique({ where: { id } });
+    if (!modelo) return { error: 'Modelo não encontrado' };
+    const texto = this.modeloMensagem.renderizar(modelo, body.variaveis ?? {});
+    await this.sender.enviarMensagem(body.telefone, texto, { tipoDisparo: 'TESTE' });
+    return { ok: true, preview: texto };
+  }
+
+  // ─── Fluxos ────────────────────────────────────────────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('fluxos')
+  async getFluxos(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.modeloMensagem.findAllFluxos(cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('fluxos')
+  async criarFluxo(
+    @Req() req: any,
+    @Body() body: {
+      nome: string;
+      ordem: number;
+      estado: string;
+      modeloMensagemId?: string;
+      gatilhos: any;
+      timeoutHoras?: number;
+      modeloFollowupId?: string;
+      acaoAutomatica?: string;
+    },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.modeloMensagem.createFluxo({ ...body, cooperativaId });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Put('fluxos/:id')
+  async atualizarFluxo(
+    @Param('id') id: string,
+    @Body() body: {
+      nome?: string;
+      ordem?: number;
+      estado?: string;
+      modeloMensagemId?: string;
+      gatilhos?: any;
+      timeoutHoras?: number;
+      modeloFollowupId?: string;
+      acaoAutomatica?: string;
+      ativo?: boolean;
+    },
+  ) {
+    return this.modeloMensagem.updateFluxo(id, body);
   }
 }

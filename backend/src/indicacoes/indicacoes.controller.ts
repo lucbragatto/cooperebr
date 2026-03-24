@@ -52,7 +52,11 @@ export class IndicacoesController {
 
   @Get('meu-link')
   getMeuLink(@Req() req: any) {
-    return this.service.getMeuLink(req.user?.cooperadoId || req.query?.cooperadoId);
+    const cooperadoId = req.user?.cooperadoId || req.query?.cooperadoId;
+    if (!cooperadoId) {
+      return { codigoIndicacao: null, link: null, totalIndicados: 0, indicadosAtivos: 0, semCooperado: true };
+    }
+    return this.service.getMeuLink(cooperadoId);
   }
 
   @Get('minhas')

@@ -36,6 +36,8 @@ interface ResultadoDisparo {
   total: number;
   enviados: number;
   erros: number;
+  limitado?: boolean;
+  totalNaoEnviados?: number;
 }
 
 interface MensagemHistorico {
@@ -175,7 +177,7 @@ export default function WhatsAppPage() {
     }
   }
 
-  async function dispararCobrancas(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
+  async function dispararCobrancas(params: { modo: string; parceiroId?: string; telefones?: string[]; limiteEnvios?: number }) {
     const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-cobrancas', {
       mesReferencia: mesReferencia || undefined,
       ...params,
@@ -183,7 +185,7 @@ export default function WhatsAppPage() {
     return data;
   }
 
-  async function dispararMLM(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
+  async function dispararMLM(params: { modo: string; parceiroId?: string; telefones?: string[]; limiteEnvios?: number }) {
     const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-convites-indicacao', params);
     return data;
   }

@@ -31,7 +31,7 @@ export class WhatsappMlmService {
 
   async enviarConvitesIndicacao(
     cooperativaId: string,
-    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[] },
+    opcoes?: { modo?: 'todos' | 'parceiro' | 'lista'; parceiroId?: string; telefones?: string[]; limiteEnvios?: number },
   ) {
     const modo = opcoes?.modo ?? 'todos';
     const targetCooperativaId = modo === 'parceiro' && opcoes?.parceiroId
@@ -78,6 +78,8 @@ export class WhatsappMlmService {
 
     this.logger.log(`Encontrados ${cooperados.length} cooperados ativos para convite MLM (cooperativa ${cooperativaId})`);
 
+    const limite = opcoes?.limiteEnvios ?? 30;
+
     const inicioDoMes = new Date();
     inicioDoMes.setDate(1);
     inicioDoMes.setHours(0, 0, 0, 0);
@@ -86,6 +88,7 @@ export class WhatsappMlmService {
     let erros = 0;
 
     for (const cooperado of cooperados) {
+      if (enviados >= limite) break;
       if (!cooperado.telefone) continue;
 
       try {
@@ -124,8 +127,8 @@ export class WhatsappMlmService {
         enviados++;
         this.logger.log(`Convite MLM enviado para ${cooperado.nomeCompleto} (${telefone})`);
 
-        // Pausa de 2s entre mensagens
-        await this.delay(2000);
+        // Pausa aleatória entre mensagens para evitar bloqueio
+        await this.delayAleatorio();
       } catch (err) {
         erros++;
         this.logger.error(`Erro ao enviar convite MLM para ${cooperado.nomeCompleto}: ${err.message}`);
@@ -142,13 +145,14 @@ export class WhatsappMlmService {
       qtdAvulsos = telefonesAvulsos.length;
 
       for (const telefone of telefonesAvulsos) {
+        if (enviados >= limite) break;
         try {
           const msgAvulso =
             'Olá! Conheça a CoopereBR e economize até 20% na sua conta de luz todos os meses, sem investimento. Para ver quanto você economizaria, mande uma foto da sua última conta de energia! 💡';
           await this.sender.enviarMensagem(telefone, msgAvulso, { tipoDisparo: 'MLM', cooperativaId });
           enviados++;
           this.logger.log(`Convite avulso enviado para ${telefone}`);
-          await this.delay(2000);
+          await this.delayAleatorio();
         } catch (err) {
           erros++;
           this.logger.error(`Erro ao enviar convite avulso para ${telefone}: ${err.message}`);
@@ -156,7 +160,16 @@ export class WhatsappMlmService {
       }
     }
 
-    const resultado = { total: cooperados.length + qtdAvulsos, enviados, erros, cooperativaId };
+    const totalGeral = cooperados.length + qtdAvulsos;
+    const limitado = totalGeral > limite && enviados >= limite;
+    const resultado = {
+      total: totalGeral,
+      enviados,
+      erros,
+      cooperativaId,
+      limitado,
+      ...(limitado ? { totalNaoEnviados: totalGeral - enviados } : {}),
+    };
     this.logger.log(`Resultado envio convites MLM: ${JSON.stringify(resultado)}`);
     return resultado;
   }
@@ -214,7 +227,8 @@ export class WhatsappMlmService {
     return digits;
   }
 
-  private delay(ms: number): Promise<void> {
+  private delayAleatorio(): Promise<void> {
+    const ms = 3000 + Math.random() * 5000; // entre 3s e 8s
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

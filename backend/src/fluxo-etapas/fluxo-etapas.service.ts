@@ -5,10 +5,23 @@ import { PrismaService } from '../prisma.service';
 export class FluxoEtapasService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.fluxoEtapa.findMany({
+  async findAll() {
+    const etapas = await this.prisma.fluxoEtapa.findMany({
       orderBy: { ordem: 'asc' },
     });
+
+    const modeloIds = etapas.map((e) => e.modeloMensagemId).filter(Boolean) as string[];
+    if (modeloIds.length === 0) return etapas.map((e) => ({ ...e, modeloMensagem: null }));
+
+    const modelos = await this.prisma.modeloMensagem.findMany({
+      where: { id: { in: modeloIds } },
+    });
+    const modeloMap = new Map(modelos.map((m) => [m.id, m]));
+
+    return etapas.map((e) => ({
+      ...e,
+      modeloMensagem: e.modeloMensagemId ? modeloMap.get(e.modeloMensagemId) ?? null : null,
+    }));
   }
 
   findOne(id: string) {

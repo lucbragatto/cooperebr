@@ -5,6 +5,8 @@ import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
 import { WhatsappMlmService } from './whatsapp-mlm.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { ModeloMensagemService } from './modelo-mensagem.service';
+import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 import { PrismaService } from '../prisma.service';
 import { FaturasModule } from '../faturas/faturas.module';
 import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
@@ -21,8 +23,10 @@ import { AsaasModule } from '../asaas/asaas.module';
     WhatsappCobrancaService,
     WhatsappMlmService,
     WhatsappSenderService,
+    ModeloMensagemService,
+    WhatsappFluxoMotorService,
     PrismaService,
   ],
-  exports: [WhatsappSenderService, WhatsappBotService, WhatsappCobrancaService, WhatsappMlmService],
+  exports: [WhatsappSenderService, WhatsappBotService, WhatsappCobrancaService, WhatsappMlmService, ModeloMensagemService, WhatsappFluxoMotorService],
 })
 export class WhatsappModule {}

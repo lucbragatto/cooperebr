@@ -15,19 +15,21 @@ export default function ConviteCard({ linkOverride }: ConviteCardProps) {
   const [totalIndicados, setTotalIndicados] = useState(0);
   const [indicadosAtivos, setIndicadosAtivos] = useState(0);
   const [copiou, setCopiou] = useState<'link' | 'msg' | null>(null);
+  const [semCooperado, setSemCooperado] = useState(false);
 
   useEffect(() => {
     if (linkOverride) return;
     api
-      .get<{ codigoIndicacao: string; link: string; totalIndicados: number; indicadosAtivos: number }>(
+      .get<{ codigoIndicacao: string | null; link: string | null; totalIndicados: number; indicadosAtivos: number; semCooperado?: boolean }>(
         '/indicacoes/meu-link',
       )
       .then(({ data }) => {
+        if (data.semCooperado || !data.link) { setSemCooperado(true); return; }
         setLink(data.link);
         setTotalIndicados(data.totalIndicados);
         setIndicadosAtivos(data.indicadosAtivos);
       })
-      .catch(() => {});
+      .catch(() => setSemCooperado(true));
   }, [linkOverride]);
 
   const mensagemTexto =
@@ -45,6 +47,12 @@ export default function ConviteCard({ linkOverride }: ConviteCardProps) {
   function compartilharWhatsApp() {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensagemTexto)}`, '_blank');
   }
+
+  if (semCooperado) return (
+    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center text-sm text-yellow-700">
+      Esta funcionalidade está disponível para cooperados. Administradores não possuem link de convite pessoal.
+    </div>
+  );
 
   if (!link) return null;
 
