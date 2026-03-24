@@ -6,21 +6,18 @@ import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  ArrowLeft, CheckCircle2, FileUp, Loader2, MessageCircle, Upload, Wifi, WifiOff,
+  ArrowLeft, CheckCircle2, Loader2, MessageCircle, Wifi, WifiOff,
   Send, Gift, RefreshCw, Users, Clock, PlugZap,
+  MessagesSquare, History, List,
 } from 'lucide-react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import DisparoSeletivo from '@/components/DisparoSeletivo';
+import ConversaDetalhe from '@/components/whatsapp/ConversaDetalhe';
+import HistoricoMensagens from '@/components/whatsapp/HistoricoMensagens';
+import GerenciarListas from '@/components/whatsapp/GerenciarListas';
 
 const WHATSAPP_SERVICE_URL = process.env.NEXT_PUBLIC_WHATSAPP_URL ?? 'http://localhost:3002';
-
-interface ResultadoSimulacao {
-  sucesso: boolean;
-  mensagemWhatsApp: string;
-  propostaId?: string;
-  dadosExtraidos?: Record<string, unknown>;
-}
 
 interface StatusBaileys {
   status: 'awaiting_qr' | 'connected' | 'disconnected' | 'failed' | string;
@@ -40,6 +37,17 @@ interface ResultadoDisparo {
   enviados: number;
   erros: number;
 }
+
+interface MensagemHistorico {
+  id: string;
+  telefone: string;
+  direcao: string;
+  conteudo: string | null;
+  status: string;
+  enviadaEm: string;
+}
+
+type AbaAtiva = 'disparos' | 'conversas' | 'historico' | 'listas';
 
 const cls = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500';
 const lbl = 'block text-xs font-medium text-gray-600 mb-1';
@@ -70,8 +78,17 @@ function tempoAtras(dateStr: string): string {
   return `${d}d`;
 }
 
+const abas: { id: AbaAtiva; label: string; icon: React.ElementType }[] = [
+  { id: 'disparos', label: 'Disparos', icon: Send },
+  { id: 'conversas', label: 'Conversas', icon: MessagesSquare },
+  { id: 'historico', label: 'Histórico', icon: History },
+  { id: 'listas', label: 'Listas', icon: List },
+];
+
 export default function WhatsAppPage() {
-  // Status Baileys (direto do serviço WhatsApp :3002)
+  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('disparos');
+
+  // Status Baileys
   const [status, setStatus] = useState<StatusBaileys | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
@@ -79,18 +96,10 @@ export default function WhatsAppPage() {
   // Conversas
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [loadingConversas, setLoadingConversas] = useState(true);
+  const [conversaSelecionada, setConversaSelecionada] = useState<string | null>(null);
 
   // Disparos
   const [mesReferencia, setMesReferencia] = useState('');
-
-  // Simulação manual
-  const [telefone, setTelefone] = useState('');
-  const [arquivo, setArquivo] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<ResultadoSimulacao | null>(null);
-  const [erro, setErro] = useState('');
-  const [drag, setDrag] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Auto-refresh ref
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -109,7 +118,7 @@ export default function WhatsAppPage() {
     }
   }, []);
 
-  // Buscar conversas via API backend (:3000)
+  // Buscar conversas via API backend
   const fetchConversas = useCallback(async () => {
     try {
       const { data } = await api.get<Conversa[]>('/whatsapp/conversas');
@@ -121,29 +130,25 @@ export default function WhatsAppPage() {
     }
   }, []);
 
-  // Carregar tudo
   const carregarDados = useCallback(async () => {
     setLoadingStatus(true);
     setLoadingConversas(true);
     await Promise.all([fetchStatus(), fetchConversas()]);
   }, [fetchStatus, fetchConversas]);
 
-  // Auto-refresh: poll a cada 5s enquanto não conectado
   useEffect(() => {
     fetchStatus();
     fetchConversas();
   }, [fetchStatus, fetchConversas]);
 
+  // Auto-refresh when not connected
   useEffect(() => {
-    // Limpa intervalo anterior
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-
-    const isConnected = status?.status === 'connected';
-
-    if (!isConnected) {
+    const isConn = status?.status === 'connected';
+    if (!isConn) {
       intervalRef.current = setInterval(async () => {
         const data = await fetchStatus();
         if (data?.status === 'connected' && intervalRef.current) {
@@ -152,7 +157,6 @@ export default function WhatsAppPage() {
         }
       }, 5000);
     }
-
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -161,22 +165,16 @@ export default function WhatsAppPage() {
     };
   }, [status?.status, fetchStatus]);
 
-  // Reconectar
   async function reconnect() {
     setReconnecting(true);
     try {
       await axios.post(`${WHATSAPP_SERVICE_URL}/reconnect`);
-      // Aguarda um momento para o serviço iniciar reconexão
-      setTimeout(() => {
-        fetchStatus();
-        setReconnecting(false);
-      }, 2000);
+      setTimeout(() => { fetchStatus(); setReconnecting(false); }, 2000);
     } catch {
       setReconnecting(false);
     }
   }
 
-  // Disparar cobranças (com filtro seletivo)
   async function dispararCobrancas(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
     const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-cobrancas', {
       mesReferencia: mesReferencia || undefined,
@@ -185,58 +183,17 @@ export default function WhatsAppPage() {
     return data;
   }
 
-  // Disparar convites MLM (com filtro seletivo)
   async function dispararMLM(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
     const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-convites-indicacao', params);
     return data;
   }
 
-  // Simulação manual
-  function handleFile(file: File) {
-    setArquivo(file);
-    setErro('');
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDrag(false);
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
-  }
-
-  function toBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function simular() {
-    if (!arquivo) { setErro('Selecione um arquivo de fatura.'); return; }
-    if (!telefone.trim()) { setErro('Informe o número de telefone.'); return; }
-    setErro('');
-    setLoading(true);
-    setResultado(null);
-    try {
-      const arquivoBase64 = await toBase64(arquivo);
-      const tipoArquivo = arquivo.type === 'application/pdf' ? 'pdf' : 'imagem';
-      const { data } = await api.post<ResultadoSimulacao>('/whatsapp/processar-fatura', {
-        arquivoBase64,
-        tipoArquivo,
-        telefone: telefone.trim(),
-      });
-      setResultado(data);
-    } catch {
-      setErro('Erro ao processar. Verifique o arquivo e tente novamente.');
-    } finally {
-      setLoading(false);
-    }
+  function handleUsarListaNoDisparo(telefones: string[], _nomeLista: string) {
+    setAbaAtiva('disparos');
+    // The user can see the list was loaded — they use DisparoSeletivo's lista mode
   }
 
   const isConnected = status?.status === 'connected';
-  const isAwaitingQr = status?.status === 'awaiting_qr';
   const conversasAtivas = conversas.filter(c => c.estado !== 'CONCLUIDO' && c.estado !== 'INICIAL');
   const conversasHoje = conversas.filter(c => {
     const d = new Date(c.updatedAt);
@@ -244,6 +201,17 @@ export default function WhatsAppPage() {
     return d.toDateString() === hoje.toDateString();
   });
   const statusInfo = statusLabels[status?.status ?? ''] ?? { label: status?.status ?? 'Verificando...', color: 'text-gray-500' };
+
+  // Group conversas by phone for the Conversas tab (unique phones with latest message)
+  const conversasPorTelefone = conversas.reduce<Record<string, Conversa>>((acc, c) => {
+    if (!acc[c.telefone] || new Date(c.updatedAt) > new Date(acc[c.telefone].updatedAt)) {
+      acc[c.telefone] = c;
+    }
+    return acc;
+  }, {});
+  const listaConversas = Object.values(conversasPorTelefone).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
 
   return (
     <div className="space-y-6">
@@ -262,7 +230,7 @@ export default function WhatsAppPage() {
         </Button>
       </div>
 
-      {/* Cards de status */}
+      {/* Status cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Status Baileys */}
         <Card>
@@ -284,23 +252,11 @@ export default function WhatsAppPage() {
                 </div>
               </div>
               {!isConnected && !loadingStatus && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={reconnect}
-                  disabled={reconnecting}
-                  title="Reconectar WhatsApp"
-                >
-                  {reconnecting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <PlugZap className="h-4 w-4" />
-                  )}
+                <Button variant="outline" size="sm" onClick={reconnect} disabled={reconnecting} title="Reconectar">
+                  {reconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
                 </Button>
               )}
             </div>
-
-            {/* QR Code renderizado como imagem */}
             {status?.qrCode && !isConnected && (
               <div className="mt-4 flex flex-col items-center gap-2">
                 <p className="text-xs text-gray-500">Escaneie o QR Code com o WhatsApp:</p>
@@ -310,8 +266,6 @@ export default function WhatsAppPage() {
                 <p className="text-[10px] text-gray-400 animate-pulse">Atualizando automaticamente...</p>
               </div>
             )}
-
-            {/* Mensagem de sucesso quando conectado */}
             {isConnected && !loadingStatus && (
               <div className="mt-3 flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
                 <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
@@ -321,7 +275,6 @@ export default function WhatsAppPage() {
           </CardContent>
         </Card>
 
-        {/* Conversas ativas */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -334,7 +287,6 @@ export default function WhatsAppPage() {
           </CardContent>
         </Card>
 
-        {/* Mensagens hoje */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -348,154 +300,150 @@ export default function WhatsAppPage() {
         </Card>
       </div>
 
-      {/* Ações de disparo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <DisparoSeletivo
-          titulo="Disparar cobranças do mês"
-          icon={Send}
-          isConnected={isConnected}
-          onDisparo={dispararCobrancas}
-        >
-          <div>
-            <label className={lbl}>Mês/Ano referência (opcional)</label>
-            <input className={cls} value={mesReferencia} onChange={e => setMesReferencia(e.target.value)} placeholder="03/2026 (vazio = mês atual)" />
-          </div>
-        </DisparoSeletivo>
-
-        <DisparoSeletivo
-          titulo="Enviar convites de indicação"
-          descricao="Envia mensagem com link personalizado de indicação para cooperados ativos com contrato."
-          icon={Gift}
-          isConnected={isConnected}
-          onDisparo={dispararMLM}
-        />
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-0 -mb-px">
+          {abas.map((aba) => {
+            const Icon = aba.icon;
+            const ativa = abaAtiva === aba.id;
+            return (
+              <button
+                key={aba.id}
+                onClick={() => { setAbaAtiva(aba.id); setConversaSelecionada(null); }}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  ativa
+                    ? 'border-green-600 text-green-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {aba.label}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
-      {/* Conversas recentes */}
-      {conversas.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Conversas recentes</CardTitle></CardHeader>
-          <CardContent>
-            <div className="divide-y divide-gray-100">
-              {conversas.slice(0, 20).map(c => {
-                const est = estadoLabel[c.estado] || { label: c.estado, color: 'bg-gray-100 text-gray-600' };
-                return (
-                  <div key={c.id} className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <MessageCircle className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{c.telefone}</p>
-                        <p className="text-xs text-gray-400">{tempoAtras(c.updatedAt)} atrás</p>
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${est.color}`}>{est.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Tab content */}
+      {abaAtiva === 'disparos' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DisparoSeletivo
+              titulo="Disparar cobranças do mês"
+              icon={Send}
+              isConnected={isConnected}
+              onDisparo={dispararCobrancas}
+            >
+              <div>
+                <label className={lbl}>Mês/Ano referência (opcional)</label>
+                <input className={cls} value={mesReferencia} onChange={e => setMesReferencia(e.target.value)} placeholder="03/2026 (vazio = mês atual)" />
+              </div>
+            </DisparoSeletivo>
+
+            <DisparoSeletivo
+              titulo="Enviar convites de indicação"
+              descricao="Envia mensagem com link personalizado de indicação para cooperados ativos com contrato."
+              icon={Gift}
+              isConnected={isConnected}
+              onDisparo={dispararMLM}
+            />
+          </div>
+        </div>
       )}
 
-      {/* Simulação manual */}
-      <Card>
-        <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Simulação manual (teste)</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-gray-500">Teste o fluxo de processamento de fatura como se fosse recebido pelo WhatsApp.</p>
-          <div>
-            <label className={lbl}>Telefone do remetente</label>
-            <input className={cls} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(27) 99999-0000" />
-          </div>
-
-          <div>
-            <label className={lbl}>Fatura (PDF ou imagem)</label>
-            <div
-              onClick={() => fileRef.current?.click()}
-              onDragOver={e => { e.preventDefault(); setDrag(true); }}
-              onDragLeave={() => setDrag(false)}
-              onDrop={onDrop}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-                drag ? 'border-green-500 bg-green-50' : arquivo ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-              }`}
-            >
-              <input ref={fileRef} type="file" accept=".pdf,image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
-              {arquivo ? (
-                <div className="space-y-1">
-                  <FileUp className="h-6 w-6 text-green-600 mx-auto" />
-                  <p className="text-sm font-medium text-green-800">{arquivo.name}</p>
-                  <p className="text-xs text-green-600">{(arquivo.size / 1024).toFixed(0)} KB</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Upload className="h-6 w-6 text-gray-400 mx-auto" />
-                  <p className="text-sm text-gray-600">Arraste ou <span className="text-green-700 font-medium">clique para selecionar</span></p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {erro && <p className="text-sm text-red-600">{erro}</p>}
-
-          <Button onClick={simular} disabled={loading} className="w-full">
-            {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processando fatura com IA...</> : <><MessageCircle className="h-4 w-4 mr-2" />Simular processamento</>}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {resultado && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <MessageCircle className="h-4 w-4 text-green-600" />Mensagem que seria enviada
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className={`rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed ${
-                resultado.sucesso ? 'bg-green-50 border border-green-200 text-gray-800' : 'bg-red-50 border border-red-200 text-red-800'
-              }`}>
-                {resultado.mensagemWhatsApp}
-              </div>
-            </CardContent>
-          </Card>
-
-          {resultado.dadosExtraidos && (
+      {abaAtiva === 'conversas' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Lista de conversas */}
+          <div className={`space-y-1 ${conversaSelecionada ? 'hidden md:block' : ''}`}>
             <Card>
-              <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Dados extraídos</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold text-gray-700">Conversas</CardTitle>
+              </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {Object.entries(resultado.dadosExtraidos)
-                    .filter(([k]) => k !== 'historicoConsumo')
-                    .map(([key, val]) => (
-                      <div key={key} className="flex justify-between gap-2 border-b border-gray-100 py-1.5">
-                        <span className="text-gray-500 text-xs">{key}</span>
-                        <span className="text-gray-900 text-xs font-medium text-right truncate max-w-[200px]">
-                          {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '—')}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-                {Array.isArray((resultado.dadosExtraidos as Record<string, unknown>).historicoConsumo) && (
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Histórico de consumo</p>
-                    <div className="border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="grid grid-cols-3 gap-2 px-3 py-1.5 bg-gray-50 border-b text-xs font-medium text-gray-500">
-                        <div>Mês</div><div className="text-right">kWh</div><div className="text-right">R$</div>
-                      </div>
-                      {((resultado.dadosExtraidos as Record<string, unknown>).historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>).map((h, i) => (
-                        <div key={i} className="grid grid-cols-3 gap-2 px-3 py-1.5 border-b border-gray-100 last:border-0 text-xs">
-                          <div>{h.mesAno}</div>
-                          <div className="text-right">{h.consumoKwh}</div>
-                          <div className="text-right">{h.valorRS > 0 ? `R$ ${h.valorRS.toFixed(2)}` : '—'}</div>
-                        </div>
-                      ))}
-                    </div>
+                {loadingConversas ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                  </div>
+                ) : listaConversas.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">Nenhuma conversa.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
+                    {listaConversas.map((c) => {
+                      const est = estadoLabel[c.estado] || { label: c.estado, color: 'bg-gray-100 text-gray-600' };
+                      const selecionada = conversaSelecionada === c.telefone;
+                      const telefoneFormatado = c.telefone.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4');
+                      const inicial = c.telefone.slice(-2);
+
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => setConversaSelecionada(c.telefone)}
+                          className={`w-full flex items-center gap-3 py-3 px-2 text-left transition-colors rounded ${
+                            selecionada ? 'bg-green-50' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold shrink-0">
+                            {inicial}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{telefoneFormatado}</p>
+                            <p className="text-[10px] text-gray-400">{tempoAtras(c.updatedAt)} atrás</p>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${est.color}`}>
+                            {est.label}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
-        </>
+          </div>
+
+          {/* Detalhe da conversa */}
+          <div className="md:col-span-2">
+            {conversaSelecionada ? (
+              <ConversaDetalhe
+                telefone={conversaSelecionada}
+                onVoltar={() => setConversaSelecionada(null)}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <MessagesSquare className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">Selecione uma conversa para ver as mensagens</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {abaAtiva === 'historico' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <History className="h-4 w-4" /> Histórico de mensagens
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HistoricoMensagens />
+          </CardContent>
+        </Card>
+      )}
+
+      {abaAtiva === 'listas' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <List className="h-4 w-4" /> Listas de contatos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <GerenciarListas onUsarNoDisparo={handleUsarListaNoDisparo} />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
