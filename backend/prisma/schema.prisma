@@ -1094,3 +1094,37 @@ model ConversaWhatsapp {
 
   @@map("conversas_whatsapp")
 }
+
+model MensagemWhatsapp {
+  id              String   @id @default(cuid())
+  telefone        String
+  direcao         String   // 'ENTRADA' | 'SAIDA'
+  tipo            String   @default("texto") // 'texto' | 'imagem' | 'documento'
+  conteudo        String?  @db.Text
+  status          String   @default("ENVIADA") // 'ENVIADA' | 'ENTREGUE' | 'LIDA' | 'FALHOU' | 'RECEBIDA'
+  enviadaEm       DateTime @default(now())
+  entregueEm      DateTime?
+  lidaEm          DateTime?
+  respondidaEm    DateTime?
+  disparoId       String?
+  tipoDisparo     String?  // 'COBRANCA' | 'MLM' | 'MANUAL' | 'BOT_RESPOSTA'
+  cooperadoId     String?
+  cooperativaId   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("mensagens_whatsapp")
+}
+
+model ListaContatos {
+  id            String   @id @default(cuid())
+  nome          String
+  descricao     String?
+  cooperativaId String?
+  telefones     String[] // array de telefones
+  cooperadoIds  String[] // array de IDs de cooperados
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("listas_contatos")
+}
