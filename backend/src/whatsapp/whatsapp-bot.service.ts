@@ -539,6 +539,33 @@ export class WhatsappBotService {
       try {
         await this.indicacoes.registrarIndicacao(cooperado.id, codigoRef);
         this.logger.log(`Indicação registrada para ${cooperado.id} via código ${codigoRef}`);
+
+        // Notificar o indicador
+        const indicador = await this.prisma.cooperado.findUnique({
+          where: { codigoIndicacao: codigoRef },
+          select: { telefone: true, nomeCompleto: true, cooperativaId: true },
+        });
+        if (indicador?.telefone) {
+          const nomeIndicado = cooperado.nomeCompleto || titular || 'Novo membro';
+          await this.sender.enviarMensagem(
+            indicador.telefone,
+            `🎉 Boa notícia! ${nomeIndicado} acabou de completar o cadastro através do seu convite! Quando ele pagar a primeira fatura, você receberá seu benefício automaticamente. Obrigado por indicar! 🙏`,
+          ).catch(() => {});
+
+          // Notificar admin da cooperativa
+          if (indicador.cooperativaId) {
+            const admin = await this.prisma.usuario.findFirst({
+              where: { cooperativaId: indicador.cooperativaId, perfil: 'ADMIN' },
+              select: { telefone: true },
+            });
+            if (admin?.telefone) {
+              await this.sender.enviarMensagem(
+                admin.telefone,
+                `📋 Novo cadastro via indicação: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto}. Acompanhe o processo no painel.`,
+              ).catch(() => {});
+            }
+          }
+        }
       } catch (err) {
         this.logger.warn(`Não foi possível registrar indicação: ${err.message}`);
       }

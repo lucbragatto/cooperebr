@@ -53,6 +53,49 @@ export class IndicacoesService {
     };
   }
 
+  // ─── Meu Link (com contadores) ──────────────────────────────────────────────
+
+  async getMeuLink(cooperadoId: string) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { codigoIndicacao: true, nomeCompleto: true, id: true },
+    });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+
+    // Garantir que tem código (gerar se não tiver)
+    let codigo = cooperado.codigoIndicacao;
+    if (!codigo) {
+      codigo = this.gerarCodigo();
+      await this.prisma.cooperado.update({
+        where: { id: cooperadoId },
+        data: { codigoIndicacao: codigo },
+      });
+    }
+
+    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const link = `${baseUrl}/entrar?ref=${codigo}`;
+
+    const [totalIndicados, indicadosAtivos] = await Promise.all([
+      this.prisma.indicacao.count({
+        where: { cooperadoIndicadorId: cooperadoId, nivel: 1 },
+      }),
+      this.prisma.indicacao.count({
+        where: { cooperadoIndicadorId: cooperadoId, nivel: 1, status: 'PRIMEIRA_FATURA_PAGA' },
+      }),
+    ]);
+
+    return { codigoIndicacao: codigo, link, totalIndicados, indicadosAtivos };
+  }
+
+  private gerarCodigo(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   // ─── Registrar Indicação ─────────────────────────────────────────────────────
 
   async registrarIndicacao(cooperadoIndicadoId: string, codigoIndicador: string) {
@@ -306,6 +349,16 @@ export class IndicacoesService {
     }
 
     return Object.values(arvore);
+  }
+
+  async getMinhasIndicacoes(cooperadoId: string) {
+    return this.prisma.indicacao.findMany({
+      where: { cooperadoIndicadorId: cooperadoId, nivel: 1 },
+      include: {
+        cooperadoIndicado: { select: { nomeCompleto: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async getBeneficios(cooperadoId: string) {

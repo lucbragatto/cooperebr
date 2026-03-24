@@ -50,6 +50,16 @@ export class IndicacoesController {
     return this.service.getMeuCodigo(req.user?.cooperadoId || req.query?.cooperadoId);
   }
 
+  @Get('meu-link')
+  getMeuLink(@Req() req: any) {
+    return this.service.getMeuLink(req.user?.cooperadoId || req.query?.cooperadoId);
+  }
+
+  @Get('minhas')
+  getMinhasIndicacoes(@Req() req: any) {
+    return this.service.getMinhasIndicacoes(req.user?.cooperadoId || req.query?.cooperadoId);
+  }
+
   @Get('beneficios')
   getBeneficios(@Req() req: any) {
     return this.service.getBeneficios(req.user?.cooperadoId || req.query?.cooperadoId);

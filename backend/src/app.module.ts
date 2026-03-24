@@ -32,6 +32,7 @@ import { SaasModule } from './saas/saas.module';
 import { IndicacoesModule } from './indicacoes/indicacoes.module';
 import { ModelosMensagemModule } from './modelos-mensagem/modelos-mensagem.module';
 import { FluxoEtapasModule } from './fluxo-etapas/fluxo-etapas.module';
+import { PublicoModule } from './publico/publico.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -66,6 +67,7 @@ import { RolesGuard } from './auth/roles.guard';
     IndicacoesModule,
     ModelosMensagemModule,
     FluxoEtapasModule,
+    PublicoModule,
   ],
   controllers: [AppController],
   providers: [
