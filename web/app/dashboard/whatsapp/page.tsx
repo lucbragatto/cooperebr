@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  ArrowLeft, FileUp, Loader2, MessageCircle, Upload, Wifi, WifiOff,
-  Send, Gift, RefreshCw, Users, Clock,
+  ArrowLeft, CheckCircle2, FileUp, Loader2, MessageCircle, Upload, Wifi, WifiOff,
+  Send, Gift, RefreshCw, Users, Clock, PlugZap,
 } from 'lucide-react';
 import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
+import DisparoSeletivo from '@/components/DisparoSeletivo';
+
+const WHATSAPP_SERVICE_URL = process.env.NEXT_PUBLIC_WHATSAPP_URL ?? 'http://localhost:3002';
 
 interface ResultadoSimulacao {
   sucesso: boolean;
@@ -18,7 +23,7 @@ interface ResultadoSimulacao {
 }
 
 interface StatusBaileys {
-  status: string;
+  status: 'awaiting_qr' | 'connected' | 'disconnected' | 'failed' | string;
   qrCode?: string;
 }
 
@@ -47,6 +52,13 @@ const estadoLabel: Record<string, { label: string; color: string }> = {
   CONCLUIDO: { label: 'Concluído', color: 'bg-green-100 text-green-700' },
 };
 
+const statusLabels: Record<string, { label: string; color: string }> = {
+  connected: { label: 'Conectado', color: 'text-green-600' },
+  awaiting_qr: { label: 'Aguardando QR Code', color: 'text-yellow-600' },
+  disconnected: { label: 'Desconectado', color: 'text-red-500' },
+  failed: { label: 'Falhou', color: 'text-red-500' },
+};
+
 function tempoAtras(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const min = Math.floor(diff / 60000);
@@ -59,19 +71,16 @@ function tempoAtras(dateStr: string): string {
 }
 
 export default function WhatsAppPage() {
-  // Status Baileys
+  // Status Baileys (direto do serviço WhatsApp :3002)
   const [status, setStatus] = useState<StatusBaileys | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [reconnecting, setReconnecting] = useState(false);
 
   // Conversas
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [loadingConversas, setLoadingConversas] = useState(true);
 
   // Disparos
-  const [disparandoCobrancas, setDisparandoCobrancas] = useState(false);
-  const [resultadoCobrancas, setResultadoCobrancas] = useState<ResultadoDisparo | null>(null);
-  const [disparandoMLM, setDisparandoMLM] = useState(false);
-  const [resultadoMLM, setResultadoMLM] = useState<ResultadoDisparo | null>(null);
   const [mesReferencia, setMesReferencia] = useState('');
 
   // Simulação manual
@@ -83,60 +92,103 @@ export default function WhatsAppPage() {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Confirmações
-  const [confirmCobranca, setConfirmCobranca] = useState(false);
-  const [confirmMLM, setConfirmMLM] = useState(false);
+  // Auto-refresh ref
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    carregarDados();
-  }, []);
-
-  async function carregarDados() {
-    setLoadingStatus(true);
-    setLoadingConversas(true);
+  // Buscar status direto do serviço WhatsApp (:3002)
+  const fetchStatus = useCallback(async () => {
     try {
-      const [statusRes, conversasRes] = await Promise.all([
-        api.get<StatusBaileys>('/whatsapp/status').catch(() => ({ data: { status: 'erro' } as StatusBaileys })),
-        api.get<Conversa[]>('/whatsapp/conversas').catch(() => ({ data: [] as Conversa[] })),
-      ]);
-      setStatus(statusRes.data);
-      setConversas(conversasRes.data);
+      const { data } = await axios.get<StatusBaileys>(`${WHATSAPP_SERVICE_URL}/status`);
+      setStatus(data);
+      return data;
+    } catch {
+      setStatus({ status: 'disconnected' });
+      return null;
     } finally {
       setLoadingStatus(false);
+    }
+  }, []);
+
+  // Buscar conversas via API backend (:3000)
+  const fetchConversas = useCallback(async () => {
+    try {
+      const { data } = await api.get<Conversa[]>('/whatsapp/conversas');
+      setConversas(data);
+    } catch {
+      setConversas([]);
+    } finally {
       setLoadingConversas(false);
     }
-  }
+  }, []);
 
-  // Disparar cobranças
-  async function dispararCobrancas() {
-    setDisparandoCobrancas(true);
-    setResultadoCobrancas(null);
+  // Carregar tudo
+  const carregarDados = useCallback(async () => {
+    setLoadingStatus(true);
+    setLoadingConversas(true);
+    await Promise.all([fetchStatus(), fetchConversas()]);
+  }, [fetchStatus, fetchConversas]);
+
+  // Auto-refresh: poll a cada 5s enquanto não conectado
+  useEffect(() => {
+    fetchStatus();
+    fetchConversas();
+  }, [fetchStatus, fetchConversas]);
+
+  useEffect(() => {
+    // Limpa intervalo anterior
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    const isConnected = status?.status === 'connected';
+
+    if (!isConnected) {
+      intervalRef.current = setInterval(async () => {
+        const data = await fetchStatus();
+        if (data?.status === 'connected' && intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      }, 5000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [status?.status, fetchStatus]);
+
+  // Reconectar
+  async function reconnect() {
+    setReconnecting(true);
     try {
-      const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-cobrancas', {
-        mesReferencia: mesReferencia || undefined,
-      });
-      setResultadoCobrancas(data);
+      await axios.post(`${WHATSAPP_SERVICE_URL}/reconnect`);
+      // Aguarda um momento para o serviço iniciar reconexão
+      setTimeout(() => {
+        fetchStatus();
+        setReconnecting(false);
+      }, 2000);
     } catch {
-      setResultadoCobrancas({ total: 0, enviados: 0, erros: -1 });
-    } finally {
-      setDisparandoCobrancas(false);
-      setConfirmCobranca(false);
+      setReconnecting(false);
     }
   }
 
-  // Disparar convites MLM
-  async function dispararMLM() {
-    setDisparandoMLM(true);
-    setResultadoMLM(null);
-    try {
-      const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-convites-indicacao');
-      setResultadoMLM(data);
-    } catch {
-      setResultadoMLM({ total: 0, enviados: 0, erros: -1 });
-    } finally {
-      setDisparandoMLM(false);
-      setConfirmMLM(false);
-    }
+  // Disparar cobranças (com filtro seletivo)
+  async function dispararCobrancas(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
+    const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-cobrancas', {
+      mesReferencia: mesReferencia || undefined,
+      ...params,
+    });
+    return data;
+  }
+
+  // Disparar convites MLM (com filtro seletivo)
+  async function dispararMLM(params: { modo: string; parceiroId?: string; telefones?: string[] }) {
+    const { data } = await api.post<ResultadoDisparo>('/whatsapp/disparar-convites-indicacao', params);
+    return data;
   }
 
   // Simulação manual
@@ -184,12 +236,14 @@ export default function WhatsAppPage() {
   }
 
   const isConnected = status?.status === 'connected';
+  const isAwaitingQr = status?.status === 'awaiting_qr';
   const conversasAtivas = conversas.filter(c => c.estado !== 'CONCLUIDO' && c.estado !== 'INICIAL');
   const conversasHoje = conversas.filter(c => {
     const d = new Date(c.updatedAt);
     const hoje = new Date();
     return d.toDateString() === hoje.toDateString();
   });
+  const statusInfo = statusLabels[status?.status ?? ''] ?? { label: status?.status ?? 'Verificando...', color: 'text-gray-500' };
 
   return (
     <div className="space-y-6">
@@ -213,25 +267,55 @@ export default function WhatsAppPage() {
         {/* Status Baileys */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              {loadingStatus ? (
-                <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-              ) : isConnected ? (
-                <Wifi className="h-5 w-5 text-green-600" />
-              ) : (
-                <WifiOff className="h-5 w-5 text-red-500" />
-              )}
-              <div>
-                <p className="text-sm font-medium text-gray-700">Status Baileys</p>
-                <p className={`text-xs font-semibold ${isConnected ? 'text-green-600' : 'text-red-500'}`}>
-                  {loadingStatus ? 'Verificando...' : isConnected ? 'Conectado' : status?.status === 'awaiting_qr' ? 'Aguardando QR Code' : 'Desconectado'}
-                </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {loadingStatus ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                ) : isConnected ? (
+                  <Wifi className="h-5 w-5 text-green-600" />
+                ) : (
+                  <WifiOff className="h-5 w-5 text-red-500" />
+                )}
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Status Baileys</p>
+                  <p className={`text-xs font-semibold ${statusInfo.color}`}>
+                    {loadingStatus ? 'Verificando...' : statusInfo.label}
+                  </p>
+                </div>
               </div>
+              {!isConnected && !loadingStatus && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={reconnect}
+                  disabled={reconnecting}
+                  title="Reconectar WhatsApp"
+                >
+                  {reconnecting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <PlugZap className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
+
+            {/* QR Code renderizado como imagem */}
             {status?.qrCode && !isConnected && (
-              <div className="mt-3 p-2 bg-gray-50 rounded text-center">
-                <p className="text-xs text-gray-500 mb-1">Escaneie com WhatsApp:</p>
-                <pre className="text-[6px] leading-none font-mono whitespace-pre overflow-auto max-h-32">{status.qrCode}</pre>
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <p className="text-xs text-gray-500">Escaneie o QR Code com o WhatsApp:</p>
+                <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                  <QRCodeSVG value={status.qrCode} size={220} level="M" />
+                </div>
+                <p className="text-[10px] text-gray-400 animate-pulse">Atualizando automaticamente...</p>
+              </div>
+            )}
+
+            {/* Mensagem de sucesso quando conectado */}
+            {isConnected && !loadingStatus && (
+              <div className="mt-3 flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                <p className="text-xs text-green-700 font-medium">WhatsApp conectado e pronto para uso!</p>
               </div>
             )}
           </CardContent>
@@ -266,68 +350,25 @@ export default function WhatsAppPage() {
 
       {/* Ações de disparo */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Disparar cobranças */}
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Send className="h-4 w-4" /> Disparar cobranças do mês</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <label className={lbl}>Mês/Ano referência (opcional)</label>
-              <input className={cls} value={mesReferencia} onChange={e => setMesReferencia(e.target.value)} placeholder="03/2026 (vazio = mês atual)" />
-            </div>
-            {!confirmCobranca ? (
-              <Button onClick={() => setConfirmCobranca(true)} disabled={disparandoCobrancas || !isConnected} className="w-full" variant="outline">
-                <Send className="h-4 w-4 mr-2" />Disparar cobranças via WhatsApp
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-orange-600 font-medium">Tem certeza? Isso enviará mensagens para todos os cooperados com cobranças pendentes.</p>
-                <div className="flex gap-2">
-                  <Button onClick={dispararCobrancas} disabled={disparandoCobrancas} className="flex-1" variant="default">
-                    {disparandoCobrancas ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando...</> : 'Confirmar envio'}
-                  </Button>
-                  <Button onClick={() => setConfirmCobranca(false)} variant="ghost" className="flex-1">Cancelar</Button>
-                </div>
-              </div>
-            )}
-            {resultadoCobrancas && (
-              <div className={`text-xs p-2 rounded ${resultadoCobrancas.erros === -1 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
-                {resultadoCobrancas.erros === -1
-                  ? 'Erro ao disparar cobranças. Verifique os logs.'
-                  : `Resultado: ${resultadoCobrancas.enviados} enviados de ${resultadoCobrancas.total} | ${resultadoCobrancas.erros} erros`}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <DisparoSeletivo
+          titulo="Disparar cobranças do mês"
+          icon={Send}
+          isConnected={isConnected}
+          onDisparo={dispararCobrancas}
+        >
+          <div>
+            <label className={lbl}>Mês/Ano referência (opcional)</label>
+            <input className={cls} value={mesReferencia} onChange={e => setMesReferencia(e.target.value)} placeholder="03/2026 (vazio = mês atual)" />
+          </div>
+        </DisparoSeletivo>
 
-        {/* Disparar convites MLM */}
-        <Card>
-          <CardHeader><CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Gift className="h-4 w-4" /> Enviar convites de indicação</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-gray-500">Envia mensagem com link personalizado de indicação para todos os cooperados ativos com contrato.</p>
-            {!confirmMLM ? (
-              <Button onClick={() => setConfirmMLM(true)} disabled={disparandoMLM || !isConnected} className="w-full" variant="outline">
-                <Gift className="h-4 w-4 mr-2" />Enviar convites MLM
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-orange-600 font-medium">Tem certeza? Isso enviará convites para todos os cooperados ativos.</p>
-                <div className="flex gap-2">
-                  <Button onClick={dispararMLM} disabled={disparandoMLM} className="flex-1" variant="default">
-                    {disparandoMLM ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Enviando...</> : 'Confirmar envio'}
-                  </Button>
-                  <Button onClick={() => setConfirmMLM(false)} variant="ghost" className="flex-1">Cancelar</Button>
-                </div>
-              </div>
-            )}
-            {resultadoMLM && (
-              <div className={`text-xs p-2 rounded ${resultadoMLM.erros === -1 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
-                {resultadoMLM.erros === -1
-                  ? 'Erro ao enviar convites. Verifique os logs.'
-                  : `Resultado: ${resultadoMLM.enviados} enviados de ${resultadoMLM.total} | ${resultadoMLM.erros} erros`}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <DisparoSeletivo
+          titulo="Enviar convites de indicação"
+          descricao="Envia mensagem com link personalizado de indicação para cooperados ativos com contrato."
+          icon={Gift}
+          isConnected={isConnected}
+          onDisparo={dispararMLM}
+        />
       </div>
 
       {/* Conversas recentes */}
