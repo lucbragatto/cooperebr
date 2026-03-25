@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query } from '@nestjs/common';
+/// <reference types="multer" />
+import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CooperadosService } from './cooperados.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -76,6 +78,17 @@ export class CooperadosController {
   @Get('meu-perfil/documentos')
   meusDocumentos(@Req() req: any) {
     return this.cooperadosService.meusDocumentos(req.user);
+  }
+
+  @Roles(COOPERADO)
+  @Post('meu-perfil/documentos')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadMeuDocumento(
+    @Req() req: any,
+    @Body('tipo') tipo: string,
+    @UploadedFile() arquivo: Express.Multer.File,
+  ) {
+    return this.cooperadosService.uploadMeuDocumento(req.user, tipo, arquivo);
   }
 
   @Roles(COOPERADO)

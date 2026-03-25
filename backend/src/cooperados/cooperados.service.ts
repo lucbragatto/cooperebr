@@ -1,17 +1,28 @@
+/// <reference types="multer" />
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { StatusCooperado, TipoCooperado } from '@prisma/client';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 
+const BUCKET = 'documentos-cooperados';
+
 @Injectable()
 export class CooperadosService {
+  private supabase: SupabaseClient;
+
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
     private usinasService: UsinasService,
-  ) {}
+  ) {
+    this.supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_KEY!,
+    );
+  }
 
   async meuPerfil(usuario: { id: string; email: string; cpf?: string }) {
     const where: any[] = [];
@@ -36,15 +47,27 @@ export class CooperadosService {
           where: { status: { in: ['PENDENTE', 'REPROVADO'] } },
           orderBy: { createdAt: 'desc' },
         },
+        indicacoesFeitas: {
+          include: {
+            cooperadoIndicado: {
+              select: { nomeCompleto: true, status: true, createdAt: true },
+            },
+          },
+        },
+        beneficiosIndicacao: {
+          where: { status: 'APLICADO' },
+          select: { valorCalculado: true },
+        },
       },
     });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado para este usuário');
 
+    const c = cooperado as any;
     // Calcular resumo
-    const contratoAtivo = cooperado.contratos.find(c => c.status === 'ATIVO');
-    const todasCobrancas = cooperado.contratos.flatMap(c => c.cobrancas);
-    const cobrancasPendentes = todasCobrancas.filter(c => c.status === 'PENDENTE' || c.status === 'VENCIDO');
-    const proximaCobranca = todasCobrancas.find(c => c.status === 'PENDENTE');
+    const contratoAtivo = c.contratos.find((ct: any) => ct.status === 'ATIVO');
+    const todasCobrancas = c.contratos.flatMap((ct: any) => ct.cobrancas);
+    const cobrancasPendentes = todasCobrancas.filter((cb: any) => cb.status === 'PENDENTE' || cb.status === 'VENCIDO');
+    const proximaCobranca = todasCobrancas.find((cb: any) => cb.status === 'PENDENTE');
 
     return {
       ...cooperado,
@@ -53,7 +76,7 @@ export class CooperadosService {
         proximoVencimento: proximaCobranca?.dataVencimento ?? null,
         statusConta: cooperado.status,
         kwhAlocados: Number(cooperado.cotaKwhMensal ?? 0),
-        documentosPendentes: cooperado.documentos.length,
+        documentosPendentes: c.documentos.length,
         faturasPendentes: cobrancasPendentes.length,
       },
     };
@@ -177,6 +200,50 @@ export class CooperadosService {
       where: { id: cooperado.id },
       data: dadosPermitidos,
     });
+  }
+
+  /** Upload de documento pelo próprio cooperado (role COOPERADO) */
+  async uploadMeuDocumento(
+    usuario: { id: string; email: string; cpf?: string },
+    tipo: string,
+    arquivo: Express.Multer.File,
+  ) {
+    if (!arquivo) throw new BadRequestException('Arquivo obrigatório.');
+    if (!tipo) throw new BadRequestException('Tipo de documento obrigatório.');
+
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+    const ext = arquivo.originalname.split('.').pop() ?? 'bin';
+    const storagePath = `${cooperado.id}/${tipo}_${Date.now()}.${ext}`;
+
+    const { error } = await this.supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, arquivo.buffer, { contentType: arquivo.mimetype });
+    if (error) throw new BadRequestException(`Erro no upload: ${error.message}`);
+
+    const { data: urlData } = this.supabase.storage.from(BUCKET).getPublicUrl(storagePath);
+
+    const existing = await this.prisma.documentoCooperado.findUnique({
+      where: { cooperadoId_tipo: { cooperadoId: cooperado.id, tipo: tipo as any } },
+    });
+
+    const doc = existing
+      ? await this.prisma.documentoCooperado.update({
+          where: { id: existing.id },
+          data: { url: urlData.publicUrl, nomeArquivo: arquivo.originalname, tamanhoBytes: arquivo.size, status: 'PENDENTE', motivoRejeicao: null },
+        })
+      : await this.prisma.documentoCooperado.create({
+          data: { cooperadoId: cooperado.id, tipo: tipo as any, url: urlData.publicUrl, nomeArquivo: arquivo.originalname, tamanhoBytes: arquivo.size, status: 'PENDENTE' },
+        });
+
+    await this.notificacoes.criar({
+      tipo: 'NOVO_DOCUMENTO',
+      titulo: 'Novo documento enviado',
+      mensagem: `Documento ${tipo} enviado pelo cooperado ${cooperado.nomeCompleto} para aprovação.`,
+      cooperadoId: cooperado.id,
+      link: `/dashboard/cooperados/${cooperado.id}`,
+    });
+
+    return doc;
   }
 
   async findAll(cooperativaId?: string, limit?: number, offset?: number, search?: string) {

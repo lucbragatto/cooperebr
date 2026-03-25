@@ -41,7 +41,6 @@ const TIPO_LABEL: Record<string, string> = {
   CNH_FRENTE: 'CNH (Frente)',
   CNH_VERSO: 'CNH (Verso)',
   CONTRATO_SOCIAL: 'Contrato Social',
-  PROCURACAO: 'Procuração',
   OUTROS: 'Outro documento',
 };
 
@@ -88,7 +87,7 @@ export default function PortalDocumentosPage() {
     ['RG_FRENTE', 'RG_VERSO', 'CNH_FRENTE', 'CNH_VERSO'].includes(d.tipo),
   );
   const docsOutros = documentos.filter((d) =>
-    ['CONTRATO_SOCIAL', 'PROCURACAO', 'OUTROS'].includes(d.tipo),
+    ['CONTRATO_SOCIAL', 'OUTROS'].includes(d.tipo),
   );
 
   return (
@@ -278,7 +277,7 @@ function UploadModal({
       const formData = new FormData();
       formData.append('file', arquivo);
       formData.append('tipo', tipo);
-      await api.post('/upload/documento', formData, {
+      await api.post('/cooperados/meu-perfil/documentos', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       onSuccess();

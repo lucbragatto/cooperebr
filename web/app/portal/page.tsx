@@ -26,6 +26,7 @@ interface Resumo {
 interface MeuPerfil {
   id: string;
   nomeCompleto: string;
+  codigoIndicacao?: string;
   resumo: Resumo;
 }
 
@@ -76,7 +77,7 @@ export default function PortalInicioPage() {
 
   // Link de indicação via WhatsApp
   const linkIndicacao = typeof window !== 'undefined'
-    ? `${window.location.origin}/entrar?ref=${perfil?.id ?? ''}`
+    ? `${window.location.origin}/entrar?ref=${perfil?.codigoIndicacao ?? perfil?.id ?? ''}`
     : '';
   const textoWhatsapp = encodeURIComponent(
     `Olá! Quer economizar na conta de luz? Participe da nossa cooperativa de energia solar! Acesse: ${linkIndicacao}`

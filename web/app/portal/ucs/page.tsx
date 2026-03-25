@@ -37,14 +37,20 @@ interface UcItem {
 
 export default function PortalUcsPage() {
   const [ucs, setUcs] = useState<UcItem[]>([]);
+  const [cooperadoId, setCooperadoId] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
   const [ucSelecionada, setUcSelecionada] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get('/cooperados/meu-perfil/ucs')
-      .then((res) => setUcs(res.data))
+    Promise.all([
+      api.get('/cooperados/meu-perfil/ucs'),
+      api.get('/cooperados/meu-perfil'),
+    ])
+      .then(([ucsRes, perfilRes]) => {
+        setUcs(ucsRes.data);
+        setCooperadoId(perfilRes.data.id);
+      })
       .catch(() => {})
       .finally(() => setCarregando(false));
   }, []);
@@ -177,7 +183,7 @@ export default function PortalUcsPage() {
 
       {/* Modal Adicionar UC */}
       {modalAberto && (
-        <ModalNovaUc onClose={() => setModalAberto(false)} onSuccess={() => {
+        <ModalNovaUc cooperadoId={cooperadoId} onClose={() => setModalAberto(false)} onSuccess={() => {
           setModalAberto(false);
           api.get('/cooperados/meu-perfil/ucs').then((res) => setUcs(res.data));
         }} />
@@ -240,9 +246,11 @@ function UcChart({ ucId }: { ucId: string }) {
 }
 
 function ModalNovaUc({
+  cooperadoId,
   onClose,
   onSuccess,
 }: {
+  cooperadoId: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -263,6 +271,7 @@ function ModalNovaUc({
       // Placeholder: in the future, the backend will accept file upload
       // For now, just notify support
       await api.post('/ocorrencias', {
+        cooperadoId,
         tipo: 'SOLICITACAO',
         descricao: `Solicitação de inclusão de nova UC: ${numero}${arquivo ? ' (fatura anexada)' : ''}`,
         prioridade: 'MEDIA',
