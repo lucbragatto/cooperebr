@@ -42,8 +42,12 @@ export default function EntrarPage() {
     setErro('');
 
     const telLimpo = telefone.replace(/\D/g, '');
-    if (!nome.trim() || telLimpo.length < 10) {
-      setErro('Preencha nome e telefone válido.');
+    if (!nome.trim()) {
+      setErro('Preencha seu nome.');
+      return;
+    }
+    if (telLimpo.length !== 11) {
+      setErro('Telefone deve ter 11 dígitos (DDD + 9 dígitos). Ex: (11) 99999-9999');
       return;
     }
 
