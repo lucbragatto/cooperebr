@@ -78,9 +78,15 @@ export class CobrancasJob {
       // Recalcula sempre baseado no valorLiquido original
       const valorAtualizado = valorOriginal + multa + juros;
 
-      // Armazenamos nos campos existentes como referência
-      // valorPago será usado para o valor final quando pagar
-      // Usamos um campo json se necessário, mas por enquanto logamos
+      await this.prisma.cobranca.update({
+        where: { id: cobranca.id },
+        data: {
+          valorMulta: multa,
+          valorJuros: juros,
+          valorAtualizado,
+        },
+      });
+
       this.logger.debug(
         `Cobrança ${cobranca.id}: ${diasEfetivos} dias efetivos, multa R$${multa.toFixed(2)}, juros R$${juros.toFixed(2)}, total R$${valorAtualizado.toFixed(2)}`,
       );

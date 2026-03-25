@@ -356,6 +356,9 @@ model Cobranca {
   baseCalculoUsada   String?
   fonteDesconto      String?
   cooperativaId      String?
+  valorMulta         Decimal?       @db.Decimal(10, 2)
+  valorJuros         Decimal?       @db.Decimal(10, 2)
+  valorAtualizado    Decimal?       @db.Decimal(10, 2)
   whatsappEnviadoEm  DateTime?
   cobrancasBancarias CobrancaBancaria[]
   asaasCobrancas     AsaasCobranca[]
