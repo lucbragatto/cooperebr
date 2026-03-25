@@ -22,6 +22,15 @@ export class IndicacoesService {
     modalidade: string;
     niveisConfig: { nivel: number; percentual: number; reaisKwh: number }[];
   }) {
+    // Validar teto de percentual em cada nível
+    for (const nivel of dto.niveisConfig) {
+      if (nivel.percentual < 0 || nivel.percentual > 100) {
+        throw new BadRequestException(`Percentual do nível ${nivel.nivel} deve estar entre 0 e 100`);
+      }
+      if (nivel.reaisKwh < 0) {
+        throw new BadRequestException(`Valor R$/kWh do nível ${nivel.nivel} não pode ser negativo`);
+      }
+    }
     return this.prisma.configIndicacao.upsert({
       where: { cooperativaId },
       update: {
@@ -222,7 +231,7 @@ export class IndicacoesService {
 
       // PERCENTUAL_PRIMEIRA_FATURA ou AMBOS
       if (config.modalidade === 'PERCENTUAL_PRIMEIRA_FATURA' || config.modalidade === 'AMBOS') {
-        const percentual = nivelConfig.percentual || 0;
+        const percentual = Math.min(nivelConfig.percentual || 0, 100);
         if (percentual > 0) {
           const valorCalc = (valorFatura * percentual) / 100;
           beneficiosCriados.push(
