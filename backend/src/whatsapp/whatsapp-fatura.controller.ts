@@ -48,9 +48,11 @@ export class WhatsappFaturaController {
     },
   ) {
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);
-    this.bot.processarMensagem(body).catch((err) => {
-      this.logger.error(`Erro ao processar mensagem: ${err.message}`);
-    });
+    try {
+      await this.bot.processarMensagem(body);
+    } catch (err) {
+      this.logger.error(`Erro ao processar mensagem de ${body.telefone}: ${err.message}`, err.stack);
+    }
     return { ok: true };
   }
 
