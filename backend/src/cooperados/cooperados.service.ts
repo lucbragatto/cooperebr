@@ -389,7 +389,7 @@ export class CooperadosService {
           take: 1,
         },
       },
-      orderBy: { updatedAt: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     return cooperados.map(c => ({
