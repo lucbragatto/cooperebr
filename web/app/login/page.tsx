@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { login } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,6 +77,12 @@ export default function LoginPage() {
               <Button type="submit" className="w-full" disabled={carregando}>
                 {carregando ? 'Entrando...' : 'Entrar'}
               </Button>
+
+              <div className="text-center">
+                <Link href="/esqueci-senha" className="text-sm text-green-700 hover:underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
             </form>
           </CardContent>
         </Card>
