@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 export default function RedefinirSenhaPage() {
   const searchParams = useSearchParams();
   const [accessToken, setAccessToken] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [sucesso, setSucesso] = useState(false);
@@ -19,6 +20,13 @@ export default function RedefinirSenhaPage() {
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
+    // Token próprio (via WhatsApp)
+    const customToken = searchParams.get('token') || '';
+    if (customToken) {
+      setResetToken(customToken);
+      return;
+    }
+
     // Supabase pode enviar como query param ou fragment
     const token = searchParams.get('access_token') || '';
     if (token) setAccessToken(token);
@@ -43,14 +51,20 @@ export default function RedefinirSenhaPage() {
       setErro('As senhas não coincidem.');
       return;
     }
-    if (!accessToken) {
+    if (!accessToken && !resetToken) {
       setErro('Token de redefinição não encontrado. Solicite um novo link.');
       return;
     }
 
     setCarregando(true);
     try {
-      await api.post('/auth/redefinir-senha', { access_token: accessToken, novaSenha });
+      const payload: any = { novaSenha };
+      if (resetToken) {
+        payload.token = resetToken;
+      } else {
+        payload.access_token = accessToken;
+      }
+      await api.post('/auth/redefinir-senha', payload);
       setSucesso(true);
     } catch {
       setErro('Erro ao redefinir senha. O link pode ter expirado.');

@@ -1,8 +1,13 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsString, MinLength, IsOptional } from 'class-validator';
 
 export class RedefinirSenhaDto {
   @IsString()
-  access_token!: string;
+  @IsOptional()
+  access_token?: string;
+
+  @IsString()
+  @IsOptional()
+  token?: string;
 
   @IsString()
   @MinLength(8)

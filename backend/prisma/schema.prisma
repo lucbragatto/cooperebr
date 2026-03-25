@@ -55,8 +55,10 @@ model Usuario {
   supabaseId    String?       @unique
   perfil        PerfilUsuario @default(COOPERADO)
   ativo         Boolean       @default(true)
-  fotoFacialUrl String?
-  cooperativaId String?
+  fotoFacialUrl    String?
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  cooperativaId    String?
   cooperativa   Cooperativa?  @relation(fields: [cooperativaId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

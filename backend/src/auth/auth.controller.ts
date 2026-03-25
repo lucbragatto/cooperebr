@@ -8,6 +8,7 @@ import { Roles } from './roles.decorator';
 import { PerfilUsuario } from './perfil.enum';
 import { RegisterDto } from './dto/register.dto';
 import { EsqueciSenhaDto } from './dto/esqueci-senha.dto';
+import { IdentificadorDto } from './dto/identificador.dto';
 import { RedefinirSenhaDto } from './dto/redefinir-senha.dto';
 import { AlterarSenhaDto } from './dto/alterar-senha.dto';
 import { CriarUsuarioDto } from './dto/criar-usuario.dto';
@@ -82,7 +83,24 @@ export class AuthController {
   @HttpCode(200)
   @Post('esqueci-senha')
   esqueciSenha(@Body() dto: EsqueciSenhaDto) {
-    return this.authService.esqueciSenha(dto.email);
+    const valor = dto.email || dto.identificador || '';
+    return this.authService.esqueciSenha(valor);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @HttpCode(200)
+  @Post('verificar-canal')
+  verificarCanal(@Body() dto: IdentificadorDto) {
+    return this.authService.verificarCanal(dto.identificador);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  @HttpCode(200)
+  @Post('esqueci-senha-whatsapp')
+  esqueciSenhaWhatsapp(@Body() dto: IdentificadorDto) {
+    return this.authService.esqueciSenhaWhatsapp(dto.identificador);
   }
 
   @Public()
@@ -90,7 +108,7 @@ export class AuthController {
   @HttpCode(200)
   @Post('redefinir-senha')
   redefinirSenha(@Body() dto: RedefinirSenhaDto) {
-    return this.authService.redefinirSenha(dto.access_token, dto.novaSenha);
+    return this.authService.redefinirSenha(dto.access_token ?? '', dto.novaSenha, dto.token);
   }
 
   // --- Alterar Senha (autenticado) ---

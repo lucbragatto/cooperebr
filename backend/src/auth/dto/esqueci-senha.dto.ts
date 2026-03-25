@@ -1,6 +1,11 @@
-import { IsEmail } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEmail } from 'class-validator';
 
 export class EsqueciSenhaDto {
   @IsEmail()
-  email!: string;
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  identificador?: string;
 }

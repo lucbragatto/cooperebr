@@ -10,7 +10,9 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { createClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { PerfilUsuario } from './perfil.enum';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +24,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private whatsappSender: WhatsappSenderService,
   ) {}
 
   async register(data: {
@@ -114,7 +117,18 @@ export class AuthService {
     return { token, usuario: this.formatarUsuario(usuario) };
   }
 
-  async esqueciSenha(email: string) {
+  async esqueciSenha(emailOuIdentificador: string) {
+    let email = emailOuIdentificador;
+
+    // Se não for email, buscar o email do usuário
+    if (!emailOuIdentificador.includes('@')) {
+      const usuario = await this.buscarPorIdentificador(emailOuIdentificador);
+      if (!usuario) {
+        return { ok: true, mensagem: 'Se o email existir, você receberá um link de redefinição.' };
+      }
+      email = usuario.email;
+    }
+
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     await this.supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${frontendUrl}/redefinir-senha`,
@@ -122,7 +136,32 @@ export class AuthService {
     return { ok: true, mensagem: 'Se o email existir, você receberá um link de redefinição.' };
   }
 
-  async redefinirSenha(accessToken: string, novaSenha: string) {
+  async redefinirSenha(accessToken: string, novaSenha: string, resetToken?: string) {
+    // Fluxo via token WhatsApp (resetToken próprio)
+    if (resetToken) {
+      const usuario: any = await this.prisma.usuario.findFirst({
+        where: { resetToken },
+      });
+      if (!usuario || !usuario.resetTokenExpiry || new Date() > usuario.resetTokenExpiry) {
+        throw new UnauthorizedException('Token inválido ou expirado');
+      }
+      if (!usuario.supabaseId) {
+        throw new BadRequestException('Usuário sem vinculação Supabase');
+      }
+      const { error } = await this.supabase.auth.admin.updateUserById(usuario.supabaseId, {
+        password: novaSenha,
+      });
+      if (error) {
+        throw new BadRequestException(error.message);
+      }
+      await (this.prisma.usuario.update as any)({
+        where: { id: usuario.id },
+        data: { resetToken: null, resetTokenExpiry: null },
+      });
+      return { ok: true };
+    }
+
+    // Fluxo via Supabase access_token (email)
     const { data: { user }, error: sessionError } = await this.supabase.auth.getUser(accessToken);
     if (sessionError || !user) {
       throw new UnauthorizedException('Token inválido ou expirado');
@@ -276,6 +315,82 @@ export class AuthService {
       redirectTo: `${frontendUrl}/redefinir-senha`,
     });
     return { ok: true };
+  }
+
+  async verificarCanal(identificador: string) {
+    const usuario = await this.buscarPorIdentificador(identificador);
+    if (!usuario) {
+      return { temWhatsapp: false, temEmail: false };
+    }
+    return {
+      temWhatsapp: !!usuario.telefone,
+      temEmail: !!usuario.email,
+      telefone: usuario.telefone ? this.mascararTelefone(usuario.telefone) : undefined,
+      email: usuario.email ? this.mascararEmail(usuario.email) : undefined,
+    };
+  }
+
+  async esqueciSenhaWhatsapp(identificador: string) {
+    const usuario: any = await this.buscarPorIdentificador(identificador);
+    if (!usuario) {
+      return { ok: true, mensagem: 'Se o usuário existir, receberá um link.' };
+    }
+
+    if (!usuario.telefone) {
+      throw new BadRequestException('Usuário não possui telefone cadastrado');
+    }
+
+    const token = randomUUID();
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await (this.prisma.usuario.update as any)({
+      where: { id: usuario.id },
+      data: { resetToken: token, resetTokenExpiry: expiry },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const link = `${frontendUrl}/redefinir-senha?token=${token}`;
+
+    const texto = `Olá, ${usuario.nome}! 👋\n\nVocê solicitou redefinição de senha no CoopereBR.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${link}\n\nSe não foi você, ignore esta mensagem.`;
+
+    await this.whatsappSender.enviarMensagem(usuario.telefone, texto, {
+      tipoDisparo: 'RESET_SENHA',
+      cooperadoId: usuario.id,
+      cooperativaId: usuario.cooperativaId ?? undefined,
+    });
+
+    return {
+      canal: 'whatsapp',
+      telefone: this.mascararTelefone(usuario.telefone),
+    };
+  }
+
+  private async buscarPorIdentificador(identificador: string) {
+    const trimmed = identificador.trim();
+    return this.prisma.usuario.findFirst({
+      where: {
+        OR: [
+          { email: trimmed },
+          { cpf: trimmed },
+          { telefone: trimmed },
+        ],
+      },
+    });
+  }
+
+  private mascararTelefone(telefone: string): string {
+    const digits = telefone.replace(/\D/g, '');
+    if (digits.length >= 8) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 3)}****-${digits.slice(-4)}`;
+    }
+    return '****' + telefone.slice(-4);
+  }
+
+  private mascararEmail(email: string): string {
+    const [local, domain] = email.split('@');
+    if (!domain) return '***';
+    const masked = local.slice(0, 1) + '***';
+    return `${masked}@${domain}`;
   }
 
   private assinarToken(sub: string, email: string, perfil: PerfilUsuario) {

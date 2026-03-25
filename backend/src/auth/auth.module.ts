@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma.service';
 import { FacialModule } from './facial/facial.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { getJwtSecret } from './jwt-secret';
 
 @Module({
@@ -16,6 +17,7 @@ import { getJwtSecret } from './jwt-secret';
       signOptions: { expiresIn: '7d' },
     }),
     FacialModule,
+    WhatsappModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, PrismaService],
