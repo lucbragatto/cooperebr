@@ -24,6 +24,13 @@ export class CooperadosController {
     return this.cooperadosService.filaEspera(req.user?.cooperativaId);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('fila-espera/count')
+  async filaEsperaCount(@Req() req: any) {
+    const lista = await this.cooperadosService.filaEspera(req.user?.cooperativaId);
+    return { count: lista.length };
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id/checklist')
   getChecklist(@Param('id') id: string) {

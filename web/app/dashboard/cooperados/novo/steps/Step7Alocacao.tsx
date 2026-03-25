@@ -64,8 +64,8 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         } else {
           setSemVaga(true);
           try {
-            const { data: espera } = await api.get<{ posicao: number }>('/cooperados/fila-espera/count');
-            setPosicaoEspera((espera?.posicao ?? 0) + 1);
+            const { data: espera } = await api.get<{ count: number }>('/cooperados/fila-espera/count');
+            setPosicaoEspera((espera?.count ?? 0) + 1);
           } catch {
             setPosicaoEspera(1);
           }
@@ -90,7 +90,6 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         telefone: dadosPessoais.telefone || undefined,
         status: 'PENDENTE',
         tipoPessoa: dadosPessoais.tipoPessoa,
-        tipoMembro: tipoMembro,
         representanteLegalNome: dadosPessoais.representanteLegalNome || undefined,
         representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
         representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,
