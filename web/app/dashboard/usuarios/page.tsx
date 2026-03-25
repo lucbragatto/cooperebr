@@ -322,12 +322,12 @@ export default function UsuariosPage() {
               <div className="space-y-1">
                 <Label>Parceiro</Label>
                 <Select value={formCooperativaId} onValueChange={setFormCooperativaId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="w-[--radix-select-trigger-width] max-w-none">
                     {cooperativas.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                      <SelectItem key={c.id} value={c.id} className="whitespace-normal break-words">{c.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
