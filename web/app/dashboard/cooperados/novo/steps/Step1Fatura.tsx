@@ -82,9 +82,10 @@ export function detectarSuspeitos(historico: HistoricoItemEditavel[]): Set<numbe
   if (historico.length < 2) return suspeitos;
   for (let i = 0; i < historico.length; i++) {
     if (historico[i].estimado) continue;
+    if (historico[i].consumoKwh === 0) { suspeitos.add(i); continue; }
     const outros = historico.filter((_, j) => j !== i);
     const mediaOutros = outros.reduce((acc, m) => acc + m.consumoKwh, 0) / outros.length;
-    if (historico[i].consumoKwh < mediaOutros * 0.3) suspeitos.add(i);
+    if (historico[i].consumoKwh < mediaOutros * 0.4) suspeitos.add(i);
   }
   return suspeitos;
 }
@@ -302,6 +303,13 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>Histórico com {historico.length} meses. A média será calculada e extrapolada para 12 meses.</span>
+          </div>
+        )}
+
+        {suspeitos.size > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span><b>{suspeitos.size}</b> mês(es) com consumo suspeito foram desmarcados automaticamente (consumo &lt; 40% da média ou zero).</span>
           </div>
         )}
 
