@@ -14,11 +14,6 @@ export class WhatsappCobrancaService {
     private sender: WhatsappSenderService,
   ) {}
 
-  // TODO [MEL-001]: Ao gerar cobranças, ler cooperado.preferenciaCobranca para calcular
-  // a dataVencimento corretamente. Valores possíveis:
-  // - 'VENCIMENTO_CONCESSIONARIA' → usar mesma data de vencimento da fatura da concessionária
-  // - 'DIA_FIXO_5' | 'DIA_FIXO_10' | ... → usar dia fixo do mês
-  // - 'DIAS_APOS_FATURA_3' | 'DIAS_APOS_FATURA_5' | ... → X dias úteis após emissão da fatura
 
   /**
    * Dispara cobranças do mês via WhatsApp com PIX copia-e-cola.

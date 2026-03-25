@@ -695,4 +695,66 @@ IMPORTANTE:
     // 5. Padrão
     return 'FIXO_MENSAL';
   }
+
+  /**
+   * Calcula a data de vencimento com base na preferência do cooperado.
+   * Fallback: hoje + diasVencimentoPadrao (ConfigTenant).
+   */
+  private calcularVencimento(
+    preferencia: string | null | undefined,
+    diasVencimentoPadrao: number,
+    vencimentoFaturaConcessionaria?: string,
+  ): Date {
+    const hoje = new Date();
+
+    if (!preferencia) {
+      const v = new Date();
+      v.setDate(v.getDate() + diasVencimentoPadrao);
+      return v;
+    }
+
+    // VENCIMENTO_CONCESSIONARIA — usar dia do vencimento da fatura da concessionária
+    if (preferencia === 'VENCIMENTO_CONCESSIONARIA') {
+      if (vencimentoFaturaConcessionaria) {
+        // Formato DD/MM/AAAA
+        const partes = vencimentoFaturaConcessionaria.split('/');
+        if (partes.length === 3) {
+          const dia = parseInt(partes[0], 10);
+          if (dia >= 1 && dia <= 31) {
+            const v = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+            // Se o dia já passou neste mês, usar próximo mês
+            if (v <= hoje) v.setMonth(v.getMonth() + 1);
+            return v;
+          }
+        }
+      }
+      // Fallback se não encontrar vencimento na fatura
+      const v = new Date();
+      v.setDate(v.getDate() + diasVencimentoPadrao);
+      return v;
+    }
+
+    // DIA_FIXO_XX — dia fixo do mês (ex: DIA_FIXO_05, DIA_FIXO_10)
+    const matchDiaFixo = preferencia.match(/^DIA_FIXO_(\d{2})$/);
+    if (matchDiaFixo) {
+      const dia = parseInt(matchDiaFixo[1], 10);
+      const v = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+      if (v <= hoje) v.setMonth(v.getMonth() + 1);
+      return v;
+    }
+
+    // APOS_FATURA_XD — X dias após geração da cobrança (ex: APOS_FATURA_3D, APOS_FATURA_10D)
+    const matchApos = preferencia.match(/^APOS_FATURA_(\d+)D$/);
+    if (matchApos) {
+      const dias = parseInt(matchApos[1], 10);
+      const v = new Date();
+      v.setDate(v.getDate() + dias);
+      return v;
+    }
+
+    // Preferência não reconhecida — fallback
+    const v = new Date();
+    v.setDate(v.getDate() + diasVencimentoPadrao);
+    return v;
+  }
 }
