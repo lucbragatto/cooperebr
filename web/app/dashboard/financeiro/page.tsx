@@ -46,9 +46,10 @@ export default function FinanceiroPage() {
   function exportarCsv() {
     if (!dados) return;
     const all = [...(dados.entradas || []), ...(dados.saidas || [])];
+    const escapeCsv = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const header = 'Tipo,Descricao,Valor,Categoria,Cooperado,Vencimento,Pagamento,Status';
     const rows = all.map((t: any) =>
-      `"${t.tipo}","${t.descricao}","${Number(t.valor).toFixed(2)}","${t.categoriaNome ?? ''}","${t.cooperado ?? ''}","${formatarData(t.dataVencimento)}","${formatarData(t.dataPagamento)}","${t.status}"`
+      [t.tipo, t.descricao, Number(t.valor).toFixed(2), t.categoriaNome ?? '', t.cooperado ?? '', formatarData(t.dataVencimento), formatarData(t.dataPagamento), t.status].map(escapeCsv).join(',')
     );
     const csv = [header, ...rows].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -72,7 +73,7 @@ export default function FinanceiroPage() {
     setCompetencia(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  const maxHistorico = dados?.historico
+  const maxHistorico = dados?.historico?.length
     ? Math.max(...dados.historico.flatMap((h: any) => [h.receitas, h.despesas]), 1)
     : 1;
 
