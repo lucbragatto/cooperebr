@@ -21,8 +21,8 @@ export default function EntrarPage() {
   const codigoRef = searchParams.get('ref') ?? '';
 
   const [nomeIndicador, setNomeIndicador] = useState('');
-  const [nome, setNome] = useState('');
-  const [telefone, setTelefone] = useState('');
+  const [nome, setNome] = useState(searchParams.get('nome') ?? '');
+  const [telefone, setTelefone] = useState(searchParams.get('tel') ?? '');
   const [loading, setLoading] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [erro, setErro] = useState('');
