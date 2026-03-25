@@ -45,10 +45,11 @@ export class CooperadosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
-  create(@Body() body: CreateCooperadoDto) {
-    const { termoAdesaoAceitoEm, ...rest } = body;
+  create(@Body() body: CreateCooperadoDto, @Req() req: any) {
+    const { termoAdesaoAceitoEm, cooperativaId, ...rest } = body;
     return this.cooperadosService.create({
       ...rest,
+      cooperativaId: cooperativaId || req.user?.cooperativaId || undefined,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
     });
   }

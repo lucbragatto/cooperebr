@@ -99,6 +99,10 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
   }, [ocr?.distribuidora]);
 
   async function finalizar() {
+    if (!semVaga && usinaSelecionada && !simulacaoData.simulacao) {
+      setErro('Simulação é obrigatória para criar o contrato. Volte à etapa de simulação.');
+      return;
+    }
     setSalvando(true); setErro('');
     try {
       // 1. Criar cooperado
@@ -156,7 +160,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
             cooperadoId: cid,
             usinaId: usinaSelecionada,
             dataInicio: new Date().toISOString().slice(0, 10),
-            percentualDesconto: simulacaoData.simulacao?.desconto ?? 15,
+            percentualDesconto: simulacaoData.simulacao!.desconto,
             kwhContrato: Math.round(mediaKwh),
             planoId: simulacaoData.planoSelecionadoId || undefined,
           });

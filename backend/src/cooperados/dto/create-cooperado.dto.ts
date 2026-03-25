@@ -51,6 +51,10 @@ export class CreateCooperadoDto {
 
   @IsOptional()
   @IsString()
+  cooperativaId?: string;
+
+  @IsOptional()
+  @IsString()
   usinaPropriaId?: string;
 
   @IsOptional()

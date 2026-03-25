@@ -183,13 +183,16 @@ export default function NovoMembroWizard() {
         if (!step2.telefone.trim()) return 'Telefone é obrigatório.';
         return null;
       case 2:
-        // Simulação é opcional, mas recomendada
+        if (!step3.planoSelecionadoId && !step3.simulacao) return 'Execute a simulação antes de avançar.';
         return null;
       case 3:
+        if (!step4.propostaAceita) return 'A proposta deve ser aceita antes de avançar.';
         return null;
       case 4:
+        if (step5.documentos.length === 0) return 'Envie pelo menos um documento para avançar.';
         return null;
       case 5:
+        if (!step6.contratoGerado) return 'Gere o contrato antes de avançar.';
         return null;
       default:
         return null;

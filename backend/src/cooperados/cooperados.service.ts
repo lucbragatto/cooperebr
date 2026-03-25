@@ -155,6 +155,7 @@ export class CooperadosService {
     representanteLegalNome?: string;
     representanteLegalCpf?: string;
     representanteLegalCargo?: string;
+    cooperativaId?: string;
     usinaPropriaId?: string;
     percentualRepasse?: number;
   }) {
