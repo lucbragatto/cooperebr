@@ -34,6 +34,7 @@ export default function Step3Espera({ cooperativaId, usinaKwh, onSubmit }: Step3
       {!cooperativaId ? (
         <div className="p-6 text-center border-2 border-dashed border-neutral-200 rounded-lg">
           <p className="text-sm text-neutral-400">Parceiro ainda não foi salvo. A lista de espera será configurada após a criação.</p>
+          <p className="text-xs text-neutral-300 mt-2">Você pode avançar — esta etapa é opcional até o parceiro ser criado.</p>
         </div>
       ) : carregando ? (
         <p className="text-sm text-neutral-400">Carregando lista de espera...</p>
