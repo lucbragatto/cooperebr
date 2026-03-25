@@ -38,6 +38,12 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @Get(':id/painel-parceiro')
+  painelParceiro(@Param('id') id: string) {
+    return this.cooperativasService.painelParceiro(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cooperativasService.findOne(id);

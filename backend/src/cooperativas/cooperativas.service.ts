@@ -126,6 +126,55 @@ export class CooperativasService {
     });
   }
 
+  async painelParceiro(id: string) {
+    const cooperativa = await this.prisma.cooperativa.findUnique({
+      where: { id },
+      select: { id: true, nome: true, cnpj: true, tipoParceiro: true, cidade: true, estado: true },
+    });
+    if (!cooperativa) throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
+
+    const [totalMembros, ativos, pendentes, inativos, cooperadosComIndicacoes] = await Promise.all([
+      this.prisma.cooperado.count({ where: { cooperativaId: id } }),
+      this.prisma.cooperado.count({ where: { cooperativaId: id, status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS', 'APROVADO'] } } }),
+      this.prisma.cooperado.count({ where: { cooperativaId: id, status: { in: ['PENDENTE', 'PENDENTE_VALIDACAO', 'PENDENTE_DOCUMENTOS', 'AGUARDANDO_CONCESSIONARIA'] } } }),
+      this.prisma.cooperado.count({ where: { cooperativaId: id, status: { in: ['SUSPENSO', 'ENCERRADO'] } } }),
+      this.prisma.cooperado.findMany({
+        where: { cooperativaId: id },
+        select: { id: true, nomeCompleto: true, codigoIndicacao: true, _count: { select: { indicacoesFeitas: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const totalIndicacoes = cooperadosComIndicacoes.reduce((acc, c) => acc + c._count.indicacoesFeitas, 0);
+
+    const label = getLabelMembro(cooperativa.tipoParceiro);
+    const slug = cooperativa.nome
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    return {
+      cooperativa: {
+        ...cooperativa,
+        tipoMembro: label.singular,
+        tipoMembroPlural: label.plural,
+      },
+      totalMembros,
+      ativos,
+      pendentes,
+      inativos,
+      totalIndicacoes,
+      linkConvite: `/entrar?ref=${slug}`,
+      membrosRecentes: cooperadosComIndicacoes.slice(0, 10).map((c) => ({
+        id: c.id,
+        nome: c.nomeCompleto,
+        indicacoes: c._count.indicacoesFeitas,
+        codigoIndicacao: c.codigoIndicacao,
+      })),
+    };
+  }
+
   async remove(id: string) {
     const cooperativa = await this.prisma.cooperativa.findUnique({ where: { id } });
     if (!cooperativa) {
