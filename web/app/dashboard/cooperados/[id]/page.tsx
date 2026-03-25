@@ -103,6 +103,9 @@ interface CooperadoCompleto {
   status: string; cotaKwhMensal: number | string | null;
   documento: string | null; tipoDocumento: string | null; createdAt: string; updatedAt: string;
   tipoCooperado: string; tipoPessoa: string | null;
+  dataNascimento: string | null; razaoSocial: string | null;
+  cep: string | null; logradouro: string | null; numero: string | null;
+  complemento: string | null; bairro: string | null; cidade: string | null; estado: string | null;
   usinaPropriaId: string | null; percentualRepasse: number | string | null;
   preferenciaCobranca: string | null;
   representanteLegalNome: string | null; representanteLegalCpf: string | null; representanteLegalCargo: string | null;
@@ -118,6 +121,16 @@ const cooperadoSchema = z.object({
   cpf: z.string().min(11, 'CPF/CNPJ obrigatório'),
   telefone: z.string().optional(),
   status: z.string().min(1),
+  dataNascimento: z.string().optional(),
+  tipoPessoa: z.string().optional(),
+  razaoSocial: z.string().optional(),
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
 });
 
 type CooperadoFormData = z.infer<typeof cooperadoSchema>;
@@ -455,6 +468,16 @@ export default function CooperadoPerfilPage() {
       cpf: cooperado.cpf,
       telefone: cooperado.telefone ?? '',
       status: cooperado.status,
+      dataNascimento: cooperado.dataNascimento ? cooperado.dataNascimento.slice(0, 10) : '',
+      tipoPessoa: cooperado.tipoPessoa ?? 'PF',
+      razaoSocial: cooperado.razaoSocial ?? '',
+      cep: cooperado.cep ?? '',
+      logradouro: cooperado.logradouro ?? '',
+      numero: cooperado.numero ?? '',
+      complemento: cooperado.complemento ?? '',
+      bairro: cooperado.bairro ?? '',
+      cidade: cooperado.cidade ?? '',
+      estado: cooperado.estado ?? '',
     });
     setSheetCooperado(true);
   }
@@ -462,8 +485,11 @@ export default function CooperadoPerfilPage() {
   async function salvarCooperado(formData: CooperadoFormData) {
     setSalvando(true);
     try {
-      const { data } = await api.put<CooperadoCompleto>(`/cooperados/${id}`, formData);
-      setCooperado(p => p ? { ...p, nomeCompleto: data.nomeCompleto, email: data.email, telefone: data.telefone, cpf: data.cpf, status: data.status, updatedAt: data.updatedAt } : p);
+      // Remover campos vazios opcionais para não enviar strings vazias
+      const payload: Record<string, any> = { ...formData };
+      if (!payload.dataNascimento) delete payload.dataNascimento;
+      const { data } = await api.put<CooperadoCompleto>(`/cooperados/${id}`, payload);
+      setCooperado(p => p ? { ...p, ...data } : p);
       setSheetCooperado(false);
       showToast('sucesso', 'Dados atualizados com sucesso.');
     } catch { showToast('erro', 'Erro ao atualizar dados.'); }
@@ -1564,8 +1590,8 @@ export default function CooperadoPerfilPage() {
 
       {/* Sheet — Editar Cooperado (RHF + Zod) */}
       <Sheet open={sheetCooperado} onOpenChange={setSheetCooperado}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader><SheetTitle>Editar Cooperado</SheetTitle></SheetHeader>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader><SheetTitle>Editar {tipoMembro}</SheetTitle></SheetHeader>
           <form onSubmit={cooperadoForm.handleSubmit(salvarCooperado)} className="mt-6 space-y-4">
             <div>
               <label className={lbl}>Nome completo *</label>
@@ -1577,22 +1603,106 @@ export default function CooperadoPerfilPage() {
               <input type="email" className={cls} {...cooperadoForm.register('email')} />
               {formCoopErrors.email && <p className="text-xs text-red-500 mt-1">{formCoopErrors.email.message}</p>}
             </div>
-            <div>
-              <label className={lbl}>CPF/CNPJ *</label>
-              <input className={cls} {...cooperadoForm.register('cpf')} />
-              {formCoopErrors.cpf && <p className="text-xs text-red-500 mt-1">{formCoopErrors.cpf.message}</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>CPF/CNPJ *</label>
+                <input className={cls} {...cooperadoForm.register('cpf')} />
+                {formCoopErrors.cpf && <p className="text-xs text-red-500 mt-1">{formCoopErrors.cpf.message}</p>}
+              </div>
+              <div>
+                <label className={lbl}>Telefone (celular)</label>
+                <input className={cls} {...cooperadoForm.register('telefone')} />
+              </div>
             </div>
-            <div>
-              <label className={lbl}>Telefone</label>
-              <input className={cls} {...cooperadoForm.register('telefone')} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Status</label>
+                <select className={cls} {...cooperadoForm.register('status')}>
+                  {['PENDENTE', 'ATIVO', 'ATIVO_RECEBENDO_CREDITOS', 'AGUARDANDO_CONCESSIONARIA', 'SUSPENSO', 'ENCERRADO'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Data de nascimento</label>
+                <input type="date" className={cls} {...cooperadoForm.register('dataNascimento')} />
+              </div>
             </div>
-            <div>
-              <label className={lbl}>Status</label>
-              <select className={cls} {...cooperadoForm.register('status')}>
-                {['PENDENTE', 'ATIVO', 'SUSPENSO', 'ENCERRADO'].map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Tipo de pessoa</label>
+                <select className={cls} {...cooperadoForm.register('tipoPessoa')}>
+                  <option value="PF">Pessoa Física</option>
+                  <option value="PJ">Pessoa Jurídica</option>
+                </select>
+              </div>
+              {cooperadoForm.watch('tipoPessoa') === 'PJ' && (
+                <div>
+                  <label className={lbl}>Razão social</label>
+                  <input className={cls} {...cooperadoForm.register('razaoSocial')} />
+                </div>
+              )}
             </div>
-            <SheetFooter className="flex gap-2">
+
+            {/* Endereço */}
+            <div className="border-t pt-3 mt-3">
+              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Endereço</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={lbl}>CEP</label>
+                  <input
+                    className={cls}
+                    maxLength={9}
+                    {...cooperadoForm.register('cep', {
+                      onChange: (e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        if (raw.length === 8) {
+                          fetch(`https://viacep.com.br/ws/${raw}/json/`)
+                            .then(r => r.json())
+                            .then(d => {
+                              if (!d.erro) {
+                                cooperadoForm.setValue('logradouro', d.logradouro || '');
+                                cooperadoForm.setValue('bairro', d.bairro || '');
+                                cooperadoForm.setValue('cidade', d.localidade || '');
+                                cooperadoForm.setValue('estado', d.uf || '');
+                              }
+                            })
+                            .catch(() => {});
+                        }
+                      },
+                    })}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className={lbl}>Logradouro</label>
+                  <input className={cls} {...cooperadoForm.register('logradouro')} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                <div>
+                  <label className={lbl}>Número</label>
+                  <input className={cls} {...cooperadoForm.register('numero')} />
+                </div>
+                <div className="col-span-2">
+                  <label className={lbl}>Complemento</label>
+                  <input className={cls} {...cooperadoForm.register('complemento')} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-2">
+                <div>
+                  <label className={lbl}>Bairro</label>
+                  <input className={cls} {...cooperadoForm.register('bairro')} />
+                </div>
+                <div>
+                  <label className={lbl}>Cidade</label>
+                  <input className={cls} {...cooperadoForm.register('cidade')} />
+                </div>
+                <div>
+                  <label className={lbl}>Estado</label>
+                  <input className={cls} maxLength={2} {...cooperadoForm.register('estado')} />
+                </div>
+              </div>
+            </div>
+
+            <SheetFooter className="flex gap-2 pt-2">
               <Button type="submit" disabled={salvando} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Salvar</Button>
               <Button type="button" variant="outline" onClick={() => setSheetCooperado(false)}>Cancelar</Button>
             </SheetFooter>

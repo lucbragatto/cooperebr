@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Pencil, KeyRound, Trash2 } from 'lucide-react';
+import { Plus, Pencil, KeyRound, Trash2, Search } from 'lucide-react';
 
 type UsuarioLista = {
   id: string;
@@ -49,6 +49,7 @@ const perfilColors: Record<string, string> = {
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
+  const [busca, setBusca] = useState('');
   const [filtroPerfil, setFiltroPerfil] = useState('TODOS');
   const [carregando, setCarregando] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
@@ -197,9 +198,14 @@ export default function UsuariosPage() {
     });
   }
 
-  const usuariosFiltrados = filtroPerfil === 'TODOS'
-    ? usuarios
-    : usuarios.filter((u) => u.perfil === filtroPerfil);
+  const usuariosFiltrados = usuarios.filter((u) => {
+    if (filtroPerfil !== 'TODOS' && u.perfil !== filtroPerfil) return false;
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      if (!u.nome.toLowerCase().includes(termo) && !u.email.toLowerCase().includes(termo)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -213,20 +219,31 @@ export default function UsuariosPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <CardTitle className="text-base">Lista de Usuários</CardTitle>
-            <Select value={filtroPerfil} onValueChange={setFiltroPerfil}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODOS">Todos os perfis</SelectItem>
-                <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
-                <SelectItem value="ADMIN">Admin</SelectItem>
-                <SelectItem value="OPERADOR">Operador</SelectItem>
-                <SelectItem value="COOPERADO">Cooperado</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-3">
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar por nome ou email..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={filtroPerfil} onValueChange={setFiltroPerfil}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TODOS">Todos os perfis</SelectItem>
+                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="OPERADOR">Operador</SelectItem>
+                  <SelectItem value="COOPERADO">Cooperado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

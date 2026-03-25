@@ -412,7 +412,22 @@ export class CooperadosService {
     representanteLegalCargo: string;
     usinaPropriaId: string;
     percentualRepasse: number;
+    dataNascimento: string;
+    razaoSocial: string;
+    cep: string;
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    cidade: string;
+    estado: string;
   }>) {
+    // Converter dataNascimento string → Date se presente
+    const prismaData: any = { ...data };
+    if (prismaData.dataNascimento && typeof prismaData.dataNascimento === 'string') {
+      prismaData.dataNascimento = new Date(prismaData.dataNascimento);
+    }
+
     // Buscar status anterior para lógica condicional
     const anterior = await this.prisma.cooperado.findUnique({
       where: { id },
@@ -421,7 +436,7 @@ export class CooperadosService {
 
     const cooperado = await this.prisma.cooperado.update({
       where: { id },
-      data,
+      data: prismaData,
     });
 
     // Ativação em cascata: ao ativar cooperado, contratos PENDENTE_ATIVACAO e SUSPENSO → ATIVO

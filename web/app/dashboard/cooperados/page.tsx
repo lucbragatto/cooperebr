@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '@/lib/api';
 import {
   Table,
@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2 } from 'lucide-react';
+import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import { getUsuario } from '@/lib/auth';
@@ -226,16 +227,32 @@ export default function CooperadosPage() {
   const [cooperados, setCooperados] = useState<CooperadoLista[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroParceiro, setFiltroParceiro] = useState<string | null>(null);
+  const [busca, setBusca] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
 
   const usuario = getUsuario();
   const isSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
 
-  useEffect(() => {
-    api.get<CooperadoLista[]>('/cooperados')
+  const carregarCooperados = useCallback((search?: string) => {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    api.get<CooperadoLista[]>(`/cooperados${params}`)
       .then((r) => setCooperados(r.data))
       .finally(() => setCarregando(false));
   }, []);
+
+  useEffect(() => {
+    carregarCooperados();
+  }, [carregarCooperados]);
+
+  function handleBuscaChange(valor: string) {
+    setBusca(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setCarregando(true);
+      carregarCooperados(valor);
+    }, 500);
+  }
 
   // Agrupar por parceiro para SUPER_ADMIN
   const parceiros = isSuperAdmin
@@ -251,9 +268,19 @@ export default function CooperadosPage() {
       ).map(([id, info]) => ({ id, ...info }))
     : [];
 
-  const cooperadosFiltrados = filtroParceiro
+  const cooperadosFiltrados = (filtroParceiro
     ? cooperados.filter(c => c.cooperativaId === filtroParceiro)
-    : cooperados;
+    : cooperados
+  ).filter(c => {
+    if (!busca.trim()) return true;
+    const termo = busca.toLowerCase();
+    return (
+      c.nomeCompleto.toLowerCase().includes(termo) ||
+      c.cpf.toLowerCase().includes(termo) ||
+      c.email.toLowerCase().includes(termo) ||
+      (c.telefone && c.telefone.toLowerCase().includes(termo))
+    );
+  });
 
   return (
     <div>
@@ -305,14 +332,25 @@ export default function CooperadosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-medium text-gray-600">
-            {carregando ? 'Carregando...' : `${cooperadosFiltrados.length} registros`}
-            {filtroParceiro && parceiros.find(p => p.id === filtroParceiro) && (
-              <span className="ml-2 text-sm text-blue-600">
-                — {parceiros.find(p => p.id === filtroParceiro)!.nome}
-              </span>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle className="text-base font-medium text-gray-600">
+              {carregando ? 'Carregando...' : `${cooperadosFiltrados.length} registros`}
+              {filtroParceiro && parceiros.find(p => p.id === filtroParceiro) && (
+                <span className="ml-2 text-sm text-blue-600">
+                  — {parceiros.find(p => p.id === filtroParceiro)!.nome}
+                </span>
+              )}
+            </CardTitle>
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por nome, CPF, email ou telefone..."
+                value={busca}
+                onChange={(e) => handleBuscaChange(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <TabelaCooperados cooperados={cooperadosFiltrados} carregando={carregando} tipoMembro={tipoMembro} />

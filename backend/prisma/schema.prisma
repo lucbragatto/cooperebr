@@ -97,6 +97,15 @@ model Cooperado {
   representanteLegalCpf    String?
   representanteLegalCargo  String?
   tipoPessoa               String?              @default("PF")
+  dataNascimento           DateTime?
+  razaoSocial              String?
+  cep                      String?
+  logradouro               String?
+  numero                   String?
+  complemento              String?
+  bairro                   String?
+  cidade                   String?
+  estado                   String?
   createdAt                DateTime             @default(now())
   updatedAt                DateTime             @updatedAt
   ucs                      Uc[]
