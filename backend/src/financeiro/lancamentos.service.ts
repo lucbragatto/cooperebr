@@ -130,6 +130,115 @@ export class LancamentosService {
     };
   }
 
+  async livroCaixa(competencia: string, cooperativaId?: string) {
+    const where: any = { competencia, status: { not: 'CANCELADO' } };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+
+    // Lançamentos do mês
+    const lancamentos = await this.prisma.lancamentoCaixa.findMany({
+      where,
+      include: {
+        planoContas: { select: { codigo: true, nome: true, grupo: true } },
+        cooperado: { select: { id: true, nomeCompleto: true } },
+      },
+      orderBy: [{ tipo: 'asc' }, { createdAt: 'desc' }],
+    });
+
+    // Cobranças Asaas pagas no período (entradas)
+    const [ano, mes] = competencia.split('-').map(Number);
+    const inicioMes = new Date(ano, mes - 1, 1);
+    const fimMes = new Date(ano, mes, 0, 23, 59, 59);
+
+    const cobrancasAsaasPagas = await this.prisma.asaasCobranca.findMany({
+      where: {
+        status: { in: ['RECEIVED', 'CONFIRMED'] },
+        updatedAt: { gte: inicioMes, lte: fimMes },
+        ...(cooperativaId ? { cooperado: { cooperativaId } } : {}),
+      },
+      include: {
+        cooperado: { select: { id: true, nomeCompleto: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const totalAsaasRecebido = cobrancasAsaasPagas.reduce((acc, c) => acc + Number(c.valor), 0);
+
+    // Separar receitas e despesas dos lançamentos
+    let totalReceitas = 0;
+    let totalDespesas = 0;
+    const entradas: any[] = [];
+    const saidas: any[] = [];
+
+    for (const l of lancamentos) {
+      const item = {
+        id: l.id,
+        descricao: l.descricao,
+        valor: Number(l.valor),
+        tipo: l.tipo,
+        status: l.status,
+        categoria: l.planoContas?.grupo ?? 'OUTROS',
+        categoriaNome: l.planoContas?.nome ?? l.descricao,
+        cooperado: l.cooperado?.nomeCompleto ?? null,
+        dataVencimento: l.dataVencimento,
+        dataPagamento: l.dataPagamento,
+      };
+      if (l.tipo === 'RECEITA') {
+        totalReceitas += item.valor;
+        entradas.push(item);
+      } else {
+        totalDespesas += item.valor;
+        saidas.push(item);
+      }
+    }
+
+    // Entradas combinadas: lançamentos receita + Asaas
+    const entradasAsaas = cobrancasAsaasPagas.map((c) => ({
+      id: c.id,
+      descricao: `Pagamento Asaas - ${c.cooperado?.nomeCompleto ?? 'N/A'}`,
+      valor: Number(c.valor),
+      tipo: 'RECEITA',
+      status: 'REALIZADO',
+      categoria: 'ASAAS',
+      categoriaNome: 'Pagamento via Asaas',
+      cooperado: c.cooperado?.nomeCompleto ?? null,
+      dataVencimento: c.vencimento,
+      dataPagamento: c.updatedAt,
+      formaPagamento: c.formaPagamento,
+    }));
+
+    const totalEntradas = totalReceitas + totalAsaasRecebido;
+    const saldoMes = totalEntradas - totalDespesas;
+
+    // Histórico últimos 6 meses
+    const historico: { competencia: string; receitas: number; despesas: number; saldo: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(ano, mes - 1 - i, 1);
+      const comp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const wh: any = { competencia: comp, status: { not: 'CANCELADO' } };
+      if (cooperativaId) wh.cooperativaId = cooperativaId;
+      const lancs = await this.prisma.lancamentoCaixa.findMany({ where: wh });
+      let rec = 0;
+      let desp = 0;
+      for (const l of lancs) {
+        if (l.tipo === 'RECEITA') rec += Number(l.valor);
+        else desp += Number(l.valor);
+      }
+      historico.push({ competencia: comp, receitas: rec, despesas: desp, saldo: rec - desp });
+    }
+
+    return {
+      competencia,
+      entradas: [...entradas, ...entradasAsaas],
+      saidas,
+      totalEntradas,
+      totalDespesas,
+      totalAsaasRecebido,
+      totalLancamentosReceita: totalReceitas,
+      saldoMes,
+      historico,
+    };
+  }
+
   async dre(competencia: string, cooperativaId?: string) {
     const where: any = { competencia, status: { not: 'CANCELADO' } };
     if (cooperativaId) where.cooperativaId = cooperativaId;

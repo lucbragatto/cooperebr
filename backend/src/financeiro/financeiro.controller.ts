@@ -73,6 +73,12 @@ export class FinanceiroController {
     return this.lancamentosService.create(body);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('livro-caixa')
+  livroCaixa(@Req() req: any, @Query('competencia') competencia: string) {
+    return this.lancamentosService.livroCaixa(competencia, req.user?.cooperativaId);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('lancamentos/resumo')
   resumoLancamentos(@Req() req: any, @Query('competencia') competencia: string) {
