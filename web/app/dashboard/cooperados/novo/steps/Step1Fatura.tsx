@@ -482,6 +482,50 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
         })()}
       </div>
 
+      {/* Resumo kWh em tempo real */}
+      {(() => {
+        const consumo = ocr.consumoAtualKwh || 1;
+        let valorKwh = 0;
+        if (componentesMarcados.has('tarifaTUSD')) valorKwh += getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0);
+        if (componentesMarcados.has('tarifaTE')) valorKwh += getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
+        if (componentesMarcados.has('valorBandeira')) valorKwh += ocr.valorBandeira ?? 0;
+        if (componentesMarcados.has('icms')) valorKwh += getComponenteValor('icmsValor', ocr.icmsValor ?? 0) / consumo;
+        if (componentesMarcados.has('pisCofins')) valorKwh += getComponenteValor('pisCofinsValor', ocr.pisCofinsValor ?? 0) / consumo;
+        if (componentesMarcados.has('contribIluminacaoPublica')) valorKwh += getComponenteValor('contribIluminacaoPublica', ocr.contribIluminacaoPublica ?? 0) / consumo;
+        if (componentesMarcados.has('multaJuros')) valorKwh += (ocr.multaJuros ?? 0) / consumo;
+        if (componentesMarcados.has('outrosEncargos')) valorKwh += getComponenteValor('outrosEncargos', ocr.outrosEncargos ?? 0) / consumo;
+        if (componentesMarcados.has('descontos')) valorKwh -= (ocr.descontos ?? 0) / consumo;
+        valorKwh = Math.max(0, valorKwh);
+
+        const tarifaBase = getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
+
+        const sel = historico.filter((_, i) => mesesSelecionados.has(i));
+        const mediaKwh = sel.length > 0 ? sel.reduce((acc, m) => acc + m.consumoKwh, 0) / sel.length : 0;
+        const faturaEstimada = valorKwh * mediaKwh;
+
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-green-700">Consumo médio</p>
+              <p className="text-lg font-bold text-green-800">{Math.round(mediaKwh).toLocaleString('pt-BR')} kWh</p>
+              <p className="text-xs text-green-600">{sel.length} meses selecionados</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-gray-500">Tarifa base s/ impostos</p>
+              <p className="text-lg font-bold text-gray-900">R$ {tarifaBase.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-gray-500">kWh c/ todos encargos</p>
+              <p className="text-lg font-bold text-gray-900">R$ {valorKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-gray-500">Fatura estimada</p>
+              <p className="text-lg font-bold text-gray-900">{faturaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Base de desconto */}
       <div>
         <p className="text-xs font-medium text-gray-600 mb-2">Base para aplicação do desconto:</p>
