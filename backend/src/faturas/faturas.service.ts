@@ -735,9 +735,15 @@ IMPORTANTE:
     }
 
     // DIA_FIXO_XX — dia fixo do mês (ex: DIA_FIXO_05, DIA_FIXO_10)
-    const matchDiaFixo = preferencia.match(/^DIA_FIXO_(\d{2})$/);
+    const matchDiaFixo = preferencia.match(/^DIA_FIXO_(\d{1,2})$/);
     if (matchDiaFixo) {
       const dia = parseInt(matchDiaFixo[1], 10);
+      if (dia < 1 || dia > 31) {
+        // Dia inválido — fallback para padrão
+        const v = new Date();
+        v.setDate(v.getDate() + diasVencimentoPadrao);
+        return v;
+      }
       const v = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
       if (v <= hoje) v.setMonth(v.getMonth() + 1);
       return v;
