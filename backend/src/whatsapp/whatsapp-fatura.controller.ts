@@ -9,6 +9,7 @@ import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { PrismaService } from '../prisma.service';
+import { EntradaIndicadoDto } from './dto/entrada-indicado.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
@@ -273,9 +274,7 @@ export class WhatsappFaturaController {
   // Endpoint para processar entrada de indicado (chamado pela landing page)
   @Public()
   @Post('entrada-indicado')
-  async entradaIndicado(
-    @Body() body: { telefone: string; codigoRef: string },
-  ) {
+  async entradaIndicado(@Body() body: EntradaIndicadoDto) {
     return this.mlmService.processarEntradaIndicado(body.telefone, body.codigoRef);
   }
 
