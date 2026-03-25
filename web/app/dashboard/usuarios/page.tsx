@@ -309,7 +309,7 @@ export default function UsuariosPage() {
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent style={{ zIndex: 9999 }}>
                   {isSuperAdmin && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
                   <SelectItem value="ADMIN">Admin</SelectItem>
                   <SelectItem value="OPERADOR">Operador</SelectItem>
@@ -325,7 +325,7 @@ export default function UsuariosPage() {
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
-                  <SelectContent className="w-[--radix-select-trigger-width] max-w-none">
+                  <SelectContent className="w-[--radix-select-trigger-width] max-w-none" style={{ zIndex: 9999 }}>
                     {cooperativas.map((c) => (
                       <SelectItem key={c.id} value={c.id} className="whitespace-normal break-words">{c.nome}</SelectItem>
                     ))}
