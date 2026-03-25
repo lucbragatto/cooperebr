@@ -233,15 +233,15 @@ export class IndicacoesService {
       if (config.modalidade === 'PERCENTUAL_PRIMEIRA_FATURA' || config.modalidade === 'AMBOS') {
         const percentual = Math.min(nivelConfig.percentual || 0, 100);
         if (percentual > 0) {
-          const valorCalc = (valorFatura * percentual) / 100;
+          const valorCalc = new Decimal(valorFatura).mul(percentual).div(100).toDecimalPlaces(2);
           beneficiosCriados.push(
             await this.prisma.beneficioIndicacao.create({
               data: {
                 indicacaoId: indicacao.id,
                 cooperadoId: indicacao.cooperadoIndicadorId,
                 tipo: 'PERCENTUAL_FATURA',
-                valorCalculado: new Decimal(valorCalc.toFixed(2)),
-                saldoRestante: new Decimal(valorCalc.toFixed(2)),
+                valorCalculado: valorCalc,
+                saldoRestante: valorCalc,
                 mesReferencia: mesRef,
                 status: 'PENDENTE',
               },
@@ -254,14 +254,15 @@ export class IndicacoesService {
       if (config.modalidade === 'REAIS_KWH_RECORRENTE' || config.modalidade === 'AMBOS') {
         const reaisKwh = nivelConfig.reaisKwh || 0;
         if (reaisKwh > 0) {
+          const valorKwh = new Decimal(reaisKwh).toDecimalPlaces(2);
           beneficiosCriados.push(
             await this.prisma.beneficioIndicacao.create({
               data: {
                 indicacaoId: indicacao.id,
                 cooperadoId: indicacao.cooperadoIndicadorId,
                 tipo: 'REAIS_KWH',
-                valorCalculado: new Decimal(reaisKwh.toFixed(2)),
-                saldoRestante: new Decimal(reaisKwh.toFixed(2)),
+                valorCalculado: valorKwh,
+                saldoRestante: valorKwh,
                 mesReferencia: mesRef,
                 status: 'PENDENTE',
               },
@@ -281,41 +282,43 @@ export class IndicacoesService {
     mesReferencia: string,
     valorFatura: number,
   ) {
-    const beneficios = await this.prisma.beneficioIndicacao.findMany({
-      where: {
-        cooperadoId,
-        status: { in: ['PENDENTE', 'PARCIAL'] },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    let saldoDisponivel = valorFatura;
-    let totalDesconto = 0;
-
-    for (const beneficio of beneficios) {
-      if (saldoDisponivel <= 0) break;
-
-      const saldo = Number(beneficio.saldoRestante);
-      const aplicar = Math.min(saldo, saldoDisponivel);
-
-      const novoSaldo = saldo - aplicar;
-      const novoAplicado = Number(beneficio.valorAplicado) + aplicar;
-
-      await this.prisma.beneficioIndicacao.update({
-        where: { id: beneficio.id },
-        data: {
-          valorAplicado: new Decimal(novoAplicado.toFixed(2)),
-          saldoRestante: new Decimal(novoSaldo.toFixed(2)),
-          status: novoSaldo <= 0 ? 'APLICADO' : 'PARCIAL',
-          mesReferencia,
+    return this.prisma.$transaction(async (tx) => {
+      const beneficios = await tx.beneficioIndicacao.findMany({
+        where: {
+          cooperadoId,
+          status: { in: ['PENDENTE', 'PARCIAL'] },
         },
+        orderBy: { createdAt: 'asc' },
       });
 
-      saldoDisponivel -= aplicar;
-      totalDesconto += aplicar;
-    }
+      let saldoDisponivel = new Decimal(valorFatura);
+      let totalDesconto = new Decimal(0);
 
-    return { totalDesconto, beneficiosProcessados: beneficios.length };
+      for (const beneficio of beneficios) {
+        if (saldoDisponivel.lte(0)) break;
+
+        const saldo = new Decimal(beneficio.saldoRestante.toString());
+        const aplicar = Decimal.min(saldo, saldoDisponivel);
+
+        const novoSaldo = saldo.minus(aplicar);
+        const novoAplicado = new Decimal(beneficio.valorAplicado?.toString() || '0').plus(aplicar);
+
+        await tx.beneficioIndicacao.update({
+          where: { id: beneficio.id },
+          data: {
+            valorAplicado: new Decimal(novoAplicado.toFixed(2)),
+            saldoRestante: new Decimal(novoSaldo.toFixed(2)),
+            status: novoSaldo.lte(0) ? 'APLICADO' : 'PARCIAL',
+            mesReferencia,
+          },
+        });
+
+        saldoDisponivel = saldoDisponivel.minus(aplicar);
+        totalDesconto = totalDesconto.plus(aplicar);
+      }
+
+      return { totalDesconto: Number(totalDesconto.toFixed(2)), beneficiosProcessados: beneficios.length };
+    });
   }
 
   // ─── Listagens ───────────────────────────────────────────────────────────────
