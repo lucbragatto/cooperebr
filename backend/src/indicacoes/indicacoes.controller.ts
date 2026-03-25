@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Body, Req, Query } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Req, Query, ForbiddenException } from '@nestjs/common';
 import { IndicacoesService } from './indicacoes.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -45,32 +45,43 @@ export class IndicacoesController {
 
   // ─── Cooperado ───────────────────────────────────────────────────────────────
 
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Get('meu-codigo')
   getMeuCodigo(@Req() req: any) {
-    return this.service.getMeuCodigo(req.user?.cooperadoId || req.query?.cooperadoId);
+    const cooperadoId = req.user?.cooperadoId;
+    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    return this.service.getMeuCodigo(cooperadoId);
   }
 
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Get('meu-link')
   getMeuLink(@Req() req: any) {
-    const cooperadoId = req.user?.cooperadoId || req.query?.cooperadoId;
+    const cooperadoId = req.user?.cooperadoId;
     if (!cooperadoId) {
       return { codigoIndicacao: null, link: null, totalIndicados: 0, indicadosAtivos: 0, semCooperado: true };
     }
     return this.service.getMeuLink(cooperadoId);
   }
 
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Get('minhas')
   getMinhasIndicacoes(@Req() req: any) {
-    return this.service.getMinhasIndicacoes(req.user?.cooperadoId || req.query?.cooperadoId);
+    const cooperadoId = req.user?.cooperadoId;
+    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    return this.service.getMinhasIndicacoes(cooperadoId);
   }
 
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Get('beneficios')
   getBeneficios(@Req() req: any) {
-    return this.service.getBeneficios(req.user?.cooperadoId || req.query?.cooperadoId);
+    const cooperadoId = req.user?.cooperadoId;
+    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    return this.service.getBeneficios(cooperadoId);
   }
 
   // ─── Registrar indicação ─────────────────────────────────────────────────────
 
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Post('registrar')
   registrar(@Body() body: { cooperadoIndicadoId: string; codigoIndicador: string }) {
     return this.service.registrarIndicacao(body.cooperadoIndicadoId, body.codigoIndicador);
