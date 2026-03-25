@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class IndicacoesService {
+  private readonly logger = new Logger(IndicacoesService.name);
   constructor(private prisma: PrismaService) {}
 
   // ─── Config ──────────────────────────────────────────────────────────────────
@@ -152,11 +153,18 @@ export class IndicacoesService {
       }),
     );
 
-    // Subir na cadeia para níveis superiores
+    // Subir na cadeia para níveis superiores (com detecção de ciclo)
     let currentIndicadorId = indicador.cooperadoIndicadorId;
     let nivel = 2;
+    const visitados = new Set<string>([cooperadoIndicadoId, indicador.id]);
 
     while (currentIndicadorId && nivel <= config.maxNiveis) {
+      if (visitados.has(currentIndicadorId)) {
+        this.logger.warn(`Referência circular detectada no MLM: ${currentIndicadorId} já visitado`);
+        break;
+      }
+      visitados.add(currentIndicadorId);
+
       const ancestral = await this.prisma.cooperado.findUnique({
         where: { id: currentIndicadorId },
         select: { id: true, cooperadoIndicadorId: true },
