@@ -148,31 +148,44 @@ export default function Step3Simulacao({ data, faturaData, onChange, tipoMembro 
         </div>
       )}
 
-      {/* Plano + desconto */}
-      <div className="flex gap-3 items-end">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Plano</label>
-          <select className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={planoSelecionadoId}
-            onChange={e => { onChange({ planoSelecionadoId: e.target.value, simulacao: null }); }}>
-            <option value="">Selecione um plano...</option>
-            {planosAtivos.map(p => (
-              <option key={p.id} value={p.id}>{p.nome} ({Number(p.descontoBase)}% desc.)</option>
-            ))}
-          </select>
+      {/* Plano (cards) + desconto */}
+      <div className="space-y-3">
+        <label className="block text-xs font-medium text-gray-600">Plano</label>
+        {planosAtivos.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {planosAtivos.map(p => {
+              const sel = planoSelecionadoId === p.id;
+              return (
+                <button key={p.id} type="button"
+                  onClick={() => onChange({ planoSelecionadoId: p.id, simulacao: null })}
+                  className={`relative text-left border-2 rounded-xl px-4 py-3 transition-colors ${sel ? 'border-green-600 bg-green-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  {p.temPromocao && p.descontoPromocional && (
+                    <span className="absolute -top-2 -right-2 bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                      Promo {Number(p.descontoPromocional)}%
+                    </span>
+                  )}
+                  <p className="text-sm font-semibold text-gray-800">{p.nome}</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">{Number(p.descontoBase)}%</p>
+                  <p className="text-xs text-gray-500">de desconto</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex gap-3 items-end">
+          <div className="w-32">
+            <label className="block text-xs font-medium text-gray-600 mb-1">% Desconto customizado</label>
+            <input type="number" min="1" max="99" step="0.5"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              value={descontoCustom || ''}
+              onChange={e => onChange({ descontoCustom: Number(e.target.value), simulacao: null })}
+              placeholder="Ex: 15" />
+          </div>
+          <Button onClick={gerarSimulacao} disabled={!planoSelecionadoId && !descontoCustom}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            {simulacao ? 'Recalcular' : 'Calcular'}
+          </Button>
         </div>
-        <div className="w-28">
-          <label className="block text-xs font-medium text-gray-600 mb-1">% Desconto</label>
-          <input type="number" min="1" max="99" step="0.5"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={descontoCustom || ''}
-            onChange={e => onChange({ descontoCustom: Number(e.target.value), simulacao: null })}
-            placeholder="Ex: 15" />
-        </div>
-        <Button onClick={gerarSimulacao} disabled={!planoSelecionadoId && !descontoCustom}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          {simulacao ? 'Recalcular' : 'Calcular'}
-        </Button>
       </div>
 
       {/* Resultado da simulação */}
