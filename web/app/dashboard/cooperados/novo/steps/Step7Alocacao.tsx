@@ -4,13 +4,27 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Loader2, MapPin, Zap } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CalendarClock, CalendarDays, CheckCircle, Clock, Loader2, MapPin, Zap } from 'lucide-react';
 import type { Step1Data, DadosOcr } from './Step1Fatura';
 import type { Step2Data } from './Step2Dados';
 import type { Step3Data } from './Step3Simulacao';
 import type { Step4Data } from './Step4Proposta';
 import type { Step5Data } from './Step5Documentos';
 import type { Step6Data } from './Step6Contrato';
+
+// ─── Preferência de cobrança ─────────────────────────────────────────────────
+
+type TipoPreferencia = 'VENCIMENTO_CONCESSIONARIA' | 'DIA_FIXO' | 'DIAS_APOS_FATURA';
+
+const DIAS_FIXOS = [5, 10, 15, 20, 25] as const;
+const DIAS_APOS = [3, 5, 7, 10] as const;
+
+function resolverPreferenciaCobranca(tipo: TipoPreferencia, diaFixo: number, diasApos: number): string {
+  if (tipo === 'VENCIMENTO_CONCESSIONARIA') return 'VENCIMENTO_CONCESSIONARIA';
+  if (tipo === 'DIA_FIXO') return `DIA_FIXO_${String(diaFixo).padStart(2, '0')}`;
+  return `APOS_FATURA_${diasApos}D`;
+}
 
 interface UsinaDisponivel {
   id: string;
@@ -48,6 +62,11 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
   const [concluido, setConcluido] = useState(false);
   const [cooperadoId, setCooperadoId] = useState<string | null>(null);
   const [erro, setErro] = useState('');
+
+  // Preferência de cobrança
+  const [tipoPreferencia, setTipoPreferencia] = useState<TipoPreferencia>('VENCIMENTO_CONCESSIONARIA');
+  const [diaFixo, setDiaFixo] = useState(10);
+  const [diasApos, setDiasApos] = useState(5);
 
   useEffect(() => {
     async function buscarUsinas() {
@@ -93,6 +112,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         representanteLegalNome: dadosPessoais.representanteLegalNome || undefined,
         representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
         representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,
+        preferenciaCobranca: resolverPreferenciaCobranca(tipoPreferencia, diaFixo, diasApos),
       });
       const cid = novoCoop.id;
       setCooperadoId(cid);
@@ -288,6 +308,111 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
           </p>
         </div>
       )}
+
+      {/* ─── Preferência de data de cobrança ────────────────────────────────── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="h-4 w-4 text-green-700" />
+          <h3 className="text-sm font-semibold text-gray-800">Preferência de data de cobrança</h3>
+        </div>
+        <div className="space-y-2">
+          {/* Opção 1 — Mesmo vencimento da concessionária */}
+          <button
+            type="button"
+            onClick={() => setTipoPreferencia('VENCIMENTO_CONCESSIONARIA')}
+            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
+              tipoPreferencia === 'VENCIMENTO_CONCESSIONARIA'
+                ? 'border-green-600 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
+                tipoPreferencia === 'VENCIMENTO_CONCESSIONARIA' ? 'border-green-600 bg-green-600' : 'border-gray-400'
+              }`} />
+              <div className="flex items-start gap-3">
+                <CalendarDays className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Mesmo vencimento da concessionária</p>
+                  <p className="text-xs text-gray-500">Cobrança no mesmo dia de vencimento da sua conta de energia</p>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Opção 2 — Dia fixo do mês */}
+          <button
+            type="button"
+            onClick={() => setTipoPreferencia('DIA_FIXO')}
+            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
+              tipoPreferencia === 'DIA_FIXO'
+                ? 'border-green-600 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
+                tipoPreferencia === 'DIA_FIXO' ? 'border-green-600 bg-green-600' : 'border-gray-400'
+              }`} />
+              <div className="flex items-start gap-3">
+                <CalendarClock className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">Dia fixo do mês</p>
+                  <p className="text-xs text-gray-500">Escolha um dia específico para vencimento todo mês</p>
+                  {tipoPreferencia === 'DIA_FIXO' && (
+                    <Select value={String(diaFixo)} onValueChange={(v) => setDiaFixo(Number(v))}>
+                      <SelectTrigger className="w-40" onClick={(e) => e.stopPropagation()}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DIAS_FIXOS.map(d => (
+                          <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Opção 3 — Dias após receber a fatura */}
+          <button
+            type="button"
+            onClick={() => setTipoPreferencia('DIAS_APOS_FATURA')}
+            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
+              tipoPreferencia === 'DIAS_APOS_FATURA'
+                ? 'border-green-600 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
+                tipoPreferencia === 'DIAS_APOS_FATURA' ? 'border-green-600 bg-green-600' : 'border-gray-400'
+              }`} />
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-800">Dias após receber a fatura</p>
+                  <p className="text-xs text-gray-500">Vencimento calculado a partir da data de emissão da fatura</p>
+                  {tipoPreferencia === 'DIAS_APOS_FATURA' && (
+                    <Select value={String(diasApos)} onValueChange={(v) => setDiasApos(Number(v))}>
+                      <SelectTrigger className="w-40" onClick={(e) => e.stopPropagation()}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DIAS_APOS.map(d => (
+                          <SelectItem key={d} value={String(d)}>{d} dias úteis após</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
 
       {erro && <p className="text-sm text-red-600">{erro}</p>}
 

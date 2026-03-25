@@ -58,4 +58,8 @@ export class CreateCooperadoDto {
   @Min(0)
   @Max(100)
   percentualRepasse?: number;
+
+  @IsOptional()
+  @IsString()
+  preferenciaCobranca?: string;
 }
