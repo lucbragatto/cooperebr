@@ -49,7 +49,7 @@ export class IndicacoesService {
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
     return {
       codigo: cooperado.codigoIndicacao,
-      link: `https://app.cooperebr.com.br/indicar?ref=${cooperado.codigoIndicacao}`,
+      link: `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/entrar?ref=${cooperado.codigoIndicacao}`,
     };
   }
 

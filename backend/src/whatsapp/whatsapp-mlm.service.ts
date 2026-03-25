@@ -104,7 +104,8 @@ export class WhatsappMlmService {
         }
 
         const nome = cooperado.nomeCompleto.split(' ')[0];
-        const link = `https://app.cooperebr.com.br/indicar?ref=${cooperado.codigoIndicacao}`;
+        const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+        const link = `${baseUrl}/entrar?ref=${cooperado.codigoIndicacao}`;
 
         let mensagem = `🎁 *Programa de Recompensas CoopereBR*\n\n`;
         mensagem += `Olá, ${nome}! 🌱\n\n`;
