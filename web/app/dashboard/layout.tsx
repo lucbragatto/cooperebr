@@ -55,6 +55,12 @@ const navItemsBase = [
   { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
   { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
   { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
+  { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
+];
+
+// Itens visíveis apenas para ADMIN e SUPER_ADMIN
+const adminItems = [
+  { href: '/dashboard/usuarios', label: 'Usuários', icon: Users },
 ];
 
 // Itens exclusivos SUPER_ADMIN (antes dos demais)
@@ -173,7 +179,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {[...(usuario?.perfil === 'SUPER_ADMIN' ? superAdminOnlyItems : []), ...navItemsBase].map(({ href, label, icon: Icon }) => {
+          {[...(usuario?.perfil === 'SUPER_ADMIN' ? superAdminOnlyItems : []), ...navItemsBase, ...((usuario?.perfil === 'SUPER_ADMIN' || usuario?.perfil === 'ADMIN') ? adminItems : [])].map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             const displayLabel = label === '__MEMBROS__' ? tipoMembroPlural : label;
             return (
