@@ -31,6 +31,12 @@ export class CooperadosController {
     return { count: lista.length };
   }
 
+  @Roles(COOPERADO)
+  @Get('meu-perfil')
+  meuPerfil(@Req() req: any) {
+    return this.cooperadosService.meuPerfil(req.user);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id/checklist')
   getChecklist(@Param('id') id: string) {
@@ -52,6 +58,12 @@ export class CooperadosController {
       cooperativaId: cooperativaId || req.user?.cooperativaId || undefined,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
     });
+  }
+
+  @Roles(COOPERADO)
+  @Put('meu-perfil')
+  atualizarMeuPerfil(@Req() req: any, @Body() dto: UpdateCooperadoDto) {
+    return this.cooperadosService.atualizarMeuPerfil(req.user, dto);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)

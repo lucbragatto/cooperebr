@@ -13,6 +13,73 @@ export class CooperadosService {
     private usinasService: UsinasService,
   ) {}
 
+  async meuPerfil(usuario: { id: string; email: string; cpf?: string }) {
+    const where: any[] = [];
+    if (usuario.email) where.push({ email: usuario.email });
+    if (usuario.cpf) where.push({ cpf: usuario.cpf });
+    if (where.length === 0) throw new NotFoundException('Cooperado não encontrado para este usuário');
+
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { OR: where },
+      include: {
+        ucs: true,
+        contratos: {
+          where: { status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+          include: {
+            plano: true,
+            uc: true,
+            usina: { select: { nome: true } },
+            cobrancas: { orderBy: { dataVencimento: 'desc' }, take: 6 },
+          },
+        },
+        documentos: {
+          where: { status: { in: ['PENDENTE', 'REPROVADO'] } },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado para este usuário');
+
+    // Calcular resumo
+    const contratoAtivo = cooperado.contratos.find(c => c.status === 'ATIVO');
+    const todasCobrancas = cooperado.contratos.flatMap(c => c.cobrancas);
+    const cobrancasPendentes = todasCobrancas.filter(c => c.status === 'PENDENTE' || c.status === 'VENCIDO');
+    const proximaCobranca = todasCobrancas.find(c => c.status === 'PENDENTE');
+
+    return {
+      ...cooperado,
+      resumo: {
+        descontoAtual: contratoAtivo ? Number(contratoAtivo.percentualDesconto) : null,
+        proximoVencimento: proximaCobranca?.dataVencimento ?? null,
+        statusConta: cooperado.status,
+        kwhAlocados: Number(cooperado.cotaKwhMensal ?? 0),
+        documentosPendentes: cooperado.documentos.length,
+        faturasPendentes: cobrancasPendentes.length,
+      },
+    };
+  }
+
+  async atualizarMeuPerfil(usuario: { id: string; email: string; cpf?: string }, dto: any) {
+    const where: any[] = [];
+    if (usuario.email) where.push({ email: usuario.email });
+    if (usuario.cpf) where.push({ cpf: usuario.cpf });
+    if (where.length === 0) throw new NotFoundException('Cooperado não encontrado');
+
+    const cooperado = await this.prisma.cooperado.findFirst({ where: { OR: where } });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+
+    // Apenas campos seguros para o próprio cooperado editar
+    const dadosPermitidos: any = {};
+    if (dto.nomeCompleto) dadosPermitidos.nomeCompleto = dto.nomeCompleto;
+    if (dto.email) dadosPermitidos.email = dto.email;
+    if (dto.telefone) dadosPermitidos.telefone = dto.telefone;
+
+    return this.prisma.cooperado.update({
+      where: { id: cooperado.id },
+      data: dadosPermitidos,
+    });
+  }
+
   async findAll(cooperativaId?: string, limit?: number, offset?: number, search?: string) {
     const where: any = {};
     if (cooperativaId) where.cooperativaId = cooperativaId;

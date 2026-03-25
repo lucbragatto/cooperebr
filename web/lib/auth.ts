@@ -18,6 +18,12 @@ export function logout(): void {
   window.location.href = '/login';
 }
 
+export function logoutPortal(): void {
+  Cookies.remove(TOKEN_KEY);
+  Cookies.remove(USUARIO_KEY);
+  window.location.href = '/portal/login';
+}
+
 export function getUsuario(): Usuario | null {
   const raw = Cookies.get(USUARIO_KEY);
   if (!raw) return null;
