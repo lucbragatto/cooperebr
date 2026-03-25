@@ -26,6 +26,7 @@ type UsuarioLista = {
   id: string;
   nome: string;
   email: string;
+  telefone?: string | null;
   perfil: string;
   cooperativaId: string | null;
   ativo: boolean;
@@ -69,6 +70,11 @@ export default function UsuariosPage() {
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean; title: string; description: string; action?: () => void;
   }>({ open: false, title: '', description: '' });
+
+  // Reset senha dialog state (canal)
+  const [resetDialog, setResetDialog] = useState<{
+    open: boolean; usuario: UsuarioLista | null; enviando: boolean;
+  }>({ open: false, usuario: null, enviando: false });
 
   // Cooperativas for SUPER_ADMIN
   const [cooperativas, setCooperativas] = useState<{ id: string; nome: string }[]>([]);
@@ -154,19 +160,25 @@ export default function UsuariosPage() {
   }
 
   function handleResetSenha(u: UsuarioLista) {
-    setConfirmDialog({
-      open: true,
-      title: 'Redefinir senha',
-      description: `Enviar email de redefinição de senha para ${u.email}?`,
-      action: async () => {
-        try {
-          await api.post(`/auth/usuarios/${u.id}/reset-senha`);
-          setConfirmDialog({ open: true, title: 'Sucesso', description: 'Email de redefinição enviado.' });
-        } catch {
-          setConfirmDialog({ open: true, title: 'Erro', description: 'Erro ao enviar email de redefinição.' });
-        }
-      },
-    });
+    setResetDialog({ open: true, usuario: u, enviando: false });
+  }
+
+  async function enviarResetPorCanal(canal: 'whatsapp' | 'email') {
+    const u = resetDialog.usuario;
+    if (!u) return;
+    setResetDialog((prev) => ({ ...prev, enviando: true }));
+    try {
+      if (canal === 'whatsapp') {
+        await api.post('/auth/esqueci-senha-whatsapp', { identificador: u.telefone || u.email });
+      } else {
+        await api.post('/auth/esqueci-senha', { email: u.email });
+      }
+      setResetDialog({ open: false, usuario: null, enviando: false });
+      setConfirmDialog({ open: true, title: 'Enviado!', description: `Link de redefinição enviado por ${canal === 'whatsapp' ? 'WhatsApp' : 'email'}.` });
+    } catch {
+      setResetDialog({ open: false, usuario: null, enviando: false });
+      setConfirmDialog({ open: true, title: 'Erro', description: 'Não foi possível enviar o link de redefinição.' });
+    }
   }
 
   function handleDeletar(u: UsuarioLista) {
@@ -355,6 +367,47 @@ export default function UsuariosPage() {
             </Button>
             <Button onClick={handleSalvar} disabled={salvando}>
               {salvando ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de escolha de canal para redefinição de senha */}
+      <Dialog open={resetDialog.open} onOpenChange={(open) => !open && setResetDialog({ open: false, usuario: null, enviando: false })}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Redefinir senha</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-gray-600">Como deseja enviar o link de redefinição para <strong>{resetDialog.usuario?.nome}</strong>?</p>
+            {resetDialog.usuario?.telefone && (
+              <Button
+                className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                onClick={() => enviarResetPorCanal('whatsapp')}
+                disabled={resetDialog.enviando}
+              >
+                📱 Enviar pelo WhatsApp
+                <span className="text-xs opacity-80">({resetDialog.usuario.telefone})</span>
+              </Button>
+            )}
+            {resetDialog.usuario?.email && (
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => enviarResetPorCanal('email')}
+                disabled={resetDialog.enviando}
+              >
+                ✉️ Enviar por Email
+                <span className="text-xs text-gray-500">({resetDialog.usuario.email})</span>
+              </Button>
+            )}
+            {!resetDialog.usuario?.telefone && !resetDialog.usuario?.email && (
+              <p className="text-sm text-red-600">Usuário sem WhatsApp ou email cadastrado.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setResetDialog({ open: false, usuario: null, enviando: false })}>
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>
