@@ -10,7 +10,7 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Download, Loader2, Pencil } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -80,6 +80,7 @@ export default function UsinaDetailPage() {
   const [gerandoLista, setGerandoLista] = useState(false);
   const [cooperadosAlocados, setCooperadosAlocados] = useState<any[]>([]);
   const [capacidadeInfo, setCapacidadeInfo] = useState<{usado: number; total: number} | null>(null);
+  const [distribuicao, setDistribuicao] = useState<any>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
     resolver: zodResolver(usinaSchema) as any,
@@ -101,6 +102,10 @@ export default function UsinaDetailPage() {
         const usado = (r.data.cooperados || []).reduce((acc: number, c: any) => acc + Number(c.kwhContratado || 0), 0);
         setCapacidadeInfo({ usado, total });
       })
+      .catch(() => { /* silently ignore */ });
+
+    api.get(`/usinas/${id}/distribuicao`)
+      .then((r) => setDistribuicao(r.data))
       .catch(() => { /* silently ignore */ });
   }, [usina, id]);
 
@@ -220,6 +225,92 @@ export default function UsinaDetailPage() {
               <Campo label="Atualizado em" value={new Date(usina.updatedAt).toLocaleString('pt-BR')} />
             </CardContent>
           </Card>
+
+          {/* Distribuição de Créditos do Mês */}
+          {distribuicao && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                  Distribuição de Créditos do Mês
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* KPI cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-xs text-blue-600 font-medium">Capacidade Total</p>
+                    <p className="text-2xl font-bold text-blue-800">{distribuicao.capacidadeTotal.toLocaleString('pt-BR')} <span className="text-sm font-normal">kWh/mês</span></p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <p className="text-xs text-green-600 font-medium">Total Alocado</p>
+                    <p className="text-2xl font-bold text-green-800">{distribuicao.totalAlocado.toLocaleString('pt-BR')} <span className="text-sm font-normal">kWh</span></p>
+                    <p className="text-xs text-green-600 mt-1">{distribuicao.percentualAlocado.toFixed(1)}% da capacidade</p>
+                  </div>
+                  <div className={`rounded-lg p-4 ${distribuicao.saldoDisponivel < 0 ? 'bg-red-50' : 'bg-amber-50'}`}>
+                    <p className={`text-xs font-medium ${distribuicao.saldoDisponivel < 0 ? 'text-red-600' : 'text-amber-600'}`}>Saldo Disponível</p>
+                    <p className={`text-2xl font-bold ${distribuicao.saldoDisponivel < 0 ? 'text-red-800' : 'text-amber-800'}`}>{distribuicao.saldoDisponivel.toLocaleString('pt-BR')} <span className="text-sm font-normal">kWh</span></p>
+                    <p className={`text-xs mt-1 ${distribuicao.saldoDisponivel < 0 ? 'text-red-600' : 'text-amber-600'}`}>{distribuicao.percentualDisponivel.toFixed(1)}% livre</p>
+                  </div>
+                </div>
+
+                {/* Alertas */}
+                {distribuicao.alertas?.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {distribuicao.alertas.map((a: any, i: number) => (
+                      <div key={i} className={`flex items-start gap-2 p-3 rounded-lg text-sm ${a.tipo === 'EXCESSO' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        {a.mensagem}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tabela de cooperados */}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>UC</TableHead>
+                      <TableHead>Cota kWh</TableHead>
+                      <TableHead>% do Total</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {distribuicao.cooperados.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400 py-6">
+                          Nenhum cooperado vinculado
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      distribuicao.cooperados.map((c: any, i: number) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{c.nome}</TableCell>
+                          <TableCell>{c.ucNumero || '—'}</TableCell>
+                          <TableCell>{c.kwhContratado.toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div className="bg-green-600 h-1.5 rounded-full" style={{ width: `${Math.min(c.percentual, 100)}%` }} />
+                              </div>
+                              <span className="text-xs">{c.percentual.toFixed(1)}%</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.contratoStatus === 'ATIVO' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                              {c.contratoStatus === 'ATIVO' ? 'Ativo' : 'Pend. Ativação'}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Cooperados Alocados */}
           <Card className="mt-6">

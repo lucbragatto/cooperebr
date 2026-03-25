@@ -322,6 +322,79 @@ export class UsinasService {
     return { promovidos, kwhDisponivel, kwhRestante };
   }
 
+  async distribuicaoCreditos(usinaId: string) {
+    const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
+    if (!usina) throw new NotFoundException('Usina não encontrada');
+
+    const capacidadeTotal = Number(usina.capacidadeKwh ?? 0);
+
+    const contratos = await this.prisma.contrato.findMany({
+      where: { usinaId, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+      include: {
+        cooperado: { select: { id: true, nomeCompleto: true, status: true, cpf: true } },
+        uc: { select: { id: true, numero: true } },
+      },
+    });
+
+    const cooperados = contratos.map((c) => {
+      const kwhContratado = Number(c.kwhContrato ?? 0);
+      const percentual = c.percentualUsina
+        ? Number(c.percentualUsina)
+        : capacidadeTotal > 0
+          ? Math.round((kwhContratado / capacidadeTotal) * 10000) / 100
+          : 0;
+      return {
+        cooperadoId: c.cooperado.id,
+        nome: c.cooperado.nomeCompleto,
+        cpf: c.cooperado.cpf,
+        status: c.cooperado.status,
+        ucNumero: c.uc?.numero ?? '',
+        kwhContratado,
+        percentual,
+        contratoStatus: c.status,
+      };
+    });
+
+    const totalAlocado = cooperados.reduce((acc, c) => acc + c.kwhContratado, 0);
+    const saldoDisponivel = capacidadeTotal - totalAlocado;
+    const percentualAlocado = capacidadeTotal > 0
+      ? Math.round((totalAlocado / capacidadeTotal) * 10000) / 100
+      : 0;
+    const percentualDisponivel = Math.round((100 - percentualAlocado) * 100) / 100;
+
+    // Alertas
+    const alertas: { tipo: string; mensagem: string }[] = [];
+    if (capacidadeTotal > 0 && saldoDisponivel > capacidadeTotal * 0.1) {
+      alertas.push({
+        tipo: 'SOBRA',
+        mensagem: `Sobra de ${percentualDisponivel.toFixed(1)}% da capacidade (${saldoDisponivel.toFixed(0)} kWh). Considere vincular mais cooperados.`,
+      });
+    }
+    if (saldoDisponivel < 0) {
+      alertas.push({
+        tipo: 'EXCESSO',
+        mensagem: `Alocação excede a capacidade em ${Math.abs(saldoDisponivel).toFixed(0)} kWh. Revise os contratos.`,
+      });
+    }
+
+    return {
+      usina: {
+        id: usina.id,
+        nome: usina.nome,
+        capacidadeKwh: capacidadeTotal,
+        producaoMensalKwh: Number(usina.producaoMensalKwh ?? 0),
+        statusHomologacao: usina.statusHomologacao,
+      },
+      capacidadeTotal,
+      totalAlocado,
+      saldoDisponivel,
+      percentualAlocado,
+      percentualDisponivel,
+      cooperados,
+      alertas,
+    };
+  }
+
   async gerarListaConcessionaria(usinaId: string) {
     const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
     if (!usina) throw new NotFoundException('Usina não encontrada');

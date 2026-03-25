@@ -21,6 +21,12 @@ export class UsinasController {
     return this.usinasService.findDisponiveis(ucId);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @Get(':id/distribuicao')
+  distribuicao(@Param('id') id: string) {
+    return this.usinasService.distribuicaoCreditos(id);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get(':id/lista-concessionaria')
   listaConcessionaria(@Param('id') id: string) {
