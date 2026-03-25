@@ -45,7 +45,9 @@ export default function Step3Simulacao({ data, faturaData, onChange, tipoMembro 
   const [planosAtivos, setPlanosAtivos] = useState<PlanoOption[]>([]);
 
   useEffect(() => {
-    api.get<PlanoOption[]>('/planos/ativos').then(r => setPlanosAtivos(r.data)).catch(() => {});
+    api.get<PlanoOption[]>('/planos/ativos').then(r => setPlanosAtivos(r.data)).catch(() => {
+      alert('Erro ao carregar planos ativos. Tente recarregar a página.');
+    });
   }, []);
 
   // Cálculos

@@ -220,7 +220,9 @@ function IndicacoesTab({ cooperadoId, codigoIndicacao }: { cooperadoId: string; 
   useEffect(() => {
     api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`)
       .then(({ data }) => setBeneficios(data))
-      .catch(() => {});
+      .catch(() => {
+        console.error('Erro ao carregar benefícios de indicação');
+      });
   }, [cooperadoId]);
 
   const link = `https://app.cooperebr.com.br/indicar?ref=${codigoIndicacao || ''}`;
@@ -1063,7 +1065,9 @@ export default function CooperadoPerfilPage() {
           cooperadoId={id}
           onFaturaProcessada={() => {
             // Recarregar faturas ao processar nova
-            api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {});
+            api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {
+              alert('Erro ao recarregar faturas.');
+            });
           }}
         />
       )}

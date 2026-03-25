@@ -40,7 +40,9 @@ export default function Step8Documentos({ data, onChange }: Step8Props) {
     if (data.temModeloProprio === false) {
       api.get('/motor-proposta/modelos-padrao').then(({ data: modelos }) => {
         setModelosPadrao(modelos);
-      }).catch(() => {});
+      }).catch(() => {
+        alert('Erro ao carregar modelos de documento. Tente recarregar a página.');
+      });
     }
   }, [data.temModeloProprio]);
 

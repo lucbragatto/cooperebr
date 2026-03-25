@@ -18,7 +18,9 @@ export default function ProcessarFaturaPage() {
     api
       .get<Cooperado>(`/cooperados/${id}`)
       .then((r) => setCooperado(r.data))
-      .catch(() => {});
+      .catch(() => {
+        alert('Erro ao carregar dados do cooperado.');
+      });
   }, [id]);
 
   return (

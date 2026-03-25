@@ -168,7 +168,9 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
           setConfirmado(true);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        alert('Erro ao carregar faturas. Tente recarregar a página.');
+      });
   }, [cooperadoId]);
 
   function onTabChange(t: Tab) {
