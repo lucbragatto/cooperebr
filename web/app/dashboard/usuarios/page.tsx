@@ -16,6 +16,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Plus, Pencil, KeyRound, Trash2 } from 'lucide-react';
 
 type UsuarioLista = {
@@ -57,9 +61,14 @@ export default function UsuariosPage() {
   const [formNome, setFormNome] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formSenha, setFormSenha] = useState('');
-  const [formPerfil, setFormPerfil] = useState('COOPERADO');
+  const [formPerfil, setFormPerfil] = useState('OPERADOR');
   const [formCooperativaId, setFormCooperativaId] = useState('');
   const [formAtivo, setFormAtivo] = useState(true);
+
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean; title: string; description: string; action?: () => void;
+  }>({ open: false, title: '', description: '' });
 
   // Cooperativas for SUPER_ADMIN
   const [cooperativas, setCooperativas] = useState<{ id: string; nome: string }[]>([]);
@@ -92,7 +101,7 @@ export default function UsuariosPage() {
     setFormNome('');
     setFormEmail('');
     setFormSenha('');
-    setFormPerfil('COOPERADO');
+    setFormPerfil('OPERADOR');
     setFormCooperativaId('');
     setFormAtivo(true);
     setErro('');
@@ -144,24 +153,36 @@ export default function UsuariosPage() {
     }
   }
 
-  async function handleResetSenha(u: UsuarioLista) {
-    if (!confirm(`Enviar email de redefinição de senha para ${u.email}?`)) return;
-    try {
-      await api.post(`/auth/usuarios/${u.id}/reset-senha`);
-      alert('Email de redefinição enviado.');
-    } catch {
-      alert('Erro ao enviar email de redefinição.');
-    }
+  function handleResetSenha(u: UsuarioLista) {
+    setConfirmDialog({
+      open: true,
+      title: 'Redefinir senha',
+      description: `Enviar email de redefinição de senha para ${u.email}?`,
+      action: async () => {
+        try {
+          await api.post(`/auth/usuarios/${u.id}/reset-senha`);
+          setConfirmDialog({ open: true, title: 'Sucesso', description: 'Email de redefinição enviado.' });
+        } catch {
+          setConfirmDialog({ open: true, title: 'Erro', description: 'Erro ao enviar email de redefinição.' });
+        }
+      },
+    });
   }
 
-  async function handleDeletar(u: UsuarioLista) {
-    if (!confirm(`Tem certeza que deseja excluir o usuário ${u.nome}?`)) return;
-    try {
-      await api.delete(`/auth/usuarios/${u.id}`);
-      buscarUsuarios();
-    } catch {
-      alert('Erro ao excluir usuário.');
-    }
+  function handleDeletar(u: UsuarioLista) {
+    setConfirmDialog({
+      open: true,
+      title: 'Excluir usuário',
+      description: `Tem certeza que deseja excluir o usuário ${u.nome}? Esta ação não pode ser desfeita.`,
+      action: async () => {
+        try {
+          await api.delete(`/auth/usuarios/${u.id}`);
+          buscarUsuarios();
+        } catch {
+          setConfirmDialog({ open: true, title: 'Erro', description: 'Erro ao excluir usuário.' });
+        }
+      },
+    });
   }
 
   const usuariosFiltrados = filtroPerfil === 'TODOS'
@@ -254,7 +275,7 @@ export default function UsuariosPage() {
 
       {/* Modal Criar / Editar */}
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
           </DialogHeader>
@@ -289,6 +310,7 @@ export default function UsuariosPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {isSuperAdmin && <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>}
                   <SelectItem value="ADMIN">Admin</SelectItem>
                   <SelectItem value="OPERADOR">Operador</SelectItem>
                   <SelectItem value="COOPERADO">Cooperado</SelectItem>
@@ -298,7 +320,7 @@ export default function UsuariosPage() {
 
             {isSuperAdmin && !editando && cooperativas.length > 0 && (
               <div className="space-y-1">
-                <Label>Cooperativa</Label>
+                <Label>Parceiro</Label>
                 <Select value={formCooperativaId} onValueChange={setFormCooperativaId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
@@ -337,6 +359,24 @@ export default function UsuariosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de confirmação (substitui alert/confirm nativos) */}
+      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => !open && setConfirmDialog((prev) => ({ ...prev, open: false }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{confirmDialog.action ? 'Cancelar' : 'OK'}</AlertDialogCancel>
+            {confirmDialog.action && (
+              <AlertDialogAction onClick={() => { confirmDialog.action!(); setConfirmDialog((prev) => ({ ...prev, open: false })); }}>
+                Confirmar
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -36,43 +36,94 @@ import {
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
-// Itens visíveis para SUPER_ADMIN e ADMIN
-const navItemsBase = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
-  { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
-  { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
-  { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
-  { href: '/dashboard/planos', label: 'Planos', icon: Tag },
-  { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
-  { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
-  { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
-  { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
-  { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
-  { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
-  { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
-  { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
-  { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
-  { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
-  { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
-  { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
-];
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
+type NavSection = { title?: string; titleIcon?: typeof LayoutDashboard; items: NavItem[] };
 
-// Itens visíveis apenas para ADMIN e SUPER_ADMIN
-const adminItems = [
-  { href: '/dashboard/usuarios', label: 'Usuários', icon: Users },
-];
+function getNavSections(perfil: string): NavSection[] {
+  if (perfil === 'COOPERADO') {
+    return [{
+      items: [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+        { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
+      ],
+    }];
+  }
 
-// Itens exclusivos SUPER_ADMIN (antes dos demais)
-const superAdminOnlyItems = [
-  { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
-];
+  if (perfil === 'OPERADOR') {
+    return [{
+      items: [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
+        { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
+        { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
+        { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
+        { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+        { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+        { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
+        { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+      ],
+    }];
+  }
 
-const superAdminItems = [
-  { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
-  { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
-];
+  // ADMIN e SUPER_ADMIN
+  const sections: NavSection[] = [
+    {
+      items: [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: 'Administração',
+      items: [
+        { href: '/dashboard/usuarios', label: 'Usuários', icon: Users },
+        { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
+      ],
+    },
+    {
+      title: 'Operacional',
+      items: [
+        { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
+        { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
+        { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
+        { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
+        { href: '/dashboard/planos', label: 'Planos', icon: Tag },
+        { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
+        { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+        { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
+        { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
+        { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
+        { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+        { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
+        { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
+        { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+      ],
+    },
+    {
+      title: 'Financeiro',
+      items: [
+        { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
+        { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
+        { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
+        { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
+      ],
+    },
+  ];
+
+  // Gestão Global — somente SUPER_ADMIN
+  if (perfil === 'SUPER_ADMIN') {
+    sections.push({
+      title: 'Gestão Global',
+      titleIcon: Globe,
+      items: [
+        { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
+        { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
+      ],
+    });
+  }
+
+  return sections;
+}
 
 function tempoAtras(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -180,53 +231,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {[...(usuario?.perfil === 'SUPER_ADMIN' ? superAdminOnlyItems : []), ...navItemsBase, ...((usuario?.perfil === 'SUPER_ADMIN' || usuario?.perfil === 'ADMIN') ? adminItems : [])].map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
-            const displayLabel = label === '__MEMBROS__' ? tipoMembroPlural : label;
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-green-50 text-green-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {displayLabel}
-              </Link>
-            );
-          })}
-
-          {/* Gestão Global — visível apenas para SUPER_ADMIN */}
-          {usuario?.perfil === 'SUPER_ADMIN' && (
-            <>
-              <div className="pt-3 pb-1 px-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                  <Globe className="h-3 w-3" />
-                  Gestão Global
-                </p>
-              </div>
-              {superAdminItems.map(({ href, label, icon: Icon }) => {
+          {getNavSections(usuario?.perfil ?? '').map((section, si) => (
+            <div key={si}>
+              {section.title && (
+                <div className="pt-3 pb-1 px-3">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                    {section.titleIcon && <section.titleIcon className="h-3 w-3" />}
+                    {section.title}
+                  </p>
+                </div>
+              )}
+              {section.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
+                const displayLabel = label === '__MEMBROS__' ? tipoMembroPlural : label;
+                const isGlobal = section.title === 'Gestão Global';
                 return (
                   <Link
                     key={href}
                     href={href}
                     className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       active
-                        ? 'bg-purple-50 text-purple-700'
+                        ? isGlobal ? 'bg-purple-50 text-purple-700' : 'bg-green-50 text-green-700'
                         : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-                    {label}
+                    {displayLabel}
                   </Link>
                 );
               })}
-            </>
-          )}
+            </div>
+          ))}
         </nav>
 
         <div className="px-3 py-4 border-t">
