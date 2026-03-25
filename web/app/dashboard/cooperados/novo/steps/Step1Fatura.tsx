@@ -399,14 +399,14 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
 
         {(() => {
           const consumo = ocr.consumoAtualKwh || 1;
-          const tusdTe = (ocr.tarifaTUSD ?? 0) + (ocr.tarifaTE ?? 0);
+          const tusdTe = getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
           const icmsPctEdit = getComponenteValor('icmsPercentual', ocr.icmsPercentual ?? 0);
           const pisCofPctEdit = getComponenteValor('pisCofinsPercentual', ocr.pisCofinsPercentual ?? 0);
 
           type CompItem = { key: string; label: string; valor: number; tipo: 'kwh' | 'fixo'; editKey?: string; pctKey?: string };
           const componentes: CompItem[] = [
-            { key: 'tarifaTUSD', label: 'TUSD', valor: ocr.tarifaTUSD ?? 0, tipo: 'kwh' },
-            { key: 'tarifaTE', label: 'TE', valor: ocr.tarifaTE ?? 0, tipo: 'kwh' },
+            { key: 'tarifaTUSD', label: 'TUSD', valor: getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0), tipo: 'kwh', editKey: 'tarifaTUSD' },
+            { key: 'tarifaTE', label: 'TE', valor: getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0), tipo: 'kwh', editKey: 'tarifaTE' },
             { key: 'valorBandeira', label: `Bandeira (${ocr.bandeiraTarifaria ?? '—'})`, valor: ocr.valorBandeira ?? 0, tipo: 'kwh' },
             { key: 'icms', label: 'ICMS', valor: getComponenteValor('icmsValor', ocr.icmsValor ?? 0), tipo: 'fixo', editKey: 'icmsValor', pctKey: 'icmsPercentual' },
             { key: 'pisCofins', label: 'PIS/COFINS', valor: getComponenteValor('pisCofinsValor', ocr.pisCofinsValor ?? 0), tipo: 'fixo', editKey: 'pisCofinsValor', pctKey: 'pisCofinsPercentual' },
@@ -453,7 +453,14 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
                       ) : <span className="text-gray-400">—</span>}
                     </div>
                     <div className={`col-span-3 text-sm text-right flex items-center justify-end ${sel ? 'text-gray-700' : 'text-gray-400'}`}>
-                      {isEditable ? (
+                      {isEditable && c.tipo === 'kwh' ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-400">R$</span>
+                          <input type="number" step="0.00001" className="border border-gray-200 rounded px-1.5 py-0.5 text-sm w-28 text-right focus:ring-2 focus:ring-green-500 focus:outline-none"
+                            value={c.valor} onChange={(e) => atualizarComponenteValor(c.editKey!, Number(e.target.value))} />
+                          <span className="text-xs text-gray-400">/kWh</span>
+                        </div>
+                      ) : isEditable ? (
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-gray-400">R$</span>
                           <input type="number" step="0.01" className="border border-gray-200 rounded px-1.5 py-0.5 text-sm w-24 text-right focus:ring-2 focus:ring-green-500 focus:outline-none"

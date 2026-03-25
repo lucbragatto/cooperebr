@@ -66,8 +66,8 @@ export default function Step3Simulacao({ data, faturaData, onChange, tipoMembro 
     if (!ocr) return 0;
     const consumo = ocr.consumoAtualKwh || 1;
     let valor = 0;
-    if (componentesMarcados.has('tarifaTUSD')) valor += ocr.tarifaTUSD ?? 0;
-    if (componentesMarcados.has('tarifaTE')) valor += ocr.tarifaTE ?? 0;
+    if (componentesMarcados.has('tarifaTUSD')) valor += getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0);
+    if (componentesMarcados.has('tarifaTE')) valor += getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
     if (componentesMarcados.has('valorBandeira')) valor += ocr.valorBandeira ?? 0;
     if (componentesMarcados.has('icms')) valor += getComponenteValor('icmsValor', ocr.icmsValor ?? 0) / consumo;
     if (componentesMarcados.has('pisCofins')) valor += getComponenteValor('pisCofinsValor', ocr.pisCofinsValor ?? 0) / consumo;
@@ -129,13 +129,13 @@ export default function Step3Simulacao({ data, faturaData, onChange, tipoMembro 
           </p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-          <p className="text-xs text-gray-500">Tarifa (TUSD+TE)</p>
+          <p className="text-xs text-gray-500">Tarifa base s/ impostos (TUSD+TE)</p>
           <p className="text-lg font-bold text-gray-900">
-            R$ {((ocr?.tarifaTUSD ?? 0) + (ocr?.tarifaTE ?? 0)).toLocaleString('pt-BR', { minimumFractionDigits: 5 })}
+            R$ {(getComponenteValor('tarifaTUSD', ocr?.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr?.tarifaTE ?? 0)).toLocaleString('pt-BR', { minimumFractionDigits: 5 })}
           </p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-          <p className="text-xs text-gray-500">kWh bruto</p>
+          <p className="text-xs text-gray-500">kWh c/ todos encargos</p>
           <p className="text-lg font-bold text-gray-900">
             R$ {calcularValorBrutoKwh().toLocaleString('pt-BR', { minimumFractionDigits: 5 })}
           </p>
