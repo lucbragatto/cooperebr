@@ -69,15 +69,12 @@ export class WhatsappBotService {
       this.logger.warn(`Falha ao registrar mensagem recebida: ${err.message}`);
     }
 
-    // Buscar ou criar conversa
-    let conversa = await this.prisma.conversaWhatsapp.findUnique({
+    // Buscar ou criar conversa (upsert atômico para evitar race condition)
+    const conversa = await this.prisma.conversaWhatsapp.upsert({
       where: { telefone },
+      update: {},
+      create: { telefone, estado: 'INICIAL' },
     });
-    if (!conversa) {
-      conversa = await this.prisma.conversaWhatsapp.create({
-        data: { telefone, estado: 'INICIAL' },
-      });
-    }
 
     // Fallback: palavras-chave especiais
     const corpoLower = corpo.toLowerCase();
@@ -372,8 +369,16 @@ export class WhatsappBotService {
 
       // Buscar ou criar cooperado lead
       const telefoneNorm = telefone.replace(/\D/g, '');
+      // Buscar por telefone completo normalizado (sem prefixo país variável)
+      const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       let cooperado = await this.prisma.cooperado.findFirst({
-        where: { telefone: { contains: telefoneNorm.slice(-8) } },
+        where: {
+          OR: [
+            { telefone: telefoneNorm },
+            { telefone: telefoneSemPais },
+            { telefone: `55${telefoneSemPais}` },
+          ],
+        },
       });
       if (!cooperado) {
         cooperado = await this.prisma.cooperado.create({
@@ -465,9 +470,16 @@ export class WhatsappBotService {
     const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
     const telefoneNorm = telefone.replace(/\D/g, '');
 
-    // Verificar se já existe cooperado
+    // Verificar se já existe cooperado (busca por telefone completo normalizado)
+    const telefoneSemPais = telefoneNorm.replace(/^55/, '');
     let cooperado = await this.prisma.cooperado.findFirst({
-      where: { telefone: { contains: telefoneNorm.slice(-8) } },
+      where: {
+        OR: [
+          { telefone: telefoneNorm },
+          { telefone: telefoneSemPais },
+          { telefone: `55${telefoneSemPais}` },
+        ],
+      },
     });
 
     if (cooperado && cooperado.status !== 'PENDENTE') {
