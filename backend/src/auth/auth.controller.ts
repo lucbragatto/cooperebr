@@ -1,5 +1,5 @@
-import { Controller, Post, Get, Body, UnauthorizedException, HttpCode } from '@nestjs/common';
-import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { Controller, Post, Get, Put, Delete, Body, Param, UnauthorizedException, HttpCode } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
@@ -7,6 +7,11 @@ import { CurrentUser } from './current-user.decorator';
 import { Roles } from './roles.decorator';
 import { PerfilUsuario } from './perfil.enum';
 import { RegisterDto } from './dto/register.dto';
+import { EsqueciSenhaDto } from './dto/esqueci-senha.dto';
+import { RedefinirSenhaDto } from './dto/redefinir-senha.dto';
+import { AlterarSenhaDto } from './dto/alterar-senha.dto';
+import { CriarUsuarioDto } from './dto/criar-usuario.dto';
+import { AtualizarUsuarioDto } from './dto/atualizar-usuario.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -35,7 +40,7 @@ export class AuthController {
   login(
     @Body()
     body: {
-      identificador: string; // email, CPF ou telefone
+      identificador: string;
       senha: string;
     },
   ) {
@@ -68,5 +73,68 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() usuario: any) {
     return usuario;
+  }
+
+  // --- Esqueci / Redefinir Senha ---
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @HttpCode(200)
+  @Post('esqueci-senha')
+  esqueciSenha(@Body() dto: EsqueciSenhaDto) {
+    return this.authService.esqueciSenha(dto.email);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @HttpCode(200)
+  @Post('redefinir-senha')
+  redefinirSenha(@Body() dto: RedefinirSenhaDto) {
+    return this.authService.redefinirSenha(dto.access_token, dto.novaSenha);
+  }
+
+  // --- Alterar Senha (autenticado) ---
+
+  @HttpCode(200)
+  @Post('alterar-senha')
+  alterarSenha(@CurrentUser() usuario: any, @Body() dto: AlterarSenhaDto) {
+    return this.authService.alterarSenha(usuario.id, dto.senhaAtual, dto.novaSenha);
+  }
+
+  // --- CRUD Usuários (ADMIN / SUPER_ADMIN) ---
+
+  @Roles(PerfilUsuario.ADMIN)
+  @Post('criar-usuario')
+  criarUsuario(@CurrentUser() admin: any, @Body() dto: CriarUsuarioDto) {
+    return this.authService.criarUsuario(dto, admin);
+  }
+
+  @Roles(PerfilUsuario.ADMIN)
+  @Get('usuarios')
+  listarUsuarios(@CurrentUser() admin: any) {
+    return this.authService.listarUsuarios(admin);
+  }
+
+  @Roles(PerfilUsuario.ADMIN)
+  @Put('usuarios/:id')
+  atualizarUsuario(
+    @Param('id') id: string,
+    @CurrentUser() admin: any,
+    @Body() dto: AtualizarUsuarioDto,
+  ) {
+    return this.authService.atualizarUsuario(id, dto, admin);
+  }
+
+  @Roles(PerfilUsuario.ADMIN)
+  @HttpCode(200)
+  @Post('usuarios/:id/reset-senha')
+  resetSenhaAdmin(@Param('id') id: string) {
+    return this.authService.enviarResetSenhaPorAdmin(id);
+  }
+
+  @Roles(PerfilUsuario.SUPER_ADMIN)
+  @Delete('usuarios/:id')
+  deletarUsuario(@Param('id') id: string) {
+    return this.authService.deletarUsuario(id);
   }
 }

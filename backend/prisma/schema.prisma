@@ -54,6 +54,7 @@ model Usuario {
   telefone      String?       @unique
   supabaseId    String?       @unique
   perfil        PerfilUsuario @default(COOPERADO)
+  ativo         Boolean       @default(true)
   fotoFacialUrl String?
   cooperativaId String?
   cooperativa   Cooperativa?  @relation(fields: [cooperativaId], references: [id])
