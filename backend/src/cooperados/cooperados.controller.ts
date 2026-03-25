@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query } from '@nestjs/common';
 import { CooperadosService } from './cooperados.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -14,8 +14,8 @@ export class CooperadosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
-  findAll(@Req() req: any) {
-    return this.cooperadosService.findAll(req.user?.cooperativaId);
+  findAll(@Req() req: any, @Query('limit') limit?: number, @Query('offset') offset?: number, @Query('search') search?: string) {
+    return this.cooperadosService.findAll(req.user?.cooperativaId, limit, offset, search);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)

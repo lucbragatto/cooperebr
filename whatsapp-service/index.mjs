@@ -107,16 +107,22 @@ async function startBaileys() {
         let mediaBase64 = null;
         let mimeType = null;
 
-        if (msg.message.imageMessage) {
+        // Normalizar: documentWithCaptionMessage wraps documentMessage
+        const rawMsg = msg.message.documentWithCaptionMessage?.message || msg.message;
+
+        const docMsg = rawMsg.documentMessage;
+        const imgMsg = rawMsg.imageMessage;
+
+        if (imgMsg) {
           tipo = 'imagem';
-          mimeType = msg.message.imageMessage.mimetype;
-          corpo = msg.message.imageMessage.caption || null;
+          mimeType = imgMsg.mimetype;
+          corpo = imgMsg.caption || null;
           const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
           mediaBase64 = buffer.toString('base64');
-        } else if (msg.message.documentMessage) {
+        } else if (docMsg) {
           tipo = 'documento';
-          mimeType = msg.message.documentMessage.mimetype;
-          corpo = msg.message.documentMessage.caption || null;
+          mimeType = docMsg.mimetype;
+          corpo = docMsg.caption || null;
           const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
           mediaBase64 = buffer.toString('base64');
         } else {

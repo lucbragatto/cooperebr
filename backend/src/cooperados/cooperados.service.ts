@@ -13,10 +13,21 @@ export class CooperadosService {
     private usinasService: UsinasService,
   ) {}
 
-  async findAll(cooperativaId?: string) {
+  async findAll(cooperativaId?: string, limit?: number, offset?: number, search?: string) {
+    const where: any = {};
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+    if (search) where.OR = [
+      { nomeCompleto: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+      { telefone: { contains: search } },
+      { cpf: { contains: search } },
+    ];
+
     const cooperados = await this.prisma.cooperado.findMany({
-      where: cooperativaId ? { cooperativaId } : undefined,
+      where,
       orderBy: { createdAt: 'desc' },
+      take: limit ? Number(limit) : undefined,
+      skip: offset ? Number(offset) : undefined,
       include: {
         cooperativa: cooperativaId ? false : { select: { nome: true, tipoParceiro: true } },
         contratos: {

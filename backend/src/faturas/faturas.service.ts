@@ -359,9 +359,12 @@ export class FaturasService {
       const valorDesconto = Math.round(kwhCobranca * tarifaKwh * descontoDecimal * 100) / 100;
       const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
 
-      // Data de vencimento conforme configuração (padrão 30 dias)
-      const vencimento = new Date();
-      vencimento.setDate(vencimento.getDate() + diasVencimento);
+      // Data de vencimento conforme preferência do cooperado ou configuração global
+      const vencimento = this.calcularVencimento(
+        fatura.cooperado.preferenciaCobranca,
+        diasVencimento,
+        dados?.vencimento,
+      );
 
       await this.prisma.cobranca.create({
         data: {
