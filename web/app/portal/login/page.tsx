@@ -21,13 +21,7 @@ export default function PortalLoginPage() {
     setCarregando(true);
     try {
       await login(identificador, senha);
-      const usuario = getUsuario();
-      if (usuario?.perfil !== 'COOPERADO') {
-        setErro('Este acesso é exclusivo para membros. Use o painel administrativo.');
-        setCarregando(false);
-        return;
-      }
-      router.push('/portal');
+      router.push('/selecionar-contexto');
     } catch {
       setErro('CPF, email ou senha incorretos.');
     } finally {

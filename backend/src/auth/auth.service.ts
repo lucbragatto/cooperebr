@@ -365,6 +365,109 @@ export class AuthService {
     };
   }
 
+  async obterContextosUsuario(usuario: any) {
+    const contextos: Array<{
+      tipo: string;
+      label: string;
+      id?: string;
+      cooperativaId?: string;
+      cooperativaNome?: string;
+    }> = [];
+
+    // 1. Perfil principal do sistema (SUPER_ADMIN, ADMIN, OPERADOR)
+    if (usuario.perfil === 'SUPER_ADMIN') {
+      contextos.push({ tipo: 'super_admin', label: 'Super Administrador' });
+    }
+
+    // 2. Se é ADMIN ou OPERADOR de uma cooperativa
+    if (
+      (usuario.perfil === 'ADMIN' || usuario.perfil === 'OPERADOR') &&
+      usuario.cooperativaId
+    ) {
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: usuario.cooperativaId },
+        select: { id: true, nome: true, tipoParceiro: true },
+      });
+      if (coop) {
+        contextos.push({
+          tipo: 'admin_parceiro',
+          label: `Admin — ${coop.nome}`,
+          id: coop.id,
+          cooperativaId: coop.id,
+          cooperativaNome: coop.nome,
+        });
+      }
+    }
+
+    // 3. Verificar se o usuário também é cooperado (match por CPF ou email)
+    const cooperadoWhere: any[] = [{ email: usuario.email }];
+    if (usuario.cpf) cooperadoWhere.push({ cpf: usuario.cpf });
+
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { OR: cooperadoWhere },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        cooperativaId: true,
+        cooperativa: { select: { id: true, nome: true } },
+      },
+    });
+
+    if (cooperado) {
+      contextos.push({
+        tipo: 'cooperado',
+        label: `Cooperado — ${cooperado.cooperativa?.nome ?? 'Sem parceiro'}`,
+        id: cooperado.id,
+        cooperativaId: cooperado.cooperativaId ?? undefined,
+        cooperativaNome: cooperado.cooperativa?.nome ?? undefined,
+      });
+    }
+
+    // 4. Verificar se o usuário é proprietário de usina (via cooperado ou por email)
+    let usinasProprietario: any[] = [];
+    if (cooperado) {
+      usinasProprietario = await this.prisma.usina.findMany({
+        where: { proprietarioCooperadoId: cooperado.id },
+        select: { id: true, nome: true, cooperativaId: true },
+      });
+    }
+    if (usinasProprietario.length === 0 && usuario.email) {
+      usinasProprietario = await this.prisma.usina.findMany({
+        where: { proprietarioEmail: usuario.email },
+        select: { id: true, nome: true, cooperativaId: true },
+      });
+    }
+
+    if (usinasProprietario.length > 0) {
+      contextos.push({
+        tipo: 'proprietario_usina',
+        label: `Proprietário — ${usinasProprietario.map((u) => u.nome).join(', ')}`,
+      });
+    }
+
+    // SUPER_ADMIN pode impersonar qualquer contexto — buscar todas cooperativas
+    let parceirosDisponiveis: any[] = [];
+    if (usuario.perfil === 'SUPER_ADMIN') {
+      parceirosDisponiveis = await this.prisma.cooperativa.findMany({
+        where: { ativo: true },
+        select: { id: true, nome: true, tipoParceiro: true },
+        orderBy: { nome: 'asc' },
+      });
+    }
+
+    return {
+      usuario: this.formatarUsuario(usuario),
+      cooperativaId: usuario.cooperativaId ?? null,
+      contextos,
+      cooperadoId: cooperado?.id ?? null,
+      usinasProprietario: usinasProprietario.map((u) => ({
+        id: u.id,
+        nome: u.nome,
+      })),
+      parceirosDisponiveis,
+    };
+  }
+
   private async buscarPorIdentificador(identificador: string) {
     const trimmed = identificador.trim();
     return this.prisma.usuario.findFirst({
@@ -404,6 +507,8 @@ export class AuthService {
     cpf: string | null;
     telefone: string | null;
     perfil: PerfilUsuario;
+    cooperativaId?: string | null;
+    fotoFacialUrl?: string | null;
   }) {
     return {
       id: usuario.id,
@@ -412,6 +517,8 @@ export class AuthService {
       cpf: usuario.cpf,
       telefone: usuario.telefone,
       perfil: usuario.perfil,
+      cooperativaId: usuario.cooperativaId ?? null,
+      fotoFacialUrl: usuario.fotoFacialUrl ?? null,
     };
   }
 }

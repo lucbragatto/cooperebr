@@ -22,7 +22,7 @@ export default function LoginPage() {
     setCarregando(true);
     try {
       await login(identificador, senha);
-      router.push('/dashboard');
+      router.push('/selecionar-contexto');
     } catch {
       setErro('Identificador ou senha inválidos.');
     } finally {

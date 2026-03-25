@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
+import { useContexto } from '@/hooks/useContexto';
+import ContextoSwitcher from '@/components/ContextoSwitcher';
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 type NavSection = { title?: string; titleIcon?: typeof LayoutDashboard; items: NavItem[] };
@@ -153,6 +155,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [aberto, setAberto] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { contextos, contextoAtivo, trocarContexto } = useContexto();
 
   useEffect(() => { setUsuario(getUsuario()); }, []);
 
@@ -281,6 +284,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
           <div />
           <div className="flex items-center gap-3 text-sm text-gray-600">
+            <ContextoSwitcher
+              contextos={contextos}
+              contextoAtivo={contextoAtivo}
+              onTrocar={trocarContexto}
+            />
             <span>
               Olá, <span className="font-medium">{usuario?.nome ?? 'Usuário'}</span>
             </span>

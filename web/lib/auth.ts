@@ -15,12 +15,14 @@ export async function login(identificador: string, senha: string): Promise<void>
 export function logout(): void {
   Cookies.remove(TOKEN_KEY);
   Cookies.remove(USUARIO_KEY);
+  localStorage.removeItem('contexto_ativo');
   window.location.href = '/login';
 }
 
 export function logoutPortal(): void {
   Cookies.remove(TOKEN_KEY);
   Cookies.remove(USUARIO_KEY);
+  localStorage.removeItem('contexto_ativo');
   window.location.href = '/portal/login';
 }
 

@@ -161,6 +161,27 @@ export interface AuthResponse {
   usuario: Usuario;
 }
 
+// --- Multi-contexto ---
+
+export type TipoContexto = 'super_admin' | 'admin_parceiro' | 'cooperado' | 'proprietario_usina';
+
+export interface ContextoUsuario {
+  tipo: TipoContexto;
+  label: string;
+  id?: string;
+  cooperativaId?: string;
+  cooperativaNome?: string;
+}
+
+export interface MeResponse {
+  usuario: Usuario;
+  cooperativaId: string | null;
+  contextos: ContextoUsuario[];
+  cooperadoId: string | null;
+  usinasProprietario: { id: string; nome: string }[];
+  parceirosDisponiveis: { id: string; nome: string; tipoParceiro: string }[];
+}
+
 export type ModeloCobranca = 'FIXO_MENSAL' | 'CREDITOS_COMPENSADOS' | 'CREDITOS_DINAMICO';
 export type TipoCampanha = 'PADRAO' | 'CAMPANHA';
 export type EscopoModelo = 'COOPERATIVA' | 'USINA';

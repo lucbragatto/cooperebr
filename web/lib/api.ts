@@ -10,6 +10,13 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Enviar contexto ativo para o backend
+  if (typeof window !== 'undefined') {
+    const contexto = localStorage.getItem('contexto_ativo');
+    if (contexto) {
+      config.headers['X-Contexto-Ativo'] = contexto;
+    }
+  }
   return config;
 });
 

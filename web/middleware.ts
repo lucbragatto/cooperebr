@@ -14,30 +14,42 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
   const { pathname } = request.nextUrl;
 
+  // --- Seleção de contexto (exige apenas token) ---
+  if (pathname === '/selecionar-contexto') {
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return NextResponse.next();
+  }
+
   // --- Portal do Cooperado ---
   if (pathname.startsWith('/portal')) {
-    // Login page do portal: se já autenticado como COOPERADO, redireciona para /portal
     if (pathname === '/portal/login') {
       if (token) {
-        const usuario = parseUsuarioCookie(request);
-        if (usuario?.perfil === 'COOPERADO') {
-          return NextResponse.redirect(new URL('/portal', request.url));
-        }
+        return NextResponse.redirect(new URL('/selecionar-contexto', request.url));
       }
       return NextResponse.next();
     }
 
-    // Rotas protegidas do portal
     if (!token) {
       return NextResponse.redirect(new URL('/portal/login', request.url));
     }
+    return NextResponse.next();
+  }
 
-    const usuario = parseUsuarioCookie(request);
-    // Admins/operadores não acessam o portal — redirecionar para /dashboard
-    if (usuario?.perfil && usuario.perfil !== 'COOPERADO') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+  // --- Área do Parceiro/Admin ---
+  if (pathname.startsWith('/parceiro')) {
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
+    return NextResponse.next();
+  }
 
+  // --- Área do Proprietário ---
+  if (pathname.startsWith('/proprietario')) {
+    if (!token) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
     return NextResponse.next();
   }
 
@@ -47,12 +59,19 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname === '/login' && token) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/selecionar-contexto', request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/portal/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/login',
+    '/portal/:path*',
+    '/parceiro/:path*',
+    '/proprietario/:path*',
+    '/selecionar-contexto',
+  ],
 };

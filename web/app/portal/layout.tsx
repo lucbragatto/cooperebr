@@ -12,6 +12,8 @@ import {
   LogOut,
   User,
 } from 'lucide-react';
+import { useContexto } from '@/hooks/useContexto';
+import ContextoSwitcher from '@/components/ContextoSwitcher';
 
 const navItems = [
   { href: '/portal', label: 'Início', icon: Home },
@@ -24,6 +26,7 @@ const navItems = [
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const usuario = getUsuario();
+  const { contextos, contextoAtivo, trocarContexto } = useContexto();
 
   // Login page renders without shell
   if (pathname === '/portal/login') {
@@ -37,7 +40,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <div className="flex items-center gap-3">
           <span className="text-lg font-bold text-green-700 tracking-tight">COOPERE-BR</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <ContextoSwitcher
+            contextos={contextos}
+            contextoAtivo={contextoAtivo}
+            onTrocar={trocarContexto}
+            compact
+          />
           <Link
             href="/portal/conta"
             className="flex items-center gap-2 text-sm text-gray-700 hover:text-green-700 transition-colors"

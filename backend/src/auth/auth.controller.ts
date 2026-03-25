@@ -73,7 +73,7 @@ export class AuthController {
 
   @Get('me')
   me(@CurrentUser() usuario: any) {
-    return usuario;
+    return this.authService.obterContextosUsuario(usuario);
   }
 
   // --- Esqueci / Redefinir Senha ---
