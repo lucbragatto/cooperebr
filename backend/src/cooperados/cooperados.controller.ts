@@ -61,6 +61,36 @@ export class CooperadosController {
   }
 
   @Roles(COOPERADO)
+  @Get('meu-perfil/ucs')
+  minhasUcs(@Req() req: any) {
+    return this.cooperadosService.minhasUcs(req.user);
+  }
+
+  @Roles(COOPERADO)
+  @Get('meu-perfil/cobrancas')
+  minhasCobrancas(@Req() req: any) {
+    return this.cooperadosService.minhasCobrancas(req.user);
+  }
+
+  @Roles(COOPERADO)
+  @Get('meu-perfil/documentos')
+  meusDocumentos(@Req() req: any) {
+    return this.cooperadosService.meusDocumentos(req.user);
+  }
+
+  @Roles(COOPERADO)
+  @Get('meu-perfil/contratos')
+  meusContratos(@Req() req: any) {
+    return this.cooperadosService.meusContratos(req.user);
+  }
+
+  @Roles(COOPERADO)
+  @Post('meu-perfil/solicitar-desligamento')
+  solicitarDesligamento(@Req() req: any, @Body() body: { motivo: string; observacao?: string }) {
+    return this.cooperadosService.solicitarDesligamento(req.user, body);
+  }
+
+  @Roles(COOPERADO)
   @Put('meu-perfil')
   atualizarMeuPerfil(@Req() req: any, @Body() dto: UpdateCooperadoDto) {
     return this.cooperadosService.atualizarMeuPerfil(req.user, dto);

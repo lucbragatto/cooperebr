@@ -13,6 +13,8 @@ export type TipoOcorrencia =
   | 'MEDICAO_INCORRETA'
   | 'PROBLEMA_FATURA'
   | 'SOLICITACAO'
+  | 'FALHA_USINA'
+  | 'DESLIGAMENTO'
   | 'OUTROS';
 
 export type PrioridadeOcorrencia = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';

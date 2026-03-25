@@ -59,14 +59,113 @@ export class CooperadosService {
     };
   }
 
-  async atualizarMeuPerfil(usuario: { id: string; email: string; cpf?: string }, dto: any) {
+  /** UCs do cooperado logado */
+  async minhasUcs(usuario: { id: string; email: string; cpf?: string }) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+    return this.prisma.uc.findMany({
+      where: { cooperadoId: cooperado.id },
+      include: {
+        contratos: {
+          where: { status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+          select: { percentualDesconto: true, status: true },
+          take: 1,
+        },
+        faturasProcessadas: {
+          select: { mediaKwhCalculada: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Cobranças do cooperado logado */
+  async minhasCobrancas(usuario: { id: string; email: string; cpf?: string }) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+    return this.prisma.cobranca.findMany({
+      where: { contrato: { cooperadoId: cooperado.id } },
+      include: {
+        contrato: { select: { numero: true, uc: { select: { numero: true } } } },
+        asaasCobrancas: { select: { boletoUrl: true, linkPagamento: true }, take: 1 },
+      },
+      orderBy: { dataVencimento: 'desc' },
+      take: 24,
+    });
+  }
+
+  /** Documentos do cooperado logado (todos os status) */
+  async meusDocumentos(usuario: { id: string; email: string; cpf?: string }) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+    return this.prisma.documentoCooperado.findMany({
+      where: { cooperadoId: cooperado.id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Contratos do cooperado logado */
+  async meusContratos(usuario: { id: string; email: string; cpf?: string }) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+    return this.prisma.contrato.findMany({
+      where: { cooperadoId: cooperado.id },
+      include: {
+        uc: { select: { numero: true, endereco: true } },
+        usina: { select: { nome: true } },
+        plano: { select: { nome: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Solicitar desligamento — cria ocorrência tipo DESLIGAMENTO */
+  async solicitarDesligamento(
+    usuario: { id: string; email: string; cpf?: string },
+    dto: { motivo: string; observacao?: string },
+  ) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
+
+    // Verificar se já tem pedido de desligamento aberto
+    const existente = await this.prisma.ocorrencia.findFirst({
+      where: { cooperadoId: cooperado.id, tipo: 'DESLIGAMENTO', status: { in: ['ABERTA', 'EM_ANDAMENTO'] } },
+    });
+    if (existente) {
+      throw new BadRequestException('Já existe uma solicitação de desligamento em andamento.');
+    }
+
+    const ocorrencia = await this.prisma.ocorrencia.create({
+      data: {
+        cooperadoId: cooperado.id,
+        cooperativaId: cooperado.cooperativaId ?? undefined,
+        tipo: 'DESLIGAMENTO',
+        descricao: `Motivo: ${dto.motivo}${dto.observacao ? `. Observação: ${dto.observacao}` : ''}`,
+        prioridade: 'ALTA',
+      },
+    });
+
+    await this.notificacoes.criar({
+      tipo: 'SOLICITACAO',
+      titulo: 'Solicitação de desligamento',
+      mensagem: `${cooperado.nomeCompleto} solicitou desligamento. Motivo: ${dto.motivo}`,
+      cooperadoId: cooperado.id,
+      link: `/dashboard/ocorrencias`,
+    });
+
+    return { protocolo: ocorrencia.id, criadoEm: ocorrencia.createdAt };
+  }
+
+  /** Helper: busca cooperado pelo JWT */
+  private async findCooperadoByUsuario(usuario: { id: string; email: string; cpf?: string }) {
     const where: any[] = [];
     if (usuario.email) where.push({ email: usuario.email });
     if (usuario.cpf) where.push({ cpf: usuario.cpf });
-    if (where.length === 0) throw new NotFoundException('Cooperado não encontrado');
-
+    if (where.length === 0) throw new NotFoundException('Cooperado não encontrado para este usuário');
     const cooperado = await this.prisma.cooperado.findFirst({ where: { OR: where } });
-    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado para este usuário');
+    return cooperado;
+  }
+
+  async atualizarMeuPerfil(usuario: { id: string; email: string; cpf?: string }, dto: any) {
+    const cooperado = await this.findCooperadoByUsuario(usuario);
 
     // Apenas campos seguros para o próprio cooperado editar
     const dadosPermitidos: any = {};
