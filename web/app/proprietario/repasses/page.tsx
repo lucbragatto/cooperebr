@@ -96,11 +96,11 @@ export default function ProprietarioRepassesPage() {
                       </td>
                       <td className="py-2">
                         {r.pdfUrl && (
-                          <Button variant="ghost" size="sm" asChild>
-                            <a href={r.pdfUrl} target="_blank" rel="noopener noreferrer">
+                          <a href={r.pdfUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="sm">
                               <Download className="w-4 h-4" />
-                            </a>
-                          </Button>
+                            </Button>
+                          </a>
                         )}
                       </td>
                     </tr>
