@@ -60,21 +60,17 @@ export default function PortalIndicacoesPage() {
   const [erro, setErro] = useState('');
 
   useEffect(() => {
+    const progressaoPromise = api.get('/clube-vantagens/minha-progressao').then(r => r).catch(() => ({ data: null }));
     Promise.all([
       api.get('/cooperados/meu-perfil'),
-      api.get('/indicacoes/meu-link'),
-      api.get('/clube-vantagens/minha-progressao').catch((err: { response?: { status?: number } }) => {
-        if (err?.response?.status === 403 || err?.response?.status === 401) {
-          return { data: null };
-        }
-        return { data: null };
-      }),
+      api.get('/indicacoes/meu-link').catch(() => ({ data: null })),
+      progressaoPromise,
     ])
       .then(([perfilRes, linkRes, progRes]) => {
         setDados(perfilRes.data);
-        if (progRes.data) setProgressao(progRes.data);
-        const codigo = linkRes.data?.codigoIndicacao ?? linkRes.data?.codigo;
-        const linkBackend = linkRes.data?.link;
+        if (progRes?.data) setProgressao(progRes.data);
+        const codigo = linkRes?.data?.codigoIndicacao ?? linkRes?.data?.codigo;
+        const linkBackend = linkRes?.data?.link;
         if (linkBackend) {
           setLinkConvite(linkBackend);
         } else if (codigo) {
@@ -138,8 +134,8 @@ export default function PortalIndicacoesPage() {
                   height={140}
                 />
               ) : (
-                <div className="w-[140px] h-[140px] flex items-center justify-center text-xs text-gray-400">
-                  Carregando QR Code...
+                <div className="w-[140px] h-[140px] flex items-center justify-center text-xs text-gray-400 text-center p-2">
+                  Link de convite não disponível para este perfil
                 </div>
               )}
             </div>
