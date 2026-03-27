@@ -113,7 +113,18 @@ export class AuthService {
       );
     }
 
-    const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil);
+    // Buscar cooperadoId vinculado ao usuário (match por email ou CPF)
+    const cooperadoWhere: any[] = [{ email: usuario.email }];
+    if (usuario.cpf) cooperadoWhere.push({ cpf: usuario.cpf });
+    const cooperado = await (this.prisma.cooperado as any).findFirst({
+      where: { OR: cooperadoWhere },
+      select: { id: true, cooperativaId: true },
+    });
+
+    const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil, {
+      cooperadoId: cooperado?.id ?? undefined,
+      cooperativaId: cooperado?.cooperativaId ?? usuario.cooperativaId ?? undefined,
+    });
     return { token, usuario: this.formatarUsuario(usuario) };
   }
 
@@ -496,8 +507,8 @@ export class AuthService {
     return `${masked}@${domain}`;
   }
 
-  private assinarToken(sub: string, email: string, perfil: PerfilUsuario) {
-    return this.jwtService.sign({ sub, email, perfil });
+  private assinarToken(sub: string, email: string, perfil: PerfilUsuario, extra?: { cooperadoId?: string; cooperativaId?: string }) {
+    return this.jwtService.sign({ sub, email, perfil, ...extra });
   }
 
   private formatarUsuario(usuario: {
