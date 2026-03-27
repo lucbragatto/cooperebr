@@ -28,7 +28,7 @@ export default function ParceiroFinanceiroPage() {
     .filter((c) => c.status === 'PAGO')
     .reduce((acc, c) => acc + Number(c.valorLiquido ?? c.valor ?? 0), 0);
   const pendente = cobrancas
-    .filter((c) => c.status === 'PENDENTE')
+    .filter((c) => c.status === 'A_VENCER')
     .reduce((acc, c) => acc + Number(c.valorLiquido ?? c.valor ?? 0), 0);
   const vencido = cobrancas
     .filter((c) => c.status === 'VENCIDO')
@@ -125,7 +125,7 @@ export default function ParceiroFinanceiroPage() {
                         <Badge className={
                           c.status === 'PAGO' ? 'bg-green-100 text-green-700' :
                           c.status === 'VENCIDO' ? 'bg-red-100 text-red-700' :
-                          c.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
+                          c.status === 'A_VENCER' ? 'bg-yellow-100 text-yellow-700' :
                           'bg-gray-100 text-gray-500'
                         }>
                           {c.status}

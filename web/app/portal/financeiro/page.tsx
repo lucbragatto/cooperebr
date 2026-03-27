@@ -22,9 +22,6 @@ interface CobrancaItem {
   valorBruto: number;
   valorDesconto: number;
   valorLiquido: number;
-  valorMulta: number | null;
-  valorJuros: number | null;
-  valorAtualizado: number | null;
   status: string;
   dataVencimento: string;
   dataPagamento: string | null;
@@ -33,8 +30,7 @@ interface CobrancaItem {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
   PAGO: { label: 'Pago', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  PENDENTE: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  ATRASADA: { label: 'Atrasada', color: 'bg-red-100 text-red-700', icon: AlertTriangle },
+  A_VENCER: { label: 'A Vencer', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   VENCIDO: { label: 'Vencido', color: 'bg-red-100 text-red-700', icon: AlertTriangle },
   CANCELADO: { label: 'Cancelado', color: 'bg-gray-100 text-gray-500', icon: Clock },
 };
@@ -66,7 +62,7 @@ export default function PortalFinanceiroPage() {
     .filter((c) => c.status === 'PAGO')
     .reduce((acc, c) => acc + Number(c.valorDesconto), 0);
 
-  const proximoVencimento = cobrancas.find((c) => c.status === 'PENDENTE');
+  const proximoVencimento = cobrancas.find((c) => c.status === 'A_VENCER');
 
   const ultimoPagamento = cobrancas.find((c) => c.status === 'PAGO');
 
@@ -101,7 +97,7 @@ export default function PortalFinanceiroPage() {
                   <p className="text-xs text-gray-500">Próx. vencimento</p>
                   <p className="text-sm font-semibold text-gray-800 truncate">
                     {proximoVencimento
-                      ? new Date(proximoVencimento.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')
+                      ? new Date(proximoVencimento.dataVencimento).toLocaleDateString('pt-BR')
                       : '—'}
                   </p>
                 </div>
@@ -159,45 +155,31 @@ export default function PortalFinanceiroPage() {
         ) : (
           <div className="space-y-2">
             {cobrancas.map((c) => {
-              const cfg = STATUS_CONFIG[c.status] ?? STATUS_CONFIG.PENDENTE;
+              const cfg = STATUS_CONFIG[c.status] ?? STATUS_CONFIG.A_VENCER;
               const StatusIcon = cfg.icon;
               const mesLabel = `${String(c.mesReferencia).padStart(2, '0')}/${c.anoReferencia}`;
               const boletoUrl = c.asaasCobrancas?.[0]?.boletoUrl ?? c.asaasCobrancas?.[0]?.linkPagamento;
-              const temAtualizacao = (c.status === 'ATRASADA' || c.status === 'VENCIDO') &&
-                c.valorAtualizado != null && c.valorAtualizado > Number(c.valorLiquido);
-              const valorExibido = temAtualizacao ? c.valorAtualizado! : Number(c.valorLiquido);
 
               return (
                 <Card key={c.id}>
                   <CardContent className="pt-3 pb-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <StatusIcon className={`w-4 h-4 flex-shrink-0 ${c.status === 'PAGO' ? 'text-green-600' : (c.status === 'VENCIDO' || c.status === 'ATRASADA') ? 'text-red-500' : 'text-yellow-500'}`} />
+                        <StatusIcon className={`w-4 h-4 flex-shrink-0 ${c.status === 'PAGO' ? 'text-green-600' : c.status === 'VENCIDO' ? 'text-red-500' : 'text-yellow-500'}`} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800">
                             {mesLabel}
                           </p>
                           <p className="text-xs text-gray-500">
-                            Venc.: {new Date(c.dataVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                            Venc.: {new Date(c.dataVencimento).toLocaleDateString('pt-BR')}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div className="text-right">
-                          <p className={`text-sm font-bold ${temAtualizacao ? 'text-red-600' : 'text-gray-800'}`}>
-                            R$ {valorExibido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          <p className="text-sm font-bold text-gray-800">
+                            R$ {Number(c.valorLiquido).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
-                          {temAtualizacao && (
-                            <p className="text-xs text-gray-400 line-through">
-                              R$ {Number(c.valorLiquido).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                          )}
-                          {temAtualizacao && (
-                            <p className="text-xs text-red-500">
-                              Multa R$ {Number(c.valorMulta ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              {' + '}Juros R$ {Number(c.valorJuros ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                          )}
                           <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cfg.color}`}>
                             {cfg.label}
                           </span>

@@ -131,7 +131,7 @@ export class CobrancasService {
     percentualDesconto: number;
     valorDesconto: number;
     valorLiquido: number;
-    status: 'PENDENTE' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
+    status: 'A_VENCER' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
     dataVencimento: Date;
     dataPagamento: Date;
   }>) {

@@ -4,7 +4,7 @@ export type StatusCooperado = 'PENDENTE' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
 
 export type StatusContrato = 'PENDENTE_ATIVACAO' | 'EM_APROVACAO' | 'AGUARDANDO_ASSINATURA' | 'ASSINATURA_SOLICITADA' | 'APROVADO' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO' | 'LISTA_ESPERA';
 
-export type StatusCobranca = 'PENDENTE' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
+export type StatusCobranca = 'A_VENCER' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
 
 export type StatusOcorrencia = 'ABERTA' | 'EM_ANDAMENTO' | 'RESOLVIDA' | 'CANCELADA';
 

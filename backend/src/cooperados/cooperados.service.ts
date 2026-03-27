@@ -70,8 +70,8 @@ export class CooperadosService {
     // Calcular resumo
     const contratoAtivo = c.contratos.find((ct: any) => ct.status === 'ATIVO');
     const todasCobrancas = c.contratos.flatMap((ct: any) => ct.cobrancas);
-    const cobrancasPendentes = todasCobrancas.filter((cb: any) => cb.status === 'PENDENTE' || cb.status === 'VENCIDO');
-    const proximaCobranca = todasCobrancas.find((cb: any) => cb.status === 'PENDENTE');
+    const cobrancasPendentes = todasCobrancas.filter((cb: any) => cb.status === 'A_VENCER' || cb.status === 'VENCIDO');
+    const proximaCobranca = todasCobrancas.find((cb: any) => cb.status === 'A_VENCER');
 
     return {
       ...cooperado,
@@ -516,7 +516,7 @@ export class CooperadosService {
     }
 
     const cobrancasPendentes = await this.prisma.cobranca.count({
-      where: { contrato: { cooperadoId: id }, status: 'PENDENTE' },
+      where: { contrato: { cooperadoId: id }, status: 'A_VENCER' },
     });
     if (cobrancasPendentes > 0) {
       throw new BadRequestException(

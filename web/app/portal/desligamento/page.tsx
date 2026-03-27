@@ -41,7 +41,7 @@ export default function PortalDesligamentoPage() {
       .then((res) => {
         const cobrancas = res.data as any[];
         const pendentes = cobrancas.filter(
-          (c: any) => c.status === 'PENDENTE' || c.status === 'VENCIDO',
+          (c: any) => c.status === 'A_VENCER' || c.status === 'VENCIDO',
         );
         // Check for active generation in current month
         const agora = new Date();

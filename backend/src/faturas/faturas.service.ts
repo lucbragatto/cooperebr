@@ -376,7 +376,7 @@ export class FaturasService {
           valorDesconto,
           valorLiquido,
           dataVencimento: vencimento,
-          status: 'PENDENTE',
+          status: 'A_VENCER',
         },
       });
 

@@ -1,9 +1,12 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { AsaasService } from '../asaas/asaas.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
-import { WhatsappBotService } from './whatsapp-bot.service';
+import {
+  ConfiguracaoNotificacaoService,
+  TipoNotificacaoCobranca,
+} from '../cobrancas/configuracao-notificacao.service';
 
 @Injectable()
 export class WhatsappCobrancaService {
@@ -13,7 +16,7 @@ export class WhatsappCobrancaService {
     private prisma: PrismaService,
     private asaasService: AsaasService,
     private sender: WhatsappSenderService,
-    @Inject(forwardRef(() => WhatsappBotService)) private bot: WhatsappBotService,
+    private configNotificacao: ConfiguracaoNotificacaoService,
   ) {}
 
 
@@ -42,9 +45,9 @@ export class WhatsappCobrancaService {
 
     const modo = opcoes?.modo ?? 'todos';
 
-    // Buscar cobranças PENDENTE do mês que ainda não foram enviadas por WhatsApp
+    // Buscar cobranças A_VENCER do mês que ainda não foram enviadas por WhatsApp
     const where: any = {
-      status: 'PENDENTE',
+      status: 'A_VENCER',
       mesReferencia: mes,
       anoReferencia: ano,
       whatsappEnviadoEm: null,
@@ -132,10 +135,10 @@ export class WhatsappCobrancaService {
 
         // Montar mensagem
         const mesStr = mes.toString().padStart(2, '0');
+        const cabecalho = await this.montarTextoStatusFatura(cobranca.cooperativaId, valor, null, null, null, dataVenc, cobranca.status, 0);
         let mensagem = `💚 *CoopereBR — Fatura ${mesStr}/${ano}*\n\n`;
         mensagem += `Olá, ${nome}! 👋\n\n`;
-        mensagem += `Sua fatura deste mês está disponível:\n`;
-        mensagem += `💰 Valor: R$ ${valor.toFixed(2).replace('.', ',')}\n`;
+        mensagem += `${cabecalho}\n`;
         mensagem += `📅 Vencimento: ${dataFormatada}\n`;
 
         if (pixCopiaECola) {
@@ -185,84 +188,95 @@ export class WhatsappCobrancaService {
   }
 
   /**
-   * Cron: Abordagem proativa de cooperados inadimplentes.
-   * Executa diariamente às 9h, busca cobranças vencidas há mais de 5 dias
-   * que ainda não foram abordadas via fluxo de inadimplente.
+   * Abordar inadimplentes (cobranças vencidas) via WhatsApp.
+   * Cron: todo dia às 9h
    */
   @Cron('0 9 * * *', { timeZone: 'America/Sao_Paulo' })
-  async cronAbordagemInadimplentes() {
-    this.logger.log('Cron: verificando cooperados inadimplentes para abordagem...');
+  async cronAbordarInadimplentes() {
+    this.logger.log('Cron: abordando inadimplentes via WhatsApp...');
     await this.abordarInadimplentes();
   }
 
-  async abordarInadimplentes(limiteEnvios = 20): Promise<{ total: number; enviados: number; erros: number }> {
-    const cincoAtras = new Date();
-    cincoAtras.setDate(cincoAtras.getDate() - 5);
+  async abordarInadimplentes(cooperativaId?: string) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const where: any = {
+      status: 'VENCIDO',
+      whatsappEnviadoEm: { not: null }, // já recebeu a cobrança original
+    };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
 
     const cobrancas = await this.prisma.cobranca.findMany({
-      where: {
-        status: { in: ['VENCIDO', 'PENDENTE'] as any[] },
-        dataVencimento: { lt: cincoAtras },
-        // Não abordar quem já recebeu notificação de vencimento
-        notificadoVencimento: false,
-      },
+      where,
       include: {
         contrato: {
           include: {
             cooperado: true,
+            cooperativa: { select: { id: true, diasCarencia: true, multaAtraso: true, jurosDiarios: true } },
           },
         },
         asaasCobrancas: true,
       },
       orderBy: { dataVencimento: 'asc' },
-      take: limiteEnvios,
     });
 
-    this.logger.log(`Encontradas ${cobrancas.length} cobranças vencidas há 5+ dias para abordagem`);
+    this.logger.log(`Encontradas ${cobrancas.length} cobranças vencidas para abordagem`);
 
     let enviados = 0;
     let erros = 0;
 
     for (const cobranca of cobrancas) {
-      const cooperado = (cobranca as any).contrato?.cooperado;
+      const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) continue;
 
       try {
         const telefone = this.formatarTelefone(cooperado.telefone);
-        const valor = Number(cobranca.valorLiquido ?? cobranca.valorBruto);
-        const dataVencimento = new Date(cobranca.dataVencimento);
+        const nome = cooperado.nomeCompleto.split(' ')[0];
+        const valorLiquido = Number(cobranca.valorLiquido);
+        const valorAtualizado = Number(cobranca.valorAtualizado || cobranca.valorLiquido);
+        const dataVenc = new Date(cobranca.dataVencimento);
+        dataVenc.setHours(0, 0, 0, 0);
 
-        // Buscar PIX
-        let pixCopiaECola: string | undefined;
-        let linkPagamento: string | undefined;
-        const asaasCobranca = (cobranca as any).asaasCobrancas?.[0];
-        if (asaasCobranca) {
-          pixCopiaECola = asaasCobranca.pixCopiaECola || undefined;
-          linkPagamento = asaasCobranca.linkPagamento || undefined;
-        }
+        const config = cobranca.contrato?.cooperativa;
+        const diasCarencia = config?.diasCarencia ?? 3;
 
-        await this.bot.iniciarFluxoInadimplente(
-          telefone,
-          cobranca.id,
-          cooperado.nomeCompleto,
-          valor,
-          dataVencimento,
-          pixCopiaECola,
-          linkPagamento,
+        const cabecalho = await this.montarTextoStatusFatura(
+          cobranca.cooperativaId,
+          valorLiquido,
+          valorAtualizado,
+          Number(cobranca['valorMulta'] || 0),
+          Number(cobranca['valorJuros'] || 0),
+          dataVenc,
+          cobranca.status,
+          diasCarencia,
         );
 
-        // Marcar como notificado
-        await this.prisma.cobranca.update({
-          where: { id: cobranca.id },
-          data: { notificadoVencimento: true },
+        let mensagem = `💚 *CoopereBR — Aviso de Pendência*\n\n`;
+        mensagem += `Olá, ${nome}! 👋\n\n`;
+        mensagem += `${cabecalho}\n`;
+
+        const asaasCobranca = cobranca.asaasCobrancas?.[0];
+        if (asaasCobranca?.pixCopiaECola) {
+          mensagem += `\n*Pague via PIX — Copia e Cola:*\n${asaasCobranca.pixCopiaECola}\n`;
+        }
+        if (asaasCobranca?.linkPagamento) {
+          mensagem += `\n🔗 Ou acesse: ${asaasCobranca.linkPagamento}\n`;
+        }
+
+        mensagem += `\n_Dúvidas? Responda esta mensagem._`;
+
+        await this.sender.enviarMensagem(telefone, mensagem, {
+          tipoDisparo: 'COBRANCA',
+          cooperadoId: cooperado.id,
+          cooperativaId: cobranca.cooperativaId ?? undefined,
         });
 
         enviados++;
-        this.logger.log(`Abordagem inadimplente enviada para ${cooperado.nomeCompleto} (${telefone})`);
         await this.delayAleatorio();
       } catch (err) {
         erros++;
-        this.logger.error(`Erro na abordagem inadimplente cobrança ${cobranca.id}: ${err.message}`);
+        this.logger.error(`Erro ao abordar inadimplente ${cobranca.id}: ${err.message}`);
       }
     }
 
@@ -272,16 +286,76 @@ export class WhatsappCobrancaService {
   }
 
   /**
-   * Busca cooperado e suas cobranças A_VENCER/VENCIDO pelo telefone.
+   * Monta o texto de status da fatura baseado na proximidade do vencimento.
+   * Usa ConfiguracaoNotificacaoService para buscar textos configuráveis.
+   */
+  private async montarTextoStatusFatura(
+    cooperativaId: string | null,
+    valorLiquido: number,
+    valorAtualizado: number | null,
+    valorMulta: number | null,
+    valorJuros: number | null,
+    dataVencimento: Date,
+    status: string,
+    diasCarencia: number,
+  ): Promise<string> {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const venc = new Date(dataVencimento);
+    venc.setHours(0, 0, 0, 0);
+    const diff = Math.floor((venc.getTime() - hoje.getTime()) / 86400000);
+    const fmt = (v: number) => v.toFixed(2).replace('.', ',');
+    const valor = Number(valorLiquido);
+
+    if (status === 'A_VENCER' || status === 'PENDENTE') {
+      let tipo: TipoNotificacaoCobranca;
+      if (diff > 5) tipo = TipoNotificacaoCobranca.AVENCER_MAIS5;
+      else if (diff >= 2) tipo = TipoNotificacaoCobranca.AVENCER_2A4;
+      else if (diff === 1) tipo = TipoNotificacaoCobranca.AVENCER_AMANHA;
+      else tipo = TipoNotificacaoCobranca.VENCE_HOJE;
+
+      return this.configNotificacao.getTexto(cooperativaId, tipo, {
+        dias: Math.abs(diff),
+        valor: fmt(valor),
+      });
+    }
+
+    // VENCIDO
+    const diasAtraso = Math.abs(diff);
+    const diasEfetivos = Math.max(0, diasAtraso - diasCarencia);
+
+    if (diasEfetivos === 0) {
+      return this.configNotificacao.getTexto(
+        cooperativaId,
+        TipoNotificacaoCobranca.VENCIDA_CARENCIA,
+        { dias: diasAtraso, valor: fmt(valor) },
+      );
+    }
+
+    const vAtualizado = valorAtualizado ? Number(valorAtualizado) : valor;
+    const multa = valorMulta ? Number(valorMulta) : 0;
+    const juros = valorJuros ? Number(valorJuros) : 0;
+
+    return this.configNotificacao.getTexto(
+      cooperativaId,
+      TipoNotificacaoCobranca.VENCIDA_MULTA,
+      {
+        dias: diasAtraso,
+        valor: fmt(valor),
+        valorAtualizado: fmt(vAtualizado),
+        multa: fmt(multa),
+        juros: fmt(juros),
+      },
+    );
+  }
+
+  /**
+   * Busca cooperado e cobranças A_VENCER/VENCIDO pelo telefone.
    * Usado pelo menu de fatura no bot.
    */
-  async buscarCobrancasPorTelefone(telefone: string): Promise<{
-    cooperado: any | null;
-    cobrancas: any[];
-  }> {
+  async buscarCobrancasPorTelefone(telefone: string): Promise<{ cooperado: any | null; cobrancas: any[] }> {
     const telefoneNorm = this.formatarTelefone(telefone);
     const telefoneSemPais = telefoneNorm.replace(/^55/, '');
-
     const cooperado = await this.prisma.cooperado.findFirst({
       where: {
         OR: [
@@ -293,9 +367,7 @@ export class WhatsappCobrancaService {
       },
       select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
     });
-
     if (!cooperado) return { cooperado: null, cobrancas: [] };
-
     const cobrancas = await this.prisma.cobranca.findMany({
       where: {
         contrato: { cooperadoId: cooperado.id },
@@ -305,18 +377,11 @@ export class WhatsappCobrancaService {
         asaasCobrancas: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: {
-            id: true,
-            pixCopiaECola: true,
-            linkPagamento: true,
-            boletoUrl: true,
-            status: true,
-          },
+          select: { id: true, pixCopiaECola: true, linkPagamento: true, boletoUrl: true, status: true },
         },
       },
       orderBy: { dataVencimento: 'asc' },
     });
-
     return { cooperado, cobrancas };
   }
 
