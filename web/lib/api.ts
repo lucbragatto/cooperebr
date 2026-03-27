@@ -26,7 +26,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       Cookies.remove('token');
       Cookies.remove('usuario');
-      window.location.href = '/login';
+      const isPortal = window.location.pathname.startsWith('/portal');
+      window.location.href = isPortal ? '/portal/login' : '/login';
     }
     return Promise.reject(error);
   },
