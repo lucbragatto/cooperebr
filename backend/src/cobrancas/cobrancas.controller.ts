@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Req, Query } from '@nestjs/common';
 import { CobrancasService } from './cobrancas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,8 +11,11 @@ export class CobrancasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
-  findAll(@Req() req: any) {
-    return this.cobrancasService.findAll(req.user?.cooperativaId);
+  findAll(@Req() req: any, @Query('status') status?: string | string[]) {
+    const statusArray = status
+      ? Array.isArray(status) ? status : status.split(',')
+      : undefined;
+    return this.cobrancasService.findAll(req.user?.cooperativaId, statusArray);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
@@ -57,9 +60,9 @@ export class CobrancasController {
   @Patch(':id/dar-baixa')
   darBaixa(
     @Param('id') id: string,
-    @Body() body: { dataPagamento: string; valorPago: number },
+    @Body() body: { dataPagamento: string; valorPago: number; metodoPagamento?: 'PIX' | 'BOLETO' | 'TRANSFERENCIA' | 'DINHEIRO' },
   ) {
-    return this.cobrancasService.darBaixa(id, body.dataPagamento, body.valorPago);
+    return this.cobrancasService.darBaixa(id, body.dataPagamento, body.valorPago, body.metodoPagamento);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -69,6 +72,12 @@ export class CobrancasController {
     @Body() body: { motivo: string },
   ) {
     return this.cobrancasService.cancelar(id, body.motivo);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post(':id/reenviar-notificacao')
+  reenviarNotificacao(@Param('id') id: string, @Req() req: any) {
+    return this.cobrancasService.reenviarNotificacao(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

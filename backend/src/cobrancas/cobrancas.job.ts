@@ -19,7 +19,7 @@ export class CobrancasJob {
 
     const { count } = await this.prisma.cobranca.updateMany({
       where: {
-        status: 'A_VENCER',
+        status: { in: ['A_VENCER', 'PENDENTE'] },
         dataVencimento: { lt: hoje },
       },
       data: { status: 'VENCIDO' },

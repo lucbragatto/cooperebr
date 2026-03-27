@@ -145,6 +145,11 @@ export class WhatsappCobrancaService {
           mensagem += `\n*Pague via PIX — Copia e Cola:*\n${pixCopiaECola}\n`;
         }
 
+        const linhaDigitavel = asaasCobranca?.linhaDigitavel;
+        if (linhaDigitavel) {
+          mensagem += `\n*Linha digitável:*\n${linhaDigitavel}\n`;
+        }
+
         if (invoiceUrl) {
           mensagem += `\n🔗 Ou acesse: ${invoiceUrl}\n`;
         }
@@ -259,6 +264,9 @@ export class WhatsappCobrancaService {
         const asaasCobranca = cobranca.asaasCobrancas?.[0];
         if (asaasCobranca?.pixCopiaECola) {
           mensagem += `\n*Pague via PIX — Copia e Cola:*\n${asaasCobranca.pixCopiaECola}\n`;
+        }
+        if (asaasCobranca?.linhaDigitavel) {
+          mensagem += `\n*Linha digitável:*\n${asaasCobranca.linhaDigitavel}\n`;
         }
         if (asaasCobranca?.linkPagamento) {
           mensagem += `\n🔗 Ou acesse: ${asaasCobranca.linkPagamento}\n`;
@@ -377,7 +385,7 @@ export class WhatsappCobrancaService {
         asaasCobrancas: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { id: true, pixCopiaECola: true, linkPagamento: true, boletoUrl: true, status: true },
+          select: { id: true, pixCopiaECola: true, linkPagamento: true, boletoUrl: true, linhaDigitavel: true, status: true },
         },
       },
       orderBy: { dataVencimento: 'asc' },

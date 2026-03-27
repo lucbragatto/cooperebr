@@ -4,6 +4,7 @@ import { ConfiguracaoCobrancaService } from '../configuracao-cobranca/configurac
 import { AsaasService } from '../asaas/asaas.service';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 export interface CobrancaCalculo {
   contratoId: string;
@@ -31,11 +32,15 @@ export class CobrancasService {
     private asaasService: AsaasService,
     private clubeVantagensService: ClubeVantagensService,
     private whatsappCicloVida: WhatsappCicloVidaService,
+    private whatsappSender: WhatsappSenderService,
   ) {}
 
-  async findAll(cooperativaId?: string) {
+  async findAll(cooperativaId?: string, status?: string[]) {
+    const where: any = {};
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+    if (status?.length) where.status = { in: status };
     return this.prisma.cobranca.findMany({
-      where: cooperativaId ? { cooperativaId } : undefined,
+      where,
       include: { contrato: { include: { cooperado: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -138,7 +143,7 @@ export class CobrancasService {
     return this.prisma.cobranca.update({ where: { id }, data });
   }
 
-  async darBaixa(id: string, dataPagamento: string, valorPago: number) {
+  async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string) {
     const cobranca = await this.prisma.cobranca.findUnique({
       where: { id },
       include: { contrato: { include: { cooperado: true } } },
@@ -153,8 +158,10 @@ export class CobrancasService {
 
     const dtPagamento = new Date(dataPagamento);
 
-    // BUG-2: Recalcular multa/juros em tempo real se cobrança VENCIDA e multa ainda não calculada
-    if (cobranca.status === 'VENCIDO' && !Number(cobranca.valorMulta)) {
+    // Recalcular multa/juros em tempo real se cobrança vencida (VENCIDO ou PENDENTE com dataVencimento < hoje)
+    const vencida = cobranca.status === 'VENCIDO' ||
+      (cobranca.status === 'PENDENTE' && new Date(cobranca.dataVencimento) < dtPagamento);
+    if (vencida && !Number(cobranca.valorMulta)) {
       const coopId = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
       if (coopId) {
         const config = await this.prisma.cooperativa.findUnique({
@@ -223,7 +230,7 @@ export class CobrancasService {
           status: 'REALIZADO',
           cooperativaId: cobranca.cooperativaId || cobranca.contrato?.cooperativaId || undefined,
           cooperadoId: cobranca.contrato?.cooperadoId || undefined,
-          observacoes: `Ref. cobrança ${cobranca.id}`,
+          observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
         },
       });
     } catch (err) {
@@ -435,5 +442,93 @@ export class CobrancasService {
       this.logger.warn(`Falha ao emitir cobrança Asaas automaticamente: ${err.message}`);
       return null;
     }
+  }
+
+  /**
+   * Reenvia notificação WhatsApp individual para uma cobrança.
+   * Inclui PIX copia-e-cola e linha digitável (se disponíveis),
+   * e valor atualizado com multa/juros se vencida.
+   */
+  async reenviarNotificacao(id: string, cooperativaId?: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id },
+      include: {
+        contrato: { include: { cooperado: true } },
+        asaasCobrancas: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+    });
+    if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    if (cooperativaId && cobranca.cooperativaId !== cooperativaId) {
+      throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    }
+
+    const cooperado = cobranca.contrato?.cooperado;
+    if (!cooperado?.telefone) {
+      throw new BadRequestException('Cooperado sem telefone cadastrado');
+    }
+
+    // Calcular valor atualizado se vencida
+    let valor = Number(cobranca.valorAtualizado ?? cobranca.valorLiquido);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const venc = new Date(cobranca.dataVencimento);
+    venc.setHours(0, 0, 0, 0);
+
+    if ((cobranca.status === 'VENCIDO' || (cobranca.status === 'PENDENTE' && venc < hoje)) && !Number(cobranca.valorMulta)) {
+      const coopId = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
+      if (coopId) {
+        const config = await this.prisma.cooperativa.findUnique({
+          where: { id: coopId },
+          select: { multaAtraso: true, jurosDiarios: true, diasCarencia: true },
+        });
+        if (config) {
+          const diasAtraso = Math.floor((hoje.getTime() - venc.getTime()) / 86400000);
+          const diasEfetivos = Math.max(0, diasAtraso - (config.diasCarencia ?? 0));
+          if (diasEfetivos > 0) {
+            const base = Number(cobranca.valorLiquido);
+            const multa = base * (Number(config.multaAtraso) / 100);
+            const juros = base * (Number(config.jurosDiarios) / 100) * diasEfetivos;
+            valor = Math.round((base + multa + juros) * 100) / 100;
+          }
+        }
+      }
+    }
+
+    const telefone = cooperado.telefone.replace(/\D/g, '').replace(/^(?!55)/, '55');
+    const nome = cooperado.nomeCompleto.split(' ')[0];
+    const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
+    const dataFormatada = venc.toLocaleDateString('pt-BR');
+    const fmt = (v: number) => v.toFixed(2).replace('.', ',');
+
+    let mensagem = `💚 *CoopereBR — Fatura ${mesStr}/${cobranca.anoReferencia}*\n\n`;
+    mensagem += `Olá, ${nome}! 👋\n\n`;
+    mensagem += `💰 Valor: R$ ${fmt(valor)}\n`;
+    mensagem += `📅 Vencimento: ${dataFormatada}\n`;
+
+    const asaas = cobranca.asaasCobrancas?.[0];
+    if (asaas?.pixCopiaECola) {
+      mensagem += `\n*Pague via PIX — Copia e Cola:*\n${asaas.pixCopiaECola}\n`;
+    }
+    if ((asaas as any)?.linhaDigitavel) {
+      mensagem += `\n*Linha digitável:*\n${(asaas as any).linhaDigitavel}\n`;
+    }
+    if (asaas?.linkPagamento) {
+      mensagem += `\n🔗 Ou acesse: ${asaas.linkPagamento}\n`;
+    }
+
+    mensagem += `\n_Dúvidas? Responda esta mensagem._`;
+
+    await this.whatsappSender.enviarMensagem(telefone, mensagem, {
+      tipoDisparo: 'COBRANCA',
+      cooperadoId: cooperado.id,
+      cooperativaId: cobranca.cooperativaId ?? undefined,
+    });
+
+    await this.prisma.cobranca.update({
+      where: { id },
+      data: { whatsappEnviadoEm: new Date() },
+    });
+
+    return { enviado: true, telefone, valor };
   }
 }

@@ -1000,6 +1000,7 @@ model AsaasCobranca {
   pixQrCode      String?
   pixCopiaECola  String?
   nossoNumero    String?
+  linhaDigitavel String?
   formaPagamento          String    // BOLETO | PIX | CREDIT_CARD
   ultimoWebhookEventId    String?
   createdAt               DateTime  @default(now())

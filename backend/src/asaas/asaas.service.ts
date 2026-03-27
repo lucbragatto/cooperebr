@@ -241,6 +241,22 @@ export class AsaasService {
         }
       }
 
+      // Se for BOLETO, buscar linha digitável
+      if (billingType === 'BOLETO') {
+        try {
+          const { data: idField } = await client.get(`/payments/${payment.id}/identificationField`);
+          if (idField?.identificationField) {
+            await this.prisma.asaasCobranca.update({
+              where: { id: asaasCobranca.id },
+              data: { linhaDigitavel: idField.identificationField },
+            });
+            return { ...asaasCobranca, linhaDigitavel: idField.identificationField };
+          }
+        } catch {
+          // Linha digitável pode não estar disponível imediatamente
+        }
+      }
+
       return asaasCobranca;
     } catch (err) {
       this.logger.error(`Erro ao emitir cobrança Asaas: ${err.response?.data?.errors || err.message}`);
