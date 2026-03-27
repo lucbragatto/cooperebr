@@ -132,7 +132,51 @@ export class CobrancasService {
     }
 
     const dtPagamento = new Date(dataPagamento);
-    const valorFinal = valorPago ?? Number(cobranca.valorLiquido);
+
+    // BUG-2: Recalcular multa/juros em tempo real se cobrança VENCIDA e multa ainda não calculada
+    if (cobranca.status === 'VENCIDO' && !Number(cobranca.valorMulta)) {
+      const coopId = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
+      if (coopId) {
+        const config = await this.prisma.cooperativa.findUnique({
+          where: { id: coopId },
+          select: { multaAtraso: true, jurosDiarios: true, diasCarencia: true },
+        });
+
+        if (config) {
+          const vencimento = new Date(cobranca.dataVencimento);
+          vencimento.setHours(0, 0, 0, 0);
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          const diasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
+          const diasCarencia = config.diasCarencia ?? 0;
+          const diasEfetivos = Math.max(0, diasAtraso - diasCarencia);
+
+          if (diasEfetivos > 0) {
+            const valorOriginal = Number(cobranca.valorLiquido);
+            // BUG-1: Precisão de 4 casas intermediárias, arredondando para 2 no final
+            const multa = Math.round(valorOriginal * (Number(config.multaAtraso) / 100) * 1e4) / 1e4;
+            const juros = Math.round(valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos * 1e4) / 1e4;
+            const valorAtualizado = Math.round((valorOriginal + multa + juros) * 100) / 100;
+
+            await this.prisma.cobranca.update({
+              where: { id },
+              data: {
+                valorMulta: Math.round(multa * 100) / 100,
+                valorJuros: Math.round(juros * 100) / 100,
+                valorAtualizado,
+              },
+            });
+
+            // Atualizar referência local para usar valor correto abaixo
+            (cobranca as any).valorAtualizado = valorAtualizado;
+            (cobranca as any).valorMulta = Math.round(multa * 100) / 100;
+            (cobranca as any).valorJuros = Math.round(juros * 100) / 100;
+          }
+        }
+      }
+    }
+
+    const valorFinal = valorPago ?? Number((cobranca as any).valorAtualizado ?? cobranca.valorLiquido);
 
     const cobrancaAtualizada = await this.prisma.cobranca.update({
       where: { id },
