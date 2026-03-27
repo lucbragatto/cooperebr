@@ -271,6 +271,55 @@ export class WhatsappCobrancaService {
     return resultado;
   }
 
+  /**
+   * Busca cooperado e suas cobranças A_VENCER/VENCIDO pelo telefone.
+   * Usado pelo menu de fatura no bot.
+   */
+  async buscarCobrancasPorTelefone(telefone: string): Promise<{
+    cooperado: any | null;
+    cobrancas: any[];
+  }> {
+    const telefoneNorm = this.formatarTelefone(telefone);
+    const telefoneSemPais = telefoneNorm.replace(/^55/, '');
+
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: {
+        OR: [
+          { telefone: telefoneNorm },
+          { telefone: telefoneSemPais },
+          { telefone: `55${telefoneSemPais}` },
+        ],
+        status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'AGUARDANDO_DOCUMENTOS'] as any[] },
+      },
+      select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
+    });
+
+    if (!cooperado) return { cooperado: null, cobrancas: [] };
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        contrato: { cooperadoId: cooperado.id },
+        status: { in: ['A_VENCER', 'PENDENTE', 'VENCIDO'] as any[] },
+      },
+      include: {
+        asaasCobrancas: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            pixCopiaECola: true,
+            linkPagamento: true,
+            boletoUrl: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { dataVencimento: 'asc' },
+    });
+
+    return { cooperado, cobrancas };
+  }
+
   private formatarTelefone(telefone: string): string {
     let digits = telefone.replace(/\D/g, '');
     if (!digits.startsWith('55')) digits = '55' + digits;

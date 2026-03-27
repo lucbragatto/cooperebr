@@ -170,6 +170,33 @@ export class WhatsappSenderService {
     await this.enviarMensagem(telefone, textoFallback, opcoes);
   }
 
+  async enviarListaMensagem(
+    telefone: string,
+    texto: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ title: string; rowId: string; description?: string }> }>,
+    opcoes?: { tipoDisparo?: string; cooperadoId?: string; cooperativaId?: string },
+  ): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/send-list`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: telefone,
+        text: texto,
+        footer: 'CoopereBR',
+        buttonText,
+        sections,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      await this.registrarMensagem(telefone, texto, 'FALHOU', opcoes);
+      throw new Error(`Erro ao enviar lista WhatsApp: ${err.error}`);
+    }
+    this.logger.log(`Lista interativa enviada para ${telefone}`);
+    await this.registrarMensagem(telefone, texto, 'ENVIADA', opcoes);
+  }
+
   async enviarPdfWhatsApp(
     telefone: string,
     pdfPath: string,
