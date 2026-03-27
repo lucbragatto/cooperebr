@@ -113,7 +113,14 @@ async function startBaileys() {
         const docMsg = rawMsg.documentMessage;
         const imgMsg = rawMsg.imageMessage;
 
-        if (imgMsg) {
+        // Resposta de lista interativa (listResponseMessage)
+        const listResponse = rawMsg.listResponseMessage;
+
+        if (listResponse) {
+          tipo = 'texto';
+          // Enviar o rowId como corpo para o backend identificar a seleção
+          corpo = listResponse.singleSelectReply?.selectedRowId || listResponse.title || null;
+        } else if (imgMsg) {
           tipo = 'imagem';
           mimeType = imgMsg.mimetype;
           corpo = imgMsg.caption || null;
@@ -199,6 +206,101 @@ app.post('/send-message', async (req, res) => {
   } catch (err) {
     console.error('❌ Erro ao enviar mensagem:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /send-list — envia mensagem interativa com lista de opções
+app.post('/send-list', async (req, res) => {
+  try {
+    if (connectionStatus !== 'connected' || !sock) {
+      return res.status(503).json({ error: 'WhatsApp não está conectado' });
+    }
+
+    const { to, text, footer, buttonText, sections } = req.body;
+    if (!to || !text || !sections?.length) {
+      return res.status(400).json({ error: 'Campos "to", "text" e "sections" são obrigatórios' });
+    }
+
+    const jid = toJid(to);
+    await sock.sendMessage(jid, {
+      text,
+      footer: footer || '',
+      title: '',
+      buttonText: buttonText || 'Selecione',
+      sections,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ Erro ao enviar lista:', err.message);
+    // Fallback: se lista interativa falhar, enviar como texto simples
+    try {
+      const { to, text, sections } = req.body;
+      let fallbackText = text + '\n';
+      for (const section of (sections || [])) {
+        if (section.title) fallbackText += `\n*${section.title}*\n`;
+        for (const row of (section.rows || [])) {
+          fallbackText += `▸ *${row.title}*`;
+          if (row.description) fallbackText += ` — ${row.description}`;
+          fallbackText += '\n';
+        }
+      }
+      fallbackText += '\n_Responda com o número da opção desejada._';
+      const jid = toJid(to);
+      await sock.sendMessage(jid, { text: fallbackText });
+      res.json({ ok: true, fallback: true });
+    } catch (fallbackErr) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// POST /send-buttons — envia mensagem interativa com botões
+app.post('/send-buttons', async (req, res) => {
+  try {
+    if (connectionStatus !== 'connected' || !sock) {
+      return res.status(503).json({ error: 'WhatsApp não está conectado' });
+    }
+
+    const { to, text, footer, buttons } = req.body;
+    if (!to || !text || !buttons?.length) {
+      return res.status(400).json({ error: 'Campos "to", "text" e "buttons" são obrigatórios' });
+    }
+
+    const jid = toJid(to);
+
+    // Tentar enviar como lista interativa (mais confiável que buttons no Baileys)
+    const sections = [{
+      title: 'Opções',
+      rows: buttons.map((b) => ({
+        title: b.texto,
+        rowId: b.id,
+      })),
+    }];
+
+    await sock.sendMessage(jid, {
+      text,
+      footer: footer || 'CoopereBR',
+      title: '',
+      buttonText: 'Escolha uma opção',
+      sections,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ Erro ao enviar botões:', err.message);
+    // Fallback: enviar como texto numerado
+    try {
+      const { to, text, buttons } = req.body;
+      let fallbackText = text + '\n\n';
+      (buttons || []).forEach((b, i) => {
+        fallbackText += `*${i + 1}.* ${b.texto}\n`;
+      });
+      fallbackText += '\n_Responda com o número ou nome da opção._';
+      const jid = toJid(to);
+      await sock.sendMessage(jid, { text: fallbackText });
+      res.json({ ok: true, fallback: true });
+    } catch (fallbackErr) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 

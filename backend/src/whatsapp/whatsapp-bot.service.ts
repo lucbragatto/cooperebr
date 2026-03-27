@@ -5,6 +5,7 @@ import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 
@@ -27,6 +28,7 @@ export class WhatsappBotService {
     private configTenant: ConfigTenantService,
     private indicacoes: IndicacoesService,
     private sender: WhatsappSenderService,
+    private cobrancaService: WhatsappCobrancaService,
     private modelos: ModeloMensagemService,
     private fluxoMotor: WhatsappFluxoMotorService,
   ) {}
@@ -91,6 +93,17 @@ export class WhatsappBotService {
       return;
     }
 
+    if (['fatura', 'faturas', 'boleto', '2a via', '2ª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
+      await this.prisma.conversaWhatsapp.upsert({
+        where: { telefone },
+        update: { estado: 'MENU_FATURA' },
+        create: { telefone, estado: 'MENU_FATURA' },
+      });
+      const conversaAtualizada = await this.prisma.conversaWhatsapp.findUnique({ where: { telefone } });
+      await this.handleMenuFatura({ ...msg, corpo: '' }, conversaAtualizada!);
+      return;
+    }
+
     // TODO: reativar quando motor dinâmico for corrigido para processar apenas etapa atual
     // Motor dinâmico desativado — enviava todas as mensagens de uma vez sem esperar resposta
     // try {
@@ -113,6 +126,12 @@ export class WhatsappBotService {
           break;
         case 'AGUARDANDO_CONFIRMACAO_CADASTRO':
           await this.handleConfirmacaoCadastro(msg, conversa);
+          break;
+        case 'MENU_FATURA':
+          await this.handleRespostaMenuFatura(msg, conversa);
+          break;
+        case 'AGUARDANDO_COMPROVANTE_PAGAMENTO':
+          await this.handleComprovantePagamento(msg, conversa);
           break;
         case 'CONCLUIDO':
           await this.handleConcluido(msg);
@@ -606,6 +625,244 @@ export class WhatsappBotService {
       telefone,
       'Seu cadastro já foi recebido! 😊 Nossa equipe entrará em contato em breve.\n\nSe quiser fazer uma nova simulação, envie outra conta de luz. 📸',
     );
+  }
+
+  // ─── MENU FATURA: lista cobranças pendentes ─────────────────────────────
+
+  private async handleMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+
+    const { cooperado, cobrancas } = await this.cobrancaService.buscarCobrancasPorTelefone(telefone);
+
+    if (!cooperado) {
+      await this.sender.enviarMensagem(
+        telefone,
+        'Não encontramos um cadastro vinculado a este número. 😕\n\nSe você é cooperado, entre em contato pelo site cooperebr.com.br para atualizar seu telefone.',
+      );
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    if (cobrancas.length === 0) {
+      await this.sender.enviarMensagem(
+        telefone,
+        `Olá, ${cooperado.nomeCompleto.split(' ')[0]}! 😊\n\nVocê não tem faturas pendentes no momento. Está tudo em dia! ✅`,
+      );
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    // Pegar cobrança mais recente (A_VENCER ou VENCIDO — já filtrado pelo service)
+    const cobranca = cobrancas[0];
+    const nome = cooperado.nomeCompleto.split(' ')[0];
+    const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
+    const ano = cobranca.anoReferencia;
+    const valor = Number(cobranca.valorLiquido).toFixed(2).replace('.', ',');
+    const dataVenc = new Date(cobranca.dataVencimento);
+    const dataVencStr = dataVenc.toLocaleDateString('pt-BR');
+
+    // Calcular dias para vencer
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const vencDate = new Date(dataVenc);
+    vencDate.setHours(0, 0, 0, 0);
+    const diasParaVencer = Math.ceil((vencDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Régua de urgência
+    let cabecalho: string;
+    if (diasParaVencer > 5) {
+      cabecalho = `✅ Sua fatura vence em ${diasParaVencer} dias`;
+    } else if (diasParaVencer >= 2) {
+      cabecalho = `⚠️ Atenção! Sua fatura vence em ${diasParaVencer} dias`;
+    } else if (diasParaVencer === 1) {
+      cabecalho = `🔔 Sua fatura vence *amanhã*!`;
+    } else if (diasParaVencer === 0) {
+      cabecalho = `🚨 Sua fatura vence *hoje*!`;
+    } else {
+      cabecalho = `❌ Sua fatura está *vencida* há ${Math.abs(diasParaVencer)} dia(s)!`;
+    }
+
+    const statusLabel = cobranca.status === 'VENCIDO' ? '⚠️ VENCIDA' : '📅 A vencer';
+
+    let texto = `💚 *CoopereBR — Fatura ${mesStr}/${ano}*\n\n`;
+    texto += `Olá, ${nome}! 👋\n\n`;
+    texto += `${cabecalho}\n\n`;
+    texto += `${statusLabel}\n`;
+    texto += `👤 ${cooperado.nomeCompleto}\n`;
+    texto += `📆 Competência: ${mesStr}/${ano}\n`;
+    texto += `💰 Valor: *R$ ${valor}*\n`;
+    texto += `📅 Vencimento: ${dataVencStr}\n`;
+
+    await this.sender.enviarMensagem(telefone, texto);
+
+    // Enviar menu com botões
+    await this.sender.enviarMenuComBotoes(
+      telefone,
+      'Como deseja pagar ou consultar?',
+      [
+        { id: 'pix', texto: 'Pagar com PIX' },
+        { id: 'boleto', texto: 'Código de barras' },
+        { id: 'portal', texto: 'Ver fatura' },
+      ],
+    );
+
+    // Salvar cobrancaId no dadosTemp para uso no handleRespostaMenuFatura
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'MENU_FATURA',
+        dadosTemp: { cobrancaId: cobranca.id },
+      },
+    });
+  }
+
+  // ─── RESPOSTA MENU FATURA: usuário escolheu opção do menu ─────────────
+
+  private async handleRespostaMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim().toLowerCase();
+
+    if (['voltar', 'sair', 'menu'].includes(corpo)) {
+      await this.resetarConversa(telefone);
+      const texto = await this.msg('boas_vindas', {}, '👋 Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸');
+      await this.sender.enviarMensagem(telefone, texto);
+      return;
+    }
+
+    // Buscar cobrança do cooperado
+    const { cooperado, cobrancas } = await this.cobrancaService.buscarCobrancasPorTelefone(telefone);
+    if (!cooperado || cobrancas.length === 0) {
+      await this.sender.enviarMensagem(telefone, 'Não encontrei faturas pendentes. Digite *voltar* para retornar.');
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    const cobranca = cobrancas[0];
+    const asaas = cobranca.asaasCobrancas?.[0];
+
+    if (corpo.includes('pix') || corpo === '1') {
+      const pixCopiaECola = asaas?.pixCopiaECola;
+      if (pixCopiaECola) {
+        await this.sender.enviarMensagem(
+          telefone,
+          `💳 *PIX Copia e Cola:*\n\n\`${pixCopiaECola}\`\n\n_Copie o código acima e cole no app do seu banco._`,
+        );
+      } else {
+        const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
+        await this.sender.enviarMensagem(
+          telefone,
+          `PIX não disponível no momento. Acesse o portal para pagar:\n${portalUrl}`,
+        );
+      }
+    } else if (corpo.includes('boleto') || corpo.includes('codigo') || corpo.includes('código') || corpo.includes('barra') || corpo === '2') {
+      const linhaDigitavel = asaas?.linhaDigitavel;
+      if (linhaDigitavel) {
+        await this.sender.enviarMensagem(
+          telefone,
+          `📄 *Código de barras:*\n\n\`${linhaDigitavel}\`\n\n_Copie e cole no app do seu banco._`,
+        );
+      } else {
+        const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
+        await this.sender.enviarMensagem(
+          telefone,
+          `Código de barras não disponível. Acesse o portal:\n${portalUrl}`,
+        );
+      }
+    } else if (corpo.includes('portal') || corpo.includes('ver fatura') || corpo === '3') {
+      const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
+      await this.sender.enviarMensagem(
+        telefone,
+        `🔗 Acesse sua fatura no portal:\n${portalUrl}\n\n_Faça login com seu CPF e senha._`,
+      );
+    } else if (corpo.includes('extrato')) {
+      const valorLiquido = Number(cobranca.valorLiquido).toFixed(2).replace('.', ',');
+      const valorMulta = Number((cobranca as any).valorMulta ?? 0).toFixed(2).replace('.', ',');
+      const valorJuros = Number((cobranca as any).valorJuros ?? 0).toFixed(2).replace('.', ',');
+      const diasAtraso = Number((cobranca as any).diasAtraso ?? 0);
+      const valorAtualizado = Number((cobranca as any).valorAtualizado ?? cobranca.valorLiquido).toFixed(2).replace('.', ',');
+
+      let extrato = `📊 *Extrato da Fatura*\n\n`;
+      extrato += `💰 Valor original: R$ ${valorLiquido}\n`;
+      if (diasAtraso > 0) {
+        extrato += `📅 Dias em atraso: ${diasAtraso}\n`;
+        extrato += `💸 Multa: R$ ${valorMulta}\n`;
+        extrato += `💸 Juros: R$ ${valorJuros}\n`;
+        extrato += `💰 *Valor atualizado: R$ ${valorAtualizado}*\n`;
+      }
+      await this.sender.enviarMensagem(telefone, extrato);
+    } else if (corpo.includes('comprovante') || corpo.includes('paguei') || corpo.includes('já paguei')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_COMPROVANTE_PAGAMENTO' },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        '📸 Por favor, envie a *foto* ou *PDF* do comprovante de pagamento para confirmarmos.',
+      );
+      return;
+    } else {
+      // Opção não reconhecida — reenviar menu
+      await this.sender.enviarMenuComBotoes(
+        telefone,
+        'Não entendi sua resposta. Escolha uma opção:',
+        [
+          { id: 'pix', texto: 'Pagar com PIX' },
+          { id: 'boleto', texto: 'Código de barras' },
+          { id: 'portal', texto: 'Ver fatura' },
+        ],
+      );
+      return;
+    }
+
+    // Após responder, reenviar menu para nova consulta
+    await this.sender.enviarMenuComBotoes(
+      telefone,
+      'Precisa de mais alguma coisa?',
+      [
+        { id: 'pix', texto: 'Pagar com PIX' },
+        { id: 'boleto', texto: 'Código de barras' },
+        { id: 'portal', texto: 'Ver fatura' },
+      ],
+    );
+  }
+
+  // ─── COMPROVANTE DE PAGAMENTO ─────────────────────────────────────────
+
+  private async handleComprovantePagamento(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone, tipo } = msg;
+
+    const isMidia = tipo === 'imagem' || tipo === 'documento';
+
+    if (!isMidia) {
+      await this.sender.enviarMensagem(
+        telefone,
+        'Por favor, envie a *foto* ou *PDF* do comprovante de pagamento. 📸',
+      );
+      return;
+    }
+
+    // Notificar SUPER_ADMIN
+    const superAdminPhone = process.env.SUPER_ADMIN_PHONE;
+    if (superAdminPhone) {
+      const { cooperado } = await this.cobrancaService.buscarCobrancasPorTelefone(telefone);
+      const nomeCooperado = cooperado?.nomeCompleto ?? telefone;
+      await this.sender.enviarMensagem(
+        superAdminPhone,
+        `📋 *Comprovante de pagamento recebido*\n\n👤 ${nomeCooperado}\n📱 ${telefone}\n\n_Verifique o comprovante e dê baixa na fatura._`,
+      ).catch((err) => this.logger.warn(`Falha ao notificar admin: ${err.message}`));
+    }
+
+    // Confirmar ao cooperado
+    await this.sender.enviarMensagem(
+      telefone,
+      '✅ Comprovante recebido! Nossa equipe vai conferir e confirmar o pagamento. Obrigado! 🙏',
+    );
+
+    // Voltar ao estado inicial
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'INICIAL' },
+    });
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
