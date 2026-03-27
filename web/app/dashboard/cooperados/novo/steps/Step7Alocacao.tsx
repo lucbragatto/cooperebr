@@ -164,8 +164,9 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
             kwhContrato: Math.round(mediaKwh),
             planoId: simulacaoData.planoSelecionadoId || undefined,
           });
-        } catch {
-          // Contrato opcional, não bloqueia
+        } catch (err) {
+          console.error('Erro ao gerar contrato:', err);
+          setErro('Erro ao gerar contrato. Cooperado cadastrado, mas entre em contato com o suporte para emitir manualmente.');
         }
       }
 

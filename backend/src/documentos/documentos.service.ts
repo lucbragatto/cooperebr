@@ -8,6 +8,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
 const BUCKET = 'documentos-cooperados';
 
@@ -28,6 +29,7 @@ export class DocumentosService {
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
     private cooperadosService: CooperadosService,
+    private whatsappCicloVida: WhatsappCicloVidaService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -59,6 +61,15 @@ export class DocumentosService {
       link: `/dashboard/cooperados/${doc.cooperadoId}`,
     });
 
+    // Notificar cooperado via WhatsApp
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: doc.cooperadoId },
+      select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
+    });
+    if (cooperado) {
+      this.whatsappCicloVida.notificarDocumentoAprovado(cooperado).catch(() => {});
+    }
+
     await this.cooperadosService.checkProntoParaAtivar(doc.cooperadoId);
 
     return resultado;
@@ -83,6 +94,15 @@ export class DocumentosService {
       cooperadoId: doc.cooperadoId,
       link: `/dashboard/cooperados/${doc.cooperadoId}`,
     });
+
+    // Notificar cooperado via WhatsApp
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: doc.cooperadoId },
+      select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
+    });
+    if (cooperado) {
+      this.whatsappCicloVida.notificarDocumentoReprovado(cooperado, motivoRejeicao.trim()).catch(() => {});
+    }
 
     return resultado;
   }

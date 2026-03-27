@@ -32,6 +32,7 @@ import {
   Globe,
   Gift,
   UserPlus,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -80,6 +81,7 @@ function getNavSections(perfil: string): NavSection[] {
       items: [
         { href: '/dashboard/usuarios', label: 'Usuários', icon: Users },
         { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
+        { href: '/dashboard/observador', label: 'Observador', icon: Eye },
       ],
     },
     {
@@ -88,6 +90,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
         { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
         { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
+        { href: '/dashboard/usinas/listas', label: 'Listas Concessionária', icon: FileText },
         { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
         { href: '/dashboard/planos', label: 'Planos', icon: Tag },
         { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
@@ -99,12 +102,17 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
         { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
         { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+        { href: '/dashboard/clube-vantagens', label: 'Clube de Vantagens', icon: Gift },
+        { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
+        { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
+        { href: '/dashboard/administradoras', label: 'Administradoras', icon: Building2 },
       ],
     },
     {
       title: 'Financeiro',
       items: [
         { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
+        { href: '/dashboard/financeiro/pix-excedente', label: 'PIX Excedente', icon: Zap },
         { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
         { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
         { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },

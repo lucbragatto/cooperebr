@@ -175,6 +175,38 @@ export class CooperativasService {
     };
   }
 
+  async meuDashboard(cooperativaId: string) {
+    const now = new Date();
+    const mesAtual = now.getMonth() + 1;
+    const anoAtual = now.getFullYear();
+
+    const [membrosTotal, membrosAtivos, inadimplentes, receitaAgg] = await Promise.all([
+      this.prisma.cooperado.count({ where: { cooperativaId } }),
+      this.prisma.cooperado.count({
+        where: { cooperativaId, status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS', 'APROVADO'] } },
+      }),
+      this.prisma.cobranca.count({
+        where: { cooperativaId, status: 'VENCIDO' },
+      }),
+      this.prisma.cobranca.aggregate({
+        _sum: { valorLiquido: true },
+        where: {
+          cooperativaId,
+          status: 'PAGO',
+          mesReferencia: mesAtual,
+          anoReferencia: anoAtual,
+        },
+      }),
+    ]);
+
+    return {
+      membrosAtivos,
+      membrosTotal,
+      inadimplentes,
+      receitaMes: Number(receitaAgg._sum.valorLiquido ?? 0),
+    };
+  }
+
   async remove(id: string) {
     const cooperativa = await this.prisma.cooperativa.findUnique({ where: { id } });
     if (!cooperativa) {

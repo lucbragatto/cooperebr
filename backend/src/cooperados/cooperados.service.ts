@@ -5,6 +5,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 
 const BUCKET = 'documentos-cooperados';
@@ -17,6 +19,8 @@ export class CooperadosService {
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
     private usinasService: UsinasService,
+    private whatsappCicloVida: WhatsappCicloVidaService,
+    private whatsappSender: WhatsappSenderService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -269,6 +273,9 @@ export class CooperadosService {
           take: 1,
           orderBy: { createdAt: 'desc' },
         },
+        progressaoClube: {
+          select: { nivelAtual: true, indicadosAtivos: true, beneficioPercentualAtual: true },
+        },
         _count: {
           select: {
             faturasProcessadas: true,
@@ -340,6 +347,7 @@ export class CooperadosService {
         checklistPronto: checklistFeito === checklistTotal,
         checklistItems,
         createdAt: c.createdAt,
+        progressaoClube: (c as any).progressaoClube ?? null,
         // SUPER_ADMIN: info do parceiro (quando sem filtro cooperativaId)
         ...(!cooperativaId && (c as any).cooperativa ? {
           nomeParceiro: (c as any).cooperativa.nome,
@@ -392,7 +400,12 @@ export class CooperadosService {
     usinaPropriaId?: string;
     percentualRepasse?: number;
   }) {
-    return this.prisma.cooperado.create({ data });
+    const cooperado = await this.prisma.cooperado.create({ data });
+
+    // Notificar novo membro via WhatsApp
+    this.whatsappCicloVida.notificarMembroCriado(cooperado).catch(() => {});
+
+    return cooperado;
   }
 
   async update(id: string, data: Partial<{
@@ -473,6 +486,11 @@ export class CooperadosService {
           cooperadoId: id,
           link: `/dashboard/cooperados/${id}`,
         });
+
+        // Notificar via WhatsApp que concessionária aprovou (contrato ativo)
+        if (anterior?.status === 'AGUARDANDO_CONCESSIONARIA') {
+          this.whatsappCicloVida.notificarConcessionariaAprovada(cooperado).catch(() => {});
+        }
       }
     }
 
@@ -793,6 +811,95 @@ export class CooperadosService {
       mesesDescartados: media.mesesDescartados,
       cotaAtualizada: media.media > 0 && media.media !== Number(cooperado.cotaKwhMensal ?? 0),
     };
+  }
+
+  // ─── Ações em Lote ──────────────────────────────────────────────────────────
+
+  async enviarWhatsappLote(cooperadoIds: string[], mensagem: string, cooperativaId?: string) {
+    const ids = cooperadoIds.slice(0, 50); // máx 50 por chamada
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: { id: { in: ids }, ...(cooperativaId ? { cooperativaId } : {}) },
+      select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+    });
+
+    let enviados = 0;
+    let erros = 0;
+    for (const c of cooperados) {
+      if (!c.telefone) { erros++; continue; }
+      try {
+        await this.whatsappSender.enviarMensagem(c.telefone, mensagem, {
+          tipoDisparo: 'LOTE_MANUAL',
+          cooperadoId: c.id,
+          cooperativaId: c.cooperativaId ?? undefined,
+        });
+        enviados++;
+      } catch {
+        erros++;
+      }
+      // Delay 3-5s entre envios
+      await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
+    }
+    return { total: cooperados.length, enviados, erros };
+  }
+
+  async aplicarReajusteLote(cooperadoIds: string[], percentual: number, motivo: string, cooperativaId?: string) {
+    const contratos = await this.prisma.contrato.findMany({
+      where: {
+        cooperadoId: { in: cooperadoIds },
+        status: 'ATIVO',
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+    });
+
+    let atualizados = 0;
+    for (const contrato of contratos) {
+      const novoDesconto = Math.max(0, Math.min(100, Number(contrato.percentualDesconto) + percentual));
+      await this.prisma.contrato.update({
+        where: { id: contrato.id },
+        data: {
+          percentualDesconto: novoDesconto,
+          ultimoReajusteEm: new Date(),
+        },
+      });
+      atualizados++;
+    }
+    return { total: contratos.length, atualizados };
+  }
+
+  async aplicarBeneficioManualLote(dto: { cooperadoIds: string[]; valor: number; tipo: string; mesReferencia: string }, cooperativaId?: string) {
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: { id: { in: dto.cooperadoIds }, ...(cooperativaId ? { cooperativaId } : {}) },
+      select: { id: true, nomeCompleto: true },
+    });
+
+    const criados: any[] = [];
+    for (const c of cooperados) {
+      const lancamento = await this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'DESPESA',
+          descricao: `Beneficio manual - ${c.nomeCompleto} - ${dto.mesReferencia}`,
+          valor: dto.valor,
+          competencia: dto.mesReferencia,
+          status: 'PENDENTE',
+          cooperadoId: c.id,
+          cooperativaId: cooperativaId ?? undefined,
+          observacoes: `Tipo: ${dto.tipo || 'MANUAL'}`,
+        },
+      });
+      criados.push(lancamento);
+    }
+    return { total: cooperados.length, criados: criados.length };
+  }
+
+  async alterarStatusLote(dto: { cooperadoIds: string[]; status: string }, cooperativaId?: string) {
+    const { count } = await this.prisma.cooperado.updateMany({
+      where: {
+        id: { in: dto.cooperadoIds },
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+      data: { status: dto.status as any },
+    });
+    return { total: dto.cooperadoIds.length, atualizados: count };
   }
 
   private calcularMediaConsumo(

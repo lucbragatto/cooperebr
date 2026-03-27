@@ -15,9 +15,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search } from 'lucide-react';
+import AcoesLoteBar from '@/components/AcoesLoteBar';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import { getUsuario } from '@/lib/auth';
+import BadgeNivelClube from '@/components/BadgeNivelClube';
 
 interface ChecklistItem {
   label: string;
@@ -39,6 +41,11 @@ interface CooperadoLista {
   checklist: string;
   checklistPronto: boolean;
   checklistItems: ChecklistItem[];
+  progressaoClube?: {
+    nivelAtual: string;
+    indicadosAtivos: number;
+    beneficioPercentualAtual: number;
+  } | null;
   createdAt: string;
   nomeParceiro?: string;
   tipoParceiro?: string;
@@ -71,7 +78,9 @@ const CONTRATO_CONFIG: Record<string, { label: string; color: string }> = {
 
 function AcoesDropdown({ cooperado }: { cooperado: CooperadoLista }) {
   const [aberto, setAberto] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -81,13 +90,32 @@ function AcoesDropdown({ cooperado }: { cooperado: CooperadoLista }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [aberto]);
 
+  function toggleDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!aberto && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const menuW = 192;
+      const menuH = 180;
+      const flipUp = rect.bottom + menuH > window.innerHeight;
+      const flipLeft = rect.right > window.innerWidth - menuW;
+      setMenuStyle({
+        position: 'fixed',
+        top: flipUp ? rect.top - menuH - 4 : rect.bottom + 4,
+        left: flipLeft ? rect.right - menuW : rect.left,
+        width: menuW,
+        zIndex: 9999,
+      });
+    }
+    setAberto(!aberto);
+  }
+
   return (
-    <div className="relative" ref={ref}>
-      <Button variant="ghost" size="sm" onClick={() => setAberto(!aberto)}>
+    <div ref={ref}>
+      <Button variant="ghost" size="sm" ref={btnRef} onMouseDown={(e) => e.preventDefault()} onClick={toggleDropdown}>
         <MoreVertical className="h-4 w-4" />
       </Button>
       {aberto && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+        <div style={menuStyle} className="bg-white border border-gray-200 rounded-md shadow-lg">
           <Link href={`/dashboard/cooperados/${cooperado.id}`} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => setAberto(false)}>
             <Eye className="h-4 w-4" /> Ver perfil
           </Link>
@@ -140,17 +168,45 @@ function ChecklistTooltip({ checklist, items }: { checklist: string; items?: Che
   );
 }
 
-function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: CooperadoLista[]; carregando: boolean; tipoMembro: string }) {
+// ─── Tabela ───────────────────────────────────────────────────────────────────
+
+function TabelaCooperados({
+  cooperados,
+  carregando,
+  tipoMembro,
+  selecionados,
+  onToggle,
+  onToggleAll,
+}: {
+  cooperados: CooperadoLista[];
+  carregando: boolean;
+  tipoMembro: string;
+  selecionados: string[];
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
+}) {
+  const todosIds = cooperados.map(c => c.id);
+  const todosSelecionados = cooperados.length > 0 && todosIds.every(id => selecionados.includes(id));
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-10">
+            <input
+              type="checkbox"
+              checked={todosSelecionados}
+              onChange={onToggleAll}
+              className="rounded border-gray-300"
+            />
+          </TableHead>
           <TableHead>Nome</TableHead>
           <TableHead>CPF/CNPJ</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Usina</TableHead>
           <TableHead>Contrato</TableHead>
           <TableHead>Checklist</TableHead>
+          <TableHead>Clube</TableHead>
           <TableHead className="text-right">Acoes</TableHead>
         </TableRow>
       </TableHeader>
@@ -158,7 +214,7 @@ function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: 
         {carregando ? (
           Array.from({ length: 5 }).map((_, i) => (
             <TableRow key={i}>
-              {Array.from({ length: 7 }).map((_, j) => (
+              {Array.from({ length: 9 }).map((_, j) => (
                 <TableCell key={j}>
                   <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                 </TableCell>
@@ -167,7 +223,7 @@ function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: 
           ))
         ) : cooperados.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={7} className="text-center text-gray-400 py-8">
+            <TableCell colSpan={9} className="text-center text-gray-400 py-8">
               Nenhum {tipoMembro.toLowerCase()} cadastrado
             </TableCell>
           </TableRow>
@@ -175,14 +231,38 @@ function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: 
           cooperados.map((c) => {
             const st = STATUS_CONFIG[c.status];
             const ct = c.statusContrato ? CONTRATO_CONFIG[c.statusContrato] : null;
+            const checked = selecionados.includes(c.id);
             return (
-              <TableRow key={c.id} className={c.checklistPronto && c.status === 'PENDENTE' ? 'bg-green-50/50' : ''}>
+              <TableRow key={c.id} className={`${c.checklistPronto && c.status === 'PENDENTE' ? 'bg-green-50/50' : ''} ${checked ? 'bg-blue-50/50' : ''}`}>
                 <TableCell>
-                  <div>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle(c.id)}
+                    className="rounded border-gray-300"
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
                     <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
                     {c.tipoCooperado === 'SEM_UC' && (
                       <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
                     )}
+                    <button
+                      title="Observar este membro"
+                      className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const fn = (window as any).__observadorAbrirModal;
+                        if (fn) {
+                          fn({ id: c.id, nomeCompleto: c.nomeCompleto, cpf: c.cpf, telefone: c.telefone, cooperativaId: c.cooperativaId });
+                        } else {
+                          window.location.href = `/dashboard/observador?userId=${c.id}&nome=${encodeURIComponent(c.nomeCompleto)}&telefone=${c.telefone || ''}`;
+                        }
+                      }}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
@@ -211,6 +291,18 @@ function TabelaCooperados({ cooperados, carregando, tipoMembro }: { cooperados: 
                 <TableCell>
                   <ChecklistTooltip checklist={c.checklist} items={c.checklistItems} />
                 </TableCell>
+                <TableCell>
+                  {c.progressaoClube ? (
+                    <BadgeNivelClube
+                      nivel={c.progressaoClube.nivelAtual}
+                      beneficioAtivo={c.progressaoClube.beneficioPercentualAtual > 0}
+                      indicados={c.progressaoClube.indicadosAtivos}
+                      compact
+                    />
+                  ) : (
+                    <span className="text-gray-400 text-sm">&mdash;</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <AcoesDropdown cooperado={c} />
                 </TableCell>
@@ -228,6 +320,8 @@ export default function CooperadosPage() {
   const [carregando, setCarregando] = useState(true);
   const [filtroParceiro, setFiltroParceiro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
 
@@ -245,8 +339,16 @@ export default function CooperadosPage() {
     carregarCooperados();
   }, [carregarCooperados]);
 
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   function handleBuscaChange(valor: string) {
     setBusca(valor);
+    setSelecionados([]);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setCarregando(true);
@@ -282,6 +384,20 @@ export default function CooperadosPage() {
     );
   });
 
+  function toggleSelecionado(id: string) {
+    setSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  function toggleTodos() {
+    const ids = cooperadosFiltrados.map(c => c.id);
+    const todosSelecionados = ids.every(id => selecionados.includes(id));
+    if (todosSelecionados) {
+      setSelecionados(prev => prev.filter(x => !ids.includes(x)));
+    } else {
+      setSelecionados(prev => [...new Set([...prev, ...ids])]);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -294,11 +410,31 @@ export default function CooperadosPage() {
         </Link>
       </div>
 
+      {/* Toast */}
+      {toast && (
+        <div className="mb-4 px-4 py-2 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
+          {toast}
+        </div>
+      )}
+
+      {/* Acoes em Lote */}
+      {selecionados.length > 0 && (
+        <AcoesLoteBar
+          selecionados={selecionados}
+          onLimpar={() => setSelecionados([])}
+          onSucesso={(msg) => {
+            setToast(msg);
+            setCarregando(true);
+            carregarCooperados(busca || undefined);
+          }}
+        />
+      )}
+
       {/* SUPER_ADMIN: cards de resumo por parceiro */}
       {isSuperAdmin && !carregando && parceiros.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <button
-            onClick={() => setFiltroParceiro(null)}
+            onClick={() => { setFiltroParceiro(null); setSelecionados([]); }}
             className={`text-left rounded-lg border p-3 transition-colors ${
               filtroParceiro === null ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
             }`}
@@ -313,7 +449,7 @@ export default function CooperadosPage() {
           {parceiros.map((p) => (
             <button
               key={p.id}
-              onClick={() => setFiltroParceiro(p.id)}
+              onClick={() => { setFiltroParceiro(p.id); setSelecionados([]); }}
               className={`text-left rounded-lg border p-3 transition-colors ${
                 filtroParceiro === p.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
               }`}
@@ -353,7 +489,14 @@ export default function CooperadosPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <TabelaCooperados cooperados={cooperadosFiltrados} carregando={carregando} tipoMembro={tipoMembro} />
+          <TabelaCooperados
+            cooperados={cooperadosFiltrados}
+            carregando={carregando}
+            tipoMembro={tipoMembro}
+            selecionados={selecionados}
+            onToggle={toggleSelecionado}
+            onToggleAll={toggleTodos}
+          />
         </CardContent>
       </Card>
     </div>

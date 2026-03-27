@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../prisma.service';
 import { ConfiguracaoCobrancaService } from '../configuracao-cobranca/configuracao-cobranca.service';
 import { AsaasService } from '../asaas/asaas.service';
+import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
 export interface CobrancaCalculo {
   contratoId: string;
@@ -27,6 +29,8 @@ export class CobrancasService {
     private prisma: PrismaService,
     private configuracaoCobrancaService: ConfiguracaoCobrancaService,
     private asaasService: AsaasService,
+    private clubeVantagensService: ClubeVantagensService,
+    private whatsappCicloVida: WhatsappCicloVidaService,
   ) {}
 
   async findAll(cooperativaId?: string) {
@@ -101,6 +105,22 @@ export class CobrancasService {
       }
     }
 
+    // Notificar cooperado via WhatsApp sobre nova cobrança (aviso de vencimento)
+    if (contrato?.cooperado?.telefone) {
+      try {
+        const mesRef = `${String(data.mesReferencia).padStart(2, '0')}/${data.anoReferencia}`;
+        const vencimento = data.dataVencimento.toLocaleDateString('pt-BR');
+        this.whatsappCicloVida.notificarCobrancaGerada(
+          { ...contrato.cooperado, cooperativaId: resolvedCoopId ?? contrato.cooperado.cooperativaId },
+          mesRef,
+          Number(data.valorLiquido),
+          vencimento,
+        ).catch(() => {});
+      } catch (err) {
+        this.logger.warn(`Falha ao notificar cobrança gerada via WhatsApp: ${(err as Error).message}`);
+      }
+    }
+
     return cobranca;
   }
 
@@ -166,6 +186,74 @@ export class CobrancasService {
       this.logger.warn(`Falha ao criar LancamentoCaixa na baixa: ${err.message}`);
     }
 
+    // Notificar pagamento confirmado via WhatsApp
+    try {
+      const cooperado = cobranca.contrato?.cooperado;
+      if (cooperado) {
+        const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+        this.whatsappCicloVida.notificarPagamentoConfirmado(cooperado, valorFinal, mesRef).catch(() => {});
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao notificar pagamento via WhatsApp: ${err.message}`);
+    }
+
+    // Clube de Vantagens: atualizar métricas dos indicadores
+    try {
+      const cooperadoId = cobranca.contrato?.cooperadoId;
+      if (cooperadoId) {
+        const indicacoes = await this.prisma.indicacao.findMany({
+          where: { cooperadoIndicadoId: cooperadoId, status: 'PRIMEIRA_FATURA_PAGA' },
+          select: { cooperadoIndicadorId: true },
+        });
+
+        // Buscar dados dos indicadores para notificação
+        const indicadorIds = indicacoes.map(i => i.cooperadoIndicadorId);
+        const indicadores = indicadorIds.length > 0
+          ? await this.prisma.cooperado.findMany({
+              where: { id: { in: indicadorIds } },
+              select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+            })
+          : [];
+        const indicadorMap = new Map(indicadores.map(i => [i.id, i]));
+
+        const kwhEntregue = cobranca.kwhEntregue ?? 0;
+        const nomeIndicado = cobranca.contrato?.cooperado?.nomeCompleto ?? 'Indicado';
+
+        for (const ind of indicacoes) {
+          const resultado = await this.clubeVantagensService.atualizarMetricas(
+            ind.cooperadoIndicadorId,
+            kwhEntregue,
+            valorFinal,
+          );
+
+          // Notificar indicador que indicado pagou
+          const indicador = indicadorMap.get(ind.cooperadoIndicadorId);
+          if (indicador) {
+            this.whatsappCicloVida.notificarIndicadoPagou(
+              indicador,
+              nomeIndicado,
+              `R$ ${valorFinal.toFixed(2)}`,
+            ).catch(() => {});
+
+            // Se houve promoção de nível, notificar
+            if (resultado?.promovido && resultado.nivelAnterior && resultado.nivelNovo) {
+              const progressao = await this.prisma.progressaoClube.findUnique({
+                where: { cooperadoId: ind.cooperadoIndicadorId },
+              });
+              this.whatsappCicloVida.notificarNivelPromovido(
+                indicador,
+                resultado.nivelAnterior,
+                resultado.nivelNovo,
+                progressao?.beneficioPercentualAtual ?? 0,
+              ).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao atualizar Clube de Vantagens na baixa: ${err.message}`);
+    }
+
     return cobrancaAtualizada;
   }
 
@@ -192,10 +280,10 @@ export class CobrancasService {
   }
 
   async calcularCobrancaMensal(contratoId: string, competencia: Date): Promise<CobrancaCalculo> {
-    // 1. Buscar contrato com usina
+    // 1. Buscar contrato com usina e UC (para distribuidora)
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: contratoId },
-      include: { usina: true },
+      include: { usina: true, uc: true },
     });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (!contrato.usinaId || !contrato.usina) {
@@ -231,11 +319,22 @@ export class CobrancasService {
     const baseCalculoUsada = configDesconto.baseCalculo;
     const fonteDesconto = configDesconto.fonte;
 
-    // 5. Calcular valor — por enquanto usando kwhEntregue como base
-    // O valor bruto é o kWh entregue (valor em R$ será refinado quando houver tarifa)
-    // Para TUSD_TE: usa tarifa TUSD+TE por kWh; para TOTAL_FATURA: usa valor total da fatura
-    // Por agora, retornamos os kWh calculados e o desconto — valor monetário depende de tarifa/fatura
-    const valorBruto = kwhEntregue; // placeholder: kWh entregue (será multiplicado por tarifa no item 6)
+    // 5. Buscar tarifa da distribuidora do cooperado (TUSD + TE)
+    const distribuidora = contrato.uc?.distribuidora || contrato.usina?.distribuidora;
+    if (!distribuidora) {
+      throw new BadRequestException('UC/Usina não possui distribuidora definida — impossível calcular tarifa');
+    }
+    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
+      where: { concessionaria: distribuidora },
+      orderBy: { dataVigencia: 'desc' },
+    });
+    if (!tarifaVigente) {
+      throw new BadRequestException(`Tarifa não encontrada para a distribuidora "${distribuidora}". Cadastre a tarifa antes de gerar cobranças.`);
+    }
+    const tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
+
+    // 6. Calcular valor bruto em R$ = kWh entregue × tarifa (TUSD + TE)
+    const valorBruto = kwhEntregue * tarifaKwh;
     const valorDesconto = valorBruto * (descontoAplicado / 100);
     const valorLiquido = valorBruto - valorDesconto;
 

@@ -13,8 +13,10 @@ import {
   UserPlus,
   Clock,
   CheckCircle,
+  TrendingUp,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import BadgeNivelClube from '@/components/BadgeNivelClube';
 
 interface Indicacao {
   id: string;
@@ -37,16 +39,44 @@ interface PerfilIndicacao {
   }[];
 }
 
+interface Progressao {
+  nivelAtual: string;
+  kwhIndicadoAcumulado: number;
+  indicadosAtivos: number;
+  beneficioPercentualAtual: number;
+}
+
+const NIVEL_ORDEM: Record<string, number> = { BRONZE: 0, PRATA: 1, OURO: 2, DIAMANTE: 3 };
+const NIVEIS = ['BRONZE', 'PRATA', 'OURO', 'DIAMANTE'];
+const NIVEL_KWH_MIN: Record<string, number> = { BRONZE: 0, PRATA: 500, OURO: 2000, DIAMANTE: 5000 };
+const NIVEL_KWH_MAX: Record<string, number> = { BRONZE: 500, PRATA: 2000, OURO: 5000, DIAMANTE: 10000 };
+
 export default function PortalIndicacoesPage() {
   const [dados, setDados] = useState<PerfilIndicacao | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [copiado, setCopiado] = useState(false);
+  const [linkConvite, setLinkConvite] = useState('');
+  const [progressao, setProgressao] = useState<Progressao | null>(null);
+  const [erro, setErro] = useState('');
 
   useEffect(() => {
-    api
-      .get('/cooperados/meu-perfil')
-      .then((res) => setDados(res.data))
-      .catch(() => {})
+    Promise.all([
+      api.get('/cooperados/meu-perfil'),
+      api.get('/indicacoes/meu-link'),
+      api.get('/clube-vantagens/minha-progressao').catch(() => ({ data: null })),
+    ])
+      .then(([perfilRes, linkRes, progRes]) => {
+        setDados(perfilRes.data);
+        if (progRes.data) setProgressao(progRes.data);
+        const codigo = linkRes.data?.codigoIndicacao ?? linkRes.data?.codigo;
+        const linkBackend = linkRes.data?.link;
+        if (linkBackend) {
+          setLinkConvite(linkBackend);
+        } else if (codigo) {
+          setLinkConvite(`${window.location.origin}/entrar?ref=${codigo}`);
+        }
+      })
+      .catch(() => setErro('Erro ao carregar dados de indicações. Tente novamente mais tarde.'))
       .finally(() => setCarregando(false));
   }, []);
 
@@ -60,10 +90,14 @@ export default function PortalIndicacoesPage() {
     );
   }
 
-  const linkConvite =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/entrar?ref=${dados?.codigoIndicacao ?? dados?.id ?? ''}`
-      : '';
+  if (erro) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <p className="font-medium">Falha ao carregar</p>
+        <p className="text-sm mt-1">{erro}</p>
+      </div>
+    );
+  }
 
   const textoWhatsapp = encodeURIComponent(
     `Olá! Quer economizar na conta de luz com energia solar? Cadastre-se na cooperativa: ${linkConvite}`,
@@ -91,7 +125,13 @@ export default function PortalIndicacoesPage() {
         <CardContent className="pt-5 pb-5">
           <div className="flex flex-col items-center text-center">
             <div className="bg-white p-3 rounded-xl border border-gray-200 mb-3">
-              <QRCodeSVG value={linkConvite} size={140} level="M" />
+              {linkConvite ? (
+                <QRCodeSVG value={linkConvite} size={140} level="M" />
+              ) : (
+                <div className="w-[140px] h-[140px] flex items-center justify-center text-xs text-gray-400">
+                  Carregando QR Code...
+                </div>
+              )}
             </div>
             <p className="text-sm text-gray-600 mb-3">
               Compartilhe seu link e ganhe benefícios!
@@ -139,6 +179,58 @@ export default function PortalIndicacoesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Clube de Vantagens */}
+      {progressao && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500">Clube de Vantagens</p>
+                <BadgeNivelClube
+                  nivel={progressao.nivelAtual}
+                  beneficioAtivo={progressao.beneficioPercentualAtual > 0}
+                  indicados={progressao.indicadosAtivos}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div className="bg-gray-50 rounded-lg p-2">
+                <p className="text-lg font-bold text-gray-800">
+                  {progressao.kwhIndicadoAcumulado.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                </p>
+                <p className="text-[10px] text-gray-500">kWh acumulados</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2">
+                <p className="text-lg font-bold text-gray-800">{progressao.indicadosAtivos}</p>
+                <p className="text-[10px] text-gray-500">Indicados ativos</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-2">
+                <p className="text-lg font-bold text-gray-800">{progressao.beneficioPercentualAtual}%</p>
+                <p className="text-[10px] text-gray-500">Benefício</p>
+              </div>
+            </div>
+            {/* Barra de progresso para próximo nível */}
+            {NIVEL_ORDEM[progressao.nivelAtual] < 3 && (
+              <div>
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>{progressao.nivelAtual}</span>
+                  <span>{NIVEIS[NIVEL_ORDEM[progressao.nivelAtual] + 1]}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(Math.max(((progressao.kwhIndicadoAcumulado - NIVEL_KWH_MIN[progressao.nivelAtual]) / (NIVEL_KWH_MAX[progressao.nivelAtual] - NIVEL_KWH_MIN[progressao.nivelAtual])) * 100, 0), 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lista de indicados */}
       <div>

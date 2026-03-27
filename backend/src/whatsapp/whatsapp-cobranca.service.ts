@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { AsaasService } from '../asaas/asaas.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { WhatsappBotService } from './whatsapp-bot.service';
 
 @Injectable()
 export class WhatsappCobrancaService {
@@ -12,6 +13,7 @@ export class WhatsappCobrancaService {
     private prisma: PrismaService,
     private asaasService: AsaasService,
     private sender: WhatsappSenderService,
+    @Inject(forwardRef(() => WhatsappBotService)) private bot: WhatsappBotService,
   ) {}
 
 
@@ -179,6 +181,93 @@ export class WhatsappCobrancaService {
       ...(limitado ? { totalNaoEnviados: cobrancas.length - limite } : {}),
     };
     this.logger.log(`Resultado envio cobranças: ${JSON.stringify(resultado)}`);
+    return resultado;
+  }
+
+  /**
+   * Cron: Abordagem proativa de cooperados inadimplentes.
+   * Executa diariamente às 9h, busca cobranças vencidas há mais de 5 dias
+   * que ainda não foram abordadas via fluxo de inadimplente.
+   */
+  @Cron('0 9 * * *', { timeZone: 'America/Sao_Paulo' })
+  async cronAbordagemInadimplentes() {
+    this.logger.log('Cron: verificando cooperados inadimplentes para abordagem...');
+    await this.abordarInadimplentes();
+  }
+
+  async abordarInadimplentes(limiteEnvios = 20): Promise<{ total: number; enviados: number; erros: number }> {
+    const cincoAtras = new Date();
+    cincoAtras.setDate(cincoAtras.getDate() - 5);
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['VENCIDO', 'PENDENTE'] as any[] },
+        dataVencimento: { lt: cincoAtras },
+        // Não abordar quem já recebeu notificação de vencimento
+        notificadoVencimento: false,
+      },
+      include: {
+        contrato: {
+          include: {
+            cooperado: true,
+          },
+        },
+        asaasCobrancas: true,
+      },
+      orderBy: { dataVencimento: 'asc' },
+      take: limiteEnvios,
+    });
+
+    this.logger.log(`Encontradas ${cobrancas.length} cobranças vencidas há 5+ dias para abordagem`);
+
+    let enviados = 0;
+    let erros = 0;
+
+    for (const cobranca of cobrancas) {
+      const cooperado = (cobranca as any).contrato?.cooperado;
+      if (!cooperado?.telefone) continue;
+
+      try {
+        const telefone = this.formatarTelefone(cooperado.telefone);
+        const valor = Number(cobranca.valorLiquido ?? cobranca.valorBruto);
+        const dataVencimento = new Date(cobranca.dataVencimento);
+
+        // Buscar PIX
+        let pixCopiaECola: string | undefined;
+        let linkPagamento: string | undefined;
+        const asaasCobranca = (cobranca as any).asaasCobrancas?.[0];
+        if (asaasCobranca) {
+          pixCopiaECola = asaasCobranca.pixCopiaECola || undefined;
+          linkPagamento = asaasCobranca.linkPagamento || undefined;
+        }
+
+        await this.bot.iniciarFluxoInadimplente(
+          telefone,
+          cobranca.id,
+          cooperado.nomeCompleto,
+          valor,
+          dataVencimento,
+          pixCopiaECola,
+          linkPagamento,
+        );
+
+        // Marcar como notificado
+        await this.prisma.cobranca.update({
+          where: { id: cobranca.id },
+          data: { notificadoVencimento: true },
+        });
+
+        enviados++;
+        this.logger.log(`Abordagem inadimplente enviada para ${cooperado.nomeCompleto} (${telefone})`);
+        await this.delayAleatorio();
+      } catch (err) {
+        erros++;
+        this.logger.error(`Erro na abordagem inadimplente cobrança ${cobranca.id}: ${err.message}`);
+      }
+    }
+
+    const resultado = { total: cobrancas.length, enviados, erros };
+    this.logger.log(`Resultado abordagem inadimplentes: ${JSON.stringify(resultado)}`);
     return resultado;
   }
 

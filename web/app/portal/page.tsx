@@ -51,6 +51,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function PortalInicioPage() {
   const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [linkIndicacao, setLinkIndicacao] = useState('');
   const usuario = getUsuario();
 
   useEffect(() => {
@@ -60,6 +61,12 @@ export default function PortalInicioPage() {
       .catch(() => {})
       .finally(() => setCarregando(false));
   }, []);
+
+  useEffect(() => {
+    if (perfil?.codigoIndicacao) {
+      setLinkIndicacao(`${window.location.origin}/entrar?ref=${perfil.codigoIndicacao}`);
+    }
+  }, [perfil]);
 
   if (carregando) {
     return (
@@ -74,11 +81,6 @@ export default function PortalInicioPage() {
   const r = perfil?.resumo;
   const nome = perfil?.nomeCompleto?.split(' ')[0] ?? usuario?.nome?.split(' ')[0] ?? 'Membro';
   const alertas = (r?.documentosPendentes ?? 0) + (r?.faturasPendentes ?? 0);
-
-  // Link de indicação via WhatsApp
-  const linkIndicacao = typeof window !== 'undefined'
-    ? `${window.location.origin}/entrar?ref=${perfil?.codigoIndicacao ?? perfil?.id ?? ''}`
-    : '';
   const textoWhatsapp = encodeURIComponent(
     `Olá! Quer economizar na conta de luz? Participe da nossa cooperativa de energia solar! Acesse: ${linkIndicacao}`
   );

@@ -181,40 +181,16 @@ export class WhatsappMlmService {
   async processarEntradaIndicado(telefone: string, codigoRef: string) {
     const telefoneNorm = this.formatarTelefone(telefone);
 
-    // Buscar config para saber o percentual
+    // Buscar indicador para nome e cooperativaId
     const indicador = await this.prisma.cooperado.findUnique({
       where: { codigoIndicacao: codigoRef },
-      select: { cooperativaId: true },
+      select: { nomeCompleto: true, cooperativaId: true },
     });
 
-    let percentual = 15; // default
-    if (indicador?.cooperativaId) {
-      const config = await this.prisma.configIndicacao.findUnique({
-        where: { cooperativaId: indicador.cooperativaId },
-      });
-      if (config) {
-        const niveisConfig = config.niveisConfig as Array<{ nivel: number; percentual: number }>;
-        percentual = niveisConfig?.find(n => n.nivel === 1)?.percentual ?? 15;
-      }
-    }
+    const indicadorNome = indicador?.nomeCompleto?.split(' ')[0] ?? 'um amigo';
 
-    // Salvar código de indicação na conversa para uso futuro no fluxo 1
-    await this.prisma.conversaWhatsapp.upsert({
-      where: { telefone: telefoneNorm },
-      update: { dadosTemp: { codigoIndicacao: codigoRef } },
-      create: {
-        telefone: telefoneNorm,
-        estado: 'INICIAL',
-        dadosTemp: { codigoIndicacao: codigoRef },
-      },
-    });
-
-    // Enviar mensagem de boas-vindas
-    let mensagem = `👋 Olá! Você foi indicado por um amigo para conhecer a CoopereBR!\n\n`;
-    mensagem += `🌱 Economize até ${percentual}% na sua conta de luz todos os meses.\n\n`;
-    mensagem += `Para ver quanto você economizaria, *mande uma foto da sua última conta de energia!* 📸`;
-
-    await this.sender.enviarMensagem(telefoneNorm, mensagem, { tipoDisparo: 'MLM' });
+    // Usar o fluxo de convite melhorado com botões interativos
+    await this.bot.iniciarFluxoConviteIndicacao(telefoneNorm, indicadorNome, codigoRef);
 
     return { ok: true, telefone: telefoneNorm };
   }

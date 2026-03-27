@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
+import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
 @Injectable()
 export class IndicacoesService {
   private readonly logger = new Logger(IndicacoesService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private clubeVantagensService: ClubeVantagensService,
+    @Inject(forwardRef(() => WhatsappCicloVidaService)) private whatsappCicloVida: WhatsappCicloVidaService,
+  ) {}
 
   // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -196,6 +202,17 @@ export class IndicacoesService {
       nivel++;
     }
 
+    // Clube de Vantagens: criar progressão para o indicador e recalcular indicados
+    try {
+      await this.clubeVantagensService.criarOuObterProgressao(indicador.id);
+      await this.clubeVantagensService.recalcularIndicadosAtivos(indicador.id);
+    } catch (err) {
+      this.logger.warn(`Falha ao inicializar Clube de Vantagens para indicador: ${err.message}`);
+    }
+
+    // Notificar indicador que indicado se cadastrou
+    this.whatsappCicloVida.notificarIndicadoCadastrou(indicador, indicado.nomeCompleto).catch(() => {});
+
     return indicacoes;
   }
 
@@ -269,6 +286,16 @@ export class IndicacoesService {
             }),
           );
         }
+      }
+    }
+
+    // Clube de Vantagens: recalcular indicados ativos para cada indicador
+    const indicadoresUnicos = [...new Set(indicacoes.map(i => i.cooperadoIndicadorId))];
+    for (const indicadorId of indicadoresUnicos) {
+      try {
+        await this.clubeVantagensService.recalcularIndicadosAtivos(indicadorId);
+      } catch (err) {
+        this.logger.warn(`Falha ao recalcular indicados ativos no Clube: ${err.message}`);
       }
     }
 

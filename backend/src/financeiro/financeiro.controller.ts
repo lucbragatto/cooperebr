@@ -8,6 +8,7 @@ import { LancamentosService } from './lancamentos.service';
 import { ContratosUsoService } from './contratos-uso.service';
 import { ConveniosService } from './convenios.service';
 import { FormaPagamentoService } from './forma-pagamento.service';
+import { PixExcedenteService } from './pix-excedente.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -19,6 +20,7 @@ export class FinanceiroController {
     private readonly contratosUsoService: ContratosUsoService,
     private readonly conveniosService: ConveniosService,
     private readonly formaPagamentoService: FormaPagamentoService,
+    private readonly pixExcedenteService: PixExcedenteService,
   ) {}
 
   // ─── Plano de Contas ───────────────────────────────────────
@@ -205,5 +207,67 @@ export class FinanceiroController {
   @Patch('forma-pagamento/:cooperadoId')
   updateFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Body() body: any) {
     return this.formaPagamentoService.createOrUpdate(cooperadoId, body);
+  }
+
+  // ─── PIX Excedente ─────────────────────────────────────────
+
+  /**
+   * POST /financeiro/pix-excedente
+   * Calcula o excedente de geração solar, deduz impostos configuráveis e registra
+   * a transferência PIX (simulada). Estrutura preparada para integração bancária real.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post('pix-excedente')
+  processarPixExcedente(@Body() body: any, @Req() req: any) {
+    return this.pixExcedenteService.processarPixExcedente({
+      ...body,
+      cooperativaId: body.cooperativaId ?? req.user?.cooperativaId,
+    });
+  }
+
+  /**
+   * GET /financeiro/pix-excedente
+   * Lista histórico de transferências PIX de excedente
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('pix-excedente')
+  listarPixExcedente(
+    @Req() req: any,
+    @Query('cooperadoId') cooperadoId?: string,
+    @Query('condominioId') condominioId?: string,
+    @Query('mesReferencia') mesReferencia?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.pixExcedenteService.listarTransferencias({
+      cooperativaId: req.user?.cooperativaId,
+      cooperadoId,
+      condominioId,
+      mesReferencia,
+      status,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+    });
+  }
+
+  /**
+   * GET /financeiro/pix-excedente/resumo
+   * Resumo agregado de excedentes por status
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('pix-excedente/resumo')
+  resumoPixExcedente(@Req() req: any) {
+    return this.pixExcedenteService.resumoExcedentes(req.user?.cooperativaId);
+  }
+
+  /**
+   * GET /financeiro/pix-excedente/:id
+   * Detalhes de uma transferência
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('pix-excedente/:id')
+  getPixExcedente(@Param('id') id: string) {
+    return this.pixExcedenteService.getTransferencia(id);
   }
 }

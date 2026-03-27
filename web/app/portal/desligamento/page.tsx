@@ -59,7 +59,8 @@ export default function PortalDesligamentoPage() {
         });
       })
       .catch(() => {
-        setChecklist({ semFaturasAberto: true, semGeracaoAtiva: true });
+        setChecklist({ semFaturasAberto: false, semGeracaoAtiva: false });
+        setErro('Não foi possível verificar suas pendências. Tente novamente mais tarde.');
       })
       .finally(() => setCarregando(false));
   }, []);
@@ -170,6 +171,11 @@ export default function PortalDesligamentoPage() {
               label="Sem geração ativa no mês corrente"
             />
           </div>
+          {erro && !checklist?.semFaturasAberto && !checklist?.semGeracaoAtiva && (
+            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-3">
+              {erro}
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
 @Injectable()
 export class CobrancasJob {
   private readonly logger = new Logger(CobrancasJob.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsappCicloVida: WhatsappCicloVidaService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async marcarVencidas() {
@@ -74,7 +78,6 @@ export class CobrancasJob {
       const multa = valorOriginal * (Number(config.multaAtraso) / 100);
       const juros = valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos;
 
-      // Não atualizar se já foi calculado (para evitar acumulação)
       // Recalcula sempre baseado no valorLiquido original
       const valorAtualizado = valorOriginal + multa + juros;
 
@@ -95,6 +98,67 @@ export class CobrancasJob {
 
     if (atualizadas > 0) {
       this.logger.log(`${atualizadas} cobrança(s) com multa/juros calculados`);
+    }
+  }
+
+  /**
+   * Notifica cooperados com cobranças vencidas via WhatsApp (diário às 6h).
+   * Só notifica uma vez por cobrança (flag notificadoVencimento).
+   */
+  @Cron('0 6 * * *')
+  async notificarCobrancasVencidas() {
+    const ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
+    ontem.setHours(0, 0, 0, 0);
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['PENDENTE', 'VENCIDO'] as any },
+        dataVencimento: { lt: hoje },
+        notificadoVencimento: false,
+      },
+      include: {
+        contrato: {
+          include: {
+            cooperado: {
+              select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (cobrancas.length === 0) return;
+
+    let enviados = 0;
+    for (const cobranca of cobrancas) {
+      const cooperado = cobranca.contrato?.cooperado;
+      if (!cooperado?.telefone) continue;
+
+      const vencimento = new Date(cobranca.dataVencimento);
+      vencimento.setHours(0, 0, 0, 0);
+      const diasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
+      const valor = Number(cobranca.valorAtualizado ?? cobranca.valorLiquido);
+
+      try {
+        await this.whatsappCicloVida.notificarCobrancaVencida(cooperado, valor, diasAtraso);
+        await this.prisma.cobranca.update({
+          where: { id: cobranca.id },
+          data: { notificadoVencimento: true },
+        });
+        enviados++;
+      } catch (err) {
+        this.logger.warn(`Falha ao notificar cobrança vencida ${cobranca.id}: ${err.message}`);
+      }
+
+      await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
+    }
+
+    if (enviados > 0) {
+      this.logger.log(`${enviados} notificação(ões) de cobrança vencida enviada(s)`);
     }
   }
 }

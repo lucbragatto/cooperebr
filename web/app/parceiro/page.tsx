@@ -21,23 +21,20 @@ export default function ParceiroDashboardPage() {
   useEffect(() => {
     async function carregar() {
       try {
-        // Buscar KPIs do parceiro
-        const [membrosRes, usinasRes] = await Promise.allSettled([
-          api.get('/cooperados', { params: { limit: 1 } }),
+        const [dashRes, usinasRes] = await Promise.allSettled([
+          api.get('/cooperativas/meu-dashboard'),
           api.get('/usinas'),
         ]);
 
-        const membros = membrosRes.status === 'fulfilled' ? membrosRes.value.data : [];
+        const dash = dashRes.status === 'fulfilled' ? dashRes.value.data : null;
         const usinas = usinasRes.status === 'fulfilled' ? usinasRes.value.data : [];
-
-        const membrosArr = Array.isArray(membros) ? membros : membros?.data ?? [];
         const usinasArr = Array.isArray(usinas) ? usinas : usinas?.data ?? [];
 
         setKpis({
-          membrosAtivos: membrosArr.filter((m: any) => m.status === 'ATIVO' || m.status === 'ATIVO_RECEBENDO_CREDITOS').length,
-          membrosTotal: membrosArr.length,
-          inadimplentes: 0,
-          receitaMes: 0,
+          membrosAtivos: dash?.membrosAtivos ?? 0,
+          membrosTotal: dash?.membrosTotal ?? 0,
+          inadimplentes: dash?.inadimplentes ?? 0,
+          receitaMes: dash?.receitaMes ?? 0,
           usinasTotal: usinasArr.length,
           capacidadeKwh: usinasArr.reduce((acc: number, u: any) => acc + (Number(u.capacidadeKwh) || 0), 0),
         });

@@ -17,19 +17,13 @@ export default function ParceiroConfiguracoesPage() {
   useEffect(() => {
     async function carregar() {
       try {
-        const { data } = await api.get('/cooperativas/minha');
-        setCooperativa(data);
-      } catch {
-        // Tenta buscar do /auth/me
-        try {
-          const { data: me } = await api.get('/auth/me');
-          if (me.cooperativaId) {
-            const { data } = await api.get(`/cooperativas/${me.cooperativaId}`);
-            setCooperativa(data);
-          }
-        } catch {
-          // ignore
+        const { data: me } = await api.get('/auth/me');
+        if (me.cooperativaId) {
+          const { data } = await api.get(`/cooperativas/${me.cooperativaId}`);
+          setCooperativa(data);
         }
+      } catch {
+        // ignore
       } finally {
         setCarregando(false);
       }

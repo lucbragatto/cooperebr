@@ -1,295 +1,470 @@
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const BASE_URL = 'http://localhost:3000';
-
-// ── Credenciais de login ──
-const LOGIN_CREDENTIALS = [
-  { identificador: 'teste@cooperebr.com', senha: 'Coopere@123' },
-  { identificador: 'admin@cooperebr.com', senha: 'admin123' },
-  { identificador: 'admin@cooperebr.com', senha: 'Coopere@123' },
-];
-
-// ── Cooperativas a criar ──
-const COOPERATIVAS = [
-  {
-    nome: 'CoopereSul - Cooperativa Solar do Sul ES',
-    cnpj: '12345678000190',
-    email: 'contato@cooperesul.com.br',
-    telefone: '2733001000',
-  },
-  {
-    nome: 'CoopereVerde - Cooperativa Energia Verde ES',
-    cnpj: '98765432000155',
-    email: 'contato@coopereverde.com.br',
-    telefone: '2733002000',
-  },
-];
-
-// ── Usinas a criar ──
-const USINAS = [
-  {
-    nome: 'Usina Solar Sul - Cariacica',
-    potenciaKwp: 350,
-    cidade: 'Cariacica',
-    estado: 'ES',
-    statusHomologacao: 'EM_PRODUCAO',
-    cooperativaIndex: 0, // CoopereSul
-  },
-  {
-    nome: 'Usina Verde - Serra',
-    potenciaKwp: 200,
-    cidade: 'Serra',
-    estado: 'ES',
-    statusHomologacao: 'EM_PRODUCAO',
-    cooperativaIndex: 1, // CoopereVerde
-  },
-];
-
-// ── Lista de cooperados ──
-interface CooperadoInput {
-  nome: string;
-  cpfCnpj: string;
-  email: string;
-  telefone: string;
-  endereco: string;
-  complemento?: string;
-  cep: string;
-  cidade: string;
-  estado: string;
-}
-
-const COOPERADOS: CooperadoInput[] = [
-  { nome: 'ADRIANA MARIA ALMENARA ZAMBON', cpfCnpj: '98572652787', email: 'Adri.zambon@hotmail.com', telefone: '27992741005', endereco: 'RUA JOAQUIM LIRIO 366', complemento: 'AP 1601 ED JAZZ RESIDENCE', cep: '29055460', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'AESMP - Associacao ES Ministerio Publico', cpfCnpj: '27268077000101', email: 'secretaria@aesmp.org.br', telefone: '27999037503', endereco: 'RUA PRFA EMILIA FRANKLIN MOLULO 154', cep: '29050730', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'AGOSTINHO SOBRAL SAMPAIO', cpfCnpj: '79022596753', email: 'agsobral@gmail.com', telefone: '27981143072', endereco: 'AL HELIO DA COSTA FERRAZ 145', complemento: 'AP 1601 ED CARRARA DE D ITALIA', cep: '29055090', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ALAOR DE QUEIROZ ARAUJO NETO', cpfCnpj: '11041033702', email: 'alaorqueirozneto@gmail.com', telefone: '27997297495', endereco: 'RUA CONSTANTE SODRE 1001', complemento: 'AP 802 ED ISLA BONITA', cep: '29057545', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ALBERTO LUIZ MAFRA', cpfCnpj: '67328552715', email: 'albertomafra@uol.com.br', telefone: '27999718855', endereco: 'RUA DES JAIR MOURA MELO 102', complemento: 'AP 1101 ED BOSQUE IMPERIAL', cep: '29057200', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ANA CLAUDIA DA SILVA ROCHA', cpfCnpj: '06438834785', email: 'ana.claudia.rocha@hotmail.com', telefone: '27999720097', endereco: 'AV NOSSA SENHORA DA PENHA 2166', complemento: 'AP 303', cep: '29045402', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ANA CLAUDIA PIMENTEL BASTOS', cpfCnpj: '05576929784', email: 'anaclaupbastos@gmail.com', telefone: '27998899558', endereco: 'RUA DES JAIR MOURA MELO 102', complemento: 'AP 602', cep: '29057200', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ANA PAULA ALVES DIAS VITALI', cpfCnpj: '99741726753', email: 'anapaulad.vitali@gmail.com', telefone: '27999704445', endereco: 'RUA JOSE CUPERTINO DE SOUZA 55', complemento: 'ED JADE RESIDENCE AP 1101', cep: '29060310', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ANTONIO CESAR DE BARROS FREITAS', cpfCnpj: '28741969749', email: 'antoniofreitas.adv@gmail.com', telefone: '27999640900', endereco: 'RUA HENRIQUE MOSCOSO 53', complemento: 'AP 1001 ED UNIQUE', cep: '29010290', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'BERNARDO FERRAZ LYRIO', cpfCnpj: '33777618755', email: 'bernardolyrio@gmail.com', telefone: '27981196688', endereco: 'AV CESARIO ALVIM 1200', complemento: 'AP 1502', cep: '29055050', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'BLANCHE SPAGNOLO MORSCHEL', cpfCnpj: '72048285700', email: 'blanchemorschel@hotmail.com', telefone: '27999762022', endereco: 'AV CEL BORGES 150', complemento: 'AP 1402 ED SAN REMO', cep: '29065110', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'CARLOS HENRIQUE MOREIRA COSTA', cpfCnpj: '02023513795', email: 'carloshenriquecosta@gmail.com', telefone: '27999702878', endereco: 'AV SATURNINO DE BRITO 1000', cep: '29017040', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'CLAUDIO HENRIQUE POLI', cpfCnpj: '96375419749', email: 'chpoli@gmail.com', telefone: '27988218680', endereco: 'AV SATURNINO DE BRITO 560', complemento: 'AP 1801', cep: '29017040', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'CRISTIANE SIMOES VIEIRA NUNES', cpfCnpj: '07063827751', email: 'crissimoesv@gmail.com', telefone: '27999765985', endereco: 'RUA ENGENHEIRO ROBERTO SALES 1001', complemento: 'AP 1602', cep: '29055070', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'DANIEL PIMENTEL BASTOS', cpfCnpj: '93827978715', email: 'dpbastos@hotmail.com', telefone: '27988085152', endereco: 'RUA DES JAIR MOURA MELO 102', complemento: 'AP 602', cep: '29057200', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'DENISE PAIVA MOREIRA', cpfCnpj: '04773588736', email: 'denisepaiva20@hotmail.com', telefone: '27999226264', endereco: 'AV ROBERTO SILVARES 1020', cep: '29065630', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'ELIANA MEIRELES LOBATO', cpfCnpj: '38895440700', email: 'eliana.lobato@yahoo.com.br', telefone: '27998088120', endereco: 'RUA JOAQUIM LIRIO 366', complemento: 'AP 1301', cep: '29055460', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'FABIANA FRIZERA FRANCA', cpfCnpj: '09296753773', email: 'fabifrizera@gmail.com', telefone: '27999706506', endereco: 'RUA CONSTANTE SODRE 1250', complemento: 'AP 1601', cep: '29057545', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'FLAVIA COSTA AZEREDO', cpfCnpj: '92773416749', email: 'flavia.ca@hotmail.com', telefone: '27999757008', endereco: 'RUA DES JAIR MOURA MELO 102', complemento: 'AP 702', cep: '29057200', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'FRANCISCO SIANO NETO', cpfCnpj: '27022074787', email: 'fsiano@terra.com.br', telefone: '27999219966', endereco: 'AV SATURNINO DE BRITO 420', complemento: 'AP 1201', cep: '29017040', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'GERALDO OCTAVIO ROCHA SANTOS', cpfCnpj: '24625481715', email: 'geraldorocha@terra.com.br', telefone: '27999614522', endereco: 'RUA HENRIQUE MOSCOSO 80', complemento: 'AP 601', cep: '29010290', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'GILSON JOSE BARBOSA', cpfCnpj: '20040965734', email: 'gilsonbarbosa@hotmail.com', telefone: '27998127000', endereco: 'RUA CONSTANTE SODRE 950', cep: '29057545', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'HELOISA DE CAMPOS BASTOS', cpfCnpj: '37918505797', email: 'heloisabastos@gmail.com', telefone: '27999219800', endereco: 'AV DANTE MICHELINE 1701', complemento: 'AP 2301', cep: '29060680', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'IRIS QUEIROZ NETO', cpfCnpj: '74261889753', email: 'irisqneto@gmail.com', telefone: '27988011522', endereco: 'RUA HENRIQUE MOSCOSO 150', complemento: 'AP 802', cep: '29010290', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'JOSE CARLOS RODRIGUES GUIMARAES', cpfCnpj: '11263263715', email: 'josecarlosg@hotmail.com', telefone: '27999411520', endereco: 'AV VITORIA 2020', complemento: 'AP 1501', cep: '29017500', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'JOSE LUIZ COSTA PINTO', cpfCnpj: '33817694768', email: 'jlcpinto@gmail.com', telefone: '27999705500', endereco: 'RUA CONSTANTE SODRE 800', complemento: 'AP 1801', cep: '29057545', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'KATIA CILENE COSTA ZANDONADE', cpfCnpj: '77513879734', email: 'kzandonade@gmail.com', telefone: '27988145800', endereco: 'AV SATURNINO DE BRITO 780', complemento: 'AP 901', cep: '29017040', cidade: 'VITORIA', estado: 'ES' },
-  { nome: 'LETICIA OLIVEIRA CAMPOS', cpfCnpj: '12234567890', email: 'leticia.campos@gmail.com', telefone: '27999800100', endereco: 'RUA JOSE TEIXEIRA 200', cep: '29100100', cidade: 'CARIACICA', estado: 'ES' },
-  { nome: 'LUCAS FERREIRA MELO', cpfCnpj: '98765432100', email: 'lucas.melo@gmail.com', telefone: '27999800200', endereco: 'AV CENTRAL 500', cep: '29150100', cidade: 'SERRA', estado: 'ES' },
-  { nome: 'MARCOS ANTONIO BELO', cpfCnpj: '11122233344', email: 'marcos.belo@gmail.com', telefone: '27999800300', endereco: 'RUA DAS FLORES 100', cep: '29170100', cidade: 'VILA VELHA', estado: 'ES' },
-];
-
-// ── Helpers ──
-
-async function login(): Promise<string> {
-  for (const creds of LOGIN_CREDENTIALS) {
-    try {
-      const res = await fetch(`${BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(creds),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const token = data.token || data.access_token;
-        if (token) {
-          console.log(`✓ Login OK com ${creds.identificador}`);
-          return token;
-        }
-      }
-    } catch {
-      // tenta próxima credencial
-    }
-  }
-  throw new Error('Não foi possível fazer login com nenhuma credencial.');
-}
-
-async function apiPost(path: string, body: any, token: string): Promise<any> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = text;
-  }
-  if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
-  }
-  return data;
-}
-
-// ── Main ──
 
 async function main() {
-  const resumo = {
-    cooperativas: { ok: 0, falha: 0 },
-    usinas: { ok: 0, falha: 0 },
-    cooperados: { ok: 0, falha: 0 },
-    ucs: { ok: 0, falha: 0 },
+  console.log('🌱 Iniciando seed de dados fictícios...\n');
+
+  // ─── Cooperativa ─────────────────────────────────────────────────────────────
+  console.log('1. Criando Cooperativa...');
+  const cooperativa = await prisma.cooperativa.upsert({
+    where: { cnpj: '12.345.678/0001-99' },
+    update: {},
+    create: {
+      nome: 'CoopereBR Teste',
+      cnpj: '12.345.678/0001-99',
+      email: 'contato@cooperebr.com.br',
+      tipoParceiro: 'COOPERATIVA',
+    },
+  });
+  console.log(`   ✅ Cooperativa criada: ${cooperativa.id}\n`);
+
+  // ─── Config Clube de Vantagens ────────────────────────────────────────────────
+  console.log('2. Configurando Clube de Vantagens...');
+  await prisma.configClubeVantagens.upsert({
+    where: { cooperativaId: cooperativa.id },
+    update: {
+      ativo: true,
+      criterio: 'KWH_INDICADO_ACUMULADO',
+      niveisConfig: [
+        { nivel: 'BRONZE', minKwh: 0, maxKwh: 5000, beneficioPercentual: 2 },
+        { nivel: 'PRATA', minKwh: 5001, maxKwh: 15000, beneficioPercentual: 4 },
+        { nivel: 'OURO', minKwh: 15001, maxKwh: 50000, beneficioPercentual: 6 },
+        { nivel: 'DIAMANTE', minKwh: 50001, maxKwh: null, beneficioPercentual: 10 },
+      ],
+    },
+    create: {
+      cooperativaId: cooperativa.id,
+      ativo: true,
+      criterio: 'KWH_INDICADO_ACUMULADO',
+      niveisConfig: [
+        { nivel: 'BRONZE', minKwh: 0, maxKwh: 5000, beneficioPercentual: 2 },
+        { nivel: 'PRATA', minKwh: 5001, maxKwh: 15000, beneficioPercentual: 4 },
+        { nivel: 'OURO', minKwh: 15001, maxKwh: 50000, beneficioPercentual: 6 },
+        { nivel: 'DIAMANTE', minKwh: 50001, maxKwh: null, beneficioPercentual: 10 },
+      ],
+    },
+  });
+  console.log('   ✅ Config Clube de Vantagens criada\n');
+
+  // ─── Administradora ───────────────────────────────────────────────────────────
+  console.log('3. Criando Administradora...');
+  let administradora = await prisma.administradora.findFirst({
+    where: { cnpj: '98.765.432/0001-11', cooperativaId: cooperativa.id },
+  });
+  if (!administradora) {
+    administradora = await prisma.administradora.create({
+      data: {
+        cooperativaId: cooperativa.id,
+        razaoSocial: 'Gestão Predial Vitória Ltda',
+        cnpj: '98.765.432/0001-11',
+        email: 'contato@gestaopredial.com.br',
+        telefone: '(27) 3344-5566',
+        responsavelNome: 'Gestor Responsável',
+      },
+    });
+  }
+  console.log(`   ✅ Administradora criada: ${administradora.id}\n`);
+
+  // ─── Condomínio ───────────────────────────────────────────────────────────────
+  console.log('4. Criando Condomínio...');
+  let condominio = await prisma.condominio.findFirst({
+    where: { cnpj: '11.222.333/0001-44', cooperativaId: cooperativa.id },
+  });
+  if (!condominio) {
+    condominio = await prisma.condominio.create({
+      data: {
+        cooperativaId: cooperativa.id,
+        nome: 'Residencial Solar das Palmeiras',
+        cnpj: '11.222.333/0001-44',
+        endereco: 'Av. Leitão da Silva, 1000, Praia do Canto',
+        cidade: 'Vitória',
+        estado: 'ES',
+        administradoraId: administradora.id,
+        sindicoNome: 'Roberto Mendes',
+        sindicoEmail: 'roberto.mendes@gmail.com',
+        sindicoTelefone: '(27) 99887-6655',
+        modeloRateio: 'PERSONALIZADO',
+        excedentePolitica: 'PIX_MENSAL',
+        excedentePixChave: '11.222.333/0001-44',
+        excedentePixTipo: 'CNPJ',
+        aliquotaIR: 1.5,
+        aliquotaPIS: 0.65,
+        aliquotaCOFINS: 3.0,
+        taxaAdministrativa: 2.0,
+      },
+    });
+  }
+  console.log(`   ✅ Condomínio criado: ${condominio.id}\n`);
+
+  // ─── Condôminos ───────────────────────────────────────────────────────────────
+  console.log('5. Criando Condôminos...');
+
+  const condominosData = [
+    { numero: '101', bloco: 'A', nome: 'Maria Silva Santos', cpf: '111.222.333-44', email: 'maria.silva@gmail.com', telefone: '(27) 99111-2222', percentual: 10 },
+    { numero: '102', bloco: 'A', nome: 'João Carlos Oliveira', cpf: '222.333.444-55', email: 'joao.oliveira@gmail.com', telefone: '(27) 99222-3333', percentual: 10 },
+    { numero: '201', bloco: 'A', nome: 'Ana Paula Ferreira', cpf: '333.444.555-66', email: 'ana.ferreira@gmail.com', telefone: '(27) 99333-4444', percentual: 10 },
+    { numero: '202', bloco: 'A', nome: 'Pedro Henrique Costa', cpf: '444.555.666-77', email: 'pedro.costa@gmail.com', telefone: '(27) 99444-5555', percentual: 10 },
+    { numero: '301', bloco: 'A', nome: 'Carla Regina Souza', cpf: '555.666.777-88', email: 'carla.souza@gmail.com', telefone: '(27) 99555-6666', percentual: 10 },
+    { numero: '101', bloco: 'B', nome: 'Marcos Antonio Lima', cpf: '666.777.888-99', email: 'marcos.lima@gmail.com', telefone: '(27) 99666-7777', percentual: 10 },
+    { numero: '102', bloco: 'B', nome: 'Fernanda Cristina Rocha', cpf: '777.888.999-00', email: 'fernanda.rocha@gmail.com', telefone: '(27) 99777-8888', percentual: 10 },
+    { numero: '201', bloco: 'B', nome: 'Ricardo Alves Neto', cpf: '888.999.000-11', email: 'ricardo.alves@gmail.com', telefone: '(27) 99888-9999', percentual: 10 },
+    { numero: '202', bloco: 'B', nome: 'Patrícia Moura Dias', cpf: '999.000.111-22', email: 'patricia.moura@gmail.com', telefone: '(27) 99000-1111', percentual: 10 },
+    { numero: '301', bloco: 'B', nome: 'Gustavo Torres Pinto', cpf: '000.111.222-33', email: 'gustavo.torres@gmail.com', telefone: '(27) 99111-3333', percentual: 10 },
+  ];
+
+  const condominoIds: { [key: string]: string } = {};
+
+  for (const c of condominosData) {
+    const cooperado = await prisma.cooperado.upsert({
+      where: { cpf: c.cpf },
+      update: {},
+      create: {
+        nomeCompleto: c.nome,
+        cpf: c.cpf,
+        email: c.email,
+        telefone: c.telefone,
+        status: 'ATIVO',
+        cooperativaId: cooperativa.id,
+        tipoPessoa: 'PF',
+      },
+    });
+
+    condominoIds[c.email] = cooperado.id;
+
+    // Criar ou vincular unidade no condomínio
+    const numUnidade = `${c.numero}-${c.bloco}`;
+    const existingUnidade = await prisma.unidadeCondominio.findFirst({
+      where: { condominioId: condominio.id, numero: numUnidade },
+    });
+    if (!existingUnidade) {
+      await prisma.unidadeCondominio.create({
+        data: {
+          condominioId: condominio.id,
+          numero: numUnidade,
+          cooperadoId: cooperado.id,
+          percentualFixo: c.percentual,
+        },
+      });
+    }
+
+    console.log(`   ✅ Condômino: ${c.nome} (${numUnidade})`);
+  }
+  console.log();
+
+  // ─── Progressão no Clube ──────────────────────────────────────────────────────
+  console.log('6. Configurando Progressão no Clube de Vantagens...');
+
+  const progressoes = [
+    { email: 'maria.silva@gmail.com', kwhAcumulado: 3500, nivel: 'BRONZE' as const, indicadosAtivos: 2, beneficio: 2 },
+    { email: 'joao.oliveira@gmail.com', kwhAcumulado: 8000, nivel: 'PRATA' as const, indicadosAtivos: 5, beneficio: 4 },
+    { email: 'ana.ferreira@gmail.com', kwhAcumulado: 18000, nivel: 'OURO' as const, indicadosAtivos: 8, beneficio: 6 },
+    { email: 'pedro.costa@gmail.com', kwhAcumulado: 55000, nivel: 'DIAMANTE' as const, indicadosAtivos: 15, beneficio: 10 },
+  ];
+
+  for (const p of progressoes) {
+    const cooperadoId = condominoIds[p.email];
+    if (!cooperadoId) continue;
+
+    await prisma.progressaoClube.upsert({
+      where: { cooperadoId },
+      update: {
+        nivelAtual: p.nivel,
+        kwhIndicadoAcumulado: p.kwhAcumulado,
+        indicadosAtivos: p.indicadosAtivos,
+        beneficioPercentualAtual: p.beneficio,
+        dataUltimaAvaliacao: new Date(),
+        dataUltimaPromocao: new Date(),
+      },
+      create: {
+        cooperadoId,
+        nivelAtual: p.nivel,
+        kwhIndicadoAcumulado: p.kwhAcumulado,
+        indicadosAtivos: p.indicadosAtivos,
+        beneficioPercentualAtual: p.beneficio,
+        dataUltimaAvaliacao: new Date(),
+        dataUltimaPromocao: new Date(),
+      },
+    });
+    console.log(`   ✅ Progressão: ${p.email} → ${p.nivel} (${p.kwhAcumulado} kWh)`);
+  }
+  console.log();
+
+  // ─── Cobranças de Teste ───────────────────────────────────────────────────────
+  // Para criar cobranças, precisamos de um contrato. Vamos criar cooperado "condomínio"
+  // e usar as cobranças diretas do condomínio.
+  // Como Cobranca requer contratoId, e contratos requerem cooperado+uc+usina,
+  // vamos usar o cooperado representante do condomínio (síndico).
+  // Por ora, criamos uma entrada de cooperado do tipo condomínio para fins de cobrança.
+  // Alternativamente, criaremos as cobranças via parceiro cooperativo.
+  
+  console.log('7. Criando Cooperado-representante do Condomínio para Cobranças...');
+  const cooperadoCondominio = await prisma.cooperado.upsert({
+    where: { cpf: '111.222.333/0001-44' },
+    update: {},
+    create: {
+      nomeCompleto: 'Residencial Solar das Palmeiras',
+      cpf: '111.222.333/0001-44',
+      email: 'solar.palmeiras@gmail.com',
+      telefone: '(27) 99887-6655',
+      status: 'ATIVO',
+      cooperativaId: cooperativa.id,
+      tipoPessoa: 'PJ',
+      razaoSocial: 'Residencial Solar das Palmeiras',
+    },
+  });
+  console.log(`   ✅ Cooperado-representante criado: ${cooperadoCondominio.id}\n`);
+
+  // ─── Criar UC e Usina fictícias para viabilizar contratos ─────────────────────
+  console.log('8. Criando estrutura UC + Usina + Plano + Contratos para Cobranças...');
+
+  // Verificar se UC já existe
+  let ucCondominio = await prisma.uc.findFirst({
+    where: { numero: 'UC-SOLAR-PALMEIRAS-001' },
+  });
+  if (!ucCondominio) {
+    ucCondominio = await prisma.uc.create({
+      data: {
+        numero: 'UC-SOLAR-PALMEIRAS-001',
+        endereco: 'Av. Leitão da Silva, 1000',
+        cidade: 'Vitória',
+        estado: 'ES',
+        cooperadoId: cooperadoCondominio.id,
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  // Verificar se Usina já existe
+  let usinaCondominio = await prisma.usina.findFirst({
+    where: { nome: 'Usina Solar Palmeiras' },
+  });
+  if (!usinaCondominio) {
+    usinaCondominio = await prisma.usina.create({
+      data: {
+        nome: 'Usina Solar Palmeiras',
+        potenciaKwp: 100,
+        cidade: 'Vitória',
+        estado: 'ES',
+        statusHomologacao: 'EM_PRODUCAO',
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  // Verificar se Plano já existe
+  let planoBasico = await prisma.plano.findFirst({
+    where: { nome: 'Plano Condomínio Básico' },
+  });
+  if (!planoBasico) {
+    planoBasico = await prisma.plano.create({
+      data: {
+        nome: 'Plano Condomínio Básico',
+        modeloCobranca: 'FIXO_MENSAL',
+        descontoBase: 20,
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  // Contrato para condomínio
+  let contratoCondominio = await prisma.contrato.findFirst({
+    where: { numero: 'CONT-SOLAR-PALM-001' },
+  });
+  if (!contratoCondominio) {
+    contratoCondominio = await prisma.contrato.create({
+      data: {
+        numero: 'CONT-SOLAR-PALM-001',
+        cooperadoId: cooperadoCondominio.id,
+        ucId: ucCondominio.id,
+        usinaId: usinaCondominio.id,
+        planoId: planoBasico.id,
+        dataInicio: new Date('2025-01-01'),
+        percentualDesconto: 20,
+        status: 'ATIVO',
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  // Contrato para Maria Silva
+  const mariaSilvaId = condominoIds['maria.silva@gmail.com'];
+  let ucMaria = await prisma.uc.findFirst({
+    where: { numero: 'UC-MARIA-SILVA-101' },
+  });
+  if (!ucMaria) {
+    ucMaria = await prisma.uc.create({
+      data: {
+        numero: 'UC-MARIA-SILVA-101',
+        endereco: 'Av. Leitão da Silva, 1000, Apto 101-A',
+        cidade: 'Vitória',
+        estado: 'ES',
+        cooperadoId: mariaSilvaId,
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  let contratoMaria = await prisma.contrato.findFirst({
+    where: { numero: 'CONT-MARIA-SILVA-001' },
+  });
+  if (!contratoMaria) {
+    contratoMaria = await prisma.contrato.create({
+      data: {
+        numero: 'CONT-MARIA-SILVA-001',
+        cooperadoId: mariaSilvaId,
+        ucId: ucMaria.id,
+        usinaId: usinaCondominio.id,
+        planoId: planoBasico.id,
+        dataInicio: new Date('2025-01-01'),
+        percentualDesconto: 20,
+        status: 'ATIVO',
+        cooperativaId: cooperativa.id,
+      },
+    });
+  }
+
+  console.log('   ✅ UC, Usina, Plano e Contratos criados\n');
+
+  // ─── Cobranças ────────────────────────────────────────────────────────────────
+  console.log('9. Criando Cobranças de Teste...');
+
+  const now = new Date();
+  const mesAtual = now.getMonth() + 1;
+  const anoAtual = now.getFullYear();
+
+  // 3 cobranças para o condomínio
+  const cobrancasCondominio = [
+    {
+      mesReferencia: mesAtual - 2 <= 0 ? mesAtual + 10 : mesAtual - 2,
+      anoReferencia: mesAtual - 2 <= 0 ? anoAtual - 1 : anoAtual,
+      valorBruto: 1500.00,
+      status: 'PAGO' as const,
+      dataVencimento: new Date(anoAtual, mesAtual - 3, 10),
+      dataPagamento: new Date(anoAtual, mesAtual - 3, 8),
+      valorPago: 1500.00,
+    },
+    {
+      mesReferencia: mesAtual - 1 <= 0 ? 12 : mesAtual - 1,
+      anoReferencia: mesAtual - 1 <= 0 ? anoAtual - 1 : anoAtual,
+      valorBruto: 1500.00,
+      status: 'PENDENTE' as const,
+      dataVencimento: new Date(anoAtual, mesAtual - 1, 10),
+    },
+    {
+      mesReferencia: mesAtual - 3 <= 0 ? mesAtual + 9 : mesAtual - 3,
+      anoReferencia: mesAtual - 3 <= 0 ? anoAtual - 1 : anoAtual,
+      valorBruto: 1500.00,
+      status: 'VENCIDO' as const,
+      dataVencimento: new Date(anoAtual, mesAtual - 4, 10),
+    },
+  ];
+
+  for (const cb of cobrancasCondominio) {
+    const existingCb = await prisma.cobranca.findFirst({
+      where: {
+        contratoId: contratoCondominio.id,
+        mesReferencia: cb.mesReferencia,
+        anoReferencia: cb.anoReferencia,
+      },
+    });
+    if (!existingCb) {
+      const valorDesconto = cb.valorBruto * 0.2;
+      await prisma.cobranca.create({
+        data: {
+          contratoId: contratoCondominio.id,
+          mesReferencia: cb.mesReferencia,
+          anoReferencia: cb.anoReferencia,
+          valorBruto: cb.valorBruto,
+          percentualDesconto: 20,
+          valorDesconto: valorDesconto,
+          valorLiquido: cb.valorBruto - valorDesconto,
+          status: cb.status,
+          dataVencimento: cb.dataVencimento,
+          dataPagamento: (cb as any).dataPagamento || null,
+          valorPago: (cb as any).valorPago || null,
+          cooperativaId: cooperativa.id,
+        },
+      });
+    }
+    console.log(`   ✅ Cobrança Condomínio: ${cb.status} - Mês ${cb.mesReferencia}/${cb.anoReferencia}`);
+  }
+
+  // 2 cobranças para Maria Silva
+  const cobrancasMaria = [
+    {
+      mesReferencia: mesAtual - 1 <= 0 ? 12 : mesAtual - 1,
+      anoReferencia: mesAtual - 1 <= 0 ? anoAtual - 1 : anoAtual,
+      valorBruto: 120.00,
+      status: 'PAGO' as const,
+      dataVencimento: new Date(anoAtual, mesAtual - 2, 15),
+      dataPagamento: new Date(anoAtual, mesAtual - 2, 14),
+      valorPago: 120.00,
+    },
+    {
+      mesReferencia: mesAtual,
+      anoReferencia: anoAtual,
+      valorBruto: 120.00,
+      status: 'PENDENTE' as const,
+      dataVencimento: new Date(anoAtual, mesAtual - 1, 15),
+    },
+  ];
+
+  for (const cb of cobrancasMaria) {
+    const existingCb = await prisma.cobranca.findFirst({
+      where: {
+        contratoId: contratoMaria.id,
+        mesReferencia: cb.mesReferencia,
+        anoReferencia: cb.anoReferencia,
+      },
+    });
+    if (!existingCb) {
+      const valorDesconto = cb.valorBruto * 0.2;
+      await prisma.cobranca.create({
+        data: {
+          contratoId: contratoMaria.id,
+          mesReferencia: cb.mesReferencia,
+          anoReferencia: cb.anoReferencia,
+          valorBruto: cb.valorBruto,
+          percentualDesconto: 20,
+          valorDesconto: valorDesconto,
+          valorLiquido: cb.valorBruto - valorDesconto,
+          status: cb.status,
+          dataVencimento: cb.dataVencimento,
+          dataPagamento: (cb as any).dataPagamento || null,
+          valorPago: (cb as any).valorPago || null,
+          cooperativaId: cooperativa.id,
+        },
+      });
+    }
+    console.log(`   ✅ Cobrança Maria Silva: ${cb.status} - Mês ${cb.mesReferencia}/${cb.anoReferencia}`);
+  }
+
+  console.log('\n✅ Seed concluído com sucesso!\n');
+  console.log('IDs importantes:');
+  console.log(`  Cooperativa: ${cooperativa.id}`);
+  console.log(`  Condomínio:  ${condominio.id}`);
+  console.log(`  Maria Silva: ${condominoIds['maria.silva@gmail.com']}`);
+  console.log(`  Pedro Costa: ${condominoIds['pedro.costa@gmail.com']}`);
+
+  // Salvar IDs em arquivo para uso nos testes
+  const ids = {
+    cooperativaId: cooperativa.id,
+    condominioId: condominio.id,
+    administradoraId: administradora.id,
+    condominoIds,
   };
-
-  // 1. Login
-  console.log('\n═══ ETAPA 1: Login ═══');
-  const token = await login();
-
-  // 2. Criar cooperativas via Prisma (sem endpoint REST)
-  console.log('\n═══ ETAPA 2: Cooperativas ═══');
-  const cooperativaIds: string[] = [];
-
-  for (const coop of COOPERATIVAS) {
-    try {
-      const existing = await prisma.cooperativa.findFirst({ where: { cnpj: coop.cnpj } });
-      if (existing) {
-        console.log(`  → Cooperativa já existe: ${coop.nome} (${existing.id})`);
-        cooperativaIds.push(existing.id);
-        resumo.cooperativas.ok++;
-        continue;
-      }
-      const created = await prisma.cooperativa.create({ data: coop });
-      console.log(`  ✓ Cooperativa criada: ${created.nome} (${created.id})`);
-      cooperativaIds.push(created.id);
-      resumo.cooperativas.ok++;
-    } catch (err: any) {
-      console.error(`  ✗ Erro cooperativa ${coop.nome}: ${err.message}`);
-      cooperativaIds.push('');
-      resumo.cooperativas.falha++;
-    }
-  }
-
-  const coopereSulId = cooperativaIds[0];
-  const coopereVerdeId = cooperativaIds[1];
-
-  // 3. Criar usinas via API REST
-  console.log('\n═══ ETAPA 3: Usinas ═══');
-  const usinaIds: string[] = [];
-
-  for (const usina of USINAS) {
-    try {
-      const existing = await prisma.usina.findFirst({ where: { nome: usina.nome } });
-      if (existing) {
-        console.log(`  → Usina já existe: ${usina.nome} (${existing.id})`);
-        usinaIds.push(existing.id);
-        resumo.usinas.ok++;
-        continue;
-      }
-      const coopId = cooperativaIds[usina.cooperativaIndex];
-      const payload = {
-        nome: usina.nome,
-        potenciaKwp: usina.potenciaKwp,
-        cidade: usina.cidade,
-        estado: usina.estado,
-        statusHomologacao: usina.statusHomologacao,
-        cooperativaId: coopId || undefined,
-      };
-      const created = await apiPost('/usinas', payload, token);
-      console.log(`  ✓ Usina criada: ${created.nome} (${created.id})`);
-      usinaIds.push(created.id);
-      resumo.usinas.ok++;
-    } catch (err: any) {
-      console.error(`  ✗ Erro usina ${usina.nome}: ${err.message}`);
-      usinaIds.push('');
-      resumo.usinas.falha++;
-    }
-  }
-
-  // 4. Criar cooperados via API REST + UC via Prisma
-  console.log('\n═══ ETAPA 4: Cooperados ═══');
-  const LIMITE_COOPERESUL = 27; // primeiros 27 → CoopereSul, restantes → CoopereVerde
-
-  for (let i = 0; i < COOPERADOS.length; i++) {
-    const c = COOPERADOS[i];
-    const cooperativaId = i < LIMITE_COOPERESUL ? coopereSulId : coopereVerdeId;
-    const cooperativaNome = i < LIMITE_COOPERESUL ? 'CoopereSul' : 'CoopereVerde';
-    const isPJ = c.cpfCnpj.length > 11;
-
-    try {
-      // Verificar se já existe
-      let cooperado = await prisma.cooperado.findFirst({ where: { cpf: c.cpfCnpj } });
-      if (cooperado) {
-        console.log(`  → [${cooperativaNome}] já existe: ${c.nome} (${cooperado.id})`);
-      } else {
-        cooperado = await prisma.cooperado.create({
-          data: {
-            nomeCompleto: c.nome,
-            cpf: c.cpfCnpj,
-            email: c.email,
-            telefone: c.telefone,
-            tipoPessoa: isPJ ? 'PJ' : 'PF',
-            tipoCooperado: 'COM_UC',
-            status: 'ATIVO',
-            cooperativaId: cooperativaId || undefined,
-          },
-        });
-        console.log(`  ✓ [${cooperativaNome}] ${c.nome} (${cooperado.id})`);
-      }
-      resumo.cooperados.ok++;
-
-      // Criar UC com dados de endereço (se ainda não existir para este cooperado)
-      try {
-        const ucExistente = await prisma.uc.findFirst({ where: { cooperadoId: cooperado.id } });
-        if (!ucExistente) {
-          const enderecoCompleto = c.complemento ? `${c.endereco}, ${c.complemento}` : c.endereco;
-          const numeroUC = `UC-${c.cep}-${String(i + 1).padStart(3, '0')}`;
-          await prisma.uc.create({
-            data: {
-              numero: numeroUC,
-              endereco: enderecoCompleto,
-              cidade: c.cidade,
-              estado: c.estado,
-              cep: c.cep,
-              cooperadoId: cooperado.id,
-              cooperativaId: cooperativaId || undefined,
-              distribuidora: 'EDP ES',
-            },
-          });
-          console.log(`    ↳ UC criada: ${numeroUC}`);
-          resumo.ucs.ok++;
-        }
-      } catch (ucErr: any) {
-        console.error(`    ↳ ✗ Erro UC de ${c.nome}: ${ucErr.message}`);
-        resumo.ucs.falha++;
-      }
-    } catch (err: any) {
-      console.error(`  ✗ [${cooperativaNome}] ${c.nome}: ${err.message}`);
-      resumo.cooperados.falha++;
-    }
-  }
-
-  // 5. Resumo
-  console.log('\n══════════════════════════════════════');
-  console.log('           RESUMO DA EXECUÇÃO         ');
-  console.log('══════════════════════════════════════');
-  console.log(`  Cooperativas: ${resumo.cooperativas.ok} criadas, ${resumo.cooperativas.falha} falhas`);
-  console.log(`  Usinas:       ${resumo.usinas.ok} criadas, ${resumo.usinas.falha} falhas`);
-  console.log(`  Cooperados:   ${resumo.cooperados.ok} criados, ${resumo.cooperados.falha} falhas`);
-  console.log(`  UCs:          ${resumo.ucs.ok} criadas, ${resumo.ucs.falha} falhas`);
-  console.log('══════════════════════════════════════\n');
+  
+  const fs = require('fs');
+  fs.writeFileSync('prisma/seed-ids.json', JSON.stringify(ids, null, 2));
+  console.log('\n📄 IDs salvos em prisma/seed-ids.json');
 }
 
 main()
-  .catch((err) => {
-    console.error('Erro fatal:', err);
+  .catch((e) => {
+    console.error('❌ Erro no seed:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

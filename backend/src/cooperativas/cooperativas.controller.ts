@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Request, BadRequestException } from '@nestjs/common';
 import { CooperativasService } from './cooperativas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -29,6 +29,16 @@ export class CooperativasController {
     @Body() body: { multaAtraso?: number; jurosDiarios?: number; diasCarencia?: number },
   ) {
     return this.cooperativasService.updateFinanceiro(id, body);
+  }
+
+  @Roles(ADMIN)
+  @Get('meu-dashboard')
+  meuDashboard(@Request() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Usuário não vinculado a uma cooperativa');
+    }
+    return this.cooperativasService.meuDashboard(cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

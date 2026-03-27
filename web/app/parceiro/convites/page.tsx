@@ -16,15 +16,27 @@ export default function ParceiroConvitesPage() {
   useEffect(() => {
     async function carregar() {
       try {
-        const [indRes, configRes] = await Promise.allSettled([
+        const [indRes, configRes, linkRes] = await Promise.allSettled([
           api.get('/indicacoes'),
           api.get('/indicacoes/config'),
+          api.get('/indicacoes/meu-link'),
         ]);
         if (indRes.status === 'fulfilled') {
           const d = indRes.value.data;
           setIndicacoes(Array.isArray(d) ? d : d?.data ?? []);
         }
-        if (configRes.status === 'fulfilled') setConfigIndicacao(configRes.value.data);
+        if (configRes.status === 'fulfilled') {
+          const config = configRes.value.data;
+          // Usar o link real do meu-link se disponível
+          if (linkRes.status === 'fulfilled') {
+            const linkData = linkRes.value.data;
+            const link = linkData?.link ?? (linkData?.codigoIndicacao
+              ? `${window.location.origin}/entrar?ref=${linkData.codigoIndicacao}`
+              : null);
+            if (link) config.linkConvite = link;
+          }
+          setConfigIndicacao(config);
+        }
       } catch {
         // ignore
       } finally {

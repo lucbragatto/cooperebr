@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException } from '@nestjs/common';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
@@ -39,14 +39,21 @@ export class WhatsappFaturaController {
   @Public()
   @Post('webhook-incoming')
   async webhookIncoming(
+    @Query('secret') secret: string,
     @Body() body: {
       telefone: string;
       tipo: 'texto' | 'imagem' | 'documento';
       corpo?: string;
       mediaBase64?: string;
       mimeType?: string;
+      /** ID do botão clicado (buttonResponseMessage) ou rowId da lista selecionada */
+      selectedButtonId?: string;
     },
   ) {
+    const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
+    if (!expectedSecret || secret !== expectedSecret) {
+      throw new UnauthorizedException('Webhook secret inválido');
+    }
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);
     try {
       await this.bot.processarMensagem(body);
@@ -246,6 +253,16 @@ export class WhatsappFaturaController {
       telefones: body.telefones,
       limiteEnvios: body.limiteEnvios,
     });
+  }
+
+  // ─── Abordagem de inadimplentes ───────────────────────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('abordar-inadimplentes')
+  async abordarInadimplentes(
+    @Body() body: { limiteEnvios?: number },
+  ) {
+    return this.cobrancaService.abordarInadimplentes(body.limiteEnvios);
   }
 
   // ─── Fluxo 3: MLM viral via WhatsApp ─────────────────────────────────────

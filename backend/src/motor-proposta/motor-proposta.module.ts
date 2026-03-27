@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { MotorPropostaController } from './motor-proposta.controller';
 import { MotorPropostaService } from './motor-proposta.service';
@@ -16,7 +16,7 @@ import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 const multerLib = require('multer') as { memoryStorage: () => object };
 
 @Module({
-  imports: [NotificacoesModule, CooperadosModule, ContratosModule, UsinasModule, ConfigTenantModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
+  imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [MotorPropostaController],
   providers: [MotorPropostaService, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],
   exports: [MotorPropostaService],

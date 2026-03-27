@@ -10,10 +10,13 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -82,6 +85,32 @@ export default function UsinaDetailPage() {
   const [capacidadeInfo, setCapacidadeInfo] = useState<{usado: number; total: number} | null>(null);
   const [distribuicao, setDistribuicao] = useState<any>(null);
 
+  // Migração states
+  const [migrarModalAberto, setMigrarModalAberto] = useState(false);
+  const [migrarCooperadoId, setMigrarCooperadoId] = useState('');
+  const [migrarUsinaDestinoId, setMigrarUsinaDestinoId] = useState('');
+  const [migrarKwhNovo, setMigrarKwhNovo] = useState('');
+  const [migrarMotivo, setMigrarMotivo] = useState('');
+  const [migrarProcessando, setMigrarProcessando] = useState(false);
+  const [migrarMsg, setMigrarMsg] = useState('');
+
+  const [ajustarModalAberto, setAjustarModalAberto] = useState(false);
+  const [ajustarCooperadoId, setAjustarCooperadoId] = useState('');
+  const [ajustarKwhNovo, setAjustarKwhNovo] = useState('');
+  const [ajustarMotivo, setAjustarMotivo] = useState('');
+  const [ajustarProcessando, setAjustarProcessando] = useState(false);
+  const [ajustarMsg, setAjustarMsg] = useState('');
+
+  const [migrarTodosAberto, setMigrarTodosAberto] = useState(false);
+  const [migrarTodosDestinoId, setMigrarTodosDestinoId] = useState('');
+  const [migrarTodosMotivo, setMigrarTodosMotivo] = useState('');
+  const [migrarTodosProcessando, setMigrarTodosProcessando] = useState(false);
+  const [migrarTodosMsg, setMigrarTodosMsg] = useState('');
+  const [migrarTodosResultado, setMigrarTodosResultado] = useState<any>(null);
+
+  const [usinasDisponiveis, setUsinasDisponiveis] = useState<any[]>([]);
+  const [historicoMigracoes, setHistoricoMigracoes] = useState<any[]>([]);
+
   const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
     resolver: zodResolver(usinaSchema) as any,
   });
@@ -107,6 +136,16 @@ export default function UsinaDetailPage() {
     api.get(`/usinas/${id}/distribuicao`)
       .then((r) => setDistribuicao(r.data))
       .catch(() => { /* silently ignore */ });
+
+    // Carregar usinas disponíveis para migração
+    api.get('/usinas')
+      .then((r) => setUsinasDisponiveis((r.data || []).filter((u: any) => u.id !== id)))
+      .catch(() => {});
+
+    // Carregar histórico de migrações
+    api.get(`/migracoes-usina/historico-usina/${id}`)
+      .then((r) => setHistoricoMigracoes(r.data || []))
+      .catch(() => {});
   }, [usina, id]);
 
   function abrirSheet() {
@@ -155,6 +194,74 @@ export default function UsinaDetailPage() {
       setMensagem(typeof msg === 'string' ? `Erro: ${msg}` : `Erro: ${JSON.stringify(msg)}`);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function handleMigrarCooperado() {
+    setMigrarProcessando(true);
+    setMigrarMsg('');
+    try {
+      await api.post('/migracoes-usina/cooperado', {
+        cooperadoId: migrarCooperadoId,
+        usinaDestinoId: migrarUsinaDestinoId,
+        kwhNovo: migrarKwhNovo ? Number(migrarKwhNovo) : undefined,
+        motivo: migrarMotivo || undefined,
+      });
+      setMigrarMsg('Migração realizada com sucesso!');
+      setMigrarModalAberto(false);
+      // Refresh data
+      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
+      api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao migrar.';
+      setMigrarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setMigrarProcessando(false);
+    }
+  }
+
+  async function handleAjustarKwh() {
+    setAjustarProcessando(true);
+    setAjustarMsg('');
+    try {
+      await api.post('/migracoes-usina/ajustar-kwh', {
+        cooperadoId: ajustarCooperadoId,
+        kwhNovo: ajustarKwhNovo ? Number(ajustarKwhNovo) : undefined,
+        motivo: ajustarMotivo || undefined,
+      });
+      setAjustarMsg('Ajuste realizado com sucesso!');
+      setAjustarModalAberto(false);
+      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao ajustar.';
+      setAjustarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setAjustarProcessando(false);
+    }
+  }
+
+  async function handleMigrarTodos() {
+    setMigrarTodosProcessando(true);
+    setMigrarTodosMsg('');
+    setMigrarTodosResultado(null);
+    try {
+      const { data } = await api.post('/migracoes-usina/usina-total', {
+        usinaOrigemId: id,
+        usinaDestinoId: migrarTodosDestinoId,
+        motivo: migrarTodosMotivo || undefined,
+      });
+      setMigrarTodosResultado(data);
+      setMigrarTodosMsg(`Migração concluída: ${data.sucesso}/${data.total} com sucesso.`);
+      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
+      api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro na migração em massa.';
+      setMigrarTodosMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setMigrarTodosProcessando(false);
     }
   }
 
@@ -459,8 +566,209 @@ export default function UsinaDetailPage() {
               </CardContent>
             )}
           </Card>
+
+          {/* Ações de Migração */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ArrowRightLeft className="h-4 w-4 text-blue-600" />
+                Migração de Usina
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setMigrarMsg(''); setMigrarModalAberto(true); }}
+                >
+                  <ArrowRightLeft className="h-4 w-4 mr-1" />
+                  Migrar cooperado
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setAjustarMsg(''); setAjustarModalAberto(true); }}
+                >
+                  <Zap className="h-4 w-4 mr-1" />
+                  Ajustar kWh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => { setMigrarTodosMsg(''); setMigrarTodosResultado(null); setMigrarTodosAberto(true); }}
+                >
+                  <Users className="h-4 w-4 mr-1" />
+                  Migrar todos os membros
+                </Button>
+              </div>
+
+              {(migrarMsg || ajustarMsg) && (
+                <p className={`mt-3 text-sm ${(migrarMsg + ajustarMsg).toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>
+                  {migrarMsg || ajustarMsg}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Histórico de Migrações */}
+          {historicoMigracoes.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Histórico de Migrações</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Motivo</TableHead>
+                      <TableHead>kWh Ant.</TableHead>
+                      <TableHead>kWh Novo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {historicoMigracoes.map((m: any) => (
+                      <TableRow key={m.id}>
+                        <TableCell>{new Date(m.criadoEm).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-800">
+                            {m.tipo === 'MUDANCA_USINA' ? 'Mudança' : m.tipo === 'AJUSTE_KWH' ? 'Ajuste kWh' : m.tipo === 'MIGRACAO_TOTAL_USINA' ? 'Migração Total' : m.tipo}
+                          </span>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">{m.motivo || '—'}</TableCell>
+                        <TableCell>{m.kwhAnterior ?? '—'}</TableCell>
+                        <TableCell>{m.kwhNovo ?? '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
+
+      {/* Dialog — Migrar Cooperado */}
+      <Dialog open={migrarModalAberto} onOpenChange={setMigrarModalAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Migrar Cooperado para outra Usina</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className={lbl}>Cooperado (selecione da lista)</label>
+              <select className={selCls} value={migrarCooperadoId} onChange={(e) => setMigrarCooperadoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {(distribuicao?.cooperados ?? []).map((c: any) => (
+                  <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — UC {c.ucNumero}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Usina Destino</label>
+              <select className={selCls} value={migrarUsinaDestinoId} onChange={(e) => setMigrarUsinaDestinoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {usinasDisponiveis.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.nome} — {u.cidade}/{u.estado}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Novo kWh mensal</label>
+              <input className={cls} type="number" step="0.01" value={migrarKwhNovo} onChange={(e) => setMigrarKwhNovo(e.target.value)} placeholder="Manter atual se vazio" />
+            </div>
+            <div>
+              <label className={lbl}>Motivo</label>
+              <textarea className={cls} rows={2} value={migrarMotivo} onChange={(e) => setMigrarMotivo(e.target.value)} placeholder="Ex: Melhor distribuição de créditos" />
+            </div>
+            {migrarMsg && <p className={`text-sm ${migrarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{migrarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setMigrarModalAberto(false)}>Cancelar</Button>
+            <Button disabled={migrarProcessando || !migrarCooperadoId || !migrarUsinaDestinoId} onClick={handleMigrarCooperado}>
+              {migrarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Migrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Ajustar kWh */}
+      <Dialog open={ajustarModalAberto} onOpenChange={setAjustarModalAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Ajustar kWh do Cooperado</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className={lbl}>Cooperado</label>
+              <select className={selCls} value={ajustarCooperadoId} onChange={(e) => setAjustarCooperadoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {(distribuicao?.cooperados ?? []).map((c: any) => (
+                  <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — {c.kwhContratado} kWh</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Novo kWh mensal</label>
+              <input className={cls} type="number" step="0.01" value={ajustarKwhNovo} onChange={(e) => setAjustarKwhNovo(e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>Motivo</label>
+              <textarea className={cls} rows={2} value={ajustarMotivo} onChange={(e) => setAjustarMotivo(e.target.value)} />
+            </div>
+            {ajustarMsg && <p className={`text-sm ${ajustarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{ajustarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setAjustarModalAberto(false)}>Cancelar</Button>
+            <Button disabled={ajustarProcessando || !ajustarCooperadoId || !ajustarKwhNovo} onClick={handleAjustarKwh}>
+              {ajustarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Ajustar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Migrar Todos */}
+      <Dialog open={migrarTodosAberto} onOpenChange={setMigrarTodosAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Migrar TODOS os membros desta usina</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+              <strong>Atenção:</strong> Esta ação migrará todos os {cooperadosAlocados.length} cooperados ativos para a usina destino. Esta ação não pode ser desfeita facilmente.
+            </div>
+            <div>
+              <label className={lbl}>Usina Destino</label>
+              <select className={selCls} value={migrarTodosDestinoId} onChange={(e) => setMigrarTodosDestinoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {usinasDisponiveis.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.nome} — {u.cidade}/{u.estado}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Motivo</label>
+              <textarea className={cls} rows={2} value={migrarTodosMotivo} onChange={(e) => setMigrarTodosMotivo(e.target.value)} placeholder="Ex: Desativação da usina origem" />
+            </div>
+            {migrarTodosMsg && <p className={`text-sm ${migrarTodosMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{migrarTodosMsg}</p>}
+            {migrarTodosResultado && migrarTodosResultado.falhas?.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm">
+                <strong>Falhas ({migrarTodosResultado.falhas.length}):</strong>
+                <ul className="mt-1 list-disc list-inside">
+                  {migrarTodosResultado.falhas.map((f: any, i: number) => (
+                    <li key={i}>{f.nome}: {f.erro}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setMigrarTodosAberto(false)}>Cancelar</Button>
+            <Button variant="destructive" disabled={migrarTodosProcessando || !migrarTodosDestinoId} onClick={handleMigrarTodos}>
+              {migrarTodosProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Confirmar migração total
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Sheet — Editar Usina */}
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
 const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
@@ -14,6 +15,7 @@ export class ContratosService {
     private cooperadosService: CooperadosService,
     private usinasService: UsinasService,
     private notificacoes: NotificacoesService,
+    private whatsappCicloVida: WhatsappCicloVidaService,
   ) {}
 
   async findAll(cooperativaId?: string) {
@@ -196,6 +198,17 @@ export class ContratosService {
     // Side effect fora da transação
     await this.cooperadosService.checkProntoParaAtivar(data.cooperadoId);
 
+    // Notificar cooperado que contrato foi gerado
+    try {
+      const cooperado = await this.prisma.cooperado.findUnique({
+        where: { id: data.cooperadoId },
+        select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+      });
+      if (cooperado) {
+        this.whatsappCicloVida.notificarContratoGerado(cooperado).catch(() => {});
+      }
+    } catch {}
+
     return contrato;
   }
 
@@ -313,6 +326,17 @@ export class ContratosService {
 
       return updated;
     });
+
+    // Notificar cooperado via WhatsApp que créditos iniciaram
+    try {
+      const cooperado = await this.prisma.cooperado.findUnique({
+        where: { id: contrato.cooperadoId },
+        select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+      });
+      if (cooperado) {
+        this.whatsappCicloVida.notificarCreditosIniciados(cooperado).catch(() => {});
+      }
+    } catch {}
 
     return contratoAtualizado;
   }

@@ -1,17 +1,43 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
+
+export interface WhatsappMensagemEnviadaEvent {
+  telefone: string;
+  texto: string;
+  direcao: 'ENVIADA' | 'RECEBIDA';
+}
+
+export interface OpcaoMenu {
+  id: string;
+  texto: string;
+  descricao?: string;
+}
+
+export interface MenuInterativo {
+  titulo: string;
+  corpo: string;
+  rodape?: string;
+  opcoes: OpcaoMenu[];
+}
 
 @Injectable()
 export class WhatsappSenderService {
   private readonly logger = new Logger(WhatsappSenderService.name);
   private readonly baseUrl = process.env.WHATSAPP_SERVICE_URL || 'http://localhost:3002';
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
+  ) {}
 
   async getStatus(): Promise<{ status: string; qrCode?: string }> {
     const res = await fetch(`${this.baseUrl}/status`);
     return res.json();
   }
+
+  // Número do super admin — recebe cópia de todas as mensagens enviadas pelo sistema
+  private readonly SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || '5527981341348';
 
   async enviarMensagem(
     telefone: string,
@@ -33,6 +59,115 @@ export class WhatsappSenderService {
 
     // Registrar mensagem enviada
     await this.registrarMensagem(telefone, texto, 'ENVIADA', opcoes);
+
+    // Emitir evento para observadores (Modo Observador)
+    this.eventEmitter.emit('whatsapp.mensagem.enviada', {
+      telefone,
+      texto,
+      direcao: 'ENVIADA',
+    } as WhatsappMensagemEnviadaEvent);
+
+    // Espelhar para o super admin (exceto se já for ele o destinatário)
+    if (telefone.replace(/\D/g, '') !== this.SUPER_ADMIN_PHONE.replace(/\D/g, '')) {
+      const espelho = `📋 *[ESPELHO]* → para *${telefone}*:\n\n${texto}`;
+      try {
+        await fetch(`${this.baseUrl}/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: this.SUPER_ADMIN_PHONE, text: espelho }),
+        });
+      } catch (err) {
+        this.logger.warn(`Falha ao espelhar mensagem para super admin: ${err.message}`);
+      }
+    }
+  }
+
+  /**
+   * Envia menu interativo com botões (até 3 opções) ou lista (4+ opções).
+   * Se falhar, envia fallback em texto simples com opções numeradas.
+   */
+  async enviarMenuComBotoes(
+    telefone: string,
+    menu: MenuInterativo,
+    opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
+  ): Promise<void> {
+    const { titulo, corpo, rodape, opcoes: itens } = menu;
+    const footerText = rodape || 'CoopereBR - Energia Solar Compartilhada';
+
+    try {
+      let payload: any;
+
+      if (itens.length <= 3) {
+        // Botões interativos (máx 3)
+        payload = {
+          to: telefone,
+          type: 'buttons',
+          message: {
+            text: corpo,
+            footerText,
+            headerType: 1,
+            buttons: itens.map((item, i) => ({
+              buttonId: item.id,
+              buttonText: { displayText: item.texto },
+              type: 1,
+            })),
+          },
+        };
+      } else {
+        // Lista interativa (4+ opções)
+        payload = {
+          to: telefone,
+          type: 'list',
+          message: {
+            title: titulo,
+            text: corpo,
+            footerText,
+            buttonText: 'Ver opções',
+            sections: [{
+              title: titulo,
+              rows: itens.map(item => ({
+                title: item.texto,
+                description: item.descricao || '',
+                rowId: item.id,
+              })),
+            }],
+          },
+        };
+      }
+
+      const res = await fetch(`${this.baseUrl}/send-interactive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        this.logger.log(`Menu interativo enviado para ${telefone} (${itens.length} opções)`);
+        const textoRegistro = `[MENU] ${corpo}\n${itens.map(o => `${o.id}. ${o.texto}`).join('\n')}`;
+        await this.registrarMensagem(telefone, textoRegistro, 'ENVIADA', opcoes);
+        this.eventEmitter.emit('whatsapp.mensagem.enviada', {
+          telefone,
+          texto: textoRegistro,
+          direcao: 'ENVIADA',
+        } as WhatsappMensagemEnviadaEvent);
+        return;
+      }
+
+      // Se retornou erro, cai no fallback abaixo
+      this.logger.warn(`Botões interativos falharam para ${telefone}, usando fallback texto`);
+    } catch (err) {
+      this.logger.warn(`Erro ao enviar botões interativos para ${telefone}: ${err.message} — usando fallback texto`);
+    }
+
+    // Fallback: mensagem de texto simples com opções numeradas
+    let textoFallback = `${corpo}\n`;
+    for (const item of itens) {
+      textoFallback += `\n${item.id}️⃣ ${item.texto}`;
+      if (item.descricao) textoFallback += ` — ${item.descricao}`;
+    }
+    if (footerText) textoFallback += `\n\n_${footerText}_`;
+
+    await this.enviarMensagem(telefone, textoFallback, opcoes);
   }
 
   async enviarPdfWhatsApp(

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -33,6 +34,11 @@ import { IndicacoesModule } from './indicacoes/indicacoes.module';
 import { ModelosMensagemModule } from './modelos-mensagem/modelos-mensagem.module';
 import { FluxoEtapasModule } from './fluxo-etapas/fluxo-etapas.module';
 import { PublicoModule } from './publico/publico.module';
+import { ClubeVantagensModule } from './clube-vantagens/clube-vantagens.module';
+import { CondominiosModule } from './condominios/condominios.module';
+import { AdministradorasModule } from './administradoras/administradoras.module';
+import { ObservadorModule } from './observador/observador.module';
+import { MigracoesUsinaModule } from './migracoes-usina/migracoes-usina.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -40,6 +46,7 @@ import { RolesGuard } from './auth/roles.guard';
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
     CooperadosModule,
     UcsModule,
     UsinasModule,
@@ -68,6 +75,11 @@ import { RolesGuard } from './auth/roles.guard';
     ModelosMensagemModule,
     FluxoEtapasModule,
     PublicoModule,
+    ClubeVantagensModule,
+    CondominiosModule,
+    AdministradorasModule,
+    ObservadorModule,
+    MigracoesUsinaModule,
   ],
   controllers: [AppController],
   providers: [
