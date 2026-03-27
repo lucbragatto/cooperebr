@@ -43,6 +43,12 @@ model Cooperativa {
   usuarios              Usuario[]
   cooperados            Cooperado[]
   configuracoesNotificacao ConfiguracaoNotificacaoCobranca[]
+  contratos              Contrato[]             @relation("ContratoCooperativa")
+  administradoras        Administradora[]
+  condominios            Condominio[]
+  configClubeVantagens   ConfigClubeVantagens?
+  transferencias         TransferenciaPix[]
+  migracoesUsina         MigracaoUsina[]
 
   @@map("cooperativas")
 }
@@ -63,6 +69,7 @@ model Usuario {
   cooperativa   Cooperativa?  @relation(fields: [cooperativaId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  observacoes   ObservacaoAtiva[]
 
   @@map("usuarios")
 }
@@ -126,12 +133,18 @@ model Cooperado {
   usinasProprietario  Usina[]              @relation("UsinaProprietario")
   asaasCustomer       AsaasCustomer?
   asaasCobrancas      AsaasCobranca[]
+  pixChave                String?
+  pixTipo                 String?
   // Indicações MLM
   codigoIndicacao         String               @unique @default(cuid())
   cooperadoIndicadorId    String?
   indicacoesFeitas        Indicacao[]          @relation("IndicacoesFeitas")
   indicacoesRecebidas     Indicacao[]          @relation("IndicacoesRecebidas")
   beneficiosIndicacao     BeneficioIndicacao[]
+  progressaoClube         ProgressaoClube?
+  unidadesCondominio      UnidadeCondominio[]
+  transferencias          TransferenciaPix[]
+  migracoesUsina          MigracaoUsina[]
 
   @@map("cooperados")
 }
@@ -286,6 +299,7 @@ model Contrato {
   baseCalculoOverride    String?
   regrasAplicadas        Json?
   cooperativaId          String?
+  cooperativa            Cooperativa? @relation("ContratoCooperativa", fields: [cooperativaId], references: [id])
   ultimoReajusteEm       DateTime?
   ultimoReajusteIndice   String?
   createdAt              DateTime           @default(now())
@@ -371,7 +385,8 @@ model Cobranca {
   valorMulta         Decimal?       @db.Decimal(10, 2)
   valorJuros         Decimal?       @db.Decimal(10, 2)
   valorAtualizado    Decimal?       @db.Decimal(10, 2)
-  whatsappEnviadoEm  DateTime?
+  whatsappEnviadoEm      DateTime?
+  notificadoVencimento   Boolean        @default(false)
   cobrancasBancarias CobrancaBancaria[]
   asaasCobrancas     AsaasCobranca[]
   beneficiosIndicacao BeneficioIndicacao[]
@@ -1107,6 +1122,7 @@ model ConversaWhatsapp {
   cooperativaId       String?
   cooperadoId         String?
   mlmConviteEnviadoEm DateTime?
+  contadorFallback    Int       @default(0)
   updatedAt           DateTime  @updatedAt
   createdAt           DateTime  @default(now())
 
@@ -1192,4 +1208,203 @@ model ListaContatos {
   updatedAt     DateTime @updatedAt
 
   @@map("listas_contatos")
+}
+
+// ─── Administradoras & Condomínios ──────────────────────────────────────────
+
+model Administradora {
+  id                  String       @id @default(cuid())
+  cooperativaId       String
+  cooperativa         Cooperativa  @relation(fields: [cooperativaId], references: [id])
+  razaoSocial         String
+  nomeFantasia        String?
+  cnpj                String
+  email               String
+  telefone            String
+  responsavelNome     String
+  responsavelCpf      String?
+  responsavelEmail    String?
+  responsavelTelefone String?
+  ativo               Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  condominios         Condominio[]
+
+  @@map("administradoras")
+}
+
+model Condominio {
+  id                   String            @id @default(cuid())
+  cooperativaId        String?
+  cooperativa          Cooperativa?      @relation(fields: [cooperativaId], references: [id])
+  nome                 String
+  cnpj                 String?
+  endereco             String
+  cidade               String
+  estado               String
+  cep                  String?
+  administradoraId     String?
+  administradora       Administradora?   @relation(fields: [administradoraId], references: [id])
+  sindicoNome          String?
+  sindicoCpf           String?
+  sindicoEmail         String?
+  sindicoTelefone      String?
+  modeloRateio         String            @default("PROPORCIONAL_CONSUMO")
+  excedentePolitica    String            @default("CREDITO_PROXIMO_MES")
+  excedentePixChave    String?
+  excedentePixTipo     String?
+  aliquotaIR           Float?
+  aliquotaPIS          Float?
+  aliquotaCOFINS       Float?
+  taxaAdministrativa   Float?
+  ativo                Boolean           @default(true)
+  createdAt            DateTime          @default(now())
+  unidades             UnidadeCondominio[]
+  transferencias       TransferenciaPix[]
+
+  @@map("condominios")
+}
+
+model UnidadeCondominio {
+  id             String      @id @default(cuid())
+  condominioId   String
+  condominio     Condominio  @relation(fields: [condominioId], references: [id])
+  numero         String
+  cooperadoId    String?
+  cooperado      Cooperado?  @relation(fields: [cooperadoId], references: [id])
+  fracaoIdeal    Float?
+  percentualFixo Float?
+  ativo          Boolean     @default(true)
+
+  @@map("unidades_condominio")
+}
+
+// ─── Clube de Vantagens ─────────────────────────────────────────────────────
+
+model ConfigClubeVantagens {
+  id                String      @id @default(cuid())
+  cooperativaId     String      @unique
+  cooperativa       Cooperativa @relation(fields: [cooperativaId], references: [id])
+  ativo             Boolean     @default(false)
+  criterio          String      @default("KWH_INDICADO_ACUMULADO")
+  niveisConfig      Json        @default("[]")
+  bonusAniversario  Float       @default(0)
+
+  @@map("config_clube_vantagens")
+}
+
+model ProgressaoClube {
+  id                      String      @id @default(cuid())
+  cooperadoId             String      @unique
+  cooperado               Cooperado   @relation(fields: [cooperadoId], references: [id])
+  nivelAtual              String      @default("BRONZE")
+  kwhIndicadoAcumulado    Float       @default(0)
+  indicadosAtivos         Int         @default(0)
+  receitaIndicados        Float       @default(0)
+  beneficioPercentualAtual Float      @default(0)
+  beneficioReaisKwhAtual  Float       @default(0)
+  dataUltimaPromocao      DateTime?
+  dataUltimaAvaliacao     DateTime?
+  createdAt               DateTime    @default(now())
+  historico               HistoricoProgressao[]
+
+  @@map("progressoes_clube")
+}
+
+model HistoricoProgressao {
+  id               String          @id @default(cuid())
+  progressaoId     String
+  progressao       ProgressaoClube @relation(fields: [progressaoId], references: [id])
+  nivelAnterior    String
+  nivelNovo        String
+  kwhAcumulado     Float
+  indicadosAtivos  Int
+  receitaAcumulada Float
+  motivo           String?
+  createdAt        DateTime        @default(now())
+
+  @@map("historico_progressao")
+}
+
+// ─── Observador ─────────────────────────────────────────────────────────────
+
+model ObservacaoAtiva {
+  id                  String           @id @default(cuid())
+  observadorId        String
+  observador          Usuario          @relation(fields: [observadorId], references: [id])
+  observadoId         String?
+  observadoTelefone   String?
+  observadorTelefone  String
+  escopo              String
+  expiresAt           DateTime
+  motivo              String?
+  cooperativaId       String
+  ativo               Boolean          @default(true)
+  criadoEm            DateTime         @default(now())
+  logs                LogObservacao[]
+
+  @@map("observacoes_ativas")
+}
+
+model LogObservacao {
+  id             String          @id @default(cuid())
+  observacaoId   String
+  observacao     ObservacaoAtiva @relation(fields: [observacaoId], references: [id])
+  evento         String
+  detalhe        String?
+  cooperativaId  String
+  criadoEm       DateTime        @default(now())
+
+  @@map("logs_observacao")
+}
+
+// ─── Transferência PIX ──────────────────────────────────────────────────────
+
+model TransferenciaPix {
+  id              String       @id @default(cuid())
+  cooperativaId   String?
+  cooperativa     Cooperativa? @relation(fields: [cooperativaId], references: [id])
+  cooperadoId     String?
+  cooperado       Cooperado?   @relation(fields: [cooperadoId], references: [id])
+  condominioId    String?
+  condominio      Condominio?  @relation(fields: [condominioId], references: [id])
+  valorBruto      Decimal      @db.Decimal(10, 2)
+  aliquotaIR      Float        @default(0)
+  aliquotaPIS     Float        @default(0)
+  aliquotaCOFINS  Float        @default(0)
+  valorImpostos   Decimal      @db.Decimal(10, 2)
+  valorLiquido    Decimal      @db.Decimal(10, 2)
+  pixChave        String
+  pixTipo         String       @default("ALEATORIA")
+  mesReferencia   String
+  kwhExcedente    Float
+  tarifaKwh       Float
+  status          String       @default("SIMULADO")
+  observacao      String?
+  createdAt       DateTime     @default(now())
+
+  @@map("transferencias_pix")
+}
+
+// ─── Migração de Usina ──────────────────────────────────────────────────────
+
+model MigracaoUsina {
+  id                  String       @id @default(cuid())
+  cooperadoId         String
+  cooperado           Cooperado    @relation(fields: [cooperadoId], references: [id])
+  usinaOrigemId       String?
+  usinaDestinoId      String
+  contratoAntigoId    String
+  contratoNovoId      String
+  kwhAnterior         Float
+  percentualAnterior  Float
+  kwhNovo             Float
+  percentualNovo      Float
+  motivo              String?
+  tipo                String       @default("MUDANCA_USINA")
+  realizadoPorId      String
+  cooperativaId       String?
+  cooperativa         Cooperativa? @relation(fields: [cooperativaId], references: [id])
+  criadoEm            DateTime     @default(now())
+
+  @@map("migracoes_usina")
 }

@@ -14,6 +14,8 @@ import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { IndicacoesModule } from '../indicacoes/indicacoes.module';
 import { AsaasModule } from '../asaas/asaas.module';
 import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notificacao.service';
+import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
+import { WhatsappNotificacoesService } from './whatsapp-notificacoes.service';
 
 @Module({
   imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, AsaasModule],
@@ -24,11 +26,22 @@ import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notifi
     WhatsappCobrancaService,
     WhatsappMlmService,
     WhatsappSenderService,
+    WhatsappCicloVidaService,
+    WhatsappNotificacoesService,
     ModeloMensagemService,
     WhatsappFluxoMotorService,
     ConfiguracaoNotificacaoService,
     PrismaService,
   ],
-  exports: [WhatsappSenderService, WhatsappBotService, WhatsappCobrancaService, WhatsappMlmService, ModeloMensagemService, WhatsappFluxoMotorService],
+  exports: [
+    WhatsappSenderService,
+    WhatsappBotService,
+    WhatsappCobrancaService,
+    WhatsappMlmService,
+    WhatsappCicloVidaService,
+    WhatsappNotificacoesService,
+    ModeloMensagemService,
+    WhatsappFluxoMotorService,
+  ],
 })
 export class WhatsappModule {}

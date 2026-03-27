@@ -1,0 +1,2 @@
+src/observador/observador.service.ts(119,9): error TS2353: Object literal may only specify known properties, and 'observador' does not exist in type 'ObservacaoAtivaInclude<DefaultArgs>'.
+src/observador/observador.service.ts(136,9): error TS2353: Object literal may only specify known properties, and 'observador' does not exist in type 'ObservacaoAtivaInclude<DefaultArgs>'.

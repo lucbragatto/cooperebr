@@ -260,9 +260,9 @@ export class WhatsappFaturaController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('abordar-inadimplentes')
   async abordarInadimplentes(
-    @Body() body: { limiteEnvios?: number },
+    @Req() req: any,
   ) {
-    return this.cobrancaService.abordarInadimplentes(body.limiteEnvios);
+    return this.cobrancaService.abordarInadimplentes(req.user?.cooperativaId);
   }
 
   // ─── Fluxo 3: MLM viral via WhatsApp ─────────────────────────────────────

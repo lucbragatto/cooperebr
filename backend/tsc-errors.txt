@@ -1,0 +1,151 @@
+prisma/fix-cooperativa.ts(11,36): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(18,34): error TS2339: Property 'administradora' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(25,35): error TS2339: Property 'condominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(74,39): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(78,18): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(99,36): error TS2339: Property 'condominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/fix-cooperativa.ts(103,69): error TS7006: Parameter 'c' implicitly has an 'any' type.
+prisma/seed-extra.ts(165,9): error TS2353: Object literal may only specify known properties, and 'pixChave' does not exist in type 'Without<CooperadoCreateInput, CooperadoUncheckedCreateInput> & CooperadoUncheckedCreateInput'.
+prisma/seed-extra.ts(436,18): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-extra.ts(552,40): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(24,16): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(52,37): error TS2339: Property 'administradora' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(56,35): error TS2339: Property 'administradora' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(71,33): error TS2339: Property 'condominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(75,31): error TS2339: Property 'condominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(137,42): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(141,20): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+prisma/seed-teste.ts(169,18): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'.
+scripts/simular-pagamentos.ts(212,15): error TS2353: Object literal may only specify known properties, and 'notificadoVencimento' does not exist in type '(Without<CobrancaUpdateInput, CobrancaUncheckedUpdateInput> & CobrancaUncheckedUpdateInput) | (Without<...> & CobrancaUpdateInput)'.
+src/administradoras/administradoras.service.ts(9,24): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(17,35): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(38,24): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(42,35): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(44,24): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(48,35): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/administradoras/administradoras.service.ts(50,24): error TS2339: Property 'administradora' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.job.ts(19,43): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(30,41): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(35,24): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(44,42): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(53,38): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(92,25): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(101,23): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(113,23): error TS2339: Property 'historicoProgressao' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(133,23): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(145,24): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(162,23): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(176,24): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(195,24): error TS2339: Property 'configClubeVantagens' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(202,37): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(215,50): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(221,43): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(235,25): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(235,28): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(262,19): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(263,19): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(267,19): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(272,19): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(285,46): error TS7006: Parameter 'd' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(289,25): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(289,28): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(328,37): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(343,25): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(343,28): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/clube-vantagens/clube-vantagens.service.ts(368,48): error TS2339: Property 'historicoProgressao' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(416,19): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(455,42): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/clube-vantagens/clube-vantagens.service.ts(500,43): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/cobrancas/cobrancas.job.ts(121,9): error TS2353: Object literal may only specify known properties, and 'notificadoVencimento' does not exist in type 'CobrancaWhereInput'.
+src/cobrancas/cobrancas.job.ts(138,34): error TS2551: Property 'contrato' does not exist on type '{ cooperativaId: string | null; id: string; status: StatusCobranca; createdAt: Date; updatedAt: Date; percentualDesconto: Decimal; mesReferencia: number; ... 21 more ...; geracaoMensalId: string | null; }'. Did you mean 'contratoId'?
+src/cobrancas/cobrancas.job.ts(150,19): error TS2353: Object literal may only specify known properties, and 'notificadoVencimento' does not exist in type '(Without<CobrancaUpdateInput, CobrancaUncheckedUpdateInput> & CobrancaUncheckedUpdateInput) | (Without<...> & CobrancaUpdateInput)'.
+src/cobrancas/cobrancas.service.ts(284,52): error TS2339: Property 'progressaoClube' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(9,24): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(20,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(58,24): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(68,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(71,24): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(75,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(78,24): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(82,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(85,24): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(91,39): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(99,24): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(103,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/condominios/condominios.service.ts(119,47): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(119,52): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(123,31): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(125,29): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(133,29): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(136,46): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(136,51): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(138,29): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(144,47): error TS7006: Parameter 'acc' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(144,52): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(146,29): error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/condominios/condominios.service.ts(157,36): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/cooperados/cooperados.service.ts(276,9): error TS2353: Object literal may only specify known properties, and 'progressaoClube' does not exist in type 'CooperadoInclude<DefaultArgs>'.
+src/cooperados/cooperados.service.ts(307,26): error TS2339: Property 'contratos' does not exist on type '{ cooperativaId: string | null; id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null; status: StatusCooperado; cotaKwhMensal: Decimal | null; ... 26 more ...; cooperadoIndicadorId: string | null; }'.
+src/cooperados/cooperados.service.ts(309,26): error TS2339: Property '_count' does not exist on type '{ cooperativaId: string | null; id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null; status: StatusCooperado; cotaKwhMensal: Decimal | null; ... 26 more ...; cooperadoIndicadorId: string | null; }'.
+src/cooperados/cooperados.service.ts(311,28): error TS2339: Property '_count' does not exist on type '{ cooperativaId: string | null; id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null; status: StatusCooperado; cotaKwhMensal: Decimal | null; ... 26 more ...; cooperadoIndicadorId: string | null; }'.
+src/financeiro/pix-excedente.service.ts(49,49): error TS2353: Object literal may only specify known properties, and 'pixChave' does not exist in type 'CooperadoSelect<DefaultArgs>'.
+src/financeiro/pix-excedente.service.ts(52,28): error TS2339: Property 'pixChave' does not exist on type '{ cooperativaId: string | null; id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null; status: StatusCooperado; cotaKwhMensal: Decimal | null; ... 26 more ...; cooperadoIndicadorId: string | null; }'.
+src/financeiro/pix-excedente.service.ts(53,27): error TS2339: Property 'pixTipo' does not exist on type '{ cooperativaId: string | null; id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null; status: StatusCooperado; cotaKwhMensal: Decimal | null; ... 26 more ...; cooperadoIndicadorId: string | null; }'.
+src/financeiro/pix-excedente.service.ts(57,38): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(78,42): error TS2339: Property 'condominio' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(91,41): error TS2339: Property 'unidadeCondominio' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(111,45): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(164,19): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(176,19): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(191,33): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(198,19): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(203,19): error TS2339: Property 'transferenciaPix' does not exist on type 'PrismaService'.
+src/financeiro/pix-excedente.service.ts(217,32): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/migracoes-usina/migracoes-usina.service.ts(194,16): error TS2339: Property 'migracaoUsina' does not exist on type 'Omit<PrismaClient<PrismaClientOptions, never, DefaultArgs>, "$on" | "$connect" | "$disconnect" | "$transaction" | "$extends">'.
+src/migracoes-usina/migracoes-usina.service.ts(343,16): error TS2339: Property 'migracaoUsina' does not exist on type 'Omit<PrismaClient<PrismaClientOptions, never, DefaultArgs>, "$on" | "$connect" | "$disconnect" | "$transaction" | "$extends">'.
+src/migracoes-usina/migracoes-usina.service.ts(551,24): error TS2339: Property 'migracaoUsina' does not exist on type 'PrismaService'.
+src/migracoes-usina/migracoes-usina.service.ts(565,24): error TS2339: Property 'migracaoUsina' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(31,39): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(44,35): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(57,23): error TS2339: Property 'logObservacao' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(70,35): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(73,23): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(78,23): error TS2339: Property 'logObservacao' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(116,24): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(133,24): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(183,43): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(217,27): error TS2339: Property 'logObservacao' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(235,43): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(256,27): error TS2339: Property 'logObservacao' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(276,41): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(281,25): error TS2339: Property 'observacaoAtiva' does not exist on type 'PrismaService'.
+src/observador/observador.service.ts(286,25): error TS2339: Property 'logObservacao' does not exist on type 'PrismaService'.
+src/whatsapp/whatsapp-bot.service.ts(262,38): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(418,41): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(450,113): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(456,70): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(475,51): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(550,51): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(559,49): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(586,51): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(632,47): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(645,15): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(652,49): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1386,47): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1433,52): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1450,51): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1489,9): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1522,51): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1548,47): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1593,9): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1655,52): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1733,46): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1770,9): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1828,52): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-bot.service.ts(1841,50): error TS2353: Object literal may only specify known properties, and 'contadorFallback' does not exist in type '(Without<ConversaWhatsappUpdateInput, ConversaWhatsappUncheckedUpdateInput> & ConversaWhatsappUncheckedUpdateInput) | (Without<...> & ConversaWhatsappUpdateInput)'.
+src/whatsapp/whatsapp-cobranca.service.ts(216,13): error TS2353: Object literal may only specify known properties, and 'cooperativa' does not exist in type 'ContratoInclude<DefaultArgs>'.
+src/whatsapp/whatsapp-cobranca.service.ts(230,34): error TS2551: Property 'contrato' does not exist on type '{ cooperativaId: string | null; id: string; status: StatusCobranca; createdAt: Date; updatedAt: Date; percentualDesconto: Decimal; mesReferencia: number; ... 21 more ...; geracaoMensalId: string | null; }'. Did you mean 'contratoId'?
+src/whatsapp/whatsapp-cobranca.service.ts(241,33): error TS2551: Property 'contrato' does not exist on type '{ cooperativaId: string | null; id: string; status: StatusCobranca; createdAt: Date; updatedAt: Date; percentualDesconto: Decimal; mesReferencia: number; ... 21 more ...; geracaoMensalId: string | null; }'. Did you mean 'contratoId'?
+src/whatsapp/whatsapp-cobranca.service.ts(259,40): error TS2339: Property 'asaasCobrancas' does not exist on type '{ cooperativaId: string | null; id: string; status: StatusCobranca; createdAt: Date; updatedAt: Date; percentualDesconto: Decimal; mesReferencia: number; ... 21 more ...; geracaoMensalId: string | null; }'.
+src/whatsapp/whatsapp-fatura.controller.ts(265,54): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'string | undefined'.
+  Type 'number' is not assignable to type 'string'.
