@@ -15,7 +15,7 @@ import {
   CheckCircle,
   TrendingUp,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+
 import BadgeNivelClube from '@/components/BadgeNivelClube';
 
 interface Indicacao {
@@ -63,7 +63,12 @@ export default function PortalIndicacoesPage() {
     Promise.all([
       api.get('/cooperados/meu-perfil'),
       api.get('/indicacoes/meu-link'),
-      api.get('/clube-vantagens/minha-progressao').catch(() => ({ data: null })),
+      api.get('/clube-vantagens/minha-progressao').catch((err: { response?: { status?: number } }) => {
+        if (err?.response?.status === 403 || err?.response?.status === 401) {
+          return { data: null };
+        }
+        return { data: null };
+      }),
     ])
       .then(([perfilRes, linkRes, progRes]) => {
         setDados(perfilRes.data);
@@ -126,7 +131,12 @@ export default function PortalIndicacoesPage() {
           <div className="flex flex-col items-center text-center">
             <div className="bg-white p-3 rounded-xl border border-gray-200 mb-3">
               {linkConvite ? (
-                <QRCodeSVG value={linkConvite} size={140} level="M" />
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkConvite)}`}
+                  alt="QR Code do link de indicação"
+                  width={140}
+                  height={140}
+                />
               ) : (
                 <div className="w-[140px] h-[140px] flex items-center justify-center text-xs text-gray-400">
                   Carregando QR Code...
