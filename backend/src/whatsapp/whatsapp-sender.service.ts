@@ -39,11 +39,29 @@ export class WhatsappSenderService {
   // Número do super admin — recebe cópia de todas as mensagens enviadas pelo sistema
   private readonly SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || '5527981341348';
 
+  /**
+   * Números bloqueados de receber mensagens do sistema.
+   * Inclui: números de teste, números anonimizados, prefixos inválidos.
+   */
+  private isNumeroProtegido(telefone: string): boolean {
+    const digits = telefone.replace(/\D/g, '');
+    // Números anonimizados no banco começam com 'INATIVO-'
+    if (telefone.startsWith('INATIVO-')) return true;
+    // Números de teste conhecidos (padrões usados em seeds)
+    const BLOQUEADOS = ['551199988', '551199900', '551172620', '551175410', '551178110'];
+    return BLOQUEADOS.some(p => digits.startsWith(p));
+  }
+
   async enviarMensagem(
     telefone: string,
     texto: string,
     opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
   ): Promise<void> {
+    // Bloquear envio para números de teste/anonimizados
+    if (this.isNumeroProtegido(telefone)) {
+      this.logger.warn(`[BLOQUEADO] Tentativa de envio para número de teste: ${telefone}`);
+      return;
+    }
     const res = await fetch(`${this.baseUrl}/send-message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
