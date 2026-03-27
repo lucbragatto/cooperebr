@@ -7,9 +7,10 @@ import { ConfiguracaoCobrancaModule } from '../configuracao-cobranca/configuraca
 import { AsaasModule } from '../asaas/asaas.module';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [ConfiguracaoCobrancaModule, AsaasModule, ClubeVantagensModule, WhatsappModule],
+  imports: [ConfiguracaoCobrancaModule, AsaasModule, ClubeVantagensModule, WhatsappModule, EmailModule],
   controllers: [CobrancasController],
   providers: [CobrancasService, CobrancasJob, PrismaService],
   exports: [CobrancasService],

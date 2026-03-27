@@ -1409,3 +1409,19 @@ model MigracaoUsina {
 
   @@map("migracoes_usina")
 }
+
+model EmailLog {
+  id            String    @id @default(cuid())
+  destinatario  String
+  assunto       String
+  status        String    // ENVIADO, ERRO, RECEBIDO
+  tipo          String?   // COMPROVANTE, GERAL
+  erro          String?
+  cooperadoId   String?
+  valorExtraido Float?
+  nomeRemetente String?
+  dataEmail     DateTime?
+  criadoEm      DateTime  @default(now())
+
+  @@map("email_logs")
+}

@@ -13,12 +13,13 @@ import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { IndicacoesModule } from '../indicacoes/indicacoes.module';
 import { AsaasModule } from '../asaas/asaas.module';
+import { EmailModule } from '../email/email.module';
 import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notificacao.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
 import { WhatsappNotificacoesService } from './whatsapp-notificacoes.service';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, AsaasModule],
+  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, AsaasModule, EmailModule],
   controllers: [WhatsappFaturaController],
   providers: [
     WhatsappFaturaService,

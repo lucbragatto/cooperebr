@@ -7,6 +7,7 @@ import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { EmailService } from '../email/email.service';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 
 const BUCKET = 'documentos-cooperados';
@@ -21,6 +22,7 @@ export class CooperadosService {
     private usinasService: UsinasService,
     private whatsappCicloVida: WhatsappCicloVidaService,
     private whatsappSender: WhatsappSenderService,
+    private emailService: EmailService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -402,8 +404,9 @@ export class CooperadosService {
   }) {
     const cooperado = await this.prisma.cooperado.create({ data });
 
-    // Notificar novo membro via WhatsApp
+    // Notificar novo membro via WhatsApp e E-mail
     this.whatsappCicloVida.notificarMembroCriado(cooperado).catch(() => {});
+    this.emailService.enviarBoasVindas(cooperado).catch(() => {});
 
     return cooperado;
   }

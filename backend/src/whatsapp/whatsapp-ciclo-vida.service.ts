@@ -1,12 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class WhatsappCicloVidaService {
   private readonly logger = new Logger(WhatsappCicloVidaService.name);
   private readonly linkPortal = process.env.FRONTEND_URL ?? 'http://localhost:3001';
 
-  constructor(private sender: WhatsappSenderService) {}
+  constructor(
+    private sender: WhatsappSenderService,
+    @Optional() private emailService?: EmailService,
+  ) {}
 
   private async enviar(
     telefone: string | null | undefined,
@@ -30,7 +34,7 @@ export class WhatsappCicloVidaService {
     }
   }
 
-  async notificarMembroCriado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null }) {
+  async notificarMembroCriado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; email?: string | null; cooperativaId?: string | null }) {
     const texto = [
       `🌟 Bem-vindo à CoopereBR, ${cooperado.nomeCompleto}!`,
       ``,
@@ -44,10 +48,11 @@ export class WhatsappCicloVidaService {
       `🔗 Acesse seu portal: ${this.linkPortal}/portal`,
       `Qualquer dúvida, estamos aqui! 😊`,
     ].join('\n');
+    this.emailService?.enviarBoasVindas(cooperado).catch(() => {});
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined });
   }
 
-  async notificarDocumentoAprovado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null }) {
+  async notificarDocumentoAprovado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; email?: string | null; cooperativaId?: string | null }) {
     const texto = [
       `✅ Boa notícia, ${cooperado.nomeCompleto}!`,
       ``,
@@ -57,10 +62,11 @@ export class WhatsappCicloVidaService {
       ``,
       `🔗 Acompanhe pelo portal: ${this.linkPortal}/portal`,
     ].join('\n');
+    this.emailService?.enviarDocumentoAprovado(cooperado).catch(() => {});
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined });
   }
 
-  async notificarDocumentoReprovado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null }, motivo: string) {
+  async notificarDocumentoReprovado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; email?: string | null; cooperativaId?: string | null }, motivo: string) {
     const texto = [
       `⚠️ ${cooperado.nomeCompleto}, precisamos da sua ajuda!`,
       ``,
@@ -73,10 +79,11 @@ export class WhatsappCicloVidaService {
       ``,
       `Qualquer dúvida, é só chamar! 👋`,
     ].join('\n');
+    this.emailService?.enviarDocumentoReprovado(cooperado, motivo).catch(() => {});
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined });
   }
 
-  async notificarContratoGerado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null }, linkContrato?: string) {
+  async notificarContratoGerado(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; email?: string | null; cooperativaId?: string | null }, linkContrato?: string) {
     const link = linkContrato ?? `${this.linkPortal}/portal/documentos`;
     const texto = [
       `📄 Seu contrato está pronto, ${cooperado.nomeCompleto}!`,
@@ -87,6 +94,7 @@ export class WhatsappCicloVidaService {
       ``,
       `Após a assinatura, iniciaremos a alocação dos seus créditos de energia. ⚡`,
     ].join('\n');
+    this.emailService?.enviarContratoGerado(cooperado, linkContrato).catch(() => {});
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined });
   }
 

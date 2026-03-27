@@ -5,6 +5,7 @@ import { AsaasService } from '../asaas/asaas.service';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { EmailService } from '../email/email.service';
 
 export interface CobrancaCalculo {
   contratoId: string;
@@ -33,6 +34,7 @@ export class CobrancasService {
     private clubeVantagensService: ClubeVantagensService,
     private whatsappCicloVida: WhatsappCicloVidaService,
     private whatsappSender: WhatsappSenderService,
+    private emailService: EmailService,
   ) {}
 
   async findAll(cooperativaId?: string, status?: string[]) {
@@ -237,15 +239,16 @@ export class CobrancasService {
       this.logger.warn(`Falha ao criar LancamentoCaixa na baixa: ${err.message}`);
     }
 
-    // Notificar pagamento confirmado via WhatsApp
+    // Notificar pagamento confirmado via WhatsApp e E-mail
     try {
       const cooperado = cobranca.contrato?.cooperado;
       if (cooperado) {
         const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
         this.whatsappCicloVida.notificarPagamentoConfirmado(cooperado, valorFinal, mesRef).catch(() => {});
+        this.emailService.enviarConfirmacaoPagamento(cooperado, cobrancaAtualizada).catch(() => {});
       }
     } catch (err) {
-      this.logger.warn(`Falha ao notificar pagamento via WhatsApp: ${err.message}`);
+      this.logger.warn(`Falha ao notificar pagamento via WhatsApp/E-mail: ${err.message}`);
     }
 
     // Clube de Vantagens: atualizar métricas dos indicadores
