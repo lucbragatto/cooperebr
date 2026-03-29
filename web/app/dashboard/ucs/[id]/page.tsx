@@ -7,6 +7,7 @@ import type { UC } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
@@ -121,7 +122,7 @@ export default function UCDetailPage() {
             <Campo label="Endereço" value={uc.endereco} />
             <Campo label="Cidade" value={uc.cidade} />
             <Campo label="Estado" value={uc.estado} />
-            <Campo label={tipoMembro} value={uc.cooperado?.nomeCompleto} />
+            <Campo label={tipoMembro} value={uc.cooperado ? <Link href={`/dashboard/cooperados/${uc.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{uc.cooperado.nomeCompleto}</Link> : '—'} />
             <Campo label={`ID do ${tipoMembro}`} value={uc.cooperadoId} />
             <Campo label="Criado em" value={new Date(uc.createdAt).toLocaleString('pt-BR')} />
             <Campo label="Atualizado em" value={new Date(uc.updatedAt).toLocaleString('pt-BR')} />

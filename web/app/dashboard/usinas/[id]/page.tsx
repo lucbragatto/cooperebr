@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '@/lib/api';
+import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -390,7 +391,7 @@ export default function UsinaDetailPage() {
                       <TableBody>
                         {saudeFinanceira.inadimplentes.map((i: any) => (
                           <TableRow key={i.cobrancaId}>
-                            <TableCell className="font-medium">{i.nome}</TableCell>
+                            <TableCell className="font-medium">{i.cooperadoId ? <Link href={`/dashboard/cooperados/${i.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{i.nome}</Link> : i.nome}</TableCell>
                             <TableCell>R$ {i.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                             <TableCell>
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${i.diasAtraso > 30 ? 'bg-red-100 text-red-800' : i.diasAtraso > 15 ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>
@@ -446,7 +447,7 @@ export default function UsinaDetailPage() {
                       <TableBody>
                         {ocupacao.breakdown.map((b: any, i: number) => (
                           <TableRow key={i}>
-                            <TableCell className="font-medium">{b.cooperativaNome}</TableCell>
+                            <TableCell className="font-medium">{b.cooperativaId ? <Link href={`/dashboard/cooperativas/${b.cooperativaId}`} className="text-blue-600 hover:underline font-medium">{b.cooperativaNome}</Link> : b.cooperativaNome}</TableCell>
                             <TableCell>{b.percentual.toFixed(2)}%</TableCell>
                             <TableCell>{b.kwhReservado.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</TableCell>
                             <TableCell>{b.qtdContratos}</TableCell>
@@ -521,7 +522,7 @@ export default function UsinaDetailPage() {
                     ) : (
                       distribuicao.cooperados.map((c: any, i: number) => (
                         <TableRow key={i}>
-                          <TableCell className="font-medium">{c.nome}</TableCell>
+                          <TableCell className="font-medium">{c.cooperadoId ? <Link href={`/dashboard/cooperados/${c.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{c.nome}</Link> : c.nome}</TableCell>
                           <TableCell>{c.ucNumero || '—'}</TableCell>
                           <TableCell>{c.kwhContratado.toLocaleString('pt-BR')}</TableCell>
                           <TableCell>
@@ -587,7 +588,7 @@ export default function UsinaDetailPage() {
                   ) : (
                     cooperadosAlocados.map((c: any, i: number) => (
                       <TableRow key={i}>
-                        <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
+                        <TableCell className="font-medium">{c.cooperadoId ? <Link href={`/dashboard/cooperados/${c.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{c.nomeCompleto}</Link> : c.nomeCompleto}</TableCell>
                         <TableCell>{c.numeroUC}</TableCell>
                         <TableCell>{c.kwhContratado}</TableCell>
                         <TableCell>{c.percentualUsina}%</TableCell>
@@ -679,7 +680,7 @@ export default function UsinaDetailPage() {
                     ) : (
                       lista.cooperados.map((c: any, i: number) => (
                         <TableRow key={i}>
-                          <TableCell className="font-medium">{c.nomeCompleto}</TableCell>
+                          <TableCell className="font-medium">{c.cooperadoId ? <Link href={`/dashboard/cooperados/${c.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{c.nomeCompleto}</Link> : c.nomeCompleto}</TableCell>
                           <TableCell>{c.cpf}</TableCell>
                           <TableCell>{c.numeroUC}</TableCell>
                           <TableCell>{c.kwhContratado}</TableCell>

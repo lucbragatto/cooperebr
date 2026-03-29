@@ -58,12 +58,17 @@ export default function CooperativaDetailPage() {
   const [coop, setCoop] = useState<Cooperativa | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [membros, setMembros] = useState<any[]>([]);
 
   useEffect(() => {
     api.get<Cooperativa>(`/cooperativas/${id}`)
       .then((r) => setCoop(r.data))
       .catch(() => setErro('Parceiro não encontrado.'))
       .finally(() => setCarregando(false));
+
+    api.get(`/cooperados?cooperativaId=${id}`)
+      .then((r) => setMembros(Array.isArray(r.data) ? r.data : r.data.data ?? []))
+      .catch(() => {});
   }, [id]);
 
   const badge = coop ? (BADGE_TIPO[coop.tipoParceiro] || { label: coop.tipoParceiro, icone: '👤' }) : null;
@@ -154,29 +159,70 @@ export default function CooperativaDetailPage() {
                     <TableHead>Potência (kWp)</TableHead>
                     <TableHead>Cidade/UF</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(!coop.usinas || coop.usinas.length === 0) ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-gray-400 py-6">
+                      <TableCell colSpan={4} className="text-center text-gray-400 py-6">
                         Nenhuma usina vinculada
                       </TableCell>
                     </TableRow>
                   ) : (
                     coop.usinas.map((u: any) => (
                       <TableRow key={u.id}>
-                        <TableCell className="font-medium">{u.nome}</TableCell>
+                        <TableCell className="font-medium">
+                          <Link href={`/dashboard/usinas/${u.id}`} className="text-blue-600 hover:underline font-medium">
+                            {u.nome}
+                          </Link>
+                        </TableCell>
                         <TableCell>{Number(u.potenciaKwp).toFixed(2)}</TableCell>
                         <TableCell>{u.cidade}/{u.estado}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{u.statusHomologacao}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/dashboard/usinas/${u.id}`}>
-                            <Button variant="ghost" size="sm">Ver</Button>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Membros */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">{coop.tipoMembroPlural ?? 'Membros'} ({membros.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CPF/CNPJ</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {membros.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-gray-400 py-6">
+                        Nenhum membro vinculado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    membros.map((m: any) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-medium">
+                          <Link href={`/dashboard/cooperados/${m.id}`} className="text-blue-600 hover:underline font-medium">
+                            {m.nomeCompleto}
                           </Link>
+                        </TableCell>
+                        <TableCell>{m.cpf}</TableCell>
+                        <TableCell>{m.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{m.status}</Badge>
                         </TableCell>
                       </TableRow>
                     ))

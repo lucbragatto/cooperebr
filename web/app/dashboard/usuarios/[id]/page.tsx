@@ -50,11 +50,9 @@ export default function UsuarioDetalhePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/usuarios">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-          </Button>
-        </Link>
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+        </Button>
         <h1 className="text-2xl font-bold text-gray-900">{usuario.nome}</h1>
       </div>
 
@@ -88,7 +86,7 @@ export default function UsuarioDetalhePage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Parceiro</p>
-              <p className="font-medium">{usuario.cooperativa?.nome || '—'}</p>
+              <p className="font-medium">{usuario.cooperativa && usuario.cooperativaId ? <Link href={`/dashboard/cooperativas/${usuario.cooperativaId}`} className="text-blue-600 hover:underline font-medium">{usuario.cooperativa.nome}</Link> : '—'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Data de criação</p>

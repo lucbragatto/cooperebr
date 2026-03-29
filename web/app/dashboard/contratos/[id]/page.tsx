@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -159,9 +160,9 @@ export default function ContratoDetailPage() {
           <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
             <Campo label="ID" value={contrato.id} />
             <Campo label="Numero" value={contrato.numero} />
-            <Campo label={tipoMembro} value={contrato.cooperado?.nomeCompleto} />
-            <Campo label="UC" value={contrato.uc?.numero} />
-            <Campo label="Usina" value={contrato.usina?.nome} />
+            <Campo label={tipoMembro} value={contrato.cooperado ? <Link href={`/dashboard/cooperados/${contrato.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{contrato.cooperado.nomeCompleto}</Link> : '—'} />
+            <Campo label="UC" value={contrato.uc ? <Link href={`/dashboard/ucs/${contrato.ucId}`} className="text-blue-600 hover:underline font-medium">{contrato.uc.numero}</Link> : '—'} />
+            <Campo label="Usina" value={contrato.usina ? <Link href={`/dashboard/usinas/${contrato.usinaId}`} className="text-blue-600 hover:underline font-medium">{contrato.usina.nome}</Link> : '—'} />
             <Campo label="Desconto (%)" value={`${contrato.percentualDesconto}%`} />
             {contrato.descontoOverride != null && (
               <Campo label="Desconto Override (%)" value={`${contrato.descontoOverride}%`} />

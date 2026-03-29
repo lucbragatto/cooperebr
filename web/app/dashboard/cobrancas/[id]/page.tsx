@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil, CheckCircle } from 'lucide-react';
+import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
@@ -155,8 +156,8 @@ export default function CobrancaDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={cobranca.id} />
-            <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado?.nomeCompleto} />
-            <Campo label="Contrato" value={cobranca.contrato?.numero} />
+            <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado ? <Link href={`/dashboard/cooperados/${(cobranca as any).contrato.cooperado.id ?? (cobranca as any).contrato.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{(cobranca as any).contrato.cooperado.nomeCompleto}</Link> : '—'} />
+            <Campo label="Contrato" value={cobranca.contrato ? <Link href={`/dashboard/contratos/${cobranca.contratoId}`} className="text-blue-600 hover:underline font-medium">{cobranca.contrato.numero}</Link> : '—'} />
             <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
             <Campo label="Valor Bruto" value={formatBRL(cobranca.valorBruto)} />
             <Campo label="Desconto (%)" value={`${cobranca.percentualDesconto}%`} />

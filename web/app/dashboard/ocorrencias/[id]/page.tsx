@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const prioridadeClasses: Record<string, string> = {
@@ -149,8 +150,8 @@ export default function OcorrenciaDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={ocorrencia.id} />
-            <Campo label={tipoMembro} value={ocorrencia.cooperado?.nomeCompleto} />
-            <Campo label="UC" value={ocorrencia.uc?.numero} />
+            <Campo label={tipoMembro} value={ocorrencia.cooperado ? <Link href={`/dashboard/cooperados/${ocorrencia.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{ocorrencia.cooperado.nomeCompleto}</Link> : '—'} />
+            <Campo label="UC" value={ocorrencia.uc ? <Link href={`/dashboard/ucs/${ocorrencia.ucId}`} className="text-blue-600 hover:underline font-medium">{ocorrencia.uc.numero}</Link> : '—'} />
             <Campo label="Tipo" value={tipoLabel[ocorrencia.tipo] ?? ocorrencia.tipo} />
             <Campo label="Prioridade" value={prioridadeLabel[ocorrencia.prioridade] ?? ocorrencia.prioridade} />
             <Campo label="Status" value={statusLabel[ocorrencia.status] ?? ocorrencia.status} />

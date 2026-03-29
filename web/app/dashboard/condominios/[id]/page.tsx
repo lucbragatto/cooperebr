@@ -153,9 +153,9 @@ export default function CondominioDetalhePage() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/dashboard/condominios">
-          <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
-        </Link>
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" />Voltar
+        </Button>
         <div className="flex-1">
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Building className="h-6 w-6 text-blue-500" /> {cond.nome}
@@ -258,7 +258,7 @@ export default function CondominioDetalhePage() {
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.numero}</TableCell>
                   <TableCell className="text-sm text-gray-600">
-                    {u.cooperado ? u.cooperado.nomeCompleto : <span className="text-gray-400">—</span>}
+                    {u.cooperado ? <Link href={`/dashboard/cooperados/${u.cooperado.id}`} className="text-blue-600 hover:underline font-medium">{u.cooperado.nomeCompleto}</Link> : <span className="text-gray-400">—</span>}
                   </TableCell>
                   <TableCell className="text-sm">{u.fracaoIdeal != null ? `${(u.fracaoIdeal * 100).toFixed(2)}%` : '—'}</TableCell>
                   <TableCell className="text-sm">{u.percentualFixo != null ? `${u.percentualFixo}%` : '—'}</TableCell>

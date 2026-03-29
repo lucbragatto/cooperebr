@@ -45,11 +45,9 @@ export default function AdministradoraDetalhePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/administradoras">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-          </Button>
-        </Link>
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+        </Button>
         <h1 className="text-2xl font-bold text-gray-900">{admin.razaoSocial}</h1>
         {admin.nomeFantasia && <span className="text-gray-500">({admin.nomeFantasia})</span>}
       </div>

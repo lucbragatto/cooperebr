@@ -9,6 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { ArrowLeft, Copy, Check, Users, UserCheck, Clock, UserX, Gift } from 'lucide-react';
+import Link from 'next/link';
 
 export default function ParceiroPainelPage() {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,7 @@ export default function ParceiroPainelPage() {
               ) : (
                 membrosRecentes.map((m: any) => (
                   <TableRow key={m.id}>
-                    <TableCell className="font-medium">{m.nome}</TableCell>
+                    <TableCell className="font-medium">{m.id ? <Link href={`/dashboard/cooperados/${m.id}`} className="text-blue-600 hover:underline font-medium">{m.nome}</Link> : m.nome}</TableCell>
                     <TableCell>
                       {m.codigoIndicacao ? (
                         <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{m.codigoIndicacao}</code>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -326,6 +326,7 @@ function IndicacoesTab({ cooperadoId, codigoIndicacao }: { cooperadoId: string; 
 
 export default function CooperadoPerfilPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { tipoMembro, tipoMembroPlural } = useTipoParceiro();
 
   // Core data
@@ -851,7 +852,7 @@ export default function CooperadoPerfilPage() {
   if (erro || !cooperado) return (
     <div className="flex flex-col items-center py-20 gap-4">
       <p className="text-red-500">{erro || `${tipoMembro} não encontrado.`}</p>
-      <Link href="/dashboard/cooperados"><Button variant="outline"><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Button></Link>
+      <Button variant="outline" onClick={() => router.back()}><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Button>
     </div>
   );
 
@@ -869,9 +870,9 @@ export default function CooperadoPerfilPage() {
       )}
 
       {/* Back */}
-      <Link href="/dashboard/cooperados" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-800 transition-colors">
-        <ArrowLeft className="h-4 w-4 mr-1" />{tipoMembroPlural}
-      </Link>
+      <button onClick={() => router.back()} className="inline-flex items-center text-sm text-gray-500 hover:text-gray-800 transition-colors">
+        <ArrowLeft className="h-4 w-4 mr-1" />Voltar
+      </button>
 
       {/* Header */}
       <div className="bg-white border rounded-xl px-6 py-5 flex items-start justify-between gap-4">
@@ -1034,7 +1035,7 @@ export default function CooperadoPerfilPage() {
                             {statusContratoLabel[c.status] ?? c.status}
                           </span>
                         </td>
-                        <td className="px-4 py-2">{c.usina?.nome ?? <span className="text-gray-400">Sem usina</span>}</td>
+                        <td className="px-4 py-2">{c.usina ? <Link href={`/dashboard/usinas/${c.usina.id}`} className="text-blue-600 hover:underline font-medium">{c.usina.nome}</Link> : <span className="text-gray-400">Sem usina</span>}</td>
                         <td className="px-4 py-2 text-right font-mono">{Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')}</td>
                         <td className="px-4 py-2 text-right">{Number(c.percentualDesconto).toFixed(2)}%</td>
                         <td className="px-4 py-2">{c.plano ? `${c.plano.nome} (${modeloCobrancaLabel[c.plano.modeloCobranca] ?? c.plano.modeloCobranca})` : '—'}</td>
@@ -1071,7 +1072,7 @@ export default function CooperadoPerfilPage() {
                   <tbody>
                     {cooperado.ucs.map(uc => (
                       <tr key={uc.id} className="border-b last:border-0 hover:bg-gray-50">
-                        <td className="px-4 py-2 font-medium">{uc.numero}</td>
+                        <td className="px-4 py-2 font-medium"><Link href={`/dashboard/ucs/${uc.id}`} className="text-blue-600 hover:underline font-medium">{uc.numero}</Link></td>
                         <td className="px-4 py-2">{uc.endereco}</td>
                         <td className="px-4 py-2">{uc.cidade}/{uc.estado}</td>
                         <td className="px-4 py-2">{uc.distribuidora ?? '—'}</td>
@@ -1154,6 +1155,7 @@ export default function CooperadoPerfilPage() {
                         <Campo label="Número UC" value={c.uc.numero} />
                         <Campo label="Distribuidora" value={c.uc.distribuidora} />
                         <Campo label="Localização" value={`${c.uc.cidade}/${c.uc.estado}`} />
+                        <Link href={`/dashboard/ucs/${c.uc.id}`} className="text-blue-600 hover:underline text-sm font-medium">Ver UC</Link>
                       </CardContent>
                     </Card>
                   )}
@@ -1164,6 +1166,7 @@ export default function CooperadoPerfilPage() {
                         <Campo label="Nome" value={c.usina.nome} />
                         <Campo label="Potência (kWp)" value={`${Number(c.usina.potenciaKwp).toLocaleString('pt-BR')} kWp`} />
                         <Campo label="Localização" value={`${c.usina.cidade}/${c.usina.estado}`} />
+                        <Link href={`/dashboard/usinas/${c.usina.id}`} className="text-blue-600 hover:underline text-sm font-medium">Ver Usina</Link>
                       </CardContent>
                     </Card>
                   )}
