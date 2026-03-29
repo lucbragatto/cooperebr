@@ -90,8 +90,8 @@ function renderPreview(conteudo: string): string {
   return texto;
 }
 
-function highlightVariaveis(conteudo: string): (string | JSX.Element)[] {
-  const parts: (string | JSX.Element)[] = [];
+function highlightVariaveis(conteudo: string): (string | React.ReactElement)[] {
+  const parts: (string | React.ReactElement)[] = [];
   const regex = /(\{\{[a-zA-Z_]+\}\})/g;
   let last = 0;
   let match: RegExpExecArray | null;

@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { UsinasService } from './usinas.service';
+import { UsinasAnaliticoService } from './usinas-analitico.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
@@ -7,7 +8,10 @@ const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
 @Controller('usinas')
 export class UsinasController {
-  constructor(private readonly usinasService: UsinasService) {}
+  constructor(
+    private readonly usinasService: UsinasService,
+    private readonly analiticoService: UsinasAnaliticoService,
+  ) {}
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get()
@@ -19,6 +23,18 @@ export class UsinasController {
   @Get('disponiveis')
   findDisponiveis(@Query('ucId') ucId: string) {
     return this.usinasService.findDisponiveis(ucId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get(':id/saude-financeira')
+  saudeFinanceira(@Param('id') id: string) {
+    return this.analiticoService.saudeFinanceira(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get(':id/ocupacao')
+  ocupacao(@Param('id') id: string) {
+    return this.analiticoService.ocupacao(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)

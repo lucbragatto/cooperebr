@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Building, MapPin } from 'lucide-react';
+import { Plus, Search, Building, MapPin, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Condominio {
@@ -36,11 +36,23 @@ export default function CondominiosPage() {
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
 
-  useEffect(() => {
+  function carregarCondominios() {
     api.get<Condominio[]>('/condominios')
       .then(r => setCondominios(r.data))
       .finally(() => setCarregando(false));
-  }, []);
+  }
+
+  useEffect(() => { carregarCondominios(); }, []);
+
+  async function handleExcluir(id: string, nome: string) {
+    if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/condominios/${id}`);
+      carregarCondominios();
+    } catch {
+      alert('Erro ao excluir condomínio.');
+    }
+  }
 
   const filtrados = condominios.filter(c => {
     if (!busca.trim()) return true;
@@ -79,20 +91,21 @@ export default function CondominiosPage() {
                 <TableHead>Rateio</TableHead>
                 <TableHead>Unidades</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {carregando ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : filtrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
                     <Building className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                     Nenhum condominio cadastrado
                   </TableCell>
@@ -119,6 +132,11 @@ export default function CondominiosPage() {
                       <Badge className={c.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
                         {c.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" title="Excluir" onClick={() => handleExcluir(c.id, c.nome)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

@@ -40,6 +40,7 @@ import { AdministradorasModule } from './administradoras/administradoras.module'
 import { ObservadorModule } from './observador/observador.module';
 import { MigracoesUsinaModule } from './migracoes-usina/migracoes-usina.module';
 import { EmailModule } from './email/email.module';
+import { RelatoriosModule } from './relatorios/relatorios.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -82,6 +83,7 @@ import { RolesGuard } from './auth/roles.guard';
     ObservadorModule,
     MigracoesUsinaModule,
     EmailModule,
+    RelatoriosModule,
   ],
   controllers: [AppController],
   providers: [

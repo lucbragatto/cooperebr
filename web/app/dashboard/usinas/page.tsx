@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 const statusLabels: Record<StatusUsina, string> = {
   CADASTRADA: 'Cadastrada',
@@ -36,11 +36,23 @@ export default function UsinasPage() {
   const [usinas, setUsinas] = useState<Usina[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  useEffect(() => {
+  function carregarUsinas() {
     api.get<Usina[]>('/usinas')
       .then((r) => setUsinas(r.data))
       .finally(() => setCarregando(false));
-  }, []);
+  }
+
+  useEffect(() => { carregarUsinas(); }, []);
+
+  async function handleExcluir(id: string, nome: string) {
+    if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/usinas/${id}`);
+      carregarUsinas();
+    } catch {
+      alert('Erro ao excluir usina.');
+    }
+  }
 
   return (
     <div>
@@ -96,7 +108,11 @@ export default function UsinasPage() {
                   const st = (u.statusHomologacao || 'CADASTRADA') as StatusUsina;
                   return (
                     <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.nome}</TableCell>
+                      <TableCell>
+                        <Link href={`/dashboard/usinas/${u.id}`} className="text-blue-600 hover:underline font-medium">
+                          {u.nome}
+                        </Link>
+                      </TableCell>
                       <TableCell>{Number(u.potenciaKwp).toFixed(2)}</TableCell>
                       <TableCell>{u.capacidadeKwh ? Number(u.capacidadeKwh).toFixed(2) : '—'}</TableCell>
                       <TableCell>{(u as any).proprietarioNome || '—'}</TableCell>
@@ -108,9 +124,14 @@ export default function UsinasPage() {
                       <TableCell>{u.cidade}</TableCell>
                       <TableCell>{u.estado}</TableCell>
                       <TableCell className="text-right">
-                        <Link href={`/dashboard/usinas/${u.id}`}>
-                          <Button variant="ghost" size="sm">Ver</Button>
-                        </Link>
+                        <div className="flex justify-end gap-1">
+                          <Link href={`/dashboard/usinas/${u.id}`}>
+                            <Button variant="ghost" size="sm">Ver</Button>
+                          </Link>
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" title="Excluir" onClick={() => handleExcluir(u.id, u.nome)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

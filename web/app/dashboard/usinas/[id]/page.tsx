@@ -10,7 +10,7 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users, DollarSign, Activity, BarChart3 } from 'lucide-react';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -84,6 +84,8 @@ export default function UsinaDetailPage() {
   const [cooperadosAlocados, setCooperadosAlocados] = useState<any[]>([]);
   const [capacidadeInfo, setCapacidadeInfo] = useState<{usado: number; total: number} | null>(null);
   const [distribuicao, setDistribuicao] = useState<any>(null);
+  const [saudeFinanceira, setSaudeFinanceira] = useState<any>(null);
+  const [ocupacao, setOcupacao] = useState<any>(null);
 
   // Migração states
   const [migrarModalAberto, setMigrarModalAberto] = useState(false);
@@ -135,6 +137,14 @@ export default function UsinaDetailPage() {
 
     api.get(`/usinas/${id}/distribuicao`)
       .then((r) => setDistribuicao(r.data))
+      .catch(() => { /* silently ignore */ });
+
+    api.get(`/usinas/${id}/saude-financeira`)
+      .then((r) => setSaudeFinanceira(r.data))
+      .catch(() => { /* silently ignore */ });
+
+    api.get(`/usinas/${id}/ocupacao`)
+      .then((r) => setOcupacao(r.data))
       .catch(() => { /* silently ignore */ });
 
     // Carregar usinas disponíveis para migração
@@ -332,6 +342,123 @@ export default function UsinaDetailPage() {
               <Campo label="Atualizado em" value={new Date(usina.updatedAt).toLocaleString('pt-BR')} />
             </CardContent>
           </Card>
+
+          {/* Saúde Financeira */}
+          {saudeFinanceira && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <DollarSign className="h-4 w-4 text-green-600" />
+                  Saúde Financeira — {String(saudeFinanceira.mesReferencia).padStart(2, '0')}/{saudeFinanceira.anoReferencia}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <p className="text-xs text-blue-600 font-medium">kWh Gerado</p>
+                    <p className="text-xl font-bold text-blue-800">{Number(saudeFinanceira.kwhGerado).toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-600 font-medium">Contratos Ativos</p>
+                    <p className="text-xl font-bold text-gray-800">{saudeFinanceira.contratosAtivos}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3">
+                    <p className="text-xs text-amber-600 font-medium">Total Cobrado</p>
+                    <p className="text-xl font-bold text-amber-800">R$ {saudeFinanceira.totalCobrado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <p className="text-xs text-green-600 font-medium">Total Recebido</p>
+                    <p className="text-xl font-bold text-green-800">R$ {saudeFinanceira.totalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className={`rounded-lg p-3 ${saudeFinanceira.totalInadimplente > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                    <p className={`text-xs font-medium ${saudeFinanceira.totalInadimplente > 0 ? 'text-red-600' : 'text-green-600'}`}>Inadimplente</p>
+                    <p className={`text-xl font-bold ${saudeFinanceira.totalInadimplente > 0 ? 'text-red-800' : 'text-green-800'}`}>R$ {saudeFinanceira.totalInadimplente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                </div>
+
+                {saudeFinanceira.inadimplentes.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-red-700 mb-2">Inadimplentes ({saudeFinanceira.inadimplentes.length})</p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Dias em Atraso</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {saudeFinanceira.inadimplentes.map((i: any) => (
+                          <TableRow key={i.cobrancaId}>
+                            <TableCell className="font-medium">{i.nome}</TableCell>
+                            <TableCell>R$ {i.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                            <TableCell>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${i.diasAtraso > 30 ? 'bg-red-100 text-red-800' : i.diasAtraso > 15 ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>
+                                {i.diasAtraso} dias
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Ocupação vs Capacidade */}
+          {ocupacao && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Activity className="h-4 w-4 text-blue-600" />
+                  Ocupação vs. Capacidade Real
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-600">Ocupação</span>
+                    <span className="font-medium">{ocupacao.percentualOcupado.toFixed(1)}% — {ocupacao.kwhOcupado.toLocaleString('pt-BR')} / {ocupacao.capacidadeKwh.toLocaleString('pt-BR')} kWh</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-4">
+                    <div
+                      className={`h-4 rounded-full transition-all ${ocupacao.percentualOcupado > 95 ? 'bg-red-500' : ocupacao.percentualOcupado > 80 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min(ocupacao.percentualOcupado, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Disponível: {ocupacao.kwhDisponivel.toLocaleString('pt-BR')} kWh</p>
+                </div>
+
+                {ocupacao.breakdown.length > 0 && (
+                  <>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Breakdown por Parceiro</p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Parceiro</TableHead>
+                          <TableHead>% Usina</TableHead>
+                          <TableHead>kWh Reservado</TableHead>
+                          <TableHead>Contratos</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ocupacao.breakdown.map((b: any, i: number) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{b.cooperativaNome}</TableCell>
+                            <TableCell>{b.percentual.toFixed(2)}%</TableCell>
+                            <TableCell>{b.kwhReservado.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</TableCell>
+                            <TableCell>{b.qtdContratos}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Distribuição de Créditos do Mês */}
           {distribuicao && (

@@ -117,7 +117,11 @@ export default function CooperativasPage() {
                   const badge = BADGE_TIPO[c.tipoParceiro] || { label: c.tipoParceiro, icone: '👤' };
                   return (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.nome}</TableCell>
+                      <TableCell>
+                        <Link href={`/dashboard/cooperativas/${c.id}`} className="text-blue-600 hover:underline font-medium">
+                          {c.nome}
+                        </Link>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="gap-1">
                           <span>{badge.icone}</span> {badge.label}

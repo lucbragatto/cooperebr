@@ -119,6 +119,17 @@ export class AuthController {
     return this.authService.alterarSenha(usuario.id, dto.senhaAtual, dto.novaSenha);
   }
 
+  // --- Trocar Contexto ---
+
+  @HttpCode(200)
+  @Post('trocar-contexto')
+  trocarContexto(
+    @CurrentUser() usuario: any,
+    @Body() body: { contexto: string; cooperativaId?: string },
+  ) {
+    return this.authService.trocarContexto(usuario, body.contexto, body.cooperativaId);
+  }
+
   // --- CRUD Usuários (ADMIN / SUPER_ADMIN) ---
 
   @Roles(PerfilUsuario.ADMIN)
@@ -146,8 +157,8 @@ export class AuthController {
   @Roles(PerfilUsuario.ADMIN)
   @HttpCode(200)
   @Post('usuarios/:id/reset-senha')
-  resetSenhaAdmin(@Param('id') id: string) {
-    return this.authService.enviarResetSenhaPorAdmin(id);
+  resetSenhaAdmin(@Param('id') id: string, @CurrentUser() admin: any) {
+    return this.authService.enviarResetSenhaPorAdmin(id, admin);
   }
 
   @Roles(PerfilUsuario.SUPER_ADMIN)

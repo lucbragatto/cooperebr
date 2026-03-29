@@ -317,9 +317,13 @@ export class AuthService {
     return { ok: true };
   }
 
-  async enviarResetSenhaPorAdmin(id: string) {
+  async enviarResetSenhaPorAdmin(id: string, adminUser: any) {
     const usuario: any = await this.prisma.usuario.findUnique({ where: { id } });
     if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+    if (adminUser.perfil === PerfilUsuario.ADMIN && usuario.cooperativaId !== adminUser.cooperativaId) {
+      throw new ForbiddenException('Sem permissão para resetar senha deste usuário');
+    }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     await this.supabase.auth.resetPasswordForEmail(usuario.email, {
@@ -477,6 +481,43 @@ export class AuthService {
       })),
       parceirosDisponiveis,
     };
+  }
+
+  async trocarContexto(usuario: any, contexto: string, cooperativaId?: string) {
+    const contextos = await this.obterContextosUsuario(usuario);
+    const contextoValido = contextos.contextos.find((c) => c.tipo === contexto);
+    if (!contextoValido) {
+      throw new ForbiddenException('Contexto não disponível para este usuário');
+    }
+
+    let cooperadoId: string | undefined;
+    let coopId: string | undefined;
+
+    if (contexto === 'super_admin' && cooperativaId) {
+      // SUPER_ADMIN impersonando uma cooperativa
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: { id: true },
+      });
+      if (!coop) throw new NotFoundException('Cooperativa não encontrada');
+      coopId = cooperativaId;
+    } else if (contexto === 'cooperado') {
+      cooperadoId = contextoValido.id;
+      coopId = contextoValido.cooperativaId;
+    } else if (contexto === 'admin_parceiro') {
+      coopId = contextoValido.cooperativaId;
+    } else if (contexto === 'super_admin') {
+      // sem cooperativaId — contexto puro super_admin
+    } else if (contexto === 'proprietario_usina') {
+      coopId = contextoValido.cooperativaId;
+    }
+
+    const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil, {
+      cooperadoId,
+      cooperativaId: coopId,
+    });
+
+    return { token, contexto, cooperativaId: coopId ?? null };
   }
 
   private async buscarPorIdentificador(identificador: string) {

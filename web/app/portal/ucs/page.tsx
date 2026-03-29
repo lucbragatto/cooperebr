@@ -235,7 +235,7 @@ function UcChart({ ucId }: { ucId: string }) {
           <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} width={40} />
           <Tooltip
-            formatter={(value: number) => [`${value} kWh`, 'kWh']}
+            formatter={(value) => [`${value} kWh`, 'kWh']}
             labelStyle={{ fontSize: 12 }}
           />
           <Bar dataKey="kwh" fill="#16a34a" radius={[4, 4, 0, 0]} />

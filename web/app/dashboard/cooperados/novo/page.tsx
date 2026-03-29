@@ -243,7 +243,7 @@ export default function NovoMembroWizard() {
             contratoData={step6}
             tipoMembro={tipoMembro}
             tipoMembroPlural={tipoMembroPlural}
-            tipoParceiro={tipoParceiro}
+            tipoParceiro={tipoParceiro ?? 'COOPERATIVA'}
           />
         );
       default:

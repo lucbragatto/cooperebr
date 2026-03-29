@@ -37,7 +37,7 @@ export class WhatsappSenderService {
   }
 
   // Número do super admin — recebe cópia de todas as mensagens enviadas pelo sistema
-  private readonly SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || '5527981341348';
+  private readonly SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || null;
 
   /**
    * Números bloqueados de receber mensagens do sistema.
@@ -86,7 +86,7 @@ export class WhatsappSenderService {
     } as WhatsappMensagemEnviadaEvent);
 
     // Espelhar para o super admin (exceto se já for ele o destinatário)
-    if (telefone.replace(/\D/g, '') !== this.SUPER_ADMIN_PHONE.replace(/\D/g, '')) {
+    if (this.SUPER_ADMIN_PHONE && telefone.replace(/\D/g, '') !== this.SUPER_ADMIN_PHONE.replace(/\D/g, '')) {
       const espelho = `📋 *[ESPELHO]* → para *${telefone}*:\n\n${texto}`;
       try {
         await fetch(`${this.baseUrl}/send-message`, {
@@ -109,6 +109,10 @@ export class WhatsappSenderService {
     menu: MenuInterativo,
     opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
   ): Promise<void> {
+    if (this.isNumeroProtegido(telefone)) {
+      this.logger.warn(`[BLOQUEADO] Menu para número protegido: ${telefone}`);
+      return;
+    }
     const { titulo, corpo, rodape, opcoes: itens } = menu;
     const footerText = rodape || 'CoopereBR - Energia Solar Compartilhada';
 

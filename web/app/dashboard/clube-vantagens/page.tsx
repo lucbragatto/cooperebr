@@ -108,8 +108,8 @@ export default function ClubeVantagensAnalyticsPage() {
   const pieData = (analytics?.distribuicaoPorNivel ?? []).map(d => ({ name: d.nivel, value: d.count }));
 
   const evolucaoData = evolucao.map(e => ({
-    mes: e.mes.slice(5), // MM
     ...e,
+    mes: e.mes.slice(5), // MM
   }));
 
   return (

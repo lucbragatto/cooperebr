@@ -33,6 +33,8 @@ import {
   Gift,
   UserPlus,
   Eye,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -106,6 +108,13 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
         { href: '/dashboard/administradoras', label: 'Administradoras', icon: Building2 },
+      ],
+    },
+    {
+      title: 'Relatórios',
+      items: [
+        { href: '/dashboard/relatorios/inadimplencia', label: 'Inadimplência', icon: BarChart3 },
+        { href: '/dashboard/relatorios/projecao-receita', label: 'Projeção Receita', icon: TrendingUp },
       ],
     },
     {

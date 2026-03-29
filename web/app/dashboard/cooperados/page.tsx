@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search } from 'lucide-react';
+import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search, Trash2 } from 'lucide-react';
 import AcoesLoteBar from '@/components/AcoesLoteBar';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -76,7 +76,7 @@ const CONTRATO_CONFIG: Record<string, { label: string; color: string }> = {
   ENCERRADO: { label: 'Encerrado', color: 'bg-gray-100 text-gray-600' },
 };
 
-function AcoesDropdown({ cooperado }: { cooperado: CooperadoLista }) {
+function AcoesDropdown({ cooperado, onExcluir }: { cooperado: CooperadoLista; onExcluir?: (id: string, nome: string) => void }) {
   const [aberto, setAberto] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const ref = useRef<HTMLDivElement>(null);
@@ -136,6 +136,14 @@ function AcoesDropdown({ cooperado }: { cooperado: CooperadoLista }) {
               <MessageCircle className="h-4 w-4" /> Enviar WhatsApp
             </a>
           )}
+          {onExcluir && (
+            <button
+              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full"
+              onClick={() => { setAberto(false); onExcluir(cooperado.id, cooperado.nomeCompleto); }}
+            >
+              <Trash2 className="h-4 w-4" /> Excluir
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -177,6 +185,7 @@ function TabelaCooperados({
   selecionados,
   onToggle,
   onToggleAll,
+  onExcluir,
 }: {
   cooperados: CooperadoLista[];
   carregando: boolean;
@@ -184,6 +193,7 @@ function TabelaCooperados({
   selecionados: string[];
   onToggle: (id: string) => void;
   onToggleAll: () => void;
+  onExcluir: (id: string, nome: string) => void;
 }) {
   const todosIds = cooperados.map(c => c.id);
   const todosSelecionados = cooperados.length > 0 && todosIds.every(id => selecionados.includes(id));
@@ -244,7 +254,7 @@ function TabelaCooperados({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
-                    <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
+                    <Link href={`/dashboard/cooperados/${c.id}`} className="font-medium text-blue-600 hover:underline">{c.nomeCompleto}</Link>
                     {c.tipoCooperado === 'SEM_UC' && (
                       <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
                     )}
@@ -304,7 +314,7 @@ function TabelaCooperados({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <AcoesDropdown cooperado={c} />
+                  <AcoesDropdown cooperado={c} onExcluir={onExcluir} />
                 </TableCell>
               </TableRow>
             );
@@ -383,6 +393,18 @@ export default function CooperadosPage() {
       (c.telefone && c.telefone.toLowerCase().includes(termo))
     );
   });
+
+  async function handleExcluir(id: string, nome: string) {
+    if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/cooperados/${id}`);
+      setToast('Excluído com sucesso');
+      setCarregando(true);
+      carregarCooperados(busca || undefined);
+    } catch {
+      setToast('Erro ao excluir');
+    }
+  }
 
   function toggleSelecionado(id: string) {
     setSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -496,6 +518,7 @@ export default function CooperadosPage() {
             selecionados={selecionados}
             onToggle={toggleSelecionado}
             onToggleAll={toggleTodos}
+            onExcluir={handleExcluir}
           />
         </CardContent>
       </Card>

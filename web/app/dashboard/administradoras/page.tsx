@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Building2 } from 'lucide-react';
+import { Plus, Search, Building2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Administradora {
@@ -28,11 +28,23 @@ export default function AdministradorasPage() {
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
 
-  useEffect(() => {
+  function carregarAdministradoras() {
     api.get<Administradora[]>('/administradoras')
       .then(r => setAdministradoras(r.data))
       .finally(() => setCarregando(false));
-  }, []);
+  }
+
+  useEffect(() => { carregarAdministradoras(); }, []);
+
+  async function handleExcluir(id: string, nome: string) {
+    if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/administradoras/${id}`);
+      carregarAdministradoras();
+    } catch {
+      alert('Erro ao excluir administradora.');
+    }
+  }
 
   const filtradas = administradoras.filter(a => {
     if (!busca.trim()) return true;
@@ -71,20 +83,21 @@ export default function AdministradorasPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Condominios</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {carregando ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : filtradas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
                     <Building2 className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                     Nenhuma administradora cadastrada
                   </TableCell>
@@ -94,7 +107,7 @@ export default function AdministradorasPage() {
                   <TableRow key={a.id}>
                     <TableCell>
                       <div>
-                        <span className="font-medium text-gray-800">{a.razaoSocial}</span>
+                        <Link href={`/dashboard/administradoras/${a.id}`} className="font-medium text-blue-600 hover:underline">{a.razaoSocial}</Link>
                         {a.nomeFantasia && <span className="text-xs text-gray-400 ml-2">({a.nomeFantasia})</span>}
                       </div>
                     </TableCell>
@@ -106,6 +119,11 @@ export default function AdministradorasPage() {
                       <Badge className={a.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
                         {a.ativo ? 'Ativa' : 'Inativa'}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" title="Excluir" onClick={() => handleExcluir(a.id, a.razaoSocial)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

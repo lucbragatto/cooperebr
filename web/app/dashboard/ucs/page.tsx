@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 export default function UcsPage() {
@@ -22,11 +22,23 @@ export default function UcsPage() {
   const [ucs, setUcs] = useState<UC[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  useEffect(() => {
+  function carregarUcs() {
     api.get<UC[]>('/ucs')
       .then((r) => setUcs(r.data))
       .finally(() => setCarregando(false));
-  }, []);
+  }
+
+  useEffect(() => { carregarUcs(); }, []);
+
+  async function handleExcluir(id: string, nome: string) {
+    if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.delete(`/ucs/${id}`);
+      carregarUcs();
+    } catch {
+      alert('Erro ao excluir UC.');
+    }
+  }
 
   return (
     <div>
@@ -78,15 +90,24 @@ export default function UcsPage() {
               ) : (
                 ucs.map((uc) => (
                   <TableRow key={uc.id}>
-                    <TableCell className="font-medium">{uc.numero}</TableCell>
+                    <TableCell>
+                      <Link href={`/dashboard/ucs/${uc.id}`} className="text-blue-600 hover:underline font-medium">
+                        {uc.numero}
+                      </Link>
+                    </TableCell>
                     <TableCell>{uc.endereco}</TableCell>
                     <TableCell>{uc.cidade}</TableCell>
                     <TableCell>{uc.estado}</TableCell>
                     <TableCell>{uc.cooperado?.nomeCompleto ?? '—'}</TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/dashboard/ucs/${uc.id}`}>
-                        <Button variant="ghost" size="sm">Ver</Button>
-                      </Link>
+                      <div className="flex justify-end gap-1">
+                        <Link href={`/dashboard/ucs/${uc.id}`}>
+                          <Button variant="ghost" size="sm">Ver</Button>
+                        </Link>
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" title="Excluir" onClick={() => handleExcluir(uc.id, uc.numero)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

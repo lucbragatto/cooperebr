@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { getUsuario } from '@/lib/auth';
 import type { Usuario } from '@/types';
@@ -266,7 +267,11 @@ export default function UsuariosPage() {
               <TableBody>
                 {usuariosFiltrados.map((u) => (
                   <TableRow key={u.id}>
-                    <TableCell className="font-medium">{u.nome}</TableCell>
+                    <TableCell>
+                      <Link href={`/dashboard/usuarios/${u.id}`} className="text-blue-600 hover:underline font-medium">
+                        {u.nome}
+                      </Link>
+                    </TableCell>
                     <TableCell>{u.email}</TableCell>
                     <TableCell>
                       <Badge className={perfilColors[u.perfil] || ''} variant="secondary">

@@ -96,7 +96,7 @@ export default function DashboardPage() {
 
         // Cobranças vencendo hoje/amanhã
         const cobrancasVencendoHoje = cobrancas.filter((c) => {
-          if (c.status !== 'PENDENTE') return false;
+          if (c.status !== 'A_VENCER') return false;
           const venc = new Date(c.dataVencimento);
           venc.setHours(0, 0, 0, 0);
           return venc >= hoje && venc < depoisDeAmanha;
