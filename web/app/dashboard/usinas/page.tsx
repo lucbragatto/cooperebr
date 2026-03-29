@@ -35,6 +35,9 @@ const statusColors: Record<StatusUsina, string> = {
 export default function UsinasPage() {
   const [usinas, setUsinas] = useState<Usina[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [editandoStatus, setEditandoStatus] = useState<string | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   function carregarUsinas() {
     api.get<Usina[]>('/usinas')
@@ -43,6 +46,13 @@ export default function UsinasPage() {
   }
 
   useEffect(() => { carregarUsinas(); }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   async function handleExcluir(id: string, nome: string) {
     if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
@@ -65,6 +75,12 @@ export default function UsinasPage() {
           </Button>
         </Link>
       </div>
+
+      {toast && (
+        <div className="mb-4 px-4 py-2 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
+          {toast}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -117,9 +133,38 @@ export default function UsinasPage() {
                       <TableCell>{u.capacidadeKwh ? Number(u.capacidadeKwh).toFixed(2) : '—'}</TableCell>
                       <TableCell>{(u as any).proprietarioNome || '—'}</TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[st] ?? 'bg-gray-100'}`}>
-                          {statusLabels[st] ?? st}
-                        </span>
+                        {editandoStatus === u.id ? (
+                          <select
+                            autoFocus
+                            value={st}
+                            className="text-xs border border-blue-400 rounded px-1 py-0.5 bg-white cursor-pointer"
+                            onChange={async (e) => {
+                              const newStatus = e.target.value as StatusUsina;
+                              setSalvandoStatus(u.id);
+                              try {
+                                await api.put(`/usinas/${u.id}`, { statusHomologacao: newStatus });
+                                setUsinas(prev => prev.map(i => i.id === u.id ? { ...i, statusHomologacao: newStatus } : i));
+                                setToast('Status atualizado');
+                              } catch { setToast('Erro ao atualizar status'); }
+                              finally { setSalvandoStatus(null); setEditandoStatus(null); }
+                            }}
+                            onBlur={() => setEditandoStatus(null)}
+                          >
+                            <option value="CADASTRADA">Cadastrada</option>
+                            <option value="AGUARDANDO_HOMOLOGACAO">Aguard. Homologação</option>
+                            <option value="HOMOLOGADA">Homologada</option>
+                            <option value="EM_PRODUCAO">Em Produção</option>
+                            <option value="SUSPENSA">Suspensa</option>
+                          </select>
+                        ) : (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full font-medium cursor-pointer hover:opacity-80 ${statusColors[st] ?? 'bg-gray-100'}`}
+                            onClick={() => setEditandoStatus(u.id)}
+                            title="Clique para alterar"
+                          >
+                            {salvandoStatus === u.id ? 'Salvando...' : (statusLabels[st] ?? st)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>{u.cidade}</TableCell>
                       <TableCell>{u.estado}</TableCell>

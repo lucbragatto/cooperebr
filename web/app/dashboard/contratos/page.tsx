@@ -53,6 +53,9 @@ export default function ContratosPage() {
   const [dialogAberto, setDialogAberto] = useState(false);
   const [erro, setErro] = useState('');
   const [filtroReajuste, setFiltroReajuste] = useState(false);
+  const [editandoStatus, setEditandoStatus] = useState<string | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<Contrato[]>('/contratos')
@@ -72,6 +75,13 @@ export default function ContratosPage() {
       setErro(e?.response?.data?.message || 'Erro ao excluir.');
     }
   }
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   const trintaDiasAtras = new Date();
   trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
@@ -101,6 +111,12 @@ export default function ContratosPage() {
       </div>
 
       {erro && <p className="text-sm text-red-500 mb-4">{erro}</p>}
+
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-2 rounded shadow-lg text-sm animate-in fade-in slide-in-from-top-2">
+          {toast}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -149,9 +165,37 @@ export default function ContratosPage() {
                     <TableCell>{c.percentualDesconto}%</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Badge className={statusClasses[c.status]}>
-                          {statusLabel[c.status]}
-                        </Badge>
+                        {editandoStatus === c.id ? (
+                          <select
+                            autoFocus
+                            value={c.status}
+                            className="text-xs border border-blue-400 rounded px-1 py-0.5 bg-white cursor-pointer"
+                            onChange={async (e) => {
+                              const newStatus = e.target.value as Contrato['status'];
+                              setSalvandoStatus(c.id);
+                              try {
+                                await api.put(`/contratos/${c.id}`, { status: newStatus });
+                                setContratos(prev => prev.map(i => i.id === c.id ? { ...i, status: newStatus } : i));
+                                setToast('Status atualizado');
+                              } catch { setToast('Erro ao atualizar status'); }
+                              finally { setSalvandoStatus(null); setEditandoStatus(null); }
+                            }}
+                            onBlur={() => setEditandoStatus(null)}
+                          >
+                            <option value="ATIVO">Ativo</option>
+                            <option value="SUSPENSO">Suspenso</option>
+                            <option value="ENCERRADO">Encerrado</option>
+                            <option value="LISTA_ESPERA">Lista de Espera</option>
+                          </select>
+                        ) : (
+                          <Badge
+                            className={`${statusClasses[c.status]} cursor-pointer hover:opacity-80`}
+                            onClick={() => setEditandoStatus(c.id)}
+                            title="Clique para alterar"
+                          >
+                            {salvandoStatus === c.id ? 'Salvando...' : statusLabel[c.status]}
+                          </Badge>
+                        )}
                         {(c as any).ultimoReajusteEm && new Date((c as any).ultimoReajusteEm) >= trintaDiasAtras && (
                           <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Reajustado</Badge>
                         )}

@@ -39,6 +39,13 @@ const statusLabel: Record<string, string> = {
   CANCELADA: 'Cancelada',
 };
 
+const statusClasses: Record<string, string> = {
+  ABERTA: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  EM_ANDAMENTO: 'bg-blue-100 text-blue-800 border-blue-200',
+  RESOLVIDA: 'bg-green-100 text-green-800 border-green-200',
+  CANCELADA: 'bg-gray-100 text-gray-800 border-gray-200',
+};
+
 const tipoLabel: Record<string, string> = {
   FALTA_ENERGIA: 'Falta de Energia',
   MEDICAO_INCORRETA: 'Medição Incorreta',
@@ -51,12 +58,22 @@ export default function OcorrenciasPage() {
   const { tipoMembro } = useTipoParceiro();
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [editandoStatus, setEditandoStatus] = useState<string | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<Ocorrencia[]>('/ocorrencias')
       .then((r) => setOcorrencias(r.data))
       .finally(() => setCarregando(false));
   }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   return (
     <div>
@@ -69,6 +86,12 @@ export default function OcorrenciasPage() {
           </Button>
         </Link>
       </div>
+
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white px-4 py-2 rounded shadow-lg text-sm animate-in fade-in">
+          {toast}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -119,7 +142,39 @@ export default function OcorrenciasPage() {
                         {prioridadeLabel[o.prioridade] ?? o.prioridade}
                       </Badge>
                     </TableCell>
-                    <TableCell>{statusLabel[o.status] ?? o.status}</TableCell>
+                    <TableCell>
+                      {editandoStatus === o.id ? (
+                        <select
+                          autoFocus
+                          value={o.status}
+                          className="text-xs border border-blue-400 rounded px-1 py-0.5 bg-white cursor-pointer"
+                          onChange={async (e) => {
+                            const newStatus = e.target.value as Ocorrencia['status'];
+                            setSalvandoStatus(o.id);
+                            try {
+                              await api.put(`/ocorrencias/${o.id}`, { status: newStatus });
+                              setOcorrencias(prev => prev.map(i => i.id === o.id ? { ...i, status: newStatus } : i));
+                              setToast('Status atualizado');
+                            } catch { setToast('Erro ao atualizar status'); }
+                            finally { setSalvandoStatus(null); setEditandoStatus(null); }
+                          }}
+                          onBlur={() => setEditandoStatus(null)}
+                        >
+                          <option value="ABERTA">Aberta</option>
+                          <option value="EM_ANDAMENTO">Em Andamento</option>
+                          <option value="RESOLVIDA">Resolvida</option>
+                          <option value="CANCELADA">Cancelada</option>
+                        </select>
+                      ) : (
+                        <Badge
+                          className={`${statusClasses[o.status] ?? 'bg-gray-100 text-gray-600'} cursor-pointer hover:opacity-80`}
+                          onClick={() => setEditandoStatus(o.id)}
+                          title="Clique para alterar"
+                        >
+                          {salvandoStatus === o.id ? 'Salvando...' : (statusLabel[o.status] ?? o.status)}
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {new Date(o.createdAt).toLocaleDateString('pt-BR')}
                     </TableCell>

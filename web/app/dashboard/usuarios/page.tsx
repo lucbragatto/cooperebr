@@ -57,6 +57,7 @@ export default function UsuariosPage() {
   const [editando, setEditando] = useState<UsuarioLista | null>(null);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const currentUser = getUsuario();
   const isSuperAdmin = currentUser?.perfil === 'SUPER_ADMIN';
 
@@ -95,6 +96,13 @@ export default function UsuariosPage() {
   useEffect(() => {
     buscarUsuarios();
   }, [buscarUsuarios]);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -218,6 +226,12 @@ export default function UsuariosPage() {
         </Button>
       </div>
 
+      {toast && (
+        <div className="mb-4 px-4 py-2 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
+          {toast}
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4">
@@ -279,7 +293,17 @@ export default function UsuariosPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={u.ativo ? 'default' : 'destructive'}>
+                      <Badge
+                        className={`${u.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} cursor-pointer hover:opacity-80`}
+                        onClick={async () => {
+                          try {
+                            await api.put(`/auth/usuarios/${u.id}`, { ativo: !u.ativo });
+                            setUsuarios(prev => prev.map(i => i.id === u.id ? { ...i, ativo: !i.ativo } : i));
+                            setToast(u.ativo ? 'Usuário desativado' : 'Usuário ativado');
+                          } catch { setToast('Erro ao alterar status'); }
+                        }}
+                        title="Clique para alternar"
+                      >
                         {u.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </TableCell>

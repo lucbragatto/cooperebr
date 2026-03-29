@@ -43,6 +43,14 @@ export default function CooperativasPage() {
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [dialogAberto, setDialogAberto] = useState(false);
   const [erro, setErro] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   useEffect(() => {
     api.get<Cooperativa[]>('/cooperativas')
@@ -76,6 +84,12 @@ export default function CooperativasPage() {
 
       {erro && <p className="text-sm text-red-500 mb-4">{erro}</p>}
 
+      {toast && (
+        <div className="mb-4 px-4 py-2 bg-green-50 border border-green-200 text-green-800 rounded-lg text-sm">
+          {toast}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
@@ -92,6 +106,7 @@ export default function CooperativasPage() {
                 <TableHead>Cidade/UF</TableHead>
                 <TableHead>Usinas</TableHead>
                 <TableHead>Membros Ativos</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -99,7 +114,7 @@ export default function CooperativasPage() {
               {carregando ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -108,7 +123,7 @@ export default function CooperativasPage() {
                 ))
               ) : cooperativas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
                     Nenhum parceiro cadastrado
                   </TableCell>
                 </TableRow>
@@ -131,6 +146,21 @@ export default function CooperativasPage() {
                       <TableCell>{c.cidade ? `${c.cidade}/${c.estado}` : '—'}</TableCell>
                       <TableCell>{c.qtdUsinas}</TableCell>
                       <TableCell>{c.qtdCooperados}</TableCell>
+                      <TableCell>
+                        <Badge
+                          className={`${c.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} cursor-pointer hover:opacity-80`}
+                          onClick={async () => {
+                            try {
+                              await api.put(`/cooperativas/${c.id}`, { ativo: !c.ativo });
+                              setCooperativas(prev => prev.map(i => i.id === c.id ? { ...i, ativo: !i.ativo } : i));
+                              setToast(c.ativo ? 'Parceiro desativado' : 'Parceiro ativado');
+                            } catch { setToast('Erro ao alterar status'); }
+                          }}
+                          title="Clique para alternar"
+                        >
+                          {c.ativo ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right space-x-1">
                         <Link href={`/dashboard/cooperativas/${c.id}`}>
                           <Button variant="ghost" size="sm"><Eye className="h-4 w-4" /></Button>

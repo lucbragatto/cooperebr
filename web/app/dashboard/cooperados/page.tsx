@@ -186,6 +186,7 @@ function TabelaCooperados({
   onToggle,
   onToggleAll,
   onExcluir,
+  onStatusChange,
 }: {
   cooperados: CooperadoLista[];
   carregando: boolean;
@@ -194,9 +195,14 @@ function TabelaCooperados({
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onExcluir: (id: string, nome: string) => void;
+  onStatusChange: (id: string, status: string) => void;
 }) {
   const todosIds = cooperados.map(c => c.id);
   const todosSelecionados = cooperados.length > 0 && todosIds.every(id => selecionados.includes(id));
+  const [editandoStatus, setEditandoStatus] = useState<string | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState<string | null>(null);
+
+  const STATUS_OPTIONS = ['PENDENTE', 'ATIVO', 'ATIVO_RECEBENDO_CREDITOS', 'SUSPENSO', 'ENCERRADO'] as const;
 
   return (
     <Table>
@@ -278,9 +284,33 @@ function TabelaCooperados({
                 <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
-                    <Badge className={st?.color ?? 'bg-gray-100 text-gray-600'}>
-                      {st?.label ?? c.status}
-                    </Badge>
+                    {editandoStatus === c.id ? (
+                      <select
+                        autoFocus
+                        className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        defaultValue={c.status}
+                        disabled={salvandoStatus === c.id}
+                        onBlur={() => setEditandoStatus(null)}
+                        onChange={async (e) => {
+                          const novoStatus = e.target.value;
+                          setSalvandoStatus(c.id);
+                          setEditandoStatus(null);
+                          await onStatusChange(c.id, novoStatus);
+                          setSalvandoStatus(null);
+                        }}
+                      >
+                        {STATUS_OPTIONS.map(s => (
+                          <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge
+                        className={`cursor-pointer ${salvandoStatus === c.id ? 'opacity-50' : ''} ${st?.color ?? 'bg-gray-100 text-gray-600'}`}
+                        onClick={() => setEditandoStatus(c.id)}
+                      >
+                        {salvandoStatus === c.id ? 'Salvando...' : (st?.label ?? c.status)}
+                      </Badge>
+                    )}
                     {(c as any).reajusteRecente && (
                       <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Reajustado</Badge>
                     )}
@@ -519,6 +549,13 @@ export default function CooperadosPage() {
             onToggle={toggleSelecionado}
             onToggleAll={toggleTodos}
             onExcluir={handleExcluir}
+            onStatusChange={async (id, status) => {
+              try {
+                await api.put(`/cooperados/${id}`, { status });
+                setCooperados(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+                setToast('Status atualizado');
+              } catch { setToast('Erro ao atualizar status'); }
+            }}
           />
         </CardContent>
       </Card>

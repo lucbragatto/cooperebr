@@ -40,6 +40,16 @@ export default function CobrancasPage() {
   const { tipoMembro } = useTipoParceiro();
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [editandoStatus, setEditandoStatus] = useState<string | null>(null);
+  const [salvandoStatus, setSalvandoStatus] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   useEffect(() => {
     api.get<Cobranca[]>('/cobrancas')
@@ -58,6 +68,12 @@ export default function CobrancasPage() {
           </Button>
         </Link>
       </div>
+
+      {toast && (
+        <div className="mb-4 px-4 py-2 rounded bg-blue-50 text-blue-800 border border-blue-200 text-sm">
+          {toast}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -116,9 +132,37 @@ export default function CobrancasPage() {
                       {new Date(c.dataVencimento).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusClasses[c.status]}>
-                        {statusLabel[c.status]}
-                      </Badge>
+                      {editandoStatus === c.id ? (
+                        <select
+                          autoFocus
+                          value={c.status}
+                          className="text-xs border border-blue-400 rounded px-1 py-0.5 bg-white cursor-pointer"
+                          onChange={async (e) => {
+                            const newStatus = e.target.value as Cobranca['status'];
+                            setSalvandoStatus(c.id);
+                            try {
+                              await api.put(`/cobrancas/${c.id}`, { status: newStatus });
+                              setCobrancas(prev => prev.map(i => i.id === c.id ? { ...i, status: newStatus } : i));
+                              setToast('Status atualizado');
+                            } catch { setToast('Erro ao atualizar status'); }
+                            finally { setSalvandoStatus(null); setEditandoStatus(null); }
+                          }}
+                          onBlur={() => setEditandoStatus(null)}
+                        >
+                          <option value="PENDENTE">Pendente</option>
+                          <option value="PAGO">Pago</option>
+                          <option value="VENCIDO">Vencido</option>
+                          <option value="CANCELADO">Cancelado</option>
+                        </select>
+                      ) : (
+                        <Badge
+                          className={`${statusClasses[c.status]} cursor-pointer hover:opacity-80`}
+                          onClick={() => setEditandoStatus(c.id)}
+                          title="Clique para alterar"
+                        >
+                          {salvandoStatus === c.id ? 'Salvando...' : statusLabel[c.status]}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/dashboard/cobrancas/${c.id}`}>
