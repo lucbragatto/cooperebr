@@ -70,14 +70,131 @@ export class WhatsappFaturaController {
     return this.sender.getStatus();
   }
 
-  // Conversas ativas
+  // Conversas ativas (tenant-isolated)
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('conversas')
-  async getConversas() {
-    return this.prisma.conversaWhatsapp.findMany({
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
+  async getConversas(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limitParam?: string,
+    @Query('estado') estado?: string,
+    @Query('busca') busca?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const perfil = req.user?.perfil;
+    const take = Math.min(Number(limitParam) || 20, 100);
+    const skip = ((Number(page) || 1) - 1) * take;
+
+    const where: any = {};
+    if (perfil !== 'SUPER_ADMIN' && cooperativaId) {
+      where.cooperativaId = cooperativaId;
+    }
+    if (estado) where.estado = estado;
+    // Se busca por nome, primeiro buscar cooperadoIds que casam
+    let cooperadoIdsBusca: string[] | undefined;
+    if (busca) {
+      const buscaNorm = busca.replace(/\D/g, '');
+      if (buscaNorm) where.telefone = { contains: buscaNorm };
+      // Buscar cooperados pelo nome para filtrar
+      const cooperadosPorNome = await this.prisma.cooperado.findMany({
+        where: { nomeCompleto: { contains: busca, mode: 'insensitive' } },
+        select: { id: true },
+        take: 100,
+      });
+      if (cooperadosPorNome.length > 0) {
+        cooperadoIdsBusca = cooperadosPorNome.map(c => c.id);
+        // OR: telefone match OR cooperadoId match
+        delete where.telefone;
+        where.OR = [
+          { telefone: { contains: buscaNorm || '' } },
+          { cooperadoId: { in: cooperadoIdsBusca } },
+        ];
+      }
+    }
+
+    const [conversas, total] = await Promise.all([
+      this.prisma.conversaWhatsapp.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.conversaWhatsapp.count({ where }),
+    ]);
+
+    // Buscar nomes dos cooperados vinculados
+    const cooperadoIds = conversas.map(c => c.cooperadoId).filter(Boolean) as string[];
+    const cooperados = cooperadoIds.length > 0
+      ? await this.prisma.cooperado.findMany({
+          where: { id: { in: cooperadoIds } },
+          select: { id: true, nomeCompleto: true },
+        })
+      : [];
+    const nomePorId: Record<string, string> = {};
+    for (const coop of cooperados) nomePorId[coop.id] = coop.nomeCompleto;
+
+    // Buscar últimas 3 mensagens de cada conversa
+    const telefones = conversas.map(c => c.telefone);
+    const mensagensRaw = telefones.length > 0
+      ? await this.prisma.mensagemWhatsapp.findMany({
+          where: { telefone: { in: telefones } },
+          orderBy: { enviadaEm: 'desc' },
+          select: { telefone: true, conteudo: true, direcao: true, enviadaEm: true },
+        })
+      : [];
+
+    const mensagensPorTelefone: Record<string, typeof mensagensRaw> = {};
+    for (const m of mensagensRaw) {
+      if (!mensagensPorTelefone[m.telefone]) mensagensPorTelefone[m.telefone] = [];
+      if (mensagensPorTelefone[m.telefone].length < 3) mensagensPorTelefone[m.telefone].push(m);
+    }
+
+    const items = conversas.map(c => ({
+      ...c,
+      nomeCooperado: c.cooperadoId ? (nomePorId[c.cooperadoId] ?? null) : null,
+      ultimasMensagens: mensagensPorTelefone[c.telefone] ?? [],
+    }));
+
+    return { items, total, page: Number(page) || 1, limit: take };
+  }
+
+  // Histórico completo de uma conversa (tenant-isolated)
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('conversas/:telefone/historico')
+  async getConversaHistorico(
+    @Req() req: any,
+    @Param('telefone') telefone: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const perfil = req.user?.perfil;
+    const telefoneNorm = telefone.replace(/\D/g, '');
+
+    // Verificar tenant
+    if (perfil !== 'SUPER_ADMIN' && cooperativaId) {
+      const conversa = await this.prisma.conversaWhatsapp.findFirst({
+        where: { telefone: { contains: telefoneNorm }, cooperativaId },
+      });
+      if (!conversa) return { mensagens: [] };
+    }
+
+    const mensagens = await this.prisma.mensagemWhatsapp.findMany({
+      where: { telefone: { contains: telefoneNorm } },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        telefone: true,
+        direcao: true,
+        tipo: true,
+        conteudo: true,
+        status: true,
+        enviadaEm: true,
+        entregueEm: true,
+        lidaEm: true,
+        createdAt: true,
+      },
     });
+
+    return { mensagens };
   }
 
   // ─── Histórico de mensagens ────────────────────────────────────────────────

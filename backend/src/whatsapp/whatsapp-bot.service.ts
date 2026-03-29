@@ -353,6 +353,15 @@ export class WhatsappBotService {
         case 'MENU_COOPERADO':
           await this.handleMenuCooperado(msg, conversa);
           break;
+        case 'MENU_SEM_FATURA':
+          await this.handleMenuSemFatura(msg, conversa);
+          break;
+        case 'AGUARDANDO_DISPOSITIVO_EMAIL':
+          await this.handleAguardandoDispositivoEmail(msg, conversa);
+          break;
+        case 'AGUARDANDO_DISTRIBUIDORA':
+          await this.handleAguardandoDistribuidora(msg, conversa);
+          break;
         case 'MENU_CLIENTE':
           await this.handleMenuCliente(msg, conversa);
           break;
@@ -392,6 +401,50 @@ export class WhatsappBotService {
         case 'CADASTRO_EXPRESS_VALOR_FATURA':
           await this.handleCadastroExpressValorFatura(msg, conversa);
           break;
+        case 'LEAD_FORA_AREA':
+          await this.handleLeadForaArea(msg, conversa);
+          break;
+        // ─── Atualização de cadastro/contrato ──────────────
+        case 'ATUALIZACAO_CADASTRO':
+          await this.handleAtualizacaoCadastro(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOVO_NOME':
+          await this.handleAguardandoNovoNome(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOVO_EMAIL':
+          await this.handleAguardandoNovoEmail(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOVO_TELEFONE':
+          await this.handleAguardandoNovoTelefone(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOVO_CEP':
+          await this.handleAguardandoNovoCep(msg, conversa);
+          break;
+        case 'ATUALIZACAO_CONTRATO':
+          await this.handleAtualizacaoContrato(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOVO_KWH':
+          await this.handleAguardandoNovoKwh(msg, conversa);
+          break;
+        case 'CONFIRMAR_ENCERRAMENTO':
+          await this.handleConfirmarEncerramento(msg, conversa);
+          break;
+        // ─── Cadastro por Proxy ──────────────────────────
+        case 'MENU_CONVIDAR_AMIGO':
+          await this.handleMenuConvidarAmigo(msg, conversa);
+          break;
+        case 'CADASTRO_PROXY_NOME':
+          await this.handleCadastroProxyNome(msg, conversa);
+          break;
+        case 'CADASTRO_PROXY_TELEFONE':
+          await this.handleCadastroProxyTelefone(msg, conversa);
+          break;
+        case 'AGUARDANDO_FATURA_PROXY':
+          await this.handleAguardandoFaturaProxy(msg, conversa);
+          break;
+        case 'CONFIRMAR_PROXY':
+          await this.handleConfirmarProxy(msg, conversa);
+          break;
         default:
           await this.handleMenuPrincipalInicio(msg, conversa);
       }
@@ -424,6 +477,7 @@ export class WhatsappBotService {
         { id: '1', texto: '📋 Já sou cooperado' },
         { id: '2', texto: '⚡ Quero ser cooperado' },
         { id: '3', texto: '👤 Falar com atendente' },
+        { id: '4', texto: '🎁 Convidar um amigo', descricao: 'Compartilhe seu link' },
       ],
     });
   }
@@ -461,9 +515,11 @@ export class WhatsappBotService {
         opcoes: [
           { id: '1', texto: '⚡ Ver saldo de créditos', descricao: 'Seus kWh contratados' },
           { id: '2', texto: '📄 Ver próxima fatura', descricao: 'Valor e vencimento' },
-          { id: '3', texto: '📊 Simular economia', descricao: 'Nova simulação' },
-          { id: '4', texto: '🔧 Suporte / Ocorrência', descricao: 'Abrir chamado' },
-          { id: '5', texto: '👤 Falar com atendente', descricao: 'Atendimento humano' },
+          { id: '3', texto: '✏️ Atualizar meu cadastro', descricao: 'Nome, email, telefone, endereço' },
+          { id: '4', texto: '🔄 Atualizar meu contrato', descricao: 'kWh, suspensão, encerramento' },
+          { id: '5', texto: '🎁 Indicar um amigo', descricao: 'Ganhe desconto na fatura' },
+          { id: '6', texto: '🔧 Suporte / Ocorrência', descricao: 'Abrir chamado' },
+          { id: '7', texto: '👤 Falar com atendente', descricao: 'Atendimento humano' },
         ],
       });
       return;
@@ -472,12 +528,17 @@ export class WhatsappBotService {
     if (corpo === '2' || corpo.toLowerCase().includes('quero ser') || corpo.toLowerCase().includes('quero aderir')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
-        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+        data: { estado: 'MENU_SEM_FATURA', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(
-        telefone,
-        '📸 Ótimo! Para gerar sua simulação gratuita, envie uma *foto* ou *PDF* da sua conta de energia elétrica.',
-      );
+      await this.sender.enviarMenuComBotoes(telefone, {
+        titulo: 'Simulação gratuita',
+        corpo: '⚡ Ótimo! Para gerar sua simulação gratuita, preciso da sua *conta de energia elétrica*.\n\nComo prefere proceder?',
+        opcoes: [
+          { id: '1', texto: '📎 Enviar agora', descricao: 'Já tenho a fatura (foto ou PDF)' },
+          { id: '2', texto: '📧 Está no meu email', descricao: 'Vou buscar e enviar' },
+          { id: '3', texto: '💻 Baixar do site', descricao: 'Te ajudo passo a passo' },
+        ],
+      });
       return;
     }
 
@@ -486,9 +547,55 @@ export class WhatsappBotService {
       return;
     }
 
+    if (corpo === '4' || corpo.toLowerCase().includes('convidar') || corpo.toLowerCase().includes('indicar amigo')) {
+      // Verificar se é cooperado pelo telefone para buscar o link personalizado
+      const telefoneNorm = telefone.replace(/\D/g, '');
+      const telefoneSemPais = telefoneNorm.replace(/^55/, '');
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: {
+          OR: [{ telefone: telefoneNorm }, { telefone: telefoneSemPais }, { telefone: `55${telefoneSemPais}` }],
+        },
+        select: { id: true, nomeCompleto: true, codigoIndicacao: true, cooperativaId: true },
+      });
+
+      if (cooperado) {
+        // Cooperado: oferecer sub-menu com opção de proxy
+        let codigo = cooperado.codigoIndicacao;
+        if (!codigo) {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          codigo = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+          await this.prisma.cooperado.update({ where: { id: cooperado.id }, data: { codigoIndicacao: codigo } });
+        }
+        await this.prisma.conversaWhatsapp.update({
+          where: { id: conversa.id },
+          data: {
+            estado: 'MENU_CONVIDAR_AMIGO',
+            dadosTemp: { indicadorId: cooperado.id, indicadorNome: cooperado.nomeCompleto, cooperativaId: cooperado.cooperativaId, codigoIndicacao: codigo } as any,
+            contadorFallback: 0,
+          },
+        });
+        await this.sender.enviarMensagem(telefone,
+          `🎁 *Convidar um amigo:*\n\n` +
+          `1️⃣ Enviar meu link de indicação\n` +
+          `2️⃣ Cadastrar meu amigo (tenho a fatura dele)\n\n` +
+          `_Responda 1 ou 2_`
+        );
+      } else {
+        // Não é cooperado — link genérico da CoopereBR
+        const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+        await this.sender.enviarMensagem(telefone,
+          `🎁 *Convide seus amigos para economizar na conta de luz!*\n\n` +
+          `Compartilhe o link da CoopereBR:\n${baseUrl}\n\n` +
+          `☀️ Energia solar sem investimento, com até 20% de desconto na conta de luz.\n\n` +
+          `_Quer ter seu link personalizado com benefícios? Digite *2* para se cadastrar!_`
+        );
+      }
+      return;
+    }
+
     // Fallback com contador
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (cooperado), *2* (quero ser cooperado) ou *3* (atendente).',
+      'Responda *1* (cooperado), *2* (quero ser cooperado), *3* (atendente) ou *4* (convidar amigo).',
     );
   }
 
@@ -544,16 +651,60 @@ export class WhatsappBotService {
       return;
     }
 
-    if (corpo === '3' || corpo.toLowerCase().includes('simul')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('atualizar cadastro') || corpo.toLowerCase().includes('meu cadastro')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
-        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+        data: { estado: 'ATUALIZACAO_CADASTRO', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📸 Envie a foto ou PDF da sua fatura de energia para simularmos.');
+      await this.sender.enviarMenuComBotoes(telefone, {
+        titulo: 'Atualizar Cadastro',
+        corpo: '✏️ *O que deseja atualizar?*',
+        opcoes: [
+          { id: '1', texto: '📝 Nome' },
+          { id: '2', texto: '📧 Email' },
+          { id: '3', texto: '📱 Telefone' },
+          { id: '4', texto: '📍 Endereço (CEP)' },
+        ],
+      });
       return;
     }
 
-    if (corpo === '4' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrência')) {
+    if (corpo === '4' || corpo.toLowerCase().includes('atualizar contrato') || corpo.toLowerCase().includes('meu contrato')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'ATUALIZACAO_CONTRATO', contadorFallback: 0 },
+      });
+      await this.sender.enviarMenuComBotoes(telefone, {
+        titulo: 'Atualizar Contrato',
+        corpo: '🔄 *O que deseja fazer com seu contrato?*',
+        opcoes: [
+          { id: '1', texto: '⬆️ Aumentar meus kWh' },
+          { id: '2', texto: '⬇️ Diminuir meus kWh' },
+          { id: '3', texto: '⏸️ Suspender temporariamente' },
+          { id: '4', texto: '❌ Encerrar contrato' },
+        ],
+      });
+      return;
+    }
+
+    if (corpo === '5' || corpo.toLowerCase().includes('indicar') || corpo.toLowerCase().includes('amigo')) {
+      try {
+        const { link, totalIndicados, indicadosAtivos } = await this.indicacoes.getMeuLink(cooperadoId);
+        await this.sender.enviarMensagem(telefone,
+          `🎁 *Seu link de indicação:*\n\n` +
+          `${link}\n\n` +
+          `📊 Total indicados: ${totalIndicados}\n` +
+          `✅ Ativos (com benefício): ${indicadosAtivos}\n\n` +
+          `_Compartilhe! Quando seu indicado pagar a 1ª fatura, você ganha seu benefício._`,
+        );
+      } catch (err) {
+        this.logger.warn(`Erro ao buscar link de indicação para ${cooperadoId}: ${err.message}`);
+        await this.sender.enviarMensagem(telefone, '⚠️ Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.');
+      }
+      return;
+    }
+
+    if (corpo === '6' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrência')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
@@ -565,14 +716,171 @@ export class WhatsappBotService {
       return;
     }
 
-    if (corpo === '5' || corpo.toLowerCase().includes('atendente')) {
+    if (corpo === '7' || corpo.toLowerCase().includes('atendente')) {
       await this.encaminharAtendente(telefone, conversa.id, 'Cooperado solicitou atendente no menu cooperado');
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (créditos), *2* (fatura), *3* (simular), *4* (suporte) ou *5* (atendente).',
+      'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
     );
+  }
+
+  private async handleMenuSemFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const resposta = this.respostaEfetiva(msg);
+    const corpo = resposta;
+
+    if (corpo === '1' || corpo.toLowerCase().includes('enviar agora') || corpo.toLowerCase().includes('já tenho')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        '📎 Perfeito! Envie agora a *foto* ou o *PDF* da sua conta de energia.\n\n_Dica: tire uma foto clara da frente completa da fatura, com todos os dados visíveis._'
+      );
+      return;
+    }
+
+    if (corpo === '2' || corpo.toLowerCase().includes('email') || corpo.toLowerCase().includes('buscar')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_DISPOSITIVO_EMAIL', contadorFallback: 0 },
+      });
+      await this.sender.enviarMenuComBotoes(telefone, {
+        titulo: 'Onde está acessando?',
+        corpo: '📧 Ótimo! Vou te ajudar a baixar a fatura do seu email.\n\nVocê está usando:',
+        opcoes: [
+          { id: 'CEL', texto: '📱 Celular', descricao: 'Vou te guiar pelo app' },
+          { id: 'PC', texto: '💻 Computador', descricao: 'Vou te guiar pelo navegador' },
+        ],
+      });
+      return;
+    }
+
+    if (corpo === '3' || corpo.toLowerCase().includes('baixar') || corpo.toLowerCase().includes('site') || corpo.toLowerCase().includes('passo a passo')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_DISTRIBUIDORA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMenuComBotoes(telefone, {
+        titulo: 'Qual sua distribuidora?',
+        corpo: '💻 Vou te ajudar a baixar sua fatura!\n\nQual é a sua distribuidora de energia?',
+        opcoes: [
+          { id: 'EDP-ES', texto: '⚡ EDP Espírito Santo' },
+          { id: 'CEMIG', texto: '⚡ CEMIG (MG)' },
+          { id: 'COPEL', texto: '⚡ COPEL (PR)' },
+          { id: 'LIGHT', texto: '⚡ LIGHT (RJ)' },
+          { id: 'OUTRA', texto: '❓ Outra distribuidora' },
+        ],
+      });
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (enviar agora), *2* (buscar no email) ou *3* (baixar do site).'
+    );
+  }
+
+  private async handleAguardandoDispositivoEmail(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const resposta = this.respostaEfetiva(msg);
+
+    const isCelular = resposta === 'CEL' || resposta.toLowerCase().includes('celular') || resposta.toLowerCase().includes('cel');
+    const isPC = resposta === 'PC' || resposta.toLowerCase().includes('computador') || resposta.toLowerCase().includes('pc') || resposta.toLowerCase().includes('notebook');
+
+    if (isCelular) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        '📱 *Baixar a fatura pelo celular:*\n\n' +
+        '1️⃣ Abra o app do seu email (Gmail, Outlook, etc.)\n' +
+        '2️⃣ Procure uma mensagem da sua distribuidora (EDP, CEMIG, etc.) com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3️⃣ Abra o email e toque no *anexo PDF*\n' +
+        '4️⃣ Toque em *"Baixar"* ou *"Salvar"*\n' +
+        '5️⃣ Volte aqui e toque no 📎 (clipe) para enviar o arquivo\n\n' +
+        '💡 *Dica:* Se não encontrar o email, verifique a pasta *Spam* ou *Promoções*.\n\n' +
+        '⏳ Aguardo sua fatura!'
+      );
+    } else if (isPC) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        '💻 *Baixar a fatura pelo computador:*\n\n' +
+        '1️⃣ Abra seu email no navegador (gmail.com, outlook.com, etc.)\n' +
+        '2️⃣ Procure uma mensagem da distribuidora com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3️⃣ Abra o email e clique no *anexo PDF*\n' +
+        '4️⃣ Clique em *"Baixar"* — o arquivo vai para a pasta *Downloads*\n' +
+        '5️⃣ Volte aqui no WhatsApp Web, clique no 📎 (clipe) e selecione o arquivo baixado\n\n' +
+        '💡 *Dica:* Não precisa imprimir! Pode enviar direto o PDF.\n\n' +
+        '⏳ Aguardo sua fatura!'
+      );
+    } else {
+      await this.incrementarFallback(conversa, telefone, 'Responda *1* para celular ou *2* para computador.');
+    }
+  }
+
+  private async handleAguardandoDistribuidora(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const resposta = this.respostaEfetiva(msg);
+
+    const DISTRIBUIDORAS: Record<string, { nome: string; link: string; passos: string }> = {
+      'EDP-ES': {
+        nome: 'EDP Espírito Santo',
+        link: 'https://www.edp.com.br/espirito-santo/para-voce/segunda-via-de-conta',
+        passos: '1️⃣ Acesse o link acima\n2️⃣ Clique em *"Acessar"* ou *"Entrar"*\n3️⃣ Informe seu CPF e senha\n4️⃣ Vá em *"Faturas"* → *"2ª Via"*\n5️⃣ Baixe o PDF da fatura mais recente\n6️⃣ Envie aqui para mim 📎',
+      },
+      'CEMIG': {
+        nome: 'CEMIG',
+        link: 'https://atende.cemig.com.br',
+        passos: '1️⃣ Acesse o link acima\n2️⃣ Faça login com CPF e senha\n3️⃣ Clique em *"Faturas"*\n4️⃣ Selecione a última fatura\n5️⃣ Baixe o PDF\n6️⃣ Envie aqui para mim 📎',
+      },
+      'COPEL': {
+        nome: 'COPEL',
+        link: 'https://www.copel.com/hpcweb/portal-atendimento',
+        passos: '1️⃣ Acesse o link acima\n2️⃣ Faça login na Agência Virtual\n3️⃣ Clique em *"2ª Via de Conta"*\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim 📎',
+      },
+      'LIGHT': {
+        nome: 'LIGHT',
+        link: 'https://www.light.com.br/para-voce/segunda-via',
+        passos: '1️⃣ Acesse o link acima\n2️⃣ Informe seu CPF\n3️⃣ Selecione a fatura\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim 📎',
+      },
+    };
+
+    const dist = DISTRIBUIDORAS[resposta] || DISTRIBUIDORAS[resposta.toUpperCase()];
+
+    if (dist) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        `💻 *${dist.nome} — Como baixar sua fatura:*\n\n` +
+        `🔗 ${dist.link}\n\n` +
+        `${dist.passos}\n\n` +
+        `💡 *Dica extra:* Aproveite o acesso e cadastre nosso email *faturas@cooperebr.com.br* como 2º destinatário para receber sua fatura automaticamente todo mês!\n\n` +
+        `⏳ Quando tiver o PDF, envie aqui!`
+      );
+    } else {
+      // Distribuidora não mapeada
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        `💻 Para baixar sua fatura:\n\n` +
+        `1️⃣ Acesse o site ou app da sua distribuidora\n` +
+        `2️⃣ Faça login na Área do Cliente\n` +
+        `3️⃣ Busque por *"2ª Via"* ou *"Faturas"*\n` +
+        `4️⃣ Baixe o PDF da fatura mais recente\n` +
+        `5️⃣ Envie aqui para mim 📎\n\n` +
+        `Precisa de ajuda específica? Digite o nome da sua distribuidora.`
+      );
+    }
   }
 
   private async handleMenuCliente(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -760,6 +1068,44 @@ export class WhatsappBotService {
     }
 
     if (corpoUpper === 'OK') {
+      // Verificar se distribuidora tem usinas disponíveis
+      const distribuidoraOCR = String(dadosTemp.distribuidora ?? '');
+      if (distribuidoraOCR) {
+        const usinasNaArea = await this.prisma.usina.count({
+          where: {
+            distribuidora: { contains: distribuidoraOCR, mode: 'insensitive' },
+            statusHomologacao: { in: ['HOMOLOGADA', 'EM_PRODUCAO'] },
+          },
+        });
+
+        if (usinasNaArea === 0) {
+          const valorFatura = Number(dadosTemp.totalAPagar ?? 0);
+          const economiaEstimada = Math.round(valorFatura * 0.18 * 100) / 100;
+          const economiaAnual = Math.round(economiaEstimada * 12 * 100) / 100;
+
+          await this.prisma.conversaWhatsapp.update({
+            where: { id: conversa.id },
+            data: {
+              estado: 'LEAD_FORA_AREA',
+              dadosTemp: { ...dadosTemp, economiaEstimada, distribuidora: distribuidoraOCR } as any,
+            },
+          });
+
+          const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          await this.sender.enviarMensagem(
+            telefone,
+            `☀️ Fizemos sua simulação!\n\n` +
+            `📊 Sua fatura atual: R$ ${fmt(valorFatura)}\n` +
+            `💚 Economia estimada com CoopereBR: *R$ ${fmt(economiaEstimada)}/mês*\n` +
+            `🗓️ Economia anual: *R$ ${fmt(economiaAnual)}*\n\n` +
+            `Ainda não temos parceiro na área da *${distribuidoraOCR}*, mas estamos expandindo!\n\n` +
+            `Quer que te avisemos quando chegarmos na sua região?\n` +
+            `1️⃣ Sim, quero!\n2️⃣ Não por enquanto`,
+          );
+          return;
+        }
+      }
+
       // Calcular simulação
       const historico = (dadosTemp.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
       const consumoAtualKwh = Number(dadosTemp.consumoAtualKwh ?? 0);
@@ -2027,6 +2373,332 @@ export class WhatsappBotService {
     }
   }
 
+  // ─── LEAD FORA DA ÁREA: captura intenção ────────────────────────────────
+
+  private async handleLeadForaArea(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
+    const distribuidora = String(dadosTemp.distribuidora ?? '');
+    const economiaEstimada = Number(dadosTemp.economiaEstimada ?? 0);
+    const valorFatura = Number(dadosTemp.totalAPagar ?? 0);
+    const titular = String(dadosTemp.titular ?? '');
+    const numeroUC = String(dadosTemp.numeroUC ?? '');
+    const endereco = String(dadosTemp.enderecoInstalacao ?? '');
+
+    // Extrair cidade/estado do endereço (melhor esforço)
+    const partes = endereco.split(/[-–,]/);
+    const cidade = partes.length >= 2 ? partes[partes.length - 2]?.trim() : undefined;
+    const estado = partes.length >= 1 ? partes[partes.length - 1]?.trim()?.substring(0, 2)?.toUpperCase() : undefined;
+
+    if (corpo === '1') {
+      // Salvar lead com intenção confirmada
+      await this.prisma.leadExpansao.create({
+        data: {
+          telefone: telefone.replace(/\D/g, ''),
+          nomeCompleto: titular || undefined,
+          distribuidora,
+          cidade,
+          estado: estado && estado.length === 2 ? estado : undefined,
+          numeroUC: numeroUC || undefined,
+          valorFatura: valorFatura > 0 ? valorFatura : undefined,
+          economiaEstimada: economiaEstimada > 0 ? economiaEstimada : undefined,
+          intencaoConfirmada: true,
+        },
+      });
+
+      await this.finalizarConversa(conversa.id);
+      await this.sender.enviarMensagem(
+        telefone,
+        `✅ *Pronto! Você será avisado assim que chegarmos na região da ${distribuidora}.*\n\n` +
+        `Enquanto isso, que tal indicar amigos e vizinhos? Quanto mais demanda, mais rápido chegamos! 🚀\n\n` +
+        `Obrigado pelo interesse na CoopereBR! 💚`,
+      );
+      return;
+    }
+
+    if (corpo === '2') {
+      // Salvar lead sem intenção (registro passivo)
+      await this.prisma.leadExpansao.create({
+        data: {
+          telefone: telefone.replace(/\D/g, ''),
+          nomeCompleto: titular || undefined,
+          distribuidora,
+          cidade,
+          estado: estado && estado.length === 2 ? estado : undefined,
+          numeroUC: numeroUC || undefined,
+          valorFatura: valorFatura > 0 ? valorFatura : undefined,
+          economiaEstimada: economiaEstimada > 0 ? economiaEstimada : undefined,
+          intencaoConfirmada: false,
+        },
+      });
+
+      await this.finalizarConversa(conversa.id);
+      await this.sender.enviarMensagem(
+        telefone,
+        `Tudo bem! Se mudar de ideia, é só enviar outra fatura. 😊\n\nObrigado pelo interesse na CoopereBR! 💚`,
+      );
+      return;
+    }
+
+    // Não entendeu
+    await this.sender.enviarMensagem(
+      telefone,
+      'Por favor, responda:\n1️⃣ Sim, quero ser avisado\n2️⃣ Não por enquanto',
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CADASTRO POR PROXY: cooperado cadastra um amigo pelo WhatsApp
+  // ═══════════════════════════════════════════════════════════════════════
+
+  private async handleMenuConvidarAmigo(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
+
+    if (corpo === '1') {
+      // Enviar link de indicação
+      const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+      const link = `${baseUrl}/entrar?ref=${dadosTemp.codigoIndicacao}`;
+      await this.sender.enviarMensagem(telefone,
+        `🎁 *Seu link de indicação personalizado:*\n\n${link}\n\n` +
+        `📲 Compartilhe com amigos, familiares e colegas!\n\n` +
+        `Quando seu indicado pagar a primeira fatura, você recebe seu benefício automaticamente. 💚`
+      );
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    if (corpo === '2') {
+      // Iniciar cadastro por proxy
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'CADASTRO_PROXY_NOME', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone, 'Qual o *nome completo* do seu amigo?');
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (enviar link) ou *2* (cadastrar meu amigo).',
+    );
+  }
+
+  private async handleCadastroProxyNome(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+
+    if (!corpo || corpo.length < 3) {
+      await this.sender.enviarMensagem(telefone, 'Por favor, informe o *nome completo* do seu amigo:');
+      return;
+    }
+
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'CADASTRO_PROXY_TELEFONE',
+        dadosTemp: { ...dadosTemp, proxyNome: corpo } as any,
+      },
+    });
+    await this.sender.enviarMensagem(telefone, `Qual o celular de *${corpo}*? (com DDD, ex: 27999991234)`);
+  }
+
+  private async handleCadastroProxyTelefone(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
+
+    if (corpo.length < 10 || corpo.length > 13) {
+      await this.sender.enviarMensagem(telefone, 'Número inválido. Informe com DDD (ex: 27999991234):');
+      return;
+    }
+
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    const proxyTelefone = corpo.startsWith('55') ? corpo : `55${corpo}`;
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_FATURA_PROXY',
+        dadosTemp: { ...dadosTemp, proxyTelefone } as any,
+      },
+    });
+    const nome = dadosTemp.proxyNome as string;
+    await this.sender.enviarMensagem(telefone, `Agora envie a foto ou PDF da conta de luz de *${nome}* 📎`);
+  }
+
+  private async handleAguardandoFaturaProxy(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone, tipo, mediaBase64, mimeType } = msg;
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
+
+    const isMidia =
+      (tipo === 'imagem' || tipo === 'documento') &&
+      mediaBase64 &&
+      mimeType &&
+      ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
+
+    if (!isMidia) {
+      await this.sender.enviarMensagem(telefone, 'Por favor, envie uma *foto* ou *PDF* da conta de energia do seu amigo. 📸');
+      return;
+    }
+
+    await this.sender.enviarMensagem(telefone, '📄 Recebi! Analisando os dados... Aguarde um momento. ⏳');
+
+    const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
+    let dadosExtraidos: Record<string, unknown>;
+    try {
+      dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
+    } catch {
+      await this.sender.enviarMensagem(telefone, 'Não consegui identificar os dados. Envie uma foto mais nítida ou o PDF da fatura. 📸');
+      return;
+    }
+
+    const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
+    if (consumoAtualKwh <= 0) {
+      await this.sender.enviarMensagem(telefone, 'O arquivo não parece ser uma fatura de energia. Tente novamente. 📄');
+      return;
+    }
+
+    // Calcular proposta
+    const historico = (dadosExtraidos.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
+    const valorMesRecente = Number(dadosExtraidos.totalAPagar ?? 0);
+    const kwhs = historico.map(h => h.consumoKwh).filter(v => v > 0);
+    const kwhMedio = kwhs.length > 0 ? kwhs.reduce((a, b) => a + b, 0) / kwhs.length : consumoAtualKwh;
+    const valores = historico.map(h => h.valorRS).filter(v => v > 0);
+    const valorMedio = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : valorMesRecente;
+
+    let resultado: any = null;
+    try {
+      const calcResult = await this.motorProposta.calcular({
+        cooperadoId: 'temp',
+        historico: historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
+        kwhMesRecente: consumoAtualKwh || kwhMedio,
+        valorMesRecente: valorMesRecente || valorMedio,
+        mesReferencia: String(dadosExtraidos.mesReferencia ?? ''),
+        tipoFornecimento: String(dadosExtraidos.tipoFornecimento ?? 'TRIFASICO') as any,
+      });
+      resultado = calcResult.resultado;
+    } catch (err) {
+      this.logger.warn(`Erro ao calcular proposta proxy: ${err.message}`);
+    }
+
+    const economiaMensal = resultado?.economiaMensal ?? 0;
+    const distribuidora = String(dadosExtraidos.distribuidora ?? '');
+    const numeroUC = String(dadosExtraidos.numeroUC ?? '');
+    const proxyNome = dadosTemp.proxyNome as string;
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'CONFIRMAR_PROXY',
+        dadosTemp: {
+          ...dadosTemp,
+          ...dadosExtraidos,
+          resultado,
+          economiaMensal,
+          distribuidora,
+          numeroUC,
+        } as any,
+      },
+    });
+
+    const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let resposta = `*${proxyNome}* economizaria `;
+    if (economiaMensal > 0) {
+      resposta += `*R$ ${fmt(economiaMensal)}/mês* ☀️\n\n`;
+    } else {
+      resposta += `com energia solar! ☀️\n\n`;
+    }
+    resposta += `Confirma o cadastro?\n1️⃣ Sim, cadastrar\n2️⃣ Não por enquanto`;
+
+    await this.sender.enviarMensagem(telefone, resposta);
+  }
+
+  private async handleConfirmarProxy(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
+
+    if (corpo === '1' || corpo.toLowerCase().includes('sim')) {
+      const proxyNome = dadosTemp.proxyNome as string;
+      const proxyTelefone = dadosTemp.proxyTelefone as string;
+      const indicadorId = dadosTemp.indicadorId as string;
+      const cooperativaId = dadosTemp.cooperativaId as string;
+      const economiaMensal = Number(dadosTemp.economiaMensal ?? 0);
+      const distribuidora = dadosTemp.distribuidora as string | undefined;
+      const numeroUC = dadosTemp.numeroUC as string | undefined;
+
+      try {
+        // Chamar endpoint de pré-cadastro internamente
+        const cooperado = await this.prisma.cooperado.create({
+          data: {
+            nomeCompleto: proxyNome,
+            cpf: `PROXY_${Date.now()}`,
+            email: `proxy_${Date.now()}@pendente.cooperebr`,
+            telefone: proxyTelefone,
+            status: 'PENDENTE_ASSINATURA',
+            cooperadoIndicadorId: indicadorId,
+            cooperativaId,
+          },
+        });
+
+        // Gerar token JWT
+        const jwt = require('jsonwebtoken');
+        const secret = process.env.JWT_SECRET;
+        const token = jwt.sign(
+          { cooperadoId: cooperado.id, tipo: 'assinatura' },
+          secret,
+          { expiresIn: '7d' },
+        );
+        const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await this.prisma.cooperado.update({
+          where: { id: cooperado.id },
+          data: { tokenAssinatura: token, tokenAssinaturaExp: expiraEm },
+        });
+
+        const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+        const link = `${baseUrl}/portal/assinar/${token}`;
+
+        const indicadorNome = dadosTemp.indicadorNome as string;
+        const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // Enviar mensagem para o amigo
+        let msgAmigo = `${indicadorNome} te cadastrou na *CoopereBR*! ☀️\n\n`;
+        if (economiaMensal > 0) {
+          msgAmigo += `Sua economia estimada é de *R$ ${fmt(economiaMensal)}/mês*.\n\n`;
+        }
+        msgAmigo += `Para confirmar, acesse:\n${link}\n\n`;
+        msgAmigo += `O link é válido por 7 dias.`;
+
+        await this.sender.enviarMensagem(proxyTelefone, msgAmigo).catch(err => {
+          this.logger.warn(`Erro ao enviar WA para amigo proxy ${proxyTelefone}: ${err.message}`);
+        });
+
+        // Notificar cooperado
+        await this.sender.enviarMensagem(telefone,
+          `✅ Pronto! Enviei o link para *${proxyNome}* confirmar.\n` +
+          `Quando ele assinar, você receberá seu benefício!`
+        );
+      } catch (err) {
+        this.logger.error(`Erro no cadastro proxy: ${err.message}`);
+        await this.sender.enviarMensagem(telefone, '❌ Ocorreu um erro ao cadastrar. Tente novamente mais tarde.');
+      }
+
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
+      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, é só me avisar.');
+      await this.resetarConversa(telefone);
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (sim, cadastrar) ou *2* (não por enquanto).',
+    );
+  }
+
   // ─── MENU FATURA: lista cobranças pendentes ─────────────────────────────
 
   private async handleMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2320,6 +2992,252 @@ export class WhatsappBotService {
       update: { estado: 'INICIAL', dadosTemp: undefined },
       create: { telefone, estado: 'INICIAL' },
     });
+  }
+
+  // ─── Atualização de Cadastro ─────────────────────────────────────────────
+
+  private async handleAtualizacaoCadastro(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+    const cooperadoId = conversa.cooperadoId;
+
+    if (corpo === '1' || corpo.toLowerCase().includes('nome')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_NOME', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone, '📝 Digite seu *novo nome completo*:');
+      return;
+    }
+    if (corpo === '2' || corpo.toLowerCase().includes('email')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_EMAIL', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone, '📧 Digite seu *novo email*:');
+      return;
+    }
+    if (corpo === '3' || corpo.toLowerCase().includes('telefone')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_TELEFONE', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone, '📱 Digite seu *novo número de telefone* (com DDD):');
+      return;
+    }
+    if (corpo === '4' || corpo.toLowerCase().includes('endereço') || corpo.toLowerCase().includes('cep')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_CEP', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone, '📍 Digite seu *novo CEP* (apenas números):');
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* (nome), *2* (email), *3* (telefone) ou *4* (endereço).');
+  }
+
+  private async handleAguardandoNovoNome(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const novoNome = this.respostaEfetiva(msg).trim();
+    if (novoNome.length < 3) {
+      await this.sender.enviarMensagem(telefone, '⚠️ Nome muito curto. Digite o nome completo:');
+      return;
+    }
+    await this.prisma.cooperado.update({
+      where: { id: conversa.cooperadoId },
+      data: { nomeCompleto: novoNome },
+    });
+    await this.sender.enviarMensagem(telefone, `✅ *Nome* atualizado com sucesso para *${novoNome}*!`);
+    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+  }
+
+  private async handleAguardandoNovoEmail(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const novoEmail = this.respostaEfetiva(msg).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(novoEmail)) {
+      await this.sender.enviarMensagem(telefone, '⚠️ Email inválido. Digite um email válido (ex: nome@email.com):');
+      return;
+    }
+    await this.prisma.cooperado.update({
+      where: { id: conversa.cooperadoId },
+      data: { email: novoEmail },
+    });
+    await this.sender.enviarMensagem(telefone, `✅ *Email* atualizado com sucesso para *${novoEmail}*!`);
+    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+  }
+
+  private async handleAguardandoNovoTelefone(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const novoTelefone = this.respostaEfetiva(msg).replace(/\D/g, '');
+    if (novoTelefone.length < 10 || novoTelefone.length > 13) {
+      await this.sender.enviarMensagem(telefone, '⚠️ Telefone inválido. Digite com DDD (ex: 11999998888):');
+      return;
+    }
+    await this.prisma.cooperado.update({
+      where: { id: conversa.cooperadoId },
+      data: { telefone: novoTelefone },
+    });
+    await this.sender.enviarMensagem(telefone, `✅ *Telefone* atualizado com sucesso para *${novoTelefone}*!`);
+    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+  }
+
+  private async handleAguardandoNovoCep(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const novoCep = this.respostaEfetiva(msg).replace(/\D/g, '');
+    if (novoCep.length !== 8) {
+      await this.sender.enviarMensagem(telefone, '⚠️ CEP inválido. Digite 8 dígitos (ex: 01310100):');
+      return;
+    }
+    await this.prisma.cooperado.update({
+      where: { id: conversa.cooperadoId },
+      data: { cep: novoCep },
+    });
+    await this.sender.enviarMensagem(telefone, `✅ *Endereço (CEP)* atualizado com sucesso para *${novoCep}*!`);
+    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+  }
+
+  // ─── Atualização de Contrato ─────────────────────────────────────────────
+
+  private async handleAtualizacaoContrato(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+    const cooperadoId = conversa.cooperadoId;
+
+    const contrato = await this.prisma.contrato.findFirst({
+      where: { cooperadoId, status: 'ATIVO' as any },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!contrato) {
+      await this.sender.enviarMensagem(telefone, '⚠️ Nenhum contrato ativo encontrado.');
+      await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+      return;
+    }
+
+    if (corpo === '1' || corpo.toLowerCase().includes('aumentar')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'aumentar' }, contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        `📊 Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
+        `⬆️ Digite o *novo valor em kWh* que deseja contratar (maior que o atual):`,
+      );
+      return;
+    }
+
+    if (corpo === '2' || corpo.toLowerCase().includes('diminuir')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'diminuir' }, contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        `📊 Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
+        `⬇️ Digite o *novo valor em kWh* que deseja contratar (menor que o atual):`,
+      );
+      return;
+    }
+
+    if (corpo === '3' || corpo.toLowerCase().includes('suspender')) {
+      await this.prisma.contrato.update({
+        where: { id: contrato.id },
+        data: { status: 'SUSPENSO' as any },
+      });
+      // Notificar equipe
+      const superPhone = process.env.SUPER_ADMIN_PHONE;
+      if (superPhone) {
+        const cooperado = await this.prisma.cooperado.findUnique({ where: { id: cooperadoId }, select: { nomeCompleto: true } });
+        await this.sender.enviarMensagem(superPhone,
+          `⏸️ *Contrato suspenso via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${contrato.id}`,
+          { tipoDisparo: 'BOT_RESPOSTA' },
+        );
+      }
+      await this.sender.enviarMensagem(telefone, '⏸️ Seu contrato foi *suspenso temporariamente*.\n\nPara reativar, entre em contato com nossa equipe.');
+      await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
+      return;
+    }
+
+    if (corpo === '4' || corpo.toLowerCase().includes('encerrar')) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'CONFIRMAR_ENCERRAMENTO', dadosTemp: { contratoId: contrato.id }, contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(telefone,
+        '❌ *Tem certeza que deseja encerrar seu contrato?*\n\n' +
+        'Esta ação não pode ser desfeita facilmente.\n\n' +
+        '1️⃣ Sim, encerrar\n2️⃣ Não, voltar ao menu',
+      );
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* (aumentar kWh), *2* (diminuir kWh), *3* (suspender) ou *4* (encerrar).');
+  }
+
+  private async handleAguardandoNovoKwh(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+    const valor = parseInt(corpo.replace(/\D/g, ''), 10);
+
+    if (!valor || valor < 50) {
+      await this.sender.enviarMensagem(telefone, '⚠️ Valor inválido. Digite um número válido de kWh (mínimo 50):');
+      return;
+    }
+
+    const dados = conversa.dadosTemp as any;
+    const contratoId = dados?.contratoId;
+
+    await this.prisma.contrato.update({
+      where: { id: contratoId },
+      data: { kwhContratoMensal: valor },
+    });
+
+    // Notificar equipe
+    const superPhone = process.env.SUPER_ADMIN_PHONE;
+    if (superPhone) {
+      const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
+      await this.sender.enviarMensagem(superPhone,
+        `🔄 *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nAção: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
+        { tipoDisparo: 'BOT_RESPOSTA' },
+      );
+    }
+
+    await this.sender.enviarMensagem(telefone, `✅ Contrato atualizado para *${valor} kWh/mês*!\n\n_A alteração será refletida na próxima fatura._`);
+    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
+  }
+
+  private async handleConfirmarEncerramento(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+
+    if (corpo === '1' || corpo.toLowerCase().includes('sim')) {
+      const dados = conversa.dadosTemp as any;
+      await this.prisma.contrato.update({
+        where: { id: dados?.contratoId },
+        data: { status: 'ENCERRADO' as any },
+      });
+      // Notificar equipe
+      const superPhone = process.env.SUPER_ADMIN_PHONE;
+      if (superPhone) {
+        const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
+        await this.sender.enviarMensagem(superPhone,
+          `❌ *Contrato encerrado via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${dados?.contratoId}`,
+          { tipoDisparo: 'BOT_RESPOSTA' },
+        );
+      }
+      await this.sender.enviarMensagem(telefone, '❌ Seu contrato foi *encerrado*.\n\nAgradecemos por ter sido cooperado! Caso mude de ideia, entre em contato conosco.');
+      await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'CONCLUIDO', dadosTemp: undefined } });
+      return;
+    }
+
+    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('voltar')) {
+      await this.sender.enviarMensagem(telefone, '👍 Ok, seu contrato continua ativo!');
+      await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* para confirmar encerramento ou *2* para voltar.');
   }
 
   private async finalizarConversa(id: string): Promise<void> {

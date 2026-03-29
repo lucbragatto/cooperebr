@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   ArrowLeft, CheckCircle2, Loader2, MessageCircle, Wifi, WifiOff,
   Send, Gift, RefreshCw, Users, Clock, PlugZap,
-  MessagesSquare, History, List,
+  MessagesSquare, History, List, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
@@ -16,6 +16,8 @@ import DisparoSeletivo from '@/components/DisparoSeletivo';
 import ConversaDetalhe from '@/components/whatsapp/ConversaDetalhe';
 import HistoricoMensagens from '@/components/whatsapp/HistoricoMensagens';
 import GerenciarListas from '@/components/whatsapp/GerenciarListas';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
 
 const WHATSAPP_SERVICE_URL = process.env.NEXT_PUBLIC_WHATSAPP_URL ?? 'http://localhost:3002';
 
@@ -29,7 +31,21 @@ interface Conversa {
   telefone: string;
   estado: string;
   cooperadoId?: string;
+  cooperativaId?: string;
   updatedAt: string;
+  nomeCooperado?: string | null;
+  ultimasMensagens?: { conteudo: string | null; direcao: string; enviadaEm: string }[];
+}
+
+interface ConversaHistoricoMsg {
+  id: string;
+  telefone: string;
+  direcao: string;
+  tipo: string;
+  conteudo: string | null;
+  status: string;
+  enviadaEm: string;
+  createdAt: string;
 }
 
 interface ResultadoDisparo {
@@ -56,9 +72,15 @@ const lbl = 'block text-xs font-medium text-gray-600 mb-1';
 
 const estadoLabel: Record<string, { label: string; color: string }> = {
   INICIAL: { label: 'Inicial', color: 'bg-gray-100 text-gray-600' },
+  MENU_PRINCIPAL: { label: 'Menu Principal', color: 'bg-blue-50 text-blue-600' },
+  MENU_COOPERADO: { label: 'Menu Cooperado', color: 'bg-green-50 text-green-600' },
+  MENU_SEM_FATURA: { label: 'Sem Fatura', color: 'bg-orange-50 text-orange-600' },
   AGUARDANDO_CONFIRMACAO_DADOS: { label: 'Aguard. Dados', color: 'bg-yellow-100 text-yellow-700' },
   AGUARDANDO_CONFIRMACAO_PROPOSTA: { label: 'Aguard. Proposta', color: 'bg-blue-100 text-blue-700' },
   AGUARDANDO_CONFIRMACAO_CADASTRO: { label: 'Aguard. Cadastro', color: 'bg-purple-100 text-purple-700' },
+  ATUALIZACAO_CADASTRO: { label: 'Atualizando Cadastro', color: 'bg-indigo-100 text-indigo-700' },
+  ATUALIZACAO_CONTRATO: { label: 'Atualizando Contrato', color: 'bg-amber-100 text-amber-700' },
+  AGUARDANDO_ATENDENTE: { label: 'Aguard. Atendente', color: 'bg-red-100 text-red-700' },
   CONCLUIDO: { label: 'Concluído', color: 'bg-green-100 text-green-700' },
 };
 
@@ -99,6 +121,11 @@ export default function WhatsAppPage() {
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [loadingConversas, setLoadingConversas] = useState(true);
   const [conversaSelecionada, setConversaSelecionada] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [historicoMsgs, setHistoricoMsgs] = useState<ConversaHistoricoMsg[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [buscaConversa, setBuscaConversa] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
 
   // Disparos
   const [mesReferencia, setMesReferencia] = useState('');
@@ -123,8 +150,10 @@ export default function WhatsAppPage() {
   // Buscar conversas via API backend
   const fetchConversas = useCallback(async () => {
     try {
-      const { data } = await api.get<Conversa[]>('/whatsapp/conversas');
-      setConversas(data);
+      const { data } = await api.get<{ items: Conversa[]; total: number }>('/whatsapp/conversas', {
+        params: { limit: 50 },
+      });
+      setConversas(data.items ?? data as any);
     } catch {
       setConversas([]);
     } finally {
@@ -195,6 +224,20 @@ export default function WhatsAppPage() {
     // The user can see the list was loaded — they use DisparoSeletivo's lista mode
   }
 
+  async function abrirConversa(telefone: string) {
+    setConversaSelecionada(telefone);
+    setSheetOpen(true);
+    setLoadingHistorico(true);
+    try {
+      const { data } = await api.get<{ mensagens: ConversaHistoricoMsg[] }>(`/whatsapp/conversas/${telefone.replace(/\D/g, '')}/historico`);
+      setHistoricoMsgs(data.mensagens ?? []);
+    } catch {
+      setHistoricoMsgs([]);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }
+
   const isConnected = status?.status === 'connected';
   const conversasAtivas = conversas.filter(c => c.estado !== 'CONCLUIDO' && c.estado !== 'INICIAL');
   const conversasHoje = conversas.filter(c => {
@@ -214,6 +257,17 @@ export default function WhatsAppPage() {
   const listaConversas = Object.values(conversasPorTelefone).sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
+
+  const listaConversasFiltradas = listaConversas.filter(c => {
+    if (filtroEstado && c.estado !== filtroEstado) return false;
+    if (buscaConversa) {
+      const busca = buscaConversa.toLowerCase();
+      const matchTelefone = c.telefone.includes(busca.replace(/\D/g, ''));
+      const matchNome = c.nomeCooperado?.toLowerCase().includes(busca);
+      if (!matchTelefone && !matchNome) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -354,71 +408,122 @@ export default function WhatsAppPage() {
       )}
 
       {abaAtiva === 'conversas' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Lista de conversas */}
-          <div className={`space-y-1 ${conversaSelecionada ? 'hidden md:block' : ''}`}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold text-gray-700">Conversas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loadingConversas ? (
-                  <div className="flex items-center justify-center py-6">
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="flex gap-3 items-center">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar telefone ou nome..."
+                value={buscaConversa}
+                onChange={e => setBuscaConversa(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <select
+              value={filtroEstado}
+              onChange={e => setFiltroEstado(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Todos os estados</option>
+              {Object.entries(estadoLabel).map(([key, val]) => (
+                <option key={key} value={key}>{val.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Lista */}
+          <Card>
+            <CardContent className="p-0">
+              {loadingConversas ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                </div>
+              ) : listaConversasFiltradas.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">Nenhuma conversa encontrada.</p>
+              ) : (
+                <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                  {listaConversasFiltradas.map((c) => {
+                    const est = estadoLabel[c.estado] || { label: c.estado, color: 'bg-gray-100 text-gray-600' };
+                    const nome = c.nomeCooperado || c.telefone.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4');
+                    const inicial = c.nomeCooperado ? c.nomeCooperado.charAt(0).toUpperCase() : c.telefone.slice(-2);
+                    const ultimaMsg = c.ultimasMensagens?.[0];
+
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => abrirConversa(c.telefone)}
+                        className="w-full flex items-center gap-3 py-3 px-4 text-left transition-colors hover:bg-gray-50"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-sm font-bold shrink-0">
+                          {inicial}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-gray-800 truncate">{nome}</p>
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">{tempoAtras(c.updatedAt)}</span>
+                          </div>
+                          {c.nomeCooperado && (
+                            <p className="text-[11px] text-gray-400 truncate">{c.telefone.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4')}</p>
+                          )}
+                          {ultimaMsg?.conteudo && (
+                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                              {ultimaMsg.direcao === 'SAIDA' ? '\uD83E\uDD16 ' : ''}{ultimaMsg.conteudo.slice(0, 80)}
+                            </p>
+                          )}
+                        </div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${est.color}`}>
+                          {est.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Sheet de histórico */}
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5 text-green-600" />
+                  {conversaSelecionada && (
+                    <span className="text-sm">
+                      {conversas.find(c => c.telefone === conversaSelecionada)?.nomeCooperado ||
+                       conversaSelecionada.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4')}
+                    </span>
+                  )}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-2">
+                {loadingHistorico ? (
+                  <div className="flex items-center justify-center py-10">
                     <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
                   </div>
-                ) : listaConversas.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">Nenhuma conversa.</p>
+                ) : historicoMsgs.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">Nenhuma mensagem encontrada.</p>
                 ) : (
-                  <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
-                    {listaConversas.map((c) => {
-                      const est = estadoLabel[c.estado] || { label: c.estado, color: 'bg-gray-100 text-gray-600' };
-                      const selecionada = conversaSelecionada === c.telefone;
-                      const telefoneFormatado = c.telefone.replace(/(\d{2})(\d{2})(\d{5})(\d{4})/, '+$1 ($2) $3-$4');
-                      const inicial = c.telefone.slice(-2);
-
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => setConversaSelecionada(c.telefone)}
-                          className={`w-full flex items-center gap-3 py-3 px-2 text-left transition-colors rounded ${
-                            selecionada ? 'bg-green-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold shrink-0">
-                            {inicial}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{telefoneFormatado}</p>
-                            <p className="text-[10px] text-gray-400">{tempoAtras(c.updatedAt)} atrás</p>
-                          </div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${est.color}`}>
-                            {est.label}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  historicoMsgs.map((m) => {
+                    const isBot = m.direcao === 'SAIDA';
+                    return (
+                      <div key={m.id} className={`flex ${isBot ? 'justify-start' : 'justify-end'}`}>
+                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                          isBot ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-900'
+                        }`}>
+                          <p className="whitespace-pre-wrap break-words">{m.conteudo || '(m\u00EDdia)'}</p>
+                          <p className={`text-[10px] mt-1 ${isBot ? 'text-gray-400' : 'text-blue-400'}`}>
+                            {new Date(m.enviadaEm || m.createdAt).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Detalhe da conversa */}
-          <div className="md:col-span-2">
-            {conversaSelecionada ? (
-              <ConversaDetalhe
-                telefone={conversaSelecionada}
-                onVoltar={() => setConversaSelecionada(null)}
-              />
-            ) : (
-              <Card>
-                <CardContent className="py-16 text-center">
-                  <MessagesSquare className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">Selecione uma conversa para ver as mensagens</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       )}
 
