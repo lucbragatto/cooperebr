@@ -49,8 +49,14 @@ export default function Step2Usina({ defaultValues, cooperativaId, onSubmit }: S
       setCarregando(true);
       api.get('/usinas')
         .then(({ data }) => {
-          const disponiveis = data.filter((u: any) => !u.cooperativaId);
-          setUsinas(disponiveis);
+          const lista = (Array.isArray(data) ? data : []).map((u: any) => {
+            const somaContratos = (u.contratos || []).reduce(
+              (acc: number, c: any) => acc + (Number(c.percentualUsina) || 0),
+              0,
+            );
+            return { ...u, percentualOcupado: somaContratos, percentualLivre: 100 - somaContratos };
+          });
+          setUsinas(lista);
         })
         .catch(() => setUsinas([]))
         .finally(() => setCarregando(false));
@@ -95,16 +101,49 @@ export default function Step2Usina({ defaultValues, cooperativaId, onSubmit }: S
           {carregando ? (
             <p className="text-sm text-neutral-400">Carregando usinas...</p>
           ) : usinas.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nenhuma usina disponível (sem cooperativa vinculada).</p>
+            <p className="text-sm text-neutral-500">Nenhuma usina cadastrada.</p>
           ) : (
             <div>
               <label className={lbl}>Selecione a usina</label>
-              <select className={cls} value={usinaId} onChange={(e) => setUsinaId(e.target.value)}>
-                <option value="">Selecione...</option>
+              <div className="space-y-2">
                 {usinas.map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.nome} — {u.potenciaKwp} kWp</option>
+                  <div
+                    key={u.id}
+                    onClick={() => setUsinaId(u.id)}
+                    className={`cursor-pointer border rounded-lg p-3 transition ${
+                      usinaId === u.id
+                        ? 'border-green-500 bg-green-50 ring-1 ring-green-400'
+                        : 'border-neutral-200 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-medium">{u.nome}</span>
+                        <span className="text-xs text-neutral-400 ml-2">
+                          {u.potenciaKwp} kWp{u.cidade ? ` — ${u.cidade}/${u.estado}` : ''}
+                        </span>
+                      </div>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        u.percentualLivre > 50
+                          ? 'bg-green-100 text-green-700'
+                          : u.percentualLivre > 0
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {u.percentualLivre.toFixed(1)}% livre
+                      </span>
+                    </div>
+                    <div className="mt-1.5 w-full bg-neutral-200 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          u.percentualLivre > 50 ? 'bg-green-500' : u.percentualLivre > 0 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${Math.max(0, u.percentualLivre)}%` }}
+                      />
+                    </div>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
           )}
         </div>

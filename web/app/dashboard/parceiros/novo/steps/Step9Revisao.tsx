@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 
 interface WizardData {
-  // Steps 1-5 (parceiro, usina, lista espera, plano SaaS, modelo cobranca)
+  // Steps 1-6 (parceiro, membros, usina, lista espera, plano SaaS, modelo cobranca)
   parceiro?: { nome?: string; tipoParceiro?: string; cidade?: string; estado?: string; cnpj?: string; email?: string; telefone?: string; endereco?: string; bairro?: string; cep?: string };
+  membros?: { tipo?: string; membros?: any[]; unidades?: any[] };
   usina?: { nome?: string; potenciaKwp?: number; cidade?: string; estado?: string; statusHomologacao?: string };
   listaEspera?: { membros?: number };
   planoSaas?: { nome?: string; valor?: number };
@@ -74,7 +75,7 @@ export default function Step9Revisao({ wizardData, onAtivar }: Step9Props) {
   const [concluido, setConcluido] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const { parceiro, usina, listaEspera, planoSaas, modeloCobranca, asaas, banco, documentos } = wizardData;
+  const { parceiro, membros, usina, listaEspera, planoSaas, modeloCobranca, asaas, banco, documentos } = wizardData;
 
   // Status computados
   const asaasStatus = asaas.temAsaas && asaas.asaasApiKey ? 'ok' : 'pendente';
@@ -172,6 +173,16 @@ export default function Step9Revisao({ wizardData, onAtivar }: Step9Props) {
         <ResumoItem
           label="Parceiro"
           valor={parceiro?.nome ? `${parceiro.nome} (${parceiro.tipoParceiro || 'COOPERATIVA'}) - ${parceiro.cidade || ''}/${parceiro.estado || ''}` : 'A configurar'}
+        />
+        <ResumoItem
+          label="Membros"
+          valor={
+            membros?.tipo === 'unidades'
+              ? `${membros.unidades?.length || 0} unidade(s)`
+              : membros?.tipo === 'membros'
+              ? `${membros.membros?.length || 0} membro(s)`
+              : 'Nenhum adicionado'
+          }
         />
         <ResumoItem
           label="Usina"

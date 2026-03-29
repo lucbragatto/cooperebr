@@ -11,7 +11,13 @@ export class UsinasService {
     if (cooperativaId) where.cooperativaId = cooperativaId;
     return this.prisma.usina.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
-      include: { proprietarioCooperado: { select: { id: true, nomeCompleto: true } } },
+      include: {
+        proprietarioCooperado: { select: { id: true, nomeCompleto: true } },
+        contratos: {
+          where: { status: { in: ['ATIVO', 'APROVADO', 'PENDENTE_ATIVACAO'] } },
+          select: { percentualUsina: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

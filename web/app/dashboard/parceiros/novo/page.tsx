@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { CheckCircle } from 'lucide-react';
 import api from '@/lib/api';
 import Step1Dados from './steps/Step1Dados';
+import Step2Membros from './steps/Step2Membros';
 import Step2Usina from './steps/Step2Usina';
 import Step3Espera from './steps/Step3Espera';
 import Step4PlanoSaas from './steps/Step4PlanoSaas';
@@ -17,6 +18,7 @@ import Step9Revisao from './steps/Step9Revisao';
 
 const STEP_LABELS = [
   'Dados do Parceiro',
+  'Membros',
   'Usina',
   'Lista de Espera',
   'Plano SaaS',
@@ -65,8 +67,9 @@ export default function NovoParceiro() {
   const router = useRouter();
   const [etapa, setEtapa] = useState(0);
 
-  // Steps 1-5 data — updated only on step submit (not per keystroke)
+  // Steps 1-6 data — updated only on step submit (not per keystroke)
   const [dadosParceiro, setDadosParceiro] = useState<any>({});
+  const [dadosMembros, setDadosMembros] = useState<any>({});
   const [dadosUsina, setDadosUsina] = useState<any>({});
   const [dadosListaEspera, setDadosListaEspera] = useState<any>({});
   const [dadosPlanoSaas, setDadosPlanoSaas] = useState<any>({});
@@ -117,7 +120,7 @@ export default function NovoParceiro() {
   }
 
   function avancar() {
-    setEtapa((e) => Math.min(8, e + 1));
+    setEtapa((e) => Math.min(9, e + 1));
   }
 
   async function handleAtivarParceiro() {
@@ -207,39 +210,47 @@ export default function NovoParceiro() {
         );
       case 1:
         return (
+          <Step2Membros
+            tipoParceiro={dadosParceiro.tipoParceiro || 'COOPERATIVA'}
+            onSubmit={(dados) => { setDadosMembros(dados); avancar(); }}
+          />
+        );
+      case 2:
+        return (
           <Step2Usina
             defaultValues={dadosUsina}
             onSubmit={(dados) => { setDadosUsina(dados); avancar(); }}
           />
         );
-      case 2:
+      case 3:
         return (
           <Step3Espera
             onSubmit={(dados) => { setDadosListaEspera(dados); avancar(); }}
           />
         );
-      case 3:
+      case 4:
         return (
           <Step4PlanoSaas
             defaultValues={dadosPlanoSaas}
             onSubmit={(dados) => { setDadosPlanoSaas(dados); avancar(); }}
           />
         );
-      case 4:
+      case 5:
         return (
           <Step5Cobranca
             defaultValues={dadosModeloCobranca}
             onSubmit={(dados) => { setDadosModeloCobranca(dados); avancar(); }}
           />
         );
-      case 5: return <Step6Asaas data={dadosAsaas} onChange={updateAsaas} />;
-      case 6: return <Step7Banco data={dadosBanco} onChange={updateBanco} />;
-      case 7: return <Step8Documentos data={dadosDocumentos} onChange={updateDocumentos} />;
-      case 8:
+      case 6: return <Step6Asaas data={dadosAsaas} onChange={updateAsaas} />;
+      case 7: return <Step7Banco data={dadosBanco} onChange={updateBanco} />;
+      case 8: return <Step8Documentos data={dadosDocumentos} onChange={updateDocumentos} />;
+      case 9:
         return (
           <Step9Revisao
             wizardData={{
               parceiro: dadosParceiro,
+              membros: dadosMembros,
               usina: dadosUsina,
               listaEspera: dadosListaEspera,
               planoSaas: dadosPlanoSaas,
@@ -255,9 +266,9 @@ export default function NovoParceiro() {
     }
   }
 
-  // Steps 1-5 have their own "Próximo" button inside the component
+  // Steps 1-6 have their own "Próximo" button inside the component
   // Steps 6-8 use the external navigation buttons
-  const showExternalNav = etapa >= 5 && etapa < 8;
+  const showExternalNav = etapa >= 6 && etapa < 9;
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -285,10 +296,10 @@ export default function NovoParceiro() {
           </button>
           {showExternalNav && (
             <button
-              onClick={() => setEtapa((e) => Math.min(8, e + 1))}
+              onClick={() => setEtapa((e) => Math.min(9, e + 1))}
               className="px-5 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
             >
-              {etapa === 7 ? 'Revisar' : 'Proximo'}
+              {etapa === 8 ? 'Revisar' : 'Proximo'}
             </button>
           )}
         </div>
