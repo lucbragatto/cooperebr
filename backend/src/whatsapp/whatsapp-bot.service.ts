@@ -445,6 +445,9 @@ export class WhatsappBotService {
         case 'CONFIRMAR_PROXY':
           await this.handleConfirmarProxy(msg, conversa);
           break;
+        case 'NPS_AGUARDANDO_NOTA':
+          await this.handleNpsNota(msg, conversa);
+          break;
         default:
           await this.handleMenuPrincipalInicio(msg, conversa);
       }
@@ -1487,6 +1490,9 @@ export class WhatsappBotService {
 
     const textoSucesso = await this.msg('cadastro_sucesso', {}, '🎉 Perfeito! Seu pré-cadastro foi criado com sucesso!\n\nNossa equipe entrará em contato em breve para finalizar. Qualquer dúvida é só perguntar! 💚');
     await this.sender.enviarMensagem(telefone, textoSucesso);
+
+    // NPS: agendar pesquisa após 1 hora
+    this.agendarNps(telefone, conversa.id);
   }
 
   // ─── Estado CONCLUIDO ────────────────────────────────────────────────────
@@ -3238,6 +3244,54 @@ export class WhatsappBotService {
     }
 
     await this.incrementarFallback(conversa, telefone, 'Responda *1* para confirmar encerramento ou *2* para voltar.');
+  }
+
+  // ─── NPS automático pós-cadastro ──────────────────────────────────────
+
+  private agendarNps(telefone: string, conversaId: string): void {
+    setTimeout(async () => {
+      try {
+        const conversa = await this.prisma.conversaWhatsapp.findUnique({ where: { id: conversaId } });
+        if (!conversa || conversa.estado !== 'CONCLUIDO') return;
+
+        await this.prisma.conversaWhatsapp.update({
+          where: { id: conversaId },
+          data: { estado: 'NPS_AGUARDANDO_NOTA' },
+        });
+
+        await this.sender.enviarMensagem(
+          telefone,
+          '😊 Olá! Sua solicitação de adesão à CoopereBR foi recebida!\n\n' +
+          'De 0 a 10, quanto você indicaria a CoopereBR para um amigo?\n' +
+          '(Digite apenas o número)',
+        );
+      } catch (err) {
+        this.logger.warn(`Erro ao enviar NPS para ${telefone}: ${err.message}`);
+      }
+    }, 60 * 60 * 1000); // 1 hora
+  }
+
+  private async handleNpsNota(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const nota = parseInt(corpo, 10);
+
+    if (isNaN(nota) || nota < 0 || nota > 10) {
+      await this.sender.enviarMensagem(telefone, 'Por favor, digite um número de 0 a 10.');
+      return;
+    }
+
+    await this.prisma.npsResposta.create({
+      data: {
+        cooperadoId: conversa.cooperadoId || undefined,
+        telefone,
+        nota,
+        canal: 'WHATSAPP',
+      },
+    });
+
+    await this.sender.enviarMensagem(telefone, 'Obrigado pelo feedback! 💚 Isso nos ajuda a melhorar.');
+    await this.finalizarConversa(conversa.id);
   }
 
   private async finalizarConversa(id: string): Promise<void> {

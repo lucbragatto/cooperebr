@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Request, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Request, Res, BadRequestException } from '@nestjs/common';
+import { Response } from 'express';
 import { CooperativasService } from './cooperativas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -51,6 +52,12 @@ export class CooperativasController {
   @Get(':id/painel-parceiro')
   painelParceiro(@Param('id') id: string) {
     return this.cooperativasService.painelParceiro(id);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get(':id/qrcode')
+  async gerarQrCode(@Param('id') id: string) {
+    return this.cooperativasService.gerarQrCode(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

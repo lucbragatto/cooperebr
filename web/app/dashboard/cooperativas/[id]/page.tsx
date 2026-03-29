@@ -10,7 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, ArrowRightLeft, Zap, Loader2, QrCode, Download } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import DualListaConcessionaria from '@/components/DualListaConcessionaria';
 
 const BADGE_TIPO: Record<string, { label: string; icone: string }> = {
   COOPERATIVA: { label: 'Cooperativa', icone: '🏢' },
@@ -60,6 +64,31 @@ export default function CooperativaDetailPage() {
   const [erro, setErro] = useState('');
   const [membros, setMembros] = useState<any[]>([]);
 
+  // Migração / Ajuste states
+  const [usinasDisponiveis, setUsinasDisponiveis] = useState<any[]>([]);
+  const [migrarAberto, setMigrarAberto] = useState(false);
+  const [migrarMembro, setMigrarMembro] = useState<any>(null);
+  const [migrarUsinaDestinoId, setMigrarUsinaDestinoId] = useState('');
+  const [migrarModo, setMigrarModo] = useState<'kwh' | 'percent'>('kwh');
+  const [migrarValor, setMigrarValor] = useState('');
+  const [migrarMotivo, setMigrarMotivo] = useState('');
+  const [migrarProcessando, setMigrarProcessando] = useState(false);
+  const [migrarMsg, setMigrarMsg] = useState('');
+  const [migrarSucesso, setMigrarSucesso] = useState<{ usinaOrigemId: string; usinaDestinoId: string } | null>(null);
+  const [dualListaAberto, setDualListaAberto] = useState(false);
+
+  const [qrAberto, setQrAberto] = useState(false);
+  const [qrData, setQrData] = useState<{ qrCode: string; url: string } | null>(null);
+  const [qrCarregando, setQrCarregando] = useState(false);
+
+  const [ajustarAberto, setAjustarAberto] = useState(false);
+  const [ajustarMembro, setAjustarMembro] = useState<any>(null);
+  const [ajustarModo, setAjustarModo] = useState<'kwh' | 'percent'>('kwh');
+  const [ajustarValor, setAjustarValor] = useState('');
+  const [ajustarMotivo, setAjustarMotivo] = useState('');
+  const [ajustarProcessando, setAjustarProcessando] = useState(false);
+  const [ajustarMsg, setAjustarMsg] = useState('');
+
   useEffect(() => {
     api.get<Cooperativa>(`/cooperativas/${id}`)
       .then((r) => setCoop(r.data))
@@ -69,7 +98,63 @@ export default function CooperativaDetailPage() {
     api.get(`/cooperados?cooperativaId=${id}`)
       .then((r) => setMembros(Array.isArray(r.data) ? r.data : r.data.data ?? []))
       .catch(() => {});
+
+    api.get('/usinas').then((r) => setUsinasDisponiveis(r.data || [])).catch(() => {});
   }, [id]);
+
+  function recarregarMembros() {
+    api.get(`/cooperados?cooperativaId=${id}`)
+      .then((r) => setMembros(Array.isArray(r.data) ? r.data : r.data.data ?? []))
+      .catch(() => {});
+  }
+
+  async function handleMigrar() {
+    if (!migrarMembro) return;
+    setMigrarProcessando(true);
+    setMigrarMsg('');
+    try {
+      const body: any = {
+        cooperadoId: migrarMembro.id,
+        usinaDestinoId: migrarUsinaDestinoId,
+        motivo: migrarMotivo || undefined,
+      };
+      if (migrarValor) {
+        if (migrarModo === 'kwh') body.kwhNovo = Number(migrarValor);
+        else body.percentualNovo = Number(migrarValor);
+      }
+      await api.post('/migracoes-usina/cooperado', body);
+      setMigrarAberto(false);
+      setMigrarSucesso({ usinaOrigemId: (migrarMembro as any).usinaId || '', usinaDestinoId: migrarUsinaDestinoId });
+      recarregarMembros();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao migrar.';
+      setMigrarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setMigrarProcessando(false);
+    }
+  }
+
+  async function handleAjustar() {
+    if (!ajustarMembro) return;
+    setAjustarProcessando(true);
+    setAjustarMsg('');
+    try {
+      const body: any = {
+        cooperadoId: ajustarMembro.id,
+        motivo: ajustarMotivo || undefined,
+      };
+      if (ajustarModo === 'kwh') body.kwhNovo = Number(ajustarValor);
+      else body.percentualNovo = Number(ajustarValor);
+      await api.post('/migracoes-usina/ajustar-kwh', body);
+      setAjustarAberto(false);
+      recarregarMembros();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao ajustar.';
+      setAjustarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setAjustarProcessando(false);
+    }
+  }
 
   const badge = coop ? (BADGE_TIPO[coop.tipoParceiro] || { label: coop.tipoParceiro, icone: '👤' }) : null;
 
@@ -82,12 +167,34 @@ export default function CooperativaDetailPage() {
         </Button>
         <h2 className="text-2xl font-bold text-gray-800">Detalhe do Parceiro</h2>
         {coop && (
-          <Link href={`/dashboard/cooperativas/${id}/editar`} className="ml-auto">
-            <Button size="sm" variant="outline">
-              <Pencil className="h-4 w-4 mr-2" />
-              Editar
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                setQrCarregando(true);
+                try {
+                  const res = await api.get(`/cooperativas/${id}/qrcode`);
+                  setQrData(res.data);
+                  setQrAberto(true);
+                } catch {
+                  alert('Erro ao gerar QR Code.');
+                } finally {
+                  setQrCarregando(false);
+                }
+              }}
+              disabled={qrCarregando}
+            >
+              {qrCarregando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <QrCode className="h-4 w-4 mr-2" />}
+              Gerar QR Code
             </Button>
-          </Link>
+            <Link href={`/dashboard/cooperativas/${id}/editar`}>
+              <Button size="sm" variant="outline">
+                <Pencil className="h-4 w-4 mr-2" />
+                Editar
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -202,12 +309,13 @@ export default function CooperativaDetailPage() {
                     <TableHead>CPF/CNPJ</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Acoes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {membros.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-gray-400 py-6">
+                      <TableCell colSpan={5} className="text-center text-gray-400 py-6">
                         Nenhum membro vinculado
                       </TableCell>
                     </TableRow>
@@ -224,6 +332,44 @@ export default function CooperativaDetailPage() {
                         <TableCell>
                           <Badge variant="outline">{m.status}</Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              title="Mover para outra usina"
+                              onClick={() => {
+                                setMigrarMembro(m);
+                                setMigrarUsinaDestinoId('');
+                                setMigrarModo('kwh');
+                                setMigrarValor('');
+                                setMigrarMotivo('');
+                                setMigrarMsg('');
+                                setMigrarSucesso(null);
+                                setMigrarAberto(true);
+                              }}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              title="Ajustar kWh / %"
+                              onClick={() => {
+                                setAjustarMembro(m);
+                                setAjustarModo('kwh');
+                                setAjustarValor('');
+                                setAjustarMotivo('');
+                                setAjustarMsg('');
+                                setAjustarAberto(true);
+                              }}
+                            >
+                              <Zap className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -233,6 +379,125 @@ export default function CooperativaDetailPage() {
           </Card>
         </>
       )}
+
+      {/* Banner de sucesso com botão para lista dual */}
+      {migrarSucesso && migrarSucesso.usinaOrigemId && (
+        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50 max-w-sm">
+          <p className="text-sm text-green-800 font-medium mb-2">Migracao concluida com sucesso!</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setDualListaAberto(true)}>Gerar listas para concessionaria</Button>
+            <Button size="sm" variant="ghost" onClick={() => setMigrarSucesso(null)}>Fechar</Button>
+          </div>
+        </div>
+      )}
+
+      {dualListaAberto && migrarSucesso && (
+        <DualListaConcessionaria
+          usinaOrigemId={migrarSucesso.usinaOrigemId}
+          usinaDestinoId={migrarSucesso.usinaDestinoId}
+          onClose={() => { setDualListaAberto(false); setMigrarSucesso(null); }}
+        />
+      )}
+
+      {/* Dialog — Mover para outra usina */}
+      <Dialog open={migrarAberto} onOpenChange={setMigrarAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Mover para outra usina</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            {migrarMembro && (
+              <p className="text-sm text-gray-600">Membro: <strong>{migrarMembro.nomeCompleto}</strong></p>
+            )}
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Usina Destino</label>
+              <select className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" value={migrarUsinaDestinoId} onChange={(e) => setMigrarUsinaDestinoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {usinasDisponiveis.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.nome} — {u.cidade}/{u.estado}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="flex gap-2 mb-1">
+                <button className={`text-xs px-2 py-0.5 rounded ${migrarModo === 'kwh' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setMigrarModo('kwh')}>kWh</button>
+                <button className={`text-xs px-2 py-0.5 rounded ${migrarModo === 'percent' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setMigrarModo('percent')}>%</button>
+              </div>
+              <label className="text-xs text-gray-500 mb-0.5 block">{migrarModo === 'kwh' ? 'Novo kWh mensal' : 'Novo percentual (%)'}</label>
+              <input className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" type="number" step="0.01" value={migrarValor} onChange={(e) => setMigrarValor(e.target.value)} placeholder="Manter atual se vazio" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Motivo</label>
+              <textarea className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" rows={2} value={migrarMotivo} onChange={(e) => setMigrarMotivo(e.target.value)} />
+            </div>
+            {migrarMsg && <p className={`text-sm ${migrarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{migrarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setMigrarAberto(false)}>Cancelar</Button>
+            <Button disabled={migrarProcessando || !migrarUsinaDestinoId} onClick={handleMigrar}>
+              {migrarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — QR Code */}
+      <Dialog open={qrAberto} onOpenChange={setQrAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>QR Code — {coop?.nome}</DialogTitle></DialogHeader>
+          {qrData && (
+            <div className="flex flex-col items-center gap-4 mt-2">
+              <img src={qrData.qrCode} alt="QR Code" className="w-64 h-64" />
+              <p className="text-xs text-gray-500 text-center break-all">{qrData.url}</p>
+              <p className="text-sm text-gray-600 text-center">
+                Este QR Code identifica sua cooperativa. Imprima e distribua!
+              </p>
+              <Button
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = qrData.qrCode;
+                  link.download = `qrcode-${coop?.nome?.replace(/\s+/g, '-').toLowerCase() || 'cooperativa'}.png`;
+                  link.click();
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Baixar QR Code
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Ajustar kWh / % */}
+      <Dialog open={ajustarAberto} onOpenChange={setAjustarAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Ajustar kWh / %</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            {ajustarMembro && (
+              <p className="text-sm text-gray-600">Membro: <strong>{ajustarMembro.nomeCompleto}</strong></p>
+            )}
+            <div>
+              <div className="flex gap-2 mb-1">
+                <button className={`text-xs px-2 py-0.5 rounded ${ajustarModo === 'kwh' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setAjustarModo('kwh')}>kWh</button>
+                <button className={`text-xs px-2 py-0.5 rounded ${ajustarModo === 'percent' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setAjustarModo('percent')}>%</button>
+              </div>
+              <label className="text-xs text-gray-500 mb-0.5 block">{ajustarModo === 'kwh' ? 'Novo kWh mensal' : 'Novo percentual (%)'}</label>
+              <input className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" type="number" step="0.01" value={ajustarValor} onChange={(e) => setAjustarValor(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Motivo</label>
+              <textarea className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" rows={2} value={ajustarMotivo} onChange={(e) => setAjustarMotivo(e.target.value)} />
+            </div>
+            {ajustarMsg && <p className={`text-sm ${ajustarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{ajustarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setAjustarAberto(false)}>Cancelar</Button>
+            <Button disabled={ajustarProcessando || !ajustarValor} onClick={handleAjustar}>
+              {ajustarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Ajustar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

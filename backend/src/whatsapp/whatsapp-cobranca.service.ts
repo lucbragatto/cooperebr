@@ -393,6 +393,71 @@ export class WhatsappCobrancaService {
     return { cooperado, cobrancas };
   }
 
+  /**
+   * Alerta preventivo: cobranças com vencimento em 3 dias, status PENDENTE ou A_VENCER.
+   * Cron: todo dia às 9h30 (America/Sao_Paulo)
+   */
+  @Cron('30 9 * * *', { timeZone: 'America/Sao_Paulo' })
+  async cronAlertarVencimentoProximo() {
+    this.logger.log('Cron: alertando cobranças com vencimento em 3 dias...');
+    await this.alertarVencimentoProximo();
+  }
+
+  async alertarVencimentoProximo() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const em3Dias = new Date(hoje);
+    em3Dias.setDate(em3Dias.getDate() + 3);
+    const em3DiasFim = new Date(em3Dias);
+    em3DiasFim.setHours(23, 59, 59, 999);
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['PENDENTE', 'A_VENCER'] },
+        dataVencimento: { gte: em3Dias, lte: em3DiasFim },
+        notificadoVencimento: false,
+      },
+      include: {
+        contrato: {
+          include: { cooperado: true },
+        },
+      },
+    });
+
+    this.logger.log(`Encontradas ${cobrancas.length} cobranças vencendo em 3 dias`);
+
+    let enviados = 0;
+    const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    for (const cobranca of cobrancas) {
+      const cooperado = cobranca.contrato?.cooperado;
+      if (!cooperado?.telefone) continue;
+
+      const dataVenc = new Date(cobranca.dataVencimento);
+      const dataFmt = `${String(dataVenc.getDate()).padStart(2, '0')}/${String(dataVenc.getMonth() + 1).padStart(2, '0')}`;
+
+      const texto =
+        `📅 Lembrete: sua fatura CoopereBR de R$ ${fmt(Number(cobranca.valorLiquido))} vence em 3 dias (${dataFmt}).\n` +
+        `Para pagar, acesse o portal ou aguarde o link PIX.\n` +
+        `Qualquer dúvida, responda aqui! 💚`;
+
+      try {
+        await this.sender.enviarMensagem(cooperado.telefone, texto);
+        await this.prisma.cobranca.update({
+          where: { id: cobranca.id },
+          data: { notificadoVencimento: true },
+        });
+        enviados++;
+        await this.delayAleatorio();
+      } catch (err) {
+        this.logger.warn(`Erro ao alertar vencimento cobrança ${cobranca.id}: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`Alertas de vencimento enviados: ${enviados}/${cobrancas.length}`);
+    return { enviados, total: cobrancas.length };
+  }
+
   private formatarTelefone(telefone: string): string {
     let digits = telefone.replace(/\D/g, '');
     if (!digits.startsWith('55')) digits = '55' + digits;

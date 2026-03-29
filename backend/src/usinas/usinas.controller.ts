@@ -56,6 +56,12 @@ export class UsinasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @Get('proprietario/dashboard')
+  proprietarioDashboard(@Req() req: any) {
+    return this.usinasService.proprietarioDashboard(req.user?.cooperadoId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: any) {
     return this.usinasService.findOne(id, req.user?.cooperativaId);

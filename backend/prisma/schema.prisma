@@ -145,6 +145,9 @@ model Cooperado {
   unidadesCondominio      UnidadeCondominio[]
   transferencias          TransferenciaPix[]
   migracoesUsina          MigracaoUsina[]
+  // Token de assinatura remota (cadastro por proxy)
+  tokenAssinatura         String?
+  tokenAssinaturaExp      DateTime?
 
   @@map("cooperados")
 }
@@ -182,6 +185,7 @@ enum StatusDocumento {
 }
 
 enum StatusCooperado {
+  PENDENTE_ASSINATURA
   PENDENTE
   PENDENTE_VALIDACAO
   PENDENTE_DOCUMENTOS
@@ -1424,4 +1428,34 @@ model EmailLog {
   criadoEm      DateTime  @default(now())
 
   @@map("email_logs")
+}
+
+model LeadExpansao {
+  id                  String    @id @default(cuid())
+  telefone            String
+  nomeCompleto        String?
+  distribuidora       String
+  cidade              String?
+  estado              String?
+  numeroUC            String?
+  valorFatura         Decimal?  @db.Decimal(10, 2)
+  economiaEstimada    Decimal?  @db.Decimal(10, 2)
+  intencaoConfirmada  Boolean   @default(false)
+  cooperativaId       String?
+  status              String    @default("AGUARDANDO") // AGUARDANDO | NOTIFICADO | CONVERTIDO
+  createdAt           DateTime  @default(now())
+  notificadoEm        DateTime?
+
+  @@map("leads_expansao")
+}
+
+model NpsResposta {
+  id            String   @id @default(cuid())
+  cooperadoId   String?
+  telefone      String
+  nota          Int
+  canal         String   @default("WHATSAPP") // WHATSAPP | PORTAL | EMAIL
+  createdAt     DateTime @default(now())
+
+  @@map("nps_respostas")
 }

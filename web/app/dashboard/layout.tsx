@@ -115,6 +115,8 @@ function getNavSections(perfil: string): NavSection[] {
       items: [
         { href: '/dashboard/relatorios/inadimplencia', label: 'Inadimplência', icon: BarChart3 },
         { href: '/dashboard/relatorios/projecao-receita', label: 'Projeção Receita', icon: TrendingUp },
+        { href: '/dashboard/relatorios/expansao', label: 'Expansão / Investidores', icon: Globe },
+        { href: '/dashboard/proprietario', label: 'Portal Proprietário', icon: Sun },
       ],
     },
     {

@@ -125,7 +125,28 @@ export class UsinasService {
     proprietarioTipo?: string;
     proprietarioCooperadoId?: string;
   }) {
-    return this.prisma.usina.create({ data: data as any });
+    const usina = await this.prisma.usina.create({ data: data as any });
+
+    // Notificar leads de expansão quando usina entra em produção na distribuidora
+    if (data.distribuidora && data.statusHomologacao === 'EM_PRODUCAO') {
+      try {
+        await this.prisma.leadExpansao.updateMany({
+          where: {
+            distribuidora: { contains: data.distribuidora, mode: 'insensitive' },
+            intencaoConfirmada: true,
+            status: 'AGUARDANDO',
+          },
+          data: {
+            status: 'NOTIFICADO',
+            notificadoEm: new Date(),
+          },
+        });
+      } catch {
+        // Falha silenciosa — não impede criação da usina
+      }
+    }
+
+    return usina;
   }
 
   async update(id: string, data: Partial<{
@@ -445,5 +466,75 @@ export class UsinasService {
         };
       }),
     };
+  }
+
+  async proprietarioDashboard(cooperadoId: string) {
+    if (!cooperadoId) return { usinas: [], repasses: [] };
+
+    const usinas = await this.prisma.usina.findMany({
+      where: { proprietarioCooperadoId: cooperadoId },
+      include: {
+        contratos: {
+          where: { status: { in: ['ATIVO', 'APROVADO'] } },
+          select: { kwhContrato: true, percentualUsina: true },
+        },
+        geracoesMensais: {
+          orderBy: { competencia: 'desc' },
+          take: 6,
+        },
+      },
+    });
+
+    const now = new Date();
+    const mesAtual = now.getMonth() + 1;
+    const anoAtual = now.getFullYear();
+
+    const usinasResumo = usinas.map((u) => {
+      const capacidade = Number(u.capacidadeKwh ?? u.producaoMensalKwh ?? 0);
+      const kwhContratadoTotal = u.contratos.reduce((s, c) => s + Number(c.kwhContrato ?? 0), 0);
+      const ocupacao = capacidade > 0 ? Math.min(100, Math.round((kwhContratadoTotal / capacidade) * 100)) : 0;
+
+      const geracaoMesAtual = u.geracoesMensais.find(
+        (g) => new Date(g.competencia).getMonth() + 1 === mesAtual && new Date(g.competencia).getFullYear() === anoAtual,
+      );
+      const kwhGeradoMes = geracaoMesAtual?.kwhGerado ?? 0;
+
+      // Estimativa simples: R$ 0,50/kWh como valor médio de crédito
+      const receitaPrevista = kwhGeradoMes * 0.50;
+
+      return {
+        id: u.id,
+        nome: u.nome,
+        potenciaKwp: Number(u.potenciaKwp),
+        capacidadeKwh: capacidade,
+        kwhGeradoMes,
+        kwhContratadoTotal,
+        ocupacao,
+        receitaPrevista,
+        cidade: u.cidade,
+        estado: u.estado,
+      };
+    });
+
+    // Histórico de repasses (últimos 6 meses baseado em gerações mensais)
+    const repasses: { mes: string; kwhGerado: number; valorRepassado: number; status: string }[] = [];
+    for (const u of usinas) {
+      for (const g of u.geracoesMensais) {
+        const comp = new Date(g.competencia);
+        const mesLabel = `${String(comp.getMonth() + 1).padStart(2, '0')}/${comp.getFullYear()}`;
+        const valor = g.kwhGerado * 0.50;
+        const isMesAtual = comp.getMonth() + 1 === mesAtual && comp.getFullYear() === anoAtual;
+        repasses.push({
+          mes: mesLabel,
+          kwhGerado: g.kwhGerado,
+          valorRepassado: Math.round(valor * 100) / 100,
+          status: isMesAtual ? 'PREVISTO' : 'PAGO',
+        });
+      }
+    }
+
+    repasses.sort((a, b) => b.mes.localeCompare(a.mes));
+
+    return { usinas: usinasResumo, repasses: repasses.slice(0, 6) };
   }
 }

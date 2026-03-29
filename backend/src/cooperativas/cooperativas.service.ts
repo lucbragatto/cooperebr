@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { getLabelMembro } from './tipo-parceiro.helper';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class CooperativasService {
@@ -205,6 +206,25 @@ export class CooperativasService {
       inadimplentes,
       receitaMes: Number(receitaAgg._sum.valorLiquido ?? 0),
     };
+  }
+
+  async gerarQrCode(id: string) {
+    const cooperativa = await this.prisma.cooperativa.findUnique({ where: { id } });
+    if (!cooperativa) throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
+
+    const slug = cooperativa.nome
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    const url = `/entrar?ref=coop-${slug}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.cooperebr.com.br';
+    const fullUrl = `${frontendUrl}${url}`;
+
+    const qrBase64 = await QRCode.toDataURL(fullUrl, { width: 400, margin: 2 });
+
+    return { qrCode: qrBase64, url: fullUrl, cooperativaId: id, nome: cooperativa.nome };
   }
 
   async remove(id: string) {
