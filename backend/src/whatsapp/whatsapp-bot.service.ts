@@ -91,6 +91,12 @@ export class WhatsappBotService {
       direcao: 'RECEBIDA' as const,
     });
 
+    // Se mensagem chegou sem texto e sem mídia, ignorar silenciosamente
+    if (!corpo && msg.tipo === 'texto') {
+      this.logger.warn(`Mensagem sem conteúdo de ${telefone} — ignorada`);
+      return;
+    }
+
     // Buscar ou criar conversa (upsert atômico para evitar race condition)
     const conversa = await this.prisma.conversaWhatsapp.upsert({
       where: { telefone },
@@ -534,7 +540,7 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Menu do Cooperado',
-        corpo: `✅ Olá, *${cooperado.nomeCompleto}*! O que você precisa?`,
+        corpo: `✅ Olá, *${cooperado.nomeCompleto || 'Cooperado'}*! O que você precisa?`,
         opcoes: [
           { id: '1', texto: '⚡ Ver saldo de créditos', descricao: 'Seus kWh contratados' },
           { id: '2', texto: '📄 Ver próxima fatura', descricao: 'Valor e vencimento' },
@@ -711,17 +717,26 @@ export class WhatsappBotService {
     }
 
     if (corpo === '5' || corpo.toLowerCase().includes('indicar') || corpo.toLowerCase().includes('amigo')) {
+      if (!cooperadoId) {
+        await this.sender.enviarMensagem(telefone, '⚠️ Não conseguimos identificar seu cadastro. Tente novamente ou fale com o suporte.');
+        return;
+      }
       try {
-        const { link, totalIndicados, indicadosAtivos } = await this.indicacoes.getMeuLink(cooperadoId);
+        const result = await this.indicacoes.getMeuLink(cooperadoId);
+        if (!result?.link) {
+          await this.sender.enviarMensagem(telefone, '⚠️ Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.');
+          return;
+        }
+        const { link, totalIndicados, indicadosAtivos } = result;
         await this.sender.enviarMensagem(telefone,
           `🎁 *Seu link de indicação:*\n\n` +
           `${link}\n\n` +
-          `📊 Total indicados: ${totalIndicados}\n` +
-          `✅ Ativos (com benefício): ${indicadosAtivos}\n\n` +
+          `📊 Total indicados: ${totalIndicados ?? 0}\n` +
+          `✅ Ativos (com benefício): ${indicadosAtivos ?? 0}\n\n` +
           `_Compartilhe! Quando seu indicado pagar a 1ª fatura, você ganha seu benefício._`,
         );
       } catch (err) {
-        this.logger.warn(`Erro ao buscar link de indicação para ${cooperadoId}: ${err.message}`);
+        this.logger.warn(`Erro ao buscar link de indicação para ${cooperadoId}: ${err?.message}`);
         await this.sender.enviarMensagem(telefone, '⚠️ Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.');
       }
       return;
