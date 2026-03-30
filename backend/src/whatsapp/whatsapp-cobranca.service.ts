@@ -74,6 +74,7 @@ export class WhatsappCobrancaService {
         contrato: {
           include: {
             cooperado: true,
+            cooperativa: { select: { id: true, intervaloMinCobrancaHoras: true } },
           },
         },
         asaasCobrancas: true,
@@ -89,12 +90,23 @@ export class WhatsappCobrancaService {
 
     let enviados = 0;
     let erros = 0;
+    let ignorados = 0;
 
     for (const cobranca of listaLimitada) {
       const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) {
         this.logger.warn(`Cobrança ${cobranca.id}: cooperado sem telefone — pulando`);
         continue;
+      }
+
+      // Rate limit: respeitar intervalo mínimo configurável por cooperativa
+      const intervaloHoras = cobranca.contrato?.cooperativa?.intervaloMinCobrancaHoras ?? 24;
+      if (cobranca.ultimaCobrancaWhatsappEm) {
+        const limiteMinimo = new Date(cobranca.ultimaCobrancaWhatsappEm.getTime() + intervaloHoras * 60 * 60 * 1000);
+        if (agora < limiteMinimo) {
+          ignorados++;
+          continue;
+        }
       }
 
       try {
@@ -162,10 +174,10 @@ export class WhatsappCobrancaService {
           cooperativaId: cobranca.cooperativaId ?? undefined,
         });
 
-        // Marcar como enviado
+        // Marcar como enviado e registrar timestamp para rate limit
         await this.prisma.cobranca.update({
           where: { id: cobranca.id },
-          data: { whatsappEnviadoEm: new Date() },
+          data: { whatsappEnviadoEm: new Date(), ultimaCobrancaWhatsappEm: new Date() },
         });
 
         enviados++;
@@ -183,6 +195,7 @@ export class WhatsappCobrancaService {
       total: cobrancas.length,
       enviados,
       erros,
+      ignorados,
       mes,
       ano,
       limitado,
@@ -203,7 +216,8 @@ export class WhatsappCobrancaService {
   }
 
   async abordarInadimplentes(cooperativaId?: string) {
-    const hoje = new Date();
+    const agora = new Date();
+    const hoje = new Date(agora);
     hoje.setHours(0, 0, 0, 0);
 
     const where: any = {
@@ -218,7 +232,7 @@ export class WhatsappCobrancaService {
         contrato: {
           include: {
             cooperado: true,
-            cooperativa: { select: { id: true, diasCarencia: true, multaAtraso: true, jurosDiarios: true } },
+            cooperativa: { select: { id: true, diasCarencia: true, multaAtraso: true, jurosDiarios: true, intervaloMinCobrancaHoras: true } },
           },
         },
         asaasCobrancas: true,
@@ -230,10 +244,21 @@ export class WhatsappCobrancaService {
 
     let enviados = 0;
     let erros = 0;
+    let ignorados = 0;
 
     for (const cobranca of cobrancas) {
       const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) continue;
+
+      // Rate limit: respeitar intervalo mínimo configurável por cooperativa
+      const intervaloHoras = cobranca.contrato?.cooperativa?.intervaloMinCobrancaHoras ?? 24;
+      if (cobranca.ultimaCobrancaWhatsappEm) {
+        const limiteMinimo = new Date(cobranca.ultimaCobrancaWhatsappEm.getTime() + intervaloHoras * 60 * 60 * 1000);
+        if (agora < limiteMinimo) {
+          ignorados++;
+          continue;
+        }
+      }
 
       try {
         const telefone = this.formatarTelefone(cooperado.telefone);
@@ -280,6 +305,12 @@ export class WhatsappCobrancaService {
           cooperativaId: cobranca.cooperativaId ?? undefined,
         });
 
+        // Registrar timestamp da última cobrança WhatsApp
+        await this.prisma.cobranca.update({
+          where: { id: cobranca.id },
+          data: { ultimaCobrancaWhatsappEm: agora },
+        });
+
         enviados++;
         await this.delayAleatorio();
       } catch (err) {
@@ -288,7 +319,7 @@ export class WhatsappCobrancaService {
       }
     }
 
-    const resultado = { total: cobrancas.length, enviados, erros };
+    const resultado = { total: cobrancas.length, enviados, erros, ignorados };
     this.logger.log(`Resultado abordagem inadimplentes: ${JSON.stringify(resultado)}`);
     return resultado;
   }
@@ -419,7 +450,10 @@ export class WhatsappCobrancaService {
       },
       include: {
         contrato: {
-          include: { cooperado: true },
+          include: {
+            cooperado: true,
+            cooperativa: { select: { id: true, intervaloMinCobrancaHoras: true } },
+          },
         },
       },
     });
@@ -427,11 +461,23 @@ export class WhatsappCobrancaService {
     this.logger.log(`Encontradas ${cobrancas.length} cobranças vencendo em 3 dias`);
 
     let enviados = 0;
+    let ignorados = 0;
+    const agora = new Date();
     const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     for (const cobranca of cobrancas) {
       const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) continue;
+
+      // Rate limit: respeitar intervalo mínimo configurável por cooperativa
+      const intervaloHoras = cobranca.contrato?.cooperativa?.intervaloMinCobrancaHoras ?? 24;
+      if (cobranca.ultimaCobrancaWhatsappEm) {
+        const limiteMinimo = new Date(cobranca.ultimaCobrancaWhatsappEm.getTime() + intervaloHoras * 60 * 60 * 1000);
+        if (agora < limiteMinimo) {
+          ignorados++;
+          continue;
+        }
+      }
 
       const dataVenc = new Date(cobranca.dataVencimento);
       const dataFmt = `${String(dataVenc.getDate()).padStart(2, '0')}/${String(dataVenc.getMonth() + 1).padStart(2, '0')}`;
@@ -445,7 +491,7 @@ export class WhatsappCobrancaService {
         await this.sender.enviarMensagem(cooperado.telefone, texto);
         await this.prisma.cobranca.update({
           where: { id: cobranca.id },
-          data: { notificadoVencimento: true },
+          data: { notificadoVencimento: true, ultimaCobrancaWhatsappEm: new Date() },
         });
         enviados++;
         await this.delayAleatorio();
@@ -454,8 +500,8 @@ export class WhatsappCobrancaService {
       }
     }
 
-    this.logger.log(`Alertas de vencimento enviados: ${enviados}/${cobrancas.length}`);
-    return { enviados, total: cobrancas.length };
+    this.logger.log(`Alertas de vencimento enviados: ${enviados}/${cobrancas.length} (ignorados por rate limit: ${ignorados})`);
+    return { enviados, ignorados, total: cobrancas.length };
   }
 
   private formatarTelefone(telefone: string): string {

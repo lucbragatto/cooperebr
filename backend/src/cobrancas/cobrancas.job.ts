@@ -126,6 +126,9 @@ export class CobrancasJob {
             cooperado: {
               select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
             },
+            cooperativa: {
+              select: { id: true, intervaloMinCobrancaHoras: true },
+            },
           },
         },
       },
@@ -133,10 +136,22 @@ export class CobrancasJob {
 
     if (cobrancas.length === 0) return;
 
+    const agora = new Date();
     let enviados = 0;
+    let ignorados = 0;
     for (const cobranca of cobrancas) {
       const cooperado = cobranca.contrato?.cooperado;
       if (!cooperado?.telefone) continue;
+
+      // Rate limit: respeitar intervalo mínimo configurável por cooperativa
+      const intervaloHoras = (cobranca.contrato?.cooperativa as any)?.intervaloMinCobrancaHoras ?? 24;
+      if (cobranca.ultimaCobrancaWhatsappEm) {
+        const limiteMinimo = new Date(cobranca.ultimaCobrancaWhatsappEm.getTime() + intervaloHoras * 60 * 60 * 1000);
+        if (agora < limiteMinimo) {
+          ignorados++;
+          continue;
+        }
+      }
 
       const vencimento = new Date(cobranca.dataVencimento);
       vencimento.setHours(0, 0, 0, 0);
@@ -147,7 +162,7 @@ export class CobrancasJob {
         await this.whatsappCicloVida.notificarCobrancaVencida(cooperado, valor, diasAtraso);
         await this.prisma.cobranca.update({
           where: { id: cobranca.id },
-          data: { notificadoVencimento: true },
+          data: { notificadoVencimento: true, ultimaCobrancaWhatsappEm: new Date() },
         });
         enviados++;
       } catch (err) {
@@ -157,8 +172,8 @@ export class CobrancasJob {
       await new Promise(r => setTimeout(r, 3000 + Math.random() * 2000));
     }
 
-    if (enviados > 0) {
-      this.logger.log(`${enviados} notificação(ões) de cobrança vencida enviada(s)`);
+    if (enviados > 0 || ignorados > 0) {
+      this.logger.log(`Notificações cobrança vencida: ${enviados} enviada(s), ${ignorados} ignorada(s) por rate limit`);
     }
   }
 }
