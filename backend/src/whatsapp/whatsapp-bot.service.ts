@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+﻿import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
@@ -17,15 +17,15 @@ interface MensagemRecebida {
   corpo?: string;
   mediaBase64?: string;
   mimeType?: string;
-  /** ID do botão clicado (buttonResponseMessage) ou rowId da lista selecionada */
+  /** ID do botÃ£o clicado (buttonResponseMessage) ou rowId da lista selecionada */
   selectedButtonId?: string;
 }
 
-// Palavras impróprias (ofensas genéricas para detecção)
+// Palavras imprÃ³prias (ofensas genÃ©ricas para detecÃ§Ã£o)
 const PALAVRAS_IMPROPRIAS = [
-  'porra', 'caralho', 'merda', 'foda', 'puta', 'fdp', 'cuzão', 'arrombado',
-  'desgraça', 'buceta', 'viado', 'vagabund', 'safad', 'lixo', 'idiota', 'imbecil',
-  'otário', 'bosta', 'cu ', 'vtnc', 'vsf', 'pqp', 'tnc',
+  'porra', 'caralho', 'merda', 'foda', 'puta', 'fdp', 'cuzÃ£o', 'arrombado',
+  'desgraÃ§a', 'buceta', 'viado', 'vagabund', 'safad', 'lixo', 'idiota', 'imbecil',
+  'otÃ¡rio', 'bosta', 'cu ', 'vtnc', 'vsf', 'pqp', 'tnc',
 ];
 
 @Injectable()
@@ -57,7 +57,7 @@ export class WhatsappBotService {
     } catch (err) {
       this.logger.warn(`Fallback para mensagem '${nome}': ${err.message}`);
     }
-    // Fallback: substituir variáveis manualmente no texto hardcoded
+    // Fallback: substituir variÃ¡veis manualmente no texto hardcoded
     let texto = fallback;
     for (const [k, v] of Object.entries(variaveis)) {
       texto = texto.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
@@ -87,17 +87,17 @@ export class WhatsappBotService {
     // Espelhar para observadores ativos (Modo Observador) via evento
     this.eventEmitter.emit('whatsapp.mensagem.recebida', {
       telefone,
-      texto: corpo || '[mídia]',
+      texto: corpo || '[mÃ­dia]',
       direcao: 'RECEBIDA' as const,
     });
 
-    // Se mensagem chegou sem texto e sem mídia, ignorar silenciosamente
+    // Se mensagem chegou sem texto e sem mÃ­dia, ignorar silenciosamente
     if (!corpo && msg.tipo === 'texto') {
-      this.logger.warn(`Mensagem sem conteúdo de ${telefone} — ignorada`);
+      this.logger.warn(`Mensagem sem conteÃºdo de ${telefone} â€” ignorada`);
       return;
     }
 
-    // Buscar ou criar conversa (upsert atômico para evitar race condition)
+    // Buscar ou criar conversa (upsert atÃ´mico para evitar race condition)
     const conversa = await this.prisma.conversaWhatsapp.upsert({
       where: { telefone },
       update: {},
@@ -108,49 +108,49 @@ export class WhatsappBotService {
     const corpoLower = corpo.toLowerCase();
     if (['cancelar', 'cancel'].includes(corpoLower)) {
       await this.resetarConversa(telefone);
-      const texto = await this.msg('cancelar', {}, 'Tudo bem! Se quiser começar novamente, é só mandar a foto da sua conta de luz. 😊');
+      const texto = await this.msg('cancelar', {}, 'Tudo bem! Se quiser comeÃ§ar novamente, Ã© sÃ³ mandar a foto da sua conta de luz. ðŸ˜Š');
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    if (['ajuda', 'duvida', 'dúvida', 'problema', 'erro', 'help', 'menu'].includes(corpoLower)) {
+    if (['ajuda', 'duvida', 'dÃºvida', 'problema', 'erro', 'help', 'menu'].includes(corpoLower)) {
       if (corpoLower === 'menu' || corpoLower === 'ajuda' || corpoLower === 'help') {
         await this.handleMenuPrincipalInicio(msg, conversa);
         return;
       }
-      const texto = await this.msg('ajuda', {}, 'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸');
+      const texto = await this.msg('ajuda', {}, 'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulaÃ§Ã£o gratuita! ðŸ“¸');
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    // ─── Áudio → só aceita texto ──────────────────────────────────────────────
+    // â”€â”€â”€ Ãudio â†’ sÃ³ aceita texto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (msg.tipo === 'audio') {
       await this.sender.enviarMensagem(
         telefone,
-        '🎤 Desculpe, no momento só consigo processar mensagens de *texto*.\n\nPor favor, digite sua mensagem. Se preferir, envie *menu* para ver as opções disponíveis.',
+        'ðŸŽ¤ Desculpe, no momento sÃ³ consigo processar mensagens de *texto*.\n\nPor favor, digite sua mensagem. Se preferir, envie *menu* para ver as opÃ§Ãµes disponÃ­veis.',
       );
       return;
     }
 
-    // ─── Foto/documento fora de contexto (sticker, vídeo, location) ───────────
+    // â”€â”€â”€ Foto/documento fora de contexto (sticker, vÃ­deo, location) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (['video', 'sticker', 'location'].includes(msg.tipo)) {
       await this.sender.enviarMensagem(
         telefone,
-        '📎 Este tipo de mídia não é suportado.\n\nPara enviar documentos, acesse o *Portal do Cooperado*:\n👉 cooperebr.com.br/portal\n\nOu digite *menu* para ver as opções.',
+        'ðŸ“Ž Este tipo de mÃ­dia nÃ£o Ã© suportado.\n\nPara enviar documentos, acesse o *Portal do Cooperado*:\nðŸ‘‰ cooperebr.com.br/portal\n\nOu digite *menu* para ver as opÃ§Ãµes.',
       );
       return;
     }
 
-    // ─── Linguagem inapropriada ───────────────────────────────────────────────
+    // â”€â”€â”€ Linguagem inapropriada â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (corpo && PALAVRAS_IMPROPRIAS.some(p => corpoLower.includes(p))) {
       await this.sender.enviarMensagem(
         telefone,
-        '🙏 Entendo sua frustração. Estamos aqui para ajudar da melhor forma possível.\n\nPor favor, nos diga como podemos resolver sua questão. Se preferir, posso encaminhá-lo para um atendente humano.\n\nDigite *3* para falar com um atendente.',
+        'ðŸ™ Entendo sua frustraÃ§Ã£o. Estamos aqui para ajudar da melhor forma possÃ­vel.\n\nPor favor, nos diga como podemos resolver sua questÃ£o. Se preferir, posso encaminhÃ¡-lo para um atendente humano.\n\nDigite *3* para falar com um atendente.',
       );
       return;
     }
 
-    // ─── Pedido de cancelamento/desligamento ──────────────────────────────────
+    // â”€â”€â”€ Pedido de cancelamento/desligamento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (
       corpoLower.includes('cancelar assinatura') ||
       corpoLower.includes('desligamento') ||
@@ -161,43 +161,43 @@ export class WhatsappBotService {
     ) {
       await this.sender.enviarMensagem(
         telefone,
-        '⚠️ *Solicitação de desligamento*\n\n' +
+        'âš ï¸ *SolicitaÃ§Ã£o de desligamento*\n\n' +
         'Sentimos muito que queira nos deixar. Para solicitar o desligamento:\n\n' +
-        '1️⃣ Acesse o portal: cooperebr.com.br/portal/desligamento\n' +
-        '2️⃣ Preencha o formulário de desligamento\n' +
-        '3️⃣ Nossa equipe processará em até 30 dias\n\n' +
+        '1ï¸âƒ£ Acesse o portal: cooperebr.com.br/portal/desligamento\n' +
+        '2ï¸âƒ£ Preencha o formulÃ¡rio de desligamento\n' +
+        '3ï¸âƒ£ Nossa equipe processarÃ¡ em atÃ© 30 dias\n\n' +
         'Se quiser conversar sobre isso antes, digite *3* para falar com um atendente.',
       );
       return;
     }
 
-    // ─── Perguntas sobre tarifa/preço ─────────────────────────────────────────
+    // â”€â”€â”€ Perguntas sobre tarifa/preÃ§o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (
       corpoLower.includes('tarifa') ||
-      corpoLower.includes('preço') ||
+      corpoLower.includes('preÃ§o') ||
       corpoLower.includes('preco') ||
       corpoLower.includes('quanto custa') ||
       corpoLower.includes('valor da') ||
-      corpoLower.includes('tabela de preço') ||
+      corpoLower.includes('tabela de preÃ§o') ||
       corpoLower.includes('quanto pago') ||
       corpoLower.includes('qual o valor')
     ) {
       await this.sender.enviarMensagem(
         telefone,
-        '💰 *Benefícios CoopereBR:*\n\n' +
-        '🌱 Desconto de até *20%* na conta de energia\n' +
-        '☀️ Energia 100% solar e sustentável\n' +
-        '📊 Sem investimento inicial\n' +
-        '📋 Sem obras ou instalação\n' +
-        '🔄 Cancelamento sem multa\n\n' +
-        '📸 Quer saber exatamente quanto vai economizar?\n' +
-        'Envie a *foto da sua conta de luz* e faço uma simulação personalizada!\n\n' +
+        'ðŸ’° *BenefÃ­cios CoopereBR:*\n\n' +
+        'ðŸŒ± Desconto de atÃ© *20%* na conta de energia\n' +
+        'â˜€ï¸ Energia 100% solar e sustentÃ¡vel\n' +
+        'ðŸ“Š Sem investimento inicial\n' +
+        'ðŸ“‹ Sem obras ou instalaÃ§Ã£o\n' +
+        'ðŸ”„ Cancelamento sem multa\n\n' +
+        'ðŸ“¸ Quer saber exatamente quanto vai economizar?\n' +
+        'Envie a *foto da sua conta de luz* e faÃ§o uma simulaÃ§Ã£o personalizada!\n\n' +
         'Ou digite *2* para iniciar seu cadastro.',
       );
       return;
     }
 
-    // ─── Número de protocolo ──────────────────────────────────────────────────
+    // â”€â”€â”€ NÃºmero de protocolo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const protocoloMatch = corpo.match(/^(?:protocolo\s*)?(?:#?\s*)?(PROT-[\w-]+|[A-Z]{2,4}-\d{4,}[-\w]*)/i);
     if (protocoloMatch) {
       const protocolo = protocoloMatch[1].toUpperCase();
@@ -214,50 +214,50 @@ export class WhatsappBotService {
 
       if (contrato) {
         const statusLabel: Record<string, string> = {
-          PENDENTE_ATIVACAO: '🟡 Pendente de ativação',
-          EM_APROVACAO: '🟡 Em aprovação',
-          ATIVO: '🟢 Ativo',
-          SUSPENSO: '🔴 Suspenso',
-          ENCERRADO: '⚪ Encerrado',
+          PENDENTE_ATIVACAO: 'ðŸŸ¡ Pendente de ativaÃ§Ã£o',
+          EM_APROVACAO: 'ðŸŸ¡ Em aprovaÃ§Ã£o',
+          ATIVO: 'ðŸŸ¢ Ativo',
+          SUSPENSO: 'ðŸ”´ Suspenso',
+          ENCERRADO: 'âšª Encerrado',
         };
         await this.sender.enviarMensagem(
           telefone,
-          `📋 *Status do protocolo ${protocolo}:*\n\n` +
-          `👤 ${contrato.cooperado?.nomeCompleto ?? 'N/A'}\n` +
-          `📊 Status: ${statusLabel[contrato.status] ?? contrato.status}\n` +
-          `📅 Início: ${new Date(contrato.dataInicio).toLocaleDateString('pt-BR')}\n\n` +
+          `ðŸ“‹ *Status do protocolo ${protocolo}:*\n\n` +
+          `ðŸ‘¤ ${contrato.cooperado?.nomeCompleto ?? 'N/A'}\n` +
+          `ðŸ“Š Status: ${statusLabel[contrato.status] ?? contrato.status}\n` +
+          `ðŸ“… InÃ­cio: ${new Date(contrato.dataInicio).toLocaleDateString('pt-BR')}\n\n` +
           `Para mais detalhes, acesse o portal ou digite *menu*.`,
         );
       } else {
         await this.sender.enviarMensagem(
           telefone,
-          `🔍 Protocolo *${protocolo}* não encontrado.\n\nVerifique o número e tente novamente, ou digite *3* para falar com um atendente.`,
+          `ðŸ” Protocolo *${protocolo}* nÃ£o encontrado.\n\nVerifique o nÃºmero e tente novamente, ou digite *3* para falar com um atendente.`,
         );
       }
       return;
     }
 
-    // ─── Verificar horário de atendimento (20h-8h) ───────────────────────────
+    // â”€â”€â”€ Verificar horÃ¡rio de atendimento (20h-8h) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const agora = new Date();
-    // Converter para horário de Brasília (UTC-3)
+    // Converter para horÃ¡rio de BrasÃ­lia (UTC-3)
     const horaBrasilia = new Date(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const hora = horaBrasilia.getHours();
     if (hora >= 20 || hora < 8) {
-      // Fora do expediente — ainda processa a mensagem mas avisa sobre atraso
+      // Fora do expediente â€” ainda processa a mensagem mas avisa sobre atraso
       await this.sender.enviarMensagem(
         telefone,
-        '🌙 *Atendimento fora do horário comercial*\n\n' +
-        'Nosso horário de atendimento humano é de *segunda a sexta, das 8h às 20h*.\n\n' +
-        'Sua mensagem foi registrada e será respondida no próximo dia útil.\n\n' +
-        'Enquanto isso, você pode:\n' +
-        '📸 Enviar foto da fatura para simulação automática\n' +
-        '🌐 Acessar o portal: cooperebr.com.br/portal\n\n' +
-        'Ou digite *menu* para ver as opções do bot.',
+        'ðŸŒ™ *Atendimento fora do horÃ¡rio comercial*\n\n' +
+        'Nosso horÃ¡rio de atendimento humano Ã© de *segunda a sexta, das 8h Ã s 20h*.\n\n' +
+        'Sua mensagem foi registrada e serÃ¡ respondida no prÃ³ximo dia Ãºtil.\n\n' +
+        'Enquanto isso, vocÃª pode:\n' +
+        'ðŸ“¸ Enviar foto da fatura para simulaÃ§Ã£o automÃ¡tica\n' +
+        'ðŸŒ Acessar o portal: cooperebr.com.br/portal\n\n' +
+        'Ou digite *menu* para ver as opÃ§Ãµes do bot.',
       );
-      // Não faz return — continua processando normalmente (simulação funciona 24h)
+      // NÃ£o faz return â€” continua processando normalmente (simulaÃ§Ã£o funciona 24h)
     }
 
-    // ─── Verificar timeout de sessão (30min sem atividade) ────────────────────
+    // â”€â”€â”€ Verificar timeout de sessÃ£o (30min sem atividade) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (conversa.updatedAt) {
       const ultimaAtividade = new Date(conversa.updatedAt);
       const diffMs = agora.getTime() - ultimaAtividade.getTime();
@@ -269,20 +269,20 @@ export class WhatsappBotService {
         });
         await this.sender.enviarMensagem(
           telefone,
-          '⏰ Sua sessão anterior expirou por inatividade.\n\n' +
-          'Vamos recomeçar? Digite *menu* para ver as opções ou envie a *foto da sua fatura* para simular.',
+          'â° Sua sessÃ£o anterior expirou por inatividade.\n\n' +
+          'Vamos recomeÃ§ar? Digite *menu* para ver as opÃ§Ãµes ou envie a *foto da sua fatura* para simular.',
         );
         return;
       }
     }
 
-    // ─── Foto/documento em estados de menu → instruir portal ────────────────
+    // â”€â”€â”€ Foto/documento em estados de menu â†’ instruir portal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (
       (msg.tipo === 'imagem' || msg.tipo === 'documento') &&
       msg.mediaBase64 &&
       ['MENU_PRINCIPAL', 'MENU_COOPERADO', 'MENU_CLIENTE', 'MENU_CONVITE', 'AGUARDANDO_ATENDENTE'].includes(conversa.estado)
     ) {
-      // Se está em menu, redireciona para fluxo de fatura
+      // Se estÃ¡ em menu, redireciona para fluxo de fatura
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'INICIAL' },
@@ -292,8 +292,8 @@ export class WhatsappBotService {
       return;
     }
 
-    // ─── Palavras-chave de fatura/boleto → MENU_FATURA ─────────────────────
-    // Só redireciona se não houver fluxo ativo em andamento (WA-BOT-01)
+    // â”€â”€â”€ Palavras-chave de fatura/boleto â†’ MENU_FATURA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // SÃ³ redireciona se nÃ£o houver fluxo ativo em andamento (WA-BOT-01)
     const ESTADOS_FLUXO_ATIVO = [
       'AGUARDANDO_CPF', 'AGUARDANDO_NOME', 'AGUARDANDO_EMAIL',
       'AGUARDANDO_CONFIRMACAO_DADOS', 'AGUARDANDO_CONFIRMACAO_PROPOSTA',
@@ -307,11 +307,11 @@ export class WhatsappBotService {
       'CADASTRO_EXPRESS_VALOR_FATURA', 'CADASTRO_PROXY_NOME', 'CADASTRO_PROXY_TELEFONE',
       'NEGOCIACAO_PARCELAMENTO', 'CONFIRMAR_ENCERRAMENTO',
     ];
-    if (['fatura', 'faturas', 'boleto', '2a via', '2ª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
+    if (['fatura', 'faturas', 'boleto', '2a via', '2Âª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
       if (ESTADOS_FLUXO_ATIVO.includes(conversa.estado)) {
         await this.sender.enviarMensagem(
           telefone,
-          '⏳ Você está no meio de um processo. Por favor, conclua a etapa atual ou digite *cancelar* para recomeçar.',
+          'â³ VocÃª estÃ¡ no meio de um processo. Por favor, conclua a etapa atual ou digite *cancelar* para recomeÃ§ar.',
         );
         return;
       }
@@ -325,12 +325,12 @@ export class WhatsappBotService {
       return;
     }
 
-    // Motor dinâmico — processa apenas a etapa atual e aguarda próxima resposta (WA-15)
+    // Motor dinÃ¢mico â€” processa apenas a etapa atual e aguarda prÃ³xima resposta (WA-15)
     try {
       const processou = await this.fluxoMotor.processarComFluxoDinamico(msg as any, conversa);
       if (processou) return;
     } catch (err) {
-      this.logger.warn(`Erro no motor dinâmico, fallback hardcoded: ${err.message}`);
+      this.logger.warn(`Erro no motor dinÃ¢mico, fallback hardcoded: ${err.message}`);
     }
 
     try {
@@ -356,7 +356,7 @@ export class WhatsappBotService {
         case 'CONCLUIDO':
           await this.handleConcluido(msg);
           break;
-        // ─── Fluxo convite por indicação ──────────────
+        // â”€â”€â”€ Fluxo convite por indicaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_CONVITE':
           await this.handleMenuConvite(msg, conversa);
           break;
@@ -372,7 +372,7 @@ export class WhatsappBotService {
         case 'AGUARDANDO_EMAIL':
           await this.handleAguardandoEmail(msg, conversa);
           break;
-        // ─── Menu conversacional completo ─────────────
+        // â”€â”€â”€ Menu conversacional completo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_PRINCIPAL':
           await this.handleMenuPrincipal(msg, conversa);
           break;
@@ -394,7 +394,7 @@ export class WhatsappBotService {
         case 'AGUARDANDO_ATENDENTE':
           await this.handleAguardandoAtendente(msg, conversa);
           break;
-        // ─── Rotina 1: QR Code / Propaganda ──────────────
+        // â”€â”€â”€ Rotina 1: QR Code / Propaganda â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_QR_PROPAGANDA':
           await this.handleMenuQrPropaganda(msg, conversa);
           break;
@@ -404,14 +404,14 @@ export class WhatsappBotService {
         case 'RESULTADO_SIMULACAO_RAPIDA':
           await this.handleResultadoSimulacaoRapida(msg, conversa);
           break;
-        // ─── Rotina 2: Inadimplente ─────────────────────
+        // â”€â”€â”€ Rotina 2: Inadimplente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_INADIMPLENTE':
           await this.handleMenuInadimplente(msg, conversa);
           break;
         case 'NEGOCIACAO_PARCELAMENTO':
           await this.handleNegociacaoParcelamento(msg, conversa);
           break;
-        // ─── Rotina 3: Convite indicação melhorado ──────
+        // â”€â”€â”€ Rotina 3: Convite indicaÃ§Ã£o melhorado â”€â”€â”€â”€â”€â”€
         case 'MENU_CONVITE_INDICACAO':
           await this.handleMenuConviteIndicacao(msg, conversa);
           break;
@@ -430,7 +430,7 @@ export class WhatsappBotService {
         case 'LEAD_FORA_AREA':
           await this.handleLeadForaArea(msg, conversa);
           break;
-        // ─── Atualização de cadastro/contrato ──────────────
+        // â”€â”€â”€ AtualizaÃ§Ã£o de cadastro/contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'ATUALIZACAO_CADASTRO':
           await this.handleAtualizacaoCadastro(msg, conversa);
           break;
@@ -455,7 +455,7 @@ export class WhatsappBotService {
         case 'CONFIRMAR_ENCERRAMENTO':
           await this.handleConfirmarEncerramento(msg, conversa);
           break;
-        // ─── Cadastro por Proxy ──────────────────────────
+        // â”€â”€â”€ Cadastro por Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_CONVIDAR_AMIGO':
           await this.handleMenuConvidarAmigo(msg, conversa);
           break;
@@ -481,17 +481,17 @@ export class WhatsappBotService {
       this.logger.error(`Erro ao processar mensagem de ${telefone}: ${err.message}`, err.stack);
       await this.sender.enviarMensagem(
         telefone,
-        'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em alguns instantes ou envie outra foto da fatura. 😊',
+        'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em alguns instantes ou envie outra foto da fatura. ðŸ˜Š',
       );
     }
   }
 
-  /** Extrai o ID efetivo: prioriza selectedButtonId (botão/lista), senão usa texto */
+  /** Extrai o ID efetivo: prioriza selectedButtonId (botÃ£o/lista), senÃ£o usa texto */
   private respostaEfetiva(msg: MensagemRecebida): string {
     return msg.selectedButtonId?.trim() || (msg.corpo ?? '').trim();
   }
 
-  // ─── MENU PRINCIPAL ──────────────────────────────────────────────────────
+  // â”€â”€â”€ MENU PRINCIPAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleMenuPrincipalInicio(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -501,12 +501,12 @@ export class WhatsappBotService {
     });
     await this.sender.enviarMenuComBotoes(telefone, {
       titulo: 'Menu Principal',
-      corpo: '👋 Olá! Sou o assistente da *CoopereBR* — energia solar para todos.\n\nComo posso ajudar?',
+      corpo: 'ðŸ‘‹ OlÃ¡! Sou o assistente da *CoopereBR* â€” energia solar para todos.\n\nComo posso ajudar?',
       opcoes: [
-        { id: '1', texto: '📋 Já sou cooperado' },
-        { id: '2', texto: '⚡ Quero ser cooperado' },
-        { id: '3', texto: '👤 Falar com atendente' },
-        { id: '4', texto: '🎁 Convidar um amigo', descricao: 'Compartilhe seu link' },
+        { id: '1', texto: 'ðŸ“‹ JÃ¡ sou cooperado' },
+        { id: '2', texto: 'âš¡ Quero ser cooperado' },
+        { id: '3', texto: 'ðŸ‘¤ Falar com atendente' },
+        { id: '4', texto: 'ðŸŽ Convidar um amigo', descricao: 'Compartilhe seu link' },
       ],
     });
   }
@@ -516,8 +516,8 @@ export class WhatsappBotService {
     const resposta = this.respostaEfetiva(msg);
     const corpo = resposta;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('sou cooperado') || corpo.toLowerCase().includes('já sou')) {
-      // Verificar se é cooperado
+    if (corpo === '1' || corpo.toLowerCase().includes('sou cooperado') || corpo.toLowerCase().includes('jÃ¡ sou')) {
+      // Verificar se Ã© cooperado
       const telefoneNorm = telefone.replace(/\D/g, '');
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       const cooperado = await this.prisma.cooperado.findFirst({
@@ -529,7 +529,7 @@ export class WhatsappBotService {
       });
 
       if (!cooperado) {
-        await this.sender.enviarMensagem(telefone, '⚠️ Não encontrei seu cadastro ativo.\n\nSe você se cadastrou recentemente, aguarde nosso contato. Ou:\n\n1️⃣ Iniciar novo cadastro\n2️⃣ Falar com atendente');
+        await this.sender.enviarMensagem(telefone, 'âš ï¸ NÃ£o encontrei seu cadastro ativo.\n\nSe vocÃª se cadastrou recentemente, aguarde nosso contato. Ou:\n\n1ï¸âƒ£ Iniciar novo cadastro\n2ï¸âƒ£ Falar com atendente');
         await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_CLIENTE', contadorFallback: 0 } });
         return;
       }
@@ -540,15 +540,15 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Menu do Cooperado',
-        corpo: `✅ Olá, *${cooperado.nomeCompleto || 'Cooperado'}*! O que você precisa?`,
+        corpo: `âœ… OlÃ¡, *${cooperado.nomeCompleto || 'Cooperado'}*! O que vocÃª precisa?`,
         opcoes: [
-          { id: '1', texto: '⚡ Ver saldo de créditos', descricao: 'Seus kWh contratados' },
-          { id: '2', texto: '📄 Ver próxima fatura', descricao: 'Valor e vencimento' },
-          { id: '3', texto: '✏️ Atualizar meu cadastro', descricao: 'Nome, email, telefone, endereço' },
-          { id: '4', texto: '🔄 Atualizar meu contrato', descricao: 'kWh, suspensão, encerramento' },
-          { id: '5', texto: '🎁 Indicar um amigo', descricao: 'Ganhe desconto na fatura' },
-          { id: '6', texto: '🔧 Suporte / Ocorrência', descricao: 'Abrir chamado' },
-          { id: '7', texto: '👤 Falar com atendente', descricao: 'Atendimento humano' },
+          { id: '1', texto: 'âš¡ Ver saldo de crÃ©ditos', descricao: 'Seus kWh contratados' },
+          { id: '2', texto: 'ðŸ“„ Ver prÃ³xima fatura', descricao: 'Valor e vencimento' },
+          { id: '3', texto: 'âœï¸ Atualizar meu cadastro', descricao: 'Nome, email, telefone, endereÃ§o' },
+          { id: '4', texto: 'ðŸ”„ Atualizar meu contrato', descricao: 'kWh, suspensÃ£o, encerramento' },
+          { id: '5', texto: 'ðŸŽ Indicar um amigo', descricao: 'Ganhe desconto na fatura' },
+          { id: '6', texto: 'ðŸ”§ Suporte / OcorrÃªncia', descricao: 'Abrir chamado' },
+          { id: '7', texto: 'ðŸ‘¤ Falar com atendente', descricao: 'Atendimento humano' },
         ],
       });
       return;
@@ -560,12 +560,12 @@ export class WhatsappBotService {
         data: { estado: 'MENU_SEM_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Simulação gratuita',
-        corpo: '⚡ Ótimo! Para gerar sua simulação gratuita, preciso da sua *conta de energia elétrica*.\n\nComo prefere proceder?',
+        titulo: 'SimulaÃ§Ã£o gratuita',
+        corpo: 'âš¡ Ã“timo! Para gerar sua simulaÃ§Ã£o gratuita, preciso da sua *conta de energia elÃ©trica*.\n\nComo prefere proceder?',
         opcoes: [
-          { id: '1', texto: '📎 Enviar agora', descricao: 'Já tenho a fatura (foto ou PDF)' },
-          { id: '2', texto: '📧 Está no meu email', descricao: 'Vou buscar e enviar' },
-          { id: '3', texto: '💻 Baixar do site', descricao: 'Te ajudo passo a passo' },
+          { id: '1', texto: 'ðŸ“Ž Enviar agora', descricao: 'JÃ¡ tenho a fatura (foto ou PDF)' },
+          { id: '2', texto: 'ðŸ“§ EstÃ¡ no meu email', descricao: 'Vou buscar e enviar' },
+          { id: '3', texto: 'ðŸ’» Baixar do site', descricao: 'Te ajudo passo a passo' },
         ],
       });
       return;
@@ -577,7 +577,7 @@ export class WhatsappBotService {
     }
 
     if (corpo === '4' || corpo.toLowerCase().includes('convidar') || corpo.toLowerCase().includes('indicar amigo')) {
-      // Verificar se é cooperado pelo telefone para buscar o link personalizado
+      // Verificar se Ã© cooperado pelo telefone para buscar o link personalizado
       const telefoneNorm = telefone.replace(/\D/g, '');
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       const cooperado = await this.prisma.cooperado.findFirst({
@@ -588,7 +588,7 @@ export class WhatsappBotService {
       });
 
       if (cooperado) {
-        // Cooperado: oferecer sub-menu com opção de proxy
+        // Cooperado: oferecer sub-menu com opÃ§Ã£o de proxy
         let codigo = cooperado.codigoIndicacao;
         if (!codigo) {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -604,19 +604,19 @@ export class WhatsappBotService {
           },
         });
         await this.sender.enviarMensagem(telefone,
-          `🎁 *Convidar um amigo:*\n\n` +
-          `1️⃣ Enviar meu link de indicação\n` +
-          `2️⃣ Cadastrar meu amigo (tenho a fatura dele)\n\n` +
+          `ðŸŽ *Convidar um amigo:*\n\n` +
+          `1ï¸âƒ£ Enviar meu link de indicaÃ§Ã£o\n` +
+          `2ï¸âƒ£ Cadastrar meu amigo (tenho a fatura dele)\n\n` +
           `_Responda 1 ou 2_`
         );
       } else {
-        // Não é cooperado — link genérico da CoopereBR
+        // NÃ£o Ã© cooperado â€” link genÃ©rico da CoopereBR
         const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
         await this.sender.enviarMensagem(telefone,
-          `🎁 *Convide seus amigos para economizar na conta de luz!*\n\n` +
+          `ðŸŽ *Convide seus amigos para economizar na conta de luz!*\n\n` +
           `Compartilhe o link da CoopereBR:\n${baseUrl}\n\n` +
-          `☀️ Energia solar sem investimento, com até 20% de desconto na conta de luz.\n\n` +
-          `_Quer ter seu link personalizado com benefícios? Digite *2* para se cadastrar!_`
+          `â˜€ï¸ Energia solar sem investimento, com atÃ© 20% de desconto na conta de luz.\n\n` +
+          `_Quer ter seu link personalizado com benefÃ­cios? Digite *2* para se cadastrar!_`
         );
       }
       return;
@@ -639,7 +639,7 @@ export class WhatsappBotService {
       return;
     }
 
-    if (corpo === '1' || corpo.toLowerCase().includes('saldo') || corpo.toLowerCase().includes('crédito')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('saldo') || corpo.toLowerCase().includes('crÃ©dito')) {
       const contratos = await this.prisma.contrato.findMany({
         where: { cooperadoId, status: 'ATIVO' as any },
         include: { uc: { select: { numero: true } } },
@@ -647,33 +647,33 @@ export class WhatsappBotService {
         take: 3,
       });
       if (contratos.length === 0) {
-        await this.sender.enviarMensagem(telefone, '⚠️ Nenhum contrato ativo encontrado. Fale com nossa equipe.');
+        await this.sender.enviarMensagem(telefone, 'âš ï¸ Nenhum contrato ativo encontrado. Fale com nossa equipe.');
         return;
       }
-      let texto = '⚡ *Seus créditos:*\n\n';
+      let texto = 'âš¡ *Seus crÃ©ditos:*\n\n';
       for (const c of contratos) {
-        texto += `UC ${c.uc?.numero ?? 'N/A'}: ${c.kwhContratoMensal ?? 0} kWh/mês\n`;
+        texto += `UC ${c.uc?.numero ?? 'N/A'}: ${c.kwhContratoMensal ?? 0} kWh/mÃªs\n`;
       }
       texto += '\n_Acesse o portal para mais detalhes._';
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('fatura') || corpo.toLowerCase().includes('cobrança')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('fatura') || corpo.toLowerCase().includes('cobranÃ§a')) {
       const cobranca = await this.prisma.cobranca.findFirst({
         where: { contrato: { cooperadoId }, status: { in: ['PENDENTE', 'VENCIDO'] as any[] } },
         orderBy: { dataVencimento: 'asc' },
       });
       if (!cobranca) {
-        await this.sender.enviarMensagem(telefone, '✅ Você não tem faturas pendentes no momento!');
+        await this.sender.enviarMensagem(telefone, 'âœ… VocÃª nÃ£o tem faturas pendentes no momento!');
         return;
       }
       const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
       await this.sender.enviarMensagem(
         telefone,
-        `📄 *Próxima fatura:*\n\n` +
-        `💰 Valor: R$ ${fmt(Number(cobranca.valorLiquido ?? cobranca.valorBruto))}\n` +
-        `📅 Vencimento: ${new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')}\n` +
+        `ðŸ“„ *PrÃ³xima fatura:*\n\n` +
+        `ðŸ’° Valor: R$ ${fmt(Number(cobranca.valorLiquido ?? cobranca.valorBruto))}\n` +
+        `ðŸ“… Vencimento: ${new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')}\n` +
         `Status: ${cobranca.status}\n\n` +
         `Para pagar, acesse seu portal ou aguarde o link de pagamento.`,
       );
@@ -687,12 +687,12 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Atualizar Cadastro',
-        corpo: '✏️ *O que deseja atualizar?*',
+        corpo: 'âœï¸ *O que deseja atualizar?*',
         opcoes: [
-          { id: '1', texto: '📝 Nome' },
-          { id: '2', texto: '📧 Email' },
-          { id: '3', texto: '📱 Telefone' },
-          { id: '4', texto: '📍 Endereço (CEP)' },
+          { id: '1', texto: 'ðŸ“ Nome' },
+          { id: '2', texto: 'ðŸ“§ Email' },
+          { id: '3', texto: 'ðŸ“± Telefone' },
+          { id: '4', texto: 'ðŸ“ EndereÃ§o (CEP)' },
         ],
       });
       return;
@@ -705,12 +705,12 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Atualizar Contrato',
-        corpo: '🔄 *O que deseja fazer com seu contrato?*',
+        corpo: 'ðŸ”„ *O que deseja fazer com seu contrato?*',
         opcoes: [
-          { id: '1', texto: '⬆️ Aumentar meus kWh' },
-          { id: '2', texto: '⬇️ Diminuir meus kWh' },
-          { id: '3', texto: '⏸️ Suspender temporariamente' },
-          { id: '4', texto: '❌ Encerrar contrato' },
+          { id: '1', texto: 'â¬†ï¸ Aumentar meus kWh' },
+          { id: '2', texto: 'â¬‡ï¸ Diminuir meus kWh' },
+          { id: '3', texto: 'â¸ï¸ Suspender temporariamente' },
+          { id: '4', texto: 'âŒ Encerrar contrato' },
         ],
       });
       return;
@@ -718,38 +718,38 @@ export class WhatsappBotService {
 
     if (corpo === '5' || corpo.toLowerCase().includes('indicar') || corpo.toLowerCase().includes('amigo')) {
       if (!cooperadoId) {
-        await this.sender.enviarMensagem(telefone, '⚠️ Não conseguimos identificar seu cadastro. Tente novamente ou fale com o suporte.');
+        await this.sender.enviarMensagem(telefone, 'âš ï¸ NÃ£o conseguimos identificar seu cadastro. Tente novamente ou fale com o suporte.');
         return;
       }
       try {
         const result = await this.indicacoes.getMeuLink(cooperadoId);
         if (!result?.link) {
-          await this.sender.enviarMensagem(telefone, '⚠️ Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.');
+          await this.sender.enviarMensagem(telefone, 'âš ï¸ NÃ£o foi possÃ­vel gerar seu link de indicaÃ§Ã£o no momento. Tente novamente mais tarde.');
           return;
         }
         const { link, totalIndicados, indicadosAtivos } = result;
         await this.sender.enviarMensagem(telefone,
-          `🎁 *Seu link de indicação:*\n\n` +
+          `ðŸŽ *Seu link de indicaÃ§Ã£o:*\n\n` +
           `${link}\n\n` +
-          `📊 Total indicados: ${totalIndicados ?? 0}\n` +
-          `✅ Ativos (com benefício): ${indicadosAtivos ?? 0}\n\n` +
-          `_Compartilhe! Quando seu indicado pagar a 1ª fatura, você ganha seu benefício._`,
+          `ðŸ“Š Total indicados: ${totalIndicados ?? 0}\n` +
+          `âœ… Ativos (com benefÃ­cio): ${indicadosAtivos ?? 0}\n\n` +
+          `_Compartilhe! Quando seu indicado pagar a 1Âª fatura, vocÃª ganha seu benefÃ­cio._`,
         );
       } catch (err) {
-        this.logger.warn(`Erro ao buscar link de indicação para ${cooperadoId}: ${err?.message}`);
-        await this.sender.enviarMensagem(telefone, '⚠️ Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.');
+        this.logger.warn(`Erro ao buscar link de indicaÃ§Ã£o para ${cooperadoId}: ${err?.message}`);
+        await this.sender.enviarMensagem(telefone, 'âš ï¸ NÃ£o foi possÃ­vel gerar seu link de indicaÃ§Ã£o no momento. Tente novamente mais tarde.');
       }
       return;
     }
 
-    if (corpo === '6' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrência')) {
+    if (corpo === '6' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrÃªncia')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        '🔧 *Suporte técnico:*\n\nDescreva o problema e nossa equipe responderá em breve.\n\nOu escolha:\n1️⃣ Problema na fatura\n2️⃣ Créditos não creditados\n3️⃣ Outro',
+        'ðŸ”§ *Suporte tÃ©cnico:*\n\nDescreva o problema e nossa equipe responderÃ¡ em breve.\n\nOu escolha:\n1ï¸âƒ£ Problema na fatura\n2ï¸âƒ£ CrÃ©ditos nÃ£o creditados\n3ï¸âƒ£ Outro',
       );
       return;
     }
@@ -760,7 +760,7 @@ export class WhatsappBotService {
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
+      'Responda *1* (crÃ©ditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
     );
   }
 
@@ -769,13 +769,13 @@ export class WhatsappBotService {
     const resposta = this.respostaEfetiva(msg);
     const corpo = resposta;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('enviar agora') || corpo.toLowerCase().includes('já tenho')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('enviar agora') || corpo.toLowerCase().includes('jÃ¡ tenho')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        '📎 Perfeito! Envie agora a *foto* ou o *PDF* da sua conta de energia.\n\n_Dica: tire uma foto clara da frente completa da fatura, com todos os dados visíveis._'
+        'ðŸ“Ž Perfeito! Envie agora a *foto* ou o *PDF* da sua conta de energia.\n\n_Dica: tire uma foto clara da frente completa da fatura, com todos os dados visÃ­veis._'
       );
       return;
     }
@@ -786,11 +786,11 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_DISPOSITIVO_EMAIL', contadorFallback: 0 },
       });
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Onde está acessando?',
-        corpo: '📧 Ótimo! Vou te ajudar a baixar a fatura do seu email.\n\nVocê está usando:',
+        titulo: 'Onde estÃ¡ acessando?',
+        corpo: 'ðŸ“§ Ã“timo! Vou te ajudar a baixar a fatura do seu email.\n\nVocÃª estÃ¡ usando:',
         opcoes: [
-          { id: 'CEL', texto: '📱 Celular', descricao: 'Vou te guiar pelo app' },
-          { id: 'PC', texto: '💻 Computador', descricao: 'Vou te guiar pelo navegador' },
+          { id: 'CEL', texto: 'ðŸ“± Celular', descricao: 'Vou te guiar pelo app' },
+          { id: 'PC', texto: 'ðŸ’» Computador', descricao: 'Vou te guiar pelo navegador' },
         ],
       });
       return;
@@ -803,13 +803,13 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Qual sua distribuidora?',
-        corpo: '💻 Vou te ajudar a baixar sua fatura!\n\nQual é a sua distribuidora de energia?',
+        corpo: 'ðŸ’» Vou te ajudar a baixar sua fatura!\n\nQual Ã© a sua distribuidora de energia?',
         opcoes: [
-          { id: 'EDP-ES', texto: '⚡ EDP Espírito Santo' },
-          { id: 'CEMIG', texto: '⚡ CEMIG (MG)' },
-          { id: 'COPEL', texto: '⚡ COPEL (PR)' },
-          { id: 'LIGHT', texto: '⚡ LIGHT (RJ)' },
-          { id: 'OUTRA', texto: '❓ Outra distribuidora' },
+          { id: '1', texto: '1️⃣ EDP Espírito Santo' },
+          { id: '2', texto: '2️⃣ CEMIG (MG)' },
+          { id: '3', texto: '3️⃣ COPEL (PR)' },
+          { id: '4', texto: '4️⃣ LIGHT (RJ)' },
+          { id: '5', texto: '5️⃣ Outra distribuidora' },
         ],
       });
       return;
@@ -833,14 +833,14 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        '📱 *Baixar a fatura pelo celular:*\n\n' +
-        '1️⃣ Abra o app do seu email (Gmail, Outlook, etc.)\n' +
-        '2️⃣ Procure uma mensagem da sua distribuidora (EDP, CEMIG, etc.) com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
-        '3️⃣ Abra o email e toque no *anexo PDF*\n' +
-        '4️⃣ Toque em *"Baixar"* ou *"Salvar"*\n' +
-        '5️⃣ Volte aqui e toque no 📎 (clipe) para enviar o arquivo\n\n' +
-        '💡 *Dica:* Se não encontrar o email, verifique a pasta *Spam* ou *Promoções*.\n\n' +
-        '⏳ Aguardo sua fatura!'
+        'ðŸ“± *Baixar a fatura pelo celular:*\n\n' +
+        '1ï¸âƒ£ Abra o app do seu email (Gmail, Outlook, etc.)\n' +
+        '2ï¸âƒ£ Procure uma mensagem da sua distribuidora (EDP, CEMIG, etc.) com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3ï¸âƒ£ Abra o email e toque no *anexo PDF*\n' +
+        '4ï¸âƒ£ Toque em *"Baixar"* ou *"Salvar"*\n' +
+        '5ï¸âƒ£ Volte aqui e toque no ðŸ“Ž (clipe) para enviar o arquivo\n\n' +
+        'ðŸ’¡ *Dica:* Se nÃ£o encontrar o email, verifique a pasta *Spam* ou *PromoÃ§Ãµes*.\n\n' +
+        'â³ Aguardo sua fatura!'
       );
     } else if (isPC) {
       await this.prisma.conversaWhatsapp.update({
@@ -848,14 +848,14 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        '💻 *Baixar a fatura pelo computador:*\n\n' +
-        '1️⃣ Abra seu email no navegador (gmail.com, outlook.com, etc.)\n' +
-        '2️⃣ Procure uma mensagem da distribuidora com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
-        '3️⃣ Abra o email e clique no *anexo PDF*\n' +
-        '4️⃣ Clique em *"Baixar"* — o arquivo vai para a pasta *Downloads*\n' +
-        '5️⃣ Volte aqui no WhatsApp Web, clique no 📎 (clipe) e selecione o arquivo baixado\n\n' +
-        '💡 *Dica:* Não precisa imprimir! Pode enviar direto o PDF.\n\n' +
-        '⏳ Aguardo sua fatura!'
+        'ðŸ’» *Baixar a fatura pelo computador:*\n\n' +
+        '1ï¸âƒ£ Abra seu email no navegador (gmail.com, outlook.com, etc.)\n' +
+        '2ï¸âƒ£ Procure uma mensagem da distribuidora com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3ï¸âƒ£ Abra o email e clique no *anexo PDF*\n' +
+        '4ï¸âƒ£ Clique em *"Baixar"* â€” o arquivo vai para a pasta *Downloads*\n' +
+        '5ï¸âƒ£ Volte aqui no WhatsApp Web, clique no ðŸ“Ž (clipe) e selecione o arquivo baixado\n\n' +
+        'ðŸ’¡ *Dica:* NÃ£o precisa imprimir! Pode enviar direto o PDF.\n\n' +
+        'â³ Aguardo sua fatura!'
       );
     } else {
       await this.incrementarFallback(conversa, telefone, 'Responda *1* para celular ou *2* para computador.');
@@ -868,28 +868,38 @@ export class WhatsappBotService {
 
     const DISTRIBUIDORAS: Record<string, { nome: string; link: string; passos: string }> = {
       'EDP-ES': {
-        nome: 'EDP Espírito Santo',
+        nome: 'EDP EspÃ­rito Santo',
         link: 'https://www.edp.com.br/espirito-santo/para-voce/segunda-via-de-conta',
-        passos: '1️⃣ Acesse o link acima\n2️⃣ Clique em *"Acessar"* ou *"Entrar"*\n3️⃣ Informe seu CPF e senha\n4️⃣ Vá em *"Faturas"* → *"2ª Via"*\n5️⃣ Baixe o PDF da fatura mais recente\n6️⃣ Envie aqui para mim 📎',
+        passos: '1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ Clique em *"Acessar"* ou *"Entrar"*\n3ï¸âƒ£ Informe seu CPF e senha\n4ï¸âƒ£ VÃ¡ em *"Faturas"* â†’ *"2Âª Via"*\n5ï¸âƒ£ Baixe o PDF da fatura mais recente\n6ï¸âƒ£ Envie aqui para mim ðŸ“Ž',
       },
       'CEMIG': {
         nome: 'CEMIG',
         link: 'https://atende.cemig.com.br',
-        passos: '1️⃣ Acesse o link acima\n2️⃣ Faça login com CPF e senha\n3️⃣ Clique em *"Faturas"*\n4️⃣ Selecione a última fatura\n5️⃣ Baixe o PDF\n6️⃣ Envie aqui para mim 📎',
+        passos: '1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ FaÃ§a login com CPF e senha\n3ï¸âƒ£ Clique em *"Faturas"*\n4ï¸âƒ£ Selecione a Ãºltima fatura\n5ï¸âƒ£ Baixe o PDF\n6ï¸âƒ£ Envie aqui para mim ðŸ“Ž',
       },
       'COPEL': {
         nome: 'COPEL',
         link: 'https://www.copel.com/hpcweb/portal-atendimento',
-        passos: '1️⃣ Acesse o link acima\n2️⃣ Faça login na Agência Virtual\n3️⃣ Clique em *"2ª Via de Conta"*\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim 📎',
+        passos: '1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ FaÃ§a login na AgÃªncia Virtual\n3ï¸âƒ£ Clique em *"2Âª Via de Conta"*\n4ï¸âƒ£ Baixe o PDF\n5ï¸âƒ£ Envie aqui para mim ðŸ“Ž',
       },
       'LIGHT': {
         nome: 'LIGHT',
         link: 'https://www.light.com.br/para-voce/segunda-via',
-        passos: '1️⃣ Acesse o link acima\n2️⃣ Informe seu CPF\n3️⃣ Selecione a fatura\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim 📎',
+        passos: '1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ Informe seu CPF\n3ï¸âƒ£ Selecione a fatura\n4ï¸âƒ£ Baixe o PDF\n5ï¸âƒ£ Envie aqui para mim ðŸ“Ž',
       },
     };
 
-    const dist = DISTRIBUIDORAS[resposta] || DISTRIBUIDORAS[resposta.toUpperCase()];
+    // Mapeamento por nÃºmero (fallback texto: usuÃ¡rio digita 1, 2, 3, 4, 5)
+    const NUMERO_PARA_ID: Record<string, string> = {
+      '1': 'EDP-ES', '2': 'CEMIG', '3': 'COPEL', '4': 'LIGHT', '5': 'OUTRA',
+    };
+    const respostaNorm = resposta.trim().toUpperCase();
+    const resolvedKey = NUMERO_PARA_ID[respostaNorm] || respostaNorm;
+    const dist = DISTRIBUIDORAS[resolvedKey] ||
+      // Busca por nome parcial (ex: "edp", "cemig")
+      Object.entries(DISTRIBUIDORAS).find(([, v]) =>
+        v.nome.toLowerCase().includes(resposta.toLowerCase())
+      )?.[1];
 
     if (dist) {
       await this.prisma.conversaWhatsapp.update({
@@ -897,26 +907,26 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `💻 *${dist.nome} — Como baixar sua fatura:*\n\n` +
-        `🔗 ${dist.link}\n\n` +
+        `ðŸ’» *${dist.nome} â€” Como baixar sua fatura:*\n\n` +
+        `ðŸ”— ${dist.link}\n\n` +
         `${dist.passos}\n\n` +
-        `💡 *Dica extra:* Aproveite o acesso e cadastre nosso email *faturas@cooperebr.com.br* como 2º destinatário para receber sua fatura automaticamente todo mês!\n\n` +
-        `⏳ Quando tiver o PDF, envie aqui!`
+        `ðŸ’¡ *Dica extra:* Aproveite o acesso e cadastre nosso email *faturas@cooperebr.com.br* como 2Âº destinatÃ¡rio para receber sua fatura automaticamente todo mÃªs!\n\n` +
+        `â³ Quando tiver o PDF, envie aqui!`
       );
     } else {
-      // Distribuidora não mapeada
+      // Distribuidora nÃ£o mapeada
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `💻 Para baixar sua fatura:\n\n` +
-        `1️⃣ Acesse o site ou app da sua distribuidora\n` +
-        `2️⃣ Faça login na Área do Cliente\n` +
-        `3️⃣ Busque por *"2ª Via"* ou *"Faturas"*\n` +
-        `4️⃣ Baixe o PDF da fatura mais recente\n` +
-        `5️⃣ Envie aqui para mim 📎\n\n` +
-        `Precisa de ajuda específica? Digite o nome da sua distribuidora.`
+        `ðŸ’» Para baixar sua fatura:\n\n` +
+        `1ï¸âƒ£ Acesse o site ou app da sua distribuidora\n` +
+        `2ï¸âƒ£ FaÃ§a login na Ãrea do Cliente\n` +
+        `3ï¸âƒ£ Busque por *"2Âª Via"* ou *"Faturas"*\n` +
+        `4ï¸âƒ£ Baixe o PDF da fatura mais recente\n` +
+        `5ï¸âƒ£ Envie aqui para mim ðŸ“Ž\n\n` +
+        `Precisa de ajuda especÃ­fica? Digite o nome da sua distribuidora.`
       );
     }
   }
@@ -931,7 +941,7 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📸 Envie uma foto ou PDF da sua conta de energia para iniciarmos sua simulação!');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“¸ Envie uma foto ou PDF da sua conta de energia para iniciarmos sua simulaÃ§Ã£o!');
       return;
     }
 
@@ -954,7 +964,7 @@ export class WhatsappBotService {
     const complementoSuporte = telefoneSuporte ? `\n\nSe for urgente, ligue: ${telefoneSuporte}` : '';
     await this.sender.enviarMensagem(
       telefone,
-      `📬 Sua mensagem foi recebida! Nossa equipe entrará em contato em breve.${complementoSuporte}`,
+      `ðŸ“¬ Sua mensagem foi recebida! Nossa equipe entrarÃ¡ em contato em breve.${complementoSuporte}`,
     );
 
     // Notificar admin da cooperativa
@@ -966,7 +976,7 @@ export class WhatsappBotService {
       if (admin?.telefone) {
         await this.sender.enviarMensagem(
           admin.telefone,
-          `🔔 Solicitação de suporte via WhatsApp:\nTelefone: ${telefone}\nMensagem: ${corpo}`,
+          `ðŸ”” SolicitaÃ§Ã£o de suporte via WhatsApp:\nTelefone: ${telefone}\nMensagem: ${corpo}`,
         ).catch(() => {});
       }
     }
@@ -979,7 +989,7 @@ export class WhatsappBotService {
     });
     await this.sender.enviarMensagem(
       telefone,
-      '👤 *Encaminhando para atendente humano...*\n\nUm de nossos especialistas responderá em breve. Horário de atendimento: Seg–Sex 8h–18h.\n\nDescreva sua dúvida ou aguarde.',
+      'ðŸ‘¤ *Encaminhando para atendente humano...*\n\nUm de nossos especialistas responderÃ¡ em breve. HorÃ¡rio de atendimento: Segâ€“Sex 8hâ€“18h.\n\nDescreva sua dÃºvida ou aguarde.',
     );
     this.logger.log(`[Atendente] ${telefone}: ${motivo}`);
   }
@@ -992,21 +1002,21 @@ export class WhatsappBotService {
     });
 
     if (novoContador >= 3) {
-      // Após 3 mensagens não compreendidas → encaminhar para atendente
+      // ApÃ³s 3 mensagens nÃ£o compreendidas â†’ encaminhar para atendente
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        '🤔 Parece que estou com dificuldade em entender. Vou te conectar com um atendente humano!\n\n👤 Aguarde, um especialista responderá em breve.',
+        'ðŸ¤” Parece que estou com dificuldade em entender. Vou te conectar com um atendente humano!\n\nðŸ‘¤ Aguarde, um especialista responderÃ¡ em breve.',
       );
     } else {
-      await this.sender.enviarMensagem(telefone, `Não entendi 😅 ${dica}`);
+      await this.sender.enviarMensagem(telefone, `NÃ£o entendi ðŸ˜… ${dica}`);
     }
   }
 
-  // ─── PASSO 1: Recebe fatura (imagem/PDF) ─────────────────────────────────
+  // â”€â”€â”€ PASSO 1: Recebe fatura (imagem/PDF) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleInicial(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone, tipo, mediaBase64, mimeType } = msg;
@@ -1023,7 +1033,7 @@ export class WhatsappBotService {
       return;
     }
 
-    const textoProcessando = await this.msg('processando_fatura', {}, '📄 Recebi sua fatura! Analisando os dados... Aguarde um momento. ⏳');
+    const textoProcessando = await this.msg('processando_fatura', {}, 'ðŸ“„ Recebi sua fatura! Analisando os dados... Aguarde um momento. â³');
     await this.sender.enviarMensagem(telefone, textoProcessando);
 
     // OCR
@@ -1034,12 +1044,12 @@ export class WhatsappBotService {
     } catch {
       await this.sender.enviarMensagem(
         telefone,
-        'Não consegui identificar os dados da sua fatura. Por favor, envie uma foto mais nítida ou o PDF da fatura de energia. 📸',
+        'NÃ£o consegui identificar os dados da sua fatura. Por favor, envie uma foto mais nÃ­tida ou o PDF da fatura de energia. ðŸ“¸',
       );
       return;
     }
 
-    // Validar dados mínimos
+    // Validar dados mÃ­nimos
     const titular = String(dadosExtraidos.titular ?? '');
     const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
     const distribuidora = String(dadosExtraidos.distribuidora ?? '');
@@ -1047,7 +1057,7 @@ export class WhatsappBotService {
     if (!titular && consumoAtualKwh <= 0 && !distribuidora) {
       await this.sender.enviarMensagem(
         telefone,
-        'O arquivo enviado não parece ser uma fatura de energia. Por favor, envie a fatura da concessionária (PDF ou foto legível). 📄',
+        'O arquivo enviado nÃ£o parece ser uma fatura de energia. Por favor, envie a fatura da concessionÃ¡ria (PDF ou foto legÃ­vel). ðŸ“„',
       );
       return;
     }
@@ -1061,24 +1071,24 @@ export class WhatsappBotService {
       },
     });
 
-    // Montar mensagem de confirmação
+    // Montar mensagem de confirmaÃ§Ã£o
     const historico = (dadosExtraidos.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
     const endereco = String(dadosExtraidos.enderecoInstalacao ?? '');
-    const numeroUC = String(dadosExtraidos.numeroUC ?? '—');
+    const numeroUC = String(dadosExtraidos.numeroUC ?? 'â€”');
     const tipoFornecimento = String(dadosExtraidos.tipoFornecimento ?? '');
     const tensao = String(dadosExtraidos.tensaoNominal ?? '');
 
-    let msg_confirmacao = `📊 *Dados extraídos da sua fatura:*\n\n`;
-    msg_confirmacao += `👤 ${titular}\n`;
-    if (endereco) msg_confirmacao += `📍 ${endereco}\n`;
-    msg_confirmacao += `🔌 UC: ${numeroUC}\n`;
-    if (tipoFornecimento) msg_confirmacao += `⚡ ${tipoFornecimento}${tensao ? ` (${tensao})` : ''}\n`;
+    let msg_confirmacao = `ðŸ“Š *Dados extraÃ­dos da sua fatura:*\n\n`;
+    msg_confirmacao += `ðŸ‘¤ ${titular}\n`;
+    if (endereco) msg_confirmacao += `ðŸ“ ${endereco}\n`;
+    msg_confirmacao += `ðŸ”Œ UC: ${numeroUC}\n`;
+    if (tipoFornecimento) msg_confirmacao += `âš¡ ${tipoFornecimento}${tensao ? ` (${tensao})` : ''}\n`;
 
     if (historico.length > 0) {
-      msg_confirmacao += `\n📅 *Histórico de consumo:*\n`;
+      msg_confirmacao += `\nðŸ“… *HistÃ³rico de consumo:*\n`;
       for (const h of historico) {
         const valor = Number(h.valorRS);
-        const valorStr = valor > 0 ? ` — R$ ${valor.toFixed(2).replace('.', ',')}` : '';
+        const valorStr = valor > 0 ? ` â€” R$ ${valor.toFixed(2).replace('.', ',')}` : '';
         msg_confirmacao += `${h.mesAno}: ${h.consumoKwh} kWh${valorStr}\n`;
       }
     }
@@ -1090,7 +1100,7 @@ export class WhatsappBotService {
     await this.sender.enviarMensagem(telefone, msg_confirmacao);
   }
 
-  // ─── PASSO 2: Confirmação dos dados ──────────────────────────────────────
+  // â”€â”€â”€ PASSO 2: ConfirmaÃ§Ã£o dos dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoDados(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -1106,7 +1116,7 @@ export class WhatsappBotService {
     }
 
     if (corpoUpper === 'OK') {
-      // Verificar se distribuidora tem usinas disponíveis
+      // Verificar se distribuidora tem usinas disponÃ­veis
       const distribuidoraOCR = String(dadosTemp.distribuidora ?? '');
       if (distribuidoraOCR) {
         const usinasNaArea = await this.prisma.usina.count({
@@ -1132,19 +1142,19 @@ export class WhatsappBotService {
           const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           await this.sender.enviarMensagem(
             telefone,
-            `☀️ Fizemos sua simulação!\n\n` +
-            `📊 Sua fatura atual: R$ ${fmt(valorFatura)}\n` +
-            `💚 Economia estimada com CoopereBR: *R$ ${fmt(economiaEstimada)}/mês*\n` +
-            `🗓️ Economia anual: *R$ ${fmt(economiaAnual)}*\n\n` +
-            `Ainda não temos parceiro na área da *${distribuidoraOCR}*, mas estamos expandindo!\n\n` +
-            `Quer que te avisemos quando chegarmos na sua região?\n` +
-            `1️⃣ Sim, quero!\n2️⃣ Não por enquanto`,
+            `â˜€ï¸ Fizemos sua simulaÃ§Ã£o!\n\n` +
+            `ðŸ“Š Sua fatura atual: R$ ${fmt(valorFatura)}\n` +
+            `ðŸ’š Economia estimada com CoopereBR: *R$ ${fmt(economiaEstimada)}/mÃªs*\n` +
+            `ðŸ—“ï¸ Economia anual: *R$ ${fmt(economiaAnual)}*\n\n` +
+            `Ainda nÃ£o temos parceiro na Ã¡rea da *${distribuidoraOCR}*, mas estamos expandindo!\n\n` +
+            `Quer que te avisemos quando chegarmos na sua regiÃ£o?\n` +
+            `1ï¸âƒ£ Sim, quero!\n2ï¸âƒ£ NÃ£o por enquanto`,
           );
           return;
         }
       }
 
-      // Calcular simulação
+      // Calcular simulaÃ§Ã£o
       const historico = (dadosTemp.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
       const consumoAtualKwh = Number(dadosTemp.consumoAtualKwh ?? 0);
       const valorMesRecente = Number(dadosTemp.totalAPagar ?? 0);
@@ -1170,7 +1180,7 @@ export class WhatsappBotService {
         this.logger.error(`Erro ao calcular proposta: ${err.message}`);
         await this.sender.enviarMensagem(
           telefone,
-          'Houve um erro ao calcular sua simulação. Tente novamente ou entre em contato conosco. 😊',
+          'Houve um erro ao calcular sua simulaÃ§Ã£o. Tente novamente ou entre em contato conosco. ðŸ˜Š',
         );
         return;
       }
@@ -1178,7 +1188,7 @@ export class WhatsappBotService {
       if (!resultado) {
         await this.sender.enviarMensagem(
           telefone,
-          'Não foi possível gerar uma simulação com os dados extraídos. Tente enviar outra fatura. 📄',
+          'NÃ£o foi possÃ­vel gerar uma simulaÃ§Ã£o com os dados extraÃ­dos. Tente enviar outra fatura. ðŸ“„',
         );
         return;
       }
@@ -1201,13 +1211,13 @@ export class WhatsappBotService {
         },
       });
 
-      let resposta = `🌱 *Sua simulação CoopereBR:*\n\n`;
-      resposta += `📊 Fatura média atual: R$ ${fmt(valorFaturaMedia)}\n`;
-      resposta += `💚 Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
-      resposta += `💵 Economia mensal: R$ ${fmt(economiaMensal)}\n`;
-      resposta += `📅 Economia anual: R$ ${fmt(economiaAnual)}\n`;
+      let resposta = `ðŸŒ± *Sua simulaÃ§Ã£o CoopereBR:*\n\n`;
+      resposta += `ðŸ“Š Fatura mÃ©dia atual: R$ ${fmt(valorFaturaMedia)}\n`;
+      resposta += `ðŸ’š Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
+      resposta += `ðŸ’µ Economia mensal: R$ ${fmt(economiaMensal)}\n`;
+      resposta += `ðŸ“… Economia anual: R$ ${fmt(economiaAnual)}\n`;
       if (mesesEconomia > 0) {
-        resposta += `🎁 Equivale a ${mesesEconomia.toFixed(1).replace('.', ',')} meses de energia grátis!\n`;
+        resposta += `ðŸŽ Equivale a ${mesesEconomia.toFixed(1).replace('.', ',')} meses de energia grÃ¡tis!\n`;
       }
       resposta += `\nQuer receber a proposta completa em PDF?\nResponda *SIM*`;
 
@@ -1215,7 +1225,7 @@ export class WhatsappBotService {
       return;
     }
 
-    // Tentar corrigir dado do histórico via regex
+    // Tentar corrigir dado do histÃ³rico via regex
     const regexCorrecao = /^(\d{2})[\/\-](\d{2,4})\s+(\d+)\s*kwh\s+R?\$?\s*([\d.,]+)/i;
     const match = corpo.match(regexCorrecao);
 
@@ -1242,26 +1252,26 @@ export class WhatsappBotService {
 
       await this.sender.enviarMensagem(
         telefone,
-        `✅ Mês ${mesAno} atualizado: ${kwh} kWh — R$ ${valor.toFixed(2).replace('.', ',')}\n\nOutro dado a corrigir? Ou responda *OK* para gerar a simulação.`,
+        `âœ… MÃªs ${mesAno} atualizado: ${kwh} kWh â€” R$ ${valor.toFixed(2).replace('.', ',')}\n\nOutro dado a corrigir? Ou responda *OK* para gerar a simulaÃ§Ã£o.`,
       );
       return;
     }
 
-    // Não entendeu
+    // NÃ£o entendeu
     await this.sender.enviarMensagem(
       telefone,
-      `Não entendi 😅\n\nResponda *OK* se estiver tudo certo, ou corrija no formato:\n_02/26 350 kwh R$ 287,50_`,
+      `NÃ£o entendi ðŸ˜…\n\nResponda *OK* se estiver tudo certo, ou corrija no formato:\n_02/26 350 kwh R$ 287,50_`,
     );
   }
 
-  // ─── PASSO 3: Confirmação da proposta → envia PDF ────────────────────────
+  // â”€â”€â”€ PASSO 3: ConfirmaÃ§Ã£o da proposta â†’ envia PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoProposta(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim().toUpperCase();
     const dadosTempCheck = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
-    // Fluxo convite: se veio de indicação, "1" ou "SIM" leva para coleta de dados
+    // Fluxo convite: se veio de indicaÃ§Ã£o, "1" ou "SIM" leva para coleta de dados
     if (dadosTempCheck.codigoIndicacao && (corpo === '1' || corpo === 'SIM')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
@@ -1271,10 +1281,10 @@ export class WhatsappBotService {
       return;
     }
 
-    // Fluxo convite: "2" ou "NAO" → encerrar
-    if (dadosTempCheck.codigoIndicacao && (corpo === '2' || corpo.includes('NAO') || corpo.includes('NÃO'))) {
+    // Fluxo convite: "2" ou "NAO" â†’ encerrar
+    if (dadosTempCheck.codigoIndicacao && (corpo === '2' || corpo.includes('NAO') || corpo.includes('NÃƒO'))) {
       await this.finalizarConversa(conversa.id);
-      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se mudar de ideia, estamos aqui. 😊');
+      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se mudar de ideia, estamos aqui. ðŸ˜Š');
       return;
     }
 
@@ -1282,8 +1292,8 @@ export class WhatsappBotService {
       await this.sender.enviarMensagem(
         telefone,
         dadosTempCheck.codigoIndicacao
-          ? 'Responda 1️⃣ para continuar ou 2️⃣ para nao.'
-          : 'Responda *SIM* para receber a proposta em PDF, ou *cancelar* para recomeçar.',
+          ? 'Responda 1ï¸âƒ£ para continuar ou 2ï¸âƒ£ para nao.'
+          : 'Responda *SIM* para receber a proposta em PDF, ou *cancelar* para recomeÃ§ar.',
       );
       return;
     }
@@ -1293,9 +1303,9 @@ export class WhatsappBotService {
     // Gerar PDF da proposta via motor-proposta (aceitar cria proposta + PDF)
     const titular = String(dadosTemp.titular ?? '');
     const endereco = String(dadosTemp.enderecoInstalacao ?? '');
-    const numeroUC = String(dadosTemp.numeroUC ?? '—');
+    const numeroUC = String(dadosTemp.numeroUC ?? 'â€”');
 
-    await this.sender.enviarMensagem(telefone, '📄 Gerando sua proposta em PDF... Aguarde um momento. ⏳');
+    await this.sender.enviarMensagem(telefone, 'ðŸ“„ Gerando sua proposta em PDF... Aguarde um momento. â³');
 
     // Tentar gerar e enviar PDF via motor-proposta
     try {
@@ -1304,7 +1314,7 @@ export class WhatsappBotService {
 
       // Buscar ou criar cooperado lead
       const telefoneNorm = telefone.replace(/\D/g, '');
-      // Buscar por telefone completo normalizado (sem prefixo país variável)
+      // Buscar por telefone completo normalizado (sem prefixo paÃ­s variÃ¡vel)
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       let cooperado = await this.prisma.cooperado.findFirst({
         where: {
@@ -1345,22 +1355,22 @@ export class WhatsappBotService {
       });
 
       if (propostaResult.resultado) {
-        // Enviar mensagem com dados da simulação como "PDF resumo"
+        // Enviar mensagem com dados da simulaÃ§Ã£o como "PDF resumo"
         const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const r = propostaResult.resultado;
 
-        let pdfTexto = `📋 *PROPOSTA COOPEREBR*\n`;
-        pdfTexto += `━━━━━━━━━━━━━━━━━━━━\n\n`;
-        pdfTexto += `👤 *${titular}*\n`;
-        if (endereco) pdfTexto += `📍 ${endereco}\n`;
-        pdfTexto += `🔌 UC: ${numeroUC}\n\n`;
-        pdfTexto += `📊 *Dados da simulação:*\n`;
-        pdfTexto += `• Consumo considerado: ${Math.round(r.kwhContrato)} kWh/mês\n`;
-        pdfTexto += `• Desconto: ${r.descontoPercentual.toFixed(1)}%\n`;
-        pdfTexto += `• Economia mensal: R$ ${fmt(r.economiaMensal)}\n`;
-        pdfTexto += `• Economia anual: R$ ${fmt(r.economiaAnual)}\n\n`;
-        pdfTexto += `━━━━━━━━━━━━━━━━━━━━\n`;
-        pdfTexto += `_Proposta válida por 30 dias_`;
+        let pdfTexto = `ðŸ“‹ *PROPOSTA COOPEREBR*\n`;
+        pdfTexto += `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n`;
+        pdfTexto += `ðŸ‘¤ *${titular}*\n`;
+        if (endereco) pdfTexto += `ðŸ“ ${endereco}\n`;
+        pdfTexto += `ðŸ”Œ UC: ${numeroUC}\n\n`;
+        pdfTexto += `ðŸ“Š *Dados da simulaÃ§Ã£o:*\n`;
+        pdfTexto += `â€¢ Consumo considerado: ${Math.round(r.kwhContrato)} kWh/mÃªs\n`;
+        pdfTexto += `â€¢ Desconto: ${r.descontoPercentual.toFixed(1)}%\n`;
+        pdfTexto += `â€¢ Economia mensal: R$ ${fmt(r.economiaMensal)}\n`;
+        pdfTexto += `â€¢ Economia anual: R$ ${fmt(r.economiaAnual)}\n\n`;
+        pdfTexto += `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n`;
+        pdfTexto += `_Proposta vÃ¡lida por 30 dias_`;
 
         await this.sender.enviarMensagem(telefone, pdfTexto);
       }
@@ -1368,16 +1378,16 @@ export class WhatsappBotService {
       this.logger.error(`Erro ao gerar proposta: ${err.message}`);
       await this.sender.enviarMensagem(
         telefone,
-        'Houve um erro ao gerar a proposta. Nossa equipe entrará em contato. 😊',
+        'Houve um erro ao gerar a proposta. Nossa equipe entrarÃ¡ em contato. ðŸ˜Š',
       );
     }
 
-    // Confirmação de dados para cadastro
-    let dadosCadastro = `✅ *Seus dados para cadastro:*\n\n`;
-    dadosCadastro += `👤 ${titular}\n`;
-    if (endereco) dadosCadastro += `📍 ${endereco}\n`;
-    dadosCadastro += `🔌 UC: ${numeroUC}\n\n`;
-    dadosCadastro += `Está correto? Responda *CONFIRMO* para prosseguir\n`;
+    // ConfirmaÃ§Ã£o de dados para cadastro
+    let dadosCadastro = `âœ… *Seus dados para cadastro:*\n\n`;
+    dadosCadastro += `ðŸ‘¤ ${titular}\n`;
+    if (endereco) dadosCadastro += `ðŸ“ ${endereco}\n`;
+    dadosCadastro += `ðŸ”Œ UC: ${numeroUC}\n\n`;
+    dadosCadastro += `EstÃ¡ correto? Responda *CONFIRMO* para prosseguir\n`;
     dadosCadastro += `ou me diga o que precisa corrigir.`;
 
     await this.prisma.conversaWhatsapp.update({
@@ -1388,7 +1398,7 @@ export class WhatsappBotService {
     await this.sender.enviarMensagem(telefone, dadosCadastro);
   }
 
-  // ─── PASSO 4: Confirmação do cadastro → cria cooperado ───────────────────
+  // â”€â”€â”€ PASSO 4: ConfirmaÃ§Ã£o do cadastro â†’ cria cooperado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoCadastro(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -1405,7 +1415,7 @@ export class WhatsappBotService {
     const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
     const telefoneNorm = telefone.replace(/\D/g, '');
 
-    // Verificar se já existe cooperado (busca por telefone completo normalizado)
+    // Verificar se jÃ¡ existe cooperado (busca por telefone completo normalizado)
     const telefoneSemPais = telefoneNorm.replace(/^55/, '');
     let cooperado = await this.prisma.cooperado.findFirst({
       where: {
@@ -1420,7 +1430,7 @@ export class WhatsappBotService {
     if (cooperado && cooperado.status !== 'PENDENTE') {
       await this.sender.enviarMensagem(
         telefone,
-        'Você já está em nosso sistema! Nossa equipe entrará em contato em breve. 😊',
+        'VocÃª jÃ¡ estÃ¡ em nosso sistema! Nossa equipe entrarÃ¡ em contato em breve. ðŸ˜Š',
       );
       await this.finalizarConversa(conversa.id);
       return;
@@ -1459,7 +1469,7 @@ export class WhatsappBotService {
 
     // Criar UC se tiver dados
     const numeroUC = String(dadosTemp.numeroUC ?? '');
-    if (numeroUC && numeroUC !== '—') {
+    if (numeroUC && numeroUC !== 'â€”') {
       const ucExistente = await this.prisma.uc.findFirst({
         where: { numero: numeroUC },
       });
@@ -1478,17 +1488,17 @@ export class WhatsappBotService {
             },
           });
         } catch (err) {
-          this.logger.warn(`Não foi possível criar UC: ${err.message}`);
+          this.logger.warn(`NÃ£o foi possÃ­vel criar UC: ${err.message}`);
         }
       }
     }
 
-    // Verificar indicação (código salvo no dadosTemp pelo fluxo MLM)
+    // Verificar indicaÃ§Ã£o (cÃ³digo salvo no dadosTemp pelo fluxo MLM)
     const codigoRef = dadosTemp.codigoIndicacao as string | undefined;
     if (codigoRef && cooperado) {
       try {
         await this.indicacoes.registrarIndicacao(cooperado.id, codigoRef);
-        this.logger.log(`Indicação registrada para ${cooperado.id} via código ${codigoRef}`);
+        this.logger.log(`IndicaÃ§Ã£o registrada para ${cooperado.id} via cÃ³digo ${codigoRef}`);
 
         // Notificar o indicador
         const indicador = await this.prisma.cooperado.findUnique({
@@ -1499,7 +1509,7 @@ export class WhatsappBotService {
           const nomeIndicado = cooperado.nomeCompleto || titular || 'Novo membro';
           await this.sender.enviarMensagem(
             indicador.telefone,
-            `🎉 Boa notícia! ${nomeIndicado} acabou de completar o cadastro através do seu convite! Quando ele pagar a primeira fatura, você receberá seu benefício automaticamente. Obrigado por indicar! 🙏`,
+            `ðŸŽ‰ Boa notÃ­cia! ${nomeIndicado} acabou de completar o cadastro atravÃ©s do seu convite! Quando ele pagar a primeira fatura, vocÃª receberÃ¡ seu benefÃ­cio automaticamente. Obrigado por indicar! ðŸ™`,
           ).catch(() => {});
 
           // Notificar admin da cooperativa
@@ -1511,26 +1521,26 @@ export class WhatsappBotService {
             if (admin?.telefone) {
               await this.sender.enviarMensagem(
                 admin.telefone,
-                `📋 Novo cadastro via indicação: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto}. Acompanhe o processo no painel.`,
+                `ðŸ“‹ Novo cadastro via indicaÃ§Ã£o: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto}. Acompanhe o processo no painel.`,
               ).catch(() => {});
             }
           }
         }
       } catch (err) {
-        this.logger.warn(`Não foi possível registrar indicação: ${err.message}`);
+        this.logger.warn(`NÃ£o foi possÃ­vel registrar indicaÃ§Ã£o: ${err.message}`);
       }
     }
 
     await this.finalizarConversa(conversa.id);
 
-    const textoSucesso = await this.msg('cadastro_sucesso', {}, '🎉 Perfeito! Seu pré-cadastro foi criado com sucesso!\n\nNossa equipe entrará em contato em breve para finalizar. Qualquer dúvida é só perguntar! 💚');
+    const textoSucesso = await this.msg('cadastro_sucesso', {}, 'ðŸŽ‰ Perfeito! Seu prÃ©-cadastro foi criado com sucesso!\n\nNossa equipe entrarÃ¡ em contato em breve para finalizar. Qualquer dÃºvida Ã© sÃ³ perguntar! ðŸ’š');
     await this.sender.enviarMensagem(telefone, textoSucesso);
 
-    // NPS: agendar pesquisa após 1 hora
+    // NPS: agendar pesquisa apÃ³s 1 hora
     this.agendarNps(telefone, conversa.id);
   }
 
-  // ─── Estado CONCLUIDO ────────────────────────────────────────────────────
+  // â”€â”€â”€ Estado CONCLUIDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConcluido(msg: MensagemRecebida): Promise<void> {
     const { telefone, tipo, mediaBase64 } = msg;
@@ -1545,18 +1555,18 @@ export class WhatsappBotService {
 
     await this.sender.enviarMensagem(
       telefone,
-      'Seu cadastro já foi recebido! 😊 Nossa equipe entrará em contato em breve.\n\nSe quiser fazer uma nova simulação, envie outra conta de luz. 📸',
+      'Seu cadastro jÃ¡ foi recebido! ðŸ˜Š Nossa equipe entrarÃ¡ em contato em breve.\n\nSe quiser fazer uma nova simulaÃ§Ã£o, envie outra conta de luz. ðŸ“¸',
     );
   }
 
-  // ─── Fluxo Convite (indicação) ──────────────────────────────────────────
+  // â”€â”€â”€ Fluxo Convite (indicaÃ§Ã£o) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Inicia o fluxo de convite quando um lead chega via referência de indicação.
+   * Inicia o fluxo de convite quando um lead chega via referÃªncia de indicaÃ§Ã£o.
    * Chamado externamente (ex: MLM service) para iniciar a conversa.
    */
   async iniciarFluxoConvite(telefone: string, indicadorNome: string, codigoIndicacao: string): Promise<void> {
-    // Redireciona para o fluxo de convite melhorado com botões interativos
+    // Redireciona para o fluxo de convite melhorado com botÃµes interativos
     await this.iniciarFluxoConviteIndicacao(telefone, indicadorNome, codigoIndicacao);
   }
 
@@ -1570,17 +1580,17 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA' },
       });
-      await this.sender.enviarMensagem(telefone, 'Otimo! Envie uma foto da sua conta de luz (frente completa) 📸');
+      await this.sender.enviarMensagem(telefone, 'Otimo! Envie uma foto da sua conta de luz (frente completa) ðŸ“¸');
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('nao') || corpo.toLowerCase().includes('não')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('nao') || corpo.toLowerCase().includes('nÃ£o')) {
       await this.finalizarConversa(conversa.id);
-      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se mudar de ideia, estamos aqui. 😊');
+      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se mudar de ideia, estamos aqui. ðŸ˜Š');
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, 'Responda 1️⃣ para saber mais ou 2️⃣ se nao tem interesse.');
+    await this.sender.enviarMensagem(telefone, 'Responda 1ï¸âƒ£ para saber mais ou 2ï¸âƒ£ se nao tem interesse.');
   }
 
   private async handleAguardandoFotoFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -1594,11 +1604,11 @@ export class WhatsappBotService {
       ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
 
     if (!isMidia) {
-      await this.sender.enviarMensagem(telefone, 'Por favor, envie uma *foto* ou *PDF* da sua conta de energia eletrica. 📸');
+      await this.sender.enviarMensagem(telefone, 'Por favor, envie uma *foto* ou *PDF* da sua conta de energia eletrica. ðŸ“¸');
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, '📄 Recebi! Analisando os dados... Aguarde um momento. ⏳');
+    await this.sender.enviarMensagem(telefone, 'ðŸ“„ Recebi! Analisando os dados... Aguarde um momento. â³');
 
     // OCR
     const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
@@ -1606,13 +1616,13 @@ export class WhatsappBotService {
     try {
       dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
     } catch {
-      await this.sender.enviarMensagem(telefone, 'Nao consegui identificar os dados. Envie uma foto mais nitida ou o PDF da fatura. 📸');
+      await this.sender.enviarMensagem(telefone, 'Nao consegui identificar os dados. Envie uma foto mais nitida ou o PDF da fatura. ðŸ“¸');
       return;
     }
 
     const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
     if (consumoAtualKwh <= 0) {
-      await this.sender.enviarMensagem(telefone, 'O arquivo nao parece ser uma fatura de energia. Tente novamente. 📄');
+      await this.sender.enviarMensagem(telefone, 'O arquivo nao parece ser uma fatura de energia. Tente novamente. ðŸ“„');
       return;
     }
 
@@ -1654,15 +1664,15 @@ export class WhatsappBotService {
       const descontoPercentual = resultado.descontoPercentual;
       const valorComDesconto = valorMedio * (1 - descontoPercentual / 100);
 
-      let resposta = `🌱 *Simulacao de economia:*\n\n`;
-      resposta += `📊 Fatura media: R$ ${fmt(valorMedio)}\n`;
-      resposta += `💚 Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
-      resposta += `💵 Economia mensal: R$ ${fmt(economiaMensal)}\n\n`;
-      resposta += `Quer continuar?\n1️⃣ Sim\n2️⃣ Nao`;
+      let resposta = `ðŸŒ± *Simulacao de economia:*\n\n`;
+      resposta += `ðŸ“Š Fatura media: R$ ${fmt(valorMedio)}\n`;
+      resposta += `ðŸ’š Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
+      resposta += `ðŸ’µ Economia mensal: R$ ${fmt(economiaMensal)}\n\n`;
+      resposta += `Quer continuar?\n1ï¸âƒ£ Sim\n2ï¸âƒ£ Nao`;
 
       await this.sender.enviarMensagem(telefone, resposta);
     } else {
-      await this.sender.enviarMensagem(telefone, 'Recebi sua fatura! Quer prosseguir com o cadastro?\n1️⃣ Sim\n2️⃣ Nao');
+      await this.sender.enviarMensagem(telefone, 'Recebi sua fatura! Quer prosseguir com o cadastro?\n1ï¸âƒ£ Sim\n2ï¸âƒ£ Nao');
     }
 
     // Notificar indicador sobre avanco
@@ -1676,7 +1686,7 @@ export class WhatsappBotService {
       if (indicador?.telefone) {
         await this.sender.enviarMensagem(
           indicador.telefone,
-          `📋 Seu indicado enviou a fatura e esta analisando a proposta. Acompanhe!`,
+          `ðŸ“‹ Seu indicado enviou a fatura e esta analisando a proposta. Acompanhe!`,
         ).catch(() => {});
       }
     }
@@ -1750,22 +1760,22 @@ export class WhatsappBotService {
       },
     });
 
-    let confirmacao = `✅ *Confirme seus dados:*\n\n`;
-    confirmacao += `👤 ${nome}\n`;
-    confirmacao += `📄 CPF: ${cpf}\n`;
-    confirmacao += `📧 ${corpo}\n\n`;
+    let confirmacao = `âœ… *Confirme seus dados:*\n\n`;
+    confirmacao += `ðŸ‘¤ ${nome}\n`;
+    confirmacao += `ðŸ“„ CPF: ${cpf}\n`;
+    confirmacao += `ðŸ“§ ${corpo}\n\n`;
     confirmacao += `Tudo certo? Responda *CONFIRMO*`;
 
     await this.sender.enviarMensagem(telefone, confirmacao);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // ROTINA 1: Cadastro via QR Code / Propaganda
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia fluxo QR Code/Propaganda para contato espontâneo sem indicação.
-   * Chamado quando não há codigoRef na conversa e é primeira interação de texto.
+   * Inicia fluxo QR Code/Propaganda para contato espontÃ¢neo sem indicaÃ§Ã£o.
+   * Chamado quando nÃ£o hÃ¡ codigoRef na conversa e Ã© primeira interaÃ§Ã£o de texto.
    */
   async iniciarFluxoQrPropaganda(telefone: string): Promise<void> {
     await this.prisma.conversaWhatsapp.upsert({
@@ -1775,12 +1785,12 @@ export class WhatsappBotService {
     });
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Bem-vindo à CoopereBR',
-      corpo: '👋 Olá! Bem-vindo à *CoopereBR* — energia solar compartilhada!\n\nEconomize até 20% na conta de luz sem investimento e sem obras.',
+      titulo: 'Bem-vindo Ã  CoopereBR',
+      corpo: 'ðŸ‘‹ OlÃ¡! Bem-vindo Ã  *CoopereBR* â€” energia solar compartilhada!\n\nEconomize atÃ© 20% na conta de luz sem investimento e sem obras.',
       opcoes: [
-        { id: '1', texto: '🌱 Conhecer a CoopereBR', descricao: 'Saiba como funciona' },
-        { id: '2', texto: '💰 Simular minha economia', descricao: 'Calcule quanto vai economizar' },
-        { id: '3', texto: '👤 Falar com consultor', descricao: 'Atendimento personalizado' },
+        { id: '1', texto: 'ðŸŒ± Conhecer a CoopereBR', descricao: 'Saiba como funciona' },
+        { id: '2', texto: 'ðŸ’° Simular minha economia', descricao: 'Calcule quanto vai economizar' },
+        { id: '3', texto: 'ðŸ‘¤ Falar com consultor', descricao: 'Atendimento personalizado' },
       ],
     });
   }
@@ -1792,23 +1802,23 @@ export class WhatsappBotService {
     if (corpo === '1' || corpo.toLowerCase().includes('conhecer')) {
       await this.sender.enviarMensagem(
         telefone,
-        '🌱 *Como funciona a CoopereBR:*\n\n' +
-        '☀️ Somos uma cooperativa de energia solar compartilhada\n' +
-        '💡 Você recebe créditos de energia solar na sua conta de luz\n' +
-        '💰 Economia de até *20%* todo mês — sem investimento\n' +
-        '📋 Sem obras, sem instalação, sem burocracia\n' +
-        '🔄 Cancelamento sem multa a qualquer momento\n' +
-        '🌍 Energia 100% limpa e sustentável\n\n' +
-        'Quer saber exatamente quanto você vai economizar?',
+        'ðŸŒ± *Como funciona a CoopereBR:*\n\n' +
+        'â˜€ï¸ Somos uma cooperativa de energia solar compartilhada\n' +
+        'ðŸ’¡ VocÃª recebe crÃ©ditos de energia solar na sua conta de luz\n' +
+        'ðŸ’° Economia de atÃ© *20%* todo mÃªs â€” sem investimento\n' +
+        'ðŸ“‹ Sem obras, sem instalaÃ§Ã£o, sem burocracia\n' +
+        'ðŸ”„ Cancelamento sem multa a qualquer momento\n' +
+        'ðŸŒ Energia 100% limpa e sustentÃ¡vel\n\n' +
+        'Quer saber exatamente quanto vocÃª vai economizar?',
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Próximo passo',
+        titulo: 'PrÃ³ximo passo',
         corpo: 'O que deseja fazer?',
         opcoes: [
-          { id: '2', texto: '💰 Simular minha economia' },
-          { id: '4', texto: '📸 Enviar minha fatura', descricao: 'Simulação detalhada com OCR' },
-          { id: '3', texto: '👤 Falar com consultor' },
+          { id: '2', texto: 'ðŸ’° Simular minha economia' },
+          { id: '4', texto: 'ðŸ“¸ Enviar minha fatura', descricao: 'SimulaÃ§Ã£o detalhada com OCR' },
+          { id: '3', texto: 'ðŸ‘¤ Falar com consultor' },
         ],
       });
       return;
@@ -1821,7 +1831,7 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMensagem(
         telefone,
-        '💰 Vamos simular sua economia!\n\nQual o *valor médio* da sua conta de luz? (ex: 350)',
+        'ðŸ’° Vamos simular sua economia!\n\nQual o *valor mÃ©dio* da sua conta de luz? (ex: 350)',
       );
       return;
     }
@@ -1836,7 +1846,7 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📸 Envie uma *foto* ou *PDF* da sua conta de energia para uma simulação detalhada!');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“¸ Envie uma *foto* ou *PDF* da sua conta de energia para uma simulaÃ§Ã£o detalhada!');
       return;
     }
 
@@ -1849,14 +1859,14 @@ export class WhatsappBotService {
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim();
 
-    // Extrair valor numérico
+    // Extrair valor numÃ©rico
     const valorStr = corpo.replace(/[^\d.,]/g, '').replace(',', '.');
     const valor = parseFloat(valorStr);
 
     if (isNaN(valor) || valor <= 0 || valor > 50000) {
       await this.sender.enviarMensagem(
         telefone,
-        'Por favor, informe o valor da sua conta de luz em reais (apenas o número).\nExemplo: *350* ou *280,50*',
+        'Por favor, informe o valor da sua conta de luz em reais (apenas o nÃºmero).\nExemplo: *350* ou *280,50*',
       );
       return;
     }
@@ -1879,21 +1889,21 @@ export class WhatsappBotService {
 
     await this.sender.enviarMensagem(
       telefone,
-      `🌱 *Resultado da sua simulação:*\n\n` +
-      `📊 Conta atual: R$ ${fmt(valor)}\n` +
-      `💚 Com a CoopereBR: R$ ${fmt(valor - economiaMensal)} (-${descontoPercentual}%)\n` +
-      `💵 *Economia mensal: R$ ${fmt(economiaMensal)}*\n` +
-      `📅 *Economia anual: R$ ${fmt(economiaAnual)}*\n\n` +
-      `Com sua conta de R$ ${fmt(valor)}, você economizaria cerca de *R$ ${fmt(economiaMensal)} por mês* (R$ ${fmt(economiaAnual)} por ano)! 🎉`,
+      `ðŸŒ± *Resultado da sua simulaÃ§Ã£o:*\n\n` +
+      `ðŸ“Š Conta atual: R$ ${fmt(valor)}\n` +
+      `ðŸ’š Com a CoopereBR: R$ ${fmt(valor - economiaMensal)} (-${descontoPercentual}%)\n` +
+      `ðŸ’µ *Economia mensal: R$ ${fmt(economiaMensal)}*\n` +
+      `ðŸ“… *Economia anual: R$ ${fmt(economiaAnual)}*\n\n` +
+      `Com sua conta de R$ ${fmt(valor)}, vocÃª economizaria cerca de *R$ ${fmt(economiaMensal)} por mÃªs* (R$ ${fmt(economiaAnual)} por ano)! ðŸŽ‰`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Próximo passo',
+      titulo: 'PrÃ³ximo passo',
       corpo: 'O que deseja fazer agora?',
       opcoes: [
-        { id: '1', texto: '✅ Quero me cadastrar' },
-        { id: '2', texto: '📋 Receber mais informações' },
-        { id: '3', texto: '❌ Não tenho interesse' },
+        { id: '1', texto: 'âœ… Quero me cadastrar' },
+        { id: '2', texto: 'ðŸ“‹ Receber mais informaÃ§Ãµes' },
+        { id: '3', texto: 'âŒ NÃ£o tenho interesse' },
       ],
     });
   }
@@ -1910,25 +1920,25 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMensagem(
         telefone,
-        '🎉 Ótimo! Para finalizar seu cadastro, envie uma *foto* ou *PDF* da sua conta de energia.\n\nIsso nos ajuda a calcular os créditos ideais para você! 📸',
+        'ðŸŽ‰ Ã“timo! Para finalizar seu cadastro, envie uma *foto* ou *PDF* da sua conta de energia.\n\nIsso nos ajuda a calcular os crÃ©ditos ideais para vocÃª! ðŸ“¸',
       );
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('informaç') || corpo.toLowerCase().includes('informac')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('informaÃ§') || corpo.toLowerCase().includes('informac')) {
       const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
       await this.sender.enviarMensagem(
         telefone,
-        '📋 *Benefícios da CoopereBR:*\n\n' +
-        '✅ Desconto de até 20% na conta de luz\n' +
-        '✅ Energia 100% solar e renovável\n' +
-        '✅ Sem investimento inicial\n' +
-        '✅ Sem obras ou instalação\n' +
-        '✅ Cancelamento sem multa\n' +
-        '✅ Créditos aplicados direto na sua conta\n' +
-        '✅ Acompanhe tudo pelo portal\n\n' +
-        `🌐 Acesse nosso portal: ${baseUrl}\n\n` +
-        'Quando estiver pronto, digite *cadastro* para iniciar! 😊',
+        'ðŸ“‹ *BenefÃ­cios da CoopereBR:*\n\n' +
+        'âœ… Desconto de atÃ© 20% na conta de luz\n' +
+        'âœ… Energia 100% solar e renovÃ¡vel\n' +
+        'âœ… Sem investimento inicial\n' +
+        'âœ… Sem obras ou instalaÃ§Ã£o\n' +
+        'âœ… Cancelamento sem multa\n' +
+        'âœ… CrÃ©ditos aplicados direto na sua conta\n' +
+        'âœ… Acompanhe tudo pelo portal\n\n' +
+        `ðŸŒ Acesse nosso portal: ${baseUrl}\n\n` +
+        'Quando estiver pronto, digite *cadastro* para iniciar! ðŸ˜Š',
       );
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
@@ -1937,27 +1947,27 @@ export class WhatsappBotService {
       return;
     }
 
-    if (corpo === '3' || corpo.toLowerCase().includes('interesse') || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('interesse') || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('nao')) {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        'Tudo bem! Se mudar de ideia, é só nos mandar uma mensagem. Obrigado pelo interesse! 💚',
+        'Tudo bem! Se mudar de ideia, Ã© sÃ³ nos mandar uma mensagem. Obrigado pelo interesse! ðŸ’š',
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (cadastrar), *2* (mais informações) ou *3* (sem interesse).',
+      'Responda *1* (cadastrar), *2* (mais informaÃ§Ãµes) ou *3* (sem interesse).',
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // ROTINA 2: Cooperado inadimplente abordado pelo sistema
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia abordagem proativa para cooperado com cobrança vencida.
-   * Chamado pelo cron de cobrança vencida.
+   * Inicia abordagem proativa para cooperado com cobranÃ§a vencida.
+   * Chamado pelo cron de cobranÃ§a vencida.
    */
   async iniciarFluxoInadimplente(
     telefone: string,
@@ -1988,18 +1998,18 @@ export class WhatsappBotService {
 
     await this.sender.enviarMensagem(
       telefone,
-      `Olá, ${nome}! 💚\n\n` +
-      `Notamos que sua fatura no valor de *R$ ${fmt(valor)}* com vencimento em *${dataFmt}* está em aberto.\n\n` +
-      `Sabemos que imprevistos acontecem — estamos aqui para ajudar! 🤝`,
+      `OlÃ¡, ${nome}! ðŸ’š\n\n` +
+      `Notamos que sua fatura no valor de *R$ ${fmt(valor)}* com vencimento em *${dataFmt}* estÃ¡ em aberto.\n\n` +
+      `Sabemos que imprevistos acontecem â€” estamos aqui para ajudar! ðŸ¤`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
       titulo: 'Fatura em aberto',
       corpo: 'Como posso ajudar?',
       opcoes: [
-        { id: '1', texto: '📋 Ver detalhes da fatura' },
-        { id: '2', texto: '💳 Negociar parcelamento' },
-        { id: '3', texto: '✅ Já paguei' },
+        { id: '1', texto: 'ðŸ“‹ Ver detalhes da fatura' },
+        { id: '2', texto: 'ðŸ’³ Negociar parcelamento' },
+        { id: '3', texto: 'âœ… JÃ¡ paguei' },
       ],
     });
   }
@@ -2011,26 +2021,26 @@ export class WhatsappBotService {
 
     if (corpo === '1' || corpo.toLowerCase().includes('detalhe')) {
       const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      let detalhes = `📋 *Detalhes da fatura:*\n\n`;
-      detalhes += `💰 Valor: R$ ${fmt(dadosTemp.valor)}\n`;
-      detalhes += `📅 Vencimento: ${dadosTemp.dataVencimento}\n`;
+      let detalhes = `ðŸ“‹ *Detalhes da fatura:*\n\n`;
+      detalhes += `ðŸ’° Valor: R$ ${fmt(dadosTemp.valor)}\n`;
+      detalhes += `ðŸ“… Vencimento: ${dadosTemp.dataVencimento}\n`;
 
       if (dadosTemp.pixCopiaECola) {
-        detalhes += `\n*Pague via PIX — Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
+        detalhes += `\n*Pague via PIX â€” Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
       }
       if (dadosTemp.linkPagamento) {
-        detalhes += `\n🔗 Link de pagamento: ${dadosTemp.linkPagamento}\n`;
+        detalhes += `\nðŸ”— Link de pagamento: ${dadosTemp.linkPagamento}\n`;
       }
 
-      detalhes += `\n_Dúvidas? Responda esta mensagem._`;
+      detalhes += `\n_DÃºvidas? Responda esta mensagem._`;
       await this.sender.enviarMensagem(telefone, detalhes);
 
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'O que deseja?',
         corpo: 'Posso ajudar com mais alguma coisa?',
         opcoes: [
-          { id: '2', texto: '💳 Negociar parcelamento' },
-          { id: '3', texto: '✅ Já paguei' },
+          { id: '2', texto: 'ðŸ’³ Negociar parcelamento' },
+          { id: '3', texto: 'âœ… JÃ¡ paguei' },
         ],
       });
       return;
@@ -2048,35 +2058,35 @@ export class WhatsappBotService {
 
       await this.sender.enviarMensagem(
         telefone,
-        `💳 *Opções de parcelamento:*\n\n` +
-        `Podemos parcelar seu débito de R$ ${fmt(dadosTemp.valor)} sem juros:\n\n` +
-        `• 2x de R$ ${fmt(valorParcela2x)}\n` +
-        `• 3x de R$ ${fmt(valorParcela3x)}\n`,
+        `ðŸ’³ *OpÃ§Ãµes de parcelamento:*\n\n` +
+        `Podemos parcelar seu dÃ©bito de R$ ${fmt(dadosTemp.valor)} sem juros:\n\n` +
+        `â€¢ 2x de R$ ${fmt(valorParcela2x)}\n` +
+        `â€¢ 3x de R$ ${fmt(valorParcela3x)}\n`,
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Parcelamento',
         corpo: 'Deseja prosseguir com o parcelamento?',
         opcoes: [
-          { id: '1', texto: '✅ Sim, quero parcelar' },
-          { id: '2', texto: '💰 Prefiro pagar à vista' },
+          { id: '1', texto: 'âœ… Sim, quero parcelar' },
+          { id: '2', texto: 'ðŸ’° Prefiro pagar Ã  vista' },
         ],
       });
       return;
     }
 
-    if (corpo === '3' || corpo.toLowerCase().includes('paguei') || corpo.toLowerCase().includes('já paguei')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('paguei') || corpo.toLowerCase().includes('jÃ¡ paguei')) {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        '✅ Ótimo! Verificaremos o pagamento em até 24h.\n\n' +
-        'Caso precise de algo, entre em contato. Obrigado! 💚',
+        'âœ… Ã“timo! Verificaremos o pagamento em atÃ© 24h.\n\n' +
+        'Caso precise de algo, entre em contato. Obrigado! ðŸ’š',
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (ver detalhes), *2* (negociar parcelamento) ou *3* (já paguei).',
+      'Responda *1* (ver detalhes), *2* (negociar parcelamento) ou *3* (jÃ¡ paguei).',
     );
   }
 
@@ -2090,7 +2100,7 @@ export class WhatsappBotService {
       const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const valorParcela = dadosTemp.valor / 3;
 
-      // Atualizar cobrança com flag de negociação
+      // Atualizar cobranÃ§a com flag de negociaÃ§Ã£o
       if (dadosTemp.cobrancaId) {
         try {
           await this.prisma.cobranca.update({
@@ -2098,18 +2108,18 @@ export class WhatsappBotService {
             data: { motivoCancelamento: `Parcelamento 3x negociado via WhatsApp em ${new Date().toLocaleDateString('pt-BR')}` },
           });
         } catch (err) {
-          this.logger.warn(`Erro ao atualizar cobrança com parcelamento: ${err.message}`);
+          this.logger.warn(`Erro ao atualizar cobranÃ§a com parcelamento: ${err.message}`);
         }
       }
 
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `✅ *Acordo de parcelamento gerado!*\n\n` +
-        `📋 Valor total: R$ ${fmt(dadosTemp.valor)}\n` +
-        `💳 Parcelamento: 3x de R$ ${fmt(valorParcela)} sem juros\n\n` +
-        `Nossa equipe enviará os boletos/PIX de cada parcela nos próximos dias.\n\n` +
-        `Obrigado pela confiança! 💚`,
+        `âœ… *Acordo de parcelamento gerado!*\n\n` +
+        `ðŸ“‹ Valor total: R$ ${fmt(dadosTemp.valor)}\n` +
+        `ðŸ’³ Parcelamento: 3x de R$ ${fmt(valorParcela)} sem juros\n\n` +
+        `Nossa equipe enviarÃ¡ os boletos/PIX de cada parcela nos prÃ³ximos dias.\n\n` +
+        `Obrigado pela confianÃ§a! ðŸ’š`,
       );
       return;
     }
@@ -2121,14 +2131,14 @@ export class WhatsappBotService {
       });
 
       const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      let texto = `💰 Para pagar à vista (R$ ${fmt(dadosTemp.valor)}):\n`;
+      let texto = `ðŸ’° Para pagar Ã  vista (R$ ${fmt(dadosTemp.valor)}):\n`;
       if (dadosTemp.pixCopiaECola) {
         texto += `\n*PIX Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
       }
       if (dadosTemp.linkPagamento) {
-        texto += `\n🔗 Link: ${dadosTemp.linkPagamento}\n`;
+        texto += `\nðŸ”— Link: ${dadosTemp.linkPagamento}\n`;
       }
-      texto += `\nApós o pagamento, ele será confirmado em até 24h. 💚`;
+      texto += `\nApÃ³s o pagamento, ele serÃ¡ confirmado em atÃ© 24h. ðŸ’š`;
       await this.sender.enviarMensagem(telefone, texto);
 
       await this.finalizarConversa(conversa.id);
@@ -2136,17 +2146,17 @@ export class WhatsappBotService {
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (sim, quero parcelar) ou *2* (prefiro pagar à vista).',
+      'Responda *1* (sim, quero parcelar) ou *2* (prefiro pagar Ã  vista).',
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // ROTINA 3: Novo membro indicado (fluxo de convite melhorado)
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia fluxo de convite com botões interativos para novo indicado.
-   * Substituição melhorada do iniciarFluxoConvite existente.
+   * Inicia fluxo de convite com botÃµes interativos para novo indicado.
+   * SubstituiÃ§Ã£o melhorada do iniciarFluxoConvite existente.
    */
   async iniciarFluxoConviteIndicacao(telefone: string, indicadorNome: string, codigoIndicacao: string): Promise<void> {
     await this.prisma.conversaWhatsapp.upsert({
@@ -2165,17 +2175,17 @@ export class WhatsappBotService {
 
     await this.sender.enviarMensagem(
       telefone,
-      `👋 Olá! Você foi indicado por *${indicadorNome}* para conhecer a *CoopereBR*!\n\n` +
-      `🌱 Economize na conta de luz com energia solar compartilhada — sem investimento e sem obras.`,
+      `ðŸ‘‹ OlÃ¡! VocÃª foi indicado por *${indicadorNome}* para conhecer a *CoopereBR*!\n\n` +
+      `ðŸŒ± Economize na conta de luz com energia solar compartilhada â€” sem investimento e sem obras.`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Indicação CoopereBR',
+      titulo: 'IndicaÃ§Ã£o CoopereBR',
       corpo: 'O que deseja fazer?',
       opcoes: [
-        { id: '1', texto: '🌱 Conhecer os benefícios', descricao: 'Saiba como funciona' },
-        { id: '2', texto: '💰 Simular minha economia', descricao: 'Veja quanto vai economizar' },
-        { id: '3', texto: '🚀 Iniciar cadastro agora', descricao: 'Cadastro rápido express' },
+        { id: '1', texto: 'ðŸŒ± Conhecer os benefÃ­cios', descricao: 'Saiba como funciona' },
+        { id: '2', texto: 'ðŸ’° Simular minha economia', descricao: 'Veja quanto vai economizar' },
+        { id: '3', texto: 'ðŸš€ Iniciar cadastro agora', descricao: 'Cadastro rÃ¡pido express' },
       ],
     });
   }
@@ -2185,25 +2195,25 @@ export class WhatsappBotService {
     const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('benefício') || corpo.toLowerCase().includes('beneficio') || corpo.toLowerCase().includes('conhecer')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('benefÃ­cio') || corpo.toLowerCase().includes('beneficio') || corpo.toLowerCase().includes('conhecer')) {
       await this.sender.enviarMensagem(
         telefone,
-        '🌱 *Benefícios da CoopereBR:*\n\n' +
-        '☀️ Energia 100% solar e renovável\n' +
-        '💰 Economia de até *20%* na conta de luz\n' +
-        '📋 Sem investimento inicial\n' +
-        '🔧 Sem obras ou instalação\n' +
-        '🔄 Cancelamento sem multa\n' +
-        '📊 Acompanhe seus créditos pelo portal\n\n' +
-        `Como você foi indicado por *${dadosTemp.indicadorNome}*, terá atendimento prioritário! 🎉`,
+        'ðŸŒ± *BenefÃ­cios da CoopereBR:*\n\n' +
+        'â˜€ï¸ Energia 100% solar e renovÃ¡vel\n' +
+        'ðŸ’° Economia de atÃ© *20%* na conta de luz\n' +
+        'ðŸ“‹ Sem investimento inicial\n' +
+        'ðŸ”§ Sem obras ou instalaÃ§Ã£o\n' +
+        'ðŸ”„ Cancelamento sem multa\n' +
+        'ðŸ“Š Acompanhe seus crÃ©ditos pelo portal\n\n' +
+        `Como vocÃª foi indicado por *${dadosTemp.indicadorNome}*, terÃ¡ atendimento prioritÃ¡rio! ðŸŽ‰`,
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Próximo passo',
+        titulo: 'PrÃ³ximo passo',
         corpo: 'Deseja continuar?',
         opcoes: [
-          { id: '2', texto: '💰 Simular minha economia' },
-          { id: '3', texto: '🚀 Iniciar cadastro agora' },
+          { id: '2', texto: 'ðŸ’° Simular minha economia' },
+          { id: '3', texto: 'ðŸš€ Iniciar cadastro agora' },
         ],
       });
       return;
@@ -2216,26 +2226,26 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMensagem(
         telefone,
-        '💰 Vamos simular sua economia!\n\nQual o *valor médio* da sua conta de luz? (ex: 350)',
+        'ðŸ’° Vamos simular sua economia!\n\nQual o *valor mÃ©dio* da sua conta de luz? (ex: 350)',
       );
       return;
     }
 
     if (corpo === '3' || corpo.toLowerCase().includes('cadastro') || corpo.toLowerCase().includes('iniciar')) {
-      // Cadastro express: pede nome, CPF, telefone (já tem), email, valor fatura
+      // Cadastro express: pede nome, CPF, telefone (jÃ¡ tem), email, valor fatura
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'CADASTRO_EXPRESS_NOME', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        '🚀 *Cadastro Express!*\n\nVamos precisar de poucos dados. Qual é o seu *nome completo*?',
+        'ðŸš€ *Cadastro Express!*\n\nVamos precisar de poucos dados. Qual Ã© o seu *nome completo*?',
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (benefícios), *2* (simular economia) ou *3* (iniciar cadastro).',
+      'Responda *1* (benefÃ­cios), *2* (simular economia) ou *3* (iniciar cadastro).',
     );
   }
 
@@ -2256,7 +2266,7 @@ export class WhatsappBotService {
         dadosTemp: { ...dadosTemp, nomeInformado: corpo } as any,
       },
     });
-    await this.sender.enviarMensagem(telefone, `Obrigado, *${corpo}*! Agora informe seu *CPF* (apenas números):`);
+    await this.sender.enviarMensagem(telefone, `Obrigado, *${corpo}*! Agora informe seu *CPF* (apenas nÃºmeros):`);
   }
 
   private async handleCadastroExpressCpf(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2264,7 +2274,7 @@ export class WhatsappBotService {
     const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
 
     if (corpo.length !== 11) {
-      await this.sender.enviarMensagem(telefone, 'CPF inválido. Informe os *11 dígitos* do seu CPF:');
+      await this.sender.enviarMensagem(telefone, 'CPF invÃ¡lido. Informe os *11 dÃ­gitos* do seu CPF:');
       return;
     }
 
@@ -2284,7 +2294,7 @@ export class WhatsappBotService {
     const corpo = (msg.corpo ?? '').trim().toLowerCase();
 
     if (!corpo.includes('@')) {
-      await this.sender.enviarMensagem(telefone, 'E-mail inválido. Informe um *e-mail válido*:');
+      await this.sender.enviarMensagem(telefone, 'E-mail invÃ¡lido. Informe um *e-mail vÃ¡lido*:');
       return;
     }
 
@@ -2296,7 +2306,7 @@ export class WhatsappBotService {
         dadosTemp: { ...dadosTemp, emailInformado: corpo } as any,
       },
     });
-    await this.sender.enviarMensagem(telefone, 'Quase lá! Qual o *valor médio* da sua conta de luz? (ex: 350)');
+    await this.sender.enviarMensagem(telefone, 'Quase lÃ¡! Qual o *valor mÃ©dio* da sua conta de luz? (ex: 350)');
   }
 
   private async handleCadastroExpressValorFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2307,7 +2317,7 @@ export class WhatsappBotService {
     const valor = parseFloat(valorStr);
 
     if (isNaN(valor) || valor <= 0) {
-      await this.sender.enviarMensagem(telefone, 'Informe o valor em reais (apenas o número). Ex: *350*');
+      await this.sender.enviarMensagem(telefone, 'Informe o valor em reais (apenas o nÃºmero). Ex: *350*');
       return;
     }
 
@@ -2353,13 +2363,13 @@ export class WhatsappBotService {
       });
     }
 
-    // Registrar indicação
+    // Registrar indicaÃ§Ã£o
     if (codigoRef) {
       try {
         await this.indicacoes.registrarIndicacao(cooperado.id, codigoRef);
-        this.logger.log(`Indicação express registrada para ${cooperado.id} via código ${codigoRef}`);
+        this.logger.log(`IndicaÃ§Ã£o express registrada para ${cooperado.id} via cÃ³digo ${codigoRef}`);
       } catch (err) {
-        this.logger.warn(`Erro ao registrar indicação express: ${err.message}`);
+        this.logger.warn(`Erro ao registrar indicaÃ§Ã£o express: ${err.message}`);
       }
     }
 
@@ -2373,14 +2383,14 @@ export class WhatsappBotService {
     const economiaMensal = valor * 0.2;
     const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    let msgFinal = `🎉 *Perfeito! Seu cadastro está em análise.*\n\n`;
-    msgFinal += `👤 ${nome}\n`;
-    msgFinal += `📧 ${email}\n`;
-    msgFinal += `💰 Economia estimada: R$ ${fmt(economiaMensal)}/mês\n\n`;
+    let msgFinal = `ðŸŽ‰ *Perfeito! Seu cadastro estÃ¡ em anÃ¡lise.*\n\n`;
+    msgFinal += `ðŸ‘¤ ${nome}\n`;
+    msgFinal += `ðŸ“§ ${email}\n`;
+    msgFinal += `ðŸ’° Economia estimada: R$ ${fmt(economiaMensal)}/mÃªs\n\n`;
     if (indicadorNome) {
-      msgFinal += `*${indicadorNome}* será notificado quando você for aprovado! 🎉\n\n`;
+      msgFinal += `*${indicadorNome}* serÃ¡ notificado quando vocÃª for aprovado! ðŸŽ‰\n\n`;
     }
-    msgFinal += `Nossa equipe entrará em contato em breve. Obrigado! 💚`;
+    msgFinal += `Nossa equipe entrarÃ¡ em contato em breve. Obrigado! ðŸ’š`;
 
     await this.sender.enviarMensagem(telefone, msgFinal);
 
@@ -2393,8 +2403,8 @@ export class WhatsappBotService {
       if (indicador?.telefone) {
         await this.sender.enviarMensagem(
           indicador.telefone,
-          `🎉 Boa notícia! *${nome}* acabou de completar o cadastro express através do seu convite!\n\n` +
-          `Quando ele for aprovado e pagar a primeira fatura, você receberá seu benefício automaticamente. Obrigado por indicar! 🙏`,
+          `ðŸŽ‰ Boa notÃ­cia! *${nome}* acabou de completar o cadastro express atravÃ©s do seu convite!\n\n` +
+          `Quando ele for aprovado e pagar a primeira fatura, vocÃª receberÃ¡ seu benefÃ­cio automaticamente. Obrigado por indicar! ðŸ™`,
         ).catch(() => {});
 
         // Notificar admin
@@ -2406,7 +2416,7 @@ export class WhatsappBotService {
           if (admin?.telefone) {
             await this.sender.enviarMensagem(
               admin.telefone,
-              `📋 Novo cadastro express via indicação:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto}`,
+              `ðŸ“‹ Novo cadastro express via indicaÃ§Ã£o:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto}`,
             ).catch(() => {});
           }
         }
@@ -2414,7 +2424,7 @@ export class WhatsappBotService {
     }
   }
 
-  // ─── LEAD FORA DA ÁREA: captura intenção ────────────────────────────────
+  // â”€â”€â”€ LEAD FORA DA ÃREA: captura intenÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleLeadForaArea(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -2427,13 +2437,13 @@ export class WhatsappBotService {
     const numeroUC = String(dadosTemp.numeroUC ?? '');
     const endereco = String(dadosTemp.enderecoInstalacao ?? '');
 
-    // Extrair cidade/estado do endereço (melhor esforço)
-    const partes = endereco.split(/[-–,]/);
+    // Extrair cidade/estado do endereÃ§o (melhor esforÃ§o)
+    const partes = endereco.split(/[-â€“,]/);
     const cidade = partes.length >= 2 ? partes[partes.length - 2]?.trim() : undefined;
     const estado = partes.length >= 1 ? partes[partes.length - 1]?.trim()?.substring(0, 2)?.toUpperCase() : undefined;
 
     if (corpo === '1') {
-      // Salvar lead com intenção confirmada
+      // Salvar lead com intenÃ§Ã£o confirmada
       await this.prisma.leadExpansao.create({
         data: {
           telefone: telefone.replace(/\D/g, ''),
@@ -2451,15 +2461,15 @@ export class WhatsappBotService {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `✅ *Pronto! Você será avisado assim que chegarmos na região da ${distribuidora}.*\n\n` +
-        `Enquanto isso, que tal indicar amigos e vizinhos? Quanto mais demanda, mais rápido chegamos! 🚀\n\n` +
-        `Obrigado pelo interesse na CoopereBR! 💚`,
+        `âœ… *Pronto! VocÃª serÃ¡ avisado assim que chegarmos na regiÃ£o da ${distribuidora}.*\n\n` +
+        `Enquanto isso, que tal indicar amigos e vizinhos? Quanto mais demanda, mais rÃ¡pido chegamos! ðŸš€\n\n` +
+        `Obrigado pelo interesse na CoopereBR! ðŸ’š`,
       );
       return;
     }
 
     if (corpo === '2') {
-      // Salvar lead sem intenção (registro passivo)
+      // Salvar lead sem intenÃ§Ã£o (registro passivo)
       await this.prisma.leadExpansao.create({
         data: {
           telefone: telefone.replace(/\D/g, ''),
@@ -2477,21 +2487,21 @@ export class WhatsappBotService {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `Tudo bem! Se mudar de ideia, é só enviar outra fatura. 😊\n\nObrigado pelo interesse na CoopereBR! 💚`,
+        `Tudo bem! Se mudar de ideia, Ã© sÃ³ enviar outra fatura. ðŸ˜Š\n\nObrigado pelo interesse na CoopereBR! ðŸ’š`,
       );
       return;
     }
 
-    // Não entendeu
+    // NÃ£o entendeu
     await this.sender.enviarMensagem(
       telefone,
-      'Por favor, responda:\n1️⃣ Sim, quero ser avisado\n2️⃣ Não por enquanto',
+      'Por favor, responda:\n1ï¸âƒ£ Sim, quero ser avisado\n2ï¸âƒ£ NÃ£o por enquanto',
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // CADASTRO POR PROXY: cooperado cadastra um amigo pelo WhatsApp
-  // ═══════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   private async handleMenuConvidarAmigo(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -2499,13 +2509,13 @@ export class WhatsappBotService {
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
 
     if (corpo === '1') {
-      // Enviar link de indicação
+      // Enviar link de indicaÃ§Ã£o
       const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
       const link = `${baseUrl}/entrar?ref=${dadosTemp.codigoIndicacao}`;
       await this.sender.enviarMensagem(telefone,
-        `🎁 *Seu link de indicação personalizado:*\n\n${link}\n\n` +
-        `📲 Compartilhe com amigos, familiares e colegas!\n\n` +
-        `Quando seu indicado pagar a primeira fatura, você recebe seu benefício automaticamente. 💚`
+        `ðŸŽ *Seu link de indicaÃ§Ã£o personalizado:*\n\n${link}\n\n` +
+        `ðŸ“² Compartilhe com amigos, familiares e colegas!\n\n` +
+        `Quando seu indicado pagar a primeira fatura, vocÃª recebe seu benefÃ­cio automaticamente. ðŸ’š`
       );
       await this.resetarConversa(telefone);
       return;
@@ -2551,7 +2561,7 @@ export class WhatsappBotService {
     const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
 
     if (corpo.length < 10 || corpo.length > 13) {
-      await this.sender.enviarMensagem(telefone, 'Número inválido. Informe com DDD (ex: 27999991234):');
+      await this.sender.enviarMensagem(telefone, 'NÃºmero invÃ¡lido. Informe com DDD (ex: 27999991234):');
       return;
     }
 
@@ -2565,7 +2575,7 @@ export class WhatsappBotService {
       },
     });
     const nome = dadosTemp.proxyNome as string;
-    await this.sender.enviarMensagem(telefone, `Agora envie a foto ou PDF da conta de luz de *${nome}* 📎`);
+    await this.sender.enviarMensagem(telefone, `Agora envie a foto ou PDF da conta de luz de *${nome}* ðŸ“Ž`);
   }
 
   private async handleAguardandoFaturaProxy(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2579,24 +2589,24 @@ export class WhatsappBotService {
       ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
 
     if (!isMidia) {
-      await this.sender.enviarMensagem(telefone, 'Por favor, envie uma *foto* ou *PDF* da conta de energia do seu amigo. 📸');
+      await this.sender.enviarMensagem(telefone, 'Por favor, envie uma *foto* ou *PDF* da conta de energia do seu amigo. ðŸ“¸');
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, '📄 Recebi! Analisando os dados... Aguarde um momento. ⏳');
+    await this.sender.enviarMensagem(telefone, 'ðŸ“„ Recebi! Analisando os dados... Aguarde um momento. â³');
 
     const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
     let dadosExtraidos: Record<string, unknown>;
     try {
       dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
     } catch {
-      await this.sender.enviarMensagem(telefone, 'Não consegui identificar os dados. Envie uma foto mais nítida ou o PDF da fatura. 📸');
+      await this.sender.enviarMensagem(telefone, 'NÃ£o consegui identificar os dados. Envie uma foto mais nÃ­tida ou o PDF da fatura. ðŸ“¸');
       return;
     }
 
     const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
     if (consumoAtualKwh <= 0) {
-      await this.sender.enviarMensagem(telefone, 'O arquivo não parece ser uma fatura de energia. Tente novamente. 📄');
+      await this.sender.enviarMensagem(telefone, 'O arquivo nÃ£o parece ser uma fatura de energia. Tente novamente. ðŸ“„');
       return;
     }
 
@@ -2646,11 +2656,11 @@ export class WhatsappBotService {
     const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let resposta = `*${proxyNome}* economizaria `;
     if (economiaMensal > 0) {
-      resposta += `*R$ ${fmt(economiaMensal)}/mês* ☀️\n\n`;
+      resposta += `*R$ ${fmt(economiaMensal)}/mÃªs* â˜€ï¸\n\n`;
     } else {
-      resposta += `com energia solar! ☀️\n\n`;
+      resposta += `com energia solar! â˜€ï¸\n\n`;
     }
-    resposta += `Confirma o cadastro?\n1️⃣ Sim, cadastrar\n2️⃣ Não por enquanto`;
+    resposta += `Confirma o cadastro?\n1ï¸âƒ£ Sim, cadastrar\n2ï¸âƒ£ NÃ£o por enquanto`;
 
     await this.sender.enviarMensagem(telefone, resposta);
   }
@@ -2670,7 +2680,7 @@ export class WhatsappBotService {
       const numeroUC = dadosTemp.numeroUC as string | undefined;
 
       try {
-        // Chamar endpoint de pré-cadastro internamente
+        // Chamar endpoint de prÃ©-cadastro internamente
         const cooperado = await this.prisma.cooperado.create({
           data: {
             nomeCompleto: proxyNome,
@@ -2704,12 +2714,12 @@ export class WhatsappBotService {
         const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // Enviar mensagem para o amigo
-        let msgAmigo = `${indicadorNome} te cadastrou na *CoopereBR*! ☀️\n\n`;
+        let msgAmigo = `${indicadorNome} te cadastrou na *CoopereBR*! â˜€ï¸\n\n`;
         if (economiaMensal > 0) {
-          msgAmigo += `Sua economia estimada é de *R$ ${fmt(economiaMensal)}/mês*.\n\n`;
+          msgAmigo += `Sua economia estimada Ã© de *R$ ${fmt(economiaMensal)}/mÃªs*.\n\n`;
         }
         msgAmigo += `Para confirmar, acesse:\n${link}\n\n`;
-        msgAmigo += `O link é válido por 7 dias.`;
+        msgAmigo += `O link Ã© vÃ¡lido por 7 dias.`;
 
         await this.sender.enviarMensagem(proxyTelefone, msgAmigo).catch(err => {
           this.logger.warn(`Erro ao enviar WA para amigo proxy ${proxyTelefone}: ${err.message}`);
@@ -2717,30 +2727,30 @@ export class WhatsappBotService {
 
         // Notificar cooperado
         await this.sender.enviarMensagem(telefone,
-          `✅ Pronto! Enviei o link para *${proxyNome}* confirmar.\n` +
-          `Quando ele assinar, você receberá seu benefício!`
+          `âœ… Pronto! Enviei o link para *${proxyNome}* confirmar.\n` +
+          `Quando ele assinar, vocÃª receberÃ¡ seu benefÃ­cio!`
         );
       } catch (err) {
         this.logger.error(`Erro no cadastro proxy: ${err.message}`);
-        await this.sender.enviarMensagem(telefone, '❌ Ocorreu um erro ao cadastrar. Tente novamente mais tarde.');
+        await this.sender.enviarMensagem(telefone, 'âŒ Ocorreu um erro ao cadastrar. Tente novamente mais tarde.');
       }
 
       await this.resetarConversa(telefone);
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
-      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, é só me avisar.');
+    if (corpo === '2' || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('nao')) {
+      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, Ã© sÃ³ me avisar.');
       await this.resetarConversa(telefone);
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (sim, cadastrar) ou *2* (não por enquanto).',
+      'Responda *1* (sim, cadastrar) ou *2* (nÃ£o por enquanto).',
     );
   }
 
-  // ─── MENU FATURA: lista cobranças pendentes ─────────────────────────────
+  // â”€â”€â”€ MENU FATURA: lista cobranÃ§as pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -2761,7 +2771,7 @@ export class WhatsappBotService {
     if (!cooperado) {
       await this.sender.enviarMensagem(
         telefone,
-        'Não encontramos um cadastro vinculado a este número. 😕\n\nSe você é cooperado, entre em contato pelo site cooperebr.com.br para atualizar seu telefone.',
+        'NÃ£o encontramos um cadastro vinculado a este nÃºmero. ðŸ˜•\n\nSe vocÃª Ã© cooperado, entre em contato pelo site cooperebr.com.br para atualizar seu telefone.',
       );
       await this.resetarConversa(telefone);
       return;
@@ -2776,13 +2786,13 @@ export class WhatsappBotService {
     if (cobrancas.length === 0) {
       await this.sender.enviarMensagem(
         telefone,
-        `Olá, ${cooperado.nomeCompleto.split(' ')[0]}! 😊\n\nVocê não tem faturas pendentes no momento. Está tudo em dia! ✅`,
+        `OlÃ¡, ${cooperado.nomeCompleto.split(' ')[0]}! ðŸ˜Š\n\nVocÃª nÃ£o tem faturas pendentes no momento. EstÃ¡ tudo em dia! âœ…`,
       );
       await this.resetarConversa(telefone);
       return;
     }
 
-    // Pegar cobrança mais recente (A_VENCER ou VENCIDO — já filtrado pelo service)
+    // Pegar cobranÃ§a mais recente (A_VENCER ou VENCIDO â€” jÃ¡ filtrado pelo service)
     const cobranca = cobrancas[0];
     const nome = cooperado.nomeCompleto.split(' ')[0];
     const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
@@ -2798,40 +2808,40 @@ export class WhatsappBotService {
     vencDate.setHours(0, 0, 0, 0);
     const diasParaVencer = Math.ceil((vencDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Régua de urgência
+    // RÃ©gua de urgÃªncia
     let cabecalho: string;
     if (diasParaVencer > 5) {
-      cabecalho = `✅ Sua fatura vence em ${diasParaVencer} dias`;
+      cabecalho = `âœ… Sua fatura vence em ${diasParaVencer} dias`;
     } else if (diasParaVencer >= 2) {
-      cabecalho = `⚠️ Atenção! Sua fatura vence em ${diasParaVencer} dias`;
+      cabecalho = `âš ï¸ AtenÃ§Ã£o! Sua fatura vence em ${diasParaVencer} dias`;
     } else if (diasParaVencer === 1) {
-      cabecalho = `🔔 Sua fatura vence *amanhã*!`;
+      cabecalho = `ðŸ”” Sua fatura vence *amanhÃ£*!`;
     } else if (diasParaVencer === 0) {
-      cabecalho = `🚨 Sua fatura vence *hoje*!`;
+      cabecalho = `ðŸš¨ Sua fatura vence *hoje*!`;
     } else {
-      cabecalho = `❌ Sua fatura está *vencida* há ${Math.abs(diasParaVencer)} dia(s)!`;
+      cabecalho = `âŒ Sua fatura estÃ¡ *vencida* hÃ¡ ${Math.abs(diasParaVencer)} dia(s)!`;
     }
 
-    const statusLabel = cobranca.status === 'VENCIDO' ? '⚠️ VENCIDA' : '📅 A vencer';
+    const statusLabel = cobranca.status === 'VENCIDO' ? 'âš ï¸ VENCIDA' : 'ðŸ“… A vencer';
 
-    let texto = `💚 *CoopereBR — Fatura ${mesStr}/${ano}*\n\n`;
-    texto += `Olá, ${nome}! 👋\n\n`;
+    let texto = `ðŸ’š *CoopereBR â€” Fatura ${mesStr}/${ano}*\n\n`;
+    texto += `OlÃ¡, ${nome}! ðŸ‘‹\n\n`;
     texto += `${cabecalho}\n\n`;
     texto += `${statusLabel}\n`;
-    texto += `👤 ${cooperado.nomeCompleto}\n`;
-    texto += `📆 Competência: ${mesStr}/${ano}\n`;
-    texto += `💰 Valor: *R$ ${valor}*\n`;
-    texto += `📅 Vencimento: ${dataVencStr}\n`;
+    texto += `ðŸ‘¤ ${cooperado.nomeCompleto}\n`;
+    texto += `ðŸ“† CompetÃªncia: ${mesStr}/${ano}\n`;
+    texto += `ðŸ’° Valor: *R$ ${valor}*\n`;
+    texto += `ðŸ“… Vencimento: ${dataVencStr}\n`;
 
     await this.sender.enviarMensagem(telefone, texto);
 
-    // Enviar menu com botões
+    // Enviar menu com botÃµes
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Opções de pagamento',
+      titulo: 'OpÃ§Ãµes de pagamento',
       corpo: 'Como deseja pagar ou consultar?',
       opcoes: [
         { id: 'pix', texto: 'Pagar com PIX' },
-        { id: 'boleto', texto: 'Código de barras' },
+        { id: 'boleto', texto: 'CÃ³digo de barras' },
         { id: 'portal', texto: 'Ver fatura' },
       ],
     });
@@ -2846,7 +2856,7 @@ export class WhatsappBotService {
     });
   }
 
-  // ─── RESPOSTA MENU FATURA: usuário escolheu opção do menu ─────────────
+  // â”€â”€â”€ RESPOSTA MENU FATURA: usuÃ¡rio escolheu opÃ§Ã£o do menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleRespostaMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -2854,12 +2864,12 @@ export class WhatsappBotService {
 
     if (['voltar', 'sair', 'menu'].includes(corpo)) {
       await this.resetarConversa(telefone);
-      const texto = await this.msg('boas_vindas', {}, '👋 Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸');
+      const texto = await this.msg('boas_vindas', {}, 'ðŸ‘‹ OlÃ¡! Sou o assistente da *CoopereBR*.\n\nPara comeÃ§ar, envie uma *foto* ou *PDF* da sua conta de energia elÃ©trica e eu faÃ§o uma simulaÃ§Ã£o de economia para vocÃª! ðŸ“¸');
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    // Buscar cobrança do cooperado
+    // Buscar cobranÃ§a do cooperado
     const telefoneNorm2 = telefone.replace(/\D/g, '');
     const telefoneSemPais2 = telefoneNorm2.replace(/^55/, '');
     const cooperado = await this.prisma.cooperado.findFirst({
@@ -2880,7 +2890,7 @@ export class WhatsappBotService {
       take: 5,
     }) : [];
     if (!cooperado || cobrancas.length === 0) {
-      await this.sender.enviarMensagem(telefone, 'Não encontrei faturas pendentes. Digite *voltar* para retornar.');
+      await this.sender.enviarMensagem(telefone, 'NÃ£o encontrei faturas pendentes. Digite *voltar* para retornar.');
       await this.resetarConversa(telefone);
       return;
     }
@@ -2893,34 +2903,34 @@ export class WhatsappBotService {
       if (pixCopiaECola) {
         await this.sender.enviarMensagem(
           telefone,
-          `💳 *PIX Copia e Cola:*\n\n\`${pixCopiaECola}\`\n\n_Copie o código acima e cole no app do seu banco._`,
+          `ðŸ’³ *PIX Copia e Cola:*\n\n\`${pixCopiaECola}\`\n\n_Copie o cÃ³digo acima e cole no app do seu banco._`,
         );
       } else {
         const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
         await this.sender.enviarMensagem(
           telefone,
-          `PIX não disponível no momento. Acesse o portal para pagar:\n${portalUrl}`,
+          `PIX nÃ£o disponÃ­vel no momento. Acesse o portal para pagar:\n${portalUrl}`,
         );
       }
-    } else if (corpo.includes('boleto') || corpo.includes('codigo') || corpo.includes('código') || corpo.includes('barra') || corpo === '2') {
+    } else if (corpo.includes('boleto') || corpo.includes('codigo') || corpo.includes('cÃ³digo') || corpo.includes('barra') || corpo === '2') {
       const boletoUrl = asaas?.boletoUrl;
       if (boletoUrl) {
         await this.sender.enviarMensagem(
           telefone,
-          `📄 *Boleto bancário:*\n\n🔗 ${boletoUrl}\n\n_Acesse o link para visualizar e pagar._`,
+          `ðŸ“„ *Boleto bancÃ¡rio:*\n\nðŸ”— ${boletoUrl}\n\n_Acesse o link para visualizar e pagar._`,
         );
       } else {
         const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
         await this.sender.enviarMensagem(
           telefone,
-          `Código de barras não disponível. Acesse o portal:\n${portalUrl}`,
+          `CÃ³digo de barras nÃ£o disponÃ­vel. Acesse o portal:\n${portalUrl}`,
         );
       }
     } else if (corpo.includes('portal') || corpo.includes('ver fatura') || corpo === '3') {
       const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
       await this.sender.enviarMensagem(
         telefone,
-        `🔗 Acesse sua fatura no portal:\n${portalUrl}\n\n_Faça login com seu CPF e senha._`,
+        `ðŸ”— Acesse sua fatura no portal:\n${portalUrl}\n\n_FaÃ§a login com seu CPF e senha._`,
       );
     } else if (corpo.includes('extrato')) {
       const valorLiquido = Number(cobranca.valorLiquido).toFixed(2).replace('.', ',');
@@ -2929,52 +2939,52 @@ export class WhatsappBotService {
       const diasAtraso = Number((cobranca as any).diasAtraso ?? 0);
       const valorAtualizado = Number((cobranca as any).valorAtualizado ?? cobranca.valorLiquido).toFixed(2).replace('.', ',');
 
-      let extrato = `📊 *Extrato da Fatura*\n\n`;
-      extrato += `💰 Valor original: R$ ${valorLiquido}\n`;
+      let extrato = `ðŸ“Š *Extrato da Fatura*\n\n`;
+      extrato += `ðŸ’° Valor original: R$ ${valorLiquido}\n`;
       if (diasAtraso > 0) {
-        extrato += `📅 Dias em atraso: ${diasAtraso}\n`;
-        extrato += `💸 Multa: R$ ${valorMulta}\n`;
-        extrato += `💸 Juros: R$ ${valorJuros}\n`;
-        extrato += `💰 *Valor atualizado: R$ ${valorAtualizado}*\n`;
+        extrato += `ðŸ“… Dias em atraso: ${diasAtraso}\n`;
+        extrato += `ðŸ’¸ Multa: R$ ${valorMulta}\n`;
+        extrato += `ðŸ’¸ Juros: R$ ${valorJuros}\n`;
+        extrato += `ðŸ’° *Valor atualizado: R$ ${valorAtualizado}*\n`;
       }
       await this.sender.enviarMensagem(telefone, extrato);
-    } else if (corpo.includes('comprovante') || corpo.includes('paguei') || corpo.includes('já paguei')) {
+    } else if (corpo.includes('comprovante') || corpo.includes('paguei') || corpo.includes('jÃ¡ paguei')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_COMPROVANTE_PAGAMENTO' },
       });
       await this.sender.enviarMensagem(
         telefone,
-        '📸 Por favor, envie a *foto* ou *PDF* do comprovante de pagamento para confirmarmos.',
+        'ðŸ“¸ Por favor, envie a *foto* ou *PDF* do comprovante de pagamento para confirmarmos.',
       );
       return;
     } else {
-      // Opção não reconhecida — reenviar menu
+      // OpÃ§Ã£o nÃ£o reconhecida â€” reenviar menu
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Opções de pagamento',
-        corpo: 'Não entendi sua resposta. Escolha uma opção:',
+        titulo: 'OpÃ§Ãµes de pagamento',
+        corpo: 'NÃ£o entendi sua resposta. Escolha uma opÃ§Ã£o:',
         opcoes: [
           { id: 'pix', texto: 'Pagar com PIX' },
-          { id: 'boleto', texto: 'Código de barras' },
+          { id: 'boleto', texto: 'CÃ³digo de barras' },
           { id: 'portal', texto: 'Ver fatura' },
         ],
       });
       return;
     }
 
-    // Após responder, reenviar menu para nova consulta
+    // ApÃ³s responder, reenviar menu para nova consulta
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Opções de pagamento',
+      titulo: 'OpÃ§Ãµes de pagamento',
       corpo: 'Precisa de mais alguma coisa?',
       opcoes: [
         { id: 'pix', texto: 'Pagar com PIX' },
-        { id: 'boleto', texto: 'Código de barras' },
+        { id: 'boleto', texto: 'CÃ³digo de barras' },
         { id: 'portal', texto: 'Ver fatura' },
       ],
     });
   }
 
-  // ─── COMPROVANTE DE PAGAMENTO ─────────────────────────────────────────
+  // â”€â”€â”€ COMPROVANTE DE PAGAMENTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleComprovantePagamento(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone, tipo } = msg;
@@ -2984,7 +2994,7 @@ export class WhatsappBotService {
     if (!isMidia) {
       await this.sender.enviarMensagem(
         telefone,
-        'Por favor, envie a *foto* ou *PDF* do comprovante de pagamento. 📸',
+        'Por favor, envie a *foto* ou *PDF* do comprovante de pagamento. ðŸ“¸',
       );
       return;
     }
@@ -3008,14 +3018,14 @@ export class WhatsappBotService {
       const nomeCooperado = cooperadoComp?.nomeCompleto ?? telefone;
       await this.sender.enviarMensagem(
         superAdminPhone,
-        `📋 *Comprovante de pagamento recebido*\n\n👤 ${nomeCooperado}\n📱 ${telefone}\n\n_Verifique o comprovante e dê baixa na fatura._`,
+        `ðŸ“‹ *Comprovante de pagamento recebido*\n\nðŸ‘¤ ${nomeCooperado}\nðŸ“± ${telefone}\n\n_Verifique o comprovante e dÃª baixa na fatura._`,
       ).catch((err) => this.logger.warn(`Falha ao notificar admin: ${err.message}`));
     }
 
     // Confirmar ao cooperado
     await this.sender.enviarMensagem(
       telefone,
-      '✅ Comprovante recebido! Nossa equipe vai conferir e confirmar o pagamento. Obrigado! 🙏',
+      'âœ… Comprovante recebido! Nossa equipe vai conferir e confirmar o pagamento. Obrigado! ðŸ™',
     );
 
     // Voltar ao estado inicial
@@ -3025,7 +3035,7 @@ export class WhatsappBotService {
     });
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async resetarConversa(telefone: string): Promise<void> {
     await this.prisma.conversaWhatsapp.upsert({
@@ -3035,7 +3045,7 @@ export class WhatsappBotService {
     });
   }
 
-  // ─── Atualização de Cadastro ─────────────────────────────────────────────
+  // â”€â”€â”€ AtualizaÃ§Ã£o de Cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleAtualizacaoCadastro(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3047,7 +3057,7 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_NOME', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📝 Digite seu *novo nome completo*:');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“ Digite seu *novo nome completo*:');
       return;
     }
     if (corpo === '2' || corpo.toLowerCase().includes('email')) {
@@ -3055,7 +3065,7 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_EMAIL', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📧 Digite seu *novo email*:');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“§ Digite seu *novo email*:');
       return;
     }
     if (corpo === '3' || corpo.toLowerCase().includes('telefone')) {
@@ -3063,33 +3073,33 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_TELEFONE', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📱 Digite seu *novo número de telefone* (com DDD):');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“± Digite seu *novo nÃºmero de telefone* (com DDD):');
       return;
     }
-    if (corpo === '4' || corpo.toLowerCase().includes('endereço') || corpo.toLowerCase().includes('cep')) {
+    if (corpo === '4' || corpo.toLowerCase().includes('endereÃ§o') || corpo.toLowerCase().includes('cep')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_CEP', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, '📍 Digite seu *novo CEP* (apenas números):');
+      await this.sender.enviarMensagem(telefone, 'ðŸ“ Digite seu *novo CEP* (apenas nÃºmeros):');
       return;
     }
 
-    await this.incrementarFallback(conversa, telefone, 'Responda *1* (nome), *2* (email), *3* (telefone) ou *4* (endereço).');
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* (nome), *2* (email), *3* (telefone) ou *4* (endereÃ§o).');
   }
 
   private async handleAguardandoNovoNome(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
     const novoNome = this.respostaEfetiva(msg).trim();
     if (novoNome.length < 3) {
-      await this.sender.enviarMensagem(telefone, '⚠️ Nome muito curto. Digite o nome completo:');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ Nome muito curto. Digite o nome completo:');
       return;
     }
     await this.prisma.cooperado.update({
       where: { id: conversa.cooperadoId },
       data: { nomeCompleto: novoNome },
     });
-    await this.sender.enviarMensagem(telefone, `✅ *Nome* atualizado com sucesso para *${novoNome}*!`);
+    await this.sender.enviarMensagem(telefone, `âœ… *Nome* atualizado com sucesso para *${novoNome}*!`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
@@ -3098,14 +3108,14 @@ export class WhatsappBotService {
     const novoEmail = this.respostaEfetiva(msg).trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(novoEmail)) {
-      await this.sender.enviarMensagem(telefone, '⚠️ Email inválido. Digite um email válido (ex: nome@email.com):');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ Email invÃ¡lido. Digite um email vÃ¡lido (ex: nome@email.com):');
       return;
     }
     await this.prisma.cooperado.update({
       where: { id: conversa.cooperadoId },
       data: { email: novoEmail },
     });
-    await this.sender.enviarMensagem(telefone, `✅ *Email* atualizado com sucesso para *${novoEmail}*!`);
+    await this.sender.enviarMensagem(telefone, `âœ… *Email* atualizado com sucesso para *${novoEmail}*!`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
@@ -3113,14 +3123,14 @@ export class WhatsappBotService {
     const { telefone } = msg;
     const novoTelefone = this.respostaEfetiva(msg).replace(/\D/g, '');
     if (novoTelefone.length < 10 || novoTelefone.length > 13) {
-      await this.sender.enviarMensagem(telefone, '⚠️ Telefone inválido. Digite com DDD (ex: 11999998888):');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ Telefone invÃ¡lido. Digite com DDD (ex: 11999998888):');
       return;
     }
     await this.prisma.cooperado.update({
       where: { id: conversa.cooperadoId },
       data: { telefone: novoTelefone },
     });
-    await this.sender.enviarMensagem(telefone, `✅ *Telefone* atualizado com sucesso para *${novoTelefone}*!`);
+    await this.sender.enviarMensagem(telefone, `âœ… *Telefone* atualizado com sucesso para *${novoTelefone}*!`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
@@ -3128,18 +3138,18 @@ export class WhatsappBotService {
     const { telefone } = msg;
     const novoCep = this.respostaEfetiva(msg).replace(/\D/g, '');
     if (novoCep.length !== 8) {
-      await this.sender.enviarMensagem(telefone, '⚠️ CEP inválido. Digite 8 dígitos (ex: 01310100):');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ CEP invÃ¡lido. Digite 8 dÃ­gitos (ex: 01310100):');
       return;
     }
     await this.prisma.cooperado.update({
       where: { id: conversa.cooperadoId },
       data: { cep: novoCep },
     });
-    await this.sender.enviarMensagem(telefone, `✅ *Endereço (CEP)* atualizado com sucesso para *${novoCep}*!`);
+    await this.sender.enviarMensagem(telefone, `âœ… *EndereÃ§o (CEP)* atualizado com sucesso para *${novoCep}*!`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
-  // ─── Atualização de Contrato ─────────────────────────────────────────────
+  // â”€â”€â”€ AtualizaÃ§Ã£o de Contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleAtualizacaoContrato(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3152,7 +3162,7 @@ export class WhatsappBotService {
     });
 
     if (!contrato) {
-      await this.sender.enviarMensagem(telefone, '⚠️ Nenhum contrato ativo encontrado.');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ Nenhum contrato ativo encontrado.');
       await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
       return;
     }
@@ -3163,8 +3173,8 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'aumentar' }, contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `📊 Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
-        `⬆️ Digite o *novo valor em kWh* que deseja contratar (maior que o atual):`,
+        `ðŸ“Š Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mÃªs*\n\n` +
+        `â¬†ï¸ Digite o *novo valor em kWh* que deseja contratar (maior que o atual):`,
       );
       return;
     }
@@ -3175,8 +3185,8 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'diminuir' }, contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `📊 Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
-        `⬇️ Digite o *novo valor em kWh* que deseja contratar (menor que o atual):`,
+        `ðŸ“Š Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mÃªs*\n\n` +
+        `â¬‡ï¸ Digite o *novo valor em kWh* que deseja contratar (menor que o atual):`,
       );
       return;
     }
@@ -3191,11 +3201,11 @@ export class WhatsappBotService {
       if (superPhone) {
         const cooperado = await this.prisma.cooperado.findUnique({ where: { id: cooperadoId }, select: { nomeCompleto: true } });
         await this.sender.enviarMensagem(superPhone,
-          `⏸️ *Contrato suspenso via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${contrato.id}`,
+          `â¸ï¸ *Contrato suspenso via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${contrato.id}`,
           { tipoDisparo: 'BOT_RESPOSTA' },
         );
       }
-      await this.sender.enviarMensagem(telefone, '⏸️ Seu contrato foi *suspenso temporariamente*.\n\nPara reativar, entre em contato com nossa equipe.');
+      await this.sender.enviarMensagem(telefone, 'â¸ï¸ Seu contrato foi *suspenso temporariamente*.\n\nPara reativar, entre em contato com nossa equipe.');
       await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
       return;
     }
@@ -3206,9 +3216,9 @@ export class WhatsappBotService {
         data: { estado: 'CONFIRMAR_ENCERRAMENTO', dadosTemp: { contratoId: contrato.id }, contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        '❌ *Tem certeza que deseja encerrar seu contrato?*\n\n' +
-        'Esta ação não pode ser desfeita facilmente.\n\n' +
-        '1️⃣ Sim, encerrar\n2️⃣ Não, voltar ao menu',
+        'âŒ *Tem certeza que deseja encerrar seu contrato?*\n\n' +
+        'Esta aÃ§Ã£o nÃ£o pode ser desfeita facilmente.\n\n' +
+        '1ï¸âƒ£ Sim, encerrar\n2ï¸âƒ£ NÃ£o, voltar ao menu',
       );
       return;
     }
@@ -3222,7 +3232,7 @@ export class WhatsappBotService {
     const valor = parseInt(corpo.replace(/\D/g, ''), 10);
 
     if (!valor || valor < 50) {
-      await this.sender.enviarMensagem(telefone, '⚠️ Valor inválido. Digite um número válido de kWh (mínimo 50):');
+      await this.sender.enviarMensagem(telefone, 'âš ï¸ Valor invÃ¡lido. Digite um nÃºmero vÃ¡lido de kWh (mÃ­nimo 50):');
       return;
     }
 
@@ -3239,12 +3249,12 @@ export class WhatsappBotService {
     if (superPhone) {
       const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
       await this.sender.enviarMensagem(superPhone,
-        `🔄 *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nAção: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
+        `ðŸ”„ *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nAÃ§Ã£o: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
         { tipoDisparo: 'BOT_RESPOSTA' },
       );
     }
 
-    await this.sender.enviarMensagem(telefone, `✅ Contrato atualizado para *${valor} kWh/mês*!\n\n_A alteração será refletida na próxima fatura._`);
+    await this.sender.enviarMensagem(telefone, `âœ… Contrato atualizado para *${valor} kWh/mÃªs*!\n\n_A alteraÃ§Ã£o serÃ¡ refletida na prÃ³xima fatura._`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
   }
 
@@ -3263,17 +3273,17 @@ export class WhatsappBotService {
       if (superPhone) {
         const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
         await this.sender.enviarMensagem(superPhone,
-          `❌ *Contrato encerrado via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${dados?.contratoId}`,
+          `âŒ *Contrato encerrado via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${dados?.contratoId}`,
           { tipoDisparo: 'BOT_RESPOSTA' },
         );
       }
-      await this.sender.enviarMensagem(telefone, '❌ Seu contrato foi *encerrado*.\n\nAgradecemos por ter sido cooperado! Caso mude de ideia, entre em contato conosco.');
+      await this.sender.enviarMensagem(telefone, 'âŒ Seu contrato foi *encerrado*.\n\nAgradecemos por ter sido cooperado! Caso mude de ideia, entre em contato conosco.');
       await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'CONCLUIDO', dadosTemp: undefined } });
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('voltar')) {
-      await this.sender.enviarMensagem(telefone, '👍 Ok, seu contrato continua ativo!');
+    if (corpo === '2' || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('voltar')) {
+      await this.sender.enviarMensagem(telefone, 'ðŸ‘ Ok, seu contrato continua ativo!');
       await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
       return;
     }
@@ -3281,7 +3291,7 @@ export class WhatsappBotService {
     await this.incrementarFallback(conversa, telefone, 'Responda *1* para confirmar encerramento ou *2* para voltar.');
   }
 
-  // ─── NPS automático pós-cadastro ──────────────────────────────────────
+  // â”€â”€â”€ NPS automÃ¡tico pÃ³s-cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private agendarNps(telefone: string, conversaId: string): void {
     setTimeout(async () => {
@@ -3296,9 +3306,9 @@ export class WhatsappBotService {
 
         await this.sender.enviarMensagem(
           telefone,
-          '😊 Olá! Sua solicitação de adesão à CoopereBR foi recebida!\n\n' +
-          'De 0 a 10, quanto você indicaria a CoopereBR para um amigo?\n' +
-          '(Digite apenas o número)',
+          'ðŸ˜Š OlÃ¡! Sua solicitaÃ§Ã£o de adesÃ£o Ã  CoopereBR foi recebida!\n\n' +
+          'De 0 a 10, quanto vocÃª indicaria a CoopereBR para um amigo?\n' +
+          '(Digite apenas o nÃºmero)',
         );
       } catch (err) {
         this.logger.warn(`Erro ao enviar NPS para ${telefone}: ${err.message}`);
@@ -3312,7 +3322,7 @@ export class WhatsappBotService {
     const nota = parseInt(corpo, 10);
 
     if (isNaN(nota) || nota < 0 || nota > 10) {
-      await this.sender.enviarMensagem(telefone, 'Por favor, digite um número de 0 a 10.');
+      await this.sender.enviarMensagem(telefone, 'Por favor, digite um nÃºmero de 0 a 10.');
       return;
     }
 
@@ -3325,7 +3335,7 @@ export class WhatsappBotService {
       },
     });
 
-    await this.sender.enviarMensagem(telefone, 'Obrigado pelo feedback! 💚 Isso nos ajuda a melhorar.');
+    await this.sender.enviarMensagem(telefone, 'Obrigado pelo feedback! ðŸ’š Isso nos ajuda a melhorar.');
     await this.finalizarConversa(conversa.id);
   }
 
