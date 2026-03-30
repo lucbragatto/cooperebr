@@ -128,13 +128,25 @@ export class ClubeVantagensService {
 
   async atualizarMetricas(cooperadoId: string, deltaKwh: number, deltaReceita: number) {
     // Garantir que existe progressão
-    await this.criarOuObterProgressao(cooperadoId);
+    const progressao = await this.criarOuObterProgressao(cooperadoId);
+
+    const agora = new Date();
+    const mesAtual = agora.toISOString().slice(0, 7); // "2026-03"
+    const anoAtual = String(agora.getFullYear());       // "2026"
+
+    // Reset mensal/anual se mudou o período
+    const resetMes = progressao.mesReferenciaKwh !== mesAtual;
+    const resetAno = progressao.anoReferenciaKwh !== anoAtual;
 
     await this.prisma.progressaoClube.update({
       where: { cooperadoId },
       data: {
         kwhIndicadoAcumulado: { increment: deltaKwh },
         receitaIndicados: { increment: deltaReceita },
+        kwhIndicadoMes: resetMes ? deltaKwh : { increment: deltaKwh },
+        mesReferenciaKwh: mesAtual,
+        kwhIndicadoAno: resetAno ? deltaKwh : { increment: deltaKwh },
+        anoReferenciaKwh: anoAtual,
       },
     });
 
@@ -313,42 +325,42 @@ export class ClubeVantagensService {
       return this.getRanking(cooperativaId, cooperadoLogadoId);
     }
 
-    // Para mes/ano, calculamos via histórico de promoções (HistoricoProgressao)
-    // Fallback: usar kwhAcumulado do histórico
     const agora = new Date();
-    let dataInicio: Date;
-    if (periodo === 'mes') {
-      dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
-    } else {
-      dataInicio = new Date(agora.getFullYear(), 0, 1);
-    }
+    const mesAtual = agora.toISOString().slice(0, 7);
+    const anoAtual = String(agora.getFullYear());
 
-    // Para período, usamos a diferença de kWh acumulado desde o início do período
-    // Simplificação: usamos kwhIndicadoAcumulado com data de avaliação no período
+    // Filtrar por quem tem dados no período corrente e ordenar pela métrica do período
+    const isMes = periodo === 'mes';
+    const campoKwh = isMes ? 'kwhIndicadoMes' : 'kwhIndicadoAno';
+    const campoRef = isMes ? 'mesReferenciaKwh' : 'anoReferenciaKwh';
+    const valorRef = isMes ? mesAtual : anoAtual;
+
     const top10 = await this.prisma.progressaoClube.findMany({
       where: {
         ...where,
-        dataUltimaAvaliacao: { gte: dataInicio },
+        [campoRef]: valorRef,
+        [campoKwh]: { gt: 0 },
       },
-      orderBy: { kwhIndicadoAcumulado: 'desc' },
+      orderBy: { [campoKwh]: 'desc' },
       take: 10,
       include: { cooperado: { select: { id: true, nomeCompleto: true } } },
     });
 
-    const maxKwh = top10.length > 0 ? top10[0].kwhIndicadoAcumulado : 1;
+    const maxKwh = top10.length > 0 ? (top10[0] as any)[campoKwh] : 1;
 
     return {
       periodo,
-      dataInicio: dataInicio.toISOString().slice(0, 10),
+      referencia: valorRef,
       top10: top10.map((p, i) => ({
         posicao: i + 1,
         cooperadoId: p.cooperado.id,
         nome: p.cooperado.nomeCompleto,
         nivelAtual: p.nivelAtual,
+        kwhPeriodo: (p as any)[campoKwh],
         kwhAcumulado: p.kwhIndicadoAcumulado,
         indicadosAtivos: p.indicadosAtivos,
         beneficioPercentual: p.beneficioPercentualAtual,
-        progressoRelativo: maxKwh > 0 ? Math.round((p.kwhIndicadoAcumulado / maxKwh) * 100) : 0,
+        progressoRelativo: maxKwh > 0 ? Math.round(((p as any)[campoKwh] / maxKwh) * 100) : 0,
       })),
     };
   }
