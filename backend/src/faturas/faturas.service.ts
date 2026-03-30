@@ -535,7 +535,7 @@ export class FaturasService {
 Retorne exatamente este formato:
 {
   "titular": "nome completo do titular",
-  "documento": "CPF ou CNPJ do titular (apenas números)",
+  "documento": "CPF ou CNPJ do titular (apenas números, 11 dígitos para CPF ou 14 para CNPJ)",
   "tipoDocumento": "CPF ou CNPJ",
   "enderecoInstalacao": "endereço completo da instalação",
   "bairro": "bairro",
@@ -577,7 +577,8 @@ Retorne exatamente este formato:
 }
 
 IMPORTANTE:
-- historicoConsumo deve conter APENAS os meses anteriores ao mês de referência desta fatura (não inclua o mês atual).
+- DOCUMENTO (CPF/CNPJ): Procure ESPECIFICAMENTE pelo label 'CPF:' ou 'CPF/CNPJ:' ou 'CNPJ:' na fatura. O CPF tem exatamente 11 dígitos numéricos (formato XXX.XXX.XXX-XX). NÃO confunda com o número da UC (unidade consumidora), que tem formato diferente (ex: 0.000.XXX.XXX.XXX-XX com mais dígitos). Extraia APENAS os dígitos do CPF/CNPJ encontrado no label correto.
+- historicoConsumo: Procure na fatura a tabela ou gráfico chamado 'HIST. CONSUMO', 'HISTÓRICO DE CONSUMO', 'Histórico de Consumo kWh' ou similar. Extraia TODOS os meses listados (geralmente 10-13 meses), EXCETO o mês de referência desta fatura. Para cada mês, extraia mesAno (MM/AAAA) e consumoKwh. O campo valorRS deve ser o valor total da fatura daquele mês se disponível, senão 0. NÃO retorne historicoConsumo vazio se houver dados de consumo anteriores na fatura — eles geralmente aparecem como gráfico de barras ou tabela no verso/rodapé.
 - Para cada mês do histórico, extraia o valor total da conta em reais (campo valorRS). Este histórico normalmente aparece como gráfico ou tabela no verso ou rodapé da fatura. O valorRS deve ser o valor total da fatura daquele mês (não apenas energia, mas o total pago incluindo todos os encargos e impostos). Se não disponível na fatura, usar 0.
 - valorBandeira: adicional R$/kWh da bandeira tarifária (se verde, 0).
 - contribIluminacaoPublica: valor fixo mensal em R$ da CIP/COSIP.

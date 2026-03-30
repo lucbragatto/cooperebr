@@ -1,12 +1,32 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
 import { ModeloCobranca, TipoCampanha } from '@prisma/client';
 
 @Injectable()
-export class PlanosService {
+export class PlanosService implements OnModuleInit {
+  private readonly logger = new Logger(PlanosService.name);
+
   constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    const count = await this.prisma.plano.count();
+    if (count === 0) {
+      await this.prisma.plano.create({
+        data: {
+          nome: 'Plano Básico',
+          descricao: 'Plano padrão com 20% de desconto na conta de energia',
+          modeloCobranca: ModeloCobranca.CREDITOS_COMPENSADOS,
+          descontoBase: 20,
+          publico: true,
+          ativo: true,
+          tipoCampanha: TipoCampanha.PADRAO,
+        },
+      });
+      this.logger.log('Plano padrão "Plano Básico" criado automaticamente');
+    }
+  }
 
   findAll() {
     return this.prisma.plano.findMany({

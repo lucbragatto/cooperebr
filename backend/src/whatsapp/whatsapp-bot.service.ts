@@ -1521,7 +1521,7 @@ export class WhatsappBotService {
             if (admin?.telefone) {
               await this.sender.enviarMensagem(
                 admin.telefone,
-                `ðŸ“‹ Novo cadastro via indicaÃ§Ã£o: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto}. Acompanhe o processo no painel.`,
+                `ðŸ“‹ Novo cadastro via indicaÃ§Ã£o: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}. Acompanhe o processo no painel.`,
               ).catch(() => {});
             }
           }
@@ -2416,7 +2416,7 @@ export class WhatsappBotService {
           if (admin?.telefone) {
             await this.sender.enviarMensagem(
               admin.telefone,
-              `ðŸ“‹ Novo cadastro express via indicaÃ§Ã£o:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto}`,
+              `ðŸ“‹ Novo cadastro express via indicaÃ§Ã£o:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}`,
             ).catch(() => {});
           }
         }
@@ -2786,7 +2786,7 @@ export class WhatsappBotService {
     if (cobrancas.length === 0) {
       await this.sender.enviarMensagem(
         telefone,
-        `OlÃ¡, ${cooperado.nomeCompleto.split(' ')[0]}! ðŸ˜Š\n\nVocÃª nÃ£o tem faturas pendentes no momento. EstÃ¡ tudo em dia! âœ…`,
+        `OlÃ¡, ${(cooperado.nomeCompleto?.trim() || 'Cooperado').split(' ')[0]}! ðŸ˜Š\n\nVocÃª nÃ£o tem faturas pendentes no momento. EstÃ¡ tudo em dia! âœ…`,
       );
       await this.resetarConversa(telefone);
       return;
@@ -2794,7 +2794,7 @@ export class WhatsappBotService {
 
     // Pegar cobranÃ§a mais recente (A_VENCER ou VENCIDO â€” jÃ¡ filtrado pelo service)
     const cobranca = cobrancas[0];
-    const nome = cooperado.nomeCompleto.split(' ')[0];
+    const nome = (cooperado.nomeCompleto?.trim() || 'Cooperado').split(' ')[0];
     const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
     const ano = cobranca.anoReferencia;
     const valor = Number(cobranca.valorLiquido).toFixed(2).replace('.', ',');
@@ -2828,7 +2828,7 @@ export class WhatsappBotService {
     texto += `OlÃ¡, ${nome}! ðŸ‘‹\n\n`;
     texto += `${cabecalho}\n\n`;
     texto += `${statusLabel}\n`;
-    texto += `ðŸ‘¤ ${cooperado.nomeCompleto}\n`;
+    texto += `ðŸ‘¤ ${cooperado.nomeCompleto?.trim() || 'Cooperado'}\n`;
     texto += `ðŸ“† CompetÃªncia: ${mesStr}/${ano}\n`;
     texto += `ðŸ’° Valor: *R$ ${valor}*\n`;
     texto += `ðŸ“… Vencimento: ${dataVencStr}\n`;
@@ -3201,7 +3201,7 @@ export class WhatsappBotService {
       if (superPhone) {
         const cooperado = await this.prisma.cooperado.findUnique({ where: { id: cooperadoId }, select: { nomeCompleto: true } });
         await this.sender.enviarMensagem(superPhone,
-          `â¸ï¸ *Contrato suspenso via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${contrato.id}`,
+          `â¸ï¸ *Contrato suspenso via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto?.trim() || 'Cooperado'}\nTelefone: ${telefone}\nContrato: ${contrato.id}`,
           { tipoDisparo: 'BOT_RESPOSTA' },
         );
       }
@@ -3249,7 +3249,7 @@ export class WhatsappBotService {
     if (superPhone) {
       const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
       await this.sender.enviarMensagem(superPhone,
-        `ðŸ”„ *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nAÃ§Ã£o: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
+        `ðŸ”„ *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto?.trim() || 'Cooperado'}\nAÃ§Ã£o: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
         { tipoDisparo: 'BOT_RESPOSTA' },
       );
     }
@@ -3273,7 +3273,7 @@ export class WhatsappBotService {
       if (superPhone) {
         const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
         await this.sender.enviarMensagem(superPhone,
-          `âŒ *Contrato encerrado via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto}\nTelefone: ${telefone}\nContrato: ${dados?.contratoId}`,
+          `âŒ *Contrato encerrado via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto?.trim() || 'Cooperado'}\nTelefone: ${telefone}\nContrato: ${dados?.contratoId}`,
           { tipoDisparo: 'BOT_RESPOSTA' },
         );
       }
