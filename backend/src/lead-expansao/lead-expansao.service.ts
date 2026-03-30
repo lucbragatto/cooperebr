@@ -57,6 +57,7 @@ export class LeadExpansaoService {
     distribuidora?: string;
     estado?: string;
     intencaoConfirmada?: boolean;
+    cooperativaId?: string;
   }) {
     const where: any = {};
     if (filtros?.distribuidora) {
@@ -67,6 +68,10 @@ export class LeadExpansaoService {
     }
     if (filtros?.intencaoConfirmada !== undefined) {
       where.intencaoConfirmada = filtros.intencaoConfirmada;
+    }
+    // SEC: ADMIN só vê leads da sua cooperativa
+    if (filtros?.cooperativaId) {
+      where.cooperativaId = filtros.cooperativaId;
     }
     const leads = await this.prisma.leadExpansao.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
@@ -82,8 +87,9 @@ export class LeadExpansaoService {
     return leadsComScore;
   }
 
-  async getResumoInvestidores() {
-    const leads = await this.prisma.leadExpansao.findMany();
+  async getResumoInvestidores(cooperativaId?: string) {
+    const where: any = cooperativaId ? { cooperativaId } : {};
+    const leads = await this.prisma.leadExpansao.findMany({ where });
 
     const agrupado: Record<string, {
       distribuidora: string;
@@ -128,14 +134,14 @@ export class LeadExpansaoService {
     return { resumo, totalReceitaLatente };
   }
 
-  async notificarLeadsPorDistribuidora(distribuidora: string) {
-    const leads = await this.prisma.leadExpansao.findMany({
-      where: {
-        distribuidora: { contains: distribuidora, mode: 'insensitive' },
-        intencaoConfirmada: true,
-        status: 'AGUARDANDO',
-      },
-    });
+  async notificarLeadsPorDistribuidora(distribuidora: string, cooperativaId?: string) {
+    const where: any = {
+      distribuidora: { contains: distribuidora, mode: 'insensitive' },
+      intencaoConfirmada: true,
+      status: 'AGUARDANDO',
+    };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+    const leads = await this.prisma.leadExpansao.findMany({ where });
 
     const agora = new Date();
     await this.prisma.leadExpansao.updateMany({
