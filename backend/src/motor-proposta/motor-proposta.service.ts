@@ -151,7 +151,11 @@ export class MotorPropostaService {
       const kwhContrato = consumoConsiderado; // quantidade de kWh (após descontar mínimo faturável)
       const economiaAbsoluta = descontoAbsoluto;
       const economiaPercentual = kwhApuradoBase > 0 ? (descontoAbsoluto / kwhApuradoBase) * 100 : 0;
-      const economiaMensal = descontoAbsoluto * kwhContrato;
+      // economiaMensal = valor da fatura × desconto%
+      // Fallback: se tarifaUnitSemTrib=0 (sem tarifa cadastrada), usar valorBase diretamente
+      const economiaMensal = tarifaUnitSemTrib > 0
+        ? descontoAbsoluto * kwhContrato
+        : valorBase * (descontoPercentual / 100);
       const economiaAnual = economiaMensal * 12;
       const mesesEquivalentes = valorBase > 0 ? economiaAnual / valorBase : 0;
 
