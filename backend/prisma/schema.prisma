@@ -26,6 +26,7 @@ model Cooperativa {
   multaAtraso           Decimal                @default(2.0) @db.Decimal(5, 2)
   jurosDiarios          Decimal                @default(0.033) @db.Decimal(5, 3)
   diasCarencia          Int                    @default(3)
+  intervaloMinCobrancaHoras Int                @default(24)
   // SaaS
   planoSaasId           String?
   planoSaas             PlanoSaas?             @relation(fields: [planoSaasId], references: [id])
@@ -389,8 +390,9 @@ model Cobranca {
   valorMulta         Decimal?       @db.Decimal(10, 2)
   valorJuros         Decimal?       @db.Decimal(10, 2)
   valorAtualizado    Decimal?       @db.Decimal(10, 2)
-  whatsappEnviadoEm      DateTime?
-  notificadoVencimento   Boolean        @default(false)
+  whatsappEnviadoEm          DateTime?
+  notificadoVencimento       Boolean        @default(false)
+  ultimaCobrancaWhatsappEm   DateTime?
   cobrancasBancarias CobrancaBancaria[]
   asaasCobrancas     AsaasCobranca[]
   beneficiosIndicacao BeneficioIndicacao[]
@@ -1307,6 +1309,10 @@ model ProgressaoClube {
   receitaIndicados        Float       @default(0)
   beneficioPercentualAtual Float      @default(0)
   beneficioReaisKwhAtual  Float       @default(0)
+  kwhIndicadoMes          Float       @default(0)
+  mesReferenciaKwh        String?
+  kwhIndicadoAno          Float       @default(0)
+  anoReferenciaKwh        String?
   dataUltimaPromocao      DateTime?
   dataUltimaAvaliacao     DateTime?
   createdAt               DateTime    @default(now())
