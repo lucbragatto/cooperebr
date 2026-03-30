@@ -17,6 +17,7 @@ import { EmailModule } from '../email/email.module';
 import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notificacao.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
 import { WhatsappNotificacoesService } from './whatsapp-notificacoes.service';
+import { WhatsappConversaJob } from './whatsapp-conversa.job';
 
 @Module({
   imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, AsaasModule, EmailModule],
@@ -32,6 +33,7 @@ import { WhatsappNotificacoesService } from './whatsapp-notificacoes.service';
     ModeloMensagemService,
     WhatsappFluxoMotorService,
     ConfiguracaoNotificacaoService,
+    WhatsappConversaJob,
     PrismaService,
   ],
   exports: [
