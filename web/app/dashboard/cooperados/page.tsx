@@ -14,12 +14,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search, Trash2 } from 'lucide-react';
+import { CheckCircle, Plus, MoreVertical, Eye, FileText, CreditCard, MessageCircle, Building2, Search, Trash2, ArrowRightLeft, Zap, Loader2 } from 'lucide-react';
 import AcoesLoteBar from '@/components/AcoesLoteBar';
+import DualListaConcessionaria from '@/components/DualListaConcessionaria';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import { getUsuario } from '@/lib/auth';
 import BadgeNivelClube from '@/components/BadgeNivelClube';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 
 interface ChecklistItem {
   label: string;
@@ -76,7 +80,7 @@ const CONTRATO_CONFIG: Record<string, { label: string; color: string }> = {
   ENCERRADO: { label: 'Encerrado', color: 'bg-gray-100 text-gray-600' },
 };
 
-function AcoesDropdown({ cooperado, onExcluir }: { cooperado: CooperadoLista; onExcluir?: (id: string, nome: string) => void }) {
+function AcoesDropdown({ cooperado, onExcluir, onMover, onAjustar }: { cooperado: CooperadoLista; onExcluir?: (id: string, nome: string) => void; onMover?: (c: CooperadoLista) => void; onAjustar?: (c: CooperadoLista) => void }) {
   const [aberto, setAberto] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const ref = useRef<HTMLDivElement>(null);
@@ -136,6 +140,22 @@ function AcoesDropdown({ cooperado, onExcluir }: { cooperado: CooperadoLista; on
               <MessageCircle className="h-4 w-4" /> Enviar WhatsApp
             </a>
           )}
+          {onMover && (
+            <button
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full"
+              onClick={() => { setAberto(false); onMover(cooperado); }}
+            >
+              <ArrowRightLeft className="h-4 w-4" /> Mover para outra usina
+            </button>
+          )}
+          {onAjustar && (
+            <button
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full"
+              onClick={() => { setAberto(false); onAjustar(cooperado); }}
+            >
+              <Zap className="h-4 w-4" /> Ajustar kWh / %
+            </button>
+          )}
           {onExcluir && (
             <button
               className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full"
@@ -187,6 +207,8 @@ function TabelaCooperados({
   onToggleAll,
   onExcluir,
   onStatusChange,
+  onMover,
+  onAjustar,
 }: {
   cooperados: CooperadoLista[];
   carregando: boolean;
@@ -196,6 +218,8 @@ function TabelaCooperados({
   onToggleAll: () => void;
   onExcluir: (id: string, nome: string) => void;
   onStatusChange: (id: string, status: string) => void;
+  onMover: (c: CooperadoLista) => void;
+  onAjustar: (c: CooperadoLista) => void;
 }) {
   const todosIds = cooperados.map(c => c.id);
   const todosSelecionados = cooperados.length > 0 && todosIds.every(id => selecionados.includes(id));
@@ -344,7 +368,7 @@ function TabelaCooperados({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <AcoesDropdown cooperado={c} onExcluir={onExcluir} />
+                  <AcoesDropdown cooperado={c} onExcluir={onExcluir} onMover={onMover} onAjustar={onAjustar} />
                 </TableCell>
               </TableRow>
             );
@@ -368,6 +392,34 @@ export default function CooperadosPage() {
   const usuario = getUsuario();
   const isSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
 
+  // Migração states
+  const [usinasDisponiveis, setUsinasDisponiveis] = useState<any[]>([]);
+  const [migrarAberto, setMigrarAberto] = useState(false);
+  const [migrarCooperado, setMigrarCooperado] = useState<CooperadoLista | null>(null);
+  const [migrarUsinaDestinoId, setMigrarUsinaDestinoId] = useState('');
+  const [migrarModo, setMigrarModo] = useState<'kwh' | 'percent'>('kwh');
+  const [migrarValor, setMigrarValor] = useState('');
+  const [migrarMotivo, setMigrarMotivo] = useState('');
+  const [migrarProcessando, setMigrarProcessando] = useState(false);
+  const [migrarMsg, setMigrarMsg] = useState('');
+  const [migrarSucesso, setMigrarSucesso] = useState<{ usinaOrigemId: string; usinaDestinoId: string } | null>(null);
+  const [dualListaAberto, setDualListaAberto] = useState(false);
+
+  // Ajustar states
+  const [ajustarAberto, setAjustarAberto] = useState(false);
+  const [ajustarCooperado, setAjustarCooperado] = useState<CooperadoLista | null>(null);
+  const [ajustarModo, setAjustarModo] = useState<'kwh' | 'percent'>('kwh');
+  const [ajustarValor, setAjustarValor] = useState('');
+  const [ajustarMotivo, setAjustarMotivo] = useState('');
+  const [ajustarProcessando, setAjustarProcessando] = useState(false);
+  const [ajustarMsg, setAjustarMsg] = useState('');
+
+  // Contratos do membro (para modais mover/ajustar com múltiplos contratos)
+  const [contratosDoMembro, setContratosDoMembro] = useState<any[]>([]);
+  const [contratosSelecionados, setContratosSelecionados] = useState<string[]>([]);
+  const [selecionarTodos, setSelecionarTodos] = useState(true);
+  const [carregandoContratos, setCarregandoContratos] = useState(false);
+
   const carregarCooperados = useCallback((search?: string) => {
     const params = search ? `?search=${encodeURIComponent(search)}` : '';
     api.get<CooperadoLista[]>(`/cooperados${params}`)
@@ -377,6 +429,7 @@ export default function CooperadosPage() {
 
   useEffect(() => {
     carregarCooperados();
+    api.get('/usinas').then((r) => setUsinasDisponiveis(r.data || [])).catch(() => {});
   }, [carregarCooperados]);
 
   useEffect(() => {
@@ -423,6 +476,105 @@ export default function CooperadosPage() {
       (c.telefone && c.telefone.toLowerCase().includes(termo))
     );
   });
+
+  async function buscarContratosAtivos(cooperadoId: string) {
+    setCarregandoContratos(true);
+    try {
+      const { data } = await api.get(`/contratos/cooperado/${cooperadoId}`);
+      const lista = Array.isArray(data) ? data : [];
+      const ativos = lista.filter((c: any) => c.status === 'ATIVO' || c.status === 'PENDENTE_ATIVACAO');
+      setContratosDoMembro(ativos);
+      setSelecionarTodos(true);
+      setContratosSelecionados(ativos.map((c: any) => c.id));
+    } catch {
+      setContratosDoMembro([]);
+      setContratosSelecionados([]);
+    } finally {
+      setCarregandoContratos(false);
+    }
+  }
+
+  function abrirMover(c: CooperadoLista) {
+    setMigrarCooperado(c);
+    setMigrarUsinaDestinoId('');
+    setMigrarModo('kwh');
+    setMigrarValor('');
+    setMigrarMotivo('');
+    setMigrarMsg('');
+    setMigrarSucesso(null);
+    setMigrarAberto(true);
+    buscarContratosAtivos(c.id);
+  }
+
+  function abrirAjustar(c: CooperadoLista) {
+    setAjustarCooperado(c);
+    setAjustarModo('kwh');
+    setAjustarValor('');
+    setAjustarMotivo('');
+    setAjustarMsg('');
+    setAjustarAberto(true);
+    buscarContratosAtivos(c.id);
+  }
+
+  async function handleMigrar() {
+    if (!migrarCooperado || contratosSelecionados.length === 0) return;
+    setMigrarProcessando(true);
+    setMigrarMsg('');
+    try {
+      for (const contratoId of contratosSelecionados) {
+        const body: any = {
+          cooperadoId: migrarCooperado.id,
+          usinaDestinoId: migrarUsinaDestinoId,
+          contratoId,
+          motivo: migrarMotivo || undefined,
+        };
+        if (migrarValor) {
+          if (migrarModo === 'kwh') body.kwhNovo = Number(migrarValor);
+          else body.percentualNovo = Number(migrarValor);
+        }
+        await api.post('/migracoes-usina/cooperado', body);
+      }
+      setMigrarAberto(false);
+      const origemUsina = cooperados.find(c => c.id === migrarCooperado.id);
+      const origemId = (origemUsina as any)?.usinaId || '';
+      setMigrarSucesso({ usinaOrigemId: origemId, usinaDestinoId: migrarUsinaDestinoId });
+      setToast(`Migracao realizada com sucesso! (${contratosSelecionados.length} contrato${contratosSelecionados.length > 1 ? 's' : ''})`);
+      setCarregando(true);
+      carregarCooperados(busca || undefined);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao migrar.';
+      setMigrarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setMigrarProcessando(false);
+    }
+  }
+
+  async function handleAjustar() {
+    if (!ajustarCooperado || contratosSelecionados.length === 0) return;
+    setAjustarProcessando(true);
+    setAjustarMsg('');
+    try {
+      for (const contratoId of contratosSelecionados) {
+        const body: any = {
+          cooperadoId: ajustarCooperado.id,
+          contratoId,
+          motivo: ajustarMotivo || undefined,
+        };
+        if (ajustarModo === 'kwh') body.kwhNovo = Number(ajustarValor);
+        else body.percentualNovo = Number(ajustarValor);
+        await api.post('/migracoes-usina/ajustar-kwh', body);
+      }
+      setAjustarAberto(false);
+      setToast(`Ajuste realizado com sucesso! (${contratosSelecionados.length} contrato${contratosSelecionados.length > 1 ? 's' : ''})`);
+      setCarregando(true);
+      carregarCooperados(busca || undefined);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao ajustar.';
+      setAjustarMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setAjustarProcessando(false);
+    }
+  }
 
   async function handleExcluir(id: string, nome: string) {
     if (!confirm(`Tem certeza que deseja excluir '${nome}'? Esta ação não pode ser desfeita.`)) return;
@@ -549,6 +701,8 @@ export default function CooperadosPage() {
             onToggle={toggleSelecionado}
             onToggleAll={toggleTodos}
             onExcluir={handleExcluir}
+            onMover={abrirMover}
+            onAjustar={abrirAjustar}
             onStatusChange={async (id, status) => {
               try {
                 await api.put(`/cooperados/${id}`, { status });
@@ -559,6 +713,167 @@ export default function CooperadosPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Banner de sucesso com botão para lista dual */}
+      {migrarSucesso && migrarSucesso.usinaOrigemId && (
+        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50 max-w-sm">
+          <p className="text-sm text-green-800 font-medium mb-2">Migracao concluida com sucesso!</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => { setDualListaAberto(true); }}>
+              Gerar listas para concessionaria
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setMigrarSucesso(null)}>Fechar</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Dual Lista */}
+      {dualListaAberto && migrarSucesso && (
+        <DualListaConcessionaria
+          usinaOrigemId={migrarSucesso.usinaOrigemId}
+          usinaDestinoId={migrarSucesso.usinaDestinoId}
+          onClose={() => { setDualListaAberto(false); setMigrarSucesso(null); }}
+        />
+      )}
+
+      {/* Dialog — Mover para outra usina */}
+      <Dialog open={migrarAberto} onOpenChange={setMigrarAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Mover para outra usina</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            {migrarCooperado && (
+              <p className="text-sm text-gray-600">Membro: <strong>{migrarCooperado.nomeCompleto}</strong> — Usina atual: {migrarCooperado.usinaVinculada || '—'}</p>
+            )}
+            {carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a mover:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((id: string) => id !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {c.usina?.nome ?? 'sem usina'} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — {contratosDoMembro[0].usina?.nome ?? 'sem usina'} — {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</p>
+            ) : null}
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Usina Destino</label>
+              <select className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" value={migrarUsinaDestinoId} onChange={(e) => setMigrarUsinaDestinoId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {usinasDisponiveis.map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.nome} — {u.cidade}/{u.estado}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="flex gap-2 mb-1">
+                <button className={`text-xs px-2 py-0.5 rounded ${migrarModo === 'kwh' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setMigrarModo('kwh')}>kWh</button>
+                <button className={`text-xs px-2 py-0.5 rounded ${migrarModo === 'percent' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setMigrarModo('percent')}>%</button>
+              </div>
+              <label className="text-xs text-gray-500 mb-0.5 block">{migrarModo === 'kwh' ? 'Novo kWh mensal' : 'Novo percentual (%)'}</label>
+              <input className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" type="number" step="0.01" value={migrarValor} onChange={(e) => setMigrarValor(e.target.value)} placeholder="Manter atual se vazio" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Motivo</label>
+              <textarea className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" rows={2} value={migrarMotivo} onChange={(e) => setMigrarMotivo(e.target.value)} placeholder="Ex: Melhor distribuicao de creditos" />
+            </div>
+            {migrarMsg && <p className={`text-sm ${migrarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{migrarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setMigrarAberto(false)}>Cancelar</Button>
+            <Button disabled={migrarProcessando || !migrarUsinaDestinoId || contratosSelecionados.length === 0} onClick={handleMigrar}>
+              {migrarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Confirmar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Ajustar kWh / % */}
+      <Dialog open={ajustarAberto} onOpenChange={setAjustarAberto}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Ajustar kWh / %</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            {ajustarCooperado && (
+              <p className="text-sm text-gray-600">Membro: <strong>{ajustarCooperado.nomeCompleto}</strong></p>
+            )}
+            {carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a ajustar:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((id: string) => id !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {c.usina?.nome ?? 'sem usina'} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — kWh atual: {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')}</p>
+            ) : null}
+            <div>
+              <div className="flex gap-2 mb-1">
+                <button className={`text-xs px-2 py-0.5 rounded ${ajustarModo === 'kwh' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setAjustarModo('kwh')}>kWh</button>
+                <button className={`text-xs px-2 py-0.5 rounded ${ajustarModo === 'percent' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setAjustarModo('percent')}>%</button>
+              </div>
+              <label className="text-xs text-gray-500 mb-0.5 block">{ajustarModo === 'kwh' ? 'Novo kWh mensal' : 'Novo percentual (%)'}</label>
+              <input className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" type="number" step="0.01" value={ajustarValor} onChange={(e) => setAjustarValor(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-0.5 block">Motivo</label>
+              <textarea className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" rows={2} value={ajustarMotivo} onChange={(e) => setAjustarMotivo(e.target.value)} />
+            </div>
+            {ajustarMsg && <p className={`text-sm ${ajustarMsg.toLowerCase().includes('erro') ? 'text-red-500' : 'text-green-600'}`}>{ajustarMsg}</p>}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setAjustarAberto(false)}>Cancelar</Button>
+            <Button disabled={ajustarProcessando || !ajustarValor || contratosSelecionados.length === 0} onClick={handleAjustar}>
+              {ajustarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Ajustar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -23,6 +23,8 @@ export interface MigrarCooperadoDto {
   realizadoPorId: string;
   /** null = SUPER_ADMIN (sem restrição de tenant); string = validação obrigatória */
   cooperativaId: string | null;
+  /** Se informado, migra apenas este contrato específico; senão, pega o primeiro ativo */
+  contratoId?: string;
 }
 
 export interface AjustarKwhDto {
@@ -33,6 +35,8 @@ export interface AjustarKwhDto {
   realizadoPorId: string;
   /** null = SUPER_ADMIN (sem restrição de tenant); string = validação obrigatória */
   cooperativaId: string | null;
+  /** Se informado, ajusta apenas este contrato específico; senão, pega o primeiro ativo */
+  contratoId?: string;
 }
 
 export interface MigrarTodosDto {
@@ -79,14 +83,23 @@ export class MigracoesUsinaService {
       }
     }
 
-    // 1. Buscar contrato ativo do cooperado
-    const contratoAtivo = await this.prisma.contrato.findFirst({
-      where: {
-        cooperadoId: dto.cooperadoId,
-        status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
-      },
-      include: { cooperado: true, uc: true, usina: true },
-    });
+    // 1. Buscar contrato ativo do cooperado (específico ou primeiro encontrado)
+    const contratoAtivo = dto.contratoId
+      ? await this.prisma.contrato.findFirst({
+          where: {
+            id: dto.contratoId,
+            cooperadoId: dto.cooperadoId,
+            status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+          },
+          include: { cooperado: true, uc: true, usina: true },
+        })
+      : await this.prisma.contrato.findFirst({
+          where: {
+            cooperadoId: dto.cooperadoId,
+            status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+          },
+          include: { cooperado: true, uc: true, usina: true },
+        });
     if (!contratoAtivo) {
       throw new NotFoundException(
         'Cooperado não possui contrato ativo para migração.',
@@ -268,13 +281,22 @@ export class MigracoesUsinaService {
       }
     }
 
-    const contratoAtivo = await this.prisma.contrato.findFirst({
-      where: {
-        cooperadoId: dto.cooperadoId,
-        status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
-      },
-      include: { usina: true, cooperado: true },
-    });
+    const contratoAtivo = dto.contratoId
+      ? await this.prisma.contrato.findFirst({
+          where: {
+            id: dto.contratoId,
+            cooperadoId: dto.cooperadoId,
+            status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+          },
+          include: { usina: true, cooperado: true },
+        })
+      : await this.prisma.contrato.findFirst({
+          where: {
+            cooperadoId: dto.cooperadoId,
+            status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+          },
+          include: { usina: true, cooperado: true },
+        });
     if (!contratoAtivo) {
       throw new NotFoundException(
         'Cooperado não possui contrato ativo para ajuste.',

@@ -49,6 +49,7 @@ export class MigracoesUsinaController {
       realizadoPorId: req.user.id,
       // SEC-07: cooperativaId sempre do token, nunca do body
       cooperativaId: tenantId(req),
+      contratoId: body.contratoId || undefined,
     });
   }
 
@@ -63,6 +64,7 @@ export class MigracoesUsinaController {
       realizadoPorId: req.user.id,
       // SEC-07: cooperativaId sempre do token, nunca do body
       cooperativaId: tenantId(req),
+      contratoId: body.contratoId || undefined,
     });
   }
 

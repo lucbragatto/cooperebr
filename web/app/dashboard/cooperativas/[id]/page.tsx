@@ -89,6 +89,12 @@ export default function CooperativaDetailPage() {
   const [ajustarProcessando, setAjustarProcessando] = useState(false);
   const [ajustarMsg, setAjustarMsg] = useState('');
 
+  // Contratos do membro (múltiplos contratos)
+  const [contratosDoMembro, setContratosDoMembro] = useState<any[]>([]);
+  const [contratosSelecionados, setContratosSelecionados] = useState<string[]>([]);
+  const [selecionarTodos, setSelecionarTodos] = useState(true);
+  const [carregandoContratos, setCarregandoContratos] = useState(false);
+
   useEffect(() => {
     api.get<Cooperativa>(`/cooperativas/${id}`)
       .then((r) => setCoop(r.data))
@@ -108,21 +114,41 @@ export default function CooperativaDetailPage() {
       .catch(() => {});
   }
 
+  async function buscarContratosAtivos(cooperadoId: string) {
+    setCarregandoContratos(true);
+    try {
+      const { data } = await api.get(`/contratos/cooperado/${cooperadoId}`);
+      const lista = Array.isArray(data) ? data : [];
+      const ativos = lista.filter((c: any) => c.status === 'ATIVO' || c.status === 'PENDENTE_ATIVACAO');
+      setContratosDoMembro(ativos);
+      setSelecionarTodos(true);
+      setContratosSelecionados(ativos.map((c: any) => c.id));
+    } catch {
+      setContratosDoMembro([]);
+      setContratosSelecionados([]);
+    } finally {
+      setCarregandoContratos(false);
+    }
+  }
+
   async function handleMigrar() {
-    if (!migrarMembro) return;
+    if (!migrarMembro || contratosSelecionados.length === 0) return;
     setMigrarProcessando(true);
     setMigrarMsg('');
     try {
-      const body: any = {
-        cooperadoId: migrarMembro.id,
-        usinaDestinoId: migrarUsinaDestinoId,
-        motivo: migrarMotivo || undefined,
-      };
-      if (migrarValor) {
-        if (migrarModo === 'kwh') body.kwhNovo = Number(migrarValor);
-        else body.percentualNovo = Number(migrarValor);
+      for (const contratoId of contratosSelecionados) {
+        const body: any = {
+          cooperadoId: migrarMembro.id,
+          usinaDestinoId: migrarUsinaDestinoId,
+          contratoId,
+          motivo: migrarMotivo || undefined,
+        };
+        if (migrarValor) {
+          if (migrarModo === 'kwh') body.kwhNovo = Number(migrarValor);
+          else body.percentualNovo = Number(migrarValor);
+        }
+        await api.post('/migracoes-usina/cooperado', body);
       }
-      await api.post('/migracoes-usina/cooperado', body);
       setMigrarAberto(false);
       setMigrarSucesso({ usinaOrigemId: (migrarMembro as any).usinaId || '', usinaDestinoId: migrarUsinaDestinoId });
       recarregarMembros();
@@ -135,17 +161,20 @@ export default function CooperativaDetailPage() {
   }
 
   async function handleAjustar() {
-    if (!ajustarMembro) return;
+    if (!ajustarMembro || contratosSelecionados.length === 0) return;
     setAjustarProcessando(true);
     setAjustarMsg('');
     try {
-      const body: any = {
-        cooperadoId: ajustarMembro.id,
-        motivo: ajustarMotivo || undefined,
-      };
-      if (ajustarModo === 'kwh') body.kwhNovo = Number(ajustarValor);
-      else body.percentualNovo = Number(ajustarValor);
-      await api.post('/migracoes-usina/ajustar-kwh', body);
+      for (const contratoId of contratosSelecionados) {
+        const body: any = {
+          cooperadoId: ajustarMembro.id,
+          contratoId,
+          motivo: ajustarMotivo || undefined,
+        };
+        if (ajustarModo === 'kwh') body.kwhNovo = Number(ajustarValor);
+        else body.percentualNovo = Number(ajustarValor);
+        await api.post('/migracoes-usina/ajustar-kwh', body);
+      }
       setAjustarAberto(false);
       recarregarMembros();
     } catch (e: any) {
@@ -348,6 +377,7 @@ export default function CooperativaDetailPage() {
                                 setMigrarMsg('');
                                 setMigrarSucesso(null);
                                 setMigrarAberto(true);
+                                buscarContratosAtivos(m.id);
                               }}
                             >
                               <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -364,6 +394,7 @@ export default function CooperativaDetailPage() {
                                 setAjustarMotivo('');
                                 setAjustarMsg('');
                                 setAjustarAberto(true);
+                                buscarContratosAtivos(m.id);
                               }}
                             >
                               <Zap className="h-3.5 w-3.5" />
@@ -407,6 +438,39 @@ export default function CooperativaDetailPage() {
             {migrarMembro && (
               <p className="text-sm text-gray-600">Membro: <strong>{migrarMembro.nomeCompleto}</strong></p>
             )}
+            {carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a mover:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((cid: string) => cid !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {c.usina?.nome ?? 'sem usina'} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — {contratosDoMembro[0].usina?.nome ?? 'sem usina'} — {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</p>
+            ) : null}
             <div>
               <label className="text-xs text-gray-500 mb-0.5 block">Usina Destino</label>
               <select className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" value={migrarUsinaDestinoId} onChange={(e) => setMigrarUsinaDestinoId(e.target.value)}>
@@ -432,9 +496,9 @@ export default function CooperativaDetailPage() {
           </div>
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setMigrarAberto(false)}>Cancelar</Button>
-            <Button disabled={migrarProcessando || !migrarUsinaDestinoId} onClick={handleMigrar}>
+            <Button disabled={migrarProcessando || !migrarUsinaDestinoId || contratosSelecionados.length === 0} onClick={handleMigrar}>
               {migrarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Confirmar
+              Confirmar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -475,6 +539,39 @@ export default function CooperativaDetailPage() {
             {ajustarMembro && (
               <p className="text-sm text-gray-600">Membro: <strong>{ajustarMembro.nomeCompleto}</strong></p>
             )}
+            {carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a ajustar:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((cid: string) => cid !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {c.usina?.nome ?? 'sem usina'} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — kWh atual: {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')}</p>
+            ) : null}
             <div>
               <div className="flex gap-2 mb-1">
                 <button className={`text-xs px-2 py-0.5 rounded ${ajustarModo === 'kwh' ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => setAjustarModo('kwh')}>kWh</button>
@@ -491,9 +588,9 @@ export default function CooperativaDetailPage() {
           </div>
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setAjustarAberto(false)}>Cancelar</Button>
-            <Button disabled={ajustarProcessando || !ajustarValor} onClick={handleAjustar}>
+            <Button disabled={ajustarProcessando || !ajustarValor || contratosSelecionados.length === 0} onClick={handleAjustar}>
               {ajustarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Ajustar
+              Ajustar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>

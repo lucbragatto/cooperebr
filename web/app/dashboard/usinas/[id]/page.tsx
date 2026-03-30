@@ -11,7 +11,8 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import type { Usina, StatusUsina } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users, DollarSign, Activity, BarChart3 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users, DollarSign, Activity, BarChart3, FileSpreadsheet } from 'lucide-react';
+import DualListaConcessionaria from '@/components/DualListaConcessionaria';
 import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
@@ -114,6 +115,19 @@ export default function UsinaDetailPage() {
   const [usinasDisponiveis, setUsinasDisponiveis] = useState<any[]>([]);
   const [historicoMigracoes, setHistoricoMigracoes] = useState<any[]>([]);
 
+  // Contratos do membro selecionado (múltiplos contratos)
+  const [contratosDoMembro, setContratosDoMembro] = useState<any[]>([]);
+  const [contratosSelecionados, setContratosSelecionados] = useState<string[]>([]);
+  const [selecionarTodos, setSelecionarTodos] = useState(true);
+  const [carregandoContratos, setCarregandoContratos] = useState(false);
+
+  // Dual lista + inline adjust
+  const [dualListaAberto, setDualListaAberto] = useState(false);
+  const [migrarSucessoDestino, setMigrarSucessoDestino] = useState('');
+  const [inlineAjustarId, setInlineAjustarId] = useState('');
+  const [inlineAjustarValor, setInlineAjustarValor] = useState('');
+  const [inlineAjustarProcessando, setInlineAjustarProcessando] = useState(false);
+
   const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
     resolver: zodResolver(usinaSchema) as any,
   });
@@ -208,19 +222,41 @@ export default function UsinaDetailPage() {
     }
   }
 
+  async function buscarContratosAtivos(cooperadoId: string) {
+    if (!cooperadoId) { setContratosDoMembro([]); setContratosSelecionados([]); return; }
+    setCarregandoContratos(true);
+    try {
+      const { data } = await api.get(`/contratos/cooperado/${cooperadoId}`);
+      const lista = Array.isArray(data) ? data : [];
+      const ativos = lista.filter((c: any) => c.status === 'ATIVO' || c.status === 'PENDENTE_ATIVACAO');
+      setContratosDoMembro(ativos);
+      setSelecionarTodos(true);
+      setContratosSelecionados(ativos.map((c: any) => c.id));
+    } catch {
+      setContratosDoMembro([]);
+      setContratosSelecionados([]);
+    } finally {
+      setCarregandoContratos(false);
+    }
+  }
+
   async function handleMigrarCooperado() {
+    if (contratosSelecionados.length === 0) return;
     setMigrarProcessando(true);
     setMigrarMsg('');
     try {
-      await api.post('/migracoes-usina/cooperado', {
-        cooperadoId: migrarCooperadoId,
-        usinaDestinoId: migrarUsinaDestinoId,
-        kwhNovo: migrarKwhNovo ? Number(migrarKwhNovo) : undefined,
-        motivo: migrarMotivo || undefined,
-      });
+      for (const contratoId of contratosSelecionados) {
+        await api.post('/migracoes-usina/cooperado', {
+          cooperadoId: migrarCooperadoId,
+          usinaDestinoId: migrarUsinaDestinoId,
+          contratoId,
+          kwhNovo: migrarKwhNovo ? Number(migrarKwhNovo) : undefined,
+          motivo: migrarMotivo || undefined,
+        });
+      }
       setMigrarMsg('Migração realizada com sucesso!');
       setMigrarModalAberto(false);
-      // Refresh data
+      setMigrarSucessoDestino(migrarUsinaDestinoId);
       api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
       api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
@@ -233,14 +269,18 @@ export default function UsinaDetailPage() {
   }
 
   async function handleAjustarKwh() {
+    if (contratosSelecionados.length === 0) return;
     setAjustarProcessando(true);
     setAjustarMsg('');
     try {
-      await api.post('/migracoes-usina/ajustar-kwh', {
-        cooperadoId: ajustarCooperadoId,
-        kwhNovo: ajustarKwhNovo ? Number(ajustarKwhNovo) : undefined,
-        motivo: ajustarMotivo || undefined,
-      });
+      for (const contratoId of contratosSelecionados) {
+        await api.post('/migracoes-usina/ajustar-kwh', {
+          cooperadoId: ajustarCooperadoId,
+          contratoId,
+          kwhNovo: ajustarKwhNovo ? Number(ajustarKwhNovo) : undefined,
+          motivo: ajustarMotivo || undefined,
+        });
+      }
       setAjustarMsg('Ajuste realizado com sucesso!');
       setAjustarModalAberto(false);
       api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
@@ -265,6 +305,7 @@ export default function UsinaDetailPage() {
       });
       setMigrarTodosResultado(data);
       setMigrarTodosMsg(`Migração concluída: ${data.sucesso}/${data.total} com sucesso.`);
+      setMigrarSucessoDestino(migrarTodosDestinoId);
       api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
       api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
@@ -273,6 +314,25 @@ export default function UsinaDetailPage() {
       setMigrarTodosMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setMigrarTodosProcessando(false);
+    }
+  }
+
+  async function handleInlineAjustar(cooperadoId: string) {
+    if (!inlineAjustarValor) return;
+    setInlineAjustarProcessando(true);
+    try {
+      await api.post('/migracoes-usina/ajustar-kwh', {
+        cooperadoId,
+        percentualNovo: Number(inlineAjustarValor),
+      });
+      setInlineAjustarId('');
+      setInlineAjustarValor('');
+      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
+    } catch {
+      setMensagem('Erro ao ajustar percentual.');
+    } finally {
+      setInlineAjustarProcessando(false);
     }
   }
 
@@ -576,12 +636,13 @@ export default function UsinaDetailPage() {
                     <TableHead>% Usina</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Data Adesão</TableHead>
+                    <TableHead className="text-right">Acoes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {cooperadosAlocados.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-gray-400 py-6">
+                      <TableCell colSpan={7} className="text-center text-gray-400 py-6">
                         {`Nenhum ${tipoMembro.toLowerCase()} alocado nesta usina`}
                       </TableCell>
                     </TableRow>
@@ -598,6 +659,36 @@ export default function UsinaDetailPage() {
                           </span>
                         </TableCell>
                         <TableCell>{new Date(c.dataAdesao).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-right">
+                          {inlineAjustarId === c.cooperadoId ? (
+                            <div className="flex items-center gap-1 justify-end">
+                              <input
+                                className="w-16 border border-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                                type="number"
+                                step="0.01"
+                                placeholder="%"
+                                value={inlineAjustarValor}
+                                onChange={(e) => setInlineAjustarValor(e.target.value)}
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineAjustar(c.cooperadoId); if (e.key === 'Escape') setInlineAjustarId(''); }}
+                              />
+                              <Button size="sm" className="h-6 px-2 text-xs" disabled={inlineAjustarProcessando} onClick={() => handleInlineAjustar(c.cooperadoId)}>
+                                {inlineAjustarProcessando ? <Loader2 className="h-3 w-3 animate-spin" /> : 'OK'}
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => setInlineAjustarId('')}>X</Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              title="Ajustar %"
+                              onClick={() => { setInlineAjustarId(c.cooperadoId); setInlineAjustarValor(''); }}
+                            >
+                              <Zap className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -785,13 +876,46 @@ export default function UsinaDetailPage() {
           <div className="space-y-4 mt-2">
             <div>
               <label className={lbl}>Cooperado (selecione da lista)</label>
-              <select className={selCls} value={migrarCooperadoId} onChange={(e) => setMigrarCooperadoId(e.target.value)}>
+              <select className={selCls} value={migrarCooperadoId} onChange={(e) => { setMigrarCooperadoId(e.target.value); buscarContratosAtivos(e.target.value); }}>
                 <option value="">Selecione...</option>
                 {(distribuicao?.cooperados ?? []).map((c: any) => (
                   <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — UC {c.ucNumero}</option>
                 ))}
               </select>
             </div>
+            {migrarCooperadoId && (carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a mover:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((cid: string) => cid !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {c.usina?.nome ?? 'sem usina'} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</p>
+            ) : null)}
             <div>
               <label className={lbl}>Usina Destino</label>
               <select className={selCls} value={migrarUsinaDestinoId} onChange={(e) => setMigrarUsinaDestinoId(e.target.value)}>
@@ -813,9 +937,9 @@ export default function UsinaDetailPage() {
           </div>
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setMigrarModalAberto(false)}>Cancelar</Button>
-            <Button disabled={migrarProcessando || !migrarCooperadoId || !migrarUsinaDestinoId} onClick={handleMigrarCooperado}>
+            <Button disabled={migrarProcessando || !migrarCooperadoId || !migrarUsinaDestinoId || contratosSelecionados.length === 0} onClick={handleMigrarCooperado}>
               {migrarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Migrar
+              Migrar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -828,13 +952,46 @@ export default function UsinaDetailPage() {
           <div className="space-y-4 mt-2">
             <div>
               <label className={lbl}>Cooperado</label>
-              <select className={selCls} value={ajustarCooperadoId} onChange={(e) => setAjustarCooperadoId(e.target.value)}>
+              <select className={selCls} value={ajustarCooperadoId} onChange={(e) => { setAjustarCooperadoId(e.target.value); buscarContratosAtivos(e.target.value); }}>
                 <option value="">Selecione...</option>
                 {(distribuicao?.cooperados ?? []).map((c: any) => (
                   <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — {c.kwhContratado} kWh</option>
                 ))}
               </select>
             </div>
+            {ajustarCooperadoId && (carregandoContratos ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando contratos...</div>
+            ) : contratosDoMembro.length > 1 ? (
+              <div>
+                <label className="text-xs text-gray-500 mb-2 block">Contratos a ajustar:</label>
+                <div className="space-y-1 border rounded p-2 bg-gray-50">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={selecionarTodos} onChange={e => {
+                      setSelecionarTodos(e.target.checked);
+                      setContratosSelecionados(e.target.checked ? contratosDoMembro.map(c => c.id) : []);
+                    }} />
+                    <span className="font-medium">Todos os contratos ativos ({contratosDoMembro.length})</span>
+                  </label>
+                  {contratosDoMembro.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                      <input type="checkbox"
+                        checked={contratosSelecionados.includes(c.id)}
+                        onChange={e => {
+                          const novo = e.target.checked
+                            ? [...contratosSelecionados, c.id]
+                            : contratosSelecionados.filter((cid: string) => cid !== c.id);
+                          setContratosSelecionados(novo);
+                          setSelecionarTodos(novo.length === contratosDoMembro.length);
+                        }}
+                      />
+                      <span>{c.numero} — {Number(c.kwhContrato ?? 0).toLocaleString('pt-BR')} kWh</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : contratosDoMembro.length === 1 ? (
+              <p className="text-xs text-gray-500">Contrato: {contratosDoMembro[0].numero} — kWh atual: {Number(contratosDoMembro[0].kwhContrato ?? 0).toLocaleString('pt-BR')}</p>
+            ) : null)}
             <div>
               <label className={lbl}>Novo kWh mensal</label>
               <input className={cls} type="number" step="0.01" value={ajustarKwhNovo} onChange={(e) => setAjustarKwhNovo(e.target.value)} />
@@ -847,9 +1004,9 @@ export default function UsinaDetailPage() {
           </div>
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setAjustarModalAberto(false)}>Cancelar</Button>
-            <Button disabled={ajustarProcessando || !ajustarCooperadoId || !ajustarKwhNovo} onClick={handleAjustarKwh}>
+            <Button disabled={ajustarProcessando || !ajustarCooperadoId || !ajustarKwhNovo || contratosSelecionados.length === 0} onClick={handleAjustarKwh}>
               {ajustarProcessando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Ajustar
+              Ajustar{contratosSelecionados.length > 1 ? ` (${contratosSelecionados.length} contratos)` : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -897,6 +1054,28 @@ export default function UsinaDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Banner pós-migração com dual lista */}
+      {migrarSucessoDestino && (
+        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50 max-w-sm">
+          <p className="text-sm text-green-800 font-medium mb-2">Migracao concluida. Gerar listas para concessionaria?</p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setDualListaAberto(true)}>
+              <FileSpreadsheet className="h-4 w-4 mr-1" />
+              Gerar listas
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setMigrarSucessoDestino('')}>Fechar</Button>
+          </div>
+        </div>
+      )}
+
+      {dualListaAberto && migrarSucessoDestino && (
+        <DualListaConcessionaria
+          usinaOrigemId={id}
+          usinaDestinoId={migrarSucessoDestino}
+          onClose={() => { setDualListaAberto(false); setMigrarSucessoDestino(''); }}
+        />
+      )}
 
       {/* Sheet — Editar Usina */}
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
