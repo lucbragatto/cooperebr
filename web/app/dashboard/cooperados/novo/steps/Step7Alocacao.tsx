@@ -105,8 +105,11 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
     }
     setSalvando(true); setErro('');
     try {
-      // 1. Criar cooperado
-      const { data: novoCoop } = await api.post<{ id: string }>('/cooperados', {
+      // ── Montar payload atômico ──
+      const selecionados = faturaData.historico.filter((_, i) => faturaData.mesesSelecionados.has(i));
+      const mediaKwh = selecionados.length > 0 ? selecionados.reduce((acc, m) => acc + m.consumoKwh, 0) / selecionados.length : 0;
+
+      const payload: Record<string, unknown> = {
         nomeCompleto: dadosPessoais.nomeCompleto,
         cpf: dadosPessoais.cpf.replace(/\D/g, ''),
         email: dadosPessoais.email,
@@ -117,13 +120,11 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
         representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,
         preferenciaCobranca: resolverPreferenciaCobranca(tipoPreferencia, diaFixo, diasApos),
-      });
-      const cid = novoCoop.id;
-      setCooperadoId(cid);
+      };
 
-      // 2. Criar UC
+      // UC (se tem dados OCR)
       if (ocr) {
-        await api.post('/ucs', {
+        payload.uc = {
           numero: ocr.numeroUC || `UC-${Date.now()}`,
           endereco: ocr.enderecoInstalacao || dadosPessoais.endereco,
           cidade: ocr.cidade || dadosPessoais.cidade,
@@ -134,11 +135,31 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
           distribuidora: ocr.distribuidora || undefined,
           classificacao: ocr.classificacao || undefined,
           codigoMedidor: ocr.codigoMedidor || undefined,
-          cooperadoId: cid,
-        });
+        };
       }
 
-      // 3. Upload documentos
+      // Contrato (se tem usina selecionada)
+      if (!semVaga && usinaSelecionada) {
+        payload.contrato = {
+          usinaId: usinaSelecionada,
+          dataInicio: new Date().toISOString().slice(0, 10),
+          percentualDesconto: simulacaoData.simulacao!.desconto,
+          kwhContrato: Math.round(mediaKwh),
+          planoId: simulacaoData.planoSelecionadoId || undefined,
+        };
+      }
+
+      // Lista de espera (se sem vaga)
+      if (semVaga) {
+        payload.listaEspera = true;
+      }
+
+      // ── Chamada atômica única ──
+      const { data: resultado } = await api.post<{ cooperado: { id: string } }>('/cooperados/cadastro-completo', payload);
+      const cid = resultado.cooperado.id;
+      setCooperadoId(cid);
+
+      // Upload documentos (multipart — permanece separado, mas cooperado já existe)
       for (const doc of documentosData.documentos) {
         if (doc.arquivo) {
           const formData = new FormData();
@@ -150,38 +171,8 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         }
       }
 
-      // 4. Criar contrato se tem usina selecionada
-      if (!semVaga && usinaSelecionada) {
-        const selecionados = faturaData.historico.filter((_, i) => faturaData.mesesSelecionados.has(i));
-        const mediaKwh = selecionados.length > 0 ? selecionados.reduce((acc, m) => acc + m.consumoKwh, 0) / selecionados.length : 0;
-
-        try {
-          await api.post('/contratos', {
-            cooperadoId: cid,
-            usinaId: usinaSelecionada,
-            dataInicio: new Date().toISOString().slice(0, 10),
-            percentualDesconto: simulacaoData.simulacao!.desconto,
-            kwhContrato: Math.round(mediaKwh),
-            planoId: simulacaoData.planoSelecionadoId || undefined,
-          });
-        } catch (err) {
-          console.error('Erro ao gerar contrato:', err);
-          setErro('Erro ao gerar contrato. Cooperado cadastrado, mas entre em contato com o suporte para emitir manualmente.');
-        }
-      }
-
-      // 5. Lista de espera se sem vaga
-      if (semVaga) {
-        try {
-          await api.post('/lista-espera', { cooperadoId: cid });
-        } catch {
-          // fallback
-        }
-      }
-
-      // 6. Processar fatura se tem dados OCR
+      // Motor de proposta (enriquecimento — não bloqueia cadastro)
       if (ocr && faturaData.historico.length > 0) {
-        const selecionados = faturaData.historico.filter((_, i) => faturaData.mesesSelecionados.has(i));
         try {
           await api.post('/motor-proposta/calcular', {
             cooperadoId: cid,
@@ -192,7 +183,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
             tipoFornecimento: ocr.tipoFornecimento || undefined,
           });
         } catch {
-          // Proposta complementar
+          // Proposta complementar — não impede conclusão
         }
       }
 

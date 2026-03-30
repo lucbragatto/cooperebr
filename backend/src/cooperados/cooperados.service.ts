@@ -1,6 +1,7 @@
 /// <reference types="multer" />
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { StatusCooperado, TipoCooperado } from '@prisma/client';
+import { Prisma, StatusCooperado, TipoCooperado } from '@prisma/client';
+import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
@@ -9,6 +10,8 @@ import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.servic
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
+import * as jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 const BUCKET = 'documentos-cooperados';
 
@@ -409,6 +412,176 @@ export class CooperadosService {
     this.emailService.enviarBoasVindas(cooperado).catch(() => {});
 
     return cooperado;
+  }
+
+  /**
+   * Cadastro completo atômico: cooperado + UC + contrato (ou lista de espera)
+   * em uma única transação Prisma. Rollback automático se qualquer etapa falhar.
+   */
+  async cadastroCompleto(dto: CadastroCompletoDto, cooperativaId?: string) {
+    const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Criar cooperado
+      const cooperado = await tx.cooperado.create({
+        data: {
+          nomeCompleto: dto.nomeCompleto,
+          cpf: dto.cpf,
+          email: dto.email,
+          telefone: dto.telefone,
+          status: dto.status ?? 'PENDENTE',
+          tipoPessoa: dto.tipoPessoa,
+          tipoCooperado: dto.tipoCooperado,
+          representanteLegalNome: dto.representanteLegalNome,
+          representanteLegalCpf: dto.representanteLegalCpf,
+          representanteLegalCargo: dto.representanteLegalCargo,
+          cooperativaId: dto.cooperativaId || cooperativaId,
+          preferenciaCobranca: dto.preferenciaCobranca,
+        },
+      });
+
+      // 2. Criar UC (se fornecida)
+      let uc: any = null;
+      if (dto.uc) {
+        uc = await tx.uc.create({
+          data: {
+            numero: dto.uc.numero,
+            endereco: dto.uc.endereco,
+            cidade: dto.uc.cidade,
+            estado: dto.uc.estado,
+            cep: dto.uc.cep,
+            bairro: dto.uc.bairro,
+            numeroUC: dto.uc.numeroUC,
+            distribuidora: dto.uc.distribuidora,
+            classificacao: dto.uc.classificacao,
+            codigoMedidor: dto.uc.codigoMedidor,
+            cooperadoId: cooperado.id,
+            cooperativaId: dto.cooperativaId || cooperativaId,
+          },
+        });
+      }
+
+      // 3. Criar contrato (se dados fornecidos e UC existe)
+      let contrato: any = null;
+      if (dto.contrato && uc) {
+        const { usinaId, planoId, dataInicio, percentualDesconto, kwhContrato, kwhContratoAnual } = dto.contrato;
+
+        // 3a. Validar regra ANEEL: mesma distribuidora UC x Usina
+        if (usinaId) {
+          const usina = await tx.usina.findUnique({ where: { id: usinaId }, select: { distribuidora: true } });
+          if (uc.distribuidora && usina?.distribuidora) {
+            const ucDist = uc.distribuidora.toUpperCase().trim();
+            const usinaDist = usina.distribuidora.toUpperCase().trim();
+            if (ucDist !== usinaDist && !ucDist.includes(usinaDist) && !usinaDist.includes(ucDist)) {
+              throw new BadRequestException(
+                `Distribuidora da UC (${uc.distribuidora}) diverge da usina (${usina.distribuidora}). Regra ANEEL exige mesma distribuidora.`,
+              );
+            }
+          }
+        }
+
+        // 3b. Calcular kWh mensal/anual
+        let anual = kwhContratoAnual;
+        let mensal: number | undefined;
+        if (anual) {
+          mensal = Math.round((anual / 12) * 100) / 100;
+        } else if (kwhContrato) {
+          mensal = kwhContrato;
+          anual = kwhContrato * 12;
+        }
+
+        // 3c. Validar capacidade da usina
+        let percentualUsina: number | undefined;
+        if (usinaId && anual) {
+          const usina = await tx.usina.findUnique({ where: { id: usinaId } });
+          if (usina?.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
+            const capacidadeAnual = Number(usina.capacidadeKwh);
+            const contratosAtivos = await tx.contrato.findMany({
+              where: { usinaId, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+              select: { percentualUsina: true, kwhContratoAnual: true, kwhContrato: true },
+            });
+            const somaPercentual = contratosAtivos.reduce((acc: number, c: any) => {
+              if (c.percentualUsina) return acc + Number(c.percentualUsina);
+              const a = c.kwhContratoAnual ? Number(c.kwhContratoAnual) : Number(c.kwhContrato ?? 0) * 12;
+              return acc + (a / capacidadeAnual) * 100;
+            }, 0);
+            const novoPercentual = (anual / capacidadeAnual) * 100;
+            if (somaPercentual + novoPercentual > 100.0001) {
+              const disponivel = Math.round((100 - somaPercentual) * 10000) / 10000;
+              const solicitado = Math.round(novoPercentual * 10000) / 10000;
+              throw new BadRequestException(
+                `Capacidade da usina insuficiente. Disponível: ${disponivel}%, Solicitado: ${solicitado}%`,
+              );
+            }
+            percentualUsina = Math.round(novoPercentual * 10000) / 10000;
+          }
+        }
+
+        // 3d. Gerar número do contrato
+        const ano = new Date().getFullYear();
+        const ultimo = await tx.contrato.findFirst({
+          where: { numero: { startsWith: `CTR-${ano}-` } },
+          orderBy: { createdAt: 'desc' },
+        });
+        const seq = ultimo ? parseInt(ultimo.numero.split('-')[2] ?? '0', 10) + 1 : 1;
+        const numero = `CTR-${ano}-${String(seq).padStart(4, '0')}`;
+
+        // 3e. Preparar datas
+        const dtInicio = new Date(dataInicio + 'T00:00:00.000Z');
+        const dtFim = new Date(dtInicio);
+        dtFim.setMonth(dtFim.getMonth() + 12);
+
+        // 3f. Criar contrato
+        contrato = await tx.contrato.create({
+          data: {
+            cooperadoId: cooperado.id,
+            ucId: uc.id,
+            usinaId,
+            planoId,
+            numero,
+            dataInicio: dtInicio,
+            dataFim: dtFim,
+            percentualDesconto,
+            kwhContrato: mensal ?? kwhContrato,
+            kwhContratoAnual: anual,
+            kwhContratoMensal: mensal,
+            percentualUsina,
+            cooperativaId: dto.cooperativaId || cooperativaId,
+          } as any,
+          include: { uc: true, usina: true, plano: true },
+        });
+      }
+
+      // 4. Lista de espera (se sem usina disponível)
+      let listaEspera: any = null;
+      if (dto.listaEspera && !dto.contrato) {
+        const posicaoAtual = await tx.listaEspera.count({
+          where: { status: 'AGUARDANDO', ...(cooperativaId ? { cooperativaId } : {}) },
+        });
+        listaEspera = await tx.listaEspera.create({
+          data: {
+            cooperadoId: cooperado.id,
+            kwhNecessario: 0,
+            posicao: posicaoAtual + 1,
+            status: 'AGUARDANDO',
+            cooperativaId: cooperativaId || dto.cooperativaId,
+          },
+        });
+      }
+
+      return { cooperado, uc, contrato, listaEspera };
+    }, SERIALIZABLE_TX);
+
+    // Side effects fora da transação (não devem causar rollback)
+    this.whatsappCicloVida.notificarMembroCriado(result.cooperado).catch(() => {});
+    this.emailService.enviarBoasVindas(result.cooperado).catch(() => {});
+
+    if (result.contrato) {
+      this.checkProntoParaAtivar(result.cooperado.id).catch(() => {});
+      this.whatsappCicloVida.notificarContratoGerado(result.cooperado).catch(() => {});
+    }
+
+    return result;
   }
 
   async update(id: string, data: Partial<{
@@ -926,5 +1099,112 @@ export class CooperadosService {
       mesesUtilizados: filtrados.length,
       mesesDescartados: historico.length - filtrados.length,
     };
+  }
+
+  // ─── Cadastro por Proxy (assinatura remota) ─────────────────────────────────
+
+  async preCadastroProxy(data: {
+    nomeCompleto: string;
+    telefone: string;
+    numeroUC?: string;
+    distribuidora?: string;
+    cidade?: string;
+    estado?: string;
+    economiaEstimada?: number;
+    indicadorId: string;
+    cooperativaId: string;
+  }) {
+    const cooperado = await this.prisma.cooperado.create({
+      data: {
+        nomeCompleto: data.nomeCompleto,
+        cpf: `PROXY_${Date.now()}`,
+        email: `proxy_${Date.now()}@pendente.cooperebr`,
+        telefone: data.telefone,
+        status: 'PENDENTE_ASSINATURA',
+        cooperadoIndicadorId: data.indicadorId,
+        cooperativaId: data.cooperativaId,
+        cidade: data.cidade,
+        estado: data.estado,
+      },
+    });
+
+    const secret = getJwtSecret();
+    const token = jwt.sign(
+      { cooperadoId: cooperado.id, tipo: 'assinatura' },
+      secret,
+      { expiresIn: '7d' },
+    );
+
+    const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.prisma.cooperado.update({
+      where: { id: cooperado.id },
+      data: { tokenAssinatura: token, tokenAssinaturaExp: expiraEm },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${frontendUrl}/portal/assinar/${token}`;
+
+    return {
+      cooperadoId: cooperado.id,
+      tokenAssinatura: token,
+      link,
+      economiaEstimada: data.economiaEstimada,
+    };
+  }
+
+  async verificarTokenAssinatura(token: string) {
+    const secret = getJwtSecret();
+    let payload: any;
+    try {
+      payload = jwt.verify(token, secret);
+    } catch {
+      throw new BadRequestException('Token inválido ou expirado');
+    }
+
+    if (payload.tipo !== 'assinatura') {
+      throw new BadRequestException('Token inválido');
+    }
+
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: payload.cooperadoId },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        status: true,
+        cidade: true,
+        estado: true,
+        tokenAssinatura: true,
+        tokenAssinaturaExp: true,
+        ucs: { select: { numero: true, distribuidora: true } },
+        cooperativa: { select: { nome: true } },
+      },
+    });
+
+    if (!cooperado || cooperado.tokenAssinatura !== token) {
+      throw new BadRequestException('Token inválido ou já utilizado');
+    }
+
+    if (cooperado.tokenAssinaturaExp && new Date() > cooperado.tokenAssinaturaExp) {
+      throw new BadRequestException('Token expirado');
+    }
+
+    return cooperado;
+  }
+
+  async confirmarAssinatura(token: string) {
+    const cooperado = await this.verificarTokenAssinatura(token);
+
+    await this.prisma.cooperado.update({
+      where: { id: cooperado.id },
+      data: {
+        status: 'PENDENTE',
+        tokenAssinatura: null,
+        tokenAssinaturaExp: null,
+        termoAdesaoAceito: true,
+        termoAdesaoAceitoEm: new Date(),
+      },
+    });
+
+    return { ok: true };
   }
 }

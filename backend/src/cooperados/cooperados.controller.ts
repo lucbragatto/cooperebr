@@ -3,10 +3,12 @@ import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFi
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CooperadosService } from './cooperados.service';
 import { Roles } from '../auth/roles.decorator';
+import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CreateCooperadoDto } from './dto/create-cooperado.dto';
 import { UpdateCooperadoDto } from './dto/update-cooperado.dto';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
+import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { PrismaService } from '../prisma.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
@@ -38,6 +40,38 @@ export class CooperadosController {
       throw new ForbiddenException('Você não tem permissão para acessar dados de outro cooperado');
     }
   }
+
+  // ─── Cadastro por Proxy (rotas públicas) ────────────────────────────────────
+
+  @Public()
+  @Post('pre-cadastro-proxy')
+  preCadastroProxy(@Body() body: {
+    nomeCompleto: string;
+    telefone: string;
+    numeroUC?: string;
+    distribuidora?: string;
+    cidade?: string;
+    estado?: string;
+    economiaEstimada?: number;
+    indicadorId: string;
+    cooperativaId: string;
+  }) {
+    return this.cooperadosService.preCadastroProxy(body);
+  }
+
+  @Public()
+  @Get('verificar-token/:token')
+  verificarToken(@Param('token') token: string) {
+    return this.cooperadosService.verificarTokenAssinatura(token);
+  }
+
+  @Public()
+  @Post('confirmar-assinatura/:token')
+  confirmarAssinatura(@Param('token') token: string) {
+    return this.cooperadosService.confirmarAssinatura(token);
+  }
+
+  // ─── Rotas autenticadas ────────────────────────────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
@@ -87,6 +121,12 @@ export class CooperadosController {
       cooperativaId: cooperativaId || req.user?.cooperativaId || undefined,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
     });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post('cadastro-completo')
+  cadastroCompleto(@Body() body: CadastroCompletoDto, @Req() req: any) {
+    return this.cooperadosService.cadastroCompleto(body, req.user?.cooperativaId);
   }
 
   @Roles(COOPERADO)
