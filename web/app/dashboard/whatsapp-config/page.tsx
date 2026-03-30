@@ -961,7 +961,11 @@ function ModalEtapa({
               <Label>Mensagem ao entrar</Label>
               <Select value={modeloMensagemId} onValueChange={(v) => setModeloMensagemId(v ?? '')}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Nenhuma" />
+                  <span className="truncate">
+                    {modeloMensagemId
+                      ? (modelos.find((m) => m.id === modeloMensagemId)?.nome ?? modeloMensagemId)
+                      : 'Nenhuma'}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nenhuma</SelectItem>
@@ -975,7 +979,11 @@ function ModalEtapa({
               <Label>Mensagem follow-up</Label>
               <Select value={modeloFollowupId} onValueChange={(v) => setModeloFollowupId(v ?? '')}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Nenhuma" />
+                  <span className="truncate">
+                    {modeloFollowupId
+                      ? (modelos.find((m) => m.id === modeloFollowupId)?.nome ?? modeloFollowupId)
+                      : 'Nenhuma'}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Nenhuma</SelectItem>
