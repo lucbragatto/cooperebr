@@ -69,13 +69,29 @@ const CATEGORIA_CORES: Record<string, string> = {
   MANUAL: 'bg-gray-100 text-gray-800',
 };
 
-const VARIAVEIS = ['{{nome}}', '{{economia}}', '{{link}}', '{{desconto}}', '{{mes}}'];
+const VARIAVEIS = [
+  '{{nome}}', '{{economia}}', '{{link}}', '{{desconto}}', '{{mes}}',
+  '{{kwh}}', '{{valor_fatura}}', '{{distribuidora}}', '{{vencimento}}',
+  '{{codigo_indicacao}}', '{{parceiro}}', '{{usina}}', '{{status_contrato}}',
+  '{{cpf}}', '{{telefone}}', '{{email}}',
+];
 const VARIAVEIS_EXEMPLO: Record<string, string> = {
   '{{nome}}': 'João Silva',
   '{{economia}}': 'R$ 150,00',
-  '{{link}}': 'https://coopere.br/proposta/abc123',
+  '{{link}}': 'https://cooperebr.com.br/proposta/abc123',
   '{{desconto}}': '18%',
   '{{mes}}': 'março/2026',
+  '{{kwh}}': '350',
+  '{{valor_fatura}}': 'R$ 280,00',
+  '{{distribuidora}}': 'EDP Espírito Santo',
+  '{{vencimento}}': '10/04/2026',
+  '{{codigo_indicacao}}': 'IND-ABC123',
+  '{{parceiro}}': 'Parceiro Solar ES',
+  '{{usina}}': 'Usina Solar Linhares',
+  '{{status_contrato}}': 'ATIVO',
+  '{{cpf}}': '123.456.789-00',
+  '{{telefone}}': '27981341348',
+  '{{email}}': 'joao@email.com',
 };
 
 const ACOES_AUTOMATICAS = ['CRIAR_LEAD', 'GERAR_PROPOSTA', 'NOTIFICAR_EQUIPE'];
@@ -422,7 +438,7 @@ function ModalMensagem({
                 onChange={(e) => setConteudo(e.target.value)}
                 placeholder="Digite a mensagem... Use {{variavel}} para conteúdo dinâmico"
                 rows={8}
-                className="font-mono text-sm"
+                className="font-mono text-sm min-h-[200px] resize-y"
               />
             </div>
 
