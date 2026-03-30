@@ -319,14 +319,13 @@ export class WhatsappBotService {
       return;
     }
 
-    // TODO: reativar quando motor dinâmico for corrigido para processar apenas etapa atual
-    // Motor dinâmico desativado — enviava todas as mensagens de uma vez sem esperar resposta
-    // try {
-    //   const processou = await this.fluxoMotor.processarComFluxoDinamico(msg, conversa);
-    //   if (processou) return;
-    // } catch (err) {
-    //   this.logger.warn(`Erro no motor dinâmico, fallback hardcoded: ${err.message}`);
-    // }
+    // Motor dinâmico — processa apenas a etapa atual e aguarda próxima resposta (WA-15)
+    try {
+      const processou = await this.fluxoMotor.processarComFluxoDinamico(msg as any, conversa);
+      if (processou) return;
+    } catch (err) {
+      this.logger.warn(`Erro no motor dinâmico, fallback hardcoded: ${err.message}`);
+    }
 
     try {
       switch (conversa.estado) {
