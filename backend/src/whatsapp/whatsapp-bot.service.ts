@@ -287,7 +287,28 @@ export class WhatsappBotService {
     }
 
     // ─── Palavras-chave de fatura/boleto → MENU_FATURA ─────────────────────
+    // Só redireciona se não houver fluxo ativo em andamento (WA-BOT-01)
+    const ESTADOS_FLUXO_ATIVO = [
+      'AGUARDANDO_CPF', 'AGUARDANDO_NOME', 'AGUARDANDO_EMAIL',
+      'AGUARDANDO_CONFIRMACAO_DADOS', 'AGUARDANDO_CONFIRMACAO_PROPOSTA',
+      'AGUARDANDO_CONFIRMACAO_CADASTRO', 'AGUARDANDO_FOTO_FATURA',
+      'AGUARDANDO_COMPROVANTE_PAGAMENTO', 'AGUARDANDO_DISPOSITIVO_EMAIL',
+      'AGUARDANDO_DISTRIBUIDORA', 'AGUARDANDO_VALOR_FATURA',
+      'AGUARDANDO_NOVO_NOME', 'AGUARDANDO_NOVO_EMAIL',
+      'AGUARDANDO_NOVO_TELEFONE', 'AGUARDANDO_NOVO_CEP', 'AGUARDANDO_NOVO_KWH',
+      'AGUARDANDO_FATURA_PROXY', 'AGUARDANDO_ATENDENTE',
+      'CADASTRO_EXPRESS_NOME', 'CADASTRO_EXPRESS_CPF', 'CADASTRO_EXPRESS_EMAIL',
+      'CADASTRO_EXPRESS_VALOR_FATURA', 'CADASTRO_PROXY_NOME', 'CADASTRO_PROXY_TELEFONE',
+      'NEGOCIACAO_PARCELAMENTO', 'CONFIRMAR_ENCERRAMENTO',
+    ];
     if (['fatura', 'faturas', 'boleto', '2a via', '2ª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
+      if (ESTADOS_FLUXO_ATIVO.includes(conversa.estado)) {
+        await this.sender.enviarMensagem(
+          telefone,
+          '⏳ Você está no meio de um processo. Por favor, conclua a etapa atual ou digite *cancelar* para recomeçar.',
+        );
+        return;
+      }
       await this.prisma.conversaWhatsapp.upsert({
         where: { telefone },
         update: { estado: 'MENU_FATURA' },
