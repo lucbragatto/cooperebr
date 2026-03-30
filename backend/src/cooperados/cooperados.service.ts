@@ -437,6 +437,7 @@ export class CooperadosService {
           representanteLegalCargo: dto.representanteLegalCargo,
           cooperativaId: dto.cooperativaId || cooperativaId,
           preferenciaCobranca: dto.preferenciaCobranca,
+          cotaKwhMensal: dto.cotaKwhMensal ?? undefined,
         },
       });
 
@@ -561,7 +562,7 @@ export class CooperadosService {
         listaEspera = await tx.listaEspera.create({
           data: {
             cooperadoId: cooperado.id,
-            kwhNecessario: 0,
+            kwhNecessario: dto.cotaKwhMensal ?? 0,
             posicao: posicaoAtual + 1,
             status: 'AGUARDANDO',
             cooperativaId: cooperativaId || dto.cooperativaId,
@@ -834,18 +835,25 @@ export class CooperadosService {
       orderBy: { createdAt: 'asc' },
     });
 
-    return cooperados.map(c => ({
-      id: c.id,
-      nomeCompleto: c.nomeCompleto,
-      email: c.email,
-      telefone: c.telefone,
-      uc: c.ucs[0] ?? null,
-      distribuidora: c.ucs[0]?.distribuidora ?? null,
-      consumoMedioMensal: c.faturasProcessadas[0]
+    return cooperados.map(c => {
+      const mediaFatura = c.faturasProcessadas[0]
         ? Number(c.faturasProcessadas[0].mediaKwhCalculada)
-        : null,
-      dataAprovacao: c.updatedAt,
-    }));
+        : null;
+      const cotaCadastro = c.cotaKwhMensal ? Number(c.cotaKwhMensal) : null;
+      const consumo = mediaFatura ?? cotaCadastro;
+
+      return {
+        id: c.id,
+        nomeCompleto: c.nomeCompleto,
+        email: c.email,
+        telefone: c.telefone,
+        uc: c.ucs[0] ?? null,
+        distribuidora: c.ucs[0]?.distribuidora ?? null,
+        consumoMedioMensal: consumo ?? 0,
+        semHistorico: consumo === null,
+        dataAprovacao: c.updatedAt,
+      };
+    });
   }
 
   /** Aloca cooperado APROVADO a uma usina, validando regra ANEEL (mesma distribuidora) e capacidade */
@@ -900,7 +908,7 @@ export class CooperadosService {
 
     const consumoMedio = cooperado.faturasProcessadas[0]
       ? Number(cooperado.faturasProcessadas[0].mediaKwhCalculada)
-      : 0;
+      : Number(cooperado.cotaKwhMensal ?? 0);
     const kwhDisponivel = capacidade - kwhOcupado;
 
     return {

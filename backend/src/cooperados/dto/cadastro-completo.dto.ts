@@ -38,6 +38,7 @@ export class CadastroCompletoDto {
   @IsOptional() @IsString() representanteLegalCargo?: string;
   @IsOptional() @IsString() cooperativaId?: string;
   @IsOptional() @IsString() preferenciaCobranca?: string;
+  @IsOptional() @IsNumber() cotaKwhMensal?: number;
 
   // ── UC (opcional) ──
   @IsOptional() @ValidateNested() @Type(() => UcDto) uc?: UcDto;

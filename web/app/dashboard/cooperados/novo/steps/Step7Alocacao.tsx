@@ -120,6 +120,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
         representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
         representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,
         preferenciaCobranca: resolverPreferenciaCobranca(tipoPreferencia, diaFixo, diasApos),
+        cotaKwhMensal: mediaKwh > 0 ? Math.round(mediaKwh * 100) / 100 : undefined,
       };
 
       // UC (se tem dados OCR)
