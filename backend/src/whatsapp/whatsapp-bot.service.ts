@@ -91,18 +91,18 @@ interface MensagemRecebida {
   corpo?: string;
   mediaBase64?: string;
   mimeType?: string;
-  /** ID do botÃ£o clicado (buttonResponseMessage) ou rowId da lista selecionada */
+  /** ID do botão clicado (buttonResponseMessage) ou rowId da lista selecionada */
   selectedButtonId?: string;
   /** Dados do contato compartilhado (contactMessage) */
   contatoNome?: string;
   contatoTelefone?: string;
 }
 
-// Palavras imprÃ³prias (ofensas genÃ©ricas para detecÃ§Ã£o)
+// Palavras impróprias (ofensas genéricas para detecção)
 const PALAVRAS_IMPROPRIAS = [
-  'porra', 'caralho', 'merda', 'foda', 'puta', 'fdp', 'cuzÃ£o', 'arrombado',
-  'desgraÃ§a', 'buceta', 'viado', 'vagabund', 'safad', 'lixo', 'idiota', 'imbecil',
-  'otÃ¡rio', 'bosta', 'cu ', 'vtnc', 'vsf', 'pqp', 'tnc',
+  'porra', 'caralho', 'merda', 'foda', 'puta', 'fdp', 'cuzão', 'arrombado',
+  'desgraça', 'buceta', 'viado', 'vagabund', 'safad', 'lixo', 'idiota', 'imbecil',
+  'otário', 'bosta', 'cu ', 'vtnc', 'vsf', 'pqp', 'tnc',
 ];
 
 @Injectable()
@@ -134,7 +134,7 @@ export class WhatsappBotService {
     } catch (err) {
       this.logger.warn(`Fallback para mensagem '${nome}': ${err.message}`);
     }
-    // Fallback: substituir variÃ¡veis manualmente no texto hardcoded
+    // Fallback: substituir variáveis manualmente no texto hardcoded
     let texto = fallback;
     for (const [k, v] of Object.entries(variaveis)) {
       texto = texto.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v);
@@ -164,17 +164,17 @@ export class WhatsappBotService {
     // Espelhar para observadores ativos (Modo Observador) via evento
     this.eventEmitter.emit('whatsapp.mensagem.recebida', {
       telefone,
-      texto: corpo || '[mÃ­dia]',
+      texto: corpo || '[mídia]',
       direcao: 'RECEBIDA' as const,
     });
 
-    // Se mensagem chegou sem texto e sem mÃ­dia, ignorar silenciosamente
+    // Se mensagem chegou sem texto e sem mídia, ignorar silenciosamente
     if (!corpo && msg.tipo === 'texto') {
-      this.logger.warn(`Mensagem sem conteÃºdo de ${telefone} â€” ignorada`);
+      this.logger.warn(`Mensagem sem conteúdo de ${telefone} — ignorada`);
       return;
     }
 
-    // Buscar ou criar conversa (upsert atÃ´mico para evitar race condition)
+    // Buscar ou criar conversa (upsert atômico para evitar race condition)
     const conversa = await this.prisma.conversaWhatsapp.upsert({
       where: { telefone },
       update: {},
@@ -190,20 +190,20 @@ export class WhatsappBotService {
       return;
     }
 
-    // â”€â”€â”€ Ãudio â†’ sÃ³ aceita texto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Áudio â†’ só aceita texto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (msg.tipo === 'audio') {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.microfone} Desculpe, no momento sÃ³ consigo processar mensagens de *texto*.\n\nPor favor, digite sua mensagem. Se preferir, envie *menu* para ver as opÃ§Ãµes disponÃ­veis.`,
+        `${E.microfone} Desculpe, no momento só consigo processar mensagens de *texto*.\n\nPor favor, digite sua mensagem. Se preferir, envie *menu* para ver as opções disponíveis.`,
       );
       return;
     }
 
-    // â”€â”€â”€ Foto/documento fora de contexto (sticker, vÃ­deo, location) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Foto/documento fora de contexto (sticker, vídeo, location) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (['video', 'sticker', 'location'].includes(msg.tipo)) {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.clipe} Este tipo de mÃ­dia nÃ£o Ã© suportado.\n\nPara enviar documentos, acesse o *Portal do Cooperado*:\n${E.seta} cooperebr.com.br/portal\n\nOu digite *menu* para ver as opÃ§Ãµes.`,
+        `${E.clipe} Este tipo de mídia não é suportado.\n\nPara enviar documentos, acesse o *Portal do Cooperado*:\n${E.seta} cooperebr.com.br/portal\n\nOu digite *menu* para ver as opções.`,
       );
       return;
     }
@@ -212,7 +212,7 @@ export class WhatsappBotService {
     if (corpo && PALAVRAS_IMPROPRIAS.some(p => corpoLower.includes(p))) {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.orar} Entendo sua frustraÃ§Ã£o. Estamos aqui para ajudar da melhor forma possÃ­vel.\n\nPor favor, nos diga como podemos resolver sua questÃ£o. Se preferir, posso encaminhÃ¡-lo para um atendente humano.\n\nDigite *3* para falar com um atendente.`,
+        `${E.orar} Entendo sua frustração. Estamos aqui para ajudar da melhor forma possível.\n\nPor favor, nos diga como podemos resolver sua questão. Se preferir, posso encaminhá-lo para um atendente humano.\n\nDigite *3* para falar com um atendente.`,
       );
       return;
     }
@@ -228,43 +228,43 @@ export class WhatsappBotService {
     ) {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.aviso} *SolicitaÃ§Ã£o de desligamento*\n\n` +
+        `${E.aviso} *Solicitação de desligamento*\n\n` +
         'Sentimos muito que queira nos deixar. Para solicitar o desligamento:\n\n' +
-        '1ï¸âƒ£ Acesse o portal: cooperebr.com.br/portal/desligamento\n' +
-        '2ï¸âƒ£ Preencha o formulÃ¡rio de desligamento\n' +
-        '3ï¸âƒ£ Nossa equipe processarÃ¡ em atÃ© 30 dias\n\n' +
+        '1️⃣ Acesse o portal: cooperebr.com.br/portal/desligamento\n' +
+        '2️⃣ Preencha o formulário de desligamento\n' +
+        '3️⃣ Nossa equipe processará em até 30 dias\n\n' +
         'Se quiser conversar sobre isso antes, digite *3* para falar com um atendente.',
       );
       return;
     }
 
-    // â”€â”€â”€ Perguntas sobre tarifa/preÃ§o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Perguntas sobre tarifa/preço â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (
       corpoLower.includes('tarifa') ||
-      corpoLower.includes('preÃ§o') ||
+      corpoLower.includes('preço') ||
       corpoLower.includes('preco') ||
       corpoLower.includes('quanto custa') ||
       corpoLower.includes('valor da') ||
-      corpoLower.includes('tabela de preÃ§o') ||
+      corpoLower.includes('tabela de preço') ||
       corpoLower.includes('quanto pago') ||
       corpoLower.includes('qual o valor')
     ) {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.dinheiro} *BenefÃ­cios CoopereBR:*\n\n` +
-        `${E.muda} Desconto de atÃ© *20%* na conta de energia\n` +
-        `${E.solar} Energia 100% solar e sustentÃ¡vel\n` +
+        `${E.dinheiro} *Benefícios CoopereBR:*\n\n` +
+        `${E.muda} Desconto de até *20%* na conta de energia\n` +
+        `${E.solar} Energia 100% solar e sustentável\n` +
         `${E.grafico} Sem investimento inicial\n` +
-        `${E.prancheta} Sem obras ou instalaÃ§Ã£o\n` +
+        `${E.prancheta} Sem obras ou instalação\n` +
         `${E.ciclo} Cancelamento sem multa\n\n` +
         `${E.camera} Quer saber exatamente quanto vai economizar?\n` +
-        'Envie a *foto da sua conta de luz* e faÃ§o uma simulaÃ§Ã£o personalizada!\n\n' +
+        'Envie a *foto da sua conta de luz* e faço uma simulação personalizada!\n\n' +
         'Ou digite *2* para iniciar seu cadastro.',
       );
       return;
     }
 
-    // â”€â”€â”€ NÃºmero de protocolo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Número de protocolo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const protocoloMatch = corpo.match(/^(?:protocolo\s*)?(?:#?\s*)?(PROT-[\w-]+|[A-Z]{2,4}-\d{4,}[-\w]*)/i);
     if (protocoloMatch) {
       const protocolo = protocoloMatch[1].toUpperCase();
@@ -281,8 +281,8 @@ export class WhatsappBotService {
 
       if (contrato) {
         const statusLabel: Record<string, string> = {
-          PENDENTE_ATIVACAO: `${E.amarelo} Pendente de ativaÃ§Ã£o`,
-          EM_APROVACAO: `${E.amarelo} Em aprovaÃ§Ã£o`,
+          PENDENTE_ATIVACAO: `${E.amarelo} Pendente de ativação`,
+          EM_APROVACAO: `${E.amarelo} Em aprovação`,
           ATIVO: `${E.verde} Ativo`,
           SUSPENSO: `${E.vermelho} Suspenso`,
           ENCERRADO: `${E.branco} Encerrado`,
@@ -292,39 +292,39 @@ export class WhatsappBotService {
           `${E.prancheta} *Status do protocolo ${protocolo}:*\n\n` +
           `${E.pessoa} ${contrato.cooperado?.nomeCompleto ?? 'N/A'}\n` +
           `${E.grafico} Status: ${statusLabel[contrato.status] ?? contrato.status}\n` +
-          `${E.calendario} InÃ­cio: ${new Date(contrato.dataInicio).toLocaleDateString('pt-BR')}\n\n` +
+          `${E.calendario} Início: ${new Date(contrato.dataInicio).toLocaleDateString('pt-BR')}\n\n` +
           `Para mais detalhes, acesse o portal ou digite *menu*.`,
         );
       } else {
         await this.sender.enviarMensagem(
           telefone,
-          `${E.lupa} Protocolo *${protocolo}* nÃ£o encontrado.\n\nVerifique o nÃºmero e tente novamente, ou digite *3* para falar com um atendente.`,
+          `${E.lupa} Protocolo *${protocolo}* não encontrado.\n\nVerifique o número e tente novamente, ou digite *3* para falar com um atendente.`,
         );
       }
       return;
     }
 
-    // â”€â”€â”€ Verificar horÃ¡rio de atendimento (20h-8h) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Verificar horário de atendimento (20h-8h) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const agora = new Date();
-    // Converter para horÃ¡rio de BrasÃ­lia (UTC-3)
+    // Converter para horário de Brasília (UTC-3)
     const horaBrasilia = new Date(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
     const hora = horaBrasilia.getHours();
     if (hora >= 20 || hora < 8) {
-      // Fora do expediente â€” ainda processa a mensagem mas avisa sobre atraso
+      // Fora do expediente — ainda processa a mensagem mas avisa sobre atraso
       await this.sender.enviarMensagem(
         telefone,
-        `${E.lua} *Atendimento fora do horÃ¡rio comercial*\n\n` +
-        'Nosso horÃ¡rio de atendimento humano Ã© de *segunda a sexta, das 8h Ã s 20h*.\n\n' +
-        'Sua mensagem foi registrada e serÃ¡ respondida no prÃ³ximo dia Ãºtil.\n\n' +
-        'Enquanto isso, vocÃª pode:\n' +
-        `${E.camera} Enviar foto da fatura para simulaÃ§Ã£o automÃ¡tica\n` +
+        `${E.lua} *Atendimento fora do horário comercial*\n\n` +
+        'Nosso horário de atendimento humano é de *segunda a sexta, das 8h às 20h*.\n\n' +
+        'Sua mensagem foi registrada e será respondida no próximo dia útil.\n\n' +
+        'Enquanto isso, você pode:\n' +
+        `${E.camera} Enviar foto da fatura para simulação automática\n` +
         `${E.globo} Acessar o portal: cooperebr.com.br/portal\n\n` +
-        'Ou digite *menu* para ver as opÃ§Ãµes do bot.',
+        'Ou digite *menu* para ver as opções do bot.',
       );
-      // NÃ£o faz return â€” continua processando normalmente (simulaÃ§Ã£o funciona 24h)
+      // Não faz return — continua processando normalmente (simulação funciona 24h)
     }
 
-    // â”€â”€â”€ Verificar timeout de sessÃ£o (30min sem atividade) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€â”€ Verificar timeout de sessão (30min sem atividade) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (conversa.updatedAt) {
       const ultimaAtividade = new Date(conversa.updatedAt);
       const diffMs = agora.getTime() - ultimaAtividade.getTime();
@@ -336,8 +336,8 @@ export class WhatsappBotService {
         });
         await this.sender.enviarMensagem(
           telefone,
-          `${E.relogio} Sua sessÃ£o anterior expirou por inatividade.\n\n` +
-          'Vamos recomeÃ§ar? Digite *menu* para ver as opÃ§Ãµes ou envie a *foto da sua fatura* para simular.',
+          `${E.relogio} Sua sessão anterior expirou por inatividade.\n\n` +
+          'Vamos recomeçar? Digite *menu* para ver as opções ou envie a *foto da sua fatura* para simular.',
         );
         return;
       }
@@ -349,7 +349,7 @@ export class WhatsappBotService {
       msg.mediaBase64 &&
       ['MENU_PRINCIPAL', 'MENU_COOPERADO', 'MENU_CLIENTE', 'MENU_CONVITE', 'AGUARDANDO_ATENDENTE'].includes(conversa.estado)
     ) {
-      // Se estÃ¡ em menu, redireciona para fluxo de fatura
+      // Se está em menu, redireciona para fluxo de fatura
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'INICIAL' },
@@ -360,7 +360,7 @@ export class WhatsappBotService {
     }
 
     // â”€â”€â”€ Palavras-chave de fatura/boleto â†’ MENU_FATURA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // SÃ³ redireciona se nÃ£o houver fluxo ativo em andamento (WA-BOT-01)
+    // Só redireciona se não houver fluxo ativo em andamento (WA-BOT-01)
     const ESTADOS_FLUXO_ATIVO = [
       'AGUARDANDO_CPF', 'AGUARDANDO_NOME', 'AGUARDANDO_EMAIL',
       'AGUARDANDO_CONFIRMACAO_DADOS', 'AGUARDANDO_CONFIRMACAO_PROPOSTA',
@@ -381,7 +381,7 @@ export class WhatsappBotService {
       if (ESTADOS_FLUXO_ATIVO.includes(conversa.estado)) {
         await this.sender.enviarMensagem(
           telefone,
-          `${E.hourglass} VocÃª estÃ¡ no meio de um processo. Por favor, conclua a etapa atual ou digite *cancelar* para recomeÃ§ar.`,
+          `${E.hourglass} Você está no meio de um processo. Por favor, conclua a etapa atual ou digite *cancelar* para recomeçar.`,
         );
         return;
       }
@@ -395,12 +395,12 @@ export class WhatsappBotService {
       return;
     }
 
-    // Motor dinÃ¢mico â€” processa apenas a etapa atual e aguarda prÃ³xima resposta (WA-15)
+    // Motor dinâmico — processa apenas a etapa atual e aguarda próxima resposta (WA-15)
     try {
       const processou = await this.fluxoMotor.processarComFluxoDinamico(msg as any, conversa);
       if (processou) return;
     } catch (err) {
-      this.logger.warn(`Erro no motor dinÃ¢mico, fallback hardcoded: ${err.message}`);
+      this.logger.warn(`Erro no motor dinâmico, fallback hardcoded: ${err.message}`);
     }
 
     // ═══ Navegação global — palavras reservadas ═══
@@ -443,7 +443,7 @@ export class WhatsappBotService {
         case 'CONCLUIDO':
           await this.handleConcluido(msg);
           break;
-        // â”€â”€â”€ Fluxo convite por indicaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // â”€â”€â”€ Fluxo convite por indicação â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'MENU_CONVITE':
           await this.handleMenuConvite(msg, conversa);
           break;
@@ -522,7 +522,7 @@ export class WhatsappBotService {
         case 'NEGOCIACAO_PARCELAMENTO':
           await this.handleNegociacaoParcelamento(msg, conversa);
           break;
-        // â”€â”€â”€ Rotina 3: Convite indicaÃ§Ã£o melhorado â”€â”€â”€â”€â”€â”€
+        // â”€â”€â”€ Rotina 3: Convite indicação melhorado â”€â”€â”€â”€â”€â”€
         case 'MENU_CONVITE_INDICACAO':
           await this.handleMenuConviteIndicacao(msg, conversa);
           break;
@@ -541,7 +541,7 @@ export class WhatsappBotService {
         case 'LEAD_FORA_AREA':
           await this.handleLeadForaArea(msg, conversa);
           break;
-        // â”€â”€â”€ AtualizaÃ§Ã£o de cadastro/contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // â”€â”€â”€ Atualização de cadastro/contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         case 'ATUALIZACAO_CADASTRO':
           await this.handleAtualizacaoCadastro(msg, conversa);
           break;
@@ -597,7 +597,7 @@ export class WhatsappBotService {
     }
   }
 
-  /** Extrai o ID efetivo: prioriza selectedButtonId (botÃ£o/lista), senÃ£o usa texto */
+  /** Extrai o ID efetivo: prioriza selectedButtonId (botão/lista), senão usa texto */
   private respostaEfetiva(msg: MensagemRecebida): string {
     return msg.selectedButtonId?.trim() || (msg.corpo ?? '').trim();
   }
@@ -612,9 +612,9 @@ export class WhatsappBotService {
     });
     await this.sender.enviarMenuComBotoes(telefone, {
       titulo: 'Menu Principal',
-      corpo: `${E.oi} OlÃ¡! Sou o assistente da *CoopereBR* â€” energia solar para todos.\n\nComo posso ajudar?`,
+      corpo: `${E.oi} Olá! Sou o assistente da *CoopereBR* — energia solar para todos.\n\nComo posso ajudar?`,
       opcoes: [
-        { id: '1', texto: `${E.prancheta} JÃ¡ sou cooperado` },
+        { id: '1', texto: `${E.prancheta} Já sou cooperado` },
         { id: '2', texto: `${E.bolt} Quero ser cooperado` },
         { id: '3', texto: `${E.pessoa} Falar com atendente` },
         { id: '4', texto: `${E.presente} Convidar um amigo`, descricao: 'Compartilhe seu link' },
@@ -627,8 +627,8 @@ export class WhatsappBotService {
     const resposta = this.respostaEfetiva(msg);
     const corpo = resposta;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('sou cooperado') || corpo.toLowerCase().includes('jÃ¡ sou')) {
-      // Verificar se Ã© cooperado
+    if (corpo === '1' || corpo.toLowerCase().includes('sou cooperado') || corpo.toLowerCase().includes('já sou')) {
+      // Verificar se é cooperado
       const telefoneNorm = telefone.replace(/\D/g, '');
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       const cooperado = await this.prisma.cooperado.findFirst({
@@ -640,7 +640,7 @@ export class WhatsappBotService {
       });
 
       if (!cooperado) {
-        await this.sender.enviarMensagem(telefone, `${E.aviso} NÃ£o encontrei seu cadastro ativo.\n\nSe vocÃª se cadastrou recentemente, aguarde nosso contato. Ou:\n\n1ï¸âƒ£ Iniciar novo cadastro\n2ï¸âƒ£ Falar com atendente`);
+        await this.sender.enviarMensagem(telefone, `${E.aviso} Não encontrei seu cadastro ativo.\n\nSe você se cadastrou recentemente, aguarde nosso contato. Ou:\n\n1️⃣ Iniciar novo cadastro\n2️⃣ Falar com atendente`);
         await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_CLIENTE', contadorFallback: 0 } });
         return;
       }
@@ -651,14 +651,14 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Menu do Cooperado',
-        corpo: `${E.ok} OlÃ¡, *${cooperado.nomeCompleto || 'Cooperado'}*! O que vocÃª precisa?`,
+        corpo: `${E.ok} Olá, *${cooperado.nomeCompleto || 'Cooperado'}*! O que você precisa?`,
         opcoes: [
-          { id: '1', texto: `${E.bolt} Ver saldo de crÃ©ditos`, descricao: 'Seus kWh contratados' },
-          { id: '2', texto: `${E.doc} Ver prÃ³xima fatura`, descricao: 'Valor e vencimento' },
-          { id: '3', texto: `${E.editar} Atualizar meu cadastro`, descricao: 'Nome, email, telefone, endereÃ§o' },
-          { id: '4', texto: `${E.ciclo} Atualizar meu contrato`, descricao: 'kWh, suspensÃ£o, encerramento' },
+          { id: '1', texto: `${E.bolt} Ver saldo de créditos`, descricao: 'Seus kWh contratados' },
+          { id: '2', texto: `${E.doc} Ver próxima fatura`, descricao: 'Valor e vencimento' },
+          { id: '3', texto: `${E.editar} Atualizar meu cadastro`, descricao: 'Nome, email, telefone, endereço' },
+          { id: '4', texto: `${E.ciclo} Atualizar meu contrato`, descricao: 'kWh, suspensão, encerramento' },
           { id: '5', texto: `${E.presente} Indicar um amigo`, descricao: 'Ganhe desconto na fatura' },
-          { id: '6', texto: `${E.engrenagem} Suporte / OcorrÃªncia`, descricao: 'Abrir chamado' },
+          { id: '6', texto: `${E.engrenagem} Suporte / Ocorrência`, descricao: 'Abrir chamado' },
           { id: '7', texto: `${E.pessoa} Falar com atendente`, descricao: 'Atendimento humano' },
         ],
       });
@@ -671,11 +671,11 @@ export class WhatsappBotService {
         data: { estado: 'MENU_SEM_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'SimulaÃ§Ã£o gratuita',
-        corpo: `${E.bolt} Ã“timo! Para gerar sua simulaÃ§Ã£o gratuita, preciso da sua *conta de energia elÃ©trica*.\n\nComo prefere proceder?`,
+        titulo: 'Simulação gratuita',
+        corpo: `${E.bolt} Ã“timo! Para gerar sua simulação gratuita, preciso da sua *conta de energia elétrica*.\n\nComo prefere proceder?`,
         opcoes: [
-          { id: '1', texto: `${E.clipe} Enviar agora`, descricao: 'JÃ¡ tenho a fatura (foto ou PDF)' },
-          { id: '2', texto: `${E.email} EstÃ¡ no meu email`, descricao: 'Vou buscar e enviar' },
+          { id: '1', texto: `${E.clipe} Enviar agora`, descricao: 'Já tenho a fatura (foto ou PDF)' },
+          { id: '2', texto: `${E.email} Está no meu email`, descricao: 'Vou buscar e enviar' },
           { id: '3', texto: `${E.pc} Baixar do site`, descricao: 'Te ajudo passo a passo' },
         ],
       });
@@ -688,7 +688,7 @@ export class WhatsappBotService {
     }
 
     if (corpo === '4' || corpo.toLowerCase().includes('convidar') || corpo.toLowerCase().includes('indicar amigo')) {
-      // Verificar se Ã© cooperado pelo telefone para buscar o link personalizado
+      // Verificar se é cooperado pelo telefone para buscar o link personalizado
       const telefoneNorm = telefone.replace(/\D/g, '');
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       const cooperado = await this.prisma.cooperado.findFirst({
@@ -699,7 +699,7 @@ export class WhatsappBotService {
       });
 
       if (cooperado) {
-        // Cooperado: oferecer sub-menu com opÃ§Ã£o de proxy
+        // Cooperado: oferecer sub-menu com opção de proxy
         let codigo = cooperado.codigoIndicacao;
         if (!codigo) {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -716,18 +716,18 @@ export class WhatsappBotService {
         });
         await this.sender.enviarMensagem(telefone,
           `${E.presente} *Convidar um amigo:*\n\n` +
-          `1ï¸âƒ£ Enviar meu link de indicaÃ§Ã£o\n` +
-          `2ï¸âƒ£ Cadastrar meu amigo (tenho a fatura dele)\n\n` +
+          `1️⃣ Enviar meu link de indicação\n` +
+          `2️⃣ Cadastrar meu amigo (tenho a fatura dele)\n\n` +
           `_Responda 1 ou 2_`
         );
       } else {
-        // NÃ£o Ã© cooperado â€” link genÃ©rico da CoopereBR
+        // Não é cooperado — link genérico da CoopereBR
         const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
         await this.sender.enviarMensagem(telefone,
           `${E.presente} *Convide seus amigos para economizar na conta de luz!*\n\n` +
           `Compartilhe o link da CoopereBR:\n${baseUrl}\n\n` +
-          `${E.solar} Energia solar sem investimento, com atÃ© 20% de desconto na conta de luz.\n\n` +
-          `_Quer ter seu link personalizado com benefÃ­cios? Digite *2* para se cadastrar!_`
+          `${E.solar} Energia solar sem investimento, com até 20% de desconto na conta de luz.\n\n` +
+          `_Quer ter seu link personalizado com benefícios? Digite *2* para se cadastrar!_`
         );
       }
       return;
@@ -750,7 +750,7 @@ export class WhatsappBotService {
       return;
     }
 
-    if (corpo === '1' || corpo.toLowerCase().includes('saldo') || corpo.toLowerCase().includes('crÃ©dito')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('saldo') || corpo.toLowerCase().includes('crédito')) {
       const contratos = await this.prisma.contrato.findMany({
         where: { cooperadoId, status: 'ATIVO' as any },
         include: { uc: { select: { numero: true } } },
@@ -761,28 +761,28 @@ export class WhatsappBotService {
         await this.sender.enviarMensagem(telefone, `${E.aviso} Nenhum contrato ativo encontrado. Fale com nossa equipe.`);
         return;
       }
-      let texto = `${E.bolt} *Seus crÃ©ditos:*\n\n`;
+      let texto = `${E.bolt} *Seus créditos:*\n\n`;
       for (const c of contratos) {
-        texto += `UC ${c.uc?.numero ?? 'N/A'}: ${c.kwhContratoMensal ?? 0} kWh/mÃªs\n`;
+        texto += `UC ${c.uc?.numero ?? 'N/A'}: ${c.kwhContratoMensal ?? 0} kWh/mês\n`;
       }
       texto += '\n_Acesse o portal para mais detalhes._';
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('fatura') || corpo.toLowerCase().includes('cobranÃ§a')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('fatura') || corpo.toLowerCase().includes('cobrança')) {
       const cobranca = await this.prisma.cobranca.findFirst({
         where: { contrato: { cooperadoId }, status: { in: ['PENDENTE', 'VENCIDO'] as any[] } },
         orderBy: { dataVencimento: 'asc' },
       });
       if (!cobranca) {
-        await this.sender.enviarMensagem(telefone, `${E.ok} VocÃª nÃ£o tem faturas pendentes no momento!`);
+        await this.sender.enviarMensagem(telefone, `${E.ok} Você não tem faturas pendentes no momento!`);
         return;
       }
       const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.doc} *PrÃ³xima fatura:*\n\n` +
+        `${E.doc} *Próxima fatura:*\n\n` +
         `${E.dinheiro} Valor: R$ ${fmt(Number(cobranca.valorLiquido ?? cobranca.valorBruto))}\n` +
         `${E.calendario} Vencimento: ${new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')}\n` +
         `Status: ${cobranca.status}\n\n` +
@@ -803,7 +803,7 @@ export class WhatsappBotService {
           { id: '1', texto: `${E.nota} Nome` },
           { id: '2', texto: `${E.email} Email` },
           { id: '3', texto: `${E.celular} Telefone` },
-          { id: '4', texto: `${E.mapPin} EndereÃ§o (CEP)` },
+          { id: '4', texto: `${E.mapPin} Endereço (CEP)` },
         ],
       });
       return;
@@ -829,38 +829,38 @@ export class WhatsappBotService {
 
     if (corpo === '5' || corpo.toLowerCase().includes('indicar') || corpo.toLowerCase().includes('amigo')) {
       if (!cooperadoId) {
-        await this.sender.enviarMensagem(telefone, `${E.aviso} NÃ£o conseguimos identificar seu cadastro. Tente novamente ou fale com o suporte.`);
+        await this.sender.enviarMensagem(telefone, `${E.aviso} Não conseguimos identificar seu cadastro. Tente novamente ou fale com o suporte.`);
         return;
       }
       try {
         const result = await this.indicacoes.getMeuLink(cooperadoId);
         if (!result?.link) {
-          await this.sender.enviarMensagem(telefone, `${E.aviso} NÃ£o foi possÃ­vel gerar seu link de indicaÃ§Ã£o no momento. Tente novamente mais tarde.`);
+          await this.sender.enviarMensagem(telefone, `${E.aviso} Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.`);
           return;
         }
         const { link, totalIndicados, indicadosAtivos } = result;
         await this.sender.enviarMensagem(telefone,
-          `${E.presente} *Seu link de indicaÃ§Ã£o:*\n\n` +
+          `${E.presente} *Seu link de indicação:*\n\n` +
           `${link}\n\n` +
           `${E.grafico} Total indicados: ${totalIndicados ?? 0}\n` +
-          `${E.ok} Ativos (com benefÃ­cio): ${indicadosAtivos ?? 0}\n\n` +
-          `_Compartilhe! Quando seu indicado pagar a 1Âª fatura, vocÃª ganha seu benefÃ­cio._`,
+          `${E.ok} Ativos (com benefício): ${indicadosAtivos ?? 0}\n\n` +
+          `_Compartilhe! Quando seu indicado pagar a 1Âª fatura, você ganha seu benefício._`,
         );
       } catch (err) {
-        this.logger.warn(`Erro ao buscar link de indicaÃ§Ã£o para ${cooperadoId}: ${err?.message}`);
-        await this.sender.enviarMensagem(telefone, `${E.aviso} NÃ£o foi possÃ­vel gerar seu link de indicaÃ§Ã£o no momento. Tente novamente mais tarde.`);
+        this.logger.warn(`Erro ao buscar link de indicação para ${cooperadoId}: ${err?.message}`);
+        await this.sender.enviarMensagem(telefone, `${E.aviso} Não foi possível gerar seu link de indicação no momento. Tente novamente mais tarde.`);
       }
       return;
     }
 
-    if (corpo === '6' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrÃªncia')) {
+    if (corpo === '6' || corpo.toLowerCase().includes('suporte') || corpo.toLowerCase().includes('ocorrência')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.engrenagem} *Suporte tÃ©cnico:*\n\nDescreva o problema e nossa equipe responderÃ¡ em breve.\n\nOu escolha:\n1ï¸âƒ£ Problema na fatura\n2ï¸âƒ£ CrÃ©ditos nÃ£o creditados\n3ï¸âƒ£ Outro`,
+        `${E.engrenagem} *Suporte técnico:*\n\nDescreva o problema e nossa equipe responderá em breve.\n\nOu escolha:\n1️⃣ Problema na fatura\n2️⃣ Créditos não creditados\n3️⃣ Outro`,
       );
       return;
     }
@@ -871,7 +871,7 @@ export class WhatsappBotService {
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (crÃ©ditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
+      'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
     );
   }
 
@@ -880,13 +880,13 @@ export class WhatsappBotService {
     const resposta = this.respostaEfetiva(msg);
     const corpo = resposta;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('enviar agora') || corpo.toLowerCase().includes('jÃ¡ tenho')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('enviar agora') || corpo.toLowerCase().includes('já tenho')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `${E.clipe} Perfeito! Envie agora a *foto* ou o *PDF* da sua conta de energia.\n\n_Dica: tire uma foto clara da frente completa da fatura, com todos os dados visÃ­veis._`
+        `${E.clipe} Perfeito! Envie agora a *foto* ou o *PDF* da sua conta de energia.\n\n_Dica: tire uma foto clara da frente completa da fatura, com todos os dados visíveis._`
       );
       return;
     }
@@ -897,8 +897,8 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_DISPOSITIVO_EMAIL', contadorFallback: 0 },
       });
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Onde estÃ¡ acessando?',
-        corpo: `${E.email} Ã“timo! Vou te ajudar a baixar a fatura do seu email.\n\nVocÃª estÃ¡ usando:`,
+        titulo: 'Onde está acessando?',
+        corpo: `${E.email} Ã“timo! Vou te ajudar a baixar a fatura do seu email.\n\nVocê está usando:`,
         opcoes: [
           { id: 'CEL', texto: `${E.celular} Celular`, descricao: 'Vou te guiar pelo app' },
           { id: 'PC', texto: `${E.pc} Computador`, descricao: 'Vou te guiar pelo navegador' },
@@ -914,7 +914,7 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Qual sua distribuidora?',
-        corpo: `${E.pc} Vou te ajudar a baixar sua fatura!\n\nQual Ã© a sua distribuidora de energia?`,
+        corpo: `${E.pc} Vou te ajudar a baixar sua fatura!\n\nQual é a sua distribuidora de energia?`,
         opcoes: [
           { id: '1', texto: '1️⃣ EDP Espírito Santo' },
           { id: '2', texto: '2️⃣ CEMIG (MG)' },
@@ -945,12 +945,12 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMensagem(telefone,
         `${E.celular} *Baixar a fatura pelo celular:*\n\n` +
-        '1ï¸âƒ£ Abra o app do seu email (Gmail, Outlook, etc.)\n' +
-        '2ï¸âƒ£ Procure uma mensagem da sua distribuidora (EDP, CEMIG, etc.) com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
-        '3ï¸âƒ£ Abra o email e toque no *anexo PDF*\n' +
-        '4ï¸âƒ£ Toque em *"Baixar"* ou *"Salvar"*\n' +
-        `5ï¸âƒ£ Volte aqui e toque no ${E.clipe} (clipe) para enviar o arquivo\n\n` +
-        `${E.lampada} *Dica:* Se nÃ£o encontrar o email, verifique a pasta *Spam* ou *PromoÃ§Ãµes*.\n\n` +
+        '1️⃣ Abra o app do seu email (Gmail, Outlook, etc.)\n' +
+        '2️⃣ Procure uma mensagem da sua distribuidora (EDP, CEMIG, etc.) com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3️⃣ Abra o email e toque no *anexo PDF*\n' +
+        '4️⃣ Toque em *"Baixar"* ou *"Salvar"*\n' +
+        `5️⃣ Volte aqui e toque no ${E.clipe} (clipe) para enviar o arquivo\n\n` +
+        `${E.lampada} *Dica:* Se não encontrar o email, verifique a pasta *Spam* ou *Promoções*.\n\n` +
         `${E.hourglass} Aguardo sua fatura!`
       );
     } else if (isPC) {
@@ -960,12 +960,12 @@ export class WhatsappBotService {
       });
       await this.sender.enviarMensagem(telefone,
         `${E.pc} *Baixar a fatura pelo computador:*\n\n` +
-        '1ï¸âƒ£ Abra seu email no navegador (gmail.com, outlook.com, etc.)\n' +
-        '2ï¸âƒ£ Procure uma mensagem da distribuidora com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
-        '3ï¸âƒ£ Abra o email e clique no *anexo PDF*\n' +
-        '4ï¸âƒ£ Clique em *"Baixar"* â€” o arquivo vai para a pasta *Downloads*\n' +
-        `5ï¸âƒ£ Volte aqui no WhatsApp Web, clique no ${E.clipe} (clipe) e selecione o arquivo baixado\n\n` +
-        `${E.lampada} *Dica:* NÃ£o precisa imprimir! Pode enviar direto o PDF.\n\n` +
+        '1️⃣ Abra seu email no navegador (gmail.com, outlook.com, etc.)\n' +
+        '2️⃣ Procure uma mensagem da distribuidora com assunto *"Conta de energia"* ou *"Sua fatura"*\n' +
+        '3️⃣ Abra o email e clique no *anexo PDF*\n' +
+        '4️⃣ Clique em *"Baixar"* — o arquivo vai para a pasta *Downloads*\n' +
+        `5️⃣ Volte aqui no WhatsApp Web, clique no ${E.clipe} (clipe) e selecione o arquivo baixado\n\n` +
+        `${E.lampada} *Dica:* Não precisa imprimir! Pode enviar direto o PDF.\n\n` +
         `${E.hourglass} Aguardo sua fatura!`
       );
     } else {
@@ -979,28 +979,28 @@ export class WhatsappBotService {
 
     const DISTRIBUIDORAS: Record<string, { nome: string; link: string; passos: string }> = {
       'EDP-ES': {
-        nome: 'EDP EspÃ­rito Santo',
+        nome: 'EDP Espírito Santo',
         link: 'https://www.edp.com.br/espirito-santo/para-voce/segunda-via-de-conta',
-        passos: `1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ Clique em *"Acessar"* ou *"Entrar"*\n3ï¸âƒ£ Informe seu CPF e senha\n4ï¸âƒ£ VÃ¡ em *"Faturas"* â†’ *"2Âª Via"*\n5ï¸âƒ£ Baixe o PDF da fatura mais recente\n6ï¸âƒ£ Envie aqui para mim ${E.clipe}`,
+        passos: `1️⃣ Acesse o link acima\n2️⃣ Clique em *"Acessar"* ou *"Entrar"*\n3️⃣ Informe seu CPF e senha\n4️⃣ Vá em *"Faturas"* â†’ *"2Âª Via"*\n5️⃣ Baixe o PDF da fatura mais recente\n6️⃣ Envie aqui para mim ${E.clipe}`,
       },
       'CEMIG': {
         nome: 'CEMIG',
         link: 'https://atende.cemig.com.br',
-        passos: `1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ FaÃ§a login com CPF e senha\n3ï¸âƒ£ Clique em *"Faturas"*\n4ï¸âƒ£ Selecione a Ãºltima fatura\n5ï¸âƒ£ Baixe o PDF\n6ï¸âƒ£ Envie aqui para mim ${E.clipe}`,
+        passos: `1️⃣ Acesse o link acima\n2️⃣ Faça login com CPF e senha\n3️⃣ Clique em *"Faturas"*\n4️⃣ Selecione a última fatura\n5️⃣ Baixe o PDF\n6️⃣ Envie aqui para mim ${E.clipe}`,
       },
       'COPEL': {
         nome: 'COPEL',
         link: 'https://www.copel.com/hpcweb/portal-atendimento',
-        passos: `1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ FaÃ§a login na AgÃªncia Virtual\n3ï¸âƒ£ Clique em *"2Âª Via de Conta"*\n4ï¸âƒ£ Baixe o PDF\n5ï¸âƒ£ Envie aqui para mim ${E.clipe}`,
+        passos: `1️⃣ Acesse o link acima\n2️⃣ Faça login na Agência Virtual\n3️⃣ Clique em *"2Âª Via de Conta"*\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim ${E.clipe}`,
       },
       'LIGHT': {
         nome: 'LIGHT',
         link: 'https://www.light.com.br/para-voce/segunda-via',
-        passos: `1ï¸âƒ£ Acesse o link acima\n2ï¸âƒ£ Informe seu CPF\n3ï¸âƒ£ Selecione a fatura\n4ï¸âƒ£ Baixe o PDF\n5ï¸âƒ£ Envie aqui para mim ${E.clipe}`,
+        passos: `1️⃣ Acesse o link acima\n2️⃣ Informe seu CPF\n3️⃣ Selecione a fatura\n4️⃣ Baixe o PDF\n5️⃣ Envie aqui para mim ${E.clipe}`,
       },
     };
 
-    // Mapeamento por nÃºmero (fallback texto: usuÃ¡rio digita 1, 2, 3, 4, 5)
+    // Mapeamento por número (fallback texto: usuário digita 1, 2, 3, 4, 5)
     const NUMERO_PARA_ID: Record<string, string> = {
       '1': 'EDP-ES', '2': 'CEMIG', '3': 'COPEL', '4': 'LIGHT', '5': 'OUTRA',
     };
@@ -1018,26 +1018,26 @@ export class WhatsappBotService {
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `${E.pc} *${dist.nome} â€” Como baixar sua fatura:*\n\n` +
+        `${E.pc} *${dist.nome} — Como baixar sua fatura:*\n\n` +
         `${E.link} ${dist.link}\n\n` +
         `${dist.passos}\n\n` +
-        `${E.lampada} *Dica extra:* Aproveite o acesso e cadastre nosso email *faturas@cooperebr.com.br* como 2Âº destinatÃ¡rio para receber sua fatura automaticamente todo mÃªs!\n\n` +
+        `${E.lampada} *Dica extra:* Aproveite o acesso e cadastre nosso email *faturas@cooperebr.com.br* como 2Âº destinatário para receber sua fatura automaticamente todo mês!\n\n` +
         `${E.hourglass} Quando tiver o PDF, envie aqui!`
       );
     } else {
-      // Distribuidora nÃ£o mapeada
+      // Distribuidora não mapeada
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
         `${E.pc} Para baixar sua fatura:\n\n` +
-        `1ï¸âƒ£ Acesse o site ou app da sua distribuidora\n` +
-        `2ï¸âƒ£ FaÃ§a login na Ãrea do Cliente\n` +
-        `3ï¸âƒ£ Busque por *"2Âª Via"* ou *"Faturas"*\n` +
-        `4ï¸âƒ£ Baixe o PDF da fatura mais recente\n` +
-        `5ï¸âƒ£ Envie aqui para mim ${E.clipe}\n\n` +
-        `Precisa de ajuda especÃ­fica? Digite o nome da sua distribuidora.`
+        `1️⃣ Acesse o site ou app da sua distribuidora\n` +
+        `2️⃣ Faça login na Área do Cliente\n` +
+        `3️⃣ Busque por *"2Âª Via"* ou *"Faturas"*\n` +
+        `4️⃣ Baixe o PDF da fatura mais recente\n` +
+        `5️⃣ Envie aqui para mim ${E.clipe}\n\n` +
+        `Precisa de ajuda específica? Digite o nome da sua distribuidora.`
       );
     }
   }
@@ -1052,7 +1052,7 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, `${E.camera} Envie uma foto ou PDF da sua conta de energia para iniciarmos sua simulaÃ§Ã£o!`);
+      await this.sender.enviarMensagem(telefone, `${E.camera} Envie uma foto ou PDF da sua conta de energia para iniciarmos sua simulação!`);
       return;
     }
 
@@ -1075,7 +1075,7 @@ export class WhatsappBotService {
     const complementoSuporte = telefoneSuporte ? `\n\nSe for urgente, ligue: ${telefoneSuporte}` : '';
     await this.sender.enviarMensagem(
       telefone,
-      `${E.msgBox} Sua mensagem foi recebida! Nossa equipe entrarÃ¡ em contato em breve.${complementoSuporte}`,
+      `${E.msgBox} Sua mensagem foi recebida! Nossa equipe entrará em contato em breve.${complementoSuporte}`,
     );
 
     // Notificar admin da cooperativa
@@ -1087,7 +1087,7 @@ export class WhatsappBotService {
       if (admin?.telefone) {
         await this.sender.enviarMensagem(
           admin.telefone,
-          `${E.sino} SolicitaÃ§Ã£o de suporte via WhatsApp:\nTelefone: ${telefone}\nMensagem: ${corpo}`,
+          `${E.sino} Solicitação de suporte via WhatsApp:\nTelefone: ${telefone}\nMensagem: ${corpo}`,
         ).catch(() => {});
       }
     }
@@ -1100,7 +1100,7 @@ export class WhatsappBotService {
     });
     await this.sender.enviarMensagem(
       telefone,
-      `${E.pessoa} *Encaminhando para atendente humano...*\n\nUm de nossos especialistas responderÃ¡ em breve. HorÃ¡rio de atendimento: Segâ€“Sex 8hâ€“18h.\n\nDescreva sua dÃºvida ou aguarde.`,
+      `${E.pessoa} *Encaminhando para atendente humano...*\n\nUm de nossos especialistas responderá em breve. Horário de atendimento: Seg—Sex 8h—18h.\n\nDescreva sua dúvida ou aguarde.`,
     );
     this.logger.log(`[Atendente] ${telefone}: ${motivo}`);
   }
@@ -1113,17 +1113,17 @@ export class WhatsappBotService {
     });
 
     if (novoContador >= 3) {
-      // ApÃ³s 3 mensagens nÃ£o compreendidas â†’ encaminhar para atendente
+      // Após 3 mensagens não compreendidas â†’ encaminhar para atendente
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.pensar} Parece que estou com dificuldade em entender. Vou te conectar com um atendente humano!\n\n${E.pessoa} Aguarde, um especialista responderÃ¡ em breve.`,
+        `${E.pensar} Parece que estou com dificuldade em entender. Vou te conectar com um atendente humano!\n\n${E.pessoa} Aguarde, um especialista responderá em breve.`,
       );
     } else {
-      await this.sender.enviarMensagem(telefone, `NÃ£o entendi. ${E.aviso} Responda com o numero da opcao ou digite *menu* para voltar ao inicio.`);
+      await this.sender.enviarMensagem(telefone, `Não entendi. ${E.aviso} Responda com o numero da opcao ou digite *menu* para voltar ao inicio.`);
     }
   }
 
@@ -1253,12 +1253,12 @@ export class WhatsappBotService {
     } catch {
       await this.sender.enviarMensagem(
         telefone,
-        `NÃ£o consegui identificar os dados da sua fatura. Por favor, envie uma foto mais nÃ­tida ou o PDF da fatura de energia. ${E.camera}`,
+        `Não consegui identificar os dados da sua fatura. Por favor, envie uma foto mais nítida ou o PDF da fatura de energia. ${E.camera}`,
       );
       return;
     }
 
-    // Validar dados mÃ­nimos
+    // Validar dados mínimos
     const titular = String(dadosExtraidos.titular ?? '');
     const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
     const distribuidora = String(dadosExtraidos.distribuidora ?? '');
@@ -1266,7 +1266,7 @@ export class WhatsappBotService {
     if (!titular && consumoAtualKwh <= 0 && !distribuidora) {
       await this.sender.enviarMensagem(
         telefone,
-        `O arquivo enviado nÃ£o parece ser uma fatura de energia. Por favor, envie a fatura da concessionÃ¡ria (PDF ou foto legÃ­vel). ${E.doc}`,
+        `O arquivo enviado não parece ser uma fatura de energia. Por favor, envie a fatura da concessionária (PDF ou foto legível). ${E.doc}`,
       );
       return;
     }
@@ -1280,24 +1280,24 @@ export class WhatsappBotService {
       },
     });
 
-    // Montar mensagem de confirmaÃ§Ã£o
+    // Montar mensagem de confirmação
     const historico = (dadosExtraidos.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
     const endereco = String(dadosExtraidos.enderecoInstalacao ?? '');
-    const numeroUC = String(dadosExtraidos.numeroUC ?? 'â€”');
+    const numeroUC = String(dadosExtraidos.numeroUC ?? '—');
     const tipoFornecimento = String(dadosExtraidos.tipoFornecimento ?? '');
     const tensao = String(dadosExtraidos.tensaoNominal ?? '');
 
-    let msg_confirmacao = `${E.grafico} *Dados extraÃ­dos da sua fatura:*\n\n`;
+    let msg_confirmacao = `${E.grafico} *Dados extraídos da sua fatura:*\n\n`;
     msg_confirmacao += `${E.pessoa} ${titular}\n`;
     if (endereco) msg_confirmacao += `${E.mapPin} ${endereco}\n`;
     msg_confirmacao += `${E.plugue} UC: ${numeroUC}\n`;
     if (tipoFornecimento) msg_confirmacao += `${E.bolt} ${tipoFornecimento}${tensao ? ` (${tensao})` : ''}\n`;
 
     if (historico.length > 0) {
-      msg_confirmacao += `\n${E.calendario} *HistÃ³rico de consumo:*\n`;
+      msg_confirmacao += `\n${E.calendario} *Histórico de consumo:*\n`;
       for (const h of historico) {
         const valor = Number(h.valorRS);
-        const valorStr = valor > 0 ? ` â€” R$ ${valor.toFixed(2).replace('.', ',')}` : '';
+        const valorStr = valor > 0 ? ` — R$ ${valor.toFixed(2).replace('.', ',')}` : '';
         msg_confirmacao += `${h.mesAno}: ${h.consumoKwh} kWh${valorStr}\n`;
       }
     }
@@ -1366,7 +1366,7 @@ Essa conta de energia e:
     );
   }
 
-  // â”€â”€â”€ PASSO 2: ConfirmaÃ§Ã£o dos dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ PASSO 2: Confirmação dos dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoDados(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -1382,7 +1382,7 @@ Essa conta de energia e:
     }
 
     if (corpoUpper === 'OK') {
-      // Verificar se distribuidora tem usinas disponÃ­veis
+      // Verificar se distribuidora tem usinas disponíveis
       const distribuidoraOCR = String(dadosTemp.distribuidora ?? '');
       if (distribuidoraOCR) {
         const usinasNaArea = await this.prisma.usina.count({
@@ -1408,19 +1408,19 @@ Essa conta de energia e:
           const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           await this.sender.enviarMensagem(
             telefone,
-            `${E.solar} Fizemos sua simulaÃ§Ã£o!\n\n` +
+            `${E.solar} Fizemos sua simulação!\n\n` +
             `${E.grafico} Sua fatura atual: R$ ${fmt(valorFatura)}\n` +
-            `${E.coracao} Economia estimada com CoopereBR: *R$ ${fmt(economiaEstimada)}/mÃªs*\n` +
+            `${E.coracao} Economia estimada com CoopereBR: *R$ ${fmt(economiaEstimada)}/mês*\n` +
             `${E.calendario} Economia anual: *R$ ${fmt(economiaAnual)}*\n\n` +
-            `Ainda nÃ£o temos parceiro na Ã¡rea da *${distribuidoraOCR}*, mas estamos expandindo!\n\n` +
-            `Quer que te avisemos quando chegarmos na sua regiÃ£o?\n` +
-            `1ï¸âƒ£ Sim, quero!\n2ï¸âƒ£ NÃ£o por enquanto`,
+            `Ainda não temos parceiro na área da *${distribuidoraOCR}*, mas estamos expandindo!\n\n` +
+            `Quer que te avisemos quando chegarmos na sua região?\n` +
+            `1️⃣ Sim, quero!\n2️⃣ Não por enquanto`,
           );
           return;
         }
       }
 
-      // Calcular simulaÃ§Ã£o
+      // Calcular simulação
       const historico = (dadosTemp.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
       const consumoAtualKwh = Number(dadosTemp.consumoAtualKwh ?? 0);
       const valorMesRecente = Number(dadosTemp.totalAPagar ?? 0);
@@ -1446,7 +1446,7 @@ Essa conta de energia e:
         this.logger.error(`Erro ao calcular proposta: ${err.message}`);
         await this.sender.enviarMensagem(
           telefone,
-          `Houve um erro ao calcular sua simulaÃ§Ã£o. Tente novamente ou entre em contato conosco. ${E.sorriso}`,
+          `Houve um erro ao calcular sua simulação. Tente novamente ou entre em contato conosco. ${E.sorriso}`,
         );
         return;
       }
@@ -1454,7 +1454,7 @@ Essa conta de energia e:
       if (!resultado) {
         await this.sender.enviarMensagem(
           telefone,
-          `NÃ£o foi possÃ­vel gerar uma simulaÃ§Ã£o com os dados extraÃ­dos. Tente enviar outra fatura. ${E.doc}`,
+          `Não foi possível gerar uma simulação com os dados extraídos. Tente enviar outra fatura. ${E.doc}`,
         );
         return;
       }
@@ -1477,13 +1477,13 @@ Essa conta de energia e:
         },
       });
 
-      let resposta = `${E.muda} *Sua simulaÃ§Ã£o CoopereBR:*\n\n`;
-      resposta += `${E.grafico} Fatura mÃ©dia atual: R$ ${fmt(valorFaturaMedia)}\n`;
+      let resposta = `${E.muda} *Sua simulação CoopereBR:*\n\n`;
+      resposta += `${E.grafico} Fatura média atual: R$ ${fmt(valorFaturaMedia)}\n`;
       resposta += `${E.coracao} Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
       resposta += `${E.dolar} Economia mensal: R$ ${fmt(economiaMensal)}\n`;
       resposta += `${E.calendario} Economia anual: R$ ${fmt(economiaAnual)}\n`;
       if (mesesEconomia > 0) {
-        resposta += `${E.presente} Equivale a ${mesesEconomia.toFixed(1).replace('.', ',')} meses de energia grÃ¡tis!\n`;
+        resposta += `${E.presente} Equivale a ${mesesEconomia.toFixed(1).replace('.', ',')} meses de energia grátis!\n`;
       }
       resposta += `\nQuer receber a proposta completa em PDF?\nResponda *SIM*`;
 
@@ -1491,7 +1491,7 @@ Essa conta de energia e:
       return;
     }
 
-    // Tentar corrigir dado do histÃ³rico via regex
+    // Tentar corrigir dado do histórico via regex
     const regexCorrecao = /^(\d{2})[\/\-](\d{2,4})\s+(\d+)\s*kwh\s+R?\$?\s*([\d.,]+)/i;
     const match = corpo.match(regexCorrecao);
 
@@ -1518,26 +1518,26 @@ Essa conta de energia e:
 
       await this.sender.enviarMensagem(
         telefone,
-        `${E.ok} MÃªs ${mesAno} atualizado: ${kwh} kWh â€” R$ ${valor.toFixed(2).replace('.', ',')}\n\nOutro dado a corrigir? Ou responda *OK* para gerar a simulaÃ§Ã£o.`,
+        `${E.ok} Mês ${mesAno} atualizado: ${kwh} kWh — R$ ${valor.toFixed(2).replace('.', ',')}\n\nOutro dado a corrigir? Ou responda *OK* para gerar a simulação.`,
       );
       return;
     }
 
-    // NÃ£o entendeu
+    // Não entendeu
     await this.sender.enviarMensagem(
       telefone,
-      `NÃ£o entendi. ${E.aviso} Responda *OK* se estiver tudo certo, ou corrija no formato:\n_02/26 350 kwh R$ 287,50_`,
+      `Não entendi. ${E.aviso} Responda *OK* se estiver tudo certo, ou corrija no formato:\n_02/26 350 kwh R$ 287,50_`,
     );
   }
 
-  // â”€â”€â”€ PASSO 3: ConfirmaÃ§Ã£o da proposta â†’ envia PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ PASSO 3: Confirmação da proposta â†’ envia PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoProposta(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim().toUpperCase();
     const dadosTempCheck = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
-    // Fluxo convite: se veio de indicaÃ§Ã£o, "1" ou "SIM" leva para coleta de dados
+    // Fluxo convite: se veio de indicação, "1" ou "SIM" leva para coleta de dados
     if (dadosTempCheck.codigoIndicacao && (corpo === '1' || corpo === 'SIM')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
@@ -1558,8 +1558,8 @@ Essa conta de energia e:
       await this.sender.enviarMensagem(
         telefone,
         dadosTempCheck.codigoIndicacao
-          ? 'Responda 1ï¸âƒ£ para continuar ou 2ï¸âƒ£ para nao.'
-          : 'Responda *SIM* para receber a proposta em PDF, ou *cancelar* para recomeÃ§ar.',
+          ? 'Responda 1️⃣ para continuar ou 2️⃣ para nao.'
+          : 'Responda *SIM* para receber a proposta em PDF, ou *cancelar* para recomeçar.',
       );
       return;
     }
@@ -1569,7 +1569,7 @@ Essa conta de energia e:
     // Gerar PDF da proposta via motor-proposta (aceitar cria proposta + PDF)
     const titular = String(dadosTemp.titular ?? '');
     const endereco = String(dadosTemp.enderecoInstalacao ?? '');
-    const numeroUC = String(dadosTemp.numeroUC ?? 'â€”');
+    const numeroUC = String(dadosTemp.numeroUC ?? '—');
 
     await this.sender.enviarMensagem(telefone, `${E.doc} Gerando sua proposta em PDF... Aguarde um momento. ${E.hourglass}`);
 
@@ -1580,7 +1580,7 @@ Essa conta de energia e:
 
       // Buscar ou criar cooperado lead
       const telefoneNorm = telefone.replace(/\D/g, '');
-      // Buscar por telefone completo normalizado (sem prefixo paÃ­s variÃ¡vel)
+      // Buscar por telefone completo normalizado (sem prefixo país variável)
       const telefoneSemPais = telefoneNorm.replace(/^55/, '');
       let cooperado = await this.prisma.cooperado.findFirst({
         where: {
@@ -1621,7 +1621,7 @@ Essa conta de energia e:
       });
 
       if (propostaResult.resultado) {
-        // Enviar mensagem com dados da simulaÃ§Ã£o como "PDF resumo"
+        // Enviar mensagem com dados da simulação como "PDF resumo"
         const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const r = propostaResult.resultado;
 
@@ -1630,13 +1630,13 @@ Essa conta de energia e:
         pdfTexto += `${E.pessoa} *${titular}*\n`;
         if (endereco) pdfTexto += `${E.mapPin} ${endereco}\n`;
         pdfTexto += `${E.plugue} UC: ${numeroUC}\n\n`;
-        pdfTexto += `${E.grafico} *Dados da simulaÃ§Ã£o:*\n`;
-        pdfTexto += `â€¢ Consumo considerado: ${Math.round(r.kwhContrato)} kWh/mÃªs\n`;
-        pdfTexto += `â€¢ Desconto: ${r.descontoPercentual.toFixed(1)}%\n`;
-        pdfTexto += `â€¢ Economia mensal: R$ ${fmt(r.economiaMensal)}\n`;
-        pdfTexto += `â€¢ Economia anual: R$ ${fmt(r.economiaAnual)}\n\n`;
+        pdfTexto += `${E.grafico} *Dados da simulação:*\n`;
+        pdfTexto += `• Consumo considerado: ${Math.round(r.kwhContrato)} kWh/mês\n`;
+        pdfTexto += `• Desconto: ${r.descontoPercentual.toFixed(1)}%\n`;
+        pdfTexto += `• Economia mensal: R$ ${fmt(r.economiaMensal)}\n`;
+        pdfTexto += `• Economia anual: R$ ${fmt(r.economiaAnual)}\n\n`;
         pdfTexto += `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n`;
-        pdfTexto += `_Proposta vÃ¡lida por 30 dias_`;
+        pdfTexto += `_Proposta válida por 30 dias_`;
 
         await this.sender.enviarMensagem(telefone, pdfTexto);
       }
@@ -1644,16 +1644,16 @@ Essa conta de energia e:
       this.logger.error(`Erro ao gerar proposta: ${err.message}`);
       await this.sender.enviarMensagem(
         telefone,
-        `Houve um erro ao gerar a proposta. Nossa equipe entrarÃ¡ em contato. ${E.sorriso}`,
+        `Houve um erro ao gerar a proposta. Nossa equipe entrará em contato. ${E.sorriso}`,
       );
     }
 
-    // ConfirmaÃ§Ã£o de dados para cadastro
+    // Confirmação de dados para cadastro
     let dadosCadastro = `${E.ok} *Seus dados para cadastro:*\n\n`;
     dadosCadastro += `${E.pessoa} ${titular}\n`;
     if (endereco) dadosCadastro += `${E.mapPin} ${endereco}\n`;
     dadosCadastro += `${E.plugue} UC: ${numeroUC}\n\n`;
-    dadosCadastro += `EstÃ¡ correto? Responda *CONFIRMO* para prosseguir\n`;
+    dadosCadastro += `Está correto? Responda *CONFIRMO* para prosseguir\n`;
     dadosCadastro += `ou me diga o que precisa corrigir.`;
 
     await this.prisma.conversaWhatsapp.update({
@@ -1664,7 +1664,7 @@ Essa conta de energia e:
     await this.sender.enviarMensagem(telefone, dadosCadastro);
   }
 
-  // â”€â”€â”€ PASSO 4: ConfirmaÃ§Ã£o do cadastro â†’ cria cooperado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ PASSO 4: Confirmação do cadastro â†’ cria cooperado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleConfirmacaoCadastro(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -1681,7 +1681,7 @@ Essa conta de energia e:
     const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
     const telefoneNorm = telefone.replace(/\D/g, '');
 
-    // Verificar se jÃ¡ existe cooperado (busca por telefone completo normalizado)
+    // Verificar se já existe cooperado (busca por telefone completo normalizado)
     const telefoneSemPais = telefoneNorm.replace(/^55/, '');
     let cooperado = await this.prisma.cooperado.findFirst({
       where: {
@@ -1696,7 +1696,7 @@ Essa conta de energia e:
     if (cooperado && cooperado.status !== 'PENDENTE') {
       await this.sender.enviarMensagem(
         telefone,
-        `VocÃª jÃ¡ estÃ¡ em nosso sistema! Nossa equipe entrarÃ¡ em contato em breve. ${E.sorriso}`,
+        `Você já está em nosso sistema! Nossa equipe entrará em contato em breve. ${E.sorriso}`,
       );
       await this.finalizarConversa(conversa.id);
       return;
@@ -1744,7 +1744,7 @@ Essa conta de energia e:
 
     // Criar UC se tiver dados
     const numeroUC = String(dadosTemp.numeroUC ?? '');
-    if (numeroUC && numeroUC !== 'â€”') {
+    if (numeroUC && numeroUC !== '—') {
       const ucExistente = await this.prisma.uc.findFirst({
         where: { numero: numeroUC },
       });
@@ -1763,17 +1763,17 @@ Essa conta de energia e:
             },
           });
         } catch (err) {
-          this.logger.warn(`NÃ£o foi possÃ­vel criar UC: ${err.message}`);
+          this.logger.warn(`Não foi possível criar UC: ${err.message}`);
         }
       }
     }
 
-    // Verificar indicaÃ§Ã£o (cÃ³digo salvo no dadosTemp pelo fluxo MLM)
+    // Verificar indicação (código salvo no dadosTemp pelo fluxo MLM)
     const codigoRef = dadosTemp.codigoIndicacao as string | undefined;
     if (codigoRef && cooperado) {
       try {
         await this.indicacoes.registrarIndicacao(cooperado.id, codigoRef);
-        this.logger.log(`IndicaÃ§Ã£o registrada para ${cooperado.id} via cÃ³digo ${codigoRef}`);
+        this.logger.log(`Indicação registrada para ${cooperado.id} via código ${codigoRef}`);
 
         // Notificar o indicador
         const indicador = await this.prisma.cooperado.findUnique({
@@ -1784,7 +1784,7 @@ Essa conta de energia e:
           const nomeIndicado = cooperado.nomeCompleto || titular || 'Novo membro';
           await this.sender.enviarMensagem(
             indicador.telefone,
-            `${E.festa} Boa notÃ­cia! ${nomeIndicado} acabou de completar o cadastro atravÃ©s do seu convite! Quando ele pagar a primeira fatura, vocÃª receberÃ¡ seu benefÃ­cio automaticamente. Obrigado por indicar! ${E.orar}`,
+            `${E.festa} Boa notícia! ${nomeIndicado} acabou de completar o cadastro através do seu convite! Quando ele pagar a primeira fatura, você receberá seu benefício automaticamente. Obrigado por indicar! ${E.orar}`,
           ).catch(() => {});
 
           // Notificar admin da cooperativa
@@ -1796,13 +1796,13 @@ Essa conta de energia e:
             if (admin?.telefone) {
               await this.sender.enviarMensagem(
                 admin.telefone,
-                `${E.prancheta} Novo cadastro via indicaÃ§Ã£o: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}. Acompanhe o processo no painel.`,
+                `${E.prancheta} Novo cadastro via indicação: ${nomeIndicado} | Tel: ${telefoneNorm} | Indicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}. Acompanhe o processo no painel.`,
               ).catch(() => {});
             }
           }
         }
       } catch (err) {
-        this.logger.warn(`NÃ£o foi possÃ­vel registrar indicaÃ§Ã£o: ${err.message}`);
+        this.logger.warn(`Não foi possível registrar indicação: ${err.message}`);
       }
     }
 
@@ -1967,18 +1967,18 @@ Essa conta de energia e:
 
     await this.sender.enviarMensagem(
       telefone,
-      `Seu cadastro jÃ¡ foi recebido! ${E.sorriso} Nossa equipe entrarÃ¡ em contato em breve.\n\nSe quiser fazer uma nova simulaÃ§Ã£o, envie outra conta de luz. ${E.camera}`,
+      `Seu cadastro já foi recebido! ${E.sorriso} Nossa equipe entrará em contato em breve.\n\nSe quiser fazer uma nova simulação, envie outra conta de luz. ${E.camera}`,
     );
   }
 
-  // â”€â”€â”€ Fluxo Convite (indicaÃ§Ã£o) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ Fluxo Convite (indicação) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Inicia o fluxo de convite quando um lead chega via referÃªncia de indicaÃ§Ã£o.
+   * Inicia o fluxo de convite quando um lead chega via referência de indicação.
    * Chamado externamente (ex: MLM service) para iniciar a conversa.
    */
   async iniciarFluxoConvite(telefone: string, indicadorNome: string, codigoIndicacao: string): Promise<void> {
-    // Redireciona para o fluxo de convite melhorado com botÃµes interativos
+    // Redireciona para o fluxo de convite melhorado com botões interativos
     await this.iniciarFluxoConviteIndicacao(telefone, indicadorNome, codigoIndicacao);
   }
 
@@ -1996,13 +1996,13 @@ Essa conta de energia e:
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('nao') || corpo.toLowerCase().includes('nÃ£o')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('nao') || corpo.toLowerCase().includes('não')) {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(telefone, `Tudo bem! Se mudar de ideia, estamos aqui. ${E.sorriso}`);
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, 'Responda 1ï¸âƒ£ para saber mais ou 2ï¸âƒ£ se nao tem interesse.');
+    await this.sender.enviarMensagem(telefone, 'Responda 1️⃣ para saber mais ou 2️⃣ se nao tem interesse.');
   }
 
   private async handleAguardandoFotoFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2196,8 +2196,8 @@ Essa conta de energia e:
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia fluxo QR Code/Propaganda para contato espontÃ¢neo sem indicaÃ§Ã£o.
-   * Chamado quando nÃ£o hÃ¡ codigoRef na conversa e Ã© primeira interaÃ§Ã£o de texto.
+   * Inicia fluxo QR Code/Propaganda para contato espontâneo sem indicação.
+   * Chamado quando não há codigoRef na conversa e é primeira interação de texto.
    */
   async iniciarFluxoQrPropaganda(telefone: string): Promise<void> {
     await this.prisma.conversaWhatsapp.upsert({
@@ -2207,8 +2207,8 @@ Essa conta de energia e:
     });
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Bem-vindo Ã  CoopereBR',
-      corpo: `${E.oi} OlÃ¡! Bem-vindo Ã  *CoopereBR* â€” energia solar compartilhada!\n\nEconomize atÃ© 20% na conta de luz sem investimento e sem obras.`,
+      titulo: 'Bem-vindo à CoopereBR',
+      corpo: `${E.oi} Olá! Bem-vindo à *CoopereBR* — energia solar compartilhada!\n\nEconomize até 20% na conta de luz sem investimento e sem obras.`,
       opcoes: [
         { id: '1', texto: `${E.muda} Conhecer a CoopereBR`, descricao: 'Saiba como funciona' },
         { id: '2', texto: `${E.dinheiro} Simular minha economia`, descricao: 'Calcule quanto vai economizar' },
@@ -2226,20 +2226,20 @@ Essa conta de energia e:
         telefone,
         `${E.muda} *Como funciona a CoopereBR:*\n\n` +
         `${E.solar} Somos uma cooperativa de energia solar compartilhada\n` +
-        `${E.lampada} VocÃª recebe crÃ©ditos de energia solar na sua conta de luz\n` +
-        `${E.dinheiro} Economia de atÃ© *20%* todo mÃªs â€” sem investimento\n` +
-        `${E.prancheta} Sem obras, sem instalaÃ§Ã£o, sem burocracia\n` +
+        `${E.lampada} Você recebe créditos de energia solar na sua conta de luz\n` +
+        `${E.dinheiro} Economia de até *20%* todo mês — sem investimento\n` +
+        `${E.prancheta} Sem obras, sem instalação, sem burocracia\n` +
         `${E.ciclo} Cancelamento sem multa a qualquer momento\n` +
-        `${E.globo} Energia 100% limpa e sustentÃ¡vel\n\n` +
-        'Quer saber exatamente quanto vocÃª vai economizar?',
+        `${E.globo} Energia 100% limpa e sustentável\n\n` +
+        'Quer saber exatamente quanto você vai economizar?',
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'PrÃ³ximo passo',
+        titulo: 'Próximo passo',
         corpo: 'O que deseja fazer?',
         opcoes: [
           { id: '2', texto: `${E.dinheiro} Simular minha economia` },
-          { id: '4', texto: `${E.camera} Enviar minha fatura`, descricao: 'SimulaÃ§Ã£o detalhada com OCR' },
+          { id: '4', texto: `${E.camera} Enviar minha fatura`, descricao: 'Simulação detalhada com OCR' },
           { id: '3', texto: `${E.pessoa} Falar com consultor` },
         ],
       });
@@ -2253,7 +2253,7 @@ Essa conta de energia e:
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.dinheiro} Vamos simular sua economia!\n\nQual o *valor mÃ©dio* da sua conta de luz? (ex: 350)`,
+        `${E.dinheiro} Vamos simular sua economia!\n\nQual o *valor médio* da sua conta de luz? (ex: 350)`,
       );
       return;
     }
@@ -2268,7 +2268,7 @@ Essa conta de energia e:
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, `${E.camera} Envie uma *foto* ou *PDF* da sua conta de energia para uma simulaÃ§Ã£o detalhada!`);
+      await this.sender.enviarMensagem(telefone, `${E.camera} Envie uma *foto* ou *PDF* da sua conta de energia para uma simulação detalhada!`);
       return;
     }
 
@@ -2281,14 +2281,14 @@ Essa conta de energia e:
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim();
 
-    // Extrair valor numÃ©rico
+    // Extrair valor numérico
     const valorStr = corpo.replace(/[^\d.,]/g, '').replace(',', '.');
     const valor = parseFloat(valorStr);
 
     if (isNaN(valor) || valor <= 0 || valor > 50000) {
       await this.sender.enviarMensagem(
         telefone,
-        'Por favor, informe o valor da sua conta de luz em reais (apenas o nÃºmero).\nExemplo: *350* ou *280,50*',
+        'Por favor, informe o valor da sua conta de luz em reais (apenas o número).\nExemplo: *350* ou *280,50*',
       );
       return;
     }
@@ -2311,21 +2311,21 @@ Essa conta de energia e:
 
     await this.sender.enviarMensagem(
       telefone,
-      `${E.muda} *Resultado da sua simulaÃ§Ã£o:*\n\n` +
+      `${E.muda} *Resultado da sua simulação:*\n\n` +
       `${E.grafico} Conta atual: R$ ${fmt(valor)}\n` +
       `${E.coracao} Com a CoopereBR: R$ ${fmt(valor - economiaMensal)} (-${descontoPercentual}%)\n` +
       `${E.dolar} *Economia mensal: R$ ${fmt(economiaMensal)}*\n` +
       `${E.calendario} *Economia anual: R$ ${fmt(economiaAnual)}*\n\n` +
-      `Com sua conta de R$ ${fmt(valor)}, vocÃª economizaria cerca de *R$ ${fmt(economiaMensal)} por mÃªs* (R$ ${fmt(economiaAnual)} por ano)! ${E.festa}`,
+      `Com sua conta de R$ ${fmt(valor)}, você economizaria cerca de *R$ ${fmt(economiaMensal)} por mês* (R$ ${fmt(economiaAnual)} por ano)! ${E.festa}`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'PrÃ³ximo passo',
+      titulo: 'Próximo passo',
       corpo: 'O que deseja fazer agora?',
       opcoes: [
         { id: '1', texto: `${E.ok} Quero me cadastrar` },
-        { id: '2', texto: `${E.prancheta} Receber mais informaÃ§Ãµes` },
-        { id: '3', texto: `${E.x} NÃ£o tenho interesse` },
+        { id: '2', texto: `${E.prancheta} Receber mais informações` },
+        { id: '3', texto: `${E.x} Não tenho interesse` },
       ],
     });
   }
@@ -2342,22 +2342,22 @@ Essa conta de energia e:
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.festa} Ã“timo! Para finalizar seu cadastro, envie uma *foto* ou *PDF* da sua conta de energia.\n\nIsso nos ajuda a calcular os crÃ©ditos ideais para vocÃª! ${E.camera}`,
+        `${E.festa} Ã“timo! Para finalizar seu cadastro, envie uma *foto* ou *PDF* da sua conta de energia.\n\nIsso nos ajuda a calcular os créditos ideais para você! ${E.camera}`,
       );
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('informaÃ§') || corpo.toLowerCase().includes('informac')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('informaç') || corpo.toLowerCase().includes('informac')) {
       const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
       await this.sender.enviarMensagem(
         telefone,
-        `${E.prancheta} *BenefÃ­cios da CoopereBR:*\n\n` +
-        `${E.ok} Desconto de atÃ© 20% na conta de luz\n` +
-        `${E.ok} Energia 100% solar e renovÃ¡vel\n` +
+        `${E.prancheta} *Benefícios da CoopereBR:*\n\n` +
+        `${E.ok} Desconto de até 20% na conta de luz\n` +
+        `${E.ok} Energia 100% solar e renovável\n` +
         `${E.ok} Sem investimento inicial\n` +
-        `${E.ok} Sem obras ou instalaÃ§Ã£o\n` +
+        `${E.ok} Sem obras ou instalação\n` +
         `${E.ok} Cancelamento sem multa\n` +
-        `${E.ok} CrÃ©ditos aplicados direto na sua conta\n` +
+        `${E.ok} Créditos aplicados direto na sua conta\n` +
         `${E.ok} Acompanhe tudo pelo portal\n\n` +
         `${E.globo} Acesse nosso portal: ${baseUrl}\n\n` +
         `Quando estiver pronto, digite *cadastro* para iniciar! ${E.sorriso}`,
@@ -2369,17 +2369,17 @@ Essa conta de energia e:
       return;
     }
 
-    if (corpo === '3' || corpo.toLowerCase().includes('interesse') || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('nao')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('interesse') || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `Tudo bem! Se mudar de ideia, Ã© sÃ³ nos mandar uma mensagem. Obrigado pelo interesse! ${E.coracao}`,
+        `Tudo bem! Se mudar de ideia, é só nos mandar uma mensagem. Obrigado pelo interesse! ${E.coracao}`,
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (cadastrar), *2* (mais informaÃ§Ãµes) ou *3* (sem interesse).',
+      'Responda *1* (cadastrar), *2* (mais informações) ou *3* (sem interesse).',
     );
   }
 
@@ -2388,8 +2388,8 @@ Essa conta de energia e:
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia abordagem proativa para cooperado com cobranÃ§a vencida.
-   * Chamado pelo cron de cobranÃ§a vencida.
+   * Inicia abordagem proativa para cooperado com cobrança vencida.
+   * Chamado pelo cron de cobrança vencida.
    */
   async iniciarFluxoInadimplente(
     telefone: string,
@@ -2420,9 +2420,9 @@ Essa conta de energia e:
 
     await this.sender.enviarMensagem(
       telefone,
-      `OlÃ¡, ${nome}! ${E.coracao}\n\n` +
-      `Notamos que sua fatura no valor de *R$ ${fmt(valor)}* com vencimento em *${dataFmt}* estÃ¡ em aberto.\n\n` +
-      `Sabemos que imprevistos acontecem â€” estamos aqui para ajudar! ${E.handshake}`,
+      `Olá, ${nome}! ${E.coracao}\n\n` +
+      `Notamos que sua fatura no valor de *R$ ${fmt(valor)}* com vencimento em *${dataFmt}* está em aberto.\n\n` +
+      `Sabemos que imprevistos acontecem — estamos aqui para ajudar! ${E.handshake}`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
@@ -2431,7 +2431,7 @@ Essa conta de energia e:
       opcoes: [
         { id: '1', texto: `${E.prancheta} Ver detalhes da fatura` },
         { id: '2', texto: `${E.cartao} Negociar parcelamento` },
-        { id: '3', texto: `${E.ok} JÃ¡ paguei` },
+        { id: '3', texto: `${E.ok} Já paguei` },
       ],
     });
   }
@@ -2448,13 +2448,13 @@ Essa conta de energia e:
       detalhes += `${E.calendario} Vencimento: ${dadosTemp.dataVencimento}\n`;
 
       if (dadosTemp.pixCopiaECola) {
-        detalhes += `\n*Pague via PIX â€” Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
+        detalhes += `\n*Pague via PIX — Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
       }
       if (dadosTemp.linkPagamento) {
         detalhes += `\n${E.link} Link de pagamento: ${dadosTemp.linkPagamento}\n`;
       }
 
-      detalhes += `\n_DÃºvidas? Responda esta mensagem._`;
+      detalhes += `\n_Dúvidas? Responda esta mensagem._`;
       await this.sender.enviarMensagem(telefone, detalhes);
 
       await this.sender.enviarMenuComBotoes(telefone, {
@@ -2462,7 +2462,7 @@ Essa conta de energia e:
         corpo: 'Posso ajudar com mais alguma coisa?',
         opcoes: [
           { id: '2', texto: `${E.cartao} Negociar parcelamento` },
-          { id: '3', texto: `${E.ok} JÃ¡ paguei` },
+          { id: '3', texto: `${E.ok} Já paguei` },
         ],
       });
       return;
@@ -2480,10 +2480,10 @@ Essa conta de energia e:
 
       await this.sender.enviarMensagem(
         telefone,
-        `${E.cartao} *OpÃ§Ãµes de parcelamento:*\n\n` +
-        `Podemos parcelar seu dÃ©bito de R$ ${fmt(dadosTemp.valor)} sem juros:\n\n` +
-        `â€¢ 2x de R$ ${fmt(valorParcela2x)}\n` +
-        `â€¢ 3x de R$ ${fmt(valorParcela3x)}\n`,
+        `${E.cartao} *Opções de parcelamento:*\n\n` +
+        `Podemos parcelar seu débito de R$ ${fmt(dadosTemp.valor)} sem juros:\n\n` +
+        `• 2x de R$ ${fmt(valorParcela2x)}\n` +
+        `• 3x de R$ ${fmt(valorParcela3x)}\n`,
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
@@ -2491,24 +2491,24 @@ Essa conta de energia e:
         corpo: 'Deseja prosseguir com o parcelamento?',
         opcoes: [
           { id: '1', texto: `${E.ok} Sim, quero parcelar` },
-          { id: '2', texto: `${E.dinheiro} Prefiro pagar Ã  vista` },
+          { id: '2', texto: `${E.dinheiro} Prefiro pagar à vista` },
         ],
       });
       return;
     }
 
-    if (corpo === '3' || corpo.toLowerCase().includes('paguei') || corpo.toLowerCase().includes('jÃ¡ paguei')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('paguei') || corpo.toLowerCase().includes('já paguei')) {
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `${E.ok} Ã“timo! Verificaremos o pagamento em atÃ© 24h.\n\n` +
+        `${E.ok} Ã“timo! Verificaremos o pagamento em até 24h.\n\n` +
         `Caso precise de algo, entre em contato. Obrigado! ${E.coracao}`,
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (ver detalhes), *2* (negociar parcelamento) ou *3* (jÃ¡ paguei).',
+      'Responda *1* (ver detalhes), *2* (negociar parcelamento) ou *3* (já paguei).',
     );
   }
 
@@ -2522,7 +2522,7 @@ Essa conta de energia e:
       const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const valorParcela = dadosTemp.valor / 3;
 
-      // Atualizar cobranÃ§a com flag de negociaÃ§Ã£o
+      // Atualizar cobrança com flag de negociação
       if (dadosTemp.cobrancaId) {
         try {
           await this.prisma.cobranca.update({
@@ -2530,7 +2530,7 @@ Essa conta de energia e:
             data: { observacoesNegociacao: `Parcelamento 3x negociado via WhatsApp em ${new Date().toLocaleDateString('pt-BR')}` },
           });
         } catch (err) {
-          this.logger.warn(`Erro ao atualizar cobranÃ§a com parcelamento: ${err.message}`);
+          this.logger.warn(`Erro ao atualizar cobrança com parcelamento: ${err.message}`);
         }
       }
 
@@ -2540,8 +2540,8 @@ Essa conta de energia e:
         `${E.ok} *Acordo de parcelamento gerado!*\n\n` +
         `${E.prancheta} Valor total: R$ ${fmt(dadosTemp.valor)}\n` +
         `${E.cartao} Parcelamento: 3x de R$ ${fmt(valorParcela)} sem juros\n\n` +
-        `Nossa equipe enviarÃ¡ os boletos/PIX de cada parcela nos prÃ³ximos dias.\n\n` +
-        `Obrigado pela confianÃ§a! ${E.coracao}`,
+        `Nossa equipe enviará os boletos/PIX de cada parcela nos próximos dias.\n\n` +
+        `Obrigado pela confiança! ${E.coracao}`,
       );
       return;
     }
@@ -2553,14 +2553,14 @@ Essa conta de energia e:
       });
 
       const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      let texto = `${E.dinheiro} Para pagar Ã  vista (R$ ${fmt(dadosTemp.valor)}):\n`;
+      let texto = `${E.dinheiro} Para pagar à vista (R$ ${fmt(dadosTemp.valor)}):\n`;
       if (dadosTemp.pixCopiaECola) {
         texto += `\n*PIX Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
       }
       if (dadosTemp.linkPagamento) {
         texto += `\n${E.link} Link: ${dadosTemp.linkPagamento}\n`;
       }
-      texto += `\nApÃ³s o pagamento, ele serÃ¡ confirmado em atÃ© 24h. ${E.coracao}`;
+      texto += `\nApós o pagamento, ele será confirmado em até 24h. ${E.coracao}`;
       await this.sender.enviarMensagem(telefone, texto);
 
       await this.finalizarConversa(conversa.id);
@@ -2568,7 +2568,7 @@ Essa conta de energia e:
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (sim, quero parcelar) ou *2* (prefiro pagar Ã  vista).',
+      'Responda *1* (sim, quero parcelar) ou *2* (prefiro pagar à vista).',
     );
   }
 
@@ -2577,8 +2577,8 @@ Essa conta de energia e:
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
-   * Inicia fluxo de convite com botÃµes interativos para novo indicado.
-   * SubstituiÃ§Ã£o melhorada do iniciarFluxoConvite existente.
+   * Inicia fluxo de convite com botões interativos para novo indicado.
+   * Substituição melhorada do iniciarFluxoConvite existente.
    */
   async iniciarFluxoConviteIndicacao(telefone: string, indicadorNome: string, codigoIndicacao: string): Promise<void> {
     await this.prisma.conversaWhatsapp.upsert({
@@ -2597,17 +2597,17 @@ Essa conta de energia e:
 
     await this.sender.enviarMensagem(
       telefone,
-      `${E.oi} OlÃ¡! VocÃª foi indicado por *${indicadorNome}* para conhecer a *CoopereBR*!\n\n` +
-      `${E.muda} Economize na conta de luz com energia solar compartilhada â€” sem investimento e sem obras.`,
+      `${E.oi} Olá! Você foi indicado por *${indicadorNome}* para conhecer a *CoopereBR*!\n\n` +
+      `${E.muda} Economize na conta de luz com energia solar compartilhada — sem investimento e sem obras.`,
     );
 
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'IndicaÃ§Ã£o CoopereBR',
+      titulo: 'Indicação CoopereBR',
       corpo: 'O que deseja fazer?',
       opcoes: [
-        { id: '1', texto: `${E.muda} Conhecer os benefÃ­cios`, descricao: 'Saiba como funciona' },
+        { id: '1', texto: `${E.muda} Conhecer os benefícios`, descricao: 'Saiba como funciona' },
         { id: '2', texto: `${E.dinheiro} Simular minha economia`, descricao: 'Veja quanto vai economizar' },
-        { id: '3', texto: `${E.foguete} Iniciar cadastro agora`, descricao: 'Cadastro rÃ¡pido express' },
+        { id: '3', texto: `${E.foguete} Iniciar cadastro agora`, descricao: 'Cadastro rápido express' },
       ],
     });
   }
@@ -2617,21 +2617,21 @@ Essa conta de energia e:
     const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
 
-    if (corpo === '1' || corpo.toLowerCase().includes('benefÃ­cio') || corpo.toLowerCase().includes('beneficio') || corpo.toLowerCase().includes('conhecer')) {
+    if (corpo === '1' || corpo.toLowerCase().includes('benefício') || corpo.toLowerCase().includes('beneficio') || corpo.toLowerCase().includes('conhecer')) {
       await this.sender.enviarMensagem(
         telefone,
-        `${E.muda} *BenefÃ­cios da CoopereBR:*\n\n` +
-        `${E.solar} Energia 100% solar e renovÃ¡vel\n` +
-        `${E.dinheiro} Economia de atÃ© *20%* na conta de luz\n` +
+        `${E.muda} *Benefícios da CoopereBR:*\n\n` +
+        `${E.solar} Energia 100% solar e renovável\n` +
+        `${E.dinheiro} Economia de até *20%* na conta de luz\n` +
         `${E.prancheta} Sem investimento inicial\n` +
-        `${E.engrenagem} Sem obras ou instalaÃ§Ã£o\n` +
+        `${E.engrenagem} Sem obras ou instalação\n` +
         `${E.ciclo} Cancelamento sem multa\n` +
-        `${E.grafico} Acompanhe seus crÃ©ditos pelo portal\n\n` +
-        `Como vocÃª foi indicado por *${dadosTemp.indicadorNome}*, terÃ¡ atendimento prioritÃ¡rio! ${E.festa}`,
+        `${E.grafico} Acompanhe seus créditos pelo portal\n\n` +
+        `Como você foi indicado por *${dadosTemp.indicadorNome}*, terá atendimento prioritário! ${E.festa}`,
       );
 
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'PrÃ³ximo passo',
+        titulo: 'Próximo passo',
         corpo: 'Deseja continuar?',
         opcoes: [
           { id: '2', texto: `${E.dinheiro} Simular minha economia` },
@@ -2648,26 +2648,26 @@ Essa conta de energia e:
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.dinheiro} Vamos simular sua economia!\n\nQual o *valor mÃ©dio* da sua conta de luz? (ex: 350)`,
+        `${E.dinheiro} Vamos simular sua economia!\n\nQual o *valor médio* da sua conta de luz? (ex: 350)`,
       );
       return;
     }
 
     if (corpo === '3' || corpo.toLowerCase().includes('cadastro') || corpo.toLowerCase().includes('iniciar')) {
-      // Cadastro express: pede nome, CPF, telefone (jÃ¡ tem), email, valor fatura
+      // Cadastro express: pede nome, CPF, telefone (já tem), email, valor fatura
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'CADASTRO_EXPRESS_NOME', contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(
         telefone,
-        `${E.foguete} *Cadastro Express!*\n\nVamos precisar de poucos dados. Qual Ã© o seu *nome completo*?`,
+        `${E.foguete} *Cadastro Express!*\n\nVamos precisar de poucos dados. Qual é o seu *nome completo*?`,
       );
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (benefÃ­cios), *2* (simular economia) ou *3* (iniciar cadastro).',
+      'Responda *1* (benefícios), *2* (simular economia) ou *3* (iniciar cadastro).',
     );
   }
 
@@ -2688,7 +2688,7 @@ Essa conta de energia e:
         dadosTemp: { ...dadosTemp, nomeInformado: corpo } as any,
       },
     });
-    await this.sender.enviarMensagem(telefone, `Obrigado, *${corpo}*! Agora informe seu *CPF* (apenas nÃºmeros):`);
+    await this.sender.enviarMensagem(telefone, `Obrigado, *${corpo}*! Agora informe seu *CPF* (apenas números):`);
   }
 
   private async handleCadastroExpressCpf(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2696,7 +2696,7 @@ Essa conta de energia e:
     const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
 
     if (corpo.length !== 11) {
-      await this.sender.enviarMensagem(telefone, 'CPF invÃ¡lido. Informe os *11 dÃ­gitos* do seu CPF:');
+      await this.sender.enviarMensagem(telefone, 'CPF inválido. Informe os *11 dígitos* do seu CPF:');
       return;
     }
 
@@ -2716,7 +2716,7 @@ Essa conta de energia e:
     const corpo = (msg.corpo ?? '').trim().toLowerCase();
 
     if (!corpo.includes('@')) {
-      await this.sender.enviarMensagem(telefone, 'E-mail invÃ¡lido. Informe um *e-mail vÃ¡lido*:');
+      await this.sender.enviarMensagem(telefone, 'E-mail inválido. Informe um *e-mail válido*:');
       return;
     }
 
@@ -2728,7 +2728,7 @@ Essa conta de energia e:
         dadosTemp: { ...dadosTemp, emailInformado: corpo } as any,
       },
     });
-    await this.sender.enviarMensagem(telefone, 'Quase lÃ¡! Qual o *valor mÃ©dio* da sua conta de luz? (ex: 350)');
+    await this.sender.enviarMensagem(telefone, 'Quase lá! Qual o *valor médio* da sua conta de luz? (ex: 350)');
   }
 
   private async handleCadastroExpressValorFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -2739,7 +2739,7 @@ Essa conta de energia e:
     const valor = parseFloat(valorStr);
 
     if (isNaN(valor) || valor <= 0) {
-      await this.sender.enviarMensagem(telefone, 'Informe o valor em reais (apenas o nÃºmero). Ex: *350*');
+      await this.sender.enviarMensagem(telefone, 'Informe o valor em reais (apenas o número). Ex: *350*');
       return;
     }
 
@@ -2785,13 +2785,13 @@ Essa conta de energia e:
       });
     }
 
-    // Registrar indicaÃ§Ã£o
+    // Registrar indicação
     if (codigoRef) {
       try {
         await this.indicacoes.registrarIndicacao(cooperado.id, codigoRef);
-        this.logger.log(`IndicaÃ§Ã£o express registrada para ${cooperado.id} via cÃ³digo ${codigoRef}`);
+        this.logger.log(`Indicação express registrada para ${cooperado.id} via código ${codigoRef}`);
       } catch (err) {
-        this.logger.warn(`Erro ao registrar indicaÃ§Ã£o express: ${err.message}`);
+        this.logger.warn(`Erro ao registrar indicação express: ${err.message}`);
       }
     }
 
@@ -2805,14 +2805,14 @@ Essa conta de energia e:
     const economiaMensal = valor * 0.2;
     const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    let msgFinal = `${E.festa} *Perfeito! Seu cadastro estÃ¡ em anÃ¡lise.*\n\n`;
+    let msgFinal = `${E.festa} *Perfeito! Seu cadastro está em análise.*\n\n`;
     msgFinal += `${E.pessoa} ${nome}\n`;
     msgFinal += `${E.email} ${email}\n`;
-    msgFinal += `${E.dinheiro} Economia estimada: R$ ${fmt(economiaMensal)}/mÃªs\n\n`;
+    msgFinal += `${E.dinheiro} Economia estimada: R$ ${fmt(economiaMensal)}/mês\n\n`;
     if (indicadorNome) {
-      msgFinal += `*${indicadorNome}* serÃ¡ notificado quando vocÃª for aprovado! ${E.festa}\n\n`;
+      msgFinal += `*${indicadorNome}* será notificado quando você for aprovado! ${E.festa}\n\n`;
     }
-    msgFinal += `Nossa equipe entrarÃ¡ em contato em breve. Obrigado! ${E.coracao}`;
+    msgFinal += `Nossa equipe entrará em contato em breve. Obrigado! ${E.coracao}`;
 
     await this.sender.enviarMensagem(telefone, msgFinal);
 
@@ -2825,8 +2825,8 @@ Essa conta de energia e:
       if (indicador?.telefone) {
         await this.sender.enviarMensagem(
           indicador.telefone,
-          `${E.festa} Boa notÃ­cia! *${nome}* acabou de completar o cadastro express atravÃ©s do seu convite!\n\n` +
-          `Quando ele for aprovado e pagar a primeira fatura, vocÃª receberÃ¡ seu benefÃ­cio automaticamente. Obrigado por indicar! ${E.orar}`,
+          `${E.festa} Boa notícia! *${nome}* acabou de completar o cadastro express através do seu convite!\n\n` +
+          `Quando ele for aprovado e pagar a primeira fatura, você receberá seu benefício automaticamente. Obrigado por indicar! ${E.orar}`,
         ).catch(() => {});
 
         // Notificar admin
@@ -2838,7 +2838,7 @@ Essa conta de energia e:
           if (admin?.telefone) {
             await this.sender.enviarMensagem(
               admin.telefone,
-              `${E.prancheta} Novo cadastro express via indicaÃ§Ã£o:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}`,
+              `${E.prancheta} Novo cadastro express via indicação:\n${nome} | Tel: ${telefoneNorm} | Email: ${email}\nIndicado por: ${indicador.nomeCompleto?.trim() || 'Cooperado'}`,
             ).catch(() => {});
           }
         }
@@ -2846,7 +2846,7 @@ Essa conta de energia e:
     }
   }
 
-  // â”€â”€â”€ LEAD FORA DA ÃREA: captura intenÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ LEAD FORA DA ÁREA: captura intenção â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleLeadForaArea(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -2859,13 +2859,13 @@ Essa conta de energia e:
     const numeroUC = String(dadosTemp.numeroUC ?? '');
     const endereco = String(dadosTemp.enderecoInstalacao ?? '');
 
-    // Extrair cidade/estado do endereÃ§o (melhor esforÃ§o)
-    const partes = endereco.split(/[-â€“,]/);
+    // Extrair cidade/estado do endereço (melhor esforço)
+    const partes = endereco.split(/[-—,]/);
     const cidade = partes.length >= 2 ? partes[partes.length - 2]?.trim() : undefined;
     const estado = partes.length >= 1 ? partes[partes.length - 1]?.trim()?.substring(0, 2)?.toUpperCase() : undefined;
 
     if (corpo === '1') {
-      // Salvar lead com intenÃ§Ã£o confirmada
+      // Salvar lead com intenção confirmada
       await this.prisma.leadExpansao.create({
         data: {
           telefone: telefone.replace(/\D/g, ''),
@@ -2883,15 +2883,15 @@ Essa conta de energia e:
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `${E.ok} *Pronto! VocÃª serÃ¡ avisado assim que chegarmos na regiÃ£o da ${distribuidora}.*\n\n` +
-        `Enquanto isso, que tal indicar amigos e vizinhos? Quanto mais demanda, mais rÃ¡pido chegamos! ${E.foguete}\n\n` +
+        `${E.ok} *Pronto! Você será avisado assim que chegarmos na região da ${distribuidora}.*\n\n` +
+        `Enquanto isso, que tal indicar amigos e vizinhos? Quanto mais demanda, mais rápido chegamos! ${E.foguete}\n\n` +
         `Obrigado pelo interesse na CoopereBR! ${E.coracao}`,
       );
       return;
     }
 
     if (corpo === '2') {
-      // Salvar lead sem intenÃ§Ã£o (registro passivo)
+      // Salvar lead sem intenção (registro passivo)
       await this.prisma.leadExpansao.create({
         data: {
           telefone: telefone.replace(/\D/g, ''),
@@ -2909,15 +2909,15 @@ Essa conta de energia e:
       await this.finalizarConversa(conversa.id);
       await this.sender.enviarMensagem(
         telefone,
-        `Tudo bem! Se mudar de ideia, Ã© sÃ³ enviar outra fatura. ${E.sorriso}\n\nObrigado pelo interesse na CoopereBR! ${E.coracao}`,
+        `Tudo bem! Se mudar de ideia, é só enviar outra fatura. ${E.sorriso}\n\nObrigado pelo interesse na CoopereBR! ${E.coracao}`,
       );
       return;
     }
 
-    // NÃ£o entendeu
+    // Não entendeu
     await this.sender.enviarMensagem(
       telefone,
-      'Por favor, responda:\n1ï¸âƒ£ Sim, quero ser avisado\n2ï¸âƒ£ NÃ£o por enquanto',
+      'Por favor, responda:\n1️⃣ Sim, quero ser avisado\n2️⃣ Não por enquanto',
     );
   }
 
@@ -2931,13 +2931,13 @@ Essa conta de energia e:
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
 
     if (corpo === '1') {
-      // Enviar link de indicaÃ§Ã£o
+      // Enviar link de indicação
       const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
       const link = `${baseUrl}/entrar?ref=${dadosTemp.codigoIndicacao}`;
       await this.sender.enviarMensagem(telefone,
-        `${E.presente} *Seu link de indicaÃ§Ã£o personalizado:*\n\n${link}\n\n` +
+        `${E.presente} *Seu link de indicação personalizado:*\n\n${link}\n\n` +
         `${E.celular} Compartilhe com amigos, familiares e colegas!\n\n` +
-        `Quando seu indicado pagar a primeira fatura, vocÃª recebe seu benefÃ­cio automaticamente. ${E.coracao}`
+        `Quando seu indicado pagar a primeira fatura, você recebe seu benefício automaticamente. ${E.coracao}`
       );
       await this.resetarConversa(telefone);
       return;
@@ -2983,7 +2983,7 @@ Essa conta de energia e:
     const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
 
     if (corpo.length < 10 || corpo.length > 13) {
-      await this.sender.enviarMensagem(telefone, 'NÃºmero invÃ¡lido. Informe com DDD (ex: 27999991234):');
+      await this.sender.enviarMensagem(telefone, 'Número inválido. Informe com DDD (ex: 27999991234):');
       return;
     }
 
@@ -3022,13 +3022,13 @@ Essa conta de energia e:
     try {
       dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
     } catch {
-      await this.sender.enviarMensagem(telefone, `NÃ£o consegui identificar os dados. Envie uma foto mais nÃ­tida ou o PDF da fatura. ${E.camera}`);
+      await this.sender.enviarMensagem(telefone, `Não consegui identificar os dados. Envie uma foto mais nítida ou o PDF da fatura. ${E.camera}`);
       return;
     }
 
     const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
     if (consumoAtualKwh <= 0) {
-      await this.sender.enviarMensagem(telefone, `O arquivo nÃ£o parece ser uma fatura de energia. Tente novamente. ${E.doc}`);
+      await this.sender.enviarMensagem(telefone, `O arquivo não parece ser uma fatura de energia. Tente novamente. ${E.doc}`);
       return;
     }
 
@@ -3078,11 +3078,11 @@ Essa conta de energia e:
     const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let resposta = `*${proxyNome}* economizaria `;
     if (economiaMensal > 0) {
-      resposta += `*R$ ${fmt(economiaMensal)}/mÃªs* ${E.solar}\n\n`;
+      resposta += `*R$ ${fmt(economiaMensal)}/mês* ${E.solar}\n\n`;
     } else {
       resposta += `com energia solar! ${E.solar}\n\n`;
     }
-    resposta += `Confirma o cadastro?\n1ï¸âƒ£ Sim, cadastrar\n2ï¸âƒ£ NÃ£o por enquanto`;
+    resposta += `Confirma o cadastro?\n1️⃣ Sim, cadastrar\n2️⃣ Não por enquanto`;
 
     await this.sender.enviarMensagem(telefone, resposta);
   }
@@ -3102,7 +3102,7 @@ Essa conta de energia e:
       const numeroUC = dadosTemp.numeroUC as string | undefined;
 
       try {
-        // Chamar endpoint de prÃ©-cadastro internamente
+        // Chamar endpoint de pré-cadastro internamente
         const cooperado = await this.prisma.cooperado.create({
           data: {
             nomeCompleto: proxyNome,
@@ -3138,10 +3138,10 @@ Essa conta de energia e:
         // Enviar mensagem para o amigo
         let msgAmigo = `${indicadorNome} te cadastrou na *CoopereBR*! ${E.solar}\n\n`;
         if (economiaMensal > 0) {
-          msgAmigo += `Sua economia estimada Ã© de *R$ ${fmt(economiaMensal)}/mÃªs*.\n\n`;
+          msgAmigo += `Sua economia estimada é de *R$ ${fmt(economiaMensal)}/mês*.\n\n`;
         }
         msgAmigo += `Para confirmar, acesse:\n${link}\n\n`;
-        msgAmigo += `O link Ã© vÃ¡lido por 7 dias.`;
+        msgAmigo += `O link é válido por 7 dias.`;
 
         await this.sender.enviarMensagem(proxyTelefone, msgAmigo).catch(err => {
           this.logger.warn(`Erro ao enviar WA para amigo proxy ${proxyTelefone}: ${err.message}`);
@@ -3150,7 +3150,7 @@ Essa conta de energia e:
         // Notificar cooperado
         await this.sender.enviarMensagem(telefone,
           `${E.ok} Pronto! Enviei o link para *${proxyNome}* confirmar.\n` +
-          `Quando ele assinar, vocÃª receberÃ¡ seu benefÃ­cio!`
+          `Quando ele assinar, você receberá seu benefício!`
         );
       } catch (err) {
         this.logger.error(`Erro no cadastro proxy: ${err.message}`);
@@ -3161,18 +3161,18 @@ Essa conta de energia e:
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('nao')) {
-      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, Ã© sÃ³ me avisar.');
+    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
+      await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, é só me avisar.');
       await this.resetarConversa(telefone);
       return;
     }
 
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (sim, cadastrar) ou *2* (nÃ£o por enquanto).',
+      'Responda *1* (sim, cadastrar) ou *2* (não por enquanto).',
     );
   }
 
-  // â”€â”€â”€ MENU FATURA: lista cobranÃ§as pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ MENU FATURA: lista cobranças pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3193,7 +3193,7 @@ Essa conta de energia e:
     if (!cooperado) {
       await this.sender.enviarMensagem(
         telefone,
-        `NÃ£o encontramos um cadastro vinculado a este nÃºmero. ${E.confuso}\n\nSe vocÃª Ã© cooperado, entre em contato pelo site cooperebr.com.br para atualizar seu telefone.`,
+        `Não encontramos um cadastro vinculado a este número. ${E.confuso}\n\nSe você é cooperado, entre em contato pelo site cooperebr.com.br para atualizar seu telefone.`,
       );
       await this.resetarConversa(telefone);
       return;
@@ -3208,13 +3208,13 @@ Essa conta de energia e:
     if (cobrancas.length === 0) {
       await this.sender.enviarMensagem(
         telefone,
-        `OlÃ¡, ${(cooperado.nomeCompleto?.trim() || 'Cooperado').split(' ')[0]}! ${E.sorriso}\n\nVocÃª nÃ£o tem faturas pendentes no momento. EstÃ¡ tudo em dia! ${E.ok}`,
+        `Olá, ${(cooperado.nomeCompleto?.trim() || 'Cooperado').split(' ')[0]}! ${E.sorriso}\n\nVocê não tem faturas pendentes no momento. Está tudo em dia! ${E.ok}`,
       );
       await this.resetarConversa(telefone);
       return;
     }
 
-    // Pegar cobranÃ§a mais recente (A_VENCER ou VENCIDO â€” jÃ¡ filtrado pelo service)
+    // Pegar cobrança mais recente (A_VENCER ou VENCIDO — já filtrado pelo service)
     const cobranca = cobrancas[0];
     const nome = (cooperado.nomeCompleto?.trim() || 'Cooperado').split(' ')[0];
     const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
@@ -3230,40 +3230,40 @@ Essa conta de energia e:
     vencDate.setHours(0, 0, 0, 0);
     const diasParaVencer = Math.ceil((vencDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
 
-    // RÃ©gua de urgÃªncia
+    // Régua de urgência
     let cabecalho: string;
     if (diasParaVencer > 5) {
       cabecalho = `${E.ok} Sua fatura vence em ${diasParaVencer} dias`;
     } else if (diasParaVencer >= 2) {
-      cabecalho = `${E.aviso} AtenÃ§Ã£o! Sua fatura vence em ${diasParaVencer} dias`;
+      cabecalho = `${E.aviso} Atenção! Sua fatura vence em ${diasParaVencer} dias`;
     } else if (diasParaVencer === 1) {
-      cabecalho = `${E.sino} Sua fatura vence *amanhÃ£*!`;
+      cabecalho = `${E.sino} Sua fatura vence *amanhã*!`;
     } else if (diasParaVencer === 0) {
       cabecalho = `${E.sirene} Sua fatura vence *hoje*!`;
     } else {
-      cabecalho = `${E.x} Sua fatura estÃ¡ *vencida* hÃ¡ ${Math.abs(diasParaVencer)} dia(s)!`;
+      cabecalho = `${E.x} Sua fatura está *vencida* há ${Math.abs(diasParaVencer)} dia(s)!`;
     }
 
     const statusLabel = cobranca.status === 'VENCIDO' ? `${E.aviso} VENCIDA` : `${E.calendario} A vencer`;
 
-    let texto = `${E.coracao} *CoopereBR â€” Fatura ${mesStr}/${ano}*\n\n`;
-    texto += `OlÃ¡, ${nome}! ${E.oi}\n\n`;
+    let texto = `${E.coracao} *CoopereBR — Fatura ${mesStr}/${ano}*\n\n`;
+    texto += `Olá, ${nome}! ${E.oi}\n\n`;
     texto += `${cabecalho}\n\n`;
     texto += `${statusLabel}\n`;
     texto += `${E.pessoa} ${cooperado.nomeCompleto?.trim() || 'Cooperado'}\n`;
-    texto += `${E.calendario} CompetÃªncia: ${mesStr}/${ano}\n`;
+    texto += `${E.calendario} Competência: ${mesStr}/${ano}\n`;
     texto += `${E.dinheiro} Valor: *R$ ${valor}*\n`;
     texto += `${E.calendario} Vencimento: ${dataVencStr}\n`;
 
     await this.sender.enviarMensagem(telefone, texto);
 
-    // Enviar menu com botÃµes
+    // Enviar menu com botões
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'OpÃ§Ãµes de pagamento',
+      titulo: 'Opções de pagamento',
       corpo: 'Como deseja pagar ou consultar?',
       opcoes: [
         { id: 'pix', texto: 'Pagar com PIX' },
-        { id: 'boleto', texto: 'CÃ³digo de barras' },
+        { id: 'boleto', texto: 'Código de barras' },
         { id: 'portal', texto: 'Ver fatura' },
       ],
     });
@@ -3278,7 +3278,7 @@ Essa conta de energia e:
     });
   }
 
-  // â”€â”€â”€ RESPOSTA MENU FATURA: usuÃ¡rio escolheu opÃ§Ã£o do menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ RESPOSTA MENU FATURA: usuário escolheu opção do menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleRespostaMenuFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3286,12 +3286,12 @@ Essa conta de energia e:
 
     if (['voltar', 'sair', 'menu'].includes(corpo)) {
       await this.resetarConversa(telefone);
-      const texto = await this.msg('boas_vindas', {}, `${E.oi} OlÃ¡! Sou o assistente da *CoopereBR*.\n\nPara comeÃ§ar, envie uma *foto* ou *PDF* da sua conta de energia elÃ©trica e eu faÃ§o uma simulaÃ§Ã£o de economia para vocÃª! ${E.camera}`);
+      const texto = await this.msg('boas_vindas', {}, `${E.oi} Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! ${E.camera}`);
       await this.sender.enviarMensagem(telefone, texto);
       return;
     }
 
-    // Buscar cobranÃ§a do cooperado
+    // Buscar cobrança do cooperado
     const telefoneNorm2 = telefone.replace(/\D/g, '');
     const telefoneSemPais2 = telefoneNorm2.replace(/^55/, '');
     const cooperado = await this.prisma.cooperado.findFirst({
@@ -3312,7 +3312,7 @@ Essa conta de energia e:
       take: 5,
     }) : [];
     if (!cooperado || cobrancas.length === 0) {
-      await this.sender.enviarMensagem(telefone, 'NÃ£o encontrei faturas pendentes. Digite *voltar* para retornar.');
+      await this.sender.enviarMensagem(telefone, 'Não encontrei faturas pendentes. Digite *voltar* para retornar.');
       await this.resetarConversa(telefone);
       return;
     }
@@ -3325,34 +3325,34 @@ Essa conta de energia e:
       if (pixCopiaECola) {
         await this.sender.enviarMensagem(
           telefone,
-          `${E.cartao} *PIX Copia e Cola:*\n\n\`${pixCopiaECola}\`\n\n_Copie o cÃ³digo acima e cole no app do seu banco._`,
+          `${E.cartao} *PIX Copia e Cola:*\n\n\`${pixCopiaECola}\`\n\n_Copie o código acima e cole no app do seu banco._`,
         );
       } else {
         const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
         await this.sender.enviarMensagem(
           telefone,
-          `PIX nÃ£o disponÃ­vel no momento. Acesse o portal para pagar:\n${portalUrl}`,
+          `PIX não disponível no momento. Acesse o portal para pagar:\n${portalUrl}`,
         );
       }
-    } else if (corpo.includes('boleto') || corpo.includes('codigo') || corpo.includes('cÃ³digo') || corpo.includes('barra') || corpo === '2') {
+    } else if (corpo.includes('boleto') || corpo.includes('codigo') || corpo.includes('código') || corpo.includes('barra') || corpo === '2') {
       const boletoUrl = asaas?.boletoUrl;
       if (boletoUrl) {
         await this.sender.enviarMensagem(
           telefone,
-          `${E.doc} *Boleto bancÃ¡rio:*\n\n${E.link} ${boletoUrl}\n\n_Acesse o link para visualizar e pagar._`,
+          `${E.doc} *Boleto bancário:*\n\n${E.link} ${boletoUrl}\n\n_Acesse o link para visualizar e pagar._`,
         );
       } else {
         const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
         await this.sender.enviarMensagem(
           telefone,
-          `CÃ³digo de barras nÃ£o disponÃ­vel. Acesse o portal:\n${portalUrl}`,
+          `Código de barras não disponível. Acesse o portal:\n${portalUrl}`,
         );
       }
     } else if (corpo.includes('portal') || corpo.includes('ver fatura') || corpo === '3') {
       const portalUrl = process.env.PORTAL_URL || 'https://app.cooperebr.com.br';
       await this.sender.enviarMensagem(
         telefone,
-        `${E.link} Acesse sua fatura no portal:\n${portalUrl}\n\n_FaÃ§a login com seu CPF e senha._`,
+        `${E.link} Acesse sua fatura no portal:\n${portalUrl}\n\n_Faça login com seu CPF e senha._`,
       );
     } else if (corpo.includes('extrato')) {
       const valorLiquido = Number(cobranca.valorLiquido).toFixed(2).replace('.', ',');
@@ -3370,7 +3370,7 @@ Essa conta de energia e:
         extrato += `${E.dinheiro} *Valor atualizado: R$ ${valorAtualizado}*\n`;
       }
       await this.sender.enviarMensagem(telefone, extrato);
-    } else if (corpo.includes('comprovante') || corpo.includes('paguei') || corpo.includes('jÃ¡ paguei')) {
+    } else if (corpo.includes('comprovante') || corpo.includes('paguei') || corpo.includes('já paguei')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_COMPROVANTE_PAGAMENTO' },
@@ -3381,26 +3381,26 @@ Essa conta de energia e:
       );
       return;
     } else {
-      // OpÃ§Ã£o nÃ£o reconhecida â€” reenviar menu
+      // Opção não reconhecida — reenviar menu
       await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'OpÃ§Ãµes de pagamento',
+        titulo: 'Opções de pagamento',
         corpo: `Nao entendi. ${E.aviso} Responda com o numero da opcao ou digite *menu* para voltar ao inicio.`,
         opcoes: [
           { id: 'pix', texto: 'Pagar com PIX' },
-          { id: 'boleto', texto: 'CÃ³digo de barras' },
+          { id: 'boleto', texto: 'Código de barras' },
           { id: 'portal', texto: 'Ver fatura' },
         ],
       });
       return;
     }
 
-    // ApÃ³s responder, reenviar menu para nova consulta
+    // Após responder, reenviar menu para nova consulta
     await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'OpÃ§Ãµes de pagamento',
+      titulo: 'Opções de pagamento',
       corpo: 'Precisa de mais alguma coisa?',
       opcoes: [
         { id: 'pix', texto: 'Pagar com PIX' },
-        { id: 'boleto', texto: 'CÃ³digo de barras' },
+        { id: 'boleto', texto: 'Código de barras' },
         { id: 'portal', texto: 'Ver fatura' },
       ],
     });
@@ -3440,7 +3440,7 @@ Essa conta de energia e:
       const nomeCooperado = cooperadoComp?.nomeCompleto ?? telefone;
       await this.sender.enviarMensagem(
         superAdminPhone,
-        `${E.prancheta} *Comprovante de pagamento recebido*\n\n${E.pessoa} ${nomeCooperado}\n${E.celular} ${telefone}\n\n_Verifique o comprovante e dÃª baixa na fatura._`,
+        `${E.prancheta} *Comprovante de pagamento recebido*\n\n${E.pessoa} ${nomeCooperado}\n${E.celular} ${telefone}\n\n_Verifique o comprovante e dê baixa na fatura._`,
       ).catch((err) => this.logger.warn(`Falha ao notificar admin: ${err.message}`));
     }
 
@@ -3467,7 +3467,7 @@ Essa conta de energia e:
     });
   }
 
-  // â”€â”€â”€ AtualizaÃ§Ã£o de Cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ Atualização de Cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleAtualizacaoCadastro(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3495,19 +3495,19 @@ Essa conta de energia e:
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_TELEFONE', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, `${E.celular} Digite seu *novo nÃºmero de telefone* (com DDD):`);
+      await this.sender.enviarMensagem(telefone, `${E.celular} Digite seu *novo número de telefone* (com DDD):`);
       return;
     }
-    if (corpo === '4' || corpo.toLowerCase().includes('endereÃ§o') || corpo.toLowerCase().includes('cep')) {
+    if (corpo === '4' || corpo.toLowerCase().includes('endereço') || corpo.toLowerCase().includes('cep')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_CEP', contadorFallback: 0 },
       });
-      await this.sender.enviarMensagem(telefone, `${E.mapPin} Digite seu *novo CEP* (apenas nÃºmeros):`);
+      await this.sender.enviarMensagem(telefone, `${E.mapPin} Digite seu *novo CEP* (apenas números):`);
       return;
     }
 
-    await this.incrementarFallback(conversa, telefone, 'Responda *1* (nome), *2* (email), *3* (telefone) ou *4* (endereÃ§o).');
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* (nome), *2* (email), *3* (telefone) ou *4* (endereço).');
   }
 
   private async handleAguardandoNovoNome(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -3530,7 +3530,7 @@ Essa conta de energia e:
     const novoEmail = this.respostaEfetiva(msg).trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(novoEmail)) {
-      await this.sender.enviarMensagem(telefone, `${E.aviso} Email invÃ¡lido. Digite um email vÃ¡lido (ex: nome@email.com):`);
+      await this.sender.enviarMensagem(telefone, `${E.aviso} Email inválido. Digite um email válido (ex: nome@email.com):`);
       return;
     }
     await this.prisma.cooperado.update({
@@ -3545,7 +3545,7 @@ Essa conta de energia e:
     const { telefone } = msg;
     const novoTelefone = this.respostaEfetiva(msg).replace(/\D/g, '');
     if (novoTelefone.length < 10 || novoTelefone.length > 13) {
-      await this.sender.enviarMensagem(telefone, `${E.aviso} Telefone invÃ¡lido. Digite com DDD (ex: 11999998888):`);
+      await this.sender.enviarMensagem(telefone, `${E.aviso} Telefone inválido. Digite com DDD (ex: 11999998888):`);
       return;
     }
     await this.prisma.cooperado.update({
@@ -3560,18 +3560,18 @@ Essa conta de energia e:
     const { telefone } = msg;
     const novoCep = this.respostaEfetiva(msg).replace(/\D/g, '');
     if (novoCep.length !== 8) {
-      await this.sender.enviarMensagem(telefone, `${E.aviso} CEP invÃ¡lido. Digite 8 dÃ­gitos (ex: 01310100):`);
+      await this.sender.enviarMensagem(telefone, `${E.aviso} CEP inválido. Digite 8 dígitos (ex: 01310100):`);
       return;
     }
     await this.prisma.cooperado.update({
       where: { id: conversa.cooperadoId },
       data: { cep: novoCep },
     });
-    await this.sender.enviarMensagem(telefone, `${E.ok} *EndereÃ§o (CEP)* atualizado com sucesso para *${novoCep}*!`);
+    await this.sender.enviarMensagem(telefone, `${E.ok} *Endereço (CEP)* atualizado com sucesso para *${novoCep}*!`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
-  // â”€â”€â”€ AtualizaÃ§Ã£o de Contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ Atualização de Contrato â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async handleAtualizacaoContrato(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
@@ -3595,7 +3595,7 @@ Essa conta de energia e:
         data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'aumentar' }, contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `${E.grafico} Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mÃªs*\n\n` +
+        `${E.grafico} Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
         `${E.setaCima} Digite o *novo valor em kWh* que deseja contratar (maior que o atual):`,
       );
       return;
@@ -3607,7 +3607,7 @@ Essa conta de energia e:
         data: { estado: 'AGUARDANDO_NOVO_KWH', dadosTemp: { contratoId: contrato.id, acao: 'diminuir' }, contadorFallback: 0 },
       });
       await this.sender.enviarMensagem(telefone,
-        `${E.grafico} Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mÃªs*\n\n` +
+        `${E.grafico} Seu contrato atual: *${contrato.kwhContratoMensal ?? 0} kWh/mês*\n\n` +
         `${E.setaBaixo} Digite o *novo valor em kWh* que deseja contratar (menor que o atual):`,
       );
       return;
@@ -3639,8 +3639,8 @@ Essa conta de energia e:
       });
       await this.sender.enviarMensagem(telefone,
         `${E.x} *Tem certeza que deseja encerrar seu contrato?*\n\n` +
-        'Esta aÃ§Ã£o nÃ£o pode ser desfeita facilmente.\n\n' +
-        '1ï¸âƒ£ Sim, encerrar\n2ï¸âƒ£ NÃ£o, voltar ao menu',
+        'Esta ação não pode ser desfeita facilmente.\n\n' +
+        '1️⃣ Sim, encerrar\n2️⃣ Não, voltar ao menu',
       );
       return;
     }
@@ -3654,7 +3654,7 @@ Essa conta de energia e:
     const valor = parseInt(corpo.replace(/\D/g, ''), 10);
 
     if (!valor || valor < 50) {
-      await this.sender.enviarMensagem(telefone, `${E.aviso} Valor invÃ¡lido. Digite um nÃºmero vÃ¡lido de kWh (mÃ­nimo 50):`);
+      await this.sender.enviarMensagem(telefone, `${E.aviso} Valor inválido. Digite um número válido de kWh (mínimo 50):`);
       return;
     }
 
@@ -3671,12 +3671,12 @@ Essa conta de energia e:
     if (superPhone) {
       const cooperado = await this.prisma.cooperado.findUnique({ where: { id: conversa.cooperadoId }, select: { nomeCompleto: true } });
       await this.sender.enviarMensagem(superPhone,
-        `${E.ciclo} *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto?.trim() || 'Cooperado'}\nAÃ§Ã£o: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
+        `${E.ciclo} *Ajuste de kWh via WhatsApp*\nCooperado: ${cooperado?.nomeCompleto?.trim() || 'Cooperado'}\nAção: ${dados?.acao}\nNovo valor: ${valor} kWh\nContrato: ${contratoId}`,
         { tipoDisparo: 'BOT_RESPOSTA' },
       );
     }
 
-    await this.sender.enviarMensagem(telefone, `${E.ok} Contrato atualizado para *${valor} kWh/mÃªs*!\n\n_A alteraÃ§Ã£o serÃ¡ refletida na prÃ³xima fatura._`);
+    await this.sender.enviarMensagem(telefone, `${E.ok} Contrato atualizado para *${valor} kWh/mês*!\n\n_A alteração será refletida na próxima fatura._`);
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
   }
 
@@ -3704,7 +3704,7 @@ Essa conta de energia e:
       return;
     }
 
-    if (corpo === '2' || corpo.toLowerCase().includes('nÃ£o') || corpo.toLowerCase().includes('voltar')) {
+    if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('voltar')) {
       await this.sender.enviarMensagem(telefone, `${E.like} Ok, seu contrato continua ativo!`);
       await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO', dadosTemp: undefined } });
       return;
@@ -3713,7 +3713,7 @@ Essa conta de energia e:
     await this.incrementarFallback(conversa, telefone, 'Responda *1* para confirmar encerramento ou *2* para voltar.');
   }
 
-  // â”€â”€â”€ NPS automÃ¡tico pÃ³s-cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€â”€ NPS automático pós-cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private agendarNps(telefone: string, conversaId: string): void {
     setTimeout(async () => {
@@ -3728,9 +3728,9 @@ Essa conta de energia e:
 
         await this.sender.enviarMensagem(
           telefone,
-          `${E.sorriso} OlÃ¡! Sua solicitaÃ§Ã£o de adesÃ£o Ã  CoopereBR foi recebida!\n\n` +
-          'De 0 a 10, quanto vocÃª indicaria a CoopereBR para um amigo?\n' +
-          '(Digite apenas o nÃºmero)',
+          `${E.sorriso} Olá! Sua solicitação de adesão à CoopereBR foi recebida!\n\n` +
+          'De 0 a 10, quanto você indicaria a CoopereBR para um amigo?\n' +
+          '(Digite apenas o número)',
         );
       } catch (err) {
         this.logger.warn(`Erro ao enviar NPS para ${telefone}: ${err.message}`);
@@ -3744,7 +3744,7 @@ Essa conta de energia e:
     const nota = parseInt(corpo, 10);
 
     if (isNaN(nota) || nota < 0 || nota > 10) {
-      await this.sender.enviarMensagem(telefone, 'Por favor, digite um nÃºmero de 0 a 10.');
+      await this.sender.enviarMensagem(telefone, 'Por favor, digite um número de 0 a 10.');
       return;
     }
 
