@@ -50,6 +50,8 @@ model Cooperativa {
   configClubeVantagens   ConfigClubeVantagens?
   transferencias         TransferenciaPix[]
   migracoesUsina         MigracaoUsina[]
+  // ── CooperToken ──
+  cooperTokenLedger      CooperTokenLedger[]
 
   @@map("cooperativas")
 }
@@ -149,6 +151,9 @@ model Cooperado {
   // Token de assinatura remota (cadastro por proxy)
   tokenAssinatura         String?
   tokenAssinaturaExp      DateTime?
+  // ── CooperToken ──
+  cooperTokenLedger       CooperTokenLedger[]
+  cooperTokenSaldo        CooperTokenSaldo?
 
   @@map("cooperados")
 }
@@ -335,6 +340,15 @@ model Plano {
   contratos           Contrato[]
   propostas           PropostaCooperado[]
 
+  // ── CooperToken ──
+  cooperTokenAtivo          Boolean   @default(false)
+  tokenPorKwhExcedente      Decimal?  @db.Decimal(5, 4)
+  valorTokenReais           Decimal?  @db.Decimal(10, 2)
+  tokenExpiracaoMeses       Int?
+  tokenDescontoMaxPerc      Decimal?  @db.Decimal(5, 2)
+  tokenSocialAtivo          Boolean   @default(false)
+  tokenFlexAtivo            Boolean   @default(false)
+
   @@map("planos")
 }
 
@@ -397,6 +411,10 @@ model Cobranca {
   cobrancasBancarias CobrancaBancaria[]
   asaasCobrancas     AsaasCobranca[]
   beneficiosIndicacao BeneficioIndicacao[]
+  // ── CooperToken ──
+  tokenDescontoQt    Decimal?       @db.Decimal(10, 4)
+  tokenDescontoReais Decimal?       @db.Decimal(10, 2)
+  ledgerDebitoId     String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -476,6 +494,8 @@ model FaturaProcessada {
   thresholdUtilizado Decimal      @db.Decimal(5, 2)
   status             StatusFatura @default(PENDENTE)
   cooperativaId      String?
+  // ── CooperToken ──
+  tokenApurado       Boolean      @default(false)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -1027,6 +1047,10 @@ model PlanoSaas {
   limiteMembros     Int?          // null = ilimitado
   percentualReceita Decimal       @default(0) @db.Decimal(5, 2) // % da receita dos membros
   ativo             Boolean       @default(true)
+  // ── CooperToken ──
+  taxaTokenPerc         Decimal   @default(0) @db.Decimal(5, 2)
+  limiteTokenMensal     Int?
+  cooperTokenHabilitado Boolean   @default(false)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   cooperativas      Cooperativa[]
@@ -1046,6 +1070,9 @@ model FaturaSaas {
   dataVencimento  DateTime
   dataPagamento   DateTime?
   asaasCobrancaId String?      // ID da cobrança no Asaas, se emitida
+  // ── CooperToken ──
+  volumeTokensMes    Decimal?  @db.Decimal(12, 4)
+  receitaTokens      Decimal?  @db.Decimal(10, 2)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -1465,4 +1492,59 @@ model NpsResposta {
   createdAt     DateTime @default(now())
 
   @@map("nps_respostas")
+}
+
+// ── CooperToken ──
+
+enum CooperTokenTipo {
+  GERACAO_EXCEDENTE
+  FLEX
+  SOCIAL
+  BONUS_INDICACAO
+}
+
+enum CooperTokenOperacao {
+  CREDITO
+  DEBITO
+  EXPIRACAO
+  DOACAO_ENVIADA
+  DOACAO_RECEBIDA
+}
+
+model CooperTokenLedger {
+  id               String              @id @default(cuid())
+  cooperadoId      String
+  cooperado        Cooperado           @relation(fields: [cooperadoId], references: [id])
+  cooperativaId    String
+  cooperativa      Cooperativa         @relation(fields: [cooperativaId], references: [id])
+  tipo             CooperTokenTipo
+  operacao         CooperTokenOperacao
+  quantidade       Decimal             @db.Decimal(10, 4)
+  saldoApos        Decimal             @db.Decimal(10, 4)
+  valorReais       Decimal?            @db.Decimal(10, 2)
+  referenciaId     String?
+  referenciaTabela String?
+  expiracaoEm      DateTime?
+  descricao        String?
+  createdAt        DateTime            @default(now())
+
+  @@index([cooperadoId, createdAt])
+  @@index([cooperativaId])
+  @@index([expiracaoEm])
+  @@map("cooper_token_ledger")
+}
+
+model CooperTokenSaldo {
+  id              String    @id @default(cuid())
+  cooperadoId     String    @unique
+  cooperado       Cooperado @relation(fields: [cooperadoId], references: [id])
+  cooperativaId   String
+  saldoDisponivel Decimal   @db.Decimal(10, 4) @default(0)
+  saldoPendente   Decimal   @db.Decimal(10, 4) @default(0)
+  totalEmitido    Decimal   @db.Decimal(10, 4) @default(0)
+  totalResgatado  Decimal   @db.Decimal(10, 4) @default(0)
+  totalExpirado   Decimal   @db.Decimal(10, 4) @default(0)
+  updatedAt       DateTime  @updatedAt
+
+  @@map("cooper_token_saldo")
 }
