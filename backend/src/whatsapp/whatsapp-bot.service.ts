@@ -2105,7 +2105,7 @@ export class WhatsappBotService {
         try {
           await this.prisma.cobranca.update({
             where: { id: dadosTemp.cobrancaId },
-            data: { motivoCancelamento: `Parcelamento 3x negociado via WhatsApp em ${new Date().toLocaleDateString('pt-BR')}` },
+            data: { observacoesNegociacao: `Parcelamento 3x negociado via WhatsApp em ${new Date().toLocaleDateString('pt-BR')}` },
           });
         } catch (err) {
           this.logger.warn(`Erro ao atualizar cobranÃ§a com parcelamento: ${err.message}`);

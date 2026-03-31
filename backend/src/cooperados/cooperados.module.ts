@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { CooperadosController } from './cooperados.controller';
 import { CooperadosService } from './cooperados.service';
+import { CooperadosJob } from './cooperados.job';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasModule } from '../usinas/usinas.module';
@@ -14,7 +15,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
 @Module({
   imports: [UsinasModule, WhatsappModule, EmailModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [CooperadosController],
-  providers: [CooperadosService, PrismaService, NotificacoesService],
+  providers: [CooperadosService, CooperadosJob, PrismaService, NotificacoesService],
   exports: [CooperadosService],
 })
 export class CooperadosModule {}
