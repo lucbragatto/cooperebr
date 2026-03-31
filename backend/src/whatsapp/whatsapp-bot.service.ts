@@ -87,12 +87,15 @@ const E = {
 
 interface MensagemRecebida {
   telefone: string;
-  tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'sticker' | 'location';
+  tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'sticker' | 'location' | 'contato';
   corpo?: string;
   mediaBase64?: string;
   mimeType?: string;
   /** ID do botÃ£o clicado (buttonResponseMessage) ou rowId da lista selecionada */
   selectedButtonId?: string;
+  /** Dados do contato compartilhado (contactMessage) */
+  contatoNome?: string;
+  contatoTelefone?: string;
 }
 
 // Palavras imprÃ³prias (ofensas genÃ©ricas para detecÃ§Ã£o)
@@ -370,6 +373,9 @@ export class WhatsappBotService {
       'CADASTRO_EXPRESS_NOME', 'CADASTRO_EXPRESS_CPF', 'CADASTRO_EXPRESS_EMAIL',
       'CADASTRO_EXPRESS_VALOR_FATURA', 'CADASTRO_PROXY_NOME', 'CADASTRO_PROXY_TELEFONE',
       'NEGOCIACAO_PARCELAMENTO', 'CONFIRMAR_ENCERRAMENTO',
+      'AGUARDANDO_PROPRIETARIO_FATURA', 'AGUARDANDO_CONFIRMACAO_OCR',
+      'AGUARDANDO_NOME_TERCEIRO', 'AGUARDANDO_TELEFONE_TERCEIRO',
+      'AGUARDANDO_CONFIRMACAO_CELULAR', 'AGUARDANDO_CELULAR_CORRETO', 'AGUARDANDO_INDICACAO', 'RECEBENDO_CONTATOS',
     ];
     if (['fatura', 'faturas', 'boleto', '2a via', '2Âª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
       if (ESTADOS_FLUXO_ATIVO.includes(conversa.estado)) {
@@ -443,6 +449,30 @@ export class WhatsappBotService {
           break;
         case 'AGUARDANDO_FOTO_FATURA':
           await this.handleAguardandoFotoFatura(msg, conversa);
+          break;
+        case 'AGUARDANDO_NOME_TERCEIRO':
+          await this.handleAguardandoNomeTerceiro(msg, conversa);
+          break;
+        case 'AGUARDANDO_TELEFONE_TERCEIRO':
+          await this.handleAguardandoTelefoneTerceiro(msg, conversa);
+          break;
+        case 'AGUARDANDO_PROPRIETARIO_FATURA':
+          await this.handleAguardandoProprietarioFatura(msg, conversa);
+          break;
+        case 'AGUARDANDO_CONFIRMACAO_OCR':
+          await this.handleAguardandoConfirmacaoOcr(msg, conversa);
+          break;
+        case 'AGUARDANDO_CONFIRMACAO_CELULAR':
+          await this.handleAguardandoConfirmacaoCelular(msg, conversa);
+          break;
+        case 'AGUARDANDO_CELULAR_CORRETO':
+          await this.handleAguardandoCelularCorreto(msg, conversa);
+          break;
+        case 'AGUARDANDO_INDICACAO':
+          await this.handleAguardandoIndicacao(msg, conversa);
+          break;
+        case 'RECEBENDO_CONTATOS':
+          await this.handleRecebendoContatos(msg, conversa);
           break;
         case 'AGUARDANDO_NOME':
           await this.handleAguardandoNome(msg, conversa);
@@ -1114,14 +1144,112 @@ export class WhatsappBotService {
       return;
     }
 
-    const textoProcessando = await this.msg('processando_fatura', {}, `${E.doc} Recebi sua fatura! Analisando os dados... Aguarde um momento. ${E.hourglass}`);
-    await this.sender.enviarMensagem(telefone, textoProcessando);
+    // Armazenar midia e perguntar proprietario da fatura antes do OCR
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_PROPRIETARIO_FATURA',
+        dadosTemp: { mediaBase64, mimeType } as any,
+      },
+    });
 
-    // OCR
-    const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
+    await this.sender.enviarMensagem(
+      telefone,
+      `${E.doc} Recebi sua fatura!\n\nEssa conta de energia e:\n1\uFE0F\u20E3 Minha (quero me cadastrar)\n2\uFE0F\u20E3 De outra pessoa (quero cadastrar um amigo)`,
+    );
+  }
+
+  // ——— Proprietario da fatura ———————————————————————————
+
+  private async handleAguardandoProprietarioFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+
+    if (corpo === '1') {
+      // Fatura propria — processar OCR
+      await this.processarOcrFatura(telefone, conversa, dadosTemp);
+      return;
+    }
+
+    if (corpo === '2') {
+      // Fatura de outra pessoa — pedir nome + telefone
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          estado: 'AGUARDANDO_NOME_TERCEIRO',
+          dadosTemp: { ...dadosTemp, faturaParaTerceiro: true } as any,
+        },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.pessoa} Qual o *nome completo* da pessoa que voce quer cadastrar?`,
+      );
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (minha conta) ou *2* (de outra pessoa).',
+    );
+  }
+
+  private async handleAguardandoNomeTerceiro(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+
+    if (!corpo || corpo.length < 3) {
+      await this.sender.enviarMensagem(telefone, 'Por favor, informe o nome completo da pessoa:');
+      return;
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_TELEFONE_TERCEIRO',
+        dadosTemp: { ...dadosTemp, nomeTerceiro: corpo } as any,
+      },
+    });
+    await this.sender.enviarMensagem(telefone, `${E.telefone} Qual o telefone dessa pessoa? (com DDD, ex: 11999998888)`);
+  }
+
+  private async handleAguardandoTelefoneTerceiro(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+
+    if (corpo.length < 10 || corpo.length > 13) {
+      await this.sender.enviarMensagem(telefone, 'Telefone invalido. Informe com DDD (ex: 11999998888):');
+      return;
+    }
+
+    // Salvar dados do terceiro e processar OCR
+    const dadosAtualizados = { ...dadosTemp, telefoneTerceiro: corpo };
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { dadosTemp: dadosAtualizados as any },
+    });
+    await this.processarOcrFatura(telefone, conversa, dadosAtualizados);
+  }
+
+  /**
+   * Processa OCR da fatura armazenada em dadosTemp e mostra dados para confirmacao.
+   * Usado tanto para fatura propria quanto de terceiro.
+   */
+  private async processarOcrFatura(
+    telefone: string,
+    conversa: any,
+    dadosTemp: Record<string, unknown>,
+  ): Promise<void> {
+    const mediaB64 = String(dadosTemp.mediaBase64 ?? '');
+    const mime = String(dadosTemp.mimeType ?? '');
+
+    await this.sender.enviarMensagem(telefone, `${E.doc} Analisando os dados da fatura... Aguarde um momento. ${E.hourglass}`);
+
+    const tipoArquivo = mime === 'application/pdf' ? 'pdf' : 'imagem';
     let dadosExtraidos: Record<string, unknown>;
     try {
-      dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
+      dadosExtraidos = await this.faturasService.extrairOcr(mediaB64, tipoArquivo) as unknown as Record<string, unknown>;
     } catch {
       await this.sender.enviarMensagem(
         telefone,
@@ -1147,8 +1275,8 @@ export class WhatsappBotService {
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
-        estado: 'AGUARDANDO_CONFIRMACAO_DADOS',
-        dadosTemp: dadosExtraidos as any,
+        estado: 'AGUARDANDO_CONFIRMACAO_OCR',
+        dadosTemp: { ...dadosExtraidos, ...(dadosTemp.faturaParaTerceiro ? { faturaParaTerceiro: true, nomeTerceiro: dadosTemp.nomeTerceiro, telefoneTerceiro: dadosTemp.telefoneTerceiro } : {}) } as any,
       },
     });
 
@@ -1174,11 +1302,68 @@ export class WhatsappBotService {
       }
     }
 
-    msg_confirmacao += `\n_Algum dado incorreto? Corrija no formato:_\n`;
-    msg_confirmacao += `_02/26 350 kwh R$ 287,50_\n\n`;
-    msg_confirmacao += `_Tudo certo? Responda *OK*_`;
+    // Calcular media
+    const kwhs = historico.map(h => h.consumoKwh).filter(v => v > 0);
+    const mediaKwh = kwhs.length > 0 ? Math.round(kwhs.reduce((a, b) => a + b, 0) / kwhs.length) : Number(dadosExtraidos.consumoAtualKwh ?? 0);
+    msg_confirmacao += `\n${E.grafico} Media: *${mediaKwh} kWh/mes*\n`;
+
+    msg_confirmacao += `\nEsta correto?\n1\uFE0F\u20E3 Sim, pode simular\n2\uFE0F\u20E3 Algum dado esta errado`;
 
     await this.sender.enviarMensagem(telefone, msg_confirmacao);
+  }
+
+  // ─── AGUARDANDO_CONFIRMACAO_OCR: confirmar dados extraidos antes de simular ───
+
+  private async handleAguardandoConfirmacaoOcr(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
+
+    // Se mandou nova imagem/PDF, reprocessar
+    if ((msg.tipo === 'imagem' || msg.tipo === 'documento') && msg.mediaBase64) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          estado: 'AGUARDANDO_PROPRIETARIO_FATURA',
+          dadosTemp: { mediaBase64: msg.mediaBase64, mimeType: msg.mimeType } as any,
+        },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.doc} Nova fatura recebida!
+
+Essa conta de energia e:
+1️⃣ Minha (quero me cadastrar)
+2️⃣ De outra pessoa (quero cadastrar um amigo)`,
+      );
+      return;
+    }
+
+    if (corpo === '1') {
+      // Dados corretos - ir para simulacao
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_CONFIRMACAO_DADOS', dadosTemp: dadosTemp as any },
+      });
+      await this.handleConfirmacaoDados({ ...msg, corpo: 'OK' }, { ...conversa, estado: 'AGUARDANDO_CONFIRMACAO_DADOS', dadosTemp });
+      return;
+    }
+
+    if (corpo === '2') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_FOTO_FATURA', contadorFallback: 0 },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.camera} Por favor, envie novamente a foto da sua fatura de energia com melhor qualidade, ou envie o PDF.`,
+      );
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (dados corretos) ou *2* (dados errados).',
+    );
   }
 
   // â”€â”€â”€ PASSO 2: ConfirmaÃ§Ã£o dos dados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1612,13 +1797,119 @@ export class WhatsappBotService {
       }
     }
 
-    await this.finalizarConversa(conversa.id);
+    // Pre-cadastro concluido — perguntar sobre indicacao
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'AGUARDANDO_INDICACAO' },
+    });
 
-    const textoSucesso = await this.msg('cadastro_sucesso', {}, `${E.festa} Perfeito! Seu prÃ©-cadastro foi criado com sucesso!\n\nNossa equipe entrarÃ¡ em contato em breve para finalizar. Qualquer dÃºvida Ã© sÃ³ perguntar! ${E.coracao}`);
-    await this.sender.enviarMensagem(telefone, textoSucesso);
+    await this.sender.enviarMensagem(
+      telefone,
+      `${E.festa} Pre-cadastro realizado! A equipe CoopereBR entrara em contato em breve.\n\nVoce gostaria de indicar um amigo agora?\n1\uFE0F\u20E3 Sim, quero indicar\n2\uFE0F\u20E3 Nao, obrigado`,
+    );
+  }
 
-    // NPS: agendar pesquisa apÃ³s 1 hora
-    this.agendarNps(telefone, conversa.id);
+
+  // ─── Indicacao pos-cadastro ──────────────────────────────────────
+
+  private async handleAguardandoIndicacao(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+
+    if (corpo === '1') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'RECEBENDO_CONTATOS', dadosTemp: { ...(conversa.dadosTemp ?? {}), contatosSalvos: 0 } as any },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.handshake} Que otimo! Abra seus contatos, segure o nome do amigo e toque em *Compartilhar*. Mande o contato aqui.\n\nPode enviar varios! Quando terminar, digite *pronto*.`,
+      );
+      return;
+    }
+
+    if (corpo === '2') {
+      await this.finalizarConversa(conversa.id);
+      await this.sender.enviarMensagem(
+        telefone,
+        `Tudo bem! Quando quiser indicar, e so digitar *indicar* aqui. Ate logo! ${E.oi}`,
+      );
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (sim, quero indicar) ou *2* (nao, obrigado).',
+    );
+  }
+
+  private async handleRecebendoContatos(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim().toLowerCase();
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    let contatosSalvos = Number(dadosTemp.contatosSalvos ?? 0);
+
+    // Se digitou 'pronto', encerrar
+    if (corpo === 'pronto') {
+      await this.finalizarConversa(conversa.id);
+      if (contatosSalvos > 0) {
+        await this.sender.enviarMensagem(
+          telefone,
+          `${E.festa} ${contatosSalvos} contato(s) salvo(s)! Vamos enviar um convite para cada um. Obrigado por indicar! ${E.coracao}`,
+        );
+      } else {
+        await this.sender.enviarMensagem(
+          telefone,
+          `Tudo bem! Quando quiser indicar, e so digitar *indicar* aqui. Ate logo! ${E.oi}`,
+        );
+      }
+      return;
+    }
+
+    // Processar contato compartilhado
+    if (msg.tipo === 'contato' && msg.contatoNome && msg.contatoTelefone) {
+      const nomeContato = msg.contatoNome;
+      const telContato = msg.contatoTelefone.replace(/\D/g, '');
+
+      // Salvar como lead na LeadExpansao
+      try {
+        await this.prisma.leadExpansao.create({
+          data: {
+            telefone: telContato,
+            nomeCompleto: nomeContato,
+            distribuidora: 'INDICACAO_WHATSAPP',
+            status: 'AGUARDANDO',
+          },
+        });
+      } catch (err) {
+        this.logger.warn(`Erro ao salvar lead indicacao: ${err.message}`);
+      }
+
+      contatosSalvos++;
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { dadosTemp: { ...dadosTemp, contatosSalvos } as any },
+      });
+
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.ok} ${nomeContato} salvo! Envie mais contatos ou digite *pronto* para finalizar.`,
+      );
+
+      // Disparar mensagem de convite para o contato
+      const nomeIndicador = String(dadosTemp.nomeInformado ?? dadosTemp.titular ?? 'Um amigo');
+      await this.sender.enviarMensagem(
+        telContato,
+        `${E.oi} Ola ${nomeContato}! ${nomeIndicador} te convidou para conhecer a CoopereBR.\n\nCom a CoopereBR voce economiza ate 20% na conta de luz todo mes, sem investimento.\n\nQuer ver quanto economizaria? So manda a foto da sua conta de energia! ${E.bolt}`,
+      ).catch(() => {});
+
+      return;
+    }
+
+    // Se enviou texto que nao e 'pronto', tentar interpretar como nome+telefone manual
+    await this.sender.enviarMensagem(
+      telefone,
+      `${E.seta} Compartilhe um contato do seu celular ou digite *pronto* para finalizar.`,
+    );
   }
 
   // â”€â”€â”€ Estado CONCLUIDO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1689,88 +1980,101 @@ export class WhatsappBotService {
       return;
     }
 
-    await this.sender.enviarMensagem(telefone, `${E.doc} Recebi! Analisando os dados... Aguarde um momento. ${E.hourglass}`);
-
-    // OCR
-    const tipoArquivo = mimeType === 'application/pdf' ? 'pdf' : 'imagem';
-    let dadosExtraidos: Record<string, unknown>;
-    try {
-      dadosExtraidos = await this.faturasService.extrairOcr(mediaBase64!, tipoArquivo) as unknown as Record<string, unknown>;
-    } catch {
-      await this.sender.enviarMensagem(telefone, `Nao consegui identificar os dados. Envie uma foto mais nitida ou o PDF da fatura. ${E.camera}`);
-      return;
-    }
-
-    const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
-    if (consumoAtualKwh <= 0) {
-      await this.sender.enviarMensagem(telefone, `O arquivo nao parece ser uma fatura de energia. Tente novamente. ${E.doc}`);
-      return;
-    }
-
-    // Calcular proposta rapida
-    const historico = (dadosExtraidos.historicoConsumo as Array<{ mesAno: string; consumoKwh: number; valorRS: number }>) ?? [];
-    const valorMesRecente = Number(dadosExtraidos.totalAPagar ?? 0);
-    const kwhs = historico.map(h => h.consumoKwh).filter(v => v > 0);
-    const kwhMedio = kwhs.length > 0 ? kwhs.reduce((a, b) => a + b, 0) / kwhs.length : consumoAtualKwh;
-    const valores = historico.map(h => h.valorRS).filter(v => v > 0);
-    const valorMedio = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : valorMesRecente;
-
-    let resultado: any = null;
-    try {
-      const calcResult = await this.motorProposta.calcular({
-        cooperadoId: 'temp',
-        historico: historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
-        kwhMesRecente: consumoAtualKwh || kwhMedio,
-        valorMesRecente: valorMesRecente || valorMedio,
-        mesReferencia: String(dadosExtraidos.mesReferencia ?? ''),
-        tipoFornecimento: String(dadosExtraidos.tipoFornecimento ?? 'TRIFASICO') as any,
-      });
-      resultado = calcResult.resultado;
-    } catch (err) {
-      this.logger.warn(`Erro ao calcular proposta convite: ${err.message}`);
-    }
-
-    // Salvar dados
+    // Armazenar midia e perguntar proprietario da fatura antes do OCR
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
-        estado: 'AGUARDANDO_CONFIRMACAO_PROPOSTA',
-        dadosTemp: { ...dadosTemp, ...dadosExtraidos, resultado } as any,
+        estado: 'AGUARDANDO_PROPRIETARIO_FATURA',
+        dadosTemp: { ...dadosTemp, mediaBase64, mimeType } as any,
       },
     });
 
-    if (resultado) {
-      const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const economiaMensal = resultado.economiaMensal;
-      const descontoPercentual = resultado.descontoPercentual;
-      const valorComDesconto = valorMedio * (1 - descontoPercentual / 100);
+    await this.sender.enviarMensagem(
+      telefone,
+      `${E.doc} Recebi sua fatura!\n\nEssa conta de energia e:\n1\uFE0F\u20E3 Minha (quero me cadastrar)\n2\uFE0F\u20E3 De outra pessoa (quero cadastrar um amigo)`,
+    );
+  }
 
-      let resposta = `${E.muda} *Simulacao de economia:*\n\n`;
-      resposta += `${E.grafico} Fatura media: R$ ${fmt(valorMedio)}\n`;
-      resposta += `${E.coracao} Com a CoopereBR: R$ ${fmt(valorComDesconto)} (-${descontoPercentual.toFixed(0)}%)\n`;
-      resposta += `${E.dolar} Economia mensal: R$ ${fmt(economiaMensal)}\n\n`;
-      resposta += `Quer continuar?\n1ï¸âƒ£ Sim\n2ï¸âƒ£ Nao`;
+  // ─── Confirmacao de celular ───────────────────────────
 
-      await this.sender.enviarMensagem(telefone, resposta);
-    } else {
-      await this.sender.enviarMensagem(telefone, 'Recebi sua fatura! Quer prosseguir com o cadastro?\n1ï¸âƒ£ Sim\n2ï¸âƒ£ Nao');
-    }
+  private async handleAguardandoConfirmacaoCelular(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim();
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
-    // Notificar indicador sobre avanco
-    const indicadorNome = dadosTemp.indicadorNome as string | undefined;
-    const codigoRef = dadosTemp.codigoIndicacao as string | undefined;
-    if (codigoRef) {
-      const indicador = await this.prisma.cooperado.findUnique({
-        where: { codigoIndicacao: codigoRef },
-        select: { telefone: true, nomeCompleto: true },
+    if (corpo === '1') {
+      // Celular correto - salvar e ir para confirmacao final
+      const nome = String(dadosTemp.nomeInformado ?? dadosTemp.titular ?? '');
+      const cpf = String(dadosTemp.cpfInformado ?? '');
+      const emailInfo = String(dadosTemp.emailInformado ?? '');
+
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          estado: 'AGUARDANDO_CONFIRMACAO_CADASTRO',
+          dadosTemp: { ...dadosTemp, celularConfirmado: telefone } as any,
+        },
       });
-      if (indicador?.telefone) {
-        await this.sender.enviarMensagem(
-          indicador.telefone,
-          `${E.prancheta} Seu indicado enviou a fatura e esta analisando a proposta. Acompanhe!`,
-        ).catch(() => {});
-      }
+
+      let confirmacao = `${E.ok} *Confirme seus dados:*\n\n`;
+      confirmacao += `${E.pessoa} ${nome}\n`;
+      confirmacao += `${E.doc} CPF: ${cpf}\n`;
+      confirmacao += `${E.email} ${emailInfo}\n`;
+      confirmacao += `${E.celular} ${telefone}\n\n`;
+      confirmacao += `Tudo certo? Responda *CONFIRMO*`;
+
+      await this.sender.enviarMensagem(telefone, confirmacao);
+      return;
     }
+
+    if (corpo === '2') {
+      // Quer corrigir o celular
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          estado: 'AGUARDANDO_CELULAR_CORRETO',
+          dadosTemp: dadosTemp as any,
+        },
+      });
+      await this.sender.enviarMensagem(telefone, `${E.celular} Informe o numero correto com DDD (ex: 11999998888):`);
+      return;
+    }
+
+    await this.incrementarFallback(conversa, telefone,
+      'Responda *1* (celular correto) ou *2* (corrigir).',
+    );
+  }
+
+  private async handleAguardandoCelularCorreto(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
+    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+
+    if (corpo.length < 10 || corpo.length > 13) {
+      await this.sender.enviarMensagem(telefone, 'Numero invalido. Informe com DDD (ex: 11999998888):');
+      return;
+    }
+
+    const nome = String(dadosTemp.nomeInformado ?? dadosTemp.titular ?? '');
+    const cpf = String(dadosTemp.cpfInformado ?? '');
+    const emailInfo = String(dadosTemp.emailInformado ?? '');
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_CONFIRMACAO_CADASTRO',
+        dadosTemp: { ...dadosTemp, celularConfirmado: corpo } as any,
+      },
+    });
+
+    let confirmacao = `${E.ok} *Confirme seus dados:*\n\n`;
+    confirmacao += `${E.pessoa} ${nome}\n`;
+    confirmacao += `${E.doc} CPF: ${cpf}\n`;
+    confirmacao += `${E.email} ${emailInfo}\n`;
+    confirmacao += `${E.celular} ${corpo}\n\n`;
+    confirmacao += `Tudo certo? Responda *CONFIRMO*`;
+
+    await this.sender.enviarMensagem(telefone, confirmacao);
   }
 
   /**
@@ -1796,7 +2100,7 @@ export class WhatsappBotService {
       },
     });
 
-    await this.sender.enviarMensagem(telefone, `Obrigado, ${corpo}! Agora informe seu CPF:`);
+    await this.sender.enviarMensagem(telefone, `Obrigado, ${corpo}! ${E.doc} Qual o seu CPF? (apenas numeros, ex: 12345678900)`);
   }
 
   private async handleAguardandoCpf(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -1804,7 +2108,7 @@ export class WhatsappBotService {
     const corpo = (msg.corpo ?? '').trim().replace(/\D/g, '');
 
     if (corpo.length !== 11) {
-      await this.sender.enviarMensagem(telefone, 'CPF invalido. Informe os 11 digitos do seu CPF:');
+      await this.sender.enviarMensagem(telefone, 'CPF invalido. Informe apenas numeros, 11 digitos (ex: 12345678900):');
       return;
     }
 
@@ -1817,15 +2121,15 @@ export class WhatsappBotService {
       },
     });
 
-    await this.sender.enviarMensagem(telefone, 'Agora informe seu email:');
+    await this.sender.enviarMensagem(telefone, `${E.email} Qual o seu melhor email?`);
   }
 
   private async handleAguardandoEmail(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
     const corpo = (msg.corpo ?? '').trim().toLowerCase();
 
-    if (!corpo.includes('@')) {
-      await this.sender.enviarMensagem(telefone, 'Email invalido. Informe um email valido:');
+    if (!corpo.includes('@') || !corpo.includes('.')) {
+      await this.sender.enviarMensagem(telefone, 'Email invalido. Informe um email valido (deve conter @ e .):');
       return;
     }
 
@@ -1836,18 +2140,15 @@ export class WhatsappBotService {
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
-        estado: 'AGUARDANDO_CONFIRMACAO_CADASTRO',
+        estado: 'AGUARDANDO_CONFIRMACAO_CELULAR',
         dadosTemp: { ...dadosTemp, emailInformado: corpo } as any,
       },
     });
 
-    let confirmacao = `${E.ok} *Confirme seus dados:*\n\n`;
-    confirmacao += `${E.pessoa} ${nome}\n`;
-    confirmacao += `${E.doc} CPF: ${cpf}\n`;
-    confirmacao += `${E.email} ${corpo}\n\n`;
-    confirmacao += `Tudo certo? Responda *CONFIRMO*`;
-
-    await this.sender.enviarMensagem(telefone, confirmacao);
+    await this.sender.enviarMensagem(
+      telefone,
+      `${E.celular} Confirmo seu celular como *${telefone}*?\n1\uFE0F\u20E3 Sim, esta correto\n2\uFE0F\u20E3 Nao, quero corrigir`,
+    );
   }
 
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
