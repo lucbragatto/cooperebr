@@ -1733,6 +1733,15 @@ Essa conta de energia e:
       });
     }
 
+    // Notificar equipe sobre novo lead
+    this.notificarEquipeNovoLead({
+      nome: titular || cooperado.nomeCompleto,
+      telefone: telefoneNorm,
+      email: emailInformado,
+      valorFatura: dadosTemp.valorFatura as number | undefined,
+      economiaMensal: dadosTemp.economiaMensal as number | undefined,
+    }).catch(() => {});
+
     // Criar UC se tiver dados
     const numeroUC = String(dadosTemp.numeroUC ?? '');
     if (numeroUC && numeroUC !== 'â€”') {
@@ -1809,6 +1818,37 @@ Essa conta de energia e:
     );
   }
 
+
+  // ─── Notificacao equipe novo lead ────────────────────────────────
+
+  private async notificarEquipeNovoLead(dados: {
+    nome: string;
+    telefone: string;
+    email?: string;
+    valorFatura?: number;
+    economiaMensal?: number;
+  }): Promise<void> {
+    const numerosEquipe = (process.env.NUMEROS_EQUIPE ?? '').split(',').filter(Boolean);
+    if (numerosEquipe.length === 0) return;
+
+    const linhas = [
+      `*Novo lead CoopereBR!* ${E.festa}`,
+      `Nome: ${dados.nome}`,
+      `Telefone: ${dados.telefone}`,
+    ];
+    if (dados.email) linhas.push(`Email: ${dados.email}`);
+    if (dados.valorFatura) linhas.push(`Valor fatura: R$ ${Number(dados.valorFatura).toFixed(2)}`);
+    if (dados.economiaMensal) linhas.push(`Economia estimada: R$ ${Number(dados.economiaMensal).toFixed(2)}/mes`);
+    linhas.push('Origem: Bot WhatsApp');
+
+    const texto = linhas.join('\n');
+
+    for (const numero of numerosEquipe) {
+      await this.sender.enviarMensagem(numero.trim(), texto).catch((err) => {
+        this.logger.warn(`Erro ao notificar equipe ${numero}: ${err.message}`);
+      });
+    }
+  }
 
   // ─── Indicacao pos-cadastro ──────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 const NIVEL_ORDEM: Record<string, number> = {
   BRONZE: 0,
@@ -24,6 +25,7 @@ export class ClubeVantagensService {
   constructor(
     private prisma: PrismaService,
     private whatsappCicloVida: WhatsappCicloVidaService,
+    private sender: WhatsappSenderService,
   ) {}
 
   async criarOuObterProgressao(cooperadoId: string) {
@@ -123,6 +125,16 @@ export class ClubeVantagensService {
     });
 
     this.logger.log(`Cooperado ${cooperadoId} promovido: ${nivelAnterior} → ${melhorNivel}`);
+
+    // Notificar cooperado via WhatsApp sobre novo nível
+    const cooperadoInfo = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { telefone: true },
+    });
+    if (cooperadoInfo?.telefone) {
+      this.notificarNovoNivel(cooperadoInfo.telefone, melhorNivel).catch(() => {});
+    }
+
     return { promovido: true, nivelAnterior, nivelNovo: melhorNivel };
   }
 
@@ -138,7 +150,7 @@ export class ClubeVantagensService {
     const resetMes = progressao.mesReferenciaKwh !== mesAtual;
     const resetAno = progressao.anoReferenciaKwh !== anoAtual;
 
-    await this.prisma.progressaoClube.update({
+    const updated = await this.prisma.progressaoClube.update({
       where: { cooperadoId },
       data: {
         kwhIndicadoAcumulado: { increment: deltaKwh },
@@ -149,6 +161,17 @@ export class ClubeVantagensService {
         anoReferenciaKwh: anoAtual,
       },
     });
+
+    // Notificar cooperado sobre pontos ganhos via WhatsApp
+    if (deltaKwh > 0) {
+      const cooperadoInfo = await this.prisma.cooperado.findUnique({
+        where: { id: cooperadoId },
+        select: { telefone: true },
+      });
+      if (cooperadoInfo?.telefone) {
+        this.notificarPontosGanhos(cooperadoInfo.telefone, deltaKwh, updated.kwhIndicadoAcumulado).catch(() => {});
+      }
+    }
 
     return this.avaliarProgressao(cooperadoId);
   }
@@ -544,5 +567,51 @@ export class ClubeVantagensService {
     }
 
     return { enviados, erros, total: progressoes.length };
+  }
+
+  // ─── Notificações WhatsApp do Clube ──────────────────────────────
+
+  /**
+   * Notifica cooperado via WA quando ganha pontos (kWh acumulados).
+   */
+  async notificarPontosGanhos(
+    telefone: string,
+    pontosGanhos: number,
+    totalAcumulado: number,
+  ): Promise<void> {
+    const texto = `Voce ganhou ${pontosGanhos} pontos no Clube CoopereBR! \u2B50 Total: ${totalAcumulado} pontos.`;
+    await this.sender.enviarMensagem(telefone, texto, { tipoDisparo: 'CLUBE_VANTAGENS' }).catch((err) => {
+      this.logger.warn(`Erro ao notificar pontos para ${telefone}: ${err.message}`);
+    });
+  }
+
+  /**
+   * Notifica cooperado via WA quando atinge novo nível.
+   */
+  async notificarNovoNivel(telefone: string, nivel: string): Promise<void> {
+    const texto = `Parabens! Voce subiu para o nivel ${nivel} no Clube CoopereBR! \uD83C\uDF89`;
+    await this.sender.enviarMensagem(telefone, texto, { tipoDisparo: 'CLUBE_VANTAGENS' }).catch((err) => {
+      this.logger.warn(`Erro ao notificar nivel para ${telefone}: ${err.message}`);
+    });
+  }
+
+  /**
+   * Gera texto de resumo mensal de pontos para enviar junto com notificação de fatura.
+   */
+  async resumoMensalPontos(cooperadoId: string): Promise<string | null> {
+    const progressao = await this.prisma.progressaoClube.findUnique({
+      where: { cooperadoId },
+    });
+    if (!progressao) return null;
+
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const pontosGanhosMes = progressao.mesReferenciaKwh === mesAtual ? progressao.kwhIndicadoMes : 0;
+
+    return [
+      'Resumo do seu Clube este mes:',
+      `Pontos ganhos: ${pontosGanhosMes}`,
+      `Total acumulado: ${progressao.kwhIndicadoAcumulado}`,
+      `Nivel atual: ${progressao.nivelAtual}`,
+    ].join('\n');
   }
 }
