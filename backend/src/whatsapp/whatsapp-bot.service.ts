@@ -1385,12 +1385,18 @@ Essa conta de energia e:
       // Verificar se distribuidora tem usinas disponíveis
       const distribuidoraOCR = String(dadosTemp.distribuidora ?? '');
       if (distribuidoraOCR) {
-        const usinasNaArea = await this.prisma.usina.count({
-          where: {
-            distribuidora: { contains: distribuidoraOCR, mode: 'insensitive' },
-            statusHomologacao: { in: ['HOMOLOGADA', 'EM_PRODUCAO'] },
-          },
+        const todasUsinas = await this.prisma.usina.findMany({
+          where: { statusHomologacao: { in: ['HOMOLOGADA', 'EM_PRODUCAO'] } },
+          select: { distribuidora: true },
         });
+        const distribNorm = distribuidoraOCR.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
+        const distribTokens = distribNorm.split(/\s+/).filter((t: string) => t.length > 2);
+        this.logger.log(`[BOT] Distribuidora OCR: "${distribuidoraOCR}" | tokens: ${distribTokens.join(',')}`);
+        const usinasNaArea = todasUsinas.filter((u: { distribuidora: string | null }) => {
+          if (!u.distribuidora) return false;
+          const uNorm = u.distribuidora.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
+          return distribTokens.some((t: string) => uNorm.includes(t)) || uNorm.split(/\s+/).some((t: string) => t.length > 2 && distribNorm.includes(t));
+        }).length;
 
         if (usinasNaArea === 0) {
           const valorFatura = Number(dadosTemp.totalAPagar ?? 0);
