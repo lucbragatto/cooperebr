@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 
@@ -185,6 +185,20 @@ export class ClubeVantagensService {
     niveisConfig: NivelConfig[];
     bonusAniversario?: number;
   }) {
+    // CLB-02: Validar sobreposição de ranges entre níveis
+    if (dto.niveisConfig && dto.niveisConfig.length > 1) {
+      const sorted = [...dto.niveisConfig].sort((a, b) => a.kwhMinimo - b.kwhMinimo);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
+          throw new BadRequestException(
+            `Sobreposição de faixas: ${sorted[i].nivel} (${sorted[i].kwhMinimo}-${sorted[i].kwhMaximo} kWh) ` +
+            `sobrepõe ${sorted[i + 1].nivel} (${sorted[i + 1].kwhMinimo}-${sorted[i + 1].kwhMaximo} kWh). ` +
+            `O kwhMaximo de ${sorted[i].nivel} deve ser <= kwhMinimo de ${sorted[i + 1].nivel}.`,
+          );
+        }
+      }
+    }
+
     return this.prisma.configClubeVantagens.upsert({
       where: { cooperativaId },
       update: {

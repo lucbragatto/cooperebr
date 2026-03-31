@@ -7,8 +7,10 @@ import { ConveniosService } from './convenios.service';
 import { FormaPagamentoService } from './forma-pagamento.service';
 import { PixExcedenteService } from './pix-excedente.service';
 import { PrismaService } from '../prisma.service';
+import { AsaasModule } from '../asaas/asaas.module';
 
 @Module({
+  imports: [AsaasModule],
   controllers: [FinanceiroController],
   providers: [
     PlanoContasService,

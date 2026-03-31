@@ -375,8 +375,9 @@ model Cobranca {
   dataVencimento     DateTime
   dataPagamento      DateTime?
   valorPago          Decimal?       @db.Decimal(10, 2)
-  motivoCancelamento String?
-  kwhEntregue        Float?
+  motivoCancelamento      String?
+  observacoesNegociacao   String?
+  kwhEntregue             Float?
   kwhConsumido       Float?
   kwhCompensado      Float?
   kwhSaldo           Float?

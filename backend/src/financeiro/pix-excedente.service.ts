@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { AsaasService } from '../asaas/asaas.service';
 
 export interface CalcularPixExcedenteDto {
   cooperadoId?: string;
@@ -23,7 +24,12 @@ export interface ConfigImpostosDto {
 
 @Injectable()
 export class PixExcedenteService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(PixExcedenteService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private asaasService: AsaasService,
+  ) {}
 
   /**
    * Calcula o valor liquido do excedente após impostos e registra a transferência
@@ -107,25 +113,67 @@ export class PixExcedenteService {
     const valorImpostos = valorIR + valorPIS + valorCOFINS;
     const valorLiquido = Math.max(0, valorBruto - valorImpostos);
 
-    // Registrar transferência (SIMULADO por enquanto)
+    // Dados comuns da transferência
+    const valorBrutoArredondado = Math.round(valorBruto * 100) / 100;
+    const valorImpostosArredondado = Math.round(valorImpostos * 100) / 100;
+    const valorLiquidoArredondado = Math.round(valorLiquido * 100) / 100;
+    const observacao = `Excedente de ${dto.kwhExcedente.toFixed(2)} kWh à R$ ${dto.tarifaKwh}/kWh. Impostos: IR ${aliquotaIR}%, PIS ${aliquotaPIS}%, COFINS ${aliquotaCOFINS}%`;
+    const pixExcedenteAtivo = process.env.ASAAS_PIX_EXCEDENTE_ATIVO === 'true';
+
+    let status = 'SIMULADO';
+    let asaasTransferId: string | null = null;
+
+    if (!pixExcedenteAtivo) {
+      this.logger.log('PIX Excedente em modo simulação (feature flag desativada)');
+    } else {
+      if (!dto.cooperativaId) {
+        throw new BadRequestException('cooperativaId é obrigatório para transferência PIX real');
+      }
+      try {
+        const client = await this.asaasService.getApiClient(dto.cooperativaId);
+        const pixTipoMap: Record<string, string> = {
+          CPF: 'CPF',
+          CNPJ: 'CNPJ',
+          EMAIL: 'EMAIL',
+          TELEFONE: 'PHONE',
+          ALEATORIA: 'EVP',
+        };
+        const { data: transfer } = await client.post('/transfers', {
+          value: valorLiquidoArredondado,
+          operationType: 'PIX',
+          pixAddressKey: pixChave,
+          pixAddressKeyType: pixTipoMap[pixTipo ?? 'ALEATORIA'] ?? 'EVP',
+          description: `Excedente energia ${dto.mesReferencia} - ${dto.kwhExcedente.toFixed(2)} kWh`,
+        });
+        asaasTransferId = transfer.id;
+        status = transfer.status === 'DONE' ? 'PAGO' : 'PENDENTE';
+        this.logger.log(`PIX Excedente transferido via Asaas: ${transfer.id} - status ${transfer.status}`);
+      } catch (err) {
+        this.logger.error(
+          `Erro ao transferir PIX Excedente via Asaas: ${JSON.stringify(err.response?.data?.errors || err.message)}`,
+        );
+        status = 'ERRO';
+      }
+    }
+
     const transferencia = await this.prisma.transferenciaPix.create({
       data: {
         cooperativaId: dto.cooperativaId ?? null,
         cooperadoId: dto.cooperadoId ?? null,
         condominioId: dto.condominioId ?? null,
-        valorBruto: Math.round(valorBruto * 100) / 100,
+        valorBruto: valorBrutoArredondado,
         aliquotaIR,
         aliquotaPIS,
         aliquotaCOFINS,
-        valorImpostos: Math.round(valorImpostos * 100) / 100,
-        valorLiquido: Math.round(valorLiquido * 100) / 100,
+        valorImpostos: valorImpostosArredondado,
+        valorLiquido: valorLiquidoArredondado,
         pixChave: pixChave!,
         pixTipo: pixTipo ?? 'ALEATORIA',
         mesReferencia: dto.mesReferencia,
         kwhExcedente: dto.kwhExcedente,
         tarifaKwh: dto.tarifaKwh,
-        status: 'SIMULADO',
-        observacao: `Excedente de ${dto.kwhExcedente.toFixed(2)} kWh à R$ ${dto.tarifaKwh}/kWh. Impostos: IR ${aliquotaIR}%, PIS ${aliquotaPIS}%, COFINS ${aliquotaCOFINS}%`,
+        status,
+        observacao: asaasTransferId ? `${observacao} | Asaas: ${asaasTransferId}` : observacao,
       },
     });
 
