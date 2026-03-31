@@ -1,0 +1,1 @@
+ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS observacoes_negociacao TEXT;
