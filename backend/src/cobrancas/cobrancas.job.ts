@@ -75,11 +75,11 @@ export class CobrancasJob {
 
       const diasEfetivos = diasAtraso - diasCarencia;
       const valorOriginal = Number(cobranca.valorLiquido);
-      const multa = valorOriginal * (Number(config.multaAtraso) / 100);
-      const juros = valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos;
+      const multa = Math.round(valorOriginal * (Number(config.multaAtraso) / 100) * 100) / 100;
+      const juros = Math.round(valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos * 100) / 100;
 
       // Recalcula sempre baseado no valorLiquido original
-      const valorAtualizado = valorOriginal + multa + juros;
+      const valorAtualizado = Math.round((valorOriginal + multa + juros) * 100) / 100;
 
       await this.prisma.cobranca.update({
         where: { id: cobranca.id },
