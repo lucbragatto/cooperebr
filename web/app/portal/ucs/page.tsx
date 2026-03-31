@@ -198,7 +198,7 @@ function UcChart({ ucId }: { ucId: string }) {
 
   useEffect(() => {
     api
-      .get('/cooperados/meu-perfil/cobrancas')
+      .get(`/cooperados/meu-perfil/cobrancas?ucId=${ucId}`)
       .then((res) => {
         const cobrancas = res.data
           .filter((c: any) => c.kwhConsumido != null || c.kwhEntregue != null)

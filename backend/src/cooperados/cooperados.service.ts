@@ -113,10 +113,15 @@ export class CooperadosService {
   }
 
   /** Cobranças do cooperado logado */
-  async minhasCobrancas(usuario: { id: string; email: string; cpf?: string }) {
+  async minhasCobrancas(usuario: { id: string; email: string; cpf?: string }, ucId?: string) {
     const cooperado = await this.findCooperadoByUsuario(usuario);
     return this.prisma.cobranca.findMany({
-      where: { contrato: { cooperadoId: cooperado.id } },
+      where: {
+        contrato: {
+          cooperadoId: cooperado.id,
+          ...(ucId ? { ucId } : {}),
+        },
+      },
       include: {
         contrato: { select: { numero: true, uc: { select: { numero: true } } } },
         asaasCobrancas: { select: { boletoUrl: true, linkPagamento: true }, take: 1 },

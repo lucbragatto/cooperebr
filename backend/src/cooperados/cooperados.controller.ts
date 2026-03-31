@@ -137,8 +137,8 @@ export class CooperadosController {
 
   @Roles(COOPERADO)
   @Get('meu-perfil/cobrancas')
-  minhasCobrancas(@Req() req: any) {
-    return this.cooperadosService.minhasCobrancas(req.user);
+  minhasCobrancas(@Req() req: any, @Query('ucId') ucId?: string) {
+    return this.cooperadosService.minhasCobrancas(req.user, ucId);
   }
 
   @Roles(COOPERADO)
