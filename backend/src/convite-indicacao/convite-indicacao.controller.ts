@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Query, Req, UnauthorizedException } from '@nestjs/common';
 import { ConviteIndicacaoService } from './convite-indicacao.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -19,7 +19,8 @@ export class ConviteIndicacaoController {
     @Query('indicadorId') indicadorId?: string,
     @Query('page') page?: string,
   ) {
-    return this.service.listarConvitesPendentes(req.user?.cooperativaId, {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.listarConvitesPendentes(req.user.cooperativaId, {
       status,
       diasSemAcao: diasSemAcao ? Number(diasSemAcao) : undefined,
       indicadorId,
@@ -30,18 +31,21 @@ export class ConviteIndicacaoController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('estatisticas')
   estatisticas(@Req() req: any) {
-    return this.service.getEstatisticas(req.user?.cooperativaId);
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.getEstatisticas(req.user.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post(':id/reenviar')
-  reenviar(@Param('id') id: string) {
-    return this.service.reenviarConvite(id);
+  reenviar(@Param('id') id: string, @Req() req: any) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.reenviarConvite(id, req.user.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Patch(':id/cancelar')
-  cancelar(@Param('id') id: string) {
-    return this.service.cancelarConvite(id);
+  cancelar(@Param('id') id: string, @Req() req: any) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.cancelarConvite(id, req.user.cooperativaId);
   }
 }

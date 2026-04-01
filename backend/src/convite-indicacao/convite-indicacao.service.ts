@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { StatusConvite } from '@prisma/client';
@@ -70,7 +70,12 @@ export class ConviteIndicacaoService {
 
   // ─── Reenviar Convite ─────────────────────────────────────────────────────────
 
-  async reenviarConvite(conviteId: string) {
+  async reenviarConvite(conviteId: string, cooperativaId: string) {
+    const existe = await this.prisma.conviteIndicacao.findFirst({
+      where: { id: conviteId, cooperativaId },
+    });
+    if (!existe) throw new NotFoundException('Convite nao encontrado');
+
     const convite = await this.prisma.conviteIndicacao.update({
       where: { id: conviteId },
       data: {
@@ -115,17 +120,16 @@ export class ConviteIndicacaoService {
       return null;
     }
 
-    // Atualizar convite com leadExpansaoId
-    await this.prisma.conviteIndicacao.update({
-      where: { id: convite.id },
-      data: { leadExpansaoId },
-    });
-
-    // Atualizar LeadExpansao com cooperadoIndicadorId
-    await this.prisma.leadExpansao.update({
-      where: { id: leadExpansaoId },
-      data: { cooperadoIndicadorId: convite.cooperadoIndicadorId },
-    });
+    await this.prisma.$transaction([
+      this.prisma.conviteIndicacao.update({
+        where: { id: convite.id },
+        data: { leadExpansaoId },
+      }),
+      this.prisma.leadExpansao.update({
+        where: { id: leadExpansaoId },
+        data: { cooperadoIndicadorId: convite.cooperadoIndicadorId },
+      }),
+    ]);
 
     this.logger.log(
       `Lead ${leadExpansaoId} vinculado ao convite ${convite.id}`,
@@ -157,31 +161,34 @@ export class ConviteIndicacaoService {
       return null;
     }
 
-    // Atualizar convite
-    const conviteAtualizado = await this.prisma.conviteIndicacao.update({
-      where: { id: convite.id },
-      data: {
-        status: StatusConvite.CADASTRADO,
-        cadastroConcluidoEm: new Date(),
-      },
-    });
+    const { conviteAtualizado, indicacao } = await this.prisma.$transaction(
+      async (tx) => {
+        const conviteAtualizado = await tx.conviteIndicacao.update({
+          where: { id: convite.id },
+          data: {
+            status: StatusConvite.CADASTRADO,
+            cadastroConcluidoEm: new Date(),
+          },
+        });
 
-    // Criar Indicacao nivel 1
-    const indicacao = await this.prisma.indicacao.create({
-      data: {
-        cooperativaId,
-        cooperadoIndicadorId: convite.cooperadoIndicadorId,
-        cooperadoIndicadoId: cooperadoIndicadoId,
-        nivel: 1,
-        status: 'PENDENTE',
-      },
-    });
+        const indicacao = await tx.indicacao.create({
+          data: {
+            cooperativaId,
+            cooperadoIndicadorId: convite.cooperadoIndicadorId,
+            cooperadoIndicadoId: cooperadoIndicadoId,
+            nivel: 1,
+            status: 'PENDENTE',
+          },
+        });
 
-    // Vincular indicacaoId no ConviteIndicacao
-    await this.prisma.conviteIndicacao.update({
-      where: { id: convite.id },
-      data: { indicacaoId: indicacao.id },
-    });
+        await tx.conviteIndicacao.update({
+          where: { id: convite.id },
+          data: { indicacaoId: indicacao.id },
+        });
+
+        return { conviteAtualizado, indicacao };
+      },
+    );
 
     // Notificar indicador via WA
     if (convite.cooperadoIndicador.telefone) {
@@ -301,7 +308,12 @@ export class ConviteIndicacaoService {
 
   // ─── Cancelar Convite ─────────────────────────────────────────────────────────
 
-  async cancelarConvite(conviteId: string) {
+  async cancelarConvite(conviteId: string, cooperativaId: string) {
+    const convite = await this.prisma.conviteIndicacao.findFirst({
+      where: { id: conviteId, cooperativaId },
+    });
+    if (!convite) throw new NotFoundException('Convite nao encontrado');
+
     return this.prisma.conviteIndicacao.update({
       where: { id: conviteId },
       data: { status: StatusConvite.CANCELADO },
