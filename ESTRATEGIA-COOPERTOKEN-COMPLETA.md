@@ -132,25 +132,50 @@ NOVAS USINAS
 
 ## 5b. Tokenomics — Regras de Circulação
 
-| Regra | Valor | Configurável |
-|-------|-------|-------------|
-| Validade do token | 29 dias (padrão) | ✅ Admin por cooperativa |
-| Burn on use | Token usado é destruído do ledger | ❌ Fixo (segurança) |
-| Expiração sem uso | Vira receita da CoopereBR | ❌ Fixo |
-| Circulação | Token não transferível entre cooperados | ❌ Fixo |
+### Regras fixas (não configuráveis)
+| Regra | Valor |
+|-------|-------|
+| Burn on use | Token usado é destruído do ledger — não circula |
+| Não transferível | Cooperado A não pode enviar CT para cooperado B |
+| Expiração total | Vira receita operacional da CoopereBR |
 
-**Por que 29 dias:**
-- Ciclo mensal da fatura → cooperado recebe novo lote todo mês
-- Urgência de uso → não acumula passivo de tokens não circulados
-- Se não usar: CoopereBR recupera a margem → sem risco financeiro
+### Parâmetros configuráveis pelo admin (por cooperativa)
+| Parâmetro | Padrão sugerido |
+|-----------|----------------|
+| Período pleno (uso irrestrito) | 29 dias |
+| Início do decay | Dia 30 |
+| % decay por período | -10% a cada 7 dias |
+| Expiração total | Dia 90 |
+| Parceiros aceitos no período pleno | Todos os parceiros + eletroposto + mensalidade |
+| Parceiros aceitos no decay | Apenas mensalidade CoopereBR |
 
-**Fluxo de expiração:**
+### Ciclo de vida de um lote de 200 CT
+
 ```
-Dia 1: cooperado recebe 200 CT (plano token)
-Dia 29: 200 CT não usados → expiram
-CoopereBR: credita R$200 como receita operacional
-Cooperado: recebe 200 CT novos no próximo ciclo
+Dias 1–29: Período pleno
+  → Vale R$200 (100%)
+  → Aceito: parceiros, eletroposto, mensalidade CoopereBR
+
+Dias 30–37: Decay fase 1 (-10%)
+  → Vale R$180
+  → Aceito: apenas mensalidade CoopereBR
+
+Dias 38–44: Decay fase 2 (-20%)
+  → Vale R$160
+  → Aceito: apenas mensalidade CoopereBR
+
+... continua até ...
+
+Dia 90+: Expirado
+  → Vale R$0 → vira receita CoopereBR
 ```
+
+### Por que esse modelo é inteligente
+- **Urgência sem punição imediata** — 29 dias sem pressão para o cooperado
+- **Segunda chance** — decay permite recuperar parte do valor na mensalidade
+- **Protege parceiros** — token degradado nunca chega no parceiro externo
+- **Risco zero de passivo** — pior caso = CoopereBR fica com 100% da margem
+- **Fidelização** — cooperado no decay tem incentivo extra para continuar no plano token
 
 ---
 
