@@ -130,6 +130,30 @@ NOVAS USINAS
 
 ---
 
+## 5b. Tokenomics — Regras de Circulação
+
+| Regra | Valor | Configurável |
+|-------|-------|-------------|
+| Validade do token | 29 dias (padrão) | ✅ Admin por cooperativa |
+| Burn on use | Token usado é destruído do ledger | ❌ Fixo (segurança) |
+| Expiração sem uso | Vira receita da CoopereBR | ❌ Fixo |
+| Circulação | Token não transferível entre cooperados | ❌ Fixo |
+
+**Por que 29 dias:**
+- Ciclo mensal da fatura → cooperado recebe novo lote todo mês
+- Urgência de uso → não acumula passivo de tokens não circulados
+- Se não usar: CoopereBR recupera a margem → sem risco financeiro
+
+**Fluxo de expiração:**
+```
+Dia 1: cooperado recebe 200 CT (plano token)
+Dia 29: 200 CT não usados → expiram
+CoopereBR: credita R$200 como receita operacional
+Cooperado: recebe 200 CT novos no próximo ciclo
+```
+
+---
+
 ## 6. Pendências para Implementação
 
 ### Imediato (sistema)
