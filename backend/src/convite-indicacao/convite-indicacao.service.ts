@@ -1,0 +1,349 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { StatusConvite } from '@prisma/client';
+
+function normalizarTelefone(tel: string): string {
+  let t = tel.replace(/\D/g, '');
+  if (t.startsWith('55') && t.length >= 12) t = t.slice(2);
+  if (t.length === 10) t = t.slice(0, 2) + '9' + t.slice(2);
+  return t;
+}
+
+@Injectable()
+export class ConviteIndicacaoService {
+  private readonly logger = new Logger(ConviteIndicacaoService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private sender: WhatsappSenderService,
+  ) {}
+
+  // ─── Criar Convite ────────────────────────────────────────────────────────────
+
+  async criarConvite(
+    cooperadoIndicadorId: string,
+    nomeConvidado: string,
+    telefoneConvidado: string,
+    cooperativaId: string,
+  ) {
+    const tel = normalizarTelefone(telefoneConvidado);
+
+    // Verificar se telefone ja e cooperado ativo
+    const cooperadoExistente = await this.prisma.cooperado.findFirst({
+      where: { telefone: { contains: tel }, status: 'ATIVO' },
+      select: { id: true, nomeCompleto: true },
+    });
+
+    if (cooperadoExistente) {
+      this.logger.warn(
+        `Telefone ${tel} ja e cooperado ativo: ${cooperadoExistente.nomeCompleto}`,
+      );
+      return { jaCooperado: true, cooperado: cooperadoExistente };
+    }
+
+    // Upsert por (cooperadoIndicadorId, telefoneConvidado)
+    const convite = await this.prisma.conviteIndicacao.upsert({
+      where: {
+        cooperadoIndicadorId_telefoneConvidado: {
+          cooperadoIndicadorId,
+          telefoneConvidado: tel,
+        },
+      },
+      update: {
+        nomeConvidado,
+        tentativasEnvio: { increment: 1 },
+        ultimoEnvioEm: new Date(),
+        status: StatusConvite.PENDENTE,
+      },
+      create: {
+        cooperativaId,
+        cooperadoIndicadorId,
+        nomeConvidado,
+        telefoneConvidado: tel,
+        status: StatusConvite.PENDENTE,
+      },
+    });
+
+    return { jaCooperado: false, convite };
+  }
+
+  // ─── Reenviar Convite ─────────────────────────────────────────────────────────
+
+  async reenviarConvite(conviteId: string) {
+    const convite = await this.prisma.conviteIndicacao.update({
+      where: { id: conviteId },
+      data: {
+        tentativasEnvio: { increment: 1 },
+        ultimoEnvioEm: new Date(),
+        status: StatusConvite.LEMBRETE_ENVIADO,
+        lembreteEnviadoEm: new Date(),
+      },
+      include: { cooperadoIndicador: { select: { nomeCompleto: true } } },
+    });
+
+    const nomeIndicador = convite.cooperadoIndicador.nomeCompleto;
+
+    await this.sender
+      .enviarMensagem(
+        convite.telefoneConvidado,
+        `Ola ${convite.nomeConvidado}! ${nomeIndicador} te convidou para a CoopereBR.\n\nEconomize ate 20% na conta de luz sem investimento.\n\nMande a foto da sua conta de energia para comecar!`,
+      )
+      .catch((err) =>
+        this.logger.warn(
+          `Falha ao reenviar convite ${conviteId}: ${err.message}`,
+        ),
+      );
+
+    return convite;
+  }
+
+  // ─── Vincular Lead ao Convite ─────────────────────────────────────────────────
+
+  async vincularLeadAoConvite(telefone: string, leadExpansaoId: string) {
+    const tel = normalizarTelefone(telefone);
+
+    const convite = await this.prisma.conviteIndicacao.findFirst({
+      where: { telefoneConvidado: tel },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!convite) {
+      this.logger.debug(
+        `Nenhum ConviteIndicacao encontrado para telefone ${tel}`,
+      );
+      return null;
+    }
+
+    // Atualizar convite com leadExpansaoId
+    await this.prisma.conviteIndicacao.update({
+      where: { id: convite.id },
+      data: { leadExpansaoId },
+    });
+
+    // Atualizar LeadExpansao com cooperadoIndicadorId
+    await this.prisma.leadExpansao.update({
+      where: { id: leadExpansaoId },
+      data: { cooperadoIndicadorId: convite.cooperadoIndicadorId },
+    });
+
+    this.logger.log(
+      `Lead ${leadExpansaoId} vinculado ao convite ${convite.id}`,
+    );
+    return convite;
+  }
+
+  // ─── Concluir Cadastro ────────────────────────────────────────────────────────
+
+  async concluirCadastro(
+    telefone: string,
+    cooperadoIndicadoId: string,
+    cooperativaId: string,
+  ) {
+    const tel = normalizarTelefone(telefone);
+
+    const convite = await this.prisma.conviteIndicacao.findFirst({
+      where: { telefoneConvidado: tel },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        cooperadoIndicador: { select: { nomeCompleto: true, telefone: true } },
+      },
+    });
+
+    if (!convite) {
+      this.logger.warn(
+        `Nenhum ConviteIndicacao para concluir cadastro do telefone ${tel}`,
+      );
+      return null;
+    }
+
+    // Atualizar convite
+    const conviteAtualizado = await this.prisma.conviteIndicacao.update({
+      where: { id: convite.id },
+      data: {
+        status: StatusConvite.CADASTRADO,
+        cadastroConcluidoEm: new Date(),
+      },
+    });
+
+    // Criar Indicacao nivel 1
+    const indicacao = await this.prisma.indicacao.create({
+      data: {
+        cooperativaId,
+        cooperadoIndicadorId: convite.cooperadoIndicadorId,
+        cooperadoIndicadoId: cooperadoIndicadoId,
+        nivel: 1,
+        status: 'PENDENTE',
+      },
+    });
+
+    // Vincular indicacaoId no ConviteIndicacao
+    await this.prisma.conviteIndicacao.update({
+      where: { id: convite.id },
+      data: { indicacaoId: indicacao.id },
+    });
+
+    // Notificar indicador via WA
+    if (convite.cooperadoIndicador.telefone) {
+      await this.sender
+        .enviarMensagem(
+          convite.cooperadoIndicador.telefone,
+          `Seu amigo ${convite.nomeConvidado} acabou de se cadastrar na CoopereBR! Obrigado pela indicacao!`,
+        )
+        .catch((err) =>
+          this.logger.warn(
+            `Falha ao notificar indicador: ${err.message}`,
+          ),
+        );
+    }
+
+    return { convite: conviteAtualizado, indicacao };
+  }
+
+  // ─── Listar Convites Pendentes ────────────────────────────────────────────────
+
+  async listarConvitesPendentes(
+    cooperativaId: string,
+    filtros: {
+      status?: StatusConvite;
+      diasSemAcao?: number;
+      indicadorId?: string;
+      page?: number;
+    } = {},
+  ) {
+    const { status, diasSemAcao, indicadorId, page = 1 } = filtros;
+    const take = 20;
+    const skip = (page - 1) * take;
+
+    const where: any = { cooperativaId };
+
+    if (status) where.status = status;
+    if (indicadorId) where.cooperadoIndicadorId = indicadorId;
+    if (diasSemAcao) {
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - diasSemAcao);
+      where.ultimoEnvioEm = { lte: dataLimite };
+    }
+
+    const [convites, total] = await Promise.all([
+      this.prisma.conviteIndicacao.findMany({
+        where,
+        include: {
+          cooperadoIndicador: {
+            select: { nomeCompleto: true, telefone: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.conviteIndicacao.count({ where }),
+    ]);
+
+    return { convites, total, page, totalPages: Math.ceil(total / take) };
+  }
+
+  // ─── Estatisticas ─────────────────────────────────────────────────────────────
+
+  async getEstatisticas(cooperativaId: string) {
+    const counts = await this.prisma.conviteIndicacao.groupBy({
+      by: ['status'],
+      where: { cooperativaId },
+      _count: true,
+    });
+
+    const stats = {
+      total: 0,
+      pendentes: 0,
+      lembretes: 0,
+      cadastrados: 0,
+      convertidos: 0,
+      expirados: 0,
+      cancelados: 0,
+      taxaConversao: 0,
+    };
+
+    for (const c of counts) {
+      const n = c._count;
+      stats.total += n;
+      switch (c.status) {
+        case StatusConvite.PENDENTE:
+          stats.pendentes = n;
+          break;
+        case StatusConvite.LEMBRETE_ENVIADO:
+          stats.lembretes = n;
+          break;
+        case StatusConvite.CADASTRADO:
+          stats.cadastrados = n;
+          break;
+        case StatusConvite.CONVERTIDO:
+          stats.convertidos = n;
+          break;
+        case StatusConvite.EXPIRADO:
+          stats.expirados = n;
+          break;
+        case StatusConvite.CANCELADO:
+          stats.cancelados = n;
+          break;
+      }
+    }
+
+    if (stats.total > 0) {
+      stats.taxaConversao = Number(
+        (((stats.cadastrados + stats.convertidos) / stats.total) * 100).toFixed(
+          1,
+        ),
+      );
+    }
+
+    return stats;
+  }
+
+  // ─── Cancelar Convite ─────────────────────────────────────────────────────────
+
+  async cancelarConvite(conviteId: string) {
+    return this.prisma.conviteIndicacao.update({
+      where: { id: conviteId },
+      data: { status: StatusConvite.CANCELADO },
+    });
+  }
+
+  // ─── Marcar como CONVERTIDO (chamado quando 1a fatura paga) ───────────────────
+
+  async marcarConvertido(indicacaoId: string) {
+    const convite = await this.prisma.conviteIndicacao.findUnique({
+      where: { indicacaoId },
+      include: {
+        cooperadoIndicador: { select: { nomeCompleto: true, telefone: true } },
+      },
+    });
+
+    if (!convite) {
+      this.logger.debug(
+        `Nenhum ConviteIndicacao para indicacaoId ${indicacaoId}`,
+      );
+      return null;
+    }
+
+    const atualizado = await this.prisma.conviteIndicacao.update({
+      where: { id: convite.id },
+      data: { status: StatusConvite.CONVERTIDO },
+    });
+
+    // Notificar indicador
+    if (convite.cooperadoIndicador.telefone) {
+      await this.sender
+        .enviarMensagem(
+          convite.cooperadoIndicador.telefone,
+          `Parabens! Seu amigo ${convite.nomeConvidado} pagou a primeira fatura. Voce ganhou seu beneficio!`,
+        )
+        .catch((err) =>
+          this.logger.warn(
+            `Falha ao notificar conversao: ${err.message}`,
+          ),
+        );
+    }
+
+    return atualizado;
+  }
+}

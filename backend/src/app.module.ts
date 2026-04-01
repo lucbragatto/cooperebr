@@ -42,6 +42,7 @@ import { MigracoesUsinaModule } from './migracoes-usina/migracoes-usina.module';
 import { EmailModule } from './email/email.module';
 import { RelatoriosModule } from './relatorios/relatorios.module';
 import { CooperTokenModule } from './cooper-token/cooper-token.module';
+import { ConviteIndicacaoModule } from './convite-indicacao/convite-indicacao.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
@@ -86,6 +87,7 @@ import { RolesGuard } from './auth/roles.guard';
     EmailModule,
     RelatoriosModule,
     CooperTokenModule,
+    ConviteIndicacaoModule,
   ],
   controllers: [AppController],
   providers: [

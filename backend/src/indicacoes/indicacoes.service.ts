@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
 
 @Injectable()
 export class IndicacoesService {
@@ -11,6 +12,7 @@ export class IndicacoesService {
     private prisma: PrismaService,
     private clubeVantagensService: ClubeVantagensService,
     @Inject(forwardRef(() => WhatsappCicloVidaService)) private whatsappCicloVida: WhatsappCicloVidaService,
+    @Inject(forwardRef(() => ConviteIndicacaoService)) private conviteIndicacao: ConviteIndicacaoService,
   ) {}
 
   // ─── Config ──────────────────────────────────────────────────────────────────
@@ -286,6 +288,15 @@ export class IndicacoesService {
             }),
           );
         }
+      }
+    }
+
+    // ConviteIndicacao: marcar como CONVERTIDO
+    for (const indicacao of indicacoes) {
+      try {
+        await this.conviteIndicacao.marcarConvertido(indicacao.id);
+      } catch (err) {
+        this.logger.warn(`Falha ao marcar convite convertido: ${err.message}`);
       }
     }
 

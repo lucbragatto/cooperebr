@@ -10,6 +10,7 @@ import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
+import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
 
 // Emojis em unicode escape para evitar problemas de encoding no WhatsApp
 const E = {
@@ -120,6 +121,7 @@ export class WhatsappBotService {
     private modelos: ModeloMensagemService,
     private fluxoMotor: WhatsappFluxoMotorService,
     private cicloVida: WhatsappCicloVidaService,
+    private conviteIndicacao: ConviteIndicacaoService,
     private eventEmitter: EventEmitter2,
   ) {}
 
@@ -1916,9 +1918,9 @@ Essa conta de energia e:
       const nomeContato = msg.contatoNome;
       const telContato = msg.contatoTelefone.replace(/\D/g, '');
 
-      // Salvar como lead na LeadExpansao
+      // Salvar como lead na LeadExpansao + ConviteIndicacao
       try {
-        await this.prisma.leadExpansao.create({
+        const lead = await this.prisma.leadExpansao.create({
           data: {
             telefone: telContato,
             nomeCompleto: nomeContato,
@@ -1926,6 +1928,19 @@ Essa conta de energia e:
             status: 'AGUARDANDO',
           },
         });
+
+        // Criar ConviteIndicacao se cooperadoId presente
+        if (conversa.cooperadoId && conversa.cooperativaId) {
+          await this.conviteIndicacao.criarConvite(
+            conversa.cooperadoId,
+            nomeContato,
+            telContato,
+            conversa.cooperativaId,
+          );
+          await this.conviteIndicacao
+            .vincularLeadAoConvite(telContato, lead.id)
+            .catch((e) => this.logger.warn(`Erro vincular lead ao convite: ${e.message}`));
+        }
       } catch (err) {
         this.logger.warn(`Erro ao salvar lead indicacao: ${err.message}`);
       }

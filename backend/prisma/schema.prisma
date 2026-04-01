@@ -52,6 +52,7 @@ model Cooperativa {
   migracoesUsina         MigracaoUsina[]
   // ── CooperToken ──
   cooperTokenLedger      CooperTokenLedger[]
+  convitesIndicacao      ConviteIndicacao[]
 
   @@map("cooperativas")
 }
@@ -154,6 +155,7 @@ model Cooperado {
   // ── CooperToken ──
   cooperTokenLedger       CooperTokenLedger[]
   cooperTokenSaldo        CooperTokenSaldo?
+  convitesEnviados        ConviteIndicacao[] @relation("ConvitesEnviados")
 
   @@map("cooperados")
 }
@@ -1124,6 +1126,7 @@ model Indicacao {
   primeiraFaturaPagaEm DateTime?
   createdAt            DateTime             @default(now())
   beneficios           BeneficioIndicacao[]
+  conviteOrigem        ConviteIndicacao?
 
   @@map("indicacoes")
 }
@@ -1477,8 +1480,10 @@ model LeadExpansao {
   intencaoConfirmada  Boolean   @default(false)
   cooperativaId       String?
   status              String    @default("AGUARDANDO") // AGUARDANDO | NOTIFICADO | CONVERTIDO
+  cooperadoIndicadorId String?
   createdAt           DateTime  @default(now())
   notificadoEm        DateTime?
+  conviteIndicacao    ConviteIndicacao?
 
   @@map("leads_expansao")
 }
@@ -1547,4 +1552,42 @@ model CooperTokenSaldo {
   updatedAt       DateTime  @updatedAt
 
   @@map("cooper_token_saldo")
+}
+
+// ── ConviteIndicacao (MLM tracking) ──
+
+enum StatusConvite {
+  PENDENTE
+  LEMBRETE_ENVIADO
+  CADASTRADO
+  CONVERTIDO
+  EXPIRADO
+  CANCELADO
+}
+
+model ConviteIndicacao {
+  id                    String          @id @default(cuid())
+  cooperativaId         String
+  cooperativa           Cooperativa     @relation(fields: [cooperativaId], references: [id])
+  cooperadoIndicadorId  String
+  cooperadoIndicador    Cooperado       @relation("ConvitesEnviados", fields: [cooperadoIndicadorId], references: [id])
+  nomeConvidado         String
+  telefoneConvidado     String
+  status                StatusConvite   @default(PENDENTE)
+  tentativasEnvio       Int             @default(1)
+  ultimoEnvioEm         DateTime        @default(now())
+  lembreteEnviadoEm     DateTime?
+  cadastroConcluidoEm   DateTime?
+  leadExpansaoId        String?         @unique
+  leadExpansao          LeadExpansao?   @relation(fields: [leadExpansaoId], references: [id])
+  indicacaoId           String?         @unique
+  indicacao             Indicacao?      @relation(fields: [indicacaoId], references: [id])
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([cooperadoIndicadorId, telefoneConvidado])
+  @@index([cooperativaId, status])
+  @@index([status, ultimoEnvioEm])
+  @@index([telefoneConvidado])
+  @@map("convites_indicacao")
 }

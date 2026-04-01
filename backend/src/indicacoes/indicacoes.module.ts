@@ -4,9 +4,10 @@ import { IndicacoesService } from './indicacoes.service';
 import { PrismaService } from '../prisma.service';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
 
 @Module({
-  imports: [ClubeVantagensModule, forwardRef(() => WhatsappModule)],
+  imports: [ClubeVantagensModule, forwardRef(() => WhatsappModule), forwardRef(() => ConviteIndicacaoModule)],
   controllers: [IndicacoesController],
   providers: [IndicacoesService, PrismaService],
   exports: [IndicacoesService],
