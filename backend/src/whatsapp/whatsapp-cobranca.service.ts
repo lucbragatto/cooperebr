@@ -26,6 +26,11 @@ export class WhatsappCobrancaService {
    */
   @Cron('0 8 5 * *', { timeZone: 'America/Sao_Paulo' })
   async cronEnviarCobrancas() {
+    // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
+    if (process.env.WA_COBRANCA_HABILITADO !== 'true') {
+      this.logger.warn('WhatsappCobrancaService: disparo bloqueado — WA_COBRANCA_HABILITADO não está ativo.');
+      return;
+    }
     this.logger.log('Cron: disparando cobranças do mês via WhatsApp...');
     await this.enviarCobrancasDoMes();
   }
@@ -211,6 +216,11 @@ export class WhatsappCobrancaService {
    */
   @Cron('0 9 * * *', { timeZone: 'America/Sao_Paulo' })
   async cronAbordarInadimplentes() {
+    // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
+    if (process.env.WA_INADIMPLENTES_HABILITADO !== 'true') {
+      this.logger.warn('WhatsappCobrancaService: abordagem inadimplentes bloqueada — WA_INADIMPLENTES_HABILITADO não está ativo.');
+      return;
+    }
     this.logger.log('Cron: abordando inadimplentes via WhatsApp...');
     await this.abordarInadimplentes();
   }
@@ -402,7 +412,7 @@ export class WhatsappCobrancaService {
           { telefone: telefoneSemPais },
           { telefone: `55${telefoneSemPais}` },
         ],
-        status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'AGUARDANDO_DOCUMENTOS'] as any[] },
+        status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'PENDENTE_DOCUMENTOS'] as any[] },
       },
       select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
     });
@@ -430,6 +440,11 @@ export class WhatsappCobrancaService {
    */
   @Cron('30 9 * * *', { timeZone: 'America/Sao_Paulo' })
   async cronAlertarVencimentoProximo() {
+    // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
+    if (process.env.WA_ALERTA_VENCIMENTO_HABILITADO !== 'true') {
+      this.logger.warn('WhatsappCobrancaService: alerta vencimento bloqueado — WA_ALERTA_VENCIMENTO_HABILITADO não está ativo.');
+      return;
+    }
     this.logger.log('Cron: alertando cobranças com vencimento em 3 dias...');
     await this.alertarVencimentoProximo();
   }

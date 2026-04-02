@@ -146,7 +146,7 @@ export class WhatsappBotService {
 
   async processarMensagem(msg: MensagemRecebida): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     // Registrar mensagem recebida
     try {
@@ -411,7 +411,7 @@ export class WhatsappBotService {
     const palavrasMenu = ['menu', '0', 'voltar', 'inicio', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'hey'];
 
     if (palavrasSair.includes(corpoNav) && conversa.estado !== 'INICIAL' && conversa.estado !== 'CONCLUIDO') {
-      await this.sender.enviarMensagem(telefone, 'Ate logo! Se precisar, e so chamar. ' + E.oi);
+      await this.sender.enviarMensagem(telefone, 'Até logo! Se precisar, é só chamar. ' + E.oi);
       await this.resetarConversa(telefone);
       return;
     }
@@ -636,7 +636,7 @@ export class WhatsappBotService {
       const cooperado = await this.prisma.cooperado.findFirst({
         where: {
           OR: [{ telefone: telefoneNorm }, { telefone: telefoneSemPais }, { telefone: `55${telefoneSemPais}` }],
-          status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'AGUARDANDO_DOCUMENTOS'] as any[] },
+          status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'PENDENTE_DOCUMENTOS', 'ATIVO_RECEBENDO_CREDITOS'] as any[] },
         },
         select: { id: true, nomeCompleto: true, status: true },
       });
@@ -1068,7 +1068,7 @@ export class WhatsappBotService {
 
   private async handleAguardandoAtendente(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     // Registrar a mensagem de suporte
     this.logger.log(`Mensagem de suporte de ${telefone}: ${corpo}`);
@@ -1165,7 +1165,7 @@ export class WhatsappBotService {
 
   private async handleAguardandoProprietarioFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
     if (corpo === '1') {
@@ -1197,7 +1197,7 @@ export class WhatsappBotService {
 
   private async handleAguardandoNomeTerceiro(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
     if (!corpo || corpo.length < 3) {
@@ -1318,7 +1318,7 @@ export class WhatsappBotService {
 
   private async handleAguardandoConfirmacaoOcr(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
 
     // Se mandou nova imagem/PDF, reprocessar
@@ -1372,7 +1372,7 @@ Essa conta de energia e:
 
   private async handleConfirmacaoDados(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const corpoUpper = corpo.toUpperCase();
     const dadosTemp = conversa.dadosTemp as Record<string, unknown>;
 
@@ -1862,7 +1862,7 @@ Essa conta de energia e:
 
   private async handleAguardandoIndicacao(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     if (corpo === '1') {
       await this.prisma.conversaWhatsapp.update({
@@ -2060,7 +2060,7 @@ Essa conta de energia e:
 
   private async handleAguardandoConfirmacaoCelular(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
 
     if (corpo === '1') {
@@ -2145,7 +2145,7 @@ Essa conta de energia e:
    */
   private async handleAguardandoNome(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     if (!corpo || corpo.length < 3) {
       await this.sender.enviarMensagem(telefone, 'Por favor, informe seu nome completo:');
@@ -2300,7 +2300,7 @@ Essa conta de energia e:
 
   private async handleAguardandoValorFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     // Extrair valor numérico
     const valorStr = corpo.replace(/[^\d.,]/g, '').replace(',', '.');
@@ -2369,7 +2369,7 @@ Essa conta de energia e:
     }
 
     if (corpo === '2' || corpo.toLowerCase().includes('informaç') || corpo.toLowerCase().includes('informac')) {
-      const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+      const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
       await this.sender.enviarMensagem(
         telefone,
         `${E.prancheta} *Benefícios da CoopereBR:*\n\n` +
@@ -2694,7 +2694,7 @@ Essa conta de energia e:
 
   private async handleCadastroExpressNome(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     if (!corpo || corpo.length < 3) {
       await this.sender.enviarMensagem(telefone, 'Por favor, informe seu *nome completo*:');
@@ -2754,7 +2754,7 @@ Essa conta de energia e:
 
   private async handleCadastroExpressValorFatura(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     const valorStr = corpo.replace(/[^\d.,]/g, '').replace(',', '.');
     const valor = parseFloat(valorStr);
@@ -2871,7 +2871,7 @@ Essa conta de energia e:
 
   private async handleLeadForaArea(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
     const distribuidora = String(dadosTemp.distribuidora ?? '');
     const economiaEstimada = Number(dadosTemp.economiaEstimada ?? 0);
@@ -2981,7 +2981,7 @@ Essa conta de energia e:
 
   private async handleCadastroProxyNome(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
 
     if (!corpo || corpo.length < 3) {
       await this.sender.enviarMensagem(telefone, 'Por favor, informe o *nome completo* do seu amigo:');
@@ -3761,7 +3761,7 @@ Essa conta de energia e:
 
   private async handleNpsNota(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
-    const corpo = (msg.corpo ?? '').trim();
+    const corpo = this.respostaEfetiva(msg);
     const nota = parseInt(corpo, 10);
 
     if (isNaN(nota) || nota < 0 || nota > 10) {
@@ -3789,3 +3789,4 @@ Essa conta de energia e:
     });
   }
 }
+

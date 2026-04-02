@@ -139,6 +139,15 @@ export class AuthController {
   }
 
   @Roles(PerfilUsuario.ADMIN)
+  @Post('criar-usuario-agregador')
+  criarUsuarioAgregador(
+    @CurrentUser() admin: any,
+    @Body() body: { email: string; senha: string; nome: string; administradoraId: string },
+  ) {
+    return this.authService.criarUsuarioAgregador(body, admin);
+  }
+
+  @Roles(PerfilUsuario.ADMIN)
   @Get('usuarios')
   listarUsuarios(@CurrentUser() admin: any) {
     return this.authService.listarUsuarios(admin);

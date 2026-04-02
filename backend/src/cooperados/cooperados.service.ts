@@ -115,12 +115,11 @@ export class CooperadosService {
   /** Cobranças do cooperado logado */
   async minhasCobrancas(usuario: { id: string; email: string; cpf?: string }, ucId?: string) {
     const cooperado = await this.findCooperadoByUsuario(usuario);
+    const contratoWhere: any = { cooperadoId: cooperado.id };
+    if (ucId) contratoWhere.ucId = ucId;
     return this.prisma.cobranca.findMany({
       where: {
-        contrato: {
-          cooperadoId: cooperado.id,
-          ...(ucId ? { ucId } : {}),
-        },
+        contrato: { is: contratoWhere },
       },
       include: {
         contrato: { select: { numero: true, uc: { select: { numero: true } } } },
@@ -260,9 +259,10 @@ export class CooperadosService {
     return doc;
   }
 
-  async findAll(cooperativaId?: string, limit?: number, offset?: number, search?: string) {
+  async findAll(cooperativaId?: string, limit?: number, offset?: number, search?: string, administradoraId?: string) {
     const where: any = {};
     if (cooperativaId) where.cooperativaId = cooperativaId;
+    if (administradoraId) where.administradoraId = administradoraId;
     if (search) where.OR = [
       { nomeCompleto: { contains: search, mode: 'insensitive' } },
       { email: { contains: search, mode: 'insensitive' } },
@@ -636,28 +636,32 @@ export class CooperadosService {
 
     // Ativação em cascata: ao ativar cooperado, contratos PENDENTE_ATIVACAO e SUSPENSO → ATIVO
     if (data.status === 'ATIVO') {
-      // Se vindo de AGUARDANDO_CONCESSIONARIA, contratos já devem ficar ATIVO diretamente
-      // (concessionária efetivou a troca), não precisa ativar contratos — eles já estão PENDENTE_ATIVACAO
-      const contratosAtivados = await this.prisma.contrato.updateMany({
-        where: { cooperadoId: id, status: { in: ['PENDENTE_ATIVACAO', 'SUSPENSO'] } },
-        data: { status: 'ATIVO' },
+      // Usar transação para garantir atomicidade entre cooperado e contratos
+      const contratosAtivados = await this.prisma.$transaction(async (tx) => {
+        const result = await tx.contrato.updateMany({
+          where: { cooperadoId: id, status: { in: ['PENDENTE_ATIVACAO', 'SUSPENSO'] } },
+          data: { status: 'ATIVO' },
+        });
+
+        if (result.count > 0) {
+          const contratos = await tx.contrato.findMany({
+            where: { cooperadoId: id, status: 'ATIVO' },
+            include: { usina: true },
+          });
+          for (const c of contratos) {
+            if (c.usina && Number(c.usina.capacidadeKwh ?? 0) > 0 && !c.percentualUsina) {
+              const percentual = (Number(c.kwhContrato ?? 0) / Number(c.usina.capacidadeKwh)) * 100;
+              await tx.contrato.update({
+                where: { id: c.id },
+                data: { percentualUsina: Math.round(percentual * 10000) / 10000 },
+              });
+            }
+          }
+        }
+        return result;
       });
 
       if (contratosAtivados.count > 0) {
-        // Calcular percentualUsina por contrato (cada contrato tem sua usina)
-        const contratos = await this.prisma.contrato.findMany({
-          where: { cooperadoId: id, status: 'ATIVO' },
-          include: { usina: true },
-        });
-        for (const c of contratos) {
-          if (c.usina && Number(c.usina.capacidadeKwh ?? 0) > 0 && !c.percentualUsina) {
-            const percentual = (Number(c.kwhContrato ?? 0) / Number(c.usina.capacidadeKwh)) * 100;
-            await this.prisma.contrato.update({
-              where: { id: c.id },
-              data: { percentualUsina: Math.round(percentual * 10000) / 10000 },
-            });
-          }
-        }
 
         await this.notificacoes.criar({
           tipo: 'COOPERADO_ATIVADO',

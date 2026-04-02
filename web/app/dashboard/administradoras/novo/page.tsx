@@ -40,7 +40,7 @@ export default function NovaAdministradoraPage() {
       await api.post('/administradoras', form);
       router.push('/dashboard/administradoras');
     } catch (err: any) {
-      setErro(err?.response?.data?.message || 'Erro ao criar administradora');
+      setErro(err?.response?.data?.message || 'Erro ao criar agregador');
     } finally {
       setSalvando(false);
     }
@@ -52,7 +52,7 @@ export default function NovaAdministradoraPage() {
         <Link href="/dashboard/administradoras">
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
-        <h2 className="text-2xl font-bold text-gray-800">Nova Administradora</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Novo Agregador</h2>
       </div>
 
       {erro && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{erro}</div>}
@@ -108,7 +108,7 @@ export default function NovaAdministradoraPage() {
       </div>
 
       <div className="mt-6 flex justify-end">
-        <Button onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Criar Administradora'}</Button>
+        <Button onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Criar Agregador'}</Button>
       </div>
     </div>
   );

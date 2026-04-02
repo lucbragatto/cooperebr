@@ -57,16 +57,18 @@ export class ConfiguracaoCobrancaService {
     });
   }
 
-  async resolverDesconto(contratoId: string): Promise<{ desconto: number; baseCalculo: string; fonte: string }> {
+  async resolverDesconto(contratoId: string): Promise<{ desconto: number; baseCalculo: string; fonte: string; descontoConvenio?: number }> {
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: contratoId },
       include: { usina: true },
     });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
 
+    let descontoBase: { desconto: number; baseCalculo: string; fonte: string } | null = null;
+
     // 1. Override no contrato
     if (contrato.descontoOverride != null) {
-      return {
+      descontoBase = {
         desconto: Number(contrato.descontoOverride),
         baseCalculo: contrato.baseCalculoOverride ?? 'TUSD_TE',
         fonte: 'contrato',
@@ -74,12 +76,12 @@ export class ConfiguracaoCobrancaService {
     }
 
     // 2. Config da usina
-    if (contrato.usinaId) {
+    if (!descontoBase && contrato.usinaId) {
       const configUsina = await this.prisma.configuracaoCobranca.findFirst({
         where: { usinaId: contrato.usinaId },
       });
       if (configUsina) {
-        return {
+        descontoBase = {
           desconto: Number(configUsina.descontoPadrao),
           baseCalculo: configUsina.baseCalculo,
           fonte: 'usina',
@@ -88,23 +90,70 @@ export class ConfiguracaoCobrancaService {
     }
 
     // 3. Config da cooperativa
-    const cooperativaId = contrato.cooperativaId;
-    if (cooperativaId) {
-      const configCoop = await this.prisma.configuracaoCobranca.findFirst({
-        where: { cooperativaId, usinaId: null },
-      });
-      if (configCoop) {
-        return {
-          desconto: Number(configCoop.descontoPadrao),
-          baseCalculo: configCoop.baseCalculo,
-          fonte: 'cooperativa',
-        };
+    if (!descontoBase) {
+      const cooperativaId = contrato.cooperativaId;
+      if (cooperativaId) {
+        const configCoop = await this.prisma.configuracaoCobranca.findFirst({
+          where: { cooperativaId, usinaId: null },
+        });
+        if (configCoop) {
+          descontoBase = {
+            desconto: Number(configCoop.descontoPadrao),
+            baseCalculo: configCoop.baseCalculo,
+            fonte: 'cooperativa',
+          };
+        }
       }
     }
 
-    // 4. Nenhuma configuração encontrada
-    throw new BadRequestException(
-      'Nenhuma configuração de desconto encontrada. Configure o desconto na cooperativa, na usina ou diretamente no contrato.',
-    );
+    if (!descontoBase) {
+      throw new BadRequestException(
+        'Nenhuma configuração de desconto encontrada. Configure o desconto na cooperativa, na usina ou diretamente no contrato.',
+      );
+    }
+
+    // 4. Desconto ADITIVO do convênio (soma com desconto base)
+    const descontoConvenio = await this.resolverDescontoConvenio(contrato.cooperadoId);
+    if (descontoConvenio > 0) {
+      const total = Math.min(descontoBase.desconto + descontoConvenio, 100);
+      return {
+        desconto: total,
+        baseCalculo: descontoBase.baseCalculo,
+        fonte: `${descontoBase.fonte}+convenio`,
+        descontoConvenio,
+      };
+    }
+
+    return descontoBase;
+  }
+
+  private async resolverDescontoConvenio(cooperadoId: string): Promise<number> {
+    // Desconto como membro de convênio
+    const membro = await this.prisma.convenioCooperado.findFirst({
+      where: { cooperadoId, ativo: true },
+      include: { convenio: true },
+    });
+
+    let descontoMembro = 0;
+    if (membro) {
+      descontoMembro = membro.descontoOverride != null
+        ? Number(membro.descontoOverride)
+        : Number(membro.convenio.descontoMembrosAtual);
+    }
+
+    // Desconto como conveniado (representante) — acumula de todos os convênios
+    const conveniosRepresentados = await this.prisma.contratoConvenio.findMany({
+      where: { conveniadoId: cooperadoId, status: 'ATIVO' },
+      select: { descontoConveniadoAtual: true, configBeneficio: true },
+    });
+
+    let descontoConveniado = 0;
+    for (const conv of conveniosRepresentados) {
+      const config = conv.configBeneficio as any;
+      const cap = config?.maxAcumuloConveniado ?? 100;
+      descontoConveniado += Math.min(Number(conv.descontoConveniadoAtual), cap);
+    }
+
+    return Math.min(descontoMembro + descontoConveniado, 100);
   }
 }

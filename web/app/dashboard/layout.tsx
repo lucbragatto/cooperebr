@@ -111,7 +111,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
         { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
-        { href: '/dashboard/administradoras', label: 'Administradoras', icon: Building2 },
+        { href: '/dashboard/administradoras', label: 'Agregadores', icon: Building2 },
       ],
     },
     {

@@ -18,8 +18,8 @@ export class AdministradorasService {
       where: { id },
       include: { condominios: { where: { ativo: true }, orderBy: { nome: 'asc' } } },
     });
-    if (!adm) throw new NotFoundException('Administradora nao encontrada');
-    if (cooperativaId && adm.cooperativaId !== cooperativaId) throw new NotFoundException('Administradora nao encontrada');
+    if (!adm) throw new NotFoundException('Agregador nao encontrado');
+    if (cooperativaId && adm.cooperativaId !== cooperativaId) throw new NotFoundException('Agregador nao encontrado');
     return adm;
   }
 
@@ -40,13 +40,13 @@ export class AdministradorasService {
 
   async update(id: string, data: any) {
     const adm = await this.prisma.administradora.findUnique({ where: { id } });
-    if (!adm) throw new NotFoundException('Administradora nao encontrada');
+    if (!adm) throw new NotFoundException('Agregador nao encontrado');
     return this.prisma.administradora.update({ where: { id }, data });
   }
 
   async remove(id: string) {
     const adm = await this.prisma.administradora.findUnique({ where: { id } });
-    if (!adm) throw new NotFoundException('Administradora nao encontrada');
+    if (!adm) throw new NotFoundException('Agregador nao encontrado');
     return this.prisma.administradora.update({ where: { id }, data: { ativo: false } });
   }
 }

@@ -1,0 +1,17 @@
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+const c1 = await prisma.cooperativa.count();
+const c2 = await prisma.cooperado.count();
+const c3 = await prisma.usina.count();
+const c4 = await prisma.contrato.count();
+const c5 = await prisma.fluxoEtapa.count();
+const c6 = await prisma.plano.count();
+const c7 = await prisma.tarifaConcessionaria.count();
+console.log('cooperativas:', c1);
+console.log('cooperados:', c2);
+console.log('usinas:', c3);
+console.log('contratos:', c4);
+console.log('fluxoEtapas:', c5);
+console.log('planos:', c6);
+console.log('tarifas:', c7);
+await prisma.$disconnect();

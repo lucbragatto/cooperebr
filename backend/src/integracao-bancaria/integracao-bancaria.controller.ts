@@ -15,8 +15,8 @@ export class IntegracaoBancariaController {
   private validateWebhookToken(token?: string) {
     const expectedToken = process.env.WEBHOOK_BANCO_TOKEN;
     if (!expectedToken) {
-      this.logger.warn('WEBHOOK_BANCO_TOKEN não configurado — aceitando webhook sem validação');
-      return;
+      this.logger.error('WEBHOOK_BANCO_TOKEN não configurado — rejeitando webhook');
+      throw new UnauthorizedException('Webhook não configurado');
     }
     if (token !== expectedToken) {
       throw new UnauthorizedException('Token de webhook inválido');

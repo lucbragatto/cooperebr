@@ -171,6 +171,17 @@ export class ConviteIndicacaoService {
           },
         });
 
+        // CONV-02: Verificar duplicata antes de criar indicação nível 1
+        const indicacaoExistente = await tx.indicacao.findFirst({
+          where: { cooperadoIndicadoId: cooperadoIndicadoId, nivel: 1 },
+        });
+        if (indicacaoExistente) {
+          this.logger.warn(
+            `Indicação nível 1 já existe para cooperado ${cooperadoIndicadoId}`,
+          );
+          return { conviteAtualizado, indicacao: indicacaoExistente };
+        }
+
         const indicacao = await tx.indicacao.create({
           data: {
             cooperativaId,
@@ -357,5 +368,123 @@ export class ConviteIndicacaoService {
     }
 
     return atualizado;
+  }
+
+  // ─── Dashboard ──────────────────────────────────────────────────────────────
+
+  async getDashboard(
+    cooperativaId: string,
+    filtros: {
+      status?: StatusConvite;
+      periodo?: number; // últimos N dias
+      page?: number;
+    } = {},
+  ) {
+    const { status, periodo, page = 1 } = filtros;
+    const take = 20;
+    const skip = (page - 1) * take;
+
+    const where: any = { cooperativaId };
+    if (status) where.status = status;
+    if (periodo) {
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - periodo);
+      where.createdAt = { gte: dataLimite };
+    }
+
+    const [convites, total] = await Promise.all([
+      this.prisma.conviteIndicacao.findMany({
+        where,
+        include: {
+          cooperadoIndicador: {
+            select: { nomeCompleto: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.conviteIndicacao.count({ where }),
+    ]);
+
+    return {
+      convites: convites.map((c) => ({
+        id: c.id,
+        nomeConvidado: c.nomeConvidado,
+        telefoneConvidado: c.telefoneConvidado,
+        dataConvite: c.createdAt,
+        status: c.status,
+        tentativasLembrete: c.tentativasEnvio,
+        ultimoLembrete: c.lembreteEnviadoEm,
+        indicadoPor: c.cooperadoIndicador.nomeCompleto,
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / take),
+    };
+  }
+
+  async getStats(cooperativaId: string) {
+    return this.getEstatisticas(cooperativaId);
+  }
+
+  // ─── Config Lembretes ───────────────────────────────────────────────────────
+
+  async getConfigLembretes(cooperativaId: string) {
+    const chaves = [
+      'convite.lembrete.cooldownDias',
+      'convite.lembrete.maxTentativas',
+      'convite.lembrete.habilitado',
+    ];
+
+    const configs = await this.prisma.configTenant.findMany({
+      where: {
+        chave: { in: chaves },
+        cooperativaId,
+      },
+    });
+
+    const map = new Map(configs.map((c) => [c.chave, c.valor]));
+
+    return {
+      cooldownDias: Number(map.get('convite.lembrete.cooldownDias') ?? 3),
+      maxTentativas: Number(map.get('convite.lembrete.maxTentativas') ?? 3),
+      habilitado: (map.get('convite.lembrete.habilitado') ?? 'true') === 'true',
+    };
+  }
+
+  async salvarConfigLembretes(
+    cooperativaId: string,
+    dto: { cooldownDias: number; maxTentativas: number; habilitado: boolean },
+  ) {
+    const entries = [
+      { chave: 'convite.lembrete.cooldownDias', valor: String(dto.cooldownDias), descricao: 'Dias entre lembretes de convite' },
+      { chave: 'convite.lembrete.maxTentativas', valor: String(dto.maxTentativas), descricao: 'Máximo de lembretes por convite' },
+      { chave: 'convite.lembrete.habilitado', valor: String(dto.habilitado), descricao: 'Lembretes de convite habilitados' },
+    ];
+
+    for (const entry of entries) {
+      const existing = await this.prisma.configTenant.findFirst({
+        where: { chave: entry.chave, cooperativaId },
+      });
+
+      if (existing) {
+        await this.prisma.configTenant.update({
+          where: { id: existing.id },
+          data: { valor: entry.valor },
+        });
+      } else {
+        await this.prisma.configTenant.create({
+          data: {
+            chave: entry.chave,
+            valor: entry.valor,
+            descricao: entry.descricao,
+            cooperativaId,
+          },
+        });
+      }
+    }
+
+    return this.getConfigLembretes(cooperativaId);
   }
 }

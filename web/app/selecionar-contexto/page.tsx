@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Shield, Building2, User, Sun, LogOut, Loader2 } from 'lucide-react';
+import { Shield, Building2, User, Sun, LogOut, Loader2, Users } from 'lucide-react';
 import type { ContextoUsuario, MeResponse, TipoContexto } from '@/types';
 import { setContextoAtivo, rotaPorContexto } from '@/hooks/useContexto';
 import api from '@/lib/api';
@@ -13,6 +13,7 @@ const icones: Record<TipoContexto, typeof Shield> = {
   admin_parceiro: Building2,
   cooperado: User,
   proprietario_usina: Sun,
+  admin_agregador: Users,
 };
 
 const descricoes: Record<TipoContexto, string> = {
@@ -20,6 +21,7 @@ const descricoes: Record<TipoContexto, string> = {
   admin_parceiro: 'Gerenciar membros, cobranças, usinas e configurações do seu parceiro.',
   cooperado: 'Acessar suas UCs, cobranças, documentos e indicações como membro.',
   proprietario_usina: 'Acompanhar produção, repasses e contratos das suas usinas.',
+  admin_agregador: 'Gerenciar os membros do seu agregador e acompanhar convites.',
 };
 
 const cores: Record<TipoContexto, { bg: string; border: string; icon: string; hover: string }> = {
@@ -46,6 +48,12 @@ const cores: Record<TipoContexto, { bg: string; border: string; icon: string; ho
     border: 'border-amber-200',
     icon: 'text-amber-600 bg-amber-100',
     hover: 'hover:border-amber-400 hover:shadow-amber-100',
+  },
+  admin_agregador: {
+    bg: 'bg-teal-50',
+    border: 'border-teal-200',
+    icon: 'text-teal-600 bg-teal-100',
+    hover: 'hover:border-teal-400 hover:shadow-teal-100',
   },
 };
 

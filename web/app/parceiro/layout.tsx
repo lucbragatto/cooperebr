@@ -45,6 +45,7 @@ const allNavItems = [
   { href: '/parceiro/clube-vantagens', label: 'Clube de Vantagens', icon: Award, modulo: 'clube_vantagens' },
   { href: '/parceiro/convenios', label: 'Convênios', icon: Handshake, modulo: 'convenios' },
   { href: '/parceiro/relatorios', label: 'Relatórios', icon: BarChart3, modulo: 'relatorios' },
+  { href: '/parceiro/agregadores', label: 'Agregadores', icon: Building },
   { href: '/parceiro/condominios', label: 'Condomínios', icon: Building, modulo: 'condominios' },
   { href: '/parceiro/usuarios', label: 'Usuários', icon: UserCog, modulo: 'usuarios' },
   { href: '/parceiro/convites', label: 'Convites', icon: UserPlus },
@@ -68,11 +69,15 @@ export default function ParceiroLayout({ children }: { children: React.ReactNode
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="px-6 py-5 border-b">
-          <h1 className="text-xl font-bold text-blue-700">SISGD</h1>
-          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-            <Building2 className="w-3 h-3" />
-            {contextoObj?.cooperativaNome ?? 'Painel do Parceiro'}
-          </p>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">SISGD</p>
+          {contextoObj?.cooperativaNome ? (
+            <p className="text-lg font-bold text-blue-700 mt-0.5 flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 shrink-0" />
+              {contextoObj.cooperativaNome}
+            </p>
+          ) : (
+            <p className="text-lg font-bold text-blue-700 mt-0.5">SISGD</p>
+          )}
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

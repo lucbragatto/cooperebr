@@ -242,7 +242,7 @@ export class ClubeVantagensService {
     if (dto.niveisConfig && dto.niveisConfig.length > 1) {
       const sorted = [...dto.niveisConfig].sort((a, b) => a.kwhMinimo - b.kwhMinimo);
       for (let i = 0; i < sorted.length - 1; i++) {
-        if (sorted[i].kwhMaximo != null && sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
+        if (sorted[i].kwhMaximo != null && sorted[i].kwhMaximo! > sorted[i + 1].kwhMinimo) {
           throw new BadRequestException(
             `Sobreposição de faixas: ${sorted[i].nivel} (${sorted[i].kwhMinimo}-${sorted[i].kwhMaximo} kWh) ` +
             `sobrepõe ${sorted[i + 1].nivel} (${sorted[i + 1].kwhMinimo}-${sorted[i + 1].kwhMaximo} kWh). ` +

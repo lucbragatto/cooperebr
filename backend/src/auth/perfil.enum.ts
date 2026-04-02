@@ -3,4 +3,5 @@ export enum PerfilUsuario {
   ADMIN = 'ADMIN',
   OPERADOR = 'OPERADOR',
   COOPERADO = 'COOPERADO',
+  AGREGADOR = 'AGREGADOR',
 }

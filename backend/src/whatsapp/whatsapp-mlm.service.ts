@@ -19,6 +19,11 @@ export class WhatsappMlmService {
    */
   @Cron('0 10 1 * *', { timeZone: 'America/Sao_Paulo' })
   async cronEnviarConvites() {
+    // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
+    if (process.env.WA_MLM_CONVITES_HABILITADO !== 'true') {
+      this.logger.warn('WhatsappMlmService: disparo convites MLM bloqueado — WA_MLM_CONVITES_HABILITADO não está ativo.');
+      return;
+    }
     this.logger.log('Cron: disparando convites MLM via WhatsApp...');
     // Buscar todas as cooperativas com config de indicação ativa
     const configs = await this.prisma.configIndicacao.findMany({
@@ -104,7 +109,7 @@ export class WhatsappMlmService {
         }
 
         const nome = cooperado.nomeCompleto.split(' ')[0];
-        const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+        const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
         const link = `${baseUrl}/entrar?ref=${cooperado.codigoIndicacao}`;
 
         let mensagem = `🎁 *Programa de Recompensas CoopereBR*\n\n`;
@@ -149,7 +154,9 @@ export class WhatsappMlmService {
         if (enviados >= limite) break;
         try {
           const msgAvulso =
-            'Olá! Conheça a CoopereBR e economize até 20% na sua conta de luz todos os meses, sem investimento. Para ver quanto você economizaria, mande uma foto da sua última conta de energia! 💡';
+            'Olá! 👋 A *CoopereBR* é uma cooperativa de energia solar que gera *economia real na sua conta de luz* — sem investimento, sem obras e sem fidelidade.\n\n' +
+            '☀️ Como funciona: você recebe créditos de energia solar direto na sua fatura da distribuidora, pagando menos todo mês.\n\n' +
+            '📸 Quer descobrir quanto pode economizar? Envie uma *foto da sua última conta de energia* e faço uma simulação gratuita na hora! 💡';
           await this.sender.enviarMensagem(telefone, msgAvulso, { tipoDisparo: 'MLM', cooperativaId });
           enviados++;
           this.logger.log(`Convite avulso enviado para ${telefone}`);

@@ -78,10 +78,27 @@ export class MotorPropostaService {
   async calcular(dto: CalcularPropostaDto): Promise<ResultadoCalculo> {
     const config = await this.getConfiguracao();
 
-    // Tarifa mais recente
-    const tarifa = await this.prisma.tarifaConcessionaria.findFirst({
-      orderBy: { dataVigencia: 'desc' },
+    // Tarifa mais recente — filtrar por distribuidora do cooperado
+    const ucCooperado = await this.prisma.uc.findFirst({
+      where: { cooperadoId: dto.cooperadoId },
+      select: { distribuidora: true },
     });
+    let tarifa: any = null;
+    if (ucCooperado?.distribuidora) {
+      const normDistrib = ucCooperado.distribuidora.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
+        orderBy: { dataVigencia: 'desc' },
+      });
+      tarifa = todasTarifas.find(t => {
+        const normConc = t.concessionaria.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        return normConc.includes(normDistrib) || normDistrib.includes(normConc);
+      }) || null;
+    }
+    if (!tarifa) {
+      tarifa = await this.prisma.tarifaConcessionaria.findFirst({
+        orderBy: { dataVigencia: 'desc' },
+      });
+    }
     const tusd = tarifa ? Number(tarifa.tusdNova) : 0.3;
     const te = tarifa ? Number(tarifa.teNova) : 0.2;
     const tarifaUnitSemTrib = tusd + te;
@@ -703,7 +720,8 @@ export class MotorPropostaService {
       data: { tokenAprovacao: token },
     });
 
-    const link = `http://localhost:3001/aprovar-proposta?token=${token}`;
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${baseUrl}/aprovar-proposta?token=${token}`;
     const modoAprovacao = canal === 'whatsapp' ? 'REMOTO_WHATSAPP' : 'REMOTO_EMAIL';
 
     console.log(`[APROVAÇÃO] Link para ${destino} (${canal}): ${link}`);
@@ -773,7 +791,8 @@ export class MotorPropostaService {
       data: { tokenAssinatura: token },
     });
 
-    const link = `http://localhost:3001/assinar?token=${token}`;
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${baseUrl}/assinar?token=${token}`;
     console.log(`[ASSINATURA] Link: ${link}`);
 
     return { sucesso: true, link, token };

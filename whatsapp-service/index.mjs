@@ -11,7 +11,7 @@ import qrcode from 'qrcode-terminal';
 
 const PORT = process.env.PORT || 3002;
 const BACKEND_WEBHOOK_URL =
-  process.env.BACKEND_WEBHOOK_URL || 'http://localhost:3000/whatsapp/webhook-incoming';
+  process.env.BACKEND_WEBHOOK_URL || 'http://localhost:3000/whatsapp/webhook-incoming?secret=cooperebr_wh_2026';
 const AUTH_DIR = './auth_info';
 
 const logger = pino({ level: 'warn' });
@@ -98,8 +98,32 @@ async function startBaileys() {
       if (msg.key.fromMe) continue;
       if (!msg.message) continue;
 
-      const telefone = msg.key.remoteJid?.replace('@s.whatsapp.net', '') || '';
-      if (!telefone || telefone.includes('@g.us')) continue; // ignorar grupos
+      const rawJid = msg.key.remoteJid || '';
+      // Ignorar grupos
+      if (rawJid.includes('@g.us')) continue;
+
+      let telefone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '');
+
+      // Resolver LID para número real via lid-mapping reverso
+      if (rawJid.includes('@lid')) {
+        const lidId = rawJid.replace('@lid', '');
+        try {
+          const { readFileSync } = await import('fs');
+          const mapFile = `${AUTH_DIR}/lid-mapping-${lidId}_reverse.json`;
+          const mapped = JSON.parse(readFileSync(mapFile, 'utf8'));
+          // O arquivo contém o número como string ou objeto
+          telefone = typeof mapped === 'string' ? mapped.replace(/\D/g, '') : String(mapped).replace(/\D/g, '');
+          console.log(`🔄 LID ${lidId} → ${telefone}`);
+        } catch {
+          console.log(`⚠️ LID ${lidId} sem mapeamento — ignorando`);
+          continue;
+        }
+      }
+
+      if (!telefone || telefone.length > 15) {
+        console.log(`⚠️ JID não resolvido: ${rawJid} — ignorando`);
+        continue;
+      }
 
       try {
         let tipo = 'texto';
@@ -115,11 +139,15 @@ async function startBaileys() {
 
         // Resposta de lista interativa (listResponseMessage)
         const listResponse = rawMsg.listResponseMessage;
+        // Resposta de botão interativo (buttonsResponseMessage)
+        const buttonResponse = rawMsg.buttonsResponseMessage;
 
         if (listResponse) {
           tipo = 'texto';
-          // Enviar o rowId como corpo para o backend identificar a seleção
           corpo = listResponse.singleSelectReply?.selectedRowId || listResponse.title || null;
+        } else if (buttonResponse) {
+          tipo = 'texto';
+          corpo = buttonResponse.selectedButtonId || buttonResponse.selectedDisplayText || null;
         } else if (imgMsg) {
           tipo = 'imagem';
           mimeType = imgMsg.mimetype;
@@ -223,11 +251,14 @@ app.post('/send-list', async (req, res) => {
 
     const jid = toJid(to);
     await sock.sendMessage(jid, {
-      text,
-      footer: footer || '',
-      title: '',
-      buttonText: buttonText || 'Selecione',
-      sections,
+      listMessage: {
+        title: '',
+        description: text,
+        footerText: footer || '',
+        buttonText: buttonText || 'Selecione',
+        listType: 1,
+        sections,
+      },
     });
     res.json({ ok: true });
   } catch (err) {
@@ -278,11 +309,14 @@ app.post('/send-buttons', async (req, res) => {
     }];
 
     await sock.sendMessage(jid, {
-      text,
-      footer: footer || 'CoopereBR',
-      title: '',
-      buttonText: 'Escolha uma opção',
-      sections,
+      listMessage: {
+        title: '',
+        description: text,
+        footerText: footer || 'CoopereBR',
+        buttonText: 'Escolha uma opção',
+        listType: 1,
+        sections,
+      },
     });
     res.json({ ok: true });
   } catch (err) {
@@ -295,6 +329,89 @@ app.post('/send-buttons', async (req, res) => {
         fallbackText += `*${i + 1}.* ${b.texto}\n`;
       });
       fallbackText += '\n_Responda com o número ou nome da opção._';
+      const jid = toJid(to);
+      await sock.sendMessage(jid, { text: fallbackText });
+      res.json({ ok: true, fallback: true });
+    } catch (fallbackErr) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// POST /send-interactive — envia botões ou lista interativa
+app.post('/send-interactive', async (req, res) => {
+  try {
+    if (connectionStatus !== 'connected' || !sock) {
+      return res.status(503).json({ error: 'WhatsApp não está conectado' });
+    }
+
+    const { to, type, message } = req.body;
+    if (!to || !type || !message) {
+      return res.status(400).json({ error: 'Campos "to", "type" e "message" são obrigatórios' });
+    }
+
+    const jid = toJid(to);
+
+    if (type === 'buttons') {
+      // Enviar como lista interativa (mais confiável que buttons no Baileys)
+      const sections = [{
+        title: 'Opções',
+        rows: (message.buttons || []).map((b) => ({
+          title: b.buttonText?.displayText || b.texto || 'Opção',
+          rowId: b.buttonId || b.id || String(Math.random()),
+        })),
+      }];
+
+      await sock.sendMessage(jid, {
+        listMessage: {
+          title: '',
+          description: message.text || '',
+          footerText: message.footerText || 'CoopereBR',
+          buttonText: 'Escolha uma opção',
+          listType: 1,
+          sections,
+        },
+      });
+    } else if (type === 'list') {
+      await sock.sendMessage(jid, {
+        listMessage: {
+          title: message.title || '',
+          description: message.text || '',
+          footerText: message.footerText || '',
+          buttonText: message.buttonText || 'Ver opções',
+          listType: 1,
+          sections: message.sections || [],
+        },
+      });
+    } else {
+      return res.status(400).json({ error: `Tipo "${type}" não suportado. Use "buttons" ou "list".` });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ Erro ao enviar interativo:', err.message);
+    // Fallback: enviar como texto com opções numeradas pelo rowId/buttonId
+    try {
+      const { to, type, message } = req.body;
+      let fallbackText = message.text || '';
+      if (type === 'buttons' && message.buttons) {
+        fallbackText += '\n';
+        message.buttons.forEach((b) => {
+          const texto = b.buttonText?.displayText || b.texto || 'Opção';
+          const id = b.buttonId || b.id || '';
+          fallbackText += `\n*${id}.* ${texto}`;
+        });
+        fallbackText += '\n\n_Responda com o número da opção._';
+      } else if (type === 'list' && message.sections) {
+        for (const section of message.sections) {
+          for (const row of (section.rows || [])) {
+            const id = row.rowId || '';
+            fallbackText += `\n*${id}.* ${row.title}`;
+            if (row.description) fallbackText += ` — _${row.description}_`;
+          }
+        }
+        fallbackText += '\n\n_Responda com o número da opção desejada._';
+      }
       const jid = toJid(to);
       await sock.sendMessage(jid, { text: fallbackText });
       res.json({ ok: true, fallback: true });

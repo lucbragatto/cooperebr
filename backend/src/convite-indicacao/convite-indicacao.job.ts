@@ -30,7 +30,7 @@ export class ConviteIndicacaoJob {
         ultimoEnvioEm: { lte: tresDiasAtras },
         tentativasEnvio: { lt: 3 },
       },
-      select: { id: true },
+      select: { id: true, cooperativaId: true },
     });
 
     this.logger.log(`${convites.length} convites para lembrete`);
@@ -40,7 +40,7 @@ export class ConviteIndicacaoJob {
       const batch = convites.slice(i, i + BATCH_SIZE);
       for (const convite of batch) {
         try {
-          await this.conviteService.reenviarConvite(convite.id);
+          await this.conviteService.reenviarConvite(convite.id, convite.cooperativaId);
         } catch (err) {
           this.logger.warn(
             `Falha ao reenviar convite ${convite.id}: ${err.message}`,

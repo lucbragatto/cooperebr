@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
@@ -14,6 +15,15 @@ export class IndicacoesService {
     @Inject(forwardRef(() => WhatsappCicloVidaService)) private whatsappCicloVida: WhatsappCicloVidaService,
     @Inject(forwardRef(() => ConviteIndicacaoService)) private conviteIndicacao: ConviteIndicacaoService,
   ) {}
+
+  @OnEvent('cobranca.primeira.paga')
+  async handlePrimeiraFaturaPaga(payload: { cooperadoId: string; valorFatura: number }) {
+    try {
+      await this.processarPrimeiraFaturaPaga(payload.cooperadoId, payload.valorFatura);
+    } catch (err) {
+      this.logger.warn(`Falha ao processar primeira fatura paga via evento: ${err.message}`);
+    }
+  }
 
   // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +77,7 @@ export class IndicacoesService {
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
     return {
       codigo: cooperado.codigoIndicacao,
-      link: `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/entrar?ref=${cooperado.codigoIndicacao}`,
+      link: `${process.env.FRONTEND_URL ?? 'https://cooperebr.com.br'}/entrar?ref=${cooperado.codigoIndicacao}`,
     };
   }
 
@@ -90,7 +100,7 @@ export class IndicacoesService {
       });
     }
 
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
     const link = `${baseUrl}/entrar?ref=${codigo}`;
 
     const [totalIndicados, indicadosAtivos] = await Promise.all([
@@ -273,7 +283,13 @@ export class IndicacoesService {
       if (config.modalidade === 'REAIS_KWH_RECORRENTE' || config.modalidade === 'AMBOS') {
         const reaisKwh = nivelConfig.reaisKwh || 0;
         if (reaisKwh > 0) {
-          const valorKwh = new Decimal(reaisKwh).toDecimalPlaces(2);
+          // Buscar kWh do contrato do cooperado indicado para multiplicar pela taxa R$/kWh
+          const contratoIndicado = await this.prisma.contrato.findFirst({
+            where: { cooperadoId: indicacao.cooperadoIndicadoId, status: 'ATIVO' },
+            select: { kwhContrato: true },
+          });
+          const kwhCooperado = Number(contratoIndicado?.kwhContrato ?? 0);
+          const valorKwh = new Decimal(reaisKwh).mul(kwhCooperado).toDecimalPlaces(2);
           beneficiosCriados.push(
             await this.prisma.beneficioIndicacao.create({
               data: {

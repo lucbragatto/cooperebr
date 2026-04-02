@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 
@@ -13,7 +14,10 @@ import * as crypto from 'crypto';
 export class AsaasService {
   private readonly logger = new Logger(AsaasService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
+  ) {}
 
   // ─── Criptografia ──────────────────────────────────────────
 
@@ -402,25 +406,20 @@ export class AsaasService {
         },
       });
 
-      // Se pagamento confirmado/recebido, atualizar Cobranca vinculada
+      // Se pagamento confirmado/recebido, emitir evento para dar baixa na Cobranca vinculada
       if (
         (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') &&
         asaasCobranca.cobrancaId
       ) {
-        try {
-          await this.prisma.cobranca.update({
-            where: { id: asaasCobranca.cobrancaId },
-            data: {
-              status: 'PAGO',
-              dataPagamento: payment.paymentDate
-                ? new Date(payment.paymentDate)
-                : new Date(),
-              valorPago: payment.value,
-            },
-          });
-        } catch (err) {
-          this.logger.warn(`Não foi possível atualizar cobrança vinculada: ${err.message}`);
-        }
+        const dataPag = payment.paymentDate
+          ? new Date(payment.paymentDate).toISOString()
+          : new Date().toISOString();
+        this.eventEmitter.emit('pagamento.confirmado', {
+          cobrancaId: asaasCobranca.cobrancaId,
+          dataPagamento: dataPag,
+          valorPago: payment.value,
+          metodoPagamento: 'ASAAS',
+        });
       }
 
       // Se vencido, atualizar Cobranca vinculada

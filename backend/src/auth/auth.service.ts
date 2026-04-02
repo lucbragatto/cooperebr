@@ -124,6 +124,7 @@ export class AuthService {
     const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil, {
       cooperadoId: cooperado?.id ?? undefined,
       cooperativaId: cooperado?.cooperativaId ?? usuario.cooperativaId ?? undefined,
+      administradoraId: usuario.administradoraId ?? undefined,
     });
     return { token, usuario: this.formatarUsuario(usuario) };
   }
@@ -255,6 +256,55 @@ export class AuthService {
     return usuario;
   }
 
+  async criarUsuarioAgregador(
+    data: { email: string; senha: string; nome: string; administradoraId: string },
+    adminUser: any,
+  ) {
+    if (!adminUser.cooperativaId) {
+      throw new ForbiddenException('Admin sem cooperativa associada');
+    }
+
+    const administradora = await this.prisma.administradora.findUnique({
+      where: { id: data.administradoraId },
+      select: { id: true, cooperativaId: true },
+    });
+    if (!administradora || administradora.cooperativaId !== adminUser.cooperativaId) {
+      throw new ForbiddenException('Agregador não pertence à sua cooperativa');
+    }
+
+    const existente = await this.prisma.usuario.findFirst({
+      where: { email: data.email },
+    });
+    if (existente) {
+      throw new ConflictException('Já existe um usuário com esse email');
+    }
+
+    const { data: supabaseData, error } = await this.supabase.auth.admin.createUser({
+      email: data.email,
+      password: data.senha,
+      email_confirm: true,
+    });
+    if (error || !supabaseData.user) {
+      throw new ConflictException(error?.message ?? 'Erro ao criar usuário no Supabase');
+    }
+
+    const usuario = await (this.prisma.usuario.create as any)({
+      data: {
+        nome: data.nome,
+        email: data.email,
+        supabaseId: supabaseData.user.id,
+        perfil: PerfilUsuario.AGREGADOR,
+        cooperativaId: adminUser.cooperativaId,
+        administradoraId: data.administradoraId,
+      },
+      select: {
+        id: true, nome: true, email: true, perfil: true,
+        cooperativaId: true, administradoraId: true, ativo: true, createdAt: true,
+      },
+    });
+    return usuario;
+  }
+
   async atualizarUsuario(
     id: string,
     data: { email?: string; nome?: string; perfil?: string; ativo?: boolean },
@@ -302,7 +352,7 @@ export class AuthService {
       where,
       select: {
         id: true, email: true, perfil: true, nome: true,
-        cooperativaId: true, ativo: true, createdAt: true,
+        cooperativaId: true, administradoraId: true, ativo: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -391,6 +441,8 @@ export class AuthService {
       id?: string;
       cooperativaId?: string;
       cooperativaNome?: string;
+      modulosAtivos?: string[];
+      modalidadesAtivas?: Record<string, string>;
     }> = [];
 
     // 1. Perfil principal do sistema (SUPER_ADMIN, ADMIN, OPERADOR)
@@ -416,6 +468,23 @@ export class AuthService {
           cooperativaNome: coop.nome,
           modulosAtivos: coop.modulosAtivos ?? [],
           modalidadesAtivas: (coop.modalidadesAtivas as Record<string, string>) ?? {},
+        });
+      }
+    }
+
+    // 2b. Se é AGREGADOR, montar contexto do agregador
+    if (usuario.perfil === 'AGREGADOR' && usuario.administradoraId) {
+      const agregador = await this.prisma.administradora.findUnique({
+        where: { id: usuario.administradoraId },
+        select: { id: true, razaoSocial: true, cooperativaId: true, cooperativa: { select: { nome: true } } },
+      });
+      if (agregador) {
+        contextos.push({
+          tipo: 'admin_agregador',
+          label: `Agregador — ${agregador.razaoSocial}`,
+          id: agregador.id,
+          cooperativaId: agregador.cooperativaId,
+          cooperativaNome: agregador.cooperativa?.nome,
         });
       }
     }
@@ -512,6 +581,8 @@ export class AuthService {
       coopId = contextoValido.cooperativaId;
     } else if (contexto === 'admin_parceiro') {
       coopId = contextoValido.cooperativaId;
+    } else if (contexto === 'admin_agregador') {
+      coopId = contextoValido.cooperativaId;
     } else if (contexto === 'super_admin') {
       // sem cooperativaId — contexto puro super_admin
     } else if (contexto === 'proprietario_usina') {
@@ -521,6 +592,7 @@ export class AuthService {
     const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil, {
       cooperadoId,
       cooperativaId: coopId,
+      administradoraId: contexto === 'admin_agregador' ? usuario.administradoraId : undefined,
     });
 
     return { token, contexto, cooperativaId: coopId ?? null };
@@ -554,7 +626,7 @@ export class AuthService {
     return `${masked}@${domain}`;
   }
 
-  private assinarToken(sub: string, email: string, perfil: PerfilUsuario, extra?: { cooperadoId?: string; cooperativaId?: string }) {
+  private assinarToken(sub: string, email: string, perfil: PerfilUsuario, extra?: { cooperadoId?: string; cooperativaId?: string; administradoraId?: string }) {
     return this.jwtService.sign({ sub, email, perfil, ...extra });
   }
 

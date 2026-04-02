@@ -163,13 +163,13 @@ export class ConveniosService {
 
   relatorioCsv(relatorio: {
     empresa: string;
-    cnpj: string;
+    cnpj: string | null;
     competencia: string;
     itens: { nomeCompleto: string; matricula: string; valor: number }[];
   }): string {
     const linhas: string[] = [];
     linhas.push(`Empresa;${relatorio.empresa}`);
-    linhas.push(`CNPJ;${relatorio.cnpj}`);
+    linhas.push(`CNPJ;${relatorio.cnpj ?? ''}`);
     linhas.push(`Competencia;${relatorio.competencia}`);
     linhas.push('');
     linhas.push('Cooperado;Matricula;Valor');

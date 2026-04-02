@@ -11,7 +11,7 @@ import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { PrismaService } from '../prisma.service';
 
-const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
+const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
 @Controller('cooperados')
 export class CooperadosController {
@@ -73,10 +73,11 @@ export class CooperadosController {
 
   // ─── Rotas autenticadas ────────────────────────────────────────────────────
 
-  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, AGREGADOR)
   @Get()
-  findAll(@Req() req: any, @Query('limit') limit?: number, @Query('offset') offset?: number, @Query('search') search?: string) {
-    return this.cooperadosService.findAll(req.user?.cooperativaId, limit, offset, search);
+  findAll(@Req() req: any, @Query('limit') limit?: number, @Query('offset') offset?: number, @Query('search') search?: string, @Query('administradoraId') administradoraId?: string) {
+    const admId = req.user?.perfil === AGREGADOR ? req.user.administradoraId : administradoraId;
+    return this.cooperadosService.findAll(req.user?.cooperativaId, limit, offset, search, admId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -112,7 +113,7 @@ export class CooperadosController {
     return this.cooperadosService.findOne(id, req.user?.cooperativaId);
   }
 
-  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, AGREGADOR)
   @Post()
   create(@Body() body: CreateCooperadoDto, @Req() req: any) {
     const { termoAdesaoAceitoEm, cooperativaId, ...rest } = body;
@@ -120,6 +121,9 @@ export class CooperadosController {
       ...rest,
       cooperativaId: cooperativaId || req.user?.cooperativaId || undefined,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
+      ...(req.user?.perfil === AGREGADOR && req.user.administradoraId
+        ? { administradoraId: req.user.administradoraId }
+        : {}),
     });
   }
 

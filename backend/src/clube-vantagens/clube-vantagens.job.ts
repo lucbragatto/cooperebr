@@ -14,6 +14,11 @@ export class ClubeVantagensJob {
 
   @Cron('0 9 1 * *') // Dia 1 de cada mês às 9h
   async enviarResumosMensais() {
+    // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano antes de executar
+    if (process.env.CLUBE_RESUMO_MENSAL_HABILITADO !== 'true') {
+      this.logger.warn('ClubeVantagensJob: disparo bloqueado — CLUBE_RESUMO_MENSAL_HABILITADO não está ativo. Defina como "true" no .env para habilitar.');
+      return;
+    }
     this.logger.log('Iniciando envio de resumos mensais do Clube de Vantagens...');
 
     const progressoes = await this.prisma.progressaoClube.findMany({
@@ -52,7 +57,7 @@ export class ClubeVantagensJob {
           }),
         ]);
 
-        const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+        const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
         const linkIndicacao = `${baseUrl}/entrar?ref=${cooperado.codigoIndicacao ?? ''}`;
 
         await this.whatsappCicloVida.notificarResumoMensal(cooperado, {

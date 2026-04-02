@@ -19,4 +19,19 @@ export class CooperadosJob {
     });
     if (count > 0) this.logger.log(String(count) + ' cooperado(s) proxy expirado(s) removidos');
   }
+
+  // WA-BOT-04: Limpar cooperados PROXY_* zumbi (CPFs temporários com status PENDENTE há mais de 24h)
+  @Cron('0 3 * * *')
+  async limparCooperadosProxyZumbi() {
+    const limite24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const { count } = await this.prisma.cooperado.deleteMany({
+      where: {
+        cpf: { startsWith: 'PROXY_' },
+        status: 'PENDENTE',
+        createdAt: { lt: limite24h },
+        contratos: { none: {} },
+      },
+    });
+    if (count > 0) this.logger.log(`${count} cooperado(s) PROXY_* zumbi removidos`);
+  }
 }

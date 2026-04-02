@@ -14,7 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; cooperadoId?: string; cooperativaId?: string }) {
+  async validate(payload: { sub: string; email: string; cooperadoId?: string; cooperativaId?: string; administradoraId?: string }) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: payload.sub },
     });
@@ -23,6 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ...usuario,
       cooperadoId: payload.cooperadoId ?? undefined,
       cooperativaId: payload.cooperativaId ?? usuario.cooperativaId,
+      administradoraId: payload.administradoraId ?? (usuario as any).administradoraId,
     };
   }
 }

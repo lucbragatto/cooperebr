@@ -42,7 +42,7 @@ export default function AdministradorasPage() {
       await api.delete(`/administradoras/${id}`);
       carregarAdministradoras();
     } catch {
-      alert('Erro ao excluir administradora.');
+      alert('Erro ao excluir agregador.');
     }
   }
 
@@ -55,9 +55,9 @@ export default function AdministradorasPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Administradoras</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Agregadores</h2>
         <Link href="/dashboard/administradoras/novo">
-          <Button><Plus className="h-4 w-4 mr-2" /> Nova Administradora</Button>
+          <Button><Plus className="h-4 w-4 mr-2" /> Novo Agregador</Button>
         </Link>
       </div>
 
@@ -65,7 +65,7 @@ export default function AdministradorasPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <CardTitle className="text-base font-medium text-gray-600">
-              {carregando ? 'Carregando...' : `${filtradas.length} administradoras`}
+              {carregando ? 'Carregando...' : `${filtradas.length} agregadores`}
             </CardTitle>
             <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -99,7 +99,7 @@ export default function AdministradorasPage() {
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-gray-400 py-8">
                     <Building2 className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                    Nenhuma administradora cadastrada
+                    Nenhum agregador cadastrado
                   </TableCell>
                 </TableRow>
               ) : (

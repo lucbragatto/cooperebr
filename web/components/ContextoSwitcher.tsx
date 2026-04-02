@@ -7,6 +7,7 @@ import {
   Building2,
   User,
   Sun,
+  Users,
   ChevronDown,
   ArrowRightLeft,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ const iconesPorTipo: Record<TipoContexto, typeof Shield> = {
   admin_parceiro: Building2,
   cooperado: User,
   proprietario_usina: Sun,
+  admin_agregador: Users,
 };
 
 const coresPorTipo: Record<TipoContexto, string> = {
@@ -25,6 +27,7 @@ const coresPorTipo: Record<TipoContexto, string> = {
   admin_parceiro: 'text-blue-700 bg-blue-50',
   cooperado: 'text-green-700 bg-green-50',
   proprietario_usina: 'text-amber-700 bg-amber-50',
+  admin_agregador: 'text-teal-700 bg-teal-50',
 };
 
 interface Props {

@@ -74,6 +74,8 @@ model Usuario {
   resetTokenExpiry DateTime?
   cooperativaId    String?
   cooperativa      Cooperativa?      @relation(fields: [cooperativaId], references: [id])
+  administradoraId String?
+  administradora   Administradora?   @relation(fields: [administradoraId], references: [id])
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   observacoes      ObservacaoAtiva[]
@@ -86,6 +88,7 @@ enum PerfilUsuario {
   ADMIN
   OPERADOR
   COOPERADO
+  AGREGADOR
 }
 
 model Cooperado {
@@ -1373,6 +1376,7 @@ model Administradora {
   createdAt           DateTime           @default(now())
   condominios         Condominio[]
   convenios           ContratoConvenio[]
+  usuarios            Usuario[]
 
   @@map("administradoras")
 }

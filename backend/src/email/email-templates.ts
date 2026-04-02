@@ -49,7 +49,7 @@ function botao(texto: string, url: string): string {
 </table>`;
 }
 
-const LINK_PORTAL = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+const LINK_PORTAL = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
 
 export function templateBoasVindas(nome: string): string {
   return layout('Bem-vindo à CoopereBR!', `
@@ -164,5 +164,27 @@ export function templateTeste(): string {
     <h2 style="margin:0 0 16px;font-size:20px;">E-mail de teste</h2>
     <p style="margin:0 0 12px;line-height:1.6;">Se você está lendo isto, o sistema de e-mail da CoopereBR está funcionando corretamente!</p>
     <p style="margin:0;font-size:13px;color:${COR_SUBTEXTO};">Enviado em: ${new Date().toLocaleString('pt-BR')}</p>
+  `);
+}
+
+export function templateRelatorioConvenio(
+  convenioNome: string,
+  competencia: string,
+  totalMembros: number,
+  faixaAtual: number,
+  descontoMembros: number,
+  descontoConveniado: number,
+): string {
+  return layout(`Relatório Mensal — ${convenioNome}`, `
+    <h2 style="margin:0 0 16px;font-size:20px;">Relatório Mensal do Convênio</h2>
+    <p style="margin:0 0 12px;line-height:1.6;">Convênio: <strong>${convenioNome}</strong></p>
+    <p style="margin:0 0 12px;line-height:1.6;">Competência: <strong>${competencia}</strong></p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;">Membros Ativos</td><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;">${totalMembros}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;">Faixa Atual</td><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;">Faixa ${faixaAtual + 1}</td></tr>
+      <tr><td style="padding:8px;border-bottom:1px solid #eee;">Desconto Membros</td><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;">${descontoMembros.toFixed(1)}%</td></tr>
+      <tr><td style="padding:8px;">Desconto Conveniado</td><td style="padding:8px;font-weight:bold;">${descontoConveniado.toFixed(1)}%</td></tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:${COR_SUBTEXTO};">Acesse o portal para mais detalhes.</p>
   `);
 }

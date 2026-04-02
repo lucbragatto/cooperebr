@@ -147,9 +147,27 @@ export class RelatoriosService {
     const contratos = await this.prisma.contrato.findMany({
       where: contratoWhere,
       include: {
-        usina: { select: { id: true, nome: true, capacidadeKwh: true } },
+        usina: { select: { id: true, nome: true, capacidadeKwh: true, distribuidora: true } },
       },
     });
+
+    // Buscar tarifas vigentes por distribuidora das usinas
+    const distribuidoras = [...new Set(contratos.map(c => c.usina?.distribuidora).filter(Boolean))] as string[];
+    const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
+      orderBy: { dataVigencia: 'desc' },
+    });
+    const tarifaPorDistrib = new Map<string, number>();
+    for (const d of distribuidoras) {
+      const normD = d.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      const t = todasTarifas.find(t => {
+        const normC = t.concessionaria.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        return normC.includes(normD) || normD.includes(normC);
+      });
+      if (t) tarifaPorDistrib.set(d, Number(t.tusdNova) + Number(t.teNova));
+    }
+    const tarifaFallback = todasTarifas.length > 0
+      ? Number(todasTarifas[0].tusdNova) + Number(todasTarifas[0].teNova)
+      : 0.80;
 
     const now = new Date();
     const projecaoMensal: {
@@ -182,12 +200,9 @@ export class RelatoriosService {
         const pctUsina = Number(contrato.percentualUsina ?? 0);
         const kwhContrato = (pctUsina / 100) * media.mediaKwh;
         const desconto = Number(contrato.percentualDesconto ?? 0);
-        // Receita = kWh projetado * (desconto / 100) — simplificação: valor proporcional ao desconto sobre tarifa estimada
-        // Usamos o kWh vezes um valor de referência. Como não temos tarifa aqui, usamos valorLiquido médio.
-        // Melhor abordagem: kWhProjetado * tarifaMedia. Como simplificação, projetamos o valor bruto proporcional.
-        // Para ser pragmático, usamos a média de valorLiquido por kWh das cobranças passadas.
-        // Simplificação: receita = kWh * (1 - desconto/100) * tarifa estimada (R$0.80/kWh como fallback)
-        const tarifaEstimada = 0.80;
+        // Receita = kWh projetado * (1 - desconto/100) * tarifa da distribuidora
+        const distribUsina = contrato.usina?.distribuidora;
+        const tarifaEstimada = distribUsina ? (tarifaPorDistrib.get(distribUsina) ?? tarifaFallback) : tarifaFallback;
         const receita = kwhContrato * (1 - desconto / 100) * tarifaEstimada;
 
         kwhMes += kwhContrato;

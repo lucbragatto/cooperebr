@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { ConfiguracaoCobrancaService } from '../configuracao-cobranca/configuracao-cobranca.service';
 import { AsaasService } from '../asaas/asaas.service';
@@ -29,6 +31,7 @@ export class CobrancasService {
 
   constructor(
     private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
     private configuracaoCobrancaService: ConfiguracaoCobrancaService,
     private asaasService: AsaasService,
     private clubeVantagensService: ClubeVantagensService,
@@ -36,6 +39,20 @@ export class CobrancasService {
     private whatsappSender: WhatsappSenderService,
     private emailService: EmailService,
   ) {}
+
+  @OnEvent('pagamento.confirmado')
+  async handlePagamentoConfirmado(payload: {
+    cobrancaId: string;
+    dataPagamento: string;
+    valorPago: number;
+    metodoPagamento: string;
+  }) {
+    try {
+      await this.darBaixa(payload.cobrancaId, payload.dataPagamento, payload.valorPago, payload.metodoPagamento);
+    } catch (err) {
+      this.logger.warn(`Falha ao dar baixa via evento pagamento.confirmado: ${err.message}`);
+    }
+  }
 
   async findAll(cooperativaId?: string, status?: string[]) {
     const where: any = {};
@@ -251,6 +268,24 @@ export class CobrancasService {
       this.logger.warn(`Falha ao notificar pagamento via WhatsApp/E-mail: ${err.message}`);
     }
 
+    // Verificar se é a primeira fatura paga do cooperado e emitir evento para cascade MLM
+    try {
+      const cooperadoId = cobranca.contrato?.cooperadoId;
+      if (cooperadoId) {
+        const totalPagas = await this.prisma.cobranca.count({
+          where: { contrato: { cooperadoId }, status: 'PAGO' },
+        });
+        if (totalPagas === 1) {
+          this.eventEmitter.emit('cobranca.primeira.paga', {
+            cooperadoId,
+            valorFatura: valorFinal,
+          });
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao processar primeira fatura paga: ${err.message}`);
+    }
+
     // Clube de Vantagens: atualizar métricas dos indicadores
     try {
       const cooperadoId = cobranca.contrato?.cooperadoId;
@@ -334,10 +369,10 @@ export class CobrancasService {
   }
 
   async calcularCobrancaMensal(contratoId: string, competencia: Date): Promise<CobrancaCalculo> {
-    // 1. Buscar contrato com usina e UC (para distribuidora)
+    // 1. Buscar contrato com usina, UC e plano (para distribuidora e modelo de cobrança)
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: contratoId },
-      include: { usina: true, uc: true },
+      include: { usina: true, uc: true, plano: true },
     });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
     if (!contrato.usinaId || !contrato.usina) {
@@ -378,17 +413,52 @@ export class CobrancasService {
     if (!distribuidora) {
       throw new BadRequestException('UC/Usina não possui distribuidora definida — impossível calcular tarifa');
     }
-    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
-      where: { concessionaria: distribuidora },
+    // Normalizar distribuidora para match: lowercase, sem acentos, trimmed
+    const normDistrib = distribuidora
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+    const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
       orderBy: { dataVigencia: 'desc' },
     });
+    const tarifaVigente = todasTarifas.find(t => {
+      const normConc = t.concessionaria
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+      return normConc.includes(normDistrib) || normDistrib.includes(normConc);
+    }) || null;
     if (!tarifaVigente) {
       throw new BadRequestException(`Tarifa não encontrada para a distribuidora "${distribuidora}". Cadastre a tarifa antes de gerar cobranças.`);
     }
     const tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
 
-    // 6. Calcular valor bruto em R$ = kWh entregue × tarifa (TUSD + TE)
-    const valorBruto = kwhEntregue * tarifaKwh;
+    // 6. Resolver modelo de cobrança (contrato override → usina override → plano → FIXO_MENSAL)
+    const modeloCobranca =
+      (contrato as any).modeloCobrancaOverride ||
+      (contrato.usina as any)?.modeloCobrancaOverride ||
+      (contrato as any).plano?.modeloCobranca ||
+      'CREDITOS_COMPENSADOS';
+
+    // 7. Calcular valor conforme modelo
+    let kwhCobranca: number;
+    const kwhContrato = Number(contrato.kwhContrato ?? 0);
+
+    if (modeloCobranca === 'FIXO_MENSAL') {
+      // Valor fixo mensal: usa kWhContrato como base, independente da geração real
+      kwhCobranca = kwhContrato;
+    } else if (modeloCobranca === 'CREDITOS_DINAMICO') {
+      // Similar a CREDITOS_COMPENSADOS mas usa tarifa vigente atual (já obtida acima)
+      // kWh cobrança = min(entregue, contrato) — cobra apenas o que foi efetivamente entregue
+      kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+    } else {
+      // CREDITOS_COMPENSADOS (padrão): cobra pelos kWh efetivamente entregues
+      kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+    }
+
+    const valorBruto = kwhCobranca * tarifaKwh;
     const valorDesconto = valorBruto * (descontoAplicado / 100);
     const valorLiquido = valorBruto - valorDesconto;
 
@@ -401,7 +471,7 @@ export class CobrancasService {
       kwhCompensado: null,
       kwhSaldo: null,
       descontoAplicado,
-      baseCalculoUsada,
+      baseCalculoUsada: `${baseCalculoUsada} (${modeloCobranca})`,
       fonteDesconto,
       valorBruto,
       valorDesconto,

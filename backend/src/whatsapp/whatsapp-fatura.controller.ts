@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
@@ -409,6 +410,7 @@ export class WhatsappFaturaController {
 
   // Endpoint para processar entrada de indicado (chamado pela landing page)
   @Public()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('entrada-indicado')
   async entradaIndicado(@Body() body: EntradaIndicadoDto) {
     return this.mlmService.processarEntradaIndicado(body.telefone, body.codigoRef);

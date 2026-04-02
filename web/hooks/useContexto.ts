@@ -85,5 +85,7 @@ export function rotaPorContexto(tipo: TipoContexto): string {
       return '/portal';
     case 'proprietario_usina':
       return '/proprietario';
+    case 'admin_agregador':
+      return '/agregador';
   }
 }

@@ -75,7 +75,10 @@
       "Bash(/dev/null cd:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(findstr LISTENING)",
+      "Bash(cmd //c \"taskkill /PID 12220 /F\")",
+      "Bash(cd:*)"
     ]
   }
 }

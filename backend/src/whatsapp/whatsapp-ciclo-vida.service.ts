@@ -5,7 +5,7 @@ import { EmailService } from '../email/email.service';
 @Injectable()
 export class WhatsappCicloVidaService {
   private readonly logger = new Logger(WhatsappCicloVidaService.name);
-  private readonly linkPortal = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+  private readonly linkPortal = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
 
   constructor(
     private sender: WhatsappSenderService,
@@ -235,5 +235,50 @@ export class WhatsappCicloVidaService {
       `Indique mais amigos: ${dados.linkIndicacao}`,
     ].join('\n');
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined });
+  }
+
+  // ─── Convênios ──────────────────────────────────────────────────────────
+
+  async notificarFaixaConvenioAlterada(
+    cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null },
+    dados: { convenioNome: string; faixaAnterior: number; faixaNova: number; descontoNovo: number },
+  ) {
+    const direcao = dados.faixaNova > dados.faixaAnterior ? 'subiu' : 'mudou';
+    const emoji = dados.faixaNova > dados.faixaAnterior ? '📈' : '📉';
+    const texto = [
+      `${emoji} Convênio ${dados.convenioNome}`,
+      ``,
+      `Olá, ${cooperado.nomeCompleto}!`,
+      ``,
+      `A faixa do seu convênio ${direcao}: Faixa ${dados.faixaAnterior + 1} → Faixa ${dados.faixaNova + 1}`,
+      `💎 Novo desconto: ${dados.descontoNovo}%`,
+      ``,
+      `🔗 Ver detalhes: ${this.linkPortal}/portal/convenio`,
+    ].join('\n');
+    return this.enviar(cooperado.telefone, texto, {
+      cooperadoId: cooperado.id,
+      cooperativaId: cooperado.cooperativaId ?? undefined,
+      tipoDisparo: 'CONVENIO',
+    });
+  }
+
+  async notificarMembroConvenioAdicionado(
+    cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null },
+    convenioNome: string,
+  ) {
+    const texto = [
+      `🤝 Você foi adicionado ao convênio "${convenioNome}"!`,
+      ``,
+      `Olá, ${cooperado.nomeCompleto}!`,
+      ``,
+      `Agora você faz parte deste convênio e receberá descontos adicionais na sua conta de energia.`,
+      ``,
+      `🔗 Ver detalhes: ${this.linkPortal}/portal`,
+    ].join('\n');
+    return this.enviar(cooperado.telefone, texto, {
+      cooperadoId: cooperado.id,
+      cooperativaId: cooperado.cooperativaId ?? undefined,
+      tipoDisparo: 'CONVENIO',
+    });
   }
 }

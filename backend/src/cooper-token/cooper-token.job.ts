@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenService } from './cooper-token.service';
@@ -14,14 +14,14 @@ export class CooperTokenJob {
   ) {}
 
   /**
-   * Diariamente às 6h: apura excedentes de faturas processadas
+   * Diariamente Ã s 6h: apura excedentes de faturas processadas
    * em planos com cooperTokenAtivo=true
    */
   @Cron('0 6 * * *')
   async apurarExcedentes() {
-    this.logger.log('Iniciando apuração de excedentes CooperToken...');
+    this.logger.log('Iniciando apuraÃ§Ã£o de excedentes CooperToken...');
 
-    // Buscar faturas processadas não apuradas, com plano cooperTokenAtivo
+    // Buscar faturas processadas nÃ£o apuradas, com plano cooperTokenAtivo
     const faturas = await this.prisma.faturaProcessada.findMany({
       where: {
         tokenApurado: false,
@@ -48,7 +48,7 @@ export class CooperTokenJob {
       },
     });
 
-    this.logger.log(`Encontradas ${faturas.length} faturas para apuração`);
+    this.logger.log(`Encontradas ${faturas.length} faturas para apuraÃ§Ã£o`);
 
     let totalTokensCreditados = 0;
 
@@ -58,6 +58,7 @@ export class CooperTokenJob {
         if (!contrato) continue;
 
         const plano = contrato.plano;
+        if (!plano) continue;
         const cotaKwh = Number(fatura.cooperado.cotaKwhMensal ?? 0);
         const kwhGerado = Number(fatura.mediaKwhCalculada ?? 0);
         const excedente = kwhGerado - cotaKwh;
@@ -75,7 +76,7 @@ export class CooperTokenJob {
 
         await this.cooperTokenService.creditar({
           cooperadoId: fatura.cooperadoId,
-          cooperativaId: fatura.cooperativaId ?? contrato.cooperativaId,
+          cooperativaId: contrato.cooperativaId ?? '',
           tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
           quantidade,
           referenciaId: fatura.id,
@@ -97,16 +98,16 @@ export class CooperTokenJob {
     }
 
     this.logger.log(
-      `Apuração concluída. Total de tokens creditados: ${totalTokensCreditados}`,
+      `ApuraÃ§Ã£o concluÃ­da. Total de tokens creditados: ${totalTokensCreditados}`,
     );
   }
 
   /**
-   * Todo dia 1º às 2h: expira tokens vencidos
+   * Todo dia 1Âº Ã s 2h: expira tokens vencidos
    */
   @Cron('0 2 1 * *')
   async expirarTokensVencidos() {
-    this.logger.log('Iniciando expiração de tokens vencidos...');
+    this.logger.log('Iniciando expiraÃ§Ã£o de tokens vencidos...');
 
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: { ativo: true },
@@ -135,7 +136,8 @@ export class CooperTokenJob {
     }
 
     this.logger.log(
-      `Expiração concluída. Total expirado: ${totalExpirado} tokens`,
+      `ExpiraÃ§Ã£o concluÃ­da. Total expirado: ${totalExpirado} tokens`,
     );
   }
 }
+

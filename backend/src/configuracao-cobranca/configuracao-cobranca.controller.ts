@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body } from '@nestjs/common';
+import { Controller, Get, Put, Param, Body, Req } from '@nestjs/common';
 import { ConfiguracaoCobrancaService } from './configuracao-cobranca.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,9 +11,9 @@ export class ConfiguracaoCobrancaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()
-  findCooperativa() {
-    // TODO: extrair cooperativaId do token quando multi-tenant estiver pronto
-    return this.service.findByCooperativa('default');
+  findCooperativa(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.service.findByCooperativa(cooperativaId || 'default');
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

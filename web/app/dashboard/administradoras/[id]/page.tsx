@@ -54,7 +54,7 @@ export default function AdministradoraDetalhePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Dados da Administradora</CardTitle>
+          <CardTitle className="text-base">Dados do Agregador</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

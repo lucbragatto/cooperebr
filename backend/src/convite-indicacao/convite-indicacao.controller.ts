@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Query, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Patch, Body, Param, Query, Req, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { ConviteIndicacaoService } from './convite-indicacao.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -29,10 +29,55 @@ export class ConviteIndicacaoController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @Get('dashboard')
+  dashboard(
+    @Req() req: any,
+    @Query('status') status?: StatusConvite,
+    @Query('periodo') periodo?: string,
+    @Query('page') page?: string,
+  ) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.getDashboard(req.user.cooperativaId, {
+      status,
+      periodo: periodo ? Number(periodo) : undefined,
+      page: page ? Number(page) : 1,
+    });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('stats')
+  stats(@Req() req: any) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.getStats(req.user.cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
   @Get('estatisticas')
   estatisticas(@Req() req: any) {
     if (!req.user?.cooperativaId) throw new UnauthorizedException();
     return this.service.getEstatisticas(req.user.cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('config-lembretes')
+  getConfigLembretes(@Req() req: any) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    return this.service.getConfigLembretes(req.user.cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Put('config-lembretes')
+  salvarConfigLembretes(
+    @Req() req: any,
+    @Body() body: { cooldownDias: number; maxTentativas: number; habilitado: boolean },
+  ) {
+    if (!req.user?.cooperativaId) throw new UnauthorizedException();
+    if (body.cooldownDias == null || body.maxTentativas == null || body.habilitado == null) {
+      throw new BadRequestException('cooldownDias, maxTentativas e habilitado são obrigatórios');
+    }
+    if (body.cooldownDias < 1) throw new BadRequestException('cooldownDias deve ser >= 1');
+    if (body.maxTentativas < 1) throw new BadRequestException('maxTentativas deve ser >= 1');
+    return this.service.salvarConfigLembretes(req.user.cooperativaId, body);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

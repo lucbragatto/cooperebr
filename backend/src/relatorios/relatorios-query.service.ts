@@ -46,6 +46,7 @@ export class RelatoriosQueryService {
     const data = new Date(competencia);
     const inicioMes = new Date(data.getFullYear(), data.getMonth(), 1);
     const fimMes = new Date(data.getFullYear(), data.getMonth() + 1, 0);
+    const competenciaNormalizada = new Date(data.getFullYear(), data.getMonth(), 1);
 
     const contratos = await this.prisma.contrato.findMany({
       where: { status: 'ATIVO', cooperado: { cooperativaId } },
@@ -56,8 +57,17 @@ export class RelatoriosQueryService {
       },
     });
 
+    // Buscar geração mensal real para todas as usinas nesta competência
+    const usinaIds = [...new Set(contratos.map(c => c.usinaId).filter(Boolean))] as string[];
+    const geracoes = usinaIds.length > 0
+      ? await this.prisma.geracaoMensal.findMany({
+          where: { usinaId: { in: usinaIds }, competencia: competenciaNormalizada },
+        })
+      : [];
+    const geracaoPorUsina = new Map(geracoes.map(g => [g.usinaId, g.kwhGerado]));
+
     return contratos.map(c => {
-      const geracaoUsina = 0; // será preenchido pela view materializada quando disponível
+      const geracaoUsina = c.usinaId ? (geracaoPorUsina.get(c.usinaId) ?? 0) : 0;
       const kwhEntregue = c.percentualUsina ? Number(geracaoUsina) * (Number(c.percentualUsina) / 100) : 0;
       const kwhContrato = Number(c.kwhContrato ?? 0);
       const excedente = kwhEntregue - kwhContrato;
