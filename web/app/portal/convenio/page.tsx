@@ -47,7 +47,7 @@ export default function PortalConvenioPage() {
       <h1 className="text-2xl font-bold">Meu Convênio</h1>
 
       {convenios.length > 1 && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {convenios.map((c: any) => (
             <button
               key={c.id}
@@ -55,6 +55,9 @@ export default function PortalConvenioPage() {
               onClick={() => setSelecionado(c.id)}
             >
               {c.empresaNome}
+              {c.tierMinimoClube && (
+                <Badge className="ml-2 text-xs" variant="outline">{c.tierMinimoClube}</Badge>
+              )}
             </button>
           ))}
         </div>

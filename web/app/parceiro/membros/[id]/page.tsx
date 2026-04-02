@@ -24,7 +24,7 @@ export default function ParceiroMembroDetalhePage() {
           api.get(`/cooperados/${id}`),
           api.get(`/contratos`, { params: { cooperadoId: id } }),
           api.get(`/cobrancas`, { params: { cooperadoId: id } }),
-          api.get(`/cooperados/${id}/documentos`),
+          api.get(`/documentos/cooperado/${id}`),
         ]);
 
         if (membroRes.status === 'fulfilled') setMembro(membroRes.value.data);

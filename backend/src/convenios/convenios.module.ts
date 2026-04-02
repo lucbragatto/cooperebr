@@ -8,7 +8,7 @@ import { ConveniosJob } from './convenios.job';
 import { PrismaService } from '../prisma.service';
 
 @Module({
-  controllers: [ConveniosController, ConveniosPortalController],
+  controllers: [ConveniosPortalController, ConveniosController],
   providers: [
     ConveniosService,
     ConveniosMembrosService,

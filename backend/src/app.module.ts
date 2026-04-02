@@ -44,6 +44,7 @@ import { RelatoriosModule } from './relatorios/relatorios.module';
 import { CooperTokenModule } from './cooper-token/cooper-token.module';
 import { ConviteIndicacaoModule } from './convite-indicacao/convite-indicacao.module';
 import { ConveniosModule } from './convenios/convenios.module';
+import { ConversaoCreditoModule } from './conversao-credito/conversao-credito.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
@@ -91,6 +92,7 @@ import { ModuloGuard } from './auth/modulo.guard';
     CooperTokenModule,
     ConviteIndicacaoModule,
     ConveniosModule,
+    ConversaoCreditoModule,
   ],
   controllers: [AppController],
   providers: [

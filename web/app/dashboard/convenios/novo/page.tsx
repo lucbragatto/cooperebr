@@ -45,6 +45,9 @@ export default function NovoConvenioPage() {
     criarCooperadoSemUc: true,
     registrarComoIndicacao: true,
     diaEnvioRelatorio: 5,
+    tierMinimoClube: '',
+    modalidade: 'STANDALONE',
+    taxaAprovacaoSisgd: '',
   });
 
   const [faixas, setFaixas] = useState<Faixa[]>([
@@ -95,6 +98,9 @@ export default function NovoConvenioPage() {
         criarCooperadoSemUc: form.criarCooperadoSemUc,
         registrarComoIndicacao: form.registrarComoIndicacao,
         diaEnvioRelatorio: form.diaEnvioRelatorio,
+        tierMinimoClube: form.tierMinimoClube || undefined,
+        modalidade: form.modalidade,
+        taxaAprovacaoSisgd: form.taxaAprovacaoSisgd ? parseFloat(form.taxaAprovacaoSisgd) : undefined,
         configBeneficio: {
           criterio: 'MEMBROS_ATIVOS',
           efeitoMudancaFaixa: 'SOMENTE_PROXIMAS',
@@ -158,6 +164,40 @@ export default function NovoConvenioPage() {
               <Label>Dia Envio Relatório</Label>
               <Input type="number" min={1} max={28} value={form.diaEnvioRelatorio} onChange={e => setField('diaEnvioRelatorio', parseInt(e.target.value))} />
             </div>
+            <div>
+              <Label>Tier mínimo do Clube de Vantagens</Label>
+              <select className="w-full border rounded-md px-3 py-2" value={form.tierMinimoClube} onChange={e => setField('tierMinimoClube', e.target.value)}>
+                <option value="">Sem requisito</option>
+                <option value="BRONZE">Bronze</option>
+                <option value="PRATA">Prata</option>
+                <option value="OURO">Ouro</option>
+                <option value="DIAMANTE">Diamante</option>
+              </select>
+            </div>
+            <div>
+              <Label>Modalidade</Label>
+              <div className="flex gap-4 mt-1">
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="modalidade" value="STANDALONE" checked={form.modalidade === 'STANDALONE'} onChange={e => setField('modalidade', e.target.value)} />
+                  <span className="text-sm">Standalone (só meus membros)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="modalidade" value="GLOBAL" checked={form.modalidade === 'GLOBAL'} onChange={e => setField('modalidade', e.target.value)} />
+                  <span className="text-sm">Global (rede SISGD)</span>
+                </label>
+              </div>
+            </div>
+            {form.modalidade === 'GLOBAL' && (
+              <>
+                <div className="col-span-2 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded text-sm">
+                  Convênios globais serão enviados para aprovação do SISGD antes de ficarem disponíveis na rede.
+                </div>
+                <div>
+                  <Label>Taxa de aprovação SISGD (R$)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.taxaAprovacaoSisgd} onChange={e => setField('taxaAprovacaoSisgd', e.target.value)} placeholder="0.00" />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

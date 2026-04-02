@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, ForbiddenException,
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -46,10 +46,30 @@ export class ConveniosController {
     });
   }
 
+  // ─── Governança GLOBAL (SUPER_ADMIN) ─────────────────────────────────
+
+  @Roles(SUPER_ADMIN)
+  @Get('global/pendentes')
+  listarPendentesGlobal() {
+    return this.conveniosService.listarPendentesGlobal();
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: any) {
     return this.conveniosService.findOne(id, req.user.cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Patch(':id/aprovar')
+  aprovarGlobal(@Param('id') id: string) {
+    return this.conveniosService.aprovarGlobal(id);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Patch(':id/rejeitar')
+  rejeitarGlobal(@Param('id') id: string, @Body() body: { motivoRejeicao: string }) {
+    return this.conveniosService.rejeitarGlobal(id, body.motivoRejeicao);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
@@ -79,6 +99,11 @@ export class ConveniosController {
   @Post(':id/membros')
   async adicionarMembro(@Param('id') id: string, @Body() dto: AddMembroDto, @Req() req: any) {
     await this.conveniosService.findOne(id, req.user.cooperativaId);
+    const tierOk = await this.conveniosService.checkTierRequisito(dto.cooperadoId, id);
+    if (!tierOk) {
+      const convenio = await this.conveniosService.findOne(id);
+      throw new ForbiddenException(`Você precisa ser nível ${convenio.tierMinimoClube} para acessar este convênio`);
+    }
     return this.membrosService.adicionarMembro(id, dto.cooperadoId, dto.matricula);
   }
 
@@ -157,4 +182,5 @@ export class ConveniosController {
 
     return relatorio;
   }
+
 }

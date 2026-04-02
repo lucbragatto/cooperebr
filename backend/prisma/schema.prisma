@@ -163,6 +163,7 @@ model Cooperado {
   cooperTokenLedger       CooperTokenLedger[]
   cooperTokenSaldo        CooperTokenSaldo?
   convitesEnviados        ConviteIndicacao[]       @relation("ConvitesEnviados")
+  conversoesCreditoSemUc  ConversaoCreditoSemUc[]
 
   @@map("cooperados")
 }
@@ -958,6 +959,16 @@ model ContratoConvenio {
   // ── Novo: Indicação automática ──
   registrarComoIndicacao Boolean @default(true)
 
+  // ── Tier mínimo Clube de Vantagens ──
+  tierMinimoClube String? // null = sem requisito; 'BRONZE' | 'PRATA' | 'OURO' | 'DIAMANTE'
+
+  // ── Modalidade GLOBAL vs STANDALONE ──
+  modalidade          String  @default("STANDALONE") // STANDALONE | GLOBAL
+  statusAprovacao     String  @default("APROVADO")   // APROVADO | PENDENTE | REJEITADO
+  motivoRejeicao      String?
+  taxaAprovacaoSisgd  Decimal? @db.Decimal(10, 2)
+  taxaAprovacaoPaga   Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1702,4 +1713,24 @@ model ConviteIndicacao {
   @@index([status, ultimoEnvioEm])
   @@index([telefoneConvidado])
   @@map("convites_indicacao")
+}
+
+model ConversaoCreditoSemUc {
+  id            String   @id @default(cuid())
+  cooperadoId   String
+  cooperado     Cooperado @relation(fields: [cooperadoId], references: [id])
+  cooperativaId String
+  valorKwh      Decimal  @db.Decimal(10, 2)
+  valorReais    Decimal  @db.Decimal(10, 2)
+  tarifaUsada   Decimal  @db.Decimal(10, 4)
+  status        String   @default("PENDENTE") // PENDENTE | APROVADO | PAGO | CANCELADO
+  pixChave      String?
+  pixNome       String?
+  observacao    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([cooperadoId])
+  @@index([cooperativaId, status])
+  @@map("conversoes_credito_sem_uc")
 }

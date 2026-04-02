@@ -167,7 +167,15 @@ export class IndicacoesService {
 
     const indicacoes: any[] = [];
 
-    // Nível 1: indicador direto
+    // Nível 1: indicador direto — verificar duplicação
+    const jaExisteNivel1 = await this.prisma.indicacao.findFirst({
+      where: { cooperadoIndicadorId: indicador.id, cooperadoIndicadoId, nivel: 1 },
+    });
+    if (jaExisteNivel1) {
+      this.logger.warn(`Indicação nível 1 já existe para ${cooperadoIndicadoId} → ${indicador.id}`);
+      return [jaExisteNivel1];
+    }
+
     indicacoes.push(
       await this.prisma.indicacao.create({
         data: {
@@ -198,17 +206,25 @@ export class IndicacoesService {
       });
       if (!ancestral) break;
 
-      indicacoes.push(
-        await this.prisma.indicacao.create({
-          data: {
-            cooperativaId,
-            cooperadoIndicadorId: ancestral.id,
-            cooperadoIndicadoId,
-            nivel,
-            status: 'PENDENTE',
-          },
-        }),
-      );
+      // Verificar duplicação antes de criar cada nível
+      const jaExiste = await this.prisma.indicacao.findFirst({
+        where: { cooperadoIndicadorId: ancestral.id, cooperadoIndicadoId, nivel },
+      });
+      if (!jaExiste) {
+        indicacoes.push(
+          await this.prisma.indicacao.create({
+            data: {
+              cooperativaId,
+              cooperadoIndicadorId: ancestral.id,
+              cooperadoIndicadoId,
+              nivel,
+              status: 'PENDENTE',
+            },
+          }),
+        );
+      } else {
+        indicacoes.push(jaExiste);
+      }
 
       currentIndicadorId = ancestral.cooperadoIndicadorId;
       nivel++;

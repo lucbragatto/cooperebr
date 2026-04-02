@@ -119,6 +119,18 @@ export class CreateConvenioDto {
   @IsOptional()
   @IsBoolean()
   criarCooperadoSemUc?: boolean;
+
+  @IsOptional()
+  @IsString()
+  tierMinimoClube?: string;
+
+  @IsOptional()
+  @IsString()
+  modalidade?: string;
+
+  @IsOptional()
+  @IsNumber()
+  taxaAprovacaoSisgd?: number;
 }
 
 export enum StatusConvenioDto {
@@ -196,6 +208,18 @@ export class UpdateConvenioDto {
   @IsOptional()
   @IsEnum(StatusConvenioDto)
   status?: StatusConvenioDto;
+
+  @IsOptional()
+  @IsString()
+  tierMinimoClube?: string | null;
+
+  @IsOptional()
+  @IsString()
+  modalidade?: string;
+
+  @IsOptional()
+  @IsNumber()
+  taxaAprovacaoSisgd?: number | null;
 }
 
 export class AddMembroDto {

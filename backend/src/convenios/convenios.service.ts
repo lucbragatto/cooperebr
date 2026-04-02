@@ -1,8 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
 import { CreateConvenioDto, UpdateConvenioDto, TipoConvenioDto } from './convenios.dto';
 import { ConveniosProgressaoService, ConfigBeneficio } from './convenios-progressao.service';
+
+const TIER_ORDEM: Record<string, number> = { BRONZE: 0, PRATA: 1, OURO: 2, DIAMANTE: 3 };
 
 @Injectable()
 export class ConveniosService {
@@ -78,6 +80,7 @@ export class ConveniosService {
     for (let tentativa = 0; tentativa < 5; tentativa++) {
       const numero = await this.gerarNumero(tentativa);
       try {
+        const modalidade = dto.modalidade ?? 'STANDALONE';
         return await this.prisma.contratoConvenio.create({
           data: {
             numero,
@@ -99,6 +102,10 @@ export class ConveniosService {
             diaEnvioRelatorio: dto.diaEnvioRelatorio ?? 5,
             tipoDesconto: 'PERCENTUAL',
             status: 'ATIVO',
+            tierMinimoClube: dto.tierMinimoClube ?? null,
+            modalidade,
+            statusAprovacao: modalidade === 'GLOBAL' ? 'PENDENTE' : 'APROVADO',
+            taxaAprovacaoSisgd: dto.taxaAprovacaoSisgd ?? null,
           },
         });
       } catch (err: any) {
@@ -194,6 +201,9 @@ export class ConveniosService {
     if (dto.registrarComoIndicacao !== undefined) data.registrarComoIndicacao = dto.registrarComoIndicacao;
     if (dto.diaEnvioRelatorio !== undefined) data.diaEnvioRelatorio = dto.diaEnvioRelatorio;
     if (dto.status !== undefined) data.status = dto.status;
+    if (dto.tierMinimoClube !== undefined) data.tierMinimoClube = dto.tierMinimoClube;
+    if (dto.modalidade !== undefined) data.modalidade = dto.modalidade;
+    if (dto.taxaAprovacaoSisgd !== undefined) data.taxaAprovacaoSisgd = dto.taxaAprovacaoSisgd;
 
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },
@@ -373,6 +383,46 @@ export class ConveniosService {
       })),
       historicoFaixas: convenio.historicoFaixas,
     };
+  }
+
+  // ─── Tier check ──────────────────────────────────────────────────────────
+
+  async checkTierRequisito(cooperadoId: string, convenioId: string): Promise<boolean> {
+    const convenio = await this.prisma.contratoConvenio.findUnique({ where: { id: convenioId } });
+    if (!convenio?.tierMinimoClube) return true;
+    const progressao = await this.prisma.progressaoClube.findUnique({ where: { cooperadoId } });
+    const tierAtual = progressao?.nivelAtual ?? 'BRONZE';
+    return (TIER_ORDEM[tierAtual] ?? 0) >= (TIER_ORDEM[convenio.tierMinimoClube] ?? 0);
+  }
+
+  // ─── Governança GLOBAL ─────────────────────────────────────────────────
+
+  async listarPendentesGlobal() {
+    return this.prisma.contratoConvenio.findMany({
+      where: { modalidade: 'GLOBAL', statusAprovacao: 'PENDENTE' },
+      include: {
+        _count: { select: { cooperados: { where: { ativo: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async aprovarGlobal(id: string) {
+    const convenio = await this.findOne(id);
+    if (convenio.modalidade !== 'GLOBAL') throw new BadRequestException('Convênio não é GLOBAL');
+    return this.prisma.contratoConvenio.update({
+      where: { id },
+      data: { statusAprovacao: 'APROVADO' },
+    });
+  }
+
+  async rejeitarGlobal(id: string, motivoRejeicao: string) {
+    const convenio = await this.findOne(id);
+    if (convenio.modalidade !== 'GLOBAL') throw new BadRequestException('Convênio não é GLOBAL');
+    return this.prisma.contratoConvenio.update({
+      where: { id },
+      data: { statusAprovacao: 'REJEITADO', motivoRejeicao },
+    });
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
