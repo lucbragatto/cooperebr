@@ -13,7 +13,7 @@ const NIVEL_ORDEM: Record<string, number> = {
 interface NivelConfig {
   nivel: string;
   kwhMinimo: number;
-  kwhMaximo: number;
+  kwhMaximo: number | null;
   beneficioPercentual: number;
   beneficioReaisKwh?: number;
 }
@@ -211,17 +211,20 @@ export class ClubeVantagensService {
     // CLB-02: Validar ranges individuais de cada nível
     if (dto.niveisConfig) {
       for (const nc of dto.niveisConfig) {
-        // Normalizar kwhMinimo/kwhMaximo — null/undefined tratados como 0 e Infinity
+        // Normalizar kwhMinimo/kwhMaximo — null/undefined = 0 e null (sem teto)
         nc.kwhMinimo = nc.kwhMinimo ?? 0;
-        nc.kwhMaximo = nc.kwhMaximo ?? Infinity;
+        // null significa "sem teto" (último tier) — Infinity não serializa em JSON
+        if (nc.kwhMaximo === Infinity || nc.kwhMaximo === undefined) {
+          nc.kwhMaximo = null as any;
+        }
 
         if (nc.kwhMinimo < 0) {
           throw new BadRequestException(
             `Nível ${nc.nivel}: kwhMinimo deve ser >= 0 (recebido: ${nc.kwhMinimo})`,
           );
         }
-        // kwhMaximo pode ser Infinity (último tier sem teto)
-        if (isFinite(nc.kwhMaximo) && nc.kwhMaximo <= nc.kwhMinimo) {
+        // kwhMaximo null = sem teto (último tier); se definido, deve ser > kwhMinimo
+        if (nc.kwhMaximo != null && nc.kwhMaximo <= nc.kwhMinimo) {
           throw new BadRequestException(
             `Nível ${nc.nivel}: kwhMaximo (${nc.kwhMaximo}) deve ser maior que kwhMinimo (${nc.kwhMinimo})`,
           );
@@ -239,7 +242,7 @@ export class ClubeVantagensService {
     if (dto.niveisConfig && dto.niveisConfig.length > 1) {
       const sorted = [...dto.niveisConfig].sort((a, b) => a.kwhMinimo - b.kwhMinimo);
       for (let i = 0; i < sorted.length - 1; i++) {
-        if (isFinite(sorted[i].kwhMaximo) && sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
+        if (sorted[i].kwhMaximo != null && sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
           throw new BadRequestException(
             `Sobreposição de faixas: ${sorted[i].nivel} (${sorted[i].kwhMinimo}-${sorted[i].kwhMaximo} kWh) ` +
             `sobrepõe ${sorted[i + 1].nivel} (${sorted[i + 1].kwhMinimo}-${sorted[i + 1].kwhMaximo} kWh). ` +

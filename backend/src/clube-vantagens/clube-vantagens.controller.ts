@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, Req, Query, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Put, Param, Body, Req, Query, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ClubeVantagensService } from './clube-vantagens.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -12,13 +12,21 @@ export class ClubeVantagensController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('config')
   getConfig(@Req() req: any) {
-    return this.service.getConfig(req.user?.cooperativaId);
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId é obrigatório. Selecione uma cooperativa.');
+    }
+    return this.service.getConfig(cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Put('config')
   upsertConfig(@Req() req: any, @Body() body: any) {
-    return this.service.upsertConfig(req.user?.cooperativaId, body);
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId é obrigatório. Selecione uma cooperativa antes de salvar.');
+    }
+    return this.service.upsertConfig(cooperativaId, body);
   }
 
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
