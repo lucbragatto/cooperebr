@@ -225,4 +225,83 @@ Com 500 cooperados:
 
 ---
 
+## 9. Fundo Cooperativo de Fomento Solar (FCFS)
+
+### 9.1 Nome e natureza jurídica
+
+**Nome oficial:** Fundo Cooperativo de Fomento Solar (FCFS)
+
+- Fundo interno da cooperativa, regido pela **Lei 5.764/71**
+- **NÃO** é fundo de investimento regulado pela CVM
+- É uma conta de destinação de sobras/contribuições para fins específicos do objeto social
+- **Finalidade:** financiamento de novas usinas, aquisição de carregadores veiculares elétricos, expansão da infraestrutura de GD
+- Prestação de contas anual em assembleia (obrigação legal das cooperativas)
+
+### 9.2 Como funciona
+
+O cooperado contribui voluntariamente ao FCFS além da Opção B e recebe tokens proporcionais:
+
+```
+Cooperado contribui R$ X ao FCFS
+  → Recebe tokens com desconto configurável (vêm do saldo escritural)
+  → Dinheiro vai para conta segregada do FCFS
+  → FCFS financia: novas usinas, carregadores veiculares, infraestrutura GD
+  → Cooperado usa tokens no clube em 29 dias
+```
+
+### 9.3 Diferença da Opção B
+
+| | Opção B | Contribuição ao FCFS |
+|---|---|---|
+| Origem | Desconto que o cooperado já tinha direito | Dinheiro novo voluntário |
+| Natureza | Compensação de ato cooperativo | Contribuição ao fundo cooperativo |
+| Destino do dinheiro | Caixa da cooperativa | FCFS (segregado contabilmente) |
+| Tokens recebidos | Equivalente ao desconto | Equivalente à contribuição + desconto |
+
+### 9.4 Tudo configurável pelo admin da cooperativa
+
+**Desconto por faixa:** admin define livremente
+- Ex: até 500 tokens = 10%, 501-2.000 = 20%, 2.001+ = 30%
+
+**Teto mensal por cooperado:** configurável
+- Evita que um cooperado esvazie o saldo de uma vez
+
+**Split de receita:** 100% configurável pelo admin
+- Admin define % para: SISGD / Cooperativa / FCFS / Dono da usina
+- Sugestão padrão (editável pelo admin):
+  - FCFS: 50%
+  - Cooperativa (operação): 20%
+  - Dono da usina: 20%
+  - SISGD: 10%
+
+### 9.5 Exemplo prático
+
+```
+João contribui R$ 500 ao FCFS
+Admin configurou: desconto 20%, split padrão
+
+→ João recebe 625 tokens (R$0,80/kWh com 20% de desconto = R$0,64/token → 500/0,64 = 781 tokens)
+→ R$500 entram no FCFS contabilmente
+→ Split: R$250 FCFS / R$100 cooperativa / R$100 dono usina / R$50 SISGD
+→ João usa 625 tokens no clube em 29 dias
+→ Cada circulação gera mais 1% de receita
+```
+
+### 9.6 Porta para investidores — fase futura
+
+O FCFS cria o caminho natural para captação de investidores dentro do marco cooperativo:
+- Cooperados contribuem ao fundo e recebem tokens + participação nas usinas financiadas
+- Modelo: contribuição → tokens → usina construída → mais créditos → mais tokens para todos
+- Tudo dentro da Lei 5.764/71 — sem necessidade de registro na CVM
+
+### 9.7 Pendências adicionais para implementação
+
+- [ ] Conta FCFS no Plano de Contas (tipo: Fundo de Destinação Específica)
+- [ ] Tela de configuração: desconto por faixa, teto mensal, split customizável
+- [ ] Relatório do FCFS: entradas, saídas, saldo, destino dos recursos
+- [ ] Integração com módulo de Usinas: vincular aporte do FCFS a usinas financiadas
+- [ ] Fluxo de contribuição no portal do cooperado
+
+---
+
 *Documento gerado em sessão de 02/04/2026 — Luciano + Assis*
