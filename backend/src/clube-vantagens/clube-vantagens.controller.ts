@@ -11,8 +11,8 @@ export class ClubeVantagensController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('config')
-  getConfig(@Req() req: any) {
-    const cooperativaId = req.user?.cooperativaId;
+  getConfig(@Req() req: any, @Query('cooperativaId') qCoopId?: string) {
+    const cooperativaId = req.user?.cooperativaId || qCoopId;
     if (!cooperativaId) {
       throw new BadRequestException('cooperativaId é obrigatório. Selecione uma cooperativa.');
     }
@@ -22,7 +22,7 @@ export class ClubeVantagensController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Put('config')
   upsertConfig(@Req() req: any, @Body() body: any) {
-    const cooperativaId = req.user?.cooperativaId;
+    const cooperativaId = req.user?.cooperativaId || body.cooperativaId;
     if (!cooperativaId) {
       throw new BadRequestException('cooperativaId é obrigatório. Selecione uma cooperativa antes de salvar.');
     }

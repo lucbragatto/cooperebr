@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { getUsuario } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,8 +40,29 @@ export default function ClubeVantagensConfigPage() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
 
+  const usuario = getUsuario() as any;
+  const isSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
+  const cooperativaIdFixa = usuario?.cooperativaId as string | undefined;
+
+  const [cooperativas, setCooperativas] = useState<{ id: string; nome: string }[]>([]);
+  const [cooperativaIdSelecionada, setCooperativaIdSelecionada] = useState('');
+
+  const cooperativaId = cooperativaIdFixa || cooperativaIdSelecionada;
+
   useEffect(() => {
-    api.get('/clube-vantagens/config')
+    if (isSuperAdmin && !cooperativaIdFixa) {
+      api.get('/cooperativas').then((r) => setCooperativas(r.data || [])).catch(() => {});
+    }
+  }, [isSuperAdmin, cooperativaIdFixa]);
+
+  useEffect(() => {
+    if (!cooperativaId) {
+      setCarregando(false);
+      return;
+    }
+    setCarregando(true);
+    const params = isSuperAdmin ? `?cooperativaId=${cooperativaId}` : '';
+    api.get(`/clube-vantagens/config${params}`)
       .then((res) => {
         if (res.data) {
           setAtivo(res.data.ativo);
@@ -53,9 +75,13 @@ export default function ClubeVantagensConfigPage() {
       })
       .catch(() => {})
       .finally(() => setCarregando(false));
-  }, []);
+  }, [cooperativaId, isSuperAdmin]);
 
   const salvar = async () => {
+    if (!cooperativaId) {
+      setMensagem('Selecione uma cooperativa antes de salvar.');
+      return;
+    }
     setSalvando(true);
     setMensagem('');
     try {
@@ -64,6 +90,7 @@ export default function ClubeVantagensConfigPage() {
         criterio,
         niveisConfig: niveis,
         bonusAniversario,
+        ...(isSuperAdmin ? { cooperativaId } : {}),
       });
       setMensagem('Configuração salva com sucesso!');
       setTimeout(() => setMensagem(''), 3000);
@@ -104,6 +131,24 @@ export default function ClubeVantagensConfigPage() {
           {salvando ? 'Salvando...' : 'Salvar'}
         </Button>
       </div>
+
+      {isSuperAdmin && !cooperativaIdFixa && (
+        <Card>
+          <CardContent className="pt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Selecione a cooperativa</label>
+            <select
+              value={cooperativaIdSelecionada}
+              onChange={(e) => setCooperativaIdSelecionada(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">-- Selecione --</option>
+              {cooperativas.map((c) => (
+                <option key={c.id} value={c.id}>{c.nome}</option>
+              ))}
+            </select>
+          </CardContent>
+        </Card>
+      )}
 
       {mensagem && (
         <div className={`p-3 rounded-lg text-sm ${mensagem.includes('sucesso') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
