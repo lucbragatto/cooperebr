@@ -237,12 +237,15 @@ function FinanceiroTab({ cooperadoId }: { cooperadoId: string }) {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
     setCarregando(true);
     Promise.all([
-      api.get(`/cobrancas?cooperadoId=${cooperadoId}`).then(({ data }) => setCobrancas(Array.isArray(data) ? data : data.items ?? [])).catch(() => {}),
-      api.get(`/faturas/cooperado/${cooperadoId}`).then(({ data }) => setFaturas(data)).catch(() => {}),
-      api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`).then(({ data }) => setBeneficios(data)).catch(() => {}),
-    ]).finally(() => setCarregando(false));
+      api.get(`/cobrancas?cooperadoId=${cooperadoId}`, { signal }).then(({ data }) => setCobrancas(Array.isArray(data) ? data : data.items ?? [])).catch(() => {}),
+      api.get(`/faturas/cooperado/${cooperadoId}`, { signal }).then(({ data }) => setFaturas(data)).catch(() => {}),
+      api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`, { signal }).then(({ data }) => setBeneficios(data)).catch(() => {}),
+    ]).finally(() => { if (!signal.aborted) setCarregando(false); });
+    return () => controller.abort();
   }, [cooperadoId]);
 
   if (carregando) return <p className="text-gray-500 py-4">Carregando dados financeiros...</p>;
@@ -369,11 +372,15 @@ function IndicacoesTab({ cooperadoId, codigoIndicacao }: { cooperadoId: string; 
   const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
-    api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`)
+    const controller = new AbortController();
+    api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`, { signal: controller.signal })
       .then(({ data }) => setBeneficios(data))
-      .catch(() => {
-        console.error('Erro ao carregar benefícios de indicação');
+      .catch((err) => {
+        if (err?.name !== 'AbortError' && err?.code !== 'ERR_CANCELED') {
+          console.error('Erro ao carregar benefícios de indicação');
+        }
       });
+    return () => controller.abort();
   }, [cooperadoId]);
 
   const link = `https://app.cooperebr.com.br/indicar?ref=${codigoIndicacao || ''}`;
@@ -582,16 +589,25 @@ export default function CooperadoPerfilPage() {
   // ── Load ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
     Promise.all([
-      api.get<CooperadoCompleto>(`/cooperados/${id}`),
-      api.get(`/cooperados/${id}/checklist`),
+      api.get<CooperadoCompleto>(`/cooperados/${id}`, { signal }),
+      api.get(`/cooperados/${id}/checklist`, { signal }),
     ])
       .then(([coopRes, checkRes]) => {
         setCooperado(coopRes.data);
         setChecklist(checkRes.data);
       })
-      .catch(() => setErro('Registro não encontrado.'))
-      .finally(() => setCarregando(false));
+      .catch((err) => {
+        if (err?.name !== 'AbortError' && err?.code !== 'ERR_CANCELED') {
+          setErro('Registro não encontrado.');
+        }
+      })
+      .finally(() => {
+        if (!signal.aborted) setCarregando(false);
+      });
+    return () => controller.abort();
   }, [id]);
 
   const buscarFaturas = useCallback(async (force = false) => {

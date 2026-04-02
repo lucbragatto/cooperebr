@@ -13,8 +13,15 @@ const LABEL_MAP: Record<TipoParceiro, { singular: string; plural: string }> = {
   CONDOMINIO: { singular: 'Condômino', plural: 'Condôminos' },
 };
 
+interface CooperativaResponse {
+  tipoParceiro?: string;
+  tipoMembro?: string;
+  tipoMembroPlural?: string;
+}
+
 export function useTipoParceiro() {
   const [tipoParceiro, setTipoParceiro] = useState<TipoParceiro | null>(null);
+  const [labelsFromApi, setLabelsFromApi] = useState<{ singular: string; plural: string } | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
@@ -25,9 +32,14 @@ export function useTipoParceiro() {
     }
 
     api
-      .get<{ tipoParceiro?: string }[]>('/cooperativas')
+      .get<CooperativaResponse[]>('/cooperativas')
       .then((r) => {
-        const tipo = r.data?.[0]?.tipoParceiro as TipoParceiro | undefined;
+        const coop = r.data?.[0];
+        // Prefer backend-computed labels (enriquecer adds tipoMembro/tipoMembroPlural)
+        if (coop?.tipoMembro && coop?.tipoMembroPlural) {
+          setLabelsFromApi({ singular: coop.tipoMembro, plural: coop.tipoMembroPlural });
+        }
+        const tipo = coop?.tipoParceiro as TipoParceiro | undefined;
         if (tipo && LABEL_MAP[tipo]) setTipoParceiro(tipo);
         else setTipoParceiro('COOPERATIVA');
       })
@@ -42,11 +54,11 @@ export function useTipoParceiro() {
     };
   }
 
-  const labels = LABEL_MAP[tipoParceiro ?? 'COOPERATIVA'];
+  const fallback = LABEL_MAP[tipoParceiro ?? 'COOPERATIVA'];
 
   return {
     tipoParceiro,
-    tipoMembro: labels.singular,
-    tipoMembroPlural: labels.plural,
+    tipoMembro: labelsFromApi?.singular ?? fallback.singular,
+    tipoMembroPlural: labelsFromApi?.plural ?? fallback.plural,
   };
 }

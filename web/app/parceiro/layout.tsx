@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { logout, getUsuario } from '@/lib/auth';
+import api from '@/lib/api';
 import type { Usuario } from '@/types';
 import {
   LayoutDashboard,
@@ -101,6 +102,7 @@ const allNavSections: NavSection[] = [
 export default function ParceiroLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [nomeCooperativa, setNomeCooperativa] = useState<string | null>(null);
   const { contextos, contextoAtivo, trocarContexto, contextoObj } = useContexto();
   const { temModulo } = useModulos();
 
@@ -113,16 +115,37 @@ export default function ParceiroLayout({ children }: { children: React.ReactNode
     setUsuario(getUsuario());
   }, []);
 
+  // Derive cooperativa name from context or fallback to contextos list / API
+  useEffect(() => {
+    if (contextoObj?.cooperativaNome) {
+      setNomeCooperativa(contextoObj.cooperativaNome);
+      return;
+    }
+    // Fallback: try to find admin_parceiro context in the list
+    const parceiro = contextos.find((c) => c.tipo === 'admin_parceiro');
+    if (parceiro?.cooperativaNome) {
+      setNomeCooperativa(parceiro.cooperativaNome);
+      return;
+    }
+    // Last resort: fetch from cooperativas API
+    api.get('/cooperativas')
+      .then((r) => {
+        const nome = Array.isArray(r.data) ? r.data[0]?.nome : r.data?.nome;
+        if (nome) setNomeCooperativa(nome);
+      })
+      .catch(() => {});
+  }, [contextoObj, contextos]);
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="px-6 py-5 border-b">
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">SISGD</p>
-          {contextoObj?.cooperativaNome ? (
+          {nomeCooperativa ? (
             <p className="text-lg font-bold text-blue-700 mt-0.5 flex items-center gap-1.5">
               <Building2 className="w-4 h-4 shrink-0" />
-              {contextoObj.cooperativaNome}
+              {nomeCooperativa}
             </p>
           ) : (
             <p className="text-lg font-bold text-blue-700 mt-0.5">SISGD</p>
