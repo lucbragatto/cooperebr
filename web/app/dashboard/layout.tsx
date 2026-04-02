@@ -35,6 +35,7 @@ import {
   Eye,
   BarChart3,
   TrendingUp,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -67,6 +68,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
         { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
         { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+        { href: '/dashboard/convites', label: 'Convites', icon: Mail },
       ],
     }];
   }
@@ -104,8 +106,10 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
         { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
         { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
+        { href: '/dashboard/convites', label: 'Convites', icon: Mail },
         { href: '/dashboard/clube-vantagens', label: 'Clube de Vantagens', icon: Gift },
         { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
+        { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
         { href: '/dashboard/administradoras', label: 'Administradoras', icon: Building2 },
       ],
@@ -248,7 +252,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="px-6 py-5 border-b">
-          <h1 className="text-xl font-bold text-green-700">COOPERE-BR</h1>
+          <h1 className="text-xl font-bold text-green-700">SISGD</h1>
           <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>
         </div>
 

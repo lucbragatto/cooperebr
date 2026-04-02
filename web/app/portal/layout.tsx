@@ -21,6 +21,7 @@ const navItems = [
   { href: '/portal/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/portal/documentos', label: 'Documentos', icon: FileText },
   { href: '/portal/indicacoes', label: 'Indicações', icon: Users },
+  { href: '/portal/convenio', label: 'Meu Convênio', icon: Users },
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -28,8 +29,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const usuario = getUsuario();
   const { contextos, contextoAtivo, trocarContexto } = useContexto();
 
-  // Login page renders without shell
-  if (pathname === '/portal/login') {
+  // Public pages render without shell
+  if (pathname === '/portal/login' || pathname.startsWith('/portal/assinar')) {
     return <>{children}</>;
   }
 
@@ -38,7 +39,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-green-700 tracking-tight">COOPERE-BR</span>
+          <span className="text-lg font-bold text-green-700 tracking-tight">SISGD</span>
         </div>
         <div className="flex items-center gap-2">
           <ContextoSwitcher

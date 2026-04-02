@@ -68,7 +68,7 @@ export default function ParceiroLayout({ children }: { children: React.ReactNode
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="px-6 py-5 border-b">
-          <h1 className="text-xl font-bold text-blue-700">COOPERE-BR</h1>
+          <h1 className="text-xl font-bold text-blue-700">SISGD</h1>
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <Building2 className="w-3 h-3" />
             {contextoObj?.cooperativaNome ?? 'Painel do Parceiro'}

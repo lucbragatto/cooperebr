@@ -114,7 +114,7 @@ export default function SelecionarContextoPage() {
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-green-700 mb-1">COOPERE-BR</h1>
+          <h1 className="text-2xl font-bold text-green-700 mb-1">SISGD</h1>
           <p className="text-gray-600">
             Olá, <span className="font-medium">{meData.usuario.nome.split(' ')[0]}</span>!
           </p>

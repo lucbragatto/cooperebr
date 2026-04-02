@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "COOPERE-BR | Painel Administrativo",
-  description: "Painel administrativo da cooperativa de energia COOPERE-BR",
+  title: "SISGD | Painel Administrativo",
+  description: "Painel administrativo da cooperativa de energia SISGD",
 };
 
 export default function RootLayout({

@@ -31,6 +31,19 @@ export class WhatsappSenderService {
     private eventEmitter: EventEmitter2,
   ) {}
 
+  private async getNomeParceiro(cooperativaId?: string): Promise<string> {
+    if (!cooperativaId) return 'SISGD';
+    try {
+      const cooperativa = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: { nome: true },
+      });
+      return cooperativa?.nome || 'SISGD';
+    } catch {
+      return 'SISGD';
+    }
+  }
+
   async getStatus(): Promise<{ status: string; qrCode?: string }> {
     const res = await fetch(`${this.baseUrl}/status`);
     return res.json();
@@ -104,6 +117,12 @@ export class WhatsappSenderService {
    * Envia menu interativo com botões (até 3 opções) ou lista (4+ opções).
    * Se falhar, envia fallback em texto simples com opções numeradas.
    */
+  /**
+   * Envia menu como texto formatado com opções numeradas.
+   * Baileys interactive list/button messages são instáveis (WhatsApp restringe ao Business API),
+   * causando menus que "enviam com sucesso" mas não aparecem para o usuário.
+   * Texto simples é 100% confiável em todos os dispositivos.
+   */
   async enviarMenuComBotoes(
     telefone: string,
     menu: MenuInterativo,
@@ -113,83 +132,19 @@ export class WhatsappSenderService {
       this.logger.warn(`[BLOQUEADO] Menu para número protegido: ${telefone}`);
       return;
     }
-    const { titulo, corpo, rodape, opcoes: itens } = menu;
-    const footerText = rodape || 'CoopereBR - Energia Solar Compartilhada';
+    const { corpo, rodape, opcoes: itens } = menu;
+    const nomeParceiro = await this.getNomeParceiro(opcoes?.cooperativaId);
+    const footerText = rodape || nomeParceiro;
 
-    try {
-      let payload: any;
-
-      if (itens.length <= 3) {
-        // Botões interativos (máx 3)
-        payload = {
-          to: telefone,
-          type: 'buttons',
-          message: {
-            text: corpo,
-            footerText,
-            headerType: 1,
-            buttons: itens.map((item, i) => ({
-              buttonId: item.id,
-              buttonText: { displayText: item.texto },
-              type: 1,
-            })),
-          },
-        };
-      } else {
-        // Lista interativa (4+ opções)
-        payload = {
-          to: telefone,
-          type: 'list',
-          message: {
-            title: titulo,
-            text: corpo,
-            footerText,
-            buttonText: 'Ver opções',
-            sections: [{
-              title: titulo,
-              rows: itens.map(item => ({
-                title: item.texto,
-                description: item.descricao || '',
-                rowId: item.id,
-              })),
-            }],
-          },
-        };
-      }
-
-      const res = await fetch(`${this.baseUrl}/send-interactive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        this.logger.log(`Menu interativo enviado para ${telefone} (${itens.length} opções)`);
-        const textoRegistro = `[MENU] ${corpo}\n${itens.map(o => `${o.id}. ${o.texto}`).join('\n')}`;
-        await this.registrarMensagem(telefone, textoRegistro, 'ENVIADA', opcoes);
-        this.eventEmitter.emit('whatsapp.mensagem.enviada', {
-          telefone,
-          texto: textoRegistro,
-          direcao: 'ENVIADA',
-        } as WhatsappMensagemEnviadaEvent);
-        return;
-      }
-
-      // Se retornou erro, cai no fallback abaixo
-      this.logger.warn(`Botões interativos falharam para ${telefone}, usando fallback texto`);
-    } catch (err) {
-      this.logger.warn(`Erro ao enviar botões interativos para ${telefone}: ${err.message} — usando fallback texto`);
-    }
-
-    // Fallback: mensagem de texto simples com opções numeradas
-    let textoFallback = `${corpo}\n`;
+    let texto = `${corpo}\n`;
     for (const item of itens) {
-      textoFallback += `\n${item.id}️⃣ ${item.texto}`;
-      if (item.descricao) textoFallback += ` — ${item.descricao}`;
+      texto += `\n*${item.id}.* ${item.texto}`;
+      if (item.descricao) texto += ` — _${item.descricao}_`;
     }
-    if (footerText) textoFallback += `\n\n_${footerText}_`;
+    texto += `\n\n_Responda com o número da opção desejada._`;
+    if (footerText) texto += `\n_${footerText}_`;
 
-    await this.enviarMensagem(telefone, textoFallback, opcoes);
+    await this.enviarMensagem(telefone, texto, opcoes);
   }
 
   async enviarListaMensagem(
@@ -205,7 +160,7 @@ export class WhatsappSenderService {
       body: JSON.stringify({
         to: telefone,
         text: texto,
-        footer: 'CoopereBR',
+        footer: await this.getNomeParceiro(opcoes?.cooperativaId),
         buttonText,
         sections,
       }),
