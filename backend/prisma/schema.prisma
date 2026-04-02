@@ -535,6 +535,11 @@ model FaturaProcessada {
   cooperativaId      String?
   // ── CooperToken ──
   tokenApurado       Boolean      @default(false)
+  // ── Central de Faturas ──
+  analise            Json?
+  mesReferencia      String?
+  statusRevisao      String       @default("PENDENTE_REVISAO")
+  cobrancaGeradaId   String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 

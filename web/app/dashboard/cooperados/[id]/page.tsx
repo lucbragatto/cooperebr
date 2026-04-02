@@ -402,6 +402,15 @@ export default function CooperadoPerfilPage() {
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null);
   const [formUploadDoc, setFormUploadDoc] = useState({ tipo: 'RG_FRENTE' });
 
+  // Upload fatura concessionária
+  const [sheetUploadConc, setSheetUploadConc] = useState(false);
+  const [arquivoConc, setArquivoConc] = useState<File | null>(null);
+  const [mesRefConc, setMesRefConc] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [uploadandoConc, setUploadandoConc] = useState(false);
+
   // ── Toast helper ──────────────────────────────────────────────────────────
 
   function showToast(tipo: 'sucesso' | 'erro', mensagem: string) {
@@ -446,8 +455,8 @@ export default function CooperadoPerfilPage() {
       .finally(() => setCarregando(false));
   }, [id]);
 
-  const buscarFaturas = useCallback(async () => {
-    if (faturasBuscadas) return;
+  const buscarFaturas = useCallback(async (force = false) => {
+    if (faturasBuscadas && !force) return;
     setCarregandoFaturas(true);
     try {
       const { data } = await api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`);
@@ -1088,15 +1097,106 @@ export default function CooperadoPerfilPage() {
 
       {/* ── Aba 2: Fatura & Consumo ── */}
       {aba === 'fatura' && (
-        <FaturaUploadOCR
-          cooperadoId={id}
-          onFaturaProcessada={() => {
-            // Recarregar faturas ao processar nova
-            api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {
-              alert('Erro ao recarregar faturas.');
-            });
-          }}
-        />
+        <div className="space-y-4">
+          {/* Upload concessionária */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2"><Upload className="h-4 w-4" />Faturas da Concessionária</span>
+                <Button size="sm" onClick={() => setSheetUploadConc(true)}>
+                  <FilePlus className="h-4 w-4 mr-1" />Upload Fatura
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {carregandoFaturas ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+              ) : faturas.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">Nenhuma fatura processada.</p>
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Mês Ref.</th>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Distribuidora</th>
+                        <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">kWh Comp.</th>
+                        <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">Saldo</th>
+                        <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Status</th>
+                        <th className="px-4 py-2 text-right text-xs text-gray-500 font-medium">Cobrança</th>
+                        <th className="px-4 py-2 text-center text-xs text-gray-500 font-medium">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {faturas.map((f) => {
+                        const d = f.dadosExtraidos as any;
+                        const analise = (f as any).analise as any;
+                        const sr = (f as any).statusRevisao as string;
+                        return (
+                          <tr key={f.id} className="border-t hover:bg-gray-50">
+                            <td className="px-4 py-2">{(f as any).mesReferencia ?? d?.mesReferencia ?? '—'}</td>
+                            <td className="px-4 py-2">{d?.distribuidora ?? '—'}</td>
+                            <td className="px-4 py-2 text-right">{Number(d?.creditosRecebidosKwh ?? 0).toFixed(0)}</td>
+                            <td className="px-4 py-2 text-right">{Number(d?.saldoTotalKwh ?? 0).toFixed(0)}</td>
+                            <td className="px-4 py-2">
+                              <Badge variant="outline" className={`text-xs ${
+                                sr === 'AUTO_APROVADO' || sr === 'APROVADO' ? 'bg-green-100 text-green-800 border-green-200' :
+                                sr === 'PENDENTE_REVISAO' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                sr === 'REJEITADO' ? 'bg-red-100 text-red-800 border-red-200' : ''
+                              }`}>
+                                {sr === 'AUTO_APROVADO' ? 'Auto-aprovado' : sr === 'APROVADO' ? 'Aprovado' : sr === 'PENDENTE_REVISAO' ? 'Revisar' : sr === 'REJEITADO' ? 'Rejeitado' : f.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {(f as any).cobrancaGeradaId ? <Badge variant="outline" className="text-xs bg-green-50 text-green-700">Gerada</Badge> : '—'}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {sr === 'PENDENTE_REVISAO' && (
+                                  <>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50" onClick={async () => {
+                                      try {
+                                        await api.patch(`/faturas/${f.id}/aprovar`);
+                                        showToast('sucesso', 'Fatura aprovada');
+                                        buscarFaturas(true);
+                                      } catch { showToast('erro', 'Erro ao aprovar'); }
+                                    }}>
+                                      <CheckCircle className="h-3 w-3 mr-1" />Aprovar
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50" onClick={async () => {
+                                      try {
+                                        await api.patch(`/faturas/${f.id}/rejeitar`);
+                                        showToast('sucesso', 'Fatura rejeitada');
+                                        buscarFaturas(true);
+                                      } catch { showToast('erro', 'Erro ao rejeitar'); }
+                                    }}>
+                                      <XCircle className="h-3 w-3 mr-1" />Rejeitar
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* OCR original (legacy) */}
+          <FaturaUploadOCR
+            cooperadoId={id}
+            onFaturaProcessada={() => {
+              api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {});
+            }}
+          />
+        </div>
       )}
 
       {/* ── Aba 3: Contrato & Plano ── */}
@@ -1963,6 +2063,58 @@ export default function CooperadoPerfilPage() {
           <SheetFooter className="mt-6 flex gap-2">
             <Button onClick={criarContrato} disabled={salvando || !formCriarContrato.ucId || !formCriarContrato.percentualDesconto} className="flex-1">{salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Criar</Button>
             <Button variant="outline" onClick={() => setSheetCriarContrato(false)}>Cancelar</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Sheet — Upload Fatura Concessionária */}
+      <Sheet open={sheetUploadConc} onOpenChange={setSheetUploadConc}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader><SheetTitle>Upload Fatura Concessionária</SheetTitle></SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div>
+              <label className={lbl}>Mês de referência</label>
+              <input type="month" className={cls} value={mesRefConc} onChange={e => setMesRefConc(e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>Arquivo PDF da fatura</label>
+              <input type="file" accept=".pdf,image/*" className={cls + ' py-1.5 cursor-pointer'} onChange={e => setArquivoConc(e.target.files?.[0] ?? null)} />
+              {arquivoConc && <p className="text-xs text-gray-500 mt-1">{arquivoConc.name} ({(arquivoConc.size / 1024).toFixed(0)} KB)</p>}
+            </div>
+          </div>
+          <SheetFooter className="mt-6 flex gap-2">
+            <Button onClick={async () => {
+              if (!arquivoConc || !mesRefConc) return;
+              setUploadandoConc(true);
+              try {
+                const reader = new FileReader();
+                const base64 = await new Promise<string>((resolve) => {
+                  reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                  reader.readAsDataURL(arquivoConc);
+                });
+                const tipoArquivo = arquivoConc.type.includes('pdf') ? 'pdf' : 'imagem';
+                const { data } = await api.post('/faturas/upload-concessionaria', {
+                  cooperadoId: id,
+                  arquivoBase64: base64,
+                  tipoArquivo,
+                  mesReferencia: mesRefConc,
+                });
+                showToast('sucesso', data.statusRevisao === 'AUTO_APROVADO'
+                  ? 'Fatura auto-aprovada! Cobrança gerada.'
+                  : 'Fatura enviada para revisão.');
+                setSheetUploadConc(false);
+                setArquivoConc(null);
+                buscarFaturas();
+              } catch (err: any) {
+                showToast('erro', err?.response?.data?.message ?? 'Erro ao processar fatura');
+              } finally {
+                setUploadandoConc(false);
+              }
+            }} disabled={uploadandoConc || !arquivoConc} className="flex-1">
+              {uploadandoConc ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+              Enviar e Processar
+            </Button>
+            <Button variant="outline" onClick={() => setSheetUploadConc(false)}>Cancelar</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

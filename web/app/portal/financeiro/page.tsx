@@ -3,17 +3,16 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  DollarSign,
-  Calendar,
-  TrendingDown,
-  Download,
-  CreditCard,
-  CheckCircle,
-  Clock,
-  AlertTriangle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DollarSign, Calendar, TrendingDown, Download, CreditCard,
+  CheckCircle, Clock, AlertTriangle, FileText, Upload, Loader2, Zap,
 } from 'lucide-react';
+import RelatorioFaturaCooperado from '@/components/RelatorioFaturaCooperado';
 
 interface CobrancaItem {
   id: string;
@@ -28,6 +27,15 @@ interface CobrancaItem {
   asaasCobrancas: { boletoUrl: string | null; linkPagamento: string | null }[];
 }
 
+interface FaturaItem {
+  id: string;
+  mesReferencia: string | null;
+  dadosExtraidos: any;
+  statusRevisao: string;
+  cobrancaGeradaId: string | null;
+  createdAt: string;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle }> = {
   PAGO: { label: 'Pago', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   A_VENCER: { label: 'A Vencer', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
@@ -37,15 +45,73 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 
 export default function PortalFinanceiroPage() {
   const [cobrancas, setCobrancas] = useState<CobrancaItem[]>([]);
+  const [faturas, setFaturas] = useState<FaturaItem[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [relatorioModal, setRelatorioModal] = useState<any>(null);
+  const [relatorioData, setRelatorioData] = useState<any>(null);
+
+  // Upload self-service
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [mesRef, setMesRef] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
 
   useEffect(() => {
-    api
-      .get('/cooperados/meu-perfil/cobrancas')
-      .then((res) => setCobrancas(res.data))
-      .catch(() => {})
-      .finally(() => setCarregando(false));
+    Promise.all([
+      api.get('/cooperados/meu-perfil/cobrancas').then((r) => setCobrancas(r.data)).catch(() => {}),
+      api.get('/cooperados/meu-perfil').then(async (r) => {
+        const cooperadoId = r.data.id;
+        const { data } = await api.get(`/faturas/cooperado/${cooperadoId}`);
+        setFaturas(data);
+      }).catch(() => {}),
+    ]).finally(() => setCarregando(false));
   }, []);
+
+  async function abrirRelatorio(faturaId: string) {
+    try {
+      const { data } = await api.get(`/faturas/${faturaId}/relatorio`);
+      setRelatorioData(data);
+      setRelatorioModal(true);
+    } catch {
+      // silently ignore
+    }
+  }
+
+  async function enviarFatura() {
+    if (!arquivo || !mesRef) return;
+    setUploading(true);
+    setUploadMsg('');
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(arquivo);
+      });
+      const { data: perfil } = await api.get('/cooperados/meu-perfil');
+      const tipoArquivo = arquivo.type.includes('pdf') ? 'pdf' : 'imagem';
+      const { data } = await api.post('/faturas/upload-concessionaria', {
+        cooperadoId: perfil.id,
+        arquivoBase64: base64,
+        tipoArquivo,
+        mesReferencia: mesRef,
+      });
+      setUploadMsg(data.statusRevisao === 'AUTO_APROVADO'
+        ? 'Fatura processada e aprovada automaticamente!'
+        : 'Fatura enviada para análise. Você será notificado.');
+      setArquivo(null);
+      // Recarregar faturas
+      const { data: novasFaturas } = await api.get(`/faturas/cooperado/${perfil.id}`);
+      setFaturas(novasFaturas);
+    } catch (err: any) {
+      setUploadMsg(err?.response?.data?.message ?? 'Erro ao processar fatura');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   if (carregando) {
     return (
@@ -57,13 +123,11 @@ export default function PortalFinanceiroPage() {
     );
   }
 
-  // KPI calculations
   const totalEconomizado = cobrancas
     .filter((c) => c.status === 'PAGO')
     .reduce((acc, c) => acc + Number(c.valorDesconto), 0);
 
   const proximoVencimento = cobrancas.find((c) => c.status === 'A_VENCER');
-
   const ultimoPagamento = cobrancas.find((c) => c.status === 'PAGO');
 
   return (
@@ -122,6 +186,102 @@ export default function PortalFinanceiroPage() {
         </div>
       </div>
 
+      {/* Minhas Faturas da Concessionária */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+            Minhas Faturas da Concessionária
+          </h2>
+          <Button size="sm" variant="outline" onClick={() => setUploadOpen(!uploadOpen)}>
+            <Upload className="w-3.5 h-3.5 mr-1" />Enviar fatura
+          </Button>
+        </div>
+
+        {/* Upload self-service */}
+        {uploadOpen && (
+          <Card className="mb-3 border-dashed border-2 border-green-300 bg-green-50">
+            <CardContent className="pt-4 pb-4 space-y-3">
+              <p className="text-sm text-gray-600">Escaneie ou fotografe sua fatura da concessionária e envie para análise.</p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="month"
+                  value={mesRef}
+                  onChange={(e) => setMesRef(e.target.value)}
+                  className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                />
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                  onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              {arquivo && (
+                <Button size="sm" onClick={enviarFatura} disabled={uploading}>
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                  Enviar e Processar
+                </Button>
+              )}
+              {uploadMsg && (
+                <p className={`text-xs font-medium ${uploadMsg.includes('Erro') ? 'text-red-600' : 'text-green-700'}`}>
+                  {uploadMsg}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {faturas.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 pb-6 text-center">
+              <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Nenhuma fatura processada.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {faturas.map((f) => {
+              const d = f.dadosExtraidos as any;
+              const sr = f.statusRevisao;
+              return (
+                <Card
+                  key={f.id}
+                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => abrirRelatorio(f.id)}
+                >
+                  <CardContent className="pt-3 pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Zap className={`w-4 h-4 flex-shrink-0 ${
+                          sr === 'AUTO_APROVADO' || sr === 'APROVADO' ? 'text-green-600' :
+                          sr === 'PENDENTE_REVISAO' ? 'text-yellow-500' : 'text-gray-400'
+                        }`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800">
+                            {f.mesReferencia ?? d?.mesReferencia ?? '—'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {Number(d?.creditosRecebidosKwh ?? 0)} kWh compensados
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant="outline" className={`text-xs ${
+                          sr === 'AUTO_APROVADO' || sr === 'APROVADO' ? 'bg-green-100 text-green-700' :
+                          sr === 'PENDENTE_REVISAO' ? 'bg-yellow-100 text-yellow-700' : ''
+                        }`}>
+                          {sr === 'AUTO_APROVADO' ? 'Aprovado' : sr === 'APROVADO' ? 'Aprovado' : sr === 'PENDENTE_REVISAO' ? 'Em análise' : sr}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Cartão de crédito placeholder */}
       <Card className="bg-gray-50">
         <CardContent className="pt-4 pb-4">
@@ -167,9 +327,7 @@ export default function PortalFinanceiroPage() {
                       <div className="flex items-center gap-3 min-w-0">
                         <StatusIcon className={`w-4 h-4 flex-shrink-0 ${c.status === 'PAGO' ? 'text-green-600' : c.status === 'VENCIDO' ? 'text-red-500' : 'text-yellow-500'}`} />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800">
-                            {mesLabel}
-                          </p>
+                          <p className="text-sm font-medium text-gray-800">{mesLabel}</p>
                           <p className="text-xs text-gray-500">
                             Venc.: {new Date(c.dataVencimento).toLocaleDateString('pt-BR')}
                           </p>
@@ -205,6 +363,16 @@ export default function PortalFinanceiroPage() {
           </div>
         )}
       </div>
+
+      {/* Modal relatório */}
+      <Dialog open={!!relatorioModal} onOpenChange={(open) => { if (!open) { setRelatorioModal(null); setRelatorioData(null); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Relatório Mensal</DialogTitle>
+          </DialogHeader>
+          {relatorioData && <RelatorioFaturaCooperado relatorio={relatorioData} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

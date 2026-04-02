@@ -38,6 +38,7 @@ const allNavItems = [
   { href: '/parceiro/contratos', label: 'Contratos', icon: FileText, modulo: 'contratos' },
   { href: '/parceiro/planos', label: 'Planos', icon: ClipboardList, modulo: 'planos' },
   { href: '/parceiro/cobrancas', label: 'Cobranças', icon: DollarSign, modulo: 'cobrancas' },
+  { href: '/parceiro/faturas', label: 'Central de Faturas', icon: FileText, modulo: 'cobrancas' },
   { href: '/parceiro/modelos-cobranca', label: 'Modelos de Cobrança', icon: Calculator, modulo: 'modelos_cobranca' },
   { href: '/parceiro/motor-proposta', label: 'Motor de Proposta', icon: ClipboardList, modulo: 'motor_proposta' },
   { href: '/parceiro/whatsapp', label: 'WhatsApp', icon: MessageCircle, modulo: 'whatsapp' },

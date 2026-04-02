@@ -1,11 +1,14 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
+import { EmailService } from '../email/email.service';
 import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
+import { UploadConcessionariaDto } from './dto/upload-concessionaria.dto';
+import { RelatorioFaturaService } from './relatorio-fatura.service';
 
 const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -77,13 +80,19 @@ const tipoDocumentoLabel: Record<string, string> = {
 
 @Injectable()
 export class FaturasService {
+  private readonly logger = new Logger(FaturasService.name);
   private supabase: SupabaseClient;
+
+  private readonly waBaseUrl: string;
 
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
     private configTenant: ConfigTenantService,
+    private emailService: EmailService,
+    private relatorioService: RelatorioFaturaService,
   ) {
+    this.waBaseUrl = process.env.WHATSAPP_SERVICE_URL ?? 'http://localhost:3002';
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!,
@@ -231,6 +240,452 @@ export class FaturasService {
     });
   }
 
+  // ── Upload Concessionária com análise automática ──────────────────────────
+
+  async uploadConcessionaria(dto: UploadConcessionariaDto) {
+    // 1. OCR
+    const dadosExtraidos = await this.extrairDadosFatura(dto.arquivoBase64, dto.tipoArquivo);
+
+    // 2. Match UC pelo número extraído
+    let ucId = dto.ucId ?? null;
+    if (!ucId && dadosExtraidos.numeroUC) {
+      const uc = await this.prisma.uc.findFirst({
+        where: { numeroUC: dadosExtraidos.numeroUC },
+      });
+      if (uc) ucId = uc.id;
+    }
+
+    // 3. Upload arquivo ao Supabase
+    const ext = dto.tipoArquivo === 'pdf' ? 'pdf' : 'jpg';
+    const filePath = `${dto.cooperadoId}/fatura-conc-${Date.now()}.${ext}`;
+    const buffer = Buffer.from(dto.arquivoBase64, 'base64');
+    const { data: uploadData, error: uploadError } = await this.supabase.storage
+      .from(BUCKET)
+      .upload(filePath, buffer, {
+        contentType: dto.tipoArquivo === 'pdf' ? 'application/pdf' : 'image/jpeg',
+        upsert: false,
+      });
+    if (uploadError || !uploadData) {
+      throw new BadRequestException(`Erro ao fazer upload: ${uploadError?.message ?? 'desconhecido'}`);
+    }
+    const { data: urlData } = this.supabase.storage.from(BUCKET).getPublicUrl(uploadData.path);
+    const arquivoUrl = urlData.publicUrl;
+
+    // 4. Buscar contrato ativo para comparação
+    const contrato = await this.prisma.contrato.findFirst({
+      where: { cooperadoId: dto.cooperadoId, status: 'ATIVO' },
+      include: { plano: true },
+    });
+
+    const kwhContrato = contrato ? Number(contrato.kwhContrato ?? 0) : 0;
+    const kwhCompensado = Number(dadosExtraidos.creditosRecebidosKwh ?? 0);
+    const kwhInjetado = kwhCompensado; // simplificação
+    const saldoAtual = Number(dadosExtraidos.saldoTotalKwh ?? 0);
+
+    // 5. Calcular análise: divergência entre kWh esperado (contrato) e compensado
+    const kwhEsperado = kwhContrato;
+    const divergencia = kwhEsperado > 0 ? kwhCompensado - kwhEsperado : 0;
+    const divergenciaPerc = kwhEsperado > 0
+      ? Math.abs(divergencia / kwhEsperado) * 100
+      : 0;
+
+    const statusAnalise = divergenciaPerc < 5 ? 'BAIXA' : divergenciaPerc < 15 ? 'MEDIA' : 'ALTA';
+    const analise = {
+      kwhEsperado,
+      kwhCompensado,
+      kwhInjetado,
+      saldoAtual,
+      divergencia: Math.round(divergencia * 100) / 100,
+      divergenciaPerc: Math.round(divergenciaPerc * 100) / 100,
+      statusAnalise,
+    };
+
+    // 6. Calcular media e threshold
+    const configThreshold = await this.prisma.configTenant.findUnique({
+      where: { chave: 'threshold_meses_atipicos' },
+    });
+    const threshold = configThreshold ? parseFloat(configThreshold.valor) : 50;
+    const historico = dadosExtraidos.historicoConsumo ?? [];
+    const { media, mesesUtilizados, mesesDescartados } = this.calcularMedia(
+      historico, threshold, dadosExtraidos.consumoAtualKwh,
+    );
+
+    // 7. Determinar status de revisão
+    const statusRevisao = divergenciaPerc < 5 ? 'AUTO_APROVADO' : 'PENDENTE_REVISAO';
+
+    // 8. Salvar FaturaProcessada
+    const fatura = await this.prisma.faturaProcessada.create({
+      data: {
+        cooperadoId: dto.cooperadoId,
+        ucId,
+        arquivoUrl,
+        dadosExtraidos: { ...dadosExtraidos as object, analise },
+        historicoConsumo: historico as object,
+        mesesUtilizados,
+        mesesDescartados,
+        mediaKwhCalculada: media,
+        thresholdUtilizado: threshold,
+        status: 'PENDENTE',
+        analise: analise as object,
+        mesReferencia: dto.mesReferencia,
+        statusRevisao,
+      },
+    });
+
+    // 9. Se auto-aprovado, gerar cobrança automaticamente
+    let cobranca = null;
+    if (statusRevisao === 'AUTO_APROVADO') {
+      cobranca = await this.gerarCobrancaPosFatura(fatura.id);
+    }
+
+    return {
+      fatura,
+      analise,
+      statusRevisao,
+      cobranca,
+    };
+  }
+
+  // ── Gerar cobrança após aprovação de fatura ─────────────────────────────────
+
+  async gerarCobrancaPosFatura(faturaId: string) {
+    const fatura = await this.prisma.faturaProcessada.findUnique({
+      where: { id: faturaId },
+      include: { cooperado: true, uc: true },
+    });
+    if (!fatura) throw new BadRequestException('Fatura não encontrada');
+
+    const dados = fatura.dadosExtraidos as any;
+    const analise = (fatura as any).analise as any;
+
+    // Buscar contrato ativo
+    const contrato = await this.prisma.contrato.findFirst({
+      where: { cooperadoId: fatura.cooperadoId, status: 'ATIVO' },
+      include: { plano: true, usina: true },
+    });
+    if (!contrato) {
+      this.logger.warn(`Sem contrato ativo para cooperado ${fatura.cooperadoId}`);
+      return null;
+    }
+
+    // Resolver modelo de cobrança
+    const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina);
+
+    // Determinar mês/ano referência
+    const mesRef = fatura.mesReferencia ?? dados?.mesReferencia ?? '';
+    let mesNum: number;
+    let anoNum: number;
+    if (mesRef.includes('-')) {
+      // formato AAAA-MM
+      const [a, m] = mesRef.split('-');
+      anoNum = parseInt(a, 10);
+      mesNum = parseInt(m, 10);
+    } else if (mesRef.includes('/')) {
+      // formato MM/AAAA
+      const [m, a] = mesRef.split('/');
+      mesNum = parseInt(m, 10);
+      anoNum = parseInt(a, 10);
+    } else {
+      const agora = new Date();
+      mesNum = agora.getMonth() + 1;
+      anoNum = agora.getFullYear();
+    }
+
+    // Verificar duplicata
+    const existe = await this.prisma.cobranca.findFirst({
+      where: { contratoId: contrato.id, mesReferencia: mesNum, anoReferencia: anoNum },
+    });
+    if (existe) {
+      await this.prisma.faturaProcessada.update({
+        where: { id: faturaId },
+        data: { cobrancaGeradaId: existe.id },
+      });
+      return existe;
+    }
+
+    // Buscar tarifa
+    const propostaAceita = await this.prisma.propostaCooperado.findFirst({
+      where: { cooperadoId: fatura.cooperadoId, status: 'ACEITA' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
+      orderBy: { dataVigencia: 'desc' },
+    });
+    const tusdVigente = tarifaVigente ? Number(tarifaVigente.tusdNova) : 0.3;
+    const teVigente = tarifaVigente ? Number(tarifaVigente.teNova) : 0.2;
+    const tarifaUnitVigente = tusdVigente + teVigente;
+
+    let tarifaKwh: number;
+    if (propostaAceita) {
+      tarifaKwh = Number(propostaAceita.kwhApuradoBase);
+    } else {
+      const consumoKwh = dados?.consumoAtualKwh ?? Number(contrato.kwhContrato ?? 0);
+      const valorFatura = dados?.totalAPagar ?? 0;
+      tarifaKwh = consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitVigente;
+    }
+
+    const kwhContrato = Number(contrato.kwhContrato ?? 0);
+    const percentualDesconto = Number(contrato.percentualDesconto);
+    const descontoDecimal = percentualDesconto / 100;
+    const creditosRecebidosKwh = Number(dados?.creditosRecebidosKwh ?? 0);
+
+    // kWh para cobrança conforme modelo
+    let kwhCobranca: number;
+    if (modeloCobranca === 'CREDITOS_COMPENSADOS' || modeloCobranca === 'CREDITOS_DINAMICO') {
+      if (modeloCobranca === 'CREDITOS_DINAMICO') tarifaKwh = tarifaUnitVigente;
+      kwhCobranca = creditosRecebidosKwh > 0 ? Math.min(creditosRecebidosKwh, kwhContrato) : kwhContrato;
+    } else {
+      kwhCobranca = kwhContrato;
+    }
+
+    const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
+    const valorDesconto = Math.round(kwhCobranca * tarifaKwh * descontoDecimal * 100) / 100;
+    const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
+
+    // Vencimento
+    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca');
+    const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
+    const vencimento = this.calcularVencimento(
+      fatura.cooperado.preferenciaCobranca,
+      diasVencimento,
+      dados?.vencimento,
+    );
+
+    const cobranca = await this.prisma.cobranca.create({
+      data: {
+        contratoId: contrato.id,
+        mesReferencia: mesNum,
+        anoReferencia: anoNum,
+        valorBruto,
+        percentualDesconto,
+        valorDesconto,
+        valorLiquido,
+        dataVencimento: vencimento,
+        status: 'A_VENCER',
+        kwhCompensado: creditosRecebidosKwh,
+        kwhConsumido: Number(dados?.consumoAtualKwh ?? 0),
+      },
+    });
+
+    // Vincular cobrança à fatura
+    await this.prisma.faturaProcessada.update({
+      where: { id: faturaId },
+      data: {
+        cobrancaGeradaId: cobranca.id,
+        status: 'APROVADA',
+        statusRevisao: fatura.statusRevisao === 'AUTO_APROVADO' ? 'AUTO_APROVADO' : 'APROVADO',
+      },
+    });
+
+    // Notificação
+    await this.notificacoes.criar({
+      tipo: 'COBRANCA_GERADA',
+      titulo: 'Nova cobrança gerada',
+      mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} ref. ${String(mesNum).padStart(2, '0')}/${anoNum}.`,
+      cooperadoId: fatura.cooperadoId,
+      link: '/dashboard/cobrancas',
+    });
+
+    // Enviar relatório por email + WA (async, não bloqueia)
+    this.enviarRelatorioAposAprovacao(faturaId).catch(() => {});
+
+    return cobranca;
+  }
+
+  // ── Central de Faturas: listagem com filtros ────────────────────────────────
+
+  async centralFaturas(query: {
+    cooperativaId?: string;
+    status?: string;
+    mesReferencia?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (query.cooperativaId) where.cooperativaId = query.cooperativaId;
+    if (query.status) where.statusRevisao = query.status;
+    if (query.mesReferencia) where.mesReferencia = query.mesReferencia;
+
+    const [faturas, total] = await Promise.all([
+      this.prisma.faturaProcessada.findMany({
+        where,
+        include: {
+          cooperado: { select: { id: true, nomeCompleto: true, email: true, telefone: true } },
+          uc: { select: { id: true, numeroUC: true, distribuidora: true } },
+        },
+        orderBy: [
+          { statusRevisao: 'asc' }, // PENDENTE_REVISAO first alphabetically
+          { createdAt: 'desc' },
+        ],
+        skip,
+        take: limit,
+      }),
+      this.prisma.faturaProcessada.count({ where }),
+    ]);
+
+    // Métricas
+    const baseWhere: any = {};
+    if (query.cooperativaId) baseWhere.cooperativaId = query.cooperativaId;
+    if (query.mesReferencia) baseWhere.mesReferencia = query.mesReferencia;
+
+    const [pendentes, autoAprovados, aprovados] = await Promise.all([
+      this.prisma.faturaProcessada.count({ where: { ...baseWhere, statusRevisao: 'PENDENTE_REVISAO' } }),
+      this.prisma.faturaProcessada.count({ where: { ...baseWhere, statusRevisao: 'AUTO_APROVADO' } }),
+      this.prisma.faturaProcessada.count({ where: { ...baseWhere, statusRevisao: 'APROVADO' } }),
+    ]);
+
+    // Cooperados sem fatura no mês
+    let semFatura = 0;
+    if (query.mesReferencia) {
+      const totalCooperados = await this.prisma.cooperado.count({
+        where: query.cooperativaId ? { cooperativaId: query.cooperativaId, status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'] } } : { status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'] } },
+      });
+      const comFatura = await this.prisma.faturaProcessada.count({
+        where: { ...baseWhere, mesReferencia: query.mesReferencia },
+      });
+      semFatura = Math.max(0, totalCooperados - comFatura);
+    }
+
+    return {
+      faturas,
+      total,
+      page,
+      limit,
+      metricas: {
+        pendentes,
+        autoAprovados,
+        aprovados,
+        semFatura,
+        total,
+      },
+    };
+  }
+
+  // ── Resumo por mês ─────────────────────────────────────────────────────────
+
+  async centralResumo(cooperativaId?: string) {
+    const where: any = cooperativaId ? { cooperativaId } : {};
+
+    const faturas = await this.prisma.faturaProcessada.findMany({
+      where,
+      select: { mesReferencia: true, statusRevisao: true, cobrancaGeradaId: true },
+    });
+
+    // Total de cooperados ativos
+    const totalCooperados = await this.prisma.cooperado.count({
+      where: cooperativaId
+        ? { cooperativaId, status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'] } }
+        : { status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'] } },
+    });
+
+    // Agrupar por mês
+    const meses = new Map<string, {
+      mesReferencia: string;
+      totalCooperados: number;
+      comFatura: number;
+      semFatura: number;
+      pendentes: number;
+      aprovados: number;
+      totalCobrancas: number;
+    }>();
+
+    for (const f of faturas) {
+      const mes = f.mesReferencia ?? 'sem-mes';
+      if (!meses.has(mes)) {
+        meses.set(mes, {
+          mesReferencia: mes,
+          totalCooperados,
+          comFatura: 0,
+          semFatura: 0,
+          pendentes: 0,
+          aprovados: 0,
+          totalCobrancas: 0,
+        });
+      }
+      const entry = meses.get(mes)!;
+      entry.comFatura++;
+      if (f.statusRevisao === 'PENDENTE_REVISAO') entry.pendentes++;
+      if (['APROVADO', 'AUTO_APROVADO'].includes(f.statusRevisao)) entry.aprovados++;
+      if (f.cobrancaGeradaId) entry.totalCobrancas++;
+    }
+
+    // Calcular semFatura
+    for (const entry of meses.values()) {
+      entry.semFatura = Math.max(0, totalCooperados - entry.comFatura);
+    }
+
+    return Array.from(meses.values()).sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+  }
+
+  // ── Enviar relatório após aprovação (email + WA) ─────────────────────────
+
+  async enviarRelatorioAposAprovacao(faturaId: string): Promise<void> {
+    try {
+      const fatura = await this.prisma.faturaProcessada.findUnique({
+        where: { id: faturaId },
+        include: { cooperado: true },
+      });
+      if (!fatura) return;
+
+      const cooperado = fatura.cooperado;
+      const relatorio = await this.relatorioService.gerarRelatorioByFaturaId(faturaId);
+      const html = this.relatorioService.renderHtml(relatorio);
+
+      // Email
+      if (cooperado.email) {
+        await this.emailService.enviarEmail(
+          cooperado.email,
+          `Relatório Mensal — ${relatorio.periodo.mesLabel}`,
+          html,
+        );
+        this.logger.log(`Email relatório enviado para ${cooperado.email}`);
+      }
+
+      // WhatsApp
+      if (cooperado.telefone) {
+        const economia = relatorio.economia.economiaReais.toFixed(2);
+        const economiaPerc = relatorio.economia.economiaPercentual.toFixed(0);
+        const nome = cooperado.nomeCompleto.split(' ')[0];
+        const mesLabel = relatorio.periodo.mesLabel;
+        const portalUrl = process.env.PORTAL_URL ?? 'https://app.cooperebr.com.br/portal/financeiro';
+
+        const mensagem = `Olá ${nome}! Sua fatura de ${mesLabel} está disponível. Você economizou R$${economia} (${economiaPerc}%) este mês! Ver relatório completo: ${portalUrl}`;
+
+        try {
+          await fetch(`${this.waBaseUrl}/api/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: cooperado.telefone.replace(/\D/g, ''),
+              message: mensagem,
+            }),
+          });
+          this.logger.log(`WA relatório enviado para ${cooperado.telefone}`);
+        } catch (err) {
+          this.logger.warn(`Falha ao enviar WA para ${cooperado.telefone}: ${(err as Error).message}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`Erro ao enviar relatório pós-aprovação: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Rejeitar fatura ────────────────────────────────────────────────────────
+
+  async rejeitarFatura(id: string, motivo?: string) {
+    return this.prisma.faturaProcessada.update({
+      where: { id },
+      data: {
+        status: 'REJEITADA',
+        statusRevisao: 'REJEITADO',
+      },
+    });
+  }
+
   async aprovarFatura(id: string): Promise<{
     sucesso: boolean;
     cobrancasCriadas: number;
@@ -244,8 +699,18 @@ export class FaturasService {
 
     await this.prisma.faturaProcessada.update({
       where: { id },
-      data: { status: 'APROVADA' },
+      data: { status: 'APROVADA', statusRevisao: 'APROVADO' },
     });
+
+    // Se a fatura tem mesReferencia (veio do fluxo upload-concessionaria), usar gerarCobrancaPosFatura
+    if (fatura.mesReferencia && !fatura.cobrancaGeradaId) {
+      const cobranca = await this.gerarCobrancaPosFatura(id);
+      return {
+        sucesso: true,
+        cobrancasCriadas: cobranca ? 1 : 0,
+        avisos: cobranca ? [`Cobrança R$ ${Number(cobranca.valorLiquido).toFixed(2)} gerada.`] : ['Sem contrato ativo.'],
+      };
+    }
 
     // Auto-gerar cobranças para contratos ativos do cooperado
     const avisos: string[] = [];

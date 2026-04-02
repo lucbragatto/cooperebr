@@ -98,6 +98,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
         { href: '/dashboard/planos', label: 'Planos', icon: Tag },
         { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
+        { href: '/dashboard/faturas/central', label: 'Central de Faturas', icon: FileText },
         { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
         { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
         { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
