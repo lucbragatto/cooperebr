@@ -208,11 +208,38 @@ export class ClubeVantagensService {
     niveisConfig: NivelConfig[];
     bonusAniversario?: number;
   }) {
-    // CLB-02: Validar sobreposição de ranges entre níveis
+    // CLB-02: Validar ranges individuais de cada nível
+    if (dto.niveisConfig) {
+      for (const nc of dto.niveisConfig) {
+        // Normalizar kwhMinimo/kwhMaximo — null/undefined tratados como 0 e Infinity
+        nc.kwhMinimo = nc.kwhMinimo ?? 0;
+        nc.kwhMaximo = nc.kwhMaximo ?? Infinity;
+
+        if (nc.kwhMinimo < 0) {
+          throw new BadRequestException(
+            `Nível ${nc.nivel}: kwhMinimo deve ser >= 0 (recebido: ${nc.kwhMinimo})`,
+          );
+        }
+        // kwhMaximo pode ser Infinity (último tier sem teto)
+        if (isFinite(nc.kwhMaximo) && nc.kwhMaximo <= nc.kwhMinimo) {
+          throw new BadRequestException(
+            `Nível ${nc.nivel}: kwhMaximo (${nc.kwhMaximo}) deve ser maior que kwhMinimo (${nc.kwhMinimo})`,
+          );
+        }
+        nc.beneficioPercentual = nc.beneficioPercentual ?? 0;
+        if (nc.beneficioPercentual < 0 || nc.beneficioPercentual > 100) {
+          throw new BadRequestException(
+            `Nível ${nc.nivel}: beneficioPercentual deve estar entre 0 e 100 (recebido: ${nc.beneficioPercentual})`,
+          );
+        }
+      }
+    }
+
+    // CLB-02: Validar sobreposição de ranges entre níveis (ignora Infinity no último tier)
     if (dto.niveisConfig && dto.niveisConfig.length > 1) {
       const sorted = [...dto.niveisConfig].sort((a, b) => a.kwhMinimo - b.kwhMinimo);
       for (let i = 0; i < sorted.length - 1; i++) {
-        if (sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
+        if (isFinite(sorted[i].kwhMaximo) && sorted[i].kwhMaximo > sorted[i + 1].kwhMinimo) {
           throw new BadRequestException(
             `Sobreposição de faixas: ${sorted[i].nivel} (${sorted[i].kwhMinimo}-${sorted[i].kwhMaximo} kWh) ` +
             `sobrepõe ${sorted[i + 1].nivel} (${sorted[i + 1].kwhMinimo}-${sorted[i + 1].kwhMaximo} kWh). ` +
@@ -526,7 +553,7 @@ export class ClubeVantagensService {
       }),
     ]);
 
-    const baseUrl = process.env.FRONTEND_URL ?? 'http://localhost:3001';
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
     const linkIndicacao = `${baseUrl}/entrar?ref=${cooperado.codigoIndicacao ?? ''}`;
 
     await this.whatsappCicloVida.notificarResumoMensal(cooperado, {

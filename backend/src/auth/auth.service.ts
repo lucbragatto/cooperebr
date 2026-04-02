@@ -140,7 +140,7 @@ export class AuthService {
       email = usuario.email;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cooperebr.com.br';
     await this.supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${frontendUrl}/redefinir-senha`,
     });
@@ -263,7 +263,9 @@ export class AuthService {
     const usuario: any = await this.prisma.usuario.findUnique({ where: { id } });
     if (!usuario) throw new NotFoundException('Usuário não encontrado');
 
-    if (adminUser.perfil === PerfilUsuario.ADMIN && usuario.cooperativaId !== adminUser.cooperativaId) {
+    const coopaUsuario = usuario.cooperativaId ?? null;
+    const coopaAdmin = adminUser.cooperativaId ?? null;
+    if (adminUser.perfil === PerfilUsuario.ADMIN && coopaUsuario !== coopaAdmin) {
       throw new ForbiddenException('Sem permissão para editar este usuário');
     }
 
@@ -321,11 +323,13 @@ export class AuthService {
     const usuario: any = await this.prisma.usuario.findUnique({ where: { id } });
     if (!usuario) throw new NotFoundException('Usuário não encontrado');
 
-    if (adminUser.perfil === PerfilUsuario.ADMIN && usuario.cooperativaId !== adminUser.cooperativaId) {
+    const coopaUsuarioReset = usuario.cooperativaId ?? null;
+    const coopaAdminReset = adminUser.cooperativaId ?? null;
+    if (adminUser.perfil === PerfilUsuario.ADMIN && coopaUsuarioReset !== coopaAdminReset) {
       throw new ForbiddenException('Sem permissão para resetar senha deste usuário');
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cooperebr.com.br';
     await this.supabase.auth.resetPasswordForEmail(usuario.email, {
       redirectTo: `${frontendUrl}/redefinir-senha`,
     });
@@ -363,7 +367,7 @@ export class AuthService {
       data: { resetToken: token, resetTokenExpiry: expiry },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://cooperebr.com.br';
     const link = `${frontendUrl}/redefinir-senha?token=${token}`;
 
     const texto = `Olá, ${usuario.nome}! 👋\n\nVocê solicitou redefinição de senha no CoopereBR.\n\nClique no link abaixo para criar uma nova senha (válido por 1 hora):\n\n${link}\n\nSe não foi você, ignore esta mensagem.`;

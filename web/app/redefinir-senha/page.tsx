@@ -19,24 +19,24 @@ export default function RedefinirSenhaPage() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
+  // Captura hash do Supabase (#access_token=...) ao montar — não depende de searchParams
   useEffect(() => {
-    // Token próprio (via WhatsApp)
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    const match = hash.match(/access_token=([^&]+)/);
+    if (match) setAccessToken(match[1]);
+  }, []); // roda uma vez ao montar
+
+  // Fluxo WhatsApp (token query param) e Supabase query param
+  useEffect(() => {
     const customToken = searchParams.get('token') || '';
     if (customToken) {
       setResetToken(customToken);
       return;
     }
 
-    // Supabase pode enviar como query param ou fragment
     const token = searchParams.get('access_token') || '';
     if (token) setAccessToken(token);
-
-    // Tentar extrair do hash/fragment também
-    if (!token && typeof window !== 'undefined') {
-      const hash = window.location.hash;
-      const match = hash.match(/access_token=([^&]+)/);
-      if (match) setAccessToken(match[1]);
-    }
   }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
