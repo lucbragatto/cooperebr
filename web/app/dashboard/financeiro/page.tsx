@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { DollarSign, Download, TrendingUp, TrendingDown, ArrowUpDown } from 'lucide-react';
+import {
+  DollarSign, Download, TrendingUp, TrendingDown, ArrowUpDown,
+  ArrowDownCircle, ArrowUpCircle, CheckCircle, LineChart, Wallet,
+} from 'lucide-react';
 
 function competenciaAtual(): string {
   const now = new Date();
@@ -29,11 +33,20 @@ function formatarData(d: string | null): string {
   return new Date(d).toLocaleDateString('pt-BR');
 }
 
+interface ResumoFinanceiro {
+  aReceberPrevisto: number;
+  aPagarPrevisto: number;
+  recebidoRealizado: number;
+  pagoRealizado: number;
+  saldoLiquido: number;
+}
+
 export default function FinanceiroPage() {
   const [competencia, setCompetencia] = useState(competenciaAtual());
   const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [tab, setTab] = useState<'entradas' | 'saidas' | 'resumo'>('resumo');
+  const [resumo, setResumo] = useState<ResumoFinanceiro | null>(null);
 
   useEffect(() => {
     setCarregando(true);
@@ -42,6 +55,29 @@ export default function FinanceiroPage() {
       .catch(() => setDados(null))
       .finally(() => setCarregando(false));
   }, [competencia]);
+
+  // Carregar resumo consolidado do mês atual
+  useEffect(() => {
+    const comp = competenciaAtual();
+    Promise.all([
+      api.get(`/financeiro/lancamentos?tipo=RECEITA&status=PREVISTO&competencia=${comp}`).catch(() => ({ data: [] })),
+      api.get(`/financeiro/lancamentos?tipo=DESPESA&status=PREVISTO&competencia=${comp}`).catch(() => ({ data: [] })),
+      api.get(`/financeiro/lancamentos?tipo=RECEITA&status=REALIZADO&competencia=${comp}`).catch(() => ({ data: [] })),
+      api.get(`/financeiro/lancamentos?tipo=DESPESA&status=REALIZADO&competencia=${comp}`).catch(() => ({ data: [] })),
+    ]).then(([recPrev, desPrev, recReal, desReal]) => {
+      const aReceberPrevisto = (recPrev.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
+      const aPagarPrevisto = (desPrev.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
+      const recebidoRealizado = (recReal.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
+      const pagoRealizado = (desReal.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
+      setResumo({
+        aReceberPrevisto,
+        aPagarPrevisto,
+        recebidoRealizado,
+        pagoRealizado,
+        saldoLiquido: (aReceberPrevisto + recebidoRealizado) - (aPagarPrevisto + pagoRealizado),
+      });
+    });
+  }, []);
 
   function exportarCsv() {
     if (!dados) return;
@@ -79,10 +115,88 @@ export default function FinanceiroPage() {
 
   return (
     <div>
+      <div className="flex items-center gap-3 mb-6">
+        <Wallet className="h-6 w-6 text-green-600" />
+        <h2 className="text-2xl font-bold text-gray-800">Dashboard Financeiro</h2>
+      </div>
+
+      {/* Resumo consolidado */}
+      {resumo && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <Card>
+            <CardContent className="pt-4 pb-3 px-4">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowDownCircle className="h-4 w-4 text-blue-600" />
+                <span className="text-xs text-gray-500">A Receber</span>
+              </div>
+              <p className="text-lg font-bold text-blue-700">{formatarMoeda(resumo.aReceberPrevisto)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3 px-4">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowUpCircle className="h-4 w-4 text-red-600" />
+                <span className="text-xs text-gray-500">A Pagar</span>
+              </div>
+              <p className="text-lg font-bold text-red-700">{formatarMoeda(resumo.aPagarPrevisto)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3 px-4">
+              <div className="flex items-center gap-2 mb-1">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="text-xs text-gray-500">Recebido</span>
+              </div>
+              <p className="text-lg font-bold text-green-700">{formatarMoeda(resumo.recebidoRealizado)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4 pb-3 px-4">
+              <div className="flex items-center gap-2 mb-1">
+                <CheckCircle className="h-4 w-4 text-orange-600" />
+                <span className="text-xs text-gray-500">Pago</span>
+              </div>
+              <p className="text-lg font-bold text-orange-700">{formatarMoeda(resumo.pagoRealizado)}</p>
+            </CardContent>
+          </Card>
+          <Card className={resumo.saldoLiquido >= 0 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+            <CardContent className="pt-4 pb-3 px-4">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="h-4 w-4 text-purple-600" />
+                <span className="text-xs text-gray-500">Saldo Líquido Projetado</span>
+              </div>
+              <p className={`text-lg font-bold ${resumo.saldoLiquido >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatarMoeda(resumo.saldoLiquido)}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Links rápidos */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link href="/dashboard/financeiro/contas-receber">
+          <Button variant="outline" size="sm">
+            <ArrowDownCircle className="h-4 w-4 mr-1" /> Contas a Receber
+          </Button>
+        </Link>
+        <Link href="/dashboard/financeiro/contas-pagar">
+          <Button variant="outline" size="sm">
+            <ArrowUpCircle className="h-4 w-4 mr-1" /> Contas a Pagar
+          </Button>
+        </Link>
+        <Link href="/dashboard/financeiro/fluxo-caixa">
+          <Button variant="outline" size="sm">
+            <LineChart className="h-4 w-4 mr-1" /> Fluxo de Caixa
+          </Button>
+        </Link>
+      </div>
+
+      {/* Livro Caixa */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <DollarSign className="h-6 w-6 text-green-600" />
-          <h2 className="text-2xl font-bold text-gray-800">Livro Caixa</h2>
+          <DollarSign className="h-5 w-5 text-green-600" />
+          <h3 className="text-lg font-bold text-gray-800">Livro Caixa</h3>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={mesPrev}>&larr;</Button>

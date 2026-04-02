@@ -36,6 +36,11 @@ import {
   BarChart3,
   TrendingUp,
   Mail,
+  Wallet,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ClipboardList,
+  LineChart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -97,10 +102,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/usinas/listas', label: 'Listas Concessionária', icon: FileText },
         { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
         { href: '/dashboard/planos', label: 'Planos', icon: Tag },
-        { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
-        { href: '/dashboard/faturas/central', label: 'Central de Faturas', icon: FileText },
         { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
-        { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
         { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
         { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
         { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
@@ -116,6 +118,28 @@ function getNavSections(perfil: string): NavSection[] {
       ],
     },
     {
+      title: 'Faturamento',
+      titleIcon: TrendingUp,
+      items: [
+        { href: '/dashboard/faturas/central', label: 'Central de Faturas', icon: FileText },
+        { href: '/dashboard/cobrancas', label: 'Cobranças', icon: CreditCard },
+        { href: '/dashboard/modelos-cobranca', label: 'Modelos de Cobrança', icon: Receipt },
+        { href: '/dashboard/financeiro/pix-excedente', label: 'PIX Excedente', icon: Zap },
+      ],
+    },
+    {
+      title: 'Financeiro',
+      titleIcon: DollarSign,
+      items: [
+        { href: '/dashboard/financeiro', label: 'Dashboard Financeiro', icon: Wallet },
+        { href: '/dashboard/financeiro/contas-receber', label: 'Contas a Receber', icon: ArrowDownCircle },
+        { href: '/dashboard/financeiro/contas-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
+        { href: '/dashboard/financeiro/despesas', label: 'Despesas Correntes', icon: ClipboardList },
+        { href: '/dashboard/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: LineChart },
+        { href: '/dashboard/configuracoes/financeiro', label: 'Plano de Contas', icon: DollarSign },
+      ],
+    },
+    {
       title: 'Relatórios',
       items: [
         { href: '/dashboard/relatorios/inadimplencia', label: 'Inadimplência', icon: BarChart3 },
@@ -125,12 +149,9 @@ function getNavSections(perfil: string): NavSection[] {
       ],
     },
     {
-      title: 'Financeiro',
+      title: 'Configurações',
       items: [
-        { href: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
-        { href: '/dashboard/financeiro/pix-excedente', label: 'PIX Excedente', icon: Zap },
         { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
-        { href: '/dashboard/configuracoes/financeiro', label: 'Config. Financeiro', icon: DollarSign },
         { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
       ],
     },

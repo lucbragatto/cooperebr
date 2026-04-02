@@ -17,6 +17,9 @@ import {
   Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
 import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
   AlertTriangle, ArrowLeft, BarChart3, Building2, CheckCircle, CreditCard,
   FileCheck, FileDown, FilePlus, FileText, FileX, Loader2, Mail, MessageCircle,
   Pencil, Plus, User, XCircle, Zap, Upload, DollarSign, Filter, Gift, Copy, Link as LinkIcon,
@@ -27,7 +30,7 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta' | 'asaas' | 'indicacoes';
+type Aba = 'geral' | 'fatura' | 'contrato' | 'cobrancas' | 'documentos' | 'ocorrencias' | 'proposta' | 'asaas' | 'indicacoes' | 'financeiro';
 
 interface PropostaOpcao {
   base: 'MES_RECENTE' | 'MEDIA_12M';
@@ -220,9 +223,144 @@ const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'documentos', label: 'Documentos', icon: FileText },
   { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
   { id: 'proposta', label: 'Proposta', icon: Zap },
+  { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
   { id: 'asaas', label: 'Cobranças Asaas', icon: DollarSign },
   { id: 'indicacoes', label: 'Indicações', icon: Gift },
 ];
+
+// ─── Financeiro Tab ─────────────────────────────────────────────────────────
+
+function FinanceiroTab({ cooperadoId }: { cooperadoId: string }) {
+  const [cobrancas, setCobrancas] = useState<any[]>([]);
+  const [faturas, setFaturas] = useState<any[]>([]);
+  const [beneficios, setBeneficios] = useState<any[]>([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    setCarregando(true);
+    Promise.all([
+      api.get(`/cobrancas?cooperadoId=${cooperadoId}`).then(({ data }) => setCobrancas(Array.isArray(data) ? data : data.items ?? [])).catch(() => {}),
+      api.get(`/faturas/cooperado/${cooperadoId}`).then(({ data }) => setFaturas(data)).catch(() => {}),
+      api.get(`/indicacoes/beneficios?cooperadoId=${cooperadoId}`).then(({ data }) => setBeneficios(data)).catch(() => {}),
+    ]).finally(() => setCarregando(false));
+  }, [cooperadoId]);
+
+  if (carregando) return <p className="text-gray-500 py-4">Carregando dados financeiros...</p>;
+
+  const totalPago = cobrancas.filter((c: any) => c.status === 'PAGO').reduce((s: number, c: any) => s + Number(c.valorLiquido ?? 0), 0);
+  const totalAberto = cobrancas.filter((c: any) => c.status !== 'PAGO' && c.status !== 'CANCELADO').reduce((s: number, c: any) => s + Number(c.valorLiquido ?? 0), 0);
+  const totalCreditos = faturas.reduce((s: number, f: any) => s + Number(f.dadosExtraidos?.creditosRecebidosKwh ?? 0), 0);
+  const totalBeneficios = beneficios.reduce((s: number, b: any) => s + Number(b.valorDesconto ?? 0), 0);
+
+  const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fmtData = (d: string) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+  return (
+    <div className="space-y-6">
+      {/* Resumo */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-gray-500">Total Pago</p>
+            <p className="text-lg font-bold text-green-700">{fmt(totalPago)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-gray-500">Em Aberto</p>
+            <p className="text-lg font-bold text-red-700">{fmt(totalAberto)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-gray-500">Créditos kWh</p>
+            <p className="text-lg font-bold text-blue-700">{totalCreditos.toLocaleString('pt-BR')} kWh</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-gray-500">Benefícios Indicação</p>
+            <p className="text-lg font-bold text-purple-700">{fmt(totalBeneficios)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Cobranças recentes */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Cobranças Recentes</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Referência</TableHead>
+                <TableHead>Vencimento</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {cobrancas.slice(0, 10).map((c: any) => (
+                <TableRow key={c.id}>
+                  <TableCell>{String(c.mesReferencia).padStart(2, '0')}/{c.anoReferencia}</TableCell>
+                  <TableCell>{fmtData(c.dataVencimento)}</TableCell>
+                  <TableCell className="text-right font-medium">{fmt(Number(c.valorLiquido ?? 0))}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={
+                      c.status === 'PAGO' ? 'bg-green-100 text-green-700' :
+                      c.status === 'VENCIDO' ? 'bg-red-100 text-red-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }>{c.status}</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {cobrancas.length === 0 && (
+                <TableRow><TableCell colSpan={4} className="text-center text-gray-400 py-4">Nenhuma cobrança</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Faturas concessionária */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Faturas Concessionária</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mês Ref.</TableHead>
+                <TableHead>Consumo kWh</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {faturas.slice(0, 10).map((f: any) => {
+                const d = f.dadosExtraidos as any;
+                return (
+                  <TableRow key={f.id}>
+                    <TableCell>{f.mesReferencia ?? d?.mesReferencia ?? '—'}</TableCell>
+                    <TableCell>{d?.consumoAtualKwh ?? '—'}</TableCell>
+                    <TableCell className="text-right font-medium">{d?.totalAPagar ? fmt(d.totalAPagar) : '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={
+                        f.statusRevisao === 'AUTO_APROVADO' || f.statusRevisao === 'APROVADO' ? 'bg-green-100 text-green-700' :
+                        f.statusRevisao === 'PENDENTE_REVISAO' ? 'bg-yellow-100 text-yellow-700' : ''
+                      }>{f.statusRevisao === 'AUTO_APROVADO' ? 'Aprovado' : f.statusRevisao}</Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {faturas.length === 0 && (
+                <TableRow><TableCell colSpan={4} className="text-center text-gray-400 py-4">Nenhuma fatura</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // ─── Indicações Tab ──────────────────────────────────────────────────────────
 
@@ -1937,6 +2075,9 @@ export default function CooperadoPerfilPage() {
 
       {/* ─── Aba Cobranças Asaas ─────────────────────────────────────────── */}
       {aba === 'asaas' && <AsaasTab cooperadoId={id} />}
+
+      {/* ─── Aba Financeiro ─────────────────────────────────────────────── */}
+      {aba === 'financeiro' && <FinanceiroTab cooperadoId={id} />}
 
       {/* ─── Aba Indicações ───────────────────────────────────────────────── */}
       {aba === 'indicacoes' && <IndicacoesTab cooperadoId={id} codigoIndicacao={cooperado?.codigoIndicacao} />}
