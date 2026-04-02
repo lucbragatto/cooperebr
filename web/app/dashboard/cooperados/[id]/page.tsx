@@ -1265,16 +1265,23 @@ export default function CooperadoPerfilPage() {
 
       {/* ── Aba 2: Fatura & Consumo ── */}
       {aba === 'fatura' && (
-        <div className="space-y-4">
-          {/* Upload concessionária */}
+        <div className="space-y-6">
+          {/* Seção 1 — Histórico de faturas processadas */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center justify-between">
-                <span className="flex items-center gap-2"><Upload className="h-4 w-4" />Faturas da Concessionária</span>
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Faturas Processadas — {cooperado.nomeCompleto}
+                </span>
                 <Button size="sm" onClick={() => setSheetUploadConc(true)}>
                   <FilePlus className="h-4 w-4 mr-1" />Upload Fatura
                 </Button>
               </CardTitle>
+              <p className="text-xs text-gray-500 mt-1">
+                Faturas da concessionária deste cooperado que JÁ recebe créditos da CoopereBR.
+                Cada upload analisa automaticamente a compensação real vs o contrato.
+              </p>
             </CardHeader>
             <CardContent>
               {carregandoFaturas ? (
@@ -1282,7 +1289,7 @@ export default function CooperadoPerfilPage() {
               ) : faturas.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <FileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <p className="text-sm">Nenhuma fatura processada.</p>
+                  <p className="text-sm">Nenhuma fatura processada ainda.</p>
                 </div>
               ) : (
                 <div className="border rounded-lg overflow-hidden">
@@ -1382,13 +1389,61 @@ export default function CooperadoPerfilPage() {
             </CardContent>
           </Card>
 
-          {/* OCR original (legacy) */}
-          <FaturaUploadOCR
-            cooperadoId={id}
-            onFaturaProcessada={() => {
-              api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {});
-            }}
-          />
+          {/* Seção 2 — Upload dividido em dois contextos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Bloco A — Cooperado ativo */}
+            <Card className="border-green-200">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2 text-green-700">
+                  <CheckCircle className="h-4 w-4" />
+                  Upload da fatura de {cooperado.nomeCompleto}
+                </CardTitle>
+                <p className="text-xs text-gray-500 mt-1">
+                  Este cooperado já recebe créditos da CoopereBR. Faça o upload da fatura da concessionária para:
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                  <li>Verificar se os créditos compensados estão corretos</li>
+                  <li>Analisar divergências vs contrato</li>
+                  <li>Gerar relatório mensal de economia</li>
+                  <li>Base para a cobrança CoopereBR deste mês</li>
+                </ul>
+                <FaturaUploadOCR
+                  cooperadoId={id}
+                  onFaturaProcessada={() => {
+                    api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`).then(r => setFaturas(r.data)).catch(() => {});
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Bloco B — Novo candidato (proposta) */}
+            <Card className="border-blue-200">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2 text-blue-700">
+                  <User className="h-4 w-4" />
+                  Processar fatura de um novo candidato
+                </CardTitle>
+                <p className="text-xs text-gray-500 mt-1">
+                  Esta pessoa ainda não é cooperada. Use para:
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                  <li>Calcular a economia potencial</li>
+                  <li>Gerar uma proposta de adesão</li>
+                  <li>Iniciar o processo de cadastro</li>
+                </ul>
+                <Link href="/dashboard/cooperados/novo">
+                  <Button variant="outline" className="w-full border-blue-300 text-blue-700 hover:bg-blue-50">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ir para Novo Cooperado (wizard completo)
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 

@@ -13,8 +13,12 @@ export class NotificacoesController {
   }
 
   @Get('nao-lidas')
-  countNaoLidas(@CurrentUser() user: Usuario) {
-    return this.notificacoesService.countNaoLidas(user);
+  async countNaoLidas(@CurrentUser() user: Usuario) {
+    try {
+      return await this.notificacoesService.countNaoLidas(user);
+    } catch {
+      return { count: 0 };
+    }
   }
 
   @Patch('ler-todas')

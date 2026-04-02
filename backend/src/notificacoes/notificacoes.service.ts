@@ -60,6 +60,7 @@ export class NotificacoesService {
   private async buildWhere(user: Usuario) {
     if (user.perfil !== PerfilUsuario.COOPERADO) {
       return {
+        cooperativaId: (user as Record<string, unknown>).cooperativaId as string | undefined,
         OR: [{ adminId: null }, { adminId: user.id }],
       };
     }

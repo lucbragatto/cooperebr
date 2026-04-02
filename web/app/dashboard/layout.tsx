@@ -200,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [aberto, setAberto] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { contextos, contextoAtivo, trocarContexto } = useContexto();
+  const { contextos, contextoAtivo, trocarContexto, meData } = useContexto();
 
   useEffect(() => { setUsuario(getUsuario()); }, []);
 
@@ -275,7 +275,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="px-6 py-5 border-b">
           <h1 className="text-xl font-bold text-green-700">SISGD</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>
+          {(() => {
+            const cooperativaNome = meData?.contextos?.find(c => c.tipo === 'admin_parceiro')?.cooperativaNome;
+            if (usuario?.perfil === 'ADMIN' && cooperativaNome) {
+              return (
+                <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  {cooperativaNome}
+                </p>
+              );
+            }
+            return <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>;
+          })()}
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

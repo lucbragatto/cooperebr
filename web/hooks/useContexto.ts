@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ContextoUsuario, MeResponse, TipoContexto } from '@/types';
 import api from '@/lib/api';
 import Cookies from 'js-cookie';
@@ -60,12 +60,16 @@ export function useContexto() {
     [],
   );
 
-  const contextoObj: ContextoUsuario | null =
-    meData?.contextos.find((c) => c.tipo === contextoAtivo) ?? null;
+  const contextos = useMemo(() => meData?.contextos ?? [], [meData]);
+
+  const contextoObj = useMemo<ContextoUsuario | null>(
+    () => contextos.find((c) => c.tipo === contextoAtivo) ?? null,
+    [contextos, contextoAtivo],
+  );
 
   return {
     meData,
-    contextos: meData?.contextos ?? [],
+    contextos,
     contextoAtivo,
     contextoObj,
     trocarContexto,
