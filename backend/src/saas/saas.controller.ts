@@ -24,6 +24,12 @@ export class SaasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @Post('planos/vincular')
+  vincularPlano(@Body() body: { cooperativaId: string; planoSaasId: string | null }) {
+    return this.saasService.vincularPlano(body.cooperativaId, body.planoSaasId);
+  }
+
+  @Roles(SUPER_ADMIN)
   @Post('planos')
   createPlano(
     @Body() body: {
@@ -63,12 +69,6 @@ export class SaasController {
   @Delete('planos/:id')
   deletePlano(@Param('id') id: string) {
     return this.saasService.deletePlano(id);
-  }
-
-  @Roles(SUPER_ADMIN)
-  @Post('planos/vincular')
-  vincularPlano(@Body() body: { cooperativaId: string; planoSaasId: string | null }) {
-    return this.saasService.vincularPlano(body.cooperativaId, body.planoSaasId);
   }
 
   // ─── Faturas ──────────────────────────────────────────────
