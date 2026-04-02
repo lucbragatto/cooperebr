@@ -171,6 +171,8 @@ export interface ContextoUsuario {
   id?: string;
   cooperativaId?: string;
   cooperativaNome?: string;
+  modulosAtivos?: string[];
+  modalidadesAtivas?: Record<string, string>;
 }
 
 export interface MeResponse {

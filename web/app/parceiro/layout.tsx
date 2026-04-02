@@ -14,16 +14,39 @@ import {
   Settings,
   LogOut,
   Building2,
+  FileText,
+  ClipboardList,
+  Calculator,
+  MessageCircle,
+  Gift,
+  Award,
+  Handshake,
+  BarChart3,
+  Building,
+  UserCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContexto } from '@/hooks/useContexto';
+import { useModulos } from '@/hooks/useModulos';
 import ContextoSwitcher from '@/components/ContextoSwitcher';
 
-const navItems = [
+const allNavItems = [
   { href: '/parceiro', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/parceiro/membros', label: 'Membros', icon: Users },
-  { href: '/parceiro/financeiro', label: 'Financeiro', icon: DollarSign },
-  { href: '/parceiro/usinas', label: 'Usinas', icon: Sun },
+  { href: '/parceiro/membros', label: 'Membros', icon: Users, modulo: 'membros' },
+  { href: '/parceiro/usinas', label: 'Usinas', icon: Sun, modulo: 'usinas' },
+  { href: '/parceiro/ucs', label: 'UCs', icon: Building2, modulo: 'ucs' },
+  { href: '/parceiro/contratos', label: 'Contratos', icon: FileText, modulo: 'contratos' },
+  { href: '/parceiro/planos', label: 'Planos', icon: ClipboardList, modulo: 'planos' },
+  { href: '/parceiro/cobrancas', label: 'Cobranças', icon: DollarSign, modulo: 'cobrancas' },
+  { href: '/parceiro/modelos-cobranca', label: 'Modelos de Cobrança', icon: Calculator, modulo: 'modelos_cobranca' },
+  { href: '/parceiro/motor-proposta', label: 'Motor de Proposta', icon: ClipboardList, modulo: 'motor_proposta' },
+  { href: '/parceiro/whatsapp', label: 'WhatsApp', icon: MessageCircle, modulo: 'whatsapp' },
+  { href: '/parceiro/indicacoes', label: 'Indicações', icon: Gift, modulo: 'indicacoes' },
+  { href: '/parceiro/clube-vantagens', label: 'Clube de Vantagens', icon: Award, modulo: 'clube_vantagens' },
+  { href: '/parceiro/convenios', label: 'Convênios', icon: Handshake, modulo: 'convenios' },
+  { href: '/parceiro/relatorios', label: 'Relatórios', icon: BarChart3, modulo: 'relatorios' },
+  { href: '/parceiro/condominios', label: 'Condomínios', icon: Building, modulo: 'condominios' },
+  { href: '/parceiro/usuarios', label: 'Usuários', icon: UserCog, modulo: 'usuarios' },
   { href: '/parceiro/convites', label: 'Convites', icon: UserPlus },
   { href: '/parceiro/configuracoes', label: 'Configurações', icon: Settings },
 ];
@@ -32,6 +55,9 @@ export default function ParceiroLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const { contextos, contextoAtivo, trocarContexto, contextoObj } = useContexto();
+  const { temModulo } = useModulos();
+
+  const navItems = allNavItems.filter((item) => !item.modulo || temModulo(item.modulo));
 
   useEffect(() => {
     setUsuario(getUsuario());

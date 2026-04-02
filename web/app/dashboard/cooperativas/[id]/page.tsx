@@ -51,10 +51,32 @@ interface Cooperativa {
   planoSaas?: { id: string; nome: string; mensalidadeBase: number } | null;
   statusSaas?: string;
   diaVencimentoSaas?: number;
+  modulosAtivos?: string[];
+  modalidadesAtivas?: Record<string, string>;
   usinas: any[];
   createdAt: string;
   updatedAt: string;
 }
+
+const MODULOS_LABELS: Record<string, string> = {
+  usinas: 'Cadastro de Usinas',
+  membros: 'Cadastro de Membros',
+  ucs: 'Unidades Consumidoras',
+  contratos: 'Contratos de Adesão',
+  cobrancas: 'Cobranças e Financeiro',
+  modelos_cobranca: 'Modelos de Cobrança',
+  motor_proposta: 'Motor de Proposta',
+  whatsapp: 'WhatsApp Messaging',
+  indicacoes: 'Programa de Indicações',
+  clube_vantagens: 'Clube de Vantagens',
+  convenios: 'Convênios para Membros',
+  relatorios: 'Relatórios Avançados',
+  condominios: 'Condomínios e Administradoras',
+  usuarios: 'Gerenciamento de Usuários',
+  planos: 'Planos de Assinatura',
+};
+
+const TODOS_MODULOS = Object.keys(MODULOS_LABELS);
 
 export default function CooperativaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -89,6 +111,11 @@ export default function CooperativaDetailPage() {
   const [ajustarProcessando, setAjustarProcessando] = useState(false);
   const [ajustarMsg, setAjustarMsg] = useState('');
 
+  // Planos SaaS e Faturas
+  const [planosSaas, setPlanosSaas] = useState<any[]>([]);
+  const [faturasSaas, setFaturasSaas] = useState<any[]>([]);
+  const [trocandoPlano, setTrocandoPlano] = useState(false);
+
   // Contratos do membro (múltiplos contratos)
   const [contratosDoMembro, setContratosDoMembro] = useState<any[]>([]);
   const [contratosSelecionados, setContratosSelecionados] = useState<string[]>([]);
@@ -106,6 +133,9 @@ export default function CooperativaDetailPage() {
       .catch(() => {});
 
     api.get('/usinas').then((r) => setUsinasDisponiveis(r.data || [])).catch(() => {});
+
+    api.get('/saas/planos').then((r) => setPlanosSaas(r.data || [])).catch(() => {});
+    api.get(`/saas/faturas?cooperativaId=${id}`).then((r) => setFaturasSaas(Array.isArray(r.data) ? r.data.filter((f: any) => f.cooperativaId === id) : [])).catch(() => {});
   }, [id]);
 
   function recarregarMembros() {
@@ -260,25 +290,126 @@ export default function CooperativaDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Plano SaaS */}
-          {coop.planoSaas && (
+          {/* Plano SaaS + Troca de Plano */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">Plano SaaS</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {coop.planoSaas ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+                  <Campo label="Plano" value={coop.planoSaas.nome} />
+                  <Campo label="Mensalidade" value={`R$ ${Number(coop.planoSaas.mensalidadeBase).toFixed(2)}`} />
+                  <Campo label="Dia Vencimento" value={coop.diaVencimentoSaas ?? 10} />
+                  <Campo label="Status SaaS" value={
+                    <Badge variant="outline" className={
+                      coop.statusSaas === 'ATIVO' ? 'bg-green-50 text-green-700' :
+                      coop.statusSaas === 'INADIMPLENTE' ? 'bg-red-50 text-red-700' :
+                      'bg-yellow-50 text-yellow-700'
+                    }>
+                      {coop.statusSaas}
+                    </Badge>
+                  } />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 mb-4">Nenhum plano vinculado</p>
+              )}
+              <div className="flex items-center gap-3">
+                <select
+                  className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={coop.planoSaas?.id ?? ''}
+                  onChange={async (e) => {
+                    const planoId = e.target.value || null;
+                    setTrocandoPlano(true);
+                    try {
+                      await api.post('/saas/planos/vincular', { cooperativaId: id, planoSaasId: planoId });
+                      const { data } = await api.get<Cooperativa>(`/cooperativas/${id}`);
+                      setCoop(data);
+                    } catch (err: any) {
+                      alert(err?.response?.data?.message || 'Erro ao trocar plano');
+                    } finally {
+                      setTrocandoPlano(false);
+                    }
+                  }}
+                  disabled={trocandoPlano}
+                >
+                  <option value="">Sem plano</option>
+                  {planosSaas.filter((p: any) => p.ativo).map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.nome} — R$ {Number(p.mensalidadeBase).toFixed(2)}/mes</option>
+                  ))}
+                </select>
+                {trocandoPlano && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preview dos Modulos */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">Modulos do Sistema</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {TODOS_MODULOS.map((key) => {
+                  const ativo = coop.modulosAtivos?.includes(key);
+                  const modalidade = (coop.modalidadesAtivas as any)?.[key];
+                  return (
+                    <div key={key} className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${ativo ? 'bg-green-50 text-green-800' : 'bg-gray-50 text-gray-400'}`}>
+                      <span>{ativo ? '\u2705' : '\u274C'}</span>
+                      <span>{MODULOS_LABELS[key]}</span>
+                      {ativo && modalidade && modalidade !== 'STANDALONE' && (
+                        <Badge variant="outline" className="ml-auto text-xs">{modalidade}</Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {(!coop.modulosAtivos || coop.modulosAtivos.length === 0) && (
+                <p className="text-xs text-gray-400 mt-2">Nenhum modulo habilitado. Vincule um plano para ativar modulos.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Historico de Faturas SaaS */}
+          {faturasSaas.length > 0 && (
             <Card className="mt-6">
               <CardHeader>
-                <CardTitle className="text-base">Plano SaaS</CardTitle>
+                <CardTitle className="text-base">Faturas SaaS ({faturasSaas.length})</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <Campo label="Plano" value={coop.planoSaas.nome} />
-                <Campo label="Mensalidade" value={`R$ ${Number(coop.planoSaas.mensalidadeBase).toFixed(2)}`} />
-                <Campo label="Dia Vencimento" value={coop.diaVencimentoSaas ?? 10} />
-                <Campo label="Status SaaS" value={
-                  <Badge variant="outline" className={
-                    coop.statusSaas === 'ATIVO' ? 'bg-green-50 text-green-700' :
-                    coop.statusSaas === 'INADIMPLENTE' ? 'bg-red-50 text-red-700' :
-                    'bg-yellow-50 text-yellow-700'
-                  }>
-                    {coop.statusSaas}
-                  </Badge>
-                } />
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Competencia</TableHead>
+                      <TableHead>Valor Base</TableHead>
+                      <TableHead>% Receita</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {faturasSaas.map((f: any) => (
+                      <TableRow key={f.id}>
+                        <TableCell>{new Date(f.competencia).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</TableCell>
+                        <TableCell>R$ {Number(f.valorBase).toFixed(2)}</TableCell>
+                        <TableCell>R$ {Number(f.valorReceita).toFixed(2)}</TableCell>
+                        <TableCell className="font-medium">R$ {Number(f.valorTotal).toFixed(2)}</TableCell>
+                        <TableCell>{new Date(f.dataVencimento).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={
+                            f.status === 'PAGO' ? 'bg-green-50 text-green-700' :
+                            f.status === 'VENCIDO' ? 'bg-red-50 text-red-700' :
+                            f.status === 'CANCELADO' ? 'bg-gray-50 text-gray-500' :
+                            'bg-yellow-50 text-yellow-700'
+                          }>
+                            {f.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           )}

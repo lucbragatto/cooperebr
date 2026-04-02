@@ -33,6 +33,8 @@ export class SaasController {
       mensalidadeBase?: number;
       limiteMembros?: number;
       percentualReceita?: number;
+      modulosHabilitados?: string[];
+      modalidadesModulos?: Record<string, string>;
     },
   ) {
     return this.saasService.createPlano(body);
@@ -50,6 +52,8 @@ export class SaasController {
       limiteMembros: number;
       percentualReceita: number;
       ativo: boolean;
+      modulosHabilitados: string[];
+      modalidadesModulos: Record<string, string>;
     }>,
   ) {
     return this.saasService.updatePlano(id, body);
@@ -59,6 +63,12 @@ export class SaasController {
   @Delete('planos/:id')
   deletePlano(@Param('id') id: string) {
     return this.saasService.deletePlano(id);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Post('planos/vincular')
+  vincularPlano(@Body() body: { cooperativaId: string; planoSaasId: string | null }) {
+    return this.saasService.vincularPlano(body.cooperativaId, body.planoSaasId);
   }
 
   // ─── Faturas ──────────────────────────────────────────────

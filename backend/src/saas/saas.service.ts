@@ -32,6 +32,8 @@ export class SaasService {
     mensalidadeBase?: number;
     limiteMembros?: number;
     percentualReceita?: number;
+    modulosHabilitados?: string[];
+    modalidadesModulos?: Record<string, string>;
   }) {
     return this.prisma.planoSaas.create({ data });
   }
@@ -44,10 +46,19 @@ export class SaasService {
     limiteMembros: number;
     percentualReceita: number;
     ativo: boolean;
+    modulosHabilitados: string[];
+    modalidadesModulos: Record<string, string>;
   }>) {
     const plano = await this.prisma.planoSaas.findUnique({ where: { id } });
     if (!plano) throw new NotFoundException('Plano SaaS não encontrado');
-    return this.prisma.planoSaas.update({ where: { id }, data });
+    const updated = await this.prisma.planoSaas.update({ where: { id }, data });
+
+    // Propagar módulos para todas as cooperativas vinculadas
+    if (data.modulosHabilitados !== undefined || data.modalidadesModulos !== undefined) {
+      await this.propagarModulosDoPlano(id);
+    }
+
+    return updated;
   }
 
   async deletePlano(id: string) {
@@ -64,15 +75,49 @@ export class SaasService {
   async vincularPlano(cooperativaId: string, planoSaasId: string | null) {
     const coop = await this.prisma.cooperativa.findUnique({ where: { id: cooperativaId } });
     if (!coop) throw new NotFoundException('Parceiro não encontrado');
+
+    let modulosAtivos: string[] = [];
+    let modalidadesAtivas: Record<string, string> = {};
+
     if (planoSaasId) {
       const plano = await this.prisma.planoSaas.findUnique({ where: { id: planoSaasId } });
       if (!plano) throw new NotFoundException('Plano SaaS não encontrado');
+      modulosAtivos = plano.modulosHabilitados;
+      modalidadesAtivas = (plano.modalidadesModulos as Record<string, string>) ?? {};
     }
+
     return this.prisma.cooperativa.update({
       where: { id: cooperativaId },
-      data: { planoSaasId },
+      data: { planoSaasId, modulosAtivos, modalidadesAtivas },
       include: { planoSaas: true },
     });
+  }
+
+  async getModulosCooperativa(cooperativaId: string) {
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: { modulosAtivos: true, modalidadesAtivas: true },
+    });
+    if (!coop) throw new NotFoundException('Parceiro não encontrado');
+    return {
+      modulosAtivos: coop.modulosAtivos,
+      modalidadesAtivas: coop.modalidadesAtivas as Record<string, string>,
+    };
+  }
+
+  /** Propaga módulos do plano para todas as cooperativas vinculadas */
+  private async propagarModulosDoPlano(planoSaasId: string) {
+    const plano = await this.prisma.planoSaas.findUnique({ where: { id: planoSaasId } });
+    if (!plano) return;
+
+    await this.prisma.cooperativa.updateMany({
+      where: { planoSaasId },
+      data: {
+        modulosAtivos: plano.modulosHabilitados,
+        modalidadesAtivas: plano.modalidadesModulos ?? {},
+      },
+    });
+    this.logger.log(`Módulos propagados do plano ${plano.nome} para cooperativas vinculadas`);
   }
 
   // ─── Faturas SaaS ─────────────────────────────────────────

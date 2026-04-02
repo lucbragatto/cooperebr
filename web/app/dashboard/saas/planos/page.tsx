@@ -24,8 +24,30 @@ interface PlanoSaas {
   limiteMembros: number | null;
   percentualReceita: number;
   ativo: boolean;
+  modulosHabilitados: string[];
+  modalidadesModulos: Record<string, string>;
   _count?: { cooperativas: number };
 }
+
+const MODULOS = [
+  { key: 'usinas', label: 'Cadastro de Usinas' },
+  { key: 'membros', label: 'Cadastro de Membros' },
+  { key: 'ucs', label: 'Unidades Consumidoras' },
+  { key: 'contratos', label: 'Contratos de Adesão' },
+  { key: 'cobrancas', label: 'Cobranças e Financeiro' },
+  { key: 'modelos_cobranca', label: 'Modelos de Cobrança' },
+  { key: 'motor_proposta', label: 'Motor de Proposta' },
+  { key: 'whatsapp', label: 'WhatsApp Messaging' },
+  { key: 'indicacoes', label: 'Programa de Indicações' },
+  { key: 'clube_vantagens', label: 'Clube de Vantagens' },
+  { key: 'convenios', label: 'Convênios para Membros' },
+  { key: 'relatorios', label: 'Relatórios Avançados' },
+  { key: 'condominios', label: 'Condomínios e Administradoras' },
+  { key: 'usuarios', label: 'Gerenciamento de Usuários' },
+  { key: 'planos', label: 'Planos de Assinatura' },
+] as const;
+
+const MODULOS_COM_MODALIDADE = ['indicacoes', 'clube_vantagens', 'convenios'];
 
 const emptyForm = {
   nome: '', descricao: '', taxaSetup: '0', mensalidadeBase: '0',
@@ -38,6 +60,8 @@ export default function PlanosSaasPage() {
   const [dialogAberto, setDialogAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [modulosSelecionados, setModulosSelecionados] = useState<string[]>([]);
+  const [modalidades, setModalidades] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -55,6 +79,8 @@ export default function PlanosSaasPage() {
   function abrirNovo() {
     setEditandoId(null);
     setForm(emptyForm);
+    setModulosSelecionados([]);
+    setModalidades({});
     setErro('');
     setDialogAberto(true);
   }
@@ -69,8 +95,16 @@ export default function PlanosSaasPage() {
       limiteMembros: p.limiteMembros != null ? String(p.limiteMembros) : '',
       percentualReceita: String(p.percentualReceita),
     });
+    setModulosSelecionados(p.modulosHabilitados ?? []);
+    setModalidades((p.modalidadesModulos as Record<string, string>) ?? {});
     setErro('');
     setDialogAberto(true);
+  }
+
+  function toggleModulo(key: string) {
+    setModulosSelecionados((prev) =>
+      prev.includes(key) ? prev.filter((m) => m !== key) : [...prev, key],
+    );
   }
 
   async function handleSalvar() {
@@ -78,6 +112,14 @@ export default function PlanosSaasPage() {
     setSalvando(true);
     setErro('');
     try {
+      // Limpar modalidades de módulos não selecionados
+      const modalidadesLimpas: Record<string, string> = {};
+      for (const key of MODULOS_COM_MODALIDADE) {
+        if (modulosSelecionados.includes(key)) {
+          modalidadesLimpas[key] = modalidades[key] || 'STANDALONE';
+        }
+      }
+
       const payload = {
         nome: form.nome,
         descricao: form.descricao || undefined,
@@ -85,6 +127,8 @@ export default function PlanosSaasPage() {
         mensalidadeBase: Number(form.mensalidadeBase),
         limiteMembros: form.limiteMembros ? Number(form.limiteMembros) : null,
         percentualReceita: Number(form.percentualReceita),
+        modulosHabilitados: modulosSelecionados,
+        modalidadesModulos: modalidadesLimpas,
       };
       if (editandoId) {
         await api.patch(`/saas/planos/${editandoId}`, payload);
@@ -135,15 +179,16 @@ export default function PlanosSaasPage() {
                 <TableHead>Taxa Setup</TableHead>
                 <TableHead>% Receita</TableHead>
                 <TableHead>Limite Membros</TableHead>
+                <TableHead>Modulos</TableHead>
                 <TableHead>Parceiros</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="text-right">Acoes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {planos.length === 0 && !carregando ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={9} className="text-center text-gray-400 py-8">
                     Nenhum plano cadastrado
                   </TableCell>
                 </TableRow>
@@ -155,6 +200,11 @@ export default function PlanosSaasPage() {
                     <TableCell>R$ {Number(p.taxaSetup).toFixed(2)}</TableCell>
                     <TableCell>{Number(p.percentualReceita).toFixed(2)}%</TableCell>
                     <TableCell>{p.limiteMembros ?? 'Ilimitado'}</TableCell>
+                    <TableCell>
+                      <span className="text-xs text-gray-500">
+                        {(p.modulosHabilitados?.length ?? 0)} modulos
+                      </span>
+                    </TableCell>
                     <TableCell>{p._count?.cooperativas ?? 0}</TableCell>
                     <TableCell>
                       <Badge className={p.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}>
@@ -178,17 +228,17 @@ export default function PlanosSaasPage() {
       </Card>
 
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editandoId ? 'Editar Plano' : 'Novo Plano SaaS'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="space-y-1">
               <Label>Nome *</Label>
               <Input value={form.nome} onChange={(e) => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Ex: Starter, Growth" />
             </div>
             <div className="space-y-1">
-              <Label>Descrição</Label>
+              <Label>Descricao</Label>
               <Input value={form.descricao} onChange={(e) => setForm(f => ({ ...f, descricao: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -211,6 +261,53 @@ export default function PlanosSaasPage() {
                 <Input type="number" value={form.limiteMembros} onChange={(e) => setForm(f => ({ ...f, limiteMembros: e.target.value }))} placeholder="Vazio = ilimitado" />
               </div>
             </div>
+
+            {/* Modulos Habilitados */}
+            <div className="space-y-2">
+              <Label className="text-base font-semibold">Modulos Habilitados</Label>
+              <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 bg-gray-50">
+                {MODULOS.map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={modulosSelecionados.includes(key)}
+                        onChange={() => toggleModulo(key)}
+                        className="rounded border-gray-300"
+                      />
+                      <span>{label}</span>
+                    </label>
+                    {/* Modalidade radio para módulos específicos */}
+                    {MODULOS_COM_MODALIDADE.includes(key) && modulosSelecionados.includes(key) && (
+                      <div className="ml-6 mt-1 flex gap-3">
+                        <label className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`modalidade_${key}`}
+                            checked={(modalidades[key] ?? 'STANDALONE') === 'STANDALONE'}
+                            onChange={() => setModalidades((prev) => ({ ...prev, [key]: 'STANDALONE' }))}
+                          />
+                          <span>Standalone</span>
+                        </label>
+                        <label className="flex items-center gap-1 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`modalidade_${key}`}
+                            checked={modalidades[key] === 'GLOBAL'}
+                            onChange={() => setModalidades((prev) => ({ ...prev, [key]: 'GLOBAL' }))}
+                          />
+                          <span>Global</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">
+                {modulosSelecionados.length} de {MODULOS.length} modulos selecionados
+              </p>
+            </div>
+
             {erro && <p className="text-sm text-red-600">{erro}</p>}
           </div>
           <DialogFooter>

@@ -405,7 +405,7 @@ export class AuthService {
     ) {
       const coop = await this.prisma.cooperativa.findUnique({
         where: { id: usuario.cooperativaId },
-        select: { id: true, nome: true, tipoParceiro: true },
+        select: { id: true, nome: true, tipoParceiro: true, modulosAtivos: true, modalidadesAtivas: true },
       });
       if (coop) {
         contextos.push({
@@ -414,6 +414,8 @@ export class AuthService {
           id: coop.id,
           cooperativaId: coop.id,
           cooperativaNome: coop.nome,
+          modulosAtivos: coop.modulosAtivos ?? [],
+          modalidadesAtivas: (coop.modalidadesAtivas as Record<string, string>) ?? {},
         });
       }
     }

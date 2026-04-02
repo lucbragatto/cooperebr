@@ -43,8 +43,10 @@ import { EmailModule } from './email/email.module';
 import { RelatoriosModule } from './relatorios/relatorios.module';
 import { CooperTokenModule } from './cooper-token/cooper-token.module';
 import { ConviteIndicacaoModule } from './convite-indicacao/convite-indicacao.module';
+import { ConveniosModule } from './convenios/convenios.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { ModuloGuard } from './auth/modulo.guard';
 
 @Module({
   imports: [
@@ -88,6 +90,7 @@ import { RolesGuard } from './auth/roles.guard';
     RelatoriosModule,
     CooperTokenModule,
     ConviteIndicacaoModule,
+    ConveniosModule,
   ],
   controllers: [AppController],
   providers: [
@@ -95,6 +98,7 @@ import { RolesGuard } from './auth/roles.guard';
     PrismaService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ModuloGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
