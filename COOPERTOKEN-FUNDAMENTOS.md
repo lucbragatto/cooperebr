@@ -304,4 +304,137 @@ O FCFS cria o caminho natural para captação de investidores dentro do marco co
 
 ---
 
+## 10. Contabilidade e Lançamentos Automáticos
+
+### 10.1 Novas contas no Plano de Contas
+
+```
+PASSIVO
+  2.3 Tokens a Liquidar
+      → Tokens emitidos ainda não usados/expirados
+
+PATRIMÔNIO LÍQUIDO / FUNDOS
+  3.3 FCFS — Fundo Cooperativo de Fomento Solar
+      → Uso exclusivo: usinas, carregadores veiculares, infraestrutura GD
+
+RECEITAS
+  4.4 Receita de Taxa Clube       (circulação de tokens entre cooperados)
+  4.5 Receita de Tokens Expirados (tokens não usados no prazo)
+  4.6 Receita FCFS — Operação     (% da cooperativa nas contribuições)
+
+OBRIGAÇÕES
+  5.5 Repasse SISGD — Tokens
+  5.6 Repasse Donos Usinas — FCFS
+```
+
+### 10.2 Lançamentos automáticos por evento
+
+**Evento: Cooperado paga Opção B**
+```
+DÉBITO:  Caixa/Banco                 R$ 1.000
+CRÉDITO: Receita Mensalidades        R$   800
+CRÉDITO: Passivo Tokens a Liquidar   R$   200
+```
+
+**Evento: Token usado no parceiro (liquidação)**
+```
+DÉBITO:  Passivo Tokens a Liquidar   R$ X
+CRÉDITO: Desconto concedido parceiro R$ X
+```
+
+**Evento: Token expira (job noturno)**
+```
+DÉBITO:  Passivo Tokens a Liquidar   R$ X
+CRÉDITO: Receita Tokens Expirados    R$ X
+  → Split automático: 40% Cooperativa / 30% SISGD / 30% Clube
+```
+
+**Evento: Contribuição ao FCFS**
+```
+DÉBITO:  Caixa/Banco                 R$ 500
+CRÉDITO: FCFS                        R$ 250  (50%)
+CRÉDITO: Receita Operacional FCFS    R$ 100  (20%)
+CRÉDITO: Contas a Pagar — Usinas     R$ 100  (20%)
+CRÉDITO: Contas a Pagar — SISGD      R$  50  (10%)
+```
+
+### 10.3 Impacto no Fluxo de Caixa
+
+O dashboard de Fluxo de Caixa ganha linha separada:
+- Entradas Opção B (valor cheio)
+- Liquidações de tokens (saída)
+- Tokens expirados (receita)
+- Passivo tokens em aberto (obrigação diferida)
+
+---
+
+## 11. Impacto nos Modelos de Cobrança
+
+### 11.1 Os 4 cenários de cobrança
+
+| Modalidade | Valor cobrado | Tokens emitidos | Observação |
+|---|---|---|---|
+| Opção A | kWh × tarifa × (1 - desc%) | 0 | Igual ao atual |
+| Opção B | kWh × tarifa (cheio) | % desconto em tokens | Passivo lançado |
+| Opção B + FCFS | cheio + contribuição | tokens B + tokens bônus | Split FCFS imediato |
+| Abate de tokens | cheio - tokens acumulados | pode emitir novos | Debita ledger |
+
+### 11.2 Motor de cobrança — lógica nova
+
+```
+calcularCobranca(cooperado, kwhEntregue, tarifa):
+  1. Calcular valor base = kwh × tarifa
+  2. Se Opção A: aplicar desconto → valor final
+  3. Se Opção B: valor cheio → calcular tokensAEmitir = base × desconto%
+  4. Se FCFS: somar contribuição → calcular tokens bônus por faixa
+  5. Se abate tokens: calcular valor com desvalorização por dia → subtrair
+  6. Gerar lançamentos contábeis automáticos
+  7. Retornar { valorFinal, tokensAEmitir, tokensAbatidos, lancamentos[] }
+```
+
+### 11.3 Fatura visual ao cooperado
+
+A fatura passa a mostrar:
+- Energia (kWh × tarifa)
+- Modalidade escolhida (A ou B)
+- Contribuição FCFS (se houver)
+- Abate de tokens acumulados (se solicitado)
+- Total a pagar
+- Tokens que vai receber (ao pagar)
+- Saldo de tokens após operação
+
+### 11.4 Aba CooperToken nos Modelos de Cobrança
+
+Cada modelo (ESSENCIAL, JUSTO, DINÂMICO, PREMIUM) ganha aba extra:
+- Opção B disponível: sim/não
+- % do desconto convertido em token (ex: 100%)
+- FCFS disponível: sim/não + tabela de desconto por faixa
+- Abate na fatura: sim/não + máximo de tokens por fatura
+
+### 11.5 Tela de configuração (admin)
+
+Configurações → CooperToken & FCFS:
+- Valor do token: fixo (R$) ou dinâmico (segue tarifa)
+- Validade: X dias (padrão 29)
+- Gatilho de emissão: ao pagar / ao gerar cobrança / manual
+- Desvalorização: tabela dia → percentual configurável
+- Saldo escritural: modo (sob demanda / gradual / manual) + teto por cooperado/mês
+- Split de expiração: % para cada parte (soma = 100%)
+- Split FCFS: % para cada parte (soma = 100%)
+
+---
+
+## 12. Configuração nos Planos SaaS
+
+Cada plano do SISGD define se o módulo CooperToken está habilitado:
+- `cooperTokenHabilitado`: boolean (já existe no schema)
+- `taxaTokenPerc`: % de receita que o SISGD retém por token emitido
+- `limiteTokenMensal`: limite de emissão por cooperado/mês
+
+Parceiros com plano básico: sem CooperToken
+Parceiros com plano avançado: CooperToken + FCFS disponíveis
+
+---
+
 *Documento gerado em sessão de 02/04/2026 — Luciano + Assis*
+*Atualizado: 16:55 com contabilidade + modelos de cobrança + configuração*
