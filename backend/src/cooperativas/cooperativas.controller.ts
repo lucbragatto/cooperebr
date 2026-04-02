@@ -44,7 +44,14 @@ export class CooperativasController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()
-  findAll() {
+  findAll(@Request() req: any) {
+    if (req.user?.perfil === ADMIN) {
+      const cooperativaId = req.user?.cooperativaId;
+      if (!cooperativaId) {
+        throw new BadRequestException('Usuário não vinculado a uma cooperativa');
+      }
+      return this.cooperativasService.findOne(cooperativaId).then((c) => [c]);
+    }
     return this.cooperativasService.findAll();
   }
 

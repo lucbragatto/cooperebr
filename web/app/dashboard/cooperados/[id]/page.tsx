@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -542,6 +542,7 @@ export default function CooperadoPerfilPage() {
 
   // Upload fatura concessionária
   const [sheetUploadConc, setSheetUploadConc] = useState(false);
+  const [faturaExpandida, setFaturaExpandida] = useState<string | null>(null);
   const [arquivoConc, setArquivoConc] = useState<File | null>(null);
   const [mesRefConc, setMesRefConc] = useState(() => {
     const now = new Date();
@@ -1273,51 +1274,76 @@ export default function CooperadoPerfilPage() {
                         const d = f.dadosExtraidos as any;
                         const analise = (f as any).analise as any;
                         const sr = (f as any).statusRevisao as string;
+                        const isExpanded = faturaExpandida === f.id;
                         return (
-                          <tr key={f.id} className="border-t hover:bg-gray-50">
-                            <td className="px-4 py-2">{(f as any).mesReferencia ?? d?.mesReferencia ?? '—'}</td>
-                            <td className="px-4 py-2">{d?.distribuidora ?? '—'}</td>
-                            <td className="px-4 py-2 text-right">{Number(d?.creditosRecebidosKwh ?? 0).toFixed(0)}</td>
-                            <td className="px-4 py-2 text-right">{Number(d?.saldoTotalKwh ?? 0).toFixed(0)}</td>
-                            <td className="px-4 py-2">
-                              <Badge variant="outline" className={`text-xs ${
-                                sr === 'AUTO_APROVADO' || sr === 'APROVADO' ? 'bg-green-100 text-green-800 border-green-200' :
-                                sr === 'PENDENTE_REVISAO' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                                sr === 'REJEITADO' ? 'bg-red-100 text-red-800 border-red-200' : ''
-                              }`}>
-                                {sr === 'AUTO_APROVADO' ? 'Auto-aprovado' : sr === 'APROVADO' ? 'Aprovado' : sr === 'PENDENTE_REVISAO' ? 'Revisar' : sr === 'REJEITADO' ? 'Rejeitado' : f.status}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-2 text-right">
-                              {(f as any).cobrancaGeradaId ? <Badge variant="outline" className="text-xs bg-green-50 text-green-700">Gerada</Badge> : '—'}
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                {sr === 'PENDENTE_REVISAO' && (
-                                  <>
-                                    <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50" onClick={async () => {
-                                      try {
-                                        await api.patch(`/faturas/${f.id}/aprovar`);
-                                        showToast('sucesso', 'Fatura aprovada');
-                                        buscarFaturas(true);
-                                      } catch { showToast('erro', 'Erro ao aprovar'); }
-                                    }}>
-                                      <CheckCircle className="h-3 w-3 mr-1" />Aprovar
-                                    </Button>
-                                    <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50" onClick={async () => {
-                                      try {
-                                        await api.patch(`/faturas/${f.id}/rejeitar`);
-                                        showToast('sucesso', 'Fatura rejeitada');
-                                        buscarFaturas(true);
-                                      } catch { showToast('erro', 'Erro ao rejeitar'); }
-                                    }}>
-                                      <XCircle className="h-3 w-3 mr-1" />Rejeitar
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
+                          <React.Fragment key={f.id}>
+                            <tr className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setFaturaExpandida(isExpanded ? null : f.id)}>
+                              <td className="px-4 py-2">{(f as any).mesReferencia ?? d?.mesReferencia ?? '—'}</td>
+                              <td className="px-4 py-2">{d?.distribuidora ?? '—'}</td>
+                              <td className="px-4 py-2 text-right">{Number(d?.creditosRecebidosKwh ?? 0).toFixed(0)}</td>
+                              <td className="px-4 py-2 text-right">{Number(d?.saldoTotalKwh ?? 0).toFixed(0)}</td>
+                              <td className="px-4 py-2">
+                                <Badge variant="outline" className={`text-xs ${
+                                  sr === 'AUTO_APROVADO' || sr === 'APROVADO' ? 'bg-green-100 text-green-800 border-green-200' :
+                                  sr === 'PENDENTE_REVISAO' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                  sr === 'REJEITADO' ? 'bg-red-100 text-red-800 border-red-200' : ''
+                                }`}>
+                                  {sr === 'AUTO_APROVADO' ? 'Auto-aprovado' : sr === 'APROVADO' ? 'Aprovado' : sr === 'PENDENTE_REVISAO' ? 'Revisar' : sr === 'REJEITADO' ? 'Rejeitado' : f.status}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {(f as any).cobrancaGeradaId ? <Badge variant="outline" className="text-xs bg-green-50 text-green-700">Gerada</Badge> : '—'}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {sr === 'PENDENTE_REVISAO' && (
+                                    <>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50" onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          await api.patch(`/faturas/${f.id}/aprovar`);
+                                          showToast('sucesso', 'Fatura aprovada');
+                                          buscarFaturas(true);
+                                        } catch { showToast('erro', 'Erro ao aprovar'); }
+                                      }}>
+                                        <CheckCircle className="h-3 w-3 mr-1" />Aprovar
+                                      </Button>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50" onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          await api.patch(`/faturas/${f.id}/rejeitar`);
+                                          showToast('sucesso', 'Fatura rejeitada');
+                                          buscarFaturas(true);
+                                        } catch { showToast('erro', 'Erro ao rejeitar'); }
+                                      }}>
+                                        <XCircle className="h-3 w-3 mr-1" />Rejeitar
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="bg-gray-50">
+                                <td colSpan={7} className="px-4 py-3">
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                    {analise && (
+                                      <>
+                                        <div><span className="text-gray-500">kWh Esperado:</span> <strong>{Number(analise.kwhEsperado ?? 0).toLocaleString('pt-BR')}</strong></div>
+                                        <div><span className="text-gray-500">kWh Compensado:</span> <strong>{Number(analise.kwhCompensado ?? 0).toLocaleString('pt-BR')}</strong></div>
+                                        <div><span className="text-gray-500">kWh Injetado:</span> <strong>{Number(analise.kwhInjetado ?? 0).toLocaleString('pt-BR')}</strong></div>
+                                        <div><span className="text-gray-500">Divergência:</span> <strong className={Number(analise.divergenciaPerc ?? 0) > 10 ? 'text-red-600' : 'text-green-600'}>{Number(analise.divergenciaPerc ?? 0).toFixed(1)}%</strong></div>
+                                      </>
+                                    )}
+                                    <div><span className="text-gray-500">Consumo Atual:</span> <strong>{Number(d?.consumoAtualKwh ?? 0).toLocaleString('pt-BR')} kWh</strong></div>
+                                    <div><span className="text-gray-500">Total a Pagar:</span> <strong>{Number(d?.totalAPagar ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div>
+                                    <div><span className="text-gray-500">Titular:</span> <strong>{d?.titular ?? '—'}</strong></div>
+                                    <div><span className="text-gray-500">UC:</span> <strong>{d?.numeroUC ?? '—'}</strong></div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>

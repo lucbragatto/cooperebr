@@ -65,6 +65,16 @@ interface DadosExtraidos {
   historicoConsumo: HistoricoItem[];
 }
 
+interface AnaliseResult {
+  kwhEsperado: number;
+  kwhCompensado: number;
+  kwhInjetado: number;
+  saldoAtual: number;
+  divergencia: number;
+  divergenciaPerc: number;
+  statusAnalise: string;
+}
+
 interface ProcessarResult {
   faturaId: string;
   dadosExtraidos: DadosExtraidos;
@@ -73,6 +83,8 @@ interface ProcessarResult {
   mesesDescartados: number;
   thresholdUtilizado: number;
   arquivoUrl: string;
+  analise?: AnaliseResult;
+  statusRevisao?: string;
 }
 
 type Tab = 'pdf' | 'foto' | 'imagem';
@@ -214,10 +226,11 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
     try {
       const arquivoBase64 = await fileToBase64(arquivo);
       const tipoArquivo = arquivo.type === 'application/pdf' ? 'pdf' : 'imagem';
-      const { data } = await api.post<ProcessarResult>('/faturas/processar', {
+      const { data } = await api.post<ProcessarResult>('/faturas/upload-concessionaria', {
         cooperadoId,
         arquivoBase64,
         tipoArquivo,
+        mesReferencia: new Date().toISOString().slice(0, 7),
       });
       setResultado(data);
     } catch (e: unknown) {
@@ -393,6 +406,49 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
               <Campo label="Meses descartados" value={resultado.mesesDescartados} />
             </CardContent>
           </Card>
+
+          {/* Análise vs Contrato */}
+          {resultado.analise && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  Análise vs Contrato
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    resultado.statusRevisao === 'AUTO_APROVADO'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {resultado.statusRevisao === 'AUTO_APROVADO' ? 'Auto-aprovado' : 'Pendente Revisão'}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-gray-700">
+                  kWh esperado: <strong>{resultado.analise.kwhEsperado.toLocaleString('pt-BR')}</strong>
+                  {' | '}kWh compensado: <strong>{resultado.analise.kwhCompensado.toLocaleString('pt-BR')}</strong>
+                  {' | '}Divergência: <strong>{resultado.analise.divergenciaPerc.toFixed(1)}%</strong>
+                </p>
+                {resultado.statusRevisao === 'PENDENTE_REVISAO' && (
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={async () => {
+                      try {
+                        await api.patch(`/faturas/${resultado.faturaId}/aprovar`);
+                        setResultado({ ...resultado, statusRevisao: 'APROVADO' });
+                        onFaturaProcessada?.(resultado.faturaId);
+                      } catch {
+                        setErro('Erro ao aprovar fatura.');
+                      }
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Aprovar
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Grafico historico */}
           {historico.length > 0 && (

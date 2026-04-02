@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getUsuario } from '@/lib/auth';
 import api from '@/lib/api';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -38,12 +40,22 @@ interface Cooperativa {
 }
 
 export default function CooperativasPage() {
+  const router = useRouter();
   const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [dialogAberto, setDialogAberto] = useState(false);
   const [erro, setErro] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+
+  const usuario = getUsuario();
+  const isSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    if (usuario && !isSuperAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [usuario, isSuperAdmin, router]);
 
   useEffect(() => {
     if (toast) {
@@ -74,12 +86,14 @@ export default function CooperativasPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Parceiros</h2>
-        <Link href="/dashboard/cooperativas/nova">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Parceiro
-          </Button>
-        </Link>
+        {isSuperAdmin && (
+          <Link href="/dashboard/cooperativas/nova">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Parceiro
+            </Button>
+          </Link>
+        )}
       </div>
 
       {erro && <p className="text-sm text-red-500 mb-4">{erro}</p>}

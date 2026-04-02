@@ -89,7 +89,7 @@ function getNavSections(perfil: string): NavSection[] {
       title: 'Administração',
       items: [
         { href: '/dashboard/usuarios', label: 'Usuários', icon: Users },
-        { href: '/dashboard/cooperativas', label: 'Parceiros', icon: Building2 },
+        ...(perfil === 'SUPER_ADMIN' ? [{ href: '/dashboard/cooperativas', label: 'Parceiros SISGD', icon: Building2 }] : []),
         { href: '/dashboard/observador', label: 'Observador', icon: Eye },
       ],
     },
