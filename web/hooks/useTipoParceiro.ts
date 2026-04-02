@@ -34,7 +34,13 @@ export function useTipoParceiro() {
     api
       .get<CooperativaResponse[]>('/cooperativas')
       .then((r) => {
-        const coop = r.data?.[0];
+        const lista = r.data ?? [];
+        // Se retornou múltiplas cooperativas (fallback SUPER_ADMIN), default COOPERATIVA
+        if (lista.length !== 1) {
+          setTipoParceiro('COOPERATIVA');
+          return;
+        }
+        const coop = lista[0];
         // Prefer backend-computed labels (enriquecer adds tipoMembro/tipoMembroPlural)
         if (coop?.tipoMembro && coop?.tipoMembroPlural) {
           setLabelsFromApi({ singular: coop.tipoMembro, plural: coop.tipoMembroPlural });

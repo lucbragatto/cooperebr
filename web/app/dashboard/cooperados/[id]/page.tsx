@@ -610,18 +610,31 @@ export default function CooperadoPerfilPage() {
     return () => controller.abort();
   }, [id]);
 
-  const buscarFaturas = useCallback(async (force = false) => {
+  const buscarFaturas = useCallback(async (force = false, signal?: AbortSignal) => {
     if (faturasBuscadas && !force) return;
     setCarregandoFaturas(true);
     try {
-      const { data } = await api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`);
+      const { data } = await api.get<FaturaProcessada[]>(`/faturas/cooperado/${id}`, { signal });
       setFaturas(data);
       setFaturasBuscadas(true);
-    } finally { setCarregandoFaturas(false); }
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
+    } finally { if (!signal?.aborted) setCarregandoFaturas(false); }
   }, [id, faturasBuscadas]);
 
-  useEffect(() => { if (aba === 'fatura') buscarFaturas(); }, [aba, buscarFaturas]);
-  useEffect(() => { if (aba === 'proposta') carregarHistoricoProposta(); }, [aba]);
+  useEffect(() => {
+    if (aba !== 'fatura') return;
+    const controller = new AbortController();
+    buscarFaturas(false, controller.signal);
+    return () => controller.abort();
+  }, [aba, buscarFaturas]);
+
+  useEffect(() => {
+    if (aba !== 'proposta') return;
+    const controller = new AbortController();
+    carregarHistoricoProposta(controller.signal);
+    return () => controller.abort();
+  }, [aba]);
 
   // ── Actions — Cooperado ───────────────────────────────────────────────────
 
@@ -991,12 +1004,12 @@ export default function CooperadoPerfilPage() {
     }
   }
 
-  async function carregarHistoricoProposta() {
+  async function carregarHistoricoProposta(signal?: AbortSignal) {
     try {
-      const { data } = await api.get<any[]>(`/motor-proposta/historico/${id}`);
+      const { data } = await api.get<any[]>(`/motor-proposta/historico/${id}`, { signal });
       setHistoricoProposta(data);
-    } catch {
-      // silently ignore
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
     }
   }
 
