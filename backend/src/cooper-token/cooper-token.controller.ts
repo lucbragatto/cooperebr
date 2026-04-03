@@ -54,7 +54,7 @@ export class CooperTokenController {
   @Get('admin/consolidado')
   async getConsolidado(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId) {
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
     return this.cooperTokenService.getConsolidado(cooperativaId);
@@ -72,7 +72,7 @@ export class CooperTokenController {
     },
   ) {
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId) {
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
     if (!body.cooperadoId || !body.quantidade || body.quantidade <= 0) {
@@ -98,7 +98,7 @@ export class CooperTokenController {
     @Query('limit') limit?: string,
   ) {
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId) {
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
     return this.cooperTokenService.getLedger(
@@ -112,7 +112,7 @@ export class CooperTokenController {
   @Get('admin/resumo')
   async getResumo(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId) {
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
     return this.cooperTokenService.getResumoAdmin(cooperativaId);
@@ -122,7 +122,7 @@ export class CooperTokenController {
   @Post('admin/processar')
   async processar(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId) {
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
     await this.cooperTokenJob.apurarExcedentes();
