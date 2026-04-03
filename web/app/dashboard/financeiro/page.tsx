@@ -5,6 +5,8 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -12,6 +14,10 @@ import {
   DollarSign, Download, TrendingUp, TrendingDown, ArrowUpDown,
   ArrowDownCircle, ArrowUpCircle, CheckCircle, LineChart, Wallet,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts';
 
 function competenciaAtual(): string {
   const now = new Date();
@@ -41,12 +47,88 @@ interface ResumoFinanceiro {
   saldoLiquido: number;
 }
 
+interface TransacaoItem {
+  id: string;
+  descricao: string;
+  tipo: string;
+  valor: number;
+  status?: string;
+  categoriaNome?: string;
+  cooperado?: string;
+  dataVencimento?: string;
+  dataPagamento?: string | null;
+}
+
+interface HistoricoItem {
+  competencia: string;
+  receitas: number;
+  despesas: number;
+}
+
+interface DadosLivroCaixa {
+  totalEntradas: number;
+  totalDespesas: number;
+  totalAsaasRecebido: number;
+  saldoMes: number;
+  entradas: TransacaoItem[];
+  saidas: TransacaoItem[];
+  historico: HistoricoItem[];
+}
+
+function StatusBadge({ status, dataVencimento }: { status?: string; dataVencimento?: string }) {
+  if (status === 'REALIZADO') {
+    return <Badge className="bg-green-100 text-green-700 border-green-200">Realizado</Badge>;
+  }
+  if (dataVencimento) {
+    const vencimento = new Date(dataVencimento);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    if (vencimento < hoje) {
+      return <Badge className="bg-red-100 text-red-700 border-red-200">Vencido</Badge>;
+    }
+  }
+  return (
+    <Badge variant="outline" className="text-gray-500 border-dashed border-gray-300">
+      Previsto
+    </Badge>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3 px-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+        <Skeleton className="h-6 w-28" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) {
+  if (!active || !payload) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+      <p className="text-sm font-medium text-gray-700 mb-1">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.name} className="text-sm" style={{ color: entry.color }}>
+          {entry.name}: {formatarMoeda(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default function FinanceiroPage() {
   const [competencia, setCompetencia] = useState(competenciaAtual());
-  const [dados, setDados] = useState<any>(null);
+  const [dados, setDados] = useState<DadosLivroCaixa | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [tab, setTab] = useState<'entradas' | 'saidas' | 'resumo'>('resumo');
   const [resumo, setResumo] = useState<ResumoFinanceiro | null>(null);
+  const [carregandoResumo, setCarregandoResumo] = useState(true);
 
   useEffect(() => {
     setCarregando(true);
@@ -58,6 +140,7 @@ export default function FinanceiroPage() {
 
   // Carregar resumo consolidado do mês atual
   useEffect(() => {
+    setCarregandoResumo(true);
     const comp = competenciaAtual();
     Promise.all([
       api.get(`/financeiro/lancamentos?tipo=RECEITA&status=PREVISTO&competencia=${comp}`).catch(() => ({ data: [] })),
@@ -65,10 +148,10 @@ export default function FinanceiroPage() {
       api.get(`/financeiro/lancamentos?tipo=RECEITA&status=REALIZADO&competencia=${comp}`).catch(() => ({ data: [] })),
       api.get(`/financeiro/lancamentos?tipo=DESPESA&status=REALIZADO&competencia=${comp}`).catch(() => ({ data: [] })),
     ]).then(([recPrev, desPrev, recReal, desReal]) => {
-      const aReceberPrevisto = (recPrev.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
-      const aPagarPrevisto = (desPrev.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
-      const recebidoRealizado = (recReal.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
-      const pagoRealizado = (desReal.data as any[]).reduce((s: number, l: any) => s + Number(l.valor), 0);
+      const aReceberPrevisto = (recPrev.data as TransacaoItem[]).reduce((s: number, l) => s + Number(l.valor), 0);
+      const aPagarPrevisto = (desPrev.data as TransacaoItem[]).reduce((s: number, l) => s + Number(l.valor), 0);
+      const recebidoRealizado = (recReal.data as TransacaoItem[]).reduce((s: number, l) => s + Number(l.valor), 0);
+      const pagoRealizado = (desReal.data as TransacaoItem[]).reduce((s: number, l) => s + Number(l.valor), 0);
       setResumo({
         aReceberPrevisto,
         aPagarPrevisto,
@@ -76,7 +159,7 @@ export default function FinanceiroPage() {
         pagoRealizado,
         saldoLiquido: (aReceberPrevisto + recebidoRealizado) - (aPagarPrevisto + pagoRealizado),
       });
-    });
+    }).finally(() => setCarregandoResumo(false));
   }, []);
 
   function exportarCsv() {
@@ -84,8 +167,8 @@ export default function FinanceiroPage() {
     const all = [...(dados.entradas || []), ...(dados.saidas || [])];
     const escapeCsv = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const header = 'Tipo,Descricao,Valor,Categoria,Cooperado,Vencimento,Pagamento,Status';
-    const rows = all.map((t: any) =>
-      [t.tipo, t.descricao, Number(t.valor).toFixed(2), t.categoriaNome ?? '', t.cooperado ?? '', formatarData(t.dataVencimento), formatarData(t.dataPagamento), t.status].map(escapeCsv).join(',')
+    const rows = all.map((t) =>
+      [t.tipo, t.descricao, Number(t.valor).toFixed(2), t.categoriaNome ?? '', t.cooperado ?? '', formatarData(t.dataVencimento ?? null), formatarData(t.dataPagamento ?? null), t.status ?? ''].map(escapeCsv).join(',')
     );
     const csv = [header, ...rows].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -109,9 +192,16 @@ export default function FinanceiroPage() {
     setCompetencia(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  const maxHistorico = dados?.historico?.length
-    ? Math.max(...dados.historico.flatMap((h: any) => [h.receitas, h.despesas]), 1)
-    : 1;
+  // Dados para Recharts
+  const chartData = dados?.historico?.map((h) => ({
+    name: formatarCompetencia(h.competencia),
+    Receitas: h.receitas,
+    Despesas: h.despesas,
+  })) ?? [];
+
+  // Totais para tabs
+  const totalEntradas = dados?.entradas?.reduce((s, t) => s + Number(t.valor), 0) ?? 0;
+  const totalSaidas = dados?.saidas?.reduce((s, t) => s + Number(t.valor), 0) ?? 0;
 
   return (
     <div>
@@ -121,13 +211,17 @@ export default function FinanceiroPage() {
       </div>
 
       {/* Resumo consolidado */}
-      {resumo && (
+      {carregandoResumo ? (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          {Array.from({ length: 5 }).map((_, i) => <CardSkeleton key={i} />)}
+        </div>
+      ) : resumo && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardContent className="pt-4 pb-3 px-4">
               <div className="flex items-center gap-2 mb-1">
                 <ArrowDownCircle className="h-4 w-4 text-blue-600" />
-                <span className="text-xs text-gray-500">A Receber</span>
+                <span className="text-xs text-gray-500">A Receber (Previsto)</span>
               </div>
               <p className="text-lg font-bold text-blue-700">{formatarMoeda(resumo.aReceberPrevisto)}</p>
             </CardContent>
@@ -136,7 +230,7 @@ export default function FinanceiroPage() {
             <CardContent className="pt-4 pb-3 px-4">
               <div className="flex items-center gap-2 mb-1">
                 <ArrowUpCircle className="h-4 w-4 text-red-600" />
-                <span className="text-xs text-gray-500">A Pagar</span>
+                <span className="text-xs text-gray-500">A Pagar (Previsto)</span>
               </div>
               <p className="text-lg font-bold text-red-700">{formatarMoeda(resumo.aPagarPrevisto)}</p>
             </CardContent>
@@ -145,7 +239,7 @@ export default function FinanceiroPage() {
             <CardContent className="pt-4 pb-3 px-4">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="text-xs text-gray-500">Recebido</span>
+                <span className="text-xs text-gray-500">Recebido (Realizado)</span>
               </div>
               <p className="text-lg font-bold text-green-700">{formatarMoeda(resumo.recebidoRealizado)}</p>
             </CardContent>
@@ -154,7 +248,7 @@ export default function FinanceiroPage() {
             <CardContent className="pt-4 pb-3 px-4">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="h-4 w-4 text-orange-600" />
-                <span className="text-xs text-gray-500">Pago</span>
+                <span className="text-xs text-gray-500">Pago (Realizado)</span>
               </div>
               <p className="text-lg font-bold text-orange-700">{formatarMoeda(resumo.pagoRealizado)}</p>
             </CardContent>
@@ -163,7 +257,7 @@ export default function FinanceiroPage() {
             <CardContent className="pt-4 pb-3 px-4">
               <div className="flex items-center gap-2 mb-1">
                 <DollarSign className="h-4 w-4 text-purple-600" />
-                <span className="text-xs text-gray-500">Saldo Líquido Projetado</span>
+                <span className="text-xs text-gray-500">Saldo Liquido Projetado</span>
               </div>
               <p className={`text-lg font-bold ${resumo.saldoLiquido >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                 {formatarMoeda(resumo.saldoLiquido)}
@@ -209,9 +303,18 @@ export default function FinanceiroPage() {
         </div>
       </div>
 
-      {carregando && <p className="text-gray-500">Carregando...</p>}
-
-      {dados && (
+      {carregando ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
+          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <Skeleton className="h-[200px] w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      ) : dados && (
         <>
           {/* KPI cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -231,7 +334,7 @@ export default function FinanceiroPage() {
               <CardContent className="pt-4 pb-3 px-4">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingDown className="h-4 w-4 text-red-600" />
-                  <span className="text-xs text-gray-500">Total Saídas</span>
+                  <span className="text-xs text-gray-500">Total Saidas</span>
                 </div>
                 <p className="text-xl font-bold text-red-700">{formatarMoeda(dados.totalDespesas)}</p>
               </CardContent>
@@ -240,7 +343,7 @@ export default function FinanceiroPage() {
               <CardContent className="pt-4 pb-3 px-4">
                 <div className="flex items-center gap-2 mb-1">
                   <ArrowUpDown className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs text-gray-500">Saldo do Mês</span>
+                  <span className="text-xs text-gray-500">Saldo do Mes</span>
                 </div>
                 <p className={`text-xl font-bold ${dados.saldoMes >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                   {formatarMoeda(dados.saldoMes)}
@@ -251,7 +354,7 @@ export default function FinanceiroPage() {
               <CardContent className="pt-4 pb-3 px-4">
                 <div className="flex items-center gap-2 mb-1">
                   <DollarSign className="h-4 w-4 text-purple-600" />
-                  <span className="text-xs text-gray-500">Transações</span>
+                  <span className="text-xs text-gray-500">Transacoes</span>
                 </div>
                 <p className="text-xl font-bold text-gray-800">
                   {(dados.entradas?.length || 0) + (dados.saidas?.length || 0)}
@@ -260,67 +363,74 @@ export default function FinanceiroPage() {
             </Card>
           </div>
 
-          {/* Gráfico barras últimos 6 meses */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-base">Últimos 6 Meses</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3 h-40">
-                {dados.historico?.map((h: any) => (
-                  <div key={h.competencia} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex gap-0.5 items-end justify-center" style={{ height: '120px' }}>
-                      <div
-                        className="w-5 bg-green-500 rounded-t"
-                        style={{ height: `${Math.max((h.receitas / maxHistorico) * 120, 2)}px` }}
-                        title={`Receitas: ${formatarMoeda(h.receitas)}`}
-                      />
-                      <div
-                        className="w-5 bg-red-400 rounded-t"
-                        style={{ height: `${Math.max((h.despesas / maxHistorico) * 120, 2)}px` }}
-                        title={`Despesas: ${formatarMoeda(h.despesas)}`}
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-500">{formatarCompetencia(h.competencia)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-center gap-6 mt-3">
-                <span className="flex items-center gap-1 text-xs text-gray-500">
-                  <span className="w-3 h-3 bg-green-500 rounded" /> Receitas
-                </span>
-                <span className="flex items-center gap-1 text-xs text-gray-500">
-                  <span className="w-3 h-3 bg-red-400 rounded" /> Despesas
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Gráfico Recharts — últimos 6 meses */}
+          {chartData.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">Ultimos 6 Meses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar dataKey="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Tabs */}
+          {/* Tabs com totais */}
           <div className="flex gap-1 mb-4">
-            {(['resumo', 'entradas', 'saidas'] as const).map((t) => (
-              <Button
-                key={t}
-                size="sm"
-                variant={tab === t ? 'default' : 'outline'}
-                onClick={() => setTab(t)}
-              >
-                {t === 'resumo' ? 'Resumo' : t === 'entradas' ? `Entradas (${dados.entradas?.length || 0})` : `Saídas (${dados.saidas?.length || 0})`}
-              </Button>
-            ))}
+            <Button
+              size="sm"
+              variant={tab === 'resumo' ? 'default' : 'outline'}
+              onClick={() => setTab('resumo')}
+            >
+              Resumo
+              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">
+                {(dados.entradas?.length || 0) + (dados.saidas?.length || 0)}
+              </Badge>
+            </Button>
+            <Button
+              size="sm"
+              variant={tab === 'entradas' ? 'default' : 'outline'}
+              onClick={() => setTab('entradas')}
+            >
+              Entradas
+              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 bg-green-100 text-green-700">
+                {formatarMoeda(totalEntradas)}
+              </Badge>
+            </Button>
+            <Button
+              size="sm"
+              variant={tab === 'saidas' ? 'default' : 'outline'}
+              onClick={() => setTab('saidas')}
+            >
+              Saidas
+              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 bg-red-100 text-red-700">
+                {formatarMoeda(totalSaidas)}
+              </Badge>
+            </Button>
           </div>
 
-          {/* Tabela */}
+          {/* Tabela com status badge */}
           <Card>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Descrição</TableHead>
+                    <TableHead>Descricao</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Cooperado</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead>Pagamento</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -335,22 +445,25 @@ export default function FinanceiroPage() {
                     if (!itens || itens.length === 0) {
                       return (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-gray-400 py-6">
-                            Nenhuma transação no período
+                          <TableCell colSpan={7} className="text-center text-gray-400 py-6">
+                            Nenhuma transacao no periodo
                           </TableCell>
                         </TableRow>
                       );
                     }
 
-                    return itens.map((t: any, i: number) => (
+                    return itens.map((t, i: number) => (
                       <TableRow key={`${t.id}-${i}`}>
                         <TableCell className="font-medium max-w-[240px] truncate">{t.descricao}</TableCell>
                         <TableCell>
                           <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">{t.categoriaNome}</span>
                         </TableCell>
                         <TableCell>{t.cooperado || '—'}</TableCell>
-                        <TableCell>{formatarData(t.dataVencimento)}</TableCell>
-                        <TableCell>{formatarData(t.dataPagamento)}</TableCell>
+                        <TableCell>{formatarData(t.dataVencimento ?? null)}</TableCell>
+                        <TableCell>{formatarData(t.dataPagamento ?? null)}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={t.status} dataVencimento={t.dataVencimento} />
+                        </TableCell>
                         <TableCell className={`text-right font-medium ${t.tipo === 'RECEITA' ? 'text-green-700' : 'text-red-700'}`}>
                           {t.tipo === 'RECEITA' ? '+' : '-'} {formatarMoeda(t.valor)}
                         </TableCell>
