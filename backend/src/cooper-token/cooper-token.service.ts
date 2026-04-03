@@ -362,7 +362,7 @@ export class CooperTokenService {
     // Buscar config do plano (valorTokenReais)
     const plano = await this.prisma.plano.findFirst({
       where: {
-        cooperativa: { id: cooperativaId },
+        cooperativaId: cooperativaId,
         cooperTokenAtivo: true,
       },
       select: {
