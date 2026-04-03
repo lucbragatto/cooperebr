@@ -61,7 +61,7 @@ export class CooperTokenJob {
         if (!plano) continue;
         const cotaKwh = Number(fatura.cooperado.cotaKwhMensal ?? 0);
         const kwhGerado = Number(fatura.mediaKwhCalculada ?? 0);
-        const excedente = kwhGerado - cotaKwh;
+        const excedente = Math.round((kwhGerado - cotaKwh) * 100) / 100;
 
         if (excedente <= 0) {
           await this.prisma.faturaProcessada.update({
