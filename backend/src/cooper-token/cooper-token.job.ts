@@ -72,7 +72,7 @@ export class CooperTokenJob {
         }
 
         const tokenPorKwh = Number(plano.tokenPorKwhExcedente ?? 1);
-        const quantidade = excedente * tokenPorKwh;
+        const quantidade = Math.round(excedente * tokenPorKwh * 100) / 100;
 
         await this.cooperTokenService.creditar({
           cooperadoId: fatura.cooperadoId,

@@ -526,9 +526,9 @@ export class CobrancasService {
       kwhCobranca = Math.min(kwhEntregue, kwhContrato);
     }
 
-    const valorBruto = kwhCobranca * tarifaKwh;
-    const valorDesconto = valorBruto * (descontoAplicado / 100);
-    const valorLiquido = valorBruto - valorDesconto;
+    const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
+    const valorDesconto = Math.round(valorBruto * (descontoAplicado / 100) * 100) / 100;
+    const valorLiquido = Math.round((valorBruto - valorDesconto) * 100) / 100;
 
     return {
       contratoId,

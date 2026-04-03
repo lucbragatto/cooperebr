@@ -76,7 +76,12 @@ export default function ContasReceberPage() {
       if (competencia) params.set('competencia', competencia);
       if (statusFiltro) params.set('status', statusFiltro);
       const { data } = await api.get(`/financeiro/lancamentos?${params}`);
-      setLancamentos(data);
+      const mapped = (data ?? []).map((l: any) => ({
+        ...l,
+        cooperado: l.cooperado?.nomeCompleto ?? null,
+        categoriaNome: l.planoContas?.nome ?? null,
+      }));
+      setLancamentos(mapped);
     } catch {
       setLancamentos([]);
     } finally {
