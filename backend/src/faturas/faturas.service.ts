@@ -239,9 +239,9 @@ export class FaturasService {
     return this.extrairDadosFatura(arquivoBase64, tipoArquivo);
   }
 
-  async findByCooperado(cooperadoId: string) {
+  async findByCooperado(cooperadoId: string, cooperativaId: string) {
     return this.prisma.faturaProcessada.findMany({
-      where: { cooperadoId },
+      where: { cooperadoId, cooperado: { cooperativaId } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -368,6 +368,8 @@ export class FaturasService {
       include: { cooperado: true, uc: true },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
+    if (!fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+    const cooperativaIdFatura = fatura.cooperado.cooperativaId;
 
     const dados = fatura.dadosExtraidos as any;
     const analise = (fatura as any).analise as any;
@@ -383,7 +385,7 @@ export class FaturasService {
     }
 
     // Resolver modelo de cobrança
-    const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina);
+    const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
 
     // Determinar mês/ano referência
     const mesRef = fatura.mesReferencia ?? dados?.mesReferencia ?? '';
@@ -457,7 +459,7 @@ export class FaturasService {
     const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
 
     // Vencimento
-    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca');
+    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca', cooperativaIdFatura);
     const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
     const vencimento = this.calcularVencimento(
       fatura.cooperado.preferenciaCobranca,
@@ -715,6 +717,8 @@ export class FaturasService {
       include: { cooperado: true, uc: true },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
+    if (!fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+    const cooperativaIdFatura = fatura.cooperado.cooperativaId;
 
     await this.prisma.faturaProcessada.update({
       where: { id },
@@ -774,7 +778,7 @@ export class FaturasService {
     }
 
     // Buscar dias de vencimento configurado
-    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca');
+    const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca', cooperativaIdFatura);
     const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
 
     // Dados extraídos da fatura para CREDITOS_COMPENSADOS/DINAMICO
@@ -795,7 +799,7 @@ export class FaturasService {
       const descontoDecimal = percentualDesconto / 100;
 
       // Determinar modelo de cobrança (hierarquia: contrato → usina → config → plano → FIXO_MENSAL)
-      const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina);
+      const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
 
       // tarifaKwh = preço do kWh da concessionária (da proposta aceita ou fallback)
       let tarifaKwh: number;
@@ -910,7 +914,7 @@ export class FaturasService {
 
             await this.cooperTokenService.creditar({
               cooperadoId: fatura.cooperadoId,
-              cooperativaId: fatura.cooperado.cooperativaId,
+              cooperativaId: cooperativaIdFatura,
               tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
               quantidade: kwhCompensado,
               valorEmissao,
@@ -943,19 +947,19 @@ export class FaturasService {
     return { sucesso: true };
   }
 
-  // Diagnóstico: verifica tabelas e bucket
-  async diagnostico(): Promise<Record<string, unknown>> {
+  // Diagnóstico: verifica tabelas e bucket (FATURA-02: filtrar por cooperativaId)
+  async diagnostico(cooperativaId: string): Promise<Record<string, unknown>> {
     const resultado: Record<string, unknown> = {};
 
     try {
-      await this.prisma.configTenant.findFirst();
+      await this.prisma.configTenant.findFirst({ where: { cooperativaId } });
       resultado['config_tenant'] = 'OK';
     } catch (e) {
       resultado['config_tenant'] = `ERRO: ${(e as Error).message}`;
     }
 
     try {
-      await this.prisma.faturaProcessada.findFirst();
+      await this.prisma.faturaProcessada.findFirst({ where: { cooperado: { cooperativaId } } });
       resultado['faturas_processadas'] = 'OK';
     } catch (e) {
       resultado['faturas_processadas'] = `ERRO: ${(e as Error).message}`;
@@ -972,6 +976,7 @@ export class FaturasService {
 
     try {
       const cooperado = await this.prisma.cooperado.findFirst({
+        where: { cooperativaId },
         select: { id: true, cotaKwhMensal: true, documento: true },
       });
       resultado['cooperado_campos_novos'] = cooperado
@@ -1215,6 +1220,7 @@ IMPORTANTE:
   private async resolverModeloCobranca(
     contrato: { modeloCobrancaOverride?: ModeloCobranca | null; plano?: { modeloCobranca: ModeloCobranca } | null },
     usina: { modeloCobrancaOverride?: ModeloCobranca | null } | null,
+    cooperativaId?: string,
   ): Promise<ModeloCobranca> {
     // 1. Override do contrato (maior prioridade)
     if (contrato.modeloCobrancaOverride) return contrato.modeloCobrancaOverride;
@@ -1222,8 +1228,10 @@ IMPORTANTE:
     // 2. Override da usina
     if (usina?.modeloCobrancaOverride) return usina.modeloCobrancaOverride;
 
-    // 3. ConfigTenant global
-    const configPadrao = await this.configTenant.get('modelo_cobranca_padrao');
+    // 3. ConfigTenant por cooperativa
+    const configPadrao = cooperativaId
+      ? await this.configTenant.get('modelo_cobranca_padrao', cooperativaId)
+      : null;
     if (configPadrao && ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'].includes(configPadrao)) {
       return configPadrao as ModeloCobranca;
     }

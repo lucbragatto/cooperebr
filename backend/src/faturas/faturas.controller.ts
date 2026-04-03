@@ -53,8 +53,8 @@ export class FaturasController {
   }
 
   @Get('cooperado/:cooperadoId')
-  findByCooperado(@Param('cooperadoId') cooperadoId: string): Promise<unknown> {
-    return this.faturasService.findByCooperado(cooperadoId);
+  findByCooperado(@Param('cooperadoId') cooperadoId: string, @Req() req: any): Promise<unknown> {
+    return this.faturasService.findByCooperado(cooperadoId, req.user.cooperativaId);
   }
 
   @Post('extrair')
@@ -117,8 +117,8 @@ export class FaturasController {
 
   @Get('diagnostico')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN)
-  diagnostico(): Promise<unknown> {
-    return this.faturasService.diagnostico();
+  diagnostico(@Req() req: any): Promise<unknown> {
+    return this.faturasService.diagnostico(req.user.cooperativaId);
   }
 
   @Patch('documentos/:id/status')
