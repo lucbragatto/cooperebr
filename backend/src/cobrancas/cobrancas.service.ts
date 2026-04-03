@@ -145,6 +145,34 @@ export class CobrancasService {
       }
     }
 
+    // Criar LancamentoCaixa PREVISTO (Contas a Receber)
+    try {
+      const nomeCooperado = contrato?.cooperado?.nomeCompleto || 'Cooperado';
+      const mesRef = `${String(data.mesReferencia).padStart(2, '0')}/${data.anoReferencia}`;
+      const competencia = `${data.anoReferencia}-${String(data.mesReferencia).padStart(2, '0')}`;
+
+      const planoContas = await this.prisma.planoContas.findFirst({
+        where: { codigo: '1.1.01' },
+      });
+
+      await this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `Mensalidade - ${nomeCooperado} - ${mesRef}`,
+          valor: data.valorLiquido,
+          competencia,
+          dataVencimento: data.dataVencimento,
+          status: 'PREVISTO',
+          cooperativaId: resolvedCoopId || undefined,
+          cooperadoId: contrato?.cooperadoId || undefined,
+          planoContasId: planoContas?.id || undefined,
+          observacoes: `Ref. cobrança ${cobranca.id}`,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao criar LancamentoCaixa PREVISTO: ${(err as Error).message}`);
+    }
+
     return cobranca;
   }
 
@@ -233,27 +261,47 @@ export class CobrancasService {
       },
     });
 
-    // Criar LancamentoCaixa automático
+    // Atualizar LancamentoCaixa PREVISTO → REALIZADO (Contas a Receber)
     try {
       const nomeCooperado = cobranca.contrato?.cooperado?.nomeCompleto || 'Cooperado';
       const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
       const competencia = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
 
-      await this.prisma.lancamentoCaixa.create({
-        data: {
-          tipo: 'RECEITA',
-          descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
-          valor: valorFinal,
-          competencia,
-          dataPagamento: dtPagamento,
-          status: 'REALIZADO',
-          cooperativaId: cobranca.cooperativaId || cobranca.contrato?.cooperativaId || undefined,
-          cooperadoId: cobranca.contrato?.cooperadoId || undefined,
-          observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
+      const lancamentoExistente = await this.prisma.lancamentoCaixa.findFirst({
+        where: {
+          observacoes: { contains: `Ref. cobrança ${cobranca.id}` },
+          status: 'PREVISTO',
         },
       });
+
+      if (lancamentoExistente) {
+        await this.prisma.lancamentoCaixa.update({
+          where: { id: lancamentoExistente.id },
+          data: {
+            status: 'REALIZADO',
+            valor: valorFinal,
+            dataPagamento: dtPagamento,
+            descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
+            observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
+          },
+        });
+      } else {
+        await this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'RECEITA',
+            descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
+            valor: valorFinal,
+            competencia,
+            dataPagamento: dtPagamento,
+            status: 'REALIZADO',
+            cooperativaId: cobranca.cooperativaId || cobranca.contrato?.cooperativaId || undefined,
+            cooperadoId: cobranca.contrato?.cooperadoId || undefined,
+            observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
+          },
+        });
+      }
     } catch (err) {
-      this.logger.warn(`Falha ao criar LancamentoCaixa na baixa: ${err.message}`);
+      this.logger.warn(`Falha ao atualizar LancamentoCaixa na baixa: ${err.message}`);
     }
 
     // Notificar pagamento confirmado via WhatsApp e E-mail
@@ -355,13 +403,33 @@ export class CobrancasService {
     if (cobranca.status === 'PAGO') {
       throw new BadRequestException('Não é possível cancelar cobrança já paga');
     }
-    return this.prisma.cobranca.update({
+    const cobrancaAtualizada = await this.prisma.cobranca.update({
       where: { id },
       data: {
         status: 'CANCELADO',
         motivoCancelamento: motivo,
       },
     });
+
+    // Cancelar LancamentoCaixa correspondente (Contas a Receber)
+    try {
+      const lancamento = await this.prisma.lancamentoCaixa.findFirst({
+        where: {
+          observacoes: { contains: `Ref. cobrança ${id}` },
+          status: 'PREVISTO',
+        },
+      });
+      if (lancamento) {
+        await this.prisma.lancamentoCaixa.update({
+          where: { id: lancamento.id },
+          data: { status: 'CANCELADO' },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao cancelar LancamentoCaixa: ${(err as Error).message}`);
+    }
+
+    return cobrancaAtualizada;
   }
 
   async remove(id: string) {
