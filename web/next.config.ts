@@ -1,12 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  webpack: (config) => {
-    config.watchOptions = {
-      ...config.watchOptions,
-      ignored: ["**/node_modules/**", "**/backend/**", "**/whatsapp-service/**", "**/.claude/**", "**/.git/**"],
-    };
-    return config;
+  turbopack: {
+    // Configuração vazia — silencia o aviso e usa Turbopack padrão
+    // O Fast Refresh foi corrigido via globals.css (source restrita ao web/)
   },
 };
 
