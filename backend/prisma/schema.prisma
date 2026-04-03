@@ -22,6 +22,7 @@ model Cooperativa {
   cep                       String?
   ativo                     Boolean                           @default(true)
   tipoParceiro              String                            @default("COOPERATIVA") // COOPERATIVA | CONSORCIO | ASSOCIACAO | CONDOMINIO
+  tiposOperacao             String[]                          @default([]) // USINA_PROPRIA | CONDOMINIO | EMPRESA | CARREGADOR_VEICULAR
   // Multa e juros
   multaAtraso               Decimal                           @default(2.0) @db.Decimal(5, 2)
   jurosDiarios              Decimal                           @default(0.033) @db.Decimal(5, 3)
