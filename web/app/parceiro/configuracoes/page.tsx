@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Building2, Settings, Save } from 'lucide-react';
+import { Loader2, Building2, Settings, Save, Tag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import api from '@/lib/api';
+
+const TIPOS_OPERACAO = [
+  { value: 'USINA_PROPRIA', label: 'Usina Solar Própria — Geração Distribuída' },
+  { value: 'CONDOMINIO', label: 'Condomínio — Rateio de consumo' },
+  { value: 'EMPRESA', label: 'Empresa — Uso comercial' },
+  { value: 'CARREGADOR_VEICULAR', label: 'Carregador Veicular — EV Charging' },
+] as const;
 
 export default function ParceiroConfiguracoesPage() {
   const [cooperativa, setCooperativa] = useState<any>(null);
@@ -41,6 +49,7 @@ export default function ParceiroConfiguracoesPage() {
         email: cooperativa.email,
         telefone: cooperativa.telefone,
         endereco: cooperativa.endereco,
+        tiposOperacao: cooperativa.tiposOperacao ?? [],
         multaAtraso: cooperativa.multaAtraso,
         jurosDiarios: cooperativa.jurosDiarios,
         diasCarencia: cooperativa.diasCarencia,
@@ -117,6 +126,41 @@ export default function ParceiroConfiguracoesPage() {
               value={cooperativa.endereco ?? ''}
               onChange={(e) => setCooperativa({ ...cooperativa, endereco: e.target.value })}
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tipo de Operação */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Tag className="w-4 h-4" /> Tipo de Operação
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-gray-500 mb-3">Selecione todos os tipos que se aplicam ao seu parceiro</p>
+          <div className="space-y-3">
+            {TIPOS_OPERACAO.map((tipo) => {
+              const selecionados: string[] = cooperativa.tiposOperacao ?? [];
+              const checked = selecionados.includes(tipo.value);
+              return (
+                <div key={tipo.value} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`op-${tipo.value}`}
+                    checked={checked}
+                    onCheckedChange={(isChecked) => {
+                      const updated = isChecked
+                        ? [...selecionados, tipo.value]
+                        : selecionados.filter((t) => t !== tipo.value);
+                      setCooperativa({ ...cooperativa, tiposOperacao: updated });
+                    }}
+                  />
+                  <Label htmlFor={`op-${tipo.value}`} className="text-sm cursor-pointer">
+                    {tipo.label}
+                  </Label>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
