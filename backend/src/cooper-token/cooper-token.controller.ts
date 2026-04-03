@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { CooperTokenService } from './cooper-token.service';
+import { CooperTokenJob } from './cooper-token.job';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CooperTokenTipo } from '@prisma/client';
@@ -16,7 +17,10 @@ const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
 @Controller('cooper-token')
 export class CooperTokenController {
-  constructor(private readonly cooperTokenService: CooperTokenService) {}
+  constructor(
+    private readonly cooperTokenService: CooperTokenService,
+    private readonly cooperTokenJob: CooperTokenJob,
+  ) {}
 
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
   @Get('saldo')
@@ -84,5 +88,44 @@ export class CooperTokenController {
       quantidade: body.quantidade,
       descricao: body.descricao,
     } as any);
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/ledger')
+  async getLedger(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getLedger(
+      cooperativaId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/resumo')
+  async getResumo(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getResumoAdmin(cooperativaId);
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Post('admin/processar')
+  async processar(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    await this.cooperTokenJob.apurarExcedentes();
+    return { message: 'Apuração de excedentes executada com sucesso' };
   }
 }

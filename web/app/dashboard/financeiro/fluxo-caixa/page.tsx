@@ -63,11 +63,39 @@ export default function FluxoCaixaPage() {
     try {
       // Buscar 3 meses: anterior, atual, próximo
       const comps = [navMes(competencia, -1), competencia, navMes(competencia, 1)];
-      const promises = comps.map((c) =>
+      const lancamentosPromises = comps.map((c) =>
         api.get(`/financeiro/lancamentos?competencia=${c}`).then((r) => r.data).catch(() => [])
       );
-      const results = await Promise.all(promises);
-      setLancamentos(results.flat());
+      const cobrancasPromise = api.get('/cobrancas').then((r) => r.data).catch(() => []);
+
+      const [lancamentosResults, cobrancasData] = await Promise.all([
+        Promise.all(lancamentosPromises),
+        cobrancasPromise,
+      ]);
+
+      // Mapear cobranças como lançamentos RECEITA
+      const cobrancasComoLancamentos: Lancamento[] = (cobrancasData as any[])
+        .filter((c) => c.mesReferencia && c.anoReferencia)
+        .map((c) => {
+          const comp = `${c.anoReferencia}-${String(c.mesReferencia).padStart(2, '0')}`;
+          let status = 'PREVISTO';
+          if (c.status === 'PAGO' || c.status === 'CONFIRMADO') status = 'REALIZADO';
+          else if (c.status === 'VENCIDO') status = 'VENCIDO';
+          const nomeCooperado = c.contrato?.cooperado?.nome || 'Cooperado';
+          return {
+            id: `cob-${c.id}`,
+            descricao: `Cobrança — ${nomeCooperado}`,
+            tipo: 'RECEITA',
+            valor: Number(c.valorLiquido),
+            status,
+            dataVencimento: c.dataVencimento,
+            dataPagamento: c.dataPagamento || null,
+            competencia: comp,
+          };
+        })
+        .filter((l) => comps.includes(l.competencia));
+
+      setLancamentos([...lancamentosResults.flat(), ...cobrancasComoLancamentos]);
     } catch {
       setLancamentos([]);
     } finally {

@@ -46,6 +46,7 @@ import { ConviteIndicacaoModule } from './convite-indicacao/convite-indicacao.mo
 import { ConveniosModule } from './convenios/convenios.module';
 import { ConversaoCreditoModule } from './conversao-credito/conversao-credito.module';
 import { EmailMonitorModule } from './email-monitor/email-monitor.module';
+import { LeadExpansaoModule } from './lead-expansao/lead-expansao.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
@@ -95,6 +96,7 @@ import { ModuloGuard } from './auth/modulo.guard';
     ConveniosModule,
     ConversaoCreditoModule,
     EmailMonitorModule,
+    LeadExpansaoModule,
   ],
   controllers: [AppController],
   providers: [

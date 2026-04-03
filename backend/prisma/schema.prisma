@@ -441,6 +441,8 @@ model Cobranca {
   descontoAplicado         Float?
   baseCalculoUsada         String?
   fonteDesconto            String?
+  fonteDados               String?              // FATURA_OCR | GERACAO_MANUAL | ESTIMADO
+  faturaProcessadaId       String?
   cooperativaId            String?
   valorMulta               Decimal?             @db.Decimal(10, 2)
   valorJuros               Decimal?             @db.Decimal(10, 2)

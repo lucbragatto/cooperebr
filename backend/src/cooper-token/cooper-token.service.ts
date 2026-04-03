@@ -301,6 +301,100 @@ export class CooperTokenService {
     return { items, total, page, limit };
   }
 
+  async getLedger(cooperativaId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.cooperTokenLedger.findMany({
+        where: { cooperativaId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          cooperado: { select: { nomeCompleto: true, email: true } },
+        },
+      }),
+      this.prisma.cooperTokenLedger.count({
+        where: { cooperativaId },
+      }),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  async getResumoAdmin(cooperativaId: string) {
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+    const [
+      totalEmitido,
+      totalEmCirculacao,
+      totalExpirado,
+      emitidoMes,
+      saldos,
+    ] = await Promise.all([
+      this.prisma.cooperTokenSaldo.aggregate({
+        where: { cooperativaId },
+        _sum: { totalEmitido: true },
+      }),
+      this.prisma.cooperTokenSaldo.aggregate({
+        where: { cooperativaId },
+        _sum: { saldoDisponivel: true },
+      }),
+      this.prisma.cooperTokenSaldo.aggregate({
+        where: { cooperativaId },
+        _sum: { totalExpirado: true },
+      }),
+      this.prisma.cooperTokenLedger.aggregate({
+        where: {
+          cooperativaId,
+          operacao: CooperTokenOperacao.CREDITO,
+          createdAt: { gte: inicioMes },
+        },
+        _sum: { quantidade: true },
+      }),
+      this.prisma.cooperTokenSaldo.count({
+        where: { cooperativaId },
+      }),
+    ]);
+
+    // Buscar config do plano (valorTokenReais)
+    const plano = await this.prisma.plano.findFirst({
+      where: {
+        cooperativa: { id: cooperativaId },
+        cooperTokenAtivo: true,
+      },
+      select: {
+        valorTokenReais: true,
+        tokenExpiracaoMeses: true,
+        tokenPorKwhExcedente: true,
+        tokenDescontoMaxPerc: true,
+      },
+    });
+
+    const emitidoNum = Number(totalEmitido._sum.totalEmitido ?? 0);
+    const circulacaoNum = Number(totalEmCirculacao._sum.saldoDisponivel ?? 0);
+    const expiradoNum = Number(totalExpirado._sum.totalExpirado ?? 0);
+    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+
+    return {
+      totalEmitido: emitidoNum,
+      emCirculacao: circulacaoNum,
+      totalExpirado: expiradoNum,
+      emitidoMes: Number(emitidoMes._sum.quantidade ?? 0),
+      valorTotalReais: Math.round(circulacaoNum * valorToken * 100) / 100,
+      totalCooperados: saldos,
+      config: plano
+        ? {
+            valorTokenReais: Number(plano.valorTokenReais),
+            tokenExpiracaoMeses: plano.tokenExpiracaoMeses,
+            tokenPorKwhExcedente: Number(plano.tokenPorKwhExcedente),
+            tokenDescontoMaxPerc: Number(plano.tokenDescontoMaxPerc),
+          }
+        : null,
+    };
+  }
+
   async getConsolidado(cooperativaId: string) {
     const [saldos, emitidoMes, resgatadoMes] = await Promise.all([
       this.prisma.cooperTokenSaldo.findMany({

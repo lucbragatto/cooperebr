@@ -463,6 +463,9 @@ export class FaturasService {
       dados?.vencimento,
     );
 
+    // Determinar fonte dos dados
+    const fonteDados = creditosRecebidosKwh > 0 ? 'FATURA_OCR' : 'ESTIMADO';
+
     const cobranca = await this.prisma.cobranca.create({
       data: {
         contratoId: contrato.id,
@@ -476,6 +479,8 @@ export class FaturasService {
         status: 'A_VENCER',
         kwhCompensado: creditosRecebidosKwh,
         kwhConsumido: Number(dados?.consumoAtualKwh ?? 0),
+        fonteDados,
+        faturaProcessadaId: faturaId,
       },
     });
 
@@ -843,7 +848,11 @@ export class FaturasService {
         dados?.vencimento,
       );
 
-      await this.prisma.cobranca.create({
+      // Determinar fonte dos dados
+      const fonteDados = (modeloCobranca === 'CREDITOS_COMPENSADOS' || modeloCobranca === 'CREDITOS_DINAMICO')
+        && creditosRecebidosKwh > 0 ? 'FATURA_OCR' : 'ESTIMADO';
+
+      const cobrancaCriada = await this.prisma.cobranca.create({
         data: {
           contratoId: contrato.id,
           mesReferencia,
@@ -854,7 +863,17 @@ export class FaturasService {
           valorLiquido,
           dataVencimento: vencimento,
           status: 'A_VENCER',
+          kwhCompensado: creditosRecebidosKwh > 0 ? creditosRecebidosKwh : null,
+          kwhConsumido: dados.consumoAtualKwh != null ? Number(dados.consumoAtualKwh) : null,
+          fonteDados,
+          faturaProcessadaId: fatura.id,
         },
+      });
+
+      // Vincular cobrança à fatura (última criada ganha o link)
+      await this.prisma.faturaProcessada.update({
+        where: { id: fatura.id },
+        data: { cobrancaGeradaId: cobrancaCriada.id },
       });
 
       cobrancasCriadas++;

@@ -9,6 +9,8 @@ import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.servic
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
 
+export type FonteDados = 'FATURA_OCR' | 'GERACAO_MANUAL' | 'ESTIMADO';
+
 export interface CobrancaCalculo {
   contratoId: string;
   competencia: Date;
@@ -20,9 +22,12 @@ export interface CobrancaCalculo {
   descontoAplicado: number;
   baseCalculoUsada: string;
   fonteDesconto: string;
+  fonteDados: FonteDados;
+  faturaProcessadaId: string | null;
   valorBruto: number;
   valorDesconto: number;
   valorLiquido: number;
+  avisos: string[];
 }
 
 @Injectable()
@@ -437,6 +442,8 @@ export class CobrancasService {
   }
 
   async calcularCobrancaMensal(contratoId: string, competencia: Date): Promise<CobrancaCalculo> {
+    const avisos: string[] = [];
+
     // 1. Buscar contrato com usina, UC e plano (para distribuidora e modelo de cobrança)
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: contratoId },
@@ -452,6 +459,9 @@ export class CobrancasService {
 
     // 2. Buscar GeracaoMensal da usina para a competência
     const competenciaNormalizada = new Date(competencia.getFullYear(), competencia.getMonth(), 1);
+    const mesRef = competenciaNormalizada.getMonth() + 1;
+    const anoRef = competenciaNormalizada.getFullYear();
+
     const geracao = await this.prisma.geracaoMensal.findUnique({
       where: {
         usinaId_competencia: {
@@ -481,7 +491,6 @@ export class CobrancasService {
     if (!distribuidora) {
       throw new BadRequestException('UC/Usina não possui distribuidora definida — impossível calcular tarifa');
     }
-    // Normalizar distribuidora para match: lowercase, sem acentos, trimmed
     const normDistrib = distribuidora
       .toLowerCase()
       .normalize('NFD')
@@ -501,29 +510,84 @@ export class CobrancasService {
     if (!tarifaVigente) {
       throw new BadRequestException(`Tarifa não encontrada para a distribuidora "${distribuidora}". Cadastre a tarifa antes de gerar cobranças.`);
     }
-    const tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
+    let tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
 
-    // 6. Resolver modelo de cobrança (contrato override → usina override → plano → FIXO_MENSAL)
+    // 6. Resolver modelo de cobrança (contrato override → usina override → plano → CREDITOS_COMPENSADOS)
     const modeloCobranca =
       (contrato as any).modeloCobrancaOverride ||
       (contrato.usina as any)?.modeloCobrancaOverride ||
       (contrato as any).plano?.modeloCobranca ||
       'CREDITOS_COMPENSADOS';
 
-    // 7. Calcular valor conforme modelo
+    // 7. Buscar FaturaProcessada APROVADA para este cooperado/mês (dados OCR)
+    const mesRefStr = `${anoRef}-${String(mesRef).padStart(2, '0')}`;
+    const faturaAprovada = await this.prisma.faturaProcessada.findFirst({
+      where: {
+        cooperadoId: contrato.cooperadoId,
+        status: 'APROVADA',
+        mesReferencia: mesRefStr,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const dadosOcr = faturaAprovada?.dadosExtraidos as any;
+    let fonteDados: FonteDados = 'GERACAO_MANUAL';
+    let faturaProcessadaId: string | null = null;
+    let kwhCompensadoOcr: number | null = null;
+    let kwhConsumidoOcr: number | null = null;
+
+    if (faturaAprovada && dadosOcr) {
+      faturaProcessadaId = faturaAprovada.id;
+      kwhCompensadoOcr = dadosOcr.creditosRecebidosKwh != null
+        ? Number(dadosOcr.creditosRecebidosKwh)
+        : null;
+      kwhConsumidoOcr = dadosOcr.consumoAtualKwh != null
+        ? Number(dadosOcr.consumoAtualKwh)
+        : null;
+    }
+
+    // 8. Calcular valor conforme modelo, usando OCR quando disponível
     let kwhCobranca: number;
     const kwhContrato = Number(contrato.kwhContrato ?? 0);
 
     if (modeloCobranca === 'FIXO_MENSAL') {
-      // Valor fixo mensal: usa kWhContrato como base, independente da geração real
       kwhCobranca = kwhContrato;
+    } else if (modeloCobranca === 'CREDITOS_COMPENSADOS') {
+      if (kwhCompensadoOcr != null && kwhCompensadoOcr > 0) {
+        // Usar kwhCompensado da fatura OCR em vez de kwhEntregue da GeracaoMensal
+        kwhCobranca = Math.min(kwhCompensadoOcr, kwhContrato);
+        fonteDados = 'FATURA_OCR';
+        avisos.push(`Dados OCR utilizados: kwhCompensado=${kwhCompensadoOcr} da fatura ${faturaAprovada!.id}`);
+      } else {
+        kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+        if (faturaAprovada) {
+          avisos.push('Fatura aprovada encontrada mas sem kwhCompensado — usando GeracaoMensal');
+        }
+      }
     } else if (modeloCobranca === 'CREDITOS_DINAMICO') {
-      // Similar a CREDITOS_COMPENSADOS mas usa tarifa vigente atual (já obtida acima)
-      // kWh cobrança = min(entregue, contrato) — cobra apenas o que foi efetivamente entregue
-      kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+      // CREDITOS_DINAMICO: usar tarifas OCR se disponíveis
+      if (faturaAprovada && dadosOcr) {
+        const tusdOcr = dadosOcr.tarifaTUSD != null ? Number(dadosOcr.tarifaTUSD) : null;
+        const teOcr = dadosOcr.tarifaTE != null ? Number(dadosOcr.tarifaTE) : null;
+        if (tusdOcr != null && teOcr != null && tusdOcr > 0 && teOcr > 0) {
+          tarifaKwh = tusdOcr + teOcr;
+          fonteDados = 'FATURA_OCR';
+          avisos.push(`Tarifa OCR utilizada: TUSD=${tusdOcr} + TE=${teOcr} = ${tarifaKwh} da fatura ${faturaAprovada.id}`);
+        } else {
+          avisos.push('Fatura aprovada encontrada mas sem tarifaTUSD/tarifaTE — usando tarifa vigente cadastrada');
+        }
+      }
+
+      if (kwhCompensadoOcr != null && kwhCompensadoOcr > 0) {
+        kwhCobranca = Math.min(kwhCompensadoOcr, kwhContrato);
+        if (fonteDados !== 'FATURA_OCR') fonteDados = 'FATURA_OCR';
+        avisos.push(`Dados OCR utilizados: kwhCompensado=${kwhCompensadoOcr} da fatura ${faturaAprovada!.id}`);
+      } else {
+        kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+      }
     } else {
-      // CREDITOS_COMPENSADOS (padrão): cobra pelos kWh efetivamente entregues
       kwhCobranca = Math.min(kwhEntregue, kwhContrato);
+      fonteDados = 'ESTIMADO';
     }
 
     const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
@@ -535,15 +599,18 @@ export class CobrancasService {
       competencia: competenciaNormalizada,
       geracaoMensalId: geracao.id,
       kwhEntregue,
-      kwhConsumido: null, // será preenchido quando houver fatura do cooperado
-      kwhCompensado: null,
-      kwhSaldo: null,
+      kwhConsumido: kwhConsumidoOcr,
+      kwhCompensado: kwhCompensadoOcr,
+      kwhSaldo: kwhCompensadoOcr != null ? kwhCompensadoOcr - (kwhConsumidoOcr ?? 0) : null,
       descontoAplicado,
       baseCalculoUsada: `${baseCalculoUsada} (${modeloCobranca})`,
       fonteDesconto,
+      fonteDados,
+      faturaProcessadaId,
       valorBruto,
       valorDesconto,
       valorLiquido,
+      avisos,
     };
   }
 
