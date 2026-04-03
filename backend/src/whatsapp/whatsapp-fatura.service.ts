@@ -8,6 +8,7 @@ interface ProcessarFaturaWhatsAppDto {
   arquivoBase64: string;
   tipoArquivo: 'pdf' | 'imagem';
   telefone: string;
+  cooperativaId: string;
 }
 
 export interface ResultadoWhatsApp {
@@ -59,7 +60,7 @@ export class WhatsappFaturaService {
 
     // 4. Determinar tipo de fornecimento e mínimo faturável
     const tipoFornecimento = String(dadosExtraidos.tipoFornecimento ?? 'TRIFASICO');
-    const minimoAtivo = (await this.configTenant.get('minimo_faturavel_ativo')) === 'true';
+    const minimoAtivo = (await this.configTenant.get('minimo_faturavel_ativo', dto.cooperativaId)) === 'true';
     let minimoFaturavel = 0;
     if (minimoAtivo) {
       const chaveMinimo: Record<string, string> = {
@@ -69,13 +70,13 @@ export class WhatsappFaturaService {
       };
       const chave = chaveMinimo[tipoFornecimento];
       if (chave) {
-        const val = await this.configTenant.get(chave);
+        const val = await this.configTenant.get(chave, dto.cooperativaId);
         minimoFaturavel = val ? Number(val) : 0;
       }
     }
 
     // 5. Buscar plano padrão (configurável via ConfigTenant ou menor desconto)
-    const planoPadraoId = await this.configTenant.get('plano_padrao_whatsapp');
+    const planoPadraoId = await this.configTenant.get('plano_padrao_whatsapp', dto.cooperativaId);
     let plano = planoPadraoId
       ? await this.prisma.plano.findFirst({ where: { id: planoPadraoId, ativo: true } })
       : null;

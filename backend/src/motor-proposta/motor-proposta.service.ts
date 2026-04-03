@@ -81,8 +81,9 @@ export class MotorPropostaService {
     // Tarifa mais recente — filtrar por distribuidora do cooperado
     const ucCooperado = await this.prisma.uc.findFirst({
       where: { cooperadoId: dto.cooperadoId },
-      select: { distribuidora: true },
+      select: { distribuidora: true, cooperado: { select: { cooperativaId: true } } },
     });
+    const cooperativaId = ucCooperado?.cooperado?.cooperativaId ?? '';
     let tarifa: any = null;
     if (ucCooperado?.distribuidora) {
       const normDistrib = ucCooperado.distribuidora.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -124,7 +125,7 @@ export class MotorPropostaService {
     const valorMedio12m = valores.length > 0 ? valores.reduce((a, b) => a + b, 0) / valores.length : valorMesRecente;
 
     // Mínimo faturável ANEEL
-    const minimoAtivo = (await this.configTenant.get('minimo_faturavel_ativo')) === 'true';
+    const minimoAtivo = (await this.configTenant.get('minimo_faturavel_ativo', cooperativaId)) === 'true';
     const tipoFornecimento = dto.tipoFornecimento ?? null;
     let minimoFaturavel = 0;
     if (minimoAtivo && tipoFornecimento) {
@@ -135,7 +136,7 @@ export class MotorPropostaService {
       };
       const chave = chaveMinimo[tipoFornecimento];
       if (chave) {
-        const val = await this.configTenant.get(chave);
+        const val = await this.configTenant.get(chave, cooperativaId);
         minimoFaturavel = val ? Number(val) : 0;
       }
     }

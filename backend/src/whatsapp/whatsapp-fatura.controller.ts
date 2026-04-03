@@ -32,8 +32,9 @@ export class WhatsappFaturaController {
   @Post('processar-fatura')
   processarFatura(
     @Body() body: { arquivoBase64: string; tipoArquivo: 'pdf' | 'imagem'; telefone: string },
+    @Req() req: any,
   ) {
-    return this.service.processarFatura(body);
+    return this.service.processarFatura({ ...body, cooperativaId: req.user.cooperativaId });
   }
 
   // Webhook para mensagens recebidas do Baileys

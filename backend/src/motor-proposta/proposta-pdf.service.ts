@@ -22,6 +22,7 @@ export class PropostaPdfService {
       },
     });
     if (!proposta) throw new NotFoundException('Proposta não encontrada');
+    if (!proposta.cooperado.cooperativaId) throw new NotFoundException('Cooperado sem cooperativa vinculada');
 
     // Buscar histórico de faturas do cooperado
     const faturas = await this.prisma.faturaProcessada.findMany({
@@ -34,14 +35,15 @@ export class PropostaPdfService {
         ? (faturas[0].historicoConsumo as any[])
         : [];
 
-    // Config tenant
+    // Config tenant (FATURA-02: filtrar por cooperativaId)
+    const coopId = proposta.cooperado.cooperativaId;
     const [nomeEmpresa, enderecoEmpresa, emailEmpresa, whatsappEmpresa, sloganEmpresa] =
       await Promise.all([
-        this.configTenant.get('nome_empresa'),
-        this.configTenant.get('endereco_empresa'),
-        this.configTenant.get('email_empresa'),
-        this.configTenant.get('whatsapp_empresa'),
-        this.configTenant.get('slogan_empresa'),
+        this.configTenant.get('nome_empresa', coopId),
+        this.configTenant.get('endereco_empresa', coopId),
+        this.configTenant.get('email_empresa', coopId),
+        this.configTenant.get('whatsapp_empresa', coopId),
+        this.configTenant.get('slogan_empresa', coopId),
       ]);
 
     const empresa = {

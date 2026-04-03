@@ -1078,7 +1078,7 @@ export class WhatsappBotService {
     // Registrar a mensagem de suporte
     this.logger.log(`Mensagem de suporte de ${telefone}: ${corpo}`);
 
-    const telefoneSuporte = await this.configTenant.get('suporte_telefone') || process.env.SUPORTE_TELEFONE || '';
+    const telefoneSuporte = (conversa.cooperativaId ? await this.configTenant.get('suporte_telefone', conversa.cooperativaId) : null) || process.env.SUPORTE_TELEFONE || '';
     const complementoSuporte = telefoneSuporte ? `\n\nSe for urgente, ligue: ${telefoneSuporte}` : '';
     await this.sender.enviarMensagem(
       telefone,
