@@ -8,6 +8,7 @@ interface CreditarParams {
   cooperativaId: string;
   tipo: CooperTokenTipo;
   quantidade: number;
+  valorEmissao?: number;
   referenciaId?: string;
   referenciaTabela?: string;
   expiracaoMeses?: number;
@@ -47,14 +48,17 @@ export class CooperTokenService {
       expiracaoMeses = 12,
     } = params;
 
+    const taxaEmissao = Math.round(quantidade * 0.02 * 10000) / 10000;
+    const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
+
     return this.prisma.$transaction(async (tx) => {
       // Buscar ou criar saldo
       let saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
       });
 
-      const novoSaldoDisponivel = Number(saldo?.saldoDisponivel ?? 0) + quantidade;
-      const novoTotalEmitido = Number(saldo?.totalEmitido ?? 0) + quantidade;
+      const novoSaldoDisponivel = Number(saldo?.saldoDisponivel ?? 0) + quantidadeLiquida;
+      const novoTotalEmitido = Number(saldo?.totalEmitido ?? 0) + quantidadeLiquida;
 
       if (saldo) {
         saldo = await tx.cooperTokenSaldo.update({
@@ -69,8 +73,8 @@ export class CooperTokenService {
           data: {
             cooperadoId,
             cooperativaId,
-            saldoDisponivel: quantidade,
-            totalEmitido: quantidade,
+            saldoDisponivel: quantidadeLiquida,
+            totalEmitido: quantidadeLiquida,
           },
         });
       }
@@ -84,18 +88,18 @@ export class CooperTokenService {
           cooperativaId,
           tipo,
           operacao: CooperTokenOperacao.CREDITO,
-          quantidade,
+          quantidade: quantidadeLiquida,
           saldoApos: novoSaldoDisponivel,
           valorReais: null,
           referenciaId,
           referenciaTabela,
           expiracaoEm,
-          descricao: `Crédito ${tipo} de ${quantidade} tokens`,
+          descricao: `Crédito ${tipo} de ${quantidadeLiquida} tokens (bruto: ${quantidade}, taxa emissão 2%: ${taxaEmissao})`,
         },
       });
 
       this.logger.log(
-        `Creditado ${quantidade} tokens (${tipo}) para cooperado ${cooperadoId}`,
+        `Creditado ${quantidadeLiquida} tokens líquidos (${tipo}) para cooperado ${cooperadoId} | Split: bruto=${quantidade}, taxa=${taxaEmissao}`,
       );
 
       return ledger;
@@ -148,6 +152,12 @@ export class CooperTokenService {
     });
   }
 
+  calcularValorAtual(valorEmissao: number, createdAt: Date): number {
+    const diasVida = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
+    const fator = diasVida <= 10 ? 1.0 : diasVida <= 20 ? 0.9 : diasVida <= 26 ? 0.75 : diasVida <= 29 ? 0.5 : 0;
+    return Math.round(valorEmissao * fator * 10000) / 10000;
+  }
+
   async getSaldo(cooperadoId: string) {
     const saldo = await this.prisma.cooperTokenSaldo.findUnique({
       where: { cooperadoId },
@@ -161,10 +171,37 @@ export class CooperTokenService {
         totalEmitido: 0,
         totalResgatado: 0,
         totalExpirado: 0,
+        valorAtualEstimado: 0,
       };
     }
 
-    return saldo;
+    // Estimar valor atual: buscar créditos ativos para calcular fator médio
+    const creditosAtivos = await this.prisma.cooperTokenLedger.findMany({
+      where: {
+        cooperadoId,
+        operacao: CooperTokenOperacao.CREDITO,
+        expiracaoEm: { gt: new Date() },
+      },
+      select: { quantidade: true, valorReais: true, createdAt: true },
+    });
+
+    let valorAtualEstimado = 0;
+    if (creditosAtivos.length > 0) {
+      const totalQtd = creditosAtivos.reduce((sum, c) => sum + Number(c.quantidade), 0);
+      const avgValorEmissao = totalQtd > 0
+        ? creditosAtivos.reduce((sum, c) => sum + Number(c.quantidade) * Number(c.valorReais ?? 0.45), 0) / totalQtd
+        : 0.45;
+      const avgFator = totalQtd > 0
+        ? creditosAtivos.reduce((sum, c) => {
+            const diasVida = Math.floor((Date.now() - c.createdAt.getTime()) / 86400000);
+            const fator = diasVida <= 10 ? 1.0 : diasVida <= 20 ? 0.9 : diasVida <= 26 ? 0.75 : diasVida <= 29 ? 0.5 : 0;
+            return sum + Number(c.quantidade) * fator;
+          }, 0) / totalQtd
+        : 1.0;
+      valorAtualEstimado = Math.round(Number(saldo.saldoDisponivel) * avgValorEmissao * avgFator * 100) / 100;
+    }
+
+    return { ...saldo, valorAtualEstimado };
   }
 
   async calcularDesconto(params: CalcularDescontoParams) {

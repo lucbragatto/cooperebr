@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import type { ModeloCobranca, TipoCampanha } from '@/types';
+import type { ModeloCobranca, TipoCampanha, PlanoBaseCalculo, ReferenciaValor, ComponenteCustom } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
@@ -49,6 +49,18 @@ export default function NovoPlanoPage() {
     tipoCampanha: 'PADRAO' as TipoCampanha,
     dataInicioVigencia: '',
     dataFimVigencia: '',
+    baseCalculo: 'KWH_CHEIO' as PlanoBaseCalculo,
+    componentesCustom: [] as ComponenteCustom[],
+    referenciaValor: 'MEDIA_3M' as ReferenciaValor,
+    fatorIncremento: '',
+    mostrarDiscriminado: true,
+    // CooperToken
+    cooperTokenAtivo: false,
+    tokenOpcaoCooperado: 'AMBAS' as 'OPCAO_A' | 'OPCAO_B' | 'AMBAS',
+    tokenValorTipo: 'KWH_APURADO' as 'FIXO' | 'KWH_APURADO',
+    tokenValorFixo: '',
+    tokenDescontoMaxPerc: '',
+    tokenExpiracaoMeses: '',
   });
 
   async function salvar() {
@@ -75,6 +87,20 @@ export default function NovoPlanoPage() {
       if (form.tipoCampanha === 'CAMPANHA') {
         if (form.dataInicioVigencia) payload.dataInicioVigencia = form.dataInicioVigencia;
         if (form.dataFimVigencia) payload.dataFimVigencia = form.dataFimVigencia;
+      }
+      payload.baseCalculo = form.baseCalculo;
+      payload.componentesCustom = form.baseCalculo === 'CUSTOM' ? form.componentesCustom : [];
+      payload.referenciaValor = form.referenciaValor;
+      payload.fatorIncremento = form.fatorIncremento !== '' ? parseFloat(form.fatorIncremento as string) : null;
+      payload.mostrarDiscriminado = form.mostrarDiscriminado;
+      // CooperToken
+      payload.cooperTokenAtivo = form.cooperTokenAtivo;
+      if (form.cooperTokenAtivo) {
+        payload.tokenOpcaoCooperado = form.tokenOpcaoCooperado;
+        payload.tokenValorTipo = form.tokenValorTipo;
+        payload.tokenValorFixo = form.tokenValorTipo === 'FIXO' && form.tokenValorFixo !== '' ? parseFloat(String(form.tokenValorFixo)) : null;
+        payload.tokenDescontoMaxPerc = form.tokenDescontoMaxPerc !== '' ? parseFloat(String(form.tokenDescontoMaxPerc)) : null;
+        payload.tokenExpiracaoMeses = form.tokenExpiracaoMeses !== '' ? parseInt(String(form.tokenExpiracaoMeses)) : null;
       }
       await api.post('/planos', payload);
       router.push('/dashboard/planos');
@@ -231,6 +257,176 @@ export default function NovoPlanoPage() {
                   type="date"
                   value={form.dataFimVigencia}
                   onChange={(e) => setForm({ ...form, dataFimVigencia: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+
+        </CardContent>
+      </Card>
+
+      {/* Base de Cálculo */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Configuração Base de Cálculo</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-6">
+          <div>
+            <label className={labelClass}>Base de Cálculo</label>
+            <select
+              className={inputClass}
+              value={form.baseCalculo}
+              onChange={(e) => setForm({ ...form, baseCalculo: e.target.value as PlanoBaseCalculo })}
+            >
+              <option value="KWH_CHEIO">kWh Cheio (todos componentes)</option>
+              <option value="SEM_TRIBUTO">Sem Tributos (TUSD + TE)</option>
+              <option value="COM_ICMS">Com ICMS (TUSD + TE + ICMS)</option>
+              <option value="CUSTOM">Personalizado</option>
+            </select>
+          </div>
+
+          <div>
+            <label className={labelClass}>Referência de Valor</label>
+            <select
+              className={inputClass}
+              value={form.referenciaValor}
+              onChange={(e) => setForm({ ...form, referenciaValor: e.target.value as ReferenciaValor })}
+            >
+              <option value="ULTIMA_FATURA">Última Fatura</option>
+              <option value="MEDIA_3M">Média 3 meses</option>
+              <option value="MEDIA_6M">Média 6 meses</option>
+              <option value="MEDIA_12M">Média 12 meses</option>
+            </select>
+          </div>
+
+          {form.baseCalculo === 'CUSTOM' && (
+            <div className="col-span-2">
+              <label className={labelClass}>Componentes (selecione os que compõem a base)</label>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {(['TUSD', 'TE', 'ICMS', 'PIS_COFINS', 'CIP'] as ComponenteCustom[]).map((comp) => (
+                  <label key={comp} className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.componentesCustom.includes(comp)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...form.componentesCustom, comp]
+                          : form.componentesCustom.filter((c) => c !== comp);
+                        setForm({ ...form, componentesCustom: next as ComponenteCustom[] });
+                      }}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    />
+                    {comp.replace('_', '/')}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className={labelClass}>Fator de Incremento (%)</label>
+            <input
+              className={inputClass}
+              type="number"
+              step={0.01}
+              placeholder="Opcional — ex: 5.00"
+              value={form.fatorIncremento}
+              onChange={(e) => setForm({ ...form, fatorIncremento: e.target.value })}
+            />
+            <p className="text-xs text-gray-400 mt-0.5">% adicional sobre a base de kWh (deixe vazio para ignorar)</p>
+          </div>
+
+          <div className="flex items-center gap-3 self-end pb-1">
+            <Toggle
+              checked={form.mostrarDiscriminado}
+              onChange={(v) => setForm((prev) => ({ ...prev, mostrarDiscriminado: v }))}
+            />
+            <span className="text-sm text-gray-700">Mostrar componentes discriminados ao cooperado</span>
+          </div>
+
+        </CardContent>
+      </Card>
+
+      {/* CooperToken */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>CooperToken</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-6">
+          <div className="col-span-2 flex items-center gap-3">
+            <Toggle
+              checked={form.cooperTokenAtivo}
+              onChange={(v) => setForm((prev) => ({ ...prev, cooperTokenAtivo: v }))}
+            />
+            <span className="text-sm text-gray-700">Ativar CooperToken</span>
+          </div>
+
+          {form.cooperTokenAtivo && (
+            <>
+              <div>
+                <label className={labelClass}>Opção do cooperado</label>
+                <select
+                  className={inputClass}
+                  value={form.tokenOpcaoCooperado}
+                  onChange={(e) => setForm({ ...form, tokenOpcaoCooperado: e.target.value as 'OPCAO_A' | 'OPCAO_B' | 'AMBAS' })}
+                >
+                  <option value="OPCAO_A">Opção A (desconto na cobrança)</option>
+                  <option value="OPCAO_B">Opção B (cashback/crédito)</option>
+                  <option value="AMBAS">Ambas (cooperado escolhe)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Tipo de valor do token</label>
+                <select
+                  className={inputClass}
+                  value={form.tokenValorTipo}
+                  onChange={(e) => setForm({ ...form, tokenValorTipo: e.target.value as 'FIXO' | 'KWH_APURADO' })}
+                >
+                  <option value="KWH_APURADO">kWh Apurado (variável)</option>
+                  <option value="FIXO">Valor Fixo (R$)</option>
+                </select>
+              </div>
+
+              {form.tokenValorTipo === 'FIXO' && (
+                <div>
+                  <label className={labelClass}>Valor fixo do token (R$)</label>
+                  <input
+                    className={inputClass}
+                    type="number"
+                    min={0}
+                    step={0.0001}
+                    placeholder="Ex: 0.5000"
+                    value={form.tokenValorFixo}
+                    onChange={(e) => setForm({ ...form, tokenValorFixo: e.target.value })}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className={labelClass}>Desconto máximo via token (%)</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  placeholder="Ex: 10.00"
+                  value={form.tokenDescontoMaxPerc}
+                  onChange={(e) => setForm({ ...form, tokenDescontoMaxPerc: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Meses para expiração</label>
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="Ex: 12"
+                  value={form.tokenExpiracaoMeses}
+                  onChange={(e) => setForm({ ...form, tokenExpiracaoMeses: e.target.value })}
                 />
               </div>
             </>

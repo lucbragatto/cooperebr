@@ -41,6 +41,11 @@ export class MotorPropostaController {
     return this.service.confirmarOpcao(dto);
   }
 
+  @Post('calcular-com-plano')
+  calcularComPlano(@Body() body: any) {
+    return this.service.calcularComPlano(body);
+  }
+
   @Post('aceitar')
   aceitar(@Body() body: any) {
     return this.service.aceitar(body);

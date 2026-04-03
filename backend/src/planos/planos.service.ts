@@ -69,6 +69,18 @@ export class PlanosService implements OnModuleInit {
         tipoCampanha: (dto.tipoCampanha as TipoCampanha) ?? TipoCampanha.PADRAO,
         dataInicioVigencia: dto.dataInicioVigencia ? new Date(dto.dataInicioVigencia) : null,
         dataFimVigencia: dto.dataFimVigencia ? new Date(dto.dataFimVigencia) : null,
+        baseCalculo: dto.baseCalculo ?? 'KWH_CHEIO',
+        componentesCustom: dto.componentesCustom ?? [],
+        referenciaValor: dto.referenciaValor ?? 'MEDIA_3M',
+        fatorIncremento: dto.fatorIncremento ?? null,
+        mostrarDiscriminado: dto.mostrarDiscriminado ?? true,
+        // CooperToken
+        cooperTokenAtivo: dto.cooperTokenAtivo ?? false,
+        tokenOpcaoCooperado: dto.tokenOpcaoCooperado ?? 'AMBAS',
+        tokenValorTipo: dto.tokenValorTipo ?? 'KWH_APURADO',
+        tokenValorFixo: dto.tokenValorFixo ?? null,
+        tokenDescontoMaxPerc: dto.tokenDescontoMaxPerc ?? null,
+        tokenExpiracaoMeses: dto.tokenExpiracaoMeses ?? null,
       },
     });
   }
@@ -90,6 +102,18 @@ export class PlanosService implements OnModuleInit {
         ...(dto.tipoCampanha !== undefined && { tipoCampanha: dto.tipoCampanha as TipoCampanha }),
         ...(dto.dataInicioVigencia !== undefined && { dataInicioVigencia: dto.dataInicioVigencia ? new Date(dto.dataInicioVigencia) : null }),
         ...(dto.dataFimVigencia !== undefined && { dataFimVigencia: dto.dataFimVigencia ? new Date(dto.dataFimVigencia) : null }),
+        ...(dto.baseCalculo !== undefined && { baseCalculo: dto.baseCalculo }),
+        ...(dto.componentesCustom !== undefined && { componentesCustom: dto.componentesCustom }),
+        ...(dto.referenciaValor !== undefined && { referenciaValor: dto.referenciaValor }),
+        ...(dto.fatorIncremento !== undefined && { fatorIncremento: dto.fatorIncremento }),
+        ...(dto.mostrarDiscriminado !== undefined && { mostrarDiscriminado: dto.mostrarDiscriminado }),
+        // CooperToken
+        ...(dto.cooperTokenAtivo !== undefined && { cooperTokenAtivo: dto.cooperTokenAtivo }),
+        ...(dto.tokenOpcaoCooperado !== undefined && { tokenOpcaoCooperado: dto.tokenOpcaoCooperado }),
+        ...(dto.tokenValorTipo !== undefined && { tokenValorTipo: dto.tokenValorTipo }),
+        ...(dto.tokenValorFixo !== undefined && { tokenValorFixo: dto.tokenValorFixo }),
+        ...(dto.tokenDescontoMaxPerc !== undefined && { tokenDescontoMaxPerc: dto.tokenDescontoMaxPerc }),
+        ...(dto.tokenExpiracaoMeses !== undefined && { tokenExpiracaoMeses: dto.tokenExpiracaoMeses }),
       },
     });
   }

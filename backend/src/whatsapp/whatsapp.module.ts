@@ -18,6 +18,7 @@ import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notifi
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
 import { WhatsappNotificacoesService } from './whatsapp-notificacoes.service';
 import { WhatsappConversaJob } from './whatsapp-conversa.job';
+import { CoopereAiService } from './coopere-ai.service';
 import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.m
     WhatsappFluxoMotorService,
     ConfiguracaoNotificacaoService,
     WhatsappConversaJob,
+    CoopereAiService,
     PrismaService,
   ],
   exports: [

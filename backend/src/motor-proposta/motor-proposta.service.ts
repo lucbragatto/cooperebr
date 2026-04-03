@@ -241,6 +241,141 @@ export class MotorPropostaService {
     return this.calcular(dto);
   }
 
+  /**
+   * Calcula proposta usando a configuração de base de cálculo do Plano.
+   * Usado quando há dados OCR de fatura (upload) com componentes discriminados.
+   */
+  async calcularComPlano(dados: {
+    planoId: string;
+    consumoKwh: number;
+    totalSemGD: number;
+    tusd: number;
+    te: number;
+    pisCofins: number;
+    cip: number;
+    icms?: number;
+    historico: Array<{ mes: string; kwh: number; valor: number }>;
+  }) {
+    const plano = await this.prisma.plano.findUnique({ where: { id: dados.planoId } });
+    if (!plano) throw new NotFoundException(`Plano ${dados.planoId} não encontrado`);
+
+    const baseCalculo = (plano.baseCalculo ?? 'KWH_CHEIO') as string;
+    const componentesCustom = (plano.componentesCustom ?? []) as string[];
+    const referenciaValor = (plano.referenciaValor ?? 'MEDIA_3M') as string;
+    const fatorIncremento = plano.fatorIncremento ? Number(plano.fatorIncremento) : null;
+    const mostrarDiscriminado = plano.mostrarDiscriminado ?? true;
+    const descontoBase = Number(plano.descontoBase);
+
+    // 1. Calcular valor base por kWh conforme baseCalculo
+    let totalBase: number;
+    switch (baseCalculo) {
+      case 'SEM_TRIBUTO':
+        totalBase = dados.tusd + dados.te;
+        break;
+      case 'COM_ICMS':
+        totalBase = dados.tusd + dados.te + (dados.icms ?? 0);
+        break;
+      case 'CUSTOM': {
+        let soma = 0;
+        if (componentesCustom.includes('TUSD')) soma += dados.tusd;
+        if (componentesCustom.includes('TE')) soma += dados.te;
+        if (componentesCustom.includes('ICMS')) soma += (dados.icms ?? 0);
+        if (componentesCustom.includes('PIS_COFINS')) soma += dados.pisCofins;
+        if (componentesCustom.includes('CIP')) soma += dados.cip;
+        totalBase = soma;
+        break;
+      }
+      case 'KWH_CHEIO':
+      default:
+        totalBase = dados.totalSemGD;
+        break;
+    }
+
+    const kwhBaseCalculo = dados.consumoKwh > 0
+      ? Math.round((totalBase / dados.consumoKwh) * 100000) / 100000
+      : 0;
+
+    // 2. Determinar kWh de referência conforme referenciaValor
+    const historico = dados.historico ?? [];
+    let kwhMedio: number;
+    switch (referenciaValor) {
+      case 'ULTIMA_FATURA':
+        kwhMedio = dados.consumoKwh;
+        break;
+      case 'MEDIA_6M': {
+        const ultimos6 = historico.slice(-6);
+        kwhMedio = ultimos6.length > 0
+          ? ultimos6.reduce((a, h) => a + h.kwh, 0) / ultimos6.length
+          : dados.consumoKwh;
+        break;
+      }
+      case 'MEDIA_12M': {
+        const ultimos12 = historico.slice(-12);
+        kwhMedio = ultimos12.length > 0
+          ? ultimos12.reduce((a, h) => a + h.kwh, 0) / ultimos12.length
+          : dados.consumoKwh;
+        break;
+      }
+      case 'MEDIA_3M':
+      default: {
+        const ultimos3 = historico.slice(-3);
+        kwhMedio = ultimos3.length > 0
+          ? ultimos3.reduce((a, h) => a + h.kwh, 0) / ultimos3.length
+          : dados.consumoKwh;
+        break;
+      }
+    }
+    kwhMedio = Math.round(kwhMedio * 100) / 100;
+
+    // 3. Aplicar fator de incremento
+    let kwhContrato = kwhMedio;
+    if (fatorIncremento !== null) {
+      kwhContrato = Math.round(kwhMedio * (1 + fatorIncremento / 100) * 100) / 100;
+    }
+
+    // 4. Calcular valores financeiros
+    const valorMensalCooperebr = Math.round(kwhContrato * kwhBaseCalculo * (1 - descontoBase / 100) * 100) / 100;
+    const comparativoSemGD = Math.round(kwhContrato * (dados.totalSemGD / (dados.consumoKwh || 1)) * 100) / 100;
+    const valorMensalEdp = Math.round((comparativoSemGD - valorMensalCooperebr) * 0.1 * 100) / 100; // custo mínimo EDP estimado
+    const valorTotalMensal = Math.round((valorMensalCooperebr + valorMensalEdp) * 100) / 100;
+    const economiaReais = Math.round((comparativoSemGD - valorTotalMensal) * 100) / 100;
+    const economiaPercent = comparativoSemGD > 0
+      ? Math.round((economiaReais / comparativoSemGD) * 100 * 100) / 100
+      : 0;
+
+    // 5. Discriminado (componentes) — só se mostrarDiscriminado
+    const discriminado = mostrarDiscriminado ? {
+      tusd: Math.round(dados.tusd * 100) / 100,
+      te: Math.round(dados.te * 100) / 100,
+      pisCofins: Math.round(dados.pisCofins * 100) / 100,
+      cip: Math.round(dados.cip * 100) / 100,
+      totalBase: Math.round(totalBase * 100) / 100,
+    } : null;
+
+    const baseCalculoLabels: Record<string, string> = {
+      KWH_CHEIO: 'kWh Cheio (todos componentes)',
+      SEM_TRIBUTO: 'Sem Tributos (TUSD + TE)',
+      COM_ICMS: 'Com ICMS (TUSD + TE + ICMS)',
+      CUSTOM: `Personalizado (${componentesCustom.join(', ')})`,
+    };
+
+    return {
+      kwhMedio,
+      kwhContrato,
+      kwhBaseCalculo,
+      baseCalculoUsada: baseCalculoLabels[baseCalculo] ?? baseCalculo,
+      referenciaUsada: referenciaValor,
+      fatorIncrementoAplicado: fatorIncremento,
+      discriminado,
+      valorMensalCooperebr,
+      valorMensalEdp,
+      valorTotalMensal,
+      economiaReais,
+      economiaPercent,
+      comparativoSemGD,
+    };
+  }
+
   async aceitar(dto: {
     cooperadoId: string;
     resultado: ResultadoCalculo['resultado'];

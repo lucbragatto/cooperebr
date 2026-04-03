@@ -11,6 +11,7 @@ import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
 import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
+import { CoopereAiService } from './coopere-ai.service';
 
 // Emojis em unicode escape para evitar problemas de encoding no WhatsApp
 const E = {
@@ -84,6 +85,7 @@ const E = {
   confuso: '\uD83D\uDE15',   // 😕
   mapPin: '\uD83D\uDCCD',    // 📍
   plugue: '\uD83D\uDD0C',    // 🔌
+  robo: '\uD83E\uDD16',      // 🤖
 };
 
 interface MensagemRecebida {
@@ -122,6 +124,7 @@ export class WhatsappBotService {
     private fluxoMotor: WhatsappFluxoMotorService,
     private cicloVida: WhatsappCicloVidaService,
     private conviteIndicacao: ConviteIndicacaoService,
+    private coopereAi: CoopereAiService,
     private eventEmitter: EventEmitter2,
   ) {}
 
@@ -735,9 +738,10 @@ export class WhatsappBotService {
       return;
     }
 
-    // Fallback com contador
+    // Fallback com contador — passar corpo original para CoopereAI
     await this.incrementarFallback(conversa, telefone,
       'Responda *1* (cooperado), *2* (quero ser cooperado), *3* (atendente) ou *4* (convidar amigo).',
+      corpo,
     );
   }
 
@@ -874,6 +878,7 @@ export class WhatsappBotService {
 
     await this.incrementarFallback(conversa, telefone,
       'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
+      corpo,
     );
   }
 
@@ -1063,7 +1068,7 @@ export class WhatsappBotService {
       return;
     }
 
-    await this.incrementarFallback(conversa, telefone, 'Responda *1* para iniciar cadastro ou *2* para falar com atendente.');
+    await this.incrementarFallback(conversa, telefone, 'Responda *1* para iniciar cadastro ou *2* para falar com atendente.', corpo);
   }
 
   private async handleAguardandoAtendente(msg: MensagemRecebida, conversa: any): Promise<void> {
@@ -1107,12 +1112,30 @@ export class WhatsappBotService {
     this.logger.log(`[Atendente] ${telefone}: ${motivo}`);
   }
 
-  private async incrementarFallback(conversa: any, telefone: string, dica: string): Promise<void> {
+  private async incrementarFallback(conversa: any, telefone: string, dica: string, mensagemOriginal?: string): Promise<void> {
     const novoContador = (conversa.contadorFallback ?? 0) + 1;
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: { contadorFallback: novoContador },
     });
+
+    // Tentar CoopereAI como fallback inteligente
+    const textoParaAi = mensagemOriginal || dica;
+    if (textoParaAi && textoParaAi.length > 2) {
+      const aiResp = await this.coopereAi.perguntar(textoParaAi, { telefone });
+      if (aiResp.ok && aiResp.resposta) {
+        // Resetar contador — a IA respondeu com sucesso
+        await this.prisma.conversaWhatsapp.update({
+          where: { id: conversa.id },
+          data: { contadorFallback: 0 },
+        });
+        await this.sender.enviarMensagem(
+          telefone,
+          `${E.robo} *CoopereAI:*\n\n${aiResp.resposta}\n\n_Digite *menu* para voltar ao início._`,
+        );
+        return;
+      }
+    }
 
     if (novoContador >= 3) {
       // Após 3 mensagens não compreendidas â†’ encaminhar para atendente

@@ -161,6 +161,7 @@ model Cooperado {
   tokenAssinatura         String?
   tokenAssinaturaExp      DateTime?
   // ── CooperToken ──
+  opcaoToken              String                   @default("A")
   cooperTokenLedger       CooperTokenLedger[]
   cooperTokenSaldo        CooperTokenSaldo?
   convitesEnviados        ConviteIndicacao[]       @relation("ConvitesEnviados")
@@ -380,14 +381,24 @@ model Plano {
   contratos           Contrato[]
   propostas           PropostaCooperado[]
 
+  // ── Base de Cálculo ──
+  baseCalculo           String   @default("KWH_CHEIO")
+  componentesCustom     String[] @default([])
+  referenciaValor       String   @default("MEDIA_3M")
+  fatorIncremento       Decimal? @db.Decimal(5, 2)
+  mostrarDiscriminado   Boolean  @default(true)
+
   // ── CooperToken ──
-  cooperTokenAtivo     Boolean  @default(false)
-  tokenPorKwhExcedente Decimal? @db.Decimal(5, 4)
-  valorTokenReais      Decimal? @db.Decimal(10, 2)
-  tokenExpiracaoMeses  Int?
-  tokenDescontoMaxPerc Decimal? @db.Decimal(5, 2)
-  tokenSocialAtivo     Boolean  @default(false)
-  tokenFlexAtivo       Boolean  @default(false)
+  cooperTokenAtivo      Boolean  @default(false)
+  tokenOpcaoCooperado   String   @default("AMBAS") // OPCAO_A | OPCAO_B | AMBAS
+  tokenValorTipo        String   @default("KWH_APURADO") // FIXO | KWH_APURADO
+  tokenValorFixo        Decimal? @db.Decimal(10, 4) // usado quando tokenValorTipo = FIXO
+  tokenPorKwhExcedente  Decimal? @db.Decimal(5, 4)
+  valorTokenReais       Decimal? @db.Decimal(10, 2)
+  tokenExpiracaoMeses   Int?
+  tokenDescontoMaxPerc  Decimal? @db.Decimal(5, 2)
+  tokenSocialAtivo      Boolean  @default(false)
+  tokenFlexAtivo        Boolean  @default(false)
 
   @@map("planos")
 }

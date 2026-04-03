@@ -15,6 +15,7 @@ interface Cooperado {
   cpf: string;
   email: string;
   telefone: string | null;
+  opcaoToken?: 'A' | 'B';
 }
 
 export default function PortalContaPage() {
@@ -28,6 +29,11 @@ export default function PortalContaPage() {
   const [telefone, setTelefone] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [msgDados, setMsgDados] = useState('');
+
+  // Opção de benefício (Token A/B)
+  const [opcaoToken, setOpcaoToken] = useState<'A' | 'B'>('A');
+  const [salvandoOpcao, setSalvandoOpcao] = useState(false);
+  const [msgOpcao, setMsgOpcao] = useState('');
 
   // Form alterar senha
   const [senhaAtual, setSenhaAtual] = useState('');
@@ -46,6 +52,7 @@ export default function PortalContaPage() {
         setNome(c.nomeCompleto ?? '');
         setEmail(c.email ?? '');
         setTelefone(c.telefone ?? '');
+        setOpcaoToken(c.opcaoToken ?? 'A');
       })
       .catch(() => {})
       .finally(() => setCarregando(false));
@@ -66,6 +73,21 @@ export default function PortalContaPage() {
       setMsgDados('Erro ao salvar dados. Tente novamente.');
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function handleSalvarOpcaoToken(opcao: 'A' | 'B') {
+    setSalvandoOpcao(true);
+    setMsgOpcao('');
+    try {
+      await api.patch(`/cooperados/${cooperado?.id}`, { opcaoToken: opcao });
+      setOpcaoToken(opcao);
+      setMsgOpcao('Preferência salva!');
+      setTimeout(() => setMsgOpcao(''), 3000);
+    } catch {
+      setMsgOpcao('Erro ao salvar preferência.');
+    } finally {
+      setSalvandoOpcao(false);
     }
   }
 
@@ -243,6 +265,60 @@ export default function PortalContaPage() {
               {salvandoSenha ? 'Alterando...' : 'Alterar senha'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Opção de benefício CooperToken */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+            🪙 Como desejo meu benefício
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-gray-500">Escolha como deseja receber o benefício da sua cota de energia:</p>
+          <div className="grid grid-cols-1 gap-3">
+            {/* Opção A */}
+            <button
+              onClick={() => handleSalvarOpcaoToken('A')}
+              disabled={salvandoOpcao}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${
+                opcaoToken === 'A'
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">💸</span>
+                <span className="font-semibold text-sm text-gray-800">Opção A — Desconto direto</span>
+                {opcaoToken === 'A' && <span className="ml-auto text-xs bg-green-600 text-white px-2 py-0.5 rounded-full">Ativo</span>}
+              </div>
+              <p className="text-xs text-gray-500">Receba o desconto aplicado diretamente na sua mensalidade CoopereBR. Mais simples, economia imediata na fatura.</p>
+            </button>
+
+            {/* Opção B */}
+            <button
+              onClick={() => handleSalvarOpcaoToken('B')}
+              disabled={salvandoOpcao}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${
+                opcaoToken === 'B'
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">🪙</span>
+                <span className="font-semibold text-sm text-gray-800">Opção B — Receber CooperTokens</span>
+                {opcaoToken === 'B' && <span className="ml-auto text-xs bg-green-600 text-white px-2 py-0.5 rounded-full">Ativo</span>}
+              </div>
+              <p className="text-xs text-gray-500">Pague o valor integral da mensalidade e receba tokens equivalentes ao desconto. Use no Clube de Vantagens: restaurantes, parceiros e muito mais.</p>
+            </button>
+          </div>
+          {msgOpcao && (
+            <p className={`text-xs px-3 py-2 rounded-lg ${msgOpcao.includes('Erro') ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50'}`}>
+              {msgOpcao}
+            </p>
+          )}
         </CardContent>
       </Card>
 

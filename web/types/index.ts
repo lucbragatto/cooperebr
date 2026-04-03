@@ -267,6 +267,22 @@ export interface Plano {
   tipoCampanha: TipoCampanha;
   dataInicioVigencia: string | null;
   dataFimVigencia: string | null;
+  baseCalculo: string;
+  componentesCustom: string[];
+  referenciaValor: string;
+  fatorIncremento: number | null;
+  mostrarDiscriminado: boolean;
+  // CooperToken
+  cooperTokenAtivo: boolean;
+  tokenOpcaoCooperado: string;
+  tokenValorTipo: string;
+  tokenValorFixo: number | null;
+  tokenDescontoMaxPerc: number | null;
+  tokenExpiracaoMeses: number | null;
   createdAt: string;
   updatedAt: string;
 }
+
+export type PlanoBaseCalculo = 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';
+export type ReferenciaValor = 'ULTIMA_FATURA' | 'MEDIA_3M' | 'MEDIA_6M' | 'MEDIA_12M';
+export type ComponenteCustom = 'TUSD' | 'TE' | 'ICMS' | 'PIS_COFINS' | 'CIP';

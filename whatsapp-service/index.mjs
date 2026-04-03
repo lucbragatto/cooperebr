@@ -32,6 +32,50 @@ function toJid(phone) {
   return digits + '@s.whatsapp.net';
 }
 
+// ─── CoopereAI — fallback inteligente ─────────────────────────────────
+const COOPERE_AI_URL =
+  process.env.COOPERE_AI_URL || 'http://localhost:18789/api/sessions/send';
+
+async function askCoopereAI(userMessage, senderInfo = {}) {
+  const context = [
+    senderInfo.nome ? `Nome: ${senderInfo.nome}` : null,
+    senderInfo.telefone ? `Tel: ${senderInfo.telefone}` : null,
+    senderInfo.cooperativa ? `Cooperativa: ${senderInfo.cooperativa}` : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
+
+  const fullMessage = context
+    ? `[${context}] ${userMessage}`
+    : userMessage;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(COOPERE_AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: 'coop', message: fullMessage }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      console.error(`⚠️ CoopereAI HTTP ${res.status}`);
+      return 'Olá! No momento não consigo acessar a assistente virtual. Por favor, tente novamente em instantes.';
+    }
+
+    const data = await res.json();
+    return data.reply || data.response || data.text || 'Olá!';
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'timeout' : err.message;
+    console.error(`⚠️ CoopereAI ${reason}`);
+    return 'Olá! No momento não consigo acessar a assistente virtual. Por favor, tente novamente em instantes.';
+  }
+}
+
 // ─── Iniciar conexão Baileys ─────────────────────────────────────────
 async function startBaileys() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
