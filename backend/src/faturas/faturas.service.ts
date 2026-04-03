@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, InternalServerErrorException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { TipoDocumento, ModeloCobranca } from '@prisma/client';
+import { TipoDocumento, ModeloCobranca, CooperTokenTipo } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
@@ -9,6 +9,7 @@ import { ProcessarFaturaDto } from './dto/processar-fatura.dto';
 import { UploadDocumentoDto } from './dto/upload-documento.dto';
 import { UploadConcessionariaDto } from './dto/upload-concessionaria.dto';
 import { RelatorioFaturaService } from './relatorio-fatura.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
 
 const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -91,6 +92,7 @@ export class FaturasService {
     private configTenant: ConfigTenantService,
     private emailService: EmailService,
     private relatorioService: RelatorioFaturaService,
+    private cooperTokenService: CooperTokenService,
   ) {
     this.waBaseUrl = process.env.WHATSAPP_SERVICE_URL ?? 'http://localhost:3002';
     this.supabase = createClient(
@@ -887,6 +889,46 @@ export class FaturasService {
         cooperadoId: fatura.cooperadoId,
         link: `/dashboard/cobrancas`,
       });
+
+      // Auto-emissão de CooperToken para cooperados Opção B
+      if (
+        fatura.cooperado.opcaoToken === 'B' &&
+        contrato.plano?.cooperTokenAtivo === true
+      ) {
+        try {
+          const kwhCompensado = Number(dados?.creditosRecebidosKwh ?? 0);
+          if (kwhCompensado > 0) {
+            const plano = contrato.plano;
+            const valorEmissao =
+              plano.tokenValorTipo === 'FIXO'
+                ? Number(plano.tokenValorFixo)
+                : Math.round(
+                    (valorBruto / kwhCompensado) *
+                      (1 - Number(plano.descontoBase) / 100) *
+                      10000,
+                  ) / 10000;
+
+            await this.cooperTokenService.creditar({
+              cooperadoId: fatura.cooperadoId,
+              cooperativaId: fatura.cooperado.cooperativaId,
+              tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
+              quantidade: kwhCompensado,
+              valorEmissao,
+              referenciaId: fatura.id,
+              referenciaTabela: 'FaturaProcessada',
+              expiracaoMeses: plano.tokenExpiracaoMeses ?? 12,
+            });
+
+            avisos.push(
+              `CooperToken: ${kwhCompensado} tokens emitidos (Opção B, contrato ${contrato.numero}).`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Falha ao emitir CooperToken para fatura ${fatura.id}, contrato ${contrato.numero}: ${(err as Error).message}`,
+          );
+        }
+      }
     }
 
     if (cobrancasCriadas > 0) {

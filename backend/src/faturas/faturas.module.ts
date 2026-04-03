@@ -6,9 +6,10 @@ import { PrismaService } from '../prisma.service';
 import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { EmailModule } from '../email/email.module';
+import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 
 @Module({
-  imports: [NotificacoesModule, ConfigTenantModule, EmailModule],
+  imports: [NotificacoesModule, ConfigTenantModule, EmailModule, CooperTokenModule],
   controllers: [FaturasController],
   providers: [FaturasService, RelatorioFaturaService, PrismaService],
   exports: [FaturasService, RelatorioFaturaService],
