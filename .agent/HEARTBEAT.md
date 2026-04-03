@@ -1,6 +1,9 @@
-# HEARTBEAT.md — Coop
+# HEARTBEAT.md — CoopereAI
 
 A cada heartbeat, verificar em silêncio e só alertar Luciano se houver algo real.
+
+## Memória compartilhada
+A cada heartbeat, ler `memory/shared/YYYY-MM-DD.md` (hoje e ontem) para se atualizar com decisões do Assis e Luciano. Após executar qualquer tarefa de Luciano, append no arquivo do dia.
 
 ## Checklist (rodar a cada heartbeat)
 
