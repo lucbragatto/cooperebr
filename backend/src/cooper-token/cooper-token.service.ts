@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
+import * as jwt from 'jsonwebtoken';
 
 interface CreditarParams {
   cooperadoId: string;
@@ -429,5 +430,178 @@ export class CooperTokenService {
       tokensResgatadosMes: Number(resgatadoMes._sum.quantidade ?? 0),
       totalCooperados: saldos.length,
     };
+  }
+
+  async gerarQrPagamento(params: {
+    pagadorId: string;
+    cooperativaId: string;
+    quantidade: number;
+  }) {
+    const { pagadorId, cooperativaId, quantidade } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    const saldo = await this.getSaldo(pagadorId);
+    if (Number(saldo.saldoDisponivel) < quantidade) {
+      throw new BadRequestException(
+        `Saldo insuficiente. Disponível: ${Number(saldo.saldoDisponivel)}, solicitado: ${quantidade}`,
+      );
+    }
+
+    const secret = process.env.COOPERTOKEN_QR_SECRET;
+    if (!secret) {
+      throw new BadRequestException('COOPERTOKEN_QR_SECRET não configurado');
+    }
+
+    const payload = {
+      pagadorId,
+      cooperativaId,
+      quantidade,
+      tipo: 'COOPER_TOKEN_QR',
+    };
+
+    const token = jwt.sign(payload, secret, { expiresIn: '5m' });
+
+    return { qrToken: token, expiresIn: 300 };
+  }
+
+  async processarPagamentoQr(params: {
+    qrToken: string;
+    recebedorId: string;
+    recebedorCooperativaId: string;
+  }) {
+    const { qrToken, recebedorId, recebedorCooperativaId } = params;
+
+    const secret = process.env.COOPERTOKEN_QR_SECRET;
+    if (!secret) {
+      throw new BadRequestException('COOPERTOKEN_QR_SECRET não configurado');
+    }
+
+    let decoded: {
+      pagadorId: string;
+      cooperativaId: string;
+      quantidade: number;
+      tipo: string;
+    };
+
+    try {
+      decoded = jwt.verify(qrToken, secret) as typeof decoded;
+    } catch {
+      throw new BadRequestException('QR Code inválido ou expirado');
+    }
+
+    if (decoded.tipo !== 'COOPER_TOKEN_QR') {
+      throw new BadRequestException('Token inválido');
+    }
+
+    if (decoded.pagadorId === recebedorId) {
+      throw new BadRequestException('Pagador e recebedor não podem ser o mesmo');
+    }
+
+    if (decoded.cooperativaId !== recebedorCooperativaId) {
+      throw new BadRequestException(
+        'Pagador e recebedor devem pertencer à mesma cooperativa',
+      );
+    }
+
+    const taxa = Math.round(decoded.quantidade * 0.01 * 10000) / 10000;
+    const quantidadeLiquida =
+      Math.round((decoded.quantidade - taxa) * 10000) / 10000;
+
+    return this.prisma.$transaction(async (tx) => {
+      // Validate sender balance
+      const saldoPagador = await tx.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: decoded.pagadorId },
+      });
+
+      if (
+        !saldoPagador ||
+        Number(saldoPagador.saldoDisponivel) < decoded.quantidade
+      ) {
+        throw new BadRequestException(
+          `Saldo insuficiente do pagador. Disponível: ${Number(saldoPagador?.saldoDisponivel ?? 0)}`,
+        );
+      }
+
+      // Debit sender (full amount)
+      const novoSaldoPagador =
+        Number(saldoPagador.saldoDisponivel) - decoded.quantidade;
+
+      await tx.cooperTokenSaldo.update({
+        where: { cooperadoId: decoded.pagadorId },
+        data: {
+          saldoDisponivel: novoSaldoPagador,
+          totalResgatado: { increment: decoded.quantidade },
+        },
+      });
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: decoded.pagadorId,
+          cooperativaId: decoded.cooperativaId,
+          tipo: CooperTokenTipo.PAGAMENTO_QR,
+          operacao: CooperTokenOperacao.DEBITO,
+          quantidade: decoded.quantidade,
+          saldoApos: novoSaldoPagador,
+          descricao: `Pagamento QR de ${decoded.quantidade} tokens (taxa: ${taxa})`,
+        },
+      });
+
+      // Credit receiver (net amount)
+      let saldoRecebedor = await tx.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: recebedorId },
+      });
+
+      const novoSaldoRecebedor =
+        Number(saldoRecebedor?.saldoDisponivel ?? 0) + quantidadeLiquida;
+      const novoTotalEmitido =
+        Number(saldoRecebedor?.totalEmitido ?? 0) + quantidadeLiquida;
+
+      if (saldoRecebedor) {
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: recebedorId },
+          data: {
+            saldoDisponivel: novoSaldoRecebedor,
+            totalEmitido: novoTotalEmitido,
+          },
+        });
+      } else {
+        saldoRecebedor = await tx.cooperTokenSaldo.create({
+          data: {
+            cooperadoId: recebedorId,
+            cooperativaId: recebedorCooperativaId,
+            saldoDisponivel: quantidadeLiquida,
+            totalEmitido: quantidadeLiquida,
+          },
+        });
+      }
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: recebedorId,
+          cooperativaId: recebedorCooperativaId,
+          tipo: CooperTokenTipo.PAGAMENTO_QR,
+          operacao: CooperTokenOperacao.CREDITO,
+          quantidade: quantidadeLiquida,
+          saldoApos: novoSaldoRecebedor,
+          descricao: `Recebimento QR de ${quantidadeLiquida} tokens (líquido, taxa 1%)`,
+        },
+      });
+
+      this.logger.log(
+        `Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa})`,
+      );
+
+      return {
+        sucesso: true,
+        quantidadeBruta: decoded.quantidade,
+        taxa,
+        quantidadeLiquida,
+        pagadorId: decoded.pagadorId,
+        recebedorId,
+      };
+    });
   }
 }

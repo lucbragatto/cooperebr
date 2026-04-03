@@ -1637,6 +1637,7 @@ enum CooperTokenTipo {
   FLEX
   SOCIAL
   BONUS_INDICACAO
+  PAGAMENTO_QR
 }
 
 enum CooperTokenOperacao {

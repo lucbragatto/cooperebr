@@ -128,4 +128,54 @@ export class CooperTokenController {
     await this.cooperTokenJob.apurarExcedentes();
     return { message: 'Apuração de excedentes executada com sucesso' };
   }
+
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
+  @Post('gerar-qr-pagamento')
+  async gerarQrPagamento(
+    @Req() req: any,
+    @Body() body: { quantidade: number },
+  ) {
+    const cooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperadoId) {
+      throw new BadRequestException('Cooperado não identificado');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    return this.cooperTokenService.gerarQrPagamento({
+      pagadorId: cooperadoId,
+      cooperativaId,
+      quantidade: body.quantidade,
+    });
+  }
+
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
+  @Post('processar-pagamento-qr')
+  async processarPagamentoQr(
+    @Req() req: any,
+    @Body() body: { qrToken: string },
+  ) {
+    const cooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperadoId) {
+      throw new BadRequestException('Cooperado não identificado');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.qrToken) {
+      throw new BadRequestException('Token QR é obrigatório');
+    }
+
+    return this.cooperTokenService.processarPagamentoQr({
+      qrToken: body.qrToken,
+      recebedorId: cooperadoId,
+      recebedorCooperativaId: cooperativaId,
+    });
+  }
 }

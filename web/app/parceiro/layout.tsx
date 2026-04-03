@@ -71,6 +71,7 @@ const allNavSections: NavSection[] = [
       { href: '/parceiro/faturas', label: 'Central de Faturas', icon: FileText, modulo: 'cobrancas' },
       { href: '/parceiro/cobrancas', label: 'Cobranças', icon: CreditCard, modulo: 'cobrancas' },
       { href: '/parceiro/modelos-cobranca', label: 'Modelos de Cobrança', icon: Calculator, modulo: 'modelos_cobranca' },
+      { href: '/parceiro/receber-tokens', label: 'Receber Tokens', icon: Zap },
     ],
   },
   {

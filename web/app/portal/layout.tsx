@@ -12,6 +12,7 @@ import {
   LogOut,
   User,
   Coins,
+  QrCode,
 } from 'lucide-react';
 import { useContexto } from '@/hooks/useContexto';
 import ContextoSwitcher from '@/components/ContextoSwitcher';
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/portal/indicacoes', label: 'Indicações', icon: Users },
   { href: '/portal/convenio', label: 'Meu Convênio', icon: Users },
   { href: '/portal/creditos', label: 'Converter Créditos', icon: Coins },
+  { href: '/portal/tokens', label: 'Pagar Tokens', icon: QrCode },
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
