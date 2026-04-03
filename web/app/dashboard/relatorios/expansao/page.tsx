@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Globe, Loader2, Bell, TrendingUp, Star } from 'lucide-react';
+import { Globe, Loader2, Bell, TrendingUp, Star, DollarSign, Users } from 'lucide-react';
 
 interface ResumoItem {
   distribuidora: string;
@@ -32,8 +34,26 @@ interface LeadItem {
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  const cor = score >= 8 ? 'bg-green-100 text-green-800' : score >= 5 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600';
-  return <Badge className={`${cor} font-bold`}>{score}</Badge>;
+  const config = score >= 8
+    ? { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300', stars: 3 }
+    : score >= 5
+      ? { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300', stars: 2 }
+      : { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-300', stars: 1 };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Badge className={`${config.bg} ${config.text} border ${config.border} font-bold text-sm px-2.5 py-0.5`}>
+        {score}
+      </Badge>
+      <span className="text-yellow-500 text-xs">
+        {'★'.repeat(config.stars)}{'☆'.repeat(3 - config.stars)}
+      </span>
+    </div>
+  );
+}
+
+function formatarMoeda(v: number): string {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 export default function ExpansaoPage() {
@@ -73,44 +93,65 @@ export default function ExpansaoPage() {
     }
   }
 
-  const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totalLeads = dados?.resumo.reduce((s, r) => s + r.totalLeads, 0) ?? 0;
+  const totalConfirmados = dados?.resumo.reduce((s, r) => s + r.confirmados, 0) ?? 0;
 
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
         <Globe className="h-6 w-6 text-green-600" />
-        <h2 className="text-2xl font-bold text-gray-800">Expansão &amp; Investidores</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Expansao &amp; Investidores</h2>
       </div>
 
-      {carregando && <p className="text-gray-500">Carregando...</p>}
-
-      {dados && (
+      {carregando ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="pt-6">
+                  <Skeleton className="h-3 w-24 mb-2" />
+                  <Skeleton className="h-8 w-36" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : dados && (
         <>
-          {/* KPI destaque */}
+          {/* KPI destaque — receita latente como principal */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <Card className="border-green-200 bg-green-50">
-              <CardContent className="pt-6">
-                <p className="text-sm text-green-700 font-medium">Demanda Reprimida Total</p>
-                <p className="text-2xl font-bold text-green-800">R$ {fmt(dados.totalReceitaLatente)}/ano</p>
+            <Card className="border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 shadow-sm">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="h-5 w-5 text-green-600" />
+                  <span className="text-sm text-green-700 font-semibold">Receita Latente Total</span>
+                </div>
+                <p className="text-3xl font-bold text-green-800">{formatarMoeda(dados.totalReceitaLatente)}</p>
+                <p className="text-xs text-green-600 mt-1">Potencial anual de receita com leads confirmados</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-gray-500">Total de Distribuidoras</p>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe className="h-4 w-4 text-blue-600" />
+                  <span className="text-xs text-gray-500 font-medium">Distribuidoras</span>
+                </div>
                 <p className="text-2xl font-bold text-gray-800">{dados.resumo.length}</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-gray-500">Total de Leads</p>
-                <p className="text-2xl font-bold text-gray-800">
-                  {dados.resumo.reduce((s, r) => s + r.totalLeads, 0)}
-                </p>
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Users className="h-4 w-4 text-purple-600" />
+                  <span className="text-xs text-gray-500 font-medium">Total de Leads</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-800">{totalLeads}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{totalConfirmados} confirmados ({totalLeads > 0 ? ((totalConfirmados / totalLeads) * 100).toFixed(0) : 0}%)</p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Tabela */}
+          {/* Tabela com progress bar de conversão */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -123,59 +164,73 @@ export default function ExpansaoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Distribuidora</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-center">Total Leads</TableHead>
-                    <TableHead className="text-center">Confirmados</TableHead>
-                    <TableHead className="text-right">Economia/mês média</TableHead>
+                    <TableHead>UF</TableHead>
+                    <TableHead className="text-center">Conversao</TableHead>
+                    <TableHead className="text-right">Economia/mes</TableHead>
                     <TableHead className="text-right">Receita Latente/ano</TableHead>
-                    <TableHead className="text-center">Ações</TableHead>
+                    <TableHead className="text-center">Acoes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dados.resumo.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-gray-400 py-8">
-                        Nenhum lead de expansão registrado ainda.
+                      <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                        Nenhum lead de expansao registrado ainda.
                       </TableCell>
                     </TableRow>
                   )}
-                  {dados.resumo.map((r, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">{r.distribuidora}</TableCell>
-                      <TableCell>{r.estado}</TableCell>
-                      <TableCell className="text-center">{r.totalLeads}</TableCell>
-                      <TableCell className="text-center">{r.confirmados}</TableCell>
-                      <TableCell className="text-right">R$ {fmt(r.economiaMesMedia)}</TableCell>
-                      <TableCell className="text-right font-semibold text-green-700">
-                        R$ {fmt(r.receitaLatenteAnual)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={r.confirmados === 0 || notificando === r.distribuidora}
-                          onClick={() => notificar(r.distribuidora)}
-                        >
-                          {notificando === r.distribuidora ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Bell className="h-4 w-4 mr-1" />
-                          )}
-                          Notificar
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {dados.resumo.map((r, i) => {
+                    const conversionPct = r.totalLeads > 0 ? (r.confirmados / r.totalLeads) * 100 : 0;
+                    return (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{r.distribuidora}</TableCell>
+                        <TableCell>{r.estado}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 min-w-[120px]">
+                            <div className="flex justify-between text-[10px] text-gray-500">
+                              <span>{r.confirmados}/{r.totalLeads}</span>
+                              <span>{conversionPct.toFixed(0)}%</span>
+                            </div>
+                            <Progress
+                              value={r.confirmados}
+                              max={r.totalLeads}
+                              className="h-1.5"
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">{formatarMoeda(r.economiaMesMedia)}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-700">
+                          {formatarMoeda(r.receitaLatenteAnual)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={r.confirmados === 0 || notificando === r.distribuidora}
+                            onClick={() => notificar(r.distribuidora)}
+                          >
+                            {notificando === r.distribuidora ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Bell className="h-4 w-4 mr-1" />
+                            )}
+                            Notificar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
+
           {/* Leads individuais com score */}
           <Card className="mt-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Star className="h-5 w-5 text-yellow-500" />
-                Leads — Score de Propensão
+                Leads — Score de Propensao
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -188,7 +243,7 @@ export default function ExpansaoPage() {
                     <TableHead>Distribuidora</TableHead>
                     <TableHead>UF</TableHead>
                     <TableHead className="text-right">Valor Fatura</TableHead>
-                    <TableHead className="text-center">Intenção</TableHead>
+                    <TableHead className="text-center">Intencao</TableHead>
                     <TableHead>Data</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -208,13 +263,13 @@ export default function ExpansaoPage() {
                       <TableCell>{l.distribuidora}</TableCell>
                       <TableCell>{l.estado || '—'}</TableCell>
                       <TableCell className="text-right">
-                        {l.valorFatura ? `R$ ${fmt(Number(l.valorFatura))}` : '—'}
+                        {l.valorFatura ? formatarMoeda(Number(l.valorFatura)) : '—'}
                       </TableCell>
                       <TableCell className="text-center">
                         {l.intencaoConfirmada ? (
-                          <Badge className="bg-green-100 text-green-700">Sim</Badge>
+                          <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-400">Não</Badge>
+                          <Badge variant="outline" className="text-gray-400">Nao</Badge>
                         )}
                       </TableCell>
                       <TableCell>{new Date(l.createdAt).toLocaleDateString('pt-BR')}</TableCell>
