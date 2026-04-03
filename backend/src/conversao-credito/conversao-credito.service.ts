@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class ConversaoCreditoService {
@@ -19,7 +18,7 @@ export class ConversaoCreditoService {
     }
     if (!cooperado.cooperativaId) throw new BadRequestException('Cooperativa não encontrada');
 
-    // CONV-SEM-UC-01: Buscar tarifa real (TUSD+TE) da concessionária, não descontoPadrao
+    // CONV-SEM-UC-01: Buscar tarifa real (TUSD+TE) da concessionária
     const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
       where: { cooperativaId: cooperado.cooperativaId },
       orderBy: { dataVigencia: 'desc' },
@@ -28,14 +27,17 @@ export class ConversaoCreditoService {
     const tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
     if (tarifaKwh <= 0) throw new BadRequestException('Tarifa da concessionária inválida (TUSD+TE = 0)');
 
-    // Aplicar descontoPadrao como percentual de desconto sobre a tarifa
+    // Aplicar descontoPadrao como percentual (0-100) de desconto sobre a tarifa
     const config = await this.prisma.configuracaoCobranca.findFirst({
       where: { cooperativaId: cooperado.cooperativaId },
     });
     const descontoPercentual = config ? Number(config.descontoPadrao) : 0;
-    const tarifaComDesconto = tarifaKwh * (1 - descontoPercentual / 100);
+    if (descontoPercentual < 0 || descontoPercentual > 100) {
+      throw new BadRequestException(`descontoPadrao inválido (${descontoPercentual}): deve estar entre 0 e 100`);
+    }
+    const tarifaComDesconto = Math.round(tarifaKwh * (1 - descontoPercentual / 100) * 10000) / 10000;
 
-    const valorReais = new Decimal(dto.kwhDesejado).mul(tarifaComDesconto).toDecimalPlaces(2);
+    const valorReais = Math.round(dto.kwhDesejado * tarifaComDesconto * 100) / 100;
 
     return this.prisma.conversaoCreditoSemUc.create({
       data: {
