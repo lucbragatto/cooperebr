@@ -131,9 +131,13 @@ export class FaturasService {
       dto.tipoArquivo,
     );
 
-    // 2. Buscar threshold
-    const configThreshold = await this.prisma.configTenant.findUnique({
-      where: { chave: 'threshold_meses_atipicos' },
+    // 2. Buscar threshold (FATURA-02: filtrar por cooperativaId do cooperado)
+    const cooperadoForConfig = await this.prisma.cooperado.findUnique({
+      where: { id: dto.cooperadoId },
+      select: { cooperativaId: true },
+    });
+    const configThreshold = await this.prisma.configTenant.findFirst({
+      where: { chave: 'threshold_meses_atipicos', cooperativaId: cooperadoForConfig?.cooperativaId ?? undefined },
     });
     const threshold = configThreshold ? parseFloat(configThreshold.valor) : 50;
 
@@ -243,6 +247,14 @@ export class FaturasService {
   // ── Upload Concessionária com análise automática ──────────────────────────
 
   async uploadConcessionaria(dto: UploadConcessionariaDto) {
+    // 0. Buscar cooperativaId do cooperado (FATURA-02: multi-tenant isolation)
+    const cooperadoUpload = await this.prisma.cooperado.findUnique({
+      where: { id: dto.cooperadoId },
+      select: { cooperativaId: true },
+    });
+    if (!cooperadoUpload?.cooperativaId) throw new BadRequestException('Cooperado ou cooperativa não encontrado');
+    const cooperativaIdUpload = cooperadoUpload.cooperativaId;
+
     // 1. OCR
     const dadosExtraidos = await this.extrairDadosFatura(dto.arquivoBase64, dto.tipoArquivo);
 
@@ -300,9 +312,9 @@ export class FaturasService {
       statusAnalise,
     };
 
-    // 6. Calcular media e threshold
-    const configThreshold = await this.prisma.configTenant.findUnique({
-      where: { chave: 'threshold_meses_atipicos' },
+    // 6. Calcular media e threshold (FATURA-02: filtrar por cooperativaId)
+    const configThreshold = await this.prisma.configTenant.findFirst({
+      where: { chave: 'threshold_meses_atipicos', cooperativaId: cooperativaIdUpload },
     });
     const threshold = configThreshold ? parseFloat(configThreshold.valor) : 50;
     const historico = dadosExtraidos.historicoConsumo ?? [];

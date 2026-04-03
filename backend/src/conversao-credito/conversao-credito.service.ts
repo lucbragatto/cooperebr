@@ -19,14 +19,23 @@ export class ConversaoCreditoService {
     }
     if (!cooperado.cooperativaId) throw new BadRequestException('Cooperativa não encontrada');
 
-    // Buscar tarifa vigente da cooperativa
+    // CONV-SEM-UC-01: Buscar tarifa real (TUSD+TE) da concessionária, não descontoPadrao
+    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
+      where: { cooperativaId: cooperado.cooperativaId },
+      orderBy: { dataVigencia: 'desc' },
+    });
+    if (!tarifaVigente) throw new BadRequestException('Tarifa da concessionária não cadastrada para esta cooperativa');
+    const tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
+    if (tarifaKwh <= 0) throw new BadRequestException('Tarifa da concessionária inválida (TUSD+TE = 0)');
+
+    // Aplicar descontoPadrao como percentual de desconto sobre a tarifa
     const config = await this.prisma.configuracaoCobranca.findFirst({
       where: { cooperativaId: cooperado.cooperativaId },
     });
-    const tarifa = config ? Number(config.descontoPadrao) : 0;
-    if (tarifa <= 0) throw new BadRequestException('Tarifa não configurada para esta cooperativa');
+    const descontoPercentual = config ? Number(config.descontoPadrao) : 0;
+    const tarifaComDesconto = tarifaKwh * (1 - descontoPercentual / 100);
 
-    const valorReais = new Decimal(dto.kwhDesejado).mul(tarifa).toDecimalPlaces(2);
+    const valorReais = new Decimal(dto.kwhDesejado).mul(tarifaComDesconto).toDecimalPlaces(2);
 
     return this.prisma.conversaoCreditoSemUc.create({
       data: {
@@ -34,7 +43,7 @@ export class ConversaoCreditoService {
         cooperativaId: cooperado.cooperativaId,
         valorKwh: dto.kwhDesejado,
         valorReais,
-        tarifaUsada: tarifa,
+        tarifaUsada: tarifaComDesconto,
         pixChave: dto.pixChave,
         pixNome: dto.pixNome,
         status: 'PENDENTE',

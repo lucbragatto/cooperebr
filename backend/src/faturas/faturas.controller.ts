@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, Req, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { FaturasService } from './faturas.service';
 import { RelatorioFaturaService } from './relatorio-fatura.service';
 import { PrismaService } from '../prisma.service';
@@ -22,14 +22,19 @@ export class FaturasController {
   @Get('central')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
   central(
+    @Req() req: any,
     @Query('cooperativaId') cooperativaId?: string,
     @Query('status') status?: string,
     @Query('mesReferencia') mesReferencia?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    // FATURA-03: SUPER_ADMIN pode filtrar por qualquer cooperativaId; demais usam JWT
+    const resolvedCoopId = req.user?.perfil === PerfilUsuario.SUPER_ADMIN
+      ? (cooperativaId ?? req.user?.cooperativaId)
+      : req.user?.cooperativaId;
     return this.faturasService.centralFaturas({
-      cooperativaId,
+      cooperativaId: resolvedCoopId,
       status,
       mesReferencia,
       page: page ? parseInt(page, 10) : 1,
@@ -39,8 +44,12 @@ export class FaturasController {
 
   @Get('central/resumo')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
-  centralResumo(@Query('cooperativaId') cooperativaId?: string) {
-    return this.faturasService.centralResumo(cooperativaId);
+  centralResumo(@Req() req: any, @Query('cooperativaId') cooperativaId?: string) {
+    // FATURA-03: SUPER_ADMIN pode filtrar por qualquer cooperativaId; demais usam JWT
+    const resolvedCoopId = req.user?.perfil === PerfilUsuario.SUPER_ADMIN
+      ? (cooperativaId ?? req.user?.cooperativaId)
+      : req.user?.cooperativaId;
+    return this.faturasService.centralResumo(resolvedCoopId);
   }
 
   @Get('cooperado/:cooperadoId')
@@ -61,7 +70,13 @@ export class FaturasController {
   }
 
   @Post('upload-concessionaria')
-  uploadConcessionaria(@Body() dto: UploadConcessionariaDto): Promise<unknown> {
+  uploadConcessionaria(@Body() dto: UploadConcessionariaDto, @Req() req: any): Promise<unknown> {
+    // FATURA-01: COOPERADO só pode enviar fatura para si mesmo
+    if (req.user?.perfil === PerfilUsuario.COOPERADO) {
+      if (!req.user.cooperadoId || dto.cooperadoId !== req.user.cooperadoId) {
+        throw new ForbiddenException('Cooperado só pode enviar fatura para si mesmo');
+      }
+    }
     return this.faturasService.uploadConcessionaria(dto);
   }
 
