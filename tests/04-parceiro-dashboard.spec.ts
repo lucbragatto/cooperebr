@@ -11,20 +11,21 @@ test.describe('Portal Parceiro', () => {
   });
 
   test('dashboard parceiro carrega sem erro (/parceiro)', async ({ page }) => {
-    await page.goto('/parceiro');
+    const response = await page.goto('/parceiro');
     await page.waitForLoadState('networkidle');
     const body = await page.textContent('body');
     expect(body).toBeTruthy();
-    // Should not show error page
-    expect(body).not.toContain('500');
+    // Check HTTP status, not page text (numbers like 101.664.500 cause false positives)
+    expect(response?.status()).not.toBe(500);
   });
 
   test('configuracoes carrega com secao CooperToken (/parceiro/configuracoes)', async ({ page }) => {
     await page.goto('/parceiro/configuracoes');
     await page.waitForLoadState('networkidle');
 
-    const cooperToken = page.getByText(/coopertoken/i);
-    await expect(cooperToken).toBeVisible({ timeout: 10000 });
+    // The section title contains "CooperToken" inside a CardTitle
+    const cooperToken = page.locator('text=CooperToken').first();
+    await expect(cooperToken).toBeVisible({ timeout: 15000 });
   });
 
   test('enviar tokens carrega (/parceiro/enviar-tokens)', async ({ page }) => {

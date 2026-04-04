@@ -5,8 +5,16 @@ const API_BASE = process.env.QA_API_URL ?? 'http://localhost:3000';
  */
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/`, { signal: AbortSignal.timeout(5000) });
-    return res.ok;
+    // GET / returns 401 (global JwtAuthGuard). Use POST /auth/login
+    // with empty body — a 400/401 means the backend is alive.
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(5000),
+    });
+    // Any response (even 400/401) means backend is up
+    return res.status < 500;
   } catch {
     return false;
   }

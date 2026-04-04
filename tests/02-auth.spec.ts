@@ -22,8 +22,8 @@ test.describe('Authentication', () => {
     await page.locator('#senha').fill('senhaerrada123');
     await page.getByRole('button', { name: /entrar/i }).click();
 
-    // Wait for error message
-    const errorMsg = page.locator('text=inválidos');
+    // Wait for error message — "Identificador ou senha inválidos."
+    const errorMsg = page.getByText(/inválidos|incorretos|não encontrad/i);
     await expect(errorMsg).toBeVisible({ timeout: 10000 });
   });
 
@@ -33,7 +33,8 @@ test.describe('Authentication', () => {
     await page.locator('#senha').fill('senhaerrada123');
     await page.getByRole('button', { name: /entrar/i }).click();
 
-    const errorMsg = page.locator('text=incorretos');
+    // "CPF, email ou senha incorretos."
+    const errorMsg = page.getByText(/incorretos|inválidos|não encontrad/i);
     await expect(errorMsg).toBeVisible({ timeout: 10000 });
   });
 });

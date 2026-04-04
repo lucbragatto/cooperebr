@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { checkBackendHealth, checkFrontendHealth } from './helpers/api';
 
 test.describe('Sanity Check', () => {
-  test('backend responds on GET /', async () => {
+  test('backend responds (health check)', async () => {
     const healthy = await checkBackendHealth();
     expect(healthy).toBe(true);
   });
