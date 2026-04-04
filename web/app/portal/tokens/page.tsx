@@ -94,7 +94,7 @@ export default function PortalTokensPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pagar com Tokens</h1>
+      <h1 className="text-2xl font-bold">Usar Tokens</h1>
 
       <Card>
         <CardHeader>
@@ -112,7 +112,7 @@ export default function PortalTokensPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <QrCode className="h-5 w-5" /> Gerar QR Code de Pagamento
+            <QrCode className="h-5 w-5" /> Gerar QR Code para Usar Tokens
           </CardTitle>
         </CardHeader>
         <CardContent>

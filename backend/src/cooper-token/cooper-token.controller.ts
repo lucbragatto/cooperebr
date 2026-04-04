@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Put,
   Post,
   Body,
   Query,
@@ -176,6 +177,109 @@ export class CooperTokenController {
       qrToken: body.qrToken,
       recebedorId: cooperadoId,
       recebedorCooperativaId: cooperativaId,
+    });
+  }
+
+  // ── Config CooperToken por Parceiro ──
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/config')
+  async getConfig(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getConfig(cooperativaId);
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Put('admin/config')
+  async upsertConfig(
+    @Req() req: any,
+    @Body()
+    body: {
+      modoGeracao?: string;
+      modeloVida?: string;
+      limiteTokenMensal?: number | null;
+      valorTokenReais?: number;
+      descontoMaxPerc?: number;
+      tetoCoop?: number | null;
+      ativo?: boolean;
+    },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.upsertConfig(cooperativaId, body);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Get('superadmin/config-defaults')
+  async getConfigDefaults() {
+    // Defaults globais — retorna valores padrão do sistema
+    return {
+      modoGeracao: 'AMBOS',
+      modeloVida: 'AMBOS',
+      limiteTokenMensal: null,
+      valorTokenReais: 0.45,
+      descontoMaxPerc: 30,
+      tetoCoop: null,
+      ativo: true,
+    };
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Put('superadmin/config-defaults')
+  async updateConfigDefaults(
+    @Body()
+    body: {
+      modoGeracao?: string;
+      modeloVida?: string;
+      limiteTokenMensal?: number | null;
+      valorTokenReais?: number;
+      descontoMaxPerc?: number;
+      tetoCoop?: number | null;
+      ativo?: boolean;
+    },
+  ) {
+    // Para implementação futura com tabela de defaults globais
+    // Por agora retorna o body como confirmação
+    return { message: 'Defaults atualizados', ...body };
+  }
+
+  // ── Enviar Tokens (parceiro → cooperado) ──
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Post('parceiro/enviar')
+  async enviarTokens(
+    @Req() req: any,
+    @Body()
+    body: {
+      cooperadoId: string;
+      quantidade: number;
+      descricao?: string;
+    },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const remetenteCooperadoId = req.user?.cooperadoId;
+
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!remetenteCooperadoId) {
+      throw new BadRequestException('Cooperado remetente não identificado no JWT');
+    }
+    if (!body.cooperadoId || !body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('cooperadoId e quantidade (> 0) são obrigatórios');
+    }
+
+    return this.cooperTokenService.enviarTokens({
+      remetenteCooperadoId,
+      destinatarioCooperadoId: body.cooperadoId,
+      cooperativaId,
+      quantidade: body.quantidade,
+      descricao: body.descricao,
     });
   }
 }

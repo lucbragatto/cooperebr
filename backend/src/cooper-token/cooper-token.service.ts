@@ -470,6 +470,152 @@ export class CooperTokenService {
     };
   }
 
+  // ── Enviar Tokens (parceiro → cooperado) ──
+
+  async enviarTokens(params: {
+    remetenteCooperadoId: string;
+    destinatarioCooperadoId: string;
+    cooperativaId: string;
+    quantidade: number;
+    descricao?: string;
+  }) {
+    const { remetenteCooperadoId, destinatarioCooperadoId, cooperativaId, quantidade, descricao } = params;
+
+    if (remetenteCooperadoId === destinatarioCooperadoId) {
+      throw new BadRequestException('Remetente e destinatário não podem ser o mesmo');
+    }
+
+    // Validar que destinatário pertence à mesma cooperativa
+    const destinatario = await this.prisma.cooperado.findFirst({
+      where: { id: destinatarioCooperadoId, cooperativaId },
+    });
+    if (!destinatario) {
+      throw new BadRequestException('Cooperado destinatário não encontrado nesta cooperativa');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Debitar do remetente
+      const saldoRemetente = await tx.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: remetenteCooperadoId },
+      });
+
+      if (!saldoRemetente || Number(saldoRemetente.saldoDisponivel) < quantidade) {
+        throw new BadRequestException(
+          `Saldo insuficiente. Disponível: ${Number(saldoRemetente?.saldoDisponivel ?? 0)}, solicitado: ${quantidade}`,
+        );
+      }
+
+      const novoSaldoRemetente = Number(saldoRemetente.saldoDisponivel) - quantidade;
+
+      await tx.cooperTokenSaldo.update({
+        where: { cooperadoId: remetenteCooperadoId },
+        data: {
+          saldoDisponivel: novoSaldoRemetente,
+          totalResgatado: { increment: quantidade },
+        },
+      });
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: remetenteCooperadoId,
+          cooperativaId,
+          tipo: CooperTokenTipo.BONUS_INDICACAO,
+          operacao: CooperTokenOperacao.DOACAO_ENVIADA,
+          quantidade,
+          saldoApos: novoSaldoRemetente,
+          descricao: descricao ?? `Envio de ${quantidade} tokens para cooperado`,
+        },
+      });
+
+      // Creditar no destinatário (sem taxa)
+      let saldoDestinatario = await tx.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: destinatarioCooperadoId },
+      });
+
+      const novoSaldoDestinatario = Number(saldoDestinatario?.saldoDisponivel ?? 0) + quantidade;
+      const novoTotalEmitido = Number(saldoDestinatario?.totalEmitido ?? 0) + quantidade;
+
+      if (saldoDestinatario) {
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: destinatarioCooperadoId },
+          data: {
+            saldoDisponivel: novoSaldoDestinatario,
+            totalEmitido: novoTotalEmitido,
+          },
+        });
+      } else {
+        saldoDestinatario = await tx.cooperTokenSaldo.create({
+          data: {
+            cooperadoId: destinatarioCooperadoId,
+            cooperativaId,
+            saldoDisponivel: quantidade,
+            totalEmitido: quantidade,
+          },
+        });
+      }
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: destinatarioCooperadoId,
+          cooperativaId,
+          tipo: CooperTokenTipo.BONUS_INDICACAO,
+          operacao: CooperTokenOperacao.DOACAO_RECEBIDA,
+          quantidade,
+          saldoApos: novoSaldoDestinatario,
+          descricao: descricao ?? `Recebimento de ${quantidade} tokens do parceiro`,
+        },
+      });
+
+      this.logger.log(
+        `Envio tokens: ${remetenteCooperadoId} → ${destinatarioCooperadoId}, ${quantidade} tokens (sem taxa)`,
+      );
+
+      return {
+        sucesso: true,
+        quantidade,
+        remetenteId: remetenteCooperadoId,
+        destinatarioId: destinatarioCooperadoId,
+      };
+    });
+  }
+
+  // ── ConfigCooperToken ──
+
+  async getConfig(cooperativaId: string) {
+    return this.prisma.configCooperToken.findUnique({
+      where: { cooperativaId },
+    });
+  }
+
+  async upsertConfig(
+    cooperativaId: string,
+    data: {
+      modoGeracao?: string;
+      modeloVida?: string;
+      limiteTokenMensal?: number | null;
+      valorTokenReais?: number;
+      descontoMaxPerc?: number;
+      tetoCoop?: number | null;
+      ativo?: boolean;
+    },
+  ) {
+    const payload = {
+      ...data,
+      valorTokenReais: data.valorTokenReais != null
+        ? Math.round(data.valorTokenReais * 100) / 100
+        : undefined,
+      descontoMaxPerc: data.descontoMaxPerc != null
+        ? Math.round(data.descontoMaxPerc * 100) / 100
+        : undefined,
+    };
+
+    return this.prisma.configCooperToken.upsert({
+      where: { cooperativaId },
+      update: payload,
+      create: { cooperativaId, ...payload },
+    });
+  }
+
   async gerarQrPagamento(params: {
     pagadorId: string;
     cooperativaId: string;

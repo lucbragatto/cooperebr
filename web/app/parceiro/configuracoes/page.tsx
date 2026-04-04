@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Building2, Settings, Save, Tag } from 'lucide-react';
+import { Loader2, Building2, Settings, Save, Tag, Coins } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,19 +16,58 @@ const TIPOS_OPERACAO = [
   { value: 'CARREGADOR_VEICULAR', label: 'Carregador Veicular — EV Charging' },
 ] as const;
 
+interface TokenConfig {
+  modoGeracao: string;
+  modeloVida: string;
+  limiteTokenMensal: number | null;
+  valorTokenReais: number;
+  descontoMaxPerc: number;
+  tetoCoop: number | null;
+  ativo: boolean;
+}
+
+const TOKEN_DEFAULTS: TokenConfig = {
+  modoGeracao: 'AMBOS',
+  modeloVida: 'AMBOS',
+  limiteTokenMensal: null,
+  valorTokenReais: 0.45,
+  descontoMaxPerc: 30,
+  tetoCoop: null,
+  ativo: true,
+};
+
 export default function ParceiroConfiguracoesPage() {
   const [cooperativa, setCooperativa] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
 
+  // CooperToken config
+  const [tokenConfig, setTokenConfig] = useState<TokenConfig>(TOKEN_DEFAULTS);
+  const [salvandoToken, setSalvandoToken] = useState(false);
+  const [mensagemToken, setMensagemToken] = useState('');
+
   useEffect(() => {
     async function carregar() {
       try {
         const { data: me } = await api.get('/auth/me');
         if (me.cooperativaId) {
-          const { data } = await api.get(`/cooperativas/${me.cooperativaId}`);
-          setCooperativa(data);
+          const [coopRes, tokenRes] = await Promise.all([
+            api.get(`/cooperativas/${me.cooperativaId}`),
+            api.get('/cooper-token/admin/config').catch(() => ({ data: null })),
+          ]);
+          setCooperativa(coopRes.data);
+          if (tokenRes.data) {
+            setTokenConfig({
+              modoGeracao: tokenRes.data.modoGeracao ?? 'AMBOS',
+              modeloVida: tokenRes.data.modeloVida ?? 'AMBOS',
+              limiteTokenMensal: tokenRes.data.limiteTokenMensal ?? null,
+              valorTokenReais: Number(tokenRes.data.valorTokenReais ?? 0.45),
+              descontoMaxPerc: Number(tokenRes.data.descontoMaxPerc ?? 30),
+              tetoCoop: tokenRes.data.tetoCoop ?? null,
+              ativo: tokenRes.data.ativo ?? true,
+            });
+          }
         }
       } catch {
         // ignore
@@ -59,6 +98,27 @@ export default function ParceiroConfiguracoesPage() {
       setMensagem('Erro ao salvar configurações.');
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function handleSalvarToken() {
+    setSalvandoToken(true);
+    setMensagemToken('');
+    try {
+      await api.put('/cooper-token/admin/config', {
+        modoGeracao: tokenConfig.modoGeracao,
+        modeloVida: tokenConfig.modeloVida,
+        limiteTokenMensal: tokenConfig.limiteTokenMensal || null,
+        valorTokenReais: tokenConfig.valorTokenReais,
+        descontoMaxPerc: tokenConfig.descontoMaxPerc,
+        tetoCoop: tokenConfig.tetoCoop || null,
+        ativo: tokenConfig.ativo,
+      });
+      setMensagemToken('Configuracao CooperToken salva com sucesso!');
+    } catch {
+      setMensagemToken('Erro ao salvar configuracao CooperToken.');
+    } finally {
+      setSalvandoToken(false);
     }
   }
 
@@ -214,6 +274,122 @@ export default function ParceiroConfiguracoesPage() {
         <Save className="w-4 h-4" />
         {salvando ? 'Salvando...' : 'Salvar Configurações'}
       </Button>
+
+      {/* CooperToken */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Coins className="w-4 h-4 text-amber-600" /> CooperToken
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={tokenConfig.ativo}
+              onClick={() => setTokenConfig({ ...tokenConfig, ativo: !tokenConfig.ativo })}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${tokenConfig.ativo ? 'bg-green-600' : 'bg-gray-200'}`}
+            >
+              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${tokenConfig.ativo ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+            <span className="text-sm text-gray-700">
+              {tokenConfig.ativo ? 'CooperToken ativo' : 'CooperToken desativado'}
+            </span>
+          </div>
+
+          {tokenConfig.ativo && (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm">Modo de Geracao</Label>
+                  <select
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={tokenConfig.modoGeracao}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, modoGeracao: e.target.value })}
+                  >
+                    <option value="PRE_COMPRA">Pre-Compra</option>
+                    <option value="COTA_MENSAL">Cota Mensal</option>
+                    <option value="AMBOS">Ambos</option>
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-sm">Modelo de Vida</Label>
+                  <select
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={tokenConfig.modeloVida}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, modeloVida: e.target.value })}
+                  >
+                    <option value="EXPIRACAO_29D">Expiracao 29 dias (decay escalonado)</option>
+                    <option value="DECAY_CONTINUO">Decay continuo (0.3%/dia)</option>
+                    <option value="AMBOS">Ambos (cooperado escolhe)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm">Valor do Token (R$)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={tokenConfig.valorTokenReais}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, valorTokenReais: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Desconto Maximo por Fatura (%)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={tokenConfig.descontoMaxPerc}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, descontoMaxPerc: parseFloat(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm">Limite Mensal de Tokens (opcional)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={tokenConfig.limiteTokenMensal ?? ''}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, limiteTokenMensal: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="Sem limite"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Teto de Saldo por Cooperado (opcional)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={tokenConfig.tetoCoop ?? ''}
+                    onChange={(e) => setTokenConfig({ ...tokenConfig, tetoCoop: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="Sem teto"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {mensagemToken && (
+            <p className={`text-sm ${mensagemToken.includes('Erro') ? 'text-red-600' : 'text-green-600'}`}>
+              {mensagemToken}
+            </p>
+          )}
+
+          <Button onClick={handleSalvarToken} disabled={salvandoToken} className="gap-2">
+            <Save className="w-4 h-4" />
+            {salvandoToken ? 'Salvando...' : 'Salvar CooperToken'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

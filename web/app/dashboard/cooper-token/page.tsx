@@ -8,7 +8,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Loader2, Play, Settings, BookOpen } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Coins, Loader2, Play, Settings, BookOpen, PlusCircle, Search } from 'lucide-react';
 
 interface Resumo {
   totalEmitido: number;
@@ -65,6 +67,12 @@ function TipoBadge({ tipo }: { tipo: string }) {
   return <Badge variant="outline">{labels[tipo] ?? tipo}</Badge>;
 }
 
+interface CooperadoBusca {
+  id: string;
+  nomeCompleto: string;
+  email: string;
+}
+
 export default function CooperTokenPage() {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [ledger, setLedger] = useState<LedgerItem[]>([]);
@@ -72,6 +80,16 @@ export default function CooperTokenPage() {
   const [page, setPage] = useState(1);
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState(false);
+
+  // Emissão manual
+  const [emBusca, setEmBusca] = useState('');
+  const [emBuscando, setEmBuscando] = useState(false);
+  const [emResultados, setEmResultados] = useState<CooperadoBusca[]>([]);
+  const [emSelecionado, setEmSelecionado] = useState<CooperadoBusca | null>(null);
+  const [emQuantidade, setEmQuantidade] = useState('');
+  const [emDescricao, setEmDescricao] = useState('');
+  const [emEnviando, setEmEnviando] = useState(false);
+  const [emMensagem, setEmMensagem] = useState('');
 
   useEffect(() => {
     buscarResumo();
@@ -111,6 +129,40 @@ export default function CooperTokenPage() {
     } finally {
       setProcessando(false);
     }
+  }
+
+  async function buscarCooperadoEmissao() {
+    if (emBusca.trim().length < 2) return;
+    setEmBuscando(true);
+    try {
+      const { data } = await api.get('/cooperados', { params: { search: emBusca.trim(), limit: 10 } });
+      setEmResultados(Array.isArray(data) ? data : data.items ?? data.data ?? []);
+    } catch { setEmResultados([]); }
+    finally { setEmBuscando(false); }
+  }
+
+  async function emitirManual() {
+    if (!emSelecionado) return;
+    const qtd = parseFloat(emQuantidade);
+    if (!qtd || qtd <= 0) { setEmMensagem('Quantidade deve ser maior que zero'); return; }
+    if (!confirm(`Emitir ${qtd.toFixed(4)} tokens para ${emSelecionado.nomeCompleto}?\nTaxa de emissao 2% sera aplicada (liquido: ${(qtd * 0.98).toFixed(4)}).`)) return;
+    setEmEnviando(true);
+    setEmMensagem('');
+    try {
+      await api.post('/cooper-token/admin/creditar-manual', {
+        cooperadoId: emSelecionado.id,
+        quantidade: qtd,
+        descricao: emDescricao || undefined,
+      });
+      setEmMensagem(`${qtd.toFixed(4)} tokens emitidos para ${emSelecionado.nomeCompleto} (liquido: ${(qtd * 0.98).toFixed(4)} apos taxa 2%)`);
+      setEmSelecionado(null);
+      setEmQuantidade('');
+      setEmDescricao('');
+      buscarResumo();
+      buscarLedger();
+    } catch (err: any) {
+      setEmMensagem(err.response?.data?.message ?? 'Erro ao emitir tokens');
+    } finally { setEmEnviando(false); }
   }
 
   const totalPages = Math.ceil(ledgerTotal / 50);
@@ -195,6 +247,96 @@ export default function CooperTokenPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Emissão Manual */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <PlusCircle className="h-4 w-4" />
+            Emissao Manual de Tokens
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Taxa de emissao de 2% sera aplicada automaticamente.
+          </p>
+
+          {emMensagem && (
+            <div className={`px-4 py-3 rounded text-sm border ${emMensagem.includes('Erro') ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
+              {emMensagem}
+            </div>
+          )}
+
+          {/* Busca */}
+          {emSelecionado ? (
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-md px-4 py-3">
+              <div>
+                <p className="font-medium text-green-800">{emSelecionado.nomeCompleto}</p>
+                <p className="text-xs text-green-600">{emSelecionado.email}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setEmSelecionado(null)}>
+                Trocar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-sm">Buscar cooperado</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nome ou email..."
+                  value={emBusca}
+                  onChange={(e) => setEmBusca(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarCooperadoEmissao())}
+                />
+                <Button variant="outline" onClick={buscarCooperadoEmissao} disabled={emBuscando || emBusca.trim().length < 2}>
+                  {emBuscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
+              {emResultados.length > 0 && (
+                <div className="border rounded-md divide-y max-h-40 overflow-y-auto">
+                  {emResultados.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setEmSelecionado(c); setEmResultados([]); setEmBusca(''); }}
+                      className="w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors"
+                    >
+                      <p className="text-sm font-medium">{c.nomeCompleto}</p>
+                      <p className="text-xs text-gray-500">{c.email}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm">Quantidade</Label>
+              <Input
+                type="number"
+                min={0.0001}
+                step={0.0001}
+                value={emQuantidade}
+                onChange={(e) => setEmQuantidade(e.target.value)}
+                placeholder="Ex: 100"
+              />
+            </div>
+            <div>
+              <Label className="text-sm">Descricao (opcional)</Label>
+              <Input
+                value={emDescricao}
+                onChange={(e) => setEmDescricao(e.target.value)}
+                placeholder="Ex: Bonus por fidelidade"
+              />
+            </div>
+          </div>
+
+          <Button onClick={emitirManual} disabled={!emSelecionado || emEnviando}>
+            {emEnviando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PlusCircle className="h-4 w-4 mr-2" />}
+            Emitir Tokens
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Ledger */}
       <Card>
