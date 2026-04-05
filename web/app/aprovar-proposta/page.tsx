@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -29,7 +29,7 @@ function fmtBRL(v: number | undefined | null) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export default function AprovarPropostaPage() {
+function AprovarPropostaContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
@@ -225,5 +225,13 @@ export default function AprovarPropostaPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AprovarPropostaPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <AprovarPropostaContent />
+    </Suspense>
   );
 }

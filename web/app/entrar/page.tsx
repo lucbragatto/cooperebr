@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Sun, MessageCircle, Check, Loader2, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ function formatarTelefone(valor: string): string {
   return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
 }
 
-export default function EntrarPage() {
+function EntrarContent() {
   const searchParams = useSearchParams();
   const codigoRef = searchParams.get('ref') ?? '';
 
@@ -192,5 +192,13 @@ export default function EntrarPage() {
         CoopereBR — Cooperativa de Energia Solar
       </footer>
     </div>
+  );
+}
+
+export default function EntrarPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <EntrarContent />
+    </Suspense>
   );
 }

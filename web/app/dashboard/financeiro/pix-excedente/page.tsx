@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -154,7 +154,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
-export default function PixExcedentePage() {
+function PixExcedenteContent() {
   const searchParams = useSearchParams();
   const condominioIdParam = searchParams?.get('condominioId');
 
@@ -460,5 +460,13 @@ export default function PixExcedentePage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PixExcedentePage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <PixExcedenteContent />
+    </Suspense>
   );
 }
