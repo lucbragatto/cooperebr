@@ -49,7 +49,13 @@ export class IndicacoesController {
   @Get('meu-codigo')
   getMeuCodigo(@Req() req: any) {
     const cooperadoId = req.user?.cooperadoId;
-    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    if (!cooperadoId) {
+      const perfil = req.user?.perfil;
+      if (perfil === 'ADMIN' || perfil === 'SUPER_ADMIN') {
+        return { codigoIndicacao: null, link: null, totalIndicados: 0, indicadosAtivos: 0, semCooperado: true };
+      }
+      throw new ForbiddenException('Cooperado não identificado');
+    }
     return this.service.getMeuCodigo(cooperadoId);
   }
 
@@ -67,7 +73,13 @@ export class IndicacoesController {
   @Get('minhas')
   getMinhasIndicacoes(@Req() req: any) {
     const cooperadoId = req.user?.cooperadoId;
-    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    if (!cooperadoId) {
+      const perfil = req.user?.perfil;
+      if (perfil === 'ADMIN' || perfil === 'SUPER_ADMIN') {
+        return [];
+      }
+      throw new ForbiddenException('Cooperado não identificado');
+    }
     return this.service.getMinhasIndicacoes(cooperadoId);
   }
 
@@ -75,7 +87,13 @@ export class IndicacoesController {
   @Get('beneficios')
   getBeneficios(@Req() req: any) {
     const cooperadoId = req.user?.cooperadoId;
-    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    if (!cooperadoId) {
+      const perfil = req.user?.perfil;
+      if (perfil === 'ADMIN' || perfil === 'SUPER_ADMIN') {
+        return [];
+      }
+      throw new ForbiddenException('Cooperado não identificado');
+    }
     return this.service.getBeneficios(cooperadoId);
   }
 

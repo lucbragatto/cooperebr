@@ -33,7 +33,13 @@ export class ClubeVantagensController {
   @Get('minha-progressao')
   getMinhaProgressao(@Req() req: any) {
     const cooperadoId = req.user?.cooperadoId;
-    if (!cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    if (!cooperadoId) {
+      const perfil = req.user?.perfil;
+      if (perfil === 'ADMIN' || perfil === 'SUPER_ADMIN') {
+        return { nivel: null, pontos: 0, semCooperado: true };
+      }
+      throw new ForbiddenException('Cooperado não identificado');
+    }
     return this.service.getProgressao(cooperadoId);
   }
 
