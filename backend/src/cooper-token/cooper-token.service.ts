@@ -18,6 +18,7 @@ interface DebitarParams {
   cooperadoId: string;
   cooperativaId: string;
   quantidade: number;
+  tipo?: CooperTokenTipo;
   referenciaId?: string;
   descricao?: string;
 }
@@ -136,7 +137,7 @@ export class CooperTokenService {
         data: {
           cooperadoId,
           cooperativaId,
-          tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
+          tipo: params.tipo ?? CooperTokenTipo.GERACAO_EXCEDENTE,
           operacao: CooperTokenOperacao.DEBITO,
           quantidade,
           saldoApos: novoSaldo,
@@ -361,9 +362,12 @@ export class CooperTokenService {
     return { items, total, page, limit };
   }
 
-  async getResumoAdmin(cooperativaId: string) {
+  async getResumoAdmin(cooperativaId: string | undefined) {
     const agora = new Date();
     const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+    // Build where clause — SUPER_ADMIN without cooperativaId sees all
+    const whereCoopId = cooperativaId ? { cooperativaId } : {};
 
     const [
       totalEmitido,
@@ -373,34 +377,34 @@ export class CooperTokenService {
       saldos,
     ] = await Promise.all([
       this.prisma.cooperTokenSaldo.aggregate({
-        where: { cooperativaId },
+        where: whereCoopId,
         _sum: { totalEmitido: true },
       }),
       this.prisma.cooperTokenSaldo.aggregate({
-        where: { cooperativaId },
+        where: whereCoopId,
         _sum: { saldoDisponivel: true },
       }),
       this.prisma.cooperTokenSaldo.aggregate({
-        where: { cooperativaId },
+        where: whereCoopId,
         _sum: { totalExpirado: true },
       }),
       this.prisma.cooperTokenLedger.aggregate({
         where: {
-          cooperativaId,
+          ...whereCoopId,
           operacao: CooperTokenOperacao.CREDITO,
           createdAt: { gte: inicioMes },
         },
         _sum: { quantidade: true },
       }),
       this.prisma.cooperTokenSaldo.count({
-        where: { cooperativaId },
+        where: whereCoopId,
       }),
     ]);
 
     // Buscar config do plano (valorTokenReais)
     const plano = await this.prisma.plano.findFirst({
       where: {
-        cooperativaId: cooperativaId,
+        ...whereCoopId,
         cooperTokenAtivo: true,
       },
       select: {
@@ -581,7 +585,8 @@ export class CooperTokenService {
 
   // ── ConfigCooperToken ──
 
-  async getConfig(cooperativaId: string) {
+  async getConfig(cooperativaId: string | undefined) {
+    if (!cooperativaId) return null;
     return this.prisma.configCooperToken.findUnique({
       where: { cooperativaId },
     });
@@ -635,8 +640,8 @@ export class CooperTokenService {
     }
 
     const secret = process.env.COOPERTOKEN_QR_SECRET;
-    if (!secret) {
-      throw new BadRequestException('COOPERTOKEN_QR_SECRET não configurado');
+    if (!secret || secret.length < 32) {
+      throw new BadRequestException('COOPERTOKEN_QR_SECRET deve ter no mínimo 32 caracteres');
     }
 
     const payload = {
@@ -659,8 +664,8 @@ export class CooperTokenService {
     const { qrToken, recebedorId, recebedorCooperativaId } = params;
 
     const secret = process.env.COOPERTOKEN_QR_SECRET;
-    if (!secret) {
-      throw new BadRequestException('COOPERTOKEN_QR_SECRET não configurado');
+    if (!secret || secret.length < 32) {
+      throw new BadRequestException('COOPERTOKEN_QR_SECRET deve ter no mínimo 32 caracteres');
     }
 
     let decoded: {

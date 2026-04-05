@@ -27,6 +27,8 @@
       max_restarts: 5,
       min_uptime: '60s',
       restart_delay: 8000,
+      kill_timeout: 5000,
+      wait_ready: true,
       env: { NODE_ENV: 'development' },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: 'C:/Users/Luciano/cooperebr/logs/nest-error.log',

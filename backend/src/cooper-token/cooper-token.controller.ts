@@ -14,7 +14,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CooperTokenTipo } from '@prisma/client';
 
-const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
+const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
 @Controller('cooper-token')
 export class CooperTokenController {
@@ -189,7 +189,7 @@ export class CooperTokenController {
     if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
-    return this.cooperTokenService.getConfig(cooperativaId);
+    return (await this.cooperTokenService.getConfig(cooperativaId)) ?? {};
   }
 
   @Roles(ADMIN, SUPER_ADMIN)
@@ -250,7 +250,7 @@ export class CooperTokenController {
 
   // ── Enviar Tokens (parceiro → cooperado) ──
 
-  @Roles(ADMIN, SUPER_ADMIN)
+  @Roles(ADMIN, SUPER_ADMIN, AGREGADOR)
   @Post('parceiro/enviar')
   async enviarTokens(
     @Req() req: any,

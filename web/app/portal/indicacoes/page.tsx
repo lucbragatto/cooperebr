@@ -77,7 +77,7 @@ export default function PortalIndicacoesPage() {
           setLinkConvite(`${window.location.origin}/convite/${codigo}`);
         }
       })
-      .catch(() => setErro('Erro ao carregar dados de indicaÃ§Ãµes. Tente novamente mais tarde.'))
+      .catch(() => setErro('Erro ao carregar dados de indicações. Tente novamente mais tarde.'))
       .finally(() => setCarregando(false));
   }, []);
 
@@ -101,7 +101,7 @@ export default function PortalIndicacoesPage() {
   }
 
   const textoWhatsapp = encodeURIComponent(
-    `OlÃ¡! Quer economizar na conta de luz com energia solar? Cadastre-se na cooperativa: ${linkConvite}`,
+    `Olá! Quer economizar na conta de luz com energia solar? Cadastre-se na cooperativa: ${linkConvite}`,
   );
   const linkWhatsapp = `https://wa.me/?text=${textoWhatsapp}`;
 
@@ -119,7 +119,7 @@ export default function PortalIndicacoesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-bold text-gray-800">IndicaÃ§Ãµes</h1>
+      <h1 className="text-lg font-bold text-gray-800">Indicações</h1>
 
       {/* QR Code + Link */}
       <Card>
@@ -129,18 +129,18 @@ export default function PortalIndicacoesPage() {
               {linkConvite ? (
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(linkConvite)}`}
-                  alt="QR Code do link de indicaÃ§Ã£o"
+                  alt="QR Code do link de indicação"
                   width={140}
                   height={140}
                 />
               ) : (
                 <div className="w-[140px] h-[140px] flex items-center justify-center text-xs text-gray-400 text-center p-2">
-                  Link de convite nÃ£o disponÃ­vel para este perfil
+                  Link de convite não disponível para este perfil
                 </div>
               )}
             </div>
             <p className="text-sm text-gray-600 mb-3">
-              Compartilhe seu link e ganhe benefÃ­cios!
+              Compartilhe seu link e ganhe benefícios!
             </p>
             <div className="flex items-center gap-2 w-full bg-gray-50 rounded-lg px-3 py-2 mb-3">
               <p className="text-xs text-gray-500 truncate flex-1">{linkConvite}</p>
@@ -169,7 +169,7 @@ export default function PortalIndicacoesPage() {
         </CardContent>
       </Card>
 
-      {/* BenefÃ­cio atual */}
+      {/* Benefício atual */}
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-3">
@@ -177,7 +177,7 @@ export default function PortalIndicacoesPage() {
               <Gift className="w-5 h-5 text-yellow-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">BenefÃ­cio por indicaÃ§Ãµes</p>
+              <p className="text-xs text-gray-500">Benefício por indicações</p>
               <p className="text-xl font-bold text-gray-800">
                 R$ {totalBeneficio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
@@ -216,10 +216,10 @@ export default function PortalIndicacoesPage() {
               </div>
               <div className="bg-gray-50 rounded-lg p-2">
                 <p className="text-lg font-bold text-gray-800">{progressao.beneficioPercentualAtual}%</p>
-                <p className="text-[10px] text-gray-500">BenefÃ­cio</p>
+                <p className="text-[10px] text-gray-500">Benefício</p>
               </div>
             </div>
-            {/* Barra de progresso para prÃ³ximo nÃ­vel */}
+            {/* Barra de progresso para próximo nível */}
             {NIVEL_ORDEM[progressao.nivelAtual] < 3 && (
               <div>
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -248,7 +248,7 @@ export default function PortalIndicacoesPage() {
             <CardContent className="pt-6 pb-6 text-center">
               <UserPlus className="w-8 h-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500">
-                Nenhuma indicaÃ§Ã£o ainda. Compartilhe seu link!
+                Nenhuma indicação ainda. Compartilhe seu link!
               </p>
             </CardContent>
           </Card>
