@@ -41,6 +41,7 @@ import {
   ArrowUpCircle,
   ClipboardList,
   LineChart,
+  Coins,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -110,6 +111,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
         { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
         { href: '/dashboard/convites', label: 'Convites', icon: Mail },
+        { href: '/dashboard/cooper-token', label: 'CooperToken', icon: Coins },
         { href: '/dashboard/clube-vantagens', label: 'Clube de Vantagens', icon: Gift },
         { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
         { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
@@ -137,6 +139,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/financeiro/despesas', label: 'Despesas Correntes', icon: ClipboardList },
         { href: '/dashboard/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: LineChart },
         { href: '/dashboard/configuracoes/financeiro', label: 'Plano de Contas', icon: DollarSign },
+        { href: '/dashboard/cooper-token-parceiro', label: 'Tokens Recebidos', icon: ArrowDownCircle },
       ],
     },
     {

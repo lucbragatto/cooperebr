@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
@@ -341,12 +341,13 @@ export class CooperTokenService {
     return { items, total, page, limit };
   }
 
-  async getLedger(cooperativaId: string, page = 1, limit = 50) {
+  async getLedger(cooperativaId: string | undefined, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
+    const where = cooperativaId ? { cooperativaId } : {};
 
     const [items, total] = await Promise.all([
       this.prisma.cooperTokenLedger.findMany({
-        where: { cooperativaId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -354,9 +355,7 @@ export class CooperTokenService {
           cooperado: { select: { nomeCompleto: true, email: true } },
         },
       }),
-      this.prisma.cooperTokenLedger.count({
-        where: { cooperativaId },
-      }),
+      this.prisma.cooperTokenLedger.count({ where }),
     ]);
 
     return { items, total, page, limit };
@@ -436,6 +435,14 @@ export class CooperTokenService {
           }
         : null,
     };
+  }
+
+  async getCooperativaIdByCooperado(cooperadoId: string): Promise<string | null> {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { cooperativaId: true },
+    });
+    return cooperado?.cooperativaId ?? null;
   }
 
   async getConsolidado(cooperativaId: string) {
@@ -779,6 +786,11 @@ export class CooperTokenService {
         },
       });
 
+      // Também creditar no saldo do parceiro (cooperativa do recebedor)
+      if (recebedorCooperativaId) {
+        await this.creditarSaldoParceiroTx(tx, recebedorCooperativaId, quantidadeLiquida);
+      }
+
       this.logger.log(
         `Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa})`,
       );
@@ -791,6 +803,335 @@ export class CooperTokenService {
         pagadorId: decoded.pagadorId,
         recebedorId,
       };
+    });
+  }
+
+  // ── Parceiro: Saldo ──
+
+  async getSaldoParceiro(cooperativaId: string) {
+    let saldo = await this.prisma.cooperTokenSaldoParceiro.findUnique({
+      where: { cooperativaId },
+    });
+
+    if (!saldo) {
+      saldo = await this.prisma.cooperTokenSaldoParceiro.create({
+        data: { cooperativaId },
+      });
+    }
+
+    return saldo;
+  }
+
+  // ── Parceiro: Extrato ──
+
+  async getExtratoParceiro(cooperativaId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.cooperTokenLedger.findMany({
+        where: { parceiroId: cooperativaId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          cooperado: { select: { nomeCompleto: true, email: true } },
+        },
+      }),
+      this.prisma.cooperTokenLedger.count({
+        where: { parceiroId: cooperativaId },
+      }),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  // ── Parceiro: Usar tokens para abater energia ──
+
+  async usarTokensEnergia(params: {
+    cooperativaId: string;
+    quantidade: number;
+    descricao?: string;
+  }) {
+    const { cooperativaId, quantidade, descricao } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const saldo = await tx.cooperTokenSaldoParceiro.findUnique({
+        where: { cooperativaId },
+      });
+
+      if (!saldo || Number(saldo.saldoDisponivel) < quantidade) {
+        throw new BadRequestException(
+          `Saldo insuficiente. Disponível: ${Number(saldo?.saldoDisponivel ?? 0)}, solicitado: ${quantidade}`,
+        );
+      }
+
+      const novoSaldo = Math.round((Number(saldo.saldoDisponivel) - quantidade) * 10000) / 10000;
+
+      await tx.cooperTokenSaldoParceiro.update({
+        where: { cooperativaId },
+        data: {
+          saldoDisponivel: novoSaldo,
+          totalUsadoEnergia: { increment: quantidade },
+        },
+      });
+
+      // Registrar no ledger — usa o primeiro cooperado da cooperativa como referência
+      const adminCooperado = await tx.cooperado.findFirst({
+        where: { cooperativaId },
+        select: { id: true },
+      });
+
+      const cooperadoId = adminCooperado?.id ?? 'SISTEMA';
+
+      const ledger = await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId,
+          cooperativaId,
+          tipo: CooperTokenTipo.PAGAMENTO_QR,
+          operacao: CooperTokenOperacao.ABATIMENTO_ENERGIA,
+          quantidade,
+          saldoApos: novoSaldo,
+          parceiroId: cooperativaId,
+          descricao: descricao ?? `Abatimento de ${quantidade} tokens em conta de energia`,
+        },
+      });
+
+      this.logger.log(
+        `Parceiro ${cooperativaId} usou ${quantidade} tokens para energia. Novo saldo: ${novoSaldo}`,
+      );
+
+      return { sucesso: true, quantidade, novoSaldo, ledger };
+    });
+  }
+
+  // ── Parceiro: Transferir tokens para outro parceiro ──
+
+  async transferirTokensParceiro(params: {
+    remetenteCooperativaId: string;
+    destinatarioCooperativaId: string;
+    quantidade: number;
+    descricao?: string;
+  }) {
+    const { remetenteCooperativaId, destinatarioCooperativaId, quantidade, descricao } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    if (remetenteCooperativaId === destinatarioCooperativaId) {
+      throw new BadRequestException('Remetente e destinatário não podem ser o mesmo');
+    }
+
+    // Validar que o destinatário existe e está ativo
+    const destinatario = await this.prisma.cooperativa.findFirst({
+      where: { id: destinatarioCooperativaId, ativo: true },
+    });
+
+    if (!destinatario) {
+      throw new NotFoundException('Parceiro destinatário não encontrado ou inativo');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Debitar do remetente
+      const saldoRemetente = await tx.cooperTokenSaldoParceiro.findUnique({
+        where: { cooperativaId: remetenteCooperativaId },
+      });
+
+      if (!saldoRemetente || Number(saldoRemetente.saldoDisponivel) < quantidade) {
+        throw new BadRequestException(
+          `Saldo insuficiente. Disponível: ${Number(saldoRemetente?.saldoDisponivel ?? 0)}, solicitado: ${quantidade}`,
+        );
+      }
+
+      const novoSaldoRemetente = Math.round((Number(saldoRemetente.saldoDisponivel) - quantidade) * 10000) / 10000;
+
+      await tx.cooperTokenSaldoParceiro.update({
+        where: { cooperativaId: remetenteCooperativaId },
+        data: {
+          saldoDisponivel: novoSaldoRemetente,
+          totalTransferido: { increment: quantidade },
+        },
+      });
+
+      // Creditar no destinatário
+      let saldoDestinatario = await tx.cooperTokenSaldoParceiro.findUnique({
+        where: { cooperativaId: destinatarioCooperativaId },
+      });
+
+      const novoSaldoDestinatario = Math.round(
+        (Number(saldoDestinatario?.saldoDisponivel ?? 0) + quantidade) * 10000,
+      ) / 10000;
+
+      if (saldoDestinatario) {
+        await tx.cooperTokenSaldoParceiro.update({
+          where: { cooperativaId: destinatarioCooperativaId },
+          data: {
+            saldoDisponivel: novoSaldoDestinatario,
+            totalRecebido: { increment: quantidade },
+          },
+        });
+      } else {
+        await tx.cooperTokenSaldoParceiro.create({
+          data: {
+            cooperativaId: destinatarioCooperativaId,
+            saldoDisponivel: quantidade,
+            totalRecebido: quantidade,
+          },
+        });
+      }
+
+      // Ledger entries — buscar cooperado referência para cada lado
+      const adminRemetente = await tx.cooperado.findFirst({
+        where: { cooperativaId: remetenteCooperativaId },
+        select: { id: true },
+      });
+      const adminDestinatario = await tx.cooperado.findFirst({
+        where: { cooperativaId: destinatarioCooperativaId },
+        select: { id: true },
+      });
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: adminRemetente?.id ?? 'SISTEMA',
+          cooperativaId: remetenteCooperativaId,
+          tipo: CooperTokenTipo.PAGAMENTO_QR,
+          operacao: CooperTokenOperacao.TRANSFERENCIA_PARCEIRO,
+          quantidade,
+          saldoApos: novoSaldoRemetente,
+          parceiroId: remetenteCooperativaId,
+          descricao: descricao ?? `Transferência de ${quantidade} tokens para parceiro ${destinatario.nome}`,
+        },
+      });
+
+      await tx.cooperTokenLedger.create({
+        data: {
+          cooperadoId: adminDestinatario?.id ?? 'SISTEMA',
+          cooperativaId: destinatarioCooperativaId,
+          tipo: CooperTokenTipo.PAGAMENTO_QR,
+          operacao: CooperTokenOperacao.CREDITO,
+          quantidade,
+          saldoApos: novoSaldoDestinatario,
+          parceiroId: destinatarioCooperativaId,
+          descricao: descricao ?? `Recebimento de ${quantidade} tokens do parceiro`,
+        },
+      });
+
+      this.logger.log(
+        `Transferência parceiro: ${remetenteCooperativaId} → ${destinatarioCooperativaId}, ${quantidade} tokens`,
+      );
+
+      return {
+        sucesso: true,
+        quantidade,
+        remetenteCooperativaId,
+        destinatarioCooperativaId,
+        novoSaldoRemetente,
+      };
+    });
+  }
+
+  // ── Parceiro: Processar QR de cooperado ──
+
+  async processarQrParceiro(params: {
+    qrToken: string;
+    parceiroCooperativaId: string;
+    recebedorId: string;
+  }) {
+    // Reutilizar processarPagamentoQr e, após, creditar no saldo parceiro
+    const resultado = await this.processarPagamentoQr({
+      qrToken: params.qrToken,
+      recebedorId: params.recebedorId,
+      recebedorCooperativaId: params.parceiroCooperativaId,
+    });
+
+    // Taxa de 1% já foi aplicada — creditar o líquido no saldo parceiro
+    const taxa1Pct = Math.round(resultado.quantidadeLiquida * 0.01 * 10000) / 10000;
+    const liquidoParceiro = Math.round((resultado.quantidadeLiquida - taxa1Pct) * 10000) / 10000;
+
+    await this.prisma.$transaction(async (tx) => {
+      let saldoParceiro = await tx.cooperTokenSaldoParceiro.findUnique({
+        where: { cooperativaId: params.parceiroCooperativaId },
+      });
+
+      const novoSaldo = Math.round(
+        (Number(saldoParceiro?.saldoDisponivel ?? 0) + liquidoParceiro) * 10000,
+      ) / 10000;
+
+      if (saldoParceiro) {
+        await tx.cooperTokenSaldoParceiro.update({
+          where: { cooperativaId: params.parceiroCooperativaId },
+          data: {
+            saldoDisponivel: novoSaldo,
+            totalRecebido: { increment: liquidoParceiro },
+          },
+        });
+      } else {
+        await tx.cooperTokenSaldoParceiro.create({
+          data: {
+            cooperativaId: params.parceiroCooperativaId,
+            saldoDisponivel: liquidoParceiro,
+            totalRecebido: liquidoParceiro,
+          },
+        });
+      }
+    });
+
+    this.logger.log(
+      `QR Parceiro: creditado ${liquidoParceiro} tokens no saldo parceiro ${params.parceiroCooperativaId} (taxa cooperativa mãe: ${taxa1Pct})`,
+    );
+
+    return { ...resultado, liquidoParceiro, taxaCooperativaMae: taxa1Pct };
+  }
+
+  // ── Admin: Listar saldos de todos parceiros ──
+
+  async listarSaldosParceiros() {
+    return this.prisma.cooperTokenSaldoParceiro.findMany({
+      include: {
+        cooperativa: { select: { nome: true, cnpj: true, ativo: true } },
+      },
+      orderBy: { saldoDisponivel: 'desc' },
+    });
+  }
+
+  // ── Creditar no saldo parceiro (usado internamente) ──
+
+  async creditarSaldoParceiro(cooperativaId: string, quantidade: number) {
+    return this.prisma.$transaction(async (tx) => {
+      return this.creditarSaldoParceiroTx(tx, cooperativaId, quantidade);
+    });
+  }
+
+  // Versão que aceita transação existente (para uso dentro de $transaction)
+  private async creditarSaldoParceiroTx(tx: any, cooperativaId: string, quantidade: number) {
+    const saldo = await tx.cooperTokenSaldoParceiro.findUnique({
+      where: { cooperativaId },
+    });
+
+    const novoSaldo = Math.round(
+      (Number(saldo?.saldoDisponivel ?? 0) + quantidade) * 10000,
+    ) / 10000;
+
+    if (saldo) {
+      return tx.cooperTokenSaldoParceiro.update({
+        where: { cooperativaId },
+        data: {
+          saldoDisponivel: novoSaldo,
+          totalRecebido: { increment: quantidade },
+        },
+      });
+    }
+
+    return tx.cooperTokenSaldoParceiro.create({
+      data: {
+        cooperativaId,
+        saldoDisponivel: quantidade,
+        totalRecebido: quantidade,
+      },
     });
   }
 }

@@ -44,7 +44,9 @@ const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const fmtToken = (v: number) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+  Number.isInteger(v)
+    ? v.toLocaleString('pt-BR')
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
 function OperacaoBadge({ operacao }: { operacao: string }) {
   const cores: Record<string, string> = {
@@ -88,6 +90,7 @@ export default function CooperTokenPage() {
   const [emSelecionado, setEmSelecionado] = useState<CooperadoBusca | null>(null);
   const [emQuantidade, setEmQuantidade] = useState('');
   const [emDescricao, setEmDescricao] = useState('');
+  const [emTipo, setEmTipo] = useState('GERACAO_EXCEDENTE');
   const [emEnviando, setEmEnviando] = useState(false);
   const [emMensagem, setEmMensagem] = useState('');
 
@@ -145,7 +148,9 @@ export default function CooperTokenPage() {
     if (!emSelecionado) return;
     const qtd = parseFloat(emQuantidade);
     if (!qtd || qtd <= 0) { setEmMensagem('Quantidade deve ser maior que zero'); return; }
-    if (!confirm(`Emitir ${qtd.toFixed(4)} tokens para ${emSelecionado.nomeCompleto}?\nTaxa de emissao 2% sera aplicada (liquido: ${(qtd * 0.98).toFixed(4)}).`)) return;
+    const fmtQtd = Number.isInteger(qtd) ? String(qtd) : qtd.toFixed(4);
+    const fmtLiq = Number.isInteger(qtd * 0.98) ? String(qtd * 0.98) : (qtd * 0.98).toFixed(4);
+    if (!confirm(`Emitir ${fmtQtd} tokens para ${emSelecionado.nomeCompleto}?\nTaxa de emissao 2% sera aplicada (liquido: ${fmtLiq}).`)) return;
     setEmEnviando(true);
     setEmMensagem('');
     try {
@@ -153,11 +158,13 @@ export default function CooperTokenPage() {
         cooperadoId: emSelecionado.id,
         quantidade: qtd,
         descricao: emDescricao || undefined,
+        tipo: emTipo,
       });
-      setEmMensagem(`${qtd.toFixed(4)} tokens emitidos para ${emSelecionado.nomeCompleto} (liquido: ${(qtd * 0.98).toFixed(4)} apos taxa 2%)`);
+      setEmMensagem(`${fmtQtd} tokens emitidos para ${emSelecionado.nomeCompleto} (liquido: ${fmtLiq} apos taxa 2%)`);
       setEmSelecionado(null);
       setEmQuantidade('');
       setEmDescricao('');
+      setEmTipo('GERACAO_EXCEDENTE');
       buscarResumo();
       buscarLedger();
     } catch (err: any) {
@@ -309,7 +316,7 @@ export default function CooperTokenPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label className="text-sm">Quantidade</Label>
               <Input
@@ -320,6 +327,18 @@ export default function CooperTokenPage() {
                 onChange={(e) => setEmQuantidade(e.target.value)}
                 placeholder="Ex: 100"
               />
+            </div>
+            <div>
+              <Label className="text-sm">Tipo</Label>
+              <select
+                value={emTipo}
+                onChange={(e) => setEmTipo(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="GERACAO_EXCEDENTE">Excedente</option>
+                <option value="BONUS_INDICACAO">Bonus Indicacao</option>
+                <option value="SOCIAL">Social</option>
+              </select>
             </div>
             <div>
               <Label className="text-sm">Descricao (opcional)</Label>
@@ -377,11 +396,15 @@ export default function CooperTokenPage() {
                   )}
                   {ledger.map((l) => (
                     <TableRow key={l.id}>
-                      <TableCell className="whitespace-nowrap">
-                        {new Date(l.createdAt).toLocaleDateString('pt-BR')}{' '}
-                        <span className="text-gray-400 text-xs">
-                          {new Date(l.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                      <TableCell className="whitespace-nowrap text-sm">
+                        {(() => {
+                          const d = new Date(l.createdAt);
+                          const dd = String(d.getDate()).padStart(2, '0');
+                          const mm = String(d.getMonth() + 1).padStart(2, '0');
+                          const hh = String(d.getHours()).padStart(2, '0');
+                          const mi = String(d.getMinutes()).padStart(2, '0');
+                          return `${dd}/${mm} ${hh}:${mi}`;
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{l.cooperado?.nomeCompleto ?? '—'}</div>

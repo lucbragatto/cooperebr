@@ -72,9 +72,10 @@ export class CooperTokenController {
       cooperadoId: string;
       quantidade: number;
       descricao?: string;
+      tipo?: string;
     },
   ) {
-    const cooperativaId = req.user?.cooperativaId;
+    let cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
@@ -84,10 +85,29 @@ export class CooperTokenController {
       );
     }
 
+    // Validar tipo se fornecido
+    const tiposPermitidos: string[] = [
+      CooperTokenTipo.GERACAO_EXCEDENTE,
+      CooperTokenTipo.BONUS_INDICACAO,
+      CooperTokenTipo.SOCIAL,
+    ];
+    const tipoFinal = body.tipo && tiposPermitidos.includes(body.tipo)
+      ? (body.tipo as CooperTokenTipo)
+      : CooperTokenTipo.GERACAO_EXCEDENTE;
+
+    // SUPER_ADMIN não tem cooperativaId no JWT — busca pelo cooperado alvo
+    if (!cooperativaId) {
+      const coop = await this.cooperTokenService.getCooperativaIdByCooperado(body.cooperadoId);
+      if (!coop) {
+        throw new BadRequestException('Cooperado não encontrado ou sem cooperativa associada');
+      }
+      cooperativaId = coop;
+    }
+
     return this.cooperTokenService.creditar({
       cooperadoId: body.cooperadoId,
       cooperativaId,
-      tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
+      tipo: tipoFinal,
       quantidade: body.quantidade,
       descricao: body.descricao,
     } as any);
@@ -236,6 +256,107 @@ export class CooperTokenController {
   async updateConfigDefaults() {
     // SEC-NEW-001: Endpoint ainda não implementado — retornar 501 em vez de 200 enganoso
     throw new HttpException('Funcionalidade ainda nao implementada', HttpStatus.NOT_IMPLEMENTED);
+  }
+
+  // ── Parceiro: Saldo de tokens recebidos ──
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Get('parceiro/saldo')
+  async getSaldoParceiro(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getSaldoParceiro(cooperativaId);
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Get('parceiro/extrato')
+  async getExtratoParceiro(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getExtratoParceiro(
+      cooperativaId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Post('parceiro/usar-energia')
+  async usarTokensEnergia(
+    @Req() req: any,
+    @Body() body: { quantidade: number; descricao?: string },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+    return this.cooperTokenService.usarTokensEnergia({
+      cooperativaId,
+      quantidade: body.quantidade,
+      descricao: body.descricao,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Post('parceiro/transferir')
+  async transferirTokensParceiro(
+    @Req() req: any,
+    @Body() body: { destinatarioCooperativaId: string; quantidade: number; descricao?: string },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.destinatarioCooperativaId || !body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('destinatarioCooperativaId e quantidade (> 0) são obrigatórios');
+    }
+    return this.cooperTokenService.transferirTokensParceiro({
+      remetenteCooperativaId: cooperativaId,
+      destinatarioCooperativaId: body.destinatarioCooperativaId,
+      quantidade: body.quantidade,
+      descricao: body.descricao,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Post('admin/processar-qr-parceiro')
+  async processarQrParceiro(
+    @Req() req: any,
+    @Body() body: { qrToken: string },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const cooperadoId = req.user?.cooperadoId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!cooperadoId) {
+      throw new BadRequestException('Cooperado recebedor não identificado');
+    }
+    if (!body.qrToken) {
+      throw new BadRequestException('Token QR é obrigatório');
+    }
+    return this.cooperTokenService.processarQrParceiro({
+      qrToken: body.qrToken,
+      parceiroCooperativaId: cooperativaId,
+      recebedorId: cooperadoId,
+    });
+  }
+
+  @Roles(SUPER_ADMIN)
+  @Get('admin/parceiros/saldos')
+  async listarSaldosParceiros() {
+    return this.cooperTokenService.listarSaldosParceiros();
   }
 
   // ── Enviar Tokens (parceiro → cooperado) ──

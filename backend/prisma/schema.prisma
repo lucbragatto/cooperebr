@@ -57,6 +57,7 @@ model Cooperativa {
   // ── CooperToken ──
   cooperTokenLedger         CooperTokenLedger[]
   configCooperToken         ConfigCooperToken?
+  cooperTokenSaldoParceiro  CooperTokenSaldoParceiro?
   convitesIndicacao         ConviteIndicacao[]
 
   @@map("cooperativas")
@@ -1658,6 +1659,9 @@ enum CooperTokenOperacao {
   EXPIRACAO
   DOACAO_ENVIADA
   DOACAO_RECEBIDA
+  COMPRA_PARCEIRO
+  ABATIMENTO_ENERGIA
+  TRANSFERENCIA_PARCEIRO
 }
 
 model CooperTokenLedger {
@@ -1675,11 +1679,13 @@ model CooperTokenLedger {
   referenciaTabela String?
   expiracaoEm      DateTime?
   descricao        String?
+  parceiroId       String?
   createdAt        DateTime            @default(now())
 
   @@index([cooperadoId, createdAt])
   @@index([cooperativaId])
   @@index([expiracaoEm])
+  @@index([parceiroId])
   @@map("cooper_token_ledger")
 }
 
@@ -1771,4 +1777,19 @@ model ConfigCooperToken {
   updatedAt        DateTime @updatedAt
 
   @@map("config_cooper_token")
+}
+
+model CooperTokenSaldoParceiro {
+  id                String      @id @default(cuid())
+  cooperativaId     String      @unique
+  cooperativa       Cooperativa @relation(fields: [cooperativaId], references: [id])
+  saldoDisponivel   Decimal     @default(0) @db.Decimal(10, 4)
+  totalRecebido     Decimal     @default(0) @db.Decimal(10, 4)
+  totalUsadoEnergia Decimal     @default(0) @db.Decimal(10, 4)
+  totalTransferido  Decimal     @default(0) @db.Decimal(10, 4)
+  totalComprado     Decimal     @default(0) @db.Decimal(10, 4)
+  updatedAt         DateTime    @updatedAt
+  createdAt         DateTime    @default(now())
+
+  @@map("cooper_token_saldo_parceiro")
 }

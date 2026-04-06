@@ -13,6 +13,58 @@ A cooperativa **arrenda usinas fotovoltaicas** e distribui os créditos de energ
 
 **Distribuidora:** EDP Espírito Santo
 
+## Aluguel/Arrendamento de Usina Solar
+
+Proprietários de usinas solares podem alugar os créditos excedentes para a CoopereBR.
+
+**Como funciona:**
+- A CoopereBR analisa a conta de energia do proprietário e calcula a média de kWh que sobram por mês
+- A usina fica no nome da cooperativa e os créditos excedentes são administrados por ela
+- O proprietário continua recebendo seus próprios kWh de consumo sem custo adicional
+- Além disso, recebe um **aluguel fixo mensal** pelos kWh excedentes
+- Os créditos excedentes são distribuídos para outros cooperados (beneficiários)
+- Os créditos não consumidos em um mês podem ser usados em até **60 meses**
+- **Manutenção da usina:** responsabilidade do proprietário
+
+**Vantagens para o dono da usina:**
+- ✅ Renda extra mensal pelos créditos que sobram e não usa
+- ✅ Continua recebendo sua própria energia sem custo
+- ✅ CoopereBR gerencia toda a distribuição dos créditos
+- ✅ Regulamentado pela ANEEL (Resolução Normativa nº 482/2012)
+
+**Para simular ou alugar (créditos excedentes):**
+- Simulador: cooperebr.com.br/alugarusina
+- WhatsApp: (27) 4042-1630
+- Link direto: cooperebr.com.br/upload_usina_arrendada
+
+---
+
+## Arrendamento de Usinas Exclusivas para a CoopereBR
+
+Modalidade diferente do aluguel de excedentes: a CoopereBR também arrenda **usinas inteiras exclusivamente** para distribuir os créditos aos cooperados.
+
+**Porte das usinas aceitas:**
+- De **110 kWp** até mais de **5 MWp**
+
+**Como funciona:**
+- A usina é arrendada integralmente pela CoopereBR
+- Toda a geração é destinada aos cooperados da cooperativa
+- Indicado para proprietários de usinas de médio e grande porte
+- Detalhes de contrato, valores e condições: **sob consulta**
+
+**Para mais informações:**
+- WhatsApp: (27) 4042-1630
+- Site: cooperebr.com.br
+
+⚠️ Esta modalidade ainda não está publicada no site — informação interna. Ao responder usuários, indicar o contato direto.
+
+---
+
+**Usinas (3 no total):**
+- 2 usinas em **Linhares - ES**
+- 1 usina em **Ibiraçu - ES**
+- Todas na área de concessão da EDP Espírito Santo
+
 ---
 
 ## Como funciona (em linguagem simples)
@@ -29,7 +81,7 @@ A cooperativa **arrenda usinas fotovoltaicas** e distribui os créditos de energ
 
 ## Vantagens
 
-- ✅ Conta de energia mais barata (até 15% de desconto)
+- ✅ Conta de energia mais barata (desconto variável — pode passar de 20%; não afirmar valor fixo de 15%)
 - ✅ R$ 0,00 de investimento inicial
 - ✅ Sem fidelidade
 - ✅ Não necessita de obras ou alterações na instalação elétrica
@@ -125,7 +177,7 @@ Depende — verificar conflito com sistema próprio de geração. Consultar.
 ### Detalhes do serviço
 
 **Como o desconto é calculado?**
-Com base nos kWh compensados × tarifa da EDP × percentual de desconto contratado.
+Com base nos kWh compensados × tarifa da EDP × percentual de desconto contratado. O desconto é variável — em alguns meses pode passar de 20%. Não afirmar valor fixo; dizer "pode chegar a mais de 20%".
 
 **Tem fidelidade?**
 Não.
@@ -160,6 +212,53 @@ O excedente de consumo é cobrado normalmente pela EDP, sem desconto da CoopereB
 
 **Se a EDP interromper o fornecimento, fico sem energia?**
 Sim — como a energia vem da rede da EDP (não direto da usina), interrupções da concessionária afetam normalmente.
+
+---
+
+## Clube de Benefícios / Clube de Vantagens CoopereBR
+
+O Clube de Benefícios é uma **rede exclusiva** criada entre a CoopereBR, seus cooperados e parceiros estratégicos.
+
+**Como funciona:**
+- Os parceiros distribuem benefícios aos cooperados dentro da rede
+- Os benefícios incluem:
+  - ⚡ Redução da fatura de energia / reembolso dos créditos de energia
+  - 🛍️ Descontos nos serviços e estabelecimentos dos parceiros
+
+**O sistema de TOKEN:**
+- Tudo funciona através de um moderno sistema de tokens digitais
+- **1 TOKEN = 1 crédito de energia**
+- Os tokens podem ser usados pelos cooperados para:
+  - Abater na conta de energia
+  - Trocar por benefícios/descontos nos parceiros
+
+**Diferenciais:**
+- Une economia de energia com um ecossistema de vantagens reais
+- Quanto mais parceiros, mais benefícios disponíveis para os cooperados
+- Modelo inovador que transforma créditos de energia em moeda de troca dentro da rede
+
+---
+
+## Como se tornar Parceiro da CoopereBR
+
+Parceiros são **cooperados estratégicos** — diferente do cooperado comum, o parceiro agrega valor além do desconto na energia.
+
+**O parceiro:**
+- Faz parte da CoopereBR como cooperado (recebe créditos de energia e reduz seus custos)
+- Tem uma base de clientes (associados, colaboradores, seguidores) que podem se tornar cooperados
+- Indica suas residências, comércios, escritórios e clínicas para entrar na cooperativa
+- Ajuda a ampliar o número de cooperados, fortalecendo o projeto
+- Faz parte do **Clube de Benefícios da CoopereBR** e pode oferecer esse clube à sua base
+
+**Perfis ideais de parceiro:**
+- Associações (ex: OAB, ASSEJUFES, AESMP)
+- Empresas com grande base de clientes/colaboradores
+- Prestadores de serviço com público fiel
+- Entidades de classe ou sindicatos
+
+**Como se tornar parceiro:**
+- Ainda sem página/formulário no site (a definir)
+- Por ora: contato direto pelo WhatsApp (27) 4042-1630
 
 ---
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -71,7 +71,7 @@ A presente procuração é outorgada em caráter irrevogável e irretratável pe
 O outorgante declara estar ciente de que esta procuração não confere poderes para alteração de titularidade, encerramento ou qualquer outra modificação que não esteja diretamente relacionada ao sistema de compensação de energia da cooperativa.
 `.trim();
 
-export default function AssinarPage() {
+function AssinarContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const docParam = searchParams.get('doc');
@@ -313,5 +313,13 @@ export default function AssinarPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AssinarPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <AssinarContent />
+    </Suspense>
   );
 }

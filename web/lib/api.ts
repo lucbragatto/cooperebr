@@ -24,10 +24,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
-      Cookies.remove('token');
-      Cookies.remove('usuario');
-      const isPortal = window.location.pathname.startsWith('/portal');
-      window.location.href = isPortal ? '/portal/login' : '/login';
+      const path = window.location.pathname;
+      // Don't redirect if already on a login page (let the form show the error)
+      const isLoginPage = path === '/login' || path === '/portal/login';
+      if (!isLoginPage) {
+        Cookies.remove('token');
+        Cookies.remove('usuario');
+        const isPortal = path.startsWith('/portal');
+        window.location.href = isPortal ? '/portal/login' : '/login';
+      }
     }
     return Promise.reject(error);
   },
