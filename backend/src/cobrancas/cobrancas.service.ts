@@ -322,17 +322,26 @@ export class CobrancasService {
     }
 
     // Verificar se é a primeira fatura paga do cooperado e emitir evento para cascade MLM
+    // Evento emitido APÓS confirmação de que a baixa foi persistida (idempotente via count check)
     try {
       const cooperadoId = cobranca.contrato?.cooperadoId;
       if (cooperadoId) {
-        const totalPagas = await this.prisma.cobranca.count({
-          where: { contrato: { cooperadoId }, status: 'PAGO' },
+        // Confirmar que o status PAGO foi realmente persistido antes de emitir evento
+        const cobrancaConfirmada = await this.prisma.cobranca.findUnique({
+          where: { id },
+          select: { status: true },
         });
-        if (totalPagas === 1) {
-          this.eventEmitter.emit('cobranca.primeira.paga', {
-            cooperadoId,
-            valorFatura: valorFinal,
+        if (cobrancaConfirmada?.status === 'PAGO') {
+          const totalPagas = await this.prisma.cobranca.count({
+            where: { contrato: { cooperadoId }, status: 'PAGO' },
           });
+          if (totalPagas === 1) {
+            this.eventEmitter.emit('cobranca.primeira.paga', {
+              cooperadoId,
+              cobrancaId: id,
+              valorFatura: valorFinal,
+            });
+          }
         }
       }
     } catch (err) {

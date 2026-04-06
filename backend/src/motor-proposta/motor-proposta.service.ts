@@ -334,6 +334,11 @@ export class MotorPropostaService {
       kwhContrato = Math.round(kwhMedio * (1 + fatorIncremento / 100) * 100) / 100;
     }
 
+    // BUG-NEW-002: Validar que kwhContrato > 0 antes de prosseguir
+    if (kwhContrato <= 0) {
+      throw new BadRequestException('kwhContrato calculado é zero ou negativo. Verifique o consumo informado e o fator de incremento.');
+    }
+
     // 4. Calcular valores financeiros
     const valorMensalCooperebr = Math.round(kwhContrato * kwhBaseCalculo * (1 - descontoBase / 100) * 100) / 100;
     const comparativoSemGD = Math.round(kwhContrato * (dados.totalSemGD / (dados.consumoKwh || 1)) * 100) / 100;

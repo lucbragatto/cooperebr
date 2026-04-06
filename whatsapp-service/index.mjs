@@ -23,6 +23,49 @@ let currentQR = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT = 5;
 
+// BUG-WA-005: Buffer de mensagens durante reconexão + backoff exponencial com jitter
+const messageBuffer = [];
+const MAX_BUFFER_SIZE = 200;
+const MAX_BUFFER_AGE_MS = 5 * 60 * 1000; // 5 minutos
+
+function calcBackoffWithJitter(attempt) {
+  const baseDelay = 1000;
+  const maxDelay = 60000;
+  const exponential = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+  const jitter = Math.random() * exponential * 0.3;
+  return Math.round(exponential + jitter);
+}
+
+function bufferMessage(to, text) {
+  if (messageBuffer.length >= MAX_BUFFER_SIZE) {
+    console.warn(`⚠️ Buffer de mensagens cheio (${MAX_BUFFER_SIZE}), descartando mensagem mais antiga`);
+    messageBuffer.shift();
+  }
+  messageBuffer.push({ to, text, timestamp: Date.now() });
+}
+
+async function flushMessageBuffer() {
+  if (messageBuffer.length === 0) return;
+  const now = Date.now();
+  console.log(`📤 Enviando ${messageBuffer.length} mensagem(ns) do buffer...`);
+  while (messageBuffer.length > 0) {
+    const msg = messageBuffer.shift();
+    // Descartar mensagens muito antigas
+    if (now - msg.timestamp > MAX_BUFFER_AGE_MS) {
+      console.log(`⏭️ Mensagem descartada (expirou): ${msg.to}`);
+      continue;
+    }
+    try {
+      const jid = toJid(msg.to);
+      await sock.sendMessage(jid, { text: msg.text });
+    } catch (err) {
+      console.error(`❌ Falha ao enviar mensagem do buffer para ${msg.to}: ${err.message}`);
+    }
+    // Delay entre mensagens para evitar rate limit
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+
 // ─── Normalizar telefone para JID ────────────────────────────────────
 function toJid(phone) {
   let digits = phone.replace(/\D/g, '');
@@ -107,6 +150,8 @@ async function startBaileys() {
       currentQR = null;
       reconnectAttempts = 0;
       console.log('✅ WhatsApp conectado com sucesso!');
+      // BUG-WA-005: Flush mensagens acumuladas durante reconexão
+      flushMessageBuffer().catch(err => console.error('❌ Erro ao flush buffer:', err.message));
     }
 
     if (connection === 'close') {
@@ -126,8 +171,9 @@ async function startBaileys() {
         });
       } else if (reconnectAttempts < MAX_RECONNECT) {
         reconnectAttempts++;
-        const delay = Math.min(3000 * reconnectAttempts, 15000);
-        console.log(`⚠️  Desconectado (code: ${statusCode}). Tentativa ${reconnectAttempts}/${MAX_RECONNECT} em ${delay / 1000}s...`);
+        // BUG-WA-005: Backoff exponencial com jitter para evitar reconnection storm
+        const delay = calcBackoffWithJitter(reconnectAttempts);
+        console.log(`⚠️  Desconectado (code: ${statusCode}). Tentativa ${reconnectAttempts}/${MAX_RECONNECT} em ${(delay / 1000).toFixed(1)}s...`);
         setTimeout(startBaileys, delay);
       } else {
         console.log(`❌ Máximo de reconexões atingido (code: ${statusCode}). Aguardando chamada manual via /status ou reinicie o serviço.`);
@@ -263,13 +309,15 @@ app.post('/reconnect', async (_req, res) => {
 // POST /send-message
 app.post('/send-message', async (req, res) => {
   try {
-    if (connectionStatus !== 'connected' || !sock) {
-      return res.status(503).json({ error: 'WhatsApp não está conectado' });
-    }
-
     const { to, text } = req.body;
     if (!to || !text) {
       return res.status(400).json({ error: 'Campos "to" e "text" são obrigatórios' });
+    }
+
+    // BUG-WA-005: Buffer mensagens durante reconexão em vez de rejeitar
+    if (connectionStatus !== 'connected' || !sock) {
+      bufferMessage(to, text);
+      return res.json({ ok: true, buffered: true, message: 'Mensagem será enviada após reconexão' });
     }
 
     const jid = toJid(to);

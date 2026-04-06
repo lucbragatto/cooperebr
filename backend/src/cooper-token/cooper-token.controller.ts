@@ -7,6 +7,8 @@ import {
   Query,
   Req,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { CooperTokenService } from './cooper-token.service';
 import { CooperTokenJob } from './cooper-token.job';
@@ -231,26 +233,14 @@ export class CooperTokenController {
 
   @Roles(SUPER_ADMIN)
   @Put('superadmin/config-defaults')
-  async updateConfigDefaults(
-    @Body()
-    body: {
-      modoGeracao?: string;
-      modeloVida?: string;
-      limiteTokenMensal?: number | null;
-      valorTokenReais?: number;
-      descontoMaxPerc?: number;
-      tetoCoop?: number | null;
-      ativo?: boolean;
-    },
-  ) {
-    // Para implementação futura com tabela de defaults globais
-    // Por agora retorna o body como confirmação
-    return { message: 'Defaults atualizados', ...body };
+  async updateConfigDefaults() {
+    // SEC-NEW-001: Endpoint ainda não implementado — retornar 501 em vez de 200 enganoso
+    throw new HttpException('Funcionalidade ainda nao implementada', HttpStatus.NOT_IMPLEMENTED);
   }
 
   // ── Enviar Tokens (parceiro → cooperado) ──
 
-  @Roles(ADMIN, SUPER_ADMIN, AGREGADOR)
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
   @Post('parceiro/enviar')
   async enviarTokens(
     @Req() req: any,
@@ -263,15 +253,29 @@ export class CooperTokenController {
   ) {
     const cooperativaId = req.user?.cooperativaId;
     const remetenteCooperadoId = req.user?.cooperadoId;
+    const perfil = req.user?.perfil;
 
-    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+    if (!cooperativaId && perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
-    }
-    if (!remetenteCooperadoId) {
-      throw new BadRequestException('Cooperado remetente não identificado no JWT');
     }
     if (!body.cooperadoId || !body.quantidade || body.quantidade <= 0) {
       throw new BadRequestException('cooperadoId e quantidade (> 0) são obrigatórios');
+    }
+
+    // ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR: crédito direto (envio do parceiro, sem débito pessoal)
+    if ([ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR].includes(perfil) && !remetenteCooperadoId) {
+      return this.cooperTokenService.creditar({
+        cooperadoId: body.cooperadoId,
+        cooperativaId,
+        tipo: CooperTokenTipo.BONUS_INDICACAO,
+        quantidade: body.quantidade,
+        descricao: body.descricao,
+      } as any);
+    }
+
+    // AGREGADOR ou ADMIN que também é cooperado: transferência com débito
+    if (!remetenteCooperadoId) {
+      throw new BadRequestException('Cooperado remetente não identificado no JWT');
     }
 
     return this.cooperTokenService.enviarTokens({

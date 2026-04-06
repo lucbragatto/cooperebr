@@ -371,7 +371,14 @@ function PixExcedenteContent() {
                     value={form.pixChave}
                     onChange={e => {
                       let v = e.target.value;
-                      if (form.pixTipo === 'CPF') v = v.replace(/\D/g, '').slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (_, a, b, c, d) => d ? `${a}.${b}.${c}-${d}` : v.replace(/\D/g, '').length > 6 ? `${a}.${b}.${c}` : v.replace(/\D/g, '').length > 3 ? `${a}.${b}` : a);
+                      if (form.pixTipo === 'CPF') {
+                        // BUG-FRONT-003: Extrair dígitos primeiro, depois formatar com base em digitos.length
+                        const digitos = v.replace(/\D/g, '').slice(0, 11);
+                        if (digitos.length > 9) v = digitos.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+                        else if (digitos.length > 6) v = digitos.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+                        else if (digitos.length > 3) v = digitos.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+                        else v = digitos;
+                      }
                       if (form.pixTipo === 'TELEFONE') v = v.replace(/\D/g, '').slice(0, 11);
                       if (form.pixTipo === 'CNPJ') v = v.replace(/\D/g, '').slice(0, 14);
                       setForm(p => ({ ...p, pixChave: v }));

@@ -116,7 +116,7 @@ export class CobrancasJob {
 
     const cobrancas = await this.prisma.cobranca.findMany({
       where: {
-        status: { in: ['PENDENTE', 'VENCIDO'] as any },
+        status: { in: ['PENDENTE', 'A_VENCER', 'VENCIDO'] },
         dataVencimento: { lt: hoje },
         notificadoVencimento: false,
       },

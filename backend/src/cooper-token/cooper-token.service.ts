@@ -511,11 +511,11 @@ export class CooperTokenService {
 
       const novoSaldoRemetente = Number(saldoRemetente.saldoDisponivel) - quantidade;
 
+      // BUG-CT-003: Doação NÃO é resgate — não incrementar totalResgatado
       await tx.cooperTokenSaldo.update({
         where: { cooperadoId: remetenteCooperadoId },
         data: {
           saldoDisponivel: novoSaldoRemetente,
-          totalResgatado: { increment: quantidade },
         },
       });
 

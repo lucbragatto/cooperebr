@@ -196,6 +196,19 @@ export class PixExcedenteService {
     };
   }
 
+  /**
+   * Valida que condominioId pertence à cooperativaId informada (multi-tenant).
+   */
+  private async validarCondominioOwnership(condominioId: string, cooperativaId: string) {
+    const cond = await this.prisma.condominio.findFirst({
+      where: { id: condominioId, cooperativaId },
+      select: { id: true },
+    });
+    if (!cond) {
+      throw new BadRequestException('Condomínio não pertence a esta cooperativa');
+    }
+  }
+
   async listarTransferencias(filtros: {
     cooperativaId?: string;
     cooperadoId?: string;
@@ -207,6 +220,11 @@ export class PixExcedenteService {
   }) {
     const { page = 1, limit = 20, ...where } = filtros;
     const skip = (page - 1) * limit;
+
+    // BUG-NEW-007: Validar que condominioId pertence à cooperativa do JWT
+    if (where.condominioId && where.cooperativaId) {
+      await this.validarCondominioOwnership(where.condominioId, where.cooperativaId);
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.transferenciaPix.findMany({
@@ -235,9 +253,13 @@ export class PixExcedenteService {
     return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
-  async getTransferencia(id: string) {
+  async getTransferencia(id: string, cooperativaId?: string) {
     const t = await this.prisma.transferenciaPix.findUnique({ where: { id } });
     if (!t) throw new NotFoundException('Transferência não encontrada');
+    // BUG-NEW-007: Validar que transferência pertence à cooperativa do JWT
+    if (cooperativaId && t.cooperativaId !== cooperativaId) {
+      throw new NotFoundException('Transferência não encontrada');
+    }
     return t;
   }
 

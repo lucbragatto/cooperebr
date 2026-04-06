@@ -267,7 +267,7 @@ export class FinanceiroController {
    */
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('pix-excedente/:id')
-  getPixExcedente(@Param('id') id: string) {
-    return this.pixExcedenteService.getTransferencia(id);
+  getPixExcedente(@Param('id') id: string, @Req() req: any) {
+    return this.pixExcedenteService.getTransferencia(id, req.user?.cooperativaId);
   }
 }
