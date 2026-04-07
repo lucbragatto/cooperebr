@@ -55,12 +55,20 @@ export class CooperTokenController {
 
   @Roles(ADMIN, SUPER_ADMIN)
   @Get('admin/consolidado')
-  async getConsolidado(@Req() req: any) {
+  async getConsolidado(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
-    return this.cooperTokenService.getConsolidado(cooperativaId);
+    return this.cooperTokenService.getConsolidado(
+      cooperativaId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Roles(ADMIN, SUPER_ADMIN)

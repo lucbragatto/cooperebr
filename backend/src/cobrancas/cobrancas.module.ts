@@ -8,9 +8,10 @@ import { AsaasModule } from '../asaas/asaas.module';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
+import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 
 @Module({
-  imports: [ConfiguracaoCobrancaModule, AsaasModule, ClubeVantagensModule, WhatsappModule, EmailModule],
+  imports: [ConfiguracaoCobrancaModule, AsaasModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule],
   controllers: [CobrancasController],
   providers: [CobrancasService, CobrancasJob, PrismaService],
   exports: [CobrancasService],

@@ -401,6 +401,7 @@ model Plano {
   tokenDescontoMaxPerc  Decimal? @db.Decimal(5, 2)
   tokenSocialAtivo      Boolean  @default(false)
   tokenFlexAtivo        Boolean  @default(false)
+  modoToken             String   @default("DESCONTO_DIRETO") // DESCONTO_DIRETO | FATURA_CHEIA_TOKEN
 
   @@map("planos")
 }
@@ -1651,6 +1652,7 @@ enum CooperTokenTipo {
   SOCIAL
   BONUS_INDICACAO
   PAGAMENTO_QR
+  DESCONTO_FATURA
 }
 
 enum CooperTokenOperacao {

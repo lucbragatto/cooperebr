@@ -445,19 +445,25 @@ export class CooperTokenService {
     return cooperado?.cooperativaId ?? null;
   }
 
-  async getConsolidado(cooperativaId: string) {
-    const [saldos, emitidoMes, resgatadoMes] = await Promise.all([
+  async getConsolidado(cooperativaId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+    const [cooperados, totalCooperados, emitidoMes, resgatadoMes] = await Promise.all([
       this.prisma.cooperTokenSaldo.findMany({
         where: { cooperativaId },
         include: { cooperado: { select: { nomeCompleto: true, email: true } } },
+        skip,
+        take: limit,
+      }),
+      this.prisma.cooperTokenSaldo.count({
+        where: { cooperativaId },
       }),
       this.prisma.cooperTokenLedger.aggregate({
         where: {
           cooperativaId,
           operacao: CooperTokenOperacao.CREDITO,
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          },
+          createdAt: { gte: inicioMes },
         },
         _sum: { quantidade: true },
       }),
@@ -465,19 +471,20 @@ export class CooperTokenService {
         where: {
           cooperativaId,
           operacao: CooperTokenOperacao.DEBITO,
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          },
+          createdAt: { gte: inicioMes },
         },
         _sum: { quantidade: true },
       }),
     ]);
 
     return {
-      cooperados: saldos,
+      cooperados,
       tokensEmitidosMes: Number(emitidoMes._sum.quantidade ?? 0),
       tokensResgatadosMes: Number(resgatadoMes._sum.quantidade ?? 0),
-      totalCooperados: saldos.length,
+      totalCooperados,
+      page,
+      limit,
+      pages: Math.ceil(totalCooperados / limit),
     };
   }
 

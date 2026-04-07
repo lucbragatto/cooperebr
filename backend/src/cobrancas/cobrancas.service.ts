@@ -8,6 +8,8 @@ import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.servic
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { CooperTokenTipo } from '@prisma/client';
 
 export type FonteDados = 'FATURA_OCR' | 'GERACAO_MANUAL' | 'ESTIMADO';
 
@@ -43,6 +45,7 @@ export class CobrancasService {
     private whatsappCicloVida: WhatsappCicloVidaService,
     private whatsappSender: WhatsappSenderService,
     private emailService: EmailService,
+    private cooperTokenService: CooperTokenService,
   ) {}
 
   @OnEvent('pagamento.confirmado')
@@ -103,7 +106,7 @@ export class CobrancasService {
     // Buscar contrato para obter cooperativaId e dados do cooperado
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: data.contratoId },
-      include: { cooperado: true },
+      include: { cooperado: true, plano: true },
     });
 
     // Resolver cooperativaId: parâmetro > contrato
@@ -115,6 +118,82 @@ export class CobrancasService {
         ...(resolvedCoopId ? { cooperativaId: resolvedCoopId } : {}),
       },
     });
+
+    // ── CooperToken: desconto automático ou crédito FATURA_CHEIA_TOKEN ──
+    const plano = contrato?.plano;
+    if (
+      plano?.cooperTokenAtivo === true &&
+      contrato?.cooperadoId &&
+      resolvedCoopId
+    ) {
+      try {
+        const modoToken = (plano as any).modoToken ?? 'DESCONTO_DIRETO';
+
+        if (modoToken === 'FATURA_CHEIA_TOKEN') {
+          // Modo Fatura Cheia: NÃO aplica desconto, credita tokens equivalentes
+          const valorToken = Number(plano.valorTokenReais ?? 0.45);
+          const maxPerc = Number(plano.tokenDescontoMaxPerc ?? 30);
+          const valorDescontoEmReais = Math.round(data.valorLiquido * (maxPerc / 100) * 100) / 100;
+          const valorDescontoEmTokens = Math.round((valorDescontoEmReais / valorToken) * 10000) / 10000;
+
+          if (valorDescontoEmTokens > 0) {
+            await this.cooperTokenService.creditar({
+              cooperadoId: contrato.cooperadoId,
+              cooperativaId: resolvedCoopId,
+              tipo: CooperTokenTipo.BONUS_INDICACAO,
+              quantidade: valorDescontoEmTokens,
+              valorEmissao: valorToken,
+              referenciaId: cobranca.id,
+              referenciaTabela: 'Cobranca',
+            });
+            this.logger.log(
+              `CooperToken FATURA_CHEIA: ${valorDescontoEmTokens} tokens creditados ao cooperado ${contrato.cooperadoId} (cobrança ${cobranca.id})`,
+            );
+          }
+        } else if (Number(plano.tokenDescontoMaxPerc ?? 0) > 0) {
+          // Modo DESCONTO_DIRETO: desconto automático na fatura
+          const desconto = await this.cooperTokenService.calcularDesconto({
+            cooperadoId: contrato.cooperadoId,
+            valorCobranca: data.valorLiquido,
+            plano,
+          });
+
+          if (desconto.tokensNecessarios > 0) {
+            await this.cooperTokenService.debitar({
+              cooperadoId: contrato.cooperadoId,
+              cooperativaId: resolvedCoopId,
+              quantidade: desconto.tokensNecessarios,
+              tipo: CooperTokenTipo.DESCONTO_FATURA,
+              referenciaId: cobranca.id,
+              descricao: 'Desconto automático na fatura via CooperToken',
+            });
+
+            const novoValorLiquido = Math.round((data.valorLiquido - desconto.descontoReais) * 100) / 100;
+
+            await this.prisma.cobranca.update({
+              where: { id: cobranca.id },
+              data: {
+                tokenDescontoQt: desconto.tokensNecessarios,
+                tokenDescontoReais: desconto.descontoReais,
+                ledgerDebitoId: cobranca.id,
+                valorLiquido: novoValorLiquido,
+              },
+            });
+
+            // Atualizar valorLiquido no objeto para uso nas notificações abaixo
+            (data as any).valorLiquido = novoValorLiquido;
+
+            this.logger.log(
+              `CooperToken DESCONTO: ${desconto.tokensNecessarios} tokens debitados, R$ ${desconto.descontoReais} de desconto na cobrança ${cobranca.id}`,
+            );
+          }
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Falha ao processar CooperToken na cobrança ${cobranca.id}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     // Emitir automaticamente no Asaas se configurado
     if (resolvedCoopId && contrato?.cooperadoId) {

@@ -933,6 +933,39 @@ export class FaturasService {
           );
         }
       }
+
+      // Crédito automático de CooperToken por kWh excedente (gerou mais que a cota)
+      if (
+        contrato.plano?.cooperTokenAtivo === true &&
+        Number(contrato.plano?.tokenPorKwhExcedente ?? 0) > 0
+      ) {
+        try {
+          const kwhExcedente = creditosRecebidosKwh - kwhContrato;
+          if (kwhExcedente > 0) {
+            const plano = contrato.plano;
+            const quantidadeTokens = Math.round(kwhExcedente * Number(plano.tokenPorKwhExcedente) * 10000) / 10000;
+
+            await this.cooperTokenService.creditar({
+              cooperadoId: fatura.cooperadoId,
+              cooperativaId: cooperativaIdFatura,
+              tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
+              quantidade: quantidadeTokens,
+              valorEmissao: Number(plano.valorTokenReais ?? 0.45),
+              referenciaId: fatura.id,
+              referenciaTabela: 'FaturaProcessada',
+              expiracaoMeses: plano.tokenExpiracaoMeses ?? 12,
+            });
+
+            avisos.push(
+              `CooperToken excedente: ${quantidadeTokens.toFixed(4)} tokens creditados (${kwhExcedente.toFixed(2)} kWh excedente, contrato ${contrato.numero}).`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Falha ao creditar CooperToken excedente para fatura ${fatura.id}, contrato ${contrato.numero}: ${(err as Error).message}`,
+          );
+        }
+      }
     }
 
     if (cobrancasCriadas > 0) {
