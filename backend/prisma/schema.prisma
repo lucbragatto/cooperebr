@@ -1795,3 +1795,19 @@ model CooperTokenSaldoParceiro {
 
   @@map("cooper_token_saldo_parceiro")
 }
+
+model CooperTokenCompra {
+  id              String   @id @default(cuid())
+  cooperativaId   String
+  quantidade      Decimal  @db.Decimal(10, 4)
+  valorTokenReais Decimal  @db.Decimal(10, 2)
+  valorTotal      Decimal  @db.Decimal(10, 2)
+  formaPagamento  String   // PIX | BOLETO
+  status          String   @default("AGUARDANDO_PAGAMENTO") // AGUARDANDO_PAGAMENTO | PAGO | CANCELADO
+  dataPagamento   DateTime?
+  asaasId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("cooper_token_compras")
+}

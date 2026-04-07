@@ -1094,6 +1094,206 @@ export class CooperTokenService {
     return { ...resultado, liquidoParceiro, taxaCooperativaMae: taxa1Pct };
   }
 
+  // ── Cooperado: Usar tokens para abater fatura (ação manual) ──
+
+  async usarNaFatura(params: {
+    cooperadoId: string;
+    cooperativaId: string;
+    cobrancaId: string;
+    quantidadeTokens: number;
+  }) {
+    const { cooperadoId, cooperativaId, cobrancaId, quantidadeTokens } = params;
+
+    if (quantidadeTokens <= 0) {
+      throw new BadRequestException('Quantidade de tokens deve ser maior que zero');
+    }
+
+    // Buscar cobrança e validar ownership
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      include: { contrato: { include: { plano: true } } },
+    });
+
+    if (!cobranca) {
+      throw new NotFoundException('Cobrança não encontrada');
+    }
+
+    if (cobranca.contrato?.cooperadoId !== cooperadoId) {
+      throw new BadRequestException('Cobrança não pertence ao cooperado autenticado');
+    }
+
+    const status = cobranca.status as string;
+    if (status !== 'A_VENCER' && status !== 'VENCIDO') {
+      throw new BadRequestException('Só é possível usar tokens em cobranças A_VENCER ou VENCIDO');
+    }
+
+    // Calcular desconto disponível
+    const plano = cobranca.contrato?.plano;
+    const valorCobranca = Number(cobranca.valorLiquido);
+    const desconto = await this.calcularDesconto({
+      cooperadoId,
+      valorCobranca,
+      plano: plano ?? { valorTokenReais: null, tokenDescontoMaxPerc: null },
+    });
+
+    // Limitar tokens ao necessário
+    const tokensEfetivos = Math.min(quantidadeTokens, desconto.tokensNecessarios);
+
+    if (tokensEfetivos <= 0) {
+      throw new BadRequestException('Saldo insuficiente ou desconto máximo já atingido');
+    }
+
+    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+    const descontoReais = Math.round(tokensEfetivos * valorToken * 100) / 100;
+    const novoValorLiquido = Math.round((valorCobranca - descontoReais) * 100) / 100;
+
+    // Debitar tokens
+    await this.debitar({
+      cooperadoId,
+      cooperativaId,
+      quantidade: tokensEfetivos,
+      tipo: CooperTokenTipo.DESCONTO_FATURA,
+      referenciaId: cobrancaId,
+      descricao: 'Abatimento manual na fatura via CooperToken',
+    });
+
+    // Atualizar cobrança
+    const tokenDescontoQtAnterior = Number(cobranca.tokenDescontoQt ?? 0);
+    const tokenDescontoReaisAnterior = Number(cobranca.tokenDescontoReais ?? 0);
+
+    await this.prisma.cobranca.update({
+      where: { id: cobrancaId },
+      data: {
+        valorLiquido: novoValorLiquido,
+        tokenDescontoQt: Math.round((tokenDescontoQtAnterior + tokensEfetivos) * 10000) / 10000,
+        tokenDescontoReais: Math.round((tokenDescontoReaisAnterior + descontoReais) * 100) / 100,
+      },
+    });
+
+    this.logger.log(
+      `Cooperado ${cooperadoId} usou ${tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${descontoReais}`,
+    );
+
+    return {
+      novoValor: novoValorLiquido,
+      desconto: descontoReais,
+      tokensUsados: tokensEfetivos,
+    };
+  }
+
+  // ── Parceiro: Comprar tokens ──
+
+  async comprarTokensParceiro(params: {
+    cooperativaId: string;
+    quantidade: number;
+    formaPagamento: 'PIX' | 'BOLETO';
+  }) {
+    const { cooperativaId, quantidade, formaPagamento } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    // Buscar config para valor do token
+    const config = await this.prisma.configCooperToken.findUnique({
+      where: { cooperativaId },
+    });
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const valorTotal = Math.round(quantidade * valorTokenReais * 100) / 100;
+
+    // Criar registro de compra pendente
+    const compra = await this.prisma.cooperTokenCompra.create({
+      data: {
+        cooperativaId,
+        quantidade,
+        valorTokenReais,
+        valorTotal,
+        formaPagamento,
+        status: 'AGUARDANDO_PAGAMENTO',
+      },
+    });
+
+    this.logger.log(
+      `Parceiro ${cooperativaId} solicitou compra de ${quantidade} tokens (R$ ${valorTotal}) via ${formaPagamento}`,
+    );
+
+    return {
+      compraId: compra.id,
+      quantidade,
+      valorTokenReais,
+      valorTotal,
+      formaPagamento,
+      status: 'AGUARDANDO_PAGAMENTO',
+      instrucoes: formaPagamento === 'PIX'
+        ? `Realize o PIX de R$ ${valorTotal.toFixed(2)}. Envie o comprovante para confirmar.`
+        : `Boleto será gerado em breve no valor de R$ ${valorTotal.toFixed(2)}.`,
+    };
+  }
+
+  // ── Confirmar compra de tokens (webhook ou manual) ──
+
+  async confirmarCompraParceiro(compraId: string) {
+    const compra = await this.prisma.cooperTokenCompra.findUnique({
+      where: { id: compraId },
+    });
+
+    if (!compra) {
+      throw new NotFoundException('Compra não encontrada');
+    }
+
+    if (compra.status !== 'AGUARDANDO_PAGAMENTO') {
+      throw new BadRequestException('Compra já processada');
+    }
+
+    // Creditar tokens no saldo do parceiro
+    await this.creditarSaldoParceiro(compra.cooperativaId, Number(compra.quantidade));
+
+    // Atualizar status da compra
+    await this.prisma.cooperTokenCompra.update({
+      where: { id: compraId },
+      data: {
+        status: 'PAGO',
+        dataPagamento: new Date(),
+      },
+    });
+
+    this.logger.log(
+      `Compra ${compraId} confirmada: ${compra.quantidade} tokens creditados ao parceiro ${compra.cooperativaId}`,
+    );
+
+    return {
+      sucesso: true,
+      quantidade: compra.quantidade,
+      cooperativaId: compra.cooperativaId,
+    };
+  }
+
+  // ── Cooperado: Listar cobranças pendentes ──
+
+  async getCobrancasPendentesCooperado(cooperadoId: string, cooperativaId: string) {
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        cooperativaId,
+        status: { in: ['A_VENCER', 'VENCIDO'] },
+        contrato: { cooperadoId },
+      },
+      select: {
+        id: true,
+        mesReferencia: true,
+        anoReferencia: true,
+        valorBruto: true,
+        valorLiquido: true,
+        status: true,
+        dataVencimento: true,
+        tokenDescontoQt: true,
+        tokenDescontoReais: true,
+      },
+      orderBy: { dataVencimento: 'asc' },
+    });
+
+    return cobrancas;
+  }
+
   // ── Admin: Listar saldos de todos parceiros ──
 
   async listarSaldosParceiros() {

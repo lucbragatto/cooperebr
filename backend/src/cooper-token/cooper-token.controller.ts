@@ -210,6 +210,49 @@ export class CooperTokenController {
     });
   }
 
+  // ── Cooperado: Usar tokens na fatura ──
+
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
+  @Post('usar-na-fatura')
+  async usarNaFatura(
+    @Req() req: any,
+    @Body() body: { cobrancaId: string; quantidadeTokens: number },
+  ) {
+    const cooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperadoId) {
+      throw new BadRequestException('Cooperado não identificado');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.cobrancaId || !body.quantidadeTokens || body.quantidadeTokens <= 0) {
+      throw new BadRequestException('cobrancaId e quantidadeTokens (> 0) são obrigatórios');
+    }
+    return this.cooperTokenService.usarNaFatura({
+      cooperadoId,
+      cooperativaId,
+      cobrancaId: body.cobrancaId,
+      quantidadeTokens: body.quantidadeTokens,
+    });
+  }
+
+  // ── Cooperado: Listar cobranças pendentes para abatimento ──
+
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
+  @Get('cobrancas-pendentes')
+  async getCobrancasPendentes(@Req() req: any) {
+    const cooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperadoId) {
+      throw new BadRequestException('Cooperado não identificado');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getCobrancasPendentesCooperado(cooperadoId, cooperativaId);
+  }
+
   // ── Config CooperToken por Parceiro ──
 
   @Roles(ADMIN, SUPER_ADMIN)
@@ -294,6 +337,43 @@ export class CooperTokenController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 50,
     );
+  }
+
+  // ── Parceiro: Comprar tokens ──
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Post('parceiro/comprar')
+  async comprarTokens(
+    @Req() req: any,
+    @Body() body: { quantidade: number; formaPagamento: 'PIX' | 'BOLETO' },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+    if (!['PIX', 'BOLETO'].includes(body.formaPagamento)) {
+      throw new BadRequestException('formaPagamento deve ser PIX ou BOLETO');
+    }
+    return this.cooperTokenService.comprarTokensParceiro({
+      cooperativaId,
+      quantidade: body.quantidade,
+      formaPagamento: body.formaPagamento,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Post('admin/confirmar-compra')
+  async confirmarCompra(
+    @Req() req: any,
+    @Body() body: { compraId: string },
+  ) {
+    if (!body.compraId) {
+      throw new BadRequestException('compraId é obrigatório');
+    }
+    return this.cooperTokenService.confirmarCompraParceiro(body.compraId);
   }
 
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
