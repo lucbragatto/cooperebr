@@ -331,7 +331,7 @@ export default function PortalTokensPage() {
                 required
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Taxa: 1% retida na transferencia
+                Taxa de pagamento QR: 1% retida no pagamento
               </p>
             </div>
             <Button type="submit" disabled={gerando}>

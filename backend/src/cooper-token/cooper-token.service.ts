@@ -32,6 +32,11 @@ interface CalcularDescontoParams {
   };
 }
 
+/** Taxa de emissão de tokens (creditar) — 2% */
+const TAXA_EMISSAO = 0.02;
+/** Taxa de pagamento via QR Code (processarPagamentoQr) — 1% */
+const TAXA_QR = 0.01;
+
 @Injectable()
 export class CooperTokenService {
   private readonly logger = new Logger(CooperTokenService.name);
@@ -50,7 +55,7 @@ export class CooperTokenService {
       expiracaoMeses = 12,
     } = params;
 
-    const taxaEmissao = Math.round(quantidade * 0.02 * 10000) / 10000;
+    const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
     const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
 
     return this.prisma.$transaction(async (tx) => {
@@ -709,7 +714,7 @@ export class CooperTokenService {
       );
     }
 
-    const taxa = Math.round(decoded.quantidade * 0.01 * 10000) / 10000;
+    const taxa = Math.round(decoded.quantidade * TAXA_QR * 10000) / 10000;
     const quantidadeLiquida =
       Math.round((decoded.quantidade - taxa) * 10000) / 10000;
 
@@ -1056,7 +1061,7 @@ export class CooperTokenService {
     });
 
     // Taxa de 1% já foi aplicada — creditar o líquido no saldo parceiro
-    const taxa1Pct = Math.round(resultado.quantidadeLiquida * 0.01 * 10000) / 10000;
+    const taxa1Pct = Math.round(resultado.quantidadeLiquida * TAXA_QR * 10000) / 10000;
     const liquidoParceiro = Math.round((resultado.quantidadeLiquida - taxa1Pct) * 10000) / 10000;
 
     await this.prisma.$transaction(async (tx) => {
