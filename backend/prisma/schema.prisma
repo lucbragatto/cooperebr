@@ -59,6 +59,7 @@ model Cooperativa {
   configCooperToken         ConfigCooperToken?
   cooperTokenSaldoParceiro  CooperTokenSaldoParceiro?
   convitesIndicacao         ConviteIndicacao[]
+  ofertasClube              OfertaClube[]
 
   @@map("cooperativas")
 }
@@ -168,6 +169,7 @@ model Cooperado {
   cooperTokenSaldo        CooperTokenSaldo?
   convitesEnviados        ConviteIndicacao[]       @relation("ConvitesEnviados")
   conversoesCreditoSemUc  ConversaoCreditoSemUc[]
+  resgatesClubeVantagens  ResgateClubeVantagens[]
 
   @@map("cooperados")
 }
@@ -1664,6 +1666,7 @@ enum CooperTokenOperacao {
   COMPRA_PARCEIRO
   ABATIMENTO_ENERGIA
   TRANSFERENCIA_PARCEIRO
+  RESGATE_CLUBE
 }
 
 model CooperTokenLedger {
@@ -1810,4 +1813,46 @@ model CooperTokenCompra {
   updatedAt       DateTime @updatedAt
 
   @@map("cooper_token_compras")
+}
+
+// ── Clube de Vantagens — Ofertas e Resgates ──
+
+model OfertaClube {
+  id               String    @id @default(cuid())
+  cooperativaId    String
+  cooperativa      Cooperativa @relation(fields: [cooperativaId], references: [id])
+  titulo           String
+  descricao        String
+  quantidadeTokens Int       // tokens necessários para resgatar
+  beneficio        String    // descrição do que o cooperado ganha
+  ativo            Boolean   @default(true)
+  validadeAte      DateTime?
+  estoque          Int?      // null = ilimitado
+  totalResgatado   Int       @default(0)
+  emoji            String?   @default("🎁")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  resgates         ResgateClubeVantagens[]
+
+  @@index([cooperativaId, ativo])
+  @@map("ofertas_clube")
+}
+
+model ResgateClubeVantagens {
+  id              String    @id @default(cuid())
+  cooperadoId     String
+  cooperado       Cooperado @relation(fields: [cooperadoId], references: [id])
+  ofertaId        String
+  oferta          OfertaClube @relation(fields: [ofertaId], references: [id])
+  cooperativaId   String
+  tokensUsados    Int
+  codigoResgate   String    @unique // UUID de confirmação
+  validado        Boolean   @default(false)
+  validadoEm      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([cooperadoId])
+  @@index([cooperativaId])
+  @@index([codigoResgate])
+  @@map("resgates_clube_vantagens")
 }

@@ -1,7 +1,9 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { randomUUID } from 'crypto';
 
 const NIVEL_ORDEM: Record<string, number> = {
   BRONZE: 0,
@@ -26,6 +28,7 @@ export class ClubeVantagensService {
     private prisma: PrismaService,
     private whatsappCicloVida: WhatsappCicloVidaService,
     private sender: WhatsappSenderService,
+    private cooperTokenService: CooperTokenService,
   ) {}
 
   async criarOuObterProgressao(cooperadoId: string) {
@@ -643,5 +646,203 @@ export class ClubeVantagensService {
       `Total acumulado: ${progressao.kwhIndicadoAcumulado}`,
       `Nivel atual: ${progressao.nivelAtual}`,
     ].join('\n');
+  }
+
+  // ─── Ofertas do Clube de Vantagens ──────────────────────────────
+
+  async listarOfertas(cooperativaId: string) {
+    return this.prisma.ofertaClube.findMany({
+      where: {
+        cooperativaId,
+        ativo: true,
+        OR: [
+          { validadeAte: null },
+          { validadeAte: { gte: new Date() } },
+        ],
+      },
+      orderBy: { quantidadeTokens: 'asc' },
+    });
+  }
+
+  async listarOfertasAdmin(cooperativaId: string) {
+    return this.prisma.ofertaClube.findMany({
+      where: { cooperativaId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async criarOferta(cooperativaId: string, dto: {
+    titulo: string;
+    descricao: string;
+    quantidadeTokens: number;
+    beneficio: string;
+    validadeAte?: string | null;
+    estoque?: number | null;
+    emoji?: string;
+  }) {
+    if (dto.quantidadeTokens <= 0) {
+      throw new BadRequestException('quantidadeTokens deve ser maior que zero');
+    }
+
+    return this.prisma.ofertaClube.create({
+      data: {
+        cooperativaId,
+        titulo: dto.titulo,
+        descricao: dto.descricao,
+        quantidadeTokens: dto.quantidadeTokens,
+        beneficio: dto.beneficio,
+        validadeAte: dto.validadeAte ? new Date(dto.validadeAte) : null,
+        estoque: dto.estoque ?? null,
+        emoji: dto.emoji ?? '🎁',
+      },
+    });
+  }
+
+  async atualizarOferta(cooperativaId: string, ofertaId: string, dto: {
+    titulo?: string;
+    descricao?: string;
+    quantidadeTokens?: number;
+    beneficio?: string;
+    ativo?: boolean;
+    validadeAte?: string | null;
+    estoque?: number | null;
+    emoji?: string;
+  }) {
+    const oferta = await this.prisma.ofertaClube.findFirst({
+      where: { id: ofertaId, cooperativaId },
+    });
+    if (!oferta) throw new NotFoundException('Oferta nao encontrada');
+
+    return this.prisma.ofertaClube.update({
+      where: { id: ofertaId },
+      data: {
+        ...(dto.titulo !== undefined && { titulo: dto.titulo }),
+        ...(dto.descricao !== undefined && { descricao: dto.descricao }),
+        ...(dto.quantidadeTokens !== undefined && { quantidadeTokens: dto.quantidadeTokens }),
+        ...(dto.beneficio !== undefined && { beneficio: dto.beneficio }),
+        ...(dto.ativo !== undefined && { ativo: dto.ativo }),
+        ...(dto.validadeAte !== undefined && { validadeAte: dto.validadeAte ? new Date(dto.validadeAte) : null }),
+        ...(dto.estoque !== undefined && { estoque: dto.estoque }),
+        ...(dto.emoji !== undefined && { emoji: dto.emoji }),
+      },
+    });
+  }
+
+  // ─── Resgate de Ofertas ──────────────────────────────
+
+  async resgatarOferta(cooperadoId: string, cooperativaId: string, ofertaId: string) {
+    // Buscar oferta com validação tenant
+    const oferta = await this.prisma.ofertaClube.findFirst({
+      where: { id: ofertaId, cooperativaId, ativo: true },
+    });
+    if (!oferta) throw new NotFoundException('Oferta nao encontrada ou inativa');
+
+    // Validar validade
+    if (oferta.validadeAte && oferta.validadeAte < new Date()) {
+      throw new BadRequestException('Oferta expirada');
+    }
+
+    // Validar estoque
+    if (oferta.estoque != null && oferta.totalResgatado >= oferta.estoque) {
+      throw new BadRequestException('Estoque esgotado para esta oferta');
+    }
+
+    const tokensNecessarios = oferta.quantidadeTokens;
+
+    // Debitar tokens do cooperado
+    await this.cooperTokenService.debitar({
+      cooperadoId,
+      cooperativaId,
+      quantidade: tokensNecessarios,
+      tipo: 'FLEX' as any,
+      referenciaId: ofertaId,
+      descricao: `Resgate Clube: ${oferta.titulo}`,
+    });
+
+    // Creditar tokens no saldo do parceiro
+    await this.cooperTokenService.creditarSaldoParceiro(cooperativaId, tokensNecessarios);
+
+    // Gerar código de resgate
+    const codigoResgate = randomUUID();
+
+    // Criar registro de resgate e incrementar totalResgatado
+    const [resgate] = await this.prisma.$transaction([
+      this.prisma.resgateClubeVantagens.create({
+        data: {
+          cooperadoId,
+          ofertaId,
+          cooperativaId,
+          tokensUsados: tokensNecessarios,
+          codigoResgate,
+        },
+      }),
+      this.prisma.ofertaClube.update({
+        where: { id: ofertaId },
+        data: { totalResgatado: { increment: 1 } },
+      }),
+    ]);
+
+    this.logger.log(
+      `Cooperado ${cooperadoId} resgatou oferta "${oferta.titulo}" (${tokensNecessarios} tokens) - codigo: ${codigoResgate}`,
+    );
+
+    return {
+      codigoResgate,
+      ofertaTitulo: oferta.titulo,
+      beneficio: oferta.beneficio,
+      tokensUsados: tokensNecessarios,
+    };
+  }
+
+  async validarResgate(cooperativaId: string, codigoResgate: string) {
+    const resgate = await this.prisma.resgateClubeVantagens.findUnique({
+      where: { codigoResgate },
+      include: {
+        cooperado: { select: { nomeCompleto: true } },
+        oferta: { select: { titulo: true, beneficio: true } },
+      },
+    });
+
+    if (!resgate) throw new NotFoundException('Codigo de resgate nao encontrado');
+    if (resgate.cooperativaId !== cooperativaId) {
+      throw new NotFoundException('Codigo de resgate nao encontrado');
+    }
+
+    if (resgate.validado) {
+      return {
+        jaValidado: true,
+        validadoEm: resgate.validadoEm,
+        cooperadoNome: resgate.cooperado.nomeCompleto,
+        ofertaTitulo: resgate.oferta.titulo,
+        beneficio: resgate.oferta.beneficio,
+        tokensUsados: resgate.tokensUsados,
+        criadoEm: resgate.createdAt,
+      };
+    }
+
+    // Marcar como validado
+    const atualizado = await this.prisma.resgateClubeVantagens.update({
+      where: { codigoResgate },
+      data: { validado: true, validadoEm: new Date() },
+    });
+
+    return {
+      jaValidado: false,
+      validadoEm: atualizado.validadoEm,
+      cooperadoNome: resgate.cooperado.nomeCompleto,
+      ofertaTitulo: resgate.oferta.titulo,
+      beneficio: resgate.oferta.beneficio,
+      tokensUsados: resgate.tokensUsados,
+      criadoEm: resgate.createdAt,
+    };
+  }
+
+  async meusResgates(cooperadoId: string) {
+    return this.prisma.resgateClubeVantagens.findMany({
+      where: { cooperadoId },
+      include: { oferta: { select: { titulo: true, beneficio: true, emoji: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
   }
 }

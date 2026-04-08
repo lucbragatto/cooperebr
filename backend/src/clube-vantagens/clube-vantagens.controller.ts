@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, Req, Query, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, Req, Query, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ClubeVantagensService } from './clube-vantagens.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -93,5 +93,76 @@ export class ClubeVantagensController {
   @Get('analytics/funil')
   getAnalyticsFunil(@Req() req: any) {
     return this.service.getFunilConversao(req.user?.cooperativaId);
+  }
+
+  // ─── Ofertas ──────────────────────────────
+
+  /** Lista ofertas ativas (cooperado) */
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
+  @Get('ofertas')
+  listarOfertas(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    return this.service.listarOfertas(cooperativaId);
+  }
+
+  /** Lista todas as ofertas (admin) */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('ofertas/admin')
+  listarOfertasAdmin(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    return this.service.listarOfertasAdmin(cooperativaId);
+  }
+
+  /** Criar oferta (admin) */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('ofertas')
+  criarOferta(@Req() req: any, @Body() body: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    return this.service.criarOferta(cooperativaId, body);
+  }
+
+  /** Atualizar oferta (admin) */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Put('ofertas/:id')
+  atualizarOferta(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    return this.service.atualizarOferta(cooperativaId, id, body);
+  }
+
+  // ─── Resgate ──────────────────────────────
+
+  /** Resgatar oferta (cooperado) */
+  @Roles(COOPERADO)
+  @Post('resgatar')
+  resgatar(@Req() req: any, @Body() body: { ofertaId: string }) {
+    const cooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperadoId) throw new ForbiddenException('Cooperado nao identificado');
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    if (!body.ofertaId) throw new BadRequestException('ofertaId obrigatorio');
+    return this.service.resgatarOferta(cooperadoId, cooperativaId, body.ofertaId);
+  }
+
+  /** Meus resgates (cooperado) */
+  @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
+  @Get('meus-resgates')
+  meusResgates(@Req() req: any) {
+    const cooperadoId = req.user?.cooperadoId;
+    if (!cooperadoId) return [];
+    return this.service.meusResgates(cooperadoId);
+  }
+
+  /** Validar código de resgate (admin/parceiro) */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('validar-resgate')
+  validarResgate(@Req() req: any, @Body() body: { codigoResgate: string }) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatorio');
+    if (!body.codigoResgate) throw new BadRequestException('codigoResgate obrigatorio');
+    return this.service.validarResgate(cooperativaId, body.codigoResgate);
   }
 }
