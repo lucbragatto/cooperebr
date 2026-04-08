@@ -9,6 +9,7 @@ import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.servic
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CooperTokenTipo } from '@prisma/client';
 
 export type FonteDados = 'FATURA_OCR' | 'GERACAO_MANUAL' | 'ESTIMADO';
@@ -46,6 +47,7 @@ export class CobrancasService {
     private whatsappSender: WhatsappSenderService,
     private emailService: EmailService,
     private cooperTokenService: CooperTokenService,
+    private tokenContabil: TokenContabilService,
   ) {}
 
   @OnEvent('pagamento.confirmado')
@@ -149,6 +151,19 @@ export class CobrancasService {
             this.logger.log(
               `CooperToken FATURA_CHEIA: ${valorDescontoEmTokens} tokens creditados ao cooperado ${contrato.cooperadoId} (cobrança ${cobranca.id})`,
             );
+
+            // Lançamento contábil: emissão fatura-cheia
+            try {
+              await this.tokenContabil.lancarEmissaoFaturaCheia({
+                cooperativaId: resolvedCoopId,
+                cooperadoId: contrato.cooperadoId,
+                valor: valorDescontoEmReais,
+                competencia: new Date().toISOString().slice(0, 7),
+                descricao: `Fatura-cheia ${valorDescontoEmTokens} tokens (cobrança ${cobranca.id})`,
+              });
+            } catch (err) {
+              this.logger.warn(`Falha ao lançar contábil fatura-cheia: ${(err as Error).message}`);
+            }
           }
         } else if (Number(plano.tokenDescontoMaxPerc ?? 0) > 0) {
           // Modo DESCONTO_DIRETO: desconto automático na fatura

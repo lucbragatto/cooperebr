@@ -6,6 +6,7 @@ import { ContratosUsoService } from './contratos-uso.service';
 import { ConveniosService } from './convenios.service';
 import { FormaPagamentoService } from './forma-pagamento.service';
 import { PixExcedenteService } from './pix-excedente.service';
+import { TokenContabilService } from './token-contabil.service';
 import { PrismaService } from '../prisma.service';
 import { AsaasModule } from '../asaas/asaas.module';
 
@@ -19,6 +20,7 @@ import { AsaasModule } from '../asaas/asaas.module';
     ConveniosService,
     FormaPagamentoService,
     PixExcedenteService,
+    TokenContabilService,
     PrismaService,
   ],
   exports: [
@@ -28,6 +30,7 @@ import { AsaasModule } from '../asaas/asaas.module';
     ConveniosService,
     FormaPagamentoService,
     PixExcedenteService,
+    TokenContabilService,
   ],
 })
 export class FinanceiroModule {}

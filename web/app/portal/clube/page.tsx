@@ -40,6 +40,7 @@ export default function PortalClubePage() {
     tokensUsados: number;
   } | null>(null);
   const [erro, setErro] = useState('');
+  const [confirmando, setConfirmando] = useState<Oferta | null>(null);
 
   const carregarDados = useCallback(async () => {
     try {
@@ -96,6 +97,47 @@ export default function PortalClubePage() {
           <p className="text-2xl font-bold text-green-600">{saldo.toFixed(0)} CTK</p>
         </CardContent>
       </Card>
+
+      {/* Modal de confirmacao */}
+      {confirmando && (
+        <Card className="border-2 border-blue-400 bg-blue-50">
+          <CardContent className="py-6 text-center space-y-3">
+            <h2 className="text-lg font-bold text-blue-800">Confirmar resgate</h2>
+            <p className="text-sm text-blue-700">
+              <strong>{confirmando.emoji ?? '🎁'} {confirmando.titulo}</strong>
+            </p>
+            <p className="text-sm text-muted-foreground">{confirmando.beneficio}</p>
+            <div className="bg-white border rounded-lg p-3 mt-2">
+              <p className="text-xs text-muted-foreground">Custo</p>
+              <p className="text-xl font-bold text-amber-600">{confirmando.quantidadeTokens} CTK</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Saldo atual: <span className="font-medium text-green-600">{saldo.toFixed(0)} CTK</span>
+                {' → '}
+                Saldo apos: <span className="font-medium">{(saldo - confirmando.quantidadeTokens).toFixed(0)} CTK</span>
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center mt-3">
+              <Button variant="outline" size="sm" onClick={() => setConfirmando(null)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={resgatando === confirmando.id}
+                onClick={() => {
+                  const ofertaId = confirmando.id;
+                  setConfirmando(null);
+                  handleResgatar(ofertaId);
+                }}
+              >
+                {resgatando === confirmando.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : null}
+                Confirmar resgate
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Modal de resultado de resgate */}
       {resultado && (
@@ -167,7 +209,7 @@ export default function PortalClubePage() {
                         size="sm"
                         className="mt-2"
                         disabled={semEstoque || saldoInsuficiente || resgatando === oferta.id}
-                        onClick={() => handleResgatar(oferta.id)}
+                        onClick={() => setConfirmando(oferta)}
                       >
                         {resgatando === oferta.id ? (
                           <Loader2 className="h-3 w-3 animate-spin mr-1" />

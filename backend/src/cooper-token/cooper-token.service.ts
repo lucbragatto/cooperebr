@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger, Inject, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
+import { TokenContabilService } from '../financeiro/token-contabil.service';
 import * as jwt from 'jsonwebtoken';
 
 interface CreditarParams {
@@ -41,7 +42,10 @@ const TAXA_QR = 0.01;
 export class CooperTokenService {
   private readonly logger = new Logger(CooperTokenService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() @Inject(TokenContabilService) private tokenContabil?: TokenContabilService,
+  ) {}
 
   async creditar(params: CreditarParams) {
     const {
@@ -320,6 +324,23 @@ export class CooperTokenService {
     this.logger.log(
       `Expirados ${totalExpirado} tokens para cooperativa ${cooperativaId}`,
     );
+
+    // Lançamento contábil: expiração de tokens
+    if (totalExpirado > 0) {
+      try {
+        const config = await this.getConfig(cooperativaId);
+        const valorToken = config ? Number(config.valorTokenReais) : 0.45;
+        const valorReais = Math.round(totalExpirado * valorToken * 100) / 100;
+        await this.tokenContabil?.lancarExpiracao({
+          cooperativaId,
+          valor: valorReais,
+          competencia: new Date().toISOString().slice(0, 7),
+          descricao: `Expiração de ${totalExpirado} tokens`,
+        });
+      } catch (err) {
+        this.logger.warn(`Falha ao lançar contábil expiração: ${(err as Error).message}`);
+      }
+    }
 
     return totalExpirado;
   }
@@ -1179,6 +1200,19 @@ export class CooperTokenService {
       `Cooperado ${cooperadoId} usou ${tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${descontoReais}`,
     );
 
+    // Lançamento contábil: resgate na fatura (baixa passivo)
+    try {
+      await this.tokenContabil?.lancarResgateFatura({
+        cooperativaId,
+        cooperadoId,
+        valor: descontoReais,
+        competencia: new Date().toISOString().slice(0, 7),
+        descricao: `Resgate ${tokensEfetivos} tokens na cobrança ${cobrancaId}`,
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao lançar contábil resgate fatura: ${(err as Error).message}`);
+    }
+
     return {
       novoValor: novoValorLiquido,
       desconto: descontoReais,
@@ -1265,6 +1299,18 @@ export class CooperTokenService {
     this.logger.log(
       `Compra ${compraId} confirmada: ${compra.quantidade} tokens creditados ao parceiro ${compra.cooperativaId}`,
     );
+
+    // Lançamento contábil: receita venda tokens
+    try {
+      await this.tokenContabil?.lancarCompraParceiroPago({
+        cooperativaId: compra.cooperativaId,
+        valor: Number(compra.valorTotal),
+        competencia: new Date().toISOString().slice(0, 7),
+        descricao: `Compra parceiro ${compraId}: ${compra.quantidade} tokens`,
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao lançar contábil compra parceiro: ${(err as Error).message}`);
+    }
 
     return {
       sucesso: true,
