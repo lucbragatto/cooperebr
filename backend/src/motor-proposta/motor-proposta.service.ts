@@ -391,6 +391,11 @@ export class MotorPropostaService {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
 
+    // BUG-CARRY-002: kwhContrato deve ser > 0 para gerar contrato
+    if (!r.kwhContrato || r.kwhContrato <= 0) {
+      throw new BadRequestException('kwhContrato deve ser maior que zero para aceitar a proposta.');
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       // 1. Cancelar propostas anteriores aceitas para mesmo cooperado/mês
       const propostasAnteriores = await tx.propostaCooperado.findMany({

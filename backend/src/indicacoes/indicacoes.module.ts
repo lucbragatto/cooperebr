@@ -5,9 +5,10 @@ import { PrismaService } from '../prisma.service';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
+import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 
 @Module({
-  imports: [ClubeVantagensModule, forwardRef(() => WhatsappModule), forwardRef(() => ConviteIndicacaoModule)],
+  imports: [ClubeVantagensModule, forwardRef(() => WhatsappModule), forwardRef(() => ConviteIndicacaoModule), CooperTokenModule],
   controllers: [IndicacoesController],
   providers: [IndicacoesService, PrismaService],
   exports: [IndicacoesService],

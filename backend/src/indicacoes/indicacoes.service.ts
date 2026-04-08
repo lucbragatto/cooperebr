@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
+import { CooperTokenTipo } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
 
 @Injectable()
 export class IndicacoesService {
@@ -14,6 +16,7 @@ export class IndicacoesService {
     private clubeVantagensService: ClubeVantagensService,
     @Inject(forwardRef(() => WhatsappCicloVidaService)) private whatsappCicloVida: WhatsappCicloVidaService,
     @Inject(forwardRef(() => ConviteIndicacaoService)) private conviteIndicacao: ConviteIndicacaoService,
+    private cooperTokenService: CooperTokenService,
   ) {}
 
   @OnEvent('cobranca.primeira.paga')
@@ -320,6 +323,38 @@ export class IndicacoesService {
             }),
           );
         }
+      }
+    }
+
+    // CooperToken: creditar bônus de indicação ao indicador (uma vez por indicação)
+    for (const indicacao of indicacoes) {
+      try {
+        // Verificar se já creditou tokens para esta indicação (idempotência)
+        const jaCredidato = await this.prisma.cooperTokenLedger.findFirst({
+          where: { referenciaId: indicacao.id, referenciaTabela: 'Indicacao' },
+        });
+        if (jaCredidato) {
+          this.logger.log(`Token BONUS_INDICACAO já creditado para indicação ${indicacao.id}, pulando.`);
+          continue;
+        }
+
+        // Buscar bonusIndicacao da config ou usar default 50
+        const configToken = await this.prisma.configCooperToken.findUnique({
+          where: { cooperativaId },
+        });
+        const bonusQtd = (configToken as any)?.bonusIndicacao ?? 50;
+
+        await this.cooperTokenService.creditar({
+          cooperadoId: indicacao.cooperadoIndicadorId,
+          cooperativaId,
+          tipo: CooperTokenTipo.BONUS_INDICACAO,
+          quantidade: bonusQtd,
+          referenciaId: indicacao.id,
+          referenciaTabela: 'Indicacao',
+        });
+        this.logger.log(`Token BONUS_INDICACAO: ${bonusQtd} tokens creditados ao indicador ${indicacao.cooperadoIndicadorId} (indicação ${indicacao.id})`);
+      } catch (err) {
+        this.logger.warn(`Falha ao creditar token de indicação ${indicacao.id}: ${err.message}`);
       }
     }
 

@@ -156,6 +156,11 @@ export class ContratosService {
       // kwhContrato = mensal (usado nas cobranças)
       const kwhContrato = kwhContratoMensal ?? data.kwhContrato;
 
+      // BUG-CARRY-002: kwhContrato deve ser > 0
+      if (!kwhContrato || kwhContrato <= 0) {
+        throw new BadRequestException('kwhContrato deve ser maior que zero.');
+      }
+
       // 3. Validar capacidade da usina e calcular percentualUsina com base no ANUAL
       let percentualUsina: number | undefined;
       if (data.usinaId && kwhContratoAnual) {
@@ -236,6 +241,14 @@ export class ContratosService {
       const mensal = Math.round((data.kwhContratoAnual / 12) * 100) / 100;
       (data as any).kwhContratoMensal = mensal;
       (data as any).kwhContrato = mensal;
+    }
+
+    // BUG-CARRY-002: kwhContrato deve ser > 0
+    if (data.kwhContrato !== undefined && data.kwhContrato <= 0) {
+      throw new BadRequestException('kwhContrato deve ser maior que zero.');
+    }
+    if (data.kwhContratoAnual !== undefined && data.kwhContratoAnual <= 0) {
+      throw new BadRequestException('kwhContratoAnual deve ser maior que zero.');
     }
 
     // Validar regra ANEEL se mudou usinaId
