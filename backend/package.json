@@ -22,6 +22,7 @@
     "test:api": "ts-node -r dotenv/config --project tsconfig.seed.json test/api-test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.86.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",

@@ -339,6 +339,7 @@ export class WhatsappBotService {
           where: { id: conversa.id },
           data: { estado: 'INICIAL', contadorFallback: 0 },
         });
+        this.coopereAi.limparHistorico(telefone);
         await this.sender.enviarMensagem(
           telefone,
           `${E.relogio} Sua sessão anterior expirou por inatividade.\n\n` +
@@ -3729,6 +3730,8 @@ Essa conta de energia e:
       update: { estado: 'INICIAL', dadosTemp: undefined },
       create: { telefone, estado: 'INICIAL' },
     });
+    // Limpar histórico de conversa da CoopereAI para próximo contato partir do zero
+    this.coopereAi.limparHistorico(telefone);
   }
 
   // â”€â”€â”€ Atualização de Cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

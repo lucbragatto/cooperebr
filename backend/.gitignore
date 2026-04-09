@@ -57,6 +57,11 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
 
+# Dados de interações CoopereAI (logs de conversa)
+/data/interacoes-coopereai/*.json
+/data/interacoes-coopereai/*.jsonl
+!/data/interacoes-coopereai/.gitkeep
+
 # Arquivos de teste e temporários
 test-ocr*.js
 fatura-*.txt
