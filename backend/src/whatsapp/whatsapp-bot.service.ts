@@ -381,6 +381,7 @@ export class WhatsappBotService {
       'AGUARDANDO_PROPRIETARIO_FATURA', 'AGUARDANDO_CONFIRMACAO_OCR',
       'AGUARDANDO_NOME_TERCEIRO', 'AGUARDANDO_TELEFONE_TERCEIRO',
       'AGUARDANDO_CONFIRMACAO_CELULAR', 'AGUARDANDO_CELULAR_CORRETO', 'AGUARDANDO_INDICACAO', 'RECEBENDO_CONTATOS',
+      'PRIMEIRO_ATENDIMENTO_AI',
     ];
     if (['fatura', 'faturas', 'boleto', '2a via', '2Âª via', 'segunda via', 'pix', 'pagar'].includes(corpoLower)) {
       if (ESTADOS_FLUXO_ATIVO.includes(conversa.estado)) {
@@ -419,7 +420,12 @@ export class WhatsappBotService {
       return;
     }
 
-    if (palavrasMenu.includes(corpoNav) && conversa.estado !== 'INICIAL') {
+    // No estado PRIMEIRO_ATENDIMENTO_AI, só 'menu' explícito abre o menu (não saudações)
+    const saudacoes = ['oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'hey'];
+    const ehSaudacao = saudacoes.includes(corpoNav);
+    const ehEstadoAI = conversa.estado === 'PRIMEIRO_ATENDIMENTO_AI';
+
+    if (palavrasMenu.includes(corpoNav) && conversa.estado !== 'INICIAL' && !(ehEstadoAI && ehSaudacao)) {
       await this.resetarConversa(telefone);
       await this.handleMenuPrincipalInicio(msg, conversa);
       return;
@@ -429,6 +435,9 @@ export class WhatsappBotService {
       switch (conversa.estado) {
         case 'INICIAL':
           await this.handleInicial(msg, conversa);
+          break;
+        case 'PRIMEIRO_ATENDIMENTO_AI':
+          await this.handlePrimeiroAtendimentoAI(msg, conversa);
           break;
         case 'AGUARDANDO_CONFIRMACAO_DADOS':
           await this.handleConfirmacaoDados(msg, conversa);
@@ -1164,8 +1173,29 @@ export class WhatsappBotService {
       ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
 
     if (!isMidia) {
-      // Redirecionar para menu principal em vez de mostrar apenas mensagem de fatura
-      await this.handleMenuPrincipalInicio(msg, conversa);
+      // Verificar se é cooperado cadastrado
+      const telefoneNorm = telefone.replace(/\D/g, '');
+      const telefoneSemPais = telefoneNorm.replace(/^55/, '');
+      const cooperadoExistente = await this.prisma.cooperado.findFirst({
+        where: {
+          OR: [
+            { telefone: telefoneNorm },
+            { telefone: telefoneSemPais },
+            { telefone: `55${telefoneSemPais}` },
+          ],
+          status: { in: ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'PENDENTE_DOCUMENTOS', 'ATIVO_RECEBENDO_CREDITOS'] as any[] },
+        },
+        select: { id: true },
+      });
+
+      if (cooperadoExistente) {
+        // Cooperado conhecido → menu normal
+        await this.handleMenuPrincipalInicio(msg, conversa);
+        return;
+      }
+
+      // Número desconhecido → CoopereAI primeiro atendimento
+      await this.iniciarPrimeiroAtendimentoAI(msg, conversa);
       return;
     }
 
@@ -1182,6 +1212,196 @@ export class WhatsappBotService {
       telefone,
       `${E.doc} Recebi sua fatura!\n\nEssa conta de energia e:\n1\uFE0F\u20E3 Minha (quero me cadastrar)\n2\uFE0F\u20E3 De outra pessoa (quero cadastrar um amigo)`,
     );
+  }
+
+  // ─── CoopereAI Primeiro Atendimento ────────��────────────────────────
+
+  /**
+   * Inicia o primeiro atendimento via CoopereAI para número desconhecido.
+   * Cria o lead, chama a IA e adiciona call-to-action contextual.
+   */
+  private async iniciarPrimeiroAtendimentoAI(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+
+    // Criar lead se ainda não existe
+    await this.upsertLeadWhatsapp(telefone);
+
+    // Chamar CoopereAI com contexto de primeiro atendimento
+    const aiResp = await this.coopereAi.perguntar(
+      `[PRIMEIRO ATENDIMENTO - Número novo, ainda não é cooperado] ${corpo}`,
+      { telefone },
+    );
+
+    if (aiResp.ok && aiResp.resposta) {
+      const cta = this.buildCallToAction(aiResp.resposta);
+      await this.sender.enviarMensagem(
+        telefone,
+        `${aiResp.resposta}${cta}`,
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'PRIMEIRO_ATENDIMENTO_AI', contadorFallback: 0 },
+      });
+    } else {
+      // CoopereAI indisponível → mensagem padrão de encaminhamento
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.oi} Olá! Bem-vindo à *CoopereBR* — energia solar por assinatura!\n\n` +
+        `${E.solar} Economize até *20%* na conta de luz sem nenhum investimento.\n\n` +
+        `Um colaborador entrará em contato em breve para te ajudar.\n\n` +
+        `${E.lampada} _Enquanto isso, envie a *foto da sua conta de luz* para uma simulação instantânea, ou digite *menu* para ver as opções._`,
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'PRIMEIRO_ATENDIMENTO_AI', contadorFallback: 0 },
+      });
+    }
+  }
+
+  /**
+   * Handler para mensagens no estado PRIMEIRO_ATENDIMENTO_AI.
+   * Continua conversa com CoopereAI, detecta nome/email, adiciona CTA.
+   */
+  private async handlePrimeiroAtendimentoAI(msg: MensagemRecebida, conversa: any): Promise<void> {
+    const { telefone, tipo, mediaBase64, mimeType } = msg;
+    const corpo = this.respostaEfetiva(msg);
+
+    // Se enviar foto/documento → redirecionar para fluxo de fatura (simulação)
+    const isMidia =
+      (tipo === 'imagem' || tipo === 'documento') &&
+      mediaBase64 &&
+      mimeType &&
+      ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(mimeType);
+
+    if (isMidia) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'INICIAL' },
+      });
+      const conversaAtualizada = await this.prisma.conversaWhatsapp.findUnique({ where: { telefone } });
+      await this.handleInicial({ ...msg }, conversaAtualizada);
+      return;
+    }
+
+    // Atalhos de texto: simulação/cadastro → redirecionar para fluxos específicos
+    const corpoLower = corpo.toLowerCase().trim();
+    if (['simulação', 'simulacao', 'simular'].includes(corpoLower)) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'INICIAL' },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.camera} Ótimo! Envie a *foto da sua conta de luz* (frente completa) ou o *PDF* e faço uma simulação personalizada da sua economia!`,
+      );
+      return;
+    }
+    if (['cadastro', 'cadastrar', 'quero ser cooperado'].includes(corpoLower)) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'INICIAL' },
+      });
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.camera} Para iniciar seu cadastro, envie a *foto da sua conta de luz* (frente completa) ou o *PDF*. Vamos analisar e gerar sua proposta!`,
+      );
+      return;
+    }
+
+    // Detectar e salvar nome/email do lead
+    await this.detectarEAtualizarDadosLead(telefone, corpo);
+
+    // Chamar CoopereAI
+    const aiResp = await this.coopereAi.perguntar(corpo, { telefone });
+
+    if (aiResp.ok && aiResp.resposta) {
+      const cta = this.buildCallToAction(aiResp.resposta);
+      await this.sender.enviarMensagem(telefone, `${aiResp.resposta}${cta}`);
+      // Resetar fallback
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { contadorFallback: 0 },
+      });
+    } else {
+      // IA indisponível → encaminhar para atendente humano
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.pessoa} Um colaborador entrará em contato em breve para te ajudar!\n\n` +
+        `${E.lampada} _Enquanto isso, envie a *foto da sua conta de luz* para uma simulação automática, ou digite *menu* para ver as opções._`,
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'AGUARDANDO_ATENDENTE', contadorFallback: 0 },
+      });
+    }
+  }
+
+  /**
+   * Monta call-to-action contextual com base na resposta da CoopereAI.
+   */
+  private buildCallToAction(aiResponse: string): string {
+    const lower = aiResponse.toLowerCase();
+    if (lower.includes('economi') || lower.includes('desconto') || lower.includes('tarifa') || lower.includes('conta de luz')) {
+      return `\n\n${E.lampada} _Quer simular sua economia? Digite *simulação* ou envie a foto da sua conta de luz._`;
+    }
+    if (lower.includes('cadastr') || lower.includes('cooperad') || lower.includes('assinatura')) {
+      return `\n\n${E.lampada} _Para iniciar seu cadastro, digite *cadastro* ou envie a foto da sua conta de luz._`;
+    }
+    if (lower.includes('atendente') || lower.includes('humano') || lower.includes('colaborador')) {
+      return `\n\n${E.lampada} _Para falar com um atendente, digite *3*. Ou digite *menu* para ver todas as opções._`;
+    }
+    return `\n\n${E.lampada} _Para mais opções, digite *menu*._`;
+  }
+
+  /**
+   * Cria ou atualiza lead WhatsApp.
+   */
+  private async upsertLeadWhatsapp(telefone: string, dados?: { nome?: string; email?: string }): Promise<void> {
+    try {
+      await this.prisma.leadWhatsapp.upsert({
+        where: { telefone },
+        update: {
+          ...(dados?.nome ? { nome: dados.nome } : {}),
+          ...(dados?.email ? { email: dados.email } : {}),
+        },
+        create: {
+          telefone,
+          nome: dados?.nome ?? null,
+          email: dados?.email ?? null,
+          fonte: 'whatsapp',
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao salvar lead WhatsApp: ${err.message}`);
+    }
+  }
+
+  /**
+   * Detecta nome e email na mensagem do usuário e atualiza o lead.
+   */
+  private async detectarEAtualizarDadosLead(telefone: string, corpo: string): Promise<void> {
+    const updates: { nome?: string; email?: string } = {};
+
+    // Detectar email
+    const emailMatch = corpo.match(/[\w.+-]+@[\w.-]+\.\w{2,}/);
+    if (emailMatch) {
+      updates.email = emailMatch[0].toLowerCase();
+    }
+
+    // Detectar nome — padrões comuns em português
+    const nomePatterns = /(?:(?:meu nome [eé]|me chamo|sou o |sou a |pode me chamar de |eu sou )\s*)(.{2,40})/i;
+    const nomeMatch = corpo.match(nomePatterns);
+    if (nomeMatch) {
+      const nomeLimpo = nomeMatch[1].replace(/[.!,?]+$/, '').trim();
+      if (nomeLimpo.length >= 2 && nomeLimpo.length <= 60) {
+        updates.nome = nomeLimpo;
+      }
+    }
+
+    if (updates.nome || updates.email) {
+      await this.upsertLeadWhatsapp(telefone, updates);
+    }
   }
 
   // --- Proprietario da fatura ---------------------------

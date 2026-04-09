@@ -1,10 +1,13 @@
-import { Controller, Post, Get, Body, Param, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, BadRequestException, Logger } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 @Controller('publico')
 export class PublicoController {
+  private readonly logger = new Logger(PublicoController.name);
+
   constructor(
     private prisma: PrismaService,
     private sender: WhatsappSenderService,
@@ -92,5 +95,41 @@ export class PublicoController {
     }
 
     return { nomeIndicador: cooperado.nomeCompleto, valido: true };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('salvar-lead')
+  async salvarLead(
+    @Body() body: { telefone: string; nome?: string; email?: string; fonte?: string },
+  ) {
+    if (!body.telefone) {
+      throw new BadRequestException('Telefone é obrigatório');
+    }
+
+    const telefone = body.telefone.replace(/\D/g, '');
+    if (telefone.length < 10 || telefone.length > 13) {
+      throw new BadRequestException('Telefone inválido');
+    }
+
+    try {
+      const lead = await this.prisma.leadWhatsapp.upsert({
+        where: { telefone },
+        update: {
+          ...(body.nome ? { nome: body.nome } : {}),
+          ...(body.email ? { email: body.email } : {}),
+        },
+        create: {
+          telefone,
+          nome: body.nome ?? null,
+          email: body.email ?? null,
+          fonte: body.fonte ?? 'site',
+        },
+      });
+      return { ok: true, data: { id: lead.id, telefone: lead.telefone } };
+    } catch (err) {
+      this.logger.error(`Erro ao salvar lead: ${err.message}`);
+      return { ok: false, error: 'Erro ao salvar lead' };
+    }
   }
 }

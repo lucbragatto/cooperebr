@@ -65,6 +65,41 @@ export class WhatsappFaturaController {
     return { ok: true };
   }
 
+  // POST /whatsapp/publico/leads — captura de leads via WhatsApp
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('publico/leads')
+  async criarLead(
+    @Body() body: { telefone: string; nome?: string; email?: string; fonte?: string },
+  ) {
+    if (!body.telefone) {
+      return { ok: false, error: 'Telefone é obrigatório' };
+    }
+    const telefone = body.telefone.replace(/\D/g, '');
+    if (telefone.length < 10 || telefone.length > 13) {
+      return { ok: false, error: 'Telefone inválido' };
+    }
+    try {
+      const lead = await this.prisma.leadWhatsapp.upsert({
+        where: { telefone },
+        update: {
+          ...(body.nome ? { nome: body.nome } : {}),
+          ...(body.email ? { email: body.email } : {}),
+        },
+        create: {
+          telefone,
+          nome: body.nome ?? null,
+          email: body.email ?? null,
+          fonte: body.fonte ?? 'whatsapp',
+        },
+      });
+      return { ok: true, data: { id: lead.id, telefone: lead.telefone } };
+    } catch (err) {
+      this.logger.error(`Erro ao criar lead: ${err.message}`);
+      return { ok: false, error: 'Erro ao salvar lead' };
+    }
+  }
+
   // Status da conexão Baileys
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('status')

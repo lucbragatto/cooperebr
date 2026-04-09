@@ -1635,6 +1635,18 @@ model LeadExpansao {
   @@map("leads_expansao")
 }
 
+model LeadWhatsapp {
+  id        String   @id @default(cuid())
+  telefone  String   @unique
+  nome      String?
+  email     String?
+  fonte     String   @default("whatsapp")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("leads_whatsapp")
+}
+
 model NpsResposta {
   id          String   @id @default(cuid())
   cooperadoId String?
