@@ -121,26 +121,31 @@ cd backend && npm run test:e2e
 
 ---
 
-## Bugs críticos em aberto (atualizar ao resolver)
+## Bugs — Status atualizado
 
-> Última atualização: QA 2026-04-03 · Score 8.5/10 · 35 bugs acumulados
+> Última atualização: 2026-04-08 · Score 8.5/10 · 35 bugs acumulados no QA de 03/04
 
-### 🔴 Críticos — NÃO subir em produção sem resolver
+### ✅ Críticos — RESOLVIDOS
 
-| ID | Descrição | Módulo |
+| ID | Descrição | Fix |
 |---|---|---|
-| FATURA-01 | IDOR: cooperado pode enviar fatura em nome de outro (sem validação owner em `uploadConcessionaria`) | faturas |
-| FATURA-02 | `ConfigTenant` buscado sem `cooperativaId` → threshold de um parceiro aplicado a outro | multi-tenant |
-| FATURA-03 | Admin de parceiro consegue ver faturas de outros passando `cooperativaId` externo em `GET /faturas/central` | multi-tenant |
-| CONV-SEM-UC-01 | Conversão SEM_UC usa `descontoPadrao` (%) como preço R$/kWh → valores absurdos (100 kWh = R$2.000) | conversão |
-| PIX-01 | PIX Excedente aguarda `ASAAS_PIX_EXCEDENTE_ATIVO=true` em prod (6 dias parado) | PIX |
+| FATURA-01 | IDOR: cooperado enviava fatura em nome de outro | Validação owner em `uploadConcessionaria` (7c8ed1d) |
+| FATURA-02 | `ConfigTenant` sem `cooperativaId` | Isolado por tenant (7c8ed1d, 850dfbd) |
+| FATURA-03 | Admin via faturas de outro tenant | `cooperativaId` sempre do JWT (7c8ed1d, b3cf4b6) |
+| CONV-SEM-UC-01 | Conversão usava % como R$/kWh | Tarifa real TUSD+TE com Math.round (7c8ed1d, 621abd3) |
+| CTK-01 | Sem Math.round em `apurarExcedentes` | Math.round adicionado (3ab3b5d, 0f78382) |
+| FINANCEIRO-01 | Telas vazias no módulo financeiro | contas-receber busca cobranças reais (3ab3b5d, 0f78382) |
 
-### 🟠 Alta prioridade
+### 🟡 Aguardando ação manual
 
 | ID | Descrição | Observação |
 |---|---|---|
-| CTK-01 | Sem Math.round em `apurarExcedentes` | **5º sprint sem correção** — fix de 1 linha |
-| CTK-04 | Loop de apuração pode pegar contrato errado | aberto |
-| WA-BOT-06 | Dupla mensagem em menu fora de horário | aberto |
-| WA-BOT-03 | (ver relatório QA) | aberto |
-| FINANCEIRO-01 | Módulo Financeiro exibe telas vazias (sem backend) | frontend sem dados |
+| PIX-01 | PIX Excedente implementado com feature flag | Código pronto (b735dbe) — aguarda `ASAAS_PIX_EXCEDENTE_ATIVO=true` em prod por decisão de Luciano |
+
+### 🟠 Em aberto — investigar
+
+| ID | Descrição | Observação |
+|---|---|---|
+| CTK-04 | Loop de apuração pode pegar contrato errado | não verificado |
+| WA-BOT-06 | Dupla mensagem em menu fora de horário | não verificado |
+| WA-BOT-03 | (ver relatório QA) | não verificado |

@@ -22,5 +22,8 @@
   "homepage": "https://github.com/lucbragatto/cooperebr#readme",
   "devDependencies": {
     "@playwright/test": "^1.59.1"
+  },
+  "dependencies": {
+    "openclaw": "^2026.4.8"
   }
 }

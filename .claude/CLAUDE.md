@@ -33,10 +33,18 @@ Possui **3 usinas arrendadas** em operação no Espírito Santo.
 - `pix-agent` — lógica de PIX excedente
 - `wa-bot-agent` — WhatsApp bot
 
-## Pendências críticas (NÃO subir para prod)
+## Pendências críticas — Status atualizado (2026-04-08)
 
-- **FATURA-01:** IDOR — cooperado pode enviar fatura em nome de outro
-- **FATURA-02:** ConfigTenant sem isolamento por cooperativa
-- **FATURA-03:** Admin pode ver faturas de outra cooperativa via parâmetro externo
-- **CONV-SEM-UC-01:** Conversão de créditos usa % como R$/kWh → valores absurdos
-- Tokens sem arredondamento (5° sprint sem corrigir)
+### ✅ Resolvidos
+- **FATURA-01:** IDOR corrigido — validação owner em uploadConcessionaria (7c8ed1d)
+- **FATURA-02:** ConfigTenant isolado por cooperativaId (850dfbd)
+- **FATURA-03:** cooperativaId sempre do JWT nos endpoints de fatura (b3cf4b6)
+- **CONV-SEM-UC-01:** Conversão usa tarifa real TUSD+TE com Math.round (621abd3)
+- **CTK-01:** Math.round em apurarExcedentes (0f78382)
+
+### 🟡 Aguardando ação manual
+- **PIX-01:** Código pronto (b735dbe) — aguarda `ASAAS_PIX_EXCEDENTE_ATIVO=true` em prod
+
+### 🟠 Em aberto
+- **CTK-04:** Loop de apuração pode pegar contrato errado
+- **WA-BOT-03/06:** Investigar no relatório QA

@@ -83,14 +83,55 @@ Usar o script `ver-msgs-luciano.mjs` como referência para consultas rápidas po
 
 ---
 
-## ⚙️ REGRA: Quando CoopereAI entra em cena
+## ⚙️ REGRA: Call-to-action no final de toda resposta
 
-Quando o usuário não escolhe nenhuma opção do menu (não digita 1, 2, 3 etc.) e o Assis não entende a mensagem, a CoopereAI é chamada automaticamente como fallback inteligente para tentar responder a pergunta em linguagem natural.
+No final de **toda** resposta da CoopereAI, incluir uma linha contextual sugerindo o próximo passo:
 
-A CoopereAI se apresenta assim:
-> "🤖 *CoopereAI:* [resposta]\n\n_Digite *menu* para voltar ao início._"
+| Contexto da pergunta | Call-to-action sugerido |
+|---|---|
+| Desconto, economia, quanto vou pagar | _"Quer simular sua economia? Digite **simulação**."_ |
+| Fatura, conta, status, pagamento | _"Para consultar sua fatura ou status, digite **fatura**."_ |
+| Cadastro, como entrar, participar | _"Para iniciar seu cadastro, digite **cadastro**."_ |
+| Dúvida genérica / qualquer outra | _"Para ver todas as opções, digite **menu**."_ |
+| Quer falar com pessoa | _"Para falar com nossa equipe, digite **atendimento**."_ |
 
-Se a CoopereAI também não conseguir ajudar após 3 tentativas, o usuário é encaminhado para atendente humano.
+**Regra:** a sugestão deve ser **contextual** — não jogar sempre "menu". Pensar no que faz mais sentido para aquele usuário naquele momento.
+
+---
+
+## ⚙️ REGRA: Fluxo de primeiro atendimento (CoopereAI PRIMEIRO)
+
+### Qualquer mensagem de número desconhecido → CoopereAI responde primeiro
+
+NÃO mostrar menu automático. A CoopereAI é a porta de entrada.
+
+**Exemplo de fluxo:**
+- Usuário: "oi"
+- CoopereAI: "Olá! Tudo bem? 😊 Aqui é a CoopereBR, cooperativa de energia solar. Você já conhece o nosso projeto?"
+- Usuário responde qualquer coisa → CoopereAI segue a conversa naturalmente
+- Ao final de cada resposta: call-to-action contextual (ver regra acima)
+- Se não souber responder: "Vou chamar um dos nossos colaboradores para te ajudar! Eles entrarão em contato em breve."
+
+### Captura de dados do contato
+1. **Número** → sempre salvo automaticamente ao receber qualquer mensagem
+2. **Nome** → tentar extrair do perfil do WhatsApp. Se não disponível:
+   - Perguntar: "Como posso te chamar?"
+   - Salvar no banco assim que responder
+3. **Email** → perguntar somente quando fizer sentido no contexto (ex: cadastro, simulação)
+   - "Para te enviar a simulação detalhada, qual seu email?"
+   - Salvar no banco assim que responder
+4. Todos os dados vão para: tabela `ConversaWhatsapp` + `Cooperado` (ou `Lead` se não for cooperado ainda)
+
+### Quando encaminhar para humano
+- Pergunta que a CoopereAI não consegue responder após 2 tentativas
+- Usuário pede explicitamente por atendente
+- Situação sensível (reclamação, problema com conta, inadimplência)
+- Resposta: "Vou chamar um colaborador para te ajudar. Eles entrarão em contato em breve! 🙏"
+
+### Menu
+- Só aparece quando usuário digitar **menu** explicitamente
+- Ou quando CoopereAI sugerir e usuário aceitar
+- Nunca jogar o menu de surpresa na primeira mensagem
 
 ---
 

@@ -78,7 +78,31 @@
       "Bash(npm uninstall:*)",
       "Bash(findstr LISTENING)",
       "Bash(cmd //c \"taskkill /PID 12220 /F\")",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(echo \"$PATH\")",
+      "Bash(/c/Users/Luciano/.local/bin/claude --version 2>/dev/null)",
+      "Bash(powershell.exe -Command \"irm https://claude.ai/install.ps1 | iex\" 2>&1)",
+      "Bash(powershell.exe -Command \"[Environment]::GetEnvironmentVariable\\('Path', 'User'\\)\")",
+      "Bash(powershell.exe -File - <<'PS1'\n$currentPath = [Environment]::GetEnvironmentVariable\\('Path', 'User'\\)\n$newPath = 'C:\\\\Users\\\\Luciano\\\\.local\\\\bin;' + $currentPath\n[Environment]::SetEnvironmentVariable\\('Path', $newPath, 'User'\\)\nWrite-Host \"PATH updated successfully\"\nWrite-Host \\([Environment]::GetEnvironmentVariable\\('Path', 'User'\\)\\)\nPS1)",
+      "Read(//c/Users/Luciano/.openclaw-cooperebr/**)",
+      "Bash(npx pm2:*)",
+      "Bash(npx openclaw:*)",
+      "Bash(openclaw start:*)",
+      "Bash(openclaw status:*)",
+      "Bash(openclaw --help)",
+      "Bash(openclaw gateway:*)",
+      "Bash(openclaw agents:*)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(powershell.exe:*)",
+      "Bash(BGPID=$! sleep 10 echo \"=== Check port ===\" netstat -an)",
+      "Bash(openclaw doctor:*)",
+      "Bash(openclaw health:*)",
+      "Bash(openclaw memory:*)",
+      "Bash(npm list:*)",
+      "Bash(openclaw tui:*)",
+      "Bash(openclaw agent:*)",
+      "Bash(openclaw plugins:*)"
     ]
   }
 }
