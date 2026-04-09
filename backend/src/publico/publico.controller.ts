@@ -99,6 +99,83 @@ export class PublicoController {
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('cadastro-web')
+  async cadastroWeb(
+    @Body()
+    body: {
+      nome: string;
+      cpf: string;
+      email: string;
+      telefone: string;
+      dataNascimento: string;
+      endereco: {
+        cep: string;
+        logradouro: string;
+        numero: string;
+        complemento?: string;
+        bairro: string;
+        cidade: string;
+        estado: string;
+      };
+      instalacao: {
+        numeroUC: string;
+        distribuidora: string;
+        consumoMedioKwh: number;
+      };
+    },
+  ) {
+    if (!body.nome || !body.cpf || !body.email || !body.telefone) {
+      throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
+    }
+
+    const cpfLimpo = body.cpf.replace(/\D/g, '');
+    if (cpfLimpo.length !== 11) {
+      throw new BadRequestException('CPF inválido');
+    }
+
+    const telefoneLimpo = body.telefone.replace(/\D/g, '');
+    if (telefoneLimpo.length < 10 || telefoneLimpo.length > 13) {
+      throw new BadRequestException('Telefone inválido');
+    }
+
+    try {
+      const lead = await this.prisma.leadWhatsapp.upsert({
+        where: { telefone: telefoneLimpo },
+        update: {
+          nome: body.nome,
+          email: body.email,
+          cpf: cpfLimpo,
+          fonte: 'cadastro-web',
+          dados: {
+            dataNascimento: body.dataNascimento,
+            endereco: body.endereco,
+            instalacao: body.instalacao,
+          } as any,
+        },
+        create: {
+          telefone: telefoneLimpo,
+          nome: body.nome,
+          email: body.email,
+          cpf: cpfLimpo,
+          fonte: 'cadastro-web',
+          dados: {
+            dataNascimento: body.dataNascimento,
+            endereco: body.endereco,
+            instalacao: body.instalacao,
+          } as any,
+        },
+      });
+
+      this.logger.log(`Lead cadastro-web criado: ${lead.id} (${body.nome})`);
+      return { ok: true, data: { id: lead.id } };
+    } catch (err) {
+      this.logger.error(`Erro ao salvar cadastro-web: ${err.message}`);
+      throw new BadRequestException('Erro ao processar cadastro. Tente novamente.');
+    }
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('salvar-lead')
   async salvarLead(
     @Body() body: { telefone: string; nome?: string; email?: string; fonte?: string },

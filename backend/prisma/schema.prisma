@@ -1640,7 +1640,9 @@ model LeadWhatsapp {
   telefone  String   @unique
   nome      String?
   email     String?
+  cpf       String?
   fonte     String   @default("whatsapp")
+  dados     Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
