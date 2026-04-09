@@ -150,6 +150,52 @@ export class CooperTokenController {
   }
 
   @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/financeiro')
+  async getFinanceiro(
+    @Req() req: any,
+    @Query('periodo') periodo?: string,
+    @Query('ano') ano?: string,
+    @Query('mes') mes?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getFinanceiro(
+      cooperativaId,
+      periodo,
+      ano ? parseInt(ano, 10) : undefined,
+      mes ? parseInt(mes, 10) : undefined,
+    );
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/fluxo-caixa')
+  async getFluxoCaixa(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getFluxoCaixa(cooperativaId);
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/rendimento-cooperados')
+  async getRendimentoCooperados(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getRendimentoCooperados(
+      cooperativaId,
+      limit ? parseInt(limit, 10) : 10,
+    );
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN)
   @Post('admin/processar')
   async processar(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;

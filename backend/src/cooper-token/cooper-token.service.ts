@@ -1,7 +1,14 @@
-import { Injectable, BadRequestException, NotFoundException, Logger, Inject, Optional } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
-import { TokenContabilService } from '../financeiro/token-contabil.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  COOPER_TOKEN_EVENTS,
+  CooperTokenEmitidoEvent,
+  CooperTokenResgatadoEvent,
+  CooperTokenExpiradoEvent,
+  CooperTokenCompraParceiroPagoEvent,
+} from './cooper-token.events';
 import * as jwt from 'jsonwebtoken';
 
 interface CreditarParams {
@@ -44,7 +51,7 @@ export class CooperTokenService {
 
   constructor(
     private prisma: PrismaService,
-    @Optional() @Inject(TokenContabilService) private tokenContabil?: TokenContabilService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async creditar(params: CreditarParams) {
@@ -62,7 +69,7 @@ export class CooperTokenService {
     const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
     const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
 
-    return this.prisma.$transaction(async (tx) => {
+    const ledger = await this.prisma.$transaction(async (tx) => {
       // Buscar ou criar saldo
       let saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
@@ -93,7 +100,7 @@ export class CooperTokenService {
       const expiracaoEm = new Date();
       expiracaoEm.setMonth(expiracaoEm.getMonth() + expiracaoMeses);
 
-      const ledger = await tx.cooperTokenLedger.create({
+      const entry = await tx.cooperTokenLedger.create({
         data: {
           cooperadoId,
           cooperativaId,
@@ -113,8 +120,19 @@ export class CooperTokenService {
         `Creditado ${quantidadeLiquida} tokens líquidos (${tipo}) para cooperado ${cooperadoId} | Split: bruto=${quantidade}, taxa=${taxaEmissao}`,
       );
 
-      return ledger;
+      return entry;
     });
+
+    // Emitir evento para lançamento contábil
+    const valorReais = valorEmissao != null
+      ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100
+      : 0;
+    this.eventEmitter.emit(
+      COOPER_TOKEN_EVENTS.EMITIDO,
+      new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais),
+    );
+
+    return ledger;
   }
 
   async debitar(params: DebitarParams) {
@@ -325,21 +343,15 @@ export class CooperTokenService {
       `Expirados ${totalExpirado} tokens para cooperativa ${cooperativaId}`,
     );
 
-    // Lançamento contábil: expiração de tokens
+    // Emitir evento para lançamento contábil
     if (totalExpirado > 0) {
-      try {
-        const config = await this.getConfig(cooperativaId);
-        const valorToken = config ? Number(config.valorTokenReais) : 0.45;
-        const valorReais = Math.round(totalExpirado * valorToken * 100) / 100;
-        await this.tokenContabil?.lancarExpiracao({
-          cooperativaId,
-          valor: valorReais,
-          competencia: new Date().toISOString().slice(0, 7),
-          descricao: `Expiração de ${totalExpirado} tokens`,
-        });
-      } catch (err) {
-        this.logger.warn(`Falha ao lançar contábil expiração: ${(err as Error).message}`);
-      }
+      const config = await this.getConfig(cooperativaId);
+      const valorToken = config ? Number(config.valorTokenReais) : 0.45;
+      const valorReais = Math.round(totalExpirado * valorToken * 100) / 100;
+      this.eventEmitter.emit(
+        COOPER_TOKEN_EVENTS.EXPIRADO,
+        new CooperTokenExpiradoEvent(cooperativaId, totalExpirado, valorReais),
+      );
     }
 
     return totalExpirado;
@@ -1200,18 +1212,11 @@ export class CooperTokenService {
       `Cooperado ${cooperadoId} usou ${tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${descontoReais}`,
     );
 
-    // Lançamento contábil: resgate na fatura (baixa passivo)
-    try {
-      await this.tokenContabil?.lancarResgateFatura({
-        cooperativaId,
-        cooperadoId,
-        valor: descontoReais,
-        competencia: new Date().toISOString().slice(0, 7),
-        descricao: `Resgate ${tokensEfetivos} tokens na cobrança ${cobrancaId}`,
-      });
-    } catch (err) {
-      this.logger.warn(`Falha ao lançar contábil resgate fatura: ${(err as Error).message}`);
-    }
+    // Emitir evento para lançamento contábil
+    this.eventEmitter.emit(
+      COOPER_TOKEN_EVENTS.RESGATADO,
+      new CooperTokenResgatadoEvent(cooperativaId, cooperadoId, cobrancaId, tokensEfetivos, descontoReais),
+    );
 
     return {
       novoValor: novoValorLiquido,
@@ -1300,17 +1305,16 @@ export class CooperTokenService {
       `Compra ${compraId} confirmada: ${compra.quantidade} tokens creditados ao parceiro ${compra.cooperativaId}`,
     );
 
-    // Lançamento contábil: receita venda tokens
-    try {
-      await this.tokenContabil?.lancarCompraParceiroPago({
-        cooperativaId: compra.cooperativaId,
-        valor: Number(compra.valorTotal),
-        competencia: new Date().toISOString().slice(0, 7),
-        descricao: `Compra parceiro ${compraId}: ${compra.quantidade} tokens`,
-      });
-    } catch (err) {
-      this.logger.warn(`Falha ao lançar contábil compra parceiro: ${(err as Error).message}`);
-    }
+    // Emitir evento para lançamento contábil
+    this.eventEmitter.emit(
+      COOPER_TOKEN_EVENTS.COMPRA_PARCEIRO_PAGO,
+      new CooperTokenCompraParceiroPagoEvent(
+        compra.cooperativaId,
+        compraId,
+        Number(compra.quantidade),
+        Number(compra.valorTotal),
+      ),
+    );
 
     return {
       sucesso: true,
@@ -1390,6 +1394,208 @@ export class CooperTokenService {
         saldoDisponivel: quantidade,
         totalRecebido: quantidade,
       },
+    });
+  }
+
+  // ── Financeiro: Relatório completo ──
+
+  async getFinanceiro(
+    cooperativaId: string | undefined,
+    periodo?: string,
+    ano?: number,
+    mes?: number,
+  ) {
+    const whereCoopId = cooperativaId ? { cooperativaId } : {};
+    const agora = new Date();
+    const anoRef = ano ?? agora.getFullYear();
+    const mesRef = mes ?? agora.getMonth() + 1;
+
+    let dateFrom: Date;
+    let dateTo: Date;
+
+    if (periodo === 'ano') {
+      dateFrom = new Date(anoRef, 0, 1);
+      dateTo = new Date(anoRef + 1, 0, 1);
+    } else if (periodo === 'trimestre') {
+      const trimestreInicio = Math.floor((mesRef - 1) / 3) * 3;
+      dateFrom = new Date(anoRef, trimestreInicio, 1);
+      dateTo = new Date(anoRef, trimestreInicio + 3, 1);
+    } else {
+      // default: mês
+      dateFrom = new Date(anoRef, mesRef - 1, 1);
+      dateTo = new Date(anoRef, mesRef, 1);
+    }
+
+    const dateFilter = { createdAt: { gte: dateFrom, lt: dateTo } };
+
+    // Buscar config para valorTokenReais
+    const plano = await this.prisma.plano.findFirst({
+      where: { ...whereCoopId, cooperTokenAtivo: true },
+      select: { valorTokenReais: true },
+    });
+    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+
+    const [
+      circulacaoAgg,
+      receitaParceiros,
+      resgateFaturaAgg,
+      expiradosAgg,
+    ] = await Promise.all([
+      // Passivo total: tokens em circulação
+      this.prisma.cooperTokenSaldo.aggregate({
+        where: whereCoopId,
+        _sum: { saldoDisponivel: true },
+      }),
+      // Receita de parceiros: compras PAGO no período
+      this.prisma.cooperTokenCompra.aggregate({
+        where: {
+          ...whereCoopId,
+          status: 'PAGO',
+          dataPagamento: { gte: dateFrom, lt: dateTo },
+        },
+        _sum: { valorTotal: true },
+      }),
+      // Custo resgates (usar-na-fatura) no período
+      this.prisma.cooperTokenLedger.aggregate({
+        where: {
+          ...whereCoopId,
+          operacao: CooperTokenOperacao.DEBITO,
+          descricao: { contains: 'Desconto' },
+          ...dateFilter,
+        },
+        _sum: { quantidade: true },
+      }),
+      // Tokens expirados no período
+      this.prisma.cooperTokenLedger.aggregate({
+        where: {
+          ...whereCoopId,
+          operacao: CooperTokenOperacao.EXPIRACAO,
+          ...dateFilter,
+        },
+        _sum: { quantidade: true },
+      }),
+    ]);
+
+    const circulacao = Number(circulacaoAgg._sum.saldoDisponivel ?? 0);
+    const resgatados = Number(resgateFaturaAgg._sum.quantidade ?? 0);
+    const expirados = Number(expiradosAgg._sum.quantidade ?? 0);
+
+    return {
+      passivoTotal: Math.round(circulacao * valorToken * 100) / 100,
+      receitaParceiros: Math.round(Number(receitaParceiros._sum.valorTotal ?? 0) * 100) / 100,
+      custoResgates: Math.round(resgatados * valorToken * 100) / 100,
+      receitaExpiracao: Math.round(expirados * valorToken * 100) / 100,
+      tokensCirculacao: circulacao,
+      tokensResgatados: resgatados,
+      tokensExpirados: expirados,
+      valorTokenReais: valorToken,
+      periodo: periodo ?? 'mes',
+      ano: anoRef,
+      mes: mesRef,
+    };
+  }
+
+  // ── Financeiro: Fluxo de caixa 12 meses ──
+
+  async getFluxoCaixa(cooperativaId: string | undefined) {
+    const whereCoopId = cooperativaId ? { cooperativaId } : {};
+    const agora = new Date();
+    const meses: Array<{ mes: string; dateFrom: Date; dateTo: Date }> = [];
+
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+      const dEnd = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      const label = `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      meses.push({ mes: label, dateFrom: d, dateTo: dEnd });
+    }
+
+    // Buscar config
+    const plano = await this.prisma.plano.findFirst({
+      where: { ...whereCoopId, cooperTokenAtivo: true },
+      select: { valorTokenReais: true },
+    });
+    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+
+    const resultado = await Promise.all(
+      meses.map(async ({ mes, dateFrom, dateTo }) => {
+        const dateFilter = { createdAt: { gte: dateFrom, lt: dateTo } };
+
+        const [emitidosAgg, resgatadosAgg, expiradosAgg, comprasAgg] =
+          await Promise.all([
+            this.prisma.cooperTokenLedger.aggregate({
+              where: { ...whereCoopId, operacao: CooperTokenOperacao.CREDITO, ...dateFilter },
+              _sum: { quantidade: true },
+            }),
+            this.prisma.cooperTokenLedger.aggregate({
+              where: { ...whereCoopId, operacao: CooperTokenOperacao.DEBITO, ...dateFilter },
+              _sum: { quantidade: true },
+            }),
+            this.prisma.cooperTokenLedger.aggregate({
+              where: { ...whereCoopId, operacao: CooperTokenOperacao.EXPIRACAO, ...dateFilter },
+              _sum: { quantidade: true },
+            }),
+            this.prisma.cooperTokenCompra.aggregate({
+              where: { ...whereCoopId, status: 'PAGO', dataPagamento: { gte: dateFrom, lt: dateTo } },
+              _sum: { valorTotal: true },
+            }),
+          ]);
+
+        return {
+          mes,
+          emitido: Math.round(Number(emitidosAgg._sum.quantidade ?? 0) * valorToken * 100) / 100,
+          resgatado: Math.round(Number(resgatadosAgg._sum.quantidade ?? 0) * valorToken * 100) / 100,
+          expirado: Math.round(Number(expiradosAgg._sum.quantidade ?? 0) * valorToken * 100) / 100,
+          compraParceiro: Math.round(Number(comprasAgg._sum.valorTotal ?? 0) * 100) / 100,
+        };
+      }),
+    );
+
+    return resultado;
+  }
+
+  // ── Financeiro: Top cooperados por economia via tokens ──
+
+  async getRendimentoCooperados(cooperativaId: string | undefined, limit = 10) {
+    const whereCoopId = cooperativaId ? { cooperativaId } : {};
+
+    // Buscar config
+    const plano = await this.prisma.plano.findFirst({
+      where: { ...whereCoopId, cooperTokenAtivo: true },
+      select: { valorTokenReais: true },
+    });
+    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+
+    // Agregar resgates (DEBITO com desconto fatura) por cooperado
+    const resgates = await this.prisma.cooperTokenLedger.groupBy({
+      by: ['cooperadoId'],
+      where: {
+        ...whereCoopId,
+        operacao: CooperTokenOperacao.DEBITO,
+      },
+      _sum: { quantidade: true },
+      orderBy: { _sum: { quantidade: 'desc' } },
+      take: limit,
+    });
+
+    // Buscar dados dos cooperados
+    const cooperadoIds = resgates.map((r) => r.cooperadoId);
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: { id: { in: cooperadoIds } },
+      select: { id: true, nomeCompleto: true, email: true },
+    });
+
+    const cooperadoMap = new Map(cooperados.map((c) => [c.id, c]));
+
+    return resgates.map((r) => {
+      const coop = cooperadoMap.get(r.cooperadoId);
+      const tokensUsados = Number(r._sum.quantidade ?? 0);
+      return {
+        cooperadoId: r.cooperadoId,
+        nomeCompleto: coop?.nomeCompleto ?? 'N/A',
+        email: coop?.email ?? '',
+        tokensUsados,
+        economiaReais: Math.round(tokensUsados * valorToken * 100) / 100,
+      };
     });
   }
 }

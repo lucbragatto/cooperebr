@@ -140,6 +140,7 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: LineChart },
         { href: '/dashboard/configuracoes/financeiro', label: 'Plano de Contas', icon: DollarSign },
         { href: '/dashboard/cooper-token-parceiro', label: 'Tokens Recebidos', icon: ArrowDownCircle },
+        { href: '/dashboard/cooper-token-financeiro', label: 'Financeiro Tokens', icon: Coins },
       ],
     },
     {
