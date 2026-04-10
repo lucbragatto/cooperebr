@@ -351,14 +351,18 @@ export class CobrancasService {
 
     const valorFinal = valorPago ?? Number((cobranca as any).valorAtualizado ?? cobranca.valorLiquido);
 
-    const cobrancaAtualizada = await this.prisma.cobranca.update({
-      where: { id },
+    const updated = await this.prisma.cobranca.updateMany({
+      where: { id, status: { notIn: ['PAGO', 'CANCELADO'] } },
       data: {
         status: 'PAGO',
         dataPagamento: dtPagamento,
         valorPago: valorFinal,
       },
     });
+    if (updated.count === 0) {
+      throw new BadRequestException('Cobrança já foi paga ou cancelada (processamento concorrente)');
+    }
+    const cobrancaAtualizada = (await this.prisma.cobranca.findUnique({ where: { id } }))!;
 
     // Atualizar LancamentoCaixa PREVISTO → REALIZADO (Contas a Receber)
     try {
@@ -511,13 +515,17 @@ export class CobrancasService {
     if (cobranca.status === 'PAGO') {
       throw new BadRequestException('Não é possível cancelar cobrança já paga');
     }
-    const cobrancaAtualizada = await this.prisma.cobranca.update({
-      where: { id },
+    const updatedCancel = await this.prisma.cobranca.updateMany({
+      where: { id, status: { notIn: ['PAGO', 'CANCELADO'] } },
       data: {
         status: 'CANCELADO',
         motivoCancelamento: motivo,
       },
     });
+    if (updatedCancel.count === 0) {
+      throw new BadRequestException('Cobrança já foi paga ou cancelada (processamento concorrente)');
+    }
+    const cobrancaAtualizada = await this.prisma.cobranca.findUnique({ where: { id } });
 
     // Cancelar LancamentoCaixa correspondente (Contas a Receber)
     try {
