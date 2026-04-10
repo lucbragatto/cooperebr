@@ -1636,15 +1636,18 @@ model LeadExpansao {
 }
 
 model LeadWhatsapp {
-  id        String   @id @default(cuid())
-  telefone  String   @unique
-  nome      String?
-  email     String?
-  cpf       String?
-  fonte     String   @default("whatsapp")
-  dados     Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  telefone            String   @unique
+  nome                String?
+  email               String?
+  cpf                 String?
+  fonte               String   @default("whatsapp")
+  dados               Json?
+  planoSelecionado    String?  // DESCONTO_DIRETO | FATURA_CHEIA_TOKEN
+  aceitaClube         Boolean  @default(false)
+  pendenciaDocumentos Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@map("leads_whatsapp")
 }

@@ -1,28 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Sun, ArrowLeft, ArrowRight, Check, Loader2, User, MapPin, Zap, FileCheck, X, SkipForward } from 'lucide-react';
+import {
+  Sun, ArrowLeft, ArrowRight, Check, Loader2, User, MapPin, Zap,
+  FileCheck, X, SkipForward, Upload, Camera, FileText, AlertTriangle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 const DISTRIBUIDORAS = [
-  'EDP-ES',
-  'CEMIG',
-  'CEMAT',
-  'ENERGISA',
-  'ENEL',
-  'CPFL',
-  'CELESC',
-  'EQUATORIAL',
-  'NEOENERGIA',
-  'Outra',
+  'EDP-ES', 'CEMIG', 'CEMAT', 'ENERGISA', 'ENEL',
+  'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
 ];
+
+// Tarifa EDP-ES Fev/2026
+const TARIFA_KWH = 0.78931;
+const DESCONTO_PERCENTUAL = 0.15;
 
 // ─── Masks ───────────────────────────────────────────────
 
@@ -47,6 +49,10 @@ function formatarCEP(valor: string): string {
   return `${nums.slice(0, 5)}-${nums.slice(5)}`;
 }
 
+function formatarMoeda(valor: number): string {
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 // ─── Types ───────────────────────────────────────────────
 
 interface DadosPessoais {
@@ -54,7 +60,6 @@ interface DadosPessoais {
   cpf: string;
   email: string;
   telefone: string;
-  dataNascimento: string;
 }
 
 interface Endereco {
@@ -73,6 +78,27 @@ interface Instalacao {
   consumoMedioKwh: string;
 }
 
+interface HistoricoItem {
+  mesAno: string;
+  consumoKwh: number;
+  valorRS: number;
+}
+
+interface OcrDados {
+  nome?: string;
+  cpf?: string;
+  numeroUC?: string;
+  distribuidora?: string;
+  consumoMedioKwh?: number;
+  totalAPagar?: number;
+  endereco?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  cep?: string;
+  historicoConsumo?: HistoricoItem[];
+}
+
 const STEPS = [
   { label: 'Dados pessoais', icon: User },
   { label: 'Endereco', icon: MapPin },
@@ -80,7 +106,7 @@ const STEPS = [
   { label: 'Revisao', icon: FileCheck },
 ];
 
-export default function CadastroPage() {
+function CadastroPageInner() {
   const searchParams = useSearchParams();
   const refCode = searchParams.get('ref');
 
@@ -90,6 +116,22 @@ export default function CadastroPage() {
   const [erro, setErro] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+  const [aceitaClube, setAceitaClube] = useState(false);
+  const [planoSelecionado, setPlanoSelecionado] = useState<'DESCONTO_DIRETO' | 'FATURA_CHEIA_TOKEN' | ''>('');
+
+  // OCR state
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrSucesso, setOcrSucesso] = useState(false);
+  const [ocrErro, setOcrErro] = useState('');
+  const [ocrDados, setOcrDados] = useState<OcrDados>({});
+  const [historicoConsumo, setHistoricoConsumo] = useState<HistoricoItem[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Documento pendente (tela sucesso)
+  const [mostrarUploadDoc, setMostrarUploadDoc] = useState(false);
+  const [docEnviado, setDocEnviado] = useState(false);
+  const [enviarDepois, setEnviarDepois] = useState(false);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // ─── Convite / Indicador ─────────────────────────────────
   const [nomeIndicador, setNomeIndicador] = useState<string | null>(null);
@@ -112,7 +154,6 @@ export default function CadastroPage() {
     cpf: '',
     email: '',
     telefone: '',
-    dataNascimento: '',
   });
 
   const [endereco, setEndereco] = useState<Endereco>({
@@ -145,6 +186,64 @@ export default function CadastroPage() {
     setInstalacao({ ...instalacao, [field]: value });
   }
 
+  // ─── OCR Upload ──────────────────────────────────────────
+
+  async function handleOcrUpload(file: File) {
+    setOcrLoading(true);
+    setOcrErro('');
+    setOcrSucesso(false);
+
+    try {
+      const formData = new FormData();
+      formData.append('fatura', file);
+
+      const res = await fetch(`${API_URL}/publico/processar-fatura-ocr`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.sucesso && data.dados) {
+        setOcrDados(data.dados);
+        setOcrSucesso(true);
+
+        // Pre-fill pessoais
+        if (data.dados.nome) setPessoais((p) => ({ ...p, nome: data.dados.nome }));
+        if (data.dados.cpf) {
+          setPessoais((p) => ({ ...p, cpf: formatarCPF(data.dados.cpf) }));
+        }
+
+        // Pre-fill endereco
+        if (data.dados.endereco || data.dados.bairro || data.dados.cidade) {
+          setEndereco((e) => ({
+            ...e,
+            logradouro: data.dados.endereco || e.logradouro,
+            bairro: data.dados.bairro || e.bairro,
+            cidade: data.dados.cidade || e.cidade,
+            estado: data.dados.estado || e.estado,
+            cep: data.dados.cep ? formatarCEP(data.dados.cep) : e.cep,
+          }));
+        }
+
+        // Pre-fill instalacao
+        if (data.dados.numeroUC) setInstalacao((i) => ({ ...i, numeroUC: data.dados.numeroUC }));
+        if (data.dados.distribuidora) setInstalacao((i) => ({ ...i, distribuidora: data.dados.distribuidora }));
+        if (data.dados.consumoMedioKwh) setInstalacao((i) => ({ ...i, consumoMedioKwh: String(data.dados.consumoMedioKwh) }));
+
+        // Historico
+        if (data.dados.historicoConsumo?.length > 0) {
+          setHistoricoConsumo(data.dados.historicoConsumo);
+        }
+      } else {
+        setOcrErro(data.mensagem || 'Nao foi possivel ler automaticamente. Preencha os dados manualmente.');
+      }
+    } catch {
+      setOcrErro('Erro ao processar fatura. Preencha os dados manualmente.');
+    } finally {
+      setOcrLoading(false);
+    }
+  }
+
   // ─── CEP lookup ──────────────────────────────────────────
 
   async function buscarCEP(cep: string) {
@@ -158,14 +257,14 @@ export default function CadastroPage() {
         setEndereco({
           ...endereco,
           cep,
-          logradouro: data.logradouro || '',
-          bairro: data.bairro || '',
-          cidade: data.localidade || '',
-          estado: data.uf || '',
+          logradouro: data.logradouro || endereco.logradouro,
+          bairro: data.bairro || endereco.bairro,
+          cidade: data.localidade || endereco.cidade,
+          estado: data.uf || endereco.estado,
         });
       }
     } catch {
-      // silently fail — user can fill manually
+      // silently fail
     } finally {
       setBuscandoCep(false);
     }
@@ -173,19 +272,18 @@ export default function CadastroPage() {
 
   // ─── Navigation ──────────────────────────────────────────
 
-  function avancar() {
-    setErro('');
-    setStep(step + 1);
-  }
+  function avancar() { setErro(''); setStep(step + 1); }
+  function pular() { setErro(''); setStep(step + 1); }
+  function voltar() { setErro(''); setStep(step - 1); }
 
-  function pular() {
-    setErro('');
-    setStep(step + 1);
-  }
+  // ─── Simulacao ───────────────────────────────────────────
 
-  function voltar() {
-    setErro('');
-    setStep(step - 1);
+  function calcularSimulacao() {
+    const consumo = Number(instalacao.consumoMedioKwh) || 0;
+    const contaAtual = Math.round(consumo * TARIFA_KWH * 100) / 100;
+    const economia = Math.round(contaAtual * DESCONTO_PERCENTUAL * 100) / 100;
+    const contaCoopereBR = Math.round((contaAtual - economia) * 100) / 100;
+    return { contaAtual, contaCoopereBR, economiaMensal: economia, economiaAnual: Math.round(economia * 12 * 100) / 100 };
   }
 
   // ─── Submit ──────────────────────────────────────────────
@@ -193,6 +291,10 @@ export default function CadastroPage() {
   async function handleSubmit() {
     if (!aceitouTermos) {
       setErro('Voce precisa aceitar os termos de adesao.');
+      return;
+    }
+    if (!planoSelecionado) {
+      setErro('Selecione um plano para continuar.');
       return;
     }
     setErro('');
@@ -204,7 +306,6 @@ export default function CadastroPage() {
         cpf: pessoais.cpf,
         email: pessoais.email.trim(),
         telefone: pessoais.telefone,
-        dataNascimento: pessoais.dataNascimento,
         endereco: {
           cep: endereco.cep.replace(/\D/g, ''),
           logradouro: endereco.logradouro,
@@ -219,6 +320,8 @@ export default function CadastroPage() {
           distribuidora: instalacao.distribuidora,
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
+        planoSelecionado,
+        aceitaClube,
       };
 
       if (refCode) {
@@ -241,11 +344,98 @@ export default function CadastroPage() {
     }
   }
 
+  // ─── Enviar docs depois (marca pendencia) ────────────────
+
+  async function marcarPendenciaDocumentos() {
+    try {
+      await fetch(`${API_URL}/publico/cadastro-web`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: pessoais.nome.trim(),
+          cpf: pessoais.cpf,
+          email: pessoais.email.trim(),
+          telefone: pessoais.telefone,
+          endereco: { cep: endereco.cep.replace(/\D/g, ''), logradouro: endereco.logradouro, numero: endereco.numero, complemento: endereco.complemento, bairro: endereco.bairro, cidade: endereco.cidade, estado: endereco.estado },
+          instalacao: { numeroUC: instalacao.numeroUC, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
+          planoSelecionado,
+          aceitaClube,
+          pendenciaDocumentos: true,
+        }),
+      });
+    } catch {
+      // best effort
+    }
+    setEnviarDepois(true);
+  }
+
   // ─── Render steps ────────────────────────────────────────
 
   function renderStep0() {
     return (
       <div className="space-y-4">
+        {/* Upload fatura section */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <FileText className="h-5 w-5 text-amber-600" /> Sua conta de luz
+          </h3>
+          <p className="text-sm text-gray-600">
+            Tenha sua fatura em maos (PDF salvo ou foto). O sistema tentara ler os dados automaticamente.
+          </p>
+          <div className="bg-amber-100 border border-amber-300 rounded-md p-3 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-800">
+              Caso o sistema nao consiga extrair os dados, nossa equipe entrara em contato para ajudar.
+            </p>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleOcrUpload(file);
+            }}
+          />
+
+          {ocrLoading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-green-700">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm font-medium">Analisando sua fatura...</span>
+            </div>
+          ) : ocrSucesso ? (
+            <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
+              <Check className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-green-800">Fatura lida com sucesso! Campos preenchidos automaticamente.</span>
+            </div>
+          ) : (
+            <>
+              {ocrErro && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                  {ocrErro}
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full gap-2 border-dashed border-2 border-amber-300 hover:border-amber-400 hover:bg-amber-50 py-6"
+              >
+                <Upload className="h-5 w-5 text-amber-600" />
+                <span>Enviar foto ou PDF da fatura</span>
+              </Button>
+            </>
+          )}
+        </div>
+
+        <div className="border-t pt-4">
+          <p className="text-xs text-gray-500 mb-3">
+            {ocrSucesso ? 'Confira e ajuste os dados se necessario:' : 'Ou preencha manualmente:'}
+          </p>
+        </div>
+
         <div>
           <Label htmlFor="nome">Nome completo *</Label>
           <Input
@@ -287,16 +477,6 @@ export default function CadastroPage() {
             className="h-10"
           />
         </div>
-        <div>
-          <Label htmlFor="dataNascimento">Data de nascimento *</Label>
-          <Input
-            id="dataNascimento"
-            type="date"
-            value={pessoais.dataNascimento}
-            onChange={(e) => updatePessoais('dataNascimento', e.target.value)}
-            className="h-10"
-          />
-        </div>
       </div>
     );
   }
@@ -304,6 +484,11 @@ export default function CadastroPage() {
   function renderStep1() {
     return (
       <div className="space-y-4">
+        {ocrSucesso && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-2 flex items-center gap-2 text-sm text-green-700">
+            <Check className="h-4 w-4" /> Dados lidos da sua fatura
+          </div>
+        )}
         <div>
           <Label htmlFor="cep">CEP *</Label>
           <div className="relative">
@@ -397,6 +582,11 @@ export default function CadastroPage() {
   function renderStep2() {
     return (
       <div className="space-y-4">
+        {ocrSucesso && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-2 flex items-center gap-2 text-sm text-green-700">
+            <Check className="h-4 w-4" /> Dados lidos da sua fatura
+          </div>
+        )}
         <div>
           <Label htmlFor="numeroUC">Numero da instalacao (UC) *</Label>
           <Input
@@ -439,65 +629,181 @@ export default function CadastroPage() {
             Veja o consumo medio nos ultimos 12 meses na sua conta de luz.
           </p>
         </div>
+
+        {/* Historico de consumo chart */}
+        {historicoConsumo.length > 0 && (
+          <div className="bg-gray-50 rounded-lg p-4 mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Historico de consumo (12 meses)</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={historicoConsumo.slice(-12)} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mesAno" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip
+                  formatter={(value) => [`${value} kWh`, 'Consumo']}
+                  labelStyle={{ fontSize: 12 }}
+                />
+                <Bar dataKey="consumoKwh" fill="#16a34a" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     );
   }
 
   function renderStep3() {
+    const sim = calcularSimulacao();
+
     return (
       <div className="space-y-5">
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-            <User className="h-4 w-4 text-green-600" /> Dados pessoais
-          </h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+        {/* 4a. Resumo compacto */}
+        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          <h3 className="font-semibold text-gray-800 text-sm">Seus dados</h3>
+          <div className="grid grid-cols-2 gap-1 text-sm">
             <div><span className="text-gray-500">Nome:</span> {pessoais.nome || '—'}</div>
-            <div><span className="text-gray-500">CPF:</span> {pessoais.cpf || '—'}</div>
             <div><span className="text-gray-500">Email:</span> {pessoais.email || '—'}</div>
-            <div><span className="text-gray-500">Telefone:</span> {pessoais.telefone || '—'}</div>
-            <div><span className="text-gray-500">Nascimento:</span> {pessoais.dataNascimento || '—'}</div>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-green-600" /> Endereco
-          </h3>
-          <div className="text-sm space-y-1">
-            <div>{endereco.logradouro || '—'}, {endereco.numero || '—'}{endereco.complemento ? ` - ${endereco.complemento}` : ''}</div>
-            <div>{endereco.bairro || '—'} - {endereco.cidade || '—'}/{endereco.estado || '—'}</div>
-            <div>CEP: {endereco.cep || '—'}</div>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-green-600" /> Dados da instalacao
-          </h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
             <div><span className="text-gray-500">UC:</span> {instalacao.numeroUC || '—'}</div>
             <div><span className="text-gray-500">Distribuidora:</span> {instalacao.distribuidora || '—'}</div>
-            <div><span className="text-gray-500">Consumo medio:</span> {instalacao.consumoMedioKwh ? `${instalacao.consumoMedioKwh} kWh/mes` : '—'}</div>
           </div>
         </div>
 
-        <label className="flex items-start gap-3 p-4 border border-green-200 rounded-lg bg-green-50 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={aceitouTermos}
-            onChange={(e) => setAceitouTermos(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-          />
-          <span className="text-sm text-gray-700 leading-relaxed">
-            Li e aceito os <span className="text-green-700 font-medium underline">termos de adesao</span> da
-            cooperativa, incluindo as regras de participacao na geracao distribuida de energia solar.
-          </span>
-        </label>
+        {/* 4b. Simulacao de economia */}
+        {Number(instalacao.consumoMedioKwh) > 0 && (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-green-600" /> Simulacao de economia
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-red-600 font-medium mb-1">Conta atual</p>
+                <p className="text-xl font-bold text-red-700">{formatarMoeda(sim.contaAtual)}</p>
+                <p className="text-xs text-red-500">por mes</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                <p className="text-xs text-green-600 font-medium mb-1">Com CoopereBR</p>
+                <p className="text-xl font-bold text-green-700">{formatarMoeda(sim.contaCoopereBR)}</p>
+                <p className="text-xs text-green-500">por mes</p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-green-600 to-emerald-500 rounded-lg p-4 text-center text-white">
+              <p className="text-sm font-medium opacity-90">Voce economiza</p>
+              <p className="text-2xl font-bold">{formatarMoeda(sim.economiaMensal)}/mes</p>
+              <p className="text-sm opacity-80 mt-1">{formatarMoeda(sim.economiaAnual)} por ano</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3">
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={[
+                  { label: 'Conta atual', valor: sim.contaAtual },
+                  { label: 'Com CoopereBR', valor: sim.contaCoopereBR },
+                ]} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(value) => [formatarMoeda(Number(value)), 'Valor']} />
+                  <Bar dataKey="valor" radius={[6, 6, 0, 0]}>
+                    <Cell fill="#ef4444" />
+                    <Cell fill="#16a34a" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* 4c. Escolha do plano */}
+        <div className="space-y-3">
+          <h3 className="font-semibold text-gray-800">Escolha seu plano</h3>
+
+          <button
+            type="button"
+            onClick={() => setPlanoSelecionado('DESCONTO_DIRETO')}
+            className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+              planoSelecionado === 'DESCONTO_DIRETO'
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">💰</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-800">Desconto Direto</span>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Mais popular</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Pague menos na sua conta de luz todos os meses. Desconto aplicado automaticamente.
+                </p>
+              </div>
+              {planoSelecionado === 'DESCONTO_DIRETO' && (
+                <Check className="h-5 w-5 text-green-600 shrink-0" />
+              )}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPlanoSelecionado('FATURA_CHEIA_TOKEN')}
+            className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+              planoSelecionado === 'FATURA_CHEIA_TOKEN'
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">🪙</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-800">Acumular Tokens</span>
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Clube de Vantagens</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Pague o valor cheio e acumule CooperTokens para usar no Clube de Vantagens ou na fatura quando quiser.
+                </p>
+              </div>
+              {planoSelecionado === 'FATURA_CHEIA_TOKEN' && (
+                <Check className="h-5 w-5 text-green-600 shrink-0" />
+              )}
+            </div>
+          </button>
+        </div>
+
+        {/* 4d. Checkboxes de termos */}
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 p-4 border border-green-200 rounded-lg bg-green-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={aceitouTermos}
+              onChange={(e) => setAceitouTermos(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+            />
+            <span className="text-sm text-gray-700 leading-relaxed">
+              Li e aceito os <span className="text-green-700 font-medium underline">termos de adesao</span> da
+              cooperativa CoopereBR.
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 p-4 border border-purple-200 rounded-lg bg-purple-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={aceitaClube}
+              onChange={(e) => setAceitaClube(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            <span className="text-sm text-gray-700 leading-relaxed">
+              ✨ Quero fazer parte do <span className="text-purple-700 font-medium underline">Clube de Vantagens</span> e
+              aceito os termos do clube — descontos e beneficios exclusivos com parceiros!
+            </span>
+          </label>
+        </div>
       </div>
     );
   }
 
-  // ─── Success screen (enhanced) ───────────────────────────
+  // ─── Success screen ──────────────────────────────────────
 
   if (sucesso) {
     return (
@@ -536,6 +842,50 @@ export default function CadastroPage() {
                   <span className="text-green-600">✅</span> Sem obras, sem investimento
                 </div>
               </div>
+
+              {/* Secao documentos */}
+              {!docEnviado && !enviarDepois && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3 text-left">
+                  <h3 className="font-semibold text-blue-800 text-sm">Um ultimo passo — Documentos</h3>
+                  <p className="text-sm text-blue-700">
+                    Para finalizar sua adesao, precisamos do documento do responsavel pela instalacao (RG ou CNH).
+                    Isso NAO impede a conclusao do seu cadastro.
+                  </p>
+                  <input
+                    ref={docInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={() => setDocEnviado(true)}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => docInputRef.current?.click()}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                  >
+                    <Camera className="h-4 w-4" /> Enviar documentos agora
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={marcarPendenciaDocumentos}
+                    className="w-full text-sm text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Enviar depois
+                  </button>
+                </div>
+              )}
+
+              {docEnviado && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800 flex items-center gap-2">
+                  <Check className="h-4 w-4" /> Documento recebido! Obrigado.
+                </div>
+              )}
+
+              {enviarDepois && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
+                  Tudo certo! Enviaremos um lembrete para voce.
+                </div>
+              )}
 
               <a
                 href="https://wa.me/552740421630"
@@ -709,5 +1059,17 @@ export default function CadastroPage() {
         CoopereBR — Cooperativa de Energia Solar
       </footer>
     </div>
+  );
+}
+
+export default function CadastroPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-green-600" />
+      </div>
+    }>
+      <CadastroPageInner />
+    </Suspense>
   );
 }

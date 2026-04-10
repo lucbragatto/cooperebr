@@ -1,9 +1,12 @@
-import { Controller, Post, Get, Body, Param, BadRequestException, Logger } from '@nestjs/common';
+/// <reference types="multer" />
+import { Controller, Post, Get, Body, Param, BadRequestException, Logger, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { FaturasService } from '../faturas/faturas.service';
 
 @Controller('publico')
 export class PublicoController {
@@ -13,6 +16,7 @@ export class PublicoController {
     private prisma: PrismaService,
     private sender: WhatsappSenderService,
     private cooperToken: CooperTokenService,
+    private faturasService: FaturasService,
   ) {}
 
   @Public()
@@ -109,7 +113,6 @@ export class PublicoController {
       cpf: string;
       email: string;
       telefone: string;
-      dataNascimento: string;
       endereco: {
         cep: string;
         logradouro: string;
@@ -125,6 +128,9 @@ export class PublicoController {
         consumoMedioKwh: number;
       };
       codigoRef?: string;
+      planoSelecionado?: string;
+      aceitaClube?: boolean;
+      pendenciaDocumentos?: boolean;
     },
   ) {
     if (!body.nome || !body.cpf || !body.email || !body.telefone) {
@@ -143,7 +149,6 @@ export class PublicoController {
 
     try {
       const dadosLead: Record<string, unknown> = {
-        dataNascimento: body.dataNascimento,
         endereco: body.endereco,
         instalacao: body.instalacao,
       };
@@ -160,6 +165,9 @@ export class PublicoController {
           cpf: cpfLimpo,
           fonte: 'cadastro-web',
           dados: dadosLead as any,
+          planoSelecionado: body.planoSelecionado ?? null,
+          aceitaClube: body.aceitaClube ?? false,
+          pendenciaDocumentos: body.pendenciaDocumentos ?? false,
         },
         create: {
           telefone: telefoneLimpo,
@@ -168,6 +176,9 @@ export class PublicoController {
           cpf: cpfLimpo,
           fonte: 'cadastro-web',
           dados: dadosLead as any,
+          planoSelecionado: body.planoSelecionado ?? null,
+          aceitaClube: body.aceitaClube ?? false,
+          pendenciaDocumentos: body.pendenciaDocumentos ?? false,
         },
       });
 
@@ -227,6 +238,68 @@ export class PublicoController {
       } catch {
         // Log but don't fail
       }
+    }
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('processar-fatura-ocr')
+  @UseInterceptors(FileInterceptor('fatura'))
+  async processarFaturaOcr(@UploadedFile() arquivo: Express.Multer.File): Promise<{
+    sucesso: boolean;
+    mensagem?: string;
+    dados: Record<string, unknown>;
+  }> {
+    if (!arquivo) {
+      throw new BadRequestException('Arquivo da fatura é obrigatório');
+    }
+
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (arquivo.size > maxSize) {
+      throw new BadRequestException('Arquivo excede o limite de 10MB');
+    }
+
+    const isPdf = arquivo.mimetype === 'application/pdf';
+    const isImage = arquivo.mimetype.startsWith('image/');
+
+    if (!isPdf && !isImage) {
+      throw new BadRequestException('Formato não suportado. Envie PDF ou imagem.');
+    }
+
+    try {
+      const arquivoBase64 = arquivo.buffer.toString('base64');
+      const tipoArquivo = isPdf ? 'pdf' as const : 'imagem' as const;
+      const dadosExtraidos = await this.faturasService.extrairOcr(arquivoBase64, tipoArquivo);
+
+      const consumoMedio = dadosExtraidos.historicoConsumo?.length > 0
+        ? Math.round(dadosExtraidos.historicoConsumo.reduce((s, h) => s + h.consumoKwh, 0) / dadosExtraidos.historicoConsumo.length)
+        : dadosExtraidos.consumoAtualKwh || 0;
+
+      return {
+        sucesso: true,
+        dados: {
+          nome: dadosExtraidos.titular || '',
+          cpf: dadosExtraidos.documento || '',
+          numeroUC: dadosExtraidos.numeroUC || '',
+          distribuidora: dadosExtraidos.distribuidora || '',
+          consumoMedioKwh: consumoMedio,
+          totalAPagar: dadosExtraidos.totalAPagar || 0,
+          endereco: dadosExtraidos.enderecoInstalacao || '',
+          bairro: dadosExtraidos.bairro || '',
+          cidade: dadosExtraidos.cidade || '',
+          estado: dadosExtraidos.estado || '',
+          cep: dadosExtraidos.cep || '',
+          historicoConsumo: dadosExtraidos.historicoConsumo || [],
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.logger.warn(`OCR fatura pública falhou: ${message}`);
+      return {
+        sucesso: false,
+        mensagem: 'Leitura automática não disponível. Preencha manualmente.',
+        dados: {},
+      };
     }
   }
 
