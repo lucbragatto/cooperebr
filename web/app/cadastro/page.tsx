@@ -127,6 +127,11 @@ function CadastroPageInner() {
   const [historicoConsumo, setHistoricoConsumo] = useState<HistoricoItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Modo manual (OCR falhou)
+  const [modoManual, setModoManual] = useState(false);
+  const [faturaArquivo, setFaturaArquivo] = useState<File | null>(null);
+  const [valorUltimaFatura, setValorUltimaFatura] = useState('');
+
   // Documento pendente (tela sucesso)
   const [mostrarUploadDoc, setMostrarUploadDoc] = useState(false);
   const [docEnviado, setDocEnviado] = useState(false);
@@ -235,10 +240,14 @@ function CadastroPageInner() {
           setHistoricoConsumo(data.dados.historicoConsumo);
         }
       } else {
-        setOcrErro(data.mensagem || 'Nao foi possivel ler automaticamente. Preencha os dados manualmente.');
+        setOcrErro(data.mensagem || 'Nao foi possivel ler automaticamente.');
+        setModoManual(true);
+        setFaturaArquivo(file);
       }
     } catch {
-      setOcrErro('Erro ao processar fatura. Preencha os dados manualmente.');
+      setOcrErro('Erro ao processar fatura.');
+      setModoManual(true);
+      setFaturaArquivo(file);
     } finally {
       setOcrLoading(false);
     }
@@ -272,9 +281,25 @@ function CadastroPageInner() {
 
   // ─── Navigation ──────────────────────────────────────────
 
-  function avancar() { setErro(''); setStep(step + 1); }
+  function avancar() {
+    setErro('');
+    // No modo manual, step 0 pula direto para revisão (step 3)
+    if (modoManual && step === 0) {
+      setStep(3);
+    } else {
+      setStep(step + 1);
+    }
+  }
   function pular() { setErro(''); setStep(step + 1); }
-  function voltar() { setErro(''); setStep(step - 1); }
+  function voltar() {
+    setErro('');
+    // No modo manual, da revisão volta para step 0
+    if (modoManual && step === 3) {
+      setStep(0);
+    } else {
+      setStep(step - 1);
+    }
+  }
 
   // ─── Simulacao ───────────────────────────────────────────
 
@@ -326,6 +351,22 @@ function CadastroPageInner() {
 
       if (refCode) {
         payload.codigoRef = refCode;
+      }
+
+      if (valorUltimaFatura) {
+        payload.valorUltimaFatura = Number(valorUltimaFatura) || 0;
+      }
+
+      // Enviar arquivo da fatura como base64 (modo manual)
+      if (faturaArquivo) {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(faturaArquivo);
+        });
+        payload.faturaBase64 = base64;
+        payload.faturaNome = faturaArquivo.name;
+        payload.faturaTipo = faturaArquivo.type;
       }
 
       const res = await fetch(`${API_URL}/publico/cadastro-web`, {
@@ -412,27 +453,44 @@ function CadastroPageInner() {
             </div>
           ) : (
             <>
-              {ocrErro && (
+              {ocrErro && !modoManual && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
                   {ocrErro}
                 </div>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full gap-2 border-dashed border-2 border-amber-300 hover:border-amber-400 hover:bg-amber-50 py-6"
-              >
-                <Upload className="h-5 w-5 text-amber-600" />
-                <span>Enviar foto ou PDF da fatura</span>
-              </Button>
+              {!modoManual && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full gap-2 border-dashed border-2 border-amber-300 hover:border-amber-400 hover:bg-amber-50 py-6"
+                >
+                  <Upload className="h-5 w-5 text-amber-600" />
+                  <span>Enviar foto ou PDF da fatura</span>
+                </Button>
+              )}
             </>
           )}
         </div>
 
+        {/* Modo manual: mensagem amigável + campos simplificados */}
+        {modoManual && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+            <p className="text-sm text-blue-800 font-medium">
+              Nao foi possivel ler automaticamente. Preencha os dados essenciais abaixo para continuarmos.
+            </p>
+            <div className="flex items-start gap-2 bg-blue-100 border border-blue-300 rounded-md p-3">
+              <FileText className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-blue-700">
+                Nossa equipe recebera seu arquivo e finalizara o cadastro. Voce sera contatado em breve.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="border-t pt-4">
           <p className="text-xs text-gray-500 mb-3">
-            {ocrSucesso ? 'Confira e ajuste os dados se necessario:' : 'Ou preencha manualmente:'}
+            {ocrSucesso ? 'Confira e ajuste os dados se necessario:' : modoManual ? 'Preencha os dados essenciais:' : 'Ou preencha manualmente:'}
           </p>
         </div>
 
@@ -477,6 +535,55 @@ function CadastroPageInner() {
             className="h-10"
           />
         </div>
+
+        {/* Campos extras no modo manual — UC + consumo + valor */}
+        {modoManual && (
+          <>
+            <div className="border-t pt-4">
+              <p className="text-xs text-gray-500 mb-3">Dados da sua conta de luz:</p>
+            </div>
+            <div>
+              <Label htmlFor="numeroUC-manual">Numero da instalacao (UC) *</Label>
+              <Input
+                id="numeroUC-manual"
+                placeholder="Numero que consta na conta de luz"
+                value={instalacao.numeroUC}
+                onChange={(e) => updateInstalacao('numeroUC', e.target.value)}
+                className="h-10"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Encontre este numero no canto superior da sua conta de luz.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="consumo-manual">Consumo ultimo mes (kWh) *</Label>
+                <Input
+                  id="consumo-manual"
+                  type="number"
+                  placeholder="Ex: 350"
+                  min="1"
+                  value={instalacao.consumoMedioKwh}
+                  onChange={(e) => updateInstalacao('consumoMedioKwh', e.target.value)}
+                  className="h-10"
+                />
+              </div>
+              <div>
+                <Label htmlFor="valor-manual">Valor da fatura (R$)</Label>
+                <Input
+                  id="valor-manual"
+                  type="number"
+                  placeholder="Ex: 280"
+                  min="0"
+                  step="0.01"
+                  value={valorUltimaFatura}
+                  onChange={(e) => setValorUltimaFatura(e.target.value)}
+                  className="h-10"
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -1018,20 +1125,22 @@ function CadastroPageInner() {
 
                 {step < STEPS.length - 1 ? (
                   <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={pular}
-                      className="gap-1 text-gray-500 hover:text-gray-700"
-                    >
-                      Pular <SkipForward className="h-4 w-4" />
-                    </Button>
+                    {!(modoManual && step === 0) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={pular}
+                        className="gap-1 text-gray-500 hover:text-gray-700"
+                      >
+                        Pular <SkipForward className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       onClick={avancar}
                       className="bg-green-600 hover:bg-green-700 text-white gap-1"
                     >
-                      Proximo <ArrowRight className="h-4 w-4" />
+                      {modoManual && step === 0 ? 'Continuar' : 'Proximo'} <ArrowRight className="h-4 w-4" />
                     </Button>
                   </div>
                 ) : (

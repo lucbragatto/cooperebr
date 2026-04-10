@@ -131,6 +131,10 @@ export class PublicoController {
       planoSelecionado?: string;
       aceitaClube?: boolean;
       pendenciaDocumentos?: boolean;
+      faturaBase64?: string;
+      faturaNome?: string;
+      faturaTipo?: string;
+      valorUltimaFatura?: number;
     },
   ) {
     if (!body.nome || !body.cpf || !body.email || !body.telefone) {
@@ -155,6 +159,18 @@ export class PublicoController {
 
       if (body.codigoRef) {
         dadosLead.codigoRef = body.codigoRef;
+      }
+
+      if (body.valorUltimaFatura) {
+        dadosLead.valorUltimaFatura = body.valorUltimaFatura;
+      }
+
+      if (body.faturaBase64) {
+        dadosLead.faturaArquivo = {
+          base64: body.faturaBase64,
+          nome: body.faturaNome ?? 'fatura',
+          tipo: body.faturaTipo ?? 'application/octet-stream',
+        };
       }
 
       const lead = await this.prisma.leadWhatsapp.upsert({
