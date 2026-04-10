@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Sun, ArrowLeft, ArrowRight, Check, Loader2, User, MapPin, Zap, FileCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Sun, ArrowLeft, ArrowRight, Check, Loader2, User, MapPin, Zap, FileCheck, X, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,22 +47,6 @@ function formatarCEP(valor: string): string {
   return `${nums.slice(0, 5)}-${nums.slice(5)}`;
 }
 
-function validarCPF(cpf: string): boolean {
-  const nums = cpf.replace(/\D/g, '');
-  if (nums.length !== 11) return false;
-  if (/^(\d)\1+$/.test(nums)) return false;
-  let soma = 0;
-  for (let i = 0; i < 9; i++) soma += parseInt(nums[i]) * (10 - i);
-  let resto = (soma * 10) % 11;
-  if (resto === 10) resto = 0;
-  if (resto !== parseInt(nums[9])) return false;
-  soma = 0;
-  for (let i = 0; i < 10; i++) soma += parseInt(nums[i]) * (11 - i);
-  resto = (soma * 10) % 11;
-  if (resto === 10) resto = 0;
-  return resto === parseInt(nums[10]);
-}
-
 // ─── Types ───────────────────────────────────────────────
 
 interface DadosPessoais {
@@ -96,12 +81,31 @@ const STEPS = [
 ];
 
 export default function CadastroPage() {
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get('ref');
+
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [erro, setErro] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+
+  // ─── Convite / Indicador ─────────────────────────────────
+  const [nomeIndicador, setNomeIndicador] = useState<string | null>(null);
+  const [bannerVisivel, setBannerVisivel] = useState(true);
+
+  useEffect(() => {
+    if (!refCode) return;
+    fetch(`${API_URL}/publico/convite/${refCode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.valido && data.nomeIndicador) {
+          setNomeIndicador(data.nomeIndicador);
+        }
+      })
+      .catch(() => {});
+  }, [refCode]);
 
   const [pessoais, setPessoais] = useState<DadosPessoais>({
     nome: '',
@@ -167,40 +171,14 @@ export default function CadastroPage() {
     }
   }
 
-  // ─── Validation ──────────────────────────────────────────
-
-  function validarStep(): string | null {
-    if (step === 0) {
-      if (!pessoais.nome.trim()) return 'Preencha o nome completo.';
-      if (!validarCPF(pessoais.cpf)) return 'CPF invalido.';
-      if (!pessoais.email.trim() || !pessoais.email.includes('@')) return 'Email invalido.';
-      const telLimpo = pessoais.telefone.replace(/\D/g, '');
-      if (telLimpo.length !== 11) return 'Telefone deve ter 11 digitos (DDD + 9 digitos).';
-      if (!pessoais.dataNascimento) return 'Preencha a data de nascimento.';
-    }
-    if (step === 1) {
-      if (endereco.cep.replace(/\D/g, '').length !== 8) return 'CEP invalido.';
-      if (!endereco.logradouro.trim()) return 'Preencha o logradouro.';
-      if (!endereco.numero.trim()) return 'Preencha o numero.';
-      if (!endereco.bairro.trim()) return 'Preencha o bairro.';
-      if (!endereco.cidade.trim()) return 'Preencha a cidade.';
-      if (!endereco.estado.trim()) return 'Preencha o estado.';
-    }
-    if (step === 2) {
-      if (!instalacao.numeroUC.trim()) return 'Preencha o numero da instalacao (UC).';
-      if (!instalacao.distribuidora) return 'Selecione a distribuidora.';
-      const consumo = Number(instalacao.consumoMedioKwh);
-      if (!consumo || consumo <= 0) return 'Consumo medio deve ser maior que zero.';
-    }
-    return null;
-  }
+  // ─── Navigation ──────────────────────────────────────────
 
   function avancar() {
-    const erroValidacao = validarStep();
-    if (erroValidacao) {
-      setErro(erroValidacao);
-      return;
-    }
+    setErro('');
+    setStep(step + 1);
+  }
+
+  function pular() {
     setErro('');
     setStep(step + 1);
   }
@@ -221,30 +199,36 @@ export default function CadastroPage() {
     setLoading(true);
 
     try {
+      const payload: Record<string, unknown> = {
+        nome: pessoais.nome.trim(),
+        cpf: pessoais.cpf,
+        email: pessoais.email.trim(),
+        telefone: pessoais.telefone,
+        dataNascimento: pessoais.dataNascimento,
+        endereco: {
+          cep: endereco.cep.replace(/\D/g, ''),
+          logradouro: endereco.logradouro,
+          numero: endereco.numero,
+          complemento: endereco.complemento,
+          bairro: endereco.bairro,
+          cidade: endereco.cidade,
+          estado: endereco.estado,
+        },
+        instalacao: {
+          numeroUC: instalacao.numeroUC,
+          distribuidora: instalacao.distribuidora,
+          consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
+        },
+      };
+
+      if (refCode) {
+        payload.codigoRef = refCode;
+      }
+
       const res = await fetch(`${API_URL}/publico/cadastro-web`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome: pessoais.nome.trim(),
-          cpf: pessoais.cpf,
-          email: pessoais.email.trim(),
-          telefone: pessoais.telefone,
-          dataNascimento: pessoais.dataNascimento,
-          endereco: {
-            cep: endereco.cep.replace(/\D/g, ''),
-            logradouro: endereco.logradouro,
-            numero: endereco.numero,
-            complemento: endereco.complemento,
-            bairro: endereco.bairro,
-            cidade: endereco.cidade,
-            estado: endereco.estado,
-          },
-          instalacao: {
-            numeroUC: instalacao.numeroUC,
-            distribuidora: instalacao.distribuidora,
-            consumoMedioKwh: Number(instalacao.consumoMedioKwh),
-          },
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Erro ao enviar cadastro');
@@ -467,11 +451,11 @@ export default function CadastroPage() {
             <User className="h-4 w-4 text-green-600" /> Dados pessoais
           </h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-gray-500">Nome:</span> {pessoais.nome}</div>
-            <div><span className="text-gray-500">CPF:</span> {pessoais.cpf}</div>
-            <div><span className="text-gray-500">Email:</span> {pessoais.email}</div>
-            <div><span className="text-gray-500">Telefone:</span> {pessoais.telefone}</div>
-            <div><span className="text-gray-500">Nascimento:</span> {pessoais.dataNascimento}</div>
+            <div><span className="text-gray-500">Nome:</span> {pessoais.nome || '—'}</div>
+            <div><span className="text-gray-500">CPF:</span> {pessoais.cpf || '—'}</div>
+            <div><span className="text-gray-500">Email:</span> {pessoais.email || '—'}</div>
+            <div><span className="text-gray-500">Telefone:</span> {pessoais.telefone || '—'}</div>
+            <div><span className="text-gray-500">Nascimento:</span> {pessoais.dataNascimento || '—'}</div>
           </div>
         </div>
 
@@ -480,9 +464,9 @@ export default function CadastroPage() {
             <MapPin className="h-4 w-4 text-green-600" /> Endereco
           </h3>
           <div className="text-sm space-y-1">
-            <div>{endereco.logradouro}, {endereco.numero}{endereco.complemento ? ` - ${endereco.complemento}` : ''}</div>
-            <div>{endereco.bairro} - {endereco.cidade}/{endereco.estado}</div>
-            <div>CEP: {endereco.cep}</div>
+            <div>{endereco.logradouro || '—'}, {endereco.numero || '—'}{endereco.complemento ? ` - ${endereco.complemento}` : ''}</div>
+            <div>{endereco.bairro || '—'} - {endereco.cidade || '—'}/{endereco.estado || '—'}</div>
+            <div>CEP: {endereco.cep || '—'}</div>
           </div>
         </div>
 
@@ -491,9 +475,9 @@ export default function CadastroPage() {
             <Zap className="h-4 w-4 text-green-600" /> Dados da instalacao
           </h3>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-gray-500">UC:</span> {instalacao.numeroUC}</div>
-            <div><span className="text-gray-500">Distribuidora:</span> {instalacao.distribuidora}</div>
-            <div><span className="text-gray-500">Consumo medio:</span> {instalacao.consumoMedioKwh} kWh/mes</div>
+            <div><span className="text-gray-500">UC:</span> {instalacao.numeroUC || '—'}</div>
+            <div><span className="text-gray-500">Distribuidora:</span> {instalacao.distribuidora || '—'}</div>
+            <div><span className="text-gray-500">Consumo medio:</span> {instalacao.consumoMedioKwh ? `${instalacao.consumoMedioKwh} kWh/mes` : '—'}</div>
           </div>
         </div>
 
@@ -513,7 +497,7 @@ export default function CadastroPage() {
     );
   }
 
-  // ─── Success screen ──────────────────────────────────────
+  // ─── Success screen (enhanced) ───────────────────────────
 
   if (sucesso) {
     return (
@@ -526,18 +510,41 @@ export default function CadastroPage() {
         </header>
         <main className="flex-1 flex items-start justify-center px-4 pb-12">
           <Card className="w-full max-w-md">
-            <CardContent className="text-center space-y-4 pt-6">
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                <Check className="h-8 w-8 text-green-600" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">Cadastro enviado!</h2>
+            <CardContent className="text-center space-y-5 pt-8 pb-8">
+              <div className="text-6xl">☀️</div>
+              <h2 className="text-2xl font-bold text-gray-800">
+                Bem-vindo a familia CoopereBR! 🌞
+              </h2>
               <p className="text-gray-600">
-                Recebemos seus dados. Nossa equipe vai analisar e entrar em contato
-                pelo WhatsApp ou email em breve.
+                Seu cadastro foi recebido e esta em analise. Em breve entraremos em contato.
               </p>
-              <p className="text-sm text-gray-500">
-                Enquanto isso, fique atento ao seu WhatsApp para atualizacoes.
-              </p>
+
+              {nomeIndicador && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+                  Voce foi indicado por <strong>{nomeIndicador}</strong> — ele ja foi notificado da sua chegada! 🎉
+                </div>
+              )}
+
+              <div className="space-y-2 text-left bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="text-green-600">✅</span> Voce ja faz parte do Clube de Vantagens
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="text-green-600">✅</span> Energia limpa e economia garantida
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="text-green-600">✅</span> Sem obras, sem investimento
+                </div>
+              </div>
+
+              <a
+                href="https://wa.me/552740421630"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+              >
+                Acompanhar pelo WhatsApp →
+              </a>
             </CardContent>
           </Card>
         </main>
@@ -565,91 +572,136 @@ export default function CadastroPage() {
 
       {/* Main */}
       <main className="flex-1 flex items-start justify-center px-4 pb-12">
-        <Card className="w-full max-w-lg">
-          {/* Step indicator */}
-          <CardHeader>
-            <div className="flex justify-between mb-3">
-              {STEPS.map((s, i) => {
-                const Icon = s.icon;
-                const isActive = i === step;
-                const isDone = i < step;
-                return (
-                  <div key={i} className="flex flex-col items-center gap-1">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                        isDone
-                          ? 'bg-green-600 text-white'
-                          : isActive
-                            ? 'bg-green-100 text-green-700 ring-2 ring-green-600'
-                            : 'bg-gray-100 text-gray-400'
-                      }`}
-                    >
-                      {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-                    </div>
-                    <span className={`text-xs hidden sm:block ${isActive ? 'text-green-700 font-medium' : 'text-gray-400'}`}>
-                      {s.label}
-                    </span>
-                  </div>
-                );
-              })}
+        <div className="w-full max-w-lg space-y-4">
+          {/* Banner de boas-vindas (quando veio com ?ref=) */}
+          {nomeIndicador && bannerVisivel && (
+            <div className="relative bg-gradient-to-r from-green-600 to-emerald-500 rounded-xl p-5 text-white shadow-lg">
+              <button
+                onClick={() => setBannerVisivel(false)}
+                className="absolute top-3 right-3 text-white/70 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <p className="text-lg font-bold mb-2">
+                🌿 {nomeIndicador} te convidou para a CoopereBR!
+              </p>
+              <p className="text-sm text-white/90 leading-relaxed mb-2">
+                Ao concluir seu cadastro, voce entra para um grupo exclusivo de pessoas
+                que economizam energia e cuidam do planeta. ♻️
+              </p>
+              <p className="text-sm text-white/90 leading-relaxed mb-2">
+                ✨ Voce tambem passa a fazer parte do nosso exclusivo Clube de Vantagens —
+                descontos e beneficios reais com parceiros que compartilham os mesmos valores.
+              </p>
+              <p className="text-xs text-white/70 mt-3">
+                {nomeIndicador} sera notificado que voce esta iniciando seu cadastro!
+              </p>
             </div>
-            <Progress value={progressValue} className="h-1.5" />
-            <CardTitle className="mt-3">{STEPS[step].label}</CardTitle>
-            <CardDescription>
-              Passo {step + 1} de {STEPS.length}
-            </CardDescription>
-          </CardHeader>
+          )}
 
-          <CardContent>
-            {step === 0 && renderStep0()}
-            {step === 1 && renderStep1()}
-            {step === 2 && renderStep2()}
-            {step === 3 && renderStep3()}
-
-            {erro && (
-              <p className="text-sm text-red-600 text-center mt-4">{erro}</p>
+          <Card>
+            {/* Badge persistente de convite */}
+            {nomeIndicador && (
+              <div className="bg-green-50 border-b border-green-100 px-4 py-2 text-sm text-green-700 flex items-center gap-2">
+                🤝 Convidado por <strong>{nomeIndicador}</strong>
+              </div>
             )}
 
-            {/* Navigation buttons */}
-            <div className="flex justify-between mt-6 gap-3">
-              {step > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={voltar}
-                  className="gap-1"
-                >
-                  <ArrowLeft className="h-4 w-4" /> Voltar
-                </Button>
-              ) : (
-                <div />
+            {/* Step indicator */}
+            <CardHeader>
+              <div className="flex justify-between mb-3">
+                {STEPS.map((s, i) => {
+                  const Icon = s.icon;
+                  const isActive = i === step;
+                  const isDone = i < step;
+                  return (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                          isDone
+                            ? 'bg-green-600 text-white'
+                            : isActive
+                              ? 'bg-green-100 text-green-700 ring-2 ring-green-600'
+                              : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                      </div>
+                      <span className={`text-xs hidden sm:block ${isActive ? 'text-green-700 font-medium' : 'text-gray-400'}`}>
+                        {s.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <Progress value={progressValue} className="h-1.5" />
+              <CardTitle className="mt-3">{STEPS[step].label}</CardTitle>
+              <CardDescription>
+                Passo {step + 1} de {STEPS.length}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              {step === 0 && renderStep0()}
+              {step === 1 && renderStep1()}
+              {step === 2 && renderStep2()}
+              {step === 3 && renderStep3()}
+
+              {erro && (
+                <p className="text-sm text-red-600 text-center mt-4">{erro}</p>
               )}
 
-              {step < STEPS.length - 1 ? (
-                <Button
-                  type="button"
-                  onClick={avancar}
-                  className="bg-green-600 hover:bg-green-700 text-white gap-1"
-                >
-                  Proximo <ArrowRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="bg-green-600 hover:bg-green-700 text-white gap-1"
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>Enviar cadastro <Check className="h-4 w-4" /></>
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              {/* Navigation buttons */}
+              <div className="flex justify-between mt-6 gap-3">
+                {step > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={voltar}
+                    className="gap-1"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Voltar
+                  </Button>
+                ) : (
+                  <div />
+                )}
+
+                {step < STEPS.length - 1 ? (
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={pular}
+                      className="gap-1 text-gray-500 hover:text-gray-700"
+                    >
+                      Pular <SkipForward className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={avancar}
+                      className="bg-green-600 hover:bg-green-700 text-white gap-1"
+                    >
+                      Proximo <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="bg-green-600 hover:bg-green-700 text-white gap-1"
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>Enviar cadastro <Check className="h-4 w-4" /></>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       {/* Footer */}

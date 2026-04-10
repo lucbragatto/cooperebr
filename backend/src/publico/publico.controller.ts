@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
 
 @Controller('publico')
 export class PublicoController {
@@ -11,6 +12,7 @@ export class PublicoController {
   constructor(
     private prisma: PrismaService,
     private sender: WhatsappSenderService,
+    private cooperToken: CooperTokenService,
   ) {}
 
   @Public()
@@ -122,6 +124,7 @@ export class PublicoController {
         distribuidora: string;
         consumoMedioKwh: number;
       };
+      codigoRef?: string;
     },
   ) {
     if (!body.nome || !body.cpf || !body.email || !body.telefone) {
@@ -139,6 +142,16 @@ export class PublicoController {
     }
 
     try {
+      const dadosLead: Record<string, unknown> = {
+        dataNascimento: body.dataNascimento,
+        endereco: body.endereco,
+        instalacao: body.instalacao,
+      };
+
+      if (body.codigoRef) {
+        dadosLead.codigoRef = body.codigoRef;
+      }
+
       const lead = await this.prisma.leadWhatsapp.upsert({
         where: { telefone: telefoneLimpo },
         update: {
@@ -146,11 +159,7 @@ export class PublicoController {
           email: body.email,
           cpf: cpfLimpo,
           fonte: 'cadastro-web',
-          dados: {
-            dataNascimento: body.dataNascimento,
-            endereco: body.endereco,
-            instalacao: body.instalacao,
-          } as any,
+          dados: dadosLead as any,
         },
         create: {
           telefone: telefoneLimpo,
@@ -158,19 +167,66 @@ export class PublicoController {
           email: body.email,
           cpf: cpfLimpo,
           fonte: 'cadastro-web',
-          dados: {
-            dataNascimento: body.dataNascimento,
-            endereco: body.endereco,
-            instalacao: body.instalacao,
-          } as any,
+          dados: dadosLead as any,
         },
       });
 
       this.logger.log(`Lead cadastro-web criado: ${lead.id} (${body.nome})`);
+
+      // Processar indicação se veio com código de convite
+      if (body.codigoRef) {
+        this.processarIndicacao(body.codigoRef, body.nome, lead.id).catch((err) => {
+          this.logger.error(`Erro ao processar indicação ref=${body.codigoRef}: ${err.message}`);
+        });
+      }
+
       return { ok: true, data: { id: lead.id } };
-    } catch (err) {
-      this.logger.error(`Erro ao salvar cadastro-web: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.logger.error(`Erro ao salvar cadastro-web: ${message}`);
       throw new BadRequestException('Erro ao processar cadastro. Tente novamente.');
+    }
+  }
+
+  private async processarIndicacao(codigoRef: string, nomeNovo: string, leadId: string) {
+    const indicador = await this.prisma.cooperado.findUnique({
+      where: { codigoIndicacao: codigoRef },
+      select: { id: true, nomeCompleto: true, telefone: true, cooperativaId: true },
+    });
+
+    if (!indicador || !indicador.cooperativaId) {
+      this.logger.warn(`Código de convite não encontrado ou sem cooperativa: ${codigoRef}`);
+      return;
+    }
+
+    // Creditar 50 tokens BONUS_INDICACAO ao indicador
+    try {
+      await this.cooperToken.creditar({
+        cooperadoId: indicador.id,
+        cooperativaId: indicador.cooperativaId,
+        tipo: 'BONUS_INDICACAO' as any,
+        quantidade: 50,
+        referenciaId: leadId,
+        referenciaTabela: 'LeadWhatsapp',
+      });
+      this.logger.log(`50 tokens BONUS_INDICACAO creditados ao indicador ${indicador.id}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.logger.error(`Erro ao creditar tokens ao indicador: ${message}`);
+    }
+
+    // Notificar indicador via WhatsApp
+    if (indicador.telefone) {
+      const telefoneIndicador = indicador.telefone.replace(/\D/g, '');
+      const msgNotificacao =
+        `Boa notícia! ${nomeNovo} acabou de iniciar o cadastro usando seu convite CoopereBR! 🎉 ` +
+        `Quando ele for aprovado, você receberá seus tokens de indicação.`;
+
+      try {
+        await this.sender.enviarMensagem(telefoneIndicador, msgNotificacao);
+      } catch {
+        // Log but don't fail
+      }
     }
   }
 
