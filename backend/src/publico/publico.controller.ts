@@ -135,6 +135,13 @@ export class PublicoController {
       faturaNome?: string;
       faturaTipo?: string;
       valorUltimaFatura?: number;
+      dadosOcr?: {
+        energiaFornecidaKwh?: number;
+        energiaInjetadaKwh?: number;
+        saldoCreditosKwh?: number;
+        valorCompensadoReais?: number;
+        valorTotalFatura?: number;
+      };
     },
   ) {
     if (!body.nome || !body.cpf || !body.email || !body.telefone) {
@@ -170,6 +177,18 @@ export class PublicoController {
           base64: body.faturaBase64,
           nome: body.faturaNome ?? 'fatura',
           tipo: body.faturaTipo ?? 'application/octet-stream',
+        };
+      }
+
+      // Dados de créditos extraídos do OCR da fatura (histórico GD)
+      if (body.dadosOcr) {
+        const ocr = body.dadosOcr;
+        dadosLead.creditosFatura = {
+          ...(ocr.energiaFornecidaKwh != null && { energiaFornecidaKwh: ocr.energiaFornecidaKwh }),
+          ...(ocr.energiaInjetadaKwh != null && { energiaInjetadaKwh: ocr.energiaInjetadaKwh }),
+          ...(ocr.saldoCreditosKwh != null && { saldoCreditosKwh: ocr.saldoCreditosKwh }),
+          ...(ocr.valorCompensadoReais != null && { valorCompensadoReais: ocr.valorCompensadoReais }),
+          ...(ocr.valorTotalFatura != null && { valorTotalFatura: ocr.valorTotalFatura }),
         };
       }
 
