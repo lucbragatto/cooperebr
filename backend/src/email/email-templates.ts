@@ -128,6 +128,22 @@ export function templateConfirmacaoPagamento(nome: string, valor: number, mesRef
   `);
 }
 
+export function templateCadastroAprovado(nome: string): string {
+  return layout('Cadastro Aprovado — CoopereBR', `
+    <h2 style="margin:0 0 16px;font-size:20px;">Parabéns, ${nome}!</h2>
+    <p style="margin:0 0 12px;line-height:1.6;">Seu cadastro na CoopereBR foi <strong style="color:${COR_VERDE};">aprovado</strong>! Toda a documentação foi verificada com sucesso.</p>
+    <p style="margin:0 0 12px;line-height:1.6;">Agora estamos alocando sua cota de energia solar. Em breve você receberá seu contrato para assinatura e começará a economizar na conta de luz!</p>
+    <h3 style="margin:20px 0 8px;font-size:16px;">O que acontece agora?</h3>
+    <ol style="margin:0;padding-left:20px;line-height:2;">
+      <li>Alocação da sua cota em uma usina solar</li>
+      <li>Geração do contrato para assinatura digital</li>
+      <li>Início dos créditos de energia na sua conta</li>
+    </ol>
+    ${botao('Acompanhar no Portal', `${LINK_PORTAL}/portal`)}
+    <p style="margin:0;color:${COR_SUBTEXTO};font-size:14px;">Qualquer dúvida, estamos à disposição!</p>
+  `);
+}
+
 export function templateDocumentoAprovado(nome: string): string {
   return layout('Documentos Aprovados — CoopereBR', `
     <h2 style="margin:0 0 16px;font-size:20px;">Boa notícia, ${nome}!</h2>

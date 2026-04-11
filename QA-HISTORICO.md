@@ -17,6 +17,7 @@
 
 | Data | Score | Críticos | Destaques |
 |------|-------|----------|-----------|
+| 2026-04-11 | 7.8/10 | 1 | 🔴 P1: modoTeste=true persiste; +4 P2 NOVOS: race resgate oferta, ledger FATURA_CHEIA, cotaNull tokens, conflito crons 6h |
 | 2026-04-10 | 8.4/10 | 0 | +2 P2 novos: darBaixa race condition (URGENTE) + indicadosAtivos sem decremento |
 | 2026-04-09 | 8.5/10 | 0 | 4 P2 abertos: secret WA, áudio bot, HMAC Asaas, arredondamento |
 | 2026-04-08 | 8.5/10 | 0 | BUG-NOVO-001 e BUG-CARRY-002 corrigidos |
@@ -36,16 +37,23 @@
 
 ---
 
-## Bugs P2 atualmente abertos (10/04/2026)
+## Bugs P2 atualmente abertos (11/04/2026)
 
 | ID | Bug | Sprint sugerido |
-|----|-----|-----------------|
-| BUG-NEW-2026-04-10-002 | darBaixa sem atomicidade — race condition duplo-processamento | **URGENTE** |
+|----|-----|-----------------|  
+| **BUG-NEW-2026-04-11-001** | **modoTeste=true bypassa aceite de termos — COMPLIANCE** | **URGENTE HOJE** |
+| BUG-NEW-2026-04-11-005 | Race condition no resgate de ofertas do Clube (estoque) | Próximo |
+| BUG-NEW-2026-04-11-006 | FATURA_CHEIA_TOKEN gravado como BONUS_INDICACAO no ledger | Próximo |
+| BUG-NEW-2026-04-11-008 | cotaKwhMensal=null inflaciona tokens de excedente | Próximo |
+| BUG-NEW-2026-04-11-002 | Tarifa EDP-ES hardcoded na simulação do cadastro | Próximo |
+| BUG-NEW-2026-04-11-003 | Tokens BONUS_INDICACAO creditados antes da aprovação | Próximo |
+| ~~BUG-NEW-2026-04-10-002~~ | ~~darBaixa race condition~~ | ✅ RESOLVIDO |
 | BUG-NEW-2026-04-10-001 | indicadosAtivos nunca decrementado → tiers Clube inflados | Próximo |
 | SEC-CT-002 | Secret WA na query string / hardcoded nos logs | Próximo |
 | BUG-WA-AUDIO | audio/video/sticker sem tipo correto no whatsapp-service | Próximo |
 | BUG-NEW-002 | Webhook Asaas sem HMAC validation | Próximo |
 | BUG-CALCULO-001 | Arredondamento multa/juros: 2dp vs 4dp intermediário | Backlog |
+| BUG-NEW-2026-04-11-007 | Conflito de crons às 6h (tokens + cobrança) | Backlog |
 
 ---
 
@@ -59,4 +67,4 @@ Ao iniciar cada dia:
 
 ---
 
-*Próxima atualização automática: 11/04/2026 às 03h*
+*Última atualização: 11/04/2026 às 07:46 | Próxima: 12/04/2026 às 03h*

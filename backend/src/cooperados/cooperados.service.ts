@@ -771,7 +771,7 @@ export class CooperadosService {
   async checkProntoParaAtivar(cooperadoId: string) {
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },
-      select: { status: true, nomeCompleto: true, tipoCooperado: true },
+      select: { id: true, status: true, nomeCompleto: true, email: true, tipoCooperado: true, cooperativaId: true },
     });
     if (!cooperado) return;
 
@@ -821,6 +821,7 @@ export class CooperadosService {
           cooperadoId,
           link: `/dashboard/cooperados/${cooperadoId}`,
         });
+        this.emailService.enviarCadastroAprovado(cooperado).catch(() => {});
       }
     }
   }

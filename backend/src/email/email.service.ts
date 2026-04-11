@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import {
   templateBoasVindas,
+  templateCadastroAprovado,
   templateFatura,
   templateConfirmacaoPagamento,
   templateDocumentoAprovado,
@@ -35,11 +36,12 @@ export class EmailService {
   private readonly from: string;
 
   constructor(private prisma: PrismaService) {
-    this.from = process.env.EMAIL_FROM || 'CoopereBR <contato@cooperebr.com>';
+    this.from = process.env.EMAIL_FROM || 'CoopereBR <contato@cooperebr.com.br>';
+    const port = Number(process.env.EMAIL_PORT) || 465;
     this.transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: Number(process.env.EMAIL_PORT) || 587,
-      secure: false,
+      port,
+      secure: process.env.EMAIL_SECURE === 'true' || port === 465,
       auth: {
         user: process.env.EMAIL_USER || '',
         pass: process.env.EMAIL_PASS || '',
@@ -70,6 +72,12 @@ export class EmailService {
     if (!cooperado.email) return false;
     const html = templateBoasVindas(cooperado.nomeCompleto);
     return this.enviarEmail(cooperado.email, 'Bem-vindo à CoopereBR! ☀️', html);
+  }
+
+  async enviarCadastroAprovado(cooperado: CooperadoEmail): Promise<boolean> {
+    if (!cooperado.email) return false;
+    const html = templateCadastroAprovado(cooperado.nomeCompleto);
+    return this.enviarEmail(cooperado.email, 'Seu cadastro foi aprovado! ✅', html);
   }
 
   async enviarFatura(
