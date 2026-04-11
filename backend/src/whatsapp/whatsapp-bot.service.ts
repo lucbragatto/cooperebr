@@ -1215,7 +1215,7 @@ export class WhatsappBotService {
     );
   }
 
-  // ─── CoopereAI Primeiro Atendimento ────────��────────────────────────
+  // ─── CoopereAI Primeiro Atendimento ─────────────────────────────────
 
   /**
    * Inicia o primeiro atendimento via CoopereAI para número desconhecido.
