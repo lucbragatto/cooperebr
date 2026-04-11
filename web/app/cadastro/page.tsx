@@ -22,7 +22,8 @@ const DISTRIBUIDORAS = [
   'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
 ];
 
-// Tarifa EDP-ES Fev/2026
+// TODO: buscar tarifa da distribuidora selecionada via API
+// Tarifa EDP-ES Fev/2026 (fallback fixo)
 const TARIFA_KWH = 0.78931;
 const DESCONTO_PERCENTUAL = 0.15;
 
@@ -316,6 +317,10 @@ function CadastroPageInner() {
   async function handleSubmit() {
     const modoTeste = false; // Produção: validações ativas
     if (!modoTeste) {
+      if (!pessoais.nome || !pessoais.cpf || !pessoais.email || !pessoais.telefone) {
+        setErro('Preencha todos os dados pessoais obrigatórios.');
+        return;
+      }
       if (!aceitouTermos) {
         setErro('Voce precisa aceitar os termos de adesao.');
         return;
@@ -323,6 +328,10 @@ function CadastroPageInner() {
       if (!planoSelecionado) {
         setErro('Selecione um plano para continuar.');
         return;
+      }
+    } else {
+      if (!pessoais.nome || !pessoais.cpf || !pessoais.email || !pessoais.telefone) {
+        console.warn('[modoTeste] Dados pessoais incompletos — submit permitido');
       }
     }
     setErro('');
@@ -821,6 +830,9 @@ function CadastroPageInner() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              *Simulação baseada na tarifa média da sua distribuidora. Valores reais podem variar.
+            </p>
           </div>
         )}
 
