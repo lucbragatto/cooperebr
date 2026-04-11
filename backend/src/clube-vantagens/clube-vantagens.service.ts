@@ -731,43 +731,57 @@ export class ClubeVantagensService {
   // ─── Resgate de Ofertas ──────────────────────────────
 
   async resgatarOferta(cooperadoId: string, cooperativaId: string, ofertaId: string) {
-    // Buscar oferta com validação tenant
-    const oferta = await this.prisma.ofertaClube.findFirst({
-      where: { id: ofertaId, cooperativaId, ativo: true },
-    });
-    if (!oferta) throw new NotFoundException('Oferta nao encontrada ou inativa');
+    // Transação interativa: garante atomicidade na verificação de estoque + resgate
+    return await this.prisma.$transaction(async (tx) => {
+      // Buscar oferta com validação tenant
+      const oferta = await tx.ofertaClube.findFirst({
+        where: { id: ofertaId, cooperativaId, ativo: true },
+      });
+      if (!oferta) throw new NotFoundException('Oferta nao encontrada ou inativa');
 
-    // Validar validade
-    if (oferta.validadeAte && oferta.validadeAte < new Date()) {
-      throw new BadRequestException('Oferta expirada');
-    }
+      // Validar validade
+      if (oferta.validadeAte && oferta.validadeAte < new Date()) {
+        throw new BadRequestException('Oferta expirada');
+      }
 
-    // Validar estoque
-    if (oferta.estoque != null && oferta.totalResgatado >= oferta.estoque) {
-      throw new BadRequestException('Estoque esgotado para esta oferta');
-    }
+      // Validar estoque (dentro da transação para evitar race condition)
+      if (oferta.estoque != null && oferta.totalResgatado >= oferta.estoque) {
+        throw new BadRequestException('Estoque esgotado para esta oferta');
+      }
 
-    const tokensNecessarios = oferta.quantidadeTokens;
+      const tokensNecessarios = oferta.quantidadeTokens;
 
-    // Debitar tokens do cooperado
-    await this.cooperTokenService.debitar({
-      cooperadoId,
-      cooperativaId,
-      quantidade: tokensNecessarios,
-      tipo: 'FLEX' as any,
-      referenciaId: ofertaId,
-      descricao: `Resgate Clube: ${oferta.titulo}`,
-    });
+      // Debitar tokens do cooperado
+      await this.cooperTokenService.debitar({
+        cooperadoId,
+        cooperativaId,
+        quantidade: tokensNecessarios,
+        tipo: 'FLEX' as any,
+        referenciaId: ofertaId,
+        descricao: `Resgate Clube: ${oferta.titulo}`,
+      });
 
-    // Creditar tokens no saldo do parceiro
-    await this.cooperTokenService.creditarSaldoParceiro(cooperativaId, tokensNecessarios);
+      // Creditar tokens no saldo do parceiro
+      await this.cooperTokenService.creditarSaldoParceiro(cooperativaId, tokensNecessarios);
 
-    // Gerar código de resgate
-    const codigoResgate = randomUUID();
+      // Gerar código de resgate
+      const codigoResgate = randomUUID();
 
-    // Criar registro de resgate e incrementar totalResgatado
-    const [resgate] = await this.prisma.$transaction([
-      this.prisma.resgateClubeVantagens.create({
+      // Incrementar totalResgatado com guard atômico (double-check estoque)
+      const updated = await tx.ofertaClube.updateMany({
+        where: {
+          id: ofertaId,
+          ...(oferta.estoque != null ? { totalResgatado: { lt: oferta.estoque } } : {}),
+        },
+        data: { totalResgatado: { increment: 1 } },
+      });
+
+      if (updated.count === 0) {
+        throw new BadRequestException('Estoque esgotado para esta oferta');
+      }
+
+      // Criar registro de resgate
+      const resgate = await tx.resgateClubeVantagens.create({
         data: {
           cooperadoId,
           ofertaId,
@@ -775,23 +789,19 @@ export class ClubeVantagensService {
           tokensUsados: tokensNecessarios,
           codigoResgate,
         },
-      }),
-      this.prisma.ofertaClube.update({
-        where: { id: ofertaId },
-        data: { totalResgatado: { increment: 1 } },
-      }),
-    ]);
+      });
 
-    this.logger.log(
-      `Cooperado ${cooperadoId} resgatou oferta "${oferta.titulo}" (${tokensNecessarios} tokens) - codigo: ${codigoResgate}`,
-    );
+      this.logger.log(
+        `Cooperado ${cooperadoId} resgatou oferta "${oferta.titulo}" (${tokensNecessarios} tokens) - codigo: ${codigoResgate}`,
+      );
 
-    return {
-      codigoResgate,
-      ofertaTitulo: oferta.titulo,
-      beneficio: oferta.beneficio,
-      tokensUsados: tokensNecessarios,
-    };
+      return {
+        codigoResgate,
+        ofertaTitulo: oferta.titulo,
+        beneficio: oferta.beneficio,
+        tokensUsados: tokensNecessarios,
+      };
+    });
   }
 
   async validarResgate(cooperativaId: string, codigoResgate: string) {
