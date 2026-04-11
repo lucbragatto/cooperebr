@@ -314,7 +314,7 @@ function CadastroPageInner() {
   // ─── Submit ──────────────────────────────────────────────
 
   async function handleSubmit() {
-    const modoTeste = true; // TODO: remover quando for para produção
+    const modoTeste = false; // Produção: validações ativas
     if (!modoTeste) {
       if (!aceitouTermos) {
         setErro('Voce precisa aceitar os termos de adesao.');
