@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.4.8",
+    "lastTouchedAt": "2026-04-11T11:37:00.000Z"
+  },
+  "auth": {
+    "profiles": {
+      "anthropic:default": {
+        "provider": "anthropic",
+        "mode": "api_key",
+        "apiKey": "BSAQtVQrC1xZ_bb0yvsB6xhJhaGVv2V"
+      }
+    }
+  },
+  "gateway": {
+    "port": 18790,
+    "mode": "local",
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "coop-agent-p-gateway-token-2026"
+    }
+  },
+  "agent": {
+    "id": "coop",
+    "workspace": "C:\\Users\\Luciano\\cooperebr\\.agent"
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "open",
+      "selfChatMode": false
+    }
+  }
+}
