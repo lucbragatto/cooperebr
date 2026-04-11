@@ -1667,6 +1667,7 @@ model NpsResposta {
 
 enum CooperTokenTipo {
   GERACAO_EXCEDENTE
+  FATURA_CHEIA
   FLEX
   SOCIAL
   BONUS_INDICACAO

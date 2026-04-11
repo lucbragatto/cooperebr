@@ -142,7 +142,7 @@ export class CobrancasService {
             await this.cooperTokenService.creditar({
               cooperadoId: contrato.cooperadoId,
               cooperativaId: resolvedCoopId,
-              tipo: CooperTokenTipo.BONUS_INDICACAO,
+              tipo: CooperTokenTipo.FATURA_CHEIA,
               quantidade: valorDescontoEmTokens,
               valorEmissao: valorToken,
               referenciaId: cobranca.id,
