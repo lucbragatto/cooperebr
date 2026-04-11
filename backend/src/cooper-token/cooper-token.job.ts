@@ -59,7 +59,18 @@ export class CooperTokenJob {
 
         const plano = contrato.plano;
         if (!plano) continue;
-        const cotaKwh = Number(fatura.cooperado.cotaKwhMensal ?? 0);
+
+        // BUG-008: cooperados sem cota definida não devem receber tokens de excedente
+        const cotaKwhRaw = fatura.cooperado.cotaKwhMensal;
+        if (!cotaKwhRaw || Number(cotaKwhRaw) <= 0) {
+          await this.prisma.faturaProcessada.update({
+            where: { id: fatura.id },
+            data: { tokenApurado: true },
+          });
+          continue;
+        }
+
+        const cotaKwh = Number(cotaKwhRaw);
         const kwhGerado = Number(fatura.mediaKwhCalculada ?? 0);
         const excedente = Math.round((kwhGerado - cotaKwh) * 100) / 100;
 
