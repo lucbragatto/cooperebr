@@ -59,6 +59,10 @@ interface DadosExtraidos {
   creditosRecebidosKwh: number;
   saldoTotalKwh: number;
   participacaoSaldo: number;
+  energiaInjetadaKwh: number;
+  energiaFornecidaKwh: number;
+  valorCompensadoReais: number;
+  temCreditosInjetados: boolean;
   historicoConsumo: HistoricoItem[];
 }
 
@@ -1147,6 +1151,10 @@ Retorne exatamente este formato:
   "creditosRecebidosKwh": 0,
   "saldoTotalKwh": 0,
   "participacaoSaldo": 0,
+  "energiaInjetadaKwh": 0,
+  "energiaFornecidaKwh": 0,
+  "valorCompensadoReais": 0.00,
+  "temCreditosInjetados": false,
   "historicoConsumo": [
     {"mesAno": "MM/AAAA", "consumoKwh": 0, "valorRS": 0.00}
   ]
@@ -1163,6 +1171,10 @@ IMPORTANTE:
 - multaJuros: valor R$ de multa/juros por atraso (0 se não houver).
 - descontos: valor R$ de descontos da concessionária (devolução, crédito, etc). Sempre positivo.
 - outrosEncargos: valor R$ de demais encargos não classificados acima.
+- energiaInjetadaKwh: Procure linhas como 'En. At. Inj. oUC pT', 'Energia Ativa Injetada', 'En Injetada', 'Energia injetada' ou similar. Extraia o valor em kWh. Se houver múltiplas linhas (ponta, fora ponta), some todas. Se não encontrar, retorne 0.
+- energiaFornecidaKwh: Procure linhas como 'En. At. Forn. pT', 'Energia Ativa Fornecida', 'En Fornecida' ou similar. Extraia o valor em kWh. Se houver múltiplas linhas, some todas. Se não encontrar, use consumoAtualKwh.
+- valorCompensadoReais: Procure linhas como 'Energia compensada', 'Crédito de energia', 'Desconto GD' com valor em R$. É o valor monetário descontado pela compensação de créditos. Se não encontrar, retorne 0.
+- temCreditosInjetados: Retorne true se a fatura contém QUALQUER indicação de energia injetada (linhas 'En. At. Inj.', 'Energia Injetada', 'Geração Distribuída', créditos de compensação, saldo de créditos > 0, ou possuiCompensacao = true). Isso indica que a UC já participa de geração distribuída.
 - Se algum campo não estiver disponível, use string vazia ou zero.`;
 
     const body = {

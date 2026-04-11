@@ -98,6 +98,11 @@ interface OcrDados {
   estado?: string;
   cep?: string;
   historicoConsumo?: HistoricoItem[];
+  temCreditosInjetados?: boolean;
+  energiaInjetadaKwh?: number;
+  energiaFornecidaKwh?: number;
+  saldoCreditosKwh?: number;
+  valorCompensadoReais?: number;
 }
 
 const STEPS = [
@@ -132,6 +137,11 @@ function CadastroPageInner() {
   const [modoManual, setModoManual] = useState(false);
   const [faturaArquivo, setFaturaArquivo] = useState<File | null>(null);
   const [valorUltimaFatura, setValorUltimaFatura] = useState('');
+
+  // Créditos injetados (fluxo especial)
+  const [creditosInjetados, setCreditosInjetados] = useState(false);
+  const [creditosLoading, setCreditosLoading] = useState(false);
+  const [creditosEnviado, setCreditosEnviado] = useState(false);
 
   // Documento pendente (tela sucesso)
   const [mostrarUploadDoc, setMostrarUploadDoc] = useState(false);
@@ -239,6 +249,11 @@ function CadastroPageInner() {
         // Historico
         if (data.dados.historicoConsumo?.length > 0) {
           setHistoricoConsumo(data.dados.historicoConsumo);
+        }
+
+        // Detectar créditos injetados — fluxo especial
+        if (data.dados.temCreditosInjetados || (data.dados.energiaInjetadaKwh && data.dados.energiaInjetadaKwh > 0)) {
+          setCreditosInjetados(true);
         }
       } else {
         setOcrErro(data.mensagem || 'Nao foi possivel ler automaticamente.');
@@ -394,6 +409,61 @@ function CadastroPageInner() {
       setErro(message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ─── Confirmar contato — lead com créditos injetados ──────
+  async function handleConfirmarContatoCreditos() {
+    setCreditosLoading(true);
+    setErro('');
+
+    try {
+      const payload: Record<string, unknown> = {
+        nome: pessoais.nome.trim() || 'Não informado',
+        cpf: pessoais.cpf || '00000000000',
+        email: pessoais.email.trim() || 'nao@informado.com',
+        telefone: pessoais.telefone || '0000000000',
+        endereco: {
+          cep: endereco.cep.replace(/\D/g, '') || '',
+          logradouro: endereco.logradouro || '',
+          numero: endereco.numero || '',
+          complemento: endereco.complemento || '',
+          bairro: endereco.bairro || ocrDados.bairro || '',
+          cidade: endereco.cidade || ocrDados.cidade || '',
+          estado: endereco.estado || ocrDados.estado || '',
+        },
+        instalacao: {
+          numeroUC: instalacao.numeroUC || ocrDados.numeroUC || '',
+          distribuidora: instalacao.distribuidora || ocrDados.distribuidora || '',
+          consumoMedioKwh: Number(instalacao.consumoMedioKwh) || ocrDados.consumoMedioKwh || 0,
+        },
+        temCreditosInjetados: true,
+        dadosOcr: {
+          energiaFornecidaKwh: ocrDados.energiaFornecidaKwh || 0,
+          energiaInjetadaKwh: ocrDados.energiaInjetadaKwh || 0,
+          saldoCreditosKwh: ocrDados.saldoCreditosKwh || 0,
+          valorCompensadoReais: ocrDados.valorCompensadoReais || 0,
+          valorTotalFatura: ocrDados.totalAPagar || 0,
+        },
+      };
+
+      if (refCode) {
+        payload.codigoRef = refCode;
+      }
+
+      const res = await fetch(`${API_URL}/publico/cadastro-web`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Erro ao enviar');
+      setCreditosEnviado(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao enviar. Tente novamente.';
+      setErro(message);
+    } finally {
+      setCreditosLoading(false);
     }
   }
 
@@ -935,6 +1005,146 @@ function CadastroPageInner() {
         >
           Finalizar sem escolher plano (modo teste)
         </button>
+      </div>
+    );
+  }
+
+  // ─── Tela especial: créditos injetados ───────────────────
+
+  if (creditosInjetados && !creditosEnviado) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col">
+        <header className="py-6 px-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Sun className="h-8 w-8 text-green-600" />
+            <h1 className="text-2xl font-bold text-green-700">CoopereBR</h1>
+          </div>
+        </header>
+        <main className="flex-1 flex items-start justify-center px-4 pb-12">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="text-5xl mb-2">🌿</div>
+              <CardTitle className="text-xl text-green-800">
+                Sua conta ja tem energia solar!
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Detectamos que sua Unidade Consumidora
+                {ocrDados.numeroUC ? ` (UC ${ocrDados.numeroUC})` : ''} ja possui creditos de energia injetada.
+                Isso significa que voce ja pode estar participando de um sistema de geracao distribuida.
+              </p>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Para entender como a CoopereBR pode complementar ou melhorar sua situacao atual,
+                um dos nossos colaboradores entrara em contato com voce em breve! 😊
+              </p>
+              <p className="text-gray-500 text-xs">
+                Salvamos os dados da sua conta para preparar a melhor proposta para voce.
+              </p>
+
+              {ocrDados.energiaInjetadaKwh && ocrDados.energiaInjetadaKwh > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Energia injetada:</span>
+                    <span className="font-medium text-green-700">{ocrDados.energiaInjetadaKwh} kWh</span>
+                  </div>
+                  {ocrDados.saldoCreditosKwh != null && ocrDados.saldoCreditosKwh > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Saldo de creditos:</span>
+                      <span className="font-medium text-green-700">{ocrDados.saldoCreditosKwh} kWh</span>
+                    </div>
+                  )}
+                  {ocrDados.valorCompensadoReais != null && ocrDados.valorCompensadoReais > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Valor compensado:</span>
+                      <span className="font-medium text-green-700">{formatarMoeda(ocrDados.valorCompensadoReais)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Dados de contato básicos */}
+              <div className="space-y-3 pt-2">
+                <div>
+                  <Label className="text-sm">Nome completo</Label>
+                  <Input
+                    value={pessoais.nome}
+                    onChange={(e) => setPessoais({ ...pessoais, nome: e.target.value })}
+                    placeholder="Seu nome"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Telefone</Label>
+                  <Input
+                    value={pessoais.telefone}
+                    onChange={(e) => setPessoais({ ...pessoais, telefone: formatarTelefone(e.target.value) })}
+                    placeholder="(27) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Email</Label>
+                  <Input
+                    value={pessoais.email}
+                    onChange={(e) => setPessoais({ ...pessoais, email: e.target.value })}
+                    placeholder="seu@email.com"
+                    type="email"
+                  />
+                </div>
+              </div>
+
+              {erro && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                  {erro}
+                </div>
+              )}
+
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700"
+                onClick={handleConfirmarContatoCreditos}
+                disabled={creditosLoading}
+              >
+                {creditosLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  'Confirmar contato'
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (creditosEnviado) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col">
+        <header className="py-6 px-4 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <Sun className="h-8 w-8 text-green-600" />
+            <h1 className="text-2xl font-bold text-green-700">CoopereBR</h1>
+          </div>
+        </header>
+        <main className="flex-1 flex items-start justify-center px-4 pb-12">
+          <Card className="w-full max-w-md">
+            <CardContent className="text-center space-y-5 pt-8 pb-8">
+              <div className="text-5xl">🌿</div>
+              <h2 className="text-xl font-bold text-gray-800">
+                Obrigado! Recebemos seus dados.
+              </h2>
+              <p className="text-gray-600 text-sm">
+                Nossa equipe entrara em contato em breve para avaliar como a CoopereBR
+                pode complementar a geracao distribuida da sua UC.
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+                Fique tranquilo — vamos preparar uma proposta personalizada para o seu caso!
+              </div>
+            </CardContent>
+          </Card>
+        </main>
       </div>
     );
   }

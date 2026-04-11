@@ -135,6 +135,7 @@ export class PublicoController {
       faturaNome?: string;
       faturaTipo?: string;
       valorUltimaFatura?: number;
+      temCreditosInjetados?: boolean;
       dadosOcr?: {
         energiaFornecidaKwh?: number;
         energiaInjetadaKwh?: number;
@@ -180,6 +181,12 @@ export class PublicoController {
         };
       }
 
+      // Flag de créditos injetados
+      if (body.temCreditosInjetados) {
+        dadosLead.temCreditosInjetados = true;
+        dadosLead.motivoContato = 'Fatura com créditos de energia injetada detectados';
+      }
+
       // Dados de créditos extraídos do OCR da fatura (histórico GD)
       if (body.dadosOcr) {
         const ocr = body.dadosOcr;
@@ -218,6 +225,13 @@ export class PublicoController {
       });
 
       this.logger.log(`Lead cadastro-web criado: ${lead.id} (${body.nome})`);
+
+      // Notificar admin se lead tem créditos injetados
+      if (body.temCreditosInjetados) {
+        this.notificarAdminCreditosInjetados(body.nome, body.instalacao?.numeroUC, lead.id).catch((err) => {
+          this.logger.error(`Erro ao notificar admin sobre créditos injetados: ${err.message}`);
+        });
+      }
 
       // Processar indicação se veio com código de convite
       if (body.codigoRef) {
@@ -276,6 +290,24 @@ export class PublicoController {
     }
   }
 
+  private async notificarAdminCreditosInjetados(nome: string, numeroUC: string | undefined, leadId: string) {
+    const adminPhone = process.env.ADMIN_WHATSAPP_NUMBER ?? '5527981341348';
+    const msg =
+      `🔔 Novo lead com créditos injetados!\n` +
+      `Nome: ${nome}\n` +
+      `UC: ${numeroUC || 'não informada'}\n` +
+      `Lead ID: ${leadId}\n` +
+      `A UC já possui energia solar/GD. Entrar em contato para proposta personalizada.`;
+
+    try {
+      await this.sender.enviarMensagem(adminPhone, msg);
+      this.logger.log(`Notificação de créditos injetados enviada ao admin para lead ${leadId}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.logger.error(`Falha ao enviar notificação admin créditos injetados: ${message}`);
+    }
+  }
+
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('processar-fatura-ocr')
@@ -310,6 +342,13 @@ export class PublicoController {
         ? Math.round(dadosExtraidos.historicoConsumo.reduce((s, h) => s + h.consumoKwh, 0) / dadosExtraidos.historicoConsumo.length)
         : dadosExtraidos.consumoAtualKwh || 0;
 
+      const temCreditosInjetados = !!(
+        dadosExtraidos.temCreditosInjetados ||
+        (dadosExtraidos.energiaInjetadaKwh && dadosExtraidos.energiaInjetadaKwh > 0) ||
+        (dadosExtraidos.creditosRecebidosKwh && dadosExtraidos.creditosRecebidosKwh > 0) ||
+        dadosExtraidos.possuiCompensacao
+      );
+
       return {
         sucesso: true,
         dados: {
@@ -325,6 +364,11 @@ export class PublicoController {
           estado: dadosExtraidos.estado || '',
           cep: dadosExtraidos.cep || '',
           historicoConsumo: dadosExtraidos.historicoConsumo || [],
+          temCreditosInjetados,
+          energiaInjetadaKwh: dadosExtraidos.energiaInjetadaKwh || 0,
+          energiaFornecidaKwh: dadosExtraidos.energiaFornecidaKwh || 0,
+          saldoCreditosKwh: dadosExtraidos.saldoTotalKwh || 0,
+          valorCompensadoReais: dadosExtraidos.valorCompensadoReais || 0,
         },
       };
     } catch (err: unknown) {
