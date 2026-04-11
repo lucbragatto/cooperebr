@@ -20,17 +20,11 @@ export class ConfigTenantService {
   }
 
   async set(chave: string, valor: string, cooperativaId: string, descricao?: string) {
-    const existing = await this.prisma.configTenant.findFirst({
-      where: { chave, cooperativaId },
-    });
-    if (existing) {
-      return this.prisma.configTenant.update({
-        where: { id: existing.id },
-        data: { valor, ...(descricao !== undefined && { descricao }) },
-      });
-    }
-    return this.prisma.configTenant.create({
-      data: { chave, valor, cooperativaId, descricao: descricao ?? null },
+    // Usar upsert por chave (unique) para evitar P2002
+    return this.prisma.configTenant.upsert({
+      where: { chave },
+      update: { valor, cooperativaId, ...(descricao !== undefined && { descricao }) },
+      create: { chave, valor, cooperativaId, descricao: descricao ?? null },
     });
   }
 
