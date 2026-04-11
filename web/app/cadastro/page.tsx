@@ -314,13 +314,16 @@ function CadastroPageInner() {
   // ─── Submit ──────────────────────────────────────────────
 
   async function handleSubmit() {
-    if (!aceitouTermos) {
-      setErro('Voce precisa aceitar os termos de adesao.');
-      return;
-    }
-    if (!planoSelecionado) {
-      setErro('Selecione um plano para continuar.');
-      return;
+    const modoTeste = true; // TODO: remover quando for para produção
+    if (!modoTeste) {
+      if (!aceitouTermos) {
+        setErro('Voce precisa aceitar os termos de adesao.');
+        return;
+      }
+      if (!planoSelecionado) {
+        setErro('Selecione um plano para continuar.');
+        return;
+      }
     }
     setErro('');
     setLoading(true);
@@ -345,7 +348,7 @@ function CadastroPageInner() {
           distribuidora: instalacao.distribuidora,
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
-        planoSelecionado,
+        planoSelecionado: planoSelecionado || 'DESCONTO_DIRETO',
         aceitaClube,
       };
 
@@ -399,7 +402,7 @@ function CadastroPageInner() {
           telefone: pessoais.telefone,
           endereco: { cep: endereco.cep.replace(/\D/g, ''), logradouro: endereco.logradouro, numero: endereco.numero, complemento: endereco.complemento, bairro: endereco.bairro, cidade: endereco.cidade, estado: endereco.estado },
           instalacao: { numeroUC: instalacao.numeroUC, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
-          planoSelecionado,
+          planoSelecionado: planoSelecionado || 'DESCONTO_DIRETO',
           aceitaClube,
           pendenciaDocumentos: true,
         }),
@@ -822,6 +825,11 @@ function CadastroPageInner() {
         )}
 
         {/* 4c. Escolha do plano */}
+        {!planoSelecionado && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
+            Para finalizar, escolha um plano abaixo:
+          </div>
+        )}
         <div className="space-y-3">
           <h3 className="font-semibold text-gray-800">Escolha seu plano</h3>
 
@@ -906,6 +914,15 @@ function CadastroPageInner() {
             </span>
           </label>
         </div>
+
+        {/* Botão modo teste — remover quando for para produção */}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          className="w-full p-3 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg border border-dashed border-gray-300 transition-colors"
+        >
+          Finalizar sem escolher plano (modo teste)
+        </button>
       </div>
     );
   }
