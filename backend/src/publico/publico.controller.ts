@@ -309,11 +309,33 @@ export class PublicoController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('processar-fatura-ocr')
   @UseInterceptors(FileInterceptor('fatura'))
-  async processarFaturaOcr(@UploadedFile() arquivo: Express.Multer.File): Promise<{
+  async processarFaturaOcr(
+    @UploadedFile() arquivo: Express.Multer.File,
+    @Body() body?: { faturaBase64?: string; faturaTipo?: string; faturaNome?: string }
+  ): Promise<{
     sucesso: boolean;
     mensagem?: string;
     dados: Record<string, unknown>;
   }> {
+    // Aceitar base64 via JSON quando não vier arquivo multipart
+    if (!arquivo && body?.faturaBase64) {
+      const base64 = body.faturaBase64;
+      const tipo = body.faturaTipo || 'application/pdf';
+      const isPdf = tipo === 'application/pdf';
+      const isImage = tipo.startsWith('image/');
+      if (!isPdf && !isImage) throw new BadRequestException('Formato não suportado.');
+      try {
+        const tipoArquivo = isPdf ? 'pdf' as const : 'imagem' as const;
+        const dadosExtraidos = await this.faturasService.extrairOcr(base64, tipoArquivo);
+        const consumoMedio = dadosExtraidos.historicoConsumo?.length > 0
+          ? Math.round(dadosExtraidos.historicoConsumo.reduce((s: number, h: any) => s + h.consumoKwh, 0) / dadosExtraidos.historicoConsumo.length)
+          : dadosExtraidos.consumoAtualKwh || 0;
+        const temCreditosInjetados = !!(dadosExtraidos as any).energiaInjetadaKwh && (dadosExtraidos as any).energiaInjetadaKwh > 0;
+        return { sucesso: true, dados: { ...dadosExtraidos, consumoMedio, temCreditosInjetados } };
+      } catch(e: any) {
+        return { sucesso: false, mensagem: 'OCR não disponivel ou falhou: ' + (e.message || ''), dados: {} };
+      }
+    }
     if (!arquivo) {
       throw new BadRequestException('Arquivo da fatura é obrigatório');
     }
