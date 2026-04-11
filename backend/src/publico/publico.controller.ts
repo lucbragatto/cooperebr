@@ -145,19 +145,16 @@ export class PublicoController {
       };
     },
   ) {
-    if (!body.nome || !body.cpf || !body.email || !body.telefone) {
-      throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
-    }
+    // Em fase de testes: campos opcionais. Em produção: descomentar as validações abaixo.
+    // if (!body.nome || !body.cpf || !body.email || !body.telefone) {
+    //   throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
+    // }
 
-    const cpfLimpo = body.cpf.replace(/\D/g, '');
-    if (cpfLimpo.length !== 11) {
-      throw new BadRequestException('CPF inválido');
-    }
+    const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
+    // if (cpfLimpo.length !== 11) { throw new BadRequestException('CPF inválido'); }
 
-    const telefoneLimpo = body.telefone.replace(/\D/g, '');
-    if (telefoneLimpo.length < 10 || telefoneLimpo.length > 13) {
-      throw new BadRequestException('Telefone inválido');
-    }
+    const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
+    // if (telefoneLimpo.length < 10) { throw new BadRequestException('Telefone inválido'); }
 
     try {
       const dadosLead: Record<string, unknown> = {
