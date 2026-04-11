@@ -105,7 +105,7 @@ export class CobrancasJob {
    * Notifica cooperados com cobranças vencidas via WhatsApp (diário às 6h).
    * Só notifica uma vez por cobrança (flag notificadoVencimento).
    */
-  @Cron('0 6 * * *')
+  @Cron('15 6 * * *')
   async notificarCobrancasVencidas() {
     const ontem = new Date();
     ontem.setDate(ontem.getDate() - 1);

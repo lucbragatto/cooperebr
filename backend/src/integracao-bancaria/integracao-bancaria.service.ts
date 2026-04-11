@@ -324,7 +324,7 @@ export class IntegracaoBancariaService {
 
   // ── Polling diário ────────────────────────────────────────
 
-  @Cron('0 6 * * *')
+  @Cron('5 6 * * *')
   async pollingLiquidadas() {
     this.logger.log('Iniciando polling de cobranças liquidadas...');
 
