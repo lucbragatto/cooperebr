@@ -20,15 +20,38 @@ export class EmailMonitorController {
   /**
    * GET /email-monitor/status
    * Retorna status da configuração do monitor de e-mails.
+   * Verifica banco (ConfigTenant) e fallback para ENV.
    */
   @Get('status')
-  status() {
+  async status(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    let imapUser: string | null = null;
+    let imapHost = 'imap.gmail.com';
+    let fonte = 'nenhuma';
+
+    // Tentar banco primeiro
+    if (cooperativaId) {
+      const dbUser = await this.emailMonitorService.getConfigValue('email.monitor.user');
+      if (dbUser) {
+        imapUser = dbUser.replace(/(.{3}).*(@.*)/, '$1***$2');
+        const dbHost = await this.emailMonitorService.getConfigValue('email.monitor.host');
+        if (dbHost) imapHost = dbHost;
+        fonte = 'banco';
+      }
+    }
+
+    // Fallback ENV
+    if (!imapUser && process.env.EMAIL_IMAP_USER) {
+      imapUser = process.env.EMAIL_IMAP_USER.replace(/(.{3}).*(@.*)/, '$1***$2');
+      imapHost = process.env.EMAIL_IMAP_HOST || 'imap.gmail.com';
+      fonte = 'env';
+    }
+
     return {
-      imapConfigurado: !!process.env.IMAP_USER,
-      imapHost: process.env.IMAP_HOST || 'imap.gmail.com',
-      imapUser: process.env.IMAP_USER
-        ? process.env.IMAP_USER.replace(/(.{3}).*(@.*)/, '$1***$2')
-        : null,
+      imapConfigurado: !!imapUser,
+      imapHost,
+      imapUser,
+      fonte,
       intervalo: '30 minutos',
     };
   }

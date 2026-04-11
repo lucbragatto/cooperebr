@@ -27,17 +27,47 @@ export class EmailMonitorService {
     private readonly faturasService: FaturasService,
   ) {}
 
-  private criarCliente(): ImapFlow {
+  async getConfigValue(chave: string): Promise<string | null> {
+    return this.getConfigFromDb(chave);
+  }
+
+  private async getConfigFromDb(chave: string): Promise<string | null> {
+    const config = await this.prisma.configTenant.findFirst({
+      where: { chave },
+    });
+    return config?.valor ?? null;
+  }
+
+  private async criarCliente(): Promise<ImapFlow> {
+    const hostDb = await this.getConfigFromDb('email.monitor.host');
+    const portDb = await this.getConfigFromDb('email.monitor.port');
+    const userDb = await this.getConfigFromDb('email.monitor.user');
+    const passDb = await this.getConfigFromDb('email.monitor.pass');
+
+    const host = hostDb || process.env.EMAIL_IMAP_HOST || 'imap.gmail.com';
+    const port = Number(portDb || process.env.EMAIL_IMAP_PORT || '993');
+    const user = userDb || process.env.EMAIL_IMAP_USER || '';
+
+    let pass = process.env.EMAIL_IMAP_PASS || '';
+    if (passDb) {
+      pass = Buffer.from(passDb, 'base64').toString('utf-8');
+    }
+
     return new ImapFlow({
-      host: process.env.EMAIL_IMAP_HOST || 'imap.gmail.com',
-      port: Number(process.env.EMAIL_IMAP_PORT) || 993,
+      host,
+      port,
       secure: true,
-      auth: {
-        user: process.env.EMAIL_IMAP_USER || '',
-        pass: process.env.EMAIL_IMAP_PASS || '',
-      },
+      auth: { user, pass },
       logger: false,
     });
+  }
+
+  private async isMonitorAtivo(): Promise<boolean> {
+    const ativo = await this.getConfigFromDb('email.monitor.ativo');
+    if (ativo === 'false') return false;
+    // Se não tem config no banco, verificar ENV
+    const userDb = await this.getConfigFromDb('email.monitor.user');
+    return !!(userDb || process.env.EMAIL_IMAP_USER);
   }
 
   /**
@@ -45,7 +75,8 @@ export class EmailMonitorService {
    */
   @Cron('0 */30 * * * *')
   async verificarEmailsFaturas() {
-    if (!process.env.EMAIL_IMAP_USER) {
+    const ativo = await this.isMonitorAtivo();
+    if (!ativo) {
       return;
     }
     if (this.processando) {
@@ -68,7 +99,7 @@ export class EmailMonitorService {
   private async processarCaixaDeEntrada(): Promise<{ processados: number; pendentes: number; erros: number }> {
     this.processando = true;
     const resultado = { processados: 0, pendentes: 0, erros: 0 };
-    const client = this.criarCliente();
+    const client = await this.criarCliente();
 
     try {
       await client.connect();
