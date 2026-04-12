@@ -1,5 +1,6 @@
 import { Controller, Get, Put, Post, Delete, Param, Body, Req } from '@nestjs/common';
 import { ConfigTenantService } from './config-tenant.service';
+import { PrismaService } from '../prisma.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { ImapFlow } from 'imapflow';
@@ -16,7 +17,10 @@ const EMAIL_MONITOR_KEYS = [
 
 @Controller('config-tenant')
 export class ConfigTenantController {
-  constructor(private readonly service: ConfigTenantService) {}
+  constructor(
+    private readonly service: ConfigTenantService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()
@@ -51,7 +55,11 @@ export class ConfigTenantController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('email-monitor/config')
   async getEmailMonitorConfig(@Req() req: any) {
-    const cooperativaId = req.user.cooperativaId;
+    let cooperativaId = req.user.cooperativaId;
+    if (!cooperativaId) {
+      const primeira = await this.prisma.cooperativa.findFirst({ select: { id: true } }).catch(() => null);
+      cooperativaId = primeira?.id ?? 'default';
+    }
     const result: Record<string, string | null> = {};
 
     for (const chave of EMAIL_MONITOR_KEYS) {
@@ -75,7 +83,12 @@ export class ConfigTenantController {
     @Body() body: { host?: string; port?: string; user?: string; pass?: string; ativo?: boolean },
     @Req() req: any,
   ) {
-    const cooperativaId = req.user.cooperativaId;
+    // SuperAdmin não tem cooperativaId — usar a primeira cooperativa cadastrada
+    let cooperativaId = req.user.cooperativaId;
+    if (!cooperativaId) {
+      const primeira = await this.prisma.cooperativa.findFirst({ select: { id: true } }).catch(() => null);
+      cooperativaId = primeira?.id ?? 'default';
+    }
 
     if (body.host !== undefined) {
       await this.service.set('email.monitor.host', body.host, cooperativaId, 'Servidor IMAP');
