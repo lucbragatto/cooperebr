@@ -20,10 +20,10 @@ export class ConfigTenantService {
   }
 
   async set(chave: string, valor: string, cooperativaId: string, descricao?: string) {
-    // Usar upsert por chave (unique) para evitar P2002
+    // Upsert pelo unique composto [chave, cooperativaId] — isolamento total por tenant
     return this.prisma.configTenant.upsert({
-      where: { chave },
-      update: { valor, cooperativaId, ...(descricao !== undefined && { descricao }) },
+      where: { chave_cooperativaId: { chave, cooperativaId } },
+      update: { valor, ...(descricao !== undefined && { descricao }) },
       create: { chave, valor, cooperativaId, descricao: descricao ?? null },
     });
   }

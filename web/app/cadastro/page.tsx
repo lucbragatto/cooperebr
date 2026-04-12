@@ -330,7 +330,7 @@ function CadastroPageInner() {
   // ─── Submit ──────────────────────────────────────────────
 
   async function handleSubmit() {
-    const modoTeste = true; // fase de testes - mudar para false antes de produção
+    const modoTeste = false; // produção — validações ativas
     if (!modoTeste) {
       if (!pessoais.nome || !pessoais.cpf || !pessoais.email || !pessoais.telefone) {
         setErro('Preencha todos os dados pessoais obrigatórios.');
@@ -997,14 +997,7 @@ function CadastroPageInner() {
           </label>
         </div>
 
-        {/* Botão modo teste — remover quando for para produção */}
-        <button
-          type="button"
-          onClick={handleSubmit}
-          className="w-full p-3 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg border border-dashed border-gray-300 transition-colors"
-        >
-          Finalizar sem escolher plano (modo teste)
-        </button>
+        {/* Botão modo teste removido — produção */}
       </div>
     );
   }

@@ -13,8 +13,9 @@ export class EmailMonitorController {
    * Disparo manual da verificação de e-mails com faturas concessionária.
    */
   @Post('processar')
-  processar() {
-    return this.emailMonitorService.processarManual();
+  processar(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    return this.emailMonitorService.processarManual(cooperativaId);
   }
 
   /**
@@ -31,10 +32,10 @@ export class EmailMonitorController {
 
     // Tentar banco primeiro
     if (cooperativaId) {
-      const dbUser = await this.emailMonitorService.getConfigValue('email.monitor.user');
+      const dbUser = await this.emailMonitorService.getConfigValue('email.monitor.user', cooperativaId);
       if (dbUser) {
         imapUser = dbUser.replace(/(.{3}).*(@.*)/, '$1***$2');
-        const dbHost = await this.emailMonitorService.getConfigValue('email.monitor.host');
+        const dbHost = await this.emailMonitorService.getConfigValue('email.monitor.host', cooperativaId);
         if (dbHost) imapHost = dbHost;
         fonte = 'banco';
       }

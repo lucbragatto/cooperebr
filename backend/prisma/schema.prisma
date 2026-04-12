@@ -584,13 +584,14 @@ model Notificacao {
 
 model ConfigTenant {
   id            String   @id @default(cuid())
-  chave         String   @unique
+  chave         String
   valor         String
   descricao     String?
   cooperativaId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@unique([chave, cooperativaId], map: "config_tenant_chave_cooperativaId_unique")
   @@map("config_tenant")
 }
 
