@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Controller, Get, Post, Put, Delete, Body, Param, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { MotorPropostaService } from './motor-proposta.service';
@@ -140,9 +140,10 @@ export class MotorPropostaController {
     return this.service.criarTarifa(dto);
   }
 
+  @Public()
   @Get('tarifa-concessionaria/atual')
-  tarifaAtual() {
-    return this.service.tarifaAtual();
+  tarifaAtual(@Query('concessionaria') concessionaria?: string) {
+    return this.service.tarifaAtual(concessionaria);
   }
 
   @Get('tarifa-concessionaria')

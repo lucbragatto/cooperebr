@@ -645,7 +645,18 @@ export class MotorPropostaService {
     });
   }
 
-  async tarifaAtual() {
+  async tarifaAtual(concessionaria?: string) {
+    if (concessionaria) {
+      const normDistrib = concessionaria.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
+        orderBy: { dataVigencia: 'desc' },
+      });
+      const tarifa = todasTarifas.find(t => {
+        const normConc = t.concessionaria.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        return normConc.includes(normDistrib) || normDistrib.includes(normConc);
+      });
+      if (tarifa) return tarifa;
+    }
     return this.prisma.tarifaConcessionaria.findFirst({
       orderBy: { dataVigencia: 'desc' },
     });

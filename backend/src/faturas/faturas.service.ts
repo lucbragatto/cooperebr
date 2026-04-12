@@ -423,17 +423,14 @@ export class FaturasService {
       return existe;
     }
 
-    // Buscar tarifa
+    // Buscar tarifa por distribuidora da UC (BUG-11-002)
     const propostaAceita = await this.prisma.propostaCooperado.findFirst({
       where: { cooperadoId: fatura.cooperadoId, status: 'ACEITA' },
       orderBy: { createdAt: 'desc' },
     });
-    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
-      orderBy: { dataVigencia: 'desc' },
-    });
-    const tusdVigente = tarifaVigente ? Number(tarifaVigente.tusdNova) : 0.3;
-    const teVigente = tarifaVigente ? Number(tarifaVigente.teNova) : 0.2;
-    const tarifaUnitVigente = tusdVigente + teVigente;
+    const distribuidoraUc = fatura.uc?.distribuidora || contrato.usina?.distribuidora;
+    const tarifaDistrib = await this.buscarTarifaPorDistribuidora(distribuidoraUc);
+    const tarifaUnitVigente = tarifaDistrib.tarifaKwh;
 
     let tarifaKwh: number;
     if (propostaAceita) {
@@ -769,13 +766,10 @@ export class FaturasService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Buscar tarifa vigente (usada no fallback e no CREDITOS_DINAMICO)
-    const tarifaVigente = await this.prisma.tarifaConcessionaria.findFirst({
-      orderBy: { dataVigencia: 'desc' },
-    });
-    const tusdVigente = tarifaVigente ? Number(tarifaVigente.tusdNova) : 0.3;
-    const teVigente = tarifaVigente ? Number(tarifaVigente.teNova) : 0.2;
-    const tarifaUnitVigente = tusdVigente + teVigente;
+    // Buscar tarifa vigente por distribuidora da UC (BUG-11-002)
+    const distribuidoraFatura = fatura.uc?.distribuidora;
+    const tarifaFallback = await this.buscarTarifaPorDistribuidora(distribuidoraFatura);
+    let tarifaUnitVigente = tarifaFallback.tarifaKwh;
 
     if (!propostaAceita) {
       avisos.push('Sem proposta aceita encontrada. Cálculo usando tarifa vigente (TUSD+TE) como fallback.');
@@ -805,12 +799,19 @@ export class FaturasService {
       // Determinar modelo de cobrança (hierarquia: contrato → usina → config → plano → FIXO_MENSAL)
       const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
 
+      // BUG-11-002: buscar tarifa pela distribuidora do contrato (usina) se disponível
+      const distribContrato = contrato.usina?.distribuidora;
+      if (distribContrato && distribContrato !== distribuidoraFatura) {
+        const tarifaContrato = await this.buscarTarifaPorDistribuidora(distribContrato);
+        tarifaUnitVigente = tarifaContrato.tarifaKwh;
+      }
+
       // tarifaKwh = preço do kWh da concessionária (da proposta aceita ou fallback)
       let tarifaKwh: number;
       if (propostaAceita) {
         tarifaKwh = Number(propostaAceita.kwhApuradoBase);
       } else {
-        // Fallback: calcula a partir da fatura ou usa tarifa vigente
+        // Fallback: calcula a partir da fatura ou usa tarifa vigente da distribuidora
         const consumoKwh = dados.consumoAtualKwh ?? kwhContrato;
         const valorFatura = dados.totalAPagar ?? 0;
         tarifaKwh = consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitVigente;
@@ -1260,6 +1261,42 @@ IMPORTANTE:
       mesesUtilizados: mesesFiltrados.length,
       mesesDescartados,
     };
+  }
+
+  /**
+   * Busca tarifa vigente por distribuidora (TUSD + TE).
+   * Mesmo padrão usado em cobrancas.service.ts — normaliza nomes para match fuzzy.
+   */
+  private async buscarTarifaPorDistribuidora(distribuidora: string | null | undefined): Promise<{ tusd: number; te: number; tarifaKwh: number }> {
+    const fallback = { tusd: 0.3, te: 0.2, tarifaKwh: 0.5 };
+
+    if (distribuidora) {
+      const normDistrib = distribuidora.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
+        orderBy: { dataVigencia: 'desc' },
+      });
+      const tarifa = todasTarifas.find(t => {
+        const normConc = t.concessionaria.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        return normConc.includes(normDistrib) || normDistrib.includes(normConc);
+      });
+      if (tarifa) {
+        const tusd = Number(tarifa.tusdNova);
+        const te = Number(tarifa.teNova);
+        return { tusd, te, tarifaKwh: tusd + te };
+      }
+    }
+
+    // Fallback: tarifa mais recente independente de distribuidora
+    const tarifa = await this.prisma.tarifaConcessionaria.findFirst({
+      orderBy: { dataVigencia: 'desc' },
+    });
+    if (tarifa) {
+      const tusd = Number(tarifa.tusdNova);
+      const te = Number(tarifa.teNova);
+      return { tusd, te, tarifaKwh: tusd + te };
+    }
+
+    return fallback;
   }
 
   private async resolverModeloCobranca(

@@ -22,9 +22,7 @@ const DISTRIBUIDORAS = [
   'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
 ];
 
-// TODO: buscar tarifa da distribuidora selecionada via API
-// Tarifa EDP-ES Fev/2026 (fallback fixo)
-const TARIFA_KWH = 0.78931;
+const TARIFA_KWH_FALLBACK = 0.78931;
 const DESCONTO_PERCENTUAL = 0.15;
 
 // ─── Masks ───────────────────────────────────────────────
@@ -188,6 +186,24 @@ function CadastroPageInner() {
     consumoMedioKwh: '',
   });
 
+  // ─── Tarifa dinâmica por distribuidora (BUG-11-002) ─────
+  const [tarifaKwh, setTarifaKwh] = useState(TARIFA_KWH_FALLBACK);
+
+  useEffect(() => {
+    if (!instalacao.distribuidora || instalacao.distribuidora === 'Outra') {
+      setTarifaKwh(TARIFA_KWH_FALLBACK);
+      return;
+    }
+    fetch(`${API_URL}/motor-proposta/tarifa-concessionaria/atual?concessionaria=${encodeURIComponent(instalacao.distribuidora)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.tusdNova && data.teNova) {
+          setTarifaKwh(Number(data.tusdNova) + Number(data.teNova));
+        }
+      })
+      .catch(() => {});
+  }, [instalacao.distribuidora]);
+
   // ─── Helpers ─────────────────────────────────────────────
 
   function updatePessoais(field: keyof DadosPessoais, value: string) {
@@ -321,7 +337,7 @@ function CadastroPageInner() {
 
   function calcularSimulacao() {
     const consumo = Number(instalacao.consumoMedioKwh) || 0;
-    const contaAtual = Math.round(consumo * TARIFA_KWH * 100) / 100;
+    const contaAtual = Math.round(consumo * tarifaKwh * 100) / 100;
     const economia = Math.round(contaAtual * DESCONTO_PERCENTUAL * 100) / 100;
     const contaCoopereBR = Math.round((contaAtual - economia) * 100) / 100;
     return { contaAtual, contaCoopereBR, economiaMensal: economia, economiaAnual: Math.round(economia * 12 * 100) / 100 };
