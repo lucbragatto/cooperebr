@@ -297,7 +297,7 @@ export class PublicoController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 por minuto para processamento em lote
   @Post('processar-fatura-ocr')
   @UseInterceptors(FileInterceptor('fatura'))
   async processarFaturaOcr(
