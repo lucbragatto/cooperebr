@@ -56,6 +56,22 @@ export class RelatoriosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get('conferencia-kwh')
+  conferenciaKwh(
+    @Req() req: any,
+    @Query('competencia') competencia?: string,
+    @Query('cooperativaId') cooperativaId?: string,
+  ) {
+    const effectiveCoopId =
+      req.user.perfil === SUPER_ADMIN ? cooperativaId : req.user.cooperativaId;
+    if (!effectiveCoopId) {
+      return { error: 'cooperativaId é obrigatório' };
+    }
+    const comp = competencia ?? new Date().toISOString().slice(0, 7);
+    return this.queryService.conferenciaKwh(effectiveCoopId, comp);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('geracao-por-usina')
   geracaoPorUsina(
     @Req() req: any,
