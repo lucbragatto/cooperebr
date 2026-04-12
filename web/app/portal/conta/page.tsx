@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User, Lock, ShieldCheck } from 'lucide-react';
+import { User, Lock, ShieldCheck, Zap } from 'lucide-react';
+import Link from 'next/link';
 
 interface Cooperado {
   id: string;
@@ -321,6 +322,24 @@ export default function PortalContaPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Faturas Concessionária */}
+      <Link href="/portal/faturas-concessionaria">
+        <Card className="hover:border-green-300 transition-colors cursor-pointer">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <Zap className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700">Faturas da Concessionaria</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Ative o recebimento automatico da sua fatura de energia e acompanhe o historico.
+                </p>
+              </div>
+              <span className="text-gray-400 text-sm">&rarr;</span>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* Recuperação */}
       <Card>

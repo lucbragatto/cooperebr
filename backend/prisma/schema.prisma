@@ -170,6 +170,10 @@ model Cooperado {
   convitesEnviados        ConviteIndicacao[]       @relation("ConvitesEnviados")
   conversoesCreditoSemUc  ConversaoCreditoSemUc[]
   resgatesClubeVantagens  ResgateClubeVantagens[]
+  // ── Faturas Concessionária (e-mail monitor) ──
+  emailFaturasAtivo       Boolean                  @default(false)
+  emailFaturasAtivoEm     DateTime?
+  emailFaturasObservacao  String?
 
   @@map("cooperados")
 }

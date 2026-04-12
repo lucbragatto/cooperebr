@@ -144,6 +144,9 @@ export class EmailMonitorService {
                   });
                   resultado.processados++;
 
+                  // Ativar emailFaturasAtivo + notificar cooperado na primeira fatura
+                  await this.ativarEmailFaturas(cooperado.id, cooperado.nomeCompleto, cooperativaId);
+
                   // Notificar admin via WhatsApp
                   const ucNum = (resultUpload.fatura?.dadosExtraidos as Record<string, unknown>)?.numeroUC || 'N/A';
                   await this.notificarAdminWhatsApp(
@@ -181,6 +184,9 @@ export class EmailMonitorService {
                       mesReferencia: this.extrairMesReferencia(email),
                     });
                     resultado.processados++;
+
+                    // Ativar emailFaturasAtivo + notificar cooperado na primeira fatura
+                    await this.ativarEmailFaturas(cooperado.id, cooperado.nomeCompleto, cooperativaId);
 
                     const ucNum = dadosOcr.numeroUC || 'N/A';
                     await this.notificarAdminWhatsApp(
@@ -353,6 +359,42 @@ export class EmailMonitorService {
       });
     } catch (err) {
       this.logger.warn(`Falha ao notificar admin via WhatsApp: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Ativar emailFaturasAtivo + notificar cooperado na primeira fatura ──
+
+  private async ativarEmailFaturas(
+    cooperadoId: string,
+    nomeCompleto: string,
+    cooperativaId: string,
+  ): Promise<void> {
+    try {
+      const cooperado = await this.prisma.cooperado.findUnique({
+        where: { id: cooperadoId },
+        select: { emailFaturasAtivo: true, telefone: true },
+      });
+      if (!cooperado) return;
+
+      // Sempre atualizar o timestamp da última fatura recebida
+      await this.prisma.cooperado.update({
+        where: { id: cooperadoId },
+        data: {
+          emailFaturasAtivo: true,
+          emailFaturasAtivoEm: new Date(),
+        },
+      });
+
+      // Se é a primeira vez, notificar cooperado via WhatsApp
+      if (!cooperado.emailFaturasAtivo && cooperado.telefone) {
+        await this.whatsappSender.enviarMensagem(
+          cooperado.telefone,
+          `Boa notícia, ${nomeCompleto.split(' ')[0]}! Recebemos sua primeira fatura da EDP automaticamente. Seu sistema de monitoramento está ativo! 🎉`,
+          { tipoDisparo: 'SISTEMA', cooperativaId },
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao ativar emailFaturas para cooperado ${cooperadoId}: ${(err as Error).message}`);
     }
   }
 

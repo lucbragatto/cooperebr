@@ -52,6 +52,13 @@ export class FaturasController {
     return this.faturasService.centralResumo(resolvedCoopId);
   }
 
+  @Get('minhas-concessionaria')
+  @Roles(PerfilUsuario.COOPERADO)
+  minhasFaturasConcessionaria(@Req() req: any) {
+    if (!req.user?.cooperadoId) throw new ForbiddenException('Cooperado não identificado');
+    return this.faturasService.minhasFaturasConcessionaria(req.user.cooperadoId);
+  }
+
   @Get('cooperado/:cooperadoId')
   findByCooperado(@Param('cooperadoId') cooperadoId: string, @Req() req: any): Promise<unknown> {
     return this.faturasService.findByCooperado(cooperadoId, req.user.cooperativaId);
@@ -83,6 +90,20 @@ export class FaturasController {
   @Post('documento')
   documento(@Body() dto: UploadDocumentoDto): Promise<unknown> {
     return this.faturasService.uploadDocumento(dto);
+  }
+
+  @Patch(':id/vincular')
+  @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
+  vincularManual(
+    @Param('id') id: string,
+    @Body() body: { cooperadoId: string },
+    @Req() req: any,
+  ) {
+    if (!body.cooperadoId) throw new BadRequestException('cooperadoId é obrigatório');
+    const cooperativaId = req.user?.perfil === PerfilUsuario.SUPER_ADMIN
+      ? req.user?.cooperativaId
+      : req.user?.cooperativaId;
+    return this.faturasService.vincularFaturaManual(id, body.cooperadoId, cooperativaId);
   }
 
   @Patch(':id/aprovar')

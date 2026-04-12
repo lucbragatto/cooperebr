@@ -9,14 +9,17 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  CheckCircle, XCircle, FileText, Upload, Loader2, AlertTriangle, BarChart3, Filter,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  CheckCircle, XCircle, FileText, Upload, Loader2, AlertTriangle, BarChart3, Filter, Link2, Search,
 } from 'lucide-react';
 import RelatorioFaturaCooperado from '@/components/RelatorioFaturaCooperado';
 
 interface FaturaItem {
   id: string;
-  cooperadoId: string;
-  cooperado: { id: string; nomeCompleto: string; email: string; telefone: string | null };
+  cooperadoId: string | null;
+  cooperado: { id: string; nomeCompleto: string; email: string; telefone: string | null } | null;
   uc: { id: string; numeroUC: string; distribuidora: string } | null;
   dadosExtraidos: any;
   analise: any;
@@ -40,6 +43,7 @@ const STATUS_COLORS: Record<string, string> = {
   APROVADO: 'bg-green-100 text-green-800 border-green-200',
   PENDENTE_REVISAO: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   REJEITADO: 'bg-red-100 text-red-800 border-red-200',
+  NAO_IDENTIFICADA: 'bg-orange-100 text-orange-800 border-orange-200',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -47,7 +51,14 @@ const STATUS_LABEL: Record<string, string> = {
   APROVADO: 'Aprovado',
   PENDENTE_REVISAO: 'Pendente Revisão',
   REJEITADO: 'Rejeitado',
+  NAO_IDENTIFICADA: 'Sem Cooperado',
 };
+
+interface CooperadoOption {
+  id: string;
+  nomeCompleto: string;
+  cpf: string;
+}
 
 export default function CentralFaturasPage() {
   const [faturas, setFaturas] = useState<FaturaItem[]>([]);
@@ -61,6 +72,12 @@ export default function CentralFaturasPage() {
   const [detalheFatura, setDetalheFatura] = useState<FaturaItem | null>(null);
   const [relatorioData, setRelatorioData] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Vinculação manual
+  const [vincularFaturaId, setVincularFaturaId] = useState<string | null>(null);
+  const [cooperadosBusca, setCooperadosBusca] = useState<CooperadoOption[]>([]);
+  const [buscaCooperado, setBuscaCooperado] = useState('');
+  const [cooperadoSelecionado, setCooperadoSelecionado] = useState<string>('');
+  const [vinculando, setVinculando] = useState(false);
 
   const buscar = useCallback(async () => {
     setCarregando(true);
@@ -112,6 +129,33 @@ export default function CentralFaturasPage() {
       setRelatorioData(data);
     } catch {
       setRelatorioData(null);
+    }
+  }
+
+  async function buscarCooperados(termo: string) {
+    if (termo.length < 2) { setCooperadosBusca([]); return; }
+    try {
+      const { data } = await api.get(`/cooperados?search=${encodeURIComponent(termo)}&limit=10`);
+      setCooperadosBusca(Array.isArray(data) ? data : data.cooperados ?? []);
+    } catch {
+      setCooperadosBusca([]);
+    }
+  }
+
+  async function vincularManual() {
+    if (!vincularFaturaId || !cooperadoSelecionado) return;
+    setVinculando(true);
+    try {
+      await api.patch(`/faturas/${vincularFaturaId}/vincular`, { cooperadoId: cooperadoSelecionado });
+      setVincularFaturaId(null);
+      setCooperadoSelecionado('');
+      setBuscaCooperado('');
+      setCooperadosBusca([]);
+      buscar();
+    } catch {
+      // silently ignore
+    } finally {
+      setVinculando(false);
     }
   }
 
@@ -195,6 +239,7 @@ export default function CentralFaturasPage() {
         >
           <option value="">Todos status</option>
           <option value="PENDENTE_REVISAO">Pendente Revisão</option>
+          <option value="NAO_IDENTIFICADA">Sem Cooperado</option>
           <option value="AUTO_APROVADO">Auto-aprovado</option>
           <option value="APROVADO">Aprovado</option>
           <option value="REJEITADO">Rejeitado</option>
@@ -240,7 +285,11 @@ export default function CentralFaturasPage() {
                         className="border-t hover:bg-gray-50 cursor-pointer"
                         onClick={() => abrirDetalhe(f)}
                       >
-                        <td className="px-4 py-2 font-medium">{f.cooperado.nomeCompleto}</td>
+                        <td className="px-4 py-2 font-medium">
+                          {f.cooperado ? f.cooperado.nomeCompleto : (
+                            <span className="text-orange-600 italic text-xs">Não identificado</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-xs text-gray-600">{f.uc?.numeroUC ?? d?.numeroUC ?? '—'}</td>
                         <td className="px-4 py-2">{f.mesReferencia ?? '—'}</td>
                         <td className="px-4 py-2 text-right">{Number(a?.kwhInjetado ?? d?.creditosRecebidosKwh ?? 0).toFixed(0)}</td>
@@ -266,6 +315,16 @@ export default function CentralFaturasPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          {f.statusRevisao === 'NAO_IDENTIFICADA' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs text-orange-700 border-orange-300 hover:bg-orange-50"
+                              onClick={() => { setVincularFaturaId(f.id); setCooperadoSelecionado(''); setBuscaCooperado(''); }}
+                            >
+                              <Link2 className="h-3 w-3 mr-1" />Vincular
+                            </Button>
+                          )}
                           {f.statusRevisao === 'PENDENTE_REVISAO' && (
                             <div className="flex items-center justify-center gap-1">
                               <Button
@@ -300,13 +359,61 @@ export default function CentralFaturasPage() {
         </CardContent>
       </Card>
 
+      {/* Modal de vinculação manual */}
+      <Dialog open={!!vincularFaturaId} onOpenChange={(open) => { if (!open) setVincularFaturaId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5" />Vincular Fatura ao Cooperado
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Buscar cooperado</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={buscaCooperado}
+                  onChange={(e) => { setBuscaCooperado(e.target.value); buscarCooperados(e.target.value); }}
+                  placeholder="Nome ou CPF do cooperado..."
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              {cooperadosBusca.length > 0 && (
+                <div className="border rounded-md max-h-40 overflow-y-auto">
+                  {cooperadosBusca.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setCooperadoSelecionado(c.id); setBuscaCooperado(c.nomeCompleto); setCooperadosBusca([]); }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b last:border-b-0 ${cooperadoSelecionado === c.id ? 'bg-green-50' : ''}`}
+                    >
+                      <span className="font-medium">{c.nomeCompleto}</span>
+                      <span className="text-gray-400 ml-2 text-xs">{c.cpf}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
+              disabled={!cooperadoSelecionado || vinculando}
+              onClick={vincularManual}
+            >
+              {vinculando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="h-4 w-4 mr-2" />}
+              Vincular
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de detalhe */}
       <Dialog open={!!detalheFatura} onOpenChange={(open) => { if (!open) { setDetalheFatura(null); setRelatorioData(null); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Detalhe da Fatura — {detalheFatura?.cooperado.nomeCompleto}
+              Detalhe da Fatura — {detalheFatura?.cooperado?.nomeCompleto ?? (detalheFatura?.dadosExtraidos as any)?.titular ?? 'Não identificado'}
             </DialogTitle>
           </DialogHeader>
 

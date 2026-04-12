@@ -1393,4 +1393,80 @@ IMPORTANTE:
     v.setDate(v.getDate() + diasVencimentoPadrao);
     return v;
   }
+
+  // ── Faturas do cooperado (portal) ─────────────────────────────────────────
+
+  async minhasFaturasConcessionaria(cooperadoId: string) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { emailFaturasAtivo: true, emailFaturasAtivoEm: true },
+    });
+
+    const faturas = await this.prisma.faturaProcessada.findMany({
+      where: { cooperadoId },
+      select: {
+        id: true,
+        mesReferencia: true,
+        dadosExtraidos: true,
+        status: true,
+        statusRevisao: true,
+        createdAt: true,
+        uc: { select: { id: true, numeroUC: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 24,
+    });
+
+    return {
+      emailFaturasAtivo: cooperado?.emailFaturasAtivo ?? false,
+      emailFaturasAtivoEm: cooperado?.emailFaturasAtivoEm ?? null,
+      faturas,
+    };
+  }
+
+  // ── Vincular manualmente fatura a cooperado (admin) ───────────────────────
+
+  async vincularFaturaManual(faturaId: string, cooperadoId: string, cooperativaId: string) {
+    const fatura = await this.prisma.faturaProcessada.findUnique({
+      where: { id: faturaId },
+    });
+    if (!fatura) throw new BadRequestException('Fatura não encontrada');
+
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: cooperadoId, cooperativaId },
+      select: { id: true, nomeCompleto: true },
+    });
+    if (!cooperado) throw new BadRequestException('Cooperado não encontrado nesta cooperativa');
+
+    // Buscar UC pelo número extraído via OCR
+    const dadosExtraidos = fatura.dadosExtraidos as Record<string, unknown>;
+    const numeroUC = dadosExtraidos?.numeroUC as string | undefined;
+    let ucId: string | null = null;
+    if (numeroUC) {
+      const uc = await this.prisma.uc.findFirst({
+        where: { numeroUC, cooperadoId },
+      });
+      if (uc) ucId = uc.id;
+    }
+
+    const faturaAtualizada = await this.prisma.faturaProcessada.update({
+      where: { id: faturaId },
+      data: {
+        cooperadoId,
+        ucId,
+        statusRevisao: 'PENDENTE_REVISAO',
+      },
+    });
+
+    // Ativar emailFaturasAtivo
+    await this.prisma.cooperado.update({
+      where: { id: cooperadoId },
+      data: {
+        emailFaturasAtivo: true,
+        emailFaturasAtivoEm: new Date(),
+      },
+    });
+
+    return faturaAtualizada;
+  }
 }
