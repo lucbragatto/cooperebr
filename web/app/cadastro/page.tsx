@@ -22,7 +22,6 @@ const DISTRIBUIDORAS = [
   'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
 ];
 
-const TARIFA_KWH_FALLBACK = 0.78931;
 const DESCONTO_PERCENTUAL = 0.15;
 
 // ─── Masks ───────────────────────────────────────────────
@@ -187,17 +186,16 @@ function CadastroPageInner() {
   });
 
   // ─── Tarifa dinâmica por distribuidora (BUG-11-002) ─────
-  const [tarifaKwh, setTarifaKwh] = useState(TARIFA_KWH_FALLBACK);
+  const [tarifaKwh, setTarifaKwh] = useState(0);
 
   useEffect(() => {
-    if (!instalacao.distribuidora || instalacao.distribuidora === 'Outra') {
-      setTarifaKwh(TARIFA_KWH_FALLBACK);
-      return;
-    }
-    fetch(`${API_URL}/motor-proposta/tarifa-concessionaria/atual?concessionaria=${encodeURIComponent(instalacao.distribuidora)}`)
+    const concParam = instalacao.distribuidora && instalacao.distribuidora !== 'Outra'
+      ? `?concessionaria=${encodeURIComponent(instalacao.distribuidora)}`
+      : '';
+    fetch(`${API_URL}/motor-proposta/tarifa-concessionaria/atual${concParam}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.tusdNova && data.teNova) {
+        if (data?.tusdNova && data?.teNova) {
           setTarifaKwh(Number(data.tusdNova) + Number(data.teNova));
         }
       })
