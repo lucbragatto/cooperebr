@@ -17,6 +17,7 @@
 
 | Data | Score | Críticos | Destaques |
 |------|-------|----------|-----------|
+| 2026-04-12 | 7.5/10 | 2 | 🔴 P1 NOVO: ConfigTenant chave @unique quebra multi-tenant (migração urgente); modoTeste=true persiste 2° dia; +3 P2 email-monitor |
 | 2026-04-11 | 7.8/10 | 1 | 🔴 P1: modoTeste=true persiste; +4 P2 NOVOS: race resgate oferta, ledger FATURA_CHEIA, cotaNull tokens, conflito crons 6h |
 | 2026-04-10 | 8.4/10 | 0 | +2 P2 novos: darBaixa race condition (URGENTE) + indicadosAtivos sem decremento |
 | 2026-04-09 | 8.5/10 | 0 | 4 P2 abertos: secret WA, áudio bot, HMAC Asaas, arredondamento |
@@ -37,11 +38,14 @@
 
 ---
 
-## Bugs P2 atualmente abertos (11/04/2026)
+## Bugs P2 atualmente abertos (12/04/2026)
 
 | ID | Bug | Sprint sugerido |
 |----|-----|-----------------|  
-| **BUG-NEW-2026-04-11-001** | **modoTeste=true bypassa aceite de termos — COMPLIANCE** | **URGENTE HOJE** |
+| **BUG-NEW-2026-04-12-001** | **ConfigTenant chave @unique — multi-tenant isolation quebrado (migração DB)** | **URGENTE — MIGRAÇÃO** |
+| **BUG-NEW-2026-04-11-001** | **modoTeste=true + botão visível bypassa termos — 2° dia sem correção** | **URGENTE HOJE** |
+| BUG-NEW-2026-04-12-002 | email-monitor sem filtro cooperativaId (config + identificação cooperado) | Próximo |
+| BUG-NEW-2026-04-12-003 | Notificação email-monitor criada sem cooperativaId (fica órfã) | Próximo |
 | BUG-NEW-2026-04-11-005 | Race condition no resgate de ofertas do Clube (estoque) | Próximo |
 | BUG-NEW-2026-04-11-006 | FATURA_CHEIA_TOKEN gravado como BONUS_INDICACAO no ledger | Próximo |
 | BUG-NEW-2026-04-11-008 | cotaKwhMensal=null inflaciona tokens de excedente | Próximo |
@@ -54,6 +58,7 @@
 | BUG-NEW-002 | Webhook Asaas sem HMAC validation | Próximo |
 | BUG-CALCULO-001 | Arredondamento multa/juros: 2dp vs 4dp intermediário | Backlog |
 | BUG-NEW-2026-04-11-007 | Conflito de crons às 6h (tokens + cobrança) | Backlog |
+| BUG-NEW-2026-04-12-004 | Admin phone hardcoded no fallback env (5527981341348) | Backlog |
 
 ---
 
@@ -67,4 +72,4 @@ Ao iniciar cada dia:
 
 ---
 
-*Última atualização: 11/04/2026 às 07:46 | Próxima: 12/04/2026 às 03h*
+*Última atualização: 12/04/2026 às 03:00 | Próxima: 13/04/2026 às 03h*
