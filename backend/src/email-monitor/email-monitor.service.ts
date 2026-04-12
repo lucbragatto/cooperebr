@@ -78,7 +78,7 @@ export class EmailMonitorService {
 
   // ── Cron: verifica e-mails a cada 30 min para cada tenant ativo ────
 
-  @Cron('0 */30 * * * *')
+  @Cron('0 0 6 * * *') // 1x por dia às 6h (pode ser acionado manualmente via POST /email-monitor/processar)
   async verificarEmailsFaturas() {
     if (this.processando) {
       this.logger.debug('Já processando e-mails de faturas — pulando ciclo');
