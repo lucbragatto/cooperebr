@@ -379,25 +379,20 @@ async function main() {
   if (countSkipped) console.log(`[WARN] ${countSkipped} cooperados pulados (sem CPF)`);
 
   // --- 5. Referencia MMGD salva como ConfigTenant ---
-  await prisma.configTenant.upsert({
-    where: { chave: 'mmgd_percentuais_fev2026' },
-    update: { valor: JSON.stringify(MMGD_PERCENTUAIS) },
-    create: {
-      chave: 'mmgd_percentuais_fev2026',
-      valor: JSON.stringify(MMGD_PERCENTUAIS),
-      descricao: 'Percentuais MMGD fev/2026 - UC receptora EDP -> % alocado. Usar para mapear percentualUsina dos contratos.',
-    },
-  });
+  // ConfigTenant agora usa @@unique([chave, cooperativaId]) — usar findFirst + update/create
+  const mmgdExisting = await prisma.configTenant.findFirst({ where: { chave: 'mmgd_percentuais_fev2026' } });
+  if (mmgdExisting) {
+    await prisma.configTenant.update({ where: { id: mmgdExisting.id }, data: { valor: JSON.stringify(MMGD_PERCENTUAIS) } });
+  } else {
+    await prisma.configTenant.create({ data: { chave: 'mmgd_percentuais_fev2026', valor: JSON.stringify(MMGD_PERCENTUAIS), descricao: 'Percentuais MMGD fev/2026' } });
+  }
 
-  await prisma.configTenant.upsert({
-    where: { chave: 'geracao_historico' },
-    update: { valor: JSON.stringify(GERACAO_HISTORICO) },
-    create: {
-      chave: 'geracao_historico',
-      valor: JSON.stringify(GERACAO_HISTORICO),
-      descricao: 'Historico de geracao mensal da usina Linhares (kWh). Fev/25 a Fev/26.',
-    },
-  });
+  const geracaoExisting = await prisma.configTenant.findFirst({ where: { chave: 'geracao_historico' } });
+  if (geracaoExisting) {
+    await prisma.configTenant.update({ where: { id: geracaoExisting.id }, data: { valor: JSON.stringify(GERACAO_HISTORICO) } });
+  } else {
+    await prisma.configTenant.create({ data: { chave: 'geracao_historico', valor: JSON.stringify(GERACAO_HISTORICO), descricao: 'Historico geracao mensal usina Linhares' } });
+  }
 
   console.log('[OK] Dados MMGD salvos em ConfigTenant para referencia');
 
