@@ -101,7 +101,7 @@ export class RelatorioFaturaService {
     // Economia acumulada no ano
     const cobrancasAno = await this.prisma.cobranca.findMany({
       where: {
-        contrato: { cooperadoId: fatura.cooperadoId },
+        contrato: { cooperadoId: fatura.cooperadoId! },
         anoReferencia: ano,
       },
       select: { valorDesconto: true },
@@ -141,7 +141,7 @@ export class RelatorioFaturaService {
 
     return {
       cooperado: {
-        nome: fatura.cooperado.nomeCompleto,
+        nome: fatura.cooperado?.nomeCompleto ?? 'Não identificado',
         uc: fatura.uc?.numeroUC ?? dados?.numeroUC ?? '',
         distribuidora: fatura.uc?.distribuidora ?? dados?.distribuidora ?? '',
         endereco: fatura.uc?.endereco ?? dados?.enderecoInstalacao ?? '',

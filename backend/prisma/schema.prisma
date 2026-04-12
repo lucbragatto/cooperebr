@@ -539,8 +539,8 @@ enum StatusFatura {
 
 model FaturaProcessada {
   id                 String       @id @default(cuid())
-  cooperadoId        String
-  cooperado          Cooperado    @relation(fields: [cooperadoId], references: [id])
+  cooperadoId        String?
+  cooperado          Cooperado?   @relation(fields: [cooperadoId], references: [id])
   ucId               String?
   uc                 Uc?          @relation(fields: [ucId], references: [id])
   arquivoUrl         String?

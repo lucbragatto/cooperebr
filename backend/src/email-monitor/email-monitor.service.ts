@@ -4,6 +4,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 interface AnexoPdf {
   filename: string;
@@ -25,6 +26,7 @@ export class EmailMonitorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly faturasService: FaturasService,
+    private readonly whatsappSender: WhatsappSenderService,
   ) {}
 
   // ── Config helpers (com isolamento por tenant) ─────────────────────
@@ -43,7 +45,6 @@ export class EmailMonitorService {
   // ── Buscar cooperativas com monitor de e-mail ativo ────────────────
 
   private async getCooperativasComMonitorAtivo(): Promise<string[]> {
-    // Busca todas as cooperativas que têm email.monitor.ativo = 'true'
     const configs = await this.prisma.configTenant.findMany({
       where: { chave: 'email.monitor.ativo', valor: 'true' },
       select: { cooperativaId: true },
@@ -127,19 +128,29 @@ export class EmailMonitorService {
             if (email.anexos.length === 0) continue;
             if (!this.pareceSerFaturaConcessionaria(email)) continue;
 
-            const cooperado = await this.identificarCooperado(email, cooperativaId);
+            // Tentar identificar cooperado por e-mail do remetente ou UC no corpo
+            let cooperado = await this.identificarCooperado(email, cooperativaId);
 
             if (cooperado) {
+              // Cooperado identificado pré-OCR → fluxo padrão via uploadConcessionaria
               for (const anexo of email.anexos) {
                 try {
                   const base64 = anexo.content.toString('base64');
-                  await this.faturasService.uploadConcessionaria({
+                  const resultUpload = await this.faturasService.uploadConcessionaria({
                     cooperadoId: cooperado.id,
                     arquivoBase64: base64,
                     tipoArquivo: 'pdf',
                     mesReferencia: this.extrairMesReferencia(email),
                   });
                   resultado.processados++;
+
+                  // Notificar admin via WhatsApp
+                  const ucNum = (resultUpload.fatura?.dadosExtraidos as Record<string, unknown>)?.numeroUC || 'N/A';
+                  await this.notificarAdminWhatsApp(
+                    cooperativaId,
+                    `📄 Nova fatura recebida via e-mail\n\n👤 Cooperado: ${cooperado.nomeCompleto}\n🔌 UC: ${ucNum}\n📅 Ref: ${this.extrairMesReferencia(email)}\n📊 Status: aguardando aprovação`,
+                  );
+
                   this.logger.log(
                     `Fatura processada: ${anexo.filename} → cooperado ${cooperado.nomeCompleto} [coop: ${cooperativaId}]`,
                   );
@@ -152,12 +163,62 @@ export class EmailMonitorService {
               }
               await client.messageMove(msg.uid, 'Processados', { uid: true });
             } else {
-              await client.messageMove(msg.uid, 'Pendentes', { uid: true });
-              await this.criarNotificacaoPendente(email, cooperativaId);
-              resultado.pendentes++;
-              this.logger.warn(
-                `Cooperado não identificado para e-mail de ${email.remetente} [coop: ${cooperativaId}] — movido para Pendentes`,
-              );
+              // Cooperado NÃO identificado pré-OCR → tentar via OCR (UC/CPF extraídos)
+              for (const anexo of email.anexos) {
+                try {
+                  const base64 = anexo.content.toString('base64');
+                  const dadosOcr = await this.faturasService.extrairOcr(base64, 'pdf') as unknown as { numeroUC?: string; documento?: string; mesReferencia?: string; historicoConsumo?: unknown[]; [key: string]: unknown };
+
+                  // Tentar identificar por UC extraída do OCR
+                  cooperado = await this.identificarPorOcr(dadosOcr, cooperativaId);
+
+                  if (cooperado) {
+                    // Encontrado via OCR → processar normalmente
+                    const resultUpload = await this.faturasService.uploadConcessionaria({
+                      cooperadoId: cooperado.id,
+                      arquivoBase64: base64,
+                      tipoArquivo: 'pdf',
+                      mesReferencia: this.extrairMesReferencia(email),
+                    });
+                    resultado.processados++;
+
+                    const ucNum = dadosOcr.numeroUC || 'N/A';
+                    await this.notificarAdminWhatsApp(
+                      cooperativaId,
+                      `📄 Nova fatura recebida via e-mail (identificada por OCR)\n\n👤 Cooperado: ${cooperado.nomeCompleto}\n🔌 UC: ${ucNum}\n📅 Ref: ${this.extrairMesReferencia(email)}\n📊 Status: aguardando aprovação`,
+                    );
+
+                    this.logger.log(
+                      `Fatura processada (via OCR): ${anexo.filename} → cooperado ${cooperado.nomeCompleto} [coop: ${cooperativaId}]`,
+                    );
+                  } else {
+                    // Não identificado nem por OCR → salvar como não identificada
+                    await this.criarFaturaNaoIdentificada(dadosOcr, base64, email, cooperativaId);
+                    resultado.pendentes++;
+
+                    const ucNum = dadosOcr.numeroUC || 'desconhecida';
+                    await this.notificarAdminWhatsApp(
+                      cooperativaId,
+                      `⚠️ Fatura recebida por e-mail NÃO IDENTIFICADA\n\n📧 Remetente: ${email.remetente}\n🔌 UC (OCR): ${ucNum}\n📄 CPF/CNPJ (OCR): ${dadosOcr.documento || 'não extraído'}\n📅 Ref: ${dadosOcr.mesReferencia || 'N/A'}\n\n🔍 Revisão manual necessária na Central de Faturas`,
+                    );
+
+                    this.logger.warn(
+                      `Cooperado não identificado (pós-OCR) para e-mail de ${email.remetente} [coop: ${cooperativaId}]`,
+                    );
+                  }
+                } catch (err) {
+                  this.logger.warn(
+                    `Erro ao processar anexo não identificado ${anexo.filename}: ${(err as Error).message}`,
+                  );
+                  resultado.erros++;
+                }
+              }
+
+              if (cooperado) {
+                await client.messageMove(msg.uid, 'Processados', { uid: true });
+              } else {
+                await client.messageMove(msg.uid, 'Pendentes', { uid: true });
+              }
             }
           } catch (err) {
             this.logger.warn(`Erro ao processar mensagem: ${(err as Error).message}`);
@@ -186,10 +247,122 @@ export class EmailMonitorService {
     return resultado;
   }
 
-  private async extrairEmail(msg: any): Promise<EmailProcessado | null> {
-    if (!msg.source) return null;
+  // ── Identificação pós-OCR: UC e CPF/CNPJ ──────────────────────────
 
-    const parsed = await simpleParser(msg.source);
+  private async identificarPorOcr(
+    dadosOcr: { numeroUC?: string; documento?: string; [key: string]: unknown },
+    cooperativaId: string,
+  ): Promise<{ id: string; nomeCompleto: string; cooperativaId: string | null } | null> {
+    // 1. Match por número da UC extraído pelo OCR
+    const numeroUC = dadosOcr.numeroUC;
+    if (numeroUC) {
+      const uc = await this.prisma.uc.findFirst({
+        where: { numeroUC, cooperado: { cooperativaId } },
+        include: {
+          cooperado: {
+            select: { id: true, nomeCompleto: true, cooperativaId: true },
+          },
+        },
+      });
+      if (uc?.cooperado) return uc.cooperado;
+    }
+
+    // 2. Match por CPF/CNPJ extraído pelo OCR
+    const documento = dadosOcr.documento;
+    if (documento) {
+      const cpfLimpo = documento.replace(/\D/g, '');
+      if (cpfLimpo.length >= 11) {
+        const cooperado = await this.prisma.cooperado.findFirst({
+          where: { cpf: cpfLimpo, cooperativaId },
+          select: { id: true, nomeCompleto: true, cooperativaId: true },
+        });
+        if (cooperado) return cooperado;
+      }
+    }
+
+    return null;
+  }
+
+  // ── Criar FaturaProcessada para faturas não identificadas ──────────
+
+  private async criarFaturaNaoIdentificada(
+    dadosOcr: { numeroUC?: string; documento?: string; mesReferencia?: string; historicoConsumo?: unknown[]; [key: string]: unknown },
+    base64: string,
+    email: EmailProcessado,
+    cooperativaId: string,
+  ): Promise<void> {
+    try {
+      const historicoConsumo = dadosOcr.historicoConsumo ?? [];
+
+      await this.prisma.faturaProcessada.create({
+        data: {
+          cooperadoId: null,
+          ucId: null,
+          arquivoUrl: null,
+          dadosExtraidos: {
+            ...(dadosOcr as object),
+            emailRemetente: email.remetente,
+            emailAssunto: email.assunto,
+          },
+          historicoConsumo: historicoConsumo as object,
+          mesesUtilizados: 0,
+          mesesDescartados: 0,
+          mediaKwhCalculada: 0,
+          thresholdUtilizado: 0,
+          status: 'PENDENTE',
+          cooperativaId,
+          mesReferencia: dadosOcr.mesReferencia || null,
+          statusRevisao: 'NAO_IDENTIFICADA',
+        },
+      });
+
+      // Criar notificação no sistema também
+      await this.prisma.notificacao.create({
+        data: {
+          titulo: 'Fatura por e-mail não identificada',
+          mensagem: `E-mail de ${email.remetente} com assunto "${email.assunto}". UC (OCR): ${dadosOcr.numeroUC || 'N/A'}, CPF (OCR): ${dadosOcr.documento || 'N/A'}. Verifique na Central de Faturas.`,
+          tipo: 'ALERTA',
+          lida: false,
+          cooperativaId,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao criar fatura não identificada: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Notificar admin via WhatsApp ───────────────────────────────────
+
+  private async notificarAdminWhatsApp(cooperativaId: string, mensagem: string): Promise<void> {
+    try {
+      const adminPhone =
+        (await this.getConfigFromDb('admin_phone', cooperativaId)) ||
+        (await this.getConfigFromDb('suporte_telefone', cooperativaId)) ||
+        process.env.ADMIN_WHATSAPP_NUMBER ||
+        process.env.ADMIN_PHONE ||
+        null;
+
+      if (!adminPhone) {
+        this.logger.warn(`[coop: ${cooperativaId}] Sem telefone admin configurado para notificação WhatsApp`);
+        return;
+      }
+
+      await this.whatsappSender.enviarMensagem(adminPhone, mensagem, {
+        tipoDisparo: 'SISTEMA',
+        cooperativaId,
+      });
+    } catch (err) {
+      this.logger.warn(`Falha ao notificar admin via WhatsApp: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────
+
+  private async extrairEmail(msg: unknown): Promise<EmailProcessado | null> {
+    const msgTyped = msg as { source?: Buffer };
+    if (!msgTyped.source) return null;
+
+    const parsed = await simpleParser(msgTyped.source);
     const remetente = parsed.from?.value?.[0]?.address || '';
     const assunto = parsed.subject || '';
     const textoCorpo = parsed.text || '';
@@ -236,7 +409,7 @@ export class EmailMonitorService {
       if (cooperado) return cooperado;
     }
 
-    // 2. Match por número da UC extraído do corpo/assunto, filtrado por cooperativaId
+    // 2. Match por número da UC extraído do corpo/assunto
     const ucNumeros = this.extrairNumerosUC(email.textoCorpo + ' ' + email.assunto);
     for (const numero of ucNumeros) {
       const uc = await this.prisma.uc.findFirst({
@@ -294,32 +467,6 @@ export class EmailMonitorService {
     const hoje = new Date();
     const mesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
     return `${mesAnterior.getFullYear()}-${String(mesAnterior.getMonth() + 1).padStart(2, '0')}`;
-  }
-
-  /**
-   * BUG-NEW-2026-04-12-003 corrigido: notificação agora inclui cooperativaId
-   * BUG-NEW-2026-04-12-004 corrigido: telefone admin vem do ConfigTenant, não hardcoded
-   */
-  private async criarNotificacaoPendente(email: EmailProcessado, cooperativaId: string): Promise<void> {
-    try {
-      // Buscar telefone do admin da cooperativa (ConfigTenant) — sem fallback hardcoded
-      const adminPhone = await this.getConfigFromDb('admin_phone', cooperativaId)
-        || await this.getConfigFromDb('suporte_telefone', cooperativaId)
-        || process.env.ADMIN_PHONE
-        || null;
-
-      await this.prisma.notificacao.create({
-        data: {
-          titulo: 'Fatura por e-mail não identificada',
-          mensagem: `E-mail de ${email.remetente} com assunto "${email.assunto}" contém PDF de fatura mas o cooperado não foi identificado. Verifique a pasta Pendentes do e-mail.${adminPhone ? ` Contato admin: ${adminPhone}` : ''}`,
-          tipo: 'ALERTA',
-          lida: false,
-          cooperativaId,
-        },
-      });
-    } catch (err) {
-      this.logger.warn(`Falha ao criar notificação pendente: ${(err as Error).message}`);
-    }
   }
 
   private async garantirPasta(client: ImapFlow, nome: string): Promise<void> {

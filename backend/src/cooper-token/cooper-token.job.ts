@@ -54,6 +54,7 @@ export class CooperTokenJob {
 
     for (const fatura of faturas) {
       try {
+        if (!fatura.cooperado || !fatura.cooperadoId) continue;
         const contrato = fatura.cooperado.contratos[0];
         if (!contrato) continue;
 
@@ -86,7 +87,7 @@ export class CooperTokenJob {
         const quantidade = Math.round(excedente * tokenPorKwh * 100) / 100;
 
         await this.cooperTokenService.creditar({
-          cooperadoId: fatura.cooperadoId,
+          cooperadoId: fatura.cooperadoId!,
           cooperativaId: contrato.cooperativaId ?? '',
           tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
           quantidade,

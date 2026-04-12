@@ -372,7 +372,8 @@ export class FaturasService {
       include: { cooperado: true, uc: true },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
-    if (!fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+    if (!fatura.cooperado || !fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+    if (!fatura.cooperadoId) throw new BadRequestException('Fatura sem cooperado vinculado');
     const cooperativaIdFatura = fatura.cooperado.cooperativaId;
 
     const dados = fatura.dadosExtraidos as any;
@@ -380,7 +381,7 @@ export class FaturasService {
 
     // Buscar contrato ativo
     const contrato = await this.prisma.contrato.findFirst({
-      where: { cooperadoId: fatura.cooperadoId, status: 'ATIVO' },
+      where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
       include: { plano: true, usina: true },
     });
     if (!contrato) {
@@ -425,7 +426,7 @@ export class FaturasService {
 
     // Buscar tarifa por distribuidora da UC (BUG-11-002)
     const propostaAceita = await this.prisma.propostaCooperado.findFirst({
-      where: { cooperadoId: fatura.cooperadoId, status: 'ACEITA' },
+      where: { cooperadoId: fatura.cooperadoId!, status: 'ACEITA' },
       orderBy: { createdAt: 'desc' },
     });
     const distribuidoraUc = fatura.uc?.distribuidora || contrato.usina?.distribuidora;
@@ -463,7 +464,7 @@ export class FaturasService {
     const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca', cooperativaIdFatura);
     const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
     const vencimento = this.calcularVencimento(
-      fatura.cooperado.preferenciaCobranca,
+      fatura.cooperado?.preferenciaCobranca ?? null,
       diasVencimento,
       dados?.vencimento,
     );
@@ -504,7 +505,7 @@ export class FaturasService {
       tipo: 'COBRANCA_GERADA',
       titulo: 'Nova cobrança gerada',
       mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} ref. ${String(mesNum).padStart(2, '0')}/${anoNum}.`,
-      cooperadoId: fatura.cooperadoId,
+      cooperadoId: fatura.cooperadoId ?? undefined,
       link: '/dashboard/cobrancas',
     });
 
@@ -651,7 +652,7 @@ export class FaturasService {
         where: { id: faturaId },
         include: { cooperado: true },
       });
-      if (!fatura) return;
+      if (!fatura || !fatura.cooperado) return;
 
       const cooperado = fatura.cooperado;
       const relatorio = await this.relatorioService.gerarRelatorioByFaturaId(faturaId);
@@ -718,7 +719,7 @@ export class FaturasService {
       include: { cooperado: true, uc: true },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
-    if (!fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+    if (!fatura.cooperado || !fatura.cooperado.cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
     const cooperativaIdFatura = fatura.cooperado.cooperativaId;
 
     await this.prisma.faturaProcessada.update({
@@ -741,7 +742,7 @@ export class FaturasService {
     let cobrancasCriadas = 0;
 
     const contratos = await this.prisma.contrato.findMany({
-      where: { cooperadoId: fatura.cooperadoId, status: 'ATIVO' },
+      where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
       include: { plano: true, usina: true },
     });
 
@@ -762,7 +763,7 @@ export class FaturasService {
 
     // Buscar proposta aceita mais recente do cooperado
     const propostaAceita = await this.prisma.propostaCooperado.findFirst({
-      where: { cooperadoId: fatura.cooperadoId, status: 'ACEITA' },
+      where: { cooperadoId: fatura.cooperadoId!, status: 'ACEITA' },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -895,13 +896,13 @@ export class FaturasService {
         tipo: 'COBRANCA_GERADA',
         titulo: 'Nova cobrança gerada',
         mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} gerada para contrato ${contrato.numero} ref. ${mesRef}. Você economizou R$ ${economia} este mês.`,
-        cooperadoId: fatura.cooperadoId,
+        cooperadoId: fatura.cooperadoId ?? undefined,
         link: `/dashboard/cobrancas`,
       });
 
       // Auto-emissão de CooperToken para cooperados Opção B
       if (
-        fatura.cooperado.opcaoToken === 'B' &&
+        fatura.cooperado?.opcaoToken === 'B' &&
         contrato.plano?.cooperTokenAtivo === true
       ) {
         try {
@@ -918,7 +919,7 @@ export class FaturasService {
                   ) / 10000;
 
             await this.cooperTokenService.creditar({
-              cooperadoId: fatura.cooperadoId,
+              cooperadoId: fatura.cooperadoId!,
               cooperativaId: cooperativaIdFatura,
               tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
               quantidade: kwhCompensado,
@@ -951,7 +952,7 @@ export class FaturasService {
             const quantidadeTokens = Math.round(kwhExcedente * Number(plano.tokenPorKwhExcedente) * 10000) / 10000;
 
             await this.cooperTokenService.creditar({
-              cooperadoId: fatura.cooperadoId,
+              cooperadoId: fatura.cooperadoId!,
               cooperativaId: cooperativaIdFatura,
               tipo: CooperTokenTipo.GERACAO_EXCEDENTE,
               quantidade: quantidadeTokens,
