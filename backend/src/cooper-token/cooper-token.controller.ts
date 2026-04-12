@@ -112,13 +112,21 @@ export class CooperTokenController {
       cooperativaId = coop;
     }
 
-    return this.cooperTokenService.creditar({
+    const result = await this.cooperTokenService.creditar({
       cooperadoId: body.cooperadoId,
       cooperativaId,
       tipo: tipoFinal,
       quantidade: body.quantidade,
       descricao: body.descricao,
     } as any);
+
+    if (!result) {
+      throw new BadRequestException(
+        'Cooperado não está ATIVO — ative o cooperado antes de creditar tokens',
+      );
+    }
+
+    return result;
   }
 
   @Roles(ADMIN, SUPER_ADMIN)

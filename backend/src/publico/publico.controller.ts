@@ -256,21 +256,12 @@ export class PublicoController {
       return;
     }
 
-    // Creditar 50 tokens BONUS_INDICACAO ao indicador
-    try {
-      await this.cooperToken.creditar({
-        cooperadoId: indicador.id,
-        cooperativaId: indicador.cooperativaId,
-        tipo: 'BONUS_INDICACAO' as any,
-        quantidade: 50,
-        referenciaId: leadId,
-        referenciaTabela: 'LeadWhatsapp',
-      });
-      this.logger.log(`50 tokens BONUS_INDICACAO creditados ao indicador ${indicador.id}`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      this.logger.error(`Erro ao creditar tokens ao indicador: ${message}`);
-    }
+    // BUG-11-003: NÃO creditar tokens no momento do cadastro do lead.
+    // Tokens BONUS_INDICACAO são creditados apenas quando o cooperado indicado
+    // tem sua primeira fatura paga (via indicacoes.service.ts → processarPrimeiraFaturaPaga).
+    this.logger.log(
+      `BONUS_INDICACAO para indicador ${indicador.id} será creditado após aprovação/primeira fatura do lead ${leadId}`,
+    );
 
     // Notificar indicador via WhatsApp
     if (indicador.telefone) {

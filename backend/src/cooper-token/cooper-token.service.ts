@@ -54,6 +54,9 @@ export class CooperTokenService {
     private eventEmitter: EventEmitter2,
   ) {}
 
+  /** Status permitidos para receber crédito de tokens */
+  private static readonly STATUS_PERMITIDOS_CREDITO = ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'];
+
   async creditar(params: CreditarParams) {
     const {
       cooperadoId,
@@ -65,6 +68,24 @@ export class CooperTokenService {
       referenciaTabela,
       expiracaoMeses = 12,
     } = params;
+
+    // BUG-11-003: Só creditar tokens para cooperados com status ATIVO
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { id: true, status: true },
+    });
+
+    if (!cooperado) {
+      this.logger.warn(`creditar: cooperado ${cooperadoId} não encontrado, crédito negado`);
+      return null;
+    }
+
+    if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(cooperado.status)) {
+      this.logger.warn(
+        `creditar: cooperado ${cooperadoId} com status ${cooperado.status} — crédito de ${quantidade} ${tipo} negado (requer ATIVO)`,
+      );
+      return null;
+    }
 
     const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
     const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
@@ -544,9 +565,17 @@ export class CooperTokenService {
     // Validar que destinatário pertence à mesma cooperativa
     const destinatario = await this.prisma.cooperado.findFirst({
       where: { id: destinatarioCooperadoId, cooperativaId },
+      select: { id: true, status: true },
     });
     if (!destinatario) {
       throw new BadRequestException('Cooperado destinatário não encontrado nesta cooperativa');
+    }
+
+    // BUG-11-003: Só enviar tokens para cooperados ATIVO
+    if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(destinatario.status)) {
+      throw new BadRequestException(
+        `Cooperado destinatário não está ATIVO (status: ${destinatario.status})`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
