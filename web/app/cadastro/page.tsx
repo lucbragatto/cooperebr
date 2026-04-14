@@ -344,7 +344,7 @@ function CadastroPageInner() {
   // ─── Submit ──────────────────────────────────────────────
 
   async function handleSubmit() {
-    const modoTeste = false; // produção — validações ativas
+    const modoTeste = process.env.NEXT_PUBLIC_MODO_TESTE === 'true';
     if (!modoTeste) {
       if (!pessoais.nome || !pessoais.cpf || !pessoais.email || !pessoais.telefone) {
         setErro('Preencha todos os dados pessoais obrigatórios.');
