@@ -10,8 +10,13 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 
 const PORT = process.env.PORT || 3002;
+const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET;
+if (!WHATSAPP_WEBHOOK_SECRET) {
+  console.error('❌ WHATSAPP_WEBHOOK_SECRET não definido no .env — abortando');
+  process.exit(1);
+}
 const BACKEND_WEBHOOK_URL =
-  process.env.BACKEND_WEBHOOK_URL || 'http://localhost:3000/whatsapp/webhook-incoming?secret=cooperebr_wh_2026';
+  process.env.BACKEND_WEBHOOK_URL || `http://localhost:3000/whatsapp/webhook-incoming?secret=${WHATSAPP_WEBHOOK_SECRET}`;
 const AUTH_DIR = './auth_info';
 
 const logger = pino({ level: 'warn' });
