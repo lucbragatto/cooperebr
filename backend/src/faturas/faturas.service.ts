@@ -63,6 +63,10 @@ interface DadosExtraidos {
   energiaFornecidaKwh: number;
   valorCompensadoReais: number;
   temCreditosInjetados: boolean;
+  saldoKwhAnterior: number;
+  saldoKwhAtual: number;
+  validadeCreditos: string;
+  valorSemDesconto: number;
   historicoConsumo: HistoricoItem[];
 }
 
@@ -178,6 +182,10 @@ export class FaturasService {
     // 5. Salvar em faturas_processadas
     let faturaId: string;
     try {
+      const economiaGerada = dadosExtraidos.valorSemDesconto > 0
+        ? Math.round((dadosExtraidos.valorSemDesconto - dadosExtraidos.totalAPagar) * 100) / 100
+        : null;
+
       const fatura = await this.prisma.faturaProcessada.create({
         data: {
           cooperadoId: dto.cooperadoId,
@@ -190,6 +198,13 @@ export class FaturasService {
           mediaKwhCalculada: media,
           thresholdUtilizado: threshold,
           status: 'PENDENTE',
+          saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
+          saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
+          validadeCreditos: dadosExtraidos.validadeCreditos
+            ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
+            : null,
+          valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
+          economiaGerada,
         },
         select: { id: true },
       });
@@ -332,6 +347,10 @@ export class FaturasService {
     const statusRevisao = divergenciaPerc < 5 ? 'AUTO_APROVADO' : 'PENDENTE_REVISAO';
 
     // 8. Salvar FaturaProcessada
+    const economiaGeradaConc = dadosExtraidos.valorSemDesconto > 0
+      ? Math.round((dadosExtraidos.valorSemDesconto - dadosExtraidos.totalAPagar) * 100) / 100
+      : null;
+
     const fatura = await this.prisma.faturaProcessada.create({
       data: {
         cooperadoId: dto.cooperadoId,
@@ -347,6 +366,13 @@ export class FaturasService {
         analise: analise as object,
         mesReferencia: dto.mesReferencia,
         statusRevisao,
+        saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
+        saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
+        validadeCreditos: dadosExtraidos.validadeCreditos
+          ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
+          : null,
+        valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
+        economiaGerada: economiaGeradaConc,
       },
     });
 
@@ -1171,6 +1197,10 @@ Retorne exatamente este formato:
   "energiaFornecidaKwh": 0,
   "valorCompensadoReais": 0.00,
   "temCreditosInjetados": false,
+  "saldoKwhAnterior": 0,
+  "saldoKwhAtual": 0,
+  "validadeCreditos": "MM/AAAA",
+  "valorSemDesconto": 0.00,
   "historicoConsumo": [
     {"mesAno": "MM/AAAA", "consumoKwh": 0, "valorRS": 0.00}
   ]
@@ -1191,6 +1221,10 @@ IMPORTANTE:
 - energiaFornecidaKwh: Procure linhas como 'En. At. Forn. pT', 'Energia Ativa Fornecida', 'En Fornecida' ou similar. Extraia o valor em kWh. Se houver múltiplas linhas, some todas. Se não encontrar, use consumoAtualKwh.
 - valorCompensadoReais: Procure linhas como 'Energia compensada', 'Crédito de energia', 'Desconto GD' com valor em R$. É o valor monetário descontado pela compensação de créditos. Se não encontrar, retorne 0.
 - temCreditosInjetados: Retorne true se a fatura contém QUALQUER indicação de energia injetada (linhas 'En. At. Inj.', 'Energia Injetada', 'Geração Distribuída', créditos de compensação, saldo de créditos > 0, ou possuiCompensacao = true). Isso indica que a UC já participa de geração distribuída.
+- saldoKwhAnterior: Saldo de créditos acumulados ANTES da compensação desta fatura (kWh). Procure 'Saldo anterior', 'Saldo mês anterior', 'Créditos acumulados' na fatura. Se não encontrar, retorne 0.
+- saldoKwhAtual: Saldo de créditos APÓS a compensação desta fatura (kWh). Procure 'Saldo atual', 'Saldo a expirar', 'Créditos remanescentes'. Se não encontrar, retorne 0.
+- validadeCreditos: Data de validade dos créditos mais antigos (MM/AAAA). Créditos de GD vencem em 60 meses. Procure 'Validade', 'Expiração'. Se não encontrar, use string vazia.
+- valorSemDesconto: Valor que seria cobrado se a UC NÃO participasse de GD (sem compensação de créditos). Some consumoAtualKwh * (tarifaTUSD + tarifaTE) + contribIluminacaoPublica + impostos. Se não conseguir calcular, retorne 0.
 - Se algum campo não estiver disponível, use string vazia ou zero.`;
 
     const body = {
