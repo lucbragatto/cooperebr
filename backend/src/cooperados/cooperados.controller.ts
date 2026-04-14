@@ -106,6 +106,12 @@ export class CooperadosController {
     return this.cooperadosService.getChecklist(id);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get(':id/historico-status')
+  getHistoricoStatus(@Param('id') id: string, @Req() req: any) {
+    return this.cooperadosService.getHistoricoStatus(id, req.user?.cooperativaId);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id')
   async findOne(@Param('id') id: string, @Req() req: any) {
@@ -232,7 +238,7 @@ export class CooperadosController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('batch/status')
   alterarStatusLote(@Body() body: { cooperadoIds: string[]; status: string }, @Req() req: any) {
-    return this.cooperadosService.alterarStatusLote(body, req.user?.cooperativaId);
+    return this.cooperadosService.alterarStatusLote(body, req.user?.cooperativaId, req.user?.id);
   }
 
   // ─── Aliases /lote/* (compatibilidade com spec Fase 2) ───────────────────────

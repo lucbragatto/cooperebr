@@ -688,7 +688,118 @@ export class CooperadosService {
       });
     }
 
+    // Churn: ao encerrar/suspender cooperado, decrementar indicadosAtivos do indicador
+    if (data.status && ['SUSPENSO', 'ENCERRADO'].includes(data.status) && anterior?.status && !['SUSPENSO', 'ENCERRADO'].includes(anterior.status)) {
+      await this.decrementarIndicadosAtivosNoChurn(id);
+    }
+
+    // Reativação: ao reativar cooperado que estava churned, recalcular indicadosAtivos
+    if (data.status === 'ATIVO' && anterior?.status && ['SUSPENSO', 'ENCERRADO'].includes(anterior.status)) {
+      await this.reativarIndicacoesNoRetorno(id);
+    }
+
+    // Registrar histórico de mudança de status
+    if (data.status && anterior?.status && data.status !== anterior.status) {
+      await this.prisma.historicoStatusCooperado.create({
+        data: {
+          cooperadoId: id,
+          cooperativaId: cooperado.cooperativaId ?? undefined,
+          statusAnterior: anterior.status,
+          statusNovo: data.status,
+        },
+      });
+    }
+
     return cooperado;
+  }
+
+  /** P1-1: Ao churnar cooperado, marcar Indicacao como CANCELADO e recalcular indicadosAtivos do indicador */
+  private async decrementarIndicadosAtivosNoChurn(cooperadoId: string) {
+    // Buscar indicações onde este cooperado é o indicado (nivel 1 = direto)
+    const indicacoes = await this.prisma.indicacao.findMany({
+      where: {
+        cooperadoIndicadoId: cooperadoId,
+        status: 'PRIMEIRA_FATURA_PAGA',
+      },
+      select: { id: true, cooperadoIndicadorId: true },
+    });
+
+    if (indicacoes.length === 0) return;
+
+    // Marcar indicações como CANCELADO
+    await this.prisma.indicacao.updateMany({
+      where: {
+        cooperadoIndicadoId: cooperadoId,
+        status: 'PRIMEIRA_FATURA_PAGA',
+      },
+      data: { status: 'CANCELADO' },
+    });
+
+    // Recalcular indicadosAtivos para cada indicador afetado
+    const indicadorIds = [...new Set(indicacoes.map(i => i.cooperadoIndicadorId))];
+    for (const indicadorId of indicadorIds) {
+      await this.recalcularIndicadosAtivos(indicadorId);
+    }
+  }
+
+  /** Ao reativar cooperado, restaurar Indicacao e recalcular indicadosAtivos */
+  private async reativarIndicacoesNoRetorno(cooperadoId: string) {
+    const indicacoes = await this.prisma.indicacao.findMany({
+      where: {
+        cooperadoIndicadoId: cooperadoId,
+        status: 'CANCELADO',
+        primeiraFaturaPagaEm: { not: null },
+      },
+      select: { id: true, cooperadoIndicadorId: true },
+    });
+
+    if (indicacoes.length === 0) return;
+
+    await this.prisma.indicacao.updateMany({
+      where: {
+        cooperadoIndicadoId: cooperadoId,
+        status: 'CANCELADO',
+        primeiraFaturaPagaEm: { not: null },
+      },
+      data: { status: 'PRIMEIRA_FATURA_PAGA' },
+    });
+
+    const indicadorIds = [...new Set(indicacoes.map(i => i.cooperadoIndicadorId))];
+    for (const indicadorId of indicadorIds) {
+      await this.recalcularIndicadosAtivos(indicadorId);
+    }
+  }
+
+  /** Recalcular indicadosAtivos no ProgressaoClube (mesma lógica do ClubeVantagensService) */
+  private async recalcularIndicadosAtivos(cooperadoId: string) {
+    const count = await this.prisma.indicacao.count({
+      where: {
+        cooperadoIndicadorId: cooperadoId,
+        nivel: 1,
+        status: 'PRIMEIRA_FATURA_PAGA',
+      },
+    });
+
+    const progressao = await this.prisma.progressaoClube.findUnique({
+      where: { cooperadoId },
+    });
+
+    if (progressao) {
+      await this.prisma.progressaoClube.update({
+        where: { cooperadoId },
+        data: { indicadosAtivos: count },
+      });
+    }
+  }
+
+  async getHistoricoStatus(cooperadoId: string, cooperativaId?: string) {
+    return this.prisma.historicoStatusCooperado.findMany({
+      where: {
+        cooperadoId,
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async remove(id: string) {
@@ -785,6 +896,15 @@ export class CooperadosService {
           where: { id: cooperadoId },
           data: { status: 'ATIVO' },
         });
+        await this.prisma.historicoStatusCooperado.create({
+          data: {
+            cooperadoId,
+            cooperativaId: cooperado.cooperativaId ?? undefined,
+            statusAnterior: cooperado.status,
+            statusNovo: 'ATIVO',
+            motivo: 'Ativação automática — contrato ativo detectado',
+          },
+        });
         await this.notificacoes.criar({
           tipo: 'COOPERADO_ATIVADO',
           titulo: 'Cooperado ativado',
@@ -813,6 +933,15 @@ export class CooperadosService {
         await this.prisma.cooperado.update({
           where: { id: cooperadoId },
           data: { status: 'APROVADO' },
+        });
+        await this.prisma.historicoStatusCooperado.create({
+          data: {
+            cooperadoId,
+            cooperativaId: cooperado.cooperativaId ?? undefined,
+            statusAnterior: cooperado.status,
+            statusNovo: 'APROVADO',
+            motivo: 'Aprovação automática — documentação completa',
+          },
         });
         await this.notificacoes.criar({
           tipo: 'COOPERADO_APROVADO',
@@ -1085,7 +1214,16 @@ export class CooperadosService {
     return { total: cooperados.length, criados: criados.length };
   }
 
-  async alterarStatusLote(dto: { cooperadoIds: string[]; status: string }, cooperativaId?: string) {
+  async alterarStatusLote(dto: { cooperadoIds: string[]; status: string }, cooperativaId?: string, usuarioId?: string) {
+    // Buscar status anterior de cada cooperado para histórico e churn
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: {
+        id: { in: dto.cooperadoIds },
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+      select: { id: true, status: true, cooperativaId: true },
+    });
+
     const { count } = await this.prisma.cooperado.updateMany({
       where: {
         id: { in: dto.cooperadoIds },
@@ -1093,6 +1231,30 @@ export class CooperadosService {
       },
       data: { status: dto.status as any },
     });
+
+    // Registrar histórico e tratar churn para cada cooperado que mudou de status
+    for (const c of cooperados) {
+      if (c.status === dto.status) continue;
+
+      await this.prisma.historicoStatusCooperado.create({
+        data: {
+          cooperadoId: c.id,
+          cooperativaId: c.cooperativaId ?? undefined,
+          statusAnterior: c.status,
+          statusNovo: dto.status,
+          usuarioId,
+        },
+      });
+
+      if (['SUSPENSO', 'ENCERRADO'].includes(dto.status) && !['SUSPENSO', 'ENCERRADO'].includes(c.status)) {
+        await this.decrementarIndicadosAtivosNoChurn(c.id);
+      }
+
+      if (dto.status === 'ATIVO' && ['SUSPENSO', 'ENCERRADO'].includes(c.status)) {
+        await this.reativarIndicacoesNoRetorno(c.id);
+      }
+    }
+
     return { total: dto.cooperadoIds.length, atualizados: count };
   }
 

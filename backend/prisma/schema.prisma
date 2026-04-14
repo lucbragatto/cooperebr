@@ -60,6 +60,8 @@ model Cooperativa {
   cooperTokenSaldoParceiro  CooperTokenSaldoParceiro?
   convitesIndicacao         ConviteIndicacao[]
   ofertasClube              OfertaClube[]
+  contasAPagar              ContaAPagar[]
+  historicosStatusCooperado HistoricoStatusCooperado[]
 
   @@map("cooperativas")
 }
@@ -170,6 +172,7 @@ model Cooperado {
   convitesEnviados        ConviteIndicacao[]       @relation("ConvitesEnviados")
   conversoesCreditoSemUc  ConversaoCreditoSemUc[]
   resgatesClubeVantagens  ResgateClubeVantagens[]
+  historicoStatus         HistoricoStatusCooperado[]
   // ── Faturas Concessionária (e-mail monitor) ──
   emailFaturasAtivo       Boolean                  @default(false)
   emailFaturasAtivoEm     DateTime?
@@ -320,6 +323,7 @@ model Usina {
   leituras                UsinaLeitura[]
   alertas                 UsinaAlerta[]
   contratosUso            ContratoUso[]
+  contasAPagar            ContaAPagar[]
 
   @@map("usinas")
 }
@@ -563,6 +567,12 @@ model FaturaProcessada {
   mesReferencia      String?
   statusRevisao      String       @default("PENDENTE_REVISAO")
   cobrancaGeradaId   String?
+  // ── Saldos e economia (P1-2) ──
+  saldoKwhAnterior   Decimal?     @db.Decimal(10, 2)
+  saldoKwhAtual      Decimal?     @db.Decimal(10, 2)
+  validadeCreditos   DateTime?
+  valorSemDesconto   Decimal?     @db.Decimal(10, 2)
+  economiaGerada     Decimal?     @db.Decimal(10, 2)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -1878,4 +1888,61 @@ model ResgateClubeVantagens {
   @@index([cooperativaId])
   @@index([codigoResgate])
   @@map("resgates_clube_vantagens")
+}
+
+// ── Histórico de Status do Cooperado (P2-1) ──
+
+model HistoricoStatusCooperado {
+  id              String       @id @default(cuid())
+  cooperadoId     String
+  cooperado       Cooperado    @relation(fields: [cooperadoId], references: [id])
+  cooperativaId   String?
+  cooperativa     Cooperativa? @relation(fields: [cooperativaId], references: [id])
+  statusAnterior  String
+  statusNovo      String
+  motivo          String?
+  usuarioId       String?
+  createdAt       DateTime     @default(now())
+
+  @@index([cooperadoId])
+  @@index([cooperativaId])
+  @@map("historico_status_cooperado")
+}
+
+// ── Contas a Pagar (P2-2) ──
+
+enum CategoriaContaAPagar {
+  ARRENDAMENTO_USINA
+  MANUTENCAO
+  SALARIO
+  OUTRO
+}
+
+enum StatusContaAPagar {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+model ContaAPagar {
+  id              String               @id @default(cuid())
+  cooperativaId   String
+  cooperativa     Cooperativa          @relation(fields: [cooperativaId], references: [id])
+  descricao       String
+  categoria       CategoriaContaAPagar
+  valor           Decimal              @db.Decimal(10, 2)
+  dataVencimento  DateTime
+  dataPagamento   DateTime?
+  status          StatusContaAPagar    @default(PENDENTE)
+  usinaId         String?
+  usina           Usina?               @relation(fields: [usinaId], references: [id])
+  comprovante     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([cooperativaId])
+  @@index([status])
+  @@index([dataVencimento])
+  @@map("contas_a_pagar")
 }
