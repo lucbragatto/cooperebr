@@ -345,8 +345,18 @@ export class AsaasService {
       throw new UnauthorizedException('Token de webhook ausente');
     }
 
-    const config = await this.prisma.asaasConfig.findFirst({
-      where: { webhookToken: token },
+    // Buscar configs com webhookToken definido e comparar com timing-safe
+    const configs = await this.prisma.asaasConfig.findMany({
+      where: { webhookToken: { not: null } },
+      select: { id: true, cooperativaId: true, webhookToken: true },
+    });
+
+    const config = configs.find((c) => {
+      if (!c.webhookToken) return false;
+      const a = Buffer.from(token);
+      const b = Buffer.from(c.webhookToken);
+      if (a.length !== b.length) return false;
+      return crypto.timingSafeEqual(a, b);
     });
 
     if (!config) {
