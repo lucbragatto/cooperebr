@@ -44,7 +44,7 @@ export class WhatsappFaturaController {
     @Query('secret') secret: string,
     @Body() body: {
       telefone: string;
-      tipo: 'texto' | 'imagem' | 'documento';
+      tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'sticker' | 'location';
       corpo?: string;
       mediaBase64?: string;
       mimeType?: string;

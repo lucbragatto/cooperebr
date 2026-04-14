@@ -231,6 +231,8 @@ async function startBaileys() {
 
         const docMsg = rawMsg.documentMessage;
         const imgMsg = rawMsg.imageMessage;
+        const audioMsg = rawMsg.audioMessage;
+        const videoMsg = rawMsg.videoMessage;
 
         // Resposta de lista interativa (listResponseMessage)
         const listResponse = rawMsg.listResponseMessage;
@@ -255,6 +257,12 @@ async function startBaileys() {
           corpo = docMsg.caption || null;
           const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
           mediaBase64 = buffer.toString('base64');
+        } else if (audioMsg) {
+          tipo = 'audio';
+          mimeType = audioMsg.mimetype;
+        } else if (videoMsg) {
+          tipo = 'video';
+          mimeType = videoMsg.mimetype;
         } else {
           corpo =
             msg.message.conversation ||
