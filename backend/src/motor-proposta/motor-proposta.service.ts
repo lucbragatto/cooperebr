@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
@@ -581,9 +581,17 @@ export class MotorPropostaService {
     };
   }
 
-  async excluirProposta(propostaId: string) {
-    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
-    if (!proposta) throw new Error('Proposta não encontrada');
+  async excluirProposta(propostaId: string, cooperativaId?: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: { cooperado: { select: { cooperativaId: true } } },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    // BUG-4: verificar cooperativaId para evitar IDOR
+    if (cooperativaId && proposta.cooperado?.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Proposta não pertence à sua cooperativa');
+    }
 
     // Se a proposta estava ACEITA, cancelar contrato associado (mesmo cooperado/mês)
     if (proposta.status === 'ACEITA') {
@@ -612,9 +620,17 @@ export class MotorPropostaService {
     descontoPercentual: number;
     kwhContrato: number;
     planoId: string;
-  }>) {
-    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
-    if (!proposta) throw new Error('Proposta não encontrada');
+  }>, cooperativaId?: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: { cooperado: { select: { cooperativaId: true } } },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    // BUG-4: verificar cooperativaId para evitar IDOR
+    if (cooperativaId && proposta.cooperado?.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Proposta não pertence à sua cooperativa');
+    }
     return this.prisma.propostaCooperado.update({
       where: { id: propostaId },
       data: data as any,

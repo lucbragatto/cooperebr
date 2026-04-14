@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 export interface RelatorioMensal {
@@ -46,7 +46,7 @@ const MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
 export class RelatorioFaturaService {
   constructor(private prisma: PrismaService) {}
 
-  async gerarRelatorioByFaturaId(faturaId: string): Promise<RelatorioMensal> {
+  async gerarRelatorioByFaturaId(faturaId: string, cooperativaId?: string): Promise<RelatorioMensal> {
     const fatura = await this.prisma.faturaProcessada.findUnique({
       where: { id: faturaId },
       include: {
@@ -55,6 +55,11 @@ export class RelatorioFaturaService {
       },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
+
+    // BUG-3: verificar cooperativaId para evitar IDOR
+    if (cooperativaId && fatura.cooperado?.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Fatura não pertence à sua cooperativa');
+    }
 
     const dados = fatura.dadosExtraidos as any;
 
@@ -155,8 +160,8 @@ export class RelatorioFaturaService {
         totalPago,
         consumoKwh,
         kwhCompensado,
-        kwhInjetado: kwhCompensado,
-        saldoAnterior: saldoAtual + kwhCompensado,
+        kwhInjetado: Number(dados?.energiaInjetadaKwh ?? 0),
+        saldoAnterior: saldoAtual - Number(dados?.energiaInjetadaKwh ?? 0) + kwhCompensado,
         saldoAtual,
         tarifaTUSD,
         tarifaTE,

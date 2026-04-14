@@ -64,13 +64,13 @@ export class MotorPropostaController {
   }
 
   @Delete('proposta/:id')
-  excluirProposta(@Param('id') id: string) {
-    return this.service.excluirProposta(id);
+  excluirProposta(@Param('id') id: string, @Req() req: any) {
+    return this.service.excluirProposta(id, req.user?.cooperativaId);
   }
 
   @Put('proposta/:id')
-  editarProposta(@Param('id') id: string, @Body() body: any) {
-    return this.service.editarProposta(id, body);
+  editarProposta(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.service.editarProposta(id, body, req.user?.cooperativaId);
   }
 
   @Get('proposta/:id/html')

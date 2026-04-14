@@ -114,26 +114,26 @@ export class FaturasController {
 
   @Patch(':id/rejeitar')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
-  rejeitar(@Param('id') id: string, @Body() body?: { motivo?: string }): Promise<unknown> {
-    return this.faturasService.rejeitarFatura(id, body?.motivo);
+  rejeitar(@Param('id') id: string, @Body() body: { motivo?: string } = {}, @Req() req: any): Promise<unknown> {
+    return this.faturasService.rejeitarFatura(id, body?.motivo, req.user?.cooperativaId);
   }
 
   @Get(':id/relatorio')
-  relatorio(@Param('id') id: string) {
-    return this.relatorioService.gerarRelatorioByFaturaId(id);
+  relatorio(@Param('id') id: string, @Req() req: any) {
+    return this.relatorioService.gerarRelatorioByFaturaId(id, req.user?.cooperativaId);
   }
 
   @Get(':id/relatorio/html')
-  async relatorioHtml(@Param('id') id: string) {
-    const dados = await this.relatorioService.gerarRelatorioByFaturaId(id);
+  async relatorioHtml(@Param('id') id: string, @Req() req: any) {
+    const dados = await this.relatorioService.gerarRelatorioByFaturaId(id, req.user?.cooperativaId);
     const html = this.relatorioService.renderHtml(dados);
     return { html };
   }
 
   @Delete(':id')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
-  deletar(@Param('id') id: string): Promise<unknown> {
-    return this.faturasService.deletarFatura(id);
+  deletar(@Param('id') id: string, @Req() req: any): Promise<unknown> {
+    return this.faturasService.deletarFatura(id, req.user?.cooperativaId);
   }
 
   @Get('diagnostico')

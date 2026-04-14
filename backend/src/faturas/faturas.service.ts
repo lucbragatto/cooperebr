@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, Logger, Optional, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -699,7 +699,14 @@ export class FaturasService {
 
   // ── Rejeitar fatura ────────────────────────────────────────────────────────
 
-  async rejeitarFatura(id: string, motivo?: string) {
+  async rejeitarFatura(id: string, motivo?: string, cooperativaId?: string) {
+    // BUG-2: verificar cooperativaId para evitar IDOR
+    if (cooperativaId) {
+      const fatura = await this.prisma.faturaProcessada.findFirst({
+        where: { id, cooperado: { cooperativaId } },
+      });
+      if (!fatura) throw new ForbiddenException('Fatura não pertence à sua cooperativa');
+    }
     return this.prisma.faturaProcessada.update({
       where: { id },
       data: {
@@ -981,7 +988,14 @@ export class FaturasService {
     return { sucesso: true, cobrancasCriadas, avisos };
   }
 
-  async deletarFatura(id: string): Promise<{ sucesso: boolean }> {
+  async deletarFatura(id: string, cooperativaId?: string): Promise<{ sucesso: boolean }> {
+    // BUG-2: verificar cooperativaId para evitar IDOR
+    if (cooperativaId) {
+      const fatura = await this.prisma.faturaProcessada.findFirst({
+        where: { id, cooperado: { cooperativaId } },
+      });
+      if (!fatura) throw new ForbiddenException('Fatura não pertence à sua cooperativa');
+    }
     await this.prisma.faturaProcessada.delete({ where: { id } });
     return { sucesso: true };
   }
