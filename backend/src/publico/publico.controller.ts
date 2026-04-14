@@ -20,6 +20,17 @@ export class PublicoController {
   ) {}
 
   @Public()
+  @Get('desconto-padrao')
+  async descontoPadrao() {
+    const config = await this.prisma.configuracaoMotor.findFirst({
+      orderBy: { updatedAt: 'desc' },
+      select: { descontoPadrao: true },
+    });
+    const desconto = config ? Number(config.descontoPadrao) : 20;
+    return { percentual: desconto / 100 };
+  }
+
+  @Public()
   @Post('iniciar-cadastro')
   async iniciarCadastro(
     @Body() body: { nome: string; telefone: string; codigoRef?: string },

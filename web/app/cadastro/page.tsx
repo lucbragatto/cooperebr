@@ -22,7 +22,7 @@ const DISTRIBUIDORAS = [
   'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
 ];
 
-const DESCONTO_PERCENTUAL = 0.15;
+const DESCONTO_PERCENTUAL_FALLBACK = 0.20;
 
 // ─── Masks ───────────────────────────────────────────────
 
@@ -149,6 +149,16 @@ function CadastroPageInner() {
   // ─── Convite / Indicador ─────────────────────────────────
   const [nomeIndicador, setNomeIndicador] = useState<string | null>(null);
   const [bannerVisivel, setBannerVisivel] = useState(true);
+  const [descontoPercentual, setDescontoPercentual] = useState(DESCONTO_PERCENTUAL_FALLBACK);
+
+  useEffect(() => {
+    fetch(`${API_URL}/publico/desconto-padrao`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.percentual && data.percentual > 0) setDescontoPercentual(data.percentual);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!refCode) return;
@@ -336,7 +346,7 @@ function CadastroPageInner() {
   function calcularSimulacao() {
     const consumo = Number(instalacao.consumoMedioKwh) || 0;
     const contaAtual = Math.round(consumo * tarifaKwh * 100) / 100;
-    const economia = Math.round(contaAtual * DESCONTO_PERCENTUAL * 100) / 100;
+    const economia = Math.round(contaAtual * descontoPercentual * 100) / 100;
     const contaCoopereBR = Math.round((contaAtual - economia) * 100) / 100;
     return { contaAtual, contaCoopereBR, economiaMensal: economia, economiaAnual: Math.round(economia * 12 * 100) / 100 };
   }

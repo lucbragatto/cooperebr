@@ -18,14 +18,20 @@ export default function ConvitePage() {
   const [sucesso, setSucesso] = useState(false);
   const [erro, setErro] = useState('');
   const [conta, setConta] = useState(300);
+  const [descontoPercentual, setDescontoPercentual] = useState(0.20);
 
   useEffect(() => {
     api.get(`/publico/convite/${codigo}`)
       .then(r => setConvite(r.data))
       .catch(() => setConvite({ valido: false }));
+    api.get('/publico/desconto-padrao')
+      .then(r => {
+        if (r.data?.percentual > 0) setDescontoPercentual(r.data.percentual);
+      })
+      .catch(() => {});
   }, [codigo]);
 
-  const economia = Math.round(conta * 0.15);
+  const economia = Math.round(conta * descontoPercentual);
   const economiaAno = economia * 12;
 
   async function handleSubmit(e: React.FormEvent) {

@@ -129,18 +129,20 @@ export class RelatorioFaturaService {
     for (const f of faturasAnteriores.slice(0, 6)) {
       const d = f.dadosExtraidos as any;
       let cobValor = 0;
+      let cobEconomia = 0;
       if (f.cobrancaGeradaId) {
         const cob = await this.prisma.cobranca.findUnique({
           where: { id: f.cobrancaGeradaId },
           select: { valorLiquido: true, valorDesconto: true },
         });
         cobValor = cob ? Number(cob.valorLiquido) : 0;
+        cobEconomia = cob ? Number(cob.valorDesconto) : 0;
       }
       historico.push({
         mes: f.mesReferencia ?? d?.mesReferencia ?? '',
         kwhCompensado: Number(d?.creditosRecebidosKwh ?? 0),
         valorCobrado: cobValor,
-        economia: Number(d?.creditosRecebidosKwh ?? 0) * tarifaUnit * 0.15,
+        economia: cobEconomia,
       });
     }
 

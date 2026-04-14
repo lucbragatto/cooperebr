@@ -89,7 +89,7 @@ interface ProcessarResult {
 
 type Tab = 'pdf' | 'foto' | 'imagem';
 
-const PERCENTUAL_DESCONTO = 0.15;
+const PERCENTUAL_DESCONTO_FALLBACK = 0.20;
 
 const bandeiraLabel: Record<string, string> = {
   VERDE: 'Verde',
@@ -159,8 +159,17 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
   const [erro, setErro] = useState('');
   const [excluindo, setExcluindo] = useState(false);
   const [showExcluirDialog, setShowExcluirDialog] = useState(false);
+  const [percentualDesconto, setPercentualDesconto] = useState(PERCENTUAL_DESCONTO_FALLBACK);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get('/publico/desconto-padrao')
+      .then((r) => {
+        if (r.data?.percentual > 0) setPercentualDesconto(r.data.percentual);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     api
@@ -282,7 +291,7 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
 
   const historico = resultado?.dadosExtraidos.historicoConsumo ?? [];
   const ultimos12 = historico.slice(-12);
-  const totalEconomia = ultimos12.reduce((acc, m) => acc + m.valorRS * PERCENTUAL_DESCONTO, 0);
+  const totalEconomia = ultimos12.reduce((acc, m) => acc + m.valorRS * percentualDesconto, 0);
 
   return (
     <div className="space-y-4">
@@ -502,8 +511,8 @@ export default function FaturaUploadOCR({ cooperadoId, onFaturaProcessada }: Fat
                           <td className="py-2 text-gray-800">{m.mesAno}</td>
                           <td className="py-2 text-right text-gray-800">{m.consumoKwh.toLocaleString('pt-BR')}</td>
                           <td className="py-2 text-right text-gray-800">{m.valorRS.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td className="py-2 text-right text-gray-800">{(m.valorRS * (1 - PERCENTUAL_DESCONTO)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td className="py-2 text-right text-green-600 font-medium">{(m.valorRS * PERCENTUAL_DESCONTO).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td className="py-2 text-right text-gray-800">{(m.valorRS * (1 - percentualDesconto)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td className="py-2 text-right text-green-600 font-medium">{(m.valorRS * percentualDesconto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                         </tr>
                       ))}
                     </tbody>
