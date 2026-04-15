@@ -99,12 +99,44 @@ LISTA_ESPERA (sem usina disponível)
 
 ### Proposta
 ```
-PENDENTE → PENDENTE_ASSINATURA → ASSINADA → ACEITA → CANCELADA
+PENDENTE → ACEITA → CONCLUIDA | CANCELADA
 ```
-- `aceitar()` deve ser transação atômica: calcula %, verifica capacidade, cria Contrato.
-- Após gerar proposta: enviar link de assinatura por WA + email automaticamente.
-- Se não assinar em X horas: lembrete automático por WA + email.
-- Após assinar: copia para cooperado por WA + email, passa para fila de alocação em usina.
+- A proposta NÃO precisa de assinatura. Aceite é uma ação no sistema (clique cooperado ou marcação admin).
+- Após aceite: cooperado vai para PENDENTE_DOCUMENTOS, notificado para enviar docs.
+- Link de assinatura é enviado APENAS após admin aprovar documentos (não após aceite).
+- `aceitar()` é transação atômica: grava PropostaCooperado + muda status cooperado.
+
+### Status do Cooperado (fluxo correto)
+```
+PENDENTE → PENDENTE_DOCUMENTOS → EM_ANALISE → APROVADO → ATIVO
+```
+Desvios:
+```
+EM_ANALISE → PENDENTE_DOCUMENTOS  (admin pede mais docs)
+EM_ANALISE → REPROVADO            (motivo registrado + cooperado notificado)
+```
+
+### Fluxo unificado pós-aceite (admin e público — idêntico)
+```
+[ACEITA] → notifica cooperado para enviar docs
+  → [PENDENTE_DOCUMENTOS] → cooperado faz upload
+  → [EM_ANALISE] → admin analisa:
+      APROVADO → sistema gera PDFs (contrato + termos + procuração + proposta)
+               → envia link de assinatura
+               → [AGUARDANDO_ASSINATURA]
+      PENDENTE → admin contata cooperado, pede o que falta
+      REPROVADO → motivo salvo + cooperado notificado
+  → cooperado assina → [CADASTRO_CONCLUIDO]
+  → entra na fila de alocação em usina
+  → usina disponível → admin aprova lista → envia para concessionária
+  → cooperado: ATIVO
+```
+
+### Indicação — sempre opcional
+- Cadastro funciona normalmente SEM código de indicação
+- SE veio com `?ref=CODIGO`: banner + notificação ao indicador
+- Token BONUS_INDICACAO: apenas após primeira fatura paga (não no cadastro)
+- `registrarIndicacao()` chamado somente se `codigoRef` presente
 
 ---
 
