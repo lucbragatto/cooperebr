@@ -300,36 +300,37 @@ Ou: mudar `gerarLink()` no `indicacoes.service.ts` para usar `/cadastro`.
 
 ---
 
-## ORDEM DE EXECUÇÃO RECOMENDADA
+## ORDEM DE EXECUÇÃO RECOMENDADA (revisado — 15/04/2026)
 
-```
-T1  → sem dependências (só frontend) → PODE EXECUTAR AGORA
-T2  → depende de verificar schema Plano (cooperativaId) → executar após T1
-T8  → junto com T2 (mesmo serviço)
-T0  → depende de T2 (wizard usa planos reais) e T3 (envio assinatura)
-T3  → depende de injetar WhatsappSenderService + EmailService no motor → após T0
-T4  → depende de T3 (usa enviarAssinatura)
-T5  → depende de T4 (cooperado existe no momento do cadastro)
-T6  → independente, pode ser feita a qualquer momento
-T7  → independente, pode ser feita a qualquer momento
-```
+> ⚠️ Correção: diagrama anterior tinha dependência circular T0↔T3.
+> T3 é APENAS backend (motor). T0 é APENAS frontend (wizard).
+> T3 não depende de T0. T0 depende de T3. Ordem: T3 → T0.
 
-**Diagrama de dependências:**
+**Schema Prisma:** campo `cooperativaId` já existe em `Plano` como `String?`.
+Nenhuma migration necessária para T2/T8.
+
+**Diagrama de dependências CORRETO:**
 ```
-T1
-T2 → T8
-T0 → T2, T3
-T3 → T0
-T4 → T3
-T5 → T4
-T6 (independente)
-T7 (independente)
+T1 ✅ (concluída)
+T7 → independente (risco zero)
+T6 → independente (risco zero)
+T8 → independente (mesmo arquivo que T2, fazer junto)
+T2 → depende T8 (mesmo serviço)
+T3 → depende T2 (motor passa a usar planos reais)
+T0 → depende T3 (wizard consome motor corrigido)
+T4 → depende T0 + T3 (refatoração do cadastro público)
+T5 → depende T4 (cooperado existe no cadastro)
 ```
 
-**Sprint sugerido:**
-- Sprint 1: T1 + T2 + T8 + T7 + T6 (baixo risco, sem dependências pesadas)
-- Sprint 2: T3 + T0 (médio risco — motor + wizard)
-- Sprint 3: T4 + T5 (alto risco — refatoração do cadastro público)
+**Sprint sugerido (revisado):**
+- Sprint 1: T7 → T6 → T2+T8 (baixo/médio risco, sem dependências pesadas)
+- Sprint 2: T3 → T0 (nessa ordem, não paralelo — T3 primeiro por ser só backend)
+- Sprint 3: T4 (com feature toggle) → T5
+
+**⚠️ T4 — risco elevado:**
+Mudar `cadastroWeb` de criar `LeadWhatsapp` para criar `Cooperado + PropostaCooperado`
+é uma quebra de fluxo. Implementar com **feature toggle** (`NEXT_PUBLIC_CADASTRO_V2=true`)
+até validar com usuário real. Admin pode ter processos que dependem do lead manual.
 
 ---
 

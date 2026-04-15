@@ -242,17 +242,17 @@ Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não
 | T6 | Unificar link de indicação | `backend/src/indicacoes/indicacoes.service.ts` | Mudar `gerarLink()` para usar `/cadastro?ref=` em vez de `/entrar?ref=` |
 | T7 | Reativar validações cadastro público | `backend/src/publico/publico.controller.ts` | Descomentar validações de CPF/email/telefone |
 
-### Sprint 2 — Médio risco (motor + wizard)
+### Sprint 2 — Médio risco (motor ANTES do wizard — nessa ordem)
 | # | Tarefa | Arquivos | Detalhes |
 |---|---|---|---|
-| T3 | PENDENTE_ASSINATURA + envio real | `backend/src/motor-proposta/motor-proposta.service.ts` | `confirmarOpcao()` mudar status, `enviarAssinatura()` enviar WA+email de verdade (hoje só console.log), proteger rota direta `aceitar()` |
-| T0 | Wizard Admin conectar ao Motor | `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx` | Step3 chamar `calcular()` real, Step4/6 chamar `aceitar()` + `enviarAssinatura()` — hoje NADA é salvo no banco pelo wizard |
+| T3 | PENDENTE_ASSINATURA + envio real | `backend/src/motor-proposta/motor-proposta.service.ts` | **Só backend.** `confirmarOpcao()` mudar status, `enviarAssinatura()` enviar WA+email (hoje só console.log), proteger rota direta `aceitar()`. **Fazer antes de T0.** |
+| T0 | Wizard Admin conectar ao Motor | `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx` | **Depende de T3 pronto.** Step3 chamar `calcular()` real, Step4/6 chamar `aceitar()` + `enviarAssinatura()` — hoje NADA é salvo no banco pelo wizard |
 
-### Sprint 3 — Alto risco (refatoração cadastro público)
+### Sprint 3 — Alto risco (feature toggle obrigatório)
 | # | Tarefa | Arquivos | Detalhes |
 |---|---|---|---|
-| T4 | Cadastro público criar Cooperado + Proposta | `backend/src/publico/publico.controller.ts` | Em vez de criar LeadWhatsapp, criar Cooperado (PENDENTE) + chamar Motor + `enviarAssinatura()` |
-| T5 | Vincular indicação no cadastro público | `backend/src/publico/publico.controller.ts` + `indicacoes.service.ts` | Chamar `registrarIndicacao(cooperadoId, codigoRef)` após criar Cooperado |
+| T4 | Cadastro público criar Cooperado + Proposta | `backend/src/publico/publico.controller.ts` | Em vez de LeadWhatsapp, criar Cooperado (PENDENTE) + Motor + `enviarAssinatura()`. **Usar feature toggle `NEXT_PUBLIC_CADASTRO_V2=true`** — quebra de fluxo significativa, admin pode ter processos dependentes do lead manual |
+| T5 | Vincular indicação no cadastro público | `backend/src/publico/publico.controller.ts` + `indicacoes.service.ts` | Chamar `registrarIndicacao(cooperadoId, codigoRef)` após criar Cooperado. Depende de T4. |
 
 ### P2 — Backlog anterior (manter)
 | # | Item | Descrição |
