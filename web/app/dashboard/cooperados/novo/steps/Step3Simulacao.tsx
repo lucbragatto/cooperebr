@@ -50,6 +50,17 @@ export default function Step3Simulacao({ data, faturaData, onChange, tipoMembro 
     });
   }, []);
 
+  // Recalcula simulação automaticamente ao trocar plano.
+  // Guard: simulacao é limpa pelo onClick do card, então só dispara quando realmente precisa recomputar.
+  useEffect(() => {
+    if (!planoSelecionadoId || planosAtivos.length === 0) return;
+    if (simulacao) return;
+    const { mediaKwh } = calcularEstatisticas();
+    if (mediaKwh <= 0 && !descontoCustom) return;
+    gerarSimulacao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planoSelecionadoId, planosAtivos, simulacao]);
+
   // Cálculos
   function calcularEstatisticas() {
     const selecionados = historico.filter((_, i) => mesesSelecionados.has(i));
