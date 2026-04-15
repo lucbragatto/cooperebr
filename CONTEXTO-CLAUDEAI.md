@@ -166,6 +166,20 @@ contato@cooperebr.com.br (IMAP)
 
 ---
 
+## PERGUNTAS EM ABERTO — RESPOSTAS CONFIRMADAS (15/04/2026)
+
+| # | Pergunta | Resposta |
+|---|---|---|
+| P1 | Como `/cadastro` identifica o tenant hoje? | **Não identifica.** Não há cooperativaId, subdomínio nem query param. Decisão: usar `?tenant=COOPERATIVA_ID` como query param agora. Subdomínio é evolução futura. |
+| P2 | `GET /planos/ativos` já existe? | **Existe (`@Public()`), mas filtra errado.** Retorna todos os planos do sistema sem filtrar por `cooperativaId` nem `publico: true`. Precisa adicionar ambos os filtros + aceitar query params. |
+| P3 | `enviarAssinatura()` já envia WA + email? | **Não. Só gera token e faz `console.log` do link.** Nenhum WA, nenhum email é disparado. Precisa implementar envio real do zero dentro dessa função. |
+| P4 | Há chamadas diretas a `aceitar()` que podem quebrar? | **Sim — 1 rota no controller** (`motor-proposta.controller.ts:50`). Na T3, essa rota deve ser protegida ou removida. O fluxo correto é: `assinarDocumento()` → chama `aceitar()` internamente. |
+
+### Detalhe crítico — `confirmarOpcao()` atual
+Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não dispara nada. O fluxo `PENDENTE → PENDENTE_ASSINATURA` ainda não existe no código. A T3 cria isso do zero.
+
+---
+
 ## BACKLOG PRIORIZADO (15/04/2026)
 
 ### P1 — Urgentes
