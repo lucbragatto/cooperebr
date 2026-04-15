@@ -166,6 +166,57 @@ contato@cooperebr.com.br (IMAP)
 
 ---
 
+## DIAGNÓSTICO ARQUITETURAL — OS 3 MUNDOS DESCONECTADOS (15/04/2026)
+
+O sistema tem três camadas que deveriam se conectar em sequência mas estão isoladas:
+
+```
+[Módulo Planos] → define regras comerciais
+      ↓ (deveria alimentar)
+[Motor de Proposta] → calcula, grava e gerencia propostas
+      ↓ (deveria ser chamado por)
+[Wizard Admin / Cadastro Público] → interface de cadastro
+```
+
+### Wizard Admin (`/dashboard/cooperados/novo`) — 7 steps
+- Step 1: OCR fatura ✅
+- Step 2: Dados pessoais ✅
+- Step 3: Simulação + escolha plano — chama calcular() mas só exibe, não grava ⚠️
+- Step 4: Envia proposta via wa.me ou mailto — **NÃO chama aceitar(), nada é salvo no banco** ❌
+- Step 5: Upload docs ✅
+- Step 6: Contrato — `enviarParaAssinatura()` só muda estado React local, **não chama backend** ❌
+- Step 7: Alocação — chama motor tarde demais ❌
+
+**Resultado:** wizard admin não persiste nada. PropostaCooperado e Contrato nunca são criados pelo wizard.
+
+### Cadastro Público (`/cadastro`) — 4 steps
+- `DESCONTO_PERCENTUAL_FALLBACK = 0.20` **hardcoded** ❌
+- Campo `plano.publico` existe no banco mas é **ignorado** ❌
+- `GET /planos/ativos` existe mas **sem filtro de tenant nem de publico** ❌
+- Finaliza com `POST /publico/cadastro-web` → cria `LeadWhatsapp` (não Cooperado, não Proposta) ❌
+- Motor de Proposta **nunca é chamado** no fluxo público ❌
+- Tenant não é identificado na página — **usar `?tenant=COOPERATIVA_ID`** como query param
+
+### Como o link de indicação se conecta ao MLM e Clube
+```
+Cooperado compartilha: /cadastro?ref=CODIGO
+  → frontend exibe banner com nome do indicador
+  → ao finalizar cadastro: salva codigoRef no LeadWhatsapp.dados{}
+  → notifica indicador via WA (já implementado)
+  → PROBLEMA: codigoRef fica perdido no JSON do lead — não chama registrarIndicacao()
+  → registrarIndicacao() exige cooperadoId — lead não é cooperado ainda
+  → resultado: cadeia MLM NUNCA se forma pelo cadastro web
+
+O correto (após refatoração):
+  → cadastro-web cria Cooperado (PENDENTE) — não Lead
+  → chama registrarIndicacao(cooperadoId, codigoRef) imediatamente
+  → tokens BONUS_INDICACAO só na primeira fatura paga (já correto)
+```
+
+Links internos do backend geram `/entrar?ref=CODIGO` mas cadastro usa `/cadastro?ref=CODIGO` — **duas entradas diferentes**, precisa unificar.
+
+---
+
 ## PERGUNTAS EM ABERTO — RESPOSTAS CONFIRMADAS (15/04/2026)
 
 | # | Pergunta | Resposta |
@@ -180,17 +231,30 @@ Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não
 
 ---
 
-## BACKLOG PRIORIZADO (15/04/2026)
+## BACKLOG PRIORIZADO — COMPLETO (15/04/2026)
 
-### P1 — Urgentes
-| # | Item | Descrição |
-|---|---|---|
-| 1 | Fix recalculo plano (admin) | `Step3Simulacao.tsx`: ao trocar plano, adicionar `useEffect` que chama `gerarSimulacao()` automaticamente |
-| 2 | Cadastro público buscar planos | `/cadastro` deve buscar planos com `publico=true` do admin (hoje usa 20% hardcoded) |
-| 3 | Fluxo assinatura — envio automático | Após gerar proposta, enviar link `/assinar?token=xxx` por WA + email automaticamente |
-| 4 | Status `PENDENTE_ASSINATURA` | Motor de proposta: adicionar status no ciclo de vida da proposta |
+### Sprint 1 — Baixo risco, sem dependências pesadas
+| # | Tarefa | Arquivos | Detalhes |
+|---|---|---|---|
+| T1 | Fix recalculo plano (admin) | `web/app/dashboard/cooperados/novo/steps/Step3Simulacao.tsx` | Adicionar `useEffect` que observa `planoSelecionadoId` e chama `gerarSimulacao()` quando há dados |
+| T2 | Cadastro público buscar planos reais | `backend/src/planos/planos.service.ts`, `planos.controller.ts`, `web/app/cadastro/page.tsx` | `findAtivos()` aceitar `cooperativaId` + `publico`, frontend buscar `?publico=true&cooperativaId=X`, remover 20% hardcoded |
+| T8 | Tenant isolation em Planos | `backend/src/planos/planos.service.ts` | Todos os métodos exigir cooperativaId |
+| T6 | Unificar link de indicação | `backend/src/indicacoes/indicacoes.service.ts` | Mudar `gerarLink()` para usar `/cadastro?ref=` em vez de `/entrar?ref=` |
+| T7 | Reativar validações cadastro público | `backend/src/publico/publico.controller.ts` | Descomentar validações de CPF/email/telefone |
 
-### P2 — Importantes
+### Sprint 2 — Médio risco (motor + wizard)
+| # | Tarefa | Arquivos | Detalhes |
+|---|---|---|---|
+| T3 | PENDENTE_ASSINATURA + envio real | `backend/src/motor-proposta/motor-proposta.service.ts` | `confirmarOpcao()` mudar status, `enviarAssinatura()` enviar WA+email de verdade (hoje só console.log), proteger rota direta `aceitar()` |
+| T0 | Wizard Admin conectar ao Motor | `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx` | Step3 chamar `calcular()` real, Step4/6 chamar `aceitar()` + `enviarAssinatura()` — hoje NADA é salvo no banco pelo wizard |
+
+### Sprint 3 — Alto risco (refatoração cadastro público)
+| # | Tarefa | Arquivos | Detalhes |
+|---|---|---|---|
+| T4 | Cadastro público criar Cooperado + Proposta | `backend/src/publico/publico.controller.ts` | Em vez de criar LeadWhatsapp, criar Cooperado (PENDENTE) + chamar Motor + `enviarAssinatura()` |
+| T5 | Vincular indicação no cadastro público | `backend/src/publico/publico.controller.ts` + `indicacoes.service.ts` | Chamar `registrarIndicacao(cooperadoId, codigoRef)` após criar Cooperado |
+
+### P2 — Backlog anterior (manter)
 | # | Item | Descrição |
 |---|---|---|
 | 5 | Cópia pós-assinatura | Enviar PDF assinado por WA + email após confirmação |
