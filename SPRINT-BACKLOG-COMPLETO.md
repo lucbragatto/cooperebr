@@ -304,6 +304,80 @@ Step 7: acompanhar assinatura → quando assinado: busca usina → admin aprova 
 
 ---
 
+## TAREFAS — SPRINT 2.5 (portal do cooperado — baixo risco)
+
+### T9 — Banner de status do cadastro no portal
+**Arquivo:** `web/app/portal/page.tsx`
+**Problema:** cooperado em PENDENTE_DOCUMENTOS / EM_ANALISE / AGUARDANDO_ASSINATURA não tem visibilidade do processo
+**Fix:** adicionar bloco condicional no dashboard do portal baseado no `status` retornado por `/cooperados/meu-perfil`
+```tsx
+// Exibir banner apenas se status != ATIVO
+{statusCadastro !== 'ATIVO' && (
+  <BannerStatusCadastro
+    status={statusCadastro}
+    linkAssinatura={proposta?.tokenAssinatura}
+  />
+)}
+
+// Etapas exibidas:
+// ✅ Proposta aceita
+// 📎 PENDENTE_DOCUMENTOS → botão "Enviar documentos" → /portal/documentos
+// 🔍 EM_ANALISE → "Documentos em análise — aguarde"
+// ✅ APROVADO + AGUARDANDO_ASSINATURA → botão "Assinar documentos" → /portal/assinar/[token]
+// ✅ ATIVO → não exibe banner
+```
+**Depende de:** T3 (backend retornar status correto + tokenAssinatura no /meu-perfil)
+**Commit:** `feat: banner de status do cadastro no portal do cooperado`
+
+---
+
+### T9b — Feedback da análise de documentos no portal
+**Arquivo:** `web/app/portal/documentos/page.tsx`
+**Problema:** página lista docs e permite upload, mas não mostra resultado da análise do admin
+**Fix:** exibir por documento: APROVADO ✅ / PENDENTE ⏳ / REPROVADO ❌ + motivo da reprovação
+**Depende de:** backend retornar status por documento na rota `/cooperados/meu-perfil/documentos`
+**Commit:** `feat: exibir status de análise por documento no portal`
+
+---
+
+### T6 corrigido — Unificar link de indicação (backend + portal)
+**Arquivos:**
+- `backend/src/indicacoes/indicacoes.service.ts` — mudar `gerarLink()` para `/cadastro?ref=`
+- `web/app/portal/page.tsx` linha ~72 — mudar `/entrar?ref=` para `/cadastro?ref=`
+- `web/app/portal/indicacoes/page.tsx` — mesma correção
+**Commit:** `fix: unificar link de indicação para /cadastro?ref=CODIGO`
+
+---
+
+### T10 — Aprovação automática de documentos (opt-in por parceiro)
+**Problema:** admin é gargalo do fluxo. Para escalar, parceiros precisam poder habilitar aprovação automática.
+**Quem habilita:** SUPER_ADMIN (qualquer parceiro) ou ADMIN do parceiro (para si mesmo)
+
+**Fix — schema (migration necessária):**
+```prisma
+// ConfigTenant ou Cooperativa
+aprovacaoDocumentosAutomatica  Boolean  @default(false)
+prazoAprovacaoAutoHoras        Int      @default(24)
+```
+
+**Fix — lógica:**
+```typescript
+// Após cooperado enviar documentos → status EM_ANALISE
+// SE aprovacaoAutomatica = true:
+//   agenda job para X horas depois
+//   se nenhum doc reprovado manualmente nesse prazo → aprova automaticamente
+//   admin ainda pode reprovar dentro do prazo
+// SE aprovacaoAutomatica = false:
+//   notifica admin para análise manual (fluxo atual)
+```
+
+**Por que prazo de espera:** dá margem para admin intervir se notar algo errado sem precisar revisar tudo antes
+**Padrão:** `@default(false)` — fluxo manual é o padrão, automático é opt-in
+**Depende de:** T3 (fluxo de documentos implementado)
+**Commit:** `feat: aprovação automática de documentos por parceiro (opt-in)`
+
+---
+
 ## TAREFAS — SPRINT 3 (alto risco — feature toggle obrigatório)
 
 ### T4-PRE — Auditoria de queries (pré-requisito de T4)
@@ -370,9 +444,27 @@ T4 → depende T0 + T3 + T4-PRE
 T5 → incluída em T4
 ```
 
-**Sequência de menor risco:**
+**Sequência de menor risco (revisada final):**
 ```
-T7 → T6 → T2+T8 → T3 → T0 → T4-PRE → T4
+T7 → T6 → T2+T8    (Sprint 1 — baixo risco)
+T3 → T0             (Sprint 2 — motor antes do wizard)
+T9 → T9b → T10     (Sprint 2.5 — portal cooperado)
+T4-PRE → T4        (Sprint 3 — refatoração cadastro público)
+```
+
+**Diagrama completo:**
+```
+T1 ✅ concluída
+T7 → independente
+T6 → independente (backend + portal)
+T2+T8 → independente
+T3 → depende T2+T8
+T0 → depende T3
+T9 → depende T3 (status correto no /meu-perfil)
+T9b → depende T3
+T10 → depende T3 (fluxo docs implementado)
+T4-PRE → independente (auditoria)
+T4 → depende T0 + T3 + T4-PRE
 ```
 
 ---

@@ -259,7 +259,17 @@ Links internos do backend geram `/entrar?ref=CODIGO` mas cadastro usa `/cadastro
 | P4 | Há chamadas diretas a `aceitar()` que podem quebrar? | **Sim — 1 rota no controller** (`motor-proposta.controller.ts:50`). Na T3, essa rota deve ser protegida ou removida. O fluxo correto é: `assinarDocumento()` → chama `aceitar()` internamente. |
 
 ### Detalhe crítico — `confirmarOpcao()` atual
-Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não dispara nada. O fluxo `PENDENTE → PENDENTE_ASSINATURA` ainda não existe no código. A T3 cria isso do zero.
+Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não dispara nada.
+`aceitar()` cria PropostaCooperado com status `ACEITA` direto — sem notificar cooperado, sem mudar status para PENDENTE_DOCUMENTOS.
+`enviarAssinatura()` só faz `console.log` — nenhum WA nem email enviado.
+A T3 implementa o fluxo completo do zero.
+
+### Portal do Cooperado (`/portal`) — estado atual
+- Já existe com páginas: dashboard, financeiro, documentos (com upload), UCs, tokens, clube, indicações, conta, ranking, convenio, desligamento
+- `/portal/assinar/[token]` já existe — aguarda link ser enviado de verdade (T3)
+- `/portal/documentos` permite upload — falta exibir status da análise admin (T9b)
+- Link de indicação no portal usa `/entrar?ref=` em vez de `/cadastro?ref=` (T6)
+- Falta: banner de status de cadastro para cooperados em transição (T9)
 
 ---
 
@@ -277,14 +287,23 @@ Hoje `confirmarOpcao()` **apenas chama `calcular()`** — não muda status, não
 ### Sprint 2 — Médio risco (motor ANTES do wizard — nessa ordem)
 | # | Tarefa | Arquivos | Detalhes |
 |---|---|---|---|
-| T3 | PENDENTE_ASSINATURA + envio real | `backend/src/motor-proposta/motor-proposta.service.ts` | **Só backend.** `confirmarOpcao()` mudar status, `enviarAssinatura()` enviar WA+email (hoje só console.log), proteger rota direta `aceitar()`. **Fazer antes de T0.** |
-| T0 | Wizard Admin conectar ao Motor | `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx` | **Depende de T3 pronto.** Step3 chamar `calcular()` real, Step4/6 chamar `aceitar()` + `enviarAssinatura()` — hoje NADA é salvo no banco pelo wizard |
+| T3 | Fluxo aceite + docs + assinatura real | `backend/src/motor-proposta/motor-proposta.service.ts` | **Só backend.** Após `aceitar()`: mudar cooperado para PENDENTE_DOCUMENTOS + notificar. Novo endpoint status-documentos (APROVADO/PENDENTE/REPROVADO). `enviarLinkAssinaturaDocs()` gerar PDFs + enviar WA+email real (hoje só console.log). Proteger rota direta `aceitar()`. **Fazer antes de T0.** |
+| T0 | Wizard Admin conectar ao Motor | `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx` | **Depende de T3 pronto.** Step2 criar cooperado, Step3 chamar `calcular()` real, Step4 chamar `aceitar()`, Step5 upload docs, Step6 análise docs, Step7 assinar — hoje NADA é salvo no banco pelo wizard |
+
+### Sprint 2.5 — Portal do cooperado (baixo risco, depende de T3)
+| # | Tarefa | Arquivos | Detalhes |
+|---|---|---|---|
+| T9 | Banner status cadastro no portal | `web/app/portal/page.tsx` | Bloco condicional por status: PENDENTE_DOCUMENTOS → botão upload docs, AGUARDANDO_ASSINATURA → botão assinar, ATIVO → sem banner |
+| T9b | Feedback análise docs no portal | `web/app/portal/documentos/page.tsx` | Exibir APROVADO/PENDENTE/REPROVADO + motivo por documento |
+| T6 | Unificar link indicação | `indicacoes.service.ts` + `web/app/portal/page.tsx` + `web/app/portal/indicacoes/page.tsx` | Mudar `/entrar?ref=` para `/cadastro?ref=` em todos os lugares (backend + portal) |
+| T10 | Aprovação automática docs (opt-in) | `ConfigTenant` migration + `backend/src/motor-proposta/` | Flag `aprovacaoDocumentosAutomatica` + `prazoAprovacaoAutoHoras` por parceiro. SUPER_ADMIN ou ADMIN habilita. Default false (manual). Agenda job: se nenhum doc reprovado no prazo → aprova e gera PDFs automaticamente. |
 
 ### Sprint 3 — Alto risco (feature toggle obrigatório)
 | # | Tarefa | Arquivos | Detalhes |
 |---|---|---|---|
-| T4 | Cadastro público criar Cooperado + Proposta | `backend/src/publico/publico.controller.ts` | Em vez de LeadWhatsapp, criar Cooperado (PENDENTE) + Motor + `enviarAssinatura()`. **Usar feature toggle `NEXT_PUBLIC_CADASTRO_V2=true`** — quebra de fluxo significativa, admin pode ter processos dependentes do lead manual |
-| T5 | Vincular indicação no cadastro público | `backend/src/publico/publico.controller.ts` + `indicacoes.service.ts` | Chamar `registrarIndicacao(cooperadoId, codigoRef)` após criar Cooperado. Depende de T4. |
+| T4-PRE | Auditoria queries por status | Todo backend | Garantir cobranças/stats filtram `status=ATIVO`. Mapear queries que assumem cooperado tem proposta/contrato. |
+| T4 | Cadastro público criar Cooperado + Proposta | `backend/src/publico/publico.controller.ts` | Em vez de LeadWhatsapp, criar Cooperado (PENDENTE) + chamar Motor + `aceitar()`. **Flag `NEXT_PUBLIC_CADASTRO_V2=true`**. Manter fluxo lead enquanto não validado. |
+| T5 | Vincular indicação | Incluído em T4 | `registrarIndicacao(cooperadoId, codigoRef)` se `codigoRef` presente. Indicação sempre opcional. |
 
 ### P2 — Backlog anterior (manter)
 | # | Item | Descrição |
