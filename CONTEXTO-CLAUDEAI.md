@@ -379,7 +379,43 @@ const valorLiquido = Math.round((valorBruto - desconto) * 100) / 100;
 | Rebalanceamento de usinas | Somente com aprovação explicitado do admin — nunca automático |
 | Lista concessionária | Toda alocação ou rebalanceamento aprovado gera nova lista por usina afetada |
 | Indicação no cadastro | `/cadastro?ref=CODIGO` vincula indicação e aplica desconto maior para o indicador |
-| Fluxo proposta | Proposta gerada → link assinatura enviado → lembrete se pendente → assinada → alocação em usina |
+| Fluxo proposta | Proposta aceita → cooperado envia docs → admin analisa → aprovado → sistema gera PDFs + envia link assinatura → cooperado assina → alocação em usina |
+| Aprovação docs | Default: manual (admin analisa). Opt-in por parceiro: aprovação automática após prazo configurável se nenhum doc reprovado. SUPER_ADMIN ou ADMIN habilita. |
+
+---
+
+## ATENÇÕES PARA IMPLEMENTAÇÃO (T3 em diante)
+
+### Enum StatusCooperado no schema Prisma
+O schema tem status legados que não fazem parte do fluxo atual:
+```
+PENDENTE_ASSINATURA ← legado, não usar
+AGUARDANDO_CONCESSIONARIA ← legado, não usar
+ATIVO_RECEBENDO_CREDITOS ← legado, usar ATIVO
+```
+Fluxo correto (não criar migration agora — deixar para cleanup futuro):
+```
+PENDENTE → PENDENTE_DOCUMENTOS → EM_ANALISE → APROVADO → ATIVO
+```
+Desvios:
+```
+EM_ANALISE → PENDENTE_DOCUMENTOS (pede mais docs)
+EM_ANALISE → REPROVADO (com motivo)
+```
+
+### Função `enviarAssinatura()` — renomear em T3
+- Nome atual: `enviarAssinatura(propostaId)` — só faz `console.log`, nunca envia nada
+- Novo nome: `enviarLinkAssinaturaDocs(propostaId)` — gera PDFs + envia WA+email de verdade
+- **Não criar as duas funções** — renomear e reimplementar a existente
+- Atualizar todas as referências no controller ao renomear
+
+### Status da Proposta
+```
+PENDENTE → ACEITA → CONCLUIDA | CANCELADA
+```
+- Proposta NÃO tem assinatura própria — o aceite é um clique/ação no sistema
+- O que é assinado são os DOCUMENTOS (contrato + termos + procuração) gerados após aprovação
+- `PENDENTE_ASSINATURA` era status incorreto — não usar
 
 ---
 
