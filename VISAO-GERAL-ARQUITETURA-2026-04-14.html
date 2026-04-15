@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CooperEBR — Visão Geral da Arquitetura</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #334155;
+    --border: #475569;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #22d3ee;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --orange: #fb923c;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  h1 {
+    font-size: 2rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle { color: var(--text-dim); margin-bottom: 2rem; font-size: 1.1rem; }
+
+  h2 {
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--surface2);
+  }
+
+  h3 {
+    font-size: 1.15rem;
+    color: var(--accent2);
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  p, li { color: var(--text); margin-bottom: 0.5rem; }
+
+  /* ── Navigation Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 1rem 0;
+    z-index: 100;
+    border-bottom: 1px solid var(--surface2);
+  }
+  .tab {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+  .tab:hover { border-color: var(--accent); color: var(--text); }
+  .tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ── Entity Diagram ── */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  .entity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin: 1rem 0;
+  }
+
+  .entity-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .entity-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .entity-card h4 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .entity-card .icon { font-size: 1.3rem; }
+  .entity-card .desc { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.75rem; }
+  .entity-card .fields {
+    font-family: 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    background: var(--bg);
+    padding: 0.75rem;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .entity-card .fields .key { color: var(--accent); }
+  .entity-card .fields .rel { color: var(--purple); }
+  .entity-card .fields .fk { color: var(--orange); }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0.1rem;
+  }
+  .badge.core { background: var(--accent); color: var(--bg); }
+  .badge.support { background: var(--purple); color: #fff; }
+  .badge.finance { background: var(--green); color: var(--bg); }
+  .badge.external { background: var(--orange); color: var(--bg); }
+  .badge.gap { background: var(--red); color: #fff; }
+  .badge.ok { background: var(--green); color: var(--bg); }
+  .badge.warn { background: var(--yellow); color: var(--bg); }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    padding: 1rem;
+    background: var(--surface);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  .flow-step {
+    background: var(--surface2);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .flow-arrow { color: var(--accent); font-size: 1.2rem; }
+  .flow-step.critical { border-color: var(--red); background: rgba(248,113,113,0.1); }
+  .flow-step.ok { border-color: var(--green); }
+  .flow-step.gap { border-color: var(--red); background: rgba(248,113,113,0.15); color: var(--red); }
+
+  /* ── Relationship table ── */
+  .rel-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .rel-table th {
+    text-align: left;
+    padding: 0.75rem;
+    background: var(--surface2);
+    color: var(--accent);
+    border-bottom: 2px solid var(--border);
+  }
+  .rel-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--surface2);
+    vertical-align: top;
+  }
+  .rel-table tr:hover td { background: rgba(56,189,248,0.05); }
+
+  /* ── Gap cards ── */
+  .gap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .gap-card {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 1.2rem;
+    border-left: 4px solid var(--red);
+  }
+  .gap-card.warn { border-left-color: var(--yellow); }
+  .gap-card.info { border-left-color: var(--accent); }
+  .gap-card h4 { font-size: 0.95rem; margin-bottom: 0.5rem; }
+  .gap-card p { font-size: 0.85rem; color: var(--text-dim); }
+  .gap-card code {
+    background: var(--bg);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    color: var(--accent);
+  }
+
+  /* ── SVG Diagram ── */
+  .svg-diagram {
+    width: 100%;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+  }
+  .svg-diagram svg {
+    min-width: 1000px;
+  }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85rem;
+    margin: 1rem 0;
+  }
+
+  ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  li { margin-bottom: 0.3rem; }
+
+  /* priority matrix */
+  .priority-matrix {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .priority-box {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 1.2rem;
+    border: 1px solid var(--border);
+  }
+  .priority-box h4 { margin-bottom: 0.75rem; }
+  .priority-box.p1 { border-color: var(--red); }
+  .priority-box.p1 h4 { color: var(--red); }
+  .priority-box.p2 { border-color: var(--orange); }
+  .priority-box.p2 h4 { color: var(--orange); }
+  .priority-box.p3 { border-color: var(--yellow); }
+  .priority-box.p3 h4 { color: var(--yellow); }
+  .priority-box.p4 { border-color: var(--green); }
+  .priority-box.p4 h4 { color: var(--green); }
+
+  /* ── Resolved cards ── */
+  .gap-card.resolved {
+    border-left-color: var(--green);
+    opacity: 0.75;
+  }
+  .gap-card.resolved h4 { text-decoration: line-through; }
+  .commit-ref {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--green);
+    background: rgba(74,222,128,0.1);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+  }
+  .new-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: var(--accent2);
+    color: var(--bg);
+    margin-left: 0.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .priority-matrix { grid-template-columns: 1fr; }
+    .entity-grid { grid-template-columns: 1fr; }
+    body { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>CooperEBR — Visao Geral da Arquitetura</h1>
+<p class="subtitle">Documento de referencia: entidades, relacionamentos, fluxos de negocio e lacunas de integracao — 14/Abr/2026 (atualizado com sprints ate 14/04)</p>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="showSection('entities')">Entidades</div>
+  <div class="tab" onclick="showSection('relationships')">Relacionamentos</div>
+  <div class="tab" onclick="showSection('flows')">Fluxos de Negocio</div>
+  <div class="tab" onclick="showSection('billing')">Ciclo Cobranca</div>
+  <div class="tab" onclick="showSection('newmodules')">Novos Modulos</div>
+  <div class="tab" onclick="showSection('gaps')">Lacunas</div>
+  <div class="tab" onclick="showSection('roadmap')">Roadmap</div>
+  <div class="tab" onclick="showSection('sprint1504')">Sprint 14-15/Abr ★</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: ENTIDADES -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section active" id="entities">
+<h2>1. Mapa de Entidades</h2>
+
+<p>O sistema possui <strong>70+ modelos Prisma</strong> organizados em dominios. Abaixo estao as entidades centrais que formam o nucleo do negocio de geracao distribuida.</p>
+
+<h3>Nucleo do Negocio (Core)</h3>
+<div class="entity-grid">
+
+  <div class="entity-card">
+    <h4><span class="icon">🏢</span> Cooperativa <span class="badge core">TENANT ROOT</span></h4>
+    <div class="desc">Raiz do multi-tenant. Cada cooperativa/consorcio e um tenant isolado. Todas as queries filtram por cooperativaId.</div>
+    <div class="fields">
+      <div><span class="key">id</span> String (cuid)</div>
+      <div><span class="key">nome, cnpj</span> identificacao</div>
+      <div><span class="key">tipoParceiro</span> COOPERATIVA | CONSORCIO | ASSOCIACAO | CONDOMINIO</div>
+      <div><span class="key">tiposOperacao[]</span> USINA_PROPRIA | CONDOMINIO | EMPRESA | ...</div>
+      <div><span class="key">multaAtraso, jurosDiarios</span> regras financeiras</div>
+      <div><span class="key">modulosAtivos[]</span> features habilitadas</div>
+      <div><span class="rel">→ Usinas[], Cooperados[], Contratos[]</span></div>
+      <div><span class="rel">→ ConfiguracaoCobranca[], AsaasConfig</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">👤</span> Cooperado <span class="badge core">MEMBRO</span></h4>
+    <div class="desc">Pessoa fisica ou juridica aderente a cooperativa. Possui UCs, contratos, propostas. Ciclo de vida com 8+ estados.</div>
+    <div class="fields">
+      <div><span class="key">id, nomeCompleto, cpf, email</span></div>
+      <div><span class="key">status</span> StatusCooperado (8 estados)</div>
+      <div><span class="key">tipoCooperado</span> COM_UC | SEM_UC | GERADOR | ...</div>
+      <div><span class="key">tipoPessoa</span> PF | PJ</div>
+      <div><span class="key">cooperativaId</span> <span class="fk">FK → Cooperativa</span></div>
+      <div><span class="rel">→ UCs[], Contratos[], Propostas[]</span></div>
+      <div><span class="rel">→ FaturasProcessadas[], Cobrancas (via Contrato)</span></div>
+      <div><span class="rel">→ Indicacoes[], CooperToken</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">🔌</span> UC (Unid. Consumidora) <span class="badge core">PONTO CONSUMO</span></h4>
+    <div class="desc">Conta de luz do cooperado na concessionaria. Deve ser da MESMA distribuidora da usina (regra ANEEL).</div>
+    <div class="fields">
+      <div><span class="key">numero</span> String @unique</div>
+      <div><span class="key">distribuidora</span> String (ex: "EDP-ES")</div>
+      <div><span class="key">cidade, estado, endereco</span></div>
+      <div><span class="key">classificacao, modalidadeTarifaria</span></div>
+      <div><span class="key">cooperadoId</span> <span class="fk">FK → Cooperado</span></div>
+      <div><span class="rel">→ Contratos[], FaturasProcessadas[]</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">☀️</span> Usina <span class="badge core">GERADORA</span></h4>
+    <div class="desc">Usina fotovoltaica que gera energia. Capacidade distribuida entre cooperados via contratos. Soma dos % <= 100%.</div>
+    <div class="fields">
+      <div><span class="key">nome, potenciaKwp</span></div>
+      <div><span class="key">capacidadeKwh, producaoMensalKwh</span></div>
+      <div><span class="key">distribuidora</span> String (regra geografica)</div>
+      <div><span class="key">statusHomologacao</span> CADASTRADA → ... → EM_PRODUCAO</div>
+      <div><span class="key">cooperativaId</span> <span class="fk">FK → Cooperativa</span></div>
+      <div><span class="key">proprietarioCooperadoId</span> <span class="fk">FK → Cooperado</span></div>
+      <div><span class="rel">→ Contratos[], GeracoesMensais[]</span></div>
+      <div><span class="rel">→ ConfiguracaoCobranca[], Alertas[]</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">📋</span> Contrato <span class="badge core">VINCULO CENTRAL</span></h4>
+    <div class="desc">Liga Cooperado ↔ UC ↔ Usina. Define a cota de energia (kWh) e o percentual da usina alocado.</div>
+    <div class="fields">
+      <div><span class="key">numero</span> CTR-YYYY-NNNN (unico)</div>
+      <div><span class="key">cooperadoId</span> <span class="fk">FK → Cooperado</span></div>
+      <div><span class="key">ucId</span> <span class="fk">FK → UC</span></div>
+      <div><span class="key">usinaId</span> <span class="fk">FK → Usina</span></div>
+      <div><span class="key">percentualUsina</span> % alocado da usina</div>
+      <div><span class="key">kwhContratoAnual / Mensal</span></div>
+      <div><span class="key">percentualDesconto</span></div>
+      <div><span class="key">descontoOverride, baseCalculoOverride</span></div>
+      <div><span class="key">status</span> PENDENTE_ATIVACAO → ATIVO → ...</div>
+      <div><span class="rel">→ Cobrancas[], ListaEspera?</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">💰</span> Cobranca <span class="badge finance">FATURAMENTO</span></h4>
+    <div class="desc">Cobranca mensal gerada para cada contrato ATIVO. Vincula geracao real, fatura OCR, e pagamento via Asaas.</div>
+    <div class="fields">
+      <div><span class="key">contratoId</span> <span class="fk">FK → Contrato</span></div>
+      <div><span class="key">mesReferencia, anoReferencia</span></div>
+      <div><span class="key">valorBruto, valorDesconto, valorLiquido</span></div>
+      <div><span class="key">kwhEntregue, kwhConsumido, kwhCompensado</span></div>
+      <div><span class="key">geracaoMensalId</span> <span class="fk">FK → GeracaoMensal</span></div>
+      <div><span class="key">faturaProcessadaId</span> <span class="fk">FK → FaturaProcessada</span></div>
+      <div><span class="key">status</span> PENDENTE → A_VENCER → PAGO | VENCIDO</div>
+      <div><span class="rel">→ AsaasCobranca[], CobrancaBancaria[]</span></div>
+    </div>
+  </div>
+</div>
+
+<h3>Dados de Entrada</h3>
+<div class="entity-grid">
+  <div class="entity-card">
+    <h4><span class="icon">📄</span> FaturaProcessada <span class="badge support">OCR/CLAUDE</span></h4>
+    <div class="desc">Fatura da concessionaria processada por OCR (Claude AI). Extrai consumo, tarifas, historico. Base para kwhContratoAnual.</div>
+    <div class="fields">
+      <div><span class="key">cooperadoId, ucId</span> <span class="fk">FKs</span></div>
+      <div><span class="key">dadosExtraidos</span> Json (output Claude)</div>
+      <div><span class="key">historicoConsumo</span> Json (12 meses)</div>
+      <div><span class="key">mediaKwhCalculada</span> Decimal</div>
+      <div><span class="key">status</span> PENDENTE → APROVADA | REJEITADA</div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">⚡</span> GeracaoMensal <span class="badge support">INPUT MANUAL</span></h4>
+    <div class="desc">kWh efetivamente gerado pela usina em cada mes. Input manual do admin. Usado para ratear creditos entre cooperados.</div>
+    <div class="fields">
+      <div><span class="key">usinaId</span> <span class="fk">FK → Usina</span></div>
+      <div><span class="key">competencia</span> DateTime (mes/ano)</div>
+      <div><span class="key">kwhGerado</span> Float</div>
+      <div><span class="key">fonte</span> MANUAL | SUNGROW | ...</div>
+      <div><span class="rel">→ Cobrancas[] (vinculadas ao rateio)</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">📊</span> PropostaCooperado <span class="badge support">MOTOR</span></h4>
+    <div class="desc">Saida do Motor de Propostas. Calcula economia projetada e aloca % da usina. Ao ser aceita, cria Contrato automaticamente.</div>
+    <div class="fields">
+      <div><span class="key">cooperadoId</span> <span class="fk">FK → Cooperado</span></div>
+      <div><span class="key">kwhMesRecente, kwhMedio12m</span></div>
+      <div><span class="key">descontoPercentual, economiaAnual</span></div>
+      <div><span class="key">kwhContrato, percentualUsina</span> (calculados)</div>
+      <div><span class="key">status</span> PENDENTE → APROVADA | REJEITADA</div>
+      <div><span class="rel">→ Contratos[] (criados ao aceitar)</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card">
+    <h4><span class="icon">⚙️</span> ConfiguracaoCobranca <span class="badge support">REGRA</span></h4>
+    <div class="desc">Regras de desconto por cooperativa ou por usina. Cascata: Contrato.override → Usina → Cooperativa.</div>
+    <div class="fields">
+      <div><span class="key">cooperativaId</span> <span class="fk">FK → Cooperativa</span></div>
+      <div><span class="key">usinaId</span> <span class="fk">FK → Usina (nullable)</span></div>
+      <div><span class="key">descontoPadrao, descontoMin, descontoMax</span></div>
+      <div><span class="key">baseCalculo</span> TUSD_TE | TOTAL_FATURA</div>
+      <div>@@unique([cooperativaId, usinaId])</div>
+    </div>
+  </div>
+</div>
+
+<h3>Modulos Complementares</h3>
+<div class="entity-grid">
+  <div class="entity-card">
+    <h4><span class="icon">🤝</span> Convenio <span class="badge support">INSTITUCIONAL</span></h4>
+    <div class="desc">Acordos com condominios, empresas, associacoes. Descontos progressivos por faixa de membros.</div>
+  </div>
+  <div class="entity-card">
+    <h4><span class="icon">🪙</span> CooperToken <span class="badge support">FIDELIDADE</span></h4>
+    <div class="desc">Sistema de tokens de fidelidade. Opcao A (desconto direto) ou B (acumula tokens). Ledger contabil.</div>
+  </div>
+  <div class="entity-card">
+    <h4><span class="icon">📱</span> WhatsApp Bot <span class="badge external">COMUNICACAO</span></h4>
+    <div class="desc">Bot conversacional para notificacoes de cobranca, aprovacao de propostas, MLM.</div>
+  </div>
+  <div class="entity-card">
+    <h4><span class="icon">💳</span> Asaas <span class="badge external">PAGAMENTOS</span></h4>
+    <div class="desc">Gateway de pagamento (PIX, boleto). Webhooks para confirmacao automatica.</div>
+  </div>
+  <div class="entity-card">
+    <h4><span class="icon">👥</span> Indicacoes (MLM) <span class="badge support">REFERRAL</span></h4>
+    <div class="desc">Sistema de indicacoes com cascata de comissoes. BeneficioIndicacao vinculado a Cobranca.</div>
+  </div>
+  <div class="entity-card">
+    <h4><span class="icon">🏆</span> Clube de Vantagens <span class="badge support">TIERS</span></h4>
+    <div class="desc">BRONZE → PRATA → OURO → DIAMANTE. Progressao baseada em atividade e indicacoes.</div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: RELATIONSHIPS -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="relationships">
+<h2>2. Mapa de Relacionamentos</h2>
+
+<h3>Diagrama ER Principal</h3>
+<div class="svg-diagram">
+<svg viewBox="0 0 1100 700" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1100" height="700" fill="#1e293b" rx="12"/>
+
+  <!-- Cooperativa -->
+  <rect x="430" y="20" width="220" height="60" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+  <text x="540" y="55" text-anchor="middle" fill="#38bdf8" font-size="16" font-weight="bold">COOPERATIVA</text>
+
+  <!-- Usina -->
+  <rect x="50" y="160" width="200" height="60" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+  <text x="150" y="195" text-anchor="middle" fill="#fbbf24" font-size="15" font-weight="bold">☀️ USINA</text>
+
+  <!-- Cooperado -->
+  <rect x="830" y="160" width="220" height="60" rx="8" fill="#0f172a" stroke="#4ade80" stroke-width="2"/>
+  <text x="940" y="195" text-anchor="middle" fill="#4ade80" font-size="15" font-weight="bold">👤 COOPERADO</text>
+
+  <!-- UC -->
+  <rect x="830" y="310" width="220" height="60" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="2"/>
+  <text x="940" y="345" text-anchor="middle" fill="#a78bfa" font-size="15" font-weight="bold">🔌 UC</text>
+
+  <!-- Contrato (CENTRAL) -->
+  <rect x="400" y="280" width="260" height="80" rx="8" fill="#0f172a" stroke="#f87171" stroke-width="3"/>
+  <text x="530" y="310" text-anchor="middle" fill="#f87171" font-size="16" font-weight="bold">📋 CONTRATO</text>
+  <text x="530" y="335" text-anchor="middle" fill="#94a3b8" font-size="12">Cooperado ↔ UC ↔ Usina</text>
+  <text x="530" y="350" text-anchor="middle" fill="#94a3b8" font-size="11">percentualUsina, kwhContrato</text>
+
+  <!-- GeracaoMensal -->
+  <rect x="30" y="310" width="200" height="50" rx="8" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="130" y="340" text-anchor="middle" fill="#22d3ee" font-size="13">⚡ GeracaoMensal</text>
+
+  <!-- ConfiguracaoCobranca -->
+  <rect x="30" y="420" width="200" height="50" rx="8" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="130" y="450" text-anchor="middle" fill="#22d3ee" font-size="13">⚙️ ConfigCobranca</text>
+
+  <!-- Cobranca -->
+  <rect x="400" y="440" width="260" height="70" rx="8" fill="#0f172a" stroke="#4ade80" stroke-width="2"/>
+  <text x="530" y="470" text-anchor="middle" fill="#4ade80" font-size="15" font-weight="bold">💰 COBRANCA</text>
+  <text x="530" y="490" text-anchor="middle" fill="#94a3b8" font-size="11">valorBruto, desconto, kwhEntregue</text>
+
+  <!-- FaturaProcessada -->
+  <rect x="750" y="440" width="220" height="50" rx="8" fill="#0f172a" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="860" y="470" text-anchor="middle" fill="#fb923c" font-size="13">📄 FaturaProcessada</text>
+
+  <!-- PropostaCooperado -->
+  <rect x="430" y="160" width="220" height="50" rx="8" fill="#0f172a" stroke="#f472b6" stroke-width="1.5"/>
+  <text x="540" y="190" text-anchor="middle" fill="#f472b6" font-size="13">📊 PropostaCooperado</text>
+
+  <!-- Asaas -->
+  <rect x="400" y="570" width="180" height="45" rx="8" fill="#0f172a" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="490" y="597" text-anchor="middle" fill="#fb923c" font-size="13">💳 Asaas (PIX/Boleto)</text>
+
+  <!-- ListaEspera -->
+  <rect x="250" y="380" width="130" height="40" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="315" y="405" text-anchor="middle" fill="#fbbf24" font-size="12">📋 ListaEspera</text>
+
+  <!-- Plano -->
+  <rect x="680" y="280" width="130" height="40" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+  <text x="745" y="305" text-anchor="middle" fill="#a78bfa" font-size="12">📦 Plano</text>
+
+  <!-- LINES / RELATIONSHIPS -->
+  <!-- Cooperativa → Usina (1:N) -->
+  <line x1="430" y1="50" x2="250" y2="165" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="320" y="100" fill="#94a3b8" font-size="11">1:N</text>
+
+  <!-- Cooperativa → Cooperado (1:N) -->
+  <line x1="650" y1="50" x2="870" y2="165" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="780" y="100" fill="#94a3b8" font-size="11">1:N</text>
+
+  <!-- Cooperado → UC (1:N) -->
+  <line x1="940" y1="220" x2="940" y2="310" stroke="#475569" stroke-width="1.5"/>
+  <text x="955" y="270" fill="#94a3b8" font-size="11">1:N</text>
+
+  <!-- Cooperado → Contrato (1:N) -->
+  <line x1="830" y1="200" x2="660" y2="300" stroke="#4ade80" stroke-width="2"/>
+  <text x="760" y="240" fill="#4ade80" font-size="11">1:N</text>
+
+  <!-- UC → Contrato (1:N) -->
+  <line x1="830" y1="335" x2="660" y2="325" stroke="#a78bfa" stroke-width="2"/>
+  <text x="755" y="340" fill="#a78bfa" font-size="11">1:N</text>
+
+  <!-- Usina → Contrato (1:N) -->
+  <line x1="250" y1="200" x2="400" y2="310" stroke="#fbbf24" stroke-width="2"/>
+  <text x="300" y="250" fill="#fbbf24" font-size="11">1:N</text>
+
+  <!-- Contrato → Cobranca (1:N) -->
+  <line x1="530" y1="360" x2="530" y2="440" stroke="#f87171" stroke-width="2"/>
+  <text x="545" y="405" fill="#f87171" font-size="11">1:N</text>
+
+  <!-- Contrato → ListaEspera -->
+  <line x1="400" y1="340" x2="380" y2="390" stroke="#fbbf24" stroke-width="1"/>
+
+  <!-- Contrato → Plano -->
+  <line x1="660" y1="300" x2="680" y2="300" stroke="#a78bfa" stroke-width="1"/>
+
+  <!-- Usina → GeracaoMensal (1:N) -->
+  <line x1="150" y1="220" x2="130" y2="310" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="100" y="270" fill="#22d3ee" font-size="11">1:N</text>
+
+  <!-- Usina → ConfigCobranca -->
+  <line x1="130" y1="220" x2="130" y2="420" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- GeracaoMensal → Cobranca -->
+  <line x1="230" y1="340" x2="400" y2="470" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="290" y="415" fill="#22d3ee" font-size="10">rateio</text>
+
+  <!-- FaturaProcessada → Cobranca -->
+  <line x1="750" y1="465" x2="660" y2="465" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="705" y="458" fill="#fb923c" font-size="10">ref</text>
+
+  <!-- Cobranca → Asaas -->
+  <line x1="490" y1="510" x2="490" y2="570" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="505" y="545" fill="#fb923c" font-size="10">pagamento</text>
+
+  <!-- Proposta → Contrato -->
+  <line x1="540" y1="210" x2="530" y2="280" stroke="#f472b6" stroke-width="1.5"/>
+  <text x="555" y="248" fill="#f472b6" font-size="10">aceitar()</text>
+
+  <!-- Cooperado → Proposta -->
+  <line x1="830" y1="180" x2="650" y2="185" stroke="#f472b6" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- FaturaProcessada → UC/Cooperado -->
+  <line x1="860" y1="440" x2="940" y2="370" stroke="#fb923c" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Legend -->
+  <rect x="30" y="560" width="300" height="120" rx="8" fill="#0f172a" stroke="#475569"/>
+  <text x="50" y="585" fill="#94a3b8" font-size="12" font-weight="bold">Legenda:</text>
+  <line x1="50" y1="600" x2="90" y2="600" stroke="#f87171" stroke-width="2"/>
+  <text x="100" y="605" fill="#94a3b8" font-size="11">Relacao direta (FK)</text>
+  <line x1="50" y1="620" x2="90" y2="620" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="100" y="625" fill="#94a3b8" font-size="11">Relacao indireta / referencia</text>
+  <rect x="50" y="635" width="12" height="12" fill="#0f172a" stroke="#f87171" stroke-width="3" rx="2"/>
+  <text x="70" y="647" fill="#94a3b8" font-size="11">Entidade central (Contrato)</text>
+  <text x="50" y="668" fill="#f87171" font-size="11" font-weight="bold">Contrato e o elo que conecta tudo</text>
+</svg>
+</div>
+
+<h3>Tabela de Relacionamentos Detalhada</h3>
+<table class="rel-table">
+<thead>
+  <tr><th>De</th><th>Para</th><th>Cardinalidade</th><th>Campo FK</th><th>Observacao</th></tr>
+</thead>
+<tbody>
+  <tr><td>Cooperativa</td><td>Cooperado</td><td>1:N</td><td>cooperado.cooperativaId</td><td>Isolamento multi-tenant</td></tr>
+  <tr><td>Cooperativa</td><td>Usina</td><td>1:N</td><td>usina.cooperativaId</td><td>Usinas da cooperativa</td></tr>
+  <tr><td>Cooperativa</td><td>Contrato</td><td>1:N</td><td>contrato.cooperativaId</td><td>Redundancia intencional (facilita queries)</td></tr>
+  <tr><td>Cooperado</td><td>UC</td><td>1:N</td><td>uc.cooperadoId</td><td>Cooperado pode ter multiplas UCs</td></tr>
+  <tr><td>Cooperado</td><td>Contrato</td><td>1:N</td><td>contrato.cooperadoId</td><td>Um contrato por UC+Usina</td></tr>
+  <tr><td>UC</td><td>Contrato</td><td>1:N</td><td>contrato.ucId</td><td>UC pode trocar de usina (migracao)</td></tr>
+  <tr><td>Usina</td><td>Contrato</td><td>1:N</td><td>contrato.usinaId</td><td>Soma % ≤ 100%</td></tr>
+  <tr style="background:rgba(248,113,113,0.1)"><td><strong>Contrato</strong></td><td><strong>Cobranca</strong></td><td><strong>1:N</strong></td><td>cobranca.contratoId</td><td><strong>Vinculo principal — so gera se ATIVO</strong></td></tr>
+  <tr><td>Usina</td><td>GeracaoMensal</td><td>1:N</td><td>geracao.usinaId</td><td>unique(usinaId, competencia)</td></tr>
+  <tr><td>GeracaoMensal</td><td>Cobranca</td><td>1:N</td><td>cobranca.geracaoMensalId</td><td>Rateio proporcional ao %</td></tr>
+  <tr><td>FaturaProcessada</td><td>Cobranca</td><td>0:1</td><td>cobranca.faturaProcessadaId</td><td>Referencia opcional (dados OCR)</td></tr>
+  <tr><td>Cooperado</td><td>Proposta</td><td>1:N</td><td>proposta.cooperadoId</td><td>Historico de propostas</td></tr>
+  <tr><td>Proposta</td><td>Contrato</td><td>1:N</td><td>contrato.propostaId</td><td>aceitar() cria contrato</td></tr>
+  <tr><td>Contrato</td><td>ListaEspera</td><td>1:0..1</td><td>listaEspera.contratoId</td><td>Se usina sem capacidade</td></tr>
+  <tr><td>Cobranca</td><td>AsaasCobranca</td><td>1:N</td><td>asaas.cobrancaId</td><td>Registros de pagamento</td></tr>
+  <tr><td>Cooperativa</td><td>ConfigCobranca</td><td>1:N</td><td>config.cooperativaId</td><td>Regras de desconto</td></tr>
+  <tr><td>Usina</td><td>ConfigCobranca</td><td>1:0..1</td><td>config.usinaId</td><td>Override por usina</td></tr>
+</tbody>
+</table>
+
+<h3>Cascata de Desconto</h3>
+<div class="flow">
+  <div class="flow-step" style="border-color: var(--red);">Contrato.descontoOverride?</div>
+  <div class="flow-arrow">→ SIM usa →</div>
+  <div class="flow-step">Desconto do Contrato</div>
+</div>
+<div class="flow">
+  <div class="flow-step">NAO ↓</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--yellow);">ConfigCobranca(cooperativaId, usinaId)?</div>
+  <div class="flow-arrow">→ SIM usa →</div>
+  <div class="flow-step">Desconto da Usina</div>
+</div>
+<div class="flow">
+  <div class="flow-step">NAO ↓</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--green);">ConfigCobranca(cooperativaId, null)?</div>
+  <div class="flow-arrow">→ SIM usa →</div>
+  <div class="flow-step">Desconto da Cooperativa</div>
+</div>
+<div class="flow">
+  <div class="flow-step">NAO ↓</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step critical">ERRO: Sem regra de cobranca configurada</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: FLOWS -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="flows">
+<h2>3. Fluxos de Negocio</h2>
+
+<h3>Fluxo 1: Cadastro → Ativacao do Cooperado</h3>
+<div class="flow">
+  <div class="flow-step">Cooperado se cadastra (publico ou admin)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">PENDENTE</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Upload docs (RG, CNH)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">PENDENTE_DOCUMENTOS</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Admin valida</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">APROVADO</div>
+</div>
+<div class="flow">
+  <div class="flow-step">APROVADO</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--yellow);">Admin ativa manualmente</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step ok">ATIVO</div>
+  <div class="flow-arrow">→ cascata →</div>
+  <div class="flow-step ok">Contratos PENDENTE_ATIVACAO → ATIVO</div>
+</div>
+
+<h3>Fluxo 2: Proposta → Contrato</h3>
+<div class="flow">
+  <div class="flow-step">Upload fatura (PDF)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Claude OCR extrai dados</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">FaturaProcessada (PENDENTE)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Admin curadoria 12 meses</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">APROVADA</div>
+</div>
+<div class="flow">
+  <div class="flow-step">Motor calcula proposta</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">kwhApurado, desconto, economia</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">PropostaCooperado (PENDENTE)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--green);">Cooperado aceita (WA/email/admin)</div>
+</div>
+<div class="flow">
+  <div class="flow-step critical">aceitar()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Calcula percentualUsina</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Verifica capacidade (≤100%?)</div>
+  <div class="flow-arrow">→ SIM →</div>
+  <div class="flow-step ok">Cria Contrato (PENDENTE_ATIVACAO)</div>
+</div>
+<div class="flow">
+  <div class="flow-step">Capacidade excedida?</div>
+  <div class="flow-arrow">→ SIM →</div>
+  <div class="flow-step" style="border-color: var(--yellow);">Contrato → LISTA_ESPERA</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Aguarda liberar %</div>
+</div>
+
+<h3>Fluxo 3: Geracao → Rateio → Cobranca</h3>
+<div class="flow">
+  <div class="flow-step">Admin registra GeracaoMensal</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">kwhGerado da usina no mes</div>
+</div>
+<div class="flow">
+  <div class="flow-step">Gerador de cobrancas</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Busca contratos ATIVO da usina</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Calcula kwhEntregue = kwhGerado × %</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Aplica desconto (cascata)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step ok">Cria Cobranca</div>
+</div>
+<div class="flow">
+  <div class="flow-step ok">Cobranca criada</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Gera Asaas (PIX/boleto)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Notifica WhatsApp</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Cooperado paga</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step ok">Webhook Asaas → PAGO</div>
+</div>
+
+<h3>Fluxo 4: Ciclo de Vida do Contrato</h3>
+<div class="flow">
+  <div class="flow-step">PENDENTE_ATIVACAO</div>
+  <div class="flow-arrow">→ cooperado ativado →</div>
+  <div class="flow-step ok">ATIVO</div>
+  <div class="flow-arrow">→ inadimplencia →</div>
+  <div class="flow-step" style="border-color: var(--yellow);">SUSPENSO</div>
+  <div class="flow-arrow">→ regulariza →</div>
+  <div class="flow-step ok">ATIVO</div>
+</div>
+<div class="flow">
+  <div class="flow-step ok">ATIVO</div>
+  <div class="flow-arrow">→ saida voluntaria →</div>
+  <div class="flow-step" style="border-color: var(--red);">ENCERRADO</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Libera % usina</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">verificarListaEspera()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Proximo da fila ativa</div>
+</div>
+
+<h3>Formula: Percentual de Usina</h3>
+<pre>
+// Calculo do percentual de usina de um contrato
+percentualUsina = (kwhContratoAnual / (usina.capacidadeKwhMensal × 12)) × 100
+
+// Validacao de capacidade
+somaPercentuais = SUM(percentualUsina) WHERE usinaId = X AND status IN (ATIVO, PENDENTE_ATIVACAO)
+IF somaPercentuais + novoPercentual > 100 THEN → LISTA_ESPERA
+
+// Calculo do kwhEntregue na cobranca
+kwhEntregue = geracaoMensal.kwhGerado × (contrato.percentualUsina / 100)
+</pre>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: BILLING -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="billing">
+<h2>4. Ciclo Completo de Cobranca</h2>
+
+<p>Este e o fluxo mais complexo do sistema, pois conecta quase todas as entidades. Abaixo esta o diagrama passo-a-passo de como uma cobranca deveria ser gerada:</p>
+
+<h3>Pipeline Completo</h3>
+<div class="svg-diagram">
+<svg viewBox="0 0 1100 850" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1100" height="850" fill="#1e293b" rx="12"/>
+
+  <!-- Step 1 -->
+  <rect x="50" y="30" width="200" height="70" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+  <text x="150" y="58" text-anchor="middle" fill="#fbbf24" font-size="13" font-weight="bold">1. GERACAO MENSAL</text>
+  <text x="150" y="78" text-anchor="middle" fill="#94a3b8" font-size="11">Admin registra kWh gerado</text>
+
+  <!-- Step 2 -->
+  <rect x="300" y="30" width="220" height="70" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+  <text x="410" y="58" text-anchor="middle" fill="#38bdf8" font-size="13" font-weight="bold">2. BUSCA CONTRATOS</text>
+  <text x="410" y="78" text-anchor="middle" fill="#94a3b8" font-size="11">WHERE usinaId AND status=ATIVO</text>
+
+  <!-- Arrow -->
+  <line x1="250" y1="65" x2="300" y2="65" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Step 3 -->
+  <rect x="570" y="30" width="220" height="70" rx="8" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+  <text x="680" y="58" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="bold">3. RATEIO POR %</text>
+  <text x="680" y="78" text-anchor="middle" fill="#94a3b8" font-size="11">kwhEntregue = kwhGerado × %</text>
+
+  <line x1="520" y1="65" x2="570" y2="65" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 4 -->
+  <rect x="840" y="30" width="220" height="70" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="2"/>
+  <text x="950" y="58" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="bold">4. RESOLVE DESCONTO</text>
+  <text x="950" y="78" text-anchor="middle" fill="#94a3b8" font-size="11">Cascata: Contrato→Usina→Coop</text>
+
+  <line x1="790" y1="65" x2="840" y2="65" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 5 - Calculo -->
+  <rect x="50" y="150" width="470" height="120" rx="8" fill="#0f172a" stroke="#4ade80" stroke-width="2"/>
+  <text x="285" y="175" text-anchor="middle" fill="#4ade80" font-size="14" font-weight="bold">5. CALCULO DA COBRANCA</text>
+  <text x="285" y="200" text-anchor="middle" fill="#e2e8f0" font-size="12">valorBruto = kwhEntregue × tarifaUnitaria</text>
+  <text x="285" y="220" text-anchor="middle" fill="#e2e8f0" font-size="12">valorDesconto = valorBruto × (percentualDesconto / 100)</text>
+  <text x="285" y="240" text-anchor="middle" fill="#e2e8f0" font-size="12">valorLiquido = valorBruto - valorDesconto  (Math.round!)</text>
+  <text x="285" y="258" text-anchor="middle" fill="#f87171" font-size="11">Fio B 2026 = 60% → deduzir do beneficio</text>
+
+  <line x1="950" y1="100" x2="950" y2="130" stroke="#475569" stroke-width="1"/>
+  <line x1="950" y1="130" x2="520" y2="130" stroke="#475569" stroke-width="1"/>
+  <line x1="520" y1="130" x2="520" y2="150" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 6 - Persiste -->
+  <rect x="570" y="150" width="220" height="120" rx="8" fill="#0f172a" stroke="#f87171" stroke-width="2"/>
+  <text x="680" y="178" text-anchor="middle" fill="#f87171" font-size="14" font-weight="bold">6. PERSISTE COBRANCA</text>
+  <text x="680" y="200" text-anchor="middle" fill="#94a3b8" font-size="11">contratoId ✓</text>
+  <text x="680" y="216" text-anchor="middle" fill="#94a3b8" font-size="11">geracaoMensalId ✓</text>
+  <text x="680" y="232" text-anchor="middle" fill="#94a3b8" font-size="11">faturaProcessadaId ?</text>
+  <text x="680" y="248" text-anchor="middle" fill="#94a3b8" font-size="11">valores + status PENDENTE</text>
+  <text x="680" y="264" text-anchor="middle" fill="#94a3b8" font-size="11">cooperativaId (tenant)</text>
+
+  <line x1="520" y1="210" x2="570" y2="210" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 7 - Asaas -->
+  <rect x="840" y="150" width="220" height="80" rx="8" fill="#0f172a" stroke="#fb923c" stroke-width="2"/>
+  <text x="950" y="178" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="bold">7. CRIA NO ASAAS</text>
+  <text x="950" y="198" text-anchor="middle" fill="#94a3b8" font-size="11">AsaasCobranca (PIX/boleto)</text>
+  <text x="950" y="214" text-anchor="middle" fill="#94a3b8" font-size="11">linkPagamento, qrCode</text>
+
+  <line x1="790" y1="200" x2="840" y2="190" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 8 - Notifica -->
+  <rect x="50" y="320" width="250" height="70" rx="8" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+  <text x="175" y="348" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="bold">8. NOTIFICA COOPERADO</text>
+  <text x="175" y="368" text-anchor="middle" fill="#94a3b8" font-size="11">WhatsApp: link pag + valor + vencimento</text>
+
+  <!-- Step 9 - Pagamento -->
+  <rect x="350" y="320" width="250" height="70" rx="8" fill="#0f172a" stroke="#4ade80" stroke-width="2"/>
+  <text x="475" y="348" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="bold">9. COOPERADO PAGA</text>
+  <text x="475" y="368" text-anchor="middle" fill="#94a3b8" font-size="11">PIX ou Boleto via Asaas</text>
+
+  <line x1="300" y1="355" x2="350" y2="355" stroke="#475569" stroke-width="2"/>
+
+  <!-- Step 10 - Webhook -->
+  <rect x="650" y="320" width="250" height="70" rx="8" fill="#0f172a" stroke="#4ade80" stroke-width="2"/>
+  <text x="775" y="348" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="bold">10. WEBHOOK ASAAS</text>
+  <text x="775" y="368" text-anchor="middle" fill="#94a3b8" font-size="11">status → PAGO + dataPagamento</text>
+
+  <line x1="600" y1="355" x2="650" y2="355" stroke="#475569" stroke-width="2"/>
+
+  <!-- Vencido path -->
+  <rect x="350" y="440" width="250" height="60" rx="8" fill="#0f172a" stroke="#f87171" stroke-width="2"/>
+  <text x="475" y="465" text-anchor="middle" fill="#f87171" font-size="13" font-weight="bold">VENCIDO (cron)</text>
+  <text x="475" y="485" text-anchor="middle" fill="#94a3b8" font-size="11">multa + juros diarios</text>
+
+  <line x1="475" y1="390" x2="475" y2="440" stroke="#f87171" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="490" y="420" fill="#f87171" font-size="10">se nao pago</text>
+
+  <!-- Inputs side panel -->
+  <rect x="50" y="550" width="1010" height="280" rx="10" fill="#0f172a" stroke="#475569"/>
+  <text x="555" y="580" text-anchor="middle" fill="#38bdf8" font-size="15" font-weight="bold">ENTRADAS NECESSARIAS PARA GERAR COBRANCA</text>
+
+  <rect x="80" y="600" width="200" height="100" rx="6" fill="#1e293b" stroke="#fbbf24"/>
+  <text x="180" y="625" text-anchor="middle" fill="#fbbf24" font-size="12" font-weight="bold">GeracaoMensal</text>
+  <text x="180" y="645" text-anchor="middle" fill="#94a3b8" font-size="10">usinaId + competencia</text>
+  <text x="180" y="660" text-anchor="middle" fill="#94a3b8" font-size="10">kwhGerado (manual/Sungrow)</text>
+  <text x="180" y="680" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="bold">OBRIGATORIO</text>
+
+  <rect x="310" y="600" width="200" height="100" rx="6" fill="#1e293b" stroke="#4ade80"/>
+  <text x="410" y="625" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="bold">Contrato ATIVO</text>
+  <text x="410" y="645" text-anchor="middle" fill="#94a3b8" font-size="10">percentualUsina</text>
+  <text x="410" y="660" text-anchor="middle" fill="#94a3b8" font-size="10">kwhContratoMensal</text>
+  <text x="410" y="680" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="bold">OBRIGATORIO</text>
+
+  <rect x="540" y="600" width="230" height="100" rx="6" fill="#1e293b" stroke="#a78bfa"/>
+  <text x="655" y="625" text-anchor="middle" fill="#a78bfa" font-size="12" font-weight="bold">ConfiguracaoCobranca</text>
+  <text x="655" y="645" text-anchor="middle" fill="#94a3b8" font-size="10">descontoPadrao + baseCalculo</text>
+  <text x="655" y="660" text-anchor="middle" fill="#94a3b8" font-size="10">ou Contrato.descontoOverride</text>
+  <text x="655" y="680" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="bold">OBRIGATORIO (cascata)</text>
+
+  <rect x="800" y="600" width="230" height="100" rx="6" fill="#1e293b" stroke="#fb923c"/>
+  <text x="915" y="625" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="bold">FaturaProcessada</text>
+  <text x="915" y="645" text-anchor="middle" fill="#94a3b8" font-size="10">dadosExtraidos (consumo real)</text>
+  <text x="915" y="660" text-anchor="middle" fill="#94a3b8" font-size="10">referencia para kwhConsumido</text>
+  <text x="915" y="680" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="bold">OPCIONAL (enriquece)</text>
+
+  <!-- Tarifa -->
+  <rect x="80" y="720" width="450" height="90" rx="6" fill="#1e293b" stroke="#22d3ee"/>
+  <text x="305" y="748" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="bold">TarifaConcessionaria (para calculo do valor)</text>
+  <text x="305" y="768" text-anchor="middle" fill="#94a3b8" font-size="10">TUSD + TE → tarifaUnitaria para calcular valorBruto</text>
+  <text x="305" y="788" text-anchor="middle" fill="#94a3b8" font-size="10">Fio B = tarifaFioB × 0.60 (2026)</text>
+
+  <rect x="560" y="720" width="470" height="90" rx="6" fill="#1e293b" stroke="#f472b6"/>
+  <text x="795" y="748" text-anchor="middle" fill="#f472b6" font-size="12" font-weight="bold">Asaas (para efetivar cobranca)</text>
+  <text x="795" y="768" text-anchor="middle" fill="#94a3b8" font-size="10">AsaasConfig.apiKey + AsaasCustomer.customerId</text>
+  <text x="795" y="788" text-anchor="middle" fill="#94a3b8" font-size="10">Webhook para confirmacao de pagamento</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<h3>Modelos de Cobranca</h3>
+<table class="rel-table">
+<thead>
+  <tr><th>Modelo</th><th>Como calcula</th><th>Quando usar</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td><strong>FIXO_MENSAL</strong></td>
+    <td>Valor fixo mensal independente da geracao</td>
+    <td>Cooperados com consumo previsivel</td>
+  </tr>
+  <tr>
+    <td><strong>CREDITOS_COMPENSADOS</strong></td>
+    <td>Baseado nos creditos realmente compensados na fatura da concessionaria</td>
+    <td>Modelo padrao, vinculado a fatura real</td>
+  </tr>
+  <tr>
+    <td><strong>CREDITOS_DINAMICO</strong></td>
+    <td>Baseado na geracao real da usina × % do contrato</td>
+    <td>Modelo mais preciso, requer GeracaoMensal</td>
+  </tr>
+</tbody>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION: NEW MODULES -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="newmodules">
+<h2>Modulos Novos (abr/09–14)</h2>
+<p>Estes modulos foram implementados apos a criacao do documento original e precisam ser considerados na arquitetura:</p>
+
+<div class="entity-grid">
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">📧</span> Pipeline Email IMAP <span class="new-badge">NOVO abr/12</span></h4>
+    <div class="desc">Monitor de email que detecta faturas da concessionaria automaticamente, processa via OCR e cria FaturaProcessada sem intervencao manual. Isolado por tenant.</div>
+    <div class="fields">
+      <div><span class="key">Fluxo:</span> IMAP inbox → detecta PDF → Claude OCR → FaturaProcessada</div>
+      <div><span class="key">Tenant:</span> email-monitor isolado por cooperativaId ✓</div>
+      <div><span class="key">Dependencias:</span> faturas.service, Claude AI</div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">🤖</span> CoopereAI <span class="new-badge">NOVO abr/09</span></h4>
+    <div class="desc">Bot educativo que interage com novos usuarios no WhatsApp antes do menu principal. Explica como funciona a cooperativa e tira duvidas.</div>
+    <div class="fields">
+      <div><span class="key">Posicao:</span> Pre-menu WA para novos contatos</div>
+      <div><span class="key">Integracao:</span> whatsapp-service/index.mjs</div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">📝</span> Wizard /cadastro publico <span class="new-badge">NOVO abr/10-11</span></h4>
+    <div class="desc">Auto-cadastro do cooperado com OCR de fatura, simulacao de economia, escolha de plano e assinatura digital. Fluxo completo sem admin.</div>
+    <div class="fields">
+      <div><span class="key">Fluxo:</span> Upload PDF → OCR → Simulacao → Plano → Assinatura</div>
+      <div style="color: var(--red);"><span class="key">Problema:</span> Nao gera proposta no Motor de Proposta</div>
+      <div style="color: var(--red);"><span class="key">Problema:</span> Desconto fixo 20% hardcoded</div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">💸</span> Contas a Pagar <span class="new-badge">NOVO abr/14</span></h4>
+    <div class="desc">Modulo CRUD completo para gestao de contas a pagar (arrendamento de usinas, manutencao, etc). Backend + frontend.</div>
+    <div class="fields">
+      <div><span class="key">Commit:</span> <span class="commit-ref">b98727a</span></div>
+      <div><span class="key">Model:</span> ContaAPagar (Prisma)</div>
+      <div><span class="key">Relacoes:</span> Cooperativa, Usina</div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">📜</span> Historico Status Cooperado <span class="new-badge">NOVO abr/14</span></h4>
+    <div class="desc">Audit trail de todas as mudancas de status do cooperado. Registra quem mudou, quando e de/para qual status.</div>
+    <div class="fields">
+      <div><span class="key">Commit:</span> <span class="commit-ref">ee06ca1</span></div>
+      <div><span class="key">Model:</span> HistoricoStatusCooperado</div>
+      <div><span class="key">Resolve:</span> Lacuna "sem audit trail" (parcial)</div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">📊</span> Relatorio Conferencia kWh <span class="new-badge">NOVO abr/12</span></h4>
+    <div class="desc">Compara kWh contratado vs compensado por usina. Permite identificar divergencias entre o que foi alocado e o que foi efetivamente creditado.</div>
+    <div class="fields">
+      <div><span class="key">Commit:</span> <span class="commit-ref">abaefc1</span></div>
+    </div>
+  </div>
+
+  <div class="entity-card" style="border-color: var(--accent2);">
+    <h4><span class="icon">💰</span> FaturaProcessada: campos saldo/economia <span class="new-badge">NOVO abr/14</span></h4>
+    <div class="desc">Novos campos na FaturaProcessada: saldoKwhAnterior, saldoKwhAtual, validadeCreditos, valorSemDesconto, economiaGerada. Migration OCR inclusa.</div>
+    <div class="fields">
+      <div><span class="key">Commit:</span> <span class="commit-ref">313fbf4</span></div>
+      <div><span class="key">Impacto:</span> Enriquece dados para cobranca e dashboard cooperado</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: GAPS -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="gaps">
+<h2>5. Lacunas de Integracao — Atualizado 14/Abr</h2>
+
+<!-- ── RESOLVED P1 ── -->
+<h3>P1 Criticas — RESOLVIDAS ✓</h3>
+<div class="gap-grid">
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Race Condition no aceitar() — transacao atomica</h4>
+    <p>O fluxo de aceitar proposta agora roda dentro de <code>prisma.$transaction</code> com isolamento adequado.</p>
+    <p><span class="commit-ref">19b28b6</span> (abr/07)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Secret WA hardcoded na query string (SEC-CT-002)</h4>
+    <p>Segredo do WhatsApp removido da URL e movido para variavel de ambiente.</p>
+    <p><span class="commit-ref">3b50a45</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Webhook Asaas sem HMAC-SHA256</h4>
+    <p>Validacao de assinatura HMAC adicionada nos webhooks do Asaas.</p>
+    <p><span class="commit-ref">20c337c</span> (abr/14)</p>
+  </div>
+</div>
+
+<!-- ── RESOLVED P2 ── -->
+<h3>P2 Altas — RESOLVIDAS ✓</h3>
+<div class="gap-grid">
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> ConfigTenant @@unique multi-tenant</h4>
+    <p>Constraint unique corrigida para incluir <code>cooperativaId</code>.</p>
+    <p><span class="commit-ref">4e6da12</span> (abr/12)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Email-monitor tenant isolation</h4>
+    <p>Pipeline de email agora filtra por <code>cooperativaId</code>.</p>
+    <p><span class="commit-ref">4e6da12</span> (abr/12)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Tarifa hardcoded → dinamica por distribuidora</h4>
+    <p>Tarifas agora vem de <code>TarifaConcessionaria</code> por distribuidora.</p>
+    <p><span class="commit-ref">495f65d</span> (abr/12)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Tokens creditados para cooperados inativos</h4>
+    <p>Verificacao de status ATIVO antes de creditar CooperToken.</p>
+    <p><span class="commit-ref">c6295c1</span> (abr/12)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> IDOR: DELETE/GET faturas, PUT/DELETE motor-proposta</h4>
+    <p>Tenant check adicionado em todos os endpoints de faturas e motor-proposta.</p>
+    <p><span class="commit-ref">879e3f8</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> kwhInjetado usando valor de kwhCompensado</h4>
+    <p>Calculo corrigido para usar campo correto.</p>
+    <p><span class="commit-ref">879e3f8</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> saldoAnterior formula incorreta</h4>
+    <p>Formula de saldo anterior corrigida.</p>
+    <p><span class="commit-ref">879e3f8</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> indicadosAtivos sem decremento no churn</h4>
+    <p>Contador agora decrementa corretamente quando cooperado sai.</p>
+    <p><span class="commit-ref">ee06ca1</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> modoTeste hardcoded + fator 0.15 hardcoded</h4>
+    <p>Ambos movidos para configuracao dinamica.</p>
+    <p><span class="commit-ref">5904c0d</span> <span class="commit-ref">980414e</span> (abr/14)</p>
+  </div>
+  <div class="gap-card resolved">
+    <h4><span class="badge ok">RESOLVIDO</span> Audio/video/sticker silencioso no bot WA</h4>
+    <p>Bot agora responde com mensagem de que nao processa esse tipo de midia.</p>
+    <p><span class="commit-ref">1a6d930</span> (abr/14)</p>
+  </div>
+</div>
+
+<!-- ── STILL OPEN ── -->
+<h3>Ainda Abertas — P2 (corrigir esta semana)</h3>
+<div class="gap-grid">
+  <div class="gap-card">
+    <h4><span class="badge gap">P2</span> BONUS_INDICACAO sem cooperativaId na idempotencia</h4>
+    <p>A verificacao de idempotencia do bonus de indicacao nao filtra por <code>cooperativaId</code>. Um bonus dado no tenant A pode bloquear bonus no tenant B.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Adicionar <code>cooperativaId</code> na clausula WHERE da verificacao de duplicidade.</p>
+  </div>
+
+  <div class="gap-card">
+    <h4><span class="badge gap">P2</span> BUG-CALCULO-001: 3 implementacoes divergentes de multa/juros</h4>
+    <p>Multa e juros por atraso sao calculados de 3 formas diferentes em pontos distintos do codigo. Pode resultar em valores inconsistentes entre cobranca, WhatsApp e dashboard.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Centralizar calculo em funcao unica <code>calcularMultaJuros()</code> e reutilizar em todos os pontos.</p>
+  </div>
+
+  <div class="gap-card">
+    <h4><span class="badge gap">P2</span> CORS * no whatsapp-service porta 3002</h4>
+    <p>O whatsapp-service aceita requests de qualquer origem (<code>Access-Control-Allow-Origin: *</code>). Em producao, qualquer site pode fazer requests ao bot.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Restringir CORS para origens conhecidas (backend, frontend).</p>
+  </div>
+
+  <div class="gap-card">
+    <h4><span class="badge gap">P2</span> Validacoes CPF/nome comentadas no cadastroWeb</h4>
+    <p>O endpoint <code>/cooperados/cadastroWeb</code> tem validacoes de CPF e nome comentadas no codigo. Qualquer string passa.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Descomentar e ativar validacoes. Adicionar DTO com class-validator.</p>
+  </div>
+
+  <div class="gap-card">
+    <h4><span class="badge gap">P2</span> 3 crons conflitando as 6h AM</h4>
+    <p>Tres cron jobs estao agendados para o mesmo horario (6h), causando picos de carga e possiveis conflitos de dados.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Escalonar: 6h00 (vencimentos), 6h15 (tokens), 6h30 (notificacoes).</p>
+  </div>
+</div>
+
+<!-- ── ARCHITECTURE GAPS (from original analysis, still relevant) ── -->
+<h3>Lacunas Arquiteturais (originais, ainda pendentes)</h3>
+<div class="gap-grid">
+  <div class="gap-card warn">
+    <h4><span class="badge warn">ALTO</span> Wizard + Cadastro publico desconectados do Motor de Proposta</h4>
+    <p>O cadastro publico (<code>/cadastro</code>) e o wizard admin (<code>/cooperados/novo</code>) nao geram proposta no Motor de Proposta. Desconto de 20% hardcoded. Planos diferentes nao recalculam valor. Analise completa na reuniao de 14/04.</p>
+    <p style="color: var(--green); margin-top: 0.5rem;"><strong>Solucao:</strong> Opcao A — conectar wizard ao Motor no Step 3/4. Cadastro publico gera proposta PENDENTE.</p>
+  </div>
+
+  <div class="gap-card warn">
+    <h4><span class="badge warn">ALTO</span> Vinculo GeracaoMensal ↔ Cobranca fragil</h4>
+    <p>A cobranca tem <code>geracaoMensalId</code> mas nem sempre e preenchido. Para CREDITOS_DINAMICO, sem vinculo o rateio nao e confiavel.</p>
+  </div>
+
+  <div class="gap-card warn">
+    <h4><span class="badge warn">ALTO</span> FaturaProcessada desconectada da Cobranca</h4>
+    <p>Campo <code>faturaProcessadaId</code> na Cobranca raramente preenchido. Para CREDITOS_COMPENSADOS, dados OCR nao linkados.</p>
+  </div>
+
+  <div class="gap-card warn">
+    <h4><span class="badge warn">ALTO</span> Frontend so mostra cobrancas do 1o contrato</h4>
+    <p>Cooperados com multiplos contratos veem cobrancas de apenas um.</p>
+  </div>
+
+  <div class="gap-card warn">
+    <h4><span class="badge warn">MEDIO</span> Sem verificacao de dependencias ao deletar</h4>
+    <p>Delete de entidades nao verifica registros dependentes.</p>
+  </div>
+</div>
+
+<h3>Medias (melhorias)</h3>
+<div class="gap-grid">
+  <div class="gap-card info">
+    <h4><span class="badge core">MEDIO</span> Sem DTOs de validacao consistentes</h4>
+    <p>Muitos endpoints aceitam input sem validacao via class-validator.</p>
+  </div>
+  <div class="gap-card info">
+    <h4><span class="badge core">MEDIO</span> Sem paginacao em queries de listagem</h4>
+    <p>Queries retornam todos registros. Performance degrada com crescimento.</p>
+  </div>
+  <div class="gap-card info">
+    <h4><span class="badge core">MEDIO</span> Testes automatizados: ~0% cobertura</h4>
+    <p>Sem testes unitarios ou de integracao. Regressoes passam despercebidas.</p>
+  </div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 6: ROADMAP -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="roadmap">
+<h2>6. Roadmap de Estabilizacao — Atualizado 14/Abr</h2>
+
+<p>Estado atualizado com base nos sprints ate 14/04. P1 criticos todos resolvidos. Foco agora nos P2 de bugs + lacuna arquitetural do Motor de Proposta.</p>
+
+<div class="priority-matrix">
+  <div class="priority-box p1">
+    <h4>P1 — Criticos ✅ TODOS RESOLVIDOS</h4>
+    <p style="color: var(--green);">Transacao atomica no aceitar(), secret WA, webhook Asaas HMAC — tudo corrigido.</p>
+    <ul>
+      <li><s>Transacao atomica no aceitar()</s> — <span class="commit-ref">19b28b6</span></li>
+      <li><s>Secret WA hardcoded</s> — <span class="commit-ref">3b50a45</span></li>
+      <li><s>Webhook Asaas sem HMAC</s> — <span class="commit-ref">20c337c</span></li>
+    </ul>
+  </div>
+
+  <div class="priority-box p2">
+    <h4>P2 — Bugs em aberto (esta semana)</h4>
+    <p>5 bugs confirmados que precisam de correcao imediata.</p>
+    <ul>
+      <li><strong>BONUS_INDICACAO sem cooperativaId</strong> — idempotencia cross-tenant</li>
+      <li><strong>BUG-CALCULO-001: multa/juros divergentes</strong> — 3 implementacoes diferentes</li>
+      <li><strong>CORS * no whatsapp-service</strong> — porta 3002 aberta a qualquer origem</li>
+      <li><strong>Validacoes CPF/nome comentadas</strong> — cadastroWeb sem validacao</li>
+      <li><strong>3 crons conflitando 6h AM</strong> — escalonar horarios</li>
+    </ul>
+  </div>
+
+  <div class="priority-box p3">
+    <h4>P2-Arquitetural — Wizard ↔ Motor de Proposta (proxima semana)</h4>
+    <p>Desconexao entre cadastro publico, wizard admin e Motor de Proposta. Sprint dedicado.</p>
+    <ul>
+      <li><strong>Conectar wizard admin ao Motor no Step 3/4</strong> — gerar proposta formal</li>
+      <li><strong>Cadastro publico gera proposta PENDENTE</strong> — admin aprova no painel</li>
+      <li><strong>Remover desconto 20% hardcoded</strong> — usar plano real</li>
+      <li><strong>Vincular GeracaoMensal ↔ Cobranca</strong> — obrigatorio para CREDITOS_DINAMICO</li>
+      <li><strong>Vincular FaturaProcessada ↔ Cobranca</strong> — para CREDITOS_COMPENSADOS</li>
+      <li><strong>Fix frontend multi-contrato</strong> — mostrar todas as cobrancas</li>
+    </ul>
+  </div>
+
+  <div class="priority-box p4">
+    <h4>P3/P4 — Qualidade + Features (proximo mes)</h4>
+    <p>Estabilidade de longo prazo e features novas.</p>
+    <ul>
+      <li><strong>DTOs com class-validator</strong> em todos os endpoints</li>
+      <li><strong>Paginacao nas listagens</strong></li>
+      <li><strong>Audit trail para Contrato e Usina</strong> (cooperado ja tem ✓)</li>
+      <li><strong>Testes unitarios</strong> nos fluxos criticos</li>
+      <li><strong>Dashboard cooperado</strong> — saldo creditos, historico economia</li>
+      <li><strong>Soft delete + verificacao dependencias</strong></li>
+    </ul>
+  </div>
+</div>
+
+<h3>Progresso Visual</h3>
+<div class="flow">
+  <div class="flow-step ok">✅ P1 Criticos (3/3)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step ok">✅ P2 Security (10/10)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step critical">🔴 P2 Bugs (0/5)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--yellow);">🟡 Wizard↔Motor</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step" style="border-color: var(--accent);">P3/P4</div>
+</div>
+
+<h3>Modulos Novos Entregues neste Ciclo</h3>
+<div class="flow">
+  <div class="flow-step ok">Pipeline Email IMAP</div>
+  <div class="flow-step ok">CoopereAI Bot</div>
+  <div class="flow-step ok">Wizard /cadastro</div>
+  <div class="flow-step ok">Contas a Pagar</div>
+  <div class="flow-step ok">Historico Status</div>
+  <div class="flow-step ok">Relatorio kWh</div>
+  <div class="flow-step ok">Campos saldo/economia</div>
+</div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!-- SECTION 7: SPRINT 14-15/ABR -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section" id="sprint1504">
+<h2>7. Sprint 14-15/Abr/2026 — Status Atual</h2>
+<p style="color:var(--green)">QA Score: <strong>8.8/10</strong> ↑ (+0.5) — melhor histórico. Zero P1. 9 P2 fechados em 24h.</p>
+
+<h3>✅ Bugs Fechados no Sprint (14/04)</h3>
+<table class="rel-table">
+<thead><tr><th>Commit</th><th>O que foi corrigido</th></tr></thead>
+<tbody>
+  <tr><td><code>879e3f8</code></td><td>6 IDORs: deletar/rejeitar fatura, GET relatório, DELETE/PUT motor-proposta — todos com cooperativaId</td></tr>
+  <tr><td><code>879e3f8</code></td><td>kwhInjetado usava kwhCompensado (dado errado no relatório cooperado)</td></tr>
+  <tr><td><code>879e3f8</code></td><td>saldoAnterior fórmula incorreta</td></tr>
+  <tr><td><code>3b50a45</code></td><td>Secret WA hardcoded → env var WHATSAPP_WEBHOOK_SECRET</td></tr>
+  <tr><td><code>20c337c</code></td><td>Webhook Asaas sem HMAC → timing-safe comparison</td></tr>
+  <tr><td><code>5904c0d</code></td><td>modoTeste hardcoded → env var NEXT_PUBLIC_MODO_TESTE</td></tr>
+  <tr><td><code>980414e</code></td><td>Fator 0.15 hardcoded no histórico de economia → usa desconto real do contrato</td></tr>
+  <tr><td><code>1a6d930</code></td><td>Áudio/vídeo/sticker silencioso no bot WA → handler com resposta graciosa</td></tr>
+  <tr><td><code>ee06ca1</code></td><td>indicadosAtivos sem decremento no churn + Histórico de status cooperado</td></tr>
+  <tr><td><code>313fbf4</code></td><td>Campos saldo/economia em FaturaProcessada + migration OCR</td></tr>
+  <tr><td><code>b98727a</code></td><td>Módulo Contas a Pagar (CRUD backend + frontend KPIs)</td></tr>
+</tbody>
+</table>
+
+<h3>🟡 P2 Abertos (4 restantes)</h3>
+<div class="gap-grid">
+  <div class="gap-card warn">
+    <h4>BUG-15-001 — DTOs sem validação (Contas a Pagar)</h4>
+    <p>Valor negativo, data inválida e categoria fora do enum podem ser salvas. Adicionar <code>class-validator</code> nos DTOs.</p>
+  </div>
+  <div class="gap-card warn">
+    <h4>BUG-15-002 — SUPER_ADMIN info leak (Contas a Pagar)</h4>
+    <p><code>findAll</code> sem filtro retorna registros de todas as cooperativas. Adicionar <code>cooperativaId</code> no where quando não for SUPER_ADMIN.</p>
+  </div>
+  <div class="gap-card warn">
+    <h4>BONUS_INDICACAO — Idempotência cross-tenant</h4>
+    <p>Verificação de duplicata no ledger não filtra por <code>cooperativaId</code>. Pode creditar token cross-tenant.</p>
+  </div>
+  <div class="gap-card warn">
+    <h4>BUG-CALCULO-001 — Multa/juros divergentes</h4>
+    <p>3 implementações com arredondamentos diferentes (R$0,01-0,02 de diferença). Centralizar em um único método.</p>
+  </div>
+</div>
+
+<h3>🔥 Lacunas Críticas Identificadas (15/04) — Próximo Sprint</h3>
+<div class="gap-grid">
+  <div class="gap-card">
+    <h4>Wizard Admin ≠ Motor de Proposta</h4>
+    <p>Step 4 do wizard envia proposta via <code>wa.me</code>/mailto — não salva no banco, não rastreia. Motor só é chamado no Step 7 (após documentos e contrato).</p>
+    <p><strong>Fix:</strong> Step 3/4 deve chamar <code>/motor-proposta/calcular</code> e gerar PDF real.</p>
+  </div>
+  <div class="gap-card">
+    <h4>Desconto 20% hardcoded no /cadastro</h4>
+    <p><code>DESCONTO_PERCENTUAL_FALLBACK = 0.20</code> ignorando planos públicos configurados pelo admin. Campo <code>plano.publico</code> existe no banco mas é ignorado na página.</p>
+    <p><strong>Fix:</strong> Buscar <code>GET /planos/ativos?publico=true</code> e exibir todos os planos públicos.</p>
+  </div>
+  <div class="gap-card">
+    <h4>Troca de plano não recalcula simulação</h4>
+    <p><code>Step3Simulacao.tsx</code>: ao trocar plano, limpa simulação mas não recalcula automaticamente. Requer clique manual em "Calcular".</p>
+    <p><strong>Fix:</strong> Adicionar <code>useEffect</code> reativo que chama <code>gerarSimulacao()</code> ao mudar o plano.</p>
+  </div>
+  <div class="gap-card">
+    <h4>Fluxo de Assinatura incompleto</h4>
+    <p>Infraestrutura existe (<code>enviarAssinatura</code>, <code>assinarDocumento</code>, página <code>/assinar</code>) mas não é acionada no fluxo. Cooperado não recebe o link automaticamente.</p>
+    <p><strong>Fix:</strong> Enviar link por WA + email após proposta gerada. Adicionar status <code>PENDENTE_ASSINATURA</code>. Lembrete se não assinar em 24h.</p>
+  </div>
+  <div class="gap-card info">
+    <h4>Rebalanceamento de Usinas (futuro)</h4>
+    <p>Sem algoritmo para combinar sobras de 2-3 usinas para encaixar cooperado. Sem proposta de rebalanceamento para o admin aprovar. Sem geração automática de lista por usina.</p>
+  </div>
+  <div class="gap-card info">
+    <h4>Caso Hangar: MLM por papel (futuro)</h4>
+    <p>Academia com 20 professores + 200 alunos. R$ 4.281/mês de economia. MLM: Hangar recebe R$0,05/kWh por professor, professores recebem R$0,03/kWh por aluno. Sistema atual suporta níveis numéricos. Falta: TipoCooperado.AGREGADOR com painel próprio.</p>
+  </div>
+</div>
+
+<h3>📦 Decisões de Produto (15/04/2026)</h3>
+<table class="rel-table">
+<thead><tr><th>Decisão</th><th>Detalhe</th></tr></thead>
+<tbody>
+  <tr><td>Assinatura</td><td>Preparar infra para D4Sign/ClickSign (hoje é timestamp+nome)</td></tr>
+  <tr><td>Planos públicos</td><td>Admin pode marcar vários planos como públicos — todos aparecem em /cadastro</td></tr>
+  <tr><td>FATURA_CHEIA_TOKEN</td><td>Cooperado paga valor cheio, recebe CooperTokens equivalentes ao desconto</td></tr>
+  <tr><td>Rebalanceamento</td><td>Somente com aprovação explícita do admin — nunca automático</td></tr>
+  <tr><td>Indicação no cadastro</td><td>/cadastro?ref=CODIGO vincula indicação e aplica desconto maior ao indicador</td></tr>
+  <tr><td>Fluxo proposta</td><td>Proposta → link assinatura enviado automaticamente → lembrete 24h → assinada → alocação</td></tr>
+</tbody>
+</table>
+
+<h3>📅 Backlog Priorizado</h3>
+<div class="priority-matrix">
+  <div class="priority-box p1">
+    <h4>P1 — Urgente</h4>
+    <ul>
+      <li>Fix recalculo ao trocar plano (Step3Simulacao.tsx)</li>
+      <li>Cadastro público buscar planos publico=true</li>
+      <li>Fluxo assinatura: envio link WA + email após proposta</li>
+      <li>Status PENDENTE_ASSINATURA no motor de proposta</li>
+    </ul>
+  </div>
+  <div class="priority-box p2">
+    <h4>P2 — Alta</h4>
+    <ul>
+      <li>Cópia pós-assinatura por WA + email</li>
+      <li>Lembrete se não assinar em 24h</li>
+      <li>Rebalanceamento de usinas com aprovação admin</li>
+      <li>Lista por usina após alocação</li>
+      <li>Desconto maior por indicação (/cadastro?ref=)</li>
+      <li>DTOs Contas a Pagar (class-validator)</li>
+      <li>SUPER_ADMIN info leak Contas a Pagar</li>
+    </ul>
+  </div>
+  <div class="priority-box p3">
+    <h4>P3 — Futuro</h4>
+    <ul>
+      <li>Integração D4Sign/ClickSign (assinatura legal)</li>
+      <li>TipoCooperado.AGREGADOR + painel Hangar</li>
+      <li>BONUS_INDICACAO idempotência cross-tenant</li>
+      <li>BUG-CALCULO-001 multa/juros divergentes</li>
+      <li>CORS * whatsapp-service porta 3002</li>
+    </ul>
+  </div>
+  <div class="priority-box p4">
+    <h4>P4 — Desejável</h4>
+    <ul>
+      <li>Integração Sungrow (GeraçãoMensal automática)</li>
+      <li>Testes unitários e integração</li>
+      <li>Soft delete global</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+</div><!-- container -->
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
