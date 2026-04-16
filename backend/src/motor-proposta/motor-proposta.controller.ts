@@ -47,8 +47,8 @@ export class MotorPropostaController {
   }
 
   @Post('aceitar')
-  aceitar(@Body() body: any) {
-    return this.service.aceitar(body);
+  aceitar(@Body() body: any, @Req() req: any) {
+    return this.service.aceitar(body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

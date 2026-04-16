@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { Prisma, StatusCooperado, TipoCooperado } from '@prisma/client';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -879,6 +879,45 @@ export class CooperadosService {
    * FASE 1 → APROVADO: docs aprovados + fatura processada
    * FASE 2 → ATIVO: tem contrato ATIVO
    */
+  /**
+   * Marca cooperado como PENDENTE_DOCUMENTOS após aceite de proposta.
+   * Só transiciona se status atual for "antes" do fluxo de docs
+   * (PENDENTE, PENDENTE_VALIDACAO). Se já estiver em PENDENTE_DOCUMENTOS
+   * ou mais adiante (APROVADO/ATIVO), é no-op para não regredir o ciclo.
+   * Registra audit trail em HistoricoStatusCooperado.
+   */
+  async marcarPendenteDocumentos(cooperadoId: string, cooperativaId?: string) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { id: true, status: true, cooperativaId: true },
+    });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+    // Multi-tenant: se o caller passar cooperativaId, exigir match
+    if (cooperativaId && cooperado.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
+    }
+    const transicionaveis: string[] = ['PENDENTE', 'PENDENTE_VALIDACAO'];
+    if (!transicionaveis.includes(cooperado.status)) {
+      return { atualizado: false, statusAtual: cooperado.status };
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cooperado.update({
+        where: { id: cooperadoId },
+        data: { status: 'PENDENTE_DOCUMENTOS' },
+      });
+      await tx.historicoStatusCooperado.create({
+        data: {
+          cooperadoId,
+          cooperativaId: cooperado.cooperativaId ?? undefined,
+          statusAnterior: cooperado.status,
+          statusNovo: 'PENDENTE_DOCUMENTOS',
+          motivo: 'Proposta aceita — aguardando envio de documentos',
+        },
+      });
+    });
+    return { atualizado: true, statusAnterior: cooperado.status, statusNovo: 'PENDENTE_DOCUMENTOS' };
+  }
+
   async checkProntoParaAtivar(cooperadoId: string) {
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },

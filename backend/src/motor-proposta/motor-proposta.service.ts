@@ -7,6 +7,8 @@ import { CooperadosService } from '../cooperados/cooperados.service';
 import { ContratosService } from '../contratos/contratos.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
+import { EmailService } from '../email/email.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -57,6 +59,8 @@ export class MotorPropostaService {
     private contratosService: ContratosService,
     private usinasService: UsinasService,
     private configTenant: ConfigTenantService,
+    private email: EmailService,
+    private whatsappSender: WhatsappSenderService,
   ) {}
 
   async getConfiguracao() {
@@ -387,9 +391,21 @@ export class MotorPropostaService {
     resultado: ResultadoCalculo['resultado'];
     mesReferencia: string;
     planoId?: string;
-  }) {
+  }, cooperativaId?: string) {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
+
+    // Multi-tenant: validar que o cooperado pertence ao tenant do caller
+    if (cooperativaId) {
+      const dono = await this.prisma.cooperado.findUnique({
+        where: { id: dto.cooperadoId },
+        select: { cooperativaId: true },
+      });
+      if (!dono) throw new NotFoundException('Cooperado não encontrado');
+      if (dono.cooperativaId !== cooperativaId) {
+        throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
+      }
+    }
 
     // BUG-CARRY-002: kwhContrato deve ser > 0 para gerar contrato
     if (!r.kwhContrato || r.kwhContrato <= 0) {
@@ -571,6 +587,11 @@ export class MotorPropostaService {
       }
     }
 
+    // T3 PARTE 1: após aceite, marcar cooperado como PENDENTE_DOCUMENTOS (se aplicável)
+    // e notificar para envio de documentos.
+    await this.cooperadosService.marcarPendenteDocumentos(dto.cooperadoId, cooperativaId);
+    await this.notificarCooperadoEnvioDocumentos(dto.cooperadoId);
+
     await this.cooperadosService.checkProntoParaAtivar(dto.cooperadoId);
 
     return {
@@ -579,6 +600,47 @@ export class MotorPropostaService {
       emListaEspera: result.emListaEspera,
       ...(result.contrato ? {} : { aviso: (result as any).aviso }),
     };
+  }
+
+  /**
+   * Notifica cooperado (WA + email) para enviar documentos após aceite.
+   * Guardado por NOTIFICACOES_ATIVAS: em dev fica off; em prod precisa
+   * `NOTIFICACOES_ATIVAS=true` para disparar envios reais.
+   * Falhas de envio são logadas mas não abortam o fluxo (best-effort).
+   */
+  private async notificarCooperadoEnvioDocumentos(cooperadoId: string): Promise<void> {
+    if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { nomeCompleto: true, email: true, telefone: true },
+    });
+    if (!cooperado) return;
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const linkDocs = `${baseUrl}/portal/documentos`;
+    const mensagem =
+      `Olá, ${cooperado.nomeCompleto}! Sua proposta CoopereBR foi aceita. ` +
+      `Para finalizar sua adesão, envie seus documentos aqui: ${linkDocs}`;
+    if (cooperado.telefone) {
+      try {
+        await this.whatsappSender.enviarMensagem(cooperado.telefone, mensagem);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar WA para cooperado ${cooperadoId}: ${msg}`);
+      }
+    }
+    if (cooperado.email) {
+      try {
+        const html =
+          `<p>Olá, <strong>${cooperado.nomeCompleto}</strong>!</p>` +
+          `<p>Sua proposta CoopereBR foi aceita. Para finalizar sua adesão, ` +
+          `envie seus documentos acessando o link abaixo:</p>` +
+          `<p><a href="${linkDocs}">${linkDocs}</a></p>`;
+        await this.email.enviarEmail(cooperado.email, 'Proposta aceita — envie seus documentos', html, mensagem);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar email para cooperado ${cooperadoId}: ${msg}`);
+      }
+    }
   }
 
   async excluirProposta(propostaId: string, cooperativaId?: string) {

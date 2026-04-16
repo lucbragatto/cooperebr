@@ -10,13 +10,14 @@ import { CooperadosModule } from '../cooperados/cooperados.module';
 import { ContratosModule } from '../contratos/contratos.module';
 import { UsinasModule } from '../usinas/usinas.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
+import { EmailModule } from '../email/email.module';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const multerLib = require('multer') as { memoryStorage: () => object };
 
 @Module({
-  imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
+  imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, EmailModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [MotorPropostaController],
   providers: [MotorPropostaService, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],
   exports: [MotorPropostaService],
