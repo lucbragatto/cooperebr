@@ -1,29 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarClock, CalendarDays, CheckCircle, Clock, Loader2, MapPin, Zap } from 'lucide-react';
-import type { Step1Data, DadosOcr } from './Step1Fatura';
+import {
+  CheckCircle, Clock, Loader2, MapPin, RefreshCw, Send, User, Zap, FileText, ExternalLink,
+} from 'lucide-react';
 import type { Step2Data } from './Step2Dados';
-import type { Step3Data } from './Step3Simulacao';
 import type { Step4Data } from './Step4Proposta';
-import type { Step5Data } from './Step5Documentos';
-import type { Step6Data } from './Step6Contrato';
 
-// ─── Preferência de cobrança ─────────────────────────────────────────────────
+interface CooperadoStatus {
+  id: string;
+  nomeCompleto: string;
+  status: string;
+}
 
-type TipoPreferencia = 'VENCIMENTO_CONCESSIONARIA' | 'DIA_FIXO' | 'DIAS_APOS_FATURA';
+interface PropostaStatus {
+  id: string;
+  status: string;
+  tokenAssinatura: string | null;
+  termoAdesaoAssinadoEm: string | null;
+  procuracaoAssinadaEm: string | null;
+  contratos: Array<{
+    id: string;
+    numero: string;
+    status: string;
+    usinaId: string | null;
+    usina?: { nome: string } | null;
+  }>;
+}
 
-const DIAS_FIXOS = [5, 10, 15, 20, 25] as const;
-const DIAS_APOS = [3, 5, 7, 10] as const;
-
-function resolverPreferenciaCobranca(tipo: TipoPreferencia, diaFixo: number, diasApos: number): string {
-  if (tipo === 'VENCIMENTO_CONCESSIONARIA') return 'VENCIMENTO_CONCESSIONARIA';
-  if (tipo === 'DIA_FIXO') return `DIA_FIXO_${String(diaFixo).padStart(2, '0')}`;
-  return `APOS_FATURA_${diasApos}D`;
+interface ListaEsperaEntry {
+  id: string;
+  cooperadoId: string;
+  status: string;
+  posicao: number;
+  contrato: { numero: string; status: string } | null;
 }
 
 interface UsinaDisponivel {
@@ -33,379 +46,307 @@ interface UsinaDisponivel {
   estado: string;
   distribuidora: string | null;
   capacidadeKwh: number | null;
-  producaoMensalKwh: number | null;
   statusHomologacao: string;
 }
 
 interface Step7Props {
-  faturaData: Step1Data;
   dadosPessoais: Step2Data;
-  simulacaoData: Step3Data;
   propostaData: Step4Data;
-  documentosData: Step5Data;
-  contratoData: Step6Data;
   tipoMembro: string;
-  tipoMembroPlural: string;
-  tipoParceiro: string;
 }
 
-export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData, propostaData, documentosData, contratoData, tipoMembro, tipoMembroPlural, tipoParceiro }: Step7Props) {
+export default function Step7Alocacao({ dadosPessoais, propostaData, tipoMembro }: Step7Props) {
   const router = useRouter();
-  const ocr = faturaData.ocr;
+  const cooperadoId = dadosPessoais.cooperadoId;
+  const propostaId = propostaData.propostaId;
 
-  const [usinas, setUsinas] = useState<UsinaDisponivel[]>([]);
-  const [usinaSelecionada, setUsinaSelecionada] = useState('');
-  const [semVaga, setSemVaga] = useState(false);
-  const [posicaoEspera, setPosicaoEspera] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [salvando, setSalvando] = useState(false);
-  const [concluido, setConcluido] = useState(false);
-  const [cooperadoId, setCooperadoId] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [cooperado, setCooperado] = useState<CooperadoStatus | null>(null);
+  const [proposta, setProposta] = useState<PropostaStatus | null>(null);
+  const [listaEspera, setListaEspera] = useState<ListaEsperaEntry | null>(null);
   const [erro, setErro] = useState('');
 
-  // Preferência de cobrança
-  const [tipoPreferencia, setTipoPreferencia] = useState<TipoPreferencia>('VENCIMENTO_CONCESSIONARIA');
-  const [diaFixo, setDiaFixo] = useState(10);
-  const [diasApos, setDiasApos] = useState(5);
+  // Alocação
+  const [usinas, setUsinas] = useState<UsinaDisponivel[]>([]);
+  const [usinaSelecionada, setUsinaSelecionada] = useState('');
+  const [alocando, setAlocando] = useState(false);
+
+  // Reenvio
+  const [reenviando, setReenviando] = useState(false);
+  const [linkReenviado, setLinkReenviado] = useState('');
+
+  const buscarStatus = useCallback(async () => {
+    if (!cooperadoId || !propostaId) return;
+    setCarregando(true);
+    setErro('');
+    try {
+      const [coopRes, histRes, leRes] = await Promise.all([
+        api.get<CooperadoStatus>(`/cooperados/${cooperadoId}`),
+        api.get<PropostaStatus[]>(`/motor-proposta/historico/${cooperadoId}`),
+        api.get<ListaEsperaEntry[]>('/motor-proposta/lista-espera').catch(() => ({ data: [] as ListaEsperaEntry[] })),
+      ]);
+      setCooperado(coopRes.data);
+      const minhaProposta = histRes.data.find(p => p.id === propostaId) ?? histRes.data[0] ?? null;
+      setProposta(minhaProposta);
+      const minhaEspera = leRes.data.find(e => e.cooperadoId === cooperadoId && e.status === 'AGUARDANDO') ?? null;
+      setListaEspera(minhaEspera);
+    } catch {
+      setErro('Erro ao carregar status. Clique em Atualizar para tentar novamente.');
+    } finally {
+      setCarregando(false);
+    }
+  }, [cooperadoId, propostaId]);
 
   useEffect(() => {
-    async function buscarUsinas() {
+    buscarStatus();
+  }, [buscarStatus]);
+
+  // Buscar usinas quando em lista de espera
+  useEffect(() => {
+    if (!listaEspera) return;
+    api.get<UsinaDisponivel[]>('/usinas').then(r => {
+      const compat = r.data.filter(u =>
+        u.statusHomologacao === 'HOMOLOGADA' || u.statusHomologacao === 'EM_PRODUCAO',
+      );
+      setUsinas(compat);
+      if (compat.length > 0) setUsinaSelecionada(compat[0].id);
+    }).catch(() => {});
+  }, [listaEspera]);
+
+  // Assinatura
+  const ambosAssinados = !!(proposta?.termoAdesaoAssinadoEm && proposta?.procuracaoAssinadaEm);
+  const contrato = proposta?.contratos?.[0] ?? null;
+  const contratoAtivo = contrato && contrato.status !== 'LISTA_ESPERA';
+  const tudo_concluido = ambosAssinados && contratoAtivo;
+
+  // Confetti
+  useEffect(() => {
+    if (!tudo_concluido) return;
+    (async () => {
       try {
-        const { data: all } = await api.get<UsinaDisponivel[]>('/usinas');
-        const distribuidora = ocr?.distribuidora?.toUpperCase() ?? '';
-        const compativeis = all.filter(u =>
-          (u.statusHomologacao === 'HOMOLOGADA' || u.statusHomologacao === 'EM_PRODUCAO') &&
-          (!distribuidora || (u.distribuidora?.toUpperCase() ?? '').includes(distribuidora))
-        );
-        setUsinas(compativeis);
-        if (compativeis.length > 0) {
-          setUsinaSelecionada(compativeis[0].id);
-        } else {
-          setSemVaga(true);
-          try {
-            const { data: espera } = await api.get<{ count: number }>('/cooperados/fila-espera/count');
-            setPosicaoEspera((espera?.count ?? 0) + 1);
-          } catch {
-            setPosicaoEspera(1);
-          }
-        }
-      } catch {
-        setSemVaga(true);
-      } finally {
-        setLoading(false);
-      }
-    }
-    buscarUsinas();
-  }, [ocr?.distribuidora]);
+        const confetti = (await import('canvas-confetti')).default;
+        const fim = Date.now() + 3000;
+        const frame = () => {
+          confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#22c55e', '#16a34a', '#4ade80', '#fbbf24', '#3b82f6'] });
+          confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#22c55e', '#16a34a', '#4ade80', '#fbbf24', '#3b82f6'] });
+          if (Date.now() < fim) requestAnimationFrame(frame);
+        };
+        frame();
+      } catch {}
+    })();
+  }, [tudo_concluido]);
 
-  async function finalizar() {
-    if (!semVaga && usinaSelecionada && !simulacaoData.simulacao) {
-      setErro('Simulação é obrigatória para criar o contrato. Volte à etapa de simulação.');
-      return;
-    }
-    setSalvando(true); setErro('');
+  async function reenviarLink() {
+    setReenviando(true);
+    setLinkReenviado('');
     try {
-      // ── Montar payload atômico ──
-      const selecionados = faturaData.historico.filter((_, i) => faturaData.mesesSelecionados.has(i));
-      const mediaKwh = selecionados.length > 0 ? selecionados.reduce((acc, m) => acc + m.consumoKwh, 0) / selecionados.length : 0;
-
-      const payload: Record<string, unknown> = {
-        nomeCompleto: dadosPessoais.nomeCompleto,
-        cpf: dadosPessoais.cpf.replace(/\D/g, ''),
-        email: dadosPessoais.email,
-        telefone: dadosPessoais.telefone || undefined,
-        status: 'PENDENTE',
-        tipoPessoa: dadosPessoais.tipoPessoa,
-        representanteLegalNome: dadosPessoais.representanteLegalNome || undefined,
-        representanteLegalCpf: dadosPessoais.representanteLegalCpf?.replace(/\D/g, '') || undefined,
-        representanteLegalCargo: dadosPessoais.representanteLegalCargo || undefined,
-        preferenciaCobranca: resolverPreferenciaCobranca(tipoPreferencia, diaFixo, diasApos),
-        cotaKwhMensal: mediaKwh > 0 ? Math.round(mediaKwh * 100) / 100 : undefined,
-      };
-
-      // UC (se tem dados OCR)
-      if (ocr) {
-        payload.uc = {
-          numero: ocr.numeroUC || `UC-${Date.now()}`,
-          endereco: ocr.enderecoInstalacao || dadosPessoais.endereco,
-          cidade: ocr.cidade || dadosPessoais.cidade,
-          estado: ocr.estado || dadosPessoais.estado,
-          cep: ocr.cep || dadosPessoais.cep,
-          bairro: ocr.bairro || dadosPessoais.bairro,
-          numeroUC: ocr.numeroUC || undefined,
-          distribuidora: ocr.distribuidora || undefined,
-          classificacao: ocr.classificacao || undefined,
-          codigoMedidor: ocr.codigoMedidor || undefined,
-        };
-      }
-
-      // Contrato (se tem usina selecionada)
-      if (!semVaga && usinaSelecionada) {
-        payload.contrato = {
-          usinaId: usinaSelecionada,
-          dataInicio: new Date().toISOString().slice(0, 10),
-          percentualDesconto: simulacaoData.simulacao!.desconto,
-          kwhContrato: Math.round(mediaKwh),
-          planoId: simulacaoData.planoSelecionadoId || undefined,
-        };
-      }
-
-      // Lista de espera (se sem vaga)
-      if (semVaga) {
-        payload.listaEspera = true;
-      }
-
-      // ── Chamada atômica única ──
-      const { data: resultado } = await api.post<{ cooperado: { id: string } }>('/cooperados/cadastro-completo', payload);
-      const cid = resultado.cooperado.id;
-      setCooperadoId(cid);
-
-      // T0: upload de documentos agora é feito pelo cooperado via portal (Step 5 acompanha)
-
-      // Motor de proposta (enriquecimento — não bloqueia cadastro)
-      if (ocr && faturaData.historico.length > 0) {
-        try {
-          await api.post('/motor-proposta/calcular', {
-            cooperadoId: cid,
-            historico: selecionados.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
-            kwhMesRecente: ocr.consumoAtualKwh ?? 0,
-            valorMesRecente: ocr.totalAPagar ?? 0,
-            mesReferencia: selecionados[selecionados.length - 1]?.mesAno ?? '',
-            tipoFornecimento: ocr.tipoFornecimento || undefined,
-          });
-        } catch {
-          // Proposta complementar — não impede conclusão
-        }
-      }
-
-      setConcluido(true);
-      dispararConfetti();
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErro(msg || 'Erro ao finalizar cadastro. Tente novamente.');
+      const { data: resp } = await api.post<{ link?: string }>(`/motor-proposta/proposta/${propostaId}/enviar-assinatura`);
+      if (resp.link) setLinkReenviado(resp.link);
+      await buscarStatus();
+    } catch {
+      setErro('Erro ao reenviar link de assinatura.');
     } finally {
-      setSalvando(false);
+      setReenviando(false);
     }
   }
 
-  async function dispararConfetti() {
+  async function alocarUsina() {
+    if (!listaEspera || !usinaSelecionada) return;
+    setAlocando(true);
+    setErro('');
     try {
-      const confetti = (await import('canvas-confetti')).default;
-      const duracao = 3000;
-      const fim = Date.now() + duracao;
-      const frame = () => {
-        confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#22c55e', '#16a34a', '#4ade80', '#fbbf24', '#3b82f6'] });
-        confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#22c55e', '#16a34a', '#4ade80', '#fbbf24', '#3b82f6'] });
-        if (Date.now() < fim) requestAnimationFrame(frame);
-      };
-      frame();
-    } catch {}
+      await api.post(`/motor-proposta/lista-espera/${listaEspera.id}/alocar`, { usinaId: usinaSelecionada });
+      setListaEspera(null);
+      await buscarStatus();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErro(msg || 'Erro ao alocar em usina.');
+    } finally {
+      setAlocando(false);
+    }
   }
 
-  // ─── Concluído ──────────────────────────────────────────────────────────────
-  if (concluido) {
-    return (
-      <div className="text-center py-12 space-y-6">
-        <div className="text-6xl">&#x1F389;</div>
-        <h2 className="text-2xl font-bold text-green-700">
-          {dadosPessoais.nomeCompleto} cadastrado com sucesso!
-        </h2>
-        <p className="text-neutral-500">
-          {semVaga
-            ? `Adicionado à lista de espera — posição ${posicaoEspera}. Previsão de ativação: quando nova usina for homologada.`
-            : `${tipoMembro} alocado na usina e contrato criado.`
-          }
-        </p>
-        <div className="flex justify-center gap-3">
-          <Button onClick={() => router.push(`/dashboard/cooperados/${cooperadoId}`)}>
-            Ver perfil
-          </Button>
-          <Button variant="outline" onClick={() => router.push('/dashboard/cooperados/novo')}>
-            Cadastrar outro
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const statusLabel: Record<string, string> = {
+    PENDENTE: 'Pendente',
+    PENDENTE_VALIDACAO: 'Pendente validação',
+    PENDENTE_DOCUMENTOS: 'Aguardando documentos',
+    APROVADO: 'Aprovado',
+    ATIVO: 'Ativo',
+    SUSPENSO: 'Suspenso',
+    ENCERRADO: 'Encerrado',
+  };
 
-  // ─── Salvando ───────────────────────────────────────────────────────────────
-  if (salvando) {
-    return (
-      <div className="text-center py-12 space-y-6">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-green-200 border-t-green-600" />
-        <p className="text-lg font-medium text-neutral-700">Finalizando cadastro...</p>
-      </div>
-    );
-  }
+  const statusColor: Record<string, string> = {
+    PENDENTE: 'bg-gray-100 text-gray-700',
+    PENDENTE_VALIDACAO: 'bg-amber-100 text-amber-700',
+    PENDENTE_DOCUMENTOS: 'bg-amber-100 text-amber-700',
+    APROVADO: 'bg-blue-100 text-blue-700',
+    ATIVO: 'bg-green-100 text-green-700',
+    SUSPENSO: 'bg-red-100 text-red-700',
+    ENCERRADO: 'bg-gray-100 text-gray-600',
+  };
 
-  // ─── Loading usinas ─────────────────────────────────────────────────────────
-  if (loading) {
+  if (carregando) {
     return (
       <div className="text-center py-12 space-y-4">
         <Loader2 className="h-8 w-8 text-green-600 mx-auto animate-spin" />
-        <p className="text-sm text-gray-500">Verificando usinas disponíveis...</p>
+        <p className="text-sm text-gray-500">Carregando status...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Alocação e conclusão</h2>
-        <p className="text-sm text-gray-500">Verifique usinas disponíveis e finalize o cadastro do {tipoMembro.toLowerCase()}.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-gray-800 mb-1">Acompanhamento</h2>
+          <p className="text-sm text-gray-500">Status consolidado do cadastro de {dadosPessoais.nomeCompleto}.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={buscarStatus} disabled={carregando}>
+          <RefreshCw className="h-4 w-4 mr-2" /> Atualizar
+        </Button>
       </div>
 
-      {/* Usina disponível */}
-      {!semVaga && usinas.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-green-700" />
-            <h3 className="text-sm font-semibold text-gray-800">Usinas compatíveis ({ocr?.distribuidora ?? 'mesma distribuidora'})</h3>
-          </div>
-          <div className="space-y-2">
-            {usinas.map(u => (
-              <button key={u.id} onClick={() => setUsinaSelecionada(u.id)}
-                className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${usinaSelecionada === u.id ? 'border-green-600 bg-green-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${usinaSelecionada === u.id ? 'border-green-600 bg-green-600' : 'border-gray-400'}`} />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">{u.nome}</p>
-                    <p className="text-xs text-gray-500">{u.cidade}/{u.estado} — {u.distribuidora ?? 'N/A'} — {u.statusHomologacao}</p>
-                    {u.capacidadeKwh && <p className="text-xs text-gray-500">Capacidade: {u.capacidadeKwh.toLocaleString('pt-BR')} kWh</p>}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {erro && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{erro}</div>}
 
-      {/* Sem vaga */}
-      {semVaga && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-amber-600" />
-            <h3 className="text-sm font-semibold text-amber-800">Nenhuma usina disponível</h3>
-          </div>
-          <p className="text-sm text-amber-700">
-            {tipoMembro} será adicionado à lista de espera — posição estimada: <b>{posicaoEspera}</b>
-          </p>
-          <p className="text-xs text-amber-600">
-            Previsão de ativação: quando nova usina for homologada na mesma distribuidora.
-          </p>
+      {/* 1. Status do cooperado */}
+      <div className="border rounded-lg p-4 flex items-center gap-3">
+        <User className="h-5 w-5 text-gray-600" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-800">{cooperado?.nomeCompleto ?? dadosPessoais.nomeCompleto}</p>
+          <p className="text-xs text-gray-500">Status do cooperado</p>
         </div>
-      )}
+        <span className={`text-xs font-medium px-3 py-1 rounded-full ${statusColor[cooperado?.status ?? ''] ?? 'bg-gray-100 text-gray-600'}`}>
+          {statusLabel[cooperado?.status ?? ''] ?? cooperado?.status ?? 'Desconhecido'}
+        </span>
+      </div>
 
-      {/* ─── Preferência de data de cobrança ────────────────────────────────── */}
-      <div className="space-y-3">
+      {/* 2. Status da assinatura */}
+      <div className={`border rounded-lg p-4 space-y-3 ${ambosAssinados ? 'border-green-200 bg-green-50' : 'border-amber-200'}`}>
         <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-green-700" />
-          <h3 className="text-sm font-semibold text-gray-800">Preferência de data de cobrança</h3>
+          <FileText className="h-5 w-5 text-gray-600" />
+          <h3 className="text-sm font-semibold text-gray-800">Assinatura</h3>
         </div>
-        <div className="space-y-2">
-          {/* Opção 1 — Mesmo vencimento da concessionária */}
-          <button
-            type="button"
-            onClick={() => setTipoPreferencia('VENCIMENTO_CONCESSIONARIA')}
-            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
-              tipoPreferencia === 'VENCIMENTO_CONCESSIONARIA'
-                ? 'border-green-600 bg-green-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
-                tipoPreferencia === 'VENCIMENTO_CONCESSIONARIA' ? 'border-green-600 bg-green-600' : 'border-gray-400'
-              }`} />
-              <div className="flex items-start gap-3">
-                <CalendarDays className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Mesmo vencimento da concessionária</p>
-                  <p className="text-xs text-gray-500">Cobrança no mesmo dia de vencimento da sua conta de energia</p>
-                </div>
-              </div>
-            </div>
-          </button>
 
-          {/* Opção 2 — Dia fixo do mês */}
-          <button
-            type="button"
-            onClick={() => setTipoPreferencia('DIA_FIXO')}
-            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
-              tipoPreferencia === 'DIA_FIXO'
-                ? 'border-green-600 bg-green-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
-                tipoPreferencia === 'DIA_FIXO' ? 'border-green-600 bg-green-600' : 'border-gray-400'
-              }`} />
-              <div className="flex items-start gap-3">
-                <CalendarClock className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-800">Dia fixo do mês</p>
-                  <p className="text-xs text-gray-500">Escolha um dia específico para vencimento todo mês</p>
-                  {tipoPreferencia === 'DIA_FIXO' && (
-                    <Select value={String(diaFixo)} onValueChange={(v) => setDiaFixo(Number(v))}>
-                      <SelectTrigger className="w-40" onClick={(e) => e.stopPropagation()}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DIAS_FIXOS.map(d => (
-                          <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
+        {ambosAssinados ? (
+          <div className="flex items-center gap-2 text-sm text-green-700">
+            <CheckCircle className="h-4 w-4" />
+            <span className="font-medium">Termo e procuração assinados</span>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                {proposta?.termoAdesaoAssinadoEm
+                  ? <><CheckCircle className="h-3 w-3 text-green-600" /> <span className="text-green-700">Termo assinado em {new Date(proposta.termoAdesaoAssinadoEm).toLocaleDateString('pt-BR')}</span></>
+                  : <><Clock className="h-3 w-3 text-amber-500" /> <span className="text-amber-700">Termo pendente</span></>
+                }
+              </div>
+              <div className="flex items-center gap-2">
+                {proposta?.procuracaoAssinadaEm
+                  ? <><CheckCircle className="h-3 w-3 text-green-600" /> <span className="text-green-700">Procuração assinada em {new Date(proposta.procuracaoAssinadaEm).toLocaleDateString('pt-BR')}</span></>
+                  : <><Clock className="h-3 w-3 text-amber-500" /> <span className="text-amber-700">Procuração pendente</span></>
+                }
               </div>
             </div>
-          </button>
-
-          {/* Opção 3 — Dias após receber a fatura */}
-          <button
-            type="button"
-            onClick={() => setTipoPreferencia('DIAS_APOS_FATURA')}
-            className={`w-full text-left border-2 rounded-xl p-4 transition-colors ${
-              tipoPreferencia === 'DIAS_APOS_FATURA'
-                ? 'border-green-600 bg-green-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${
-                tipoPreferencia === 'DIAS_APOS_FATURA' ? 'border-green-600 bg-green-600' : 'border-gray-400'
-              }`} />
-              <div className="flex items-start gap-3">
-                <Clock className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-800">Dias após receber a fatura</p>
-                  <p className="text-xs text-gray-500">Vencimento calculado a partir da data de emissão da fatura</p>
-                  {tipoPreferencia === 'DIAS_APOS_FATURA' && (
-                    <Select value={String(diasApos)} onValueChange={(v) => setDiasApos(Number(v))}>
-                      <SelectTrigger className="w-40" onClick={(e) => e.stopPropagation()}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DIAS_APOS.map(d => (
-                          <SelectItem key={d} value={String(d)}>{d} dias úteis após</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
+            <Button variant="outline" size="sm" onClick={reenviarLink} disabled={reenviando}>
+              {reenviando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Reenviar link de assinatura
+            </Button>
+            {linkReenviado && (
+              <div className="bg-gray-50 border border-gray-200 rounded-md p-2">
+                <p className="text-xs text-gray-500 mb-1">Link reenviado:</p>
+                <code className="text-xs text-gray-700 break-all">{linkReenviado}</code>
               </div>
-            </div>
-          </button>
-        </div>
+            )}
+          </>
+        )}
       </div>
 
-      {erro && <p className="text-sm text-red-600">{erro}</p>}
+      {/* 3. Contrato / Alocação */}
+      <div className={`border rounded-lg p-4 space-y-3 ${
+        contratoAtivo ? 'border-green-200 bg-green-50' : listaEspera ? 'border-amber-200 bg-amber-50' : 'border-gray-200'
+      }`}>
+        <div className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-gray-600" />
+          <h3 className="text-sm font-semibold text-gray-800">Contrato e usina</h3>
+        </div>
 
-      <Button onClick={finalizar} className="w-full py-4 text-lg font-bold">
-        Finalizar cadastro
-      </Button>
+        {contratoAtivo && (
+          <div className="flex items-center gap-2 text-sm text-green-700">
+            <CheckCircle className="h-4 w-4" />
+            <span className="font-medium">
+              Contrato #{contrato.numero} — {contrato.status === 'ATIVO' ? 'Ativo' : 'Pendente ativação'}
+              {contrato.usina ? ` — Usina: ${contrato.usina.nome}` : ''}
+            </span>
+          </div>
+        )}
+
+        {listaEspera && (
+          <>
+            <div className="flex items-center gap-2 text-sm text-amber-700">
+              <MapPin className="h-4 w-4" />
+              <span>Lista de espera — posição {listaEspera.posicao}</span>
+            </div>
+            {usinas.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">Alocar manualmente em usina:</p>
+                <div className="flex gap-2">
+                  <select
+                    value={usinaSelecionada}
+                    onChange={e => setUsinaSelecionada(e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    {usinas.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.nome} — {u.cidade}/{u.estado} ({u.capacidadeKwh?.toLocaleString('pt-BR') ?? '?'} kWh)
+                      </option>
+                    ))}
+                  </select>
+                  <Button size="sm" onClick={alocarUsina} disabled={alocando}>
+                    {alocando ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Alocar'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!contratoAtivo && !listaEspera && contrato && contrato.status === 'LISTA_ESPERA' && (
+          <div className="text-sm text-amber-700">
+            <Clock className="h-4 w-4 inline mr-1" />
+            Contrato #{contrato.numero} em lista de espera. Clique em &quot;Atualizar&quot; para verificar alocação.
+          </div>
+        )}
+
+        {!contrato && (
+          <div className="text-sm text-gray-500">
+            Nenhum contrato criado. Verifique se o cooperado tem UC cadastrada.
+          </div>
+        )}
+      </div>
+
+      {/* Conclusão */}
+      {tudo_concluido && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-5 text-center space-y-2">
+          <p className="text-2xl">🎉</p>
+          <p className="text-lg font-bold text-green-700">Cadastro completo!</p>
+          <p className="text-sm text-green-600">
+            {dadosPessoais.nomeCompleto} está com contrato ativo e documentos assinados.
+          </p>
+        </div>
+      )}
+
+      {/* Ações finais */}
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => router.push(`/dashboard/cooperados/${cooperadoId}`)} className="flex-1">
+          <ExternalLink className="h-4 w-4 mr-2" />
+          Ver perfil completo
+        </Button>
+        <Button variant="outline" onClick={() => router.push('/dashboard/cooperados/novo')} className="flex-1">
+          Cadastrar outro
+        </Button>
+      </div>
     </div>
   );
 }

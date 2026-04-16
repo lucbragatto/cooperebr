@@ -240,15 +240,9 @@ export default function NovoMembroWizard() {
       case 6:
         return (
           <Step7Alocacao
-            faturaData={step1}
             dadosPessoais={step2}
-            simulacaoData={step3}
             propostaData={step4}
-            documentosData={step5}
-            contratoData={step6}
             tipoMembro={tipoMembro}
-            tipoMembroPlural={tipoMembroPlural}
-            tipoParceiro={tipoParceiro ?? 'COOPERATIVA'}
           />
         );
       default:
