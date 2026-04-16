@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { Prisma, StatusCooperado, TipoCooperado } from '@prisma/client';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -410,11 +410,20 @@ export class CooperadosService {
     usinaPropriaId?: string;
     percentualRepasse?: number;
   }) {
-    const cooperado = await this.prisma.cooperado.create({ data });
+    let cooperado;
+    try {
+      cooperado = await this.prisma.cooperado.create({ data });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('CPF já cadastrado');
+      }
+      throw err;
+    }
 
-    // Notificar novo membro via WhatsApp e E-mail
-    this.whatsappCicloVida.notificarMembroCriado(cooperado).catch(() => {});
-    this.emailService.enviarBoasVindas(cooperado).catch(() => {});
+    if (process.env.NOTIFICACOES_ATIVAS === 'true') {
+      this.whatsappCicloVida.notificarMembroCriado(cooperado).catch(() => {});
+      this.emailService.enviarBoasVindas(cooperado).catch(() => {});
+    }
 
     return cooperado;
   }
