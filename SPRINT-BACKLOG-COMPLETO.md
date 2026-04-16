@@ -242,7 +242,14 @@ const desconto = planoSelecionado?.descontoBase ?? 0.20;
 
 ## TAREFAS — SPRINT 2 (motor ANTES do wizard — nessa ordem)
 
-### T3 — Motor de Proposta: aceite + fluxo de documentos
+### T3 — Motor de Proposta: aceite + fluxo de documentos ✅ CONCLUÍDA — commits `bb646e9` + `33a8ea2` + `f2fbdfc` + `91e89bb`
+
+**Dívida técnica registrada:** a proteção completa da rota `POST /motor-proposta/aceitar` depende de T0. Hoje a rota aplica 3 camadas de defesa (roles `SUPER_ADMIN/ADMIN` sem OPERADOR, validação de ranges no `resultado`, audit trail com `usuarioId` em `HistoricoStatusCooperado`), mas um ADMIN autenticado ainda consegue injetar `descontoPercentual` arbitrário dentro do range. O fix definitivo exige que `calcular()` persista uma proposta `PENDENTE` no banco e que `aceitar()` valide a transição `PENDENTE → ACEITA` contra os dados já persistidos — isso é parte do T0 (Wizard Admin conectar ao Motor de Proposta). Docstring de dívida técnica deixada no topo de `MotorPropostaService.aceitar()`.
+
+**Dívida cosmética:** a rota HTTP permanece `/proposta/:id/enviar-assinatura` (handler renomeado para `enviarLinkAssinaturaDocs`). Não alterada porque `web/app/dashboard/motor-proposta/page.tsx:123` consome esse path e a task proíbe mudanças em frontend.
+
+**Dívida cosmética:** `enviarAprovacao()` (linhas ~940 do service) tem o mesmo padrão de só fazer `console.log` sem envio real. Fora do escopo do T3, ficar para refactor futuro.
+
 **Arquivo:** `backend/src/motor-proposta/motor-proposta.service.ts`
 
 **O que muda:**

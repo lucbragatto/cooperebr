@@ -335,6 +335,10 @@ A T3 implementa o fluxo completo do zero.
 
 | Commit | O que foi feito |
 |---|---|
+| `91e89bb` | feat(t3-p4): proteger rota aceitar() com roles + range validation + audit trail (Sprint 2 T3) |
+| `f2fbdfc` | feat(t3-p3): renomear enviarAssinatura → enviarLinkAssinaturaDocs + PDF + link real (Sprint 2 T3) |
+| `33a8ea2` | feat(t3-p2): novo endpoint análise de documentos admin com audit trail (Sprint 2 T3) |
+| `bb646e9` | feat(t3-p1): aceitar() marca cooperado PENDENTE_DOCUMENTOS + notifica envio de docs (Sprint 2 T3) |
 | `f296f34` | fix: filtrar planos por tenant/publico e usar descontoBase real no cadastro web (Sprint 1 T2+T8) |
 | `930807b` | fix: unificar link de indicação para `/cadastro?ref=CODIGO` (Sprint 1 T6) |
 | `bc304c8` | docs: adicionar `CADASTRO_VALIDACOES_ATIVAS` às env vars obrigatórias (Sprint 1 T7) |
@@ -370,7 +374,7 @@ const valorLiquido = Math.round((valorBruto - desconto) * 100) / 100;
 // refactor: extrair cálculo desconto para service
 ```
 
-**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`, `CADASTRO_VALIDACOES_ATIVAS` (prod=`true` para validar CPF/email/telefone no cadastro público; dev pode omitir)
+**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`, `CADASTRO_VALIDACOES_ATIVAS` (prod=`true` para validar CPF/email/telefone no cadastro público; dev pode omitir), `NOTIFICACOES_ATIVAS` (prod=`true` para disparar WA/email no fluxo de aceite/análise de docs/link de assinatura; dev pode omitir)
 
 ---
 
