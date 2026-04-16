@@ -29,10 +29,10 @@ export class UsinasAnaliticoService {
       where: { usinaId, status: 'ATIVO' },
     });
 
-    // Cobranças do mês via contratos da usina
+    // Cobranças do mês via contratos da usina (apenas cooperados e contratos ativos)
     const cobrancasMes = await this.prisma.cobranca.findMany({
       where: {
-        contrato: { usinaId },
+        contrato: { usinaId, status: 'ATIVO', cooperado: { status: 'ATIVO' } },
         mesReferencia: mes,
         anoReferencia: ano,
         status: { not: 'CANCELADO' },
