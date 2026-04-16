@@ -365,7 +365,7 @@ const valorLiquido = Math.round((valorBruto - desconto) * 100) / 100;
 // refactor: extrair cálculo desconto para service
 ```
 
-**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`
+**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`, `CADASTRO_VALIDACOES_ATIVAS` (prod=`true` para validar CPF/email/telefone no cadastro público; dev pode omitir)
 
 ---
 
