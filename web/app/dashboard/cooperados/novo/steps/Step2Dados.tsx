@@ -171,9 +171,13 @@ export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: S
         const { data: cooperado } = await api.post<{ id: string }>('/cooperados', payload);
         cooperadoId = cooperado.id;
       } catch (err: unknown) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
-        if (status === 409) {
-          // CPF duplicado — buscar cooperado existente
+        const resp = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+        if (resp?.status === 409) {
+          const msg = resp.data?.message ?? '';
+          if (msg.includes('Email')) {
+            setErro('Email já cadastrado para outro cooperado. Verifique o email informado.');
+            return;
+          }
           const cpfBusca = cpfLimpo;
           const { data: lista } = await api.get<Array<{ id: string; nomeCompleto: string; email: string; cpf: string }>>(`/cooperados?search=${cpfBusca}&limit=5`);
           const existente = lista.find((c) => c.cpf?.replace(/\D/g, '') === cpfBusca);
@@ -358,12 +362,12 @@ export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: S
         </div>
       )}
 
-      {/* Salvar cooperado + UC */}
+      {/* Salvar membro + UC */}
       {jaSalvo ? (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
           <Check className="h-5 w-5 text-green-600" />
           <span className="text-sm text-green-800 font-medium">
-            Cooperado salvo. Pode avançar para simulação.
+            {tipoMembro} salvo. Pode avançar para simulação.
           </span>
         </div>
       ) : (
@@ -375,7 +379,7 @@ export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: S
           {salvando ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</>
           ) : (
-            'Salvar cooperado e continuar'
+            `Salvar ${tipoMembro.toLowerCase()} e continuar`
           )}
         </button>
       )}

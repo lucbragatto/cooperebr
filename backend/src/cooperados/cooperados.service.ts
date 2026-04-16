@@ -415,6 +415,10 @@ export class CooperadosService {
       cooperado = await this.prisma.cooperado.create({ data });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = (err.meta?.target as string[]) ?? [];
+        if (target.includes('email')) {
+          throw new ConflictException('Email já cadastrado');
+        }
         throw new ConflictException('CPF já cadastrado');
       }
       throw err;
