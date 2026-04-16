@@ -127,7 +127,6 @@ export default function NovoMembroWizard() {
 
   const [step6, setStep6] = useState<Step6Data>({
     contratoGerado: false,
-    assinaturaPresencial: false,
     statusAssinatura: 'pendente',
   });
 
@@ -237,7 +236,7 @@ export default function NovoMembroWizard() {
       case 4:
         return <Step5Documentos data={step5} cooperadoId={step2.cooperadoId} onChange={updateStep5} tipoMembro={tipoMembro} />;
       case 5:
-        return <Step6Contrato data={step6} dadosPessoais={step2} simulacaoData={step3} onChange={updateStep6} tipoMembro={tipoMembro} />;
+        return <Step6Contrato data={step6} propostaId={step4.propostaId} dadosPessoais={step2} simulacaoData={step3} onChange={updateStep6} tipoMembro={tipoMembro} />;
       case 6:
         return (
           <Step7Alocacao
