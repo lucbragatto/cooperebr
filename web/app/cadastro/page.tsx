@@ -412,6 +412,7 @@ function CadastroPageInner() {
     setLoading(true);
 
     try {
+      const tenant = searchParams.get('tenant') ?? process.env.NEXT_PUBLIC_COOPERATIVA_ID;
       const payload: Record<string, unknown> = {
         nome: pessoais.nome.trim(),
         cpf: pessoais.cpf,
@@ -432,6 +433,8 @@ function CadastroPageInner() {
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
         planoSelecionado: planoSelecionado?.cooperTokenAtivo ? 'FATURA_CHEIA_TOKEN' : 'DESCONTO_DIRETO',
+        planoId: planoSelecionado?.id || undefined,
+        cooperativaId: tenant || undefined,
         aceitaClube,
       };
 
@@ -441,6 +444,14 @@ function CadastroPageInner() {
 
       if (valorUltimaFatura) {
         payload.valorUltimaFatura = Number(valorUltimaFatura) || 0;
+      }
+
+      if (historicoConsumo.length > 0) {
+        payload.historicoConsumo = historicoConsumo.map(h => ({
+          mesAno: h.mesAno,
+          consumoKwh: h.consumoKwh,
+          valorRS: h.valorRS,
+        }));
       }
 
       // Enviar arquivo da fatura como base64 (modo manual)
