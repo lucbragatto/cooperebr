@@ -80,7 +80,7 @@ interface Step3Props {
 
 export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange, tipoMembro }: Step3Props) {
   const { planoSelecionadoId, simulacao, resultadoMotor } = data;
-  const { ocr, historico, mesesSelecionados, componentesMarcados, componentesEditados } = faturaData;
+  const { ocr, historico, mesesSelecionados, componentesMarcados, componentesEditados, baseDesconto } = faturaData;
 
   const [planosAtivos, setPlanosAtivos] = useState<PlanoOption[]>([]);
   const [calculando, setCalculando] = useState(false);
@@ -97,6 +97,13 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
     chamarMotor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cooperadoId]);
+
+  // Recalcular ao trocar plano ou base de desconto
+  useEffect(() => {
+    if (!cooperadoId || !resultadoMotor) return;
+    chamarMotor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planoSelecionadoId, baseDesconto]);
 
   // Helpers para cards de resumo (display only — não influenciam o cálculo do motor)
   function calcularEstatisticas() {
@@ -131,6 +138,8 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
         valorMesRecente: ocr?.totalAPagar ?? ultimoMes?.valorRS ?? 0,
         mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
         tipoFornecimento: ocr?.tipoFornecimento || undefined,
+        planoId: planoSelecionadoId || undefined,
+        baseDesconto: baseDesconto === 'VALOR_FATURA' ? 'VALOR_FATURA' as const : 'KWH_CHEIO' as const,
         ...(opcaoEscolhida ? { opcaoEscolhida } : {}),
       };
 
