@@ -136,18 +136,19 @@ export default function NovoMembroWizard() {
     setStep1(prev => ({ ...prev, ...partial }));
 
     // Pre-fill step 2 with OCR data when OCR completes.
-    // Sempre sobrescreve — dados da fatura têm prioridade sobre valores anteriores.
+    // Sempre sobrescreve com dados da fatura. Se OCR não extraiu um campo, limpa
+    // o valor anterior (nunca herda dados de outra fatura/cooperado).
     if (partial.ocr) {
       const ocr = partial.ocr;
       setStep2(prev => ({
         ...prev,
-        nomeCompleto: ocr.titular || prev.nomeCompleto || '',
-        cpf: ocr.documento || prev.cpf || '',
-        endereco: ocr.enderecoInstalacao || prev.endereco || '',
-        bairro: ocr.bairro || prev.bairro || '',
-        cidade: ocr.cidade || prev.cidade || '',
-        estado: ocr.estado || prev.estado || '',
-        cep: ocr.cep || prev.cep || '',
+        nomeCompleto: ocr.titular ?? '',
+        cpf: ocr.documento ?? '',
+        endereco: ocr.enderecoInstalacao ?? '',
+        bairro: ocr.bairro ?? '',
+        cidade: ocr.cidade ?? '',
+        estado: ocr.estado ?? '',
+        cep: ocr.cep ?? '',
         tipoPessoa: ocr.tipoDocumento === 'CNPJ' ? 'PJ' : 'PF',
         cooperadoId: '',
         ucId: '',
