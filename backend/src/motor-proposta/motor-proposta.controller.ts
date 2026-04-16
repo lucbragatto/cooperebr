@@ -236,8 +236,8 @@ export class MotorPropostaController {
   // ── Assinatura digital ──────────────────────────────────────────
 
   @Post('proposta/:id/enviar-assinatura')
-  enviarAssinatura(@Param('id') id: string) {
-    return this.service.enviarAssinatura(id);
+  enviarLinkAssinaturaDocs(@Param('id') id: string, @Req() req: any) {
+    return this.service.enviarLinkAssinaturaDocs(id, req.user?.cooperativaId);
   }
 
   @Public()

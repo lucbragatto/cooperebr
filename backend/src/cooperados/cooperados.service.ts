@@ -918,6 +918,43 @@ export class CooperadosService {
     return { atualizado: true, statusAnterior: cooperado.status, statusNovo: 'PENDENTE_DOCUMENTOS' };
   }
 
+  /**
+   * Marca cooperado como APROVADO após análise positiva de documentos.
+   * Transiciona de PENDENTE_DOCUMENTOS | PENDENTE | PENDENTE_VALIDACAO → APROVADO.
+   * No-op se já estiver APROVADO/ATIVO/ATIVO_RECEBENDO_CREDITOS.
+   * Registra audit trail em HistoricoStatusCooperado.
+   */
+  async marcarAprovado(cooperadoId: string, cooperativaId?: string) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { id: true, status: true, cooperativaId: true },
+    });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+    if (cooperativaId && cooperado.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
+    }
+    const transicionaveis: string[] = ['PENDENTE', 'PENDENTE_VALIDACAO', 'PENDENTE_DOCUMENTOS'];
+    if (!transicionaveis.includes(cooperado.status)) {
+      return { atualizado: false, statusAtual: cooperado.status };
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.cooperado.update({
+        where: { id: cooperadoId },
+        data: { status: 'APROVADO' },
+      });
+      await tx.historicoStatusCooperado.create({
+        data: {
+          cooperadoId,
+          cooperativaId: cooperado.cooperativaId ?? undefined,
+          statusAnterior: cooperado.status,
+          statusNovo: 'APROVADO',
+          motivo: 'Documentos aprovados — link de assinatura enviado',
+        },
+      });
+    });
+    return { atualizado: true, statusAnterior: cooperado.status, statusNovo: 'APROVADO' };
+  }
+
   async checkProntoParaAtivar(cooperadoId: string) {
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },

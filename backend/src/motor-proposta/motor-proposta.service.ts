@@ -9,6 +9,8 @@ import { UsinasService } from '../usinas/usinas.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { EmailService } from '../email/email.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { PropostaPdfService } from './proposta-pdf.service';
+import { PdfGeneratorService } from './pdf-generator.service';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -61,6 +63,8 @@ export class MotorPropostaService {
     private configTenant: ConfigTenantService,
     private email: EmailService,
     private whatsappSender: WhatsappSenderService,
+    private propostaPdf: PropostaPdfService,
+    private pdfGenerator: PdfGeneratorService,
   ) {}
 
   async getConfiguracao() {
@@ -1018,8 +1022,8 @@ export class MotorPropostaService {
 
   /**
    * Endpoint de análise de documentos do cooperado (ADMIN).
-   * - APROVADO → delega para enviarAssinatura() (que muda cooperado para APROVADO
-   *   e envia link de assinatura — ver T3 PARTE 3).
+   * - APROVADO → delega para enviarLinkAssinaturaDocs() (muda cooperado para
+   *   APROVADO, gera PDFs e envia link de assinatura).
    * - REPROVADO → registra motivo em HistoricoStatusCooperado, notifica cooperado.
    * - PENDENTE → registra motivo (pedido de mais info), notifica cooperado.
    *
@@ -1062,9 +1066,9 @@ export class MotorPropostaService {
       throw new ForbiddenException('Proposta não pertence à sua cooperativa');
     }
 
-    // APROVADO → delega para enviarAssinatura (será renomeado em PARTE 3)
+    // APROVADO → delega para enviarLinkAssinaturaDocs (muda status + gera PDFs + envia link)
     if (resultado === 'APROVADO') {
-      return this.enviarAssinatura(propostaId);
+      return this.enviarLinkAssinaturaDocs(propostaId, cooperativaId);
     }
 
     // REPROVADO / PENDENTE: registrar motivo em histórico (transição no-op com motivo)
@@ -1138,21 +1142,117 @@ export class MotorPropostaService {
 
   // ── Assinatura digital ──────────────────────────────────────────
 
-  async enviarAssinatura(propostaId: string) {
-    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+  /**
+   * Gera token de assinatura, marca cooperado como APROVADO, gera PDFs de
+   * termo/procuração e envia link para o cooperado via WA + email.
+   *
+   * Link novo: ${FRONTEND_URL}/portal/assinar/${token} (path param).
+   * Envio real é guardado por NOTIFICACOES_ATIVAS; geração de PDF é best-effort
+   * (falha no pdf não aborta o envio do link).
+   *
+   * (Antigo nome: enviarAssinatura — renomeado em T3 PARTE 3.)
+   */
+  async enviarLinkAssinaturaDocs(propostaId: string, cooperativaId?: string) {
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: {
+        cooperado: {
+          select: {
+            id: true,
+            cooperativaId: true,
+            nomeCompleto: true,
+            email: true,
+            telefone: true,
+          },
+        },
+      },
+    });
     if (!proposta) throw new NotFoundException('Proposta não encontrada');
 
+    // Multi-tenant
+    if (cooperativaId && proposta.cooperado.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Proposta não pertence à sua cooperativa');
+    }
+
+    // 1. Gerar token único e persistir
     const token = randomUUID();
     await this.prisma.propostaCooperado.update({
       where: { id: propostaId },
       data: { tokenAssinatura: token },
     });
 
-    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
-    const link = `${baseUrl}/assinar?token=${token}`;
-    console.log(`[ASSINATURA] Link: ${link}`);
+    // 2. Marcar cooperado como APROVADO (audit trail em HistoricoStatusCooperado)
+    await this.cooperadosService.marcarAprovado(proposta.cooperado.id, cooperativaId);
 
-    return { sucesso: true, link, token };
+    // 3. Gerar PDFs (best-effort — não aborta o fluxo se falhar)
+    let pdfPath: string | null = null;
+    try {
+      const html = await this.propostaPdf.gerarHtml(propostaId);
+      pdfPath = await this.pdfGenerator.gerarPdf(html, `proposta-${propostaId}.pdf`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      console.error(`[T3] Falha ao gerar PDF da proposta ${propostaId}: ${msg}`);
+    }
+
+    // 4. Link no novo formato (path param — compatível com /portal/assinar/[token])
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${baseUrl}/portal/assinar/${token}`;
+
+    // 5. Envio WA + email (behind NOTIFICACOES_ATIVAS)
+    await this.notificarLinkAssinatura(proposta.cooperado, link, pdfPath);
+
+    return { sucesso: true, link, token, pdfPath };
+  }
+
+  /**
+   * Envia link de assinatura via WA + email ao cooperado.
+   * Guardado por NOTIFICACOES_ATIVAS. Se houver PDF gerado e telefone,
+   * envia o PDF como anexo via WA também.
+   */
+  private async notificarLinkAssinatura(
+    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null },
+    link: string,
+    pdfPath: string | null,
+  ): Promise<void> {
+    if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
+    const mensagem =
+      `Olá, ${cooperado.nomeCompleto}! Seus documentos foram aprovados pela CoopereBR. ` +
+      `Para finalizar sua adesão, assine o contrato e a procuração no link: ${link}`;
+
+    if (cooperado.telefone) {
+      try {
+        await this.whatsappSender.enviarMensagem(cooperado.telefone, mensagem);
+        if (pdfPath) {
+          await this.whatsappSender.enviarPdfWhatsApp(
+            cooperado.telefone,
+            pdfPath,
+            `proposta-cooperebr.pdf`,
+            'Segue sua proposta CoopereBR para assinatura',
+          );
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar WA do link de assinatura: ${msg}`);
+      }
+    }
+    if (cooperado.email) {
+      try {
+        const html =
+          `<p>Olá, <strong>${cooperado.nomeCompleto}</strong>!</p>` +
+          `<p>Seus documentos foram aprovados pela CoopereBR.</p>` +
+          `<p>Para finalizar sua adesão, assine o contrato e a procuração acessando o link abaixo:</p>` +
+          `<p><a href="${link}">${link}</a></p>`;
+        await this.email.enviarEmail(
+          cooperado.email,
+          'Documentos aprovados — assine seu contrato CoopereBR',
+          html,
+          mensagem,
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar email do link de assinatura: ${msg}`);
+      }
+    }
   }
 
   async buscarDocumentoPorToken(token: string) {
