@@ -40,7 +40,13 @@ export class CobrancasJob {
     hoje.setHours(0, 0, 0, 0);
 
     const vencidas = await this.prisma.cobranca.findMany({
-      where: { status: 'VENCIDO' },
+      where: {
+        status: 'VENCIDO',
+        contrato: {
+          status: 'ATIVO',
+          cooperado: { status: 'ATIVO' },
+        },
+      },
       include: {
         contrato: {
           select: { cooperativaId: true },
@@ -119,6 +125,10 @@ export class CobrancasJob {
         status: { in: ['PENDENTE', 'A_VENCER', 'VENCIDO'] },
         dataVencimento: { lt: hoje },
         notificadoVencimento: false,
+        contrato: {
+          status: 'ATIVO',
+          cooperado: { status: 'ATIVO' },
+        },
       },
       include: {
         contrato: {

@@ -558,9 +558,15 @@ export class CobrancasService {
     // 1. Buscar contrato com usina, UC e plano (para distribuidora e modelo de cobrança)
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: contratoId },
-      include: { usina: true, uc: true, plano: true },
+      include: { usina: true, uc: true, plano: true, cooperado: { select: { status: true } } },
     });
     if (!contrato) throw new NotFoundException('Contrato não encontrado');
+    if (contrato.status !== 'ATIVO') {
+      throw new BadRequestException(`Contrato ${contratoId} não está ATIVO (status: ${contrato.status}). Cobrança não gerada.`);
+    }
+    if (contrato.cooperado?.status !== 'ATIVO') {
+      throw new BadRequestException(`Cooperado do contrato ${contratoId} não está ATIVO (status: ${contrato.cooperado?.status}). Cobrança não gerada.`);
+    }
     if (!contrato.usinaId || !contrato.usina) {
       throw new BadRequestException('Contrato não possui usina vinculada');
     }
