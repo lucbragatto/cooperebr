@@ -135,19 +135,22 @@ export default function NovoMembroWizard() {
   function updateStep1(partial: Partial<Step1Data>) {
     setStep1(prev => ({ ...prev, ...partial }));
 
-    // Pre-fill step 2 with OCR data when OCR completes
+    // Pre-fill step 2 with OCR data when OCR completes.
+    // Sempre sobrescreve — dados da fatura têm prioridade sobre valores anteriores.
     if (partial.ocr) {
       const ocr = partial.ocr;
       setStep2(prev => ({
         ...prev,
-        nomeCompleto: prev.nomeCompleto || ocr.titular || '',
-        cpf: prev.cpf || ocr.documento || '',
-        endereco: prev.endereco || ocr.enderecoInstalacao || '',
-        bairro: prev.bairro || ocr.bairro || '',
-        cidade: prev.cidade || ocr.cidade || '',
-        estado: prev.estado || ocr.estado || '',
-        cep: prev.cep || ocr.cep || '',
+        nomeCompleto: ocr.titular || prev.nomeCompleto || '',
+        cpf: ocr.documento || prev.cpf || '',
+        endereco: ocr.enderecoInstalacao || prev.endereco || '',
+        bairro: ocr.bairro || prev.bairro || '',
+        cidade: ocr.cidade || prev.cidade || '',
+        estado: ocr.estado || prev.estado || '',
+        cep: ocr.cep || prev.cep || '',
         tipoPessoa: ocr.tipoDocumento === 'CNPJ' ? 'PJ' : 'PF',
+        cooperadoId: '',
+        ucId: '',
       }));
     }
   }
