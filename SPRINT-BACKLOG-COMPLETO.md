@@ -293,7 +293,12 @@ async enviarLinkAssinaturaDocs(propostaId: string) {
 
 ---
 
-### T0 — Wizard Admin conectar ao Motor de Proposta
+### T0 — Wizard Admin conectar ao Motor de Proposta ✅ CONCLUÍDA — commits `5cd3261` + `6c2b66e` + `457bc97` + `d8eb846` + `7ff2899` + `534b72e` + `e86c4b9`
+
+**Dívida técnica registrada:** `POST /cooperados/cadastro-completo` ainda existe no backend mas não é mais chamado pelo wizard — candidato a deprecar após T4 (cadastro público criar Cooperado + Proposta). O endpoint pode ser mantido como API interna para migração/importação em lote, mas não deve ser usado pelo fluxo principal do wizard.
+
+**Mudança de backend incluída (fora do escopo original):** guard `NOTIFICACOES_ATIVAS` no `cooperados.service.ts create()` + tratamento de P2002 como `ConflictException(409)` para CPF duplicado — necessários para segurança do wizard em dev (commit `5cd3261`).
+
 **Arquivos:** `web/app/dashboard/cooperados/novo/steps/Step*.tsx` + `page.tsx`
 
 **O que muda em cada step:**

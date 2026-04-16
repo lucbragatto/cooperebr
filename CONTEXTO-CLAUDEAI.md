@@ -335,6 +335,13 @@ A T3 implementa o fluxo completo do zero.
 
 | Commit | O que foi feito |
 |---|---|
+| `e86c4b9` | feat(t0-step7): painel de acompanhamento com status assinatura + alocação usina (Sprint 2 T0) |
+| `534b72e` | feat(t0-step6): análise global de docs + envio real de link de assinatura (Sprint 2 T0) |
+| `7ff2899` | feat(t0-step5): painel de acompanhamento de documentos com approve/reject inline (Sprint 2 T0) |
+| `d8eb846` | feat(t0-step4): aceitar proposta via motor real com propostaId persistido (Sprint 2 T0) |
+| `457bc97` | feat(t0-step3): simulação via motor de proposta real com tratamento de outlier (Sprint 2 T0) |
+| `6c2b66e` | feat(t0-step2): criar cooperado e UC no Step 2 do wizard admin (Sprint 2 T0) |
+| `5cd3261` | fix: suprimir notificações e tratar CPF duplicado no wizard admin (Sprint 2 T0) |
 | `91e89bb` | feat(t3-p4): proteger rota aceitar() com roles + range validation + audit trail (Sprint 2 T3) |
 | `f2fbdfc` | feat(t3-p3): renomear enviarAssinatura → enviarLinkAssinaturaDocs + PDF + link real (Sprint 2 T3) |
 | `33a8ea2` | feat(t3-p2): novo endpoint análise de documentos admin com audit trail (Sprint 2 T3) |
