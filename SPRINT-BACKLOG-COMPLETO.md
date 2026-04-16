@@ -403,7 +403,17 @@ prazoAprovacaoAutoHoras        Int      @default(24)
 
 ## TAREFAS — SPRINT 3 (alto risco — feature toggle obrigatório)
 
-### T4-PRE — Auditoria de queries (pré-requisito de T4)
+### T4-PRE — Auditoria de queries (pré-requisito de T4) ✅ CONCLUÍDA — commits `1f59ae0` + `68a3bc4` + `12f5a97`
+
+**Auditoria completa — 6 queries corrigidas:**
+- `cobrancas.service.ts` `calcularCobrancaMensal`: guard `contrato.status !== 'ATIVO'` + `cooperado.status !== 'ATIVO'`
+- `cobrancas.job.ts` `calcularMultaJuros`: nested filter `contrato.status: 'ATIVO', cooperado.status: 'ATIVO'`
+- `cobrancas.job.ts` `notificarCobrancasVencidas`: idem — sem WA para cooperados não-ativos
+- `relatorios.service.ts` + `relatorios-query.service.ts` `inadimplencia`: filtro nested cooperado+contrato ATIVO
+- `usinas-analitico.service.ts` `saudeFinanceira`: filtro nested cooperado+contrato ATIVO
+
+**Padrão ouro identificado:** `relatorios-query.service.ts:118` `conferenciaKwh` — filtra `contrato.status: 'ATIVO'` E `cooperado.status: 'ATIVO'`
+
 **Antes de criar cooperados pelo cadastro público, verificar:**
 - Todas as queries que tocam `Cooperado` filtram por `status`?
 - Geração de cobranças filtra `status = ATIVO`? (já deve ser — confirmar)
@@ -414,7 +424,12 @@ prazoAprovacaoAutoHoras        Int      @default(24)
 
 ---
 
-### T4 — Cadastro público criar Cooperado + Proposta (com feature toggle)
+### T4 — Cadastro público criar Cooperado + Proposta (com feature toggle) ✅ CONCLUÍDA — commits `8af1bce` + `c5f6478`
+
+**Implementação:** feature toggle `CADASTRO_V2_ATIVO=true` ativa fluxo v2. Método `cadastroWebV2()` em 5 passos: tx(Cooperado PENDENTE + UC) → motor.calcular() → motor.aceitar() → indicação → return. Legado (LeadWhatsapp) preservado como fallback. Frontend envia `planoId`, `cooperativaId`, `historicoConsumo[]` no payload. CPF duplicado → 409. Motor pode falhar silenciosamente (cooperado+UC já existem). Indicação fire-and-forget.
+
+**Env vars:** `CADASTRO_V2_ATIVO` (prod=`true` para fluxo v2; dev pode omitir → legado)
+
 **Arquivo:** `backend/src/publico/publico.controller.ts`
 
 **Flag:** `NEXT_PUBLIC_CADASTRO_V2=true` — manter fluxo de lead enquanto não validado

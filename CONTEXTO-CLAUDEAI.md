@@ -331,10 +331,15 @@ A T3 implementa o fluxo completo do zero.
 
 ---
 
-## COMMITS RECENTES (15/04/2026)
+## COMMITS RECENTES (16/04/2026)
 
 | Commit | O que foi feito |
 |---|---|
+| `c5f6478` | feat: cadastro público v2 frontend — payload completo para novo fluxo (Sprint 3 T4) |
+| `8af1bce` | feat: cadastro público v2 backend — cooperado + UC + proposta via motor (Sprint 3 T4) |
+| `12f5a97` | fix: saúde financeira da usina filtrar contrato e cooperado ATIVO (Sprint 3 T4-PRE) |
+| `68a3bc4` | fix: relatórios de inadimplência filtrar cooperado e contrato ATIVO (Sprint 3 T4-PRE) |
+| `1f59ae0` | fix: geração de cobranças e crons filtrar cooperado.status e contrato.status ATIVO (Sprint 3 T4-PRE) |
 | `d87ce31` | feat(t10): toggle de aprovação automática de documentos no admin (Sprint 2.5 T10) |
 | `58c3892` | feat(t10): job de aprovação automática de documentos por tenant via ConfigTenant (Sprint 2.5 T10) |
 | `e75661e` | feat(t9b): exibir status de análise por documento no portal (Sprint 2.5 T9b) |
@@ -385,7 +390,7 @@ const valorLiquido = Math.round((valorBruto - desconto) * 100) / 100;
 // refactor: extrair cálculo desconto para service
 ```
 
-**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`, `CADASTRO_VALIDACOES_ATIVAS` (prod=`true` para validar CPF/email/telefone no cadastro público; dev pode omitir), `NOTIFICACOES_ATIVAS` (prod=`true` para disparar WA/email no fluxo de aceite/análise de docs/link de assinatura; dev pode omitir)
+**Env vars obrigatórias:** `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_WEBHOOK_SECRET`, `ASAAS_API_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_MODO_TESTE`, `CADASTRO_VALIDACOES_ATIVAS` (prod=`true` para validar CPF/email/telefone no cadastro público; dev pode omitir), `NOTIFICACOES_ATIVAS` (prod=`true` para disparar WA/email no fluxo de aceite/análise de docs/link de assinatura; dev pode omitir), `CADASTRO_V2_ATIVO` (prod=`true` para cadastro público criar Cooperado+UC+Proposta real; dev pode omitir → cria LeadWhatsapp legado)
 
 ---
 
