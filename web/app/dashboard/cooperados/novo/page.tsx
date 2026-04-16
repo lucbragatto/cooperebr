@@ -118,6 +118,7 @@ export default function NovoMembroWizard() {
     canalEnvio: null,
     aprovacaoPresencial: false,
     propostaAceita: false,
+    propostaId: '',
   });
 
   const [step5, setStep5] = useState<Step5Data>({
@@ -191,7 +192,7 @@ export default function NovoMembroWizard() {
         if (!step3.planoSelecionadoId) return 'Selecione um plano antes de avançar.';
         return null;
       case 3:
-        if (!step4.propostaAceita) return 'A proposta deve ser aceita antes de avançar.';
+        if (!step4.propostaId) return 'Aceite a proposta antes de avançar.';
         return null;
       case 4:
         if (step5.documentos.length === 0) return 'Envie pelo menos um documento para avançar.';

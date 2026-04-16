@@ -12,6 +12,7 @@ export interface Step4Data {
   canalEnvio: 'whatsapp' | 'email' | 'pdf' | null;
   aprovacaoPresencial: boolean;
   propostaAceita: boolean;
+  propostaId: string;
 }
 
 interface Step4Props {
@@ -23,12 +24,19 @@ interface Step4Props {
 }
 
 export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onChange, tipoMembro }: Step4Props) {
-  const { propostaEnviada, canalEnvio, aprovacaoPresencial, propostaAceita } = data;
-  const { simulacao } = simulacaoData;
+  const { propostaEnviada, canalEnvio, propostaAceita, propostaId } = data;
+  const { simulacao, resultadoMotor, planoSelecionadoId } = simulacaoData;
   const [enviando, setEnviando] = useState(false);
+  const [aceitando, setAceitando] = useState(false);
   const [telefoneEnvio, setTelefoneEnvio] = useState(dadosPessoais.telefone);
   const [emailEnvio, setEmailEnvio] = useState(dadosPessoais.email);
   const [erro, setErro] = useState('');
+  const [erroAceite, setErroAceite] = useState('');
+  const [resultadoAceite, setResultadoAceite] = useState<{
+    contrato: { numero: string } | null;
+    emListaEspera: boolean;
+    aviso?: string;
+  } | null>(null);
 
   const cls = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500';
 
@@ -82,6 +90,36 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
   function gerarPDF() {
     window.print();
     onChange({ propostaEnviada: true, canalEnvio: 'pdf' });
+  }
+
+  async function aceitarProposta() {
+    if (!resultadoMotor || !dadosPessoais.cooperadoId) return;
+    setAceitando(true);
+    setErroAceite('');
+    try {
+      const { data: resp } = await api.post<{
+        proposta: { id: string };
+        contrato: { id: string; numero: string } | null;
+        emListaEspera: boolean;
+        aviso?: string;
+      }>('/motor-proposta/aceitar', {
+        cooperadoId: dadosPessoais.cooperadoId,
+        resultado: resultadoMotor,
+        mesReferencia: resultadoMotor.mesReferencia,
+        planoId: planoSelecionadoId || undefined,
+      });
+      setResultadoAceite({
+        contrato: resp.contrato ? { numero: resp.contrato.numero } : null,
+        emListaEspera: resp.emListaEspera,
+        aviso: resp.aviso,
+      });
+      onChange({ propostaId: resp.proposta.id, propostaAceita: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao aceitar proposta.';
+      setErroAceite(message);
+    } finally {
+      setAceitando(false);
+    }
   }
 
   return (
@@ -178,32 +216,76 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
 
       {erro && <p className="text-sm text-red-600">{erro}</p>}
 
-      {/* Aprovação presencial */}
+      {/* Aceitar proposta — chama o motor de proposta real */}
       <div className="border-t border-gray-200 pt-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-700">Aprovação presencial?</span>
-          <button
-            onClick={() => onChange({ aprovacaoPresencial: !aprovacaoPresencial })}
-            className={`relative w-11 h-6 rounded-full transition-colors ${aprovacaoPresencial ? 'bg-green-600' : 'bg-gray-300'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${aprovacaoPresencial ? 'translate-x-5' : ''}`} />
-          </button>
-        </div>
+        <h3 className="text-sm font-semibold text-gray-800">Aceitar proposta</h3>
 
-        {!aprovacaoPresencial && !propostaAceita && (
-          <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-            <p className="text-sm text-amber-800">Aguardando resposta do {tipoMembro.toLowerCase()}...</p>
-            <Button onClick={() => onChange({ propostaAceita: true })} size="sm" variant="outline">
-              Marcar como aceita
+        {!propostaId && !resultadoAceite && (
+          <>
+            <p className="text-xs text-gray-500">
+              Ao aceitar, o sistema cria a proposta + contrato no banco e o cooperado passa para PENDENTE_DOCUMENTOS.
+            </p>
+            <Button
+              onClick={aceitarProposta}
+              disabled={aceitando || !resultadoMotor}
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
+            >
+              {aceitando ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Aceitando proposta...</>
+              ) : (
+                <><CheckCircle className="h-4 w-4 mr-2" /> Aceitar proposta</>
+              )}
+            </Button>
+          </>
+        )}
+
+        {/* Erro no aceite */}
+        {erroAceite && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+            <p className="text-sm text-red-700">{erroAceite}</p>
+            <Button variant="outline" size="sm" onClick={aceitarProposta}>
+              Tentar novamente
             </Button>
           </div>
         )}
 
-        {(aprovacaoPresencial || propostaAceita) && (
-          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800 flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            {aprovacaoPresencial ? 'Aprovação presencial registrada' : 'Proposta aceita pelo ' + tipoMembro.toLowerCase()}
-          </div>
+        {/* Resultado do aceite */}
+        {resultadoAceite && (
+          <>
+            {resultadoAceite.contrato && !resultadoAceite.emListaEspera && (
+              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="font-semibold">Proposta aceita — Contrato #{resultadoAceite.contrato.numero} criado</p>
+                  <p className="text-xs text-green-700">Cooperado agora está em PENDENTE_DOCUMENTOS.</p>
+                </div>
+              </div>
+            )}
+
+            {resultadoAceite.emListaEspera && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 space-y-1">
+                <p className="font-semibold flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-amber-600" />
+                  Proposta aceita — Cooperado em lista de espera
+                </p>
+                <p className="text-xs">
+                  Não há usina com capacidade disponível no momento. O contrato foi criado em LISTA_ESPERA
+                  e o cooperado será alocado quando abrir vaga.
+                </p>
+              </div>
+            )}
+
+            {resultadoAceite.aviso && !resultadoAceite.contrato && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-800 space-y-1">
+                <p className="font-semibold flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-orange-600" />
+                  Proposta aceita — sem contrato automático
+                </p>
+                <p className="text-xs">{resultadoAceite.aviso}</p>
+                <p className="text-xs">Cadastre uma UC para o cooperado e crie o contrato manualmente.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
