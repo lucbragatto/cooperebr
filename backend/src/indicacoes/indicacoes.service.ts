@@ -80,7 +80,7 @@ export class IndicacoesService {
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
     return {
       codigo: cooperado.codigoIndicacao,
-      link: `${process.env.FRONTEND_URL ?? 'https://cooperebr.com.br'}/entrar?ref=${cooperado.codigoIndicacao}`,
+      link: `${process.env.FRONTEND_URL ?? 'https://cooperebr.com.br'}/cadastro?ref=${cooperado.codigoIndicacao}`,
     };
   }
 
@@ -104,7 +104,7 @@ export class IndicacoesService {
     }
 
     const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
-    const link = `${baseUrl}/entrar?ref=${codigo}`;
+    const link = `${baseUrl}/cadastro?ref=${codigo}`;
 
     const [totalIndicados, indicadosAtivos] = await Promise.all([
       this.prisma.indicacao.count({

@@ -64,7 +64,7 @@ export default function PortalInicioPage() {
 
   useEffect(() => {
     if (perfil?.codigoIndicacao) {
-      setLinkIndicacao(`${window.location.origin}/entrar?ref=${perfil.codigoIndicacao}`);
+      setLinkIndicacao(`${window.location.origin}/cadastro?ref=${perfil.codigoIndicacao}`);
     }
   }, [perfil]);
 
