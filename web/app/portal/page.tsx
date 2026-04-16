@@ -267,6 +267,25 @@ export default function PortalInicioPage() {
         </Card>
       )}
 
+      {/* Links rápidos */}
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { href: '/portal/convenio', label: 'Meu Convênio', icon: '🤝' },
+          { href: '/portal/clube', label: 'Clube de Vantagens', icon: '🏆' },
+          { href: '/portal/tokens', label: 'Pagar com Tokens', icon: '🪙' },
+          { href: '/portal/creditos', label: 'Converter Créditos', icon: '💱' },
+          { href: '/portal/conta', label: 'Minha Conta', icon: '👤' },
+          { href: '/portal/ranking', label: 'Ranking', icon: '📊' },
+        ].map(item => (
+          <Link key={item.href} href={item.href}
+            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-green-300 hover:bg-green-50 transition-colors"
+          >
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </div>
+
       {/* Ação rápida: WhatsApp */}
       <a
         href={linkWhatsapp}
