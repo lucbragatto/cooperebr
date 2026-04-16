@@ -246,7 +246,6 @@ function UcChart({ ucId }: { ucId: string }) {
 }
 
 function ModalNovaUc({
-  cooperadoId,
   onClose,
   onSuccess,
 }: {
@@ -254,88 +253,230 @@ function ModalNovaUc({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   const [numero, setNumero] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!numero.trim()) {
-      setErro('Informe o número da UC.');
-      return;
-    }
-    setEnviando(true);
+  // Dados retornados pelo endpoint nova-uc-com-fatura
+  const [ucId, setUcId] = useState('');
+  const [simulacao, setSimulacao] = useState<Record<string, number> | null>(null);
+  const [dadosOcr, setDadosOcr] = useState<Record<string, unknown> | null>(null);
+  const [outlier, setOutlier] = useState(false);
+
+  // Dados retornados pelo endpoint confirmar-nova-uc
+  const [contratoNumero, setContratoNumero] = useState<string | null>(null);
+  const [emListaEspera, setEmListaEspera] = useState(false);
+
+  const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  // ── Etapa 1: Upload + OCR ──────────────────────────────────────────────
+
+  async function analisarFatura() {
+    if (!numero.trim()) { setErro('Informe o número da UC.'); return; }
+    if (!arquivo) { setErro('Envie a fatura (foto ou PDF).'); return; }
+    setCarregando(true);
     setErro('');
     try {
-      // Placeholder: in the future, the backend will accept file upload
-      // For now, just notify support
-      await api.post('/ocorrencias', {
-        cooperadoId,
-        tipo: 'SOLICITACAO',
-        descricao: `Solicitação de inclusão de nova UC: ${numero}${arquivo ? ' (fatura anexada)' : ''}`,
-        prioridade: 'MEDIA',
+      const formData = new FormData();
+      formData.append('fatura', arquivo);
+      formData.append('numeroUC', numero.trim());
+      const { data: resp } = await api.post<{
+        ok: boolean;
+        ucId: string;
+        outlierDetectado: boolean;
+        simulacao: Record<string, number> | null;
+        dadosOcr: Record<string, unknown> | null;
+      }>('/cooperados/meu-perfil/nova-uc-com-fatura', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      onSuccess();
-    } catch {
-      setErro('Erro ao enviar solicitação. Tente novamente.');
+      setUcId(resp.ucId);
+      setSimulacao(resp.simulacao);
+      setDadosOcr(resp.dadosOcr);
+      if (resp.outlierDetectado) {
+        setOutlier(true);
+      } else {
+        setEtapa(2);
+      }
+    } catch (err: unknown) {
+      const resp = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+      if (resp?.status === 409) {
+        setErro(resp.data?.message ?? 'UC já cadastrada.');
+      } else {
+        setErro(resp?.data?.message ?? 'Erro ao analisar fatura. Tente novamente.');
+      }
     } finally {
-      setEnviando(false);
+      setCarregando(false);
     }
-  };
+  }
+
+  // ── Etapa 3: Confirmação ───────────────────────────────────────────────
+
+  async function confirmarProposta() {
+    setCarregando(true);
+    setErro('');
+    try {
+      const { data: resp } = await api.post<{
+        ok: boolean;
+        propostaId: string | null;
+        contratoNumero: string | null;
+        emListaEspera: boolean;
+      }>('/cooperados/meu-perfil/confirmar-nova-uc', { ucId });
+      setContratoNumero(resp.contratoNumero);
+      setEmListaEspera(resp.emListaEspera);
+      setEtapa(3);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErro(msg ?? 'Erro ao confirmar. Tente novamente.');
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md p-5 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-        >
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
           <X className="w-5 h-5" />
         </button>
-        <h2 className="text-lg font-bold text-gray-800 mb-4">
-          Adicionar nova UC
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="numero-uc">Número da UC</Label>
-            <Input
-              id="numero-uc"
-              placeholder="Ex: 0012345678"
-              value={numero}
-              onChange={(e) => setNumero(e.target.value)}
-            />
+
+        {/* ── Etapa 1: Upload + OCR ── */}
+        {etapa === 1 && !outlier && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-gray-800">Adicionar nova UC</h2>
+            <p className="text-sm text-gray-500">Envie a fatura da sua unidade consumidora para análise automática.</p>
+            <div>
+              <Label htmlFor="numero-uc">Número da UC</Label>
+              <Input id="numero-uc" placeholder="Ex: 0012345678" value={numero} onChange={(e) => setNumero(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="fatura-upload">Fatura (foto ou PDF)</Label>
+              <label htmlFor="fatura-upload"
+                className="flex items-center justify-center gap-2 w-full h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-400 transition-colors text-sm text-gray-500">
+                <Upload className="w-5 h-5" />
+                {arquivo ? arquivo.name : 'Clique ou arraste para enviar'}
+              </label>
+              <input id="fatura-upload" type="file" accept="image/*,.pdf" className="hidden"
+                onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+            </div>
+            {erro && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{erro}</p>}
+            <Button onClick={analisarFatura} disabled={carregando} className="w-full bg-green-600 hover:bg-green-700 text-white">
+              {carregando ? 'Analisando fatura...' : 'Analisar fatura'}
+            </Button>
           </div>
-          <div>
-            <Label htmlFor="fatura-upload">Fatura (foto ou PDF)</Label>
-            <label
-              htmlFor="fatura-upload"
-              className="flex items-center justify-center gap-2 w-full h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-400 transition-colors text-sm text-gray-500"
-            >
-              <Upload className="w-5 h-5" />
-              {arquivo ? arquivo.name : 'Clique ou arraste para enviar'}
-            </label>
-            <input
-              id="fatura-upload"
-              type="file"
-              accept="image/*,.pdf"
-              className="hidden"
-              onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-            />
-          </div>
-          {erro && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
-              {erro}
+        )}
+
+        {/* ── Outlier detectado ── */}
+        {etapa === 1 && outlier && (
+          <div className="space-y-4 text-center py-4">
+            <div className="text-4xl">⚠️</div>
+            <h2 className="text-lg font-bold text-gray-800">Consumo irregular detectado</h2>
+            <p className="text-sm text-gray-600">
+              Identificamos um padrão de consumo atípico na sua fatura. Nossa equipe entrará em contato para finalizar a inclusão da sua UC.
             </p>
-          )}
-          <Button
-            type="submit"
-            disabled={enviando}
-            className="w-full bg-green-600 hover:bg-green-700 text-white"
-          >
-            {enviando ? 'Enviando...' : 'Solicitar inclusão'}
-          </Button>
-        </form>
+            <p className="text-xs text-gray-500">UC {numero} foi registrada. Você será contatado em breve.</p>
+            <Button onClick={onClose} variant="outline" className="w-full">Fechar</Button>
+          </div>
+        )}
+
+        {/* ── Etapa 2: Simulação ── */}
+        {etapa === 2 && simulacao && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-gray-800">Simulação de economia</h2>
+            <p className="text-sm text-gray-500">Confira a economia estimada para sua nova UC.</p>
+
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">UC</span>
+                <span className="font-medium text-gray-800">{numero}</span>
+              </div>
+              {dadosOcr?.distribuidora ? (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Distribuidora</span>
+                  <span className="font-medium text-gray-800">{String(dadosOcr.distribuidora)}</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between">
+                <span className="text-gray-600">Consumo médio</span>
+                <span className="font-medium text-gray-800">{Math.round(Number(dadosOcr?.consumoMedioKwh ?? 0)).toLocaleString('pt-BR')} kWh/mês</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Valor atual</span>
+                <span className="font-medium text-gray-800">{fmt(Number(dadosOcr?.totalAPagar ?? 0))}/mês</span>
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-green-700">Desconto</span>
+                <span className="font-bold text-green-800">{Number(simulacao.descontoPercentual ?? 0).toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Economia mensal</span>
+                <span className="font-bold text-green-800">{fmt(Number(simulacao.economiaMensal ?? 0))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Economia anual</span>
+                <span className="font-bold text-green-800">{fmt(Number(simulacao.economiaAnual ?? 0))}</span>
+              </div>
+            </div>
+
+            {erro && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{erro}</p>}
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => { setEtapa(1); setErro(''); }} className="flex-1">
+                Voltar
+              </Button>
+              <Button onClick={confirmarProposta} disabled={carregando} className="flex-1 bg-green-600 hover:bg-green-700 text-white">
+                {carregando ? 'Criando contrato...' : 'Confirmar'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Etapa 2 sem simulação (motor falhou) ── */}
+        {etapa === 2 && !simulacao && (
+          <div className="space-y-4 text-center py-4">
+            <div className="text-4xl">📋</div>
+            <h2 className="text-lg font-bold text-gray-800">UC cadastrada</h2>
+            <p className="text-sm text-gray-600">
+              Sua UC {numero} foi cadastrada, mas não foi possível calcular a simulação agora.
+              Nossa equipe completará o processo.
+            </p>
+            <Button onClick={onSuccess} className="w-full bg-green-600 hover:bg-green-700 text-white">
+              Fechar
+            </Button>
+          </div>
+        )}
+
+        {/* ── Etapa 3: Confirmação ── */}
+        {etapa === 3 && (
+          <div className="space-y-4 text-center py-4">
+            <div className="text-4xl">🎉</div>
+            <h2 className="text-lg font-bold text-green-700">UC adicionada com sucesso!</h2>
+            {contratoNumero && !emListaEspera && (
+              <p className="text-sm text-gray-600">
+                Contrato <strong>#{contratoNumero}</strong> criado e aguardando ativação.
+              </p>
+            )}
+            {emListaEspera && (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                Você entrou na lista de espera por uma usina compatível. Será notificado quando houver vaga.
+              </p>
+            )}
+            {!contratoNumero && !emListaEspera && (
+              <p className="text-sm text-gray-600">
+                Sua UC foi registrada. O contrato será criado quando houver usina disponível.
+              </p>
+            )}
+            <Button onClick={onSuccess} className="w-full bg-green-600 hover:bg-green-700 text-white">
+              Fechar
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
