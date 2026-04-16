@@ -122,7 +122,7 @@ export default function NovoMembroWizard() {
   });
 
   const [step5, setStep5] = useState<Step5Data>({
-    documentos: [],
+    documentosConferidos: false,
   });
 
   const [step6, setStep6] = useState<Step6Data>({
@@ -195,7 +195,7 @@ export default function NovoMembroWizard() {
         if (!step4.propostaId) return 'Aceite a proposta antes de avançar.';
         return null;
       case 4:
-        if (step5.documentos.length === 0) return 'Envie pelo menos um documento para avançar.';
+        if (!step5.documentosConferidos) return 'Confirme a documentação antes de avançar.';
         return null;
       case 5:
         if (!step6.contratoGerado) return 'Gere o contrato antes de avançar.';
@@ -235,7 +235,7 @@ export default function NovoMembroWizard() {
       case 3:
         return <Step4Proposta data={step4} dadosPessoais={step2} simulacaoData={step3} onChange={updateStep4} tipoMembro={tipoMembro} />;
       case 4:
-        return <Step5Documentos data={step5} isPJ={step2.tipoPessoa === 'PJ'} onChange={updateStep5} tipoMembro={tipoMembro} />;
+        return <Step5Documentos data={step5} cooperadoId={step2.cooperadoId} onChange={updateStep5} tipoMembro={tipoMembro} />;
       case 5:
         return <Step6Contrato data={step6} dadosPessoais={step2} simulacaoData={step3} onChange={updateStep6} tipoMembro={tipoMembro} />;
       case 6:

@@ -160,17 +160,7 @@ export default function Step7Alocacao({ faturaData, dadosPessoais, simulacaoData
       const cid = resultado.cooperado.id;
       setCooperadoId(cid);
 
-      // Upload documentos (multipart — permanece separado, mas cooperado já existe)
-      for (const doc of documentosData.documentos) {
-        if (doc.arquivo) {
-          const formData = new FormData();
-          formData.append('arquivo', doc.arquivo);
-          formData.append('tipo', doc.tipo);
-          await api.post(`/documentos/upload/${cid}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        }
-      }
+      // T0: upload de documentos agora é feito pelo cooperado via portal (Step 5 acompanha)
 
       // Motor de proposta (enriquecimento — não bloqueia cadastro)
       if (ocr && faturaData.historico.length > 0) {
