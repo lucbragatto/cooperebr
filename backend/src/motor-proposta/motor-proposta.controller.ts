@@ -46,9 +46,12 @@ export class MotorPropostaController {
     return this.service.calcularComPlano(body);
   }
 
+  // T3 PARTE 4: restringido a ADMIN/SUPER_ADMIN (OPERADOR removido para reduzir superfície).
+  // Ver comentário de dívida técnica no topo de MotorPropostaService.aceitar().
+  @Roles(SUPER_ADMIN, ADMIN)
   @Post('aceitar')
   aceitar(@Body() body: any, @Req() req: any) {
-    return this.service.aceitar(body, req.user?.cooperativaId);
+    return this.service.aceitar(body, req.user?.cooperativaId, req.user?.id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

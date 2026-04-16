@@ -390,12 +390,27 @@ export class MotorPropostaService {
     };
   }
 
+  /**
+   * ⚠️ DÍVIDA TÉCNICA (T3 PARTE 4):
+   * Esta rota hoje aceita um `resultado` inteiro no body e cria diretamente
+   * uma PropostaCooperado com status ACEITA, sem que exista uma proposta
+   * PENDENTE prévia no banco. Isso permite que um admin autenticado envie
+   * valores arbitrários no resultado (injeção insider-threat).
+   *
+   * A proteção completa exige T0 (refactor do Wizard Admin): persistir uma
+   * proposta PENDENTE dentro de calcular() e exigir transição PENDENTE →
+   * ACEITA aqui, validando contra o que já está no banco. Enquanto T0 não
+   * é feito, esta função aplica 3 camadas de defesa cumulativas:
+   *   1. @Roles(SUPER_ADMIN, ADMIN) no controller (sem OPERADOR)
+   *   2. Validação de ranges no resultado (descontoPercentual, valores)
+   *   3. Audit trail com usuarioId em HistoricoStatusCooperado
+   */
   async aceitar(dto: {
     cooperadoId: string;
     resultado: ResultadoCalculo['resultado'];
     mesReferencia: string;
     planoId?: string;
-  }, cooperativaId?: string) {
+  }, cooperativaId?: string, usuarioId?: string) {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
 
@@ -409,6 +424,22 @@ export class MotorPropostaService {
       if (dono.cooperativaId !== cooperativaId) {
         throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
       }
+    }
+
+    // T3 PARTE 4 camada 2: validação de ranges no resultado.
+    // Bloqueia injeção descuidada e erros óbvios. Não impede insider-threat
+    // sofisticado (ex: descontoPct=49.99) — isso só fecha com T0.
+    const descontoPct = Number(r.descontoPercentual);
+    if (!Number.isFinite(descontoPct) || descontoPct < 0 || descontoPct > 50) {
+      throw new BadRequestException(
+        `descontoPercentual fora do range permitido: ${descontoPct}. Valor deve estar entre 0 e 50.`,
+      );
+    }
+    if (Number(r.valorCooperado) < 0) {
+      throw new BadRequestException('valorCooperado não pode ser negativo.');
+    }
+    if (Number(r.economiaMensal) < 0) {
+      throw new BadRequestException('economiaMensal não pode ser negativa.');
     }
 
     // BUG-CARRY-002: kwhContrato deve ser > 0 para gerar contrato
@@ -589,6 +620,26 @@ export class MotorPropostaService {
           link: `/dashboard/cooperados/${dto.cooperadoId}`,
         });
       }
+    }
+
+    // T3 PARTE 4 camada 3: audit trail — registrar quem acionou aceitar()
+    // antes da transição de status. Usa HistoricoStatusCooperado (campo
+    // usuarioId já existe no schema) para trilha forense persistente.
+    const cooperadoAntes = await this.prisma.cooperado.findUnique({
+      where: { id: dto.cooperadoId },
+      select: { status: true, cooperativaId: true },
+    });
+    if (cooperadoAntes) {
+      await this.prisma.historicoStatusCooperado.create({
+        data: {
+          cooperadoId: dto.cooperadoId,
+          cooperativaId: cooperadoAntes.cooperativaId ?? undefined,
+          statusAnterior: cooperadoAntes.status,
+          statusNovo: cooperadoAntes.status,
+          motivo: `Proposta aceita via /motor-proposta/aceitar — desconto=${descontoPct}%, kwh=${r.kwhContrato}, propostaId=${result.proposta.id}`,
+          usuarioId: usuarioId ?? undefined,
+        },
+      });
     }
 
     // T3 PARTE 1: após aceite, marcar cooperado como PENDENTE_DOCUMENTOS (se aplicável)
