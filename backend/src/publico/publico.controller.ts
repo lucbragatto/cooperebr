@@ -1,12 +1,15 @@
 /// <reference types="multer" />
-import { Controller, Post, Get, Body, Param, BadRequestException, Logger, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, BadRequestException, ConflictException, Logger, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Prisma } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { FaturasService } from '../faturas/faturas.service';
+import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
+import { IndicacoesService } from '../indicacoes/indicacoes.service';
 
 @Controller('publico')
 export class PublicoController {
@@ -17,6 +20,8 @@ export class PublicoController {
     private sender: WhatsappSenderService,
     private cooperToken: CooperTokenService,
     private faturasService: FaturasService,
+    private motorProposta: MotorPropostaService,
+    private indicacoes: IndicacoesService,
   ) {}
 
   @Public()
@@ -140,6 +145,8 @@ export class PublicoController {
       };
       codigoRef?: string;
       planoSelecionado?: string;
+      planoId?: string;
+      cooperativaId?: string;
       aceitaClube?: boolean;
       pendenciaDocumentos?: boolean;
       faturaBase64?: string;
@@ -147,6 +154,7 @@ export class PublicoController {
       faturaTipo?: string;
       valorUltimaFatura?: number;
       temCreditosInjetados?: boolean;
+      historicoConsumo?: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
       dadosOcr?: {
         energiaFornecidaKwh?: number;
         energiaInjetadaKwh?: number;
@@ -155,7 +163,18 @@ export class PublicoController {
         valorTotalFatura?: number;
       };
     },
+    @Query('tenant') tenantParam?: string,
   ) {
+    // Feature toggle: v2 cria Cooperado + UC + Proposta real; legado cria LeadWhatsapp
+    const v2Ativo = process.env.CADASTRO_V2_ATIVO === 'true';
+    if (v2Ativo) {
+      const cooperativaId = body.cooperativaId ?? tenantParam;
+      if (!cooperativaId) {
+        throw new BadRequestException('cooperativaId ou query param ?tenant= é obrigatório no modo v2');
+      }
+      return this.cadastroWebV2(body as Parameters<typeof this.cadastroWebV2>[0], cooperativaId);
+    }
+
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
     const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
 
@@ -260,6 +279,129 @@ export class PublicoController {
       this.logger.error(`Erro ao salvar cadastro-web: ${message}`);
       throw new BadRequestException('Erro ao processar cadastro. Tente novamente.');
     }
+  }
+
+  // ── Cadastro V2: cria Cooperado + UC + Proposta real via motor ──────────────
+  // Ativado por CADASTRO_V2_ATIVO=true. Legado (LeadWhatsapp) permanece como fallback.
+
+  private async cadastroWebV2(
+    body: {
+      nome: string;
+      cpf: string;
+      email: string;
+      telefone: string;
+      endereco: { cep: string; logradouro: string; numero: string; complemento?: string; bairro: string; cidade: string; estado: string };
+      instalacao: { numeroUC: string; distribuidora: string; consumoMedioKwh: number };
+      codigoRef?: string;
+      planoId?: string;
+      aceitaClube?: boolean;
+      valorUltimaFatura?: number;
+      historicoConsumo?: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
+    },
+    cooperativaId: string,
+  ) {
+    const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
+    const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
+
+    // Validações (reutiliza as mesmas do legado, guardadas por CADASTRO_VALIDACOES_ATIVAS)
+    if (process.env.CADASTRO_VALIDACOES_ATIVAS === 'true') {
+      if (!body.nome || !body.cpf || !body.email || !body.telefone) {
+        throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
+      }
+      if (cpfLimpo.length !== 11) {
+        throw new BadRequestException('CPF inválido');
+      }
+      if (telefoneLimpo.length < 10) {
+        throw new BadRequestException('Telefone inválido');
+      }
+    }
+
+    // PASSO 1+2 — Criar Cooperado + UC em transação atômica
+    const { cooperadoId, ucId } = await this.prisma.$transaction(async (tx) => {
+      let cooperado;
+      try {
+        cooperado = await tx.cooperado.create({
+          data: {
+            nomeCompleto: body.nome.trim(),
+            cpf: cpfLimpo,
+            email: body.email.trim(),
+            telefone: telefoneLimpo || undefined,
+            status: 'PENDENTE',
+            tipoCooperado: 'COM_UC',
+            cooperativaId,
+          },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new ConflictException('CPF já cadastrado');
+        }
+        throw err;
+      }
+
+      const uc = await tx.uc.create({
+        data: {
+          numero: body.instalacao.numeroUC || `UC-${Date.now()}`,
+          endereco: body.endereco.logradouro
+            ? `${body.endereco.logradouro}, ${body.endereco.numero}`
+            : '',
+          cidade: body.endereco.cidade,
+          estado: body.endereco.estado,
+          cooperadoId: cooperado.id,
+          cep: body.endereco.cep || undefined,
+          bairro: body.endereco.bairro || undefined,
+          distribuidora: body.instalacao.distribuidora || undefined,
+        },
+      });
+
+      return { cooperadoId: cooperado.id, ucId: uc.id };
+    });
+
+    // PASSO 3+4 — Motor de Proposta (fora da transação — pode ser lento)
+    let propostaId: string | null = null;
+    let emListaEspera = false;
+    try {
+      const consumo = body.instalacao.consumoMedioKwh || 0;
+      const valorFatura = body.valorUltimaFatura || 0;
+      const historico = body.historicoConsumo ?? [];
+      const ultimoMes = historico.length > 0 ? historico[historico.length - 1] : null;
+
+      const resultado = await this.motorProposta.calcular({
+        cooperadoId,
+        historico: historico.length > 0
+          ? historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS }))
+          : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valorFatura }],
+        kwhMesRecente: ultimoMes?.consumoKwh ?? consumo,
+        valorMesRecente: ultimoMes?.valorRS ?? valorFatura,
+        mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
+      });
+
+      if (resultado.resultado) {
+        const aceite = await this.motorProposta.aceitar({
+          cooperadoId,
+          resultado: resultado.resultado,
+          mesReferencia: resultado.resultado.mesReferencia,
+          planoId: body.planoId || undefined,
+        });
+        propostaId = aceite.proposta?.id ?? null;
+        emListaEspera = aceite.emListaEspera ?? false;
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(`[cadastro-v2] Motor falhou para cooperado ${cooperadoId}: ${msg}`);
+    }
+
+    // PASSO 5 — Indicação (fire-and-forget)
+    if (body.codigoRef) {
+      try {
+        await this.indicacoes.registrarIndicacao(cooperadoId, body.codigoRef);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        this.logger.warn(`[cadastro-v2] Indicação falhou ref=${body.codigoRef}: ${msg}`);
+      }
+    }
+
+    this.logger.log(`[cadastro-v2] Cooperado ${cooperadoId} criado (proposta=${propostaId ?? 'nenhuma'}, espera=${emListaEspera})`);
+    return { ok: true, data: { cooperadoId, ucId, propostaId, emListaEspera } };
   }
 
   private async processarIndicacao(codigoRef: string, nomeNovo: string, leadId: string) {
