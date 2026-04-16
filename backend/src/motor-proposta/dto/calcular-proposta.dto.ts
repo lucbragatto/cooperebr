@@ -37,4 +37,12 @@ export class CalcularPropostaDto {
   @IsOptional()
   @IsIn(['MONOFASICO', 'BIFASICO', 'TRIFASICO'])
   tipoFornecimento?: 'MONOFASICO' | 'BIFASICO' | 'TRIFASICO';
+
+  @IsOptional()
+  @IsString()
+  planoId?: string;
+
+  @IsOptional()
+  @IsIn(['KWH_CHEIO', 'VALOR_FATURA'])
+  baseDesconto?: 'KWH_CHEIO' | 'VALOR_FATURA';
 }

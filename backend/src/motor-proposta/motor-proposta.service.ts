@@ -152,6 +152,21 @@ export class MotorPropostaService {
     const threshold = Number(config.thresholdOutlier);
     const outlierDetectado = kwhMesRecente > kwhMedio12m * threshold;
 
+    // Resolver desconto: plano.descontoBase (se planoId informado) ou config.descontoPadrao
+    let descontoPadraoResolido = Number(config.descontoPadrao);
+    if (dto.planoId) {
+      const plano = await this.prisma.plano.findUnique({
+        where: { id: dto.planoId },
+        select: { descontoBase: true },
+      });
+      if (plano) {
+        descontoPadraoResolido = Number(plano.descontoBase);
+      }
+    }
+
+    // Base de desconto: KWH_CHEIO (tarifa × kWh) ou VALOR_FATURA (valor da fatura inteira)
+    const usarValorFatura = dto.baseDesconto === 'VALOR_FATURA';
+
     // Função de cálculo de uma opção
     const calcularOpcao = (base: 'MES_RECENTE' | 'MEDIA_12M'): OpcaoCalculo => {
       const kwhBase = base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m;
@@ -160,7 +175,7 @@ export class MotorPropostaService {
       const consumoConsiderado = Math.max(0, kwhBase - minimoFaturavel);
       // kwhApuradoBase = preço por kWh (R$/kWh) = valorFatura / consumoKwh
       const kwhApuradoBase = kwhBase > 0 ? valorBase / kwhBase : 0;
-      let descontoPercentual = Number(config.descontoPadrao);
+      let descontoPercentual = descontoPadraoResolido;
       const descontoMax = Number(config.descontoMaximo);
 
       let descontoAbsoluto = tarifaUnitSemTrib * (descontoPercentual / 100);
@@ -174,14 +189,19 @@ export class MotorPropostaService {
         valorCooperado = kwhApuradoBase - descontoAbsoluto;
       }
 
-      const kwhContrato = consumoConsiderado; // quantidade de kWh (após descontar mínimo faturável)
+      const kwhContrato = consumoConsiderado;
       const economiaAbsoluta = descontoAbsoluto;
       const economiaPercentual = kwhApuradoBase > 0 ? (descontoAbsoluto / kwhApuradoBase) * 100 : 0;
-      // economiaMensal = valor da fatura × desconto%
-      // Fallback: se tarifaUnitSemTrib=0 (sem tarifa cadastrada), usar valorBase diretamente
-      const economiaMensal = tarifaUnitSemTrib > 0
-        ? descontoAbsoluto * kwhContrato
-        : valorBase * (descontoPercentual / 100);
+      // economiaMensal: VALOR_FATURA → desconto% direto sobre o valor da fatura
+      //                 KWH_CHEIO   → descontoAbsoluto × kWhContrato (padrão)
+      let economiaMensal: number;
+      if (usarValorFatura) {
+        economiaMensal = Math.round(valorBase * (descontoPercentual / 100) * 100) / 100;
+      } else if (tarifaUnitSemTrib > 0) {
+        economiaMensal = descontoAbsoluto * kwhContrato;
+      } else {
+        economiaMensal = valorBase * (descontoPercentual / 100);
+      }
       const economiaAnual = economiaMensal * 12;
       const mesesEquivalentes = valorBase > 0 ? economiaAnual / valorBase : 0;
 
