@@ -102,6 +102,15 @@ interface OcrDados {
   valorCompensadoReais?: number;
 }
 
+interface PlanoOption {
+  id: string;
+  nome: string;
+  descricao?: string | null;
+  descontoBase: string;
+  cooperTokenAtivo: boolean;
+  modeloCobranca: string;
+}
+
 const STEPS = [
   { label: 'Dados pessoais', icon: User },
   { label: 'Endereco', icon: MapPin },
@@ -120,7 +129,9 @@ function CadastroPageInner() {
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [aceitaClube, setAceitaClube] = useState(false);
-  const [planoSelecionado, setPlanoSelecionado] = useState<'DESCONTO_DIRETO' | 'FATURA_CHEIA_TOKEN' | ''>('');
+  const [planos, setPlanos] = useState<PlanoOption[]>([]);
+  const [planoSelecionadoId, setPlanoSelecionadoId] = useState<string>('');
+  const planoSelecionado = planos.find((p) => p.id === planoSelecionadoId) ?? null;
 
   // OCR state
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -159,6 +170,19 @@ function CadastroPageInner() {
       })
       .catch(() => {});
   }, []);
+
+  // Buscar planos do tenant (multi-tenant: tenant via ?tenant= ou env NEXT_PUBLIC_COOPERATIVA_ID)
+  useEffect(() => {
+    const tenant = searchParams.get('tenant') ?? process.env.NEXT_PUBLIC_COOPERATIVA_ID;
+    const qs = new URLSearchParams({ publico: 'true' });
+    if (tenant) qs.set('cooperativaId', tenant);
+    fetch(`${API_URL}/planos/ativos?${qs.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPlanos(data);
+      })
+      .catch(() => {});
+  }, [searchParams]);
 
   useEffect(() => {
     if (!refCode) return;
@@ -346,9 +370,20 @@ function CadastroPageInner() {
   function calcularSimulacao() {
     const consumo = Number(instalacao.consumoMedioKwh) || 0;
     const contaAtual = Math.round(consumo * tarifaKwh * 100) / 100;
-    const economia = Math.round(contaAtual * descontoPercentual * 100) / 100;
+    // Fonte do percentual: plano selecionado → /desconto-padrao → 0.20 (este último só se planos vazio)
+    const descontoPlano = planoSelecionado
+      ? Number(planoSelecionado.descontoBase) / 100
+      : descontoPercentual;
+    const economia = Math.round(contaAtual * descontoPlano * 100) / 100;
     const contaCoopereBR = Math.round((contaAtual - economia) * 100) / 100;
-    return { contaAtual, contaCoopereBR, economiaMensal: economia, economiaAnual: Math.round(economia * 12 * 100) / 100 };
+    const creditosKwhMensal = Math.round(consumo * descontoPlano);
+    return {
+      contaAtual,
+      contaCoopereBR,
+      economiaMensal: economia,
+      economiaAnual: Math.round(economia * 12 * 100) / 100,
+      creditosKwhMensal,
+    };
   }
 
   // ─── Submit ──────────────────────────────────────────────
@@ -364,7 +399,7 @@ function CadastroPageInner() {
         setErro('Voce precisa aceitar os termos de adesao.');
         return;
       }
-      if (!planoSelecionado) {
+      if (planos.length > 0 && !planoSelecionadoId) {
         setErro('Selecione um plano para continuar.');
         return;
       }
@@ -396,7 +431,7 @@ function CadastroPageInner() {
           distribuidora: instalacao.distribuidora,
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
-        planoSelecionado: planoSelecionado || 'DESCONTO_DIRETO',
+        planoSelecionado: planoSelecionado?.cooperTokenAtivo ? 'FATURA_CHEIA_TOKEN' : 'DESCONTO_DIRETO',
         aceitaClube,
       };
 
@@ -505,7 +540,7 @@ function CadastroPageInner() {
           telefone: pessoais.telefone,
           endereco: { cep: endereco.cep.replace(/\D/g, ''), logradouro: endereco.logradouro, numero: endereco.numero, complemento: endereco.complemento, bairro: endereco.bairro, cidade: endereco.cidade, estado: endereco.estado },
           instalacao: { numeroUC: instalacao.numeroUC, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
-          planoSelecionado: planoSelecionado || 'DESCONTO_DIRETO',
+          planoSelecionado: planoSelecionado?.cooperTokenAtivo ? 'FATURA_CHEIA_TOKEN' : 'DESCONTO_DIRETO',
           aceitaClube,
           pendenciaDocumentos: true,
         }),
@@ -902,9 +937,19 @@ function CadastroPageInner() {
             </div>
 
             <div className="bg-gradient-to-r from-green-600 to-emerald-500 rounded-lg p-4 text-center text-white">
-              <p className="text-sm font-medium opacity-90">Voce economiza</p>
-              <p className="text-2xl font-bold">{formatarMoeda(sim.economiaMensal)}/mes</p>
-              <p className="text-sm opacity-80 mt-1">{formatarMoeda(sim.economiaAnual)} por ano</p>
+              {planoSelecionado?.cooperTokenAtivo ? (
+                <>
+                  <p className="text-sm font-medium opacity-90">Voce recebe</p>
+                  <p className="text-2xl font-bold">{sim.creditosKwhMensal} créditos kWh/mês</p>
+                  <p className="text-sm opacity-80 mt-1">{sim.creditosKwhMensal * 12} créditos kWh por ano</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium opacity-90">Voce economiza</p>
+                  <p className="text-2xl font-bold">{formatarMoeda(sim.economiaMensal)}/mes</p>
+                  <p className="text-sm opacity-80 mt-1">{formatarMoeda(sim.economiaAnual)} por ano</p>
+                </>
+              )}
             </div>
 
             <div className="bg-gray-50 rounded-lg p-3">
@@ -931,66 +976,64 @@ function CadastroPageInner() {
         )}
 
         {/* 4c. Escolha do plano */}
-        {!planoSelecionado && (
+        {planos.length > 0 && !planoSelecionadoId && (
           <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
             Para finalizar, escolha um plano abaixo:
           </div>
         )}
-        <div className="space-y-3">
-          <h3 className="font-semibold text-gray-800">Escolha seu plano</h3>
-
-          <button
-            type="button"
-            onClick={() => setPlanoSelecionado('DESCONTO_DIRETO')}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
-              planoSelecionado === 'DESCONTO_DIRETO'
-                ? 'border-green-500 bg-green-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">💰</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-800">Desconto Direto</span>
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Mais popular</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">
-                  Pague menos na sua conta de luz todos os meses. Desconto aplicado automaticamente.
-                </p>
-              </div>
-              {planoSelecionado === 'DESCONTO_DIRETO' && (
-                <Check className="h-5 w-5 text-green-600 shrink-0" />
-              )}
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPlanoSelecionado('FATURA_CHEIA_TOKEN')}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
-              planoSelecionado === 'FATURA_CHEIA_TOKEN'
-                ? 'border-green-500 bg-green-50'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🪙</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-800">Acumular Tokens</span>
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Clube de Vantagens</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">
-                  Pague o valor cheio e acumule CooperTokens para usar no Clube de Vantagens ou na fatura quando quiser.
-                </p>
-              </div>
-              {planoSelecionado === 'FATURA_CHEIA_TOKEN' && (
-                <Check className="h-5 w-5 text-green-600 shrink-0" />
-              )}
-            </div>
-          </button>
-        </div>
+        {planos.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-gray-800">Escolha seu plano</h3>
+            {planos.map((p) => {
+              const selected = p.id === planoSelecionadoId;
+              const descontoPct = Number(p.descontoBase);
+              const consumoNum = Number(instalacao.consumoMedioKwh) || 0;
+              const economiaPreview = Math.round(consumoNum * tarifaKwh * (descontoPct / 100) * 100) / 100;
+              const creditosPreview = Math.round(consumoNum * (descontoPct / 100));
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPlanoSelecionadoId(p.id)}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+                    selected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">{p.cooperTokenAtivo ? '🪙' : '💰'}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800">{p.nome}</span>
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                          {descontoPct}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {p.cooperTokenAtivo
+                          ? (consumoNum > 0
+                              ? `Pague o valor cheio e receba ${creditosPreview} créditos de kWh/mês no Clube de Vantagens.`
+                              : 'Pague o valor cheio e acumule CooperTokens para usar no Clube de Vantagens ou na fatura.')
+                          : (consumoNum > 0
+                              ? `Economize ${formatarMoeda(economiaPreview)}/mês direto na sua conta de luz.`
+                              : 'Pague menos na sua conta de luz todos os meses. Desconto aplicado automaticamente.')
+                        }
+                      </p>
+                      {p.descricao && (
+                        <p className="text-xs text-gray-500 mt-1">{p.descricao}</p>
+                      )}
+                    </div>
+                    {selected && <Check className="h-5 w-5 text-green-600 shrink-0" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {planos.length === 0 && (
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+            Nenhum plano disponível no momento — seguiremos com simulação estimada.
+          </div>
+        )}
 
         {/* 4d. Checkboxes de termos */}
         <div className="space-y-3">

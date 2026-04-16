@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logge
 import { PrismaService } from '../prisma.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
-import { ModeloCobranca, TipoCampanha } from '@prisma/client';
+import { ModeloCobranca, TipoCampanha, Prisma } from '@prisma/client';
 
 @Injectable()
 export class PlanosService implements OnModuleInit {
@@ -34,15 +34,30 @@ export class PlanosService implements OnModuleInit {
     });
   }
 
-  findAtivos() {
+  findAtivos(cooperativaId?: string, publico?: boolean) {
     const hoje = new Date();
-    return this.prisma.plano.findMany({
-      where: {
-        ativo: true,
+    const andFilters: Prisma.PlanoWhereInput[] = [
+      {
         OR: [
           { dataFimVigencia: null },
           { dataFimVigencia: { gte: hoje } },
         ],
+      },
+    ];
+    // Multi-tenant: tenant próprio + planos globais (cooperativaId=null). Nunca cross-tenant.
+    if (cooperativaId) {
+      andFilters.push({
+        OR: [
+          { cooperativaId },
+          { cooperativaId: null },
+        ],
+      });
+    }
+    return this.prisma.plano.findMany({
+      where: {
+        ativo: true,
+        ...(publico === true && { publico: true }),
+        AND: andFilters,
       },
       orderBy: { createdAt: 'desc' },
     });

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { PlanosService } from './planos.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
@@ -18,8 +18,11 @@ export class PlanosController {
 
   @Get('ativos')
   @Public()
-  findAtivos() {
-    return this.planosService.findAtivos();
+  findAtivos(
+    @Query('cooperativaId') cooperativaId?: string,
+    @Query('publico') publico?: string,
+  ) {
+    return this.planosService.findAtivos(cooperativaId, publico === 'true');
   }
 
   @Get(':id')
