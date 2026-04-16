@@ -511,11 +511,11 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
               <p className="text-xs text-green-600">{sel.length} meses selecionados</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">Tarifa base s/ impostos</p>
+              <p className="text-xs text-gray-500">Tarifa OCR (TUSD+TE s/ ICMS)</p>
               <p className="text-lg font-bold text-gray-900">R$ {tarifaBase.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">kWh c/ todos encargos</p>
+              <p className="text-xs text-gray-500">Tarifa OCR (c/ ICMS e encargos)</p>
               <p className="text-lg font-bold text-gray-900">R$ {valorKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
@@ -525,6 +525,10 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
           </div>
         );
       })()}
+
+      <p className="text-xs text-gray-400 italic">
+        Valores da fatura (com impostos) — usados apenas como referência. O cálculo de economia usa a tarifa homologada ANEEL.
+      </p>
 
       {/* Base de desconto */}
       <div>

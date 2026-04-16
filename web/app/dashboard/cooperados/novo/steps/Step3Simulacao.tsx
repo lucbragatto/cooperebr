@@ -201,7 +201,7 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
           </p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-          <p className="text-xs text-gray-500">Tarifa base (TUSD+TE)</p>
+          <p className="text-xs text-gray-500">Tarifa OCR (c/ ICMS)</p>
           <p className="text-lg font-bold text-gray-900">
             R$ {(getComponenteValor('tarifaTUSD', ocr?.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr?.tarifaTE ?? 0)).toLocaleString('pt-BR', { minimumFractionDigits: 5 })}
           </p>
