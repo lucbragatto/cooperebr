@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import {
@@ -108,6 +108,19 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [tarifaAneel, setTarifaAneel] = useState(0);
+
+  // Buscar tarifa ANEEL (sem ICMS) ao detectar distribuidora do OCR
+  useEffect(() => {
+    const distrib = ocr?.distribuidora;
+    const param = distrib ? `?concessionaria=${encodeURIComponent(distrib)}` : '';
+    api.get<{ tusdNova?: number; teNova?: number }>(`/motor-proposta/tarifa-concessionaria/atual${param}`)
+      .then(r => {
+        const t = Number(r.data?.tusdNova ?? 0) + Number(r.data?.teNova ?? 0);
+        if (t > 0) setTarifaAneel(t);
+      })
+      .catch(() => {});
+  }, [ocr?.distribuidora]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Add month state
@@ -511,13 +524,19 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
               <p className="text-xs text-green-600">{sel.length} meses selecionados</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">Tarifa OCR (TUSD+TE s/ ICMS)</p>
+              <p className="text-xs text-gray-500">Tarifa OCR (TUSD+TE c/ ICMS)</p>
               <p className="text-lg font-bold text-gray-900">R$ {tarifaBase.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">Tarifa OCR (c/ ICMS e encargos)</p>
+              <p className="text-xs text-gray-500">Tarifa OCR (c/ todos encargos)</p>
               <p className="text-lg font-bold text-gray-900">R$ {valorKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
+            {tarifaAneel > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                <p className="text-xs text-blue-700">Tarifa ANEEL (base do cálculo)</p>
+                <p className="text-lg font-bold text-blue-900">R$ {tarifaAneel.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+              </div>
+            )}
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
               <p className="text-xs text-gray-500">Fatura estimada</p>
               <p className="text-lg font-bold text-gray-900">{faturaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
