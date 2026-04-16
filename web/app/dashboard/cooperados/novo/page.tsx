@@ -110,6 +110,7 @@ export default function NovoMembroWizard() {
     planoSelecionadoId: '',
     descontoCustom: 0,
     simulacao: null,
+    resultadoMotor: null,
   });
 
   const [step4, setStep4] = useState<Step4Data>({
@@ -186,7 +187,8 @@ export default function NovoMembroWizard() {
         if (!step2.cooperadoId) return 'Salve o cooperado antes de avançar.';
         return null;
       case 2:
-        if (!step3.planoSelecionadoId && !step3.simulacao) return 'Execute a simulação antes de avançar.';
+        if (!step3.resultadoMotor) return 'Execute o cálculo do motor antes de avançar.';
+        if (!step3.planoSelecionadoId) return 'Selecione um plano antes de avançar.';
         return null;
       case 3:
         if (!step4.propostaAceita) return 'A proposta deve ser aceita antes de avançar.';
@@ -228,7 +230,7 @@ export default function NovoMembroWizard() {
       case 1:
         return <Step2Dados data={step2} faturaData={step1} onChange={updateStep2} tipoMembro={tipoMembro} />;
       case 2:
-        return <Step3Simulacao data={step3} faturaData={step1} onChange={updateStep3} tipoMembro={tipoMembro} />;
+        return <Step3Simulacao data={step3} faturaData={step1} cooperadoId={step2.cooperadoId} onChange={updateStep3} tipoMembro={tipoMembro} />;
       case 3:
         return <Step4Proposta data={step4} dadosPessoais={step2} simulacaoData={step3} onChange={updateStep4} tipoMembro={tipoMembro} />;
       case 4:
