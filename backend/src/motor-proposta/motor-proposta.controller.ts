@@ -216,6 +216,23 @@ export class MotorPropostaController {
     return this.service.aprovarPresencial(id);
   }
 
+  // ── Análise de documentos (T3 PARTE 2) ───────────────────────────
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('proposta/:propostaId/documentos/status')
+  analisarDocumentos(
+    @Param('propostaId') propostaId: string,
+    @Body() body: { resultado: 'APROVADO' | 'PENDENTE' | 'REPROVADO'; motivo?: string },
+    @Req() req: any,
+  ) {
+    return this.service.analisarDocumentos(
+      propostaId,
+      body.resultado,
+      body.motivo,
+      req.user?.cooperativaId,
+    );
+  }
+
   // ── Assinatura digital ──────────────────────────────────────────
 
   @Post('proposta/:id/enviar-assinatura')

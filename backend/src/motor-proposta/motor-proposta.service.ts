@@ -1014,6 +1014,128 @@ export class MotorPropostaService {
     return { sucesso: true, propostaId, status: 'ACEITA' };
   }
 
+  // ── Análise de documentos (T3 PARTE 2) ───────────────────────────
+
+  /**
+   * Endpoint de análise de documentos do cooperado (ADMIN).
+   * - APROVADO → delega para enviarAssinatura() (que muda cooperado para APROVADO
+   *   e envia link de assinatura — ver T3 PARTE 3).
+   * - REPROVADO → registra motivo em HistoricoStatusCooperado, notifica cooperado.
+   * - PENDENTE → registra motivo (pedido de mais info), notifica cooperado.
+   *
+   * Multi-tenant: valida que a proposta pertence à cooperativa do admin.
+   * WA/email guardados por NOTIFICACOES_ATIVAS.
+   */
+  async analisarDocumentos(
+    propostaId: string,
+    resultado: 'APROVADO' | 'PENDENTE' | 'REPROVADO',
+    motivo: string | undefined,
+    cooperativaId: string | undefined,
+  ) {
+    const validos: Array<'APROVADO' | 'PENDENTE' | 'REPROVADO'> = ['APROVADO', 'PENDENTE', 'REPROVADO'];
+    if (!validos.includes(resultado)) {
+      throw new BadRequestException(`Resultado inválido: ${resultado}. Use APROVADO | PENDENTE | REPROVADO.`);
+    }
+    if (resultado === 'REPROVADO' && (!motivo || motivo.trim().length === 0)) {
+      throw new BadRequestException('Motivo é obrigatório quando resultado = REPROVADO.');
+    }
+
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: {
+        cooperado: {
+          select: {
+            id: true,
+            cooperativaId: true,
+            nomeCompleto: true,
+            email: true,
+            telefone: true,
+            status: true,
+          },
+        },
+      },
+    });
+    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+
+    // Multi-tenant: proposta precisa pertencer à cooperativa do admin
+    if (cooperativaId && proposta.cooperado.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Proposta não pertence à sua cooperativa');
+    }
+
+    // APROVADO → delega para enviarAssinatura (será renomeado em PARTE 3)
+    if (resultado === 'APROVADO') {
+      return this.enviarAssinatura(propostaId);
+    }
+
+    // REPROVADO / PENDENTE: registrar motivo em histórico (transição no-op com motivo)
+    await this.prisma.historicoStatusCooperado.create({
+      data: {
+        cooperadoId: proposta.cooperado.id,
+        cooperativaId: proposta.cooperado.cooperativaId ?? undefined,
+        statusAnterior: proposta.cooperado.status,
+        statusNovo: proposta.cooperado.status,
+        motivo: `Análise de documentos: ${resultado}${motivo ? ` — ${motivo}` : ''}`,
+      },
+    });
+
+    // Notificação in-app (sempre ligada — é interno, não é WA/email real)
+    await this.notificacoes.criar({
+      tipo: resultado === 'REPROVADO' ? 'DOCUMENTOS_REPROVADOS' : 'DOCUMENTOS_PENDENTES',
+      titulo: resultado === 'REPROVADO' ? 'Documentos reprovados' : 'Documentos requerem ajuste',
+      mensagem: `${proposta.cooperado.nomeCompleto}: ${resultado}${motivo ? ` — ${motivo}` : ''}`,
+      cooperadoId: proposta.cooperado.id,
+      link: `/dashboard/cooperados/${proposta.cooperado.id}`,
+    });
+
+    // WA + email → behind NOTIFICACOES_ATIVAS
+    await this.notificarAnaliseDocumentos(proposta.cooperado, resultado, motivo);
+
+    return { sucesso: true, propostaId, resultado, motivo: motivo ?? null };
+  }
+
+  /**
+   * Envia WA + email ao cooperado informando resultado da análise.
+   * Guardado por NOTIFICACOES_ATIVAS. Falhas são logadas mas não abortam.
+   */
+  private async notificarAnaliseDocumentos(
+    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null },
+    resultado: 'REPROVADO' | 'PENDENTE',
+    motivo?: string,
+  ): Promise<void> {
+    if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const linkDocs = `${baseUrl}/portal/documentos`;
+    const titulo = resultado === 'REPROVADO'
+      ? 'Documentos reprovados — envie novamente'
+      : 'Seus documentos precisam de ajustes';
+    const mensagemBase = resultado === 'REPROVADO'
+      ? `Olá, ${cooperado.nomeCompleto}. Seus documentos foram reprovados`
+      : `Olá, ${cooperado.nomeCompleto}. Precisamos de mais informações sobre seus documentos`;
+    const sufixo = motivo ? `: ${motivo}` : '.';
+    const mensagem = `${mensagemBase}${sufixo} Reenvie aqui: ${linkDocs}`;
+
+    if (cooperado.telefone) {
+      try {
+        await this.whatsappSender.enviarMensagem(cooperado.telefone, mensagem);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar WA de análise: ${msg}`);
+      }
+    }
+    if (cooperado.email) {
+      try {
+        const html =
+          `<p>Olá, <strong>${cooperado.nomeCompleto}</strong>.</p>` +
+          `<p>${mensagemBase}${motivo ? `: <em>${motivo}</em>` : '.'}</p>` +
+          `<p>Para reenviar, acesse: <a href="${linkDocs}">${linkDocs}</a></p>`;
+        await this.email.enviarEmail(cooperado.email, titulo, html, mensagem);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        console.error(`[T3] Falha ao enviar email de análise: ${msg}`);
+      }
+    }
+  }
+
   // ── Assinatura digital ──────────────────────────────────────────
 
   async enviarAssinatura(propostaId: string) {
