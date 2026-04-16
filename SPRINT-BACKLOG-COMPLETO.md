@@ -321,7 +321,10 @@ Step 7: acompanhar assinatura → quando assinado: busca usina → admin aprova 
 
 ## TAREFAS — SPRINT 2.5 (portal do cooperado — baixo risco)
 
-### T9 — Banner de status do cadastro no portal
+### T9 — Banner de status do cadastro no portal ✅ CONCLUÍDA — commit `8f1c985`
+
+**Dívida técnica:** `tokenAssinatura` não exposto no portal — cooperado recebe link via WA/email (T3 P3). Para link direto no portal: adicionar propostas ao `GET /cooperados/meu-perfil` em sprint futuro.
+
 **Arquivo:** `web/app/portal/page.tsx`
 **Problema:** cooperado em PENDENTE_DOCUMENTOS / EM_ANALISE / AGUARDANDO_ASSINATURA não tem visibilidade do processo
 **Fix:** adicionar bloco condicional no dashboard do portal baseado no `status` retornado por `/cooperados/meu-perfil`
@@ -346,7 +349,7 @@ Step 7: acompanhar assinatura → quando assinado: busca usina → admin aprova 
 
 ---
 
-### T9b — Feedback da análise de documentos no portal
+### T9b — Feedback da análise de documentos no portal ✅ CONCLUÍDA — commit `e75661e`
 **Arquivo:** `web/app/portal/documentos/page.tsx`
 **Problema:** página lista docs e permite upload, mas não mostra resultado da análise do admin
 **Fix:** exibir por documento: APROVADO ✅ / PENDENTE ⏳ / REPROVADO ❌ + motivo da reprovação
@@ -364,7 +367,12 @@ Step 7: acompanhar assinatura → quando assinado: busca usina → admin aprova 
 
 ---
 
-### T10 — Aprovação automática de documentos (opt-in por parceiro)
+### T10 — Aprovação automática de documentos (opt-in por parceiro) ✅ CONCLUÍDA — commits `58c3892` + `d87ce31`
+
+**Implementação:** usou ConfigTenant chave-valor (sem migration). Chaves: `aprovacao_documentos_automatica` (`true`/`false`) e `prazo_aprovacao_auto_horas` (default `24`). Job cron horário (`documentos-aprovacao.job.ts`) verifica cooperados em PENDENTE_DOCUMENTOS com docs enviados há mais de X horas sem reprovação manual → chama `analisarDocumentos(propostaId, 'APROVADO')`. Frontend: toggle + select de prazo em `/dashboard/configuracoes/documentos`.
+
+**Dívida técnica:** rota `/dashboard/configuracoes/documentos` não linkada no menu lateral do admin — admin navega diretamente pela URL. Adicionar link no menu em sprint futuro.
+
 **Problema:** admin é gargalo do fluxo. Para escalar, parceiros precisam poder habilitar aprovação automática.
 **Quem habilita:** SUPER_ADMIN (qualquer parceiro) ou ADMIN do parceiro (para si mesmo)
 

@@ -335,6 +335,10 @@ A T3 implementa o fluxo completo do zero.
 
 | Commit | O que foi feito |
 |---|---|
+| `d87ce31` | feat(t10): toggle de aprovação automática de documentos no admin (Sprint 2.5 T10) |
+| `58c3892` | feat(t10): job de aprovação automática de documentos por tenant via ConfigTenant (Sprint 2.5 T10) |
+| `e75661e` | feat(t9b): exibir status de análise por documento no portal (Sprint 2.5 T9b) |
+| `8f1c985` | feat(t9): banner de status do cadastro no portal do cooperado (Sprint 2.5 T9) |
 | `e86c4b9` | feat(t0-step7): painel de acompanhamento com status assinatura + alocação usina (Sprint 2 T0) |
 | `534b72e` | feat(t0-step6): análise global de docs + envio real de link de assinatura (Sprint 2 T0) |
 | `7ff2899` | feat(t0-step5): painel de acompanhamento de documentos com approve/reject inline (Sprint 2 T0) |
