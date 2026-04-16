@@ -43,8 +43,12 @@ export class RelatoriosQueryService {
   constructor(private prisma: PrismaService) {}
 
   async inadimplencia(filtros: InadimplenciaFiltros) {
-    const where: any = { status: 'VENCIDO', cooperativaId: filtros.cooperativaId };
-    if (filtros.usinaId) where.contrato = { usinaId: filtros.usinaId };
+    const where: any = {
+      status: 'VENCIDO',
+      cooperativaId: filtros.cooperativaId,
+      contrato: { status: 'ATIVO', cooperado: { status: 'ATIVO' } },
+    };
+    if (filtros.usinaId) where.contrato = { ...where.contrato, usinaId: filtros.usinaId };
     if (filtros.periodoInicio || filtros.periodoFim) {
       where.dataVencimento = {};
       if (filtros.periodoInicio) where.dataVencimento.gte = filtros.periodoInicio;

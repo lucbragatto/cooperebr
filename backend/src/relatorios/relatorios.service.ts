@@ -11,7 +11,10 @@ export class RelatoriosService {
     cooperativaId?: string;
     tipoCooperado?: string;
   }) {
-    const where: any = { status: 'VENCIDO' };
+    const where: any = {
+      status: 'VENCIDO',
+      contrato: { status: 'ATIVO', cooperado: { status: 'ATIVO' } },
+    };
     if (filtros.usinaId) where.contrato = { ...where.contrato, usinaId: filtros.usinaId };
     if (filtros.cooperativaId) where.cooperativaId = filtros.cooperativaId;
 
