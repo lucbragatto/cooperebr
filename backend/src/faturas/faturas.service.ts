@@ -45,6 +45,8 @@ interface DadosExtraidos {
   leituraAtual: number;
   tarifaTUSD: number;
   tarifaTE: number;
+  tarifaTUSDSemICMS?: number;
+  tarifaTESemICMS?: number;
   bandeiraTarifaria: 'VERDE' | 'AMARELA' | 'VERMELHA_1' | 'VERMELHA_2';
   valorBandeira: number;
   contribIluminacaoPublica: number;
@@ -1179,6 +1181,8 @@ Retorne exatamente este formato:
   "leituraAtual": 0,
   "tarifaTUSD": 0.00000,
   "tarifaTE": 0.00000,
+  "tarifaTUSDSemICMS": 0.00000,
+  "tarifaTESemICMS": 0.00000,
   "bandeiraTarifaria": "VERDE ou AMARELA ou VERMELHA_1 ou VERMELHA_2",
   "valorBandeira": 0.00000,
   "contribIluminacaoPublica": 0.00,
@@ -1225,6 +1229,8 @@ IMPORTANTE:
 - saldoKwhAtual: Saldo de créditos APÓS a compensação desta fatura (kWh). Procure 'Saldo atual', 'Saldo a expirar', 'Créditos remanescentes'. Se não encontrar, retorne 0.
 - validadeCreditos: Data de validade dos créditos mais antigos (MM/AAAA). Créditos de GD vencem em 60 meses. Procure 'Validade', 'Expiração'. Se não encontrar, use string vazia.
 - valorSemDesconto: Valor que seria cobrado se a UC NÃO participasse de GD (sem compensação de créditos). Some consumoAtualKwh * (tarifaTUSD + tarifaTE) + contribIluminacaoPublica + impostos. Se não conseguir calcular, retorne 0.
+- tarifaTUSD/tarifaTE: valores da coluna "Preço Unit. c/ Tributos" ou "Preço Unit. COM ICMS" da fatura (R$/kWh). Se a fatura tiver apenas uma coluna de tarifa (sem diferenciar com/sem tributos), use essa coluna.
+- tarifaTUSDSemICMS/tarifaTESemICMS: valores da coluna "Tarifa Unit.(R$)" ou "Tarifa Aplicada s/ Tributos" ou "Tarifa s/ ICMS" (R$/kWh). São as tarifas homologadas pela ANEEL antes da incidência de ICMS. Se a fatura não separar as colunas, calcule: tarifaTUSDSemICMS = tarifaTUSD / (1 + icmsPercentual/100). Idem para TE.
 - Se algum campo não estiver disponível, use string vazia ou zero.`;
 
     const body = {

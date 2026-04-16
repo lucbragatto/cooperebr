@@ -35,6 +35,8 @@ export interface DadosOcr {
   consumoAtualKwh: number;
   tarifaTUSD: number;
   tarifaTE: number;
+  tarifaTUSDSemICMS?: number;
+  tarifaTESemICMS?: number;
   bandeiraTarifaria: string;
   valorBandeira: number;
   contribIluminacaoPublica: number;
@@ -510,7 +512,21 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
         if (componentesMarcados.has('descontos')) valorKwh -= (ocr.descontos ?? 0) / consumo;
         valorKwh = Math.max(0, valorKwh);
 
-        const tarifaBase = getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
+        // Tarifas: OCR com ICMS (informativo) vs sem ICMS (base do cálculo)
+        const tarifaComICMS = getComponenteValor('tarifaTUSD', ocr.tarifaTUSD ?? 0) + getComponenteValor('tarifaTE', ocr.tarifaTE ?? 0);
+        const tusdSemIcms = ocr.tarifaTUSDSemICMS ?? 0;
+        const teSemIcms = ocr.tarifaTESemICMS ?? 0;
+        const tarifaSemICMS = tusdSemIcms + teSemIcms;
+        // Se OCR extraiu tarifa sem ICMS, usar como base ANEEL; senão usar fetch do endpoint
+        const tarifaBaseCalculo = tarifaSemICMS > 0 ? tarifaSemICMS : tarifaAneel;
+        // "c/ todos encargos" = tarifa sem ICMS + ICMS + PIS/COFINS + CIP + outros
+        const encargosKwh = tarifaBaseCalculo > 0
+          ? tarifaBaseCalculo
+            + (getComponenteValor('icmsValor', ocr.icmsValor ?? 0) / consumo)
+            + (getComponenteValor('pisCofinsValor', ocr.pisCofinsValor ?? 0) / consumo)
+            + (getComponenteValor('contribIluminacaoPublica', ocr.contribIluminacaoPublica ?? 0) / consumo)
+            + (getComponenteValor('outrosEncargos', ocr.outrosEncargos ?? 0) / consumo)
+          : valorKwh;
 
         const sel = historico.filter((_, i) => mesesSelecionados.has(i));
         const mediaKwh = sel.length > 0 ? sel.reduce((acc, m) => acc + m.consumoKwh, 0) / sel.length : 0;
@@ -524,17 +540,19 @@ export default function Step1Fatura({ data, onChange, tipoMembro }: Step1Props) 
               <p className="text-xs text-green-600">{sel.length} meses selecionados</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">Tarifa OCR (TUSD+TE c/ ICMS)</p>
-              <p className="text-lg font-bold text-gray-900">R$ {tarifaBase.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+              <p className="text-xs text-gray-500">Tarifa fatura (TUSD+TE c/ ICMS)</p>
+              <p className="text-lg font-bold text-gray-900">R$ {tarifaComICMS.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-gray-500">Tarifa OCR (c/ todos encargos)</p>
-              <p className="text-lg font-bold text-gray-900">R$ {valorKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+              <p className="text-xs text-gray-500">Tarifa c/ todos encargos</p>
+              <p className="text-lg font-bold text-gray-900">R$ {encargosKwh.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
             </div>
-            {tarifaAneel > 0 && (
+            {tarifaBaseCalculo > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
                 <p className="text-xs text-blue-700">Tarifa ANEEL (base do cálculo)</p>
-                <p className="text-lg font-bold text-blue-900">R$ {tarifaAneel.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+                <p className="text-lg font-bold text-blue-900">R$ {tarifaBaseCalculo.toLocaleString('pt-BR', { minimumFractionDigits: 5 })}</p>
+                {tarifaSemICMS > 0 && <p className="text-xs text-blue-500">da fatura (s/ ICMS)</p>}
+                {tarifaSemICMS === 0 && tarifaAneel > 0 && <p className="text-xs text-blue-500">do cadastro ANEEL</p>}
               </div>
             )}
             <div className="bg-gray-50 rounded-lg px-3 py-2.5">
