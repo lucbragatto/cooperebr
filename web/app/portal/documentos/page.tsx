@@ -13,6 +13,7 @@ import {
   Download,
   RefreshCw,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Documento {
@@ -55,6 +56,12 @@ export default function PortalDocumentosPage() {
   const [contratos, setContratos] = useState<ContratoItem[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [uploadModal, setUploadModal] = useState(false);
+  const [uploadTipoInicial, setUploadTipoInicial] = useState('RG_FRENTE');
+
+  function abrirUpload(tipoPreSelecionado?: string) {
+    setUploadTipoInicial(tipoPreSelecionado ?? 'RG_FRENTE');
+    setUploadModal(true);
+  }
 
   const carregarDados = () => {
     setCarregando(true);
@@ -97,12 +104,22 @@ export default function PortalDocumentosPage() {
         <Button
           size="sm"
           className="bg-green-600 hover:bg-green-700 text-white"
-          onClick={() => setUploadModal(true)}
+          onClick={() => abrirUpload()}
         >
           <Upload className="w-4 h-4 mr-1" />
           Enviar
         </Button>
       </div>
+
+      {/* Banner de docs reprovados */}
+      {documentos.some((d) => d.status === 'REPROVADO') && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-sm text-amber-800">
+            Alguns documentos foram reprovados e precisam ser reenviados. Clique em <RefreshCw className="w-3 h-3 inline" /> no documento para reenviar.
+          </p>
+        </div>
+      )}
 
       {/* Documentos Pessoais */}
       <section>
@@ -118,7 +135,7 @@ export default function PortalDocumentosPage() {
         ) : (
           <div className="space-y-2">
             {docsPessoais.map((doc) => (
-              <DocCard key={doc.id} doc={doc} />
+              <DocCard key={doc.id} doc={doc} onReenviar={() => abrirUpload(doc.tipo)} />
             ))}
           </div>
         )}
@@ -182,7 +199,7 @@ export default function PortalDocumentosPage() {
           </h2>
           <div className="space-y-2">
             {docsOutros.map((doc) => (
-              <DocCard key={doc.id} doc={doc} />
+              <DocCard key={doc.id} doc={doc} onReenviar={() => abrirUpload(doc.tipo)} />
             ))}
           </div>
         </section>
@@ -191,6 +208,7 @@ export default function PortalDocumentosPage() {
       {/* Upload Modal */}
       {uploadModal && (
         <UploadModal
+          tipoInicial={uploadTipoInicial}
           onClose={() => setUploadModal(false)}
           onSuccess={() => {
             setUploadModal(false);
@@ -202,7 +220,7 @@ export default function PortalDocumentosPage() {
   );
 }
 
-function DocCard({ doc }: { doc: Documento }) {
+function DocCard({ doc, onReenviar }: { doc: Documento; onReenviar: () => void }) {
   const cfg = STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.PENDENTE;
   const StatusIcon = cfg.icon;
 
@@ -216,13 +234,15 @@ function DocCard({ doc }: { doc: Documento }) {
               <p className="text-sm font-medium text-gray-800 truncate">
                 {TIPO_LABEL[doc.tipo] ?? doc.tipo}
               </p>
-              <div className="flex items-center gap-1">
-                <StatusIcon className={`w-3 h-3 ${cfg.color}`} />
-                <span className={`text-xs ${cfg.color}`}>{cfg.label}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <StatusIcon className={`w-3 h-3 ${cfg.color}`} />
+                  <span className={`text-xs ${cfg.color}`}>{cfg.label}</span>
+                </div>
+                <span className="text-xs text-gray-400">
+                  {new Date(doc.createdAt).toLocaleDateString('pt-BR')}
+                </span>
               </div>
-              {doc.status === 'REPROVADO' && doc.motivoRejeicao && (
-                <p className="text-xs text-red-500 mt-0.5">{doc.motivoRejeicao}</p>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -239,6 +259,7 @@ function DocCard({ doc }: { doc: Documento }) {
             )}
             {doc.status === 'REPROVADO' && (
               <button
+                onClick={onReenviar}
                 className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
                 title="Reenviar"
               >
@@ -247,19 +268,27 @@ function DocCard({ doc }: { doc: Documento }) {
             )}
           </div>
         </div>
+        {doc.status === 'REPROVADO' && doc.motivoRejeicao && (
+          <div className="flex items-start gap-2 mt-2 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+            <AlertTriangle className="w-3 h-3 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-600">{doc.motivoRejeicao}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function UploadModal({
+  tipoInicial,
   onClose,
   onSuccess,
 }: {
+  tipoInicial: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [tipo, setTipo] = useState('RG_FRENTE');
+  const [tipo, setTipo] = useState(tipoInicial);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
