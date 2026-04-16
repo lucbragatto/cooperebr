@@ -102,6 +102,8 @@ export default function NovoMembroWizard() {
     representanteLegalCargo: '',
     formaPagamento: 'BOLETO',
     codigoIndicacao: '',
+    cooperadoId: '',
+    ucId: '',
   });
 
   const [step3, setStep3] = useState<Step3Data>({
@@ -181,6 +183,7 @@ export default function NovoMembroWizard() {
         if (!step2.cpf.trim()) return `${step2.tipoPessoa === 'PJ' ? 'CNPJ' : 'CPF'} é obrigatório.`;
         if (!step2.email.trim()) return 'Email é obrigatório.';
         if (!step2.telefone.trim()) return 'Telefone é obrigatório.';
+        if (!step2.cooperadoId) return 'Salve o cooperado antes de avançar.';
         return null;
       case 2:
         if (!step3.planoSelecionadoId && !step3.simulacao) return 'Execute a simulação antes de avançar.';
@@ -223,7 +226,7 @@ export default function NovoMembroWizard() {
       case 0:
         return <Step1Fatura data={step1} onChange={updateStep1} tipoMembro={tipoMembro} />;
       case 1:
-        return <Step2Dados data={step2} onChange={updateStep2} tipoMembro={tipoMembro} />;
+        return <Step2Dados data={step2} faturaData={step1} onChange={updateStep2} tipoMembro={tipoMembro} />;
       case 2:
         return <Step3Simulacao data={step3} faturaData={step1} onChange={updateStep3} tipoMembro={tipoMembro} />;
       case 3:

@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
-import { User, Gift } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { User, Gift, Loader2, Check, AlertTriangle } from 'lucide-react';
+import api from '@/lib/api';
+import type { Step1Data } from './Step1Fatura';
 
 export interface Step2Data {
   nomeCompleto: string;
@@ -19,10 +21,13 @@ export interface Step2Data {
   representanteLegalCargo: string;
   formaPagamento: string;
   codigoIndicacao: string;
+  cooperadoId: string;
+  ucId: string;
 }
 
 interface Step2Props {
   data: Step2Data;
+  faturaData: Step1Data;
   onChange: (partial: Partial<Step2Data>) => void;
   tipoMembro: string;
 }
@@ -82,7 +87,11 @@ function validarCNPJ(cnpj: string): boolean {
   return parseInt(nums[13]) === d2;
 }
 
-export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
+export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: Step2Props) {
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [cpfDuplicado, setCpfDuplicado] = useState<{ id: string; nomeCompleto: string; email: string } | null>(null);
+
   // Pré-preencher código de indicação do localStorage (vindo do ?ref= na landing page)
   useEffect(() => {
     if (!data.codigoIndicacao) {
@@ -94,12 +103,114 @@ export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
   const isPJ = data.tipoPessoa === 'PJ';
   const docNums = data.cpf.replace(/\D/g, '');
   const docValido = isPJ ? (docNums.length < 14 || validarCNPJ(data.cpf)) : (docNums.length < 11 || validarCPF(data.cpf));
+  const jaSalvo = !!data.cooperadoId;
 
   function handleDoc(v: string) {
     const nums = v.replace(/\D/g, '');
     if (isPJ) onChange({ cpf: maskCNPJ(v) });
     else if (nums.length > 11) onChange({ cpf: maskCNPJ(v), tipoPessoa: 'PJ' });
     else onChange({ cpf: maskCPF(v) });
+  }
+
+  async function usarCooperadoExistente(cooperadoId: string) {
+    setCpfDuplicado(null);
+    setErro('');
+    setSalvando(true);
+    try {
+      // Buscar UCs do cooperado existente
+      const { data: ucs } = await api.get<Array<{ id: string }>>(`/ucs?cooperadoId=${cooperadoId}`);
+      const ucId = ucs.length > 0 ? ucs[0].id : '';
+      if (!ucId && faturaData.ocr) {
+        // Cooperado existe mas sem UC — criar
+        const ucPayload = {
+          numero: faturaData.ocr.numeroUC || 'UC-' + Date.now(),
+          endereco: data.endereco,
+          cidade: data.cidade,
+          estado: data.estado,
+          cooperadoId,
+          cep: data.cep.replace(/\D/g, '') || undefined,
+          bairro: data.bairro || undefined,
+          distribuidora: faturaData.ocr.distribuidora || undefined,
+        };
+        const { data: ucCriada } = await api.post<{ id: string }>('/ucs', ucPayload);
+        onChange({ cooperadoId, ucId: ucCriada.id });
+      } else {
+        onChange({ cooperadoId, ucId });
+      }
+    } catch {
+      setErro('Erro ao carregar cooperado existente. Tente novamente.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function salvarCooperado() {
+    setErro('');
+    setCpfDuplicado(null);
+    setSalvando(true);
+    try {
+      // 1. Criar cooperado
+      const cpfLimpo = data.cpf.replace(/\D/g, '');
+      const payload: Record<string, unknown> = {
+        nomeCompleto: data.nomeCompleto.trim(),
+        cpf: cpfLimpo,
+        email: data.email.trim(),
+        telefone: data.telefone.replace(/\D/g, '') || undefined,
+        status: 'PENDENTE',
+        tipoPessoa: data.tipoPessoa,
+        preferenciaCobranca: data.formaPagamento,
+      };
+      if (isPJ) {
+        payload.representanteLegalNome = data.representanteLegalNome || undefined;
+        payload.representanteLegalCpf = data.representanteLegalCpf?.replace(/\D/g, '') || undefined;
+        payload.representanteLegalCargo = data.representanteLegalCargo || undefined;
+      }
+
+      let cooperadoId: string;
+      try {
+        const { data: cooperado } = await api.post<{ id: string }>('/cooperados', payload);
+        cooperadoId = cooperado.id;
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 409) {
+          // CPF duplicado — buscar cooperado existente
+          const cpfBusca = cpfLimpo;
+          const { data: lista } = await api.get<Array<{ id: string; nomeCompleto: string; email: string; cpf: string }>>(`/cooperados?search=${cpfBusca}&limit=5`);
+          const existente = lista.find((c) => c.cpf?.replace(/\D/g, '') === cpfBusca);
+          if (existente) {
+            setCpfDuplicado({ id: existente.id, nomeCompleto: existente.nomeCompleto, email: existente.email });
+          } else {
+            setErro('CPF já cadastrado mas não foi possível localizar o registro. Verifique no painel de cooperados.');
+          }
+          return;
+        }
+        throw err;
+      }
+
+      // 2. Criar UC com dados do OCR
+      let ucId = '';
+      if (faturaData.ocr) {
+        const ucPayload = {
+          numero: faturaData.ocr.numeroUC || 'UC-' + Date.now(),
+          endereco: data.endereco,
+          cidade: data.cidade,
+          estado: data.estado,
+          cooperadoId,
+          cep: data.cep.replace(/\D/g, '') || undefined,
+          bairro: data.bairro || undefined,
+          distribuidora: faturaData.ocr.distribuidora || undefined,
+        };
+        const { data: ucCriada } = await api.post<{ id: string }>('/ucs', ucPayload);
+        ucId = ucCriada.id;
+      }
+
+      onChange({ cooperadoId, ucId });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar cooperado.';
+      setErro(message);
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -208,6 +319,66 @@ export default function Step2Dados({ data, onChange, tipoMembro }: Step2Props) {
           <p className="text-xs text-gray-500 mt-1">Se este membro foi indicado, insira o código do indicador</p>
         </Campo>
       </div>
+
+      {/* CPF duplicado — dialog de confirmação */}
+      {cpfDuplicado && (
+        <div className="border-2 border-amber-400 rounded-lg p-4 bg-amber-50 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">CPF já cadastrado</p>
+              <p className="text-sm text-amber-700 mt-1">
+                Encontrado: <strong>{cpfDuplicado.nomeCompleto}</strong> ({cpfDuplicado.email})
+              </p>
+              <p className="text-xs text-amber-600 mt-1">Deseja continuar com o cadastro existente?</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => usarCooperadoExistente(cpfDuplicado.id)}
+              disabled={salvando}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {salvando ? 'Carregando...' : 'Usar cadastro existente'}
+            </button>
+            <button
+              onClick={() => setCpfDuplicado(null)}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Erro */}
+      {erro && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          {erro}
+        </div>
+      )}
+
+      {/* Salvar cooperado + UC */}
+      {jaSalvo ? (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
+          <Check className="h-5 w-5 text-green-600" />
+          <span className="text-sm text-green-800 font-medium">
+            Cooperado salvo. Pode avançar para simulação.
+          </span>
+        </div>
+      ) : (
+        <button
+          onClick={salvarCooperado}
+          disabled={salvando || !data.nomeCompleto.trim() || !data.cpf.trim() || !data.email.trim()}
+          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          {salvando ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</>
+          ) : (
+            'Salvar cooperado e continuar'
+          )}
+        </button>
+      )}
     </div>
   );
 }
