@@ -338,6 +338,7 @@ A T3 implementa o fluxo completo do zero.
 | `f296f34` | fix: filtrar planos por tenant/publico e usar descontoBase real no cadastro web (Sprint 1 T2+T8) |
 | `930807b` | fix: unificar link de indicação para `/cadastro?ref=CODIGO` (Sprint 1 T6) |
 | `bc304c8` | docs: adicionar `CADASTRO_VALIDACOES_ATIVAS` às env vars obrigatórias (Sprint 1 T7) |
+| `62cbdf8` | fix: reativar validações de CPF/email/telefone no cadastro público (Sprint 1 T7) |
 | `b296316` | fix: recalcular simulação automaticamente ao trocar plano (Sprint 1 T1) |
 | `b98727a` | Módulo Contas a Pagar (CRUD + frontend) |
 | `313fbf4` | Campos saldo/economia em FaturaProcessada + migration |

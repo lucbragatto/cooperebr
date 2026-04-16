@@ -168,7 +168,7 @@ useEffect(() => {
 
 ---
 
-### T7 — Reativar validações no cadastro público ✅ CONCLUÍDA — commit `bc304c8`
+### T7 — Reativar validações no cadastro público ✅ CONCLUÍDA — commits `62cbdf8` + `bc304c8`
 **Arquivo:** `backend/src/publico/publico.controller.ts`
 **Fix:** descomentar validações de CPF (11 dígitos), email e telefone que estão comentadas
 **Commit:** `fix: reativar validações CPF/email/telefone no cadastro público`
