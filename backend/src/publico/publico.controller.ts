@@ -156,16 +156,22 @@ export class PublicoController {
       };
     },
   ) {
-    // Em fase de testes: campos opcionais. Em produção: descomentar as validações abaixo.
-    // if (!body.nome || !body.cpf || !body.email || !body.telefone) {
-    //   throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
-    // }
-
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
-    // if (cpfLimpo.length !== 11) { throw new BadRequestException('CPF inválido'); }
-
     const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
-    // if (telefoneLimpo.length < 10) { throw new BadRequestException('Telefone inválido'); }
+
+    // Validações controladas por env var: em dev fica desligado para facilitar testes,
+    // em prod `CADASTRO_VALIDACOES_ATIVAS=true` rejeita leads inválidos.
+    if (process.env.CADASTRO_VALIDACOES_ATIVAS === 'true') {
+      if (!body.nome || !body.cpf || !body.email || !body.telefone) {
+        throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
+      }
+      if (cpfLimpo.length !== 11) {
+        throw new BadRequestException('CPF inválido');
+      }
+      if (telefoneLimpo.length < 10) {
+        throw new BadRequestException('Telefone inválido');
+      }
+    }
 
     try {
       const dadosLead: Record<string, unknown> = {
