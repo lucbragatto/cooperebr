@@ -155,7 +155,7 @@ PENDENTE → ACEITA → CONCLUIDA
 
 ## TAREFAS — SPRINT 1 (baixo risco, sem dependências)
 
-### T1 — Fix recálculo ao trocar plano (Wizard Admin) ✅ CONCLUÍDA
+### T1 — Fix recálculo ao trocar plano (Wizard Admin) ✅ CONCLUÍDA — commit `b296316`
 **Arquivo:** `web/app/dashboard/cooperados/novo/steps/Step3Simulacao.tsx`
 ```tsx
 useEffect(() => {
@@ -168,14 +168,14 @@ useEffect(() => {
 
 ---
 
-### T7 — Reativar validações no cadastro público
+### T7 — Reativar validações no cadastro público ✅ CONCLUÍDA — commit `bc304c8`
 **Arquivo:** `backend/src/publico/publico.controller.ts`
 **Fix:** descomentar validações de CPF (11 dígitos), email e telefone que estão comentadas
 **Commit:** `fix: reativar validações CPF/email/telefone no cadastro público`
 
 ---
 
-### T6 — Unificar link de indicação
+### T6 — Unificar link de indicação ✅ CONCLUÍDA — commit `930807b`
 **Arquivo:** `backend/src/indicacoes/indicacoes.service.ts`
 **Problema:** backend gera `/entrar?ref=CODIGO` mas cadastro está em `/cadastro?ref=CODIGO`
 **Fix:** mudar `gerarLink()` para usar `/cadastro?ref=` em vez de `/entrar?ref=`
@@ -183,7 +183,10 @@ useEffect(() => {
 
 ---
 
-### T2 + T8 — Planos com filtro de tenant e público
+### T2 + T8 — Planos com filtro de tenant e público ✅ CONCLUÍDA — commit `f296f34`
+
+**Lacuna conhecida (Sprint 2+):** `/planos/ativos` continua `@Public()` sem ler JWT — wizard admin autenticado ainda pode ver planos cross-tenant. Correção exige refatorar o guard do controller para identificar tenant do token quando autenticado. **Não tratado no Sprint 1 por instrução explícita** (escopo: "não adicionar guard de auth").
+
 **Arquivos:** `backend/src/planos/planos.service.ts`, `planos.controller.ts`, `web/app/cadastro/page.tsx`
 
 **Fix backend:**

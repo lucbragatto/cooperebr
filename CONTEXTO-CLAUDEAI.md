@@ -331,10 +331,14 @@ A T3 implementa o fluxo completo do zero.
 
 ---
 
-## COMMITS RECENTES (14/04/2026)
+## COMMITS RECENTES (15/04/2026)
 
 | Commit | O que foi feito |
 |---|---|
+| `f296f34` | fix: filtrar planos por tenant/publico e usar descontoBase real no cadastro web (Sprint 1 T2+T8) |
+| `930807b` | fix: unificar link de indicação para `/cadastro?ref=CODIGO` (Sprint 1 T6) |
+| `bc304c8` | docs: adicionar `CADASTRO_VALIDACOES_ATIVAS` às env vars obrigatórias (Sprint 1 T7) |
+| `b296316` | fix: recalcular simulação automaticamente ao trocar plano (Sprint 1 T1) |
 | `b98727a` | Módulo Contas a Pagar (CRUD + frontend) |
 | `313fbf4` | Campos saldo/economia em FaturaProcessada + migration |
 | `ee06ca1` | indicadosAtivos no churn + histórico de status cooperado |
