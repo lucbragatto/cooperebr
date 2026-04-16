@@ -12,7 +12,13 @@ import {
   FileWarning,
   DollarSign,
   MessageCircle,
+  CheckCircle,
+  Clock,
+  FileText,
+  Search,
+  PenTool,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface Resumo {
   descontoAtual: number | null;
@@ -32,18 +38,22 @@ interface MeuPerfil {
 
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: 'Pendente',
+  PENDENTE_VALIDACAO: 'Pendente validação',
+  PENDENTE_DOCUMENTOS: 'Aguardando documentos',
+  APROVADO: 'Aprovado',
   ATIVO: 'Ativo',
   ATIVO_RECEBENDO_CREDITOS: 'Recebendo créditos',
   SUSPENSO: 'Suspenso',
   ENCERRADO: 'Encerrado',
-  APROVADO: 'Aprovado',
 };
 
 const STATUS_COLOR: Record<string, string> = {
+  PENDENTE: 'text-yellow-600',
+  PENDENTE_VALIDACAO: 'text-yellow-600',
+  PENDENTE_DOCUMENTOS: 'text-amber-600',
+  APROVADO: 'text-blue-600',
   ATIVO: 'text-green-700',
   ATIVO_RECEBENDO_CREDITOS: 'text-green-700',
-  APROVADO: 'text-blue-600',
-  PENDENTE: 'text-yellow-600',
   SUSPENSO: 'text-red-600',
   ENCERRADO: 'text-gray-500',
 };
@@ -95,6 +105,76 @@ export default function PortalInicioPage() {
           <p className="text-sm text-gray-500 mt-1">Bem-vindo ao seu painel.</p>
         </CardContent>
       </Card>
+
+      {/* Banner de status do cadastro — aparece apenas quando status !== ATIVO */}
+      {r?.statusConta && r.statusConta !== 'ATIVO' && r.statusConta !== 'ATIVO_RECEBENDO_CREDITOS' && (
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+          <CardContent className="pt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-800">Etapas do seu cadastro</h3>
+            <div className="space-y-2">
+              {/* Etapa 1: Proposta aceita */}
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-green-700 font-medium">Proposta aceita</p>
+              </div>
+
+              {/* Etapa 2: Documentos */}
+              <div className="flex items-start gap-3">
+                {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
+                  <FileText className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                )}
+                <div className="flex-1">
+                  {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
+                    <>
+                      <p className="text-sm text-amber-700 font-medium">Envie seus documentos</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Precisamos dos seus documentos para prosseguir com o cadastro.
+                      </p>
+                      <Link
+                        href="/portal/documentos"
+                        className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-md transition-colors"
+                      >
+                        <FileText className="h-3 w-3" /> Enviar documentos
+                      </Link>
+                    </>
+                  ) : (
+                    <p className="text-sm text-green-700 font-medium">Documentos enviados</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Etapa 3: Análise — exibida como ativa apenas se status indica análise em andamento */}
+              {(r.statusConta === 'PENDENTE_VALIDACAO' || r.statusConta === 'PENDENTE') && (
+                <div className="flex items-start gap-3">
+                  <Search className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-blue-700 font-medium">Documentos em análise</p>
+                    <p className="text-xs text-blue-600 mt-0.5">
+                      Nossa equipe está verificando — em breve você receberá uma resposta.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Etapa 4: Assinatura */}
+              {r.statusConta === 'APROVADO' && (
+                <div className="flex items-start gap-3">
+                  <PenTool className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-blue-700 font-medium">Assine seu contrato</p>
+                    <p className="text-xs text-blue-600 mt-0.5">
+                      Seus documentos foram aprovados! Acesse o link de assinatura enviado no seu
+                      WhatsApp ou email para finalizar o cadastro. Não encontrou? Entre em contato com a cooperativa.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Resumo */}
       <Card>
