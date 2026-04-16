@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFile, UseInterceptors, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFile, UseInterceptors, ForbiddenException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CooperadosService } from './cooperados.service';
 import { Roles } from '../auth/roles.decorator';
@@ -10,14 +10,22 @@ import { UpdateCooperadoDto } from './dto/update-cooperado.dto';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { PrismaService } from '../prisma.service';
+import { FaturasService } from '../faturas/faturas.service';
+import { UcsService } from '../ucs/ucs.service';
+import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
 @Controller('cooperados')
 export class CooperadosController {
+  private readonly logger = new Logger(CooperadosController.name);
+
   constructor(
     private readonly cooperadosService: CooperadosService,
     private readonly prisma: PrismaService,
+    private readonly faturasService: FaturasService,
+    private readonly ucsService: UcsService,
+    private readonly motorProposta: MotorPropostaService,
   ) {}
 
   /**
@@ -166,6 +174,170 @@ export class CooperadosController {
     @UploadedFile() arquivo: Express.Multer.File,
   ) {
     return this.cooperadosService.uploadMeuDocumento(req.user, tipo, arquivo);
+  }
+
+  // ── Portal: Nova UC com fatura (OCR + UC + simulação) ────────────────────
+
+  @Roles(COOPERADO)
+  @Post('meu-perfil/nova-uc-com-fatura')
+  @UseInterceptors(FileInterceptor('fatura'))
+  async novaUcComFatura(
+    @Req() req: any,
+    @UploadedFile() arquivo: Express.Multer.File,
+    @Body('numeroUC') numeroUC: string,
+    @Body('planoId') planoId?: string,
+  ) {
+    if (!arquivo) throw new BadRequestException('Arquivo da fatura é obrigatório');
+    if (!numeroUC?.trim()) throw new BadRequestException('Número da UC é obrigatório');
+
+    const cooperado = await this.cooperadosService.findCooperadoByUsuarioPublic(req.user);
+    const cooperativaId = cooperado.cooperativaId;
+    if (!cooperativaId) throw new BadRequestException('Cooperado sem cooperativa vinculada');
+
+    // 1. Verificar UC duplicada
+    const ucExistente = await this.prisma.uc.findFirst({
+      where: { cooperadoId: cooperado.id, numero: numeroUC.trim() },
+    });
+    if (ucExistente) throw new ConflictException('UC já cadastrada para este cooperado');
+
+    // 2. OCR da fatura
+    const isPdf = arquivo.mimetype === 'application/pdf';
+    const isImage = arquivo.mimetype.startsWith('image/');
+    if (!isPdf && !isImage) throw new BadRequestException('Formato não suportado. Envie PDF ou imagem.');
+    if (arquivo.size > 10 * 1024 * 1024) throw new BadRequestException('Arquivo excede 10MB');
+
+    const base64 = arquivo.buffer.toString('base64');
+    const tipoArquivo = isPdf ? 'pdf' as const : 'imagem' as const;
+    const dadosOcr: Record<string, any> = await this.faturasService.extrairOcr(base64, tipoArquivo);
+
+    // 3. Criar UC
+    const uc = await this.ucsService.create({
+      numero: numeroUC.trim(),
+      endereco: dadosOcr.enderecoInstalacao || '',
+      cidade: dadosOcr.cidade || '',
+      estado: dadosOcr.estado || '',
+      cooperadoId: cooperado.id,
+      cep: dadosOcr.cep || undefined,
+      bairro: dadosOcr.bairro || undefined,
+      distribuidora: dadosOcr.distribuidora || undefined,
+    });
+
+    // 4. Simulação via motor (não persiste proposta ainda)
+    const historico = dadosOcr.historicoConsumo ?? [];
+    const ultimo = historico.length > 0 ? historico[historico.length - 1] : null;
+    const consumo = dadosOcr.consumoAtualKwh ?? ultimo?.consumoKwh ?? 0;
+    const valor = dadosOcr.totalAPagar ?? ultimo?.valorRS ?? 0;
+
+    let simulacao: Record<string, unknown> | null = null;
+    let outlierDetectado = false;
+    try {
+      const resultado = await this.motorProposta.calcular({
+        cooperadoId: cooperado.id,
+        historico: historico.length > 0
+          ? historico.map((h: { mesAno?: string; consumoKwh: number; valorRS?: number }) => ({
+              mesAno: h.mesAno ?? new Date().toISOString().slice(0, 7),
+              consumoKwh: h.consumoKwh,
+              valorRS: h.valorRS ?? 0,
+            }))
+          : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valor }],
+        kwhMesRecente: consumo,
+        valorMesRecente: valor,
+        mesReferencia: ultimo?.mesAno ?? new Date().toISOString().slice(0, 7),
+      });
+
+      outlierDetectado = resultado.outlierDetectado && !!resultado.aguardandoEscolha;
+      if (resultado.resultado) {
+        simulacao = {
+          base: resultado.resultado.base,
+          kwhContrato: resultado.resultado.kwhContrato,
+          descontoPercentual: resultado.resultado.descontoPercentual,
+          economiaMensal: resultado.resultado.economiaMensal,
+          economiaAnual: resultado.resultado.economiaAnual,
+          valorCooperado: resultado.resultado.valorCooperado,
+          tarifaUnitSemTrib: resultado.resultado.tarifaUnitSemTrib,
+          mesReferencia: resultado.resultado.mesReferencia,
+        };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(`[nova-uc] Motor falhou para cooperado ${cooperado.id}: ${msg}`);
+    }
+
+    return {
+      ok: true,
+      ucId: uc.id,
+      outlierDetectado,
+      simulacao,
+      dadosOcr: {
+        consumoMedioKwh: consumo,
+        totalAPagar: valor,
+        distribuidora: dadosOcr.distribuidora || null,
+        historicoConsumo: historico,
+      },
+    };
+  }
+
+  // ── Portal: Confirmar nova UC (aceitar proposta + contrato) ─────────────
+
+  @Roles(COOPERADO)
+  @Post('meu-perfil/confirmar-nova-uc')
+  async confirmarNovaUc(
+    @Req() req: any,
+    @Body() body: { ucId: string; planoId?: string },
+  ) {
+    if (!body.ucId) throw new BadRequestException('ucId é obrigatório');
+
+    const cooperado = await this.cooperadosService.findCooperadoByUsuarioPublic(req.user);
+    const cooperativaId = cooperado.cooperativaId;
+
+    // Validar que a UC pertence ao cooperado
+    const uc = await this.prisma.uc.findFirst({
+      where: { id: body.ucId, cooperadoId: cooperado.id },
+    });
+    if (!uc) throw new BadRequestException('UC não encontrada ou não pertence ao cooperado');
+
+    // Recalcular para obter resultado fresco
+    const historico = await this.prisma.faturaProcessada.findMany({
+      where: { cooperadoId: cooperado.id },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { mesReferencia: true, dadosExtraidos: true },
+    });
+
+    // Buscar última fatura da UC ou usar dados mínimos
+    const lastFatura = historico[0];
+    const dados = (lastFatura?.dadosExtraidos as Record<string, unknown>) ?? {};
+    const consumo = Number(dados.consumoAtualKwh ?? 0) || 300;
+    const valor = Number(dados.totalAPagar ?? 0) || 250;
+    const mesRef = lastFatura?.mesReferencia ?? new Date().toISOString().slice(0, 7);
+
+    const resultado = await this.motorProposta.calcular({
+      cooperadoId: cooperado.id,
+      historico: [{ mesAno: mesRef, consumoKwh: consumo, valorRS: valor }],
+      kwhMesRecente: consumo,
+      valorMesRecente: valor,
+      mesReferencia: mesRef,
+    });
+
+    if (!resultado.resultado) {
+      throw new BadRequestException('Não foi possível calcular a proposta. Verifique se a tarifa da distribuidora está cadastrada.');
+    }
+
+    const aceite = await this.motorProposta.aceitar({
+      cooperadoId: cooperado.id,
+      resultado: resultado.resultado,
+      mesReferencia: resultado.resultado.mesReferencia,
+      planoId: body.planoId || undefined,
+    }, cooperativaId ?? undefined);
+
+    this.logger.log(`[confirmar-uc] Cooperado ${cooperado.id} — proposta ${aceite.proposta?.id}, espera=${aceite.emListaEspera}`);
+
+    return {
+      ok: true,
+      propostaId: aceite.proposta?.id ?? null,
+      contratoNumero: aceite.contrato?.numero ?? null,
+      emListaEspera: aceite.emListaEspera ?? false,
+    };
   }
 
   @Roles(COOPERADO)

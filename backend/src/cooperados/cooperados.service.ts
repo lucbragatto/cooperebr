@@ -190,6 +190,10 @@ export class CooperadosService {
   }
 
   /** Helper: busca cooperado pelo JWT */
+  async findCooperadoByUsuarioPublic(usuario: { id: string; email: string; cpf?: string }) {
+    return this.findCooperadoByUsuario(usuario);
+  }
+
   private async findCooperadoByUsuario(usuario: { id: string; email: string; cpf?: string }) {
     const where: any[] = [];
     if (usuario.email) where.push({ email: usuario.email });
