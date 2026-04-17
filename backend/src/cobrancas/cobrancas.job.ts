@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 
 @Injectable()
 export class CobrancasJob {
@@ -10,6 +11,7 @@ export class CobrancasJob {
   constructor(
     private prisma: PrismaService,
     private whatsappCicloVida: WhatsappCicloVidaService,
+    private calculoMultaJuros: CalculoMultaJurosService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
@@ -56,48 +58,31 @@ export class CobrancasJob {
 
     if (vencidas.length === 0) return;
 
-    // Buscar config financeira de todas as cooperativas envolvidas
-    const cooperativaIds = [...new Set(vencidas.map((c) => c.contrato?.cooperativaId || c.cooperativaId).filter(Boolean))] as string[];
-    const cooperativas = await this.prisma.cooperativa.findMany({
-      where: { id: { in: cooperativaIds } },
-      select: { id: true, multaAtraso: true, jurosDiarios: true, diasCarencia: true },
-    });
-    const configMap = new Map(cooperativas.map((c) => [c.id, c]));
-
     let atualizadas = 0;
     for (const cobranca of vencidas) {
       const coopId = cobranca.contrato?.cooperativaId || cobranca.cooperativaId;
       if (!coopId) continue;
 
-      const config = configMap.get(coopId);
-      if (!config) continue;
+      const calculo = await this.calculoMultaJuros.calcular(
+        Number(cobranca.valorLiquido),
+        cobranca.dataVencimento,
+        coopId,
+        hoje,
+      );
 
-      const diasCarencia = config.diasCarencia;
-      const vencimento = new Date(cobranca.dataVencimento);
-      vencimento.setHours(0, 0, 0, 0);
-      const diasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (diasAtraso <= diasCarencia) continue;
-
-      const diasEfetivos = diasAtraso - diasCarencia;
-      const valorOriginal = Number(cobranca.valorLiquido);
-      const multa = Math.round(valorOriginal * (Number(config.multaAtraso) / 100) * 100) / 100;
-      const juros = Math.round(valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos * 100) / 100;
-
-      // Recalcula sempre baseado no valorLiquido original
-      const valorAtualizado = Math.round((valorOriginal + multa + juros) * 100) / 100;
+      if (calculo.diasEfetivos <= 0) continue;
 
       await this.prisma.cobranca.update({
         where: { id: cobranca.id },
         data: {
-          valorMulta: multa,
-          valorJuros: juros,
-          valorAtualizado,
+          valorMulta: calculo.multa,
+          valorJuros: calculo.juros,
+          valorAtualizado: calculo.valorAtualizado,
         },
       });
 
       this.logger.debug(
-        `Cobrança ${cobranca.id}: ${diasEfetivos} dias efetivos, multa R$${multa.toFixed(2)}, juros R$${juros.toFixed(2)}, total R$${valorAtualizado.toFixed(2)}`,
+        `Cobrança ${cobranca.id}: ${calculo.diasEfetivos} dias efetivos, multa R$${calculo.multa.toFixed(2)}, juros R$${calculo.juros.toFixed(2)}, total R$${calculo.valorAtualizado.toFixed(2)}`,
       );
       atualizadas++;
     }

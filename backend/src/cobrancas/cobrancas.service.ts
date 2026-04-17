@@ -10,6 +10,7 @@ import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { TokenContabilService } from '../financeiro/token-contabil.service';
+import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 import { CooperTokenTipo } from '@prisma/client';
 
 export type FonteDados = 'FATURA_OCR' | 'GERACAO_MANUAL' | 'ESTIMADO';
@@ -51,6 +52,7 @@ export class CobrancasService {
     private emailService: EmailService,
     private cooperTokenService: CooperTokenService,
     private tokenContabil: TokenContabilService,
+    private calculoMultaJuros: CalculoMultaJurosService,
   ) {}
 
   @OnEvent('pagamento.confirmado')
@@ -313,41 +315,25 @@ export class CobrancasService {
     if (vencida && !Number(cobranca.valorMulta)) {
       const coopId = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
       if (coopId) {
-        const config = await this.prisma.cooperativa.findUnique({
-          where: { id: coopId },
-          select: { multaAtraso: true, jurosDiarios: true, diasCarencia: true },
-        });
+        const calculo = await this.calculoMultaJuros.calcular(
+          Number(cobranca.valorLiquido),
+          cobranca.dataVencimento,
+          coopId,
+        );
 
-        if (config) {
-          const vencimento = new Date(cobranca.dataVencimento);
-          vencimento.setHours(0, 0, 0, 0);
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-          const diasAtraso = Math.floor((hoje.getTime() - vencimento.getTime()) / (1000 * 60 * 60 * 24));
-          const diasCarencia = config.diasCarencia ?? 0;
-          const diasEfetivos = Math.max(0, diasAtraso - diasCarencia);
+        if (calculo.diasEfetivos > 0) {
+          await this.prisma.cobranca.update({
+            where: { id },
+            data: {
+              valorMulta: calculo.multa,
+              valorJuros: calculo.juros,
+              valorAtualizado: calculo.valorAtualizado,
+            },
+          });
 
-          if (diasEfetivos > 0) {
-            const valorOriginal = Number(cobranca.valorLiquido);
-            // BUG-1: Precisão de 4 casas intermediárias, arredondando para 2 no final
-            const multa = Math.round(valorOriginal * (Number(config.multaAtraso) / 100) * 1e4) / 1e4;
-            const juros = Math.round(valorOriginal * (Number(config.jurosDiarios) / 100) * diasEfetivos * 1e4) / 1e4;
-            const valorAtualizado = Math.round((valorOriginal + multa + juros) * 100) / 100;
-
-            await this.prisma.cobranca.update({
-              where: { id },
-              data: {
-                valorMulta: Math.round(multa * 100) / 100,
-                valorJuros: Math.round(juros * 100) / 100,
-                valorAtualizado,
-              },
-            });
-
-            // Atualizar referência local para usar valor correto abaixo
-            (cobranca as any).valorAtualizado = valorAtualizado;
-            (cobranca as any).valorMulta = Math.round(multa * 100) / 100;
-            (cobranca as any).valorJuros = Math.round(juros * 100) / 100;
-          }
+          (cobranca as any).valorAtualizado = calculo.valorAtualizado;
+          (cobranca as any).valorMulta = calculo.multa;
+          (cobranca as any).valorJuros = calculo.juros;
         }
       }
     }
@@ -844,19 +830,13 @@ export class CobrancasService {
     if ((cobranca.status === 'VENCIDO' || (cobranca.status === 'PENDENTE' && venc < hoje)) && !Number(cobranca.valorMulta)) {
       const coopId = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
       if (coopId) {
-        const config = await this.prisma.cooperativa.findUnique({
-          where: { id: coopId },
-          select: { multaAtraso: true, jurosDiarios: true, diasCarencia: true },
-        });
-        if (config) {
-          const diasAtraso = Math.floor((hoje.getTime() - venc.getTime()) / 86400000);
-          const diasEfetivos = Math.max(0, diasAtraso - (config.diasCarencia ?? 0));
-          if (diasEfetivos > 0) {
-            const base = Number(cobranca.valorLiquido);
-            const multa = base * (Number(config.multaAtraso) / 100);
-            const juros = base * (Number(config.jurosDiarios) / 100) * diasEfetivos;
-            valor = Math.round((base + multa + juros) * 100) / 100;
-          }
+        const calculo = await this.calculoMultaJuros.calcular(
+          Number(cobranca.valorLiquido),
+          cobranca.dataVencimento,
+          coopId,
+        );
+        if (calculo.diasEfetivos > 0) {
+          valor = calculo.valorAtualizado;
         }
       }
     }
