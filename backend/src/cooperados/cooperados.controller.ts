@@ -287,7 +287,13 @@ export class CooperadosController {
   @Post('meu-perfil/confirmar-nova-uc')
   async confirmarNovaUc(
     @Req() req: any,
-    @Body() body: { ucId: string; planoId?: string },
+    @Body() body: {
+      ucId: string;
+      planoId?: string;
+      consumoKwh?: number;
+      valorFatura?: number;
+      mesReferencia?: string;
+    },
   ) {
     if (!body.ucId) throw new BadRequestException('ucId é obrigatório');
 
@@ -300,20 +306,44 @@ export class CooperadosController {
     });
     if (!uc) throw new BadRequestException('UC não encontrada ou não pertence ao cooperado');
 
-    // Recalcular para obter resultado fresco
-    const historico = await this.prisma.faturaProcessada.findMany({
-      where: { cooperadoId: cooperado.id },
-      orderBy: { createdAt: 'desc' },
-      take: 12,
-      select: { mesReferencia: true, dadosExtraidos: true },
-    });
+    let consumo: number;
+    let valor: number;
+    let mesRef: string;
 
-    // Buscar última fatura da UC ou usar dados mínimos
-    const lastFatura = historico[0];
-    const dados = (lastFatura?.dadosExtraidos as Record<string, unknown>) ?? {};
-    const consumo = Number(dados.consumoAtualKwh ?? 0) || 300;
-    const valor = Number(dados.totalAPagar ?? 0) || 250;
-    const mesRef = lastFatura?.mesReferencia ?? new Date().toISOString().slice(0, 7);
+    if (body.consumoKwh && body.valorFatura) {
+      // Preferir dados enviados pelo frontend (vindos do OCR de novaUcComFatura)
+      consumo = body.consumoKwh;
+      valor = body.valorFatura;
+      mesRef = body.mesReferencia ?? new Date().toISOString().slice(0, 7);
+    } else {
+      // Fallback: buscar FaturaProcessada persistida
+      const historico = await this.prisma.faturaProcessada.findMany({
+        where: { cooperadoId: cooperado.id },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { mesReferencia: true, dadosExtraidos: true },
+      });
+
+      const lastFatura = historico[0];
+      if (!lastFatura) {
+        throw new BadRequestException(
+          'Dados de consumo não informados e nenhuma fatura processada encontrada. ' +
+          'Envie consumoKwh e valorFatura no body.',
+        );
+      }
+
+      const dados = (lastFatura.dadosExtraidos as Record<string, unknown>) ?? {};
+      consumo = Number(dados.consumoAtualKwh ?? 0);
+      valor = Number(dados.totalAPagar ?? 0);
+      mesRef = lastFatura.mesReferencia ?? new Date().toISOString().slice(0, 7);
+
+      if (!consumo || !valor) {
+        throw new BadRequestException(
+          'Fatura processada encontrada mas sem dados de consumo/valor válidos. ' +
+          'Envie consumoKwh e valorFatura no body.',
+        );
+      }
+    }
 
     const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
     const planoId = body.planoId || primPlano?.id || '';

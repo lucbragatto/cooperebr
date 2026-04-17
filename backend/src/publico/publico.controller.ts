@@ -380,6 +380,16 @@ export class PublicoController {
         mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
       });
 
+      // Motor detected a consumption outlier and needs user choice (MEDIA_12M vs MES_RECENTE)
+      if (resultado.outlierDetectado && resultado.aguardandoEscolha) {
+        return {
+          ok: false,
+          erro: 'OUTLIER_DETECTADO',
+          opcoes: resultado.opcoes,
+          data: { cooperadoId, ucId },
+        };
+      }
+
       if (resultado.resultado) {
         const aceite = await this.motorProposta.aceitar({
           cooperadoId,

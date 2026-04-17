@@ -74,6 +74,15 @@ export class DocumentosAprovacaoJob {
     // Verificar se algum doc foi reprovado — admin já interveio manualmente
     if (docs.some(d => d.status === 'REPROVADO')) return;
 
+    // Se TODOS os docs ainda estão PENDENTE, nenhum humano revisou — não auto-aprovar
+    if (docs.every(d => d.status === 'PENDENTE')) {
+      this.logger.warn(
+        `Cooperado ${cooperadoId}: todos os ${docs.length} doc(s) ainda PENDENTE — ` +
+        `aguardando revisão humana, pulando aprovação automática`,
+      );
+      return;
+    }
+
     // Prazo: contar a partir do ÚLTIMO documento enviado
     const ultimoDoc = docs[0];
     const agora = new Date();
