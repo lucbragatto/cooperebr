@@ -128,7 +128,17 @@
       "Bash(PGPASSWORD=postgres C:/pgsql17/pgsql/bin/pg_restore.exe:*)",
       "Bash(npm run:*)",
       "Bash(npx ts-node-dev:*)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep -ioP '\\(?:nao se trata|não se trata|questão|questao\\)[^<]{0,100}')",
+      "Bash(pm2 logs:*)",
+      "Bash(pm2 list:*)",
+      "Bash(pm2 show:*)",
+      "Bash(pm2 restart:*)",
+      "Bash(pm2 stop:*)",
+      "Bash(pm2 start:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

@@ -1,6 +1,8 @@
 # CLAUDE.md — CoopereBR
 
-Plataforma SaaS para gestão de **cooperativas de energia solar** no modelo de Geração Distribuída (GD) regulamentado pela ANEEL. Gerencia o ciclo completo: cadastro de cooperados, contratos, faturas via OCR, cobranças e créditos de energia.
+Plataforma SaaS multi-tenant para gestão de **cooperativas, consórcios e associações de energia solar** no modelo de Geração Distribuída (GD) regulamentado pela ANEEL. Gerencia o ciclo completo: cadastro de cooperados, contratos, faturas via OCR, cobranças e créditos de energia.
+
+> Última atualização: 2026-04-14
 
 ---
 
@@ -10,15 +12,16 @@ Plataforma SaaS para gestão de **cooperativas de energia solar** no modelo de G
 |---|---|
 | Backend | NestJS + Prisma ORM + PostgreSQL (Supabase) |
 | Frontend | Next.js 16 + Shadcn/UI + Tailwind CSS |
-| WhatsApp | whatsapp-service (bot conversacional) |
+| WhatsApp | whatsapp-service (bot conversacional + CoopereAI) |
 | OCR | Claude AI (Anthropic) |
-| Auth | JWT — roles: SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO |
-| Pagamentos | Asaas (PIX + boleto) |
+| Email | Pipeline IMAP → OCR automático |
+| Auth | JWT — roles: SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR |
+| Pagamentos | Asaas (PIX + boleto) com webhook HMAC-SHA256 |
 
 **Serviços em dev:**
 - Backend: `localhost:3000`
 - Frontend: `localhost:3001`
-- WhatsApp: `localhost:3002` (porta padrão do serviço)
+- WhatsApp: `localhost:3002`
 
 ---
 
@@ -26,16 +29,53 @@ Plataforma SaaS para gestão de **cooperativas de energia solar** no modelo de G
 
 ```
 cooperebr/
-├── backend/          # NestJS API
+├── backend/          # NestJS API (44 módulos, 70+ models Prisma)
 │   ├── prisma/       # Schema + migrations
 │   └── src/
 │       ├── modules/  # Módulos por domínio
 │       └── common/   # Guards, interceptors, utils
-├── web/              # Next.js frontend
+├── web/              # Next.js frontend (20+ pages)
 │   └── app/          # App Router (Next.js 16)
-├── whatsapp-service/ # Bot WA
-└── .claude/          # Esta pasta — contexto do Claude Code
+├── whatsapp-service/ # Bot WA + CoopereAI
+└── .claude/          # Contexto do Claude Code
+    ├── rules/        # Regras de negócio e código
+    ├── commands/     # Comandos disponíveis
+    └── agents/       # Agentes especializados
 ```
+
+---
+
+## Entidades Centrais e Relacionamentos
+
+Ver `.claude/rules/arquitetura.md` para detalhes completos. Resumo:
+
+### Núcleo (elo central = Contrato)
+```
+Cooperativa (tenant root, 1:N tudo)
+  └→ Cooperado (membro, 8 status)
+       └→ UC (unidade consumidora, regra geográfica ANEEL)
+  └→ Usina (geradora, soma % ≤ 100%)
+  └→ Contrato (liga Cooperado ↔ UC ↔ Usina, define cota kWh)
+       └→ Cobrança (mensal, vincula geração + fatura + Asaas)
+```
+
+### Entidades de suporte
+- **PropostaCooperado** — saída do Motor de Proposta, ao aceitar cria Contrato
+- **FaturaProcessada** — fatura OCR (Claude AI), base para kwhContratoAnual
+- **GeracaoMensal** — kWh gerado por usina/mês, usado para rateio
+- **ConfiguracaoCobranca** — regras de desconto (cascata: Contrato → Usina → Cooperativa)
+- **TarifaConcessionaria** — tarifas dinâmicas por distribuidora
+- **ListaEspera** — contratos em fila quando usina lotada
+
+### Módulos complementares
+- **Convênios** — acordos institucionais (condôminos, empresas, associações)
+- **CooperToken** — sistema de fidelidade (opção A desconto / opção B acúmulo)
+- **Indicações (MLM)** — referral com cascata de comissões
+- **Clube de Vantagens** — tiers BRONZE → PRATA → OURO → DIAMANTE
+- **Contas a Pagar** — gestão de AP (arrendamento usinas, manutenção)
+- **Pipeline Email IMAP** — monitor de email → OCR automático
+- **CoopereAI** — bot educativo pré-menu WA para novos contatos
+- **Monitoramento Usinas** — integração Sungrow
 
 ---
 
@@ -43,11 +83,12 @@ cooperebr/
 
 ### Ciclo de vida do Cooperado
 ```
-CADASTRADO → EM_ANALISE → APROVADO → ATIVO → SUSPENSO → ENCERRADO
+PENDENTE → PENDENTE_VALIDACAO → PENDENTE_DOCUMENTOS → AGUARDANDO_CONCESSIONARIA → APROVADO → ATIVO → ATIVO_RECEBENDO_CREDITOS → SUSPENSO → ENCERRADO
 ```
 - **APROVADO** = checklist completo, aguarda ativação manual do admin
 - **ATIVO** = pode receber cobranças e créditos
 - `PENDENTE` é status legado — tratar como `CADASTRADO`
+- Mudanças de status registradas em `HistoricoStatusCooperado` (audit trail)
 
 ### Ciclo de vida do Contrato
 ```
@@ -55,21 +96,36 @@ PENDENTE_ATIVACAO → ATIVO → SUSPENSO → ENCERRADO
 LISTA_ESPERA (sem usina disponível)
 ```
 - Contrato nasce como `PENDENTE_ATIVACAO`
-- Quando admin ativa cooperado → todos contratos `PENDENTE_ATIVACAO` → `ATIVO` em cascata
+- Quando admin ativa cooperado → todos contratos `PENDENTE_ATIVACAO` → `ATIVO` em cascata (transação atômica)
 - **Cobrança só é gerada para contratos ATIVO**
 
 ### Regra de percentual de usina
 - `Contrato.percentualUsina` = `kwhContratoAnual / (usina.capacidadeKwhMensal × 12) × 100`
 - Soma dos % de todos os contratos ATIVO + PENDENTE_ATIVACAO de uma usina ≤ 100%
-- Validar **sempre com transação Prisma** (evitar race condition)
+- Validar **sempre com transação Prisma** (corrigido em 19b28b6)
 - `Cooperado.percentualUsina` é campo **legado** — não usar
+
+### Cascata de desconto
+```
+1. Contrato.descontoOverride (se definido) → usa
+2. ConfiguracaoCobranca(cooperativaId, usinaId) → usa (por usina)
+3. ConfiguracaoCobranca(cooperativaId, null) → usa (geral)
+4. ERRO: sem regra configurada
+```
 
 ### Regra geográfica ANEEL
 - UC só pode ser vinculada a usina da **mesma distribuidora**
-- Ao criar contrato/proposta: filtrar usinas por `distribuidora.id` da UC
+- Ao criar contrato/proposta: filtrar usinas por distribuidora da UC
+
+### Fluxo de cobrança (pipeline)
+```
+GeracaoMensal → Busca contratos ATIVO → Rateio por % → Resolve desconto (cascata)
+→ Calcula valor (Math.round!) → Persiste Cobrança → Cria no Asaas → Notifica WA
+→ Cooperado paga → Webhook Asaas → status PAGO
+```
 
 ### Terminologia correta
-| ❌ Evitar | ✅ Usar |
+| Evitar | Usar |
 |---|---|
 | "Fatura" (sozinho) | "Fatura Concessionária" |
 | FaturaProcessada APROVADA | "Dados Conferidos" |
@@ -79,13 +135,27 @@ LISTA_ESPERA (sem usina disponível)
 
 ## Regras Críticas
 
-Ver `.claude/rules/` para regras detalhadas por tema. Resumo:
+Ver `.claude/rules/` para regras detalhadas por tema:
+- `rules/multi-tenant.md` — isolamento por cooperativaId
+- `rules/financeiro.md` — Math.round, Fio B, tarifas, PIX Excedente
+- `rules/codigo.md` — TypeScript strict, NestJS patterns, Shadcn/UI
+- `rules/arquitetura.md` — entidades, relacionamentos, fluxos de negócio
+- `rules/status-bugs.md` — estado atualizado de bugs e pendências
 
-1. **Multi-tenant obrigatório** — todo query Prisma deve filtrar por `cooperativaId` (nunca expor dados cross-tenant)
-2. **Nunca modificar prod diretamente** — usar migrations Prisma, nunca SQL manual em prod
-3. **PIX Excedente** — controlado pela flag `ASAAS_PIX_EXCEDENTE_ATIVO` no `.env`; não ativar sem instrução explícita
-4. **Math.round em cálculos financeiros** — sempre arredondar valores monetários antes de persistir
-5. **Fio B** — cobrado progressivamente desde 2023 para GD2 e GD1 >75kW; em 2026 = 60% do valor total
+---
+
+## Bugs — Status atualizado (2026-04-14)
+
+Ver `.claude/rules/status-bugs.md` para detalhes completos.
+
+### Resumo rápido
+- **P1 Críticos:** 3/3 resolvidos (transação aceitar, secret WA, webhook HMAC)
+- **P2 Security:** 10/10 resolvidos (IDORs, tenant isolation, tarifa dinâmica)
+- **P2 Bugs em aberto:** 5 pendentes (BONUS_INDICACAO, multa/juros, CORS, validações, crons)
+- **Lacuna arquitetural:** Wizard + Cadastro público desconectados do Motor de Proposta
+
+### 🟡 Aguardando ação manual
+- **PIX-01:** Código pronto (b735dbe) — aguarda `ASAAS_PIX_EXCEDENTE_ATIVO=true` em prod
 
 ---
 
@@ -110,42 +180,11 @@ cd backend && npm run test:e2e
 
 ---
 
-## Contexto da Cooperativa
+## Contexto da Cooperativa (cliente principal)
 
 - **3 usinas arrendadas** em operação
 - Distribuidora: EDP-ES (Espírito Santo)
-- Tarifa EDP-ES (Fev/2026, B1 residencial):
+- Tarifa EDP-ES (Fev/2026, B1 residencial) — agora dinâmica via TarifaConcessionaria:
   - TUSD líquida: R$ 0,46863/kWh
   - TE líquida: R$ 0,32068/kWh
   - Total sem tributos: R$ 0,78931/kWh
-
----
-
-## Bugs — Status atualizado
-
-> Última atualização: 2026-04-08 · Score 8.5/10 · 35 bugs acumulados no QA de 03/04
-
-### ✅ Críticos — RESOLVIDOS
-
-| ID | Descrição | Fix |
-|---|---|---|
-| FATURA-01 | IDOR: cooperado enviava fatura em nome de outro | Validação owner em `uploadConcessionaria` (7c8ed1d) |
-| FATURA-02 | `ConfigTenant` sem `cooperativaId` | Isolado por tenant (7c8ed1d, 850dfbd) |
-| FATURA-03 | Admin via faturas de outro tenant | `cooperativaId` sempre do JWT (7c8ed1d, b3cf4b6) |
-| CONV-SEM-UC-01 | Conversão usava % como R$/kWh | Tarifa real TUSD+TE com Math.round (7c8ed1d, 621abd3) |
-| CTK-01 | Sem Math.round em `apurarExcedentes` | Math.round adicionado (3ab3b5d, 0f78382) |
-| FINANCEIRO-01 | Telas vazias no módulo financeiro | contas-receber busca cobranças reais (3ab3b5d, 0f78382) |
-
-### 🟡 Aguardando ação manual
-
-| ID | Descrição | Observação |
-|---|---|---|
-| PIX-01 | PIX Excedente implementado com feature flag | Código pronto (b735dbe) — aguarda `ASAAS_PIX_EXCEDENTE_ATIVO=true` em prod por decisão de Luciano |
-
-### 🟠 Em aberto — investigar
-
-| ID | Descrição | Observação |
-|---|---|---|
-| CTK-04 | Loop de apuração pode pegar contrato errado | não verificado |
-| WA-BOT-06 | Dupla mensagem em menu fora de horário | não verificado |
-| WA-BOT-03 | (ver relatório QA) | não verificado |
