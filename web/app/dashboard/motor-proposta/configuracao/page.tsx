@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,6 @@ interface Config {
   fonteKwh: string;
   thresholdOutlier: number;
   acaoOutlier: string;
-  baseDesconto: string;
-  descontoPadrao: number;
-  descontoMinimo: number;
-  descontoMaximo: number;
   acaoResultadoAcima: string;
   acaoResultadoAbaixo: string;
   indicesCorrecao: string[];
@@ -24,14 +20,19 @@ interface Config {
   mesAplicacaoAnual: number;
   aplicacaoCorrecao: string;
   aprovarManualmente: boolean;
+  consumoMinimoFaturavelAtivo: boolean;
+  consumoMinimoMonofasicoKwh: number;
+  consumoMinimoBifasicoKwh: number;
+  consumoMinimoTrifasicoKwh: number;
 }
 
 const defaultConfig: Config = {
   fonteKwh: 'MES_RECENTE', thresholdOutlier: 1.5, acaoOutlier: 'OFERECER_OPCAO',
-  baseDesconto: 'TARIFA_UNIT', descontoPadrao: 20, descontoMinimo: 15, descontoMaximo: 30,
   acaoResultadoAcima: 'AUMENTAR_DESCONTO', acaoResultadoAbaixo: 'USAR_FATURA',
   indicesCorrecao: ['IPCA'], combinacaoIndices: 'MAIOR', limiteReajusteConces: true,
   diaAplicacaoAnual: 1, mesAplicacaoAnual: 1, aplicacaoCorrecao: 'GERAL', aprovarManualmente: true,
+  consumoMinimoFaturavelAtivo: false, consumoMinimoMonofasicoKwh: 30,
+  consumoMinimoBifasicoKwh: 50, consumoMinimoTrifasicoKwh: 100,
 };
 
 const cls = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500';
@@ -75,54 +76,7 @@ export default function ConfiguracaoMotorPage() {
     }
   }
 
-  // ── Mínimo faturável (ConfigTenant keys) ──────────────────────────────────
-  const [minimoAtivo, setMinimoAtivo] = useState(true);
-  const [minimoMono, setMinimoMono] = useState(30);
-  const [minimoBi, setMinimoBi] = useState(50);
-  const [minimoTri, setMinimoTri] = useState(100);
-  const [minimoLoaded, setMinimoLoaded] = useState(false);
-  const [salvandoMinimo, setSalvandoMinimo] = useState(false);
-
-  const carregarMinimo = useCallback(async () => {
-    try {
-      const [ativo, mono, bi, tri] = await Promise.all([
-        api.get<{ valor: string }>('/config-tenant/minimo_faturavel_ativo').then(r => r.data.valor).catch(() => 'true'),
-        api.get<{ valor: string }>('/config-tenant/minimo_monofasico').then(r => r.data.valor).catch(() => '30'),
-        api.get<{ valor: string }>('/config-tenant/minimo_bifasico').then(r => r.data.valor).catch(() => '50'),
-        api.get<{ valor: string }>('/config-tenant/minimo_trifasico').then(r => r.data.valor).catch(() => '100'),
-      ]);
-      setMinimoAtivo(ativo === 'true');
-      setMinimoMono(Number(mono) || 30);
-      setMinimoBi(Number(bi) || 50);
-      setMinimoTri(Number(tri) || 100);
-    } catch {
-      // use defaults
-    } finally {
-      setMinimoLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => { carregarMinimo(); }, [carregarMinimo]);
-
-  async function salvarMinimo() {
-    setSalvandoMinimo(true);
-    try {
-      await Promise.all([
-        api.put('/config-tenant/minimo_faturavel_ativo', { valor: minimoAtivo ? 'true' : 'false', descricao: 'Descontar mínimo faturável do consumo' }),
-        api.put('/config-tenant/minimo_monofasico', { valor: String(minimoMono), descricao: 'Mínimo faturável monofásico (kWh)' }),
-        api.put('/config-tenant/minimo_bifasico', { valor: String(minimoBi), descricao: 'Mínimo faturável bifásico (kWh)' }),
-        api.put('/config-tenant/minimo_trifasico', { valor: String(minimoTri), descricao: 'Mínimo faturável trifásico (kWh)' }),
-      ]);
-      setToast({ tipo: 'sucesso', msg: 'Configuração de mínimo faturável salva.' });
-    } catch {
-      setToast({ tipo: 'erro', msg: 'Erro ao salvar mínimo faturável.' });
-    } finally {
-      setSalvandoMinimo(false);
-      setTimeout(() => setToast(null), 3000);
-    }
-  }
-
-  if (loading || !minimoLoaded) return <div className="p-8 text-gray-400">Carregando configuração...</div>;
+  if (loading) return <div className="p-8 text-gray-400">Carregando configuração...</div>;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -170,34 +124,6 @@ export default function ConfiguracaoMotorPage() {
       </Card>
 
       {/* Bloco 2 */}
-      <Card>
-        <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Bloco 2 — Desconto</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className={lbl}>Base de cálculo do desconto</label>
-            <select className={cls} value={form.baseDesconto} onChange={e => set('baseDesconto', e.target.value)}>
-              <option value="TARIFA_UNIT">Tarifa unitária (TUSD + TE)</option>
-              <option value="VALOR_TOTAL">Valor total da fatura</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={lbl}>Desconto padrão (%)</label>
-              <input className={cls} type="number" step="0.00001" value={form.descontoPadrao} onChange={e => set('descontoPadrao', Number(e.target.value))} />
-            </div>
-            <div>
-              <label className={lbl}>Desconto mínimo (%)</label>
-              <input className={cls} type="number" step="0.00001" value={form.descontoMinimo} onChange={e => set('descontoMinimo', Number(e.target.value))} />
-            </div>
-            <div>
-              <label className={lbl}>Desconto máximo (%)</label>
-              <input className={cls} type="number" step="0.00001" value={form.descontoMaximo} onChange={e => set('descontoMaximo', Number(e.target.value))} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bloco 3 */}
       <Card>
         <CardHeader><CardTitle className="text-sm font-semibold text-gray-700">Bloco 3 — Comparação com a média da cooperativa</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -290,34 +216,33 @@ export default function ConfiguracaoMotorPage() {
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer">
-            <div onClick={() => setMinimoAtivo(!minimoAtivo)} className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${minimoAtivo ? 'bg-green-600' : 'bg-gray-300'}`}>
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${minimoAtivo ? 'translate-x-5' : 'translate-x-1'}`} />
+            <div onClick={() => set('consumoMinimoFaturavelAtivo', !form.consumoMinimoFaturavelAtivo)} className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${form.consumoMinimoFaturavelAtivo ? 'bg-green-600' : 'bg-gray-300'}`}>
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.consumoMinimoFaturavelAtivo ? 'translate-x-5' : 'translate-x-1'}`} />
             </div>
             <span className="text-sm text-gray-700">Descontar mínimo faturável do consumo considerado</span>
           </label>
 
-          {minimoAtivo && (
+          {form.consumoMinimoFaturavelAtivo && (
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className={lbl}>Monofásico (kWh)</label>
-                <input className={cls} type="number" min={0} value={minimoMono} onChange={e => setMinimoMono(Number(e.target.value))} />
+                <input className={cls} type="number" min={0} value={form.consumoMinimoMonofasicoKwh} onChange={e => set('consumoMinimoMonofasicoKwh', Number(e.target.value))} />
               </div>
               <div>
                 <label className={lbl}>Bifásico (kWh)</label>
-                <input className={cls} type="number" min={0} value={minimoBi} onChange={e => setMinimoBi(Number(e.target.value))} />
+                <input className={cls} type="number" min={0} value={form.consumoMinimoBifasicoKwh} onChange={e => set('consumoMinimoBifasicoKwh', Number(e.target.value))} />
               </div>
               <div>
                 <label className={lbl}>Trifásico (kWh)</label>
-                <input className={cls} type="number" min={0} value={minimoTri} onChange={e => setMinimoTri(Number(e.target.value))} />
+                <input className={cls} type="number" min={0} value={form.consumoMinimoTrifasicoKwh} onChange={e => set('consumoMinimoTrifasicoKwh', Number(e.target.value))} />
               </div>
             </div>
           )}
 
-          <div className="flex justify-end">
-            <Button onClick={salvarMinimo} disabled={salvandoMinimo} size="sm" variant="outline">
-              {salvandoMinimo ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : 'Salvar mínimo faturável'}
-            </Button>
-          </div>
+          <p className="text-xs text-gray-400">
+            Se ativado, o valor mínimo faturável será deduzido do consumo considerado na proposta e na cobrança mensal.
+            O tipo de fornecimento é extraído automaticamente do OCR da fatura.
+          </p>
         </CardContent>
       </Card>
 

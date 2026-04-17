@@ -36,4 +36,16 @@ export class ConfiguracaoMotorDto {
 
   @IsOptional() @IsBoolean()
   aprovarManualmente?: boolean;
+
+  @IsOptional() @IsBoolean()
+  consumoMinimoFaturavelAtivo?: boolean;
+
+  @IsOptional() @IsNumber()
+  consumoMinimoMonofasicoKwh?: number;
+
+  @IsOptional() @IsNumber()
+  consumoMinimoBifasicoKwh?: number;
+
+  @IsOptional() @IsNumber()
+  consumoMinimoTrifasicoKwh?: number;
 }
