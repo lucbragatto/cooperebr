@@ -210,7 +210,47 @@ export class CooperadosController {
     const tipoArquivo = isPdf ? 'pdf' as const : 'imagem' as const;
     const dadosOcr: Record<string, any> = await this.faturasService.extrairOcr(base64, tipoArquivo);
 
-    // 3. Criar UC
+    // 3. Preparar dados de simulação antes de criar UC
+    const historico = dadosOcr.historicoConsumo ?? [];
+    const ultimo = historico.length > 0 ? historico[historico.length - 1] : null;
+    const consumo = dadosOcr.consumoAtualKwh ?? ultimo?.consumoKwh ?? 0;
+    const valor = dadosOcr.totalAPagar ?? ultimo?.valorRS ?? 0;
+
+    const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+    const planoIdResolvido = planoId || primPlano?.id || '';
+
+    // 4. Validar motor ANTES de criar UC (evita UC órfã)
+    const resultado = await this.motorProposta.calcular({
+      cooperadoId: cooperado.id,
+      planoId: planoIdResolvido,
+      historico: historico.length > 0
+        ? historico.map((h: { mesAno?: string; consumoKwh: number; valorRS?: number }) => ({
+            mesAno: h.mesAno ?? new Date().toISOString().slice(0, 7),
+            consumoKwh: h.consumoKwh,
+            valorRS: h.valorRS ?? 0,
+          }))
+        : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valor }],
+      kwhMesRecente: consumo,
+      valorMesRecente: valor,
+      mesReferencia: ultimo?.mesAno ?? new Date().toISOString().slice(0, 7),
+    });
+
+    const outlierDetectado = resultado.outlierDetectado && !!resultado.aguardandoEscolha;
+    let simulacao: Record<string, unknown> | null = null;
+    if (resultado.resultado) {
+      simulacao = {
+        base: resultado.resultado.base,
+        kwhContrato: resultado.resultado.kwhContrato,
+        descontoPercentual: resultado.resultado.descontoPercentual,
+        economiaMensal: resultado.resultado.economiaMensal,
+        economiaAnual: resultado.resultado.economiaAnual,
+        valorCooperado: resultado.resultado.valorCooperado,
+        tarifaUnitSemTrib: resultado.resultado.tarifaUnitSemTrib,
+        mesReferencia: resultado.resultado.mesReferencia,
+      };
+    }
+
+    // 5. Motor OK → agora criar UC (sem risco de órfã)
     const uc = await this.ucsService.create({
       numero: numeroUC.trim(),
       endereco: dadosOcr.enderecoInstalacao || '',
@@ -221,51 +261,6 @@ export class CooperadosController {
       bairro: dadosOcr.bairro || undefined,
       distribuidora: dadosOcr.distribuidora || undefined,
     });
-
-    // 4. Simulação via motor (não persiste proposta ainda)
-    const historico = dadosOcr.historicoConsumo ?? [];
-    const ultimo = historico.length > 0 ? historico[historico.length - 1] : null;
-    const consumo = dadosOcr.consumoAtualKwh ?? ultimo?.consumoKwh ?? 0;
-    const valor = dadosOcr.totalAPagar ?? ultimo?.valorRS ?? 0;
-
-    let simulacao: Record<string, unknown> | null = null;
-    let outlierDetectado = false;
-    try {
-      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
-      const planoId = primPlano?.id ?? '';
-
-      const resultado = await this.motorProposta.calcular({
-        cooperadoId: cooperado.id,
-        planoId,
-        historico: historico.length > 0
-          ? historico.map((h: { mesAno?: string; consumoKwh: number; valorRS?: number }) => ({
-              mesAno: h.mesAno ?? new Date().toISOString().slice(0, 7),
-              consumoKwh: h.consumoKwh,
-              valorRS: h.valorRS ?? 0,
-            }))
-          : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valor }],
-        kwhMesRecente: consumo,
-        valorMesRecente: valor,
-        mesReferencia: ultimo?.mesAno ?? new Date().toISOString().slice(0, 7),
-      });
-
-      outlierDetectado = resultado.outlierDetectado && !!resultado.aguardandoEscolha;
-      if (resultado.resultado) {
-        simulacao = {
-          base: resultado.resultado.base,
-          kwhContrato: resultado.resultado.kwhContrato,
-          descontoPercentual: resultado.resultado.descontoPercentual,
-          economiaMensal: resultado.resultado.economiaMensal,
-          economiaAnual: resultado.resultado.economiaAnual,
-          valorCooperado: resultado.resultado.valorCooperado,
-          tarifaUnitSemTrib: resultado.resultado.tarifaUnitSemTrib,
-          mesReferencia: resultado.resultado.mesReferencia,
-        };
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'erro desconhecido';
-      this.logger.warn(`[nova-uc] Motor falhou para cooperado ${cooperado.id}: ${msg}`);
-    }
 
     return {
       ok: true,
