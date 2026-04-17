@@ -48,6 +48,7 @@ import { ConversaoCreditoModule } from './conversao-credito/conversao-credito.mo
 import { EmailMonitorModule } from './email-monitor/email-monitor.module';
 import { LeadExpansaoModule } from './lead-expansao/lead-expansao.module';
 import { ContasPagarModule } from './contas-pagar/contas-pagar.module';
+import { BandeiraTarifariaModule } from './bandeira-tarifaria/bandeira-tarifaria.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
@@ -99,6 +100,7 @@ import { ModuloGuard } from './auth/modulo.guard';
     EmailMonitorModule,
     LeadExpansaoModule,
     ContasPagarModule,
+    BandeiraTarifariaModule,
   ],
   controllers: [AppController],
   providers: [
