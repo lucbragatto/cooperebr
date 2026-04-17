@@ -27,11 +27,12 @@ export class PublicoController {
   @Public()
   @Get('desconto-padrao')
   async descontoPadrao() {
-    const config = await this.prisma.configuracaoMotor.findFirst({
-      orderBy: { updatedAt: 'desc' },
-      select: { descontoPadrao: true },
+    const plano = await this.prisma.plano.findFirst({
+      where: { ativo: true },
+      orderBy: { descontoBase: 'desc' },
+      select: { descontoBase: true },
     });
-    const desconto = config ? Number(config.descontoPadrao) : 20;
+    const desconto = plano ? Number(plano.descontoBase) : 20;
     return { percentual: desconto / 100 };
   }
 
@@ -365,8 +366,12 @@ export class PublicoController {
       const historico = body.historicoConsumo ?? [];
       const ultimoMes = historico.length > 0 ? historico[historico.length - 1] : null;
 
+      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      const planoId = body.planoId || primPlano?.id || '';
+
       const resultado = await this.motorProposta.calcular({
         cooperadoId,
+        planoId,
         historico: historico.length > 0
           ? historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS }))
           : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valorFatura }],

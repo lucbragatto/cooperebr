@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsArray, IsOptional, IsIn, ValidateNested } from 'class-validator';
+import { IsString, IsNumber, IsArray, IsOptional, IsNotEmpty, IsIn, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class HistoricoItemDto {
@@ -38,9 +38,9 @@ export class CalcularPropostaDto {
   @IsIn(['MONOFASICO', 'BIFASICO', 'TRIFASICO'])
   tipoFornecimento?: 'MONOFASICO' | 'BIFASICO' | 'TRIFASICO';
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  planoId?: string;
+  planoId!: string;
 
   @IsOptional()
   @IsIn(['KWH_CHEIO', 'VALOR_FATURA'])

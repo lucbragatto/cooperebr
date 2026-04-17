@@ -152,17 +152,15 @@ export class MotorPropostaService {
     const threshold = Number(config.thresholdOutlier);
     const outlierDetectado = kwhMesRecente > kwhMedio12m * threshold;
 
-    // Resolver desconto: plano.descontoBase (se planoId informado) ou config.descontoPadrao
-    let descontoPadraoResolido = Number(config.descontoPadrao);
-    if (dto.planoId) {
-      const plano = await this.prisma.plano.findUnique({
-        where: { id: dto.planoId },
-        select: { descontoBase: true },
-      });
-      if (plano) {
-        descontoPadraoResolido = Number(plano.descontoBase);
-      }
+    // Buscar plano (obrigatório — desconto vem exclusivamente do plano)
+    const plano = await this.prisma.plano.findFirst({
+      where: { id: dto.planoId, ativo: true },
+      select: { descontoBase: true },
+    });
+    if (!plano) {
+      throw new BadRequestException(`Plano ${dto.planoId} não encontrado ou inativo`);
     }
+    const descontoDoPlano = Number(plano.descontoBase);
 
     // Base de desconto: KWH_CHEIO (tarifa × kWh) ou VALOR_FATURA (valor da fatura inteira)
     const usarValorFatura = dto.baseDesconto === 'VALOR_FATURA';
@@ -171,21 +169,17 @@ export class MotorPropostaService {
     const calcularOpcao = (base: 'MES_RECENTE' | 'MEDIA_12M'): OpcaoCalculo => {
       const kwhBase = base === 'MES_RECENTE' ? kwhMesRecente : kwhMedio12m;
       const valorBase = base === 'MES_RECENTE' ? valorMesRecente : valorMedio12m;
-      // Aplicar mínimo faturável: consumoConsiderado = MAX(0, consumo - minimo)
       const consumoConsiderado = Math.max(0, kwhBase - minimoFaturavel);
-      // kwhApuradoBase = preço por kWh (R$/kWh) = valorFatura / consumoKwh
       const kwhApuradoBase = kwhBase > 0 ? valorBase / kwhBase : 0;
-      let descontoPercentual = descontoPadraoResolido;
-      const descontoMax = Number(config.descontoMaximo);
+      const descontoPercentual = descontoDoPlano;
 
       let descontoAbsoluto = tarifaUnitSemTrib * (descontoPercentual / 100);
       let valorCooperado = kwhApuradoBase - descontoAbsoluto;
 
-      // Ajustar desconto se resultado acima da média cooperativa
+      // Ajustar se resultado acima da média cooperativa (usa descontoBase do plano como teto)
       if (config.acaoResultadoAcima === 'AUMENTAR_DESCONTO' && mediaCooperativaKwh > 0 && valorCooperado > mediaCooperativaKwh) {
         const descontoNecessario = ((kwhApuradoBase - mediaCooperativaKwh) / tarifaUnitSemTrib) * 100;
-        descontoPercentual = Math.min(descontoNecessario, descontoMax);
-        descontoAbsoluto = tarifaUnitSemTrib * (descontoPercentual / 100);
+        descontoAbsoluto = tarifaUnitSemTrib * (Math.min(descontoNecessario, descontoDoPlano) / 100);
         valorCooperado = kwhApuradoBase - descontoAbsoluto;
       }
 

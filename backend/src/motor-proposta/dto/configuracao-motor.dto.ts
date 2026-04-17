@@ -11,18 +11,6 @@ export class ConfiguracaoMotorDto {
   acaoOutlier?: string;
 
   @IsOptional() @IsString()
-  baseDesconto?: string;
-
-  @IsOptional() @IsNumber()
-  descontoPadrao?: number;
-
-  @IsOptional() @IsNumber()
-  descontoMinimo?: number;
-
-  @IsOptional() @IsNumber()
-  descontoMaximo?: number;
-
-  @IsOptional() @IsString()
   acaoResultadoAcima?: string;
 
   @IsOptional() @IsString()

@@ -105,8 +105,12 @@ export class WhatsappFaturaService {
     // 7. Calcular proposta
     let resultado;
     try {
+      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      const planoId = primPlano?.id ?? '';
+
       const calcResult = await this.motorPropostaService.calcular({
         cooperadoId: cooperado.id,
+        planoId,
         historico: historicoConsumo.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
         kwhMesRecente: consumoAtualKwh || kwhMedio,
         valorMesRecente: Number(dadosExtraidos.totalAPagar ?? valorMedio),

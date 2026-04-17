@@ -231,8 +231,12 @@ export class CooperadosController {
     let simulacao: Record<string, unknown> | null = null;
     let outlierDetectado = false;
     try {
+      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      const planoId = primPlano?.id ?? '';
+
       const resultado = await this.motorProposta.calcular({
         cooperadoId: cooperado.id,
+        planoId,
         historico: historico.length > 0
           ? historico.map((h: { mesAno?: string; consumoKwh: number; valorRS?: number }) => ({
               mesAno: h.mesAno ?? new Date().toISOString().slice(0, 7),
@@ -311,8 +315,12 @@ export class CooperadosController {
     const valor = Number(dados.totalAPagar ?? 0) || 250;
     const mesRef = lastFatura?.mesReferencia ?? new Date().toISOString().slice(0, 7);
 
+    const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+    const planoId = body.planoId || primPlano?.id || '';
+
     const resultado = await this.motorProposta.calcular({
       cooperadoId: cooperado.id,
+      planoId,
       historico: [{ mesAno: mesRef, consumoKwh: consumo, valorRS: valor }],
       kwhMesRecente: consumo,
       valorMesRecente: valor,

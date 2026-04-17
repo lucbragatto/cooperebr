@@ -1685,8 +1685,12 @@ Essa conta de energia e:
 
       let resultado;
       try {
+        const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+        const planoId = primPlano?.id ?? '';
+
         const calcResult = await this.motorProposta.calcular({
           cooperadoId: conversa.cooperadoId || 'temp',
+          planoId,
           historico: historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
           kwhMesRecente: consumoAtualKwh || kwhMedio,
           valorMesRecente: valorMesRecente || valorMedio,
@@ -1863,8 +1867,12 @@ Essa conta de energia e:
       });
 
       // Criar proposta no motor
+      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      const planoId = primPlano?.id ?? '';
+
       const propostaResult = await this.motorProposta.calcular({
         cooperadoId: cooperado.id,
+        planoId,
         historico: historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
         kwhMesRecente: Number(dadosTemp.consumoAtualKwh ?? 0),
         valorMesRecente: Number(dadosTemp.totalAPagar ?? 0),
@@ -3307,8 +3315,12 @@ Essa conta de energia e:
 
     let resultado: any = null;
     try {
+      const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+      const planoId = primPlano?.id ?? '';
+
       const calcResult = await this.motorProposta.calcular({
         cooperadoId: 'temp',
+        planoId,
         historico: historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS })),
         kwhMesRecente: consumoAtualKwh || kwhMedio,
         valorMesRecente: valorMesRecente || valorMedio,
