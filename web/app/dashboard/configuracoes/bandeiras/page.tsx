@@ -141,6 +141,45 @@ export default function BandeirasPage() {
     }
   }
 
+  // Sincronizar ANEEL
+  const [sincronizando, setSincronizando] = useState(false);
+  const [previewAneel, setPreviewAneel] = useState<{ tipo: string; valorPor100Kwh: number; fonte: string } | null>(null);
+
+  async function buscarPreviewAneel() {
+    setSincronizando(true);
+    setPreviewAneel(null);
+    try {
+      const { data } = await api.get('/bandeiras-tarifarias/aneel/preview');
+      if (!data) {
+        showToast('erro', 'Bandeira não encontrada na ANEEL para o mês atual.');
+        return;
+      }
+      setPreviewAneel(data);
+    } catch {
+      showToast('erro', 'Erro ao consultar dados da ANEEL.');
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
+  async function confirmarSincronizacao() {
+    setSincronizando(true);
+    try {
+      const { data } = await api.post('/bandeiras-tarifarias/aneel/sincronizar', {});
+      if (data?.existente) {
+        showToast('sucesso', 'Bandeira já existia para este período.');
+      } else {
+        showToast('sucesso', `Bandeira ${data?.bandeira?.tipo} sincronizada com sucesso.`);
+      }
+      setPreviewAneel(null);
+      carregar();
+    } catch {
+      showToast('erro', 'Erro ao sincronizar bandeira.');
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
   if (loading) return <div className="p-8 text-gray-400">Carregando bandeiras...</div>;
 
   return (
@@ -171,6 +210,42 @@ export default function BandeirasPage() {
           A bandeira verde não gera cobrança adicional.
         </span>
       </div>
+
+      {/* Sincronizar ANEEL */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-gray-700">Sincronizar com ANEEL</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-500">
+            Busca a bandeira vigente nos dados abertos da ANEEL e cria automaticamente para este mês.
+          </p>
+
+          {previewAneel ? (
+            <div className="bg-gray-50 border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                {tipoBadge(previewAneel.tipo)}
+                <span className="text-sm font-mono">
+                  R$ {previewAneel.valorPor100Kwh.toFixed(4).replace('.', ',')} / 100 kWh
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">{previewAneel.fonte}</p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={confirmarSincronizacao} disabled={sincronizando}>
+                  {sincronizando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Aplicando...</> : 'Aplicar'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPreviewAneel(null)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" onClick={buscarPreviewAneel} disabled={sincronizando}>
+              {sincronizando ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Consultando ANEEL...</> : 'Consultar bandeira atual'}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Grid de bandeiras */}
       <Card>
