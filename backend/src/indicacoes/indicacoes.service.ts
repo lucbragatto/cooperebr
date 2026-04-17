@@ -329,9 +329,14 @@ export class IndicacoesService {
     // CooperToken: creditar bônus de indicação ao indicador (uma vez por indicação)
     for (const indicacao of indicacoes) {
       try {
-        // Verificar se já creditou tokens para esta indicação (idempotência)
+        // Verificar se já creditou tokens para esta indicação (idempotência multi-tenant)
         const jaCredidato = await this.prisma.cooperTokenLedger.findFirst({
-          where: { referenciaId: indicacao.id, referenciaTabela: 'Indicacao' },
+          where: {
+            referenciaId: indicacao.id,
+            referenciaTabela: 'Indicacao',
+            cooperativaId,
+            cooperadoId: indicacao.cooperadoIndicadorId,
+          },
         });
         if (jaCredidato) {
           this.logger.log(`Token BONUS_INDICACAO já creditado para indicação ${indicacao.id}, pulando.`);

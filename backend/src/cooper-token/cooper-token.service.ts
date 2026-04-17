@@ -87,6 +87,17 @@ export class CooperTokenService {
       return null;
     }
 
+    // Idempotência: se referenciaId fornecido, verificar duplicidade
+    if (referenciaId && referenciaTabela) {
+      const jaCredidato = await this.prisma.cooperTokenLedger.findFirst({
+        where: { referenciaId, referenciaTabela, cooperadoId, cooperativaId },
+      });
+      if (jaCredidato) {
+        this.logger.log(`creditar: ${tipo} já creditado para ref ${referenciaTabela}/${referenciaId}, cooperado ${cooperadoId} — idempotente`);
+        return jaCredidato;
+      }
+    }
+
     const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
     const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
 
