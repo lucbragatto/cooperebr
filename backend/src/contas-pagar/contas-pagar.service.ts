@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CategoriaContaAPagar, StatusContaAPagar } from '@prisma/client';
 
@@ -27,6 +27,7 @@ export class ContasPagarService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(cooperativaId: string, filtros?: { status?: string; categoria?: string }) {
+    if (!cooperativaId) throw new BadRequestException('cooperativaId é obrigatório');
     return this.prisma.contaAPagar.findMany({
       where: {
         cooperativaId,
@@ -39,6 +40,7 @@ export class ContasPagarService {
   }
 
   async findOne(id: string, cooperativaId: string) {
+    if (!cooperativaId) throw new BadRequestException('cooperativaId é obrigatório');
     const conta = await this.prisma.contaAPagar.findFirst({
       where: { id, cooperativaId },
       include: { usina: { select: { id: true, nome: true } } },
@@ -48,6 +50,7 @@ export class ContasPagarService {
   }
 
   async create(cooperativaId: string, dto: CreateContaAPagarDto) {
+    if (!cooperativaId) throw new BadRequestException('cooperativaId é obrigatório');
     return this.prisma.contaAPagar.create({
       data: {
         cooperativaId,
