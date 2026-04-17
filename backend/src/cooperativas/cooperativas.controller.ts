@@ -113,6 +113,8 @@ export class CooperativasController {
       cep?: string;
       ativo?: boolean;
       tipoParceiro?: string;
+      bandeiraAtiva?: boolean;
+      bandeiraSincronizacaoAuto?: boolean;
     },
   ) {
     return this.cooperativasService.update(id, body);

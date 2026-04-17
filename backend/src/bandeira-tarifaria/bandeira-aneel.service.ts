@@ -128,7 +128,7 @@ export class BandeiraAneelService {
     this.logger.log('Sincronização automática de bandeira ANEEL iniciada');
 
     const cooperativas = await this.prisma.cooperativa.findMany({
-      where: { ativo: true },
+      where: { ativo: true, bandeiraSincronizacaoAuto: true },
       select: { id: true, nome: true },
     });
 

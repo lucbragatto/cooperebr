@@ -64,6 +64,12 @@ export default function BandeirasPage() {
     observacao: '',
   });
 
+  // Toggles cooperativa
+  const [bandeiraAtiva, setBandeiraAtiva] = useState(false);
+  const [sincAuto, setSincAuto] = useState(false);
+  const [togglesLoaded, setTogglesLoaded] = useState(false);
+  const [cooperativaId, setCooperativaId] = useState('');
+
   const showToast = (tipo: 'sucesso' | 'erro', msg: string) => {
     setToast({ tipo, msg });
     setTimeout(() => setToast(null), 3000);
@@ -71,8 +77,18 @@ export default function BandeirasPage() {
 
   const carregar = useCallback(async () => {
     try {
-      const { data } = await api.get<Bandeira[]>('/bandeiras-tarifarias');
-      setBandeiras(data);
+      const [bandeirasRes, coopRes] = await Promise.all([
+        api.get<Bandeira[]>('/bandeiras-tarifarias'),
+        api.get<{ id: string; bandeiraAtiva: boolean; bandeiraSincronizacaoAuto: boolean }[]>('/cooperativas'),
+      ]);
+      setBandeiras(bandeirasRes.data);
+      if (coopRes.data.length > 0) {
+        const coop = coopRes.data[0];
+        setCooperativaId(coop.id);
+        setBandeiraAtiva(coop.bandeiraAtiva ?? false);
+        setSincAuto(coop.bandeiraSincronizacaoAuto ?? false);
+        setTogglesLoaded(true);
+      }
     } catch {
       showToast('erro', 'Erro ao carregar bandeiras.');
     } finally {
@@ -138,6 +154,15 @@ export default function BandeirasPage() {
       carregar();
     } catch {
       showToast('erro', 'Erro ao excluir bandeira.');
+    }
+  }
+
+  async function salvarToggle(campo: string, valor: boolean) {
+    if (!cooperativaId) return;
+    try {
+      await api.put(`/cooperativas/${cooperativaId}`, { [campo]: valor });
+    } catch {
+      showToast('erro', 'Erro ao salvar configuração.');
     }
   }
 
@@ -210,6 +235,39 @@ export default function BandeirasPage() {
           A bandeira verde não gera cobrança adicional.
         </span>
       </div>
+
+      {/* Toggles */}
+      {togglesLoaded && (
+        <Card>
+          <CardContent className="pt-5 space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                onClick={() => { const v = !bandeiraAtiva; setBandeiraAtiva(v); salvarToggle('bandeiraAtiva', v); }}
+                className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${bandeiraAtiva ? 'bg-green-600' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${bandeiraAtiva ? 'translate-x-5' : 'translate-x-1'}`} />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Aplicar bandeira tarifária nas cobranças</span>
+                <p className="text-xs text-gray-400">Quando ativo, bandeiras amarela/vermelha são adicionadas ao valor das faturas</p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                onClick={() => { const v = !sincAuto; setSincAuto(v); salvarToggle('bandeiraSincronizacaoAuto', v); }}
+                className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${sincAuto ? 'bg-green-600' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sincAuto ? 'translate-x-5' : 'translate-x-1'}`} />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Sincronização automática com ANEEL</span>
+                <p className="text-xs text-gray-400">Dia 1 de cada mês, busca e aplica a bandeira vigente automaticamente</p>
+              </div>
+            </label>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sincronizar ANEEL */}
       <Card>

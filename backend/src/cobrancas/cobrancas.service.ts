@@ -717,21 +717,29 @@ export class CobrancasService {
     const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
     const valorDesconto = Math.round(valorBruto * (descontoAplicado / 100) * 100) / 100;
 
-    // 10. Bandeira tarifária: adicionar taxa extra baseada no período
+    // 10. Bandeira tarifária: adicionar taxa extra se cooperativa tem bandeiraAtiva=true
     let valorBandeira = 0;
     let tipoBandeira = 'VERDE';
-    const bandeira = await this.prisma.bandeiraTarifaria.findFirst({
-      where: {
-        cooperativaId: contrato.cooperativaId ?? undefined,
-        dataInicio: { lte: competenciaNormalizada },
-        dataFim: { gte: competenciaNormalizada },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (bandeira && bandeira.tipo !== 'VERDE') {
-      tipoBandeira = bandeira.tipo;
-      valorBandeira = Math.round((kwhCobranca / 100) * Number(bandeira.valorPor100Kwh) * 100) / 100;
-      avisos.push(`Bandeira ${tipoBandeira}: ${kwhCobranca} kWh × R$ ${bandeira.valorPor100Kwh}/100kWh = R$ ${valorBandeira.toFixed(2)}`);
+    if (contrato.cooperativaId) {
+      const cooperativa = await this.prisma.cooperativa.findUnique({
+        where: { id: contrato.cooperativaId },
+        select: { bandeiraAtiva: true },
+      });
+      if (cooperativa?.bandeiraAtiva) {
+        const bandeira = await this.prisma.bandeiraTarifaria.findFirst({
+          where: {
+            cooperativaId: contrato.cooperativaId,
+            dataInicio: { lte: competenciaNormalizada },
+            dataFim: { gte: competenciaNormalizada },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (bandeira && bandeira.tipo !== 'VERDE') {
+          tipoBandeira = bandeira.tipo;
+          valorBandeira = Math.round((kwhCobranca / 100) * Number(bandeira.valorPor100Kwh) * 100) / 100;
+          avisos.push(`Bandeira ${tipoBandeira}: ${kwhCobranca} kWh × R$ ${bandeira.valorPor100Kwh}/100kWh = R$ ${valorBandeira.toFixed(2)}`);
+        }
+      }
     }
 
     const valorLiquido = Math.round((valorBruto - valorDesconto + valorBandeira) * 100) / 100;
