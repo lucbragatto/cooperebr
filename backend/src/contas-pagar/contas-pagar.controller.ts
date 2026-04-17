@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Query } from '@nestjs/common';
 import { ContasPagarService } from './contas-pagar.service';
+import { CreateContaAPagarDto } from './dto/create-conta-a-pagar.dto';
+import { UpdateContaAPagarDto } from './dto/update-conta-a-pagar.dto';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
@@ -23,13 +25,13 @@ export class ContasPagarController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post()
-  create(@Req() req: any, @Body() dto: any) {
+  create(@Req() req: any, @Body() dto: CreateContaAPagarDto) {
     return this.contasPagarService.create(req.user.cooperativaId, dto);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Req() req: any, @Body() dto: any) {
+  update(@Param('id') id: string, @Req() req: any, @Body() dto: UpdateContaAPagarDto) {
     return this.contasPagarService.update(id, req.user.cooperativaId, dto);
   }
 
