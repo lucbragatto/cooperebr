@@ -62,6 +62,7 @@ model Cooperativa {
   ofertasClube              OfertaClube[]
   contasAPagar              ContaAPagar[]
   historicosStatusCooperado HistoricoStatusCooperado[]
+  bandeirasTarifarias       BandeiraTarifaria[]
 
   @@map("cooperativas")
 }
@@ -627,6 +628,10 @@ model ConfiguracaoMotor {
   mesAplicacaoAnual    Int      @default(1)
   aplicacaoCorrecao    String   @default("GERAL")
   aprovarManualmente   Boolean  @default(true)
+  consumoMinimoFaturavelAtivo   Boolean  @default(false)
+  consumoMinimoMonofasicoKwh   Int      @default(30)
+  consumoMinimoBifasicoKwh     Int      @default(50)
+  consumoMinimoTrifasicoKwh    Int      @default(100)
   cooperativaId        String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -1945,4 +1950,22 @@ model ContaAPagar {
   @@index([status])
   @@index([dataVencimento])
   @@map("contas_a_pagar")
+}
+
+// ── Bandeira Tarifária (Sprint 4) ──
+
+model BandeiraTarifaria {
+  id              String      @id @default(cuid())
+  cooperativaId   String
+  cooperativa     Cooperativa @relation(fields: [cooperativaId], references: [id])
+  tipo            String
+  valorPor100Kwh  Decimal     @db.Decimal(10, 4)
+  dataInicio      DateTime
+  dataFim         DateTime
+  observacao      String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([cooperativaId, dataInicio, dataFim])
+  @@map("bandeiras_tarifarias")
 }
