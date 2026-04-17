@@ -193,21 +193,24 @@ export default function PortalUcsPage() {
 }
 
 function UcChart({ ucId }: { ucId: string }) {
-  const [dados, setDados] = useState<{ mes: string; kwh: number }[]>([]);
+  const [dados, setDados] = useState<{ mes: string; kwh: number; valor: number }[]>([]);
+  const [temKwh, setTemKwh] = useState(false);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     api
       .get(`/cooperados/meu-perfil/cobrancas?ucId=${ucId}`)
       .then((res) => {
-        const cobrancas = res.data
-          .filter((c: any) => c.kwhConsumido != null || c.kwhEntregue != null)
-          .slice(0, 6)
-          .reverse();
+        const cobrancas = (res.data as Record<string, unknown>[]).slice(0, 6).reverse();
+        const algumKwh = cobrancas.some(
+          (c) => c.kwhEntregue != null || c.kwhConsumido != null,
+        );
+        setTemKwh(algumKwh);
         setDados(
-          cobrancas.map((c: any) => ({
+          cobrancas.map((c) => ({
             mes: `${String(c.mesReferencia).padStart(2, '0')}/${c.anoReferencia}`,
             kwh: Number(c.kwhEntregue ?? c.kwhConsumido ?? 0),
+            valor: Number(c.valorLiquido ?? 0),
           })),
         );
       })
@@ -225,20 +228,23 @@ function UcChart({ ucId }: { ucId: string }) {
     );
   }
 
+  const dataKey = temKwh ? 'kwh' : 'valor';
+  const label = temKwh ? 'kWh' : 'R$';
+
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
       <p className="text-xs text-gray-500 mb-2 font-medium">
-        Geração / Consumo (últimos meses)
+        {temKwh ? 'Geração / Consumo (últimos meses)' : 'Cobranças (últimos meses)'}
       </p>
       <ResponsiveContainer width="100%" height={140}>
         <BarChart data={dados}>
           <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} width={40} />
+          <YAxis tick={{ fontSize: 10 }} width={50} />
           <Tooltip
-            formatter={(value) => [`${value} kWh`, 'kWh']}
+            formatter={(value) => [`${label} ${value}`, label]}
             labelStyle={{ fontSize: 12 }}
           />
-          <Bar dataKey="kwh" fill="#16a34a" radius={[4, 4, 0, 0]} />
+          <Bar dataKey={dataKey} fill="#16a34a" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -322,7 +328,11 @@ function ModalNovaUc({
         propostaId: string | null;
         contratoNumero: string | null;
         emListaEspera: boolean;
-      }>('/cooperados/meu-perfil/confirmar-nova-uc', { ucId });
+      }>('/cooperados/meu-perfil/confirmar-nova-uc', {
+        ucId,
+        consumoKwh: dadosOcr?.consumoMedioKwh ? Number(dadosOcr.consumoMedioKwh) : undefined,
+        valorFatura: dadosOcr?.totalAPagar ? Number(dadosOcr.totalAPagar) : undefined,
+      });
       setContratoNumero(resp.contratoNumero);
       setEmListaEspera(resp.emListaEspera);
       setEtapa(3);
