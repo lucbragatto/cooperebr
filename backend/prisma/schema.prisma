@@ -478,6 +478,10 @@ model Cobranca {
   cobrancasBancarias       CobrancaBancaria[]
   asaasCobrancas           AsaasCobranca[]
   beneficiosIndicacao      BeneficioIndicacao[]
+  // ── Consumo mínimo + Bandeira tarifária ──
+  kwhMinimoFaturavel       Float?               @default(0)
+  valorBandeira            Decimal?             @db.Decimal(10, 2) @default(0)
+  tipoBandeira             String?              @default("VERDE")
   // ── CooperToken ──
   tokenDescontoQt          Decimal?             @db.Decimal(10, 4)
   tokenDescontoReais       Decimal?             @db.Decimal(10, 2)

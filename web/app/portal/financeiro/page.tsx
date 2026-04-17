@@ -21,6 +21,9 @@ interface CobrancaItem {
   valorBruto: number;
   valorDesconto: number;
   valorLiquido: number;
+  kwhMinimoFaturavel?: number;
+  valorBandeira?: number;
+  tipoBandeira?: string;
   status: string;
   dataVencimento: string;
   dataPagamento: string | null;
@@ -262,9 +265,19 @@ export default function PortalFinanceiroPage() {
                             <p className="text-sm font-bold text-gray-800">
                               R$ {Number(c.valorLiquido).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cfg.color}`}>
-                              {cfg.label}
-                            </span>
+                            <div className="flex items-center justify-end gap-1">
+                              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${cfg.color}`}>
+                                {cfg.label}
+                              </span>
+                              {c.tipoBandeira && c.tipoBandeira !== 'VERDE' && (
+                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 ${
+                                  c.tipoBandeira === 'AMARELA' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  {c.tipoBandeira}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {boletoUrl && c.status !== 'PAGO' && (
                             <a

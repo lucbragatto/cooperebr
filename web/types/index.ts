@@ -115,6 +115,9 @@ export interface Cobranca {
   status: StatusCobranca;
   dataVencimento: string;
   dataPagamento: string | null;
+  kwhMinimoFaturavel?: number;
+  valorBandeira?: number;
+  tipoBandeira?: string;
   createdAt: string;
   updatedAt: string;
 }

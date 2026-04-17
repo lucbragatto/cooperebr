@@ -7,7 +7,7 @@ import type { Cobranca, StatusCobranca } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Pencil, CheckCircle, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
@@ -154,20 +154,54 @@ export default function CobrancaDetailPage() {
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-6">
-            <Campo label="ID" value={cobranca.id} />
-            <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado ? <Link href={`/dashboard/cooperados/${(cobranca as any).contrato.cooperado.id ?? (cobranca as any).contrato.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{(cobranca as any).contrato.cooperado.nomeCompleto}</Link> : '—'} />
-            <Campo label="Contrato" value={cobranca.contrato ? <Link href={`/dashboard/contratos/${cobranca.contratoId}`} className="text-blue-600 hover:underline font-medium">{cobranca.contrato.numero}</Link> : '—'} />
-            <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
-            <Campo label="Valor Bruto" value={formatBRL(cobranca.valorBruto)} />
-            <Campo label="Desconto (%)" value={`${cobranca.percentualDesconto}%`} />
-            <Campo label="Valor Desconto" value={formatBRL(cobranca.valorDesconto)} />
-            <Campo label="Valor Líquido" value={formatBRL(cobranca.valorLiquido)} />
-            <Campo label="Status" value={statusLabel[cobranca.status]} />
-            <Campo label="Vencimento" value={new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')} />
-            <Campo label="Pagamento" value={cobranca.dataPagamento ? new Date(cobranca.dataPagamento).toLocaleDateString('pt-BR') : null} />
-            <Campo label="Criado em" value={new Date(cobranca.createdAt).toLocaleString('pt-BR')} />
-            <Campo label="Atualizado em" value={new Date(cobranca.updatedAt).toLocaleString('pt-BR')} />
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-2 gap-6">
+              <Campo label="ID" value={cobranca.id} />
+              <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado ? <Link href={`/dashboard/cooperados/${(cobranca as any).contrato.cooperado.id ?? (cobranca as any).contrato.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{(cobranca as any).contrato.cooperado.nomeCompleto}</Link> : '—'} />
+              <Campo label="Contrato" value={cobranca.contrato ? <Link href={`/dashboard/contratos/${cobranca.contratoId}`} className="text-blue-600 hover:underline font-medium">{cobranca.contrato.numero}</Link> : '—'} />
+              <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
+              <Campo label="Status" value={statusLabel[cobranca.status]} />
+              <Campo label="Vencimento" value={new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')} />
+              <Campo label="Pagamento" value={cobranca.dataPagamento ? new Date(cobranca.dataPagamento).toLocaleDateString('pt-BR') : null} />
+            </div>
+
+            {/* Discriminação de valores */}
+            <div className="border rounded-lg p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Discriminação</h3>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Valor base</span>
+                <span>{formatBRL(cobranca.valorBruto)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-green-600">
+                <span>Desconto ({cobranca.percentualDesconto}%)</span>
+                <span>-{formatBRL(cobranca.valorDesconto)}</span>
+              </div>
+              {(cobranca.kwhMinimoFaturavel ?? 0) > 0 && (
+                <div className="flex justify-between text-sm text-blue-600">
+                  <span>Consumo mínimo deduzido</span>
+                  <span>{cobranca.kwhMinimoFaturavel} kWh</span>
+                </div>
+              )}
+              {(cobranca.valorBandeira ?? 0) > 0 && (
+                <div className="flex justify-between text-sm text-orange-600">
+                  <span className="inline-flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Bandeira {cobranca.tipoBandeira}
+                  </span>
+                  <span>+{formatBRL(cobranca.valorBandeira!)}</span>
+                </div>
+              )}
+              <hr className="my-2" />
+              <div className="flex justify-between font-medium text-sm">
+                <span>Total a pagar</span>
+                <span>{formatBRL(cobranca.valorLiquido)}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              <Campo label="Criado em" value={new Date(cobranca.createdAt).toLocaleString('pt-BR')} />
+              <Campo label="Atualizado em" value={new Date(cobranca.updatedAt).toLocaleString('pt-BR')} />
+            </div>
           </CardContent>
         </Card>
       )}
