@@ -41,7 +41,7 @@ export default function NovoPlanoPage() {
     nome: '',
     descricao: '',
     modeloCobranca: 'FIXO_MENSAL' as ModeloCobranca,
-    descontoBase: 0,
+    descontoBase: 20,
     temPromocao: false,
     descontoPromocional: 0,
     mesesPromocao: 0,
@@ -66,6 +66,10 @@ export default function NovoPlanoPage() {
   async function salvar() {
     if (!form.nome.trim()) {
       setMensagem('O nome é obrigatório.');
+      return;
+    }
+    if (!form.descontoBase || form.descontoBase < 1 || form.descontoBase > 100) {
+      setMensagem('Desconto base é obrigatório (entre 1% e 100%).');
       return;
     }
     setSalvando(true);
@@ -168,16 +172,18 @@ export default function NovoPlanoPage() {
 
           {/* Desconto Base */}
           <div>
-            <label className={labelClass}>Desconto Base (%)</label>
+            <label className={labelClass}>Desconto Base (%) *</label>
             <input
               className={inputClass}
               type="number"
-              min={0}
+              min={1}
               max={100}
               step={0.01}
+              required
               value={form.descontoBase}
               onChange={(e) => setForm({ ...form, descontoBase: parseFloat(e.target.value) || 0 })}
             />
+            <p className="text-xs text-gray-400 mt-0.5">Desconto aplicado pelo motor de proposta (obrigatório, 1-100%)</p>
           </div>
 
           {/* Toggle Promoção */}

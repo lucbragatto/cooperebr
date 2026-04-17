@@ -395,16 +395,18 @@ export default function PlanoDetailPage() {
             </div>
 
             <div>
-              <label className={labelClass}>Desconto Base (%)</label>
+              <label className={labelClass}>Desconto Base (%) *</label>
               <input
                 className={inputClass}
                 type="number"
-                min={0}
+                min={1}
                 max={100}
                 step={0.01}
+                required
                 value={form.descontoBase}
                 onChange={(e) => setForm({ ...form, descontoBase: parseFloat(e.target.value) || 0 })}
               />
+              <p className="text-xs text-gray-400 mt-0.5">Obrigatório — usado pelo motor de proposta (1-100%)</p>
             </div>
 
             <div className="col-span-2 flex items-center gap-3">

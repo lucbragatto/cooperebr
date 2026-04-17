@@ -1,8 +1,19 @@
+import { IsNotEmpty, IsString, IsNumber, IsOptional, IsBoolean, IsIn, IsArray, Min, Max } from 'class-validator';
+
 export class CreatePlanoDto {
+  @IsNotEmpty() @IsString()
   nome!: string;
+
+  @IsOptional() @IsString()
   descricao?: string;
+
+  @IsNotEmpty() @IsIn(['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'])
   modeloCobranca!: 'FIXO_MENSAL' | 'CREDITOS_COMPENSADOS' | 'CREDITOS_DINAMICO';
+
+  @IsNotEmpty() @IsNumber() @Min(1, { message: 'Desconto base deve ser pelo menos 1%' }) @Max(100)
   descontoBase!: number;
+
+  @IsOptional() @IsBoolean()
   temPromocao?: boolean;
   descontoPromocional?: number;
   mesesPromocao?: number;
