@@ -1,7 +1,5 @@
 # PONTO DE RETOMADA — CoopereBR
-> Salvo em 16/04/2026 — sessão 2
-
----
+> Salvo em 16/04/2026 — fim da sessão
 
 ## ESTADO ATUAL
 
@@ -12,66 +10,96 @@
 | Sprint 2 | T3 (4 partes) + T0 (7 steps) | bb646e9 → 3acb013 |
 | Sprint 2.5 | T9, T9b, T10 | 8f1c985 → 4ff48d2 |
 | Sprint 3 | T4-PRE + T4 | 1f59ae0 → 0b00d49 |
-| Sprint 3.5 | Fixes wizard + portal UCs | c0153a9 → 4b271d9 |
+| Sprint 3.5 | Fixes wizard + portal UCs + motor | 5e9c87e → último commit de hoje |
 
 ### Último commit
-`4b271d9` — fix: Step1 labels de tarifa mais claros (OCR vs motor)
-
-### Commits desta sessão (16/04/2026)
-| Commit | O que foi feito |
-|---|---|
-| `5e9c87e` | fix: nav bar portal (9→5 itens + links rápidos na home) |
-| `90ef79c` | fix: Step2 nunca herdar dados de cooperado anterior (nullish coalescing) |
-| `a1bfb49` | fix: Step2 pré-preencher com dados OCR sobrescrevendo valores anteriores |
-| `c0153a9` | fix: tratar email duplicado (409) + labels dinâmicos no wizard admin |
-| `a5f7a38` | feat: endpoint nova-uc-com-fatura e confirmar-nova-uc para cooperado |
-| `cb100ae` | feat: portal UCs — modal 3 etapas com OCR + simulação + contrato |
-| `ec3af81` | feat: motor aceitar planoId e baseDesconto no calcular() |
-| `8f9c0ef` | feat: Step3 recalcular ao trocar plano com desconto real do plano |
-| `4b271d9` | fix: Step1 labels de tarifa mais claros (OCR vs motor) |
-
-### Feature toggles em produção
-| Env var | Valor prod | Propósito |
-|---|---|---|
-| `CADASTRO_VALIDACOES_ATIVAS` | `true` | Validar CPF/email/telefone no cadastro público |
-| `NOTIFICACOES_ATIVAS` | `true` | Disparar WA/email no fluxo aceite/docs/assinatura |
-| `CADASTRO_V2_ATIVO` | `true` | Cadastro público cria Cooperado+UC+Proposta real (v2) |
+Verificar com: git log --oneline -1
 
 ---
 
-## PRÓXIMO PASSO
+## PRÓXIMO PASSO — Sprint 4
 
-Candidatos Sprint 4 (por prioridade):
+### Contexto das decisões de hoje
 
-**P1 — Testar fluxos end-to-end:**
-- Testar fluxo completo wizard admin do Step1 ao Step7 com cooperado real
-- Testar portal UCs com upload de fatura real (modal 3 etapas)
+**Motor de Proposta — refatoração de arquitetura:**
+- Desconto sai do motor → vai para os Planos
+- Motor passa a usar plano.descontoBase obrigatoriamente
+- Sem plano selecionado → erro explícito (não usar fallback silencioso)
+- Motor mantém: threshold outlier, fonte kWh, ações acima/abaixo da média
 
-**P2 — Bugs e features:**
-- BUG-CALCULO-001: multa/juros com 3 implementações divergentes
-- Lembrete assinatura pendente (24h sem assinar → WA + email)
-- Rebalanceamento de usinas (algoritmo + aprovação admin)
+**Consumo Mínimo Faturável (já existe na tela, não impacta cálculo ainda):**
+- Se ativado: deduzir o mínimo faturável (30/50/100 kWh por tipo de
+  fornecimento) do consumo considerado na proposta e na cobrança
+- Tipo de fornecimento vem do OCR (monofásico/bifásico/trifásico)
+- Aparece discriminado na cobrança: "Mínimo faturável deduzido: 100 kWh"
 
-**Dívidas técnicas documentadas:**
-1. `aceitar()` — proteção completa depende de T0 persistir PENDENTE em calcular()
-2. `POST /cooperados/cadastro-completo` — não mais usado pelo wizard, deprecar
-3. Rota HTTP `/proposta/:id/enviar-assinatura` — nome desatualizado vs handler
+**Bandeira Tarifária (a implementar na cobrança mensal):**
+- NÃO impacta proposta (média histórica já inclui períodos com bandeira)
+- Impacta COBRANÇA MENSAL quando contrato já está ativo
+- Cálculo ANEEL: valorBandeira = (kwhConsumido / 100) × tarifaBandeira
+- Valores vigentes 2026:
+  - Verde: R$ 0,00
+  - Amarela: R$ 1,885 / 100 kWh
+  - Vermelha P1: R$ 4,463 / 100 kWh
+  - Vermelha P2: R$ 7,877 / 100 kWh
+- Admin configura: tipo + valor + período (data início/fim)
+- Se mês pegar período parcial: pro-rata por dias
+- Aparece discriminado na fatura do cooperado
+- Histórico completo para relatórios e auditorias
+- Schema necessário: model BandeiraTarifaria {
+    tipo: String (VERDE|AMARELA|VERMELHA_P1|VERMELHA_P2)
+    valorPor100Kwh: Decimal
+    dataInicio: DateTime
+    dataFim: DateTime
+    cooperativaId: String
+  }
+
+### Tarefas Sprint 4 (em ordem)
+1. Schema: adicionar BandeiraTarifaria + consumoMinimoKwh em ConfiguracaoMotor
+2. Motor: remover campos de desconto, usar plano.descontoBase obrigatório
+3. Tela config motor: remover campos desconto, adicionar consumoMinimoKwh
+4. Cobrança mensal: aplicar consumo mínimo faturável + bandeira tarifária
+5. Fatura cooperado: exibir bandeira discriminada
+6. Planos: garantir que descontoBase é obrigatório e usado pelo motor
+
+---
+
+## DÍVIDAS TÉCNICAS DOCUMENTADAS
+
+1. `aceitar()` — proteção completa depende de T0 persistir PENDENTE
+2. `POST /cooperados/cadastro-completo` — deprecar
+3. Rota `/proposta/:id/enviar-assinatura` — nome desatualizado
 4. `enviarAprovacao()` — ainda faz console.log sem envio real
-5. `tokenAssinatura` não exposto no portal — link direto depende de adicionar propostas ao GET /cooperados/meu-perfil
-6. Rota `/dashboard/configuracoes/documentos` não linkada no menu lateral
+5. `tokenAssinatura` não exposto no portal
+6. Rota `/dashboard/configuracoes/documentos` não linkada no menu
 7. `/planos/ativos` ainda @Public() sem ler JWT quando autenticado
+8. BUG-CALCULO-001: multa/juros 3 implementações divergentes
+
+---
+
+## ENV VARS OBRIGATÓRIAS
+
+DATABASE_URL, DIRECT_URL, SUPABASE_SERVICE_ROLE_KEY,
+WHATSAPP_WEBHOOK_SECRET, ASAAS_API_KEY, ANTHROPIC_API_KEY,
+NEXT_PUBLIC_MODO_TESTE, NOTIFICACOES_ATIVAS=true,
+CADASTRO_VALIDACOES_ATIVAS=true, NEXT_PUBLIC_CADASTRO_V2=true,
+CADASTRO_V2_ATIVO=true
 
 ---
 
 ## BRIEFING PARA NOVA SESSÃO
 
-Ao iniciar, ler:
-- `CONTEXTO-CLAUDEAI.md` — arquitetura, regras, commits recentes
-- `SPRINT-BACKLOG-COMPLETO.md` — tarefas concluídas e pendentes
-- Este arquivo — estado consolidado
+Você é um engenheiro sênior trabalhando no CoopereBR.
+Leia CONTEXTO-CLAUDEAI.md e SPRINT-BACKLOG-COMPLETO.md antes
+de qualquer ação.
 
-Regras da sessão:
-- ⚠️ Dados reais em banco — NÃO disparar WA, email ou notificações
-- Multi-tenant obrigatório em tudo
+Contexto:
+- Sprints 1, 2, 2.5, 3 e 3.5 concluídos
+- Próximo: Sprint 4 — refatoração motor + bandeira tarifária
+- Ver seção "PRÓXIMO PASSO" acima para decisões de arquitetura já tomadas
+
+Regras:
+- Dados reais em banco — NÃO disparar WA/email
+- Multi-tenant obrigatório
 - Commits em português
-- Uma tarefa por vez — propõe → aprova → executa
+- Uma tarefa por vez
