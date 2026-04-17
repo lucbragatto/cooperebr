@@ -22,6 +22,7 @@ export interface CobrancaCalculo {
   kwhConsumido: number | null;
   kwhCompensado: number | null;
   kwhSaldo: number | null;
+  kwhMinimoFaturavel: number;
   descontoAplicado: number;
   baseCalculoUsada: string;
   fonteDesconto: string;
@@ -29,6 +30,8 @@ export interface CobrancaCalculo {
   faturaProcessadaId: string | null;
   valorBruto: number;
   valorDesconto: number;
+  valorBandeira: number;
+  tipoBandeira: string;
   valorLiquido: number;
   avisos: string[];
 }
@@ -707,9 +710,45 @@ export class CobrancasService {
       fonteDados = 'ESTIMADO';
     }
 
+    // 9. Consumo mínimo faturável: deduzir do kWh considerado
+    let kwhMinimoFaturavel = 0;
+    const configMotor = await this.prisma.configuracaoMotor.findFirst({
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (configMotor?.consumoMinimoFaturavelAtivo) {
+      const tipo = (contrato.uc?.tipoFornecimento ?? '').toUpperCase();
+      if (tipo === 'MONOFASICO') {
+        kwhMinimoFaturavel = configMotor.consumoMinimoMonofasicoKwh;
+      } else if (tipo === 'BIFASICO') {
+        kwhMinimoFaturavel = configMotor.consumoMinimoBifasicoKwh;
+      } else {
+        kwhMinimoFaturavel = configMotor.consumoMinimoTrifasicoKwh;
+      }
+      kwhCobranca = Math.max(0, kwhCobranca - kwhMinimoFaturavel);
+      avisos.push(`Mínimo faturável deduzido: ${kwhMinimoFaturavel} kWh (${tipo || 'TRIFASICO'})`);
+    }
+
     const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
     const valorDesconto = Math.round(valorBruto * (descontoAplicado / 100) * 100) / 100;
-    const valorLiquido = Math.round((valorBruto - valorDesconto) * 100) / 100;
+
+    // 10. Bandeira tarifária: adicionar taxa extra baseada no período
+    let valorBandeira = 0;
+    let tipoBandeira = 'VERDE';
+    const bandeira = await this.prisma.bandeiraTarifaria.findFirst({
+      where: {
+        cooperativaId: contrato.cooperativaId ?? undefined,
+        dataInicio: { lte: competenciaNormalizada },
+        dataFim: { gte: competenciaNormalizada },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (bandeira && bandeira.tipo !== 'VERDE') {
+      tipoBandeira = bandeira.tipo;
+      valorBandeira = Math.round((kwhCobranca / 100) * Number(bandeira.valorPor100Kwh) * 100) / 100;
+      avisos.push(`Bandeira ${tipoBandeira}: ${kwhCobranca} kWh × R$ ${bandeira.valorPor100Kwh}/100kWh = R$ ${valorBandeira.toFixed(2)}`);
+    }
+
+    const valorLiquido = Math.round((valorBruto - valorDesconto + valorBandeira) * 100) / 100;
 
     return {
       contratoId,
@@ -719,6 +758,7 @@ export class CobrancasService {
       kwhConsumido: kwhConsumidoOcr,
       kwhCompensado: kwhCompensadoOcr,
       kwhSaldo: kwhCompensadoOcr != null ? kwhCompensadoOcr - (kwhConsumidoOcr ?? 0) : null,
+      kwhMinimoFaturavel,
       descontoAplicado,
       baseCalculoUsada: `${baseCalculoUsada} (${modeloCobranca})`,
       fonteDesconto,
@@ -726,6 +766,8 @@ export class CobrancasService {
       faturaProcessadaId,
       valorBruto,
       valorDesconto,
+      valorBandeira,
+      tipoBandeira,
       valorLiquido,
       avisos,
     };
