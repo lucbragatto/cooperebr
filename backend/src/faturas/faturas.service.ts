@@ -848,6 +848,11 @@ export class FaturasService {
 
       // Sprint 5: bloquear modelos não-FIXO enquanto engine não refatorada
       if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && modeloCobranca !== 'FIXO_MENSAL') {
+        this.logger.warn(
+          `Cobrança pulada em aprovação de fatura: contrato ${contrato.numero} ` +
+          `usa modelo ${modeloCobranca}, bloqueado por BLOQUEIO_MODELOS_NAO_FIXO. ` +
+          `Fatura: ${fatura.id}`,
+        );
         avisos.push(`Contrato ${contrato.numero}: modelo ${modeloCobranca} bloqueado (Sprint 5). Cobrança não gerada.`);
         continue;
       }
