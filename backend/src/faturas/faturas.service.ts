@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Optional, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotImplementedException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -410,7 +410,7 @@ export class FaturasService {
     // Buscar contrato ativo
     const contrato = await this.prisma.contrato.findFirst({
       where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true },
+      include: { plano: true, usina: true, cooperativa: true },
     });
     if (!contrato) {
       this.logger.warn(`Sem contrato ativo para cooperado ${fatura.cooperadoId}`);
@@ -463,41 +463,12 @@ export class FaturasService {
       return existe;
     }
 
-    // Buscar tarifa por distribuidora da UC (BUG-11-002)
-    const propostaAceita = await this.prisma.propostaCooperado.findFirst({
-      where: { cooperadoId: fatura.cooperadoId!, status: 'ACEITA' },
-      orderBy: { createdAt: 'desc' },
+    // Calcular valores via núcleo único
+    const calc = await this.calcularValorCobrancaPorModelo({
+      contrato,
+      fatura,
+      cooperativaId: cooperativaIdFatura,
     });
-    const distribuidoraUc = fatura.uc?.distribuidora || contrato.usina?.distribuidora;
-    const tarifaDistrib = await this.buscarTarifaPorDistribuidora(distribuidoraUc);
-    const tarifaUnitVigente = tarifaDistrib.tarifaKwh;
-
-    let tarifaKwh: number;
-    if (propostaAceita) {
-      tarifaKwh = Number(propostaAceita.kwhApuradoBase);
-    } else {
-      const consumoKwh = dados?.consumoAtualKwh ?? Number(contrato.kwhContrato ?? 0);
-      const valorFatura = dados?.totalAPagar ?? 0;
-      tarifaKwh = consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitVigente;
-    }
-
-    const kwhContrato = Number(contrato.kwhContrato ?? 0);
-    const percentualDesconto = Number(contrato.percentualDesconto);
-    const descontoDecimal = percentualDesconto / 100;
-    const creditosRecebidosKwh = Number(dados?.creditosRecebidosKwh ?? 0);
-
-    // kWh para cobrança conforme modelo
-    let kwhCobranca: number;
-    if (modeloCobranca === 'CREDITOS_COMPENSADOS' || modeloCobranca === 'CREDITOS_DINAMICO') {
-      if (modeloCobranca === 'CREDITOS_DINAMICO') tarifaKwh = tarifaUnitVigente;
-      kwhCobranca = creditosRecebidosKwh > 0 ? Math.min(creditosRecebidosKwh, kwhContrato) : kwhContrato;
-    } else {
-      kwhCobranca = kwhContrato;
-    }
-
-    const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
-    const valorDesconto = Math.round(kwhCobranca * tarifaKwh * descontoDecimal * 100) / 100;
-    const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
 
     // Vencimento
     const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca', cooperativaIdFatura);
@@ -508,7 +479,7 @@ export class FaturasService {
       dados?.vencimento,
     );
 
-    // Determinar fonte dos dados
+    const creditosRecebidosKwh = Number(dados?.creditosRecebidosKwh ?? 0);
     const fonteDados = creditosRecebidosKwh > 0 ? 'FATURA_OCR' : 'ESTIMADO';
 
     const cobranca = await this.prisma.cobranca.create({
@@ -516,16 +487,23 @@ export class FaturasService {
         contratoId: contrato.id,
         mesReferencia: mesNum,
         anoReferencia: anoNum,
-        valorBruto,
-        percentualDesconto,
-        valorDesconto,
-        valorLiquido,
+        valorBruto: calc.valorBruto,
+        percentualDesconto: Number(contrato.percentualDesconto),
+        valorDesconto: calc.valorDesconto,
+        valorLiquido: calc.valorLiquido,
         dataVencimento: vencimento,
         status: 'A_VENCER',
-        kwhCompensado: creditosRecebidosKwh,
+        kwhCompensado: calc.kwhCompensado ?? creditosRecebidosKwh,
         kwhConsumido: Number(dados?.consumoAtualKwh ?? 0),
         fonteDados,
         faturaProcessadaId: faturaId,
+        // Snapshots de auditoria (Sprint 5)
+        modeloCobrancaUsado: calc.modeloCobrancaUsado,
+        consumoBruto: calc.consumoBruto,
+        tarifaApurada: calc.tarifaApurada,
+        tarifaContratualAplicada: calc.tarifaContratualAplicada,
+        bandeiraAplicada: calc.bandeiraAplicada,
+        valorTotalFatura: calc.valorTotalFatura,
       },
     });
 
@@ -543,7 +521,7 @@ export class FaturasService {
     await this.notificacoes.criar({
       tipo: 'COBRANCA_GERADA',
       titulo: 'Nova cobrança gerada',
-      mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} ref. ${String(mesNum).padStart(2, '0')}/${anoNum}.`,
+      mensagem: `Cobrança de R$ ${calc.valorLiquido.toFixed(2)} ref. ${String(mesNum).padStart(2, '0')}/${anoNum}.`,
       cooperadoId: fatura.cooperadoId ?? undefined,
       link: '/dashboard/cobrancas',
     });
@@ -789,7 +767,7 @@ export class FaturasService {
 
     const contratos = await this.prisma.contrato.findMany({
       where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true },
+      include: { plano: true, usina: true, cooperativa: true },
     });
 
     if (contratos.length === 0) {
@@ -805,21 +783,6 @@ export class FaturasService {
     if (!mesReferencia || !anoReferencia) {
       avisos.push('Mês de referência não identificado na fatura. Cobranças não geradas automaticamente.');
       return { sucesso: true, cobrancasCriadas: 0, avisos };
-    }
-
-    // Buscar proposta aceita mais recente do cooperado
-    const propostaAceita = await this.prisma.propostaCooperado.findFirst({
-      where: { cooperadoId: fatura.cooperadoId!, status: 'ACEITA' },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Buscar tarifa vigente por distribuidora da UC (BUG-11-002)
-    const distribuidoraFatura = fatura.uc?.distribuidora;
-    const tarifaFallback = await this.buscarTarifaPorDistribuidora(distribuidoraFatura);
-    let tarifaUnitVigente = tarifaFallback.tarifaKwh;
-
-    if (!propostaAceita) {
-      avisos.push('Sem proposta aceita encontrada. Cálculo usando tarifa vigente (TUSD+TE) como fallback.');
     }
 
     // Buscar dias de vencimento configurado
@@ -841,7 +804,6 @@ export class FaturasService {
 
       const kwhContrato = Number(contrato.kwhContrato ?? 0);
       const percentualDesconto = Number(contrato.percentualDesconto);
-      const descontoDecimal = percentualDesconto / 100;
 
       // Determinar modelo de cobrança (hierarquia: contrato → usina → config → plano → FIXO_MENSAL)
       const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
@@ -857,58 +819,21 @@ export class FaturasService {
         continue;
       }
 
-      // BUG-11-002: buscar tarifa pela distribuidora do contrato (usina) se disponível
-      const distribContrato = contrato.usina?.distribuidora;
-      if (distribContrato && distribContrato !== distribuidoraFatura) {
-        const tarifaContrato = await this.buscarTarifaPorDistribuidora(distribContrato);
-        tarifaUnitVigente = tarifaContrato.tarifaKwh;
+      // Calcular valores via núcleo único (Sprint 5)
+      let calc: Awaited<ReturnType<typeof this.calcularValorCobrancaPorModelo>>;
+      try {
+        calc = await this.calcularValorCobrancaPorModelo({
+          contrato,
+          fatura,
+          cooperativaId: cooperativaIdFatura,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Cobrança não gerada para contrato ${contrato.numero}: ${(err as Error).message}`,
+        );
+        avisos.push(`Contrato ${contrato.numero}: ${(err as Error).message}`);
+        continue;
       }
-
-      // tarifaKwh = preço do kWh da concessionária (da proposta aceita ou fallback)
-      let tarifaKwh: number;
-      if (propostaAceita) {
-        tarifaKwh = Number(propostaAceita.kwhApuradoBase);
-      } else {
-        // Fallback: calcula a partir da fatura ou usa tarifa vigente da distribuidora
-        const consumoKwh = dados.consumoAtualKwh ?? kwhContrato;
-        const valorFatura = dados.totalAPagar ?? 0;
-        tarifaKwh = consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitVigente;
-      }
-
-      // Determinar kwhCobranca conforme modelo
-      let kwhCobranca: number;
-      let modeloUsado: string;
-
-      if (modeloCobranca === 'CREDITOS_COMPENSADOS') {
-        if (creditosRecebidosKwh > 0) {
-          kwhCobranca = Math.min(creditosRecebidosKwh, kwhContrato);
-          modeloUsado = `CREDITOS_COMPENSADOS (${kwhCobranca.toFixed(2)} kWh recebidos)`;
-        } else {
-          kwhCobranca = kwhContrato;
-          modeloUsado = 'FIXO_MENSAL (fallback — creditosRecebidosKwh não disponível na fatura)';
-        }
-
-      } else if (modeloCobranca === 'CREDITOS_DINAMICO') {
-        // No dinâmico, usa tarifa vigente atual em vez da proposta
-        tarifaKwh = tarifaUnitVigente;
-        if (creditosRecebidosKwh > 0) {
-          kwhCobranca = Math.min(creditosRecebidosKwh, kwhContrato);
-          modeloUsado = `CREDITOS_DINAMICO (${kwhCobranca.toFixed(2)} kWh, tarifa TUSD+TE=${tarifaUnitVigente.toFixed(5)})`;
-        } else {
-          kwhCobranca = kwhContrato;
-          modeloUsado = `CREDITOS_DINAMICO fixo (fallback — sem créditos, tarifa TUSD+TE=${tarifaUnitVigente.toFixed(5)})`;
-        }
-
-      } else {
-        // FIXO_MENSAL (padrão)
-        kwhCobranca = kwhContrato;
-        modeloUsado = 'FIXO_MENSAL';
-      }
-
-      // Cálculo unificado: valorLiquido = kwhCobranca × tarifaKwh × (1 - descontoDecimal)
-      const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
-      const valorDesconto = Math.round(kwhCobranca * tarifaKwh * descontoDecimal * 100) / 100;
-      const valorLiquido = Math.round(kwhCobranca * tarifaKwh * (1 - descontoDecimal) * 100) / 100;
 
       // Data de vencimento conforme preferência do cooperado ou configuração global
       const vencimento = this.calcularVencimento(
@@ -917,25 +842,30 @@ export class FaturasService {
         dados?.vencimento,
       );
 
-      // Determinar fonte dos dados
-      const fonteDados = (modeloCobranca === 'CREDITOS_COMPENSADOS' || modeloCobranca === 'CREDITOS_DINAMICO')
-        && creditosRecebidosKwh > 0 ? 'FATURA_OCR' : 'ESTIMADO';
+      const fonteDados = calc.kwhCompensado && calc.kwhCompensado > 0 ? 'FATURA_OCR' : 'ESTIMADO';
 
       const cobrancaCriada = await this.prisma.cobranca.create({
         data: {
           contratoId: contrato.id,
           mesReferencia,
           anoReferencia,
-          valorBruto,
+          valorBruto: calc.valorBruto,
           percentualDesconto,
-          valorDesconto,
-          valorLiquido,
+          valorDesconto: calc.valorDesconto,
+          valorLiquido: calc.valorLiquido,
           dataVencimento: vencimento,
           status: 'A_VENCER',
-          kwhCompensado: creditosRecebidosKwh > 0 ? creditosRecebidosKwh : null,
+          kwhCompensado: calc.kwhCompensado ?? (creditosRecebidosKwh > 0 ? creditosRecebidosKwh : null),
           kwhConsumido: dados.consumoAtualKwh != null ? Number(dados.consumoAtualKwh) : null,
           fonteDados,
           faturaProcessadaId: fatura.id,
+          // Snapshots de auditoria (Sprint 5)
+          modeloCobrancaUsado: calc.modeloCobrancaUsado,
+          consumoBruto: calc.consumoBruto,
+          tarifaApurada: calc.tarifaApurada,
+          tarifaContratualAplicada: calc.tarifaContratualAplicada,
+          bandeiraAplicada: calc.bandeiraAplicada,
+          valorTotalFatura: calc.valorTotalFatura,
         },
       });
 
@@ -946,13 +876,13 @@ export class FaturasService {
       });
 
       cobrancasCriadas++;
-      avisos.push(`Contrato ${contrato.numero}: modelo ${modeloUsado}`);
+      avisos.push(`Contrato ${contrato.numero}: modelo ${calc.modeloCobrancaUsado}`);
 
-      const economia = valorDesconto.toFixed(2);
+      const economia = calc.valorDesconto.toFixed(2);
       await this.notificacoes.criar({
         tipo: 'COBRANCA_GERADA',
         titulo: 'Nova cobrança gerada',
-        mensagem: `Cobrança de R$ ${valorLiquido.toFixed(2)} gerada para contrato ${contrato.numero} ref. ${mesRef}. Você economizou R$ ${economia} este mês.`,
+        mensagem: `Cobrança de R$ ${calc.valorLiquido.toFixed(2)} gerada para contrato ${contrato.numero} ref. ${mesRef}. Você economizou R$ ${economia} este mês.`,
         cooperadoId: fatura.cooperadoId ?? undefined,
         link: `/dashboard/cobrancas`,
       });
@@ -970,7 +900,7 @@ export class FaturasService {
               plano.tokenValorTipo === 'FIXO'
                 ? Number(plano.tokenValorFixo)
                 : Math.round(
-                    (valorBruto / kwhCompensado) *
+                    (calc.valorBruto / kwhCompensado) *
                       (1 - Number(plano.descontoBase) / 100) *
                       10000,
                   ) / 10000;
@@ -1374,6 +1304,136 @@ IMPORTANTE:
     }
 
     return fallback;
+  }
+
+  // ── Núcleo único de cálculo de cobrança (Sprint 5) ──────────────────────────
+
+  /** Desconto efetivo do contrato (fração: 0.20 = 20%). */
+  private resolverDescontoContrato(contrato: any): number {
+    const pct = Number(contrato.descontoOverride ?? contrato.percentualDesconto ?? 0);
+    return pct / 100;
+  }
+
+  /** Retorna se bandeira deve ser cobrada para esse contrato. */
+  private resolverPoliticaBandeira(contrato: any): boolean {
+    const politica =
+      contrato.usina?.politicaBandeira ??
+      contrato.cooperativa?.politicaBandeira ??
+      'DECIDIR_MENSAL';
+    // Só APLICAR cobra automaticamente. DECIDIR_MENSAL e NAO_APLICAR ficam false
+    // (DECIDIR_MENSAL sobe pra admin decidir em interface separada — Sprint 6).
+    return politica === 'APLICAR';
+  }
+
+  /**
+   * Núcleo único de cálculo de cobrança. Retorna objeto com valores
+   * calculados + snapshots de auditoria. NÃO persiste.
+   *
+   * Consumidores: gerarCobrancaPosFatura (Path A) e aprovarFatura (Path B).
+   */
+  private async calcularValorCobrancaPorModelo(args: {
+    contrato: any;
+    fatura: any;
+    cooperativaId: string;
+  }): Promise<{
+    valorBruto: number;
+    valorDesconto: number;
+    valorLiquido: number;
+    kwhEntregue: number | null;
+    kwhCompensado: number | null;
+    modeloCobrancaUsado: ModeloCobranca;
+    consumoBruto: number | null;
+    tarifaApurada: number | null;
+    tarifaContratualAplicada: number | null;
+    bandeiraAplicada: boolean;
+    valorTotalFatura: number | null;
+  }> {
+    const { contrato, fatura, cooperativaId } = args;
+    const modelo = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaId);
+    const desconto = this.resolverDescontoContrato(contrato);
+    const bandeiraCobrada = this.resolverPoliticaBandeira(contrato);
+
+    // Extração de dados do OCR
+    const dadosOCR = (fatura?.dadosExtraidos ?? {}) as any;
+    const kwhCompensadoOCR = Number(dadosOCR.creditosRecebidosKwh ?? 0) || 0;
+    const kwhConsumidoOCR = Number(dadosOCR.consumoAtualKwh ?? 0) || 0;
+    const valorTotalOCR = Number(dadosOCR.totalAPagar ?? 0) || null;
+
+    switch (modelo) {
+      case 'FIXO_MENSAL': {
+        const valorContrato = Number(contrato.valorContrato ?? 0);
+        if (!valorContrato || valorContrato <= 0) {
+          throw new BadRequestException(
+            `Contrato ${contrato.numero} está em FIXO_MENSAL mas ` +
+            `valorContrato não foi preenchido. Preencha o valor mensal ` +
+            `fixo antes de gerar cobrança.`,
+          );
+        }
+        // FIXO: valor já embute tudo. Desconto NÃO é aplicado de novo.
+        return {
+          valorBruto: valorContrato,
+          valorDesconto: 0,
+          valorLiquido: Math.round(valorContrato * 100) / 100,
+          kwhEntregue: null,
+          kwhCompensado: null,
+          modeloCobrancaUsado: 'FIXO_MENSAL',
+          consumoBruto: kwhConsumidoOCR || null,
+          tarifaApurada: null,
+          tarifaContratualAplicada: null,
+          bandeiraAplicada: false,
+          valorTotalFatura: valorTotalOCR,
+        };
+      }
+
+      case 'CREDITOS_COMPENSADOS': {
+        const tarifaContratual = Number(contrato.tarifaContratual ?? 0);
+        // Fallback: tarifa apurada da fatura OCR (valorTotal / consumo)
+        const tarifaApuradaOCR = kwhConsumidoOCR > 0 && valorTotalOCR
+          ? Math.round((valorTotalOCR / kwhConsumidoOCR) * 100000) / 100000
+          : 0;
+        const tarifaUsada = tarifaContratual > 0 ? tarifaContratual : tarifaApuradaOCR;
+
+        if (!kwhCompensadoOCR || !tarifaUsada) {
+          throw new BadRequestException(
+            `Contrato ${contrato.numero} (COMPENSADOS): faltam dados. ` +
+            `kwhCompensado=${kwhCompensadoOCR}, tarifa=${tarifaUsada}. ` +
+            `Verifique se a fatura foi OCR corretamente e se tarifaContratual ` +
+            `está preenchida no contrato.`,
+          );
+        }
+
+        const valorBruto = Math.round(kwhCompensadoOCR * tarifaUsada * 100) / 100;
+        const valorDescontoCalc = Math.round(valorBruto * desconto * 100) / 100;
+        const valorLiquido = Math.round((valorBruto - valorDescontoCalc) * 100) / 100;
+
+        return {
+          valorBruto,
+          valorDesconto: valorDescontoCalc,
+          valorLiquido,
+          kwhEntregue: kwhCompensadoOCR,
+          kwhCompensado: kwhCompensadoOCR,
+          modeloCobrancaUsado: 'CREDITOS_COMPENSADOS',
+          consumoBruto: kwhConsumidoOCR || null,
+          tarifaApurada: tarifaApuradaOCR || null,
+          tarifaContratualAplicada: tarifaContratual || null,
+          bandeiraAplicada: bandeiraCobrada,
+          valorTotalFatura: valorTotalOCR,
+        };
+      }
+
+      case 'CREDITOS_DINAMICO': {
+        throw new NotImplementedException(
+          `Modelo CREDITOS_DINAMICO ainda não implementado. ` +
+          `Previsto pra Sprint 6+. Contrato afetado: ${contrato.numero}.`,
+        );
+      }
+
+      default: {
+        throw new BadRequestException(
+          `Modelo de cobrança desconhecido: ${modelo}`,
+        );
+      }
+    }
   }
 
   private async resolverModeloCobranca(
