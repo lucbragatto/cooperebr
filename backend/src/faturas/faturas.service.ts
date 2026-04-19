@@ -410,7 +410,7 @@ export class FaturasService {
     // Buscar contrato ativo
     const contrato = await this.prisma.contrato.findFirst({
       where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true, cooperativa: true },
+      include: { plano: true, usina: true, cooperativa: true, cooperado: true },
     });
     if (!contrato) {
       this.logger.warn(`Sem contrato ativo para cooperado ${fatura.cooperadoId}`);
@@ -767,7 +767,7 @@ export class FaturasService {
 
     const contratos = await this.prisma.contrato.findMany({
       where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true, cooperativa: true },
+      include: { plano: true, usina: true, cooperativa: true, cooperado: true },
     });
 
     if (contratos.length === 0) {
@@ -1349,6 +1349,36 @@ IMPORTANTE:
     valorTotalFatura: number | null;
   }> {
     const { contrato, fatura, cooperativaId } = args;
+
+    // ─── Blindagem multi-tenant ─────────────────────────────────────
+    // O sistema atende parceiros de tipos diversos (COOPERATIVA,
+    // CONSORCIO, ASSOCIACAO, CONDOMINIO). A cooperativaId é a fonte
+    // canônica de tenant e deve ser coerente entre todas as entidades
+    // envolvidas na cobrança.
+    const tenantId = contrato.cooperativaId;
+    if (!tenantId) {
+      throw new BadRequestException(
+        `Contrato ${contrato.numero} sem cooperativaId — dados corrompidos.`,
+      );
+    }
+    const divergencias: string[] = [];
+    if (contrato.cooperado?.cooperativaId && contrato.cooperado.cooperativaId !== tenantId) {
+      divergencias.push(`cooperado=${contrato.cooperado.cooperativaId}`);
+    }
+    if (contrato.usina?.cooperativaId && contrato.usina.cooperativaId !== tenantId) {
+      divergencias.push(`usina=${contrato.usina.cooperativaId}`);
+    }
+    if (fatura?.cooperativaId && fatura.cooperativaId !== tenantId) {
+      divergencias.push(`fatura=${fatura.cooperativaId}`);
+    }
+    if (divergencias.length > 0) {
+      throw new ForbiddenException(
+        `Violação multi-tenant no contrato ${contrato.numero}. ` +
+        `Esperado cooperativaId=${tenantId}, divergem: ${divergencias.join(', ')}.`,
+      );
+    }
+
+    // ─── Resolução de parâmetros ────────────────────────────────────
     const modelo = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaId);
     const desconto = this.resolverDescontoContrato(contrato);
     const bandeiraCobrada = this.resolverPoliticaBandeira(contrato);
