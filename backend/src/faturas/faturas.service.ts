@@ -15,6 +15,17 @@ const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
+/**
+ * Normaliza string de UC removendo tudo que não for dígito.
+ * Absorve variações de formato da concessionária.
+ * Ex: "0.000.892.226.054-40" → "000089222605440"
+ *     "0001566475054-47"     → "000156647505447"
+ */
+export function normalizarNumeroUc(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return String(raw).replace(/\D+/g, '');
+}
+
 interface HistoricoItem {
   mesAno: string;
   consumoKwh: number;
@@ -407,11 +418,37 @@ export class FaturasService {
     const dados = fatura.dadosExtraidos as any;
     const analise = (fatura as any).analise as any;
 
-    // Buscar contrato ativo
-    const contrato = await this.prisma.contrato.findFirst({
-      where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true, cooperativa: true, cooperado: true },
-    });
+    // Buscar contrato ativo via UC (matching preciso) ou fallback por cooperado
+    const uc = await this.resolverUcDaFatura(fatura);
+
+    let contrato;
+    if (uc) {
+      contrato = await this.prisma.contrato.findFirst({
+        where: {
+          ucId: uc.id,
+          status: 'ATIVO',
+          cooperativaId: cooperativaIdFatura,
+        },
+        include: { plano: true, usina: true, cooperativa: true, cooperado: true },
+      });
+    }
+    if (!contrato) {
+      // Fallback: cooperado + primeiro ATIVO (compatibilidade)
+      if (uc) {
+        this.logger.warn(
+          `Fatura ${faturaId}: UC ${uc.numero} encontrada mas sem contrato ATIVO nela. ` +
+          `Tentando fallback por cooperadoId.`,
+        );
+      }
+      contrato = await this.prisma.contrato.findFirst({
+        where: {
+          cooperadoId: fatura.cooperadoId!,
+          status: 'ATIVO',
+          cooperativaId: cooperativaIdFatura,
+        },
+        include: { plano: true, usina: true, cooperativa: true, cooperado: true },
+      });
+    }
     if (!contrato) {
       this.logger.warn(`Sem contrato ativo para cooperado ${fatura.cooperadoId}`);
       return null;
@@ -761,17 +798,34 @@ export class FaturasService {
       };
     }
 
-    // Auto-gerar cobranças para contratos ativos do cooperado
+    // Auto-gerar cobranças para contratos ativos — matching por UC
     const avisos: string[] = [];
     let cobrancasCriadas = 0;
 
-    const contratos = await this.prisma.contrato.findMany({
-      where: { cooperadoId: fatura.cooperadoId!, status: 'ATIVO' },
-      include: { plano: true, usina: true, cooperativa: true, cooperado: true },
-    });
+    const uc = await this.resolverUcDaFatura(fatura);
+
+    let contratos;
+    if (uc) {
+      contratos = await this.prisma.contrato.findMany({
+        where: {
+          ucId: uc.id,
+          status: 'ATIVO',
+          cooperativaId: cooperativaIdFatura,
+        },
+        include: { plano: true, usina: true, cooperativa: true, cooperado: true },
+      });
+    } else {
+      // Sem UC resolvida → abortar pra não gerar cobranças em todos os contratos
+      this.logger.warn(
+        `Fatura ${fatura.id}: sem UC resolvida, Path B abortado para não ` +
+        `gerar cobranças duplicadas em todos os contratos do cooperado.`,
+      );
+      avisos.push('Fatura sem UC identificável — cobrança não gerada automaticamente.');
+      return { sucesso: true, cobrancasCriadas: 0, avisos };
+    }
 
     if (contratos.length === 0) {
-      avisos.push('Cooperado não possui contratos ativos. Nenhuma cobrança gerada.');
+      avisos.push(`Nenhum contrato ATIVO encontrado para UC ${uc.numero}.`);
     }
 
     const dados = fatura.dadosExtraidos as any;
@@ -1304,6 +1358,74 @@ IMPORTANTE:
     }
 
     return fallback;
+  }
+
+  // ── Matching fatura → UC (Sprint 5) ─────────────────────────────────────────
+
+  /**
+   * Resolve qual UC corresponde à fatura, dentro da cooperativa
+   * dona da fatura (blindagem multi-tenant).
+   *
+   * Ordem:
+   *  1. fatura.ucId preenchido → valida tenant e usa direto
+   *  2. dadosExtraidos.numeroUC → normaliza → busca por ucs.numero
+   *     normalizado DENTRO da mesma cooperativa
+   *  3. null se não encontra (chamador decide se falha ou segue)
+   */
+  private async resolverUcDaFatura(fatura: any): Promise<{ id: string; numero: string } | null> {
+    const tenantId = fatura.cooperativaId
+      ?? fatura.cooperado?.cooperativaId;
+    if (!tenantId) {
+      this.logger.warn(
+        `Fatura ${fatura.id} sem cooperativaId — não é possível resolver UC com segurança.`,
+      );
+      return null;
+    }
+
+    // Caminho feliz: ucId já vinculado
+    if (fatura.ucId) {
+      const uc = await this.prisma.uc.findFirst({
+        where: {
+          id: fatura.ucId,
+          OR: [
+            { cooperativaId: tenantId },
+            { cooperado: { cooperativaId: tenantId } },
+          ],
+        },
+        select: { id: true, numero: true },
+      });
+      if (!uc) {
+        this.logger.warn(
+          `Fatura ${fatura.id} tem ucId=${fatura.ucId} mas UC não pertence ` +
+          `à cooperativa ${tenantId}. Retornando null.`,
+        );
+        return null;
+      }
+      return uc;
+    }
+
+    // Fallback: buscar por número extraído do OCR
+    const numeroOCR = (fatura.dadosExtraidos as any)?.numeroUC;
+    const alvo = normalizarNumeroUc(numeroOCR);
+    if (!alvo) return null;
+
+    const ucs = await this.prisma.uc.findMany({
+      where: {
+        OR: [
+          { cooperativaId: tenantId },
+          { cooperado: { cooperativaId: tenantId } },
+        ],
+      },
+      select: { id: true, numero: true },
+    });
+    const achou = ucs.find(u => normalizarNumeroUc(u.numero) === alvo);
+    if (!achou) {
+      this.logger.warn(
+        `Fatura ${fatura.id}: UC "${numeroOCR}" não encontrada na cooperativa ${tenantId}.`,
+      );
+      return null;
+    }
+    return achou;
   }
 
   // ── Núcleo único de cálculo de cobrança (Sprint 5) ──────────────────────────
