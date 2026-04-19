@@ -110,6 +110,40 @@ export class ContratosService {
     return `CTR-${ano}-${String(seq).padStart(4, '0')}`;
   }
 
+  /**
+   * Sprint 5: bloqueia CREDITOS_COMPENSADOS e CREDITOS_DINAMICO.
+   * Controlado por env var BLOQUEIO_MODELOS_NAO_FIXO (default: true).
+   * Remover ao concluir Sprint 5.
+   */
+  private readonly MODELOS_BLOQUEADOS_SPRINT5 = ['CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
+
+  private isBloqueioAtivo(): boolean {
+    return process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false';
+  }
+
+  private async validarModeloNaoBloqueado(modeloOverride?: string | null, planoId?: string) {
+    if (!this.isBloqueioAtivo()) return;
+
+    // 1. Override explícito no contrato
+    if (modeloOverride && this.MODELOS_BLOQUEADOS_SPRINT5.includes(modeloOverride)) {
+      throw new BadRequestException(
+        'Modelo em refatoração (Sprint 5). Disponível em breve. Use FIXO_MENSAL por enquanto.',
+      );
+    }
+    // 2. Modelo herdado do plano
+    if (planoId) {
+      const plano = await this.prisma.plano.findUnique({
+        where: { id: planoId },
+        select: { modeloCobranca: true, nome: true },
+      });
+      if (plano && this.MODELOS_BLOQUEADOS_SPRINT5.includes(plano.modeloCobranca)) {
+        throw new BadRequestException(
+          `Plano "${plano.nome}" usa modelo "${plano.modeloCobranca}" — em refatoração (Sprint 5). Disponível em breve. Use um plano FIXO_MENSAL por enquanto.`,
+        );
+      }
+    }
+  }
+
   async create(data: {
     cooperadoId: string;
     ucId: string;
@@ -122,6 +156,9 @@ export class ContratosService {
     kwhContrato?: number;
     modeloCobrancaOverride?: string | null;
   }) {
+    // Sprint 5: bloquear criação em modelos COMPENSADOS/DINAMICO
+    await this.validarModeloNaoBloqueado(data.modeloCobrancaOverride, data.planoId);
+
     const contrato = await this.prisma.$transaction(async (tx) => {
       // 1. Validar: não permitir contrato ativo/lista_espera para mesma UC
       const contratoExistente = await tx.contrato.findFirst({
@@ -233,6 +270,12 @@ export class ContratosService {
       const modelos = ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
       if (data.modeloCobrancaOverride !== null && !modelos.includes(data.modeloCobrancaOverride)) {
         throw new BadRequestException(`Modelo de cobrança inválido. Valores aceitos: ${modelos.join(', ')} ou null`);
+      }
+      // Sprint 5: bloquear update para modelos COMPENSADOS/DINAMICO
+      if (this.isBloqueioAtivo() && data.modeloCobrancaOverride && this.MODELOS_BLOQUEADOS_SPRINT5.includes(data.modeloCobrancaOverride)) {
+        throw new BadRequestException(
+          'Modelo em refatoração (Sprint 5). Disponível em breve. Use FIXO_MENSAL por enquanto.',
+        );
       }
     }
 

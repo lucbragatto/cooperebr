@@ -15,26 +15,60 @@ export class UpdatePlanoDto {
 
   @IsOptional() @IsBoolean()
   temPromocao?: boolean;
+
+  @IsOptional() @IsNumber()
   descontoPromocional?: number;
+
+  @IsOptional() @IsNumber()
   mesesPromocao?: number;
+
+  @IsOptional() @IsBoolean()
   publico?: boolean;
+
+  @IsOptional() @IsBoolean()
   ativo?: boolean;
+
+  @IsOptional() @IsIn(['PADRAO', 'CAMPANHA'])
   tipoCampanha?: 'PADRAO' | 'CAMPANHA';
+
+  @IsOptional() @IsString()
   dataInicioVigencia?: string;
+
+  @IsOptional() @IsString()
   dataFimVigencia?: string;
 
   // Base de Cálculo
+  @IsOptional() @IsIn(['KWH_CHEIO', 'SEM_TRIBUTO', 'COM_ICMS', 'CUSTOM'])
   baseCalculo?: 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';
+
+  @IsOptional() @IsArray()
   componentesCustom?: string[];
+
+  @IsOptional() @IsIn(['ULTIMA_FATURA', 'MEDIA_3M', 'MEDIA_6M', 'MEDIA_12M'])
   referenciaValor?: 'ULTIMA_FATURA' | 'MEDIA_3M' | 'MEDIA_6M' | 'MEDIA_12M';
+
+  @IsOptional() @IsNumber()
   fatorIncremento?: number;
+
+  @IsOptional() @IsBoolean()
   mostrarDiscriminado?: boolean;
 
   // CooperToken
+  @IsOptional() @IsBoolean()
   cooperTokenAtivo?: boolean;
+
+  @IsOptional() @IsIn(['OPCAO_A', 'OPCAO_B', 'AMBAS'])
   tokenOpcaoCooperado?: 'OPCAO_A' | 'OPCAO_B' | 'AMBAS';
+
+  @IsOptional() @IsIn(['FIXO', 'KWH_APURADO'])
   tokenValorTipo?: 'FIXO' | 'KWH_APURADO';
+
+  @IsOptional() @IsNumber()
   tokenValorFixo?: number;
+
+  @IsOptional() @IsNumber()
   tokenDescontoMaxPerc?: number;
+
+  @IsOptional() @IsNumber()
   tokenExpiracaoMeses?: number;
 }

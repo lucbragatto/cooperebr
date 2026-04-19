@@ -461,6 +461,21 @@ export class MotorPropostaService {
       throw new BadRequestException('kwhContrato deve ser maior que zero para aceitar a proposta.');
     }
 
+    // Sprint 5: bloquear aceite se plano usa modelo COMPENSADOS/DINAMICO
+    // Controlado por env var BLOQUEIO_MODELOS_NAO_FIXO (default: true). Remover ao concluir Sprint 5.
+    if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && dto.planoId) {
+      const planoCheck = await this.prisma.plano.findUnique({
+        where: { id: dto.planoId },
+        select: { modeloCobranca: true, nome: true },
+      });
+      const bloqueados = ['CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
+      if (planoCheck && bloqueados.includes(planoCheck.modeloCobranca)) {
+        throw new BadRequestException(
+          `Plano "${planoCheck.nome}" usa modelo "${planoCheck.modeloCobranca}" — em refatoração (Sprint 5). Disponível em breve. Use um plano FIXO_MENSAL por enquanto.`,
+        );
+      }
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       // 1. Cancelar propostas anteriores aceitas para mesmo cooperado/mês
       const propostasAnteriores = await tx.propostaCooperado.findMany({

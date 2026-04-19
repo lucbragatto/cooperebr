@@ -53,6 +53,13 @@ export class PlanosService implements OnModuleInit {
         ],
       });
     }
+    // Sprint 5: esconder planos COMPENSADOS/DINAMICO da listagem pública enquanto bloqueio ativo.
+    // Controlado por env var BLOQUEIO_MODELOS_NAO_FIXO (default: true). Remover ao concluir Sprint 5.
+    if (publico && process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false') {
+      andFilters.push({
+        modeloCobranca: { notIn: [ModeloCobranca.CREDITOS_COMPENSADOS, ModeloCobranca.CREDITOS_DINAMICO] },
+      });
+    }
     return this.prisma.plano.findMany({
       where: {
         ativo: true,

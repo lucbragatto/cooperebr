@@ -15,9 +15,9 @@ const cls = 'w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus
 const lbl = 'block text-xs font-medium text-neutral-600 mb-1';
 
 const MODELOS_COBRANCA = [
-  { value: 'FIXO', label: 'Fixo', desc: 'Valor fixo mensal por membro, independente do consumo.' },
-  { value: 'CREDITOS_COMPENSADOS', label: 'Créditos Compensados', desc: 'Cobrança baseada no valor de kWh compensado na fatura.' },
-  { value: 'DINAMICO', label: 'Dinâmico', desc: 'Percentual de desconto sobre o valor da energia compensada.' },
+  { value: 'FIXO', label: 'Fixo', desc: 'Valor fixo mensal por membro, independente do consumo.', bloqueado: false },
+  { value: 'CREDITOS_COMPENSADOS', label: 'Créditos Compensados', desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).', bloqueado: true },
+  { value: 'DINAMICO', label: 'Dinâmico', desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).', bloqueado: true },
 ];
 
 function Section({ titulo, aberto, onToggle, children }: {
@@ -47,11 +47,14 @@ function SecaoCobranca({ config, onChange }: { config: ConfiguracoesData; onChan
         {MODELOS_COBRANCA.map((m) => (
           <button
             key={m.value}
-            onClick={() => onChange({ modeloCobranca: m.value })}
+            onClick={() => !m.bloqueado && onChange({ modeloCobranca: m.value })}
+            disabled={m.bloqueado}
             className={`text-left p-3 rounded-lg border-2 transition ${
-              config.modeloCobranca === m.value
-                ? 'border-green-500 bg-green-50'
-                : 'border-neutral-200 hover:border-neutral-300'
+              m.bloqueado
+                ? 'border-neutral-100 bg-neutral-50 opacity-50 cursor-not-allowed'
+                : config.modeloCobranca === m.value
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-neutral-200 hover:border-neutral-300'
             }`}
           >
             <p className="font-medium text-sm text-neutral-800">{m.label}</p>

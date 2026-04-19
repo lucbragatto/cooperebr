@@ -389,8 +389,8 @@ export default function PlanoDetailPage() {
                 onChange={(e) => setForm({ ...form, modeloCobranca: e.target.value as ModeloCobranca })}
               >
                 <option value="FIXO_MENSAL">Fixo Mensal</option>
-                <option value="CREDITOS_COMPENSADOS">Créditos Compensados</option>
-                <option value="CREDITOS_DINAMICO">Créditos Dinâmico</option>
+                <option value="CREDITOS_COMPENSADOS" disabled>Créditos Compensados (bloqueado — Sprint 5)</option>
+                <option value="CREDITOS_DINAMICO" disabled>Créditos Dinâmico (bloqueado — Sprint 5)</option>
               </select>
             </div>
 

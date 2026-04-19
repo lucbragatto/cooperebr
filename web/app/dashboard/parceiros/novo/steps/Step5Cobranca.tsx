@@ -12,16 +12,19 @@ const MODELOS = [
     value: 'FIXO',
     label: 'Fixo',
     desc: 'Valor fixo mensal por membro, independente do consumo.',
+    bloqueado: false,
   },
   {
     value: 'CREDITOS_COMPENSADOS',
     label: 'Créditos Compensados',
-    desc: 'Cobrança baseada no valor de kWh compensado na fatura.',
+    desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).',
+    bloqueado: true,
   },
   {
     value: 'DINAMICO',
     label: 'Dinâmico',
-    desc: 'Percentual de desconto sobre o valor da energia compensada.',
+    desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).',
+    bloqueado: true,
   },
 ];
 
@@ -57,11 +60,14 @@ export default function Step5Cobranca({ defaultValues, onSubmit }: Step5Props) {
         {MODELOS.map((m) => (
           <button
             key={m.value}
-            onClick={() => setTipo(m.value)}
+            onClick={() => !m.bloqueado && setTipo(m.value)}
+            disabled={m.bloqueado}
             className={`text-left p-4 rounded-lg border-2 transition ${
-              tipo === m.value
-                ? 'border-green-500 bg-green-50'
-                : 'border-neutral-200 hover:border-neutral-300'
+              m.bloqueado
+                ? 'border-neutral-100 bg-neutral-50 opacity-50 cursor-not-allowed'
+                : tipo === m.value
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-neutral-200 hover:border-neutral-300'
             }`}
           >
             <p className="font-medium text-sm text-neutral-800">{m.label}</p>
