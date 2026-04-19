@@ -4,7 +4,6 @@ import { CobrancasService } from './cobrancas.service';
 import { CobrancasJob } from './cobrancas.job';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 import { PrismaService } from '../prisma.service';
-import { ConfiguracaoCobrancaModule } from '../configuracao-cobranca/configuracao-cobranca.module';
 import { AsaasModule } from '../asaas/asaas.module';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
@@ -13,7 +12,7 @@ import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 import { FinanceiroModule } from '../financeiro/financeiro.module';
 
 @Module({
-  imports: [ConfiguracaoCobrancaModule, AsaasModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule, FinanceiroModule],
+  imports: [AsaasModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule, FinanceiroModule],
   controllers: [CobrancasController],
   providers: [CobrancasService, CobrancasJob, CalculoMultaJurosService, PrismaService],
   exports: [CobrancasService, CalculoMultaJurosService],

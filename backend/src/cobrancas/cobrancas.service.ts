@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
-import { ConfiguracaoCobrancaService } from '../configuracao-cobranca/configuracao-cobranca.service';
 import { AsaasService } from '../asaas/asaas.service';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
@@ -13,30 +12,6 @@ import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 import { CooperTokenTipo } from '@prisma/client';
 
-export type FonteDados = 'FATURA_OCR' | 'GERACAO_MANUAL' | 'ESTIMADO';
-
-export interface CobrancaCalculo {
-  contratoId: string;
-  competencia: Date;
-  geracaoMensalId: string;
-  kwhEntregue: number;
-  kwhConsumido: number | null;
-  kwhCompensado: number | null;
-  kwhSaldo: number | null;
-  kwhMinimoFaturavel: number;
-  descontoAplicado: number;
-  baseCalculoUsada: string;
-  fonteDesconto: string;
-  fonteDados: FonteDados;
-  faturaProcessadaId: string | null;
-  valorBruto: number;
-  valorDesconto: number;
-  valorBandeira: number;
-  tipoBandeira: string;
-  valorLiquido: number;
-  avisos: string[];
-}
-
 @Injectable()
 export class CobrancasService {
   private readonly logger = new Logger(CobrancasService.name);
@@ -44,7 +19,6 @@ export class CobrancasService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
-    private configuracaoCobrancaService: ConfiguracaoCobrancaService,
     private asaasService: AsaasService,
     private clubeVantagensService: ClubeVantagensService,
     private whatsappCicloVida: WhatsappCicloVidaService,
@@ -539,232 +513,6 @@ export class CobrancasService {
 
   async remove(id: string) {
     return this.prisma.cobranca.delete({ where: { id } });
-  }
-
-  async calcularCobrancaMensal(contratoId: string, competencia: Date): Promise<CobrancaCalculo> {
-    const avisos: string[] = [];
-
-    // 1. Buscar contrato com usina, UC e plano (para distribuidora e modelo de cobrança)
-    const contrato = await this.prisma.contrato.findUnique({
-      where: { id: contratoId },
-      include: { usina: true, uc: true, plano: true, cooperado: { select: { status: true } } },
-    });
-    if (!contrato) throw new NotFoundException('Contrato não encontrado');
-    if (contrato.status !== 'ATIVO') {
-      throw new BadRequestException(`Contrato ${contratoId} não está ATIVO (status: ${contrato.status}). Cobrança não gerada.`);
-    }
-    if (contrato.cooperado?.status !== 'ATIVO') {
-      throw new BadRequestException(`Cooperado do contrato ${contratoId} não está ATIVO (status: ${contrato.cooperado?.status}). Cobrança não gerada.`);
-    }
-    if (!contrato.usinaId || !contrato.usina) {
-      throw new BadRequestException('Contrato não possui usina vinculada');
-    }
-    if (contrato.percentualUsina == null) {
-      throw new BadRequestException('Contrato não possui percentualUsina definido');
-    }
-
-    // 2. Buscar GeracaoMensal da usina para a competência
-    const competenciaNormalizada = new Date(competencia.getFullYear(), competencia.getMonth(), 1);
-    const mesRef = competenciaNormalizada.getMonth() + 1;
-    const anoRef = competenciaNormalizada.getFullYear();
-
-    const geracao = await this.prisma.geracaoMensal.findUnique({
-      where: {
-        usinaId_competencia: {
-          usinaId: contrato.usinaId,
-          competencia: competenciaNormalizada,
-        },
-      },
-    });
-    if (!geracao) {
-      throw new NotFoundException(
-        `Geração mensal não encontrada para usina ${contrato.usina.nome} na competência ${competenciaNormalizada.toISOString().slice(0, 7)}`,
-      );
-    }
-
-    // 3. Calcular kWh entregue ao cooperado
-    const percentualUsina = Number(contrato.percentualUsina) / 100;
-    const kwhEntregue = geracao.kwhGerado * percentualUsina;
-
-    // 4. Resolver desconto via hierarquia (contrato → usina → cooperativa)
-    const configDesconto = await this.configuracaoCobrancaService.resolverDesconto(contratoId);
-    const descontoAplicado = configDesconto.desconto;
-    const baseCalculoUsada = configDesconto.baseCalculo;
-    const fonteDesconto = configDesconto.fonte;
-
-    // 5. Buscar tarifa da distribuidora do cooperado (TUSD + TE)
-    const distribuidora = contrato.uc?.distribuidora || contrato.usina?.distribuidora;
-    if (!distribuidora) {
-      throw new BadRequestException('UC/Usina não possui distribuidora definida — impossível calcular tarifa');
-    }
-    const normDistrib = distribuidora
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim();
-    const todasTarifas = await this.prisma.tarifaConcessionaria.findMany({
-      orderBy: { dataVigencia: 'desc' },
-    });
-    const tarifaVigente = todasTarifas.find(t => {
-      const normConc = t.concessionaria
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim();
-      return normConc.includes(normDistrib) || normDistrib.includes(normConc);
-    }) || null;
-    if (!tarifaVigente) {
-      throw new BadRequestException(`Tarifa não encontrada para a distribuidora "${distribuidora}". Cadastre a tarifa antes de gerar cobranças.`);
-    }
-    let tarifaKwh = Number(tarifaVigente.tusdNova) + Number(tarifaVigente.teNova);
-
-    // 6. Resolver modelo de cobrança (contrato override → usina override → plano → CREDITOS_COMPENSADOS)
-    const modeloCobranca =
-      (contrato as any).modeloCobrancaOverride ||
-      (contrato.usina as any)?.modeloCobrancaOverride ||
-      (contrato as any).plano?.modeloCobranca ||
-      'CREDITOS_COMPENSADOS';
-
-    // 7. Buscar FaturaProcessada APROVADA para este cooperado/mês (dados OCR)
-    const mesRefStr = `${anoRef}-${String(mesRef).padStart(2, '0')}`;
-    const faturaAprovada = await this.prisma.faturaProcessada.findFirst({
-      where: {
-        cooperadoId: contrato.cooperadoId,
-        status: 'APROVADA',
-        mesReferencia: mesRefStr,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    const dadosOcr = faturaAprovada?.dadosExtraidos as any;
-    let fonteDados: FonteDados = 'GERACAO_MANUAL';
-    let faturaProcessadaId: string | null = null;
-    let kwhCompensadoOcr: number | null = null;
-    let kwhConsumidoOcr: number | null = null;
-
-    if (faturaAprovada && dadosOcr) {
-      faturaProcessadaId = faturaAprovada.id;
-      kwhCompensadoOcr = dadosOcr.creditosRecebidosKwh != null
-        ? Number(dadosOcr.creditosRecebidosKwh)
-        : null;
-      kwhConsumidoOcr = dadosOcr.consumoAtualKwh != null
-        ? Number(dadosOcr.consumoAtualKwh)
-        : null;
-    }
-
-    // 8. Calcular valor conforme modelo, usando OCR quando disponível
-    let kwhCobranca: number;
-    const kwhContrato = Number(contrato.kwhContrato ?? 0);
-
-    if (modeloCobranca === 'FIXO_MENSAL') {
-      kwhCobranca = kwhContrato;
-    } else if (modeloCobranca === 'CREDITOS_COMPENSADOS') {
-      if (kwhCompensadoOcr != null && kwhCompensadoOcr > 0) {
-        // Usar kwhCompensado da fatura OCR em vez de kwhEntregue da GeracaoMensal
-        kwhCobranca = Math.min(kwhCompensadoOcr, kwhContrato);
-        fonteDados = 'FATURA_OCR';
-        avisos.push(`Dados OCR utilizados: kwhCompensado=${kwhCompensadoOcr} da fatura ${faturaAprovada!.id}`);
-      } else {
-        kwhCobranca = Math.min(kwhEntregue, kwhContrato);
-        if (faturaAprovada) {
-          avisos.push('Fatura aprovada encontrada mas sem kwhCompensado — usando GeracaoMensal');
-        }
-      }
-    } else if (modeloCobranca === 'CREDITOS_DINAMICO') {
-      // CREDITOS_DINAMICO: usar tarifas OCR se disponíveis
-      if (faturaAprovada && dadosOcr) {
-        const tusdOcr = dadosOcr.tarifaTUSD != null ? Number(dadosOcr.tarifaTUSD) : null;
-        const teOcr = dadosOcr.tarifaTE != null ? Number(dadosOcr.tarifaTE) : null;
-        if (tusdOcr != null && teOcr != null && tusdOcr > 0 && teOcr > 0) {
-          tarifaKwh = tusdOcr + teOcr;
-          fonteDados = 'FATURA_OCR';
-          avisos.push(`Tarifa OCR utilizada: TUSD=${tusdOcr} + TE=${teOcr} = ${tarifaKwh} da fatura ${faturaAprovada.id}`);
-        } else {
-          avisos.push('Fatura aprovada encontrada mas sem tarifaTUSD/tarifaTE — usando tarifa vigente cadastrada');
-        }
-      }
-
-      if (kwhCompensadoOcr != null && kwhCompensadoOcr > 0) {
-        kwhCobranca = Math.min(kwhCompensadoOcr, kwhContrato);
-        if (fonteDados !== 'FATURA_OCR') fonteDados = 'FATURA_OCR';
-        avisos.push(`Dados OCR utilizados: kwhCompensado=${kwhCompensadoOcr} da fatura ${faturaAprovada!.id}`);
-      } else {
-        kwhCobranca = Math.min(kwhEntregue, kwhContrato);
-      }
-    } else {
-      kwhCobranca = Math.min(kwhEntregue, kwhContrato);
-      fonteDados = 'ESTIMADO';
-    }
-
-    // 9. Consumo mínimo faturável: deduzir do kWh considerado
-    let kwhMinimoFaturavel = 0;
-    const configMotor = await this.prisma.configuracaoMotor.findFirst({
-      orderBy: { updatedAt: 'desc' },
-    });
-    if (configMotor?.consumoMinimoFaturavelAtivo) {
-      const tipo = (contrato.uc?.tipoFornecimento ?? '').toUpperCase();
-      if (tipo === 'MONOFASICO') {
-        kwhMinimoFaturavel = configMotor.consumoMinimoMonofasicoKwh;
-      } else if (tipo === 'BIFASICO') {
-        kwhMinimoFaturavel = configMotor.consumoMinimoBifasicoKwh;
-      } else {
-        kwhMinimoFaturavel = configMotor.consumoMinimoTrifasicoKwh;
-      }
-      kwhCobranca = Math.max(0, kwhCobranca - kwhMinimoFaturavel);
-      avisos.push(`Mínimo faturável deduzido: ${kwhMinimoFaturavel} kWh (${tipo || 'TRIFASICO'})`);
-    }
-
-    const valorBruto = Math.round(kwhCobranca * tarifaKwh * 100) / 100;
-    const valorDesconto = Math.round(valorBruto * (descontoAplicado / 100) * 100) / 100;
-
-    // 10. Bandeira tarifária: adicionar taxa extra se cooperativa tem bandeiraAtiva=true
-    let valorBandeira = 0;
-    let tipoBandeira = 'VERDE';
-    if (contrato.cooperativaId) {
-      const cooperativa = await this.prisma.cooperativa.findUnique({
-        where: { id: contrato.cooperativaId },
-        select: { bandeiraAtiva: true },
-      });
-      if (cooperativa?.bandeiraAtiva) {
-        const bandeira = await this.prisma.bandeiraTarifaria.findFirst({
-          where: {
-            cooperativaId: contrato.cooperativaId,
-            dataInicio: { lte: competenciaNormalizada },
-            dataFim: { gte: competenciaNormalizada },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (bandeira && bandeira.tipo !== 'VERDE') {
-          tipoBandeira = bandeira.tipo;
-          valorBandeira = Math.round((kwhCobranca / 100) * Number(bandeira.valorPor100Kwh) * 100) / 100;
-          avisos.push(`Bandeira ${tipoBandeira}: ${kwhCobranca} kWh × R$ ${bandeira.valorPor100Kwh}/100kWh = R$ ${valorBandeira.toFixed(2)}`);
-        }
-      }
-    }
-
-    const valorLiquido = Math.round((valorBruto - valorDesconto + valorBandeira) * 100) / 100;
-
-    return {
-      contratoId,
-      competencia: competenciaNormalizada,
-      geracaoMensalId: geracao.id,
-      kwhEntregue,
-      kwhConsumido: kwhConsumidoOcr,
-      kwhCompensado: kwhCompensadoOcr,
-      kwhSaldo: kwhCompensadoOcr != null ? kwhCompensadoOcr - (kwhConsumidoOcr ?? 0) : null,
-      kwhMinimoFaturavel,
-      descontoAplicado,
-      baseCalculoUsada: `${baseCalculoUsada} (${modeloCobranca})`,
-      fonteDesconto,
-      fonteDados,
-      faturaProcessadaId,
-      valorBruto,
-      valorDesconto,
-      valorBandeira,
-      tipoBandeira,
-      valorLiquido,
-      avisos,
-    };
   }
 
   /**
