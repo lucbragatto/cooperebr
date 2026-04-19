@@ -420,6 +420,17 @@ export class FaturasService {
     // Resolver modelo de cobrança
     const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
 
+    // Sprint 5: a engine de cobrança não foi refatorada pra modelos não-FIXO.
+    // Reusa o mesmo flag que congela criação de contratos em COMPENSADOS/DINAMICO.
+    if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && modeloCobranca !== 'FIXO_MENSAL') {
+      throw new BadRequestException(
+        `Geração de cobrança bloqueada: contrato ${contrato.numero} ` +
+        `usa modelo ${modeloCobranca}. ` +
+        `A engine de cobrança só suporta FIXO_MENSAL durante o Sprint 5. ` +
+        `Para liberar, definir BLOQUEIO_MODELOS_NAO_FIXO=false (não recomendado).`,
+      );
+    }
+
     // Determinar mês/ano referência
     const mesRef = fatura.mesReferencia ?? dados?.mesReferencia ?? '';
     let mesNum: number;
@@ -834,6 +845,12 @@ export class FaturasService {
 
       // Determinar modelo de cobrança (hierarquia: contrato → usina → config → plano → FIXO_MENSAL)
       const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
+
+      // Sprint 5: bloquear modelos não-FIXO enquanto engine não refatorada
+      if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && modeloCobranca !== 'FIXO_MENSAL') {
+        avisos.push(`Contrato ${contrato.numero}: modelo ${modeloCobranca} bloqueado (Sprint 5). Cobrança não gerada.`);
+        continue;
+      }
 
       // BUG-11-002: buscar tarifa pela distribuidora do contrato (usina) se disponível
       const distribContrato = contrato.usina?.distribuidora;
