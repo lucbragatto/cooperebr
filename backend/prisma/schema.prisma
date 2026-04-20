@@ -372,9 +372,16 @@ model Contrato {
   ultimoReajusteEm         DateTime?
   ultimoReajusteIndice     String?
   // ── Sprint 5: campos pra refatoração da engine de cobrança ──
-  valorContrato            Decimal?                  @db.Decimal(10, 2)
-  tarifaContratual         Decimal?                  @db.Decimal(10, 5)
-  dataUltimoReajusteTarifa DateTime?
+  valorContrato                Decimal?                  @db.Decimal(10, 2)
+  tarifaContratual             Decimal?                  @db.Decimal(10, 5)
+  dataUltimoReajusteTarifa     DateTime?
+  // Snapshots adicionais do plano — preenchidos em aceitar()
+  valorContratoPromocional     Decimal?                  @db.Decimal(10, 2)
+  tarifaContratualPromocional  Decimal?                  @db.Decimal(10, 5)
+  descontoPromocionalAplicado  Decimal?                  @db.Decimal(5, 2)
+  mesesPromocaoAplicados       Int?
+  baseCalculoAplicado          String                    @default("KWH_CHEIO")
+  tipoDescontoAplicado         TipoDesconto              @default(APLICAR_SOBRE_BASE)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   cobrancas                Cobranca[]
@@ -405,11 +412,12 @@ model Plano {
   propostas           PropostaCooperado[]
 
   // ── Base de Cálculo ──
-  baseCalculo         String   @default("KWH_CHEIO")
-  componentesCustom   String[] @default([])
-  referenciaValor     String   @default("MEDIA_3M")
-  fatorIncremento     Decimal? @db.Decimal(5, 2)
-  mostrarDiscriminado Boolean  @default(true)
+  baseCalculo         String       @default("KWH_CHEIO")
+  tipoDesconto        TipoDesconto @default(APLICAR_SOBRE_BASE)
+  componentesCustom   String[]     @default([])
+  referenciaValor     String       @default("MEDIA_3M")
+  fatorIncremento     Decimal?     @db.Decimal(5, 2)
+  mostrarDiscriminado Boolean      @default(true)
 
   // ── CooperToken ──
   cooperTokenAtivo     Boolean  @default(false)
@@ -437,6 +445,11 @@ enum PoliticaBandeira {
   APLICAR // cobra bandeira automaticamente quando vier na fatura
   NAO_APLICAR // nunca cobra bandeira do cooperado
   DECIDIR_MENSAL // admin decide manualmente por ciclo (default conservador)
+}
+
+enum TipoDesconto {
+  APLICAR_SOBRE_BASE
+  ABATER_DA_CHEIA
 }
 
 enum TipoCampanha {
