@@ -1,5 +1,10 @@
 # FÓRMULAS DE COBRANÇA — CoopereBR
-> Fonte única de verdade para cálculo de cobrança por modelo.
+
+> ⚠️ **DEPRECATED** — substituído por `REGRAS-PLANOS-E-COBRANCA.md` (20/04/2026).
+> Este arquivo contém erros conceituais sobre ICMS e não cobre tipoDesconto, promoção temporal nem pipeline email.
+> Mantido para referência histórica. Não usar como fonte de verdade.
+
+> ~~Fonte única de verdade para cálculo de cobrança por modelo.~~
 > Decisões fechadas com Luciano em 18/04/2026.
 > Este documento vale MAIS que qualquer código divergente que o Claude Code encontrar.
 
