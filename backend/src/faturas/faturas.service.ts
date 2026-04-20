@@ -26,6 +26,43 @@ export function normalizarNumeroUc(raw: string | null | undefined): string {
   return String(raw).replace(/\D+/g, '');
 }
 
+/**
+ * Busca UC cujo numero (normalizado) bate com numeroOCR (normalizado),
+ * dentro do tenant especificado. Retorna { id, numero } ou null.
+ *
+ * Usável tanto ANTES de criar FaturaProcessada (contexto factory)
+ * quanto DEPOIS (contexto matching de cobrança).
+ *
+ * Multi-tenant: NUNCA retorna UC de outra cooperativa.
+ */
+export async function resolverUcPorNumero(
+  prisma: PrismaService,
+  tenantId: string,
+  numeroOCR: string | null | undefined,
+  logger?: { warn: (msg: string) => void },
+): Promise<{ id: string; numero: string } | null> {
+  const alvo = normalizarNumeroUc(numeroOCR);
+  if (!alvo || !tenantId) return null;
+
+  const ucs = await prisma.uc.findMany({
+    where: {
+      OR: [
+        { cooperativaId: tenantId },
+        { cooperado: { cooperativaId: tenantId } },
+      ],
+    },
+    select: { id: true, numero: true },
+  });
+  const achou = ucs.find(u => normalizarNumeroUc(u.numero) === alvo);
+  if (!achou && logger) {
+    logger.warn(
+      `resolverUcPorNumero: numero ${numeroOCR} (normalizado ${alvo}) ` +
+      `não encontrado no tenant ${tenantId}. UCs tentadas: ${ucs.length}.`,
+    );
+  }
+  return achou ?? null;
+}
+
 interface HistoricoItem {
   mesAno: string;
   consumoKwh: number;
@@ -1373,16 +1410,13 @@ IMPORTANTE:
    *  3. null se não encontra (chamador decide se falha ou segue)
    */
   private async resolverUcDaFatura(fatura: any): Promise<{ id: string; numero: string } | null> {
-    const tenantId = fatura.cooperativaId
-      ?? fatura.cooperado?.cooperativaId;
+    const tenantId = fatura?.cooperativaId ?? fatura?.cooperado?.cooperativaId;
     if (!tenantId) {
-      this.logger.warn(
-        `Fatura ${fatura.id} sem cooperativaId — não é possível resolver UC com segurança.`,
-      );
+      this.logger.warn(`Fatura ${fatura?.id} sem cooperativaId — não é possível resolver UC.`);
       return null;
     }
 
-    // Caminho feliz: ucId já vinculado
+    // Caminho feliz: ucId já vinculado, validar que pertence ao tenant
     if (fatura.ucId) {
       const uc = await this.prisma.uc.findFirst({
         where: {
@@ -1396,36 +1430,122 @@ IMPORTANTE:
       });
       if (!uc) {
         this.logger.warn(
-          `Fatura ${fatura.id} tem ucId=${fatura.ucId} mas UC não pertence ` +
-          `à cooperativa ${tenantId}. Retornando null.`,
+          `Fatura ${fatura.id} tem ucId=${fatura.ucId} fora do tenant ${tenantId}.`,
         );
         return null;
       }
       return uc;
     }
 
-    // Fallback: buscar por número extraído do OCR
-    const numeroOCR = (fatura.dadosExtraidos as any)?.numeroUC;
-    const alvo = normalizarNumeroUc(numeroOCR);
-    if (!alvo) return null;
+    // Fallback: delega pro utility
+    return resolverUcPorNumero(
+      this.prisma,
+      tenantId,
+      (fatura?.dadosExtraidos as any)?.numeroUC,
+      this.logger,
+    );
+  }
 
-    const ucs = await this.prisma.uc.findMany({
-      where: {
-        OR: [
-          { cooperativaId: tenantId },
-          { cooperado: { cooperativaId: tenantId } },
-        ],
-      },
-      select: { id: true, numero: true },
-    });
-    const achou = ucs.find(u => normalizarNumeroUc(u.numero) === alvo);
-    if (!achou) {
-      this.logger.warn(
-        `Fatura ${fatura.id}: UC "${numeroOCR}" não encontrada na cooperativa ${tenantId}.`,
-      );
-      return null;
+  // ── Factory de FaturaProcessada (Sprint 5, tarefa 8b) ───────────────────────
+
+  /**
+   * Centraliza criação de FaturaProcessada resolvendo cooperativaId, ucId
+   * e cooperadoId de forma best-effort antes do prisma.create.
+   *
+   * Nenhum call site usa ainda (Commits B e C migram).
+   */
+  async criarFaturaProcessada(args: {
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+    ucId?: string | null;
+    dadosExtraidos: any;
+    historicoConsumo: any;
+    mesesUtilizados: number;
+    mesesDescartados: number;
+    mediaKwhCalculada: number;
+    thresholdUtilizado: number;
+    arquivoUrl?: string | null;
+    mesReferencia?: string | null;
+    analise?: any;
+    statusRevisao?: string;
+    status?: string;
+    saldoKwhAnterior?: number | null;
+    saldoKwhAtual?: number | null;
+    validadeCreditos?: Date | null;
+    valorSemDesconto?: number | null;
+    economiaGerada?: number | null;
+  }) {
+    // 1) Resolver tenantId
+    let tenantId = args.cooperativaId ?? null;
+    if (!tenantId && args.cooperadoId) {
+      const coop = await this.prisma.cooperado.findUnique({
+        where: { id: args.cooperadoId },
+        select: { cooperativaId: true },
+      });
+      tenantId = coop?.cooperativaId ?? null;
     }
-    return achou;
+    if (!tenantId) {
+      throw new BadRequestException(
+        'criarFaturaProcessada: cooperativaId não resolvível ' +
+        '(passe cooperativaId direto ou cooperadoId válido).',
+      );
+    }
+
+    // 2) Resolver ucId (best-effort — não falha se não conseguir)
+    let ucIdFinal: string | null = args.ucId ?? null;
+    if (!ucIdFinal) {
+      const numeroOCR = args.dadosExtraidos?.numeroUC;
+      if (numeroOCR) {
+        const uc = await resolverUcPorNumero(
+          this.prisma, tenantId, numeroOCR, this.logger,
+        );
+        ucIdFinal = uc?.id ?? null;
+      }
+    }
+
+    // 3) Se ucId resolvido e cooperadoId não veio, derivar cooperadoId
+    let cooperadoIdFinal: string | null = args.cooperadoId ?? null;
+    if (ucIdFinal && !cooperadoIdFinal) {
+      const uc = await this.prisma.uc.findUnique({
+        where: { id: ucIdFinal },
+        select: { cooperadoId: true },
+      });
+      cooperadoIdFinal = uc?.cooperadoId ?? null;
+    }
+
+    // 4) Log de warn se ucId ficou null
+    if (!ucIdFinal) {
+      this.logger.warn(
+        `criarFaturaProcessada: fatura criada sem ucId. ` +
+        `tenantId=${tenantId}, cooperadoId=${cooperadoIdFinal}, ` +
+        `numeroUC OCR=${args.dadosExtraidos?.numeroUC ?? '(nenhum)'}.`,
+      );
+    }
+
+    // 5) Criar
+    return this.prisma.faturaProcessada.create({
+      data: {
+        cooperativaId: tenantId,
+        cooperadoId: cooperadoIdFinal,
+        ucId: ucIdFinal,
+        arquivoUrl: args.arquivoUrl ?? null,
+        dadosExtraidos: args.dadosExtraidos,
+        historicoConsumo: args.historicoConsumo,
+        mesesUtilizados: args.mesesUtilizados,
+        mesesDescartados: args.mesesDescartados,
+        mediaKwhCalculada: args.mediaKwhCalculada,
+        thresholdUtilizado: args.thresholdUtilizado,
+        status: (args.status as any) ?? 'PENDENTE',
+        mesReferencia: args.mesReferencia ?? null,
+        analise: args.analise ?? null,
+        statusRevisao: args.statusRevisao ?? 'PENDENTE_REVISAO',
+        saldoKwhAnterior: args.saldoKwhAnterior ?? null,
+        saldoKwhAtual: args.saldoKwhAtual ?? null,
+        validadeCreditos: args.validadeCreditos ?? null,
+        valorSemDesconto: args.valorSemDesconto ?? null,
+        economiaGerada: args.economiaGerada ?? null,
+      },
+    });
   }
 
   // ── Núcleo único de cálculo de cobrança (Sprint 5) ──────────────────────────
