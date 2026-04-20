@@ -428,16 +428,21 @@ export class MotorPropostaService {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
 
-    // Multi-tenant: validar que o cooperado pertence ao tenant do caller
-    if (cooperativaId) {
-      const dono = await this.prisma.cooperado.findUnique({
-        where: { id: dto.cooperadoId },
-        select: { cooperativaId: true },
-      });
-      if (!dono) throw new NotFoundException('Cooperado não encontrado');
-      if (dono.cooperativaId !== cooperativaId) {
-        throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
-      }
+    // Carregar cooperado — precisamos de cooperativaId pro contrato
+    const dono = await this.prisma.cooperado.findUnique({
+      where: { id: dto.cooperadoId },
+      select: { cooperativaId: true },
+    });
+    if (!dono) throw new NotFoundException('Cooperado não encontrado');
+    if (!dono.cooperativaId) {
+      throw new BadRequestException(
+        `Cooperado ${dto.cooperadoId} sem cooperativaId — dados corrompidos.`,
+      );
+    }
+
+    // Multi-tenant: cross-check quando caller informou tenant
+    if (cooperativaId && dono.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
     }
 
     // T3 PARTE 4 camada 2: validação de ranges no resultado.
@@ -601,6 +606,7 @@ export class MotorPropostaService {
         data: {
           numero,
           cooperadoId: dto.cooperadoId,
+          cooperativaId: dono.cooperativaId,
           planoId,
           ucId: ucDisponivel.id,
           usinaId: usinaComVaga?.id ?? null,
