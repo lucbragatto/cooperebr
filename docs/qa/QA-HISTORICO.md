@@ -17,6 +17,7 @@
 
 | Data | Score | Críticos | Destaques |
 |------|-------|----------|-----------|
+| 2026-04-20 | 8.7/10 | 0 | 🔴 NOVO P2: percentualDesconto=20% mas valorDesconto=R$0 em FIXO_MENSAL (DRE incorreto); Sprint 5 ✅ concluído (engine unificada, testes UC matching, 6 campos auditoria); BUG-18-001 cross-tenant ainda aberto |
 | 2026-04-19 | 8.8/10 | 0 | ⚙️ Sprint 5 freeze COMPENSADOS/DINAMICO (3 camadas de defesa, feature flag); P2 cross-tenant cobrança ainda aberto; 4 P3 novos (onModuleInit plano inválido, getConfiguracao sem cooperativaId, Step5 código morto, enum wizard errado) ||
 | 2026-04-18 | 9.0/10 | 0 | 🚀 10 bugs fechados (8 P2 + 2 P3); BandeiraTarifaria + consumo mínimo + ANEEL auto-sync entregues; 1 P2 novo (ConfiguracaoMotor cross-tenant) |
 | 2026-04-17 | 8.5/10 | 0 | ⚠️ SPRINT MASSIVO (52 commits): T0→T10 entregues (wizard admin completo, portal UCs, cadastro v2); 4 P2 novos (confirmar-UC 300kWh, job aprovação auto, v2 outlier, UC sem rollback) |
@@ -44,7 +45,7 @@
 
 ---
 
-## Bugs P2 atualmente abertos (18/04/2026)
+## Bugs P2 atualmente abertos (20/04/2026)
 
 | ID | Bug | Sprint sugerido |
 |----|-----|-----------------|
@@ -68,6 +69,8 @@
 | **BUG-19-002** | **getConfiguracao() motor-proposta sem cooperativaId → threshold outlier cross-tenant** | Próximo |
 | BUG-19-003 | Step5Cobranca.tsx código morto/orphaned | Backlog |
 | BUG-19-004 | Step3Configuracoes usa 'FIXO'/'DINAMICO' vs 'FIXO_MENSAL'/'CREDITOS_DINAMICO' | Próximo |
+| **BUG-20-001** | **FIXO_MENSAL: percentualDesconto=contrato% mas valorDesconto=0 na Cobrança — DRE incorreto** | **Urgente** |
+| BUG-20-002 | kwhExcedente incorreto quando kwhContrato=0 (todos créditos = excedente) | Próximo |
 | ~~BUG-NEW-2026-04-14-002~~ | ~~IDOR: DELETE /faturas/:id e PATCH /:id/rejeitar sem tenant check~~ | ✅ RESOLVIDO 15/04 |
 | ~~BUG-NEW-2026-04-13-001~~ | ~~IDOR: GET /faturas/:id/relatorio sem tenant check~~ | ✅ RESOLVIDO 15/04 |
 | ~~BUG-NEW-2026-04-13-002~~ | ~~IDOR: DELETE/PUT /motor-proposta/proposta/:id sem tenant~~ | ✅ RESOLVIDO 15/04 |
