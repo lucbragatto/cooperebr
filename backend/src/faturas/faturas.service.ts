@@ -229,34 +229,31 @@ export class FaturasService {
       .getPublicUrl(uploadData.path);
     const arquivoUrl = urlData.publicUrl;
 
-    // 5. Salvar em faturas_processadas
+    // 5. Salvar em faturas_processadas via factory (Sprint 5)
     let faturaId: string;
     try {
       const economiaGerada = dadosExtraidos.valorSemDesconto > 0
         ? Math.round((dadosExtraidos.valorSemDesconto - dadosExtraidos.totalAPagar) * 100) / 100
         : null;
 
-      const fatura = await this.prisma.faturaProcessada.create({
-        data: {
-          cooperadoId: dto.cooperadoId,
-          ucId: dto.ucId ?? null,
-          arquivoUrl,
-          dadosExtraidos: dadosExtraidos as object,
-          historicoConsumo: historico as object,
-          mesesUtilizados,
-          mesesDescartados,
-          mediaKwhCalculada: media,
-          thresholdUtilizado: threshold,
-          status: 'PENDENTE',
-          saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
-          saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
-          validadeCreditos: dadosExtraidos.validadeCreditos
-            ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
-            : null,
-          valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
-          economiaGerada,
-        },
-        select: { id: true },
+      const fatura = await this.criarFaturaProcessada({
+        cooperadoId: dto.cooperadoId,
+        ucId: dto.ucId ?? null,
+        arquivoUrl,
+        dadosExtraidos: dadosExtraidos as object,
+        historicoConsumo: historico as object,
+        mesesUtilizados,
+        mesesDescartados,
+        mediaKwhCalculada: media,
+        thresholdUtilizado: threshold,
+        status: 'PENDENTE',
+        saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
+        saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
+        validadeCreditos: dadosExtraidos.validadeCreditos
+          ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
+          : null,
+        valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
+        economiaGerada,
       });
       faturaId = fatura.id;
     } catch (e) { throw new InternalServerErrorException(`Salvar fatura: ${(e as Error).message}`); }
@@ -329,16 +326,7 @@ export class FaturasService {
     // 1. OCR
     const dadosExtraidos = await this.extrairDadosFatura(dto.arquivoBase64, dto.tipoArquivo);
 
-    // 2. Match UC pelo número extraído
-    let ucId = dto.ucId ?? null;
-    if (!ucId && dadosExtraidos.numeroUC) {
-      const uc = await this.prisma.uc.findFirst({
-        where: { numeroUC: dadosExtraidos.numeroUC },
-      });
-      if (uc) ucId = uc.id;
-    }
-
-    // 3. Upload arquivo ao Supabase
+    // 2. Upload arquivo ao Supabase
     const ext = dto.tipoArquivo === 'pdf' ? 'pdf' : 'jpg';
     const filePath = `${dto.cooperadoId}/fatura-conc-${Date.now()}.${ext}`;
     const buffer = Buffer.from(dto.arquivoBase64, 'base64');
@@ -396,34 +384,32 @@ export class FaturasService {
     // 7. Determinar status de revisão
     const statusRevisao = divergenciaPerc < 5 ? 'AUTO_APROVADO' : 'PENDENTE_REVISAO';
 
-    // 8. Salvar FaturaProcessada
+    // 8. Salvar FaturaProcessada via factory (Sprint 5)
     const economiaGeradaConc = dadosExtraidos.valorSemDesconto > 0
       ? Math.round((dadosExtraidos.valorSemDesconto - dadosExtraidos.totalAPagar) * 100) / 100
       : null;
 
-    const fatura = await this.prisma.faturaProcessada.create({
-      data: {
-        cooperadoId: dto.cooperadoId,
-        ucId,
-        arquivoUrl,
-        dadosExtraidos: { ...dadosExtraidos as object, analise },
-        historicoConsumo: historico as object,
-        mesesUtilizados,
-        mesesDescartados,
-        mediaKwhCalculada: media,
-        thresholdUtilizado: threshold,
-        status: 'PENDENTE',
-        analise: analise as object,
-        mesReferencia: dto.mesReferencia,
-        statusRevisao,
-        saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
-        saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
-        validadeCreditos: dadosExtraidos.validadeCreditos
-          ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
-          : null,
-        valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
-        economiaGerada: economiaGeradaConc,
-      },
+    const fatura = await this.criarFaturaProcessada({
+      cooperadoId: dto.cooperadoId,
+      ucId: dto.ucId ?? null,
+      arquivoUrl,
+      dadosExtraidos: { ...dadosExtraidos as object, analise },
+      historicoConsumo: historico as object,
+      mesesUtilizados,
+      mesesDescartados,
+      mediaKwhCalculada: media,
+      thresholdUtilizado: threshold,
+      status: 'PENDENTE',
+      analise: analise as object,
+      mesReferencia: dto.mesReferencia,
+      statusRevisao,
+      saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
+      saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
+      validadeCreditos: dadosExtraidos.validadeCreditos
+        ? (() => { const [m, a] = dadosExtraidos.validadeCreditos.split('/'); return m && a ? new Date(Number(a), Number(m) - 1) : null; })()
+        : null,
+      valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
+      economiaGerada: economiaGeradaConc,
     });
 
     // 9. Se auto-aprovado, gerar cobrança automaticamente

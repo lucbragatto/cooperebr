@@ -10,6 +10,7 @@ import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.servic
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { EmailService } from '../email/email.service';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
+import { FaturasService } from '../faturas/faturas.service';
 import * as jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../auth/jwt-secret';
 
@@ -26,6 +27,7 @@ export class CooperadosService {
     private whatsappCicloVida: WhatsappCicloVidaService,
     private whatsappSender: WhatsappSenderService,
     private emailService: EmailService,
+    private faturasService: FaturasService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -1195,19 +1197,18 @@ export class CooperadosService {
       );
     }
 
-    const fatura = await this.prisma.faturaProcessada.create({
-      data: {
-        cooperadoId,
-        ucId: dto.ucId ?? null,
-        arquivoUrl: dto.arquivoUrl ?? null,
-        dadosExtraidos: dto.dadosOcr as object,
-        historicoConsumo: historicoConsumo as object,
-        mesesUtilizados: media.mesesUtilizados,
-        mesesDescartados: media.mesesDescartados,
-        mediaKwhCalculada: media.media,
-        thresholdUtilizado: 50,
-        status: 'APROVADA',
-      },
+    const fatura = await this.faturasService.criarFaturaProcessada({
+      cooperadoId,
+      ucId: dto.ucId ?? null,
+      arquivoUrl: dto.arquivoUrl ?? null,
+      dadosExtraidos: dto.dadosOcr as object,
+      historicoConsumo: historicoConsumo as object,
+      mesesUtilizados: media.mesesUtilizados,
+      mesesDescartados: media.mesesDescartados,
+      mediaKwhCalculada: media.media,
+      thresholdUtilizado: 50,
+      status: 'APROVADA',
+      statusRevisao: 'APROVADO',
     });
 
     // Atualizar cotaKwhMensal se a nova média for diferente
