@@ -300,32 +300,44 @@ export class EmailMonitorService {
     try {
       const historicoConsumo = dadosOcr.historicoConsumo ?? [];
 
-      await this.prisma.faturaProcessada.create({
-        data: {
-          cooperadoId: null,
-          ucId: null,
-          arquivoUrl: null,
-          dadosExtraidos: {
-            ...(dadosOcr as object),
-            emailRemetente: email.remetente,
-            emailAssunto: email.assunto,
-          },
-          historicoConsumo: historicoConsumo as object,
-          mesesUtilizados: 0,
-          mesesDescartados: 0,
-          mediaKwhCalculada: 0,
-          thresholdUtilizado: 0,
-          status: 'PENDENTE',
-          cooperativaId,
-          mesReferencia: dadosOcr.mesReferencia || null,
-          statusRevisao: 'NAO_IDENTIFICADA',
+      // Factory pode resolver ucId via dadosOcr.numeroUC e derivar
+      // cooperadoId a partir da UC. Se resolver, upgrade pra PENDENTE_REVISAO.
+      const fatura = await this.faturasService.criarFaturaProcessada({
+        cooperativaId,
+        cooperadoId: null,
+        ucId: null,
+        arquivoUrl: null,
+        dadosExtraidos: {
+          ...(dadosOcr as object),
+          emailRemetente: email.remetente,
+          emailAssunto: email.assunto,
         },
+        historicoConsumo: historicoConsumo as object,
+        mesesUtilizados: 0,
+        mesesDescartados: 0,
+        mediaKwhCalculada: 0,
+        thresholdUtilizado: 0,
+        status: 'PENDENTE',
+        mesReferencia: dadosOcr.mesReferencia || null,
+        statusRevisao: 'NAO_IDENTIFICADA',
       });
+
+      // Upgrade: se factory identificou UC + cooperado via OCR
+      if (fatura.ucId && fatura.cooperadoId) {
+        await this.prisma.faturaProcessada.update({
+          where: { id: fatura.id },
+          data: { statusRevisao: 'PENDENTE_REVISAO' },
+        });
+        this.logger.log(
+          `Fatura ${fatura.id}: identificação automática via numeroUC ` +
+          `do OCR. Status NAO_IDENTIFICADA → PENDENTE_REVISAO.`,
+        );
+      }
 
       // Criar notificação no sistema também
       await this.prisma.notificacao.create({
         data: {
-          titulo: 'Fatura por e-mail não identificada',
+          titulo: fatura.ucId ? 'Fatura por e-mail identificada automaticamente' : 'Fatura por e-mail não identificada',
           mensagem: `E-mail de ${email.remetente} com assunto "${email.assunto}". UC (OCR): ${dadosOcr.numeroUC || 'N/A'}, CPF (OCR): ${dadosOcr.documento || 'N/A'}. Verifique na Central de Faturas.`,
           tipo: 'ALERTA',
           lida: false,

@@ -381,8 +381,8 @@ export class FaturasService {
       historico, threshold, dadosExtraidos.consumoAtualKwh,
     );
 
-    // 7. Determinar status de revisão
-    const statusRevisao = divergenciaPerc < 5 ? 'AUTO_APROVADO' : 'PENDENTE_REVISAO';
+    // 7. Determinar status de revisão (guard ucId adicionado após factory, abaixo)
+    let statusRevisao = divergenciaPerc < 5 ? 'AUTO_APROVADO' : 'PENDENTE_REVISAO';
 
     // 8. Salvar FaturaProcessada via factory (Sprint 5)
     const economiaGeradaConc = dadosExtraidos.valorSemDesconto > 0
@@ -411,6 +411,21 @@ export class FaturasService {
       valorSemDesconto: dadosExtraidos.valorSemDesconto || null,
       economiaGerada: economiaGeradaConc,
     });
+
+    // Guard Sprint 5: AUTO_APROVADO requer ucId resolvido.
+    // Sem UC identificada, matching fatura→contrato cai no fallback
+    // permissivo (bug cross-UC). Downgrade pra PENDENTE_REVISAO.
+    if (statusRevisao === 'AUTO_APROVADO' && fatura.ucId == null) {
+      statusRevisao = 'PENDENTE_REVISAO';
+      await this.prisma.faturaProcessada.update({
+        where: { id: fatura.id },
+        data: { statusRevisao: 'PENDENTE_REVISAO' },
+      });
+      this.logger.warn(
+        `Fatura ${fatura.id}: AUTO_APROVADO revogado — ucId não resolvido. ` +
+        `Admin precisa triar manualmente.`,
+      );
+    }
 
     // 9. Se auto-aprovado, gerar cobrança automaticamente
     let cobranca = null;
