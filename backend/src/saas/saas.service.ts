@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -121,6 +122,25 @@ export class SaasService {
   }
 
   // ─── Faturas SaaS ─────────────────────────────────────────
+
+  /**
+   * Cron mensal — dia 1 às 6h. Gera FaturaSaas pra cada parceiro
+   * com plano ativo. Ticket 10 Sprint 6: primeira receita da plataforma.
+   */
+  @Cron('0 6 1 * *')
+  async cronGerarFaturasMensal() {
+    this.logger.log('Cron FaturaSaas: iniciando geração mensal...');
+    try {
+      const resultado = await this.gerarFaturasMensal();
+      const criadas = resultado.faturas.filter(f => f.status === 'CRIADA').length;
+      const jaExistiam = resultado.faturas.filter(f => f.status === 'JA_EXISTE').length;
+      this.logger.log(
+        `Cron FaturaSaas: ${criadas} criada(s), ${jaExistiam} já existia(m), ${resultado.total} parceiro(s) processado(s).`,
+      );
+    } catch (err) {
+      this.logger.error(`Cron FaturaSaas falhou: ${(err as Error).message}`);
+    }
+  }
 
   async findAllFaturas(filtros?: { status?: string }) {
     return this.prisma.faturaSaas.findMany({
