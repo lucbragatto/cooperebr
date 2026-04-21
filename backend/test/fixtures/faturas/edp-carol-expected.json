@@ -1,0 +1,111 @@
+{
+  "titular": "DIEGO ALLAN CORREIA PEREIRA",
+  "documento": "05375082799",
+  "tipoDocumento": "CPF",
+  "enderecoInstalacao": "RUA PERNAMBUCO 120",
+  "bairro": "PRAIA DA COSTA",
+  "cidade": "VILA VELHA",
+  "estado": "ES",
+  "cep": "29101335",
+  "numeroUC": "0.001.516.624.054-75",
+  "codigoMedidor": "16294137",
+  "distribuidora": "EDP ES DISTRIB DE ENERGIA SA",
+  "classificacao": "B1-RESIDENCIAL",
+  "modalidadeTarifaria": "CONVENCIONAL",
+  "tensaoNominal": "220/127V",
+  "tipoFornecimento": "TRIFASICO",
+  "mesReferencia": "01/2026",
+  "vencimento": "15/01/2026",
+  "totalAPagar": 545.95,
+  "consumoAtualKwh": 490,
+  "leituraAnterior": 12726,
+  "leituraAtual": 13216,
+  "tarifaTUSD": 0.59522449,
+  "tarifaTE": 0.40728571,
+  "tarifaTUSDSemICMS": 0.46863,
+  "tarifaTESemICMS": 0.32068,
+  "bandeiraTarifaria": "AMARELA",
+  "valorBandeira": 0.02390992,
+  "contribIluminacaoPublica": 43.76,
+  "icmsPercentual": 17,
+  "icmsValor": 85.37,
+  "pisCofinsPercentual": 4.28,
+  "pisCofinsValor": 21.42,
+  "multaJuros": 0,
+  "descontos": 0,
+  "outrosEncargos": 2.07,
+  "possuiCompensacao": false,
+  "creditosRecebidosKwh": 0,
+  "saldoTotalKwh": 0,
+  "participacaoSaldo": 0,
+  "energiaInjetadaKwh": 0,
+  "energiaFornecidaKwh": 490,
+  "valorCompensadoReais": 0,
+  "temCreditosInjetados": false,
+  "saldoKwhAnterior": 0,
+  "saldoKwhAtual": 0,
+  "validadeCreditos": "",
+  "valorSemDesconto": 545.95,
+  "historicoConsumo": [
+    {
+      "mesAno": "12/2025",
+      "consumoKwh": 322,
+      "valorRS": 370
+    },
+    {
+      "mesAno": "11/2025",
+      "consumoKwh": 306,
+      "valorRS": 357.76
+    },
+    {
+      "mesAno": "10/2025",
+      "consumoKwh": 278,
+      "valorRS": 336.47
+    },
+    {
+      "mesAno": "09/2025",
+      "consumoKwh": 273,
+      "valorRS": 324.49
+    },
+    {
+      "mesAno": "08/2025",
+      "consumoKwh": 261,
+      "valorRS": 290.62
+    },
+    {
+      "mesAno": "07/2025",
+      "consumoKwh": 265,
+      "valorRS": 265.34
+    },
+    {
+      "mesAno": "06/2025",
+      "consumoKwh": 286,
+      "valorRS": 275.91
+    },
+    {
+      "mesAno": "05/2025",
+      "consumoKwh": 411,
+      "valorRS": 399.02
+    },
+    {
+      "mesAno": "04/2025",
+      "consumoKwh": 506,
+      "valorRS": 486.72
+    },
+    {
+      "mesAno": "03/2025",
+      "consumoKwh": 512,
+      "valorRS": 113.44
+    },
+    {
+      "mesAno": "02/2025",
+      "consumoKwh": 392,
+      "valorRS": 364.81
+    },
+    {
+      "mesAno": "01/2025",
+      "consumoKwh": 385,
+      "valorRS": 339.75
+    }
+  ]
+}
