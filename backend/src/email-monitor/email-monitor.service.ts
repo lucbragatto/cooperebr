@@ -263,7 +263,11 @@ export class EmailMonitorService {
     const numeroUC = dadosOcr.numeroUC;
     if (numeroUC) {
       const uc = await this.prisma.uc.findFirst({
-        where: { numeroUC, cooperado: { cooperativaId } },
+        // T5 Sprint 5: match pelo campo canônico `uc.numero` (unique).
+        // O campo `uc.numeroUC` é legado, nullable — buscar nele sempre
+        // retornava null e deixava faturas órfãs. `dadosOcr.numeroUC` é
+        // chave do JSON OCR (mantém), distinto do campo do model.
+        where: { numero: numeroUC, cooperado: { cooperativaId } },
         include: {
           cooperado: {
             select: { id: true, nomeCompleto: true, cooperativaId: true },
@@ -467,7 +471,8 @@ export class EmailMonitorService {
     const ucNumeros = this.extrairNumerosUC(email.textoCorpo + ' ' + email.assunto);
     for (const numero of ucNumeros) {
       const uc = await this.prisma.uc.findFirst({
-        where: { numeroUC: numero, cooperado: { cooperativaId } },
+        // T5 Sprint 5: mesma correção da identificarPorOcr — campo canônico é `numero`.
+        where: { numero, cooperado: { cooperativaId } },
         include: {
           cooperado: {
             select: { id: true, nomeCompleto: true, cooperativaId: true },
