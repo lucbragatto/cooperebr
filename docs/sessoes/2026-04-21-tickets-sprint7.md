@@ -93,3 +93,67 @@ A T7 vai migrar o Wizard pra `calcularComPlano()`. Quando isso acontecer,
 **Decisão pendente:** o ticket pode se transformar em "nunca remover" se 
 algum caller externo (integração futura, cliente API) depender da rota 
 `/motor-proposta/calcular`. Avaliar na hora.
+
+---
+
+## Ticket 4 — Bug pré-existente: FIXO_MENSAL reporta economia zero
+
+**Origem:** descoberto durante sondagem T4 (Sprint 5), marcado com TODO
+no código (commit 67eae97).
+
+**Localização:** `backend/src/faturas/faturas.service.ts`, função
+`calcularValorCobrancaPorModelo`, case `FIXO_MENSAL`.
+
+**Problema:** Pra contratos FIXO_MENSAL, o cálculo retorna:
+
+```typescript
+valorBruto: valorContrato,   // valor final ao cooperado
+valorDesconto: 0,            // zero sempre
+valorLiquido: valorContrato, // igual ao bruto
+```
+
+Tecnicamente coerente pro cálculo do valor a cobrar (FIXO não tem
+desconto incremental, o valor já embute tudo). Mas semanticamente
+errado pra fins de relatório:
+
+- `valorBruto` deveria representar "quanto o cooperado pagaria sem
+  cooperativa" (estimável via `valorTotalOCR` da fatura).
+- `valorDesconto` deveria representar "quanto a cooperativa economizou
+  para o cooperado" (diferença entre os dois).
+
+**Impacto:** Qualquer relatório ou dashboard que agregue `valorDesconto`
+por cooperativa vai reportar economia = R$ 0 pra contratos FIXO.
+Afeta dashboard comercial, relatórios de impacto pra stakeholders, e
+eventualmente materiais de marketing baseados em dados reais.
+
+**Não foi corrigido na T4** porque:
+- Expandiria escopo da tarefa (2 arquivos, cobertura de edge cases)
+- FIXO é o único modelo ativo hoje (BLOQUEIO_MODELOS_NAO_FIXO=true)
+  mas o sistema ainda não está em produção real, então não há
+  relatórios saindo errados pra ninguém hoje
+
+**Escopo do ticket:**
+
+1. Trocar a lógica do case FIXO_MENSAL em `calcularValorCobrancaPorModelo`:
+   - `valorBruto` = `valorTotalOCR` (se fatura existe) ou fallback
+     documentado (ex: `kwhConsumido × tarifaApurada`)
+   - `valorDesconto` = `valorBruto - valorLiquido`
+   - `valorLiquido` mantém comportamento atual (= `valorContrato`)
+
+2. Adicionar teste em `faturas.service.calcular.spec.ts` dentro do
+   describe FIXO_MENSAL:
+   - Fatura com `totalAPagar = 1235.93`, `valorContrato = 988.77`
+   - Esperado: `valorBruto = 1235.93`, `valorDesconto = 247.16`,
+     `valorLiquido = 988.77`
+
+3. Considerar edge cases:
+   - Fatura sem `totalAPagar` (OCR falhou) → usar fallback
+   - `valorBruto < valorLiquido` (admin configurou valorContrato
+     maior que a conta cheia) → lançar erro ou logar warning?
+
+**Dependências:** Nenhuma. Pode ser corrigido isoladamente.
+
+**Prioridade sugerida:** MÉDIA. Antes de entrar em produção com
+dashboard comercial funcionando.
+
+**Estimativa:** S (~30min código + 15min teste).
