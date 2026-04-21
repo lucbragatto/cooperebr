@@ -157,3 +157,57 @@ eventualmente materiais de marketing baseados em dados reais.
 dashboard comercial funcionando.
 
 **Estimativa:** S (~30min código + 15min teste).
+
+---
+
+## Ticket 5 — Infra de testes E2E de usuário final (front+back integrados)
+
+**Origem:** decisão 21/04/2026 durante planejamento da T8 do Sprint 5.
+
+**Contexto:** T8 adotou abordagem B2 (testes com mocks Prisma, focados
+em fluxo através de services). Foi escolha pragmática — usa infra de
+teste que já funciona, fecha o Sprint 5 no prazo. Mas cobre só backend
+isolado com mocks, não o sistema integrado.
+
+**Falta cobrir:** testes que simulem admin real usando a aplicação:
+- Admin abre /dashboard/planos/novo, preenche campos, clica Salvar,
+  verifica que plano aparece na lista
+- Admin gera proposta no Wizard, envia link de assinatura, cooperado
+  assina em outra aba, sistema cria contrato
+- Fatura PDF chega por email → OCR → cobrança é gerada → admin aprova
+  → notificação WhatsApp dispara
+
+**Escopo do ticket:**
+
+Escolher e instalar uma das alternativas:
+
+- **Playwright** (recomendado) — E2E via browser real, testa frontend +
+  backend + banco juntos. Gravação de interações, screenshots em
+  caso de falha. Stack coerente com Next.js.
+- **Cypress** — similar ao Playwright, ecossistema maduro, mais
+  opinativo.
+- **Supertest + Prisma SQLite in-memory** — só backend HTTP, não
+  testa UI. Mais leve mas cobre menos.
+
+Primeira bateria de testes:
+1. Fluxo completo Wizard Admin — criar cooperado → aceitar proposta
+   → documentos → assinatura → contrato criado
+2. Fluxo público /cadastro — upload fatura → OCR → proposta → aceite
+3. Pipeline email→OCR→cobrança com fatura PDF real (fixture)
+4. Admin edita plano e vê mudança refletida na tela
+
+**Dependências:**
+
+- Sprint 6 precisa concluir primeiro (CooperToken + UI refactor),
+  senão fluxos mudam durante desenvolvimento dos testes
+- Definir estratégia de dados de teste: fixture shared ou seed por
+  teste?
+- CI/CD: pipeline precisa rodar Playwright em container
+
+**Estimativa:** L (1-2 semanas). Setup inicial + 4-6 cenários base.
+
+**Prioridade sugerida:** ALTA antes de primeiro cliente real em
+produção. Hoje a gente tem 78 testes unitários e zero E2E. É
+sustentável em dev, insustentável em produção.
+
+**Quando fazer:** Sprint 7 ou 8 — depende de quando Sprint 6 fechar.
