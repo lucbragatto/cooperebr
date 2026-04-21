@@ -211,3 +211,157 @@ produção. Hoje a gente tem 78 testes unitários e zero E2E. É
 sustentável em dev, insustentável em produção.
 
 **Quando fazer:** Sprint 7 ou 8 — depende de quando Sprint 6 fechar.
+
+---
+
+## Ticket 6 — OCR: tarifas trocadas em faturas B3 comercial simples
+
+**Origem:** revisão de baseline 21/04/2026 durante T8 Parte B Sprint 5.
+
+**Reproduzível:** `backend/test/fixtures/faturas/edp-moradas-enseada.pdf`
+
+**Bug:** `extrairDadosFatura()` está confundindo colunas em faturas
+B3-COMERCIAL sem compensação. Campos extraídos errados:
+
+```json
+"tarifaTUSD": 0.682         // CORRETO: 0.60322723
+"tarifaTE": 0.46685         // CORRETO: 0.41277630
+"tarifaTUSDSemICMS": 0.60322723  // CORRETO: 0.46863
+"tarifaTESemICMS": 0.4127763     // CORRETO: 0.32068
+```
+
+Padrão do erro: `0.682 = 682.25 / 1000` — OCR pegou "Valor Total R$"
+e dividiu. Nas faturas Carol (B1 sem GD) e Luciano (B1 com GD) as
+tarifas saíram corretas. Só Moradas diverge.
+
+**Causa provável:** formato visual da fatura Moradas tem colunas
+"Preço Unit (R$) com tributos" separadas em 2 colunas. OCR confundiu.
+
+**Impacto hoje:** baixo — cálculo de cobrança usa `totalAPagar /
+consumoAtualKwh` (apuração), não `tarifaTUSD`. Mas relatórios futuros
+que dependam de tarifa discriminada vão ficar errados.
+
+**Ação:** ajustar prompt do Anthropic em `faturas.service.ts:1186`
+(função `extrairDadosFatura`). Adicionar ao prompt instrução
+explícita: "para extrair tarifaTUSD e tarifaTE, buscar a coluna
+'Tarifa Unit. (R$)' quando presente. Não confundir com 'Preço Unit.
+(R$) com tributos' nem derivar de valor total."
+
+**Validação:** rodar `npx ts-node backend/scripts/smoke-pipeline-fatura.ts --update`
+após fix e comparar expected.json antes/depois. Campos afetados
+devem bater com o PDF.
+
+**Estimativa:** S (2-3h)
+
+---
+
+## Ticket 7 — OCR: campos inventados ou zerados em faturas com GD
+
+**Origem:** revisão de baseline 21/04/2026 durante T8 Parte B Sprint 5.
+
+**Reproduzível:** `backend/test/fixtures/faturas/edp-luciano-gd.pdf`
+
+**Três sub-bugs:**
+
+### 7.1 — Campo inventado: `saldoKwhAnterior`
+
+```json
+"saldoKwhAnterior": 4597.7249
+```
+
+O PDF do Luciano **não mostra saldo anterior**. Mostra apenas:
+- "Saldo Total 5442,4690kWh"
+- "Saldo Atualizado no mês 5442,4690kWh"
+
+OCR parece ter calculado: `5442.469 - (1832.7441 - 988) = 4597.7249`.
+Pode estar matematicamente correto, mas **inventou número que não
+está no PDF**. É alucinação. No próximo PDF pode inventar diferente.
+
+**Ação:** ajustar prompt pra retornar `null` quando campo não
+aparece explicitamente no PDF.
+
+### 7.2 — `valorSemDesconto: 0`
+
+Em faturas com GD, esse campo deveria ter o valor **bruto** (antes
+da compensação). Na fatura do Luciano, a soma das linhas
+"TUSD/TE - Energia Ativa Fornecida" = R$ 656,30 + R$ 449,11 + iluminação
+= ~R$ 1.135 (valor se não houvesse compensação).
+
+OCR está zerando esse campo. Prompt deve extrair valor bruto das
+linhas de "Fornecida" somando.
+
+### 7.3 — `valorCompensadoReais: 0`
+
+Soma dos 4 lançamentos "En. At. Inj." em R$ deveria popular esse
+campo. Hoje zerado.
+
+**Impacto hoje:** médio. Cálculo de cobrança COMPENSADOS não usa
+esses campos (usa `totalAPagar` + `consumoAtualKwh`). Mas relatório
+de economia gerada pra cooperado vai ficar errado — sistema não
+saberá calcular "cooperado teria pago R$ X sem a cooperativa".
+
+**Estimativa:** M (4-6h — requer testar prompt em várias faturas)
+
+---
+
+## Ticket 8 — OCR: normalização de numeroUC e mesReferencia
+
+**Origem:** revisão de baseline 21/04/2026 durante T8 Parte B Sprint 5.
+
+**Reproduzível:** todas as 3 fixtures de smoke test apresentam o bug.
+
+**Bug 8.1 — numeroUC com formatação:**
+
+Todas as 3 faturas retornam `numeroUC` no formato EDP com pontos e hífen:
+
+```
+edp-carol.pdf:            "0.001.516.624.054-75"
+edp-moradas-enseada.pdf:  "0.000.944.225.054-57"
+edp-luciano-gd.pdf:       "0.001.421.380.054-70"
+```
+
+Matching de cooperado em `email-monitor.service.ts:266/470` (após
+hotfix T5) usa `numero` do campo UC na tabela Prisma. Se banco
+armazena como "001516624054" (dígitos) e OCR retorna com pontos,
+matching falha silenciosamente. Fatura entra no sistema sem vincular
+a cooperado.
+
+**Bug 8.2 — mesReferencia MM/YYYY:**
+
+Todas retornam `mesReferencia` como `"03/2026"`. Mas testes T4
+(promoção temporal) usam formato `"2026-03"` (YYYY-MM):
+
+```typescript
+// em calcular.spec.ts
+dadosExtraidos: { mesReferencia: '2026-04', consumoAtualKwh: 500 }
+```
+
+Se o código não normaliza, **promoção temporal T4 nunca dispara em
+produção com fatura real**.
+
+**Ação:** adicionar pós-processamento na saída de
+`extrairDadosFatura()` em `faturas.service.ts`:
+
+```typescript
+// Normalizar numeroUC (dígitos puros)
+if (result.numeroUC) {
+  result.numeroUC = String(result.numeroUC).replace(/[^0-9]/g, '');
+}
+
+// Normalizar mesReferencia (YYYY-MM)
+if (result.mesReferencia && /^\d{2}\/\d{4}$/.test(result.mesReferencia)) {
+  const [mes, ano] = result.mesReferencia.split('/');
+  result.mesReferencia = `${ano}-${mes}`;
+}
+```
+
+**Validação:** sonda em `backend/src` pra verificar se já existe
+normalização em algum ponto do pipeline antes de commitar fix. Se
+existir em camada posterior (ex: `email-monitor` antes de comparar),
+documentar onde e não duplicar.
+
+**Estimativa:** S (2h — 1 função + 2 testes unitários)
+
+**Nota:** esse ticket precisa ser feito **antes** de T9 escalar
+COMPENSADOS pra múltiplas faturas/cooperados, ou matching vai
+falhar em produção.

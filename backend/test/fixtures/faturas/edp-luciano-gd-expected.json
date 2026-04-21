@@ -1,0 +1,111 @@
+{
+  "titular": "LUCIANO COSTA BRAGATTO",
+  "documento": "89089324704",
+  "tipoDocumento": "CPF",
+  "enderecoInstalacao": "RUA JOAQUIM LIRIO 366 AP 501 ED JAZZ RESIDENCE",
+  "bairro": "PRAIA DO CANTO",
+  "cidade": "VITORIA",
+  "estado": "ES",
+  "cep": "29055460",
+  "numeroUC": "0.001.421.380.054-70",
+  "codigoMedidor": "0012792654",
+  "distribuidora": "EDP ES DISTRIB DE ENERGIA SA",
+  "classificacao": "B1-RESIDENCIAL",
+  "modalidadeTarifaria": "CONVENCIONAL",
+  "tensaoNominal": "220/127V",
+  "tipoFornecimento": "TRIFASICO",
+  "mesReferencia": "03/2026",
+  "vencimento": "14/04/2026",
+  "totalAPagar": 184.46,
+  "consumoAtualKwh": 1088,
+  "leituraAnterior": 29263,
+  "leituraAtual": 30351,
+  "tarifaTUSD": 0.60321691,
+  "tarifaTE": 0.41278493,
+  "tarifaTUSDSemICMS": 0.46863,
+  "tarifaTESemICMS": 0.32068,
+  "bandeiraTarifaria": "VERDE",
+  "valorBandeira": 0,
+  "contribIluminacaoPublica": 29.51,
+  "icmsPercentual": 17,
+  "icmsValor": 101.63,
+  "pisCofinsPercentual": 6.4,
+  "pisCofinsValor": 58.72,
+  "multaJuros": 0,
+  "descontos": 0,
+  "outrosEncargos": 0,
+  "possuiCompensacao": true,
+  "creditosRecebidosKwh": 1832.7441,
+  "saldoTotalKwh": 5442.469,
+  "participacaoSaldo": 0.15,
+  "energiaInjetadaKwh": 988,
+  "energiaFornecidaKwh": 1088,
+  "valorCompensadoReais": 0,
+  "temCreditosInjetados": true,
+  "saldoKwhAnterior": 4597.7249,
+  "saldoKwhAtual": 5442.469,
+  "validadeCreditos": "",
+  "valorSemDesconto": 0,
+  "historicoConsumo": [
+    {
+      "mesAno": "02/2026",
+      "consumoKwh": 1139,
+      "valorRS": 194.25
+    },
+    {
+      "mesAno": "01/2026",
+      "consumoKwh": 949,
+      "valorRS": 165.39
+    },
+    {
+      "mesAno": "12/2025",
+      "consumoKwh": 1010,
+      "valorRS": 169.05
+    },
+    {
+      "mesAno": "11/2025",
+      "consumoKwh": 724,
+      "valorRS": 168.7
+    },
+    {
+      "mesAno": "10/2025",
+      "consumoKwh": 678,
+      "valorRS": 242.06
+    },
+    {
+      "mesAno": "09/2025",
+      "consumoKwh": 603,
+      "valorRS": 696.95
+    },
+    {
+      "mesAno": "08/2025",
+      "consumoKwh": 570,
+      "valorRS": 627.74
+    },
+    {
+      "mesAno": "07/2025",
+      "consumoKwh": 541,
+      "valorRS": 520.57
+    },
+    {
+      "mesAno": "06/2025",
+      "consumoKwh": 570,
+      "valorRS": 544.56
+    },
+    {
+      "mesAno": "05/2025",
+      "consumoKwh": 666,
+      "valorRS": 613.83
+    },
+    {
+      "mesAno": "04/2025",
+      "consumoKwh": 1011,
+      "valorRS": 886.35
+    },
+    {
+      "mesAno": "03/2025",
+      "consumoKwh": 1123,
+      "valorRS": 976.78
+    }
+  ]
+}

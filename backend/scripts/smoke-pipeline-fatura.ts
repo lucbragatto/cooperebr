@@ -1,18 +1,15 @@
 /**
- * Sprint 5 T8 Parte B — Smoke test do pipeline OCR com fatura EDP real.
+ * Sprint 5 T8 Parte B — Smoke test multi-fixture do pipeline OCR.
  *
  * Roda manualmente:
- *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts           # modo híbrido (chama OCR real e compara)
- *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts --cached  # modo economia (sem chamar OCR)
- *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts --update  # regenera fixture expected (use quando OCR mudou intencionalmente)
+ *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts           # hibrido: chama OCR e compara com expected
+ *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts --cached  # economia: so valida setup
+ *   npx ts-node backend/scripts/smoke-pipeline-fatura.ts --update  # regenera todas expected.json
  *
- * Fixture:
- *   backend/test/fixtures/faturas/edp-carol.pdf         — PDF real (input)
- *   backend/test/fixtures/faturas/edp-carol-expected.json — saída esperada do OCR (output)
+ * Fixtures: toda pasta backend/test/fixtures/faturas/*.pdf e.
+ * Cada PDF gera/compara com <nome>-expected.json na mesma pasta.
  *
- * Se expected.json não existir e você rodar sem --update, script avisa e pede pra rodar --update primeiro.
- *
- * NÃO é teste Jest. É script de validação que você roda sob demanda, especialmente antes de destravar T9.
+ * Campos criticos: divergencia falha o teste. Outros campos geram warning.
  */
 
 import { NestFactory } from '@nestjs/core';
@@ -21,11 +18,8 @@ import { FaturasService } from '../src/faturas/faturas.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const PDF_PATH = path.resolve(__dirname, '../test/fixtures/faturas/edp-carol.pdf');
-const EXPECTED_JSON_PATH = path.resolve(__dirname, '../test/fixtures/faturas/edp-carol-expected.json');
+const FIXTURES_DIR = path.resolve(__dirname, '../test/fixtures/faturas');
 
-// Campos considerados críticos — divergência aqui falha o smoke test.
-// Outros campos são reportados mas não bloqueiam.
 const CAMPOS_CRITICOS = [
   'numeroUC',
   'consumoAtualKwh',
@@ -54,6 +48,21 @@ function truncate(s: string, n: number): string {
   return s.slice(0, n - 3) + '...';
 }
 
+function listarFixturesPdf(): string[] {
+  if (!fs.existsSync(FIXTURES_DIR)) {
+    console.error(red(`Pasta nao encontrada: ${FIXTURES_DIR}`));
+    process.exit(1);
+  }
+  return fs.readdirSync(FIXTURES_DIR)
+    .filter((f) => f.endsWith('.pdf'))
+    .sort();
+}
+
+function pathExpected(pdfName: string): string {
+  const base = pdfName.replace(/\.pdf$/, '');
+  return path.join(FIXTURES_DIR, `${base}-expected.json`);
+}
+
 function printTable(esperado: any, extraido: any): { falhouCritico: boolean; divergencias: number } {
   const todasChaves = Array.from(new Set([
     ...Object.keys(esperado ?? {}),
@@ -61,8 +70,8 @@ function printTable(esperado: any, extraido: any): { falhouCritico: boolean; div
   ])).sort();
 
   console.log('');
-  console.log(bold(`  ${'CAMPO'.padEnd(28)} ${'ESPERADO'.padEnd(26)} ${'EXTRAÍDO'.padEnd(26)} STATUS`));
-  console.log(gray('  ' + '─'.repeat(90)));
+  console.log(bold(`    ${'CAMPO'.padEnd(28)} ${'ESPERADO'.padEnd(26)} ${'EXTRAIDO'.padEnd(26)} STATUS`));
+  console.log(gray('    ' + '-'.repeat(90)));
 
   let falhouCritico = false;
   let divergencias = 0;
@@ -75,20 +84,20 @@ function printTable(esperado: any, extraido: any): { falhouCritico: boolean; div
 
     let status: string;
     if (igual) {
-      status = green('✓ OK');
+      status = green('OK');
     } else {
       divergencias++;
       if (critico) {
         falhouCritico = true;
-        status = red('✗ DIVERGE (CRÍTICO)');
+        status = red('DIVERGE (CRITICO)');
       } else {
-        status = yellow('≠ diverge');
+        status = yellow('diverge');
       }
     }
 
     const marcador = critico ? bold(chave) : chave;
     console.log(
-      `  ${marcador.padEnd(28 + (critico ? 8 : 0))} ` +
+      `    ${marcador.padEnd(28 + (critico ? 8 : 0))} ` +
       `${truncate(String(eVal ?? '(vazio)'), 26).padEnd(26)} ` +
       `${truncate(String(xVal ?? '(vazio)'), 26).padEnd(26)} ` +
       `${status}`,
@@ -98,97 +107,112 @@ function printTable(esperado: any, extraido: any): { falhouCritico: boolean; div
   return { falhouCritico, divergencias };
 }
 
-async function main() {
-  const modo = parseArgs();
-  console.log(bold(`\n=== Smoke test pipeline OCR — modo: ${modo} ===\n`));
+async function processarFixture(
+  faturasService: FaturasService,
+  pdfName: string,
+  modo: Modo,
+): Promise<{ nome: string; status: 'OK' | 'WARN' | 'FAIL'; detalhes: string }> {
+  const pdfPath = path.join(FIXTURES_DIR, pdfName);
+  const expectedPath = pathExpected(pdfName);
+  const expectedExists = fs.existsSync(expectedPath);
 
-  // Validar fixture
-  if (!fs.existsSync(PDF_PATH)) {
-    console.error(red(`❌ PDF não encontrado: ${PDF_PATH}`));
-    process.exit(1);
-  }
-  console.log(gray(`  PDF: ${PDF_PATH}`));
+  console.log(bold(`\n=== ${pdfName} ===`));
+  console.log(gray(`    PDF: ${pdfPath} (${fs.statSync(pdfPath).size} bytes)`));
 
-  const expectedExists = fs.existsSync(EXPECTED_JSON_PATH);
-
-  // CACHED: só verifica que arquivos existem, não chama OCR
   if (modo === 'CACHED') {
     if (!expectedExists) {
-      console.error(red(`❌ Fixture esperada não existe: ${EXPECTED_JSON_PATH}`));
-      console.error(red(`   Rode primeiro: npx ts-node backend/scripts/smoke-pipeline-fatura.ts --update`));
-      process.exit(1);
+      console.log(red(`    Fixture esperada ausente: ${path.basename(expectedPath)}`));
+      return { nome: pdfName, status: 'FAIL', detalhes: 'expected.json ausente' };
     }
-    const esperado = JSON.parse(fs.readFileSync(EXPECTED_JSON_PATH, 'utf-8'));
-    console.log(green(`  ✓ PDF existe (${fs.statSync(PDF_PATH).size} bytes)`));
-    console.log(green(`  ✓ Fixture esperada existe (${Object.keys(esperado).length} campos)`));
-    console.log(gray(`\n  Modo CACHED: não chamou OCR. Integridade do setup OK.\n`));
-    process.exit(0);
+    const esperado = JSON.parse(fs.readFileSync(expectedPath, 'utf-8'));
+    console.log(green(`    OK — expected.json existe (${Object.keys(esperado).length} campos)`));
+    return { nome: pdfName, status: 'OK', detalhes: `${Object.keys(esperado).length} campos cached` };
   }
 
-  // Pra HIBRIDO e UPDATE: precisa chamar OCR
   if (modo === 'HIBRIDO' && !expectedExists) {
-    console.error(red(`❌ Fixture esperada ainda não existe: ${EXPECTED_JSON_PATH}`));
-    console.error(yellow(`   Primeira execução: rode --update pra gerar a fixture.`));
-    console.error(gray(`   npx ts-node backend/scripts/smoke-pipeline-fatura.ts --update`));
-    process.exit(1);
+    console.log(red(`    Fixture esperada ausente. Rode --update primeiro.`));
+    return { nome: pdfName, status: 'FAIL', detalhes: 'expected.json ausente (rode --update)' };
   }
 
-  console.log(gray('  Subindo contexto Nest (pode demorar ~2s)...'));
-  const app = await NestFactory.createApplicationContext(AppModule, {
-    logger: ['error', 'warn'],
-  });
-  const faturasService = app.get(FaturasService);
-
-  console.log(gray('  Lendo PDF...'));
-  const pdfBase64 = fs.readFileSync(PDF_PATH).toString('base64');
-
-  console.log(yellow(`  Chamando Anthropic API (consome tokens)...`));
-  const inicioOcr = Date.now();
+  console.log(yellow(`    Chamando Anthropic API...`));
+  const pdfBase64 = fs.readFileSync(pdfPath).toString('base64');
+  const inicio = Date.now();
   let extraido: any;
   try {
     extraido = await faturasService.extrairOcr(pdfBase64, 'pdf');
   } catch (err: any) {
-    console.error(red(`❌ OCR falhou: ${err.message}`));
-    await app.close();
-    process.exit(1);
+    console.log(red(`    OCR falhou: ${err.message}`));
+    return { nome: pdfName, status: 'FAIL', detalhes: `OCR: ${err.message}` };
   }
-  const duracaoMs = Date.now() - inicioOcr;
-  console.log(green(`  ✓ OCR completou em ${(duracaoMs / 1000).toFixed(1)}s`));
+  const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
+  console.log(green(`    OCR ok em ${duracao}s (${Object.keys(extraido).length} campos)`));
 
-  await app.close();
-
-  // UPDATE: salva como nova fixture
   if (modo === 'UPDATE') {
-    fs.writeFileSync(EXPECTED_JSON_PATH, JSON.stringify(extraido, null, 2) + '\n', 'utf-8');
-    console.log(green(`\n  ✓ Fixture salva: ${EXPECTED_JSON_PATH}`));
-    console.log(bold('\n  Saída do OCR:'));
-    console.log(JSON.stringify(extraido, null, 2));
-    console.log(yellow(`\n  ⚠��  Revise manualmente se os campos extraídos fazem sentido.`));
-    console.log(yellow(`     Se estiver tudo certo, commit o JSON:`));
-    console.log(gray(`     git add backend/test/fixtures/faturas/edp-carol-expected.json`));
-    process.exit(0);
+    fs.writeFileSync(expectedPath, JSON.stringify(extraido, null, 2) + '\n', 'utf-8');
+    console.log(green(`    Fixture salva: ${path.basename(expectedPath)}`));
+    return { nome: pdfName, status: 'OK', detalhes: `${Object.keys(extraido).length} campos salvos` };
   }
 
-  // HIBRIDO: compara com fixture
-  const esperado = JSON.parse(fs.readFileSync(EXPECTED_JSON_PATH, 'utf-8'));
-  console.log(bold(`\n  Comparando com fixture (${EXPECTED_JSON_PATH}):`));
-
+  // HIBRIDO: compara
+  const esperado = JSON.parse(fs.readFileSync(expectedPath, 'utf-8'));
   const { falhouCritico, divergencias } = printTable(esperado, extraido);
 
   if (falhouCritico) {
-    console.error(red(bold('  ❌ FALHOU — campos críticos divergiram')));
-    console.error(yellow(`     Se a mudança for intencional (ex: schema do OCR mudou),`));
-    console.error(yellow(`     rode --update pra regenerar a fixture.`));
-    process.exit(2);
+    return { nome: pdfName, status: 'FAIL', detalhes: `${divergencias} divergencias, campos criticos afetados` };
   }
-
   if (divergencias > 0) {
-    console.warn(yellow(bold(`  ⚠️  PASSOU com ${divergencias} divergência(s) não-crítica(s)`)));
-    console.log(gray(`     Campos críticos OK: ${CAMPOS_CRITICOS.join(', ')}`));
-  } else {
-    console.log(green(bold(`  ✓ PASSOU — 100% fiel à fixture`)));
+    return { nome: pdfName, status: 'WARN', detalhes: `${divergencias} divergencias nao-criticas` };
+  }
+  return { nome: pdfName, status: 'OK', detalhes: '100% fiel a fixture' };
+}
+
+async function main() {
+  const modo = parseArgs();
+  const fixtures = listarFixturesPdf();
+
+  console.log(bold(`\n=== Smoke test multi-fixture — modo: ${modo} ===`));
+  console.log(gray(`Fixtures encontradas: ${fixtures.length}`));
+  fixtures.forEach((f) => console.log(gray(`  - ${f}`)));
+
+  if (fixtures.length === 0) {
+    console.error(red('Nenhum PDF na pasta de fixtures.'));
+    process.exit(1);
   }
 
+  let app: any = null;
+  let faturasService: FaturasService | null = null;
+
+  if (modo !== 'CACHED') {
+    console.log(gray('\nSubindo contexto Nest...'));
+    app = await NestFactory.createApplicationContext(AppModule, {
+      logger: ['error', 'warn'],
+    });
+    faturasService = app.get(FaturasService);
+  }
+
+  const resultados: Array<{ nome: string; status: 'OK' | 'WARN' | 'FAIL'; detalhes: string }> = [];
+  for (const pdf of fixtures) {
+    const r = await processarFixture(faturasService as any, pdf, modo);
+    resultados.push(r);
+  }
+
+  if (app) await app.close();
+
+  // Resumo
+  console.log(bold('\n=== RESUMO ==='));
+  const okCount = resultados.filter((r) => r.status === 'OK').length;
+  const warnCount = resultados.filter((r) => r.status === 'WARN').length;
+  const failCount = resultados.filter((r) => r.status === 'FAIL').length;
+
+  for (const r of resultados) {
+    const cor = r.status === 'OK' ? green : r.status === 'WARN' ? yellow : red;
+    console.log(`  ${cor(r.status.padEnd(5))} ${r.nome.padEnd(30)} ${gray(r.detalhes)}`);
+  }
+  console.log('');
+  console.log(`Total: ${green(`${okCount} OK`)}, ${yellow(`${warnCount} WARN`)}, ${red(`${failCount} FAIL`)}`);
+
+  if (failCount > 0) process.exit(2);
+  if (warnCount > 0) process.exit(0); // WARN não bloqueia
   process.exit(0);
 }
 

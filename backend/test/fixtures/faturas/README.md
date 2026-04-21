@@ -6,9 +6,23 @@ extrai dados consistentes com fatura EDP real.
 
 ## Arquivos
 
-- `edp-carol.pdf` — fatura EDP real
-- `edp-carol-expected.json` — saída esperada do OCR quando processa o PDF acima.
-  Gerada por `--update` e versionada no git pra servir de baseline.
+PDFs de fatura EDP real (input):
+
+- `edp-carol.pdf` — B1 residencial, sem GD, sem compensação
+- `edp-moradas-enseada.pdf` — B3 comercial (condomínio), sem GD
+- `edp-luciano-gd.pdf` — B1 residencial, **COM compensação GD** (créditos injetados)
+
+Fixtures de saída esperada (uma por PDF):
+
+- `edp-carol-expected.json`
+- `edp-moradas-enseada-expected.json`
+- `edp-luciano-gd-expected.json`
+
+Gerados por `--update`, versionados no git como baseline.
+
+**Privacidade:** os PDFs contêm dados pessoais reais (CPF, endereço, UC, titular).
+Hoje o repositório é privado. **Antes de tornar público ou dar acesso externo,
+anonimizar todos os PDFs** (ver ticket pendente na Sprint 6/7).
 
 ## Uso
 
@@ -45,7 +59,7 @@ Outros campos (bairro, cep, etc) geram warning mas não bloqueiam.
 
 ## Adicionando mais faturas
 
-1. Salvar PDF em `backend/test/fixtures/faturas/<nome>.pdf`
-2. Ajustar `PDF_PATH` e `EXPECTED_JSON_PATH` no script (ou criar versão multi-fixture)
-3. Rodar `--update` para gerar expected.json
-4. Commitar os dois arquivos juntos
+1. Salvar PDF em `backend/test/fixtures/faturas/<nome>.pdf` (sem espaços, lowercase)
+2. Rodar `--update` — script detecta automaticamente novos PDFs
+3. Revisar o JSON gerado
+4. Commitar PDF + expected.json juntos

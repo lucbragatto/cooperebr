@@ -1,0 +1,111 @@
+{
+  "titular": "CONDOMINIO DO EDIFICIO MORADAS DA ENSEADA",
+  "documento": "05521718000147",
+  "tipoDocumento": "CNPJ",
+  "enderecoInstalacao": "AL DAS GAIVOTAS 71 CONDOMINIO, ED MORADAS DA ENSEADA",
+  "bairro": "ENSEADA AZUL",
+  "cidade": "GUARAPARI",
+  "estado": "ES",
+  "cep": "29206190",
+  "numeroUC": "0.000.944.225.054-57",
+  "codigoMedidor": "0016218605",
+  "distribuidora": "EDP ES DISTRIB DE ENERGIA SA",
+  "classificacao": "B3-COMERCIAL",
+  "modalidadeTarifaria": "CONVENCIONAL",
+  "tensaoNominal": "220/127V",
+  "tipoFornecimento": "TRIFASICO",
+  "mesReferencia": "03/2026",
+  "vencimento": "14/04/2026",
+  "totalAPagar": 1235.93,
+  "consumoAtualKwh": 1131,
+  "leituraAnterior": 54550,
+  "leituraAtual": 55681,
+  "tarifaTUSD": 0.682,
+  "tarifaTE": 0.46685,
+  "tarifaTUSDSemICMS": 0.60322723,
+  "tarifaTESemICMS": 0.4127763,
+  "bandeiraTarifaria": "VERDE",
+  "valorBandeira": 0,
+  "contribIluminacaoPublica": 86.83,
+  "icmsPercentual": 17,
+  "icmsValor": 195.34,
+  "pisCofinsPercentual": 6.4,
+  "pisCofinsValor": 61.05,
+  "multaJuros": 0,
+  "descontos": 0,
+  "outrosEncargos": 59.41,
+  "possuiCompensacao": false,
+  "creditosRecebidosKwh": 0,
+  "saldoTotalKwh": 0,
+  "participacaoSaldo": 0,
+  "energiaInjetadaKwh": 0,
+  "energiaFornecidaKwh": 1131,
+  "valorCompensadoReais": 0,
+  "temCreditosInjetados": false,
+  "saldoKwhAnterior": 0,
+  "saldoKwhAtual": 0,
+  "validadeCreditos": "",
+  "valorSemDesconto": 1235.93,
+  "historicoConsumo": [
+    {
+      "mesAno": "02/2026",
+      "consumoKwh": 1443,
+      "valorRS": 1563.48
+    },
+    {
+      "mesAno": "01/2026",
+      "consumoKwh": 1630,
+      "valorRS": 1729.19
+    },
+    {
+      "mesAno": "12/2025",
+      "consumoKwh": 799,
+      "valorRS": 908.61
+    },
+    {
+      "mesAno": "11/2025",
+      "consumoKwh": 917,
+      "valorRS": 1067.4
+    },
+    {
+      "mesAno": "10/2025",
+      "consumoKwh": 515,
+      "valorRS": 648.29
+    },
+    {
+      "mesAno": "09/2025",
+      "consumoKwh": 576,
+      "valorRS": 725.55
+    },
+    {
+      "mesAno": "08/2025",
+      "consumoKwh": 601,
+      "valorRS": 720.22
+    },
+    {
+      "mesAno": "07/2025",
+      "consumoKwh": 616,
+      "valorRS": 635.79
+    },
+    {
+      "mesAno": "06/2025",
+      "consumoKwh": 1134,
+      "valorRS": 1101.16
+    },
+    {
+      "mesAno": "05/2025",
+      "consumoKwh": 1183,
+      "valorRS": 1134.18
+    },
+    {
+      "mesAno": "04/2025",
+      "consumoKwh": 1251,
+      "valorRS": 1171.63
+    },
+    {
+      "mesAno": "03/2025",
+      "consumoKwh": 1465,
+      "valorRS": 1347.28
+    }
+  ]
+}
