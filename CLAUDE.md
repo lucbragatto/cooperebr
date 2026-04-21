@@ -2,7 +2,63 @@
 
 Plataforma SaaS multi-tenant para gestão de **cooperativas, consórcios e associações de energia solar** no modelo de Geração Distribuída (GD) regulamentado pela ANEEL. Gerencia o ciclo completo: cadastro de cooperados, contratos, faturas via OCR, cobranças e créditos de energia.
 
-> Última atualização: 2026-04-14
+> Última atualização: 2026-04-21
+
+---
+
+## Instruções padrão — Claude trabalhando no CoopereBR
+
+Dono do projeto: Luciano (não-desenvolvedor). Coordena entre:
+- Claude no chat (claude.ai) — arquitetura, revisão, decisões
+- Claude Code (terminal local) — execução, commits, testes
+
+### Ao iniciar qualquer sessão, LER PRIMEIRO
+
+Em ordem:
+
+1. `docs/MAPA-SISTEMA.md` se existir — snapshot completo do sistema
+2. `docs/sessoes/` últimos 3 arquivos — contexto recente
+3. `git log -20 --oneline` — o que aconteceu recentemente
+4. `CONTEXTO-CLAUDEAI.md` e `ARQUITETURA-RESUMO.md` se ainda
+   relevantes (podem ter sido superados pelo MAPA-SISTEMA)
+
+Não começar a trabalhar sem esse contexto.
+
+### Ao responder pedidos do Claude.ai (chat)
+
+**REGRA CRÍTICA:** quando o Claude.ai pedir pra você colar conteúdo
+de arquivo, SEMPRE cole o output LITERAL do comando, nunca resuma.
+
+Fluxo correto:
+1. Execute o comando (ex: `Get-Content backend/src/x.ts`)
+2. Cole o output completo na sua resposta
+3. Se o arquivo tiver mais de 500 linhas, AVISE antes de colar e
+   pergunte se prefere anexar como arquivo ou ler em partes
+
+Fluxo incorreto:
+- Resumir o conteúdo ("48 campos extraídos", "arquivo tem 310 linhas")
+- Interpretar em vez de mostrar
+- Assumir que o Claude.ai já viu o arquivo porque você viu
+
+Motivo: Claude.ai não tem acesso ao filesystem local. Resumo faz ele
+perder informação crítica pra revisar.
+
+### Comunicação com o Luciano
+
+Luciano não programa. Explicar decisões em linguagem humana:
+- "O número antigo da EDP" não "legacy UC identifier"
+- "Fatura do cooperado" não "FaturaProcessada entity"
+- Evitar jargão de programação. Se usar termo técnico, explicar na
+  primeira menção.
+
+### Quando trava ou diverge
+
+- Se é decisão DE ENGENHARIA (qual estrutura de código, qual lib,
+  como organizar pasta): decida você mesmo, avise o Luciano por
+  qual motivo você escolheu.
+- Se é decisão DE PRODUTO (qual fluxo de usuário, qual regra de
+  negócio): pergunte ao Luciano antes de executar.
+- Se não tiver certeza: pergunte ao Luciano.
 
 ---
 
