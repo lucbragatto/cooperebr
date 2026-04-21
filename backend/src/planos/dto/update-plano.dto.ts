@@ -22,6 +22,10 @@ export class UpdatePlanoDto {
   @IsOptional() @IsNumber()
   mesesPromocao?: number;
 
+  @IsOptional()
+  @IsIn(['APLICAR_SOBRE_BASE', 'ABATER_DA_CHEIA'])
+  tipoDesconto?: 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA';
+
   @IsOptional() @IsBoolean()
   publico?: boolean;
 

@@ -28,6 +28,27 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
+/**
+ * T7 Sprint 5 — Tooltip inline ajuda admin a entender termos técnicos.
+ * CSS puro (Tailwind + group-hover). Zero dependência nova.
+ */
+function HelpIcon({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex items-center group ml-1 align-middle">
+      <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-gray-500 bg-gray-200 rounded-full cursor-help group-hover:bg-gray-300">
+        ?
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 px-3 py-2 rounded-md bg-gray-800 text-white text-xs leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg"
+      >
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+      </span>
+    </span>
+  );
+}
+
 const inputClass =
   'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500';
 const labelClass = 'text-xs text-gray-500 mb-0.5 block';
@@ -50,6 +71,7 @@ export default function NovoPlanoPage() {
     dataInicioVigencia: '',
     dataFimVigencia: '',
     baseCalculo: 'KWH_CHEIO' as PlanoBaseCalculo,
+    tipoDesconto: 'APLICAR_SOBRE_BASE' as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA',
     componentesCustom: [] as ComponenteCustom[],
     referenciaValor: 'MEDIA_3M' as ReferenciaValor,
     fatorIncremento: '',
@@ -93,6 +115,7 @@ export default function NovoPlanoPage() {
         if (form.dataFimVigencia) payload.dataFimVigencia = form.dataFimVigencia;
       }
       payload.baseCalculo = form.baseCalculo;
+      payload.tipoDesconto = form.tipoDesconto;
       payload.componentesCustom = form.baseCalculo === 'CUSTOM' ? form.componentesCustom : [];
       payload.referenciaValor = form.referenciaValor;
       payload.fatorIncremento = form.fatorIncremento !== '' ? parseFloat(form.fatorIncremento as string) : null;
@@ -158,7 +181,10 @@ export default function NovoPlanoPage() {
 
           {/* Modelo de Cobrança */}
           <div>
-            <label className={labelClass}>Modelo de Cobrança</label>
+            <label className={labelClass}>
+              Modelo de Cobrança
+              <HelpIcon text="Fixo Mensal: cooperado paga valor fixo por mês, independente de consumo. Créditos Compensados: paga pelo kWh compensado na fatura. Créditos Dinâmico: desconto % calculado mês a mês sobre a fatura." />
+            </label>
             <select
               className={inputClass}
               value={form.modeloCobranca}
@@ -172,7 +198,10 @@ export default function NovoPlanoPage() {
 
           {/* Desconto Base */}
           <div>
-            <label className={labelClass}>Desconto Base (%) *</label>
+            <label className={labelClass}>
+              Desconto Base (%) *
+              <HelpIcon text="Desconto principal do plano, usado pelo motor de proposta pra calcular economia do cooperado. Ex: 20% significa que cooperado paga 80% da tarifa base escolhida." />
+            </label>
             <input
               className={inputClass}
               type="number"
@@ -278,7 +307,10 @@ export default function NovoPlanoPage() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-6">
           <div>
-            <label className={labelClass}>Base de Cálculo</label>
+            <label className={labelClass}>
+              Base de Cálculo
+              <HelpIcon text="Sobre qual valor o desconto é aplicado. kWh Cheio: valor total da fatura (admin honesto). Sem Tributos: só TUSD+TE — prática padrão do mercado GD brasileiro. Com ICMS / Personalizado: opções avançadas." />
+            </label>
             <select
               className={inputClass}
               value={form.baseCalculo}
@@ -292,7 +324,10 @@ export default function NovoPlanoPage() {
           </div>
 
           <div>
-            <label className={labelClass}>Referência de Valor</label>
+            <label className={labelClass}>
+              Referência de Valor
+              <HelpIcon text="Qual histórico usar pra dimensionar o contrato do cooperado. Última Fatura: rápido mas volátil. Média 3 meses: equilíbrio (recomendado). Média 12 meses: mais estável, ignora sazonalidade." />
+            </label>
             <select
               className={inputClass}
               value={form.referenciaValor}
@@ -303,6 +338,42 @@ export default function NovoPlanoPage() {
               <option value="MEDIA_6M">Média 6 meses</option>
               <option value="MEDIA_12M">Média 12 meses</option>
             </select>
+          </div>
+
+          {/* T7 Sprint 5: Tipo de desconto — decisão crítica de produto */}
+          <div className="col-span-2">
+            <label className={labelClass}>
+              Como o desconto é aplicado?
+              <HelpIcon text="Decisão importante de produto. O mesmo '20%' anunciado pode virar economia real de 20% ou 14% dependendo daqui." />
+            </label>
+            <div className="flex flex-col gap-2 mt-1">
+              <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="tipoDesconto"
+                  value="APLICAR_SOBRE_BASE"
+                  checked={form.tipoDesconto === 'APLICAR_SOBRE_BASE'}
+                  onChange={(e) => setForm({ ...form, tipoDesconto: e.target.value as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA' })}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Sobre o total da conta.</strong> Se anunciar 20% de desconto, cooperado economiza 20% reais. Admin honesto.
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="tipoDesconto"
+                  value="ABATER_DA_CHEIA"
+                  checked={form.tipoDesconto === 'ABATER_DA_CHEIA'}
+                  onChange={(e) => setForm({ ...form, tipoDesconto: e.target.value as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA' })}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Sobre a parte da energia.</strong> Padrão do mercado GD brasileiro. Se anunciar 20%, cooperado economiza ~14% reais.
+                </span>
+              </label>
+            </div>
           </div>
 
           {form.baseCalculo === 'CUSTOM' && (
@@ -330,7 +401,10 @@ export default function NovoPlanoPage() {
           )}
 
           <div>
-            <label className={labelClass}>Fator de Incremento (%)</label>
+            <label className={labelClass}>
+              Fator de Incremento (%)
+              <HelpIcon text="Percentual adicional aplicado sobre o kWh de referência. Útil pra prever crescimento (ex: 5% = contrata 5% a mais que o histórico indica). Deixe vazio se não quer." />
+            </label>
             <input
               className={inputClass}
               type="number"
