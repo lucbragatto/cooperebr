@@ -230,3 +230,120 @@ describe('MotorPropostaService — Cálculo', () => {
     });
   });
 });
+
+// ─── Sprint 5 T2 — Tipo I / Tipo II ──────────────────────────────────────────
+
+import { MotorPropostaService } from './motor-proposta.service';
+
+/**
+ * Sprint 5 T2 — motor calcula Tipo II (ABATER_DA_CHEIA) no dimensionamento.
+ *
+ * Fatura de referência: Condomínio Moradas da Enseada (MAR/2026), seção 4.4
+ * do docs/referencia/REGRAS-PLANOS-E-COBRANCA.md.
+ *   - consumoKwh     = 1.131 kWh
+ *   - totalSemGD     = R$ 1.235,93  →  KWH_CHEIO   ≈ R$ 1,0928/kWh
+ *   - TUSD+TE totais = R$   892,71  →  SEM_TRIBUTO ≈ R$ 0,78931/kWh
+ *
+ * Tolerância: toBeCloseTo(..., 3) — aceita diferença ≤ 0,0005. O doc
+ * apresenta valores com 4–5 casas; implementação arredonda a 5 casas
+ * com composição ligeiramente diferente. 3 casas cobrem a equivalência
+ * numérica sem mascarar regressões.
+ */
+describe('MotorPropostaService.calcularComPlano — Tipo I e Tipo II', () => {
+  const planoFindUnique = jest.fn();
+  const prismaMock = { plano: { findUnique: planoFindUnique } } as any;
+  const empty = {} as any;
+
+  let service: MotorPropostaService;
+
+  // Fatura Condomínio (valores em R$ totais, não R$/kWh — é o que o service espera).
+  // tusd + te = 892,71 → SEM_TRIBUTO = 892,71 / 1131 ≈ 0,78931/kWh.
+  const faturaCondominio = {
+    planoId: 'plano-test',
+    consumoKwh: 1131,
+    totalSemGD: 1235.93,
+    tusd: 529.92,   // 0,46863 × 1131
+    te:   362.79,   // complemento para totalBase = 892,71
+    pisCofins: 0,
+    cip: 0,
+    historico: [] as Array<{ mes: string; kwh: number; valor: number }>,
+  };
+
+  const planoBase = {
+    descontoBase: 20,
+    componentesCustom: [] as string[],
+    referenciaValor: 'ULTIMA_FATURA',
+    fatorIncremento: null,
+    mostrarDiscriminado: true,
+  };
+
+  beforeEach(() => {
+    planoFindUnique.mockReset();
+    // 10 deps no construtor; só prisma importa para esta função.
+    service = new MotorPropostaService(
+      prismaMock,
+      empty, empty, empty, empty,
+      empty, empty, empty, empty, empty,
+    );
+  });
+
+  it('Tipo I + KWH_CHEIO → tarifaContratada ≈ 0,87424 (Seção 4.2)', async () => {
+    planoFindUnique.mockResolvedValue({
+      ...planoBase,
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+    });
+
+    const r = await service.calcularComPlano(faturaCondominio);
+
+    expect(r.tipoDescontoUsado).toBe('APLICAR_SOBRE_BASE');
+    expect(r.tarifaContratada).toBeCloseTo(0.87424, 3);
+    expect(r.abatimentoPorKwh).toBeNull();
+  });
+
+  it('Tipo II + KWH_CHEIO → tarifaContratada ≈ 0,87424 (equivalência Seção 4.6)', async () => {
+    planoFindUnique.mockResolvedValue({
+      ...planoBase,
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'ABATER_DA_CHEIA',
+    });
+
+    const r = await service.calcularComPlano(faturaCondominio);
+
+    expect(r.tipoDescontoUsado).toBe('ABATER_DA_CHEIA');
+    // Quando baseCalculo = KWH_CHEIO, Tipo I e Tipo II colapsam ao mesmo valor.
+    expect(r.tarifaContratada).toBeCloseTo(0.87424, 3);
+    expect(r.abatimentoPorKwh).not.toBeNull();
+  });
+
+  it('Tipo II + SEM_TRIBUTO → tarifaContratada ≈ 0,93494 (Seção 4.3 — padrão mercado GD)', async () => {
+    planoFindUnique.mockResolvedValue({
+      ...planoBase,
+      baseCalculo: 'SEM_TRIBUTO',
+      tipoDesconto: 'ABATER_DA_CHEIA',
+    });
+
+    const r = await service.calcularComPlano(faturaCondominio);
+
+    expect(r.tipoDescontoUsado).toBe('ABATER_DA_CHEIA');
+    expect(r.tarifaContratada).toBeCloseTo(0.93494, 3);
+    expect(r.abatimentoPorKwh).toBeCloseTo(0.15786, 3);
+    // Sanidade: kwhCheio deve ser calculado mesmo com baseCalculo SEM_TRIBUTO.
+    expect(r.kwhCheio).toBeCloseTo(1.0928, 3);
+    expect(r.tarifaBase).toBeCloseTo(0.78931, 3);
+  });
+
+  it('tipoDesconto null → fallback APLICAR_SOBRE_BASE (Seção 4.8 — migração)', async () => {
+    planoFindUnique.mockResolvedValue({
+      ...planoBase,
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: null, // simula contrato pré-Sprint 5
+    });
+
+    const r = await service.calcularComPlano(faturaCondominio);
+
+    expect(r.tipoDescontoUsado).toBe('APLICAR_SOBRE_BASE');
+    expect(r.tarifaContratada).toBeCloseTo(0.87424, 3);
+    expect(r.abatimentoPorKwh).toBeNull();
+  });
+});

@@ -279,7 +279,18 @@ export class MotorPropostaService {
     icms?: number;
     historico: Array<{ mes: string; kwh: number; valor: number }>;
   }) {
-    const plano = await this.prisma.plano.findUnique({ where: { id: dados.planoId } });
+    const plano = await this.prisma.plano.findUnique({
+      where: { id: dados.planoId },
+      select: {
+        descontoBase: true,
+        baseCalculo: true,
+        componentesCustom: true,
+        referenciaValor: true,
+        fatorIncremento: true,
+        mostrarDiscriminado: true,
+        tipoDesconto: true,
+      },
+    });
     if (!plano) throw new NotFoundException(`Plano ${dados.planoId} não encontrado`);
 
     const baseCalculo = (plano.baseCalculo ?? 'KWH_CHEIO') as string;
@@ -288,6 +299,11 @@ export class MotorPropostaService {
     const fatorIncremento = plano.fatorIncremento ? Number(plano.fatorIncremento) : null;
     const mostrarDiscriminado = plano.mostrarDiscriminado ?? true;
     const descontoBase = Number(plano.descontoBase);
+    // T2 Sprint 5: fallback defensivo para contratos pré-Sprint 5 (Seção 4.8).
+    // T1 já pôs default APLICAR_SOBRE_BASE no schema; este ?? protege o caso
+    // em que o select venha a omitir o campo por acidente no futuro.
+    const tipoDesconto: 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA' =
+      (plano.tipoDesconto as any) ?? 'APLICAR_SOBRE_BASE';
 
     // 1. Calcular valor base por kWh conforme baseCalculo
     let totalBase: number;
@@ -314,9 +330,31 @@ export class MotorPropostaService {
         break;
     }
 
-    const kwhBaseCalculo = dados.consumoKwh > 0
+    // tarifaBase: R$/kWh da base escolhida pelo admin (antes: "kwhBaseCalculo" — nome enganoso).
+    const tarifaBase = dados.consumoKwh > 0
       ? Math.round((totalBase / dados.consumoKwh) * 100000) / 100000
       : 0;
+
+    // kwhCheio: sempre calculado, independente de baseCalculo. Necessário
+    // pro Tipo II quando baseCalculo ≠ KWH_CHEIO (Seção 4.3). T3 vai
+    // reusar pra congelar snapshots no aceitar().
+    const kwhCheio = dados.consumoKwh > 0
+      ? Math.round((dados.totalSemGD / dados.consumoKwh) * 100000) / 100000
+      : 0;
+
+    // Ramificação Tipo I / Tipo II — Seções 4.2 e 4.3.
+    // Tipo I : tarifaContratada = tarifaBase × (1 − desc/100)
+    // Tipo II: tarifaContratada = kwhCheio − (tarifaBase × desc/100)
+    let tarifaContratada: number;
+    let abatimentoPorKwh: number | null;
+    if (tipoDesconto === 'ABATER_DA_CHEIA') {
+      abatimentoPorKwh = Math.round(tarifaBase * (descontoBase / 100) * 100000) / 100000;
+      tarifaContratada = Math.round((kwhCheio - abatimentoPorKwh) * 100000) / 100000;
+    } else {
+      // APLICAR_SOBRE_BASE (default de migração Seção 4.8).
+      abatimentoPorKwh = null;
+      tarifaContratada = Math.round(tarifaBase * (1 - descontoBase / 100) * 100000) / 100000;
+    }
 
     // 2. Determinar kWh de referência conforme referenciaValor
     const historico = dados.historico ?? [];
@@ -362,7 +400,7 @@ export class MotorPropostaService {
     }
 
     // 4. Calcular valores financeiros
-    const valorMensalCooperebr = Math.round(kwhContrato * kwhBaseCalculo * (1 - descontoBase / 100) * 100) / 100;
+    const valorMensalCooperebr = Math.round(kwhContrato * tarifaContratada * 100) / 100;
     const comparativoSemGD = Math.round(kwhContrato * (dados.totalSemGD / (dados.consumoKwh || 1)) * 100) / 100;
     const valorMensalEdp = Math.round((comparativoSemGD - valorMensalCooperebr) * 0.1 * 100) / 100; // custo mínimo EDP estimado
     const valorTotalMensal = Math.round((valorMensalCooperebr + valorMensalEdp) * 100) / 100;
@@ -390,7 +428,14 @@ export class MotorPropostaService {
     return {
       kwhMedio,
       kwhContrato,
-      kwhBaseCalculo,
+      // Alias de compat — frontend (Step3Simulacao) ainda consome kwhBaseCalculo.
+      // Manter até T7 refatorar a UI do plano.
+      kwhBaseCalculo: tarifaBase,
+      tarifaBase,
+      kwhCheio,
+      tarifaContratada,
+      abatimentoPorKwh,
+      tipoDescontoUsado: tipoDesconto,
       baseCalculoUsada: baseCalculoLabels[baseCalculo] ?? baseCalculo,
       referenciaUsada: referenciaValor,
       fatorIncrementoAplicado: fatorIncremento,
