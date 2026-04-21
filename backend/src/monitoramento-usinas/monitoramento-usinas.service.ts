@@ -15,7 +15,10 @@ export class MonitoramentoUsinasService {
     private ocorrencias: OcorrenciasService,
   ) {}
 
-  @Cron('* * * * *')
+  // Sprint 6 Ticket 11: desativado — 0 configs habilitadas, cron rodava
+  // a cada minuto sem fazer nada. Reativar quando integração Sungrow for
+  // implementada de verdade (Sprint 9+).
+  // @Cron('* * * * *')
   async handleCron() {
     const configs = await this.prisma.usinaMonitoramentoConfig.findMany({
       where: { habilitado: true },
