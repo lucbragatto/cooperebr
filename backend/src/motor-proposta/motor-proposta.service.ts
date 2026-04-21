@@ -511,17 +511,42 @@ export class MotorPropostaService {
       throw new BadRequestException('kwhContrato deve ser maior que zero para aceitar a proposta.');
     }
 
-    // Sprint 5: bloquear aceite se plano usa modelo COMPENSADOS/DINAMICO
-    // Controlado por env var BLOQUEIO_MODELOS_NAO_FIXO (default: true). Remover ao concluir Sprint 5.
-    if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && dto.planoId) {
-      const planoCheck = await this.prisma.plano.findUnique({
-        where: { id: dto.planoId },
-        select: { modeloCobranca: true, nome: true },
+    // T3 Sprint 5: carregar plano pra gravar snapshots no Contrato.
+    // Se dto.planoId veio, usa direto. Se não veio (caller legado
+    // /dashboard/cooperados/[id]/page.tsx), fallback pro primeiro plano ativo
+    // do tenant. Isso é comportamento preexistente — a T3 só preserva.
+    // Caso fallback: registrar flag para notificação pós-transação.
+    let planoIdResolvido: string | null = dto.planoId ?? null;
+    let usouFallbackPlano = false;
+    if (!planoIdResolvido) {
+      const primeiroPlano = await this.prisma.plano.findFirst({
+        where: { ativo: true, cooperativaId: dono.cooperativaId },
+        select: { id: true },
       });
+      planoIdResolvido = primeiroPlano?.id ?? null;
+      usouFallbackPlano = !!planoIdResolvido;
+    }
+
+    // Plano pode ser null (seed sem plano ativo) — nesse caso snapshots ficam com default do schema.
+    const planoSnapshot = planoIdResolvido
+      ? await this.prisma.plano.findUnique({
+          where: { id: planoIdResolvido },
+          select: {
+            modeloCobranca: true,
+            nome: true,
+            baseCalculo: true,
+            tipoDesconto: true,
+          },
+        })
+      : null;
+
+    // Sprint 5: bloquear aceite se plano usa modelo COMPENSADOS/DINAMICO.
+    // Controlado por env var BLOQUEIO_MODELOS_NAO_FIXO (default: true). Remover na T9.
+    if (process.env.BLOQUEIO_MODELOS_NAO_FIXO !== 'false' && planoSnapshot) {
       const bloqueados = ['CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
-      if (planoCheck && bloqueados.includes(planoCheck.modeloCobranca)) {
+      if (bloqueados.includes(planoSnapshot.modeloCobranca)) {
         throw new BadRequestException(
-          `Plano "${planoCheck.nome}" usa modelo "${planoCheck.modeloCobranca}" — em refatoração (Sprint 5). Disponível em breve. Use um plano FIXO_MENSAL por enquanto.`,
+          `Plano "${planoSnapshot.nome}" usa modelo "${planoSnapshot.modeloCobranca}" — em refatoração (Sprint 5). Disponível em breve. Use um plano FIXO_MENSAL por enquanto.`,
         );
       }
     }
@@ -581,13 +606,6 @@ export class MotorPropostaService {
 
       const nomeCooperado = (proposta as any).cooperado?.nomeCompleto ?? dto.cooperadoId;
 
-      // 3. Resolver planoId
-      let planoId: string | null = dto.planoId ?? null;
-      if (!planoId) {
-        const primeiroPlano = await tx.plano.findFirst({ where: { ativo: true } });
-        planoId = primeiroPlano?.id ?? null;
-      }
-
       // 4. Buscar UC do cooperado que NÃO tenha contrato vigente
       const ucsDoCooperado = await tx.uc.findMany({
         where: { cooperadoId: dto.cooperadoId },
@@ -645,22 +663,40 @@ export class MotorPropostaService {
         }
       }
 
-      // 9. Criar contrato
+      // 9. Criar contrato — com snapshots T3 (Seção 2.3 do doc canônico)
       const statusContrato = usinaComVaga ? 'PENDENTE_ATIVACAO' : 'LISTA_ESPERA';
+
+      // valorContrato: só para FIXO_MENSAL. R$/kWh × kWh = R$ mensal.
+      // Para COMPENSADOS/DINAMICO fica null (serão preenchidos na T3b via T7/T9).
+      const ehFixo = planoSnapshot?.modeloCobranca === 'FIXO_MENSAL';
+      const valorContrato = ehFixo
+        ? Math.round(Number(r.valorCooperado) * Number(r.kwhContrato) * 100) / 100
+        : null;
+
       const contrato = await tx.contrato.create({
         data: {
           numero,
           cooperadoId: dto.cooperadoId,
           cooperativaId: dono.cooperativaId,
-          planoId,
+          planoId: planoIdResolvido,
           ucId: ucDisponivel.id,
           usinaId: usinaComVaga?.id ?? null,
           propostaId: proposta.id,
           dataInicio: new Date(),
           percentualDesconto: r.descontoPercentual,
           kwhContrato: r.kwhContrato,
+          kwhContratoMensal: r.kwhContrato,
           percentualUsina,
           status: statusContrato as any,
+          // Snapshots T3 — Seção 2.3 do REGRAS-PLANOS-E-COBRANCA.md.
+          // baseCalculoAplicado/tipoDescontoAplicado vêm do plano no momento
+          // do aceite, não do cálculo. Se planoSnapshot for null (sem plano
+          // ativo no tenant), os defaults do schema entram em vigor.
+          ...(valorContrato !== null ? { valorContrato } : {}),
+          ...(planoSnapshot ? {
+            baseCalculoAplicado: planoSnapshot.baseCalculo,
+            tipoDescontoAplicado: planoSnapshot.tipoDesconto,
+          } : {}),
         },
       });
 
@@ -700,6 +736,21 @@ export class MotorPropostaService {
           link: `/dashboard/cooperados/${dto.cooperadoId}`,
         });
       }
+    }
+
+    // T3: se admin aceitou proposta sem escolher plano explicitamente
+    // (tela legada /dashboard/cooperados/[id] não envia planoId), registrar
+    // notificação visível pro admin revisar. Não bloqueia o fluxo — só
+    // sinaliza. Ticket Sprint 7 vai decidir o futuro dessa tela.
+    if (usouFallbackPlano && result.contrato) {
+      await this.notificacoes.criar({
+        tipo: 'PLANO_FALLBACK_APLICADO',
+        titulo: 'Contrato criado com plano padrão — revisar',
+        mensagem:
+          `Contrato ${result.numero} de ${result.nomeCooperado} foi criado usando o primeiro plano ativo da cooperativa porque nenhum plano foi escolhido explicitamente na aceitação. Revise se o plano selecionado está correto.`,
+        cooperadoId: dto.cooperadoId,
+        link: `/dashboard/cooperados/${dto.cooperadoId}`,
+      });
     }
 
     // T3 PARTE 4 camada 3: audit trail — registrar quem acionou aceitar()
