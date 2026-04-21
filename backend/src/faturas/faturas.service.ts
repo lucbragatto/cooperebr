@@ -1557,6 +1557,39 @@ IMPORTANTE:
     return pct / 100;
   }
 
+  /**
+   * T4 Sprint 5 — Verifica se a competência da fatura cai no período promocional
+   * do contrato. Regra (Decisão 2026-04-21, P2=B): o mês de `dataInicio` conta
+   * como 1º mês promocional. Exemplo: assinou em abril com 3 meses de promoção
+   * → abril, maio e junho são promocionais; julho volta ao normal.
+   *
+   * Override do admin (P1=A): qualquer ajuste em `contrato.mesesPromocaoAplicados`
+   * é respeitado automaticamente — função lê do contrato, não do plano.
+   *
+   * Retorna false se o contrato não tem promoção configurada.
+   */
+  private estaEmPeriodoPromocional(
+    contrato: { dataInicio?: Date | null; mesesPromocaoAplicados?: number | null },
+    fatura: { dadosExtraidos?: any } | null,
+  ): boolean {
+    const meses = Number(contrato.mesesPromocaoAplicados ?? 0);
+    if (!contrato.dataInicio || meses <= 0) return false;
+
+    // Competência da cobrança vem da fatura OCR (ex: "2026-04"). Fallback: hoje.
+    const mesRefStr: string | undefined = fatura?.dadosExtraidos?.mesReferencia;
+    const hoje = new Date();
+    const [anoC, mesC] = mesRefStr
+      ? mesRefStr.split('-').map(Number)
+      : [hoje.getFullYear(), hoje.getMonth() + 1];
+
+    const inicio = new Date(contrato.dataInicio);
+    const anoI = inicio.getFullYear();
+    const mesI = inicio.getMonth() + 1;
+
+    const mesesDecorridos = (anoC - anoI) * 12 + (mesC - mesI);
+    return mesesDecorridos >= 0 && mesesDecorridos < meses;
+  }
+
   /** Retorna se bandeira deve ser cobrada para esse contrato. */
   private resolverPoliticaBandeira(contrato: any): boolean {
     const politica =
@@ -1634,7 +1667,13 @@ IMPORTANTE:
 
     switch (modelo) {
       case 'FIXO_MENSAL': {
-        const valorContrato = Number(contrato.valorContrato ?? 0);
+        // T4: durante período promocional usa valorContratoPromocional; fora, valorContrato.
+        const emPromocao = this.estaEmPeriodoPromocional(contrato, fatura);
+        const valorFinal = emPromocao && contrato.valorContratoPromocional
+          ? Number(contrato.valorContratoPromocional)
+          : Number(contrato.valorContrato ?? 0);
+        const valorContrato = valorFinal;
+
         if (!valorContrato || valorContrato <= 0) {
           throw new BadRequestException(
             `Contrato ${contrato.numero} está em FIXO_MENSAL mas ` +
@@ -1643,6 +1682,10 @@ IMPORTANTE:
           );
         }
         // FIXO: valor já embute tudo. Desconto NÃO é aplicado de novo.
+        // TODO T4b/Sprint7: valorBruto aqui deveria ser "valor sem cooperativa"
+        // (estimável via valorTotalOCR) e valorDesconto = valorBruto - valorLiquido.
+        // Hoje reporta economia zero em dashboard — bug pré-existente conhecido.
+        // Ver ticket Sprint 7 #4: "Relatórios de economia FIXO zerados".
         return {
           valorBruto: valorContrato,
           valorDesconto: 0,
@@ -1659,7 +1702,11 @@ IMPORTANTE:
       }
 
       case 'CREDITOS_COMPENSADOS': {
-        const tarifaContratual = Number(contrato.tarifaContratual ?? 0);
+        // T4: durante período promocional usa tarifaContratualPromocional; fora, tarifaContratual.
+        const emPromocao = this.estaEmPeriodoPromocional(contrato, fatura);
+        const tarifaContratual = emPromocao && contrato.tarifaContratualPromocional
+          ? Number(contrato.tarifaContratualPromocional)
+          : Number(contrato.tarifaContratual ?? 0);
         // Fallback: tarifa apurada da fatura OCR (valorTotal / consumo)
         const tarifaApuradaOCR = kwhConsumidoOCR > 0 && valorTotalOCR
           ? Math.round((valorTotalOCR / kwhConsumidoOCR) * 100000) / 100000

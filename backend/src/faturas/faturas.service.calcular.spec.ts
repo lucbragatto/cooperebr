@@ -236,4 +236,46 @@ describe('FaturasService — núcleo de cálculo', () => {
       expect(resolverDesconto({ percentualDesconto: null, descontoOverride: null })).toBe(0);
     });
   });
+
+  // ─── T4: PROMOÇÃO TEMPORAL ──────────────────────────────────────────
+  describe('T4: promoção temporal', () => {
+    it('usa valorContratoPromocional durante período promocional', async () => {
+      // Contrato assinado em abril/2026 com 3 meses de promoção.
+      // Fatura competência abril → deve ser promocional (mês 0 de 3).
+      const contrato = contratoBase({
+        numero: 'C-T4-01',
+        valorContrato: 1000,
+        valorContratoPromocional: 700,
+        dataInicio: new Date('2026-04-10'),
+        mesesPromocaoAplicados: 3,
+      });
+      const fatura = faturaBase({
+        dadosExtraidos: { mesReferencia: '2026-04', consumoAtualKwh: 500 },
+      });
+
+      const r = await calc(contrato, fatura);
+
+      expect(r.valorLiquido).toBe(700);
+      expect(r.modeloCobrancaUsado).toBe('FIXO_MENSAL');
+    });
+
+    it('usa valorContrato normal após fim do período promocional', async () => {
+      // Contrato assinado em abril/2026 com 3 meses. Fatura competência julho
+      // (mês 3, fora da promoção: regra é mesesDecorridos < mesesPromocaoAplicados).
+      const contrato = contratoBase({
+        numero: 'C-T4-02',
+        valorContrato: 1000,
+        valorContratoPromocional: 700,
+        dataInicio: new Date('2026-04-10'),
+        mesesPromocaoAplicados: 3,
+      });
+      const fatura = faturaBase({
+        dadosExtraidos: { mesReferencia: '2026-07', consumoAtualKwh: 500 },
+      });
+
+      const r = await calc(contrato, fatura);
+
+      expect(r.valorLiquido).toBe(1000);
+    });
+  });
 });

@@ -536,6 +536,10 @@ export class MotorPropostaService {
             nome: true,
             baseCalculo: true,
             tipoDesconto: true,
+            temPromocao: true,
+            descontoPromocional: true,
+            mesesPromocao: true,
+            descontoBase: true,
           },
         })
       : null;
@@ -673,6 +677,40 @@ export class MotorPropostaService {
         ? Math.round(Number(r.valorCooperado) * Number(r.kwhContrato) * 100) / 100
         : null;
 
+      // T4 Sprint 5: snapshots promocionais (Seção 2.3).
+      // Só gravam se plano tem promoção configurada e válida. Plano mudando
+      // depois NÃO retroage — snapshot congela o valor do momento do aceite.
+      // Fórmula promocional: mesma do dimensionamento T2, trocando descontoBase
+      // por descontoPromocional. Pra FIXO calcula valorContratoPromocional;
+      // pra COMPENSADOS calcula tarifaContratualPromocional (inerte até T9).
+      let valorContratoPromocional: number | null = null;
+      let tarifaContratualPromocional: number | null = null;
+      let descontoPromocionalAplicado: number | null = null;
+      let mesesPromocaoAplicados: number | null = null;
+
+      const temPromocaoValida =
+        planoSnapshot?.temPromocao === true &&
+        planoSnapshot.descontoPromocional != null &&
+        planoSnapshot.mesesPromocao != null &&
+        Number(planoSnapshot.mesesPromocao) > 0;
+
+      if (temPromocaoValida && planoSnapshot) {
+        const descPromoPct = Number(planoSnapshot.descontoPromocional);
+        descontoPromocionalAplicado = descPromoPct;
+        mesesPromocaoAplicados = Number(planoSnapshot.mesesPromocao);
+
+        // Tarifa promocional: substitui descontoBase do r.valorCooperado pelo
+        // descPromoPct. r.valorCooperado foi calculado com descontoBase%;
+        // ajuste: tarifaPromo = r.kwhApuradoBase × (1 - descPromoPct/100)
+        // (assume Tipo I no legado — consistente com resultado atual do calcular()).
+        const tarifaPromo = Number(r.kwhApuradoBase) * (1 - descPromoPct / 100);
+        tarifaContratualPromocional = Math.round(tarifaPromo * 100000) / 100000;
+        if (ehFixo) {
+          valorContratoPromocional =
+            Math.round(tarifaPromo * Number(r.kwhContrato) * 100) / 100;
+        }
+      }
+
       const contrato = await tx.contrato.create({
         data: {
           numero,
@@ -696,6 +734,12 @@ export class MotorPropostaService {
           ...(planoSnapshot ? {
             baseCalculoAplicado: planoSnapshot.baseCalculo,
             tipoDescontoAplicado: planoSnapshot.tipoDesconto,
+          } : {}),
+          ...(descontoPromocionalAplicado !== null ? {
+            descontoPromocionalAplicado,
+            mesesPromocaoAplicados,
+            ...(valorContratoPromocional !== null ? { valorContratoPromocional } : {}),
+            ...(tarifaContratualPromocional !== null ? { tarifaContratualPromocional } : {}),
           } : {}),
         },
       });

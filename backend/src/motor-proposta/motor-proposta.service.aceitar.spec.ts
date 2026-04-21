@@ -250,4 +250,61 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
     expect(dataContrato.kwhContratoMensal).toBe(850);
     expect(dataContrato.kwhContrato).toBe(850); // campo antigo permanece
   });
+
+  it('T4: plano com promoção → grava snapshots promocionais', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano com Promoção',
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+      descontoBase: 20,
+      temPromocao: true,
+      descontoPromocional: 30, // 30% nos primeiros meses
+      mesesPromocao: 3,
+    });
+
+    await service.aceitar({
+      cooperadoId: 'coop-id-1',
+      resultado: resultadoCalculo,
+      mesReferencia: '2026-03',
+      planoId: 'plano-promo',
+    });
+
+    const dataContrato = contratoCreate.mock.calls[0][0].data;
+
+    expect(dataContrato.descontoPromocionalAplicado).toBe(30);
+    expect(dataContrato.mesesPromocaoAplicados).toBe(3);
+    // Promocional deve ser menor que valor normal (30% > 20% de desconto)
+    expect(Number(dataContrato.valorContratoPromocional))
+      .toBeLessThan(Number(dataContrato.valorContrato));
+    // Tarifa promocional = kwhApuradoBase × (1 - 30/100) = 1.0928 × 0.70
+    expect(Number(dataContrato.tarifaContratualPromocional))
+      .toBeCloseTo(1.0928 * 0.70, 3);
+  });
+
+  it('T4: plano sem promoção → não grava snapshots promocionais', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano Sem Promoção',
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+      descontoBase: 20,
+      temPromocao: false,
+      descontoPromocional: null,
+      mesesPromocao: null,
+    });
+
+    await service.aceitar({
+      cooperadoId: 'coop-id-1',
+      resultado: resultadoCalculo,
+      mesReferencia: '2026-03',
+      planoId: 'plano-s-promo',
+    });
+
+    const dataContrato = contratoCreate.mock.calls[0][0].data;
+
+    expect(dataContrato.descontoPromocionalAplicado).toBeUndefined();
+    expect(dataContrato.mesesPromocaoAplicados).toBeUndefined();
+    expect(dataContrato.valorContratoPromocional).toBeUndefined();
+  });
 });
