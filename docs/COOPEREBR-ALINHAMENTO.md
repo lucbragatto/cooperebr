@@ -190,12 +190,9 @@ Extraído dos diagramas Mermaid da Seção 6 do RAIO-X.
 
 Consolidados dos GAPs do RAIO-X + análise arquitetural.
 
-### Buraco 1 — Receita inexistente do SaaS (CRÍTICO)
+### Buraco 1 — Receita inexistente do SaaS ~~(CRÍTICO)~~ RESOLVIDO
 
-**Evidência:** `FaturaSaas = 0`, nenhum cron gera, PlanoSaas tem 2 entradas.
-**Impacto:** a empresa da plataforma **não tem receita formal** até hoje.
-**Tamanho:** M (2-3 dias).
-**Dependências:** precisa de cron + geração automática + integração Asaas da plataforma.
+**Resolvido:** Sprint 6 Ticket 10 (`fd35c0d`). Cron `@Cron('0 6 1 * *')` gera FaturaSaas mensal. Primeira fatura será emitida dia 01/05/2026.
 
 ### Buraco 2 — Asaas não opera em produção (CRÍTICO pra CoopereBR, não pro dono)
 
@@ -235,23 +232,17 @@ Consolidados dos GAPs do RAIO-X + análise arquitetural.
 **Impacto:** menu existe, admin não consegue popular, parceiros externos (nutricionista, academia) não estão ligados.
 **Tamanho:** M.
 
-### Buraco 8 — Multi-tenant vazando (5 órfãos)
+### Buraco 8 — Multi-tenant vazando ~~(5 órfãos)~~ RESOLVIDO
 
-**Evidência:** 5 cooperados com `cooperativaId = null`.
-**Impacto:** dados inacessíveis, risco de leak se query não checar null.
-**Tamanho:** S (1 dia, arrumar dados + validação).
+**Resolvido:** Sprint 6 Ticket 11 (`a749bd4`). 2 órfãos movidos pra CoopereBR, 3 lixo deletados, cooperativa "aaaaaaa" deletada. 0 órfãos restantes.
 
-### Buraco 9 — OCR retorna dados sujos (Tickets 6, 7, 8 do Sprint 6)
+### Buraco 9 — OCR retorna dados sujos ~~(Tickets 6, 7, 8)~~ RESOLVIDO
 
-**Evidência:** 3 tickets abertos — tarifas trocadas em B3, campos inventados em GD, `numeroUC` sem normalização.
-**Impacto:** matching falha, cobrança pode sair errada, promoção T4 não dispara em produção.
-**Tamanho:** S-M cada.
+**Resolvido:** Sprint 6 Tickets 6, 7, 8 (`5f32eca`). Prompt melhorado (tarifas B3, anti-alucinação GD) + pós-processamento (numeroUC normalizado, mesReferencia YYYY-MM). Fixtures regeneradas (`e18b0d9`).
 
-### Buraco 10 — Audit trail HistoricoStatusCooperado vazio
+### Buraco 10 — Audit trail HistoricoStatusCooperado vazio — NÃO É BUG
 
-**Evidência:** 0 registros, apesar do código existir.
-**Impacto:** sem rastreabilidade de mudanças de status. Risco legal.
-**Tamanho:** S (corrigir hook em todos os caminhos de mudança de status).
+**Resolvido:** Sprint 6 Ticket 12. Código existe em `cooperados.service.ts:721` e dispara corretamente. Os 0 registros são porque os 125 cooperados foram importados direto no banco, sem passar pelo fluxo de mudança de status. Próximas mudanças reais vão popular a tabela automaticamente.
 
 ---
 
@@ -295,22 +286,25 @@ Capturadas do RAIO-X seção 8 + discussões do sprint. **Se não souber uma des
 
 ## PARTE 7 — ROADMAP RECOMENDADO
 
-### Sprint 5 (atual, quase fechado)
+### Sprint 5 (fechado 8/9)
 
-8 tarefas técnicas fechadas (T0-T8). **T9 pendente** (desligar `BLOQUEIO_MODELOS_NAO_FIXO` em dev). Commit mais recente: `0e064dc`.
+8 tarefas técnicas fechadas (T0-T8). T9 pendente (desligar `BLOQUEIO_MODELOS_NAO_FIXO`) — pode ser feita no Sprint 7 quando Asaas entrar.
 
-**Recomendação:** fechar T9 como tarefa mínima (30 min) ou marcar Sprint 5 como encerrado com 8/9.
+### Sprint 6 — Receita e Higiene (CONCLUÍDO 21/04/2026)
 
-### Sprint 6 — Receita e Higiene (recomendado começar aqui)
+| Ticket | Descrição | Commit | Status |
+|---|---|---|---|
+| 10 | FaturaSaas automática — cron mensal | `fd35c0d` | Fechado |
+| 11 | Limpeza multi-tenant + cron Sungrow desativado | `a749bd4` | Fechado |
+| 6 | OCR tarifas B3 — prompt melhorado | `5f32eca` | Fechado |
+| 7 | OCR campos GD — prompt anti-alucinação | `5f32eca` | Fechado |
+| 8 | OCR normalização — numeroUC + mesReferencia | `5f32eca` | Fechado |
+| 9 | Campo numeroInstalacaoEDP na UC | `03742cb` | Fechado |
+| 12 | Audit trail HistoricoStatusCooperado | — | Não é bug |
 
-Ordem de ataque:
+Estado pós-Sprint 6: 4 cooperativas, 0 órfãos, 89 testes, fixtures OCR regeneradas.
 
-1. **Ticket 10 — FaturaSaas automática.** Cron mensal gera FaturaSaas pra cada parceiro com plano ativo. **Começa a receita da plataforma.** Tamanho M.
-2. **Ticket 11 — Limpeza multi-tenant.** Excluir "aaaaaaa", atribuir cooperativaId aos 5 órfãos, desabilitar cron de monitoramento Sungrow. Tamanho S.
-3. **Tickets 6, 7, 8 ��� Correções OCR** (já documentados no backlog).
-4. **Ticket 9 — Campo numeroInstalacao EDP** (já documentado).
-5. **Ticket 12 — Audit trail HistoricoStatusCooperado em todos os caminhos**. Tamanho S.
-6. **T9 Sprint 5 migrado (se não fechou antes)**.
+Próximo: **Sprint 7 — Asaas em Produção.**
 
 ### Sprint 7 — Asaas em Produção
 
@@ -366,11 +360,11 @@ Ordem de ataque:
 
 ## PARTE 9 — PRÓXIMO PASSO IMEDIATO
 
-Próxima prioridade: **Sprint 6 com Ticket 10 (FaturaSaas automática)** como item #1.
+Sprint 6 concluído (21/04/2026). Próxima prioridade: **Sprint 7 — Asaas em Produção.**
 
-Motivo: destrava a receita da empresa da plataforma. Em 3 dias, primeira FaturaSaas emitida pra CoopereBR.
+Objetivo: migrar Asaas de sandbox pra produção na CoopereBR, criar customers, emitir cobranças automaticamente, processar webhooks de pagamento.
 
-T9 do Sprint 5 pode ficar como item final do Sprint 6, ou ser descartada — destrava features que ninguém usa hoje.
+T9 do Sprint 5 (desligar `BLOQUEIO_MODELOS_NAO_FIXO`) pode entrar como item do Sprint 7 — destrava COMPENSADOS/DINAMICO quando Asaas estiver pronto.
 
 ---
 
