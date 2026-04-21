@@ -525,6 +525,10 @@ model Cobranca {
   createdAt                DateTime             @default(now())
   updatedAt                DateTime             @updatedAt
 
+  // T6 Sprint 5: anti-duplicacao por contrato + competencia. Dupla camada:
+  // guards em codigo (cobrancas.service, faturas.service) + constraint no banco.
+  @@unique([contratoId, mesReferencia, anoReferencia], map: "cobranca_contrato_competencia_unique")
+
   @@map("cobrancas")
 }
 

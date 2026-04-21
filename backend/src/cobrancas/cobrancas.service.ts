@@ -84,6 +84,25 @@ export class CobrancasService {
     dataVencimento: Date;
     dataPagamento?: Date;
   }, cooperativaId?: string) {
+    // T6 Sprint 5: guard anti-duplicacao.
+    // Mesma logica dos outros 2 gatilhos (pipeline individual + lote no
+    // faturas.service.ts). Garante idempotencia: admin clica 2x sem medo.
+    // A constraint unique no schema eh rede de seguranca — aqui lançamos
+    // erro amigavel antes de chegar no Prisma.
+    const jaExiste = await this.prisma.cobranca.findFirst({
+      where: {
+        contratoId: data.contratoId,
+        mesReferencia: data.mesReferencia,
+        anoReferencia: data.anoReferencia,
+      },
+      select: { id: true },
+    });
+    if (jaExiste) {
+      throw new BadRequestException(
+        `Ja existe cobranca para este contrato em ${String(data.mesReferencia).padStart(2, '0')}/${data.anoReferencia} (cobranca ${jaExiste.id}). Se precisa refazer, cancele a existente primeiro.`,
+      );
+    }
+
     // Buscar contrato para obter cooperativaId e dados do cooperado
     const contrato = await this.prisma.contrato.findUnique({
       where: { id: data.contratoId },
