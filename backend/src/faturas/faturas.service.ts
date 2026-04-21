@@ -1269,12 +1269,13 @@ IMPORTANTE:
 - energiaFornecidaKwh: Procure linhas como 'En. At. Forn. pT', 'Energia Ativa Fornecida', 'En Fornecida' ou similar. Extraia o valor em kWh. Se houver múltiplas linhas, some todas. Se não encontrar, use consumoAtualKwh.
 - valorCompensadoReais: Procure linhas como 'Energia compensada', 'Crédito de energia', 'Desconto GD' com valor em R$. É o valor monetário descontado pela compensação de créditos. Se não encontrar, retorne 0.
 - temCreditosInjetados: Retorne true se a fatura contém QUALQUER indicação de energia injetada (linhas 'En. At. Inj.', 'Energia Injetada', 'Geração Distribuída', créditos de compensação, saldo de créditos > 0, ou possuiCompensacao = true). Isso indica que a UC já participa de geração distribuída.
-- saldoKwhAnterior: Saldo de créditos acumulados ANTES da compensação desta fatura (kWh). Procure 'Saldo anterior', 'Saldo mês anterior', 'Créditos acumulados' na fatura. Se não encontrar, retorne 0.
+- saldoKwhAnterior: Saldo de créditos acumulados ANTES da compensação desta fatura (kWh). Procure 'Saldo anterior', 'Saldo mês anterior', 'Créditos acumulados' na fatura. APENAS extraia se o valor aparecer EXPLICITAMENTE no PDF. NÃO calcule por diferença (ex: saldoAtual - creditosRecebidos + injetada). Se não encontrar o campo explícito, retorne 0.
 - saldoKwhAtual: Saldo de créditos APÓS a compensação desta fatura (kWh). Procure 'Saldo atual', 'Saldo a expirar', 'Créditos remanescentes'. Se não encontrar, retorne 0.
 - validadeCreditos: Data de validade dos créditos mais antigos (MM/AAAA). Créditos de GD vencem em 60 meses. Procure 'Validade', 'Expiração'. Se não encontrar, use string vazia.
-- valorSemDesconto: Valor que seria cobrado se a UC NÃO participasse de GD (sem compensação de créditos). Some consumoAtualKwh * (tarifaTUSD + tarifaTE) + contribIluminacaoPublica + impostos. Se não conseguir calcular, retorne 0.
-- tarifaTUSD/tarifaTE: valores da coluna "Preço Unit. c/ Tributos" ou "Preço Unit. COM ICMS" da fatura (R$/kWh). Se a fatura tiver apenas uma coluna de tarifa (sem diferenciar com/sem tributos), use essa coluna.
-- tarifaTUSDSemICMS/tarifaTESemICMS: valores da coluna "Tarifa Unit.(R$)" ou "Tarifa Aplicada s/ Tributos" ou "Tarifa s/ ICMS" (R$/kWh). São as tarifas homologadas pela ANEEL antes da incidência de ICMS. Se a fatura não separar as colunas, calcule: tarifaTUSDSemICMS = tarifaTUSD / (1 + icmsPercentual/100). Idem para TE.
+- valorSemDesconto: Valor que seria cobrado se a UC NÃO participasse de GD (sem compensação de créditos). Em faturas COM compensação GD, some TODAS as linhas de "Energia Ativa Fornecida" (coluna "Valor Total R$") + contribIluminacaoPublica. Em faturas SEM compensação, use o totalAPagar. Se não conseguir calcular, retorne 0.
+- valorCompensadoReais: Procure linhas como 'Energia compensada', 'En. At. Inj.', 'Crédito de energia', 'Desconto GD' com valor NEGATIVO em R$ na fatura. É a soma dos valores monetários descontados pela compensação de créditos. Em faturas EDP, são as linhas "En. At. Inj. oUC" que aparecem com valor negativo na coluna "Valor Total R$". Some os valores absolutos dessas linhas. Se não encontrar, retorne 0.
+- tarifaTUSD/tarifaTE: valores da coluna "Preço Unit. c/ Tributos" ou "Preço Unit. COM ICMS" da fatura (R$/kWh). ATENÇÃO: NÃO calcule dividindo "Valor Total R$" pelo consumo — isso dá resultado errado em faturas B3-COMERCIAL onde há encargos adicionais. Procure a coluna explícita de preço unitário. Se a fatura tiver apenas uma coluna de tarifa (sem diferenciar com/sem tributos), use essa coluna.
+- tarifaTUSDSemICMS/tarifaTESemICMS: valores da coluna "Tarifa Unit.(R$)" ou "Tarifa Aplicada s/ Tributos" ou "Tarifa s/ ICMS" (R$/kWh). São as tarifas homologadas pela ANEEL antes da incidência de ICMS. NÃO confunda com "Preço Unit. c/ Tributos" (que já inclui ICMS). Se a fatura não separar as colunas, calcule: tarifaTUSDSemICMS = tarifaTUSD / (1 + icmsPercentual/100). Idem para TE.
 - Se algum campo não estiver disponível, use string vazia ou zero.`;
 
     const body = {
@@ -1316,13 +1317,27 @@ IMPORTANTE:
     const result = (await response.json()) as AnthropicResponse;
     const text = result.content.find((c) => c.type === 'text')?.text ?? '';
 
+    let dados: DadosExtraidos;
     try {
-      return JSON.parse(text) as DadosExtraidos;
+      dados = JSON.parse(text) as DadosExtraidos;
     } catch {
       throw new BadRequestException(
         `Resposta da Claude não é JSON válido: ${text.slice(0, 200)}`,
       );
     }
+
+    // Sprint 6 Tickets 8: pós-processamento de normalização.
+    // OCR retorna numeroUC com pontos/hífen e mesReferencia em MM/YYYY.
+    // Sistema espera dígitos puros e YYYY-MM respectivamente.
+    if (dados.numeroUC) {
+      dados.numeroUC = String(dados.numeroUC).replace(/[^0-9]/g, '');
+    }
+    if (dados.mesReferencia && /^\d{2}\/\d{4}$/.test(dados.mesReferencia)) {
+      const [mes, ano] = dados.mesReferencia.split('/');
+      dados.mesReferencia = `${ano}-${mes}`;
+    }
+
+    return dados;
   }
 
   private calcularMedia(
