@@ -277,5 +277,31 @@ describe('FaturasService — núcleo de cálculo', () => {
 
       expect(r.valorLiquido).toBe(1000);
     });
+
+    it('T8: COMPENSADOS usa tarifaContratualPromocional durante promoção', async () => {
+      const contrato = contratoBase({
+        plano: { modeloCobranca: 'CREDITOS_COMPENSADOS' },
+        numero: 'C-T8-COMP',
+        tarifaContratual: 0.90,
+        tarifaContratualPromocional: 0.60, // promocional menor
+        dataInicio: new Date('2026-04-01'),
+        mesesPromocaoAplicados: 3,
+        percentualDesconto: 0, // isola o efeito da tarifa
+      });
+      const fatura = faturaBase({
+        dadosExtraidos: {
+          mesReferencia: '2026-05', // dentro da promoção (mês 1 de 3)
+          creditosRecebidosKwh: 1000,
+          consumoAtualKwh: 1000,
+          totalAPagar: 900,
+        },
+      });
+
+      const r = await calc(contrato, fatura);
+
+      // 1000 × 0.60 = 600 (usando tarifa promocional, não normal)
+      expect(r.valorBruto).toBe(600);
+      expect(r.tarifaContratualAplicada).toBe(0.60);
+    });
   });
 });

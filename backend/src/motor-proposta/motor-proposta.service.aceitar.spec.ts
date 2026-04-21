@@ -307,4 +307,197 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
     expect(dataContrato.mesesPromocaoAplicados).toBeUndefined();
     expect(dataContrato.valorContratoPromocional).toBeUndefined();
   });
+
+  // ─── T8 Sprint 5: testes de integração cross-service ─────────────
+
+  it('T8: fluxo completo — aceitar() dispara TODAS operações cross-service', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano Fixo Normal',
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+    });
+
+    await service.aceitar(
+      {
+        cooperadoId: 'coop-id-fluxo',
+        resultado: resultadoCalculo,
+        mesReferencia: '2026-03',
+        planoId: 'plano-fluxo',
+      },
+      'coop-1',        // cooperativaId do caller (multi-tenant)
+      'user-admin-1',  // usuarioId pra audit trail
+    );
+
+    // 1. Contrato criado com status PENDENTE_ATIVACAO
+    expect(contratoCreate).toHaveBeenCalledTimes(1);
+    expect(contratoCreate.mock.calls[0][0].data.status).toBe('PENDENTE_ATIVACAO');
+
+    // 2. Notificação CONTRATO_CRIADO disparada
+    const notifs = notificacoesCriar.mock.calls.map((c: any) => c[0]);
+    const notifContrato = notifs.find((n: any) => n.tipo === 'CONTRATO_CRIADO');
+    expect(notifContrato).toBeDefined();
+    expect(notifContrato.titulo).toContain('Contrato criado');
+
+    // 3. Audit trail — HistoricoStatusCooperado com usuarioId
+    expect(historicoCreate).toHaveBeenCalledTimes(1);
+    const histData = historicoCreate.mock.calls[0][0].data;
+    expect(histData.usuarioId).toBe('user-admin-1');
+    expect(histData.motivo).toContain('/motor-proposta/aceitar');
+    expect(histData.cooperadoId).toBe('coop-id-fluxo');
+
+    // 4. Cooperado marcado PENDENTE_DOCUMENTOS
+    expect(cooperadosMarcarPendente).toHaveBeenCalledWith('coop-id-fluxo', 'coop-1');
+
+    // 5. Check pronto-pra-ativar disparado
+    expect(cooperadosCheckPronto).toHaveBeenCalledWith('coop-id-fluxo');
+  });
+
+  it('T8: aceitar sem usina com vaga → LISTA_ESPERA + notificação + entrada na fila', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano Fixo',
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+    });
+
+    // Override de transação: usina sem capacidade disponível
+    transactionMock.mockImplementationOnce(async (cb: any) => {
+      const tx = {
+        propostaCooperado: {
+          findMany: jest.fn().mockResolvedValue([]),
+          update: jest.fn(),
+          create: jest.fn().mockResolvedValue({
+            id: 'prop-LE',
+            cooperado: { nomeCompleto: 'Maria Espera' },
+          }),
+        },
+        uc: { findMany: jest.fn().mockResolvedValue([
+          { id: 'uc-LE', distribuidora: 'EDP', contratos: [] },
+        ]) },
+        usina: { findMany: jest.fn().mockResolvedValue([
+          // Capacidade total 1000, já ocupada → r.kwhContrato (1131) não cabe
+          { id: 'usina-cheia', capacidadeKwh: 1000, contratos: [{ kwhContrato: 1000 }] },
+        ]) },
+        contrato: { create: contratoCreate.mockResolvedValue({
+          id: 'contrato-LE', numero: 'C-LE-01',
+        }) },
+        listaEspera: {
+          count: jest.fn().mockResolvedValue(0),
+          create: listaEsperaCreate.mockResolvedValue({ id: 'le-1' }),
+        },
+      };
+      return cb(tx);
+    });
+
+    const result = await service.aceitar({
+      cooperadoId: 'coop-id-LE',
+      resultado: resultadoCalculo,
+      mesReferencia: '2026-03',
+      planoId: 'plano-LE',
+    });
+
+    // Contrato criado com status LISTA_ESPERA, sem usinaId
+    const data = contratoCreate.mock.calls[0][0].data;
+    expect(data.status).toBe('LISTA_ESPERA');
+    expect(data.usinaId).toBeNull();
+
+    // Entrada persistida em listaEspera
+    expect(listaEsperaCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cooperadoId: 'coop-id-LE',
+          contratoId: 'contrato-LE',
+          status: 'AGUARDANDO',
+          kwhNecessario: 1131,
+        }),
+      }),
+    );
+
+    // Notificação LISTA_ESPERA (não CONTRATO_CRIADO)
+    const notifs = notificacoesCriar.mock.calls.map((c: any) => c[0]);
+    expect(notifs.find((n: any) => n.tipo === 'LISTA_ESPERA')).toBeDefined();
+
+    // Retorno da função indica lista de espera
+    expect(result.emListaEspera).toBe(true);
+  });
+
+  it('T8: aceitar cooperado sem UC vinculada → retorna aviso, não cria contrato', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano',
+      baseCalculo: 'KWH_CHEIO',
+      tipoDesconto: 'APLICAR_SOBRE_BASE',
+    });
+
+    transactionMock.mockImplementationOnce(async (cb: any) => {
+      const tx = {
+        propostaCooperado: {
+          findMany: jest.fn().mockResolvedValue([]),
+          update: jest.fn(),
+          create: jest.fn().mockResolvedValue({
+            id: 'prop-SemUc',
+            cooperado: { nomeCompleto: 'Sem UC' },
+          }),
+        },
+        uc: { findMany: jest.fn().mockResolvedValue([]) }, // Sem UCs vinculadas
+        usina: { findMany: jest.fn() },
+        contrato: { create: contratoCreate },
+        listaEspera: { count: jest.fn(), create: jest.fn() },
+      };
+      return cb(tx);
+    });
+
+    const result = await service.aceitar({
+      cooperadoId: 'coop-sem-uc',
+      resultado: resultadoCalculo,
+      mesReferencia: '2026-03',
+      planoId: 'plano-1',
+    });
+
+    // Contrato não foi criado
+    expect(contratoCreate).not.toHaveBeenCalled();
+    expect(result.contrato).toBeNull();
+    expect((result as any).aviso).toMatch(/Sem UC vinculada/i);
+
+    // Mesmo sem contrato, proposta foi gravada
+    expect(result.proposta).toBeDefined();
+  });
+
+  it('T8: integração T3+T4 — FIXO + Tipo II + SEM_TRIBUTO + promoção → 8 snapshots', async () => {
+    planoFindUnique.mockResolvedValue({
+      modeloCobranca: 'FIXO_MENSAL',
+      nome: 'Plano Mercado com Promoção',
+      baseCalculo: 'SEM_TRIBUTO',
+      tipoDesconto: 'ABATER_DA_CHEIA',
+      descontoBase: 20,
+      temPromocao: true,
+      descontoPromocional: 30,
+      mesesPromocao: 3,
+    });
+
+    await service.aceitar({
+      cooperadoId: 'coop-integr',
+      resultado: resultadoCalculo,
+      mesReferencia: '2026-03',
+      planoId: 'plano-integr',
+    });
+
+    const data = contratoCreate.mock.calls[0][0].data;
+
+    // 4 snapshots base (T3)
+    expect(data.baseCalculoAplicado).toBe('SEM_TRIBUTO');
+    expect(data.tipoDescontoAplicado).toBe('ABATER_DA_CHEIA');
+    expect(data.valorContrato).toBeDefined();
+    expect(data.kwhContratoMensal).toBe(1131);
+
+    // 4 snapshots promocionais (T4)
+    expect(data.descontoPromocionalAplicado).toBe(30);
+    expect(data.mesesPromocaoAplicados).toBe(3);
+    expect(data.valorContratoPromocional).toBeDefined();
+    expect(data.tarifaContratualPromocional).toBeDefined();
+
+    // Promocional < normal (30% > 20% desconto)
+    expect(Number(data.valorContratoPromocional)).toBeLessThan(Number(data.valorContrato));
+  });
 });
