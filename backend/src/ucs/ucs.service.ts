@@ -36,6 +36,7 @@ export class UcsService {
     estado: string;
     cooperadoId: string;
     numeroUC?: string;
+    numeroInstalacaoEDP?: string;
     cep?: string;
     bairro?: string;
     distribuidora?: string;
@@ -52,6 +53,7 @@ export class UcsService {
     endereco: string;
     cidade: string;
     estado: string;
+    numeroInstalacaoEDP: string;
   }>) {
     return this.prisma.uc.update({ where: { id }, data });
   }

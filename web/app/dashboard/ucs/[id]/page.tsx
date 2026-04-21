@@ -35,6 +35,7 @@ export default function UCDetailPage() {
   const [mensagem, setMensagem] = useState('');
   const [form, setForm] = useState({
     numero: '',
+    numeroInstalacaoEDP: '',
     endereco: '',
     cidade: '',
     estado: '',
@@ -46,6 +47,7 @@ export default function UCDetailPage() {
         setUc(r.data);
         setForm({
           numero: r.data.numero,
+          numeroInstalacaoEDP: (r.data as any).numeroInstalacaoEDP ?? '',
           endereco: r.data.endereco,
           cidade: r.data.cidade,
           estado: r.data.estado,
@@ -59,6 +61,7 @@ export default function UCDetailPage() {
     if (!uc) return;
     setForm({
       numero: uc.numero,
+      numeroInstalacaoEDP: (uc as any).numeroInstalacaoEDP ?? '',
       endereco: uc.endereco,
       cidade: uc.cidade,
       estado: uc.estado,
@@ -119,6 +122,7 @@ export default function UCDetailPage() {
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={uc.id} />
             <Campo label="Número" value={uc.numero} />
+            <Campo label="Instalação EDP (antigo)" value={(uc as any).numeroInstalacaoEDP || '—'} />
             <Campo label="Endereço" value={uc.endereco} />
             <Campo label="Cidade" value={uc.cidade} />
             <Campo label="Estado" value={uc.estado} />
@@ -142,6 +146,15 @@ export default function UCDetailPage() {
                 className={inputClass}
                 value={form.numero}
                 onChange={(e) => setForm({ ...form, numero: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Número de instalação EDP (antigo)</label>
+              <input
+                className={inputClass}
+                value={form.numeroInstalacaoEDP}
+                onChange={(e) => setForm({ ...form, numeroInstalacaoEDP: e.target.value })}
+                placeholder="Ex: 1234567890"
               />
             </div>
             <div>

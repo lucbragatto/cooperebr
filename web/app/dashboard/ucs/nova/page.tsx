@@ -25,6 +25,7 @@ export default function NovaUcPage() {
 
   const [form, setForm] = useState({
     numero: '',
+    numeroInstalacaoEDP: '',
     endereco: '',
     cidade: '',
     estado: '',
@@ -96,6 +97,25 @@ export default function NovaUcPage() {
                 placeholder="3001234567"
                 required
                 autoFocus
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="numeroInstalacaoEDP" className="flex items-center gap-1">
+                Número de instalação EDP (antigo)
+                <span className="relative inline-flex items-center group ml-1">
+                  <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-gray-500 bg-gray-200 rounded-full cursor-help group-hover:bg-gray-300">?</span>
+                  <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 px-3 py-2 rounded-md bg-gray-800 text-white text-xs leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+                    Número curto de 10 dígitos exigido pela EDP para cadastro em GD. Quando disponível na fatura antiga, preencher aqui.
+                    <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+                  </span>
+                </span>
+              </Label>
+              <Input
+                id="numeroInstalacaoEDP"
+                value={form.numeroInstalacaoEDP}
+                onChange={(e) => set('numeroInstalacaoEDP', e.target.value)}
+                placeholder="Ex: 1234567890"
               />
             </div>
 

@@ -275,6 +275,7 @@ model Uc {
   cidade              String
   estado              String
   numeroUC            String?
+  numeroInstalacaoEDP String?            // Número curto 10 dígitos exigido pela EDP pra GD
   codigoMedidor       String?
   cep                 String?
   bairro              String?
