@@ -455,6 +455,36 @@ export class CobrancasService {
       this.logger.warn(`Falha ao processar primeira fatura paga: ${err.message}`);
     }
 
+    // Sprint 8B: emitir tokens pra cooperado no Caminho CLUBE
+    try {
+      const cooperadoId = cobranca.contrato?.cooperadoId;
+      if (cooperadoId) {
+        const cooperadoClube = await this.prisma.cooperado.findUnique({
+          where: { id: cooperadoId },
+          select: { modoRemuneracao: true, cooperativaId: true },
+        });
+        if (cooperadoClube?.modoRemuneracao === 'CLUBE' && cooperadoClube.cooperativaId) {
+          const descontoNaoAplicado = Number(cobranca.valorDesconto ?? 0);
+          if (descontoNaoAplicado > 0) {
+            // Tokens = valor do desconto que o cooperado abriu mão
+            await this.cooperTokenService.creditar({
+              cooperadoId,
+              cooperativaId: cooperadoClube.cooperativaId,
+              tipo: 'FATURA_CHEIA' as any,
+              quantidade: descontoNaoAplicado,
+              referenciaId: cobranca.id,
+              referenciaTabela: 'Cobranca',
+            });
+            this.logger.log(
+              `Tokens CLUBE emitidos: ${descontoNaoAplicado} pra cooperado ${cooperadoId} (cobrança ${cobranca.id})`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Falha ao emitir tokens CLUBE: ${(err as Error).message}`);
+    }
+
     // Clube de Vantagens: atualizar métricas dos indicadores
     try {
       const cooperadoId = cobranca.contrato?.cooperadoId;
