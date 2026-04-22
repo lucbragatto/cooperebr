@@ -196,11 +196,17 @@ Consolidados dos GAPs do RAIO-X + análise arquitetural.
 
 ### Buraco 2 — Asaas não opera em produção (EM ANDAMENTO)
 
-**Sprint 7 em progresso (22/04/2026):**
-- Fase A completa: 82 cooperados validados (CPF/CNPJ + email), 0 problemas
-- Script batch criado: `backend/scripts/asaas-criar-customers-batch.ts` (dry-run OK, 9 batches)
-- **Bloqueado:** Luciano precisa abrir conta Asaas (sandbox ou prod) e cadastrar API key
-- Próximo: rodar `--real` após conta aberta
+**Sprint 7 concluído (22/04/2026):**
+- Fase A: 82 cooperados validados, 61 reais com AsaasCustomer criado no sandbox
+- Fase B: 61 customers criados no Asaas sandbox (0 erros)
+- **Refatoração multi-gateway concluída (5 etapas):**
+  - Etapa 1: Schema ConfigGateway + ConfigGatewayPlataforma + CobrancaGateway (`f5dd318`)
+  - Etapa 2: Interface GatewayPagamentoAdapter + AsaasAdapter (`0c435cf`)
+  - Etapa 2.5: GatewayError padronizado com 6 codes (`780b648`)
+  - Etapa 3: 3 callers migrados pra abstração (`b0b231b`)
+  - Etapa 4: Teste ponta a ponta no sandbox — cobrança emitida via gateway abstraído
+- pix-excedente.service.ts mantido como exceção (API de transferência específica Asaas)
+- Documentação: `docs/arquitetura/gateways.md`
 
 ### Buraco 3 — Separação de painéis Dono vs Parceiro
 

@@ -51,6 +51,14 @@ Sprint 5 fechado (8/9). Sprint 6 fechado (6 tickets, 21/04/2026).
 4. Webhook processar pagamento → LancamentoCaixa
 5. T9 Sprint 5 (desligar BLOQUEIO_MODELOS_NAO_FIXO)
 
+## Gateways de pagamento
+
+Novos gateways sempre via adapter pattern (`src/gateway-pagamento/`).
+Nunca chamar AsaasService direto de fora do módulo asaas — usar
+GatewayPagamentoService. Ver `docs/arquitetura/gateways.md`.
+
+Exceção: `pix-excedente.service.ts` usa AsaasService direto (transferência PIX específica).
+
 ## Dados de teste
 
 Todos os dados atualmente no banco dev são de teste. Quando encontrar
