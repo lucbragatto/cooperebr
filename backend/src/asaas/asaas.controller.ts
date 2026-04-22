@@ -5,8 +5,10 @@ import {
   Param,
   Body,
   Req,
+  Query,
   Headers,
   HttpCode,
+  BadRequestException,
 } from '@nestjs/common';
 import { AsaasService } from './asaas.service';
 import { Roles } from '../auth/roles.decorator';
@@ -25,19 +27,21 @@ export class AsaasController {
   @Post('config')
   salvarConfig(
     @Req() req: any,
-    @Body() body: { apiKey: string; ambiente: string; webhookToken?: string },
+    @Body() body: { apiKey: string; ambiente: string; webhookToken?: string; cooperativaId?: string },
   ) {
-    const cooperativaId = req.user?.cooperativaId;
+    // SUPER_ADMIN não tem cooperativaId no JWT — aceita do body
+    const cooperativaId = req.user?.cooperativaId || body.cooperativaId;
     if (!cooperativaId) {
-      throw new Error('Cooperativa não identificada');
+      throw new BadRequestException('Cooperativa não identificada. SUPER_ADMIN: envie cooperativaId no body.');
     }
     return this.asaasService.salvarConfig(cooperativaId, body);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('config')
-  async getConfig(@Req() req: any) {
-    const cooperativaId = req.user?.cooperativaId;
+  async getConfig(@Req() req: any, @Query('cooperativaId') queryCoopId?: string) {
+    // SUPER_ADMIN não tem cooperativaId no JWT — aceita da query
+    const cooperativaId = req.user?.cooperativaId || queryCoopId;
     if (!cooperativaId) return null;
     const config = await this.asaasService.getConfigMasked(cooperativaId);
     if (!config) return null;
@@ -46,8 +50,9 @@ export class AsaasController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('testar-conexao')
-  testarConexao(@Req() req: any) {
-    return this.asaasService.testarConexao(req.user?.cooperativaId);
+  testarConexao(@Req() req: any, @Query('cooperativaId') queryCoopId?: string) {
+    const cooperativaId = req.user?.cooperativaId || queryCoopId;
+    return this.asaasService.testarConexao(cooperativaId);
   }
 
   // ─── Cobranças ───────────────────────────────────────────

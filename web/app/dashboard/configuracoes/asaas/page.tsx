@@ -21,6 +21,9 @@ export default function AsaasConfigPage() {
   const [apiKey, setApiKey] = useState('');
   const [ambiente, setAmbiente] = useState('SANDBOX');
   const [webhookToken, setWebhookToken] = useState('');
+  // SUPER_ADMIN: cooperativaId hardcoded pra CoopereBR (primeira cooperativa).
+  // Futuramente: seletor de cooperativa na tela.
+  const COOPEREBR_ID = 'cmn0ho8bx0000uox8wu96u6fd';
 
   useEffect(() => {
     loadConfig();
@@ -28,7 +31,7 @@ export default function AsaasConfigPage() {
 
   async function loadConfig() {
     try {
-      const { data } = await api.get<AsaasConfig | null>('/asaas/config');
+      const { data } = await api.get<AsaasConfig | null>(`/asaas/config?cooperativaId=${COOPEREBR_ID}`);
       if (data) {
         setConfig(data);
         setAmbiente(data.ambiente);
@@ -50,7 +53,7 @@ export default function AsaasConfigPage() {
     setErro('');
     setMsg('');
     try {
-      const payload: any = { ambiente, webhookToken: webhookToken || undefined };
+      const payload: any = { ambiente, webhookToken: webhookToken || undefined, cooperativaId: config?.cooperativaId || COOPEREBR_ID };
       if (apiKey) payload.apiKey = apiKey;
       else if (config?.apiKeyDefinida) {
         // Manter a key atual — backend precisa da key para upsert
@@ -80,7 +83,7 @@ export default function AsaasConfigPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const { data } = await api.get<{ ok: boolean; erro?: string; totalCustomers?: number }>('/asaas/testar-conexao');
+      const { data } = await api.get<{ ok: boolean; erro?: string; totalCustomers?: number }>(`/asaas/testar-conexao?cooperativaId=${COOPEREBR_ID}`);
       setTestResult(data);
     } catch {
       setTestResult({ ok: false, erro: 'Erro ao testar conexão' });
