@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { CobrancasController } from './cobrancas.controller';
 import { CobrancasService } from './cobrancas.service';
 import { CobrancasJob } from './cobrancas.job';
+import { CobrancaPdfService } from './cobranca-pdf.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
+import { PdfGeneratorService } from '../motor-proposta/pdf-generator.service';
 import { PrismaService } from '../prisma.service';
 import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
@@ -14,7 +16,7 @@ import { FinanceiroModule } from '../financeiro/financeiro.module';
 @Module({
   imports: [GatewayPagamentoModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule, FinanceiroModule],
   controllers: [CobrancasController],
-  providers: [CobrancasService, CobrancasJob, CalculoMultaJurosService, PrismaService],
+  providers: [CobrancasService, CobrancasJob, CobrancaPdfService, CalculoMultaJurosService, PdfGeneratorService, PrismaService],
   exports: [CobrancasService, CalculoMultaJurosService],
 })
 export class CobrancasModule {}

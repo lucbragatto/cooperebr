@@ -1,13 +1,19 @@
-import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Param, Body, Req, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { CobrancasService } from './cobrancas.service';
+import { CobrancaPdfService } from './cobranca-pdf.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import * as fs from 'fs';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
 @Controller('cobrancas')
 export class CobrancasController {
-  constructor(private readonly cobrancasService: CobrancasService) {}
+  constructor(
+    private readonly cobrancasService: CobrancasService,
+    private readonly cobrancaPdf: CobrancaPdfService,
+  ) {}
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
@@ -72,6 +78,16 @@ export class CobrancasController {
     @Body() body: { motivo: string },
   ) {
     return this.cobrancasService.cancelar(id, body.motivo);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @Get(':id/pdf')
+  async gerarPdf(@Param('id') id: string, @Res() res: Response) {
+    const pdfPath = await this.cobrancaPdf.gerarPdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="fatura-${id}.pdf"`);
+    const stream = fs.createReadStream(pdfPath);
+    stream.pipe(res);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
