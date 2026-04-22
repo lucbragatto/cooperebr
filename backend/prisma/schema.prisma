@@ -40,6 +40,7 @@ model Cooperativa {
   updatedAt                 DateTime                          @updatedAt
   configuracoesCobranca     ConfiguracaoCobranca[]
   usinas                    Usina[]                           @relation("CooperativaUsinas")
+  configGateways            ConfigGateway[]
   asaasConfig               AsaasConfig?
   faturasSaas               FaturaSaas[]
   modelosDocumento          ModeloDocumento[]
@@ -155,6 +156,7 @@ model Cooperado {
   usinasProprietario      Usina[]                    @relation("UsinaProprietario")
   asaasCustomer           AsaasCustomer?
   asaasCobrancas          AsaasCobranca[]
+  cobrancasGateway        CobrancaGateway[]
   pixChave                String?
   pixTipo                 String?
   // Indicações MLM
@@ -507,6 +509,7 @@ model Cobranca {
   ultimaCobrancaWhatsappEm DateTime?
   cobrancasBancarias       CobrancaBancaria[]
   asaasCobrancas           AsaasCobranca[]
+  cobrancasGateway         CobrancaGateway[]
   beneficiosIndicacao      BeneficioIndicacao[]
   // ── Consumo mínimo + Bandeira tarifária ──
   kwhMinimoFaturavel       Float?               @default(0)
@@ -1208,6 +1211,71 @@ model CobrancaBancaria {
   @@index([cooperadoId])
   @@map("cobrancas_bancarias")
 }
+
+// ─── Gateway de Pagamento (abstração multi-gateway) ──────────────────
+// ConfigGateway: config por parceiro (cada parceiro escolhe seu gateway)
+// ConfigGatewayPlataforma: config do dono da plataforma (pra cobrar FaturaSaas)
+// CobrancaGateway: registro unificado de cobrança em qualquer gateway
+
+model ConfigGateway {
+  id              String      @id @default(cuid())
+  cooperativaId   String
+  cooperativa     Cooperativa @relation(fields: [cooperativaId], references: [id])
+  gateway         String      // ASAAS | SICOOB | BB | ITAU | MANUAL
+  ambiente        String      @default("SANDBOX") // SANDBOX | PRODUCAO
+  credenciais     Json        @default("{}") // { apiKey, clientId, clientSecret, etc } — criptografado pelo adapter
+  ativo           Boolean     @default(true)
+  webhookToken    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([cooperativaId, gateway])
+  @@map("config_gateways")
+}
+
+model ConfigGatewayPlataforma {
+  id            String   @id @default(cuid())
+  gateway       String   // ASAAS | SICOOB | BB | ITAU
+  ambiente      String   @default("SANDBOX")
+  credenciais   Json     @default("{}") // criptografado
+  ativo         Boolean  @default(true)
+  webhookToken  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("config_gateway_plataforma")
+}
+
+model CobrancaGateway {
+  id                   String    @id @default(cuid())
+  cobrancaId           String?
+  cobranca             Cobranca? @relation(fields: [cobrancaId], references: [id])
+  cooperadoId          String
+  cooperado            Cooperado @relation(fields: [cooperadoId], references: [id])
+  gateway              String    // ASAAS | SICOOB | BB | ITAU
+  gatewayId            String    // ID no gateway externo (cus_xxx, boleto_xxx, etc)
+  status               String    @default("PENDING") // PENDING | CONFIRMED | RECEIVED | OVERDUE | REFUNDED | CANCELLED
+  valor                Decimal   @db.Decimal(10, 2)
+  vencimento           DateTime
+  linkPagamento        String?
+  boletoUrl            String?
+  pixQrCode            String?
+  pixCopiaECola        String?
+  nossoNumero          String?
+  linhaDigitavel       String?
+  formaPagamento       String    // BOLETO | PIX | CREDIT_CARD
+  ultimoWebhookEventId String?
+  dadosExtras          Json?     // dados específicos do gateway
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([cooperadoId])
+  @@index([status])
+  @@index([gateway, gatewayId])
+  @@map("cobrancas_gateway")
+}
+
+// ─── Asaas (legado — manter por compatibilidade com sandbox) ────────
 
 model AsaasConfig {
   id            String      @id @default(cuid())
