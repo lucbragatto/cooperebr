@@ -1,12 +1,16 @@
-# COOPEREBR — DOCUMENTO DE ALINHAMENTO
+# COOPEREBR (SISGD) — DOCUMENTO DE ALINHAMENTO
 
-**Data:** 21/04/2026
+> Sistema se chama SISGD. CoopereBR é o primeiro parceiro cliente.
+> Para histórico de documentação pré-abril/2026, ver `docs/historico/`.
+
+**Data:** 23/04/2026 (atualizado)
 **Propósito:** documento único, definitivo, consolidado. Arraste este arquivo em qualquer sessão futura com Claude (claude.ai). Em 5 minutos, o contexto está completo.
 
 **Fontes consolidadas:**
 - RAIO-X-PROJETO.md (gerado pelo Claude Code, baseado em código real, commit `9e409bc`)
-- Discussões de arquitetura de negócio (sessão 20-21/04/2026)
+- Discussões de arquitetura de negócio (sessão 20-23/04/2026)
 - Schema Prisma + CONTEXTO-CLAUDEAI.md + ARQUITETURA-RESUMO.md
+- HTML histórico de 14/04/2026 (arquivado em `docs/historico/`)
 
 ---
 
@@ -367,11 +371,44 @@ Próximo: **Sprint 7 — Asaas em Produção.**
 
 ## PARTE 9 — PRÓXIMO PASSO IMEDIATO
 
-Sprint 6 concluído (21/04/2026). Próxima prioridade: **Sprint 7 — Asaas em Produção.**
+Sprints 6, 7 e 8A/8B concluídos (23/04/2026).
 
-Objetivo: migrar Asaas de sandbox pra produção na CoopereBR, criar customers, emitir cobranças automaticamente, processar webhooks de pagamento.
+**Estado atual:**
+- Sprint 7: gateway multi-tenant + 61 AsaasCustomers sandbox
+- Sprint 8A: modoRemuneracao + saldoPendente/saldoDisponivel + bug /convites
+- Sprint 8B: PDF cobrança + envio email/WA + webhook completo + tokens CLUBE
 
-T9 do Sprint 5 (desligar `BLOQUEIO_MODELOS_NAO_FIXO`) pode entrar como item do Sprint 7 — destrava COMPENSADOS/DINAMICO quando Asaas estiver pronto.
+**Próximo:** Sprint 8C (ofertas do Clube, rede showcase) ou Sprint 9 (Sicoob/BB adapters).
+
+---
+
+## PARTE 10 — DECISÕES DE PRODUTO HISTÓRICAS (14/04/2026)
+
+Extraídas do HTML `docs/historico/VISAO-GERAL-2026-04-14.html`:
+
+1. **Assinatura digital** (D4Sign/ClickSign) preparada no schema — tokenAssinatura no Cooperado e PropostaCooperado. Não implementada em produção.
+2. **Planos públicos múltiplos** — admin cria N planos, cooperado escolhe no cadastro. Implementado no wizard e cadastro público.
+3. **FATURA_CHEIA_TOKEN** — hoje renomeado "Caminho CLUBE". Cooperado paga cheio e recebe tokens. Implementado no Sprint 8A/8B.
+4. **Rebalanceamento manual obrigatório** — admin redistribui % de usina manualmente. Não existe rebalanceamento automático.
+5. **Indicação via /cadastro?ref=** — link com código do indicador. Funcional, 10 indicações registradas.
+6. **Fluxo proposta → assinatura → lembrete 24h** — parcialmente implementado. Assinatura digital existe no schema mas não integrada com D4Sign.
+7. **Caso Hangar MLM por papel** — Agregador como papel separado. Enum AGREGADOR existe, painel não implementado.
+
+---
+
+## PARTE 11 — LACUNAS REMANESCENTES (23/04/2026)
+
+Investigação de 5 lacunas do HTML de 14/04:
+
+| # | Lacuna | Estado | Impacto |
+|---|---|---|---|
+| B.1 | Wizard ↔ Motor de Proposta | RESOLVIDO (Sprint 5) | — |
+| B.2 | GeracaoMensal ↔ Cobrança | ABERTO | Importante — relatórios incompletos |
+| B.3 | FaturaProcessada ↔ Cobrança | RESOLVIDO | — |
+| B.4 | Frontend multi-contrato | RESOLVIDO | — |
+| B.5 | Delete sem proteção (Cooperativa) | PARCIAL | Menor — banco protege por FK |
+
+Detalhes em `docs/sessoes/2026-04-23-investigacao-lacunas-antigas.md`.
 
 ---
 
