@@ -1,5 +1,6 @@
 import { GatewayPagamentoService } from './gateway-pagamento.service';
 import { AsaasAdapter } from './adapters/asaas.adapter';
+import { GatewayError } from './errors/gateway-error';
 import { BadRequestException } from '@nestjs/common';
 
 /**
@@ -118,5 +119,40 @@ describe('GatewayPagamentoService', () => {
     await expect(
       service.criarCustomer('coop-1', 'cooperativa-1'),
     ).rejects.toThrow(/não suportado/);
+  });
+
+  // ─── Etapa 2.5: GatewayError ──────────────────────────────
+
+  it('traduz erro do Asaas pra GatewayError com code correto', async () => {
+    configGatewayFindFirst.mockResolvedValue({ gateway: 'ASAAS', ativo: true });
+    const asaasErr = { response: { status: 401, data: { errors: [{ description: 'Invalid API key' }] } } };
+    (asaasAdapterMock.criarCustomer as jest.Mock).mockRejectedValue(
+      new GatewayError({ code: 'CREDENCIAIS_INVALIDAS', message: 'Credenciais Asaas inválidas', originalError: asaasErr }),
+    );
+
+    try {
+      await service.criarCustomer('coop-1', 'cooperativa-1');
+      fail('Deveria ter lançado GatewayError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(GatewayError);
+      expect((err as GatewayError).code).toBe('CREDENCIAIS_INVALIDAS');
+      expect((err as GatewayError).retryable).toBe(false);
+    }
+  });
+
+  it('GatewayError preserva originalError pra debug', async () => {
+    const original = { response: { status: 500, data: 'Internal Server Error' } };
+    const gwErr = new GatewayError({
+      code: 'GATEWAY_INDISPONIVEL',
+      message: 'Asaas indisponível',
+      retryable: true,
+      originalError: original,
+    });
+
+    expect(gwErr.originalError).toBe(original);
+    expect(gwErr.retryable).toBe(true);
+    expect(gwErr.code).toBe('GATEWAY_INDISPONIVEL');
+    expect(gwErr.message).toBe('Asaas indisponível');
+    expect(gwErr.name).toBe('GatewayError');
   });
 });
