@@ -41,15 +41,13 @@ Detalhes em `docs/COOPEREBR-ALINHAMENTO.md`.
 
 ## Sprint atual
 
-Sprint 5 fechado (8/9). Sprint 6 fechado (6 tickets, 21/04/2026).
+Sprints 5, 6, 7, 8A, 8B fechados (23/04/2026).
 
-**Próximo: Sprint 7 — Asaas em Produção:**
+**Próximo: Sprint 9 — começa pelas 2 pendências do 8B:**
 
-1. Migrar Asaas de sandbox pra prod na CoopereBR
-2. Criar AsaasCustomer pra cada cooperado ATIVO
-3. Ao gerar Cobrança, emitir AsaasCobranca automática
-4. Webhook processar pagamento → LancamentoCaixa
-5. T9 Sprint 5 (desligar BLOQUEIO_MODELOS_NAO_FIXO)
+1. PDF cobrança: adicionar imagens QR PIX + código de barras (30 min)
+2. Teste E2E real no sandbox Asaas (45 min)
+3. Depois: ofertas Clube, rede showcase, ou Sicoob/BB adapters
 
 ## Módulo Clube + CooperToken
 
