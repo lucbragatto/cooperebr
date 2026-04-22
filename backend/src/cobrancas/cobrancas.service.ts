@@ -242,6 +242,33 @@ export class CobrancasService {
       }
     }
 
+    // Sprint 8B: enviar email de fatura ao cooperado
+    if (contrato?.cooperado?.email) {
+      try {
+        // Buscar dados do gateway pra incluir PIX/boleto no email
+        const gwData = await this.prisma.cobrancaGateway.findFirst({
+          where: { cobrancaId: cobranca.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        const asaasData = await this.prisma.asaasCobranca.findFirst({
+          where: { cobrancaId: cobranca.id },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        await this.emailService.enviarFatura(
+          contrato.cooperado,
+          cobranca,
+          {
+            pixCopiaECola: gwData?.pixCopiaECola || asaasData?.pixCopiaECola || null,
+            boletoUrl: gwData?.boletoUrl || asaasData?.boletoUrl || null,
+            linhaDigitavel: gwData?.linhaDigitavel || (asaasData as any)?.linhaDigitavel || null,
+          },
+        );
+      } catch (err) {
+        this.logger.warn(`Falha ao enviar email de fatura: ${(err as Error).message}`);
+      }
+    }
+
     // Criar LancamentoCaixa PREVISTO (Contas a Receber)
     try {
       const nomeCooperado = contrato?.cooperado?.nomeCompleto || 'Cooperado';
