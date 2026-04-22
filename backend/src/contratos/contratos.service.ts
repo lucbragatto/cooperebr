@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { CooperadosService } from '../cooperados/cooperados.service';
 import { UsinasService } from '../usinas/usinas.service';
@@ -12,6 +13,7 @@ const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Seria
 export class ContratosService {
   constructor(
     private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
     private cooperadosService: CooperadosService,
     private usinasService: UsinasService,
     private notificacoes: NotificacoesService,
@@ -367,6 +369,11 @@ export class ContratosService {
           protocoloConcessionaria: data.protocoloConcessionaria,
           dataInicioCreditos: new Date(data.dataInicioCreditos + 'T00:00:00.000Z'),
         },
+      });
+
+      // 2b. Sprint 8A: emitir evento pra liberar tokens pendentes
+      this.eventEmitter.emit('cooperado.creditos.liberados', {
+        cooperadoId: contrato.cooperadoId,
       });
 
       // 3. Notificar cooperado (dentro da tx para rollback se falhar)

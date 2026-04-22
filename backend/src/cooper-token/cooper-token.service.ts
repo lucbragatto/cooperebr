@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -101,20 +102,27 @@ export class CooperTokenService {
     const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
     const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
 
+    // Sprint 8A: tokens ficam pendentes até cooperado cumprir 3 condições:
+    // 1. Cadastro completo, 2. ATIVO_RECEBENDO_CREDITOS, 3. Primeira fatura paga.
+    // forcarDisponivel=true pula esse check (ex: admin creditando manualmente).
+    const forcarDisponivel = (params as any).forcarDisponivel === true;
+    const deveSerDisponivel = forcarDisponivel || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS';
+
     const ledger = await this.prisma.$transaction(async (tx) => {
       // Buscar ou criar saldo
       let saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
       });
 
-      const novoSaldoDisponivel = Number(saldo?.saldoDisponivel ?? 0) + quantidadeLiquida;
+      const campoSaldo = deveSerDisponivel ? 'saldoDisponivel' : 'saldoPendente';
+      const novoValor = Number(saldo?.[campoSaldo] ?? 0) + quantidadeLiquida;
       const novoTotalEmitido = Number(saldo?.totalEmitido ?? 0) + quantidadeLiquida;
 
       if (saldo) {
         saldo = await tx.cooperTokenSaldo.update({
           where: { cooperadoId },
           data: {
-            saldoDisponivel: novoSaldoDisponivel,
+            [campoSaldo]: novoValor,
             totalEmitido: novoTotalEmitido,
           },
         });
@@ -123,10 +131,16 @@ export class CooperTokenService {
           data: {
             cooperadoId,
             cooperativaId,
-            saldoDisponivel: quantidadeLiquida,
+            [campoSaldo]: quantidadeLiquida,
             totalEmitido: quantidadeLiquida,
           },
         });
+      }
+
+      if (!deveSerDisponivel) {
+        this.logger.log(
+          `creditar: ${quantidadeLiquida} tokens em saldoPendente (cooperado ${cooperadoId}, status ${cooperado.status})`,
+        );
       }
 
       const expiracaoEm = new Date();
@@ -139,7 +153,7 @@ export class CooperTokenService {
           tipo,
           operacao: CooperTokenOperacao.CREDITO,
           quantidade: quantidadeLiquida,
-          saldoApos: novoSaldoDisponivel,
+          saldoApos: novoValor,
           valorReais: valorEmissao != null ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100 : null,
           referenciaId,
           referenciaTabela,
@@ -263,6 +277,92 @@ export class CooperTokenService {
     }
 
     return { ...saldo, valorAtualEstimado };
+  }
+
+  /**
+   * Sprint 8A: libera tokens pendentes → disponíveis.
+   * Chamado quando cooperado cumpre as 3 condições (cadastro completo +
+   * créditos liberados + primeira fatura paga).
+   */
+  async liberarTokensPendentes(cooperadoId: string): Promise<number> {
+    const saldo = await this.prisma.cooperTokenSaldo.findUnique({
+      where: { cooperadoId },
+    });
+
+    const pendente = Number(saldo?.saldoPendente ?? 0);
+    if (pendente <= 0) return 0;
+
+    await this.prisma.cooperTokenSaldo.update({
+      where: { cooperadoId },
+      data: {
+        saldoDisponivel: { increment: pendente },
+        saldoPendente: 0,
+      },
+    });
+
+    // Registrar no ledger pra rastreabilidade
+    const novoDisponivel = Number(saldo!.saldoDisponivel) + pendente;
+    await this.prisma.cooperTokenLedger.create({
+      data: {
+        cooperadoId,
+        cooperativaId: saldo!.cooperativaId,
+        tipo: 'GERACAO_EXCEDENTE', // reutiliza enum existente
+        operacao: 'CREDITO',
+        quantidade: pendente,
+        saldoApos: novoDisponivel,
+        descricao: 'Liberação de tokens pendentes após primeira fatura paga',
+      },
+    });
+
+    this.logger.log(
+      `liberarTokensPendentes: ${pendente} tokens liberados pra cooperado ${cooperadoId}`,
+    );
+
+    return pendente;
+  }
+
+  /**
+   * Sprint 8A: quando cooperado recebe créditos liberados pela concessionária,
+   * verificar se já pagou primeira fatura. Se sim, liberar pendentes.
+   */
+  @OnEvent('cooperado.creditos.liberados')
+  async handleCreditosLiberados(payload: { cooperadoId: string }) {
+    try {
+      // Verificar se já teve primeira fatura paga
+      const totalPagas = await this.prisma.cobranca.count({
+        where: { contrato: { cooperadoId: payload.cooperadoId }, status: 'PAGO' },
+      });
+      if (totalPagas > 0) {
+        const liberados = await this.liberarTokensPendentes(payload.cooperadoId);
+        if (liberados > 0) {
+          this.logger.log(`handleCreditosLiberados: ${liberados} tokens liberados pra ${payload.cooperadoId}`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`handleCreditosLiberados falhou: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Sprint 8A: quando primeira fatura é paga, verificar se cooperado
+   * tem ATIVO_RECEBENDO_CREDITOS. Se sim, liberar pendentes.
+   */
+  @OnEvent('cobranca.primeira.paga')
+  async handlePrimeiraFaturaPagaToken(payload: { cooperadoId: string }) {
+    try {
+      const cooperado = await this.prisma.cooperado.findUnique({
+        where: { id: payload.cooperadoId },
+        select: { status: true },
+      });
+      if (cooperado?.status === 'ATIVO_RECEBENDO_CREDITOS') {
+        const liberados = await this.liberarTokensPendentes(payload.cooperadoId);
+        if (liberados > 0) {
+          this.logger.log(`handlePrimeiraFaturaPaga: ${liberados} tokens liberados pra ${payload.cooperadoId}`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`handlePrimeiraFaturaPagaToken falhou: ${(err as Error).message}`);
+    }
   }
 
   async calcularDesconto(params: CalcularDescontoParams) {
