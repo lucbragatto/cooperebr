@@ -51,6 +51,25 @@ Sprint 5 fechado (8/9). Sprint 6 fechado (6 tickets, 21/04/2026).
 4. Webhook processar pagamento → LancamentoCaixa
 5. T9 Sprint 5 (desligar BLOQUEIO_MODELOS_NAO_FIXO)
 
+## Módulo Clube + CooperToken
+
+Especificação em `docs/especificacao-clube-cooper-token.md`.
+Sprint 8 implementa MVP. Sprint 9 faz rede interna. Sprint 10+ rede
+aberta (requer consulta advogado antes).
+
+Princípio: token = desconto diferido. kWh constante. Cooperado escolhe
+Desconto (imediato) ou Clube (acumular tokens).
+
+Ferramentas configuráveis (ativáveis por parceiro):
+- Expiração de tokens (prazo em meses)
+- Desvalorização temporal (período graça + taxa + piso)
+
+Regra de ouro: comunicação transparente ao cooperado. Curvas
+sempre visíveis no portal. WhatsApp notifica antes de eventos.
+
+Antes de implementar Sprint 8, investigar /cadastro público —
+pode já ter partes do Clube.
+
 ## Gateways de pagamento
 
 Novos gateways sempre via adapter pattern (`src/gateway-pagamento/`).
