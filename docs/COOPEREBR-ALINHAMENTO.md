@@ -194,12 +194,13 @@ Consolidados dos GAPs do RAIO-X + análise arquitetural.
 
 **Resolvido:** Sprint 6 Ticket 10 (`fd35c0d`). Cron `@Cron('0 6 1 * *')` gera FaturaSaas mensal. Primeira fatura será emitida dia 01/05/2026.
 
-### Buraco 2 — Asaas não opera em produção (CRÍTICO pra CoopereBR, não pro dono)
+### Buraco 2 — Asaas não opera em produção (EM ANDAMENTO)
 
-**Evidência:** `AsaasCustomer = 0`, `AsaasCobranca = 0`. Config existe.
-**Impacto:** CoopereBR cobra os 89 cooperados dela **fora do sistema**. Planilha, PIX manual.
-**Tamanho:** L (1 semana).
-**Dependências:** limpar Asaas sandbox → prod, criar customers, emitir cobranças automaticamente.
+**Sprint 7 em progresso (22/04/2026):**
+- Fase A completa: 82 cooperados validados (CPF/CNPJ + email), 0 problemas
+- Script batch criado: `backend/scripts/asaas-criar-customers-batch.ts` (dry-run OK, 9 batches)
+- **Bloqueado:** Luciano precisa abrir conta Asaas (sandbox ou prod) e cadastrar API key
+- Próximo: rodar `--real` após conta aberta
 
 ### Buraco 3 — Separação de painéis Dono vs Parceiro
 
