@@ -41,15 +41,23 @@ Detalhes em `docs/COOPEREBR-ALINHAMENTO.md`.
 
 ## Sprint atual
 
-Sprint 5 em 8/9 tarefas fechadas. T9 pendente (pode ser adiada).
+Sprint 5 fechado (8/9). Sprint 6 fechado (6 tickets, 21/04/2026).
 
-**Próxima prioridade (Sprint 6), detalhes na Parte 7 do alinhamento:**
+**Próximo: Sprint 7 — Asaas em Produção:**
 
-1. Ticket 10 — FaturaSaas automática (receita da plataforma — 0 hoje)
-2. Ticket 11 — Limpeza multi-tenant (5 órfãos, lixo "aaaaaaa")
-3. Tickets 6, 7, 8 — Correções OCR
-4. Ticket 9 — Campo numeroInstalacao EDP
-5. Ticket 12 — Audit trail HistoricoStatusCooperado
+1. Migrar Asaas de sandbox pra prod na CoopereBR
+2. Criar AsaasCustomer pra cada cooperado ATIVO
+3. Ao gerar Cobrança, emitir AsaasCobranca automática
+4. Webhook processar pagamento → LancamentoCaixa
+5. T9 Sprint 5 (desligar BLOQUEIO_MODELOS_NAO_FIXO)
+
+## Dados de teste
+
+Todos os dados atualmente no banco dev são de teste. Quando encontrar
+dados suspeitos (CPF/CNPJ fake padrão 1-2-3-4, nomes 'REMOVIDO', emails
+@removido.invalid, domínios @test ou @invalid), pode deletar sem perguntar.
+Apenas mostra a lista do que vai deletar e executa. Isso vale até o primeiro
+parceiro real entrar em produção.
 
 ## Regra de atualização
 
