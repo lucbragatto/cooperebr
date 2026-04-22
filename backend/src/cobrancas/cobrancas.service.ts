@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
-import { AsaasService } from '../asaas/asaas.service';
+import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.service';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
@@ -19,7 +19,7 @@ export class CobrancasService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
-    private asaasService: AsaasService,
+    private gatewayPagamento: GatewayPagamentoService,
     private clubeVantagensService: ClubeVantagensService,
     private whatsappCicloVida: WhatsappCicloVidaService,
     private whatsappSender: WhatsappSenderService,
@@ -208,10 +208,10 @@ export class CobrancasService {
       }
     }
 
-    // Emitir automaticamente no Asaas se configurado
+    // Emitir automaticamente no gateway de pagamento se configurado
     if (resolvedCoopId && contrato?.cooperadoId) {
       try {
-        await this.emitirNoAsaasSeConfigurado(
+        await this.emitirNoGatewaySeConfigurado(
           cobranca.id,
           resolvedCoopId,
           contrato.cooperadoId,
@@ -222,7 +222,7 @@ export class CobrancasService {
           },
         );
       } catch (err) {
-        this.logger.warn(`Falha ao emitir Asaas na criação da cobrança: ${err.message}`);
+        this.logger.warn(`Falha ao emitir no gateway na criação da cobrança: ${(err as Error).message}`);
       }
     }
 
@@ -538,7 +538,7 @@ export class CobrancasService {
    * Após criar uma cobrança, emite automaticamente no Asaas se a cooperativa
    * tiver config ativa e o cooperado tiver forma de pagamento compatível.
    */
-  async emitirNoAsaasSeConfigurado(
+  async emitirNoGatewaySeConfigurado(
     cobrancaId: string,
     cooperativaId: string,
     cooperadoId: string,
@@ -547,7 +547,10 @@ export class CobrancasService {
     if (!cooperativaId) return null;
 
     try {
-      const config = await this.asaasService.getConfig(cooperativaId);
+      // Verificar se parceiro tem gateway configurado
+      const config = await this.prisma.configGateway.findFirst({
+        where: { cooperativaId, ativo: true },
+      });
       if (!config) return null;
 
       // Buscar forma de pagamento do cooperado
@@ -555,19 +558,19 @@ export class CobrancasService {
         where: { cooperadoId },
       });
 
-      const formasAsaas = ['BOLETO', 'PIX', 'CARTAO_CREDITO', 'CREDIT_CARD'];
+      const formasValidas = ['BOLETO', 'PIX', 'CARTAO_CREDITO', 'CREDIT_CARD'];
       const tipo = formaPagamento?.tipo;
-      if (!tipo || !formasAsaas.includes(tipo)) return null;
+      if (!tipo || !formasValidas.includes(tipo)) return null;
 
-      return await this.asaasService.emitirCobranca(cooperadoId, cooperativaId, {
+      return await this.gatewayPagamento.emitirCobranca(cooperadoId, cooperativaId, {
         valor: dados.valor,
         vencimento: dados.vencimento.toISOString().split('T')[0],
         descricao: dados.descricao,
-        formaPagamento: tipo,
+        formaPagamento: tipo as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
         cobrancaId,
       });
     } catch (err) {
-      this.logger.warn(`Falha ao emitir cobrança Asaas automaticamente: ${err.message}`);
+      this.logger.warn(`Falha ao emitir no gateway automaticamente: ${(err as Error).message}`);
       return null;
     }
   }

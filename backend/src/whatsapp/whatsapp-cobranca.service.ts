@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
-import { AsaasService } from '../asaas/asaas.service';
+import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import {
   ConfiguracaoNotificacaoService,
@@ -14,7 +14,7 @@ export class WhatsappCobrancaService {
 
   constructor(
     private prisma: PrismaService,
-    private asaasService: AsaasService,
+    private gatewayPagamento: GatewayPagamentoService,
     private sender: WhatsappSenderService,
     private configNotificacao: ConfiguracaoNotificacaoService,
   ) {}
@@ -130,9 +130,9 @@ export class WhatsappCobrancaService {
           pixCopiaECola = asaasCobranca.pixCopiaECola || '';
           invoiceUrl = asaasCobranca.linkPagamento || '';
         } else if (cobranca.cooperativaId) {
-          // Tentar emitir cobrança no Asaas
+          // Tentar emitir cobrança via gateway configurado
           try {
-            const asaasResult = await this.asaasService.emitirCobranca(
+            const gwResult = await this.gatewayPagamento.emitirCobranca(
               cooperado.id,
               cobranca.cooperativaId,
               {
@@ -143,10 +143,10 @@ export class WhatsappCobrancaService {
                 cobrancaId: cobranca.id,
               },
             );
-            pixCopiaECola = asaasResult.pixCopiaECola || '';
-            invoiceUrl = asaasResult.linkPagamento || '';
+            pixCopiaECola = gwResult.pixCopiaECola || '';
+            invoiceUrl = gwResult.linkPagamento || '';
           } catch (err) {
-            this.logger.warn(`Não foi possível emitir Asaas para cobrança ${cobranca.id}: ${err.message}`);
+            this.logger.warn(`Não foi possível emitir no gateway para cobrança ${cobranca.id}: ${(err as Error).message}`);
           }
         }
 

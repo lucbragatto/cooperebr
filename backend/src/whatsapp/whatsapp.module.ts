@@ -12,7 +12,7 @@ import { FaturasModule } from '../faturas/faturas.module';
 import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { IndicacoesModule } from '../indicacoes/indicacoes.module';
-import { AsaasModule } from '../asaas/asaas.module';
+import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
 import { EmailModule } from '../email/email.module';
 import { ConfiguracaoNotificacaoService } from '../cobrancas/configuracao-notificacao.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
@@ -22,7 +22,7 @@ import { CoopereAiService } from './coopere-ai.service';
 import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, AsaasModule, EmailModule, forwardRef(() => ConviteIndicacaoModule)],
+  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, forwardRef(() => ConviteIndicacaoModule)],
   controllers: [WhatsappFaturaController],
   providers: [
     WhatsappFaturaService,
