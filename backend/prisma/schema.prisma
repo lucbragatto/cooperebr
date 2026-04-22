@@ -173,6 +173,8 @@ model Cooperado {
   tokenAssinatura         String?
   tokenAssinaturaExp      DateTime?
   // ── CooperToken ──
+  modoRemuneracao         ModoRemuneracao            @default(DESCONTO)
+  /// @deprecated Substituído por modoRemuneracao. Manter por compatibilidade até Sprint 9.
   opcaoToken              String                     @default("A")
   cooperTokenLedger       CooperTokenLedger[]
   cooperTokenSaldo        CooperTokenSaldo?
@@ -453,6 +455,11 @@ enum PoliticaBandeira {
 enum TipoDesconto {
   APLICAR_SOBRE_BASE
   ABATER_DA_CHEIA
+}
+
+enum ModoRemuneracao {
+  DESCONTO // Caminho tradicional — desconto direto na fatura
+  CLUBE    // Caminho Clube — paga cheio, recebe tokens
 }
 
 enum TipoCampanha {

@@ -402,6 +402,18 @@ export class CooperadosController {
     } as any);
   }
 
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Put(':id/modo-remuneracao')
+  async alterarModoRemuneracao(
+    @Param('id') id: string,
+    @Body() body: { modoRemuneracao: 'DESCONTO' | 'CLUBE' },
+  ) {
+    if (!['DESCONTO', 'CLUBE'].includes(body.modoRemuneracao)) {
+      throw new BadRequestException('modoRemuneracao deve ser DESCONTO ou CLUBE');
+    }
+    return this.cooperadosService.update(id, { modoRemuneracao: body.modoRemuneracao } as any);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post(':id/fatura-mensal')
   registrarFaturaMensal(@Param('id') id: string, @Body() dto: FaturaMensalDto) {

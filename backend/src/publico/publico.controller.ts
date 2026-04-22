@@ -295,6 +295,7 @@ export class PublicoController {
       instalacao: { numeroUC: string; distribuidora: string; consumoMedioKwh: number };
       codigoRef?: string;
       planoId?: string;
+      planoSelecionado?: string;
       aceitaClube?: boolean;
       valorUltimaFatura?: number;
       historicoConsumo?: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
@@ -321,6 +322,12 @@ export class PublicoController {
     const { cooperadoId, ucId } = await this.prisma.$transaction(async (tx) => {
       let cooperado;
       try {
+        // Sprint 8A: propagar modoRemuneracao do cadastro público
+        const modoRemuneracao =
+          body.planoSelecionado === 'FATURA_CHEIA_TOKEN' && body.aceitaClube
+            ? 'CLUBE'
+            : 'DESCONTO';
+
         cooperado = await tx.cooperado.create({
           data: {
             nomeCompleto: body.nome.trim(),
@@ -330,6 +337,7 @@ export class PublicoController {
             status: 'PENDENTE',
             tipoCooperado: 'COM_UC',
             cooperativaId,
+            modoRemuneracao: modoRemuneracao as any,
           },
         });
       } catch (err) {
