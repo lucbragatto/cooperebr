@@ -3,8 +3,16 @@
 ## Antes de qualquer tarefa, SEMPRE ler primeiro (nesta ordem)
 
 1. `docs/COOPEREBR-ALINHAMENTO.md` — estado consolidado do projeto
-2. `docs/sessoes/` — sessões recentes (os 3 arquivos mais novos)
-3. `git log -5 --oneline` — últimos commits
+2. `docs/MAPA-INTEGRIDADE-SISTEMA.md` — diagnóstico ponta a ponta dos 10 fluxos
+3. `docs/sessoes/` — sessões recentes (os 3 arquivos mais novos)
+4. `git log -5 --oneline` — últimos commits
+
+## Mapa de Integridade (documento vivo)
+
+`docs/MAPA-INTEGRIDADE-SISTEMA.md` é atualizado ao final de cada sprint.
+Após fechar sprint, atualizar a matriz executiva (% pronto, gaps resolvidos).
+Não criar versão nova com data — sobrescrever o mesmo arquivo.
+Se precisar do histórico, git log mostra as versões anteriores.
 
 Esses 3 em ordem garantem contexto completo em 5 minutos.
 
