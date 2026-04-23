@@ -1030,6 +1030,16 @@ export class CooperTokenService {
         `Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa})`,
       );
 
+      // Sprint 9: emitir evento pra notificação WA
+      this.eventEmitter.emit('cooper-token.transferencia-qr', {
+        pagadorId: decoded.pagadorId,
+        recebedorId,
+        quantidade: decoded.quantidade,
+        quantidadeLiquida,
+        taxa,
+        cooperativaId: decoded.cooperativaId,
+      });
+
       return {
         sucesso: true,
         quantidadeBruta: decoded.quantidade,

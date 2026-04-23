@@ -10,6 +10,7 @@ export default function ReceberTokensPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [scanning, setScanning] = useState(false);
   const [processando, setProcessando] = useState(false);
+  const [codigoManual, setCodigoManual] = useState('');
   const [resultado, setResultado] = useState<{
     sucesso: boolean;
     quantidadeBruta?: number;
@@ -169,6 +170,27 @@ export default function ReceberTokensPage() {
             Aponte a câmera para o QR Code exibido no app do cooperado para
             receber o pagamento em tokens.
           </p>
+
+          {/* Input manual — fallback se câmera falhar */}
+          <div className="border-t pt-4 mt-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Ou digite o código manualmente:</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Cole o código do cooperado aqui"
+                value={codigoManual}
+                onChange={(e) => setCodigoManual(e.target.value)}
+                disabled={processando}
+              />
+              <Button
+                onClick={() => { if (codigoManual.trim()) processarQr(codigoManual.trim()); }}
+                disabled={processando || !codigoManual.trim()}
+              >
+                Processar
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
