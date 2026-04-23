@@ -178,6 +178,28 @@ export class CooperTokenService {
       new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais),
     );
 
+    // Sprint 9: contabilidade preparatória — LancamentoCaixa PROVISIONAL
+    if (valorReais > 0) {
+      try {
+        const competencia = new Date().toISOString().slice(0, 7);
+        await this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'PROVISIONAL',
+            descricao: `Emissão ${tipo}: ${quantidadeLiquida} tokens (R$ ${valorReais.toFixed(2)})`,
+            valor: valorReais,
+            competencia,
+            status: 'PROVISIONAL',
+            naturezaClube: 'PROVISIONAL_TOKEN_EMISSAO',
+            cooperTokenLedgerId: ledger?.id || null,
+            cooperadoId,
+            cooperativaId,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(`LancamentoCaixa PROVISIONAL falhou: ${(err as Error).message}`);
+      }
+    }
+
     return ledger;
   }
 
@@ -222,6 +244,34 @@ export class CooperTokenService {
       this.logger.log(
         `Debitado ${quantidade} tokens do cooperado ${cooperadoId}`,
       );
+
+      // Sprint 9: contabilidade preparatória — débito gera LancamentoCaixa PROVISIONAL
+      const tipoDebito = params.tipo ?? 'GERACAO_EXCEDENTE';
+      const natureza = tipoDebito === 'DESCONTO_FATURA'
+        ? 'PROVISIONAL_TOKEN_ABATIMENTO'
+        : tipoDebito === 'PAGAMENTO_QR'
+        ? 'PROVISIONAL_TOKEN_TRANSFERENCIA'
+        : 'PROVISIONAL_TOKEN_ABATIMENTO';
+
+      try {
+        const competencia = new Date().toISOString().slice(0, 7);
+        const valorEstimado = Math.round(quantidade * 0.20 * 100) / 100; // TODO: ler valorTokenReais do plano
+        await this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'PROVISIONAL',
+            descricao: `Débito ${tipoDebito}: ${quantidade} tokens`,
+            valor: valorEstimado,
+            competencia,
+            status: 'PROVISIONAL',
+            naturezaClube: natureza,
+            cooperTokenLedgerId: ledger.id,
+            cooperadoId,
+            cooperativaId,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(`LancamentoCaixa PROVISIONAL débito falhou: ${(err as Error).message}`);
+      }
 
       return ledger;
     });

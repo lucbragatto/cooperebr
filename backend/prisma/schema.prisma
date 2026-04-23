@@ -994,10 +994,14 @@ model LancamentoCaixa {
   contratoUso    ContratoUso?      @relation(fields: [contratoUsoId], references: [id])
   convenioId     String?
   convenio       ContratoConvenio? @relation(fields: [convenioId], references: [id])
-  observacoes    String?
-  cooperativaId  String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  observacoes          String?
+  cooperativaId        String?
+  // Sprint 9: contabilidade preparatória do Clube
+  naturezaClube        String?   // PROVISIONAL_TOKEN_EMISSAO | _ABATIMENTO | _EXPIRACAO | _TRANSFERENCIA
+  cooperTokenLedgerId  String?   // FK livre para CooperTokenLedger
+  observacaoContabil   String?   @default("Aguardando classificação contábil definitiva")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([competencia])
   @@index([cooperativaId, competencia])
