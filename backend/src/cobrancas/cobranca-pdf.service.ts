@@ -45,6 +45,7 @@ export class CobrancaPdfService {
     const asaas = cobranca.asaasCobrancas?.[0];
     const linkPagamento = gw?.linkPagamento || asaas?.linkPagamento || null;
     const pixCopiaECola = gw?.pixCopiaECola || asaas?.pixCopiaECola || null;
+    const pixQrCodeBase64 = gw?.pixQrCode || asaas?.pixQrCode || null;
     const linhaDigitavel = gw?.linhaDigitavel || (asaas as any)?.linhaDigitavel || null;
     const boletoUrl = gw?.boletoUrl || asaas?.boletoUrl || null;
 
@@ -156,17 +157,30 @@ export class CobrancaPdfService {
   </div>
   ` : ''}
 
-  ${pixCopiaECola ? `
+  ${pixCopiaECola || pixQrCodeBase64 ? `
   <div class="pix-box">
     <div class="title">💚 Pague via PIX</div>
+    ${pixQrCodeBase64 ? `
+    <div style="text-align:center; margin:10px 0;">
+      <img src="data:image/png;base64,${pixQrCodeBase64}" alt="QR Code PIX" style="width:180px; height:180px;" />
+    </div>
+    ` : ''}
+    ${pixCopiaECola ? `
+    <div style="font-size:10px; color:#555; margin-top:6px;">Copia e cola:</div>
     <div class="code">${pixCopiaECola}</div>
+    ` : ''}
   </div>
   ` : ''}
 
   ${linhaDigitavel ? `
   <div class="boleto-box">
-    <div class="title">📄 Linha Digitável do Boleto</div>
+    <div class="title">📄 Boleto Bancário</div>
     <div class="code">${linhaDigitavel}</div>
+    ${boletoUrl ? `
+    <div style="text-align:center; margin-top:8px;">
+      <a href="${boletoUrl}" style="color:#854d0e; font-size:11px;">📥 Baixar boleto completo (com código de barras)</a>
+    </div>
+    ` : ''}
   </div>
   ` : ''}
 
