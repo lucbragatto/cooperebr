@@ -13,7 +13,7 @@
 
 | # | Fluxo | Status Geral | % Pronto | Bloqueia Prod? |
 |---|-------|-------------|----------|---------------|
-| 1 | Cadastro Cooperado | PARCIAL | 65% | Sim — CADASTRO_V2_ATIVO desligado |
+| 1 | Cadastro Cooperado | FUNCIONAL | 85% | Não — V2 ativo, testado E2E manual (DESCONTO, CLUBE, ref) |
 | 2 | Motor de Proposta | PARCIAL | 70% | Sim — lembrete 24h ausente, cópia assinada não enviada |
 | 3 | Modelos de Documento | PARCIAL | 40% | Sim — só 2 tipos, sem templates reais de prod |
 | 4 | Email IMAP → OCR → Cobrança | PARCIAL | 75% | Parcialmente — cron 1x/dia, cooperado sem match vai para Pendente sem notificação |
@@ -53,11 +53,11 @@
 |-------|--------|---------|-----|
 | Upload e OCR fatura | FUNCIONAL | `publico.controller.ts:514` via `POST /publico/processar-fatura-ocr` | — |
 | Preenchimento dados | FUNCIONAL | `web/app/cadastro/page.tsx` | — |
-| Envio para backend | PARCIAL | `publico.controller.ts:126` `POST /publico/cadastro-web` | **CRÍTICO:** `CADASTRO_V2_ATIVO` está `false` por padrão — cria `LeadWhatsapp` apenas, NÃO cria `Cooperado` real |
-| Motor de Proposta no V2 | IMPLEMENTADO MAS NÃO TESTADO | `publico.controller.ts:369-413` | Feature toggle desligado em prod |
-| Indicação | FUNCIONAL | `publico.controller.ts:417-455` | Lógica presente, testada indiretamente |
+| Envio para backend | FUNCIONAL | `publico.controller.ts:126` `POST /publico/cadastro-web` | `CADASTRO_V2_ATIVO=true` — cria `Cooperado` + UC real. Testado E2E manual (20/04/2026) |
+| Motor de Proposta no V2 | FUNCIONAL | `publico.controller.ts:369-413` | V2 ativo, cria Cooperado + UC + Proposta |
+| Indicação | FUNCIONAL | `publico.controller.ts:417-455` | Testado com ref=codigoIndicacao, Indicacao criada corretamente |
 
-**% Pronto:** 50% (bloqueado por toggle desligado)
+**% Pronto:** 85% (V2 ativo e testado)
 
 #### (c) Cadastro com código de referência `/cadastro?ref=XXXX`
 
@@ -82,7 +82,7 @@
 
 **% Pronto:** 55%
 
-**Resumo Fluxo 1:** 65% pronto. Principal bloqueador de produção: `CADASTRO_V2_ATIVO=false` faz todos os cadastros públicos virarem `LeadWhatsapp` sem criar cooperado real.
+**Resumo Fluxo 1:** 85% pronto. `CADASTRO_V2_ATIVO=true` desde Sprint 10 (20/04/2026). Bug termoAdesaoAceito corrigido. Testado E2E manual: DESCONTO, CLUBE (modoRemuneracao), ref=codigoIndicacao. Pendente: teste E2E automatizado.
 
 ---
 

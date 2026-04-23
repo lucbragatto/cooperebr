@@ -338,6 +338,8 @@ export class PublicoController {
             tipoCooperado: 'COM_UC',
             cooperativaId,
             modoRemuneracao: modoRemuneracao as any,
+            termoAdesaoAceito: true,
+            termoAdesaoAceitoEm: new Date(),
           },
         });
       } catch (err) {
