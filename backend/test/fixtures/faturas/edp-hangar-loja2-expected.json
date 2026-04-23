@@ -1,0 +1,111 @@
+{
+  "titular": "ACADEMIA DE GINASTICA HANGAR LTDA",
+  "documento": "36324580000110",
+  "tipoDocumento": "CNPJ",
+  "enderecoInstalacao": "RUA JAIME MARTINS 80 CONDO ED HANGAR",
+  "bairro": "PRAIA DO CANTO",
+  "cidade": "VITORIA",
+  "estado": "ES",
+  "cep": "29055610",
+  "numeroUC": "000051282905487",
+  "codigoMedidor": "13523385",
+  "distribuidora": "EDP ES DISTRIB DE ENERGIA SA",
+  "classificacao": "B3-COMERCIAL",
+  "modalidadeTarifaria": "CONVENCIONAL",
+  "tensaoNominal": "220/127V",
+  "tipoFornecimento": "TRIFASICO",
+  "mesReferencia": "2026-01",
+  "vencimento": "11/02/2026",
+  "totalAPagar": 517.99,
+  "consumoAtualKwh": 9005,
+  "leituraAnterior": 84390,
+  "leituraAtual": 93395,
+  "tarifaTUSD": 0.59520711,
+  "tarifaTE": 0.40729595,
+  "tarifaTUSDSemICMS": 0.46863,
+  "tarifaTESemICMS": 0.32068,
+  "bandeiraTarifaria": "AMARELA",
+  "valorBandeira": 0.02394403,
+  "contribIluminacaoPublica": 35.07,
+  "icmsPercentual": 17,
+  "icmsValor": 100.63,
+  "pisCofinsPercentual": 7.14,
+  "pisCofinsValor": 386.57,
+  "multaJuros": 0,
+  "descontos": 0,
+  "outrosEncargos": 0,
+  "possuiCompensacao": true,
+  "creditosRecebidosKwh": 8787,
+  "saldoTotalKwh": 7783,
+  "participacaoSaldo": 0.26,
+  "energiaInjetadaKwh": 8905,
+  "energiaFornecidaKwh": 9005,
+  "valorCompensadoReais": 5877.48,
+  "temCreditosInjetados": true,
+  "saldoKwhAnterior": 0,
+  "saldoKwhAtual": 7783,
+  "validadeCreditos": "",
+  "valorSemDesconto": 9027.54,
+  "historicoConsumo": [
+    {
+      "mesAno": "12/2025",
+      "consumoKwh": 9115,
+      "valorRS": 514.41
+    },
+    {
+      "mesAno": "11/2025",
+      "consumoKwh": 9605,
+      "valorRS": 651.53
+    },
+    {
+      "mesAno": "10/2025",
+      "consumoKwh": 9993,
+      "valorRS": 792.15
+    },
+    {
+      "mesAno": "09/2025",
+      "consumoKwh": 9800,
+      "valorRS": 677.5
+    },
+    {
+      "mesAno": "08/2025",
+      "consumoKwh": 11080,
+      "valorRS": 749.73
+    },
+    {
+      "mesAno": "07/2025",
+      "consumoKwh": 11686,
+      "valorRS": 2083.64
+    },
+    {
+      "mesAno": "06/2025",
+      "consumoKwh": 9867,
+      "valorRS": 468.89
+    },
+    {
+      "mesAno": "05/2025",
+      "consumoKwh": 11420,
+      "valorRS": 4366.49
+    },
+    {
+      "mesAno": "04/2025",
+      "consumoKwh": 11034,
+      "valorRS": 2829.9
+    },
+    {
+      "mesAno": "03/2025",
+      "consumoKwh": 10150,
+      "valorRS": 859.71
+    },
+    {
+      "mesAno": "02/2025",
+      "consumoKwh": 9432,
+      "valorRS": 337.63
+    },
+    {
+      "mesAno": "01/2025",
+      "consumoKwh": 9187,
+      "valorRS": 329.8
+    }
+  ]
+}
