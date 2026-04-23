@@ -412,4 +412,62 @@ Detalhes em `docs/sessoes/2026-04-23-investigacao-lacunas-antigas.md`.
 
 ---
 
+> Observação: sistema se chama SISGD. CoopereBR é o primeiro
+> parceiro. Renomeação do arquivo pra SISGD-ALINHAMENTO.md
+> ficará pra sessão dedicada (precisa atualizar todas referências
+> cruzadas no CLAUDE.md e outros docs).
+
+## PARTE 12 — PLANO DE SPRINTS ATÉ PRODUÇÃO (decidido 24/04/2026)
+
+Após conclusão do Sprint 9B, planejamento validado com base no
+`docs/MAPA-INTEGRIDADE-SISTEMA-2026-04-24.md`.
+
+### Sprint 10 (5-6 dias) — Desbloqueio + Lembretes críticos
+1. CADASTRO_V2_ATIVO=true + validação E2E
+2. Cron lembrete 24h pra propostas pendentes
+3. Envio cópia assinada após assinatura
+4. Email D-3/D-1 de vencimento
+5. Teste manual E2E completo
+
+### Sprint 11 (7-9 dias) — Testes E2E + Docs + Rebalanceamento
+1. Setup Playwright E2E
+2. Teste E2E: cadastro → proposta → contrato → primeira cobrança
+3. Teste E2E: webhook Asaas → cobrança PAGO → liberação tokens
+4. Templates: Termo Adesão, Termo Responsabilidade, Procuração ANEEL
+5. Rebalanceamento + promoção automática lista de espera
+6. Comunicação WhatsApp + email da lista de espera
+
+### Sprint 12 (5-7 dias) — Comunicação + Usinas
+1. Emails transacionais restantes (tokens expirando, parceiro ativado)
+2. Sungrow (decidir reativação)
+3. Vínculo GeracaoMensal ↔ Cobrança
+4. Dashboard de usinas
+
+### Sprint 13 (8-10 dias) — Financeiro + DRE
+1. Endpoint DRE consolidado
+2. Fechamento de mês
+3. Conciliação bancária
+4. Desvalorização progressiva de tokens
+5. Classificação contábil definitiva do Clube
+
+### Sprint 14 (5-8 dias) — Engine Não-FIXO
+1. Service compartilhado pros modelos COMPENSADOS e DINAMICO
+2. Integração com TarifaConcessionaria
+3. Fallback provisório com ajuste retroativo
+4. Testes E2E dos 3 modelos
+5. Desligar BLOQUEIO_MODELOS_NAO_FIXO
+
+## Total estimado
+
+30-40 dias úteis = 6-8 semanas.
+Custo estimado: $250-350.
+Acumulado projeto ao fim: ~$1.350-1.450.
+
+## Amanhã
+
+Começar Sprint 10. Primeira tarefa: CADASTRO_V2_ATIVO=true +
+validação E2E.
+
+---
+
 **FIM DO DOCUMENTO**
