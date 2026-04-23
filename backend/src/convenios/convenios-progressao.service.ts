@@ -98,6 +98,53 @@ export class ConveniosProgressaoService {
       where: { convenioId, ativo: true },
       data: { faixaAtual: label },
     });
+
+    // Sprint 9: efeitoMudancaFaixa — aplicar retroativamente se INCLUIR_PENDENTES
+    const efeito = config.efeitoMudancaFaixa ?? 'SOMENTE_PROXIMAS';
+    if (novoIndex !== faixaAnteriorIdx && efeito === 'INCLUIR_PENDENTES') {
+      // Recalcular cobranças pendentes do mês vigente dos membros deste convênio
+      const membros = await this.prisma.convenioCooperado.findMany({
+        where: { convenioId, ativo: true },
+        select: { cooperadoId: true },
+      });
+      const cooperadoIds = membros.map(m => m.cooperadoId);
+
+      if (cooperadoIds.length > 0) {
+        const agora = new Date();
+        const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+
+        const cobPendentes = await this.prisma.cobranca.findMany({
+          where: {
+            contrato: { cooperadoId: { in: cooperadoIds } },
+            status: { in: ['PENDENTE', 'A_VENCER'] },
+            createdAt: { gte: inicioMes },
+          },
+          include: { contrato: true },
+        });
+
+        for (const cob of cobPendentes) {
+          const bruto = Number(cob.valorBruto);
+          const novoDesconto = Math.round(bruto * (novoDescontoMembros / 100) * 100) / 100;
+          const novoLiquido = Math.round((bruto - novoDesconto) * 100) / 100;
+
+          await this.prisma.cobranca.update({
+            where: { id: cob.id },
+            data: {
+              percentualDesconto: novoDescontoMembros,
+              valorDesconto: novoDesconto,
+              valorLiquido: novoLiquido,
+            },
+          });
+        }
+
+        if (cobPendentes.length > 0) {
+          this.logger.log(
+            `efeitoMudancaFaixa INCLUIR_PENDENTES: ${cobPendentes.length} cobranças recalculadas no convênio ${convenioId}`,
+          );
+        }
+      }
+    }
+    // SOMENTE_PROXIMAS: não faz nada retroativo — próxima cobrança já usará o novo desconto
   }
 
   calcularFaixa(faixas: Faixa[], membrosAtivos: number): { index: number; descontoMembros: number; descontoConveniado: number } {
