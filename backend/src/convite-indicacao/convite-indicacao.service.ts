@@ -42,6 +42,24 @@ export class ConviteIndicacaoService {
       return { jaCooperado: true, cooperado: cooperadoExistente };
     }
 
+    // Sprint 9B: resolver convenioId do remetente (conveniado ou membro)
+    let convenioId: string | null = null;
+    // 1. Remetente é conveniado de algum convênio?
+    const comoConveniado = await this.prisma.contratoConvenio.findFirst({
+      where: { conveniadoId: cooperadoIndicadorId, status: 'ATIVO' },
+      select: { id: true },
+    });
+    if (comoConveniado) {
+      convenioId = comoConveniado.id;
+    } else {
+      // 2. Remetente é membro de algum convênio?
+      const comoMembro = await this.prisma.convenioCooperado.findFirst({
+        where: { cooperadoId: cooperadoIndicadorId, ativo: true },
+        select: { convenioId: true },
+      });
+      if (comoMembro) convenioId = comoMembro.convenioId;
+    }
+
     // Upsert por (cooperadoIndicadorId, telefoneConvidado)
     const convite = await this.prisma.conviteIndicacao.upsert({
       where: {
@@ -55,6 +73,7 @@ export class ConviteIndicacaoService {
         tentativasEnvio: { increment: 1 },
         ultimoEnvioEm: new Date(),
         status: StatusConvite.PENDENTE,
+        convenioId,
       },
       create: {
         cooperativaId,
@@ -62,6 +81,7 @@ export class ConviteIndicacaoService {
         nomeConvidado,
         telefoneConvidado: tel,
         status: StatusConvite.PENDENTE,
+        convenioId,
       },
     });
 

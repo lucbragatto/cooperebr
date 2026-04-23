@@ -417,6 +417,38 @@ export class PublicoController {
     if (body.codigoRef) {
       try {
         await this.indicacoes.registrarIndicacao(cooperadoId, body.codigoRef);
+
+        // Sprint 9B: vincular ao convênio se indicador é membro/conveniado
+        const indicador = await this.prisma.cooperado.findUnique({
+          where: { codigoIndicacao: body.codigoRef },
+          select: { id: true },
+        });
+        if (indicador) {
+          // Buscar convênio do indicador (como conveniado ou membro)
+          const conveniado = await this.prisma.contratoConvenio.findFirst({
+            where: { conveniadoId: indicador.id, status: 'ATIVO' },
+            select: { id: true },
+          });
+          const membro = !conveniado
+            ? await this.prisma.convenioCooperado.findFirst({
+                where: { cooperadoId: indicador.id, ativo: true },
+                select: { convenioId: true },
+              })
+            : null;
+          const convenioId = conveniado?.id ?? membro?.convenioId;
+
+          if (convenioId) {
+            const jaVinculado = await this.prisma.convenioCooperado.findFirst({
+              where: { convenioId, cooperadoId },
+            });
+            if (!jaVinculado) {
+              await this.prisma.convenioCooperado.create({
+                data: { convenioId, cooperadoId, ativo: true },
+              });
+              this.logger.log(`[cadastro-v2] Cooperado ${cooperadoId} vinculado ao convênio ${convenioId} via indicação`);
+            }
+          }
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'erro desconhecido';
         this.logger.warn(`[cadastro-v2] Indicação falhou ref=${body.codigoRef}: ${msg}`);

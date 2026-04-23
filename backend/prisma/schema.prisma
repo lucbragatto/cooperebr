@@ -1098,6 +1098,7 @@ model ContratoConvenio {
   lancamentos     LancamentoCaixa[]
   historicoFaixas HistoricoFaixaConvenio[]
   ofertasClube    OfertaClube[]
+  convites        ConviteIndicacao[]
 
   @@index([cooperativaId])
   @@index([cooperativaId, status])
@@ -1919,11 +1920,15 @@ model ConviteIndicacao {
   leadExpansao         LeadExpansao? @relation(fields: [leadExpansaoId], references: [id])
   indicacaoId          String?       @unique
   indicacao            Indicacao?    @relation(fields: [indicacaoId], references: [id])
+  // Sprint 9B: vincular convite ao convênio do remetente
+  convenioId           String?
+  convenio             ContratoConvenio? @relation(fields: [convenioId], references: [id])
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
   @@unique([cooperadoIndicadorId, telefoneConvidado])
   @@index([cooperativaId, status])
+  @@index([convenioId])
   @@index([status, ultimoEnvioEm])
   @@index([telefoneConvidado])
   @@map("convites_indicacao")
