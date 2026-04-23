@@ -1079,6 +1079,10 @@ model ContratoConvenio {
   // ── Tier mínimo Clube de Vantagens ──
   tierMinimoClube String? // null = sem requisito; 'BRONZE' | 'PRATA' | 'OURO' | 'DIAMANTE'
 
+  // ── Sprint 9B: Benefício do conveniado via tokens ──
+  tipoBeneficioConveniado     String   @default("DESCONTO") // DESCONTO | TOKENS | MISTO
+  percentualBeneficioToken    Decimal? @db.Decimal(5, 2) // 0-100, usado se MISTO
+
   // ── Modalidade GLOBAL vs STANDALONE ──
   modalidade         String   @default("STANDALONE") // STANDALONE | GLOBAL
   statusAprovacao    String   @default("APROVADO") // APROVADO | PENDENTE | REJEITADO
@@ -1093,6 +1097,7 @@ model ContratoConvenio {
   cooperados      ConvenioCooperado[]
   lancamentos     LancamentoCaixa[]
   historicoFaixas HistoricoFaixaConvenio[]
+  ofertasClube    OfertaClube[]
 
   @@index([cooperativaId])
   @@index([cooperativaId, status])
@@ -1831,6 +1836,7 @@ enum CooperTokenTipo {
   BONUS_INDICACAO
   PAGAMENTO_QR
   DESCONTO_FATURA
+  BENEFICIO_CONVENIO
 }
 
 enum CooperTokenOperacao {
@@ -2006,11 +2012,15 @@ model OfertaClube {
   estoque          Int? // null = ilimitado
   totalResgatado   Int                     @default(0)
   emoji            String?                 @default("🎁")
+  // Sprint 9B: oferta exclusiva por convênio (null = geral da cooperativa)
+  convenioId       String?
+  convenio         ContratoConvenio?       @relation(fields: [convenioId], references: [id])
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
   resgates         ResgateClubeVantagens[]
 
   @@index([cooperativaId, ativo])
+  @@index([convenioId])
   @@map("ofertas_clube")
 }
 

@@ -415,6 +415,36 @@ export class CooperTokenService {
     }
   }
 
+  /**
+   * Sprint 9B: handler de benefício de convênio em tokens.
+   */
+  @OnEvent('convenio.beneficio.tokens')
+  async handleConvenioBeneficioTokens(payload: {
+    conveniadoId: string;
+    cooperativaId: string;
+    quantidade: number;
+    convenioId: string;
+    convenioNome: string;
+    faixa: number;
+    membrosAtivos: number;
+  }) {
+    try {
+      await this.creditar({
+        cooperadoId: payload.conveniadoId,
+        cooperativaId: payload.cooperativaId,
+        tipo: 'BENEFICIO_CONVENIO' as any,
+        quantidade: payload.quantidade,
+        referenciaId: payload.convenioId,
+        referenciaTabela: 'ContratoConvenio',
+      });
+      this.logger.log(
+        `BENEFICIO_CONVENIO: ${payload.quantidade} tokens pro conveniado ${payload.conveniadoId}`,
+      );
+    } catch (err) {
+      this.logger.warn(`Falha ao creditar tokens de convênio: ${(err as Error).message}`);
+    }
+  }
+
   async calcularDesconto(params: CalcularDescontoParams) {
     const { cooperadoId, valorCobranca, plano } = params;
 

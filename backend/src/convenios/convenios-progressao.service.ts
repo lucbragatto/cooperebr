@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 
 export interface Faixa {
@@ -19,7 +20,10 @@ export interface ConfigBeneficio {
 export class ConveniosProgressaoService {
   private readonly logger = new Logger(ConveniosProgressaoService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventEmitter: EventEmitter2,
+  ) {}
 
   async recalcularFaixa(convenioId: string, motivo: string) {
     const convenio = await this.prisma.contratoConvenio.findUnique({
@@ -98,6 +102,39 @@ export class ConveniosProgressaoService {
       where: { convenioId, ativo: true },
       data: { faixaAtual: label },
     });
+
+    // Sprint 9B: emitir tokens pro conveniado se tipoBeneficioConveniado != DESCONTO
+    if (novoIndex !== faixaAnteriorIdx && convenio.conveniadoId) {
+      const tipoBeneficio = (convenio as any).tipoBeneficioConveniado ?? 'DESCONTO';
+      if (tipoBeneficio === 'TOKENS' || tipoBeneficio === 'MISTO') {
+        const descontoConveniado = novoDescontoConveniado;
+        if (descontoConveniado > 0) {
+          // Quantidade de tokens = membrosAtivos (cada membro contribui tokens proporcionais)
+          const tokensBase = membrosAtivos * descontoConveniado; // simplificado
+          let tokensEmitir = tokensBase;
+
+          if (tipoBeneficio === 'MISTO') {
+            const percToken = Number((convenio as any).percentualBeneficioToken ?? 50);
+            tokensEmitir = Math.round(tokensBase * (percToken / 100));
+          }
+
+          if (tokensEmitir > 0) {
+            this.eventEmitter.emit('convenio.beneficio.tokens', {
+              conveniadoId: convenio.conveniadoId,
+              cooperativaId: convenio.cooperativaId,
+              quantidade: tokensEmitir,
+              convenioId: convenio.id,
+              convenioNome: convenio.empresaNome,
+              faixa: novoIndex + 1,
+              membrosAtivos,
+            });
+            this.logger.log(
+              `Convenio ${convenio.empresaNome}: ${tokensEmitir} tokens emitidos pro conveniado (faixa ${novoIndex + 1}, ${membrosAtivos} membros)`,
+            );
+          }
+        }
+      }
+    }
 
     // Sprint 9: efeitoMudancaFaixa — aplicar retroativamente se INCLUIR_PENDENTES
     const efeito = config.efeitoMudancaFaixa ?? 'SOMENTE_PROXIMAS';
