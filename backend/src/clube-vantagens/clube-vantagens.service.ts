@@ -650,7 +650,17 @@ export class ClubeVantagensService {
 
   // ─── Ofertas do Clube de Vantagens ──────────────────────────────
 
-  async listarOfertas(cooperativaId: string) {
+  async listarOfertas(cooperativaId: string, cooperadoId?: string) {
+    // Sprint 9B: filtra ofertas gerais + exclusivas dos convênios do cooperado
+    let convenioIds: string[] = [];
+    if (cooperadoId) {
+      const membros = await this.prisma.convenioCooperado.findMany({
+        where: { cooperadoId, ativo: true },
+        select: { convenioId: true },
+      });
+      convenioIds = membros.map(m => m.convenioId);
+    }
+
     return this.prisma.ofertaClube.findMany({
       where: {
         cooperativaId,
@@ -659,8 +669,18 @@ export class ClubeVantagensService {
           { validadeAte: null },
           { validadeAte: { gte: new Date() } },
         ],
+        // Oferta geral (sem convênio) OU dos convênios do cooperado
+        AND: [
+          {
+            OR: [
+              { convenioId: null },
+              ...(convenioIds.length > 0 ? [{ convenioId: { in: convenioIds } }] : []),
+            ],
+          },
+        ],
       },
       orderBy: { quantidadeTokens: 'asc' },
+      include: { convenio: { select: { empresaNome: true } } },
     });
   }
 
@@ -679,6 +699,7 @@ export class ClubeVantagensService {
     validadeAte?: string | null;
     estoque?: number | null;
     emoji?: string;
+    convenioId?: string | null; // Sprint 9B: oferta exclusiva por convênio
   }) {
     if (dto.quantidadeTokens <= 0) {
       throw new BadRequestException('quantidadeTokens deve ser maior que zero');
@@ -694,6 +715,7 @@ export class ClubeVantagensService {
         validadeAte: dto.validadeAte ? new Date(dto.validadeAte) : null,
         estoque: dto.estoque ?? null,
         emoji: dto.emoji ?? '🎁',
+        convenioId: dto.convenioId ?? null,
       },
     });
   }
