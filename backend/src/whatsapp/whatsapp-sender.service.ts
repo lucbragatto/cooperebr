@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
+import { podeEnviarEmDev } from '../common/safety/whitelist-teste';
 
 export interface WhatsappMensagemEnviadaEvent {
   telefone: string;
@@ -73,6 +74,11 @@ export class WhatsappSenderService {
     // Bloquear envio para números de teste/anonimizados
     if (this.isNumeroProtegido(telefone)) {
       this.logger.warn(`[BLOQUEADO] Tentativa de envio para número de teste: ${telefone}`);
+      return;
+    }
+    // Whitelist em dev: só envia para números autorizados
+    if (!podeEnviarEmDev(telefone, 'WA')) {
+      this.logger.log(`[DEV] WA para ${telefone} SKIPPED (não está na whitelist)`);
       return;
     }
     const res = await fetch(`${this.baseUrl}/send-message`, {
@@ -154,6 +160,14 @@ export class WhatsappSenderService {
     sections: Array<{ title: string; rows: Array<{ title: string; rowId: string; description?: string }> }>,
     opcoes?: { tipoDisparo?: string; cooperadoId?: string; cooperativaId?: string },
   ): Promise<void> {
+    if (this.isNumeroProtegido(telefone)) {
+      this.logger.warn(`[BLOQUEADO] Lista para número protegido: ${telefone}`);
+      return;
+    }
+    if (!podeEnviarEmDev(telefone, 'WA')) {
+      this.logger.log(`[DEV] Lista WA para ${telefone} SKIPPED (não está na whitelist)`);
+      return;
+    }
     const res = await fetch(`${this.baseUrl}/send-list`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -181,6 +195,14 @@ export class WhatsappSenderService {
     caption: string,
     opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
   ): Promise<void> {
+    if (this.isNumeroProtegido(telefone)) {
+      this.logger.warn(`[BLOQUEADO] PDF para número protegido: ${telefone}`);
+      return;
+    }
+    if (!podeEnviarEmDev(telefone, 'WA')) {
+      this.logger.log(`[DEV] PDF WA para ${telefone} SKIPPED (não está na whitelist)`);
+      return;
+    }
     const res = await fetch(`${this.baseUrl}/send-document`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

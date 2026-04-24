@@ -11,6 +11,7 @@ import {
   templateTeste,
 } from './email-templates';
 import { PrismaService } from '../prisma.service';
+import { podeEnviarEmDev } from '../common/safety/whitelist-teste';
 
 interface CooperadoEmail {
   id: string;
@@ -53,6 +54,10 @@ export class EmailService {
     if (!process.env.EMAIL_USER) {
       this.logger.warn('EMAIL_USER não configurado — e-mail não enviado');
       return false;
+    }
+    if (!podeEnviarEmDev(to, 'EMAIL')) {
+      this.logger.log(`[DEV] E-mail para ${to} SKIPPED (não está na whitelist)`);
+      return true;
     }
     try {
       await this.transporter.sendMail({ from: this.from, to, subject, html, text });
