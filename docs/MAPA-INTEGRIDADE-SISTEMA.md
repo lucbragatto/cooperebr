@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-25 (fim Sprint 10)
+**Última atualização:** 2026-04-26 (fim Sprint 11 Dia 1 — Bloco 1 da Arquitetura de UC)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -28,6 +28,31 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **P1-01** Lembrete 24h proposta pendente → ✅ RESOLVIDO (`motor-proposta.job.ts`)
 - **P1-02** Cópia assinada pós-assinatura → ✅ RESOLVIDO (`motor-proposta.service.ts:enviarCopiaAssinada`)
 - **P1-03** Email D-3/D-1 antes vencimento → ✅ RESOLVIDO (`cobrancas.job.ts:lembretesPreVencimento`)
+
+---
+
+## SPRINT 11 — PROGRESSO
+
+### Tarefa 1 — Auditoria ampla de numeração dupla UC EDP
+✅ COMPLETA (commit `7583659`, 2026-04-26)
+
+### Tarefas 2 + 3 — consolidadas em "Arquitetura de UC"
+
+#### Bloco 1 (hoje, 2026-04-26) — Schema + Service + Forms
+✅ COMPLETO. Commits:
+- `f36496f` — schema: remove `numeroInstalacaoEDP`, `distribuidora` vira `DistribuidoraEnum` obrigatório com default `OUTRAS`
+- `559a87d` — `ucs.service`: 3 campos + validação formato (`normalizarNumeroCanonico`, `normalizarNumeroUC`, `validarDistribuidora`, `coerceDistribuidora`)
+- `39b96b8` — forms admin (`/dashboard/ucs/nova` + `/dashboard/ucs/[id]`): 3 campos, select distribuidora, tooltips, validações client-side
+- `fbc75c1` — form cadastro público (`/cadastro`): campo `numeroUCLegado` opcional, `mapearDistribuidoraOcr` pré-fill
+
+**Observação importante:** ao aplicar a troca de `distribuidora String` → `DistribuidoraEnum`, o PostgreSQL dropou os 96 valores textuais legados (91 "EDP ES" + 5 variantes). Todos viraram `OUTRAS`. Bloco 2 re-classifica via OCR.
+
+#### Bloco 2 (amanhã) — Normalização + Pipeline + E2E
+PENDENTE:
+- Script de normalização dos 326 `numero` legados (formatos variados → 10 dígitos canônicos)
+- Correção de `resolverUcPorNumero` em `faturas.service.ts`: OR em `numero`/`numeroUC` + AND `distribuidora`
+- Prompt OCR ajustado (pedir `distribuidora` como enum, extrair ambos os formatos de número)
+- Reprocessar fatura UID 2032 do Luciano via pipeline pra validar match automático
 
 ---
 
