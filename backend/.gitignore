@@ -67,3 +67,5 @@ test-ocr*.js
 fatura-*.txt
 *.local.json
 .claude/
+
+tmp-diagnostico/
