@@ -18,9 +18,28 @@ import {
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 const DISTRIBUIDORAS = [
-  'EDP-ES', 'CEMIG', 'CEMAT', 'ENERGISA', 'ENEL',
-  'CPFL', 'CELESC', 'EQUATORIAL', 'NEOENERGIA', 'Outra',
-];
+  { value: 'EDP_ES', label: 'EDP ES' },
+  { value: 'EDP_SP', label: 'EDP SP' },
+  { value: 'CEMIG', label: 'CEMIG' },
+  { value: 'ENEL_SP', label: 'Enel SP' },
+  { value: 'LIGHT_RJ', label: 'Light RJ' },
+  { value: 'CELESC', label: 'Celesc' },
+  { value: 'OUTRAS', label: 'Outras' },
+] as const;
+
+// Best-effort: mapeia string vinda do OCR (ex: "EDP ES DISTRIB DE ENERGIA SA")
+// para o enum DistribuidoraEnum do backend.
+function mapearDistribuidoraOcr(raw: string | undefined | null): string {
+  if (!raw) return '';
+  const s = String(raw).toUpperCase();
+  if (/EDP.*ES|ESPIRITO.*SANTO/.test(s)) return 'EDP_ES';
+  if (/EDP.*SP|SAO.*PAULO|BANDEIRANTE/.test(s)) return 'EDP_SP';
+  if (/CEMIG/.test(s)) return 'CEMIG';
+  if (/ENEL.*SP|ELETROPAULO/.test(s)) return 'ENEL_SP';
+  if (/LIGHT/.test(s)) return 'LIGHT_RJ';
+  if (/CELESC/.test(s)) return 'CELESC';
+  return 'OUTRAS';
+}
 
 const DESCONTO_PERCENTUAL_FALLBACK = 0.20;
 
@@ -71,8 +90,9 @@ interface Endereco {
 }
 
 interface Instalacao {
-  numeroUC: string;
-  distribuidora: string;
+  numeroUC: string;            // número que aparece na fatura (vai para `numero` canônico no backend)
+  numeroUCLegado: string;      // número antigo de 9 dígitos, opcional (vai para `numeroUC` no backend)
+  distribuidora: string;       // valor do enum DistribuidoraEnum
   consumoMedioKwh: string;
 }
 
@@ -215,6 +235,7 @@ function CadastroPageInner() {
 
   const [instalacao, setInstalacao] = useState<Instalacao>({
     numeroUC: '',
+    numeroUCLegado: '',
     distribuidora: '',
     consumoMedioKwh: '',
   });
@@ -289,9 +310,9 @@ function CadastroPageInner() {
           }));
         }
 
-        // Pre-fill instalacao
+        // Pre-fill instalacao — converte distribuidora para enum, mantém número como veio
         if (data.dados.numeroUC) setInstalacao((i) => ({ ...i, numeroUC: data.dados.numeroUC }));
-        if (data.dados.distribuidora) setInstalacao((i) => ({ ...i, distribuidora: data.dados.distribuidora }));
+        if (data.dados.distribuidora) setInstalacao((i) => ({ ...i, distribuidora: mapearDistribuidoraOcr(data.dados.distribuidora) }));
         if (data.dados.consumoMedioKwh) setInstalacao((i) => ({ ...i, consumoMedioKwh: String(data.dados.consumoMedioKwh) }));
 
         // Historico
@@ -429,6 +450,7 @@ function CadastroPageInner() {
         },
         instalacao: {
           numeroUC: instalacao.numeroUC,
+          numeroUCLegado: instalacao.numeroUCLegado || undefined,
           distribuidora: instalacao.distribuidora,
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
@@ -504,7 +526,8 @@ function CadastroPageInner() {
         },
         instalacao: {
           numeroUC: instalacao.numeroUC || ocrDados.numeroUC || '',
-          distribuidora: instalacao.distribuidora || ocrDados.distribuidora || '',
+          numeroUCLegado: instalacao.numeroUCLegado || undefined,
+          distribuidora: instalacao.distribuidora || mapearDistribuidoraOcr(ocrDados.distribuidora) || '',
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || ocrDados.consumoMedioKwh || 0,
         },
         temCreditosInjetados: true,
@@ -550,7 +573,7 @@ function CadastroPageInner() {
           email: pessoais.email.trim(),
           telefone: pessoais.telefone,
           endereco: { cep: endereco.cep.replace(/\D/g, ''), logradouro: endereco.logradouro, numero: endereco.numero, complemento: endereco.complemento, bairro: endereco.bairro, cidade: endereco.cidade, estado: endereco.estado },
-          instalacao: { numeroUC: instalacao.numeroUC, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
+          instalacao: { numeroUC: instalacao.numeroUC, numeroUCLegado: instalacao.numeroUCLegado || undefined, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
           planoSelecionado: planoSelecionado?.cooperTokenAtivo ? 'FATURA_CHEIA_TOKEN' : 'DESCONTO_DIRETO',
           aceitaClube,
           pendenciaDocumentos: true,
@@ -856,7 +879,20 @@ function CadastroPageInner() {
             className="h-10"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Encontre este numero no canto superior da sua conta de luz.
+            Encontre este numero no canto superior da sua conta de luz (ate 10 digitos).
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="numeroUCLegado">Numero antigo (se a EDP ja te mandou)</Label>
+          <Input
+            id="numeroUCLegado"
+            placeholder="9 digitos, opcional"
+            value={instalacao.numeroUCLegado}
+            onChange={(e) => updateInstalacao('numeroUCLegado', e.target.value)}
+            className="h-10"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Opcional. Se a sua concessionaria ja te enviou um numero antigo de 9 digitos para listas de compensacao, informe aqui.
           </p>
         </div>
         <div>
@@ -869,7 +905,7 @@ function CadastroPageInner() {
           >
             <option value="">Selecione a distribuidora</option>
             {DISTRIBUIDORAS.map((d) => (
-              <option key={d} value={d}>{d}</option>
+              <option key={d.value} value={d.value}>{d.label}</option>
             ))}
           </select>
         </div>

@@ -293,7 +293,7 @@ export class PublicoController {
       email: string;
       telefone: string;
       endereco: { cep: string; logradouro: string; numero: string; complemento?: string; bairro: string; cidade: string; estado: string };
-      instalacao: { numeroUC: string; distribuidora: string; consumoMedioKwh: number };
+      instalacao: { numeroUC: string; numeroUCLegado?: string; distribuidora: string; consumoMedioKwh: number };
       codigoRef?: string;
       planoId?: string;
       planoSelecionado?: string;
@@ -350,9 +350,20 @@ export class PublicoController {
         throw err;
       }
 
+      // Sprint 11 — Arquitetura UC: numero = canônico (até 10 díg) | numeroUC = legado (até 9 díg)
+      const numeroCanonicoRaw = (body.instalacao.numeroUC || '').replace(/\D/g, '');
+      const numeroCanonicoFinal = numeroCanonicoRaw
+        ? numeroCanonicoRaw.slice(-10).padStart(10, '0')
+        : `UC-${Date.now()}`;
+      const numeroUCLegadoRaw = (body.instalacao.numeroUCLegado || '').replace(/\D/g, '');
+      const numeroUCFinal = numeroUCLegadoRaw
+        ? numeroUCLegadoRaw.slice(-9).padStart(9, '0')
+        : undefined;
+
       const uc = await tx.uc.create({
         data: {
-          numero: body.instalacao.numeroUC || `UC-${Date.now()}`,
+          numero: numeroCanonicoFinal,
+          numeroUC: numeroUCFinal,
           endereco: body.endereco.logradouro
             ? `${body.endereco.logradouro}, ${body.endereco.numero}`
             : '',
