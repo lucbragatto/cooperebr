@@ -10,6 +10,20 @@ import { ArrowLeft, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
+const DISTRIBUIDORAS = [
+  { value: 'EDP_ES', label: 'EDP ES' },
+  { value: 'EDP_SP', label: 'EDP SP' },
+  { value: 'CEMIG', label: 'CEMIG' },
+  { value: 'ENEL_SP', label: 'Enel SP' },
+  { value: 'LIGHT_RJ', label: 'Light RJ' },
+  { value: 'CELESC', label: 'Celesc' },
+  { value: 'OUTRAS', label: 'Outras' },
+] as const;
+
+const DISTRIBUIDORA_LABEL: Record<string, string> = Object.fromEntries(
+  DISTRIBUIDORAS.map((d) => [d.value, d.label]),
+);
+
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -35,7 +49,8 @@ export default function UCDetailPage() {
   const [mensagem, setMensagem] = useState('');
   const [form, setForm] = useState({
     numero: '',
-    numeroInstalacaoEDP: '',
+    numeroUC: '',
+    distribuidora: 'OUTRAS',
     endereco: '',
     cidade: '',
     estado: '',
@@ -47,7 +62,8 @@ export default function UCDetailPage() {
         setUc(r.data);
         setForm({
           numero: r.data.numero,
-          numeroInstalacaoEDP: (r.data as any).numeroInstalacaoEDP ?? '',
+          numeroUC: (r.data as any).numeroUC ?? '',
+          distribuidora: (r.data as any).distribuidora ?? 'OUTRAS',
           endereco: r.data.endereco,
           cidade: r.data.cidade,
           estado: r.data.estado,
@@ -61,7 +77,8 @@ export default function UCDetailPage() {
     if (!uc) return;
     setForm({
       numero: uc.numero,
-      numeroInstalacaoEDP: (uc as any).numeroInstalacaoEDP ?? '',
+      numeroUC: (uc as any).numeroUC ?? '',
+      distribuidora: (uc as any).distribuidora ?? 'OUTRAS',
       endereco: uc.endereco,
       cidade: uc.cidade,
       estado: uc.estado,
@@ -76,6 +93,14 @@ export default function UCDetailPage() {
   }
 
   async function salvar() {
+    if (form.numero.replace(/\D/g, '').length > 10) {
+      setMensagem('Erro: número canônico deve ter até 10 dígitos.');
+      return;
+    }
+    if (form.numeroUC && form.numeroUC.replace(/\D/g, '').length > 9) {
+      setMensagem('Erro: número legado (numeroUC) deve ter até 9 dígitos.');
+      return;
+    }
     setSalvando(true);
     setMensagem('');
     try {
@@ -83,8 +108,9 @@ export default function UCDetailPage() {
       setUc(data);
       setModoEdicao(false);
       setMensagem('Salvo com sucesso!');
-    } catch {
-      setMensagem('Erro ao salvar. Tente novamente.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Erro ao salvar. Tente novamente.';
+      setMensagem(`Erro: ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
     } finally {
       setSalvando(false);
     }
@@ -121,8 +147,9 @@ export default function UCDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={uc.id} />
-            <Campo label="Número" value={uc.numero} />
-            <Campo label="Instalação EDP (antigo)" value={(uc as any).numeroInstalacaoEDP || '—'} />
+            <Campo label="Número canônico" value={uc.numero} />
+            <Campo label="Número legado (numeroUC)" value={(uc as any).numeroUC || '—'} />
+            <Campo label="Distribuidora" value={DISTRIBUIDORA_LABEL[(uc as any).distribuidora] ?? (uc as any).distribuidora ?? '—'} />
             <Campo label="Endereço" value={uc.endereco} />
             <Campo label="Cidade" value={uc.cidade} />
             <Campo label="Estado" value={uc.estado} />
@@ -141,7 +168,7 @@ export default function UCDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <div>
-              <label className={labelClass}>Número</label>
+              <label className={labelClass}>Número canônico (até 10 dígitos)</label>
               <input
                 className={inputClass}
                 value={form.numero}
@@ -149,13 +176,25 @@ export default function UCDetailPage() {
               />
             </div>
             <div>
-              <label className={labelClass}>Número de instalação EDP (antigo)</label>
+              <label className={labelClass}>Número legado / numeroUC (até 9 dígitos)</label>
               <input
                 className={inputClass}
-                value={form.numeroInstalacaoEDP}
-                onChange={(e) => setForm({ ...form, numeroInstalacaoEDP: e.target.value })}
-                placeholder="Ex: 1234567890"
+                value={form.numeroUC}
+                onChange={(e) => setForm({ ...form, numeroUC: e.target.value })}
+                placeholder="160085263"
               />
+            </div>
+            <div>
+              <label className={labelClass}>Distribuidora *</label>
+              <select
+                className={inputClass}
+                value={form.distribuidora}
+                onChange={(e) => setForm({ ...form, distribuidora: e.target.value })}
+              >
+                {DISTRIBUIDORAS.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className={labelClass}>Endereço</label>

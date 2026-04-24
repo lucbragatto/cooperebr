@@ -19,13 +19,36 @@ import {
 import { ArrowLeft } from 'lucide-react';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
+const DISTRIBUIDORAS = [
+  { value: 'EDP_ES', label: 'EDP ES' },
+  { value: 'EDP_SP', label: 'EDP SP' },
+  { value: 'CEMIG', label: 'CEMIG' },
+  { value: 'ENEL_SP', label: 'Enel SP' },
+  { value: 'LIGHT_RJ', label: 'Light RJ' },
+  { value: 'CELESC', label: 'Celesc' },
+  { value: 'OUTRAS', label: 'Outras' },
+] as const;
+
+function Tooltip({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex items-center group ml-1">
+      <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-gray-500 bg-gray-200 rounded-full cursor-help group-hover:bg-gray-300">?</span>
+      <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 px-3 py-2 rounded-md bg-gray-800 text-white text-xs leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+      </span>
+    </span>
+  );
+}
+
 export default function NovaUcPage() {
   const router = useRouter();
   const { tipoMembro } = useTipoParceiro();
 
   const [form, setForm] = useState({
     numero: '',
-    numeroInstalacaoEDP: '',
+    numeroUC: '',
+    distribuidora: '',
     endereco: '',
     cidade: '',
     estado: '',
@@ -44,14 +67,34 @@ export default function NovaUcPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  function validarFormulario(): string | null {
+    if (!form.numero.trim()) return 'Número canônico é obrigatório.';
+    const digitosNumero = form.numero.replace(/\D/g, '');
+    if (digitosNumero.length === 0 || digitosNumero.length > 10) {
+      return 'Número canônico deve ter até 10 dígitos.';
+    }
+    if (form.numeroUC.trim()) {
+      const digitosUC = form.numeroUC.replace(/\D/g, '');
+      if (digitosUC.length === 0 || digitosUC.length > 9) {
+        return 'Número legado (numeroUC) deve ter até 9 dígitos.';
+      }
+    }
+    if (!form.distribuidora) return 'Selecione a distribuidora.';
+    if (!form.endereco.trim()) return 'Endereço é obrigatório.';
+    if (!form.cidade.trim()) return 'Cidade é obrigatória.';
+    if (!form.estado.trim()) return 'Estado é obrigatório.';
+    if (!form.cooperadoId) return `${tipoMembro} é obrigatório.`;
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErro('');
     setSucesso('');
 
-    if (!form.numero.trim() || !form.endereco.trim() || !form.cidade.trim() ||
-        !form.estado.trim() || !form.cooperadoId) {
-      setErro('Todos os campos são obrigatórios.');
+    const erroValidacao = validarFormulario();
+    if (erroValidacao) {
+      setErro(erroValidacao);
       return;
     }
 
@@ -60,9 +103,9 @@ export default function NovaUcPage() {
       await api.post('/ucs', form);
       setSucesso('UC cadastrada com sucesso!');
       setTimeout(() => router.push('/dashboard/ucs'), 1000);
-    } catch {
-      const msg = 'Erro ao cadastrar UC.';
-      setErro(msg);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Erro ao cadastrar UC.';
+      setErro(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setSalvando(false);
     }
@@ -89,34 +132,48 @@ export default function NovaUcPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <Label htmlFor="numero">Número da UC *</Label>
+              <Label htmlFor="numero" className="flex items-center gap-1">
+                Número canônico (UC) *
+                <Tooltip text="Número canônico SISGD com até 10 dígitos. Encontrado na parte superior da fatura. Único na cooperativa." />
+              </Label>
               <Input
                 id="numero"
                 value={form.numero}
                 onChange={(e) => set('numero', e.target.value)}
-                placeholder="3001234567"
+                placeholder="0400702214"
                 required
                 autoFocus
               />
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="numeroInstalacaoEDP" className="flex items-center gap-1">
-                Número de instalação EDP (antigo)
-                <span className="relative inline-flex items-center group ml-1">
-                  <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-gray-500 bg-gray-200 rounded-full cursor-help group-hover:bg-gray-300">?</span>
-                  <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 px-3 py-2 rounded-md bg-gray-800 text-white text-xs leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-                    Número curto de 10 dígitos exigido pela EDP para cadastro em GD. Quando disponível na fatura antiga, preencher aqui.
-                    <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
-                  </span>
-                </span>
+              <Label htmlFor="numeroUC" className="flex items-center gap-1">
+                Número legado (numeroUC)
+                <Tooltip text="Número legado de 9 dígitos da concessionária. Recomendado preencher — necessário para listas de compensação B2B enviadas à EDP." />
               </Label>
               <Input
-                id="numeroInstalacaoEDP"
-                value={form.numeroInstalacaoEDP}
-                onChange={(e) => set('numeroInstalacaoEDP', e.target.value)}
-                placeholder="Ex: 1234567890"
+                id="numeroUC"
+                value={form.numeroUC}
+                onChange={(e) => set('numeroUC', e.target.value)}
+                placeholder="160085263"
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="distribuidora" className="flex items-center gap-1">
+                Distribuidora *
+                <Tooltip text="Concessionária que atende esta UC. Determina formato dos números e regras de match com faturas." />
+              </Label>
+              <Select value={form.distribuidora} onValueChange={(v: string | null) => set('distribuidora', v ?? '')}>
+                <SelectTrigger id="distribuidora">
+                  <SelectValue placeholder="Selecione a distribuidora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISTRIBUIDORAS.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1">
@@ -137,7 +194,7 @@ export default function NovaUcPage() {
                   id="cidade"
                   value={form.cidade}
                   onChange={(e) => set('cidade', e.target.value)}
-                  placeholder="São Paulo"
+                  placeholder="Vitória"
                   required
                 />
               </div>
@@ -147,7 +204,7 @@ export default function NovaUcPage() {
                   id="estado"
                   value={form.estado}
                   onChange={(e) => set('estado', e.target.value)}
-                  placeholder="SP"
+                  placeholder="ES"
                   maxLength={2}
                   required
                 />
