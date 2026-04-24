@@ -504,3 +504,26 @@ Estes gaps degradam a experiência mas não impedem a operação em produção:
 4. O sistema tem **arquitetura sólida** para multi-tenant, isolamento por cooperativaId, HMAC no webhook e idempotência anti-duplicação. Os gaps são funcionais, não estruturais.
 
 5. **Monitoramento Sungrow** foi intencionalmente desativado no Sprint 6 (comentário no código). Reativação depende de credenciais e configuração real das usinas.
+
+---
+
+## GAP identificado em 2026-04-24 — a tratar em Sprint 11
+
+### Numeração dupla de UCs (EDP em transição)
+
+EDP mantém 2 sistemas divergentes:
+- **Faturamento:** numeração NOVA (canônica, 10 dígitos). Ex: `0400702214`
+- **Compensação:** exige numeração LEGADA (9 dígitos) em listas recebidas da cooperativa. Ex: `160085263`
+
+Schema já tem ambos os campos no model `Uc`: `numero` (novo) e `numeroUC` (legado).
+O filename das faturas EDP usa a numeração **legada** (ex: `ESCEFATELBT07_0160085263_*.pdf`),
+mas o pipeline de identificação no OCR espera `numero` canônico. Isso explica por que faturas
+reais não vinculam automaticamente ao cooperado mesmo existindo UC no banco.
+
+**Pendente:**
+- Auditoria completa do uso dos 2 campos no sistema (motor-proposta, faturas, ucs, convenios)
+- Estratégia de migração: manter dupla até quando? Consultar EDP sobre sunset do legado
+- Preencher campo `numero` em UCs legadas ou `numeroUC` em UCs novas, de acordo com a fonte
+
+**Prioridade:** P0
+**Sprint:** 11 (antes do primeiro parceiro real)
