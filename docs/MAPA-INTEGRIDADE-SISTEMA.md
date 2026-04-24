@@ -1,6 +1,7 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Data da auditoria:** 2026-04-24  
-**Auditor:** Claude Sonnet 4.6 (modo somente-leitura)  
+**Última atualização:** 2026-04-25 (fim Sprint 10)
+**Data da auditoria inicial:** 2026-04-24
+**Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
 
 > **Metodologia:** Leitura direta de arquivos, grep estruturado e análise estática.  
@@ -9,15 +10,79 @@
 
 ---
 
+## Conquistas históricas do SISGD (25/04/2026)
+
+Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
+
+1. **Primeiro email SMTP** enviado com sucesso na história do banco (`email_logs.status='ENVIADO'` passou de 0 pra 1+)
+2. **Primeiro WhatsApp automático** enviado pós-reativação do serviço (parado desde 09/04/2026)
+3. **LGPD compliance** implementada (112 registros reais mascarados, whitelist de dev, flag `ambienteTeste`)
+4. **CADASTRO_V2_ATIVO** desbloqueado (estava `false` por default, criava só LeadWhatsapp em vez de Cooperado+UC)
+5. **3 gaps arquiteturais** identificados pra Sprint 11 ("Gargalo Crítico — Ciclo de Ativação")
+
+---
+
+## GAPS RESOLVIDOS NO SPRINT 10
+
+- **P0-01** CADASTRO_V2 desligado → ✅ RESOLVIDO (commit `c4f6ebf`)
+- **P1-01** Lembrete 24h proposta pendente → ✅ RESOLVIDO (`motor-proposta.job.ts`)
+- **P1-02** Cópia assinada pós-assinatura → ✅ RESOLVIDO (`motor-proposta.service.ts:enviarCopiaAssinada`)
+- **P1-03** Email D-3/D-1 antes vencimento → ✅ RESOLVIDO (`cobrancas.job.ts:lembretesPreVencimento`)
+
+---
+
+## GARGALO CRÍTICO — Ciclo de Ativação COMPENSADOS/DINAMICO
+
+Identificado em 25/04/2026 por Luciano. **3 gaps P0 interconectados** que juntos bloqueiam o funcionamento real dos modelos COMPENSADOS e DINAMICO em produção.
+
+### Gap 1 — Numeração dupla de UC EDP
+
+EDP em transição operacional divergente:
+- **Faturamento B2C** usa numeração NOVA (10 dígitos canônico). Ex: `0400702214`
+- **Compensação B2B** exige numeração LEGADA (9 dígitos) nas listas enviadas pela cooperativa. Ex: `160085263`
+
+SISGD precisa manter ambos cadastrados e tratar como cidadãos de primeira classe até EDP unificar (prazo indefinido).
+
+Schema já tem ambos (`Uc.numero` + `Uc.numeroUC`), mas pipelines, cadastros e exports **não usam consistentemente**. Pipeline OCR identifica UCs por `numero` canônico; faturas EDP chegam com legado no filename → match falha.
+
+### Gap 2 — Classificação de faturas COM/SEM créditos
+
+Pipeline atual trata todas faturas EDP igualmente. **3 cenários** precisam tratamento diferente:
+
+1. **Fatura COM créditos + UC cadastrada:** cooperado ativo recebendo compensação → alimenta cobrança (COMPENSADOS/DINAMICO)
+2. **Fatura SEM créditos + UC cadastrada:** cooperado recém-cadastrado aguardando EDP homologar → **NÃO gerar cobrança** + alertar admin "verificar homologação"
+3. **Fatura SEM créditos + UC NÃO cadastrada:** LEAD potencial, distribuidora enviou 2ª via mas pessoa não se cadastrou no SISGD → alerta comercial pro admin
+
+### Gap 3 — Cadastro de email EDP obrigatório não monitorado
+
+Pra cooperativa receber faturas, a pessoa precisa ir no portal EDP e cadastrar email da cooperativa (`contato@cooperebr.com.br`) como 2ª via.
+
+Se não cadastra → EDP não envia → cooperativa sem dados → cooperado fica "ativo" mas sem movimento real.
+
+**Ajustes necessários:**
+- Cadastro (admin e público): alertar cooperado sobre passo obrigatório + tutorial
+- Monitoramento pós-cadastro: após N dias, verificar se faturas começaram a chegar
+- Alerta admin: se UC ativada há 45+ dias sem fatura recebida
+- Validação de ativação COMPENSADOS/DINAMICO: ativação real só quando cooperado confirma OU primeira fatura chega
+- Fallback FIXO temporário: enquanto não fluem faturas, cobrar FIXO estimado com ajuste retroativo quando começar a fluir
+
+### Por que são interconectados
+
+Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na prática**, do cadastro no SISGD até a primeira fatura processada com créditos.
+
+**Sem resolver os 3, COMPENSADOS e DINAMICO ficam inviáveis em produção — bloqueio absoluto.**
+
+---
+
 ## SEÇÃO 1 — MATRIZ EXECUTIVA (10 FLUXOS)
 
 | # | Fluxo | Status Geral | % Pronto | Bloqueia Prod? |
 |---|-------|-------------|----------|---------------|
-| 1 | Cadastro Cooperado | FUNCIONAL | 85% | Não — V2 ativo, testado E2E manual (DESCONTO, CLUBE, ref) |
-| 2 | Motor de Proposta | PARCIAL | 70% | Sim — lembrete 24h ausente, cópia assinada não enviada |
+| 1 | Cadastro Cooperado | FUNCIONAL | 85% | Sim — não alerta cooperado sobre email EDP (gap P0 Sprint 11) |
+| 2 | Motor de Proposta | FUNCIONAL | 85% | Parcial — lembrete 24h + cópia assinada prontos; E2E real pendente |
 | 3 | Modelos de Documento | PARCIAL | 40% | Sim — só 2 tipos, sem templates reais de prod |
-| 4 | Email IMAP → OCR → Cobrança | PARCIAL | 75% | Parcialmente — cron 1x/dia, cooperado sem match vai para Pendente sem notificação |
-| 5 | Emails Transacionais | PARCIAL | 55% | Sim — 5 de 10 eventos cobertos, sem reminder vencimento, sem token expirando |
+| 4 | Email IMAP → OCR → Cobrança | PARCIAL | 75% | Sim — pipeline NUNCA rodou ponta a ponta (0 faturas processadas na história). Correção ampla em Sprint 11 |
+| 5 | Emails Transacionais | FUNCIONAL | 80% | Não — SMTP operacional (1º email histórico OK), whitelist, D-3/D-1 implementados |
 | 6 | Ciclo de Cobrança Mensal | FUNCIONAL | 80% | Não — fluxo principal funcional, lacunas menores |
 | 7 | Contabilidade & Financeiro | PARCIAL | 50% | Parcialmente — sem DRE, sem conciliação bancária real |
 | 8 | Relatórios por Papel | PARCIAL | 60% | Não — dashboards existem, dados incompletos para alguns papéis |
@@ -350,6 +415,57 @@
 ---
 
 ## SEÇÃO 4 — PLANO DE SPRINTS PARA PRODUÇÃO
+
+### Sprint 11 (7-10 dias) — Destravamento do Ciclo de Ativação
+
+**Objetivo:** resolver os 3 gaps P0 interconectados que bloqueiam COMPENSADOS/DINAMICO em produção (ver "GARGALO CRÍTICO" no topo do documento).
+
+**Tarefas:**
+
+1. **Auditoria ampla da numeração dupla** (1 dia)
+   - Mapear todos os pontos: cadastro, busca, exportação, OCR, relatórios
+   - Listar UCs incompletas no banco (sem `numero` ou sem `numeroUC`)
+
+2. **Correção do pipeline IMAP/OCR** (1-2 dias)
+   - Busca de UC por OR (`numero = X OR numeroUC = X`)
+   - Regex de filename aceita ambos formatos
+   - Log explícito de match por legado
+
+3. **Correção de cadastros** (1-2 dias)
+   - Admin wizard: campo `numeroUC` obrigatório
+   - Cadastro público: campo `numeroUC` obrigatório
+   - Auditoria: UCs sem `numeroUC` → alerta admin
+
+4. **Módulo de exportação pra EDP** (1 dia)
+   - Geração de lista com `numeroUC` (legado)
+   - Alerta se alguma UC está sem legado preenchido
+
+5. **Classificação de faturas COM/SEM créditos** (1 dia)
+   - OCR extrai flag "tem créditos" (já extrai `possuiCompensacao`)
+   - `FaturaProcessada` ganha campo `temCreditos` indexado
+   - Regras diferentes de processamento por cenário (A / B1 / B2)
+
+6. **Email EDP obrigatório** (1 dia)
+   - Tutorial automático pós-cadastro (email + WA)
+   - Checkbox de confirmação no wizard
+   - Alerta após 15 dias sem fatura recebida
+
+7. **Fallback FIXO temporário** (1 dia)
+   - Mecanismo de cobrança estimada enquanto fatura não flui
+   - Transição automática pro modelo real escolhido
+   - Ajuste retroativo (nota de crédito/débito)
+
+8. **Testes E2E completos + validação com fatura real** (Luciano) (1 dia)
+   - Fatura do Luciano processada ponta a ponta
+   - Primeiro ciclo completo IMAP → OCR → cobrança na história
+
+9. **Atualização do MAPA-INTEGRIDADE-SISTEMA.md**
+
+**Dependências:** nenhuma além do que Sprint 10 entregou
+**Estimativa total:** 7-10 dias, $80-120 em Sonnet
+**Resultado esperado:** COMPENSADOS e DINAMICO viáveis pra produção
+
+---
 
 ### Sprint A — Desbloqueio Crítico (1 semana)
 

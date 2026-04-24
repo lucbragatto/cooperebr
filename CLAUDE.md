@@ -96,3 +96,27 @@ parceiro real entrar em produção.
 
 Se estado mudar muito (muitos tickets fechados, novo sprint, schema grande),
 re-gerar RAIO-X e atualizar `docs/COOPEREBR-ALINHAMENTO.md`. Avisar Luciano antes.
+
+## Estado atual do projeto (atualizado 2026-04-25)
+
+Sprint 10 concluído. Sprint 11 definido com foco em "Destravamento do Ciclo
+de Ativação" (3 gaps P0 interconectados — ver MAPA-INTEGRIDADE-SISTEMA.md).
+
+Conquistas históricas do Sprint 10:
+- Primeiro email SMTP funcional da história (email_logs.status=ENVIADO
+  passou de 0 para 1+)
+- Primeiro WhatsApp automático pós-reativação do serviço
+- LGPD compliance implementada (whitelist dev + flag ambienteTeste + 112
+  registros mascarados)
+- CADASTRO_V2 desbloqueado
+
+Documentos vivos permanentes (ler ao iniciar sessão):
+- docs/MAPA-INTEGRIDADE-SISTEMA.md (atualizar a cada sprint)
+- docs/COOPEREBR-ALINHAMENTO.md
+- docs/especificacao-clube-cooper-token.md
+- docs/especificacao-contabilidade-clube.md
+- docs/especificacao-modelos-cobranca.md
+- CLAUDE.md (este arquivo)
+
+Próximo passo: Sprint 11. Primeira tarefa: auditoria ampla da numeração
+dupla de UC EDP.
