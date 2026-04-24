@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { EmailService } from '../email/email.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 
 @Injectable()
@@ -11,8 +12,112 @@ export class CobrancasJob {
   constructor(
     private prisma: PrismaService,
     private whatsappCicloVida: WhatsappCicloVidaService,
+    private email: EmailService,
     private calculoMultaJuros: CalculoMultaJurosService,
   ) {}
+
+  /**
+   * Sprint 10: lembretes D-3 e D-1 antes do vencimento (diário às 8h).
+   * Marca lembreteD3EnviadoEm / lembreteD1EnviadoEm para não repetir.
+   */
+  @Cron('0 8 * * *')
+  async lembretesPreVencimento() {
+    if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
+
+    await this.enviarLembretePreVencimento(3);
+    await this.enviarLembretePreVencimento(1);
+  }
+
+  private async enviarLembretePreVencimento(diasAntes: 1 | 3) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const alvo = new Date(hoje);
+    alvo.setDate(alvo.getDate() + diasAntes);
+    const proximoDia = new Date(alvo);
+    proximoDia.setDate(proximoDia.getDate() + 1);
+
+    const campoFlag = diasAntes === 3 ? 'lembreteD3EnviadoEm' : 'lembreteD1EnviadoEm';
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['A_VENCER', 'PENDENTE'] },
+        dataVencimento: { gte: alvo, lt: proximoDia },
+        [campoFlag]: null,
+        contrato: {
+          status: 'ATIVO',
+          cooperado: {
+            status: 'ATIVO',
+            ...(isDev ? { ambienteTeste: false } : {}),
+          },
+        },
+      },
+      include: {
+        contrato: {
+          include: {
+            cooperado: {
+              select: { id: true, telefone: true, email: true, nomeCompleto: true, cooperativaId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (cobrancas.length === 0) return;
+
+    let enviados = 0;
+    for (const cobranca of cobrancas) {
+      const cooperado = cobranca.contrato?.cooperado;
+      if (!cooperado) continue;
+
+      const valor = Number(cobranca.valorLiquido);
+      const venc = new Date(cobranca.dataVencimento);
+      const vencStr = venc.toLocaleDateString('pt-BR');
+      const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+
+      if (cooperado.telefone) {
+        try {
+          await this.whatsappCicloVida.notificarCobrancaProximaVencer(cooperado, valor, diasAntes, vencStr);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'erro desconhecido';
+          this.logger.warn(`Falha WA D-${diasAntes} cobrança ${cobranca.id}: ${msg}`);
+        }
+      }
+
+      if (cooperado.email) {
+        try {
+          const html =
+            `<p>Olá, <strong>${cooperado.nomeCompleto}</strong>!</p>` +
+            `<p>Sua fatura CoopereBR referente a <strong>${mesRef}</strong> vence em <strong>${diasAntes} dia(s)</strong>.</p>` +
+            `<p>Valor: <strong>R$ ${valor.toFixed(2)}</strong><br>` +
+            `Vencimento: <strong>${vencStr}</strong></p>` +
+            `<p>Acesse o portal para efetuar o pagamento e evitar multa/juros.</p>`;
+          const texto =
+            `Olá ${cooperado.nomeCompleto}! Sua fatura ${mesRef} de R$ ${valor.toFixed(2)} vence em ${diasAntes} dia(s) (${vencStr}).`;
+          await this.email.enviarEmail(
+            cooperado.email,
+            `Lembrete: fatura CoopereBR vence em ${diasAntes} dia(s)`,
+            html,
+            texto,
+          );
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'erro desconhecido';
+          this.logger.warn(`Falha email D-${diasAntes} cobrança ${cobranca.id}: ${msg}`);
+        }
+      }
+
+      await this.prisma.cobranca.update({
+        where: { id: cobranca.id },
+        data: { [campoFlag]: new Date() },
+      });
+      enviados++;
+
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+    }
+
+    this.logger.log(`Lembretes D-${diasAntes}: ${enviados} enviado(s)`);
+  }
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async marcarVencidas() {

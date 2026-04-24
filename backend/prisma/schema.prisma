@@ -535,6 +535,9 @@ model Cobranca {
   tokenDescontoQt          Decimal?             @db.Decimal(10, 4)
   tokenDescontoReais       Decimal?             @db.Decimal(10, 2)
   ledgerDebitoId           String?
+  // Sprint 10: lembretes de vencimento
+  lembreteD3EnviadoEm      DateTime?
+  lembreteD1EnviadoEm      DateTime?
   createdAt                DateTime             @default(now())
   updatedAt                DateTime             @updatedAt
 
@@ -798,6 +801,10 @@ model PropostaCooperado {
   procuracaoAssinadaEm   DateTime?
   procuracaoAssinadaPor  String?
   tokenAssinatura        String?   @unique
+
+  // Lembrete automático (Sprint 10)
+  lembreteEnviadoEm       DateTime?
+  copiaAssinadaEnviadaEm  DateTime?
 
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt

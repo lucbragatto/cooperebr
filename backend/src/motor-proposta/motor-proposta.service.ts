@@ -1520,6 +1520,11 @@ export class MotorPropostaService {
         where: { id: proposta.id },
         data: { tokenAssinatura: null },
       });
+
+      // Sprint 10: enviar cópia assinada por email
+      if (!updated?.copiaAssinadaEnviadaEm) {
+        await this.enviarCopiaAssinada(proposta.id);
+      }
     }
 
     return {
@@ -1529,6 +1534,52 @@ export class MotorPropostaService {
       tipoDocumento,
       ambosAssinados,
     };
+  }
+
+  /**
+   * Sprint 10: gera PDF da proposta assinada e envia ao cooperado por email.
+   * Best-effort — não aborta o fluxo se falhar.
+   */
+  private async enviarCopiaAssinada(propostaId: string): Promise<void> {
+    if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
+
+    const proposta = await this.prisma.propostaCooperado.findUnique({
+      where: { id: propostaId },
+      include: {
+        cooperado: {
+          select: { nomeCompleto: true, email: true },
+        },
+      },
+    });
+    if (!proposta || !proposta.cooperado.email) return;
+
+    try {
+      const html = await this.propostaPdf.gerarHtml(propostaId);
+      const pdfPath = await this.pdfGenerator.gerarPdf(html, `proposta-assinada-${propostaId}.pdf`);
+
+      const htmlEmail =
+        `<p>Olá, <strong>${proposta.cooperado.nomeCompleto}</strong>!</p>` +
+        `<p>Obrigado por assinar sua proposta CoopereBR.</p>` +
+        `<p>Segue em anexo a cópia do termo de adesão e procuração assinados.</p>` +
+        `<p>Caminho do PDF: ${pdfPath}</p>`;
+      const texto =
+        `Olá, ${proposta.cooperado.nomeCompleto}! Segue a cópia assinada da sua proposta CoopereBR.`;
+
+      await this.email.enviarEmail(
+        proposta.cooperado.email,
+        'Sua proposta CoopereBR assinada — cópia',
+        htmlEmail,
+        texto,
+      );
+
+      await this.prisma.propostaCooperado.update({
+        where: { id: propostaId },
+        data: { copiaAssinadaEnviadaEm: new Date() },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      console.error(`[Sprint10] Falha ao enviar cópia assinada ${propostaId}: ${msg}`);
+    }
   }
 
   // ── Modelos de documento ──────────────────────────────────

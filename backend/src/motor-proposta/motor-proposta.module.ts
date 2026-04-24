@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { MotorPropostaController } from './motor-proposta.controller';
 import { MotorPropostaService } from './motor-proposta.service';
+import { MotorPropostaJob } from './motor-proposta.job';
 import { PropostaPdfService } from './proposta-pdf.service';
 import { PdfGeneratorService } from './pdf-generator.service';
 import { PrismaService } from '../prisma.service';
@@ -19,7 +20,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
 @Module({
   imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, EmailModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [MotorPropostaController],
-  providers: [MotorPropostaService, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],
+  providers: [MotorPropostaService, MotorPropostaJob, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],
   exports: [MotorPropostaService],
 })
 export class MotorPropostaModule {}

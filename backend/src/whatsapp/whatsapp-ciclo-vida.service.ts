@@ -165,6 +165,29 @@ export class WhatsappCicloVidaService {
     return this.enviar(cooperado.telefone, texto, { cooperadoId: cooperado.id, cooperativaId: cooperado.cooperativaId ?? undefined, tipoDisparo: 'COBRANCA_GERADA' });
   }
 
+  async notificarCobrancaProximaVencer(
+    cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null },
+    valor: number,
+    diasParaVencer: number,
+    vencimento: string,
+  ) {
+    const urgencia = diasParaVencer <= 1 ? '⏰ URGENTE' : '🔔 Lembrete';
+    const texto = [
+      `${urgencia} — ${cooperado.nomeCompleto}, sua fatura vence em ${diasParaVencer} dia(s)!`,
+      ``,
+      `💰 Valor: R$ ${valor.toFixed(2)}`,
+      `📆 Vencimento: ${vencimento}`,
+      ``,
+      `Evite multa e juros pagando pelo portal:`,
+      `🔗 ${this.linkPortal}/portal/financeiro`,
+    ].join('\n');
+    return this.enviar(cooperado.telefone, texto, {
+      cooperadoId: cooperado.id,
+      cooperativaId: cooperado.cooperativaId ?? undefined,
+      tipoDisparo: diasParaVencer <= 1 ? 'LEMBRETE_D1' : 'LEMBRETE_D3',
+    });
+  }
+
   async notificarCobrancaVencida(cooperado: { id: string; telefone?: string | null; nomeCompleto: string; cooperativaId?: string | null }, valor: number, diasAtraso: number) {
     const texto = [
       `⚠️ ${cooperado.nomeCompleto}, sua fatura está em aberto!`,
