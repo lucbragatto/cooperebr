@@ -136,6 +136,8 @@ model Cooperado {
   bairro                  String?
   cidade                  String?
   estado                  String?
+  // Segurança LGPD em dev: true = não dispara notificações reais
+  ambienteTeste           Boolean                    @default(false)
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
   ucs                     Uc[]
