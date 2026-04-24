@@ -276,16 +276,19 @@ enum EfeitoMudancaFaixa {
 
 model Uc {
   id                  String             @id @default(cuid())
+  // Sprint 11 — Arquitetura UC: 3 campos principais
+  // numero       — canônico SISGD (10 dígitos, ex: 0400702214). Identificação única dentro do sistema.
+  // numeroUC     — legado da concessionária (9 dígitos, ex: 160085263). Usado em listas B2B de compensação.
+  // distribuidora— concessionária responsável (obrigatório, enum). Determina formato e regras de match.
   numero              String             @unique
   endereco            String
   cidade              String
   estado              String
   numeroUC            String?
-  numeroInstalacaoEDP String?            // Número curto 10 dígitos exigido pela EDP pra GD
   codigoMedidor       String?
   cep                 String?
   bairro              String?
-  distribuidora       String?
+  distribuidora       DistribuidoraEnum  @default(OUTRAS)
   classificacao       String?
   modalidadeTarifaria String?
   tensaoNominal       String?
@@ -300,6 +303,16 @@ model Uc {
   faturasProcessadas  FaturaProcessada[]
 
   @@map("ucs")
+}
+
+enum DistribuidoraEnum {
+  EDP_ES
+  EDP_SP
+  CEMIG
+  ENEL_SP
+  LIGHT_RJ
+  CELESC
+  OUTRAS
 }
 
 model Usina {
