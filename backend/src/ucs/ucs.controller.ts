@@ -37,6 +37,15 @@ export class UcsController {
       cidade: string;
       estado: string;
       cooperadoId: string;
+      distribuidora: string;
+      numeroUC?: string;
+      cep?: string;
+      bairro?: string;
+      classificacao?: string;
+      codigoMedidor?: string;
+      modalidadeTarifaria?: string;
+      tensaoNominal?: string;
+      tipoFornecimento?: string;
     },
   ) {
     return this.ucsService.create(body);

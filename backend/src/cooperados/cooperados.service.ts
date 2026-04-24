@@ -4,6 +4,7 @@ import { Prisma, StatusCooperado, TipoCooperado } from '@prisma/client';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma.service';
+import { coerceDistribuidora } from '../ucs/ucs.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
@@ -477,7 +478,7 @@ export class CooperadosService {
             cep: dto.uc.cep,
             bairro: dto.uc.bairro,
             numeroUC: dto.uc.numeroUC,
-            distribuidora: dto.uc.distribuidora,
+            distribuidora: coerceDistribuidora(dto.uc.distribuidora),
             classificacao: dto.uc.classificacao,
             codigoMedidor: dto.uc.codigoMedidor,
             cooperadoId: cooperado.id,

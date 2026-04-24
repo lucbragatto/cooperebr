@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, InternalServerErrorException, Forbidde
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { coerceDistribuidora } from '../ucs/ucs.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
 import { EmailService } from '../email/email.service';
@@ -277,7 +278,7 @@ export class FaturasService {
           codigoMedidor: dadosExtraidos.codigoMedidor || undefined,
           cep: dadosExtraidos.cep || undefined,
           bairro: dadosExtraidos.bairro || undefined,
-          distribuidora: dadosExtraidos.distribuidora || undefined,
+          distribuidora: dadosExtraidos.distribuidora ? coerceDistribuidora(dadosExtraidos.distribuidora) : undefined,
           classificacao: dadosExtraidos.classificacao || undefined,
           modalidadeTarifaria: dadosExtraidos.modalidadeTarifaria || undefined,
           tensaoNominal: dadosExtraidos.tensaoNominal || undefined,

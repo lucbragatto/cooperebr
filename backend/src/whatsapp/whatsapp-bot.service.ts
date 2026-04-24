@@ -12,6 +12,7 @@ import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 import { WhatsappCicloVidaService } from './whatsapp-ciclo-vida.service';
 import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
 import { CoopereAiService } from './coopere-ai.service';
+import { coerceDistribuidora } from '../ucs/ucs.service';
 
 // Emojis em unicode escape para evitar problemas de encoding no WhatsApp
 const E = {
@@ -2018,7 +2019,7 @@ Essa conta de energia e:
               cidade: cidade || '',
               estado: estado || '',
               cooperadoId: cooperado.id,
-              distribuidora: String(dadosTemp.distribuidora ?? ''),
+              distribuidora: coerceDistribuidora(String(dadosTemp.distribuidora ?? '')),
               tipoFornecimento: String(dadosTemp.tipoFornecimento ?? 'TRIFASICO'),
             },
           });

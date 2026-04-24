@@ -10,6 +10,7 @@ import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
+import { coerceDistribuidora } from '../ucs/ucs.service';
 
 @Controller('publico')
 export class PublicoController {
@@ -360,7 +361,7 @@ export class PublicoController {
           cooperadoId: cooperado.id,
           cep: body.endereco.cep || undefined,
           bairro: body.endereco.bairro || undefined,
-          distribuidora: body.instalacao.distribuidora || undefined,
+          distribuidora: coerceDistribuidora(body.instalacao.distribuidora),
         },
       });
 
