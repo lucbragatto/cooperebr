@@ -97,6 +97,46 @@ parceiro real entrar em produção.
 Se estado mudar muito (muitos tickets fechados, novo sprint, schema grande),
 re-gerar RAIO-X e atualizar `docs/COOPEREBR-ALINHAMENTO.md`. Avisar Luciano antes.
 
+## Regras de segurança para migrations e alterações de schema
+
+Qualquer alteração de schema que envolva os casos abaixo EXIGE auditoria
+**prévia** dos dados afetados:
+
+1. Mudança de tipo de campo (String → Enum, String → Int, etc)
+2. Tornar campo obrigatório (NULL → NOT NULL)
+3. Deletar campo existente
+4. Alterar default value
+5. Renomear campo com impacto em queries
+6. Alterar unique/index constraints
+
+### Checklist ANTES de aplicar qualquer dos casos acima
+
+**A.** Rodar SELECT que conta:
+- Quantos registros têm valor não-nulo no campo
+- Distribuição de valores (`SELECT valor, COUNT(*) GROUP BY`)
+- Valores que não vão sobreviver à mudança
+
+**B.** Reportar ao Luciano o que será perdido (se algo) e pedir
+autorização explícita antes de executar.
+
+**C.** Preferir migração em 2 passos quando possível:
+- Passo 1: UPDATE pra normalizar valores existentes
+- Passo 2: ALTER TABLE (tipo, NOT NULL, etc)
+
+**D.** Evitar `prisma db push` cego em casos acima — preferir `migrate dev`
+com review do SQL gerado. **Nunca** usar `--accept-data-loss` sem
+auditoria prévia explícita.
+
+**E.** Em scripts de normalização de dados: sempre dry-run primeiro,
+mostrar ANTES/DEPOIS de cada registro, aguardar aprovação.
+
+**F.** Se Luciano pedir "investigar relacionamentos antes de alterar",
+auditar TODOS os campos afetados, não só o campo principal da solicitação.
+
+Regra criada após incidente de 2026-04-26 (Sprint 11 Bloco 1): 96 valores
+textuais de `Uc.distribuidora` foram perdidos em migration String → Enum
+sem auditoria prévia. Registrado no MAPA-INTEGRIDADE-SISTEMA.md.
+
 ## Estado atual do projeto (atualizado 2026-04-25)
 
 Sprint 10 concluído. Sprint 11 definido com foco em "Destravamento do Ciclo

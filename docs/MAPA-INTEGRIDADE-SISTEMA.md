@@ -38,21 +38,81 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 
 ### Tarefas 2 + 3 — consolidadas em "Arquitetura de UC"
 
-#### Bloco 1 (hoje, 2026-04-26) — Schema + Service + Forms
-✅ COMPLETO. Commits:
+---
+
+## Sprint 11 Dia 1 — 26/04/2026
+
+### Entregas
+- **Tarefa 1** (Auditoria ampla de numeração dupla UC EDP): ✅ COMPLETA (commit `7583659`)
+- **Tarefa 1.5** (Auditoria focada `numeroInstalacaoEDP`): ✅ COMPLETA
+- **Bloco 1 da Arquitetura de UC**: ✅ COMPLETO (5 commits)
+  - Schema: enum `DistribuidoraEnum` criado, `numeroInstalacaoEDP` deletado
+  - Service: 3 campos + validação + normalização
+  - Forms admin: completos com tooltips
+  - Cadastro público: ajustado com OCR preenchendo distribuidora
+
+### Commits do Bloco 1
 - `f36496f` — schema: remove `numeroInstalacaoEDP`, `distribuidora` vira `DistribuidoraEnum` obrigatório com default `OUTRAS`
 - `559a87d` — `ucs.service`: 3 campos + validação formato (`normalizarNumeroCanonico`, `normalizarNumeroUC`, `validarDistribuidora`, `coerceDistribuidora`)
 - `39b96b8` — forms admin (`/dashboard/ucs/nova` + `/dashboard/ucs/[id]`): 3 campos, select distribuidora, tooltips, validações client-side
 - `fbc75c1` — form cadastro público (`/cadastro`): campo `numeroUCLegado` opcional, `mapearDistribuidoraOcr` pré-fill
+- `257e9a3` — docs fechamento parcial
 
-**Observação importante:** ao aplicar a troca de `distribuidora String` → `DistribuidoraEnum`, o PostgreSQL dropou os 96 valores textuais legados (91 "EDP ES" + 5 variantes). Todos viraram `OUTRAS`. Bloco 2 re-classifica via OCR.
+### Decisões arquiteturais aprovadas (26/04/2026)
 
-#### Bloco 2 (amanhã) — Normalização + Pipeline + E2E
-PENDENTE:
-- Script de normalização dos 326 `numero` legados (formatos variados → 10 dígitos canônicos)
-- Correção de `resolverUcPorNumero` em `faturas.service.ts`: OR em `numero`/`numeroUC` + AND `distribuidora`
-- Prompt OCR ajustado (pedir `distribuidora` como enum, extrair ambos os formatos de número)
-- Reprocessar fatura UID 2032 do Luciano via pipeline pra validar match automático
+**1. UC tem 4 campos de identificação:**
+- `numero` — 10 díg canônico SISGD
+- `numeroUC` — 9 díg legado EDP (pra listas B2B)
+- `distribuidora` — enum `DistribuidoraEnum` (obrigatório)
+- `numeroConcessionariaOriginal` — string completa como aparece na fatura, sem normalização (**a ser implementado no Bloco 2**)
+
+**2. `numeroUC` obrigatoriedade:**
+- **OPCIONAL** no cadastro (cooperado pode não ter ainda)
+- **OBRIGATÓRIO** antes da ativação do cooperado (bloqueio + alerta ao admin)
+
+**3. Formato 15 dígitos EDP ES atual (`0.000.512.828.054-91`):**
+- Guardar completo em `numeroConcessionariaOriginal`
+- **NÃO** tentar normalizar pra `numero` — formatos são incompatíveis (15 díg + DV vs 10 díg)
+
+**4. 96 registros com distribuidora virada `OUTRAS`:**
+- Decisão Luciano: deixar como está, corrigir caso a caso quando admin precisar
+- Registrado como **débito operacional** (ver incidente abaixo)
+
+### INCIDENTE — Perda de dados na migration
+
+**Data:** 2026-04-26 (Bloco 1, Etapa 1)
+
+**O que aconteceu:**
+Ao mudar campo `distribuidora` de `String?` para `DistribuidoraEnum` obrigatório, PostgreSQL não conseguiu converter automaticamente os valores textuais existentes (`"EDP ES"`, `"EDP ES DISTRIB DE ENERGIA SA"`, `"EDP"`, `"EDP Espírito Santo Distribuição de Energia S.A."`). 96 UCs viraram o default `OUTRAS`.
+
+**Causa raiz:**
+Falta de auditoria prévia do campo `distribuidora` antes da migration. Só foi auditado `numeroInstalacaoEDP` (a pedido), mas `distribuidora` (também alterado na mesma mudança de schema) não foi investigado antes de aplicar `db push --accept-data-loss`.
+
+**Impacto:**
+- 96 UCs classificadas incorretamente como `OUTRAS` (eram 91 "EDP ES" + 5 variantes)
+- Queries por distribuidora retornam dados errados pra essas UCs
+- Relatórios agrupados por distribuidora incompletos
+- Pipeline IMAP pode falhar vinculação nessas UCs (Bloco 2 terá que lidar)
+
+**Recuperação:**
+- Decisão Luciano: **correção manual caso a caso** quando admin precisar
+- Alternativa disponível (se mudar de ideia): script heurístico por estado/cidade recupera ~90% (ES → EDP_ES) em 15 min
+
+**Lição registrada em CLAUDE.md:**
+Toda migration ou alteração de schema agora exige auditoria **prévia** dos dados afetados, não só do código que referencia o campo.
+
+### Bloco 2 (Dia 2 — 27/04/2026)
+
+**Escopo:**
+1. Adicionar campo `numeroConcessionariaOriginal` no schema (novo)
+2. Ajustar service e forms pra 4 campos
+3. Ajustar prompt OCR pra extrair enum direto + número original
+4. Normalização dos 326 registros (script + review + aplica)
+5. Correção do pipeline `resolverUcPorNumero` (OR + AND distribuidora)
+6. Teste E2E com fatura Luciano UID 2032
+7. Implementar validação "`numeroUC` obrigatório na ativação"
+
+**Estimativa:** 4-5h, $20-30
 
 ---
 
