@@ -317,7 +317,7 @@ async function main() {
         endereco: enderecoUc || 'Endereco nao informado',
         cooperadoId: cooperado.id,
         codigoMedidor: d.numeroMedidor || null,
-        distribuidora: 'EDP ES',
+        distribuidora: 'EDP_ES',
       },
       create: {
         numero: ucNumero,
@@ -329,7 +329,7 @@ async function main() {
         cooperadoId: cooperado.id,
         numeroUC: d.numeroInstalacao || null,
         codigoMedidor: d.numeroMedidor || null,
-        distribuidora: 'EDP ES',
+        distribuidora: 'EDP_ES',
         classificacao: d.classeSubclasse || null,
         modalidadeTarifaria: d.modalidadeTarifaria || null,
         tensaoNominal: d.tensaoNominal || null,

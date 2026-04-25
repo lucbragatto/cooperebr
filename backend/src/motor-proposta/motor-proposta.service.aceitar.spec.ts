@@ -99,7 +99,7 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
           }),
         },
         uc: { findMany: ucFindMany.mockResolvedValue([
-          { id: 'uc-1', distribuidora: 'EDP', contratos: [] },
+          { id: 'uc-1', distribuidora: 'EDP_ES', contratos: [] },
         ]) },
         usina: { findMany: usinaFindMany.mockResolvedValue([
           { id: 'usina-1', capacidadeKwh: 10000, contratos: [] },
@@ -373,7 +373,7 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
           }),
         },
         uc: { findMany: jest.fn().mockResolvedValue([
-          { id: 'uc-LE', distribuidora: 'EDP', contratos: [] },
+          { id: 'uc-LE', distribuidora: 'EDP_ES', contratos: [] },
         ]) },
         usina: { findMany: jest.fn().mockResolvedValue([
           // Capacidade total 1000, já ocupada → r.kwhContrato (1131) não cabe
