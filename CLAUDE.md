@@ -137,6 +137,48 @@ Regra criada após incidente de 2026-04-26 (Sprint 11 Bloco 1): 96 valores
 textuais de `Uc.distribuidora` foram perdidos em migration String → Enum
 sem auditoria prévia. Registrado no MAPA-INTEGRIDADE-SISTEMA.md.
 
+## Infraestrutura local — backend gerenciado por PM2
+
+O backend roda sob **PM2** como `cooperebr-backend` (id 0). Não é processo
+livre via `npm run start:dev`.
+
+**Comandos corretos:**
+
+| Ação | Comando |
+|---|---|
+| Ver status | `pm2 list` |
+| Parar | `pm2 stop cooperebr-backend` |
+| Subir (se stopped) | `pm2 start cooperebr-backend` |
+| Reiniciar | `pm2 restart cooperebr-backend` |
+| Ver logs | `pm2 logs cooperebr-backend --lines 30` |
+
+**NUNCA usar `npm run start:dev` direto.** Mesmo que o usuário diga
+"matei o backend", o PM2 pode ressuscitar o processo automaticamente,
+criando processos zumbi e bloqueio do `query_engine_bg.wasm` (ou
+`.dll.node` em versões antigas) do Prisma.
+
+### Regras pra `prisma generate` / `db push`
+
+**OBRIGATÓRIO** antes de `prisma generate` ou `prisma db push`:
+
+1. `pm2 stop cooperebr-backend`
+2. Confirmar porta 3000 livre: `netstat -ano | findstr :3000` (não deve
+   ter `LISTENING`)
+3. Rodar `prisma generate` / `db push`
+4. `pm2 restart cooperebr-backend`
+
+**Sem parar o PM2**, o engine Prisma fica lockado e o `EPERM` persiste
+mesmo matando processo manualmente — PM2 respawna instantaneamente.
+
+**Prisma v6** usa `query_engine_bg.wasm` (não mais `.dll.node`). Engine
+binário antigo (`query_engine-windows.dll.node` de versões anteriores) é
+**lixo no disco** e pode ser ignorado — verifique a data do `.wasm` pra
+saber se o regenerate funcionou, não a do `.dll`.
+
+Regra criada após sessão de 2026-04-25, onde 1h foi gasta debugando
+erros 500 em `/ocorrencias` e `/contratos` que eram só engine Prisma
+antigo carregado em memória pelo backend que o PM2 mantinha respawnado.
+
 ## Estado atual do projeto (atualizado 2026-04-25)
 
 Sprint 10 concluído. Sprint 11 definido com foco em "Destravamento do Ciclo

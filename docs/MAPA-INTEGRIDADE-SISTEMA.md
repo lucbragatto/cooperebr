@@ -101,18 +101,49 @@ Falta de auditoria prévia do campo `distribuidora` antes da migration. Só foi 
 **Lição registrada em CLAUDE.md:**
 Toda migration ou alteração de schema agora exige auditoria **prévia** dos dados afetados, não só do código que referencia o campo.
 
-### Bloco 2 (Dia 2 — 27/04/2026)
+### Bloco 2 — em andamento
 
-**Escopo:**
-1. Adicionar campo `numeroConcessionariaOriginal` no schema (novo)
-2. Ajustar service e forms pra 4 campos
-3. Ajustar prompt OCR pra extrair enum direto + número original
-4. Normalização dos 326 registros (script + review + aplica)
-5. Correção do pipeline `resolverUcPorNumero` (OR + AND distribuidora)
-6. Teste E2E com fatura Luciano UID 2032
-7. Implementar validação "`numeroUC` obrigatório na ativação"
+#### Fase A — 4º campo `numeroConcessionariaOriginal` ✅ COMPLETA (2026-04-25)
 
-**Estimativa:** 4-5h, $20-30
+Commits:
+- `9de64ab` — fix(sprint11): seed.ts usa enum DistribuidoraEnum (débito do Bloco 1)
+- `92d610e` — feat(sprint11-bloco2-A): adiciona numeroConcessionariaOriginal como 4º campo de UC
+
+Entregas:
+- Schema: `Uc.numeroConcessionariaOriginal String? @db.VarChar(50)`
+- Backend: `validarNumeroOriginal()` (só tamanho, preserva pontuação) + `create`/`update`/`controller` aceitam o campo
+- Frontend: 3 forms (`/dashboard/ucs/nova`, `/dashboard/ucs/[id]`, `/cadastro`) com input + tooltip + auto-pré-fill via OCR quando detecta pontuação
+- Débitos do Bloco 1 fechados: `seed.ts`, `seed-convenios-teste.js`, mocks em specs agora usam `'EDP_ES'` (enum)
+- Validação visual no navegador: ✅ 3 forms operacionais
+
+#### Sessão 2026-04-25 — incidente de infra
+
+1h gasta debugando erros 500 em `/ocorrencias` e `/contratos`. Causa raiz:
+backend rodando em PM2 carregava engine Prisma antigo em memória; cada
+`prisma generate` falhava com EPERM porque PM2 respawnava o processo após
+`Stop-Process` manual. **Aprendizado documentado em CLAUDE.md** (nova seção
+"Infraestrutura local — backend gerenciado por PM2"): sempre `pm2 stop`
+antes de generate.
+
+#### Fase B (Dia 3) — Pipeline OCR (30-45 min)
+- Ajustar prompt OCR em `faturas.service.ts:1201+`: `distribuidora` como enum direto, `numeroConcessionariaOriginal` raw, `numero`/`numeroUC` separados
+- Corrigir `resolverUcPorNumero` em `faturas.service.ts:38-64`: OR nos 3 campos + AND `distribuidora` + log de qual campo deu match
+- Prioridade: `numero` > `numeroUC` > `numeroConcessionariaOriginal`
+
+#### Fase C (Dia 3) — Normalização dos 326 registros (~1h)
+
+Script `backend/scripts/normalizar-ucs-numero.ts`:
+- Dry-run primeiro mostrando ANTES/DEPOIS
+- **PARAR** e aguardar aprovação do Luciano (regra CLAUDE.md)
+- Aplicar só após "ok"
+- 7 formatos a normalizar (ver memory `project_sprint11_dia3.md`)
+
+#### Fase D (Dia 3) — Validação ativação + E2E (30-45 min)
+- Hook bloqueando ativação se UC sem `numeroUC`
+- Script `teste-pipeline-uid2032.ts`: E2E com fatura real do Luciano
+- Relatório `docs/sessoes/2026-04-27-sprint11-bloco2-D.md`
+
+**Estimativa restante (Dia 3):** 2h-2h30, $15-25
 
 ---
 
