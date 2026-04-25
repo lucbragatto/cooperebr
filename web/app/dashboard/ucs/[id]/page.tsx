@@ -50,6 +50,7 @@ export default function UCDetailPage() {
   const [form, setForm] = useState({
     numero: '',
     numeroUC: '',
+    numeroConcessionariaOriginal: '',
     distribuidora: 'OUTRAS',
     endereco: '',
     cidade: '',
@@ -63,6 +64,7 @@ export default function UCDetailPage() {
         setForm({
           numero: r.data.numero,
           numeroUC: (r.data as any).numeroUC ?? '',
+          numeroConcessionariaOriginal: (r.data as any).numeroConcessionariaOriginal ?? '',
           distribuidora: (r.data as any).distribuidora ?? 'OUTRAS',
           endereco: r.data.endereco,
           cidade: r.data.cidade,
@@ -78,6 +80,7 @@ export default function UCDetailPage() {
     setForm({
       numero: uc.numero,
       numeroUC: (uc as any).numeroUC ?? '',
+      numeroConcessionariaOriginal: (uc as any).numeroConcessionariaOriginal ?? '',
       distribuidora: (uc as any).distribuidora ?? 'OUTRAS',
       endereco: uc.endereco,
       cidade: uc.cidade,
@@ -99,6 +102,10 @@ export default function UCDetailPage() {
     }
     if (form.numeroUC && form.numeroUC.replace(/\D/g, '').length > 9) {
       setMensagem('Erro: número legado (numeroUC) deve ter até 9 dígitos.');
+      return;
+    }
+    if (form.numeroConcessionariaOriginal.length > 50) {
+      setMensagem('Erro: número original na fatura deve ter até 50 caracteres.');
       return;
     }
     setSalvando(true);
@@ -149,6 +156,7 @@ export default function UCDetailPage() {
             <Campo label="ID" value={uc.id} />
             <Campo label="Número canônico" value={uc.numero} />
             <Campo label="Número legado (numeroUC)" value={(uc as any).numeroUC || '—'} />
+            <Campo label="Número original na fatura" value={(uc as any).numeroConcessionariaOriginal || '—'} />
             <Campo label="Distribuidora" value={DISTRIBUIDORA_LABEL[(uc as any).distribuidora] ?? (uc as any).distribuidora ?? '—'} />
             <Campo label="Endereço" value={uc.endereco} />
             <Campo label="Cidade" value={uc.cidade} />
@@ -182,6 +190,16 @@ export default function UCDetailPage() {
                 value={form.numeroUC}
                 onChange={(e) => setForm({ ...form, numeroUC: e.target.value })}
                 placeholder="160085263"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Número original na fatura (até 50 chars, formato preservado)</label>
+              <input
+                className={inputClass}
+                value={form.numeroConcessionariaOriginal}
+                onChange={(e) => setForm({ ...form, numeroConcessionariaOriginal: e.target.value })}
+                placeholder="0.000.512.828.054-91"
+                maxLength={50}
               />
             </div>
             <div>

@@ -90,9 +90,10 @@ interface Endereco {
 }
 
 interface Instalacao {
-  numeroUC: string;            // número que aparece na fatura (vai para `numero` canônico no backend)
-  numeroUCLegado: string;      // número antigo de 9 dígitos, opcional (vai para `numeroUC` no backend)
-  distribuidora: string;       // valor do enum DistribuidoraEnum
+  numeroUC: string;                       // número que aparece na fatura (vai para `numero` canônico no backend)
+  numeroUCLegado: string;                 // número antigo de 9 dígitos, opcional (vai para `numeroUC` no backend)
+  numeroConcessionariaOriginal: string;   // string completa como aparece na fatura (formato preservado), opcional
+  distribuidora: string;                  // valor do enum DistribuidoraEnum
   consumoMedioKwh: string;
 }
 
@@ -236,6 +237,7 @@ function CadastroPageInner() {
   const [instalacao, setInstalacao] = useState<Instalacao>({
     numeroUC: '',
     numeroUCLegado: '',
+    numeroConcessionariaOriginal: '',
     distribuidora: '',
     consumoMedioKwh: '',
   });
@@ -311,7 +313,12 @@ function CadastroPageInner() {
         }
 
         // Pre-fill instalacao — converte distribuidora para enum, mantém número como veio
-        if (data.dados.numeroUC) setInstalacao((i) => ({ ...i, numeroUC: data.dados.numeroUC }));
+        if (data.dados.numeroUC) setInstalacao((i) => ({
+          ...i,
+          numeroUC: data.dados.numeroUC,
+          // Preserva formato original quando OCR detectar formato com pontuação (ex: 0.000.512.828.054-91)
+          numeroConcessionariaOriginal: /[.\-/]/.test(data.dados.numeroUC) ? data.dados.numeroUC : i.numeroConcessionariaOriginal,
+        }));
         if (data.dados.distribuidora) setInstalacao((i) => ({ ...i, distribuidora: mapearDistribuidoraOcr(data.dados.distribuidora) }));
         if (data.dados.consumoMedioKwh) setInstalacao((i) => ({ ...i, consumoMedioKwh: String(data.dados.consumoMedioKwh) }));
 
@@ -451,6 +458,7 @@ function CadastroPageInner() {
         instalacao: {
           numeroUC: instalacao.numeroUC,
           numeroUCLegado: instalacao.numeroUCLegado || undefined,
+          numeroConcessionariaOriginal: instalacao.numeroConcessionariaOriginal || undefined,
           distribuidora: instalacao.distribuidora,
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0,
         },
@@ -527,6 +535,7 @@ function CadastroPageInner() {
         instalacao: {
           numeroUC: instalacao.numeroUC || ocrDados.numeroUC || '',
           numeroUCLegado: instalacao.numeroUCLegado || undefined,
+          numeroConcessionariaOriginal: instalacao.numeroConcessionariaOriginal || undefined,
           distribuidora: instalacao.distribuidora || mapearDistribuidoraOcr(ocrDados.distribuidora) || '',
           consumoMedioKwh: Number(instalacao.consumoMedioKwh) || ocrDados.consumoMedioKwh || 0,
         },
@@ -573,7 +582,7 @@ function CadastroPageInner() {
           email: pessoais.email.trim(),
           telefone: pessoais.telefone,
           endereco: { cep: endereco.cep.replace(/\D/g, ''), logradouro: endereco.logradouro, numero: endereco.numero, complemento: endereco.complemento, bairro: endereco.bairro, cidade: endereco.cidade, estado: endereco.estado },
-          instalacao: { numeroUC: instalacao.numeroUC, numeroUCLegado: instalacao.numeroUCLegado || undefined, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
+          instalacao: { numeroUC: instalacao.numeroUC, numeroUCLegado: instalacao.numeroUCLegado || undefined, numeroConcessionariaOriginal: instalacao.numeroConcessionariaOriginal || undefined, distribuidora: instalacao.distribuidora, consumoMedioKwh: Number(instalacao.consumoMedioKwh) || 0 },
           planoSelecionado: planoSelecionado?.cooperTokenAtivo ? 'FATURA_CHEIA_TOKEN' : 'DESCONTO_DIRETO',
           aceitaClube,
           pendenciaDocumentos: true,
@@ -893,6 +902,20 @@ function CadastroPageInner() {
           />
           <p className="text-xs text-gray-500 mt-1">
             Opcional. Se a sua concessionaria ja te enviou um numero antigo de 9 digitos para listas de compensacao, informe aqui.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="numeroConcessionariaOriginal">Numero exato impresso na fatura (opcional)</Label>
+          <Input
+            id="numeroConcessionariaOriginal"
+            placeholder="0.000.512.828.054-91"
+            maxLength={50}
+            value={instalacao.numeroConcessionariaOriginal}
+            onChange={(e) => updateInstalacao('numeroConcessionariaOriginal', e.target.value)}
+            className="h-10"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Opcional. Util quando a fatura usa formato com pontuacao/hifen (ex: 0.000.512.828.054-91 da EDP ES). Mantenha exatamente como aparece.
           </p>
         </div>
         <div>

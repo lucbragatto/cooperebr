@@ -48,6 +48,7 @@ export default function NovaUcPage() {
   const [form, setForm] = useState({
     numero: '',
     numeroUC: '',
+    numeroConcessionariaOriginal: '',
     distribuidora: '',
     endereco: '',
     cidade: '',
@@ -78,6 +79,9 @@ export default function NovaUcPage() {
       if (digitosUC.length === 0 || digitosUC.length > 9) {
         return 'Número legado (numeroUC) deve ter até 9 dígitos.';
       }
+    }
+    if (form.numeroConcessionariaOriginal.length > 50) {
+      return 'Número original na fatura deve ter até 50 caracteres.';
     }
     if (!form.distribuidora) return 'Selecione a distribuidora.';
     if (!form.endereco.trim()) return 'Endereço é obrigatório.';
@@ -156,6 +160,20 @@ export default function NovaUcPage() {
                 value={form.numeroUC}
                 onChange={(e) => set('numeroUC', e.target.value)}
                 placeholder="160085263"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="numeroConcessionariaOriginal" className="flex items-center gap-1">
+                Número original na fatura
+                <Tooltip text="Número como aparece exatamente na fatura da concessionária. Ex: 0.000.512.828.054-91. Mantenha pontos e traços. Não normalize." />
+              </Label>
+              <Input
+                id="numeroConcessionariaOriginal"
+                value={form.numeroConcessionariaOriginal}
+                onChange={(e) => set('numeroConcessionariaOriginal', e.target.value)}
+                placeholder="0.000.512.828.054-91"
+                maxLength={50}
               />
             </div>
 

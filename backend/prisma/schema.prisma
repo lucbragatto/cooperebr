@@ -285,6 +285,9 @@ model Uc {
   cidade              String
   estado              String
   numeroUC            String?
+  // Número exato como aparece na fatura da concessionária (formato preservado, sem normalização).
+  // Ex EDP ES atual: "0.000.512.828.054-91" (15 díg + DV com pontuação que não cabe em `numero` ou `numeroUC`).
+  numeroConcessionariaOriginal String?    @db.VarChar(50)
   codigoMedidor       String?
   cep                 String?
   bairro              String?

@@ -84,6 +84,7 @@ interface CreateUcInput {
   cooperadoId: string;
   distribuidora: DistribuidoraEnum | string;
   numeroUC?: string;
+  numeroConcessionariaOriginal?: string;
   cep?: string;
   bairro?: string;
   classificacao?: string;
@@ -96,6 +97,7 @@ interface CreateUcInput {
 interface UpdateUcInput {
   numero?: string;
   numeroUC?: string;
+  numeroConcessionariaOriginal?: string;
   distribuidora?: DistribuidoraEnum | string;
   endereco?: string;
   cidade?: string;
@@ -107,6 +109,22 @@ interface UpdateUcInput {
   modalidadeTarifaria?: string;
   tensaoNominal?: string;
   tipoFornecimento?: string;
+}
+
+/**
+ * Valida tamanho máximo do `numeroConcessionariaOriginal` (50 chars).
+ * Não normaliza — preserva pontuação/hífen exatamente como na fatura.
+ */
+function validarNumeroOriginal(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const valor = String(raw).trim();
+  if (valor.length === 0) return undefined;
+  if (valor.length > 50) {
+    throw new BadRequestException(
+      `\`numeroConcessionariaOriginal\` excede 50 caracteres (recebido: ${valor.length}).`,
+    );
+  }
+  return valor;
 }
 
 @Injectable()
@@ -141,11 +159,13 @@ export class UcsService {
     const numero = normalizarNumeroCanonico(data.numero);
     const distribuidora = validarDistribuidora(data.distribuidora);
     const numeroUC = data.numeroUC ? normalizarNumeroUC(data.numeroUC) : undefined;
+    const numeroConcessionariaOriginal = validarNumeroOriginal(data.numeroConcessionariaOriginal);
 
     return this.prisma.uc.create({
       data: {
         numero,
         numeroUC,
+        numeroConcessionariaOriginal,
         distribuidora,
         endereco: data.endereco,
         cidade: data.cidade,
@@ -167,6 +187,10 @@ export class UcsService {
     if (data.numero !== undefined) patch.numero = normalizarNumeroCanonico(data.numero);
     if (data.numeroUC !== undefined) {
       patch.numeroUC = data.numeroUC === '' ? null : normalizarNumeroUC(data.numeroUC);
+    }
+    if (data.numeroConcessionariaOriginal !== undefined) {
+      patch.numeroConcessionariaOriginal =
+        data.numeroConcessionariaOriginal === '' ? null : validarNumeroOriginal(data.numeroConcessionariaOriginal);
     }
     if (data.distribuidora !== undefined) patch.distribuidora = validarDistribuidora(data.distribuidora);
     for (const campo of [

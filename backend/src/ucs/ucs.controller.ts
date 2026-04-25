@@ -39,6 +39,7 @@ export class UcsController {
       cooperadoId: string;
       distribuidora: string;
       numeroUC?: string;
+      numeroConcessionariaOriginal?: string;
       cep?: string;
       bairro?: string;
       classificacao?: string;

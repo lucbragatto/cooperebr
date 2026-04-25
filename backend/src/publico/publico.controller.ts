@@ -293,7 +293,7 @@ export class PublicoController {
       email: string;
       telefone: string;
       endereco: { cep: string; logradouro: string; numero: string; complemento?: string; bairro: string; cidade: string; estado: string };
-      instalacao: { numeroUC: string; numeroUCLegado?: string; distribuidora: string; consumoMedioKwh: number };
+      instalacao: { numeroUC: string; numeroUCLegado?: string; numeroConcessionariaOriginal?: string; distribuidora: string; consumoMedioKwh: number };
       codigoRef?: string;
       planoId?: string;
       planoSelecionado?: string;
@@ -360,10 +360,15 @@ export class PublicoController {
         ? numeroUCLegadoRaw.slice(-9).padStart(9, '0')
         : undefined;
 
+      const numeroOriginalRaw = (body.instalacao.numeroConcessionariaOriginal || '').trim();
+      const numeroConcessionariaOriginal =
+        numeroOriginalRaw && numeroOriginalRaw.length <= 50 ? numeroOriginalRaw : undefined;
+
       const uc = await tx.uc.create({
         data: {
           numero: numeroCanonicoFinal,
           numeroUC: numeroUCFinal,
+          numeroConcessionariaOriginal,
           endereco: body.endereco.logradouro
             ? `${body.endereco.logradouro}, ${body.endereco.numero}`
             : '',
