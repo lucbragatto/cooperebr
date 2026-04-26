@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-26 (fim Sprint 11 Dia 1 — Bloco 1 da Arquitetura de UC)
+**Última atualização:** 2026-04-26 (fim Sprint 11 Bloco 2 — A+B+D ✅, C adiada)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -144,12 +144,25 @@ Razões resumidas:
 
 **Em aberto pra sessão futura:** refatorar campo `numero` (recomendação preliminar: REMOVER, já que nenhuma FK aponta pra ele — todas usam `Uc.id`).
 
-#### Fase D (próxima) — Validação ativação + E2E (30-45 min)
-- Hook bloqueando ativação se UC sem `numeroUC`
-- Script `teste-pipeline-uid2032.ts`: E2E com fatura real do Luciano
-- Relatório `docs/sessoes/2026-04-26-sprint11-bloco2-D.md`
+#### Fase D — Validação ativação + E2E ✅ COMPLETA (2026-04-26, commits `1e5ecd0` + `4619bf9`)
+- Hook em `cooperados.service.ts:update()` bloqueia transição → ATIVO se UC sem `numeroUC` (mensagem clara, lista UCs problemáticas, bypass `ambienteTeste=true`)
+- Spec `cooperados.service.guard-ativacao.spec.ts`: 8/8 ✅ (UC válida, sem UC, sem numeroUC, múltiplas UCs, ambienteTeste, status diferente, sem mudança, tenant isolation)
+- Script `backend/scripts/teste-pipeline-fatura-luciano.ts`: E2E com fatura mar/2026 do Luciano (`edp-luciano-gd.pdf`, 2.1 MB)
+- **Resultado: 5/5 PASSOU.** OCR retornou `distribuidora=EDP_ES` (enum direto), `numeroConcessionariaOriginal=0.001.421.380.054-70` (formato preservado), match em `numeroConcessionariaOriginal` → UC do Luciano (cmn0dsc83005iuolsxtufdx7v). Log explícito do campo de match funcionou.
+- Relatório: `docs/sessoes/2026-04-26-sprint11-fase-d-e2e.md`
 
-**Estimativa restante (Dia 3):** 30-45 min, $5-8
+---
+
+## Sprint 11 Dia 3 — 26/04/2026 (resumo executivo)
+
+| Fase | Status | Commits | Observação |
+|---|---|---|---|
+| B (Pipeline OCR) | ✅ | `9ba0e81` | OR nos 3 campos + AND distribuidora + log de match. 18+13 testes ok. |
+| C (Normalização 326 UCs) | 🚫 adiada | `b6ee60d` | Banco real difere do plano original; pipeline da B já mitiga via `comparaNumerosUc`. Decisão arquitetural sobre `numero` em aberto pra sessão dedicada. |
+| D-1 (Guard ativação) | ✅ | `1e5ecd0` | 8/8 testes. `ambienteTeste=true` bypassa pra dados teste. |
+| D-2 (E2E fatura real) | ✅ | `4619bf9` | **5/5 passou.** Pipeline ponta-a-ponta validado com fatura EDP real. |
+
+**Conclusão Bloco 2:** A + B + D entregues. C adiada por decisão arquitetural. Pipeline OCR + match multi-campo funcionam. Próximos sprints: Sprint 12 (a definir).
 
 ---
 
@@ -203,7 +216,7 @@ Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na pr
 | 1 | Cadastro Cooperado | FUNCIONAL | 85% | Sim — não alerta cooperado sobre email EDP (gap P0 Sprint 11) |
 | 2 | Motor de Proposta | FUNCIONAL | 85% | Parcial — lembrete 24h + cópia assinada prontos; E2E real pendente |
 | 3 | Modelos de Documento | PARCIAL | 40% | Sim — só 2 tipos, sem templates reais de prod |
-| 4 | Email IMAP → OCR → Cobrança | PARCIAL | 75% | Sim — pipeline NUNCA rodou ponta a ponta (0 faturas processadas na história). Correção ampla em Sprint 11 |
+| 4 | Email IMAP → OCR → Cobrança | PARCIAL | 85% | Parcial — pipeline OCR validado E2E com fatura real (Sprint 11 Bloco 2 Fase D, 5/5 passou). Faltando: cron real disparando + geração de Cobrança a partir da FaturaProcessada + email/lista pra EDP |
 | 5 | Emails Transacionais | FUNCIONAL | 80% | Não — SMTP operacional (1º email histórico OK), whitelist, D-3/D-1 implementados |
 | 6 | Ciclo de Cobrança Mensal | FUNCIONAL | 80% | Não — fluxo principal funcional, lacunas menores |
 | 7 | Contabilidade & Financeiro | PARCIAL | 50% | Parcialmente — sem DRE, sem conciliação bancária real |
