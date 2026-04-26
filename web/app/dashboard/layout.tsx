@@ -156,6 +156,7 @@ function getNavSections(perfil: string): NavSection[] {
       title: 'Configurações',
       items: [
         { href: '/dashboard/configuracoes/asaas', label: 'Asaas (Pagamentos)', icon: Settings },
+        { href: '/dashboard/configuracoes/email', label: 'Email do Parceiro (SMTP+IMAP)', icon: Mail },
         { href: '/dashboard/configuracoes/email-faturas', label: 'Email de Faturas', icon: Mail },
         { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
       ],
