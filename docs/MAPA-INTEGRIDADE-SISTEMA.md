@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-26 (fim Sprint 11 Bloco 2 — A+B+D ✅, C adiada)
+**Última atualização:** 2026-04-26 (madrugada — entrega do plano até produção)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -793,3 +793,61 @@ Decisão: antes de Sprint 12, gerar documento mestre `docs/SISGD-VISAO-COMPLETA.
 - Ordem sugerida de construção
 
 Sprint 12 será definido **a partir** desse documento, não antes.
+
+---
+
+## Sessão 26/04 noite + madrugada — entrega do plano até produção
+
+Após criação do `SISGD-VISAO-COMPLETA.md` (commit `272f14f`) e snapshot de pivô estratégico (commit `275b314`), Luciano pediu organização completa em 4 etapas executadas nesta sessão:
+
+### Documentos vivos atualizados/criados
+
+| Documento | Tipo | Status |
+|-----------|------|--------|
+| `docs/SISGD-VISAO-COMPLETA.md` | Mapa em linguagem humana | ✅ Atualizado (4 linhas inventário + Seção 4.1 Mapa fidelidade + Seção 4.2 Operação EDP) |
+| `docs/PLANO-ATE-PRODUCAO.md` | Roteiro 15 sprints (Sprint 12 a 26) | 🆕 Criado |
+| `docs/MAPA-INTEGRIDADE-SISTEMA.md` | Estado técnico (este doc) | ✅ Atualizado (esta seção) |
+| `memory/project_sprint11_dia3.md` | Continuidade de contexto | ✅ Atualizado |
+
+### Plano consolidado — visão executiva
+
+15 sprints organizados em 3 fases:
+
+**Fase 1 — Destrava o que já existe (Sprints 12-14, ~11 dias):**
+- Sprint 12: Webhook Asaas em produção real
+- Sprint 13: Painel Luciano (governança SaaS)
+- Sprint 14: Cron de FaturaSaas
+
+**Fase 2 — Preenche o que falta (Sprints 15-22, ~42 dias):**
+- Sprint 15: Cadastro Condomínio atomizado
+- Sprint 16: Painel Agregador (Hangar/Moradas)
+- Sprint 17: **Engine COMPENSADOS** ⚠️ ALTO RISCO
+- Sprint 18: Engine DINAMICO
+- Sprint 19: DRE por parceiro
+- Sprint 20: Conciliação CNAB
+- Sprint 21: Painel Síndico detalhado
+- Sprint 22: Audit Trail global
+
+**Fase 3 — Endurece pra produção (Sprints 23-26, ~20 dias):**
+- Sprint 23: Templates por parceiro
+- Sprint 24: Login facial
+- Sprint 25: Suite E2E Playwright
+- Sprint 26: Pré-produção (load test + runbook)
+
+**Total:** 73 dias úteis ≈ 14-15 semanas (10-12 com paralelização parcial).
+
+### Sprints mais arriscados
+
+1. **Sprint 17 (Engine COMPENSADOS)** — mexe em cálculo de cobrança real, exige snapshot prévio mandatório
+2. **Sprint 18 (Engine DINAMICO)** — bandeiras tarifárias mudam, ANEEL publica resoluções
+3. **Sprint 26 (Pré-produção)** — load test pode revelar gargalo escondido
+
+### Dependências externas críticas
+
+1. **Conta Asaas em produção** (Luciano) — bloqueia Sprint 12
+2. **Decisão arquitetural sobre `Uc.numero`** — bloqueia Sprint 17
+3. **Conta produção banco (BB ou Sicoob)** — bloqueia Sprint 20 (banco demora 1-2 semanas)
+
+### Frase de retomada
+
+**"Iniciando Sprint 12 — Webhook Asaas em produção real"** após validar pré-requisitos com Luciano.

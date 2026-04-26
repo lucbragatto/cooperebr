@@ -2,7 +2,7 @@
 
 > **Pra quem é este documento:** Luciano (dono do projeto, juiz TJES, não-programador).
 > **Pra que serve:** mapa único do sistema. Quem usa, o que existe, o que falta, em que ordem construir o resto.
-> **Última atualização:** 2026-04-26
+> **Última atualização:** 2026-04-26 (revisão pós-leitura externa + correção de 3 lacunas)
 > **Atenção:** o sistema se chama **SISGD**. **CoopereBR** é o primeiro parceiro que usa o sistema. O Luciano é dono do SISGD; a CoopereBR é cliente do SISGD.
 
 ---
@@ -277,6 +277,114 @@ Tabela executiva, ordenada por importância pra produção. Status:
 | Sungrow (monitoramento de usina em tempo real) | Marcos | 🟡 | Módulo existe, intencionalmente desligado desde Sprint 6 (sem credenciais reais) |
 | PIX Excedente (transferência automática do que sobra ao parceiro) | Marcos | 🟡 | Código pronto, variável `ASAAS_PIX_EXCEDENTE_ATIVO` desligada em produção |
 | Bandeiras tarifárias atualizadas via ANEEL | Marcos | ✅ | Sincronização ativa |
+| Contas a Pagar (despesas do parceiro) | Marcos, Walter | 🟡 | Módulo `contas-pagar` existe com CRUD funcional, 0 registros no banco. Ninguém usou ainda. Tela `/dashboard/financeiro/contas-pagar` mostra lista vazia |
+| Contas a Receber (separado de cobrança de cooperado) | Marcos, Walter | 🔴 | Não existe módulo dedicado. Lançamentos do tipo RECEITA estão misturados em `LancamentoCaixa`. Falta visão "o que vai entrar nos próximos 30 dias" separada do ciclo Cobrança→Asaas |
+| Lista de compensação EDP (envio mensal B2B) | Marcos | 🔴 | EDP exige lista mensal com `numeroUC` legado das UCs ativas pra processar compensação de créditos. Hoje exportação manual via SQL. Sem cron, sem botão na UI, sem formato fixo |
+| Lista de homologação EDP (UCs aguardando aprovação) | Marcos | 🔴 | UCs novas com status `AGUARDANDO_CONCESSIONARIA` precisam ser acompanhadas. Hoje rastreio é manual: Marcos lembra ou esquece. Sem painel, sem alerta de "UC parada há > 45 dias sem feedback EDP" |
+
+---
+
+## 4.1. Mapa do sistema de fidelidade
+
+O SISGD tem **4 conceitos diferentes** vinculados a fidelidade/recompensa que costumam se confundir. Aqui a separação prática.
+
+### CooperToken — moeda interna do cooperado
+
+**Quem usa:** Ana (cooperada).
+
+**Como funciona:** Ana acumula tokens por ações específicas. Hoje tem 2 fontes:
+
+1. **Bônus de indicação:** Ana indica Júlia. Júlia paga primeira fatura. Ana ganha 50 tokens (valor configurável). Sistema usa em produção: 6 ledger entries no banco, 3 saldos.
+2. **Modo CLUBE no plano (FATURA_CHEIA_TOKEN):** Ana pode escolher pagar a fatura cheia (sem desconto) e receber a diferença em tokens. Ex: fatura R$ 250, plano dá 18% desconto. Em modo DESCONTO, Ana paga R$ 205. Em modo CLUBE, paga R$ 250 e recebe ~R$ 45 em tokens. Esses tokens valem em ofertas resgatáveis no clube.
+
+**Status:** ✅ emissão funcionando. 🟡 painel pra Ana ver o saldo e usar em coisa real está esqueleto (sem ofertas resgatáveis cadastradas).
+
+### CooperToken Parceiro — moeda do parceiro pra distribuir
+
+**Quem usa:** Marcos (admin do parceiro), Carlos (agregador).
+
+**Como funciona:** parceiro **compra** lotes de tokens do dono da plataforma (Luciano) e **distribui** estrategicamente: campanhas, brindes, fidelização. Diferente do CooperToken normal (que é emitido automaticamente pelo sistema), aqui o parceiro decide quando dar.
+
+**Status:** 🟡 schema existe (`CooperTokenSaldoParceiro`, `CooperTokenCompra`), 0 registros, fluxo nunca rodou.
+
+### Clube de Vantagens — catálogo de ofertas resgatáveis
+
+**Quem usa:** Ana (resgata), Marcos (cadastra ofertas).
+
+**Como funciona:** Ana usa CooperTokens pra resgatar ofertas reais (descontos em parceiros do clube, vouchers, brindes). Tem tiers: BRONZE → PRATA → OURO → DIAMANTE conforme tempo de cooperado e adimplência. Tier maior dá acesso a ofertas melhores.
+
+**Status:** 🟡 1 ProgressaoClube no banco (registro de teste), 0 ofertas cadastradas, 0 resgates feitos. Tela `/portal/clube` é esqueleto. Painel admin `/dashboard/clube-vantagens` também.
+
+### Convênio — desconto progressivo institucional
+
+**Quem usa:** Solange (representante de associação), Carlos (Hangar como agregador-conveniada), Helena (Moradas como condomínio-conveniado).
+
+**Como funciona:** **não tem nada a ver com tokens.** É outro mecanismo. Uma instituição (associação, sindicato, empresa, condomínio) faz convênio com a CoopereBR. Conforme aumenta o número de membros ativos vindos dessa instituição, o desconto aplicado a cada membro vai subindo (faixas progressivas: 1-10 membros = 3%, 11-50 = 5%, 51+ = 8%).
+
+**Exemplo:** Hangar Academia tem convênio. Trouxe 8 professores → todos pagam com 3% extra de desconto. Quando trouxer o 11º (algum aluno), todos passam pra 5%. É incentivo coletivo: convém à Hangar trazer mais gente porque o desconto sobe pra todos.
+
+**Status:** 🟡 53 KB de código no módulo `convenios`. 0 contratos de convênio em produção. Lógica completa, sem teste real.
+
+### Como os 4 se conectam
+
+- **CooperToken (Ana)** ↔ **Clube de Vantagens (catálogo)**: Ana resgata oferta usando token. Conexão direta.
+- **CooperToken Parceiro (Marcos compra)** → **CooperToken (Ana recebe)**: parceiro usa lote comprado pra dar de presente.
+- **Convênio (Hangar)** ↔ **Cooperado (cada professor/aluno)**: convênio aplica desconto extra na cobrança do cooperado. Não envolve tokens.
+- **CooperToken** e **Convênio** são **canais paralelos** de fidelização — não dependem um do outro.
+
+### Sumário pra ler de uma vez
+
+| Conceito | Quem | Pra que serve | Status |
+|---|---|---|---|
+| CooperToken | Ana | Moeda da Ana, ganha por indicação ou modo CLUBE | ✅ emite, 🟡 não tem onde gastar (Clube esqueleto) |
+| CooperToken Parceiro | Marcos / Carlos | Lote comprado pra distribuir como brinde/campanha | 🟡 nunca usado |
+| Clube de Vantagens | Ana resgata | Catálogo de ofertas pra usar tokens | 🟡 0 ofertas cadastradas |
+| Convênio | Solange / Carlos / Helena | Desconto progressivo conforme tamanho da rede institucional | 🟡 código pronto, 0 convênios reais |
+
+---
+
+## 4.2. Operação com a concessionária (EDP)
+
+Dois processos críticos com a EDP que hoje são feitos **manualmente** ou **não existem**. Sem isso, o sistema não pode operar com volume.
+
+### Cadastro do email da cooperativa no portal EDP (passo do cooperado)
+
+**O que é:** quando uma pessoa quer ser cooperada, ela precisa entrar no portal da EDP (`agenciavirtual.edp.com.br`) e cadastrar `contato@cooperebr.com.br` (ou o email do parceiro) como destinatário de **2ª via** das faturas dela. Sem esse passo, a EDP não envia fatura nenhuma pra cooperativa, e o pipeline IMAP/OCR não tem o que processar.
+
+**Hoje:** o sistema não orienta o cooperado a fazer isso. Marcos esquece de avisar. Resultado: cooperado cadastrado, ativo no SISGD, mas EDP não envia fatura porque ele nunca cadastrou o email. Cooperado fica em limbo: "ativo" no sistema, sem dado real circulando.
+
+**Status:** 🔴 não existe.
+
+**Solução prevista:** após cadastro, mostrar tutorial obrigatório com print do portal EDP e checkbox "já fiz". Cron alerta admin se UC ativada há mais de N dias sem fatura recebida.
+
+### Lista de compensação (envio mensal B2B pra EDP)
+
+**O que é:** todo mês a CoopereBR precisa mandar pra EDP uma lista das UCs ativas que devem receber créditos de compensação, no formato exigido pela concessionária (CSV ou planilha com `numeroUC` legado de 9 dígitos, kWh contratado, dataInício do contrato, etc.). EDP processa essa lista e aplica os créditos.
+
+**Hoje:** Marcos exporta manualmente via SQL ou copia-cola. Não há cron, não há botão "exportar lista do mês" na UI, formato não está fixado em código.
+
+**Status:** 🔴 não existe módulo dedicado.
+
+**Solução prevista:** módulo `/dashboard/exportacao-edp` com botão "Gerar lista do mês N", validação ("X UCs sem `numeroUC` preenchido — não podem ser enviadas"), histórico das listas geradas, comparativo "novas neste mês × removidas".
+
+### Lista de homologação (UCs aguardando aprovação EDP)
+
+**O que é:** quando cooperado novo entra, a UC dele precisa ser homologada pela EDP (~30-45 dias). Durante esse período, status = `AGUARDANDO_CONCESSIONARIA`. Marcos precisa acompanhar pra detectar UCs paradas (EDP esqueceu, perdeu protocolo, recusou sem avisar).
+
+**Hoje:** rastreio mental de Marcos, sem painel.
+
+**Status:** 🔴 não existe.
+
+**Solução prevista:** `/dashboard/relatorios/homologacao` com lista de UCs em `AGUARDANDO_CONCESSIONARIA`, ordenada por dias parados. Alerta visual em vermelho se > 45 dias.
+
+### Sumário
+
+| Subprocesso | Quem opera | Status |
+|---|---|---|
+| Tutorial cadastro email EDP pelo cooperado | Ana, Marcos | 🔴 não existe |
+| Alerta "UC ativa há > 15 dias sem fatura recebida" | Marcos | 🔴 não existe |
+| Lista de compensação (export mensal) | Marcos | 🔴 não existe |
+| Lista de homologação (UCs em espera) | Marcos | 🔴 não existe |
 
 ---
 
