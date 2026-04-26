@@ -125,25 +125,31 @@ backend rodando em PM2 carregava engine Prisma antigo em memória; cada
 "Infraestrutura local — backend gerenciado por PM2"): sempre `pm2 stop`
 antes de generate.
 
-#### Fase B (Dia 3) — Pipeline OCR (30-45 min)
-- Ajustar prompt OCR em `faturas.service.ts:1201+`: `distribuidora` como enum direto, `numeroConcessionariaOriginal` raw, `numero`/`numeroUC` separados
-- Corrigir `resolverUcPorNumero` em `faturas.service.ts:38-64`: OR nos 3 campos + AND `distribuidora` + log de qual campo deu match
-- Prioridade: `numero` > `numeroUC` > `numeroConcessionariaOriginal`
+#### Fase B — Pipeline OCR ✅ COMPLETA (2026-04-26, commit `9ba0e81`)
+- Prompt OCR ajustado: `distribuidora` como enum direto, 3 campos de UC separados
+- `resolverUcPorNumero` reescrita: OR nos 3 campos + AND `distribuidora` + log de match + prioridade `numero > numeroUC > numeroConcessionariaOriginal`
+- Helper `comparaNumerosUc` adicionado (tolera zeros à esquerda — caso real EDP `0160085263` vs banco `160085263`)
+- Callers (`resolverUcDaFatura`, `criarFaturaProcessada`) atualizados
+- Update da UC pós-upload preserva os 3 campos
+- 18/18 testes factory + 13/13 matching ✅ sem regressão
 
-#### Fase C (Dia 3) — Normalização dos 326 registros (~1h)
+#### Fase C — PULADA (decisão 2026-04-26, ver `docs/sessoes/2026-04-26-fase-c-pulada.md`)
 
-Script `backend/scripts/normalizar-ucs-numero.ts`:
-- Dry-run primeiro mostrando ANTES/DEPOIS
-- **PARAR** e aguardar aprovação do Luciano (regra CLAUDE.md)
-- Aplicar só após "ok"
-- 7 formatos a normalizar (ver memory `project_sprint11_dia3.md`)
+Razões resumidas:
+1. Pipeline da Fase B já mitiga via `comparaNumerosUc`
+2. Banco real tem 326 UCs em 9 padrões diferentes — plano original cobria só ~22%
+3. Decisão "manter/internalizar/remover `numero`" é arquitetural, merece sessão dedicada
+4. Dados são todos de teste — normalizar agora vira retrabalho
+5. Fase D entrega valor real (validar pipeline E2E)
 
-#### Fase D (Dia 3) — Validação ativação + E2E (30-45 min)
+**Em aberto pra sessão futura:** refatorar campo `numero` (recomendação preliminar: REMOVER, já que nenhuma FK aponta pra ele — todas usam `Uc.id`).
+
+#### Fase D (próxima) — Validação ativação + E2E (30-45 min)
 - Hook bloqueando ativação se UC sem `numeroUC`
 - Script `teste-pipeline-uid2032.ts`: E2E com fatura real do Luciano
-- Relatório `docs/sessoes/2026-04-27-sprint11-bloco2-D.md`
+- Relatório `docs/sessoes/2026-04-26-sprint11-bloco2-D.md`
 
-**Estimativa restante (Dia 3):** 2h-2h30, $15-25
+**Estimativa restante (Dia 3):** 30-45 min, $5-8
 
 ---
 
