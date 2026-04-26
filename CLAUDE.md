@@ -170,6 +170,24 @@ criando processos zumbi e bloqueio do `query_engine_bg.wasm` (ou
 **Sem parar o PM2**, o engine Prisma fica lockado e o `EPERM` persiste
 mesmo matando processo manualmente — PM2 respawna instantaneamente.
 
+### REBUILD obrigatório quando muda código backend
+
+PM2 roda `dist/src/main.js` (build compilado), **NÃO ts-node em modo watch**.
+Mudanças em arquivos `.ts` **não chegam ao runtime** sem rebuild.
+
+Sequência correta após qualquer mudança em `backend/src/`:
+1. `pm2 stop cooperebr-backend` (libera locks)
+2. `cd backend ; npm run build` (regenera `dist/`)
+3. `pm2 restart cooperebr-backend`
+
+Sintomas de "esqueci de rebuildar":
+- 404 em endpoints novos
+- Erros Prisma referenciando campos já deletados (`P2022 column 'X' does not exist`)
+- Validação `tsc --noEmit` passa mas runtime falha
+
+`scripts/` está excluído do build (`tsconfig.build.json`) — utilitários standalone
+que rodam via `ts-node` direto, não vão pro `dist/`.
+
 **Prisma v6** usa `query_engine_bg.wasm` (não mais `.dll.node`). Engine
 binário antigo (`query_engine-windows.dll.node` de versões anteriores) é
 **lixo no disco** e pode ser ignorado — verifique a data do `.wasm` pra
