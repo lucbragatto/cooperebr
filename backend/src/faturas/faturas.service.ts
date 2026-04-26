@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotImplementedException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { TipoDocumento, ModeloCobranca, CooperTokenTipo } from '@prisma/client';
+import { TipoDocumento, ModeloCobranca, CooperTokenTipo, DistribuidoraEnum } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
@@ -28,19 +28,45 @@ export function normalizarNumeroUc(raw: string | null | undefined): string {
 }
 
 /**
- * Busca UC cujo numero (normalizado) bate com numeroOCR (normalizado),
- * dentro do tenant especificado. Retorna { id, numero } ou null.
+ * Compara dois números de UC tolerando diferença de zeros à esquerda.
+ * Sprint 11 Bloco 2 Fase B — caso real: filename de fatura EDP traz
+ * "0160085263" (10 chars com zero à esquerda) mas banco tem "160085263"
+ * (9 chars do legado). Sem tolerância, match falha.
  *
- * Usável tanto ANTES de criar FaturaProcessada (contexto factory)
- * quanto DEPOIS (contexto matching de cobrança).
+ * Aplica `normalizarNumeroUc` (remove pontuação) e depois `replace(/^0+/, '')`
+ * em ambos antes de comparar. Se ambos colapsam para vazio (só zeros),
+ * exige igualdade da string normalizada original.
+ */
+export function comparaNumerosUc(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizarNumeroUc(a);
+  const nb = normalizarNumeroUc(b);
+  if (!na || !nb) return false;
+  const ca = na.replace(/^0+/, '');
+  const cb = nb.replace(/^0+/, '');
+  if (ca === '' || cb === '') return na === nb; // só zeros — exige igualdade exata
+  return ca === cb;
+}
+
+/**
+ * Busca UC cujo `numero`/`numeroUC`/`numeroConcessionariaOriginal` (normalizados)
+ * batam com `numeroOCR` (normalizado), dentro do tenant especificado.
+ * Retorna `{ id, numero }` ou `null`.
  *
- * Multi-tenant: NUNCA retorna UC de outra cooperativa.
+ * Sprint 11 Bloco 2 Fase B — agora compara contra os 3 campos de identificação
+ * de UC (Bloco 1 + Fase A). Quando `distribuidoraOCR` é informada, filtra
+ * `uc.distribuidora = distribuidoraOCR` como AND adicional.
+ *
+ * Prioridade quando múltiplos batem: `numero` > `numeroUC` > `numeroConcessionariaOriginal`.
+ * Loga explicitamente em qual campo o match ocorreu (debug).
+ *
+ * Multi-tenant: NUNCA retorna UC de outra cooperativa (escopo preservado).
  */
 export async function resolverUcPorNumero(
   prisma: PrismaService,
   tenantId: string,
   numeroOCR: string | null | undefined,
-  logger?: { warn: (msg: string) => void },
+  logger?: { warn: (msg: string) => void; log?: (msg: string) => void },
+  distribuidoraOCR?: DistribuidoraEnum | null,
 ): Promise<{ id: string; numero: string } | null> {
   const alvo = normalizarNumeroUc(numeroOCR);
   if (!alvo || !tenantId) return null;
@@ -51,17 +77,50 @@ export async function resolverUcPorNumero(
         { cooperativaId: tenantId },
         { cooperado: { cooperativaId: tenantId } },
       ],
+      ...(distribuidoraOCR ? { distribuidora: distribuidoraOCR } : {}),
     },
-    select: { id: true, numero: true },
+    select: {
+      id: true,
+      numero: true,
+      numeroUC: true,
+      numeroConcessionariaOriginal: true,
+    },
   });
-  const achou = ucs.find(u => normalizarNumeroUc(u.numero) === alvo);
-  if (!achou && logger) {
-    logger.warn(
-      `resolverUcPorNumero: numero ${numeroOCR} (normalizado ${alvo}) ` +
-      `não encontrado no tenant ${tenantId}. UCs tentadas: ${ucs.length}.`,
+
+  type CampoMatch = 'numero' | 'numeroUC' | 'numeroConcessionariaOriginal';
+  const ranked: Array<{ uc: { id: string; numero: string }; campo: CampoMatch; prioridade: number }> = [];
+  for (const u of ucs) {
+    if (comparaNumerosUc(u.numero, numeroOCR)) {
+      ranked.push({ uc: { id: u.id, numero: u.numero }, campo: 'numero', prioridade: 1 });
+    } else if (u.numeroUC && comparaNumerosUc(u.numeroUC, numeroOCR)) {
+      ranked.push({ uc: { id: u.id, numero: u.numero }, campo: 'numeroUC', prioridade: 2 });
+    } else if (u.numeroConcessionariaOriginal && comparaNumerosUc(u.numeroConcessionariaOriginal, numeroOCR)) {
+      ranked.push({ uc: { id: u.id, numero: u.numero }, campo: 'numeroConcessionariaOriginal', prioridade: 3 });
+    }
+  }
+
+  if (ranked.length === 0) {
+    if (logger) {
+      logger.warn(
+        `resolverUcPorNumero: numero ${numeroOCR} (normalizado ${alvo}) ` +
+        `não encontrado no tenant ${tenantId}` +
+        (distribuidoraOCR ? ` (distribuidora=${distribuidoraOCR})` : '') +
+        `. UCs tentadas: ${ucs.length}.`,
+      );
+    }
+    return null;
+  }
+
+  ranked.sort((a, b) => a.prioridade - b.prioridade);
+  const winner = ranked[0];
+  if (logger?.log) {
+    logger.log(
+      `resolverUcPorNumero: match em "${winner.campo}" para numeroOCR="${numeroOCR}" ` +
+      `(normalizado ${alvo}) → uc.id=${winner.uc.id}` +
+      (ranked.length > 1 ? ` (${ranked.length - 1} outro(s) candidato(s) descartado(s) por prioridade)` : ''),
     );
   }
-  return achou ?? null;
+  return winner.uc;
 }
 
 interface HistoricoItem {
@@ -79,9 +138,12 @@ interface DadosExtraidos {
   cidade: string;
   estado: string;
   cep: string;
-  numeroUC: string;
+  // Sprint 11 Bloco 2 Fase B — 3 campos de identificação de UC, independentes
+  numero?: string;                          // 10 díg canônico SISGD (com zero à esquerda). Pode estar ausente em faturas antigas.
+  numeroUC: string;                         // 9 díg legado EDP. Comum em filename de faturas EDP atuais.
+  numeroConcessionariaOriginal?: string;    // string exata como aparece na fatura (formato preservado).
   codigoMedidor: string;
-  distribuidora: string;
+  distribuidora: DistribuidoraEnum | string;  // OCR deve retornar valor do enum; string pra retrocompat.
   classificacao: string;
   modalidadeTarifaria: string;
   tensaoNominal: string;
@@ -271,14 +333,22 @@ export class FaturasService {
 
     // 7. Atualizar UC se fornecida
     if (dto.ucId) {
+      // Sprint 11 Bloco 2 Fase B — preencher os 3 campos de identificação se OCR
+      // extraiu (sem sobrescrever quando vazio). `numero` canônico só é atualizado
+      // quando o OCR realmente detectou — campo `@unique`, alterar pode quebrar.
+      const dadosExtra: any = dadosExtraidos as any;
       await this.prisma.uc.update({
         where: { id: dto.ucId },
         data: {
+          ...(dadosExtra.numero ? { numero: dadosExtra.numero } : {}),
           numeroUC: dadosExtraidos.numeroUC || undefined,
+          ...(dadosExtra.numeroConcessionariaOriginal
+            ? { numeroConcessionariaOriginal: String(dadosExtra.numeroConcessionariaOriginal).slice(0, 50) }
+            : {}),
           codigoMedidor: dadosExtraidos.codigoMedidor || undefined,
           cep: dadosExtraidos.cep || undefined,
           bairro: dadosExtraidos.bairro || undefined,
-          distribuidora: dadosExtraidos.distribuidora ? coerceDistribuidora(dadosExtraidos.distribuidora) : undefined,
+          distribuidora: dadosExtraidos.distribuidora ? coerceDistribuidora(String(dadosExtraidos.distribuidora)) : undefined,
           classificacao: dadosExtraidos.classificacao || undefined,
           modalidadeTarifaria: dadosExtraidos.modalidadeTarifaria || undefined,
           tensaoNominal: dadosExtraidos.tensaoNominal || undefined,
@@ -1211,9 +1281,11 @@ Retorne exatamente este formato:
   "cidade": "cidade",
   "estado": "UF com 2 letras",
   "cep": "CEP apenas números",
-  "numeroUC": "número da unidade consumidora",
+  "numero": "número canônico de 10 dígitos com zero à esquerda (formato SISGD), ou string vazia se não conseguir identificar",
+  "numeroUC": "número legado de 9 dígitos da concessionária, ou string vazia se não aparecer",
+  "numeroConcessionariaOriginal": "string exata como aparece na fatura, sem normalização (preserva pontos, hífens, espaços)",
   "codigoMedidor": "código do medidor",
-  "distribuidora": "nome da distribuidora",
+  "distribuidora": "EDP_ES ou EDP_SP ou CEMIG ou ENEL_SP ou LIGHT_RJ ou CELESC ou OUTRAS",
   "classificacao": "classificação tarifária ex: B1-RESIDENCIAL",
   "modalidadeTarifaria": "modalidade tarifária",
   "tensaoNominal": "tensão nominal ex: 127/220V",
@@ -1256,6 +1328,11 @@ Retorne exatamente este formato:
 }
 
 IMPORTANTE:
+- IDENTIFICAÇÃO DA UC: a fatura pode trazer o número de UC em formatos diferentes. Preencha os 3 campos de forma INDEPENDENTE — não infira um do outro:
+  * "numero" → versão canônica de 10 dígitos com zero à esquerda (ex: "0400702214"). Geralmente aparece destacado no topo. Se a fatura não trouxer essa forma específica, retorne string vazia.
+  * "numeroUC" → versão legada de 9 dígitos da concessionária (ex: "160085263"). Comum em rótulos como "Instalação", "Cliente Nº", em filename de PDFs da EDP, em códigos de barras. Se não aparecer, retorne string vazia.
+  * "numeroConcessionariaOriginal" → o número de identificação tal e qual aparece IMPRESSO na fatura, com TODA a pontuação preservada (ex EDP ES atual: "0.000.512.828.054-91"). Pode ter pontos, hífens, espaços. NÃO normalize, NÃO extraia só dígitos. Se houver vários números na fatura, escolha o que está rotulado como UC/Unidade Consumidora/Instalação.
+- DISTRIBUIDORA: escolha EXATAMENTE um dos valores aceitos. EDP Espírito Santo (ex: "EDP ES DISTRIB DE ENERGIA SA") → "EDP_ES". EDP São Paulo / Bandeirante → "EDP_SP". CEMIG → "CEMIG". Eletropaulo / Enel SP → "ENEL_SP". Light RJ → "LIGHT_RJ". Celesc SC → "CELESC". Qualquer outra (ou se não conseguir identificar com confiança) → "OUTRAS". NÃO retorne texto livre.
 - DOCUMENTO (CPF/CNPJ): Procure ESPECIFICAMENTE pelo label 'CPF:' ou 'CPF/CNPJ:' ou 'CNPJ:' na fatura. O CPF tem exatamente 11 dígitos numéricos (formato XXX.XXX.XXX-XX). NÃO confunda com o número da UC (unidade consumidora), que tem formato diferente (ex: 0.000.XXX.XXX.XXX-XX com mais dígitos). Extraia APENAS os dígitos do CPF/CNPJ encontrado no label correto.
 - historicoConsumo: Procure na fatura a tabela ou gráfico chamado 'HIST. CONSUMO', 'HISTÓRICO DE CONSUMO', 'Histórico de Consumo kWh' ou similar. Extraia TODOS os meses listados (geralmente 10-13 meses), EXCETO o mês de referência desta fatura. Para cada mês, extraia mesAno (MM/AAAA) e consumoKwh. O campo valorRS deve ser o valor total da fatura daquele mês se disponível, senão 0. NÃO retorne historicoConsumo vazio se houver dados de consumo anteriores na fatura — eles geralmente aparecem como gráfico de barras ou tabela no verso/rodapé.
 - Para cada mês do histórico, extraia o valor total da conta em reais (campo valorRS). Este histórico normalmente aparece como gráfico ou tabela no verso ou rodapé da fatura. O valorRS deve ser o valor total da fatura daquele mês (não apenas energia, mas o total pago incluindo todos os encargos e impostos). Se não disponível na fatura, usar 0.
@@ -1454,13 +1531,27 @@ IMPORTANTE:
       return uc;
     }
 
-    // Fallback: delega pro utility
-    return resolverUcPorNumero(
-      this.prisma,
-      tenantId,
-      (fatura?.dadosExtraidos as any)?.numeroUC,
-      this.logger,
-    );
+    // Fallback: delega pro utility. Sprint 11 Bloco 2 Fase B — match agora usa
+    // os 3 campos de identificação (numero/numeroUC/numeroConcessionariaOriginal).
+    // OCR pode extrair os 3 separados, então tentamos cada um na ordem de prioridade
+    // e retornamos no primeiro match. AND distribuidora aplicado quando OCR extrair.
+    const dados = (fatura?.dadosExtraidos as any) ?? {};
+    const distribuidoraOCR = dados.distribuidora
+      ? coerceDistribuidora(dados.distribuidora)
+      : undefined;
+    const candidatos: Array<string | undefined> = [
+      dados.numero,
+      dados.numeroUC,
+      dados.numeroConcessionariaOriginal,
+    ];
+    for (const candidato of candidatos) {
+      if (!candidato) continue;
+      const uc = await resolverUcPorNumero(
+        this.prisma, tenantId, candidato, this.logger, distribuidoraOCR,
+      );
+      if (uc) return uc;
+    }
+    return null;
   }
 
   // ── Factory de FaturaProcessada (Sprint 5, tarefa 8b) ───────────────────────
@@ -1508,15 +1599,26 @@ IMPORTANTE:
       );
     }
 
-    // 2) Resolver ucId (best-effort — não falha se não conseguir)
+    // 2) Resolver ucId (best-effort — não falha se não conseguir).
+    // Sprint 11 Bloco 2 Fase B — tenta os 3 campos de identificação extraídos
+    // pelo OCR na ordem de prioridade. AND distribuidora se OCR conseguir.
     let ucIdFinal: string | null = args.ucId ?? null;
     if (!ucIdFinal) {
-      const numeroOCR = args.dadosExtraidos?.numeroUC;
-      if (numeroOCR) {
+      const dados = args.dadosExtraidos ?? {};
+      const distribuidoraOCR = dados.distribuidora
+        ? coerceDistribuidora(dados.distribuidora)
+        : undefined;
+      const candidatos: Array<string | undefined> = [
+        dados.numero,
+        dados.numeroUC,
+        dados.numeroConcessionariaOriginal,
+      ];
+      for (const candidato of candidatos) {
+        if (!candidato) continue;
         const uc = await resolverUcPorNumero(
-          this.prisma, tenantId, numeroOCR, this.logger,
+          this.prisma, tenantId, candidato, this.logger, distribuidoraOCR,
         );
-        ucIdFinal = uc?.id ?? null;
+        if (uc) { ucIdFinal = uc.id; break; }
       }
     }
 
