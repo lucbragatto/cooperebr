@@ -646,8 +646,36 @@ export class CooperadosService {
     // Buscar status anterior para lógica condicional
     const anterior = await this.prisma.cooperado.findUnique({
       where: { id },
-      select: { status: true },
+      select: { status: true, ambienteTeste: true },
     });
+
+    // Sprint 11 Bloco 2 Fase D — guard de ativação
+    // Não permite mudar status pra ATIVO se alguma UC do cooperado não tem
+    // `numeroUC` preenchido. Esse número (legado 9 díg) é exigido pela EDP nas
+    // listas B2B de compensação. Sem ele, cooperado fica "ativo" mas não
+    // entra nos relatórios da concessionária — situação inconsistente.
+    //
+    // Bypass: cooperado em ambienteTeste=true pula a validação (preserva os
+    // 337 registros de teste atuais que ainda não têm numeroUC preenchido).
+    if (data.status === 'ATIVO' && !anterior?.ambienteTeste) {
+      const ucs = await this.prisma.uc.findMany({
+        where: { cooperadoId: id },
+        select: { id: true, numero: true, numeroUC: true },
+      });
+      if (ucs.length === 0) {
+        throw new BadRequestException(
+          'Cooperado não pode ser ativado: nenhuma UC cadastrada. Cadastre ao menos uma UC antes de ativar.',
+        );
+      }
+      const semNumeroUC = ucs.filter(u => !u.numeroUC || String(u.numeroUC).trim() === '');
+      if (semNumeroUC.length > 0) {
+        const lista = semNumeroUC.map(u => `${u.id} (numero=${u.numero})`).join(', ');
+        throw new BadRequestException(
+          `Cooperado não pode ser ativado: UC(s) sem numeroUC preenchido — ${lista}. ` +
+          `Preencher antes de ativar (vem do portal EDP, ver Sprint 12).`,
+        );
+      }
+    }
 
     const cooperado = await this.prisma.cooperado.update({
       where: { id },
