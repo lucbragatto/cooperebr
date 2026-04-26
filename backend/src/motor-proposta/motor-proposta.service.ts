@@ -842,7 +842,7 @@ export class MotorPropostaService {
     if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },
-      select: { nomeCompleto: true, email: true, telefone: true },
+      select: { nomeCompleto: true, email: true, telefone: true, cooperativaId: true },
     });
     if (!cooperado) return;
     const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
@@ -865,7 +865,7 @@ export class MotorPropostaService {
           `<p>Sua proposta CoopereBR foi aceita. Para finalizar sua adesão, ` +
           `envie seus documentos acessando o link abaixo:</p>` +
           `<p><a href="${linkDocs}">${linkDocs}</a></p>`;
-        await this.email.enviarEmail(cooperado.email, 'Proposta aceita — envie seus documentos', html, mensagem);
+        await this.email.enviarEmail(cooperado.email, 'Proposta aceita — envie seus documentos', html, mensagem, cooperado.cooperativaId);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'erro desconhecido';
         console.error(`[T3] Falha ao enviar email para cooperado ${cooperadoId}: ${msg}`);
@@ -1328,7 +1328,7 @@ export class MotorPropostaService {
    * Guardado por NOTIFICACOES_ATIVAS. Falhas são logadas mas não abortam.
    */
   private async notificarAnaliseDocumentos(
-    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null },
+    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null; cooperativaId?: string | null },
     resultado: 'REPROVADO' | 'PENDENTE',
     motivo?: string,
   ): Promise<void> {
@@ -1358,7 +1358,7 @@ export class MotorPropostaService {
           `<p>Olá, <strong>${cooperado.nomeCompleto}</strong>.</p>` +
           `<p>${mensagemBase}${motivo ? `: <em>${motivo}</em>` : '.'}</p>` +
           `<p>Para reenviar, acesse: <a href="${linkDocs}">${linkDocs}</a></p>`;
-        await this.email.enviarEmail(cooperado.email, titulo, html, mensagem);
+        await this.email.enviarEmail(cooperado.email, titulo, html, mensagem, cooperado.cooperativaId);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'erro desconhecido';
         console.error(`[T3] Falha ao enviar email de análise: ${msg}`);
@@ -1436,7 +1436,7 @@ export class MotorPropostaService {
    * envia o PDF como anexo via WA também.
    */
   private async notificarLinkAssinatura(
-    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null },
+    cooperado: { nomeCompleto: string; email: string | null; telefone: string | null; cooperativaId?: string | null },
     link: string,
     pdfPath: string | null,
   ): Promise<void> {
@@ -1473,6 +1473,7 @@ export class MotorPropostaService {
           'Documentos aprovados — assine seu contrato CoopereBR',
           html,
           mensagem,
+          cooperado.cooperativaId,
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'erro desconhecido';
@@ -1547,7 +1548,7 @@ export class MotorPropostaService {
       where: { id: propostaId },
       include: {
         cooperado: {
-          select: { nomeCompleto: true, email: true },
+          select: { nomeCompleto: true, email: true, cooperativaId: true },
         },
       },
     });
@@ -1570,6 +1571,7 @@ export class MotorPropostaService {
         'Sua proposta CoopereBR assinada — cópia',
         htmlEmail,
         texto,
+        proposta.cooperado.cooperativaId,
       );
 
       await this.prisma.propostaCooperado.update({

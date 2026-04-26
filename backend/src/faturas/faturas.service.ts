@@ -827,6 +827,8 @@ export class FaturasService {
           cooperado.email,
           `Relatório Mensal — ${relatorio.periodo.mesLabel}`,
           html,
+          undefined,
+          cooperado.cooperativaId,
         );
         this.logger.log(`Email relatório enviado para ${cooperado.email}`);
       }

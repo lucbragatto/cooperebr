@@ -100,6 +100,7 @@ export class CobrancasJob {
             `Lembrete: fatura CoopereBR vence em ${diasAntes} dia(s)`,
             html,
             texto,
+            cooperado.cooperativaId,
           );
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'erro desconhecido';

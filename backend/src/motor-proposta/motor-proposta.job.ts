@@ -37,7 +37,7 @@ export class MotorPropostaJob {
       },
       include: {
         cooperado: {
-          select: { nomeCompleto: true, email: true, telefone: true },
+          select: { nomeCompleto: true, email: true, telefone: true, cooperativaId: true },
         },
       },
     });
@@ -75,6 +75,7 @@ export class MotorPropostaJob {
             'Lembrete: proposta CoopereBR aguardando assinatura',
             html,
             mensagem,
+            cooperado.cooperativaId,
           );
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'erro desconhecido';
