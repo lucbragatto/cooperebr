@@ -778,3 +778,18 @@ reais não vinculam automaticamente ao cooperado mesmo existindo UC no banco.
 
 **Prioridade:** P0
 **Sprint:** 11 (antes do primeiro parceiro real)
+
+---
+
+## Sessão 26/04 noite — pivô estratégico
+
+Após fechamento do Sprint 11 (Bloco 2), discussão revelou lacuna não mapeada anteriormente: **camada de visualização/governança**. Funcionalidades existem mas não têm painel consolidado por papel pra serem operadas/auditadas.
+
+Decisão: antes de Sprint 12, gerar documento mestre `docs/SISGD-VISAO-COMPLETA.md` em linguagem humana (pro Luciano, não-programador) consolidando:
+- 12 papéis humanos do sistema
+- 3 histórias completas (cooperado solto, Hangar agregadora, Condomínio Moradas)
+- Inventário existe vs falta
+- Painéis necessários por papel
+- Ordem sugerida de construção
+
+Sprint 12 será definido **a partir** desse documento, não antes.
