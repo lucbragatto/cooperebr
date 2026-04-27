@@ -151,71 +151,101 @@ export class SaasService {
   }
 
   async gerarFaturasMensal() {
-    const hoje = new Date();
-    const competencia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: {
         planoSaasId: { not: null },
         statusSaas: { in: ['ATIVO', 'TRIAL'] },
       },
-      include: { planoSaas: true },
+      select: { id: true },
     });
 
     const resultados: { cooperativaId: string; nome: string; valor: number; status: string }[] = [];
+    for (const c of cooperativas) {
+      const r = await this.gerarFaturaParaCooperativa(c.id);
+      resultados.push(r);
+    }
+    return { total: resultados.length, faturas: resultados };
+  }
 
-    for (const coop of cooperativas) {
-      if (!coop.planoSaas) continue;
+  /**
+   * Gera FaturaSaas pra uma cooperativa específica.
+   * - competencia default: primeiro dia do mês corrente
+   * - idempotente: se já existe fatura na competência, retorna status 'JA_EXISTE'
+   * - calcula valorBase (mensalidadeBase do plano) + valorReceita (% sobre cobranças pagas no mês anterior)
+   */
+  async gerarFaturaParaCooperativa(
+    cooperativaId: string,
+    competencia?: Date,
+  ): Promise<{ cooperativaId: string; nome: string; valor: number; status: string; faturaId?: string }> {
+    const hoje = new Date();
+    const competenciaResolvida = competencia ?? new Date(hoje.getFullYear(), hoje.getMonth(), 1);
 
-      // Verificar se já existe fatura para essa competência
-      const existente = await this.prisma.faturaSaas.findUnique({
-        where: { cooperativaId_competencia: { cooperativaId: coop.id, competencia } },
-      });
-      if (existente) {
-        resultados.push({ cooperativaId: coop.id, nome: coop.nome, valor: Number(existente.valorTotal), status: 'JA_EXISTE' });
-        continue;
-      }
-
-      const valorBase = Number(coop.planoSaas.mensalidadeBase);
-
-      // Calcular % sobre receita dos membros (cobranças pagas no mês)
-      let valorReceita = 0;
-      if (Number(coop.planoSaas.percentualReceita) > 0) {
-        const mesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-        const receitaMes = await this.prisma.cobranca.aggregate({
-          where: {
-            cooperativaId: coop.id,
-            status: 'PAGO',
-            competencia: { gte: mesAnterior, lt: competencia },
-          },
-          _sum: { valorLiquido: true },
-        });
-        const receitaTotal = Number(receitaMes._sum.valorLiquido ?? 0);
-        valorReceita = receitaTotal * (Number(coop.planoSaas.percentualReceita) / 100);
-      }
-
-      const valorTotal = valorBase + valorReceita;
-      const diaVenc = coop.diaVencimentoSaas;
-      const dataVencimento = new Date(hoje.getFullYear(), hoje.getMonth(), diaVenc);
-      if (dataVencimento < hoje) {
-        dataVencimento.setMonth(dataVencimento.getMonth() + 1);
-      }
-
-      const fatura = await this.prisma.faturaSaas.create({
-        data: {
-          cooperativaId: coop.id,
-          competencia,
-          valorBase,
-          valorReceita,
-          valorTotal,
-          dataVencimento,
-        },
-      });
-
-      resultados.push({ cooperativaId: coop.id, nome: coop.nome, valor: valorTotal, status: 'CRIADA' });
-      this.logger.log(`Fatura SaaS criada: ${coop.nome} - R$ ${valorTotal.toFixed(2)}`);
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      include: { planoSaas: true },
+    });
+    if (!coop) {
+      throw new Error(`Cooperativa ${cooperativaId} não encontrada`);
+    }
+    if (!coop.planoSaas) {
+      throw new Error(`Cooperativa ${coop.nome} sem plano SaaS vinculado`);
     }
 
-    return { total: resultados.length, faturas: resultados };
+    const existente = await this.prisma.faturaSaas.findUnique({
+      where: { cooperativaId_competencia: { cooperativaId: coop.id, competencia: competenciaResolvida } },
+    });
+    if (existente) {
+      return {
+        cooperativaId: coop.id,
+        nome: coop.nome,
+        valor: Number(existente.valorTotal),
+        status: 'JA_EXISTE',
+        faturaId: existente.id,
+      };
+    }
+
+    const valorBase = Number(coop.planoSaas.mensalidadeBase);
+
+    // % sobre receita: soma cobranças PAGAS no mês anterior à competência
+    let valorReceita = 0;
+    if (Number(coop.planoSaas.percentualReceita) > 0) {
+      const mesAnterior = new Date(competenciaResolvida.getFullYear(), competenciaResolvida.getMonth() - 1, 1);
+      const receitaMes = await this.prisma.cobranca.aggregate({
+        where: {
+          cooperativaId: coop.id,
+          status: 'PAGO',
+          competencia: { gte: mesAnterior, lt: competenciaResolvida },
+        },
+        _sum: { valorLiquido: true },
+      });
+      const receitaTotal = Number(receitaMes._sum.valorLiquido ?? 0);
+      valorReceita = Math.round(receitaTotal * (Number(coop.planoSaas.percentualReceita) / 100) * 100) / 100;
+    }
+
+    const valorTotal = Math.round((valorBase + valorReceita) * 100) / 100;
+    const dataVencimento = new Date(competenciaResolvida.getFullYear(), competenciaResolvida.getMonth(), coop.diaVencimentoSaas);
+    if (dataVencimento < hoje) {
+      dataVencimento.setMonth(dataVencimento.getMonth() + 1);
+    }
+
+    const fatura = await this.prisma.faturaSaas.create({
+      data: {
+        cooperativaId: coop.id,
+        competencia: competenciaResolvida,
+        valorBase,
+        valorReceita,
+        valorTotal,
+        dataVencimento,
+      },
+    });
+    this.logger.log(`Fatura SaaS criada: ${coop.nome} - R$ ${valorTotal.toFixed(2)} (${competenciaResolvida.toISOString().slice(0, 7)})`);
+
+    return {
+      cooperativaId: coop.id,
+      nome: coop.nome,
+      valor: valorTotal,
+      status: 'CRIADA',
+      faturaId: fatura.id,
+    };
   }
 }

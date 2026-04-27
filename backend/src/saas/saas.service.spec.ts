@@ -9,12 +9,13 @@ import { SaasService } from './saas.service';
 describe('SaasService.gerarFaturasMensal', () => {
   const planoSaasFindMany = jest.fn();
   const cooperativaFindMany = jest.fn();
+  const cooperativaFindUnique = jest.fn();
   const faturaSaasFindUnique = jest.fn();
   const faturaSaasCreate = jest.fn();
   const cobrancaAggregate = jest.fn();
 
   const prismaMock = {
-    cooperativa: { findMany: cooperativaFindMany },
+    cooperativa: { findMany: cooperativaFindMany, findUnique: cooperativaFindUnique },
     faturaSaas: {
       findUnique: faturaSaasFindUnique,
       create: faturaSaasCreate,
@@ -36,6 +37,7 @@ describe('SaasService.gerarFaturasMensal', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    cooperativaFindUnique.mockResolvedValue(coopComPlano);
     service = new SaasService(prismaMock);
     (service as any).logger = { log: jest.fn(), error: jest.fn() };
   });
@@ -101,5 +103,23 @@ describe('SaasService.gerarFaturasMensal', () => {
 
     expect(r.total).toBe(0);
     expect(faturaSaasCreate).not.toHaveBeenCalled();
+  });
+
+  // Sprint 13a P0: método público parametrizado por cooperativaId
+  it('gerarFaturaParaCooperativa: cria fatura quando cooperativa tem plano', async () => {
+    faturaSaasFindUnique.mockResolvedValue(null);
+    cobrancaAggregate.mockResolvedValue({ _sum: { valorLiquido: 1000 } });
+    faturaSaasCreate.mockResolvedValue({ id: 'fatura-x' });
+
+    const r = await service.gerarFaturaParaCooperativa('coop-1');
+
+    expect(r.status).toBe('CRIADA');
+    expect(r.valor).toBe(6150); // 5900 base + 25% de 1000 = 250
+    expect(r.faturaId).toBe('fatura-x');
+  });
+
+  it('gerarFaturaParaCooperativa: throw quando cooperativa sem plano', async () => {
+    cooperativaFindUnique.mockResolvedValue({ id: 'coop-2', nome: 'Sem Plano', planoSaas: null, diaVencimentoSaas: 10 });
+    await expect(service.gerarFaturaParaCooperativa('coop-2')).rejects.toThrow(/sem plano SaaS/);
   });
 });
