@@ -38,6 +38,7 @@ export interface Cooperado {
   email: string;
   telefone: string | null;
   status: StatusCooperado;
+  modoRemuneracao?: 'DESCONTO' | 'CLUBE' | null;
   createdAt: string;
   updatedAt: string;
 }

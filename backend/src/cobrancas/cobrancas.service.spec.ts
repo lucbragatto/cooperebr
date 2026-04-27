@@ -126,13 +126,16 @@ describe('CobrancasService.create — fallback de desconto via Contrato', () => 
     );
   });
 
-  function mockContrato(percentualDesconto: number) {
+  function mockContrato(
+    percentualDesconto: number,
+    modoRemuneracao: 'DESCONTO' | 'CLUBE' | null = 'DESCONTO',
+  ) {
     contratoFindUnique.mockResolvedValue({
       id: 'contrato-1',
       cooperativaId: 'coop-1',
       cooperadoId: 'cooperado-1',
       percentualDesconto,
-      cooperado: { id: 'cooperado-1' },
+      cooperado: { id: 'cooperado-1', modoRemuneracao },
       plano: { cooperTokenAtivo: false },
     });
   }
@@ -223,5 +226,65 @@ describe('CobrancasService.create — fallback de desconto via Contrato', () => 
         dataVencimento: 'data-invalida',
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  // ── Modo CLUBE: especificacao-clube-cooper-token.md seções 2 e 3.2 ──
+  // Cooperado em CLUBE paga valor cheio. valorDesconto fica registrado
+  // como base pra emissão de tokens FATURA_CHEIA no darBaixa().
+
+  it('CLUBE: bruto R$ 100, desc 20%, modo CLUBE → líquido = bruto = 100, descontoRegistrado = 20', async () => {
+    mockContrato(20, 'CLUBE');
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.percentualDesconto).toBe(20);
+    expect(arg.valorDesconto).toBe(20);
+    expect(arg.valorLiquido).toBe(100);
+  });
+
+  it('DESCONTO: bruto R$ 100, desc 20% → líquido 80 (regressão Cenário 1 com modo explícito)', async () => {
+    mockContrato(20, 'DESCONTO');
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.valorDesconto).toBe(20);
+    expect(arg.valorLiquido).toBe(80);
+  });
+
+  it('CLUBE com override: body envia valorLiquido=50 → respeita override', async () => {
+    mockContrato(20, 'CLUBE');
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      valorLiquido: 50,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.valorLiquido).toBe(50);
+  });
+
+  it('Cooperado sem modoRemuneracao (null) → tratado como DESCONTO_DIRETO', async () => {
+    mockContrato(20, null);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.valorLiquido).toBe(80); // desconto aplicado normalmente
   });
 });

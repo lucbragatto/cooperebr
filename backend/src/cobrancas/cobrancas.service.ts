@@ -12,6 +12,24 @@ import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 import { CooperTokenTipo } from '@prisma/client';
 
+// Calcula valorDesconto e valorLiquido respeitando o modo de remuneração.
+// Especificação `docs/especificacao-clube-cooper-token.md` seção 2:
+//   CAMINHO DESCONTO  → cooperado paga reduzido (valBruto - valDesc), sem token
+//   CAMINHO CLUBE     → cooperado paga cheio (valBruto), recebe tokens equivalentes
+// valorDesconto sempre é registrado: em DESCONTO é o abatimento real,
+// em CLUBE é a base pra emissão de tokens FATURA_CHEIA no darBaixa().
+export function calcularValoresCobranca(
+  valBruto: number,
+  pctDesc: number,
+  modoClube: boolean,
+): { valorDesconto: number; valorLiquido: number } {
+  const valDesc = Math.round(valBruto * (pctDesc / 100) * 100) / 100;
+  const valLiq = modoClube
+    ? valBruto
+    : Math.round((valBruto - valDesc) * 100) / 100;
+  return { valorDesconto: valDesc, valorLiquido: valLiq };
+}
+
 // Normaliza entrada de data:
 // - "YYYY-MM-DD" (input HTML date)        → UTC midnight
 // - "YYYY-MM-DDTHH:MM:SS..." (ISO completo) → new Date(...)
@@ -133,19 +151,18 @@ export class CobrancasService {
     // Resolver cooperativaId: parâmetro > contrato
     const resolvedCoopId = cooperativaId || contrato?.cooperativaId || undefined;
 
-    // Sprint 12 (2026-04-27): backend é fonte da verdade do desconto.
-    // Cobrança herda de Contrato.percentualDesconto. Se body enviar
-    // percentualDesconto, vira override pontual (?? cai pra body).
-    // pctDesc está em PERCENTUAL (20 = 20%), não decimal — divide por 100
-    // antes de multiplicar pelo bruto.
+    // Sprint 12 (2026-04-27): backend é fonte da verdade do desconto + modo CLUBE.
+    // Cobrança herda Contrato.percentualDesconto. Se body enviar percentualDesconto,
+    // vira override (?? cai pra body).
+    // Se cooperado.modoRemuneracao === 'CLUBE', valorLiquido = valorBruto (paga cheio),
+    // valorDesconto fica registrado como base pra emissão de tokens FATURA_CHEIA
+    // no darBaixa() (ver docs/especificacao-clube-cooper-token.md seção 2 e 3.2).
+    const modoClube = contrato?.cooperado?.modoRemuneracao === 'CLUBE';
     const pctDesc = data.percentualDesconto ?? Number(contrato?.percentualDesconto ?? 0);
     const valBruto = Number(data.valorBruto);
-    const valDesc =
-      data.valorDesconto ??
-      Math.round(valBruto * (pctDesc / 100) * 100) / 100;
-    const valLiq =
-      data.valorLiquido ??
-      Math.round((valBruto - valDesc) * 100) / 100;
+    const calc = calcularValoresCobranca(valBruto, pctDesc, modoClube);
+    const valDesc = data.valorDesconto ?? calc.valorDesconto;
+    const valLiq = data.valorLiquido ?? calc.valorLiquido;
 
     // Normalizar dataVencimento — frontend (input HTML date) envia "YYYY-MM-DD".
     // Prisma exige Date object ou ISO-8601 completo. Converter pra UTC midnight
@@ -468,6 +485,10 @@ export class CobrancasService {
           },
         });
       }
+      this.logger.log(
+        `LancamentoCaixa REALIZADO: R$ ${valorFinal} — cobrança ${cobranca.id} — ` +
+          `${nomeCooperado} (${mesRef})`,
+      );
     } catch (err) {
       this.logger.warn(`Falha ao atualizar LancamentoCaixa na baixa: ${err.message}`);
     }

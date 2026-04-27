@@ -616,6 +616,13 @@ export class FaturasService {
       cooperativaId: cooperativaIdFatura,
     });
 
+    // Sprint 12 (2026-04-27): modo CLUBE paga cheio, valorDesconto vira base pra
+    // emissão de tokens FATURA_CHEIA no darBaixa() (ver
+    // docs/especificacao-clube-cooper-token.md seção 2 e 3.2).
+    if (contrato.cooperado?.modoRemuneracao === 'CLUBE') {
+      calc.valorLiquido = calc.valorBruto;
+    }
+
     // Vencimento
     const diasVencimentoStr = await this.configTenant.get('dias_vencimento_cobranca', cooperativaIdFatura);
     const diasVencimento = diasVencimentoStr ? parseInt(diasVencimentoStr, 10) : 30;
@@ -998,6 +1005,12 @@ export class FaturasService {
         );
         avisos.push(`Contrato ${contrato.numero}: ${(err as Error).message}`);
         continue;
+      }
+
+      // Sprint 12 (2026-04-27): modo CLUBE paga cheio (ver
+      // docs/especificacao-clube-cooper-token.md seção 2).
+      if (contrato.cooperado?.modoRemuneracao === 'CLUBE') {
+        calc.valorLiquido = calc.valorBruto;
       }
 
       // Data de vencimento conforme preferência do cooperado ou configuração global

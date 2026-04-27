@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -30,6 +30,7 @@ export default function NovaCobrancaPage() {
   });
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [percentualDesconto, setPercentualDesconto] = useState(0);
+  const [modoClube, setModoClube] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
@@ -37,6 +38,17 @@ export default function NovaCobrancaPage() {
   useEffect(() => {
     api.get<Contrato[]>('/contratos').then((r) => setContratos(r.data));
   }, []);
+
+  const contratosVisiveis = useMemo(() => {
+    return contratos
+      .filter((c) => c.status === 'ATIVO')
+      .filter((c) => !c.cooperado || c.cooperado.status === 'ATIVO')
+      .sort((a, b) => {
+        const na = a.cooperado?.nomeCompleto ?? '';
+        const nb = b.cooperado?.nomeCompleto ?? '';
+        return na.localeCompare(nb, 'pt-BR');
+      });
+  }, [contratos]);
 
   function set(field: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -46,11 +58,17 @@ export default function NovaCobrancaPage() {
     set('contratoId', contratoId);
     const contrato = contratos.find((c) => c.id === contratoId);
     setPercentualDesconto(contrato?.percentualDesconto ?? 0);
+    setModoClube(contrato?.cooperado?.modoRemuneracao === 'CLUBE');
   }
 
   const valorBruto = parseFloat(form.valorBruto) || 0;
-  const valorDesconto = (valorBruto * percentualDesconto) / 100;
-  const valorLiquido = valorBruto - valorDesconto;
+  const valorDesconto = Math.round(valorBruto * percentualDesconto) / 100;
+  // Espec Clube: cooperado em modo CLUBE paga cheio + recebe tokens equivalentes ao desconto
+  const valorLiquido = modoClube ? valorBruto : valorBruto - valorDesconto;
+  const valorTokenReais = 0.20; // mesmo default do PDF (TODO: ler do plano via API)
+  const tokensEstimados = modoClube && valorDesconto > 0
+    ? Math.round((valorDesconto / valorTokenReais) * 100) / 100
+    : 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -119,15 +137,26 @@ export default function NovaCobrancaPage() {
             <div className="space-y-1">
               <Label>Contrato *</Label>
               <Select onValueChange={(v: string | null) => handleContratoChange(v ?? '')}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione um contrato" />
                 </SelectTrigger>
-                <SelectContent>
-                  {contratos.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.numero} — {c.cooperado?.nomeCompleto ?? c.cooperadoId}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="z-[100] bg-white min-w-[420px] max-h-[320px] overflow-y-auto shadow-lg border border-gray-200">
+                  {contratosVisiveis.map((c) => {
+                    const nome = c.cooperado?.nomeCompleto ?? '(sem cooperado)';
+                    const ehClube = c.cooperado?.modoRemuneracao === 'CLUBE';
+                    return (
+                      <SelectItem key={c.id} value={c.id} className="bg-white hover:bg-gray-100">
+                        <span>
+                          {nome} — {c.numero}
+                          {ehClube && (
+                            <span className="ml-2 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                              CLUBE
+                            </span>
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -176,14 +205,37 @@ export default function NovaCobrancaPage() {
 
             {form.contratoId && valorBruto > 0 && (
               <div className="rounded-md bg-gray-50 border p-3 space-y-1 text-sm text-gray-700">
-                <div className="flex justify-between">
-                  <span>Desconto ({percentualDesconto}%)</span>
-                  <span className="font-medium text-red-600">− {formatBRL(valorDesconto)}</span>
-                </div>
-                <div className="flex justify-between font-semibold border-t pt-1 mt-1">
-                  <span>Valor Líquido</span>
-                  <span className="text-green-700">{formatBRL(valorLiquido)}</span>
-                </div>
+                {modoClube ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Modo CLUBE — paga cheio</span>
+                      <span className="font-medium text-blue-700">{formatBRL(valorBruto)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Desconto não aplicado (vira tokens)</span>
+                      <span>R$ {valorDesconto.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-1 mt-1">
+                      <span>Valor a cobrar</span>
+                      <span className="text-green-700">{formatBRL(valorLiquido)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-blue-600 mt-1">
+                      <span>🪙 Tokens a emitir após pagamento</span>
+                      <span>~{tokensEstimados}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Desconto ({percentualDesconto}%)</span>
+                      <span className="font-medium text-red-600">− {formatBRL(valorDesconto)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-1 mt-1">
+                      <span>Valor Líquido</span>
+                      <span className="text-green-700">{formatBRL(valorLiquido)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
