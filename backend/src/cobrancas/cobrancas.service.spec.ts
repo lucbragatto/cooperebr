@@ -97,3 +97,131 @@ describe('CobrancasService.create — anti-duplicação T6', () => {
     expect(cobrancaCreate).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * Sprint 12 (2026-04-27): backend é fonte da verdade do desconto.
+ * Cobranca herda Contrato.percentualDesconto quando body não envia.
+ * Body explícito tem prioridade (override pontual).
+ */
+describe('CobrancasService.create — fallback de desconto via Contrato', () => {
+  const cobrancaFindFirst = jest.fn();
+  const cobrancaCreate = jest.fn();
+  const contratoFindUnique = jest.fn();
+
+  const prismaMock = {
+    cobranca: { findFirst: cobrancaFindFirst, create: cobrancaCreate },
+    contrato: { findUnique: contratoFindUnique },
+  } as any;
+  const empty = {} as any;
+
+  let service: CobrancasService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    cobrancaFindFirst.mockResolvedValue(null);
+    cobrancaCreate.mockImplementation(({ data }: any) => Promise.resolve({ id: 'cob-1', ...data }));
+    service = new CobrancasService(
+      prismaMock,
+      empty, empty, empty, empty, empty, empty, empty, empty, empty,
+    );
+  });
+
+  function mockContrato(percentualDesconto: number) {
+    contratoFindUnique.mockResolvedValue({
+      id: 'contrato-1',
+      cooperativaId: 'coop-1',
+      cooperadoId: 'cooperado-1',
+      percentualDesconto,
+      cooperado: { id: 'cooperado-1' },
+      plano: { cooperTokenAtivo: false },
+    });
+  }
+
+  it('Cenário 1: bruto R$ 10, contrato 20%, body sem desconto → desc 2.00, líq 8.00', async () => {
+    mockContrato(20);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 10,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.percentualDesconto).toBe(20);
+    expect(arg.valorDesconto).toBe(2);
+    expect(arg.valorLiquido).toBe(8);
+  });
+
+  it('Cenário 3: contrato com desconto 0% → líquido = bruto', async () => {
+    mockContrato(0);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.percentualDesconto).toBe(0);
+    expect(arg.valorDesconto).toBe(0);
+    expect(arg.valorLiquido).toBe(100);
+  });
+
+  it('Cenário 4: body envia percentualDesconto=25 (override) → contrato 18% é ignorado', async () => {
+    mockContrato(18);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 100,
+      percentualDesconto: 25,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.percentualDesconto).toBe(25);
+    expect(arg.valorDesconto).toBe(25);
+    expect(arg.valorLiquido).toBe(75);
+  });
+
+  it('Centavos: bruto R$ 327.45, contrato 18% → desc 58.94, líq 268.51', async () => {
+    mockContrato(18);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 327.45,
+      dataVencimento: new Date('2026-05-10'),
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.percentualDesconto).toBe(18);
+    expect(arg.valorDesconto).toBe(58.94);
+    expect(arg.valorLiquido).toBe(268.51);
+  });
+
+  it('Normaliza dataVencimento "YYYY-MM-DD" pra Date UTC midnight', async () => {
+    mockContrato(20);
+    await service.create({
+      contratoId: 'contrato-1',
+      mesReferencia: 4,
+      anoReferencia: 2026,
+      valorBruto: 10,
+      dataVencimento: '2026-05-03',
+    });
+    const arg = cobrancaCreate.mock.calls[0][0].data;
+    expect(arg.dataVencimento).toBeInstanceOf(Date);
+    expect(arg.dataVencimento.toISOString()).toBe('2026-05-03T00:00:00.000Z');
+  });
+
+  it('Lança BadRequestException quando dataVencimento é inválida', async () => {
+    mockContrato(20);
+    await expect(
+      service.create({
+        contratoId: 'contrato-1',
+        mesReferencia: 4,
+        anoReferencia: 2026,
+        valorBruto: 10,
+        dataVencimento: 'data-invalida',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+});

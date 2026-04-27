@@ -12,6 +12,27 @@ import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 import { CooperTokenTipo } from '@prisma/client';
 
+// Normaliza entrada de data:
+// - "YYYY-MM-DD" (input HTML date)        → UTC midnight
+// - "YYYY-MM-DDTHH:MM:SS..." (ISO completo) → new Date(...)
+// - Date object                              → mantém
+// Lança BadRequestException se inválido.
+function normalizarData(valor: Date | string, campo: string): Date {
+  if (valor instanceof Date) {
+    if (Number.isNaN(valor.getTime())) {
+      throw new BadRequestException(`${campo} inválida: Date instance inválido`);
+    }
+    return valor;
+  }
+  const str = String(valor);
+  const isoNormalizado = str.length === 10 ? `${str}T00:00:00.000Z` : str;
+  const d = new Date(isoNormalizado);
+  if (Number.isNaN(d.getTime())) {
+    throw new BadRequestException(`${campo} inválida: ${valor}`);
+  }
+  return d;
+}
+
 @Injectable()
 export class CobrancasService {
   private readonly logger = new Logger(CobrancasService.name);
@@ -78,11 +99,11 @@ export class CobrancasService {
     mesReferencia: number;
     anoReferencia: number;
     valorBruto: number;
-    percentualDesconto: number;
-    valorDesconto: number;
-    valorLiquido: number;
-    dataVencimento: Date;
-    dataPagamento?: Date;
+    percentualDesconto?: number;
+    valorDesconto?: number;
+    valorLiquido?: number;
+    dataVencimento: Date | string;
+    dataPagamento?: Date | string;
   }, cooperativaId?: string) {
     // T6 Sprint 5: guard anti-duplicacao.
     // Mesma logica dos outros 2 gatilhos (pipeline individual + lote no
@@ -112,9 +133,44 @@ export class CobrancasService {
     // Resolver cooperativaId: parâmetro > contrato
     const resolvedCoopId = cooperativaId || contrato?.cooperativaId || undefined;
 
+    // Sprint 12 (2026-04-27): backend é fonte da verdade do desconto.
+    // Cobrança herda de Contrato.percentualDesconto. Se body enviar
+    // percentualDesconto, vira override pontual (?? cai pra body).
+    // pctDesc está em PERCENTUAL (20 = 20%), não decimal — divide por 100
+    // antes de multiplicar pelo bruto.
+    const pctDesc = data.percentualDesconto ?? Number(contrato?.percentualDesconto ?? 0);
+    const valBruto = Number(data.valorBruto);
+    const valDesc =
+      data.valorDesconto ??
+      Math.round(valBruto * (pctDesc / 100) * 100) / 100;
+    const valLiq =
+      data.valorLiquido ??
+      Math.round((valBruto - valDesc) * 100) / 100;
+
+    // Normalizar dataVencimento — frontend (input HTML date) envia "YYYY-MM-DD".
+    // Prisma exige Date object ou ISO-8601 completo. Converter pra UTC midnight
+    // pra evitar deslocamento de timezone.
+    const dataVenc = normalizarData(data.dataVencimento, 'dataVencimento');
+    const dataPag = data.dataPagamento != null
+      ? normalizarData(data.dataPagamento, 'dataPagamento')
+      : undefined;
+
+    // Refletir valores resolvidos em data pra o código posterior
+    // (CooperToken, gateway, lançamento contábil) ler valLiquido/valDesc.
+    data.percentualDesconto = pctDesc;
+    data.valorDesconto = valDesc;
+    data.valorLiquido = valLiq;
+    data.dataVencimento = dataVenc;
+    if (dataPag) data.dataPagamento = dataPag;
+
     const cobranca = await this.prisma.cobranca.create({
       data: {
         ...data,
+        percentualDesconto: pctDesc,
+        valorDesconto: valDesc,
+        valorLiquido: valLiq,
+        dataVencimento: dataVenc,
+        ...(dataPag ? { dataPagamento: dataPag } : {}),
         ...(resolvedCoopId ? { cooperativaId: resolvedCoopId } : {}),
       },
     });
@@ -133,7 +189,7 @@ export class CobrancasService {
           // Modo Fatura Cheia: NÃO aplica desconto, credita tokens equivalentes
           const valorToken = Number(plano.valorTokenReais ?? 0.45);
           const maxPerc = Number(plano.tokenDescontoMaxPerc ?? 30);
-          const valorDescontoEmReais = Math.round(data.valorLiquido * (maxPerc / 100) * 100) / 100;
+          const valorDescontoEmReais = Math.round(data.valorLiquido! * (maxPerc / 100) * 100) / 100;
           const valorDescontoEmTokens = Math.round((valorDescontoEmReais / valorToken) * 10000) / 10000;
 
           if (valorDescontoEmTokens > 0) {
@@ -167,7 +223,7 @@ export class CobrancasService {
           // Modo DESCONTO_DIRETO: desconto automático na fatura
           const desconto = await this.cooperTokenService.calcularDesconto({
             cooperadoId: contrato.cooperadoId,
-            valorCobranca: data.valorLiquido,
+            valorCobranca: data.valorLiquido!,
             plano,
           });
 
@@ -181,7 +237,7 @@ export class CobrancasService {
               descricao: 'Desconto automático na fatura via CooperToken',
             });
 
-            const novoValorLiquido = Math.round((data.valorLiquido - desconto.descontoReais) * 100) / 100;
+            const novoValorLiquido = Math.round((data.valorLiquido! - desconto.descontoReais) * 100) / 100;
 
             await this.prisma.cobranca.update({
               where: { id: cobranca.id },
@@ -216,7 +272,7 @@ export class CobrancasService {
           resolvedCoopId,
           contrato.cooperadoId,
           {
-            valor: data.valorLiquido,
+            valor: data.valorLiquido!,
             vencimento: data.dataVencimento,
             descricao: `Cobrança ${data.mesReferencia}/${data.anoReferencia}`,
           },
@@ -234,7 +290,7 @@ export class CobrancasService {
         this.whatsappCicloVida.notificarCobrancaGerada(
           { ...contrato.cooperado, cooperativaId: resolvedCoopId ?? contrato.cooperado.cooperativaId },
           mesRef,
-          Number(data.valorLiquido),
+          Number(data.valorLiquido!),
           vencimento,
         ).catch(() => {});
       } catch (err) {
@@ -283,7 +339,7 @@ export class CobrancasService {
         data: {
           tipo: 'RECEITA',
           descricao: `Mensalidade - ${nomeCooperado} - ${mesRef}`,
-          valor: data.valorLiquido,
+          valor: data.valorLiquido!,
           competencia,
           dataVencimento: data.dataVencimento,
           status: 'PREVISTO',

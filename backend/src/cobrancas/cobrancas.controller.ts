@@ -46,9 +46,9 @@ export class CobrancasController {
       mesReferencia: number;
       anoReferencia: number;
       valorBruto: number;
-      percentualDesconto: number;
-      valorDesconto: number;
-      valorLiquido: number;
+      percentualDesconto?: number;
+      valorDesconto?: number;
+      valorLiquido?: number;
       dataVencimento: Date;
       dataPagamento?: Date;
     },
