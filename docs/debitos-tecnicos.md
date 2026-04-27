@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-26 (fim Sprint 11)
+**Última atualização:** 2026-04-27 (bug formatarMoeda em relatório inadimplência)
 
 ---
 
@@ -68,6 +68,49 @@ estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
 **Sintoma atual:** 2 falhas em `npx jest cooperados`. Demais testes (8/8 do guard-ativacao novo + 72/72 de email/faturas) passam normalmente.
 
 **Fix sugerido (~10 min):** atualizar `Test.createTestingModule({ providers: [...] })` em ambos os specs incluindo `UsinasService`, `FaturasService`, `EmailService` e dependências transitivas. Ou marcar como `.skip()` se vão ser reescritos no futuro.
+
+### Bug — Relatório de Inadimplência quebra com valor `undefined`
+
+**Arquivo:** `web/app/dashboard/relatorios/inadimplencia/page.tsx:21` (função `formatarMoeda`).
+
+**Origem:** detectado em 2026-04-27 quando Luciano abriu `/dashboard/relatorios/inadimplencia` enquanto preparava ambiente pro teste do webhook Asaas.
+
+**Erro de runtime:**
+
+```
+Runtime TypeError: can't access property "toLocaleString", v is undefined
+  formatarMoeda  page.tsx:21
+  InadimplenciaPage  page.tsx:206
+```
+
+Código que quebra:
+
+```typescript
+function formatarMoeda(v: number): string {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+```
+
+**Impacto:** página inteira do relatório de inadimplência não abre. Afeta o admin do parceiro (Marcos no fluxo Hangar; admin CoopereBR no teste). Outras telas não são afetadas.
+
+**Causa provável:** backend retorna algum campo numérico (saldo devedor, multa, juros) como `null`/`undefined`. A função declara `v: number` mas não trata ausência do valor.
+
+**Fix sugerido (~10-15 min):**
+
+1. Adicionar guard em `formatarMoeda`:
+   ```typescript
+   function formatarMoeda(v: number | null | undefined): string {
+     if (v === null || v === undefined || Number.isNaN(v)) return 'R$ 0,00';
+     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+   }
+   ```
+2. Investigar **por que** o backend retorna campo vazio. Conferir endpoint que alimenta o relatório (`relatorios.service.ts` ou similar).
+3. Decidir contrato: backend deveria sempre retornar `0` em vez de `null`? Ou frontend é responsável pelo fallback? Aplicar regra consistente.
+4. Buscar `formatarMoeda` em outros pages/components do frontend e aplicar a mesma proteção (alta probabilidade de existir mais ocorrências).
+
+**Reproduzir:** abrir `localhost:3001/dashboard/relatorios/inadimplencia` autenticado como admin da CoopereBR — página explode no carregamento.
+
+**Não-bloqueante para:** Sprint 12, Sprint 13, retomada de qualquer outro fluxo.
 
 ### Script `teste-ocr-fatura-luciano.ts` com erros TS
 
