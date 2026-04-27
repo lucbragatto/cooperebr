@@ -42,19 +42,24 @@ Formato fixo pra cada sprint:
 
 ### Sprint 12 — Webhook Asaas em produção real
 
+> **Status atualizado 27/04/2026:** sandbox 100% validado em sessão dedicada (commit `16302e9`, ver `docs/sessoes/2026-04-27-webhook-asaas-sandbox-validado.md`). 3 bugs descobertos e corrigidos no caminho. Sprint reduzido a ~1 dia quando Luciano abrir conta Asaas em produção.
+
 - **Pra quê serve:** garantir que pagamentos PIX/boleto recebidos pela conta Asaas atualizam automaticamente as cobranças no sistema (`PAGA`).
 - **Quem ganha:** Luciano (parou de conciliar manual), cooperado (vê status atualizado em tempo real), admin parceiro (não precisa marcar pago à mão).
-- **Tempo estimado:** 3 dias úteis.
-- **Pré-requisito:** Sprint 11 fechado ✅.
+- **Tempo estimado:** ~1 dia (era 3 antes da validação sandbox).
+- **Pré-requisito:** Luciano abrir conta Asaas em produção.
 - **Bloqueia:** Sprint 14 (FaturaSaas), Sprint 22 (conciliação).
-- **Tarefas:**
-  1. Criar conta Asaas em produção (Luciano)
-  2. Configurar webhook URL pública (ngrok ou domínio)
-  3. Validar HMAC-SHA256 com secret real
-  4. Rodar 1 cobrança real PIX (R$ 1,00 teste) e ver `PAGA` automático
-  5. Documentar processo em `docs/operacao/asaas-producao.md`
-- **Critério "passou":** 1 PIX real de R$ 1,00 entra, webhook chega, cobrança vira `PAGA` sem intervenção manual, log `asaas.webhook.received` registrado.
-- **Risco:** baixo. Código já existe (commit antigo), só falta configuração.
+- **Tarefas restantes pra produção:**
+  1. ~~Configurar webhook em sandbox~~ ✅ feito 27/04
+  2. ~~Validar token timing-safe + idempotência~~ ✅ feito 27/04
+  3. ~~Confirmar criação de LancamentoCaixa nos 2 modos~~ ✅ AGOSTINHO CLUBE + ADRIANA DESCONTO
+  4. Criar conta Asaas em produção (Luciano)
+  5. Trocar `AsaasConfig.apiKey` e `webhookToken` da CoopereBR pra credenciais produção
+  6. Apontar webhook do dashboard produção pra URL pública (domínio fixo ou ngrok produção)
+  7. Smoke test: 1 PIX real R$ 1 → webhook → PAGA + LancamentoCaixa
+  8. Documentar em `docs/operacao/asaas-producao.md`
+- **Critério "passou":** 1 PIX real de R$ 1,00 entra, webhook chega, cobrança vira `PAGA` sem intervenção manual, log `LancamentoCaixa REALIZADO` registrado.
+- **Risco:** baixo. Código validado em sandbox; só falta credencial produção.
 - **Custo:** R$ 0 (Asaas tem teste grátis até X transações). Dependência externa: Luciano abre conta.
 
 ---

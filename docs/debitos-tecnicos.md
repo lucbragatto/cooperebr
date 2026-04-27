@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-27 (bug formatarMoeda em relatório inadimplência)
+**Última atualização:** 2026-04-27 (sandbox webhook Asaas validado + 3 bugs cobranças resolvidos)
 
 ---
 
@@ -111,6 +111,47 @@ function formatarMoeda(v: number): string {
 **Reproduzir:** abrir `localhost:3001/dashboard/relatorios/inadimplencia` autenticado como admin da CoopereBR — página explode no carregamento.
 
 **Não-bloqueante para:** Sprint 12, Sprint 13, retomada de qualquer outro fluxo.
+
+### PM2 sem monitoramento de crash loop
+
+**Detectado em:** 2026-04-27 (descoberta acidental durante setup ngrok)
+
+**Severidade:** P3 (ok pra dev, blocker pra Sprint 26 pré-produção)
+
+**Sintoma observado:** backend PM2 acumulou **298 restarts** em 4 horas sem alerta. Porta 3000 estava ocupada por processo node órfão (PID 4396) de sessão antiga; PM2 spawnava novo processo, falhava com `EADDRINUSE`, restartava em loop infinito. Dashboard PM2 mostrava `online` enganosamente.
+
+**Impacto em dev:** confundiu diagnóstico — webhooks 200 OK eram respondidos pelo backend órfão, não pelo PM2 novo. Quase fechei sessão sem perceber.
+
+**Impacto em produção:** sintomas seriam lentidão intermitente, requisições com latência alta, status `online` falso no dashboard.
+
+**Fix sugerido (~30 min):**
+1. Configurar `pm2-logrotate` (já vem com PM2)
+2. Hook `pm2 install pm2-server-monit` ou alerta customizado
+3. Alerta quando restart_count subir > 5 em 1h (cron + curl pra Slack/email/WA)
+4. `max_restarts: 10` no ecosystem.config — para o processo após N restarts em vez de loop infinito
+
+**Não-bloqueante para:** Sprints 12-25 em dev. Obrigatório antes de Sprint 26 (pré-produção).
+
+### 4.9 tokens emitidos por engano antes do conserto CLUBE
+
+**Detectado em:** 2026-04-27 (durante validação contraprova do bug 3)
+
+**Severidade:** P3 (registro do incidente; valores não estornados)
+
+**Contexto:** antes do commit `16302e9` (conserto modo CLUBE), 2 cobranças de cooperados em modo CLUBE foram processadas com a regra antiga de dupla bonificação:
+
+| Cooperado | Cobrança | Valor cobrado | Tokens emitidos errados |
+|-----------|----------|---------------|--------------------------|
+| TESTE E2E CLUBE SPRINT9 | `cmoh8z…` (04/2026) | R$ 8 (deveria ser R$ 10 cheio) | 1.96 FATURA_CHEIA |
+| AGOSTINHO | `cmoh9n…` (04/2026) | R$ 12 (deveria ser R$ 15 cheio) | 2.94 FATURA_CHEIA |
+
+Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados são `ambienteTeste=true`** — nenhum impacto financeiro real.
+
+**Decisão:** não estornar. Ambiente de teste, valor não material, registro pra auditoria histórica.
+
+**Origem desconhecida da Cobrança `cmobdlysq0003va18sw9twwc3`** (AGOSTINHO 05/2026 R$ 600 cheio): criada em 23/04 via script de teste com `valorLiquido = valorBruto` hardcoded, contornando o bug do `percentualDesconto` (que só apareceu via UI). Ficou correta "por sorte". Mantida como referência.
+
+**Não-bloqueante para:** nada.
 
 ### Script `teste-ocr-fatura-luciano.ts` com erros TS
 

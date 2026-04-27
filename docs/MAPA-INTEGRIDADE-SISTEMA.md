@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-26 (madrugada — entrega do plano até produção)
+**Última atualização:** 2026-04-27 (sandbox webhook Asaas validado + 3 bugs corrigidos)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -218,7 +218,7 @@ Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na pr
 | 3 | Modelos de Documento | PARCIAL | 40% | Sim — só 2 tipos, sem templates reais de prod |
 | 4 | Email IMAP → OCR → Cobrança | PARCIAL | 85% | Parcial — pipeline OCR validado E2E com fatura real (Sprint 11 Bloco 2 Fase D, 5/5 passou). Faltando: cron real disparando + geração de Cobrança a partir da FaturaProcessada + email/lista pra EDP |
 | 5 | Emails Transacionais | FUNCIONAL | 80% | Não — SMTP operacional (1º email histórico OK), whitelist, D-3/D-1 implementados |
-| 6 | Ciclo de Cobrança Mensal | FUNCIONAL | 80% | Não — fluxo principal funcional, lacunas menores |
+| 6 | Ciclo de Cobrança Mensal | FUNCIONAL | 95% | Não — sandbox webhook Asaas + LancamentoCaixa validados 27/04 |
 | 7 | Contabilidade & Financeiro | PARCIAL | 50% | Parcialmente — sem DRE, sem conciliação bancária real |
 | 8 | Relatórios por Papel | PARCIAL | 60% | Não — dashboards existem, dados incompletos para alguns papéis |
 | 9 | Fluxo de Usina | PARCIAL | 65% | Parcialmente — Sungrow desativado, rebalanceamento ausente |
@@ -378,7 +378,7 @@ Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na pr
 | Envio WA da cobrança | IMPLEMENTADO MAS NÃO TESTADO | `whatsapp-ciclo-vida.service.ts` | Chamado via `whatsappCicloVida` |
 | Exibição no portal cooperado | FUNCIONAL | `web/app/portal/financeiro/page.tsx` | Lista cobranças com status |
 | Pagamento via Asaas (PIX/boleto) | FUNCIONAL | `gateway-pagamento.service.ts` | Gateway abstrato com adaptador Asaas |
-| Webhook Asaas → baixa | FUNCIONAL | `asaas.controller.ts` → `pagamento.confirmado` event | HMAC-SHA256 validado |
+| Webhook Asaas → baixa | VALIDADO SANDBOX | `asaas.controller.ts` → `pagamento.confirmado` event | webhookToken validado timing-safe; produção pendente conta Asaas |
 | `LancamentoCaixa` criado (PREVISTO) | FUNCIONAL | `cobrancas.service.ts:272-298` | Criado na geração |
 | `LancamentoCaixa` atualizado (REALIZADO) | FUNCIONAL | `cobrancas.service.ts:376-416` | Atualizado no `darBaixa()` |
 | Tokens liberados após pagamento | FUNCIONAL | `financeiro-token.listener.ts` | `@OnEvent('pagamento.confirmado')` |
@@ -851,3 +851,37 @@ Após criação do `SISGD-VISAO-COMPLETA.md` (commit `272f14f`) e snapshot de pi
 ### Frase de retomada
 
 **"Iniciando Sprint 12 — Webhook Asaas em produção real"** após validar pré-requisitos com Luciano.
+
+---
+
+## Sessão 27/04 — Sandbox webhook Asaas validado + 3 bugs corrigidos
+
+Detalhes em `docs/sessoes/2026-04-27-webhook-asaas-sandbox-validado.md`.
+
+### O que foi entregue
+
+1. **Webhook Asaas em sandbox 100% validado** — POST `/asaas/webhook` com `asaas-access-token` validado timing-safe contra `AsaasConfig.webhookToken`. Idempotência via `ultimoWebhookEventId` confirmada (2 POSTs do mesmo evento → 200 + skipped).
+
+2. **3 bugs corrigidos no caminho manual `/dashboard/cobrancas/nova`** (commit `16302e9`):
+   - `percentualDesconto` agora busca do contrato como fallback
+   - `dataVencimento` aceita 3 formatos via helper `normalizarData()`
+   - **Modo CLUBE** agora cobra valor cheio (era dupla bonificação: cobrava reduzido + emitia tokens)
+
+3. **`LancamentoCaixa` REALIZADO** criado pela primeira vez via webhook real, em ambos modos (CLUBE e DESCONTO_DIRETO).
+
+4. **UX dropdown** `/cobrancas/nova` melhorado (badge CLUBE, filtro ATIVO, ordem alfabética, CSS sólido).
+
+### Arquitetura confirmada — 2 caminhos de remuneração
+
+Conforme `docs/especificacao-clube-cooper-token.md` seções 2 e 3.2, agora implementado de fato:
+
+- **CAMINHO DESCONTO:** `valorLiquido = valorBruto − valorDesconto`. Cooperado paga reduzido, sem tokens.
+- **CAMINHO CLUBE:** `valorLiquido = valorBruto`. Cooperado paga cheio. Após pagamento confirmado pelo webhook, tokens FATURA_CHEIA são emitidos equivalentes ao desconto não aplicado.
+
+Helper canônico: `calcularValoresCobranca(valBruto, pctDesc, modoClube)` em `cobrancas.service.ts` (linha module-level). Usado nos 3 callers de criação de cobrança.
+
+### Sprint 12 produção
+
+Pré-trabalho 100% concluído. Estimativa final: **~1 dia** (só trocar credenciais sandbox→produção no `AsaasConfig`).
+
+**Bloqueio único:** Luciano abrir conta Asaas em produção.
