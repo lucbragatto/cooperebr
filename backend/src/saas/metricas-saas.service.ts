@@ -161,6 +161,135 @@ export class MetricasSaasService {
     };
   }
 
+  /**
+   * Lista enriquecida de parceiros com saúde de cada um.
+   * Usado pela tela /dashboard/super-admin/parceiros.
+   *
+   * Implementado com aggregate single-pass + groupBy pra evitar N+1.
+   * Não fazer 1 query por parceiro como em detectarIncendios (esse método é débito P3).
+   */
+  async getListaParceirosEnriquecida() {
+    const parceiros = await this.prisma.cooperativa.findMany({
+      where: { ativo: true },
+      include: {
+        planoSaas: {
+          select: {
+            id: true,
+            nome: true,
+            mensalidadeBase: true,
+            percentualReceita: true,
+          },
+        },
+      },
+      orderBy: { nome: 'asc' },
+    });
+
+    if (parceiros.length === 0) return [];
+
+    const cooperativaIds = parceiros.map((p) => p.id);
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+
+    const [membrosTotais, membrosAtivos, contratosAtivos, cobrancasMes] = await Promise.all([
+      this.prisma.cooperado.groupBy({
+        by: ['cooperativaId'],
+        where: { cooperativaId: { in: cooperativaIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.cooperado.groupBy({
+        by: ['cooperativaId'],
+        where: {
+          cooperativaId: { in: cooperativaIds },
+          status: 'ATIVO',
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.contrato.groupBy({
+        by: ['cooperativaId'],
+        where: {
+          cooperativaId: { in: cooperativaIds },
+          status: 'ATIVO',
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.cobranca.groupBy({
+        by: ['cooperativaId', 'status'],
+        where: {
+          cooperativaId: { in: cooperativaIds },
+          dataVencimento: { gte: inicioMes },
+        },
+        _count: { _all: true },
+        _sum: { valorPago: true },
+      }),
+    ]);
+
+    const idxMembros = new Map(membrosTotais.map((m) => [m.cooperativaId, m._count._all]));
+    const idxAtivos = new Map(membrosAtivos.map((m) => [m.cooperativaId, m._count._all]));
+    const idxContratos = new Map(contratosAtivos.map((c) => [c.cooperativaId, c._count._all]));
+
+    const idxCobrancasPorCoop = new Map<
+      string,
+      { total: number; pagas: number; vencidas: number; receitaPaga: number }
+    >();
+    for (const row of cobrancasMes) {
+      if (!row.cooperativaId) continue;
+      const atual =
+        idxCobrancasPorCoop.get(row.cooperativaId) ??
+        { total: 0, pagas: 0, vencidas: 0, receitaPaga: 0 };
+      atual.total += row._count._all;
+      if (row.status === 'PAGO') {
+        atual.pagas += row._count._all;
+        atual.receitaPaga += Number(row._sum.valorPago ?? 0);
+      }
+      if (row.status === 'VENCIDO') atual.vencidas += row._count._all;
+      idxCobrancasPorCoop.set(row.cooperativaId, atual);
+    }
+
+    return parceiros.map((p) => {
+      const cob =
+        idxCobrancasPorCoop.get(p.id) ?? { total: 0, pagas: 0, vencidas: 0, receitaPaga: 0 };
+      const taxaInadimplencia =
+        cob.total > 0 ? Math.round((cob.vencidas / cob.total) * 10000) / 100 : 0;
+
+      let saudeCor: 'verde' | 'amarelo' | 'vermelho' = 'verde';
+      if (taxaInadimplencia > 20 && cob.total >= 5) saudeCor = 'vermelho';
+      else if (taxaInadimplencia > 10 && cob.total >= 3) saudeCor = 'amarelo';
+
+      return {
+        id: p.id,
+        nome: p.nome,
+        cnpj: p.cnpj,
+        tipoParceiro: p.tipoParceiro,
+        ativo: p.ativo,
+        statusSaas: p.statusSaas,
+        planoSaas: p.planoSaas
+          ? {
+              id: p.planoSaas.id,
+              nome: p.planoSaas.nome,
+              mensalidadeBase: Number(p.planoSaas.mensalidadeBase),
+            }
+          : null,
+        membros: {
+          total: idxMembros.get(p.id) ?? 0,
+          ativos: idxAtivos.get(p.id) ?? 0,
+        },
+        contratosAtivos: idxContratos.get(p.id) ?? 0,
+        cobrancasMes: {
+          total: cob.total,
+          pagas: cob.pagas,
+          vencidas: cob.vencidas,
+          receitaPaga: Math.round(cob.receitaPaga * 100) / 100,
+        },
+        saude: {
+          cor: saudeCor,
+          taxaInadimplencia,
+        },
+        criadoEm: p.createdAt,
+      };
+    });
+  }
+
   /** "Incêndios" = parceiros com >20% de cobranças VENCIDAS (mín 5 cobranças). */
   private async detectarIncendios() {
     const cooperativas = await this.prisma.cooperativa.findMany({

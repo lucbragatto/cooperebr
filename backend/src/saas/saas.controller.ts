@@ -21,6 +21,12 @@ export class SaasController {
     return this.metricasSaasService.getResumoGeral();
   }
 
+  @Roles(SUPER_ADMIN)
+  @Get('parceiros')
+  getParceiros() {
+    return this.metricasSaasService.getListaParceirosEnriquecida();
+  }
+
   // ─── Planos ───────────────────────────────────────────────
 
   @Roles(SUPER_ADMIN)

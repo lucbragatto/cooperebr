@@ -186,6 +186,36 @@ export interface ResumoSaas {
   geradoEm: string;
 }
 
+export interface ResumoParceiro {
+  id: string;
+  nome: string;
+  cnpj: string | null;
+  tipoParceiro: string;
+  ativo: boolean;
+  statusSaas: string;
+  planoSaas: {
+    id: string;
+    nome: string;
+    mensalidadeBase: number;
+  } | null;
+  membros: {
+    total: number;
+    ativos: number;
+  };
+  contratosAtivos: number;
+  cobrancasMes: {
+    total: number;
+    pagas: number;
+    vencidas: number;
+    receitaPaga: number;
+  };
+  saude: {
+    cor: 'verde' | 'amarelo' | 'vermelho';
+    taxaInadimplencia: number;
+  };
+  criadoEm: string;
+}
+
 export interface ContextoUsuario {
   tipo: TipoContexto;
   label: string;

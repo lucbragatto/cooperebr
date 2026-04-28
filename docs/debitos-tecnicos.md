@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-28 (Sprint 13a Dia 1 fechado: 4 P3 novos — MRR trunca + N+1 latente + PM2 sem max_restarts + sidebar não-otimizada)
+**Última atualização:** 2026-04-28 (Sprint 13a Dia 2 fechado: 5 débitos novos — 4 P3 + 1 P2 auditoria de drift)
 
 ---
 
@@ -84,6 +84,27 @@ Não gerar script automático.
 
 **Recuperação rápida disponível** (se mudar de ideia): heurística por
 estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
+
+### Auditoria de drift entre docs e código
+
+**Detectado em:** 2026-04-28 (meta-discussão Sprint 13a Dia 2)
+
+**Severidade:** P2
+
+**Onde:** `docs/MAPA-INTEGRIDADE-SISTEMA.md`, `docs/SISGD-VISAO-COMPLETA.md`, `docs/PLANO-ATE-PRODUCAO.md`, `CLAUDE.md`
+
+**Contexto:** Documentos foram atualizados ao longo do tempo mas há suspeita de drift. Sintomas:
+
+- MAPA com padrão de "anexar ao final" virando relatório cronológico em vez de bússola
+- VISÃO-COMPLETA possivelmente sem revisão de decisões recentes (FATURA_CHEIA_TOKEN, vocabulário multi-tipo, Hangar caso real, Portal Proprietário)
+- Features implementadas mas não documentadas
+- Features documentadas mas incompletas
+
+**Fix sugerido:** sessão dedicada — Code abre cada doc principal, cruza com código real, reporta drift com evidências (linhas exatas), classifica por severidade, reconciliação em fatias.
+
+**Estimativa:** 60-90 min Code (auditoria) + 1-2 sessões pra reconciliar.
+
+**Bloqueia:** qualidade do planejamento de Sprints futuros. Sem isso, risco de duplicar trabalho ou contradizer decisões anteriores.
 
 ---
 
@@ -298,6 +319,68 @@ Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados s
 Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajuste de menu de qualquer jeito).
 
 **Não-bloqueante para:** nada.
+
+### Lista antiga `/dashboard/cooperativas` sem coluna Plano SaaS
+
+**Detectado em:** 2026-04-28 (verificação visual Sprint 13a Dia 2)
+
+**Severidade:** P3
+
+**Onde:** `web/app/dashboard/cooperativas/page.tsx`
+
+**Contexto:** Existem 2 listas de parceiros — antiga (Administração → "Parceiros SISGD") e nova (Gestão Global → "Parceiros"). Antiga sem coluna Plano, nova com. Confunde super-admin.
+
+**Fix sugerido:** decidir após auditoria de drift se (a) adiciona coluna Plano na antiga, (b) marca antiga como deprecated, ou (c) faz redirect.
+
+**Bloqueia:** UX de organização. Nada urgente.
+
+### Inconsistência "Faturado este mês" entre Dashboard e Lista de Parceiros
+
+**Detectado em:** 2026-04-28 (verificação visual Sprint 13a Dia 2)
+
+**Severidade:** P3
+
+**Onde:** `backend/src/saas/metricas-saas.service.ts`
+
+**Contexto:** Dashboard (`getResumoGeral.calcularFaturamentoMesAtual`) mostra R$ 1.333,35 usando `dataPagamento >= inicioMes`. Lista (`getListaParceirosEnriquecida`) mostra R$ 1.180,00 pra CoopereBR usando `dataVencimento >= inicioMes`. Diferença R$ 153,35.
+
+**Decisão técnica adotada:** alinhar com `dataPagamento` (visão contábil padrão — o que entrou no caixa neste mês).
+
+**Fix sugerido:** uniformizar `getListaParceirosEnriquecida()` usando mesmo filtro de `calcularFaturamentoMesAtual()`. Pequeno ajuste, ~10 min Code. Pode entrar no Dia 3 ou em fix dedicado.
+
+**Bloqueia:** clareza de relatório. Nada urgente.
+
+### Portal do Proprietário de Usina — feature parcial
+
+**Detectado em:** 2026-04-28 (verificação visual Sprint 13a Dia 2)
+
+**Severidade:** P3
+
+**Onde:** `/dashboard/proprietario`
+
+**Contexto:** Tela destinada ao Proprietário de Usina (PF/PJ que arrenda usina pra cooperativa). Schema tem `Usina.proprietarioCooperadoId` + campos avulsos (`proprietarioNome` etc). Tela existe e gate de perfil funciona, mas sem fluxo de cadastro de Proprietário, sem dado real, sem lógica de "valores a arrecadar".
+
+**Fix sugerido:** sprint dedicado a Arrendamentos/Repasses ao Proprietário. Não está no PLANO-ATE-PRODUCAO atual. Sugestão de inserção: após Sprint 14 (pré-produção), antes de Sprint 18.
+
+**Bloqueia:** futuro. Mapeamento parcial sai da etapa 5.7 do prompt da sessão Sprint 13a Dia 2.
+
+### Regra de processo: prompt mapeador antes de prompt construtivo
+
+**Detectado em:** 2026-04-28 (meta-discussão Sprint 13a Dia 2)
+
+**Severidade:** P3 (processo)
+
+**Onde:** workflow Claude.ai + Claude Code
+
+**Contexto:** Sprint 13a Dia 2 expôs falha — Claude.ai planejou lista de Parceiros sem mapear primeiro telas existentes (já havia `/dashboard/cooperativas/[id]` e talvez `/dashboard/parceiros/[id]`), gerando redundância e inconsistência numérica. Causa: docs de contexto não consultados proativamente.
+
+**Fix:** adicionar regra ao `CLAUDE.md`:
+
+> Antes de qualquer prompt construtivo, Code abre e lê (1) CLAUDE.md, (2) docs/SISGD-VISAO-COMPLETA.md (área), (3) docs/MAPA-INTEGRIDADE-SISTEMA.md (área), (4) docs/PLANO-ATE-PRODUCAO.md (sprint vigente). Retorna mapa específico antes de codar.
+
+**Aplicação:** próxima sessão. Aplicar junto com auditoria de drift.
+
+**Bloqueia:** qualidade dos próximos sprints.
 
 ---
 

@@ -170,6 +170,7 @@ function getNavSections(perfil: string): NavSection[] {
       titleIcon: Globe,
       items: [
         { href: '/dashboard/super-admin', label: 'Painel SISGD', icon: LayoutDashboard },
+        { href: '/dashboard/super-admin/parceiros', label: 'Parceiros', icon: Building2 },
         { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
         { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
       ],
