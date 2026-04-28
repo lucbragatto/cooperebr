@@ -64,22 +64,84 @@ Formato fixo pra cada sprint:
 
 ---
 
-### Sprint 13 — Painel do Luciano (governança SaaS)
+### Sprint 13 — Painel do Luciano (governança SaaS) — DIVIDIDO em 13a/13b/13c
 
-- **Pra quê serve:** dar ao Luciano uma tela única pra ver todos os parceiros, status de pagamento da FaturaSaas, MRR, churn, parceiros inadimplentes.
-- **Quem ganha:** Luciano (saber a saúde do negócio em 30 segundos).
-- **Tempo estimado:** 4 dias úteis.
-- **Pré-requisito:** Sprint 12.
-- **Bloqueia:** Sprint 14 (FaturaSaas usa o painel pra disparar).
+> **Decisão 28/04/2026:** sprint dividido em 3 fatias entregáveis (não monolítico). Critério de divisão: cada fatia entrega valor independente e fica testável em 1-3 dias.
+
+#### Sprint 13a — Painel super-admin (visão consolidada)
+
+- **Pra quê serve:** tela consolidada com métricas SaaS — saúde do negócio em 30 segundos.
+- **Tempo estimado:** 3 dias úteis.
+- **Pré-requisito:** nenhum (Sprint 12 produção pode rodar em paralelo).
+- **Bloqueia:** Sprint 13b, Sprint 13c, Sprint 14.
+
+**Dia 1 — Painel SISGD (✅ 28/04/2026, commit `7f29bd6`):**
+- ✅ AuditLog model + migration + 4 índices
+- ✅ 4 índices cross-tenant em `cobrancas`, `cooperados`, `faturas_saas`
+- ✅ `MetricasSaasService` + endpoint `GET /saas/dashboard`
+- ✅ Tela `/dashboard/super-admin` com 5 cards
+- ✅ Sidebar reorganizada com link "Painel SISGD"
+- ✅ Specs Jest 4/4 passing
+
+**Dia 1 — Saneamento P0 (✅ 28/04/2026, commit `0d53773`):**
+- ✅ Snapshot banco
+- ✅ Limpeza CoopereVerde + Conosórcio Sul (cooperativas-fantasma)
+- ✅ CoopereBR Teste vinculada plano PRATA TRIAL
+- ✅ FaturaSaas teste R$ 5.900 vencida pra exercitar painel
+- ✅ Refactor `gerarFaturaParaCooperativa` exposto público
+
+**Dia 2 — Lista de parceiros enriquecida (próximo):**
+1. `/dashboard/super-admin/parceiros` — lista todos os tenants
+2. Card por parceiro: nome, tipo, MRR estimado, última FaturaSaas, status, taxa inadimplência cooperados
+3. Filtros: ativos, inadimplentes, TRIAL, em onboarding
+4. Ordenação: por MRR, por inadimplência, por data ativação
+5. Smoke test do fluxo
+
+**Dia 3 — Detalhe do parceiro:**
+1. `/dashboard/super-admin/parceiros/[id]` — visão profunda 1 parceiro
+2. Métricas: histórico FaturaSaas, evolução cooperados, evolução receita
+3. Indicadores de saúde: churn, retenção, taxa pagamento em dia
+4. Smoke test integrado (painel → lista → detalhe → ação)
+
+- **Critério "passou":** Luciano abre `/dashboard/super-admin`, vê resumo. Clica em um parceiro, vê detalhe completo. Identifica em 30s qual está atrasado.
+- **Risco:** baixo (só leitura).
+- **Custo total:** ~1500 linhas (Dia 1 já consumiu ~570).
+
+#### Sprint 13b — AuditLog ativo + Impersonate
+
+- **Pra quê serve:** Luciano poder "entrar como" um admin parceiro pra dar suporte, com tudo registrado pra LGPD/compliance.
+- **Tempo estimado:** 3-4 dias úteis.
+- **Pré-requisito:** Sprint 13a Dia 3.
+- **Bloqueia:** Sprint 22 (audit trail global expande este).
 - **Tarefas:**
-  1. Criar `/dashboard/super-admin/parceiros` (lista todos os tenants)
-  2. Card por parceiro: nome, MRR, última fatura SaaS, status (PAGA/PENDENTE/ATRASADA)
-  3. Filtros: ativos, inadimplentes, em onboarding
-  4. Métricas globais: MRR total, parceiros ativos, churn 30d
-  5. Acesso restrito a `SUPER_ADMIN`
-- **Critério "passou":** Luciano abre `/dashboard/super-admin/parceiros`, vê CoopereBR + parceiros mock, identifica em 30s qual está atrasado.
-- **Risco:** baixo. Só leitura de dados existentes.
-- **Custo:** ~600 linhas de código (page + componentes Shadcn).
+  1. `AuditLogInterceptor` NestJS — captura ações sensíveis automaticamente
+  2. Helper `auditLog.gravar(acao, recurso, metadata)` pra usar em services
+  3. Decorator `@Auditavel({ acao: 'cooperativa.suspender' })`
+  4. Endpoint `POST /saas/impersonate/:cooperativaId` (gera JWT temporário com `impersonating=true`)
+  5. Banner visível em todas as telas quando `impersonating === true`
+  6. `POST /saas/impersonate/sair` (volta pro próprio JWT)
+  7. Tela `/dashboard/super-admin/audit-logs` — busca/filtros + export CSV
+  8. Cache 5min no dashboard agregado (Sprint 13a deixou TODO)
+- **Critério "passou":** Luciano impersona admin Hangar, vê dashboard como ele veria, sai do impersonate, abre audit log e vê todas ações registradas com flag `impersonating=true`.
+- **Risco:** médio (segurança crítica).
+- **Custo:** ~1000 linhas + decisão sobre criptografia metadata.
+
+#### Sprint 13c — Edição de plano SaaS + suspensão de parceiro
+
+- **Pra quê serve:** Luciano poder mudar plano de um parceiro, suspender por inadimplência, reativar — sem mexer no banco direto.
+- **Tempo estimado:** 2-3 dias úteis.
+- **Pré-requisito:** Sprint 13b.
+- **Bloqueia:** Sprint 14 (cron precisa saber quais estão suspensos).
+- **Tarefas:**
+  1. Botão "Alterar plano" no detalhe do parceiro → modal com seletor + preview
+  2. Endpoint `PATCH /saas/parceiros/:id/plano` (com auditoria automática via 13b)
+  3. Botão "Suspender" — flag `statusSaas=SUSPENSO`, auth bloqueia login admin parceiro
+  4. Botão "Reativar" — volta `ATIVO`
+  5. Email automático ao admin parceiro em cada mudança (suspenso/reativado)
+  6. Smoke test: mudar plano CoopereBR Teste de PRATA pra OURO, suspender, reativar
+- **Critério "passou":** Luciano testa o fluxo completo, todas as ações aparecem no audit log, parceiro suspenso é bloqueado de logar.
+- **Risco:** médio (impacto em login).
+- **Custo:** ~600 linhas.
 
 ---
 

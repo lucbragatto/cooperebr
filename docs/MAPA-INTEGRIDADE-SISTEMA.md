@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-27 (sandbox webhook Asaas validado + 3 bugs corrigidos)
+**Última atualização:** 2026-04-28 (Sprint 13a P0 + Dia 1 — Painel SISGD operacional + AuditLog preparado + 4 índices cross-tenant)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -885,3 +885,102 @@ Helper canônico: `calcularValoresCobranca(valBruto, pctDesc, modoClube)` em `co
 Pré-trabalho 100% concluído. Estimativa final: **~1 dia** (só trocar credenciais sandbox→produção no `AsaasConfig`).
 
 **Bloqueio único:** Luciano abrir conta Asaas em produção.
+
+---
+
+## Sessão 28/04 — Sprint 13a P0 + Dia 1 — Painel SISGD operacional
+
+Detalhes em `docs/sessoes/2026-04-28-sprint13a-p0-e-dia1.md`.
+
+Sprint 13 dividido em 3 fatias entregáveis (não monolítico):
+- **13a** — Painel super-admin (foco da sessão de hoje)
+- **13b** — AuditLog ativo (interceptor) + Impersonate completo
+- **13c** — Edição de plano SaaS pelo painel + suspensão de parceiro
+
+### Sprint 13a P0 — Saneamento do banco (commit `0d53773`)
+
+Antes de construir o painel, o banco precisava refletir o estado real:
+
+1. **Snapshot** — `pg_dump` antes de qualquer mexida
+2. **Limpeza** — removidas cooperativas-fantasma criadas em testes anteriores (CoopereVerde, Conosórcio Sul) e seus dependentes (cooperados, contratos, UCs, cobranças, faturas)
+3. **CoopereBR Teste como TRIAL** — vinculado plano PRATA (`statusSaas=TRIAL`, sem `dataAtivacao`, 4 cooperados ATIVOS de teste)
+4. **FaturaSaas teste** — criada R$ 5.900 PENDENTE com `dataVencimento=2026-04-10` pra exercitar card de inadimplência SaaS no painel
+5. **Refactor SaaS** — `gerarFaturaParaCooperativa()` extraído como método público em `SaasService` (antes era lógica privada do cron). Permite gerar fatura sob demanda pra um parceiro específico via painel (Sprint 13c) ou via script (hoje)
+
+### Sprint 13a Dia 1 — Painel SISGD (commit `7f29bd6`)
+
+#### Painel SISGD (super-admin)
+
+| Camada | Arquivo | Detalhe |
+|---|---|---|
+| Backend service | `backend/src/saas/metricas-saas.service.ts` | 7 métodos privados (`contarParceirosAtivos`, `contarParceirosPorTipo`, `contarMembrosAtivos`, `calcularFaturamentoMesAtual`, `calcularMRR`, `contarInadimplenciaSaaS`, `detectarIncendios`) + 1 público (`getResumoGeral`) com `Promise.all` |
+| Backend endpoint | `backend/src/saas/saas.controller.ts` | `GET /saas/dashboard` com `@Roles(SUPER_ADMIN)` — exceção autorizada cross-tenant |
+| Backend module | `backend/src/saas/saas.module.ts` | `MetricasSaasService` registrado em `providers` + `exports` |
+| Frontend tela | `web/app/dashboard/super-admin/page.tsx` | 5 cards: hero condicional incêndios + 4 KPIs (parceiros, membros, faturado mês, MRR) + alerta inadimplência SaaS |
+| Frontend tipo | `web/types/index.ts` | `interface ResumoSaas` |
+| Sidebar | `web/app/dashboard/layout.tsx` | Link "Painel SISGD" em "Gestão Global", gated `perfil === 'SUPER_ADMIN'` |
+| Specs Jest | `metricas-saas.service.spec.ts` | 4/4 passing — vazio, 1 parceiro ATIVO+plano, TRIAL não conta MRR, detecção incêndio |
+
+**Cache:** ainda não implementado. TODO Sprint 13b (em memória ou Redis com TTL 5min). Hoje cada abertura do painel faz 7 queries (algumas com loop por parceiro). Aceitável com 2 parceiros, vai virar gargalo com 30+.
+
+#### AuditLog (preparação Sprint 13b)
+
+Tabela `audit_logs` criada com campos:
+- `id`, `usuarioId`, `usuarioPerfil`
+- `impersonating` (Boolean), `cooperativaImpersonadaId`
+- `acao` (ex: `cooperativa.suspender`), `recurso`, `recursoId`
+- `cooperativaId` (nullable — ações globais SUPER_ADMIN)
+- `metadata` (Json), `ip`, `userAgent`, `createdAt`
+
+**4 índices criados:**
+- `audit_logs_usuarioId_createdAt_idx`
+- `audit_logs_cooperativaId_createdAt_idx`
+- `audit_logs_acao_createdAt_idx`
+- `audit_logs_recurso_recursoId_idx`
+
+Ativação prevista pra Sprint 13b (interceptor NestJS + uso real em impersonate).
+
+#### Índices cross-tenant criados
+
+Pra evitar table scan quando o painel agrega métricas multi-cooperativa:
+
+- `idx_cobrancas_coop_status_venc` — usado em `detectarIncendios` (filtro por VENCIDO)
+- `idx_cobrancas_coop_pagto` — usado em `calcularFaturamentoMesAtual` e `calcularMRR`
+- `idx_cooperados_coop_status` — usado em `contarMembrosAtivos`
+- `idx_faturas_saas_coop_status` — usado em `contarInadimplenciaSaaS`
+
+### Validação visual confirmada (Luciano)
+
+- Card hero verde "Sem incêndios"
+- Parceiros: 2 (2 COOPERATIVA)
+- Membros: 303 (CoopereBR 299 + CoopereBR Teste 4)
+- Faturado mês: R$ 1.333,35 (7 cobranças)
+- MRR: R$ 10.265,67 (R$ 9.999 fixo + R$ 266,67 estimado)
+- Inadimplência SaaS: R$ 5.900 (1 fatura PRATA vencida)
+
+### Decisões de produto tomadas hoje
+
+- **D1.** Hierarquia de roles SUPER_ADMIN fica pra sprint futuro. Por enquanto todos os super-admins são iguais.
+- **D2.** Impersonate completo + AuditLog ativo → **Sprint 13b**.
+- **D3.** Edição de plano SaaS pelo painel → **Sprint 13c**.
+- **D4.** Cache 5min no dashboard agregado, real-time na página individual de parceiro (Sprint 13a Dia 3).
+- **Rotas:** `/dashboard/super-admin/*` (nova) coexiste com `/dashboard/saas/*` e `/dashboard/cooperativas/*` antigas. Migração consolidada em sprint futuro.
+- **Vocabulário:** "MVP" não é mais usado — substituir por "sistema sendo construído por fatias entregáveis".
+
+### Próximas etapas Sprint 13a
+
+- **Dia 2** (próxima sessão): lista de parceiros enriquecida + filtros (ativos, inadimplentes, em onboarding) + smoke test
+- **Dia 3:** detalhe individual do parceiro (`/dashboard/super-admin/parceiros/[id]`) + smoke test integrado
+
+### Débitos novos identificados (P3, todos registrados em `docs/debitos-tecnicos.md`)
+
+1. Card MRR trunca variável estimado em viewports estreitos
+2. N+1 latente em `calcularMRR` e `detectarIncendios` (irrelevante hoje, vai morder com 30+ parceiros)
+3. PM2 `cooperebr-backend` 331 restarts sem `max_restarts` configurado
+4. Sidebar do super-admin com ordem de itens não-otimizada (UX de organização)
+
+### Bloqueios externos pendentes (não resolvidos hoje)
+
+- Conta Asaas produção (Luciano abrir) — bloqueia Sprint 12 produção
+- Decisão arquitetural `Uc.numero` — bloqueia Sprint 17 (engine COMPENSADOS)
+- Conta bancária BB/Sicoob — bloqueia Sprint 20

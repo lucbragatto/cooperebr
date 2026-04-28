@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-27 (Sprint 13a Dia 1: card MRR trunca + N+1 latente em MetricasSaasService)
+**Última atualização:** 2026-04-28 (Sprint 13a Dia 1 fechado: 4 P3 novos — MRR trunca + N+1 latente + PM2 sem max_restarts + sidebar não-otimizada)
 
 ---
 
@@ -203,7 +203,7 @@ Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados s
 
 ### Card MRR do Painel SISGD trunca variável estimado em viewports estreitos
 
-**Detectado em:** 2026-04-27 (validação visual Sprint 13a Dia 1)
+**Detectado em:** 2026-04-28 (validação visual Sprint 13a Dia 1)
 
 **Arquivo:** `web/app/dashboard/super-admin/page.tsx` (card MRR plataforma, ~linha 119-122)
 
@@ -217,7 +217,7 @@ Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados s
 
 ### N+1 latente em MetricasSaasService (MRR + detecção de incêndios)
 
-**Detectado em:** 2026-04-27 (revisão pré-commit Sprint 13a Dia 1)
+**Detectado em:** 2026-04-28 (revisão pré-commit Sprint 13a Dia 1)
 
 **Arquivo:** `backend/src/saas/metricas-saas.service.ts`
 
@@ -237,6 +237,67 @@ Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados s
 **Estimativa:** 1-2h pra refazer com `groupBy`. Cache é 0,5 dia.
 
 **Não-bloqueante para:** Sprint 13b, 14, etc. Revisar quando totalParceiros > 30.
+
+### PM2 `cooperebr-backend` sem `max_restarts` configurado
+
+**Detectado em:** 2026-04-28 (segundo incidente em 2 dias — primeiro foi 2026-04-27 com 298 restarts por node órfão)
+
+**Severidade:** P3 (ok pra dev) — **vira P1 antes de Sprint 14 (pré-produção)**
+
+**Sintoma:** PM2 `cooperebr-backend` chegou a **331 restarts acumulados** sem nenhum alerta. Causas observadas:
+- 2026-04-27: porta 3000 ocupada por node órfão de sessão antiga, PM2 spawnava novo processo, falhava com `EADDRINUSE`, restartava em loop infinito
+- 2026-04-28: Luciano sem querer reaproveitou histórico do PowerShell ao reabrir VS Code e executou `pm2 stop`/`start` várias vezes, cada um adicionando ao contador
+
+**Onde:** `ecosystem.config.js` na raiz do projeto (ou config inline do PM2 se não existir arquivo dedicado)
+
+**Risco em produção:**
+- Status `online` enganoso quando processo está em crash loop
+- Webhooks 200 OK respondidos por processo zumbi (não pelo PM2 atual)
+- Lentidão intermitente sem alerta
+
+**Fix sugerido (~30 min):**
+1. Criar/atualizar `ecosystem.config.js`:
+   ```js
+   module.exports = {
+     apps: [{
+       name: 'cooperebr-backend',
+       script: 'dist/src/main.js',
+       cwd: 'backend',
+       max_restarts: 10,
+       min_uptime: '10s',
+       restart_delay: 3000,
+       max_memory_restart: '1G',
+       error_file: 'logs/pm2-error.log',
+       out_file: 'logs/pm2-out.log',
+       merge_logs: true,
+     }],
+   };
+   ```
+2. Pré-flight check no boot do main.ts: detectar `EADDRINUSE` ANTES de iniciar Nest e logar erro descritivo (já existe parcial — robustecer)
+3. `pm2 install pm2-logrotate` pra evitar log file gigante
+4. Cron horário (script + curl pra Slack/email/WA) que alerta se `restart_count` subir > 5 em 1h
+
+**Bloqueia:** Sprint 14 (pré-produção, requer estabilidade PM2 + observabilidade básica).
+
+### Sidebar do super-admin com ordem de itens não-otimizada
+
+**Detectado em:** 2026-04-28 (validação visual Sprint 13a Dia 1)
+
+**Onde:** `web/app/dashboard/layout.tsx` — função `getNavSections(perfil)` (linhas ~120-180)
+
+**Sintoma:** itens "Projeção Receita", "Expansão / Investidores", "Portal Proprietário", "Asaas Pagamentos" estão misturados sem agrupamento claro. Quando Luciano abre o dashboard como SUPER_ADMIN, o link "Painel SISGD" novo competiu com itens herdados de outras épocas que poderiam estar em "Configurações" ou "Operacional".
+
+**Impacto:** apenas Luciano (SUPER_ADMIN) usa esta densidade de menu. Cosmético, não bloqueia nada.
+
+**Fix sugerido (~30-45 min):** revisar agrupamento de seções. Proposta:
+- **Gestão Global** (SUPER_ADMIN): Painel SISGD, Parceiros, Planos SaaS, Faturas SaaS, Audit Logs (Sprint 13b)
+- **Operacional**: Cobranças, Faturas, Cooperados, Contratos, UCs, Usinas
+- **Comercial**: Convênios, Indicações, Clube/Token, Lead Expansão
+- **Configurações**: Email, Asaas, Modelos Cobrança, WhatsApp Config
+
+Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajuste de menu de qualquer jeito).
+
+**Não-bloqueante para:** nada.
 
 ---
 

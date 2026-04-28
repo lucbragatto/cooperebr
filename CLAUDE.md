@@ -18,13 +18,30 @@ Esses 3 em ordem garantem contexto completo em 5 minutos.
 
 ## Sobre o projeto em 5 linhas
 
-CoopereBR é plataforma SaaS multi-tenant de Geração Distribuída.
+**SISGD** é a plataforma SaaS multi-tenant de Geração Distribuída.
 Dono: Luciano (não programa).
 Parceiros (cooperativas/consórcios/associações/condomínios) pagam Luciano pelo uso do sistema via FaturaSaas.
 Membros dos parceiros pagam seus parceiros (não pagam Luciano).
 **CoopereBR é UM parceiro entre vários possíveis, NÃO o dono do sistema.**
 
-Detalhes em `docs/COOPEREBR-ALINHAMENTO.md`.
+Detalhes em `docs/COOPEREBR-ALINHAMENTO.md` e `docs/SISGD-VISAO-COMPLETA.md`.
+
+## Vocabulário multi-tipo (regra dura)
+
+SISGD atende 4 tipos de parceiro, cada um com nome próprio pra "membro":
+
+| `tipoParceiro` (enum) | Membro singular | Membro plural |
+|---|---|---|
+| COOPERATIVA | Cooperado | Cooperados |
+| CONSORCIO | Consorciado | Consorciados |
+| ASSOCIACAO | Associado | Associados |
+| CONDOMINIO | Condômino | Condôminos |
+
+**Regras:**
+- Tabela legado se chama `Cooperativa` mas representa **qualquer parceiro**. Não renomear.
+- UI/templates **nunca** devem hardcodar "Cooperado" — usar hook `useTipoParceiro()` (`web/hooks/useTipoParceiro.ts`) que retorna `{tipoMembro, tipoMembroPlural}` baseado no `tipoParceiro` da cooperativa logada.
+- Hangar Academia, AESMP, ASSEJUFES são **membros PJ da CoopereBR (cooperados)** — não são parceiros do SISGD.
+- Hook já adotado em 21 telas. Ainda há ~50 telas + 73 exceptions backend com termo hardcoded — débito P2 registrado em `docs/debitos-tecnicos.md` (commit `91652ae`). **Bloqueia onboarding produção de Consórcio/Associação/Condomínio**, não bloqueia desenvolvimento.
 
 ## Convenções de código
 
@@ -49,13 +66,14 @@ Detalhes em `docs/COOPEREBR-ALINHAMENTO.md`.
 
 ## Sprint atual
 
-Sprints 5, 6, 7, 8A, 8B fechados (23/04/2026).
+Sprint 13a P0 e Dia 1 fechados (28/04/2026). Painel SISGD `/dashboard/super-admin` operacional.
 
-**Próximo: Sprint 9 — começa pelas 2 pendências do 8B:**
+**Próximo: Sprint 13a Dia 2** — lista de parceiros enriquecida + filtros + smoke test.
 
-1. PDF cobrança: adicionar imagens QR PIX + código de barras (30 min)
-2. Teste E2E real no sandbox Asaas (45 min)
-3. Depois: ofertas Clube, rede showcase, ou Sicoob/BB adapters
+Sprint 13 foi dividido em 3 fatias entregáveis (não monolítico):
+- **13a** (em andamento) — Painel super-admin (Dia 1 ✅, Dia 2 e 3 pendentes)
+- **13b** — AuditLog ativo (interceptor) + Impersonate completo
+- **13c** — Edição de plano SaaS pelo painel + suspensão de parceiro
 
 ## Módulo Clube + CooperToken
 
@@ -197,26 +215,64 @@ Regra criada após sessão de 2026-04-25, onde 1h foi gasta debugando
 erros 500 em `/ocorrencias` e `/contratos` que eram só engine Prisma
 antigo carregado em memória pelo backend que o PM2 mantinha respawnado.
 
-## Estado atual do projeto (atualizado 2026-04-25)
+### Frontend Next.js dev — terminal vivo, NÃO gerenciado pelo PM2
 
-Sprint 10 concluído. Sprint 11 definido com foco em "Destravamento do Ciclo
-de Ativação" (3 gaps P0 interconectados — ver MAPA-INTEGRIDADE-SISTEMA.md).
+O **frontend** (`web/`) roda via `npm run dev` em **terminal interativo**.
+**Não está sob PM2.** Se o terminal/VS Code fecha, o frontend cai.
 
-Conquistas históricas do Sprint 10:
-- Primeiro email SMTP funcional da história (email_logs.status=ENVIADO
-  passou de 0 para 1+)
-- Primeiro WhatsApp automático pós-reativação do serviço
-- LGPD compliance implementada (whitelist dev + flag ambienteTeste + 112
-  registros mascarados)
+Sintomas de "frontend caiu":
+- Browser mostra "Cannot connect" em `localhost:3001`
+- Rotas que funcionavam viram 404
+- HMR para de atualizar mudanças
+
+Recuperação: abrir terminal novo, `cd web ; npm run dev`. Não tem
+ressuscitação automática.
+
+**Cuidado com VS Code reload:** ao reabrir VS Code/terminal integrado
+e usar histórico do PowerShell, é fácil rodar comando velho de PM2
+stop/start sem perceber que o backend já está estável. Resultado: sobe
+restart count desnecessário. Antes de rodar `pm2 stop/start/restart`,
+sempre `pm2 list` pra ver o estado real primeiro.
+
+Regra criada após sessão de 2026-04-28: PM2 do `cooperebr-backend`
+chegou a 331 restarts acumulados (alguns pela manhã por node órfão,
+outros à noite por reaproveitamento acidental do histórico PowerShell).
+
+## Estado atual do projeto (atualizado 2026-04-28)
+
+Sprint 13a P0 + Dia 1 concluídos. Painel SISGD operacional em `/dashboard/super-admin`.
+
+**Banco final:**
+- 2 cooperativas: **CoopereBR** (produção, plano OURO, 307 cooperados / 299 ATIVOS) + **CoopereBR Teste** (TRIAL, plano PRATA, 4 cooperados ATIVOS)
+- 1 FaturaSaas PENDENTE (CoopereBR Teste, R$ 5.900, vencida 10/04 — para validar painel de inadimplência)
+- AuditLog table criada (vazia — ativação no Sprint 13b com interceptor)
+- 4 índices cross-tenant criados em `cobrancas`, `cooperados`, `faturas_saas`
+
+**Sprint 13a Dia 1 entregou:**
+- `MetricasSaasService` + endpoint `GET /saas/dashboard` (gated SUPER_ADMIN)
+- Tela `/dashboard/super-admin` com 5 cards (parceiros, membros, faturado, MRR, alerta inadimplência + hero incêndios)
+- Sidebar reorganizada com link "Painel SISGD" em "Gestão Global"
+- Refactor `gerarFaturaParaCooperativa` exposto como público (commit `0d53773`)
+
+**Conquistas históricas do Sprint 10 (preservar):**
+- Primeiro email SMTP funcional (email_logs.status=ENVIADO passou de 0 pra 1+)
+- Primeiro WhatsApp automático pós-reativação
+- LGPD compliance (whitelist dev + flag ambienteTeste + 112 registros mascarados)
 - CADASTRO_V2 desbloqueado
+
+**Conquistas Sprint 11 e 12:**
+- Sprint 11: Arquitetura UC consolidada (numero/numeroUC/distribuidora/numeroConcessionariaOriginal), pipeline OCR multi-campo, E2E fatura Luciano
+- Sprint 12: Webhook Asaas validado em sandbox + 3 bugs corrigidos (CLUBE dupla bonificação, percentualDesconto, dataVencimento)
 
 Documentos vivos permanentes (ler ao iniciar sessão):
 - docs/MAPA-INTEGRIDADE-SISTEMA.md (atualizar a cada sprint)
+- docs/PLANO-ATE-PRODUCAO.md (roteiro de sprints até produção)
 - docs/COOPEREBR-ALINHAMENTO.md
+- docs/SISGD-VISAO-COMPLETA.md (visão humana do produto)
+- docs/debitos-tecnicos.md (P1/P2/P3 vivos)
 - docs/especificacao-clube-cooper-token.md
 - docs/especificacao-contabilidade-clube.md
 - docs/especificacao-modelos-cobranca.md
 - CLAUDE.md (este arquivo)
 
-Próximo passo: Sprint 11. Primeira tarefa: auditoria ampla da numeração
-dupla de UC EDP.
+Próximo passo: **Sprint 13a Dia 2** — lista de parceiros enriquecida com filtros e smoke test. Frase de retomada: "Iniciando Sprint 13a Dia 2 — lista parceiros + filtros".
