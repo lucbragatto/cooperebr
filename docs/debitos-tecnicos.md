@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-28 (Sprint 13a Dia 3 fechado: IDOR multi-tenant em 6 endpoints CORRIGIDO + 1 P2 derivado auditoria geral IDOR)
+**Última atualização:** 2026-04-28 (Leitura Total Parte 1: 3 P2 novos — 130+ docs sem fonte única + cobertura testes baixa + MAPA virou log cronológico)
 
 ---
 
@@ -148,6 +148,73 @@ estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
 **Bloqueia:** onboarding seguro de Sinergia (Consórcio). Hoje só CoopereBR é tenant real, então nenhuma exploração ativa — mas qualquer onboarding de segundo parceiro reabre risco em todos os módulos não-auditados.
 
 **Prioridade:** alta. **Rodar antes de Sinergia migrar pro SISGD.**
+
+### 130+ documentos `.md` no projeto sem fonte única
+
+**Detectado em:** 2026-04-28 (Leitura Total Parte 1 — inventário completo do `docs/`)
+
+**Severidade:** P2 (Doc-0 vai resolver)
+
+**Onde:** `docs/` (raiz + 7 subpastas), repo root, `memory/` (raiz repo)
+
+**Contexto:** Inventário Parte 1 revelou 130+ arquivos `.md`, **42.144 linhas total**. Quatro arquivos declaram-se "fonte única da verdade" simultaneamente:
+
+- `docs/SISGD-VISAO-COMPLETA.md` (635 linhas, narrativa humana, atualizado 2026-04-26)
+- `docs/COOPEREBR-ALINHAMENTO.md` (473 linhas, "documento único definitivo", atualizado 2026-04-23)
+- `docs/RAIO-X-PROJETO.md` (1.018 linhas, "snapshot do banco e sidebar", gerado 2026-04-20)
+- `docs/MAPA-INTEGRIDADE-SISTEMA.md` (986 linhas, atualizado a cada sprint)
+
+Sem hierarquia entre eles. Sobreposição massiva de conteúdo. Datas diferentes resultam em informações conflitantes (números do banco, sprint vigente, status de módulos).
+
+Outros sintomas:
+- `docs/qa/` tem 33 arquivos de relatórios diários de mar/abr (arqueologia)
+- `docs/changelog/` tem 16 arquivos de correções pontuais
+- `docs/sessoes/` mistura registros pós-fato com prompts pré-fato (PROMPT-CLAUDE-15H.md, etc.)
+- `FORMULAS-COBRANCA.md` marcado "desatualizado" mas ainda referenciado em memória persistente
+
+**Fix:** Doc-0 (já planejado) reescreve para 3 docs principais — provavelmente `CLAUDE.md` (instruções Code) / `PRODUTO.md` (visão humana SISGD) / `SISTEMA.md` (mapa técnico). Demais arquivos viram histórico em `docs/sessoes/` ou `docs/historico/` ou são apagados.
+
+**Bloqueia:** qualidade do planejamento de sprints futuros + onboarding de novos colaboradores.
+
+### Cobertura de testes baixa (17 specs / 80 models / 447 endpoints)
+
+**Detectado em:** 2026-04-28 (Leitura Total Parte 1 — mapeamento backend)
+
+**Severidade:** P2
+
+**Onde:** `backend/src/**/*.spec.ts`
+
+**Contexto:** apenas 17 specs Jest no projeto, distribuídos entre 13 dos 44 módulos backend. Cobertura proporcional **~2%** considerando 80 models no schema e 447 endpoints expostos.
+
+Sprint 13a Dia 3 mostrou que specs evitam regressão: 8 do helper IDOR + 8 do controller IDOR pegaram bugs antes de produção. Falta de specs gera risco crescente conforme o sistema cresce.
+
+Distribuição atual:
+- `auth` (1), `cobrancas` (1), `contratos` (1), `convenios` (1), `cooperados` (3), `cooperativas` (1), `email` (1), `email-monitor` (1), `faturas` (3), `gateway-pagamento` (1), `motor-proposta` (2), `saas` (2), `ucs` (2), `usinas` (2)
+- 31 dos 44 módulos sem nenhum spec
+
+**Fix sugerido:** após Auditoria IDOR e antes de Sprint 14, sprint dedicado de "cobertura mínima" — 1 spec por endpoint crítico de cada módulo. Estimativa: 3-5 dias úteis. Foco inicial: módulos de cobrança (cobrancas, faturas, asaas), motor-proposta, cooperados, cooperativas, indicacoes (já tem MLM em produção).
+
+**Bloqueia:** confiança em refactors futuros + onboarding de novos developers + segurança de endpoints menos visitados.
+
+### MAPA-INTEGRIDADE-SISTEMA virou log cronológico
+
+**Detectado em:** 2026-04-28 (Leitura Total Parte 1, confirma sintoma já levantado em débito P2 de drift)
+
+**Severidade:** P2 (Doc-0 vai resolver)
+
+**Onde:** `docs/MAPA-INTEGRIDADE-SISTEMA.md` (986 linhas)
+
+**Contexto:** padrão observado nas últimas sessões — cada sessão **anexa nova seção ao final** em vez de reorganizar conteúdo. Resultado: arquivo virou histórico sequencial ("Sessão 2026-04-26 — ...", "Sessão 2026-04-27 — ...", "Sessão 2026-04-28 — ..."), não mapa estrutural.
+
+Não serve mais como bússola de "onde está cada coisa" — funciona como log de sprints.
+
+**Fix:** Doc-0 reescreve este arquivo (ou substitui por `SISTEMA.md`) com estrutura de bússola:
+- Tabelas cruzadas: **Tela × Endpoint × Service × Model**
+- Mapa funcional por área (cadastro, cobrança, comunicação, etc.)
+- Estado em semáforo (✅🟡🔴) — sem narrativa cronológica
+- Histórico de sprints fica em `docs/sessoes/` (já é o padrão pra registros de sessão)
+
+**Bloqueia:** uso como referência rápida em planejamento de sprints futuros.
 
 ### Auditoria de drift entre docs e código (continuação)
 
