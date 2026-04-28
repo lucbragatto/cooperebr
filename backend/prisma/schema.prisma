@@ -1735,6 +1735,35 @@ model LogObservacao {
   @@map("logs_observacao")
 }
 
+// Sprint 13a Dia 1 — auditoria formal de ações cross-tenant.
+// Preparação pra impersonate (Sprint 13b) e compliance LGPD (Sprint 22).
+model AuditLog {
+  id                       String   @id @default(cuid())
+  // Quem fez
+  usuarioId                String
+  usuarioPerfil            String // SUPER_ADMIN | ADMIN | OPERADOR
+  // Contexto de impersonate
+  impersonating            Boolean  @default(false)
+  cooperativaImpersonadaId String?
+  // Ação
+  acao                     String // ex: "cooperativa.suspender", "plano.trocar", "cobranca.cancelar"
+  recurso                  String // ex: "Cooperativa", "Cobranca", "PlanoSaas"
+  recursoId                String? // id do registro alvo
+  // Tenant context (pode ser null pra ações globais SUPER_ADMIN)
+  cooperativaId            String?
+  // Detalhes
+  metadata                 Json?
+  ip                       String?
+  userAgent                String?
+  createdAt                DateTime @default(now())
+
+  @@index([usuarioId, createdAt])
+  @@index([cooperativaId, createdAt])
+  @@index([acao, createdAt])
+  @@index([recurso, recursoId])
+  @@map("audit_logs")
+}
+
 // ─── Transferência PIX ──────────────────────────────────────────────────────
 
 model TransferenciaPix {

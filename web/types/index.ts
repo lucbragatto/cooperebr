@@ -169,6 +169,23 @@ export interface AuthResponse {
 
 export type TipoContexto = 'super_admin' | 'admin_parceiro' | 'cooperado' | 'proprietario_usina' | 'admin_agregador';
 
+export interface ResumoSaas {
+  totalParceiros: number;
+  parceirosPorTipo: Array<{ tipo: string; count: number }>;
+  totalMembrosAtivos: number;
+  faturamentoMesAtual: { totalReais: number; totalCobrancas: number };
+  mrr: { fixo: number; variavelEstimado: number; total: number; parceirosContando: number };
+  inadimplenciaSaaS: { qtdFaturasVencidas: number; valorVencido: number };
+  parceirosComIncendio: Array<{
+    cooperativaId: string;
+    nome: string;
+    totalCobrancas: number;
+    vencidas: number;
+    taxaVencimentoPerc: number;
+  }>;
+  geradoEm: string;
+}
+
 export interface ContextoUsuario {
   tipo: TipoContexto;
   label: string;

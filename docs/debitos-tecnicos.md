@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-28 (P2 vocabulário hardcoded multi-tipo registrado)
+**Última atualização:** 2026-04-27 (Sprint 13a Dia 1: card MRR trunca + N+1 latente em MetricasSaasService)
 
 ---
 
@@ -200,6 +200,43 @@ Total: 4.9 tokens emitidos a maior + R$ 5 cobrados a menor. **Ambos cooperados s
 **Mitigação:** adicionei `scripts/` ao `tsconfig.build.json:exclude` (commit `d784553`) — não bloqueia mais o `npm run build`. Scripts standalone rodam via `ts-node --transpile-only` que ignora erros de tipo.
 
 **Fix sugerido (~15 min):** corrigir os 4 erros se for necessário rodar tsc estrito em scripts. Não urgente.
+
+### Card MRR do Painel SISGD trunca variável estimado em viewports estreitos
+
+**Detectado em:** 2026-04-27 (validação visual Sprint 13a Dia 1)
+
+**Arquivo:** `web/app/dashboard/super-admin/page.tsx` (card MRR plataforma, ~linha 119-122)
+
+**Sintoma:** o subtítulo do card mostra `R$ 9.999,00 fixo · R$ 266,67 estimado`. Em larguras menores o "estimado" trunca pra `R$ 266,6...`. Já tem `truncate` aplicado mas o texto não cabe na coluna do grid 4-col em viewports intermediários.
+
+**Impacto:** apenas Luciano (SUPER_ADMIN) vê esta tela. Cosmético, não esconde número crítico (números principais estão em `text-2xl` separado).
+
+**Fix sugerido (~10 min):** quebrar em 2 linhas (`fixo` em uma, `variável estimado` em outra) ou trocar `truncate` por `whitespace-normal break-words`. Ou mostrar tooltip com valores completos.
+
+**Não-bloqueante para:** nada.
+
+### N+1 latente em MetricasSaasService (MRR + detecção de incêndios)
+
+**Detectado em:** 2026-04-27 (revisão pré-commit Sprint 13a Dia 1)
+
+**Arquivo:** `backend/src/saas/metricas-saas.service.ts`
+
+**Sintoma:**
+- `calcularMRR()` faz 1 `aggregate` por parceiro com plano ATIVO (loop sequencial).
+- `detectarIncendios()` faz 2 `count` por cooperativa ativa (loop sequencial, `Promise.all` é só dentro do par count/total — não paraleliza entre cooperativas).
+
+**Impacto hoje:** irrelevante. 2 parceiros = 2 idas no MRR + 4 counts em incêndios. Tempo de resposta do `/saas/dashboard` continua < 500ms.
+
+**Quando vira problema:** ~30 parceiros em diante. Loop sequencial de 30+ aggregates pode levar 2-5s e degradar a tela.
+
+**Fix sugerido quando escalar:**
+1. **Cache 5min** (já marcado como TODO no comentário do service): Redis ou cache em memória do NestJS (`@nestjs/cache-manager`).
+2. **Batch query** com `groupBy` em vez de loop: `cobranca.groupBy({ by: ['cooperativaId'], where: { dataPagamento: { gte: inicioJanela }, status: 'PAGO' }, _sum: { valorPago: true } })` resolve MRR em 1 query.
+3. **Materialized view** ou tabela `metricas_saas_cache` atualizada por cron horário pra dashboards mais pesados.
+
+**Estimativa:** 1-2h pra refazer com `groupBy`. Cache é 0,5 dia.
+
+**Não-bloqueante para:** Sprint 13b, 14, etc. Revisar quando totalParceiros > 30.
 
 ---
 

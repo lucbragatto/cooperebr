@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { SaasService } from './saas.service';
+import { MetricasSaasService } from './metricas-saas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
@@ -7,7 +8,18 @@ const { SUPER_ADMIN } = PerfilUsuario;
 
 @Controller('saas')
 export class SaasController {
-  constructor(private readonly saasService: SaasService) {}
+  constructor(
+    private readonly saasService: SaasService,
+    private readonly metricasSaasService: MetricasSaasService,
+  ) {}
+
+  // ─── Painel super-admin ──────────────────────────────────
+
+  @Roles(SUPER_ADMIN)
+  @Get('dashboard')
+  getDashboard() {
+    return this.metricasSaasService.getResumoGeral();
+  }
 
   // ─── Planos ───────────────────────────────────────────────
 
