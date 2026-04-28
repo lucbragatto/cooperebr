@@ -4,13 +4,40 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-28 (Sprint 13a Dia 2 fechado: 5 débitos novos — 4 P3 + 1 P2 auditoria de drift)
+**Última atualização:** 2026-04-28 (Sprint 13a Dia 3 fechado: IDOR multi-tenant em 6 endpoints CORRIGIDO + 1 P2 derivado auditoria geral IDOR)
 
 ---
 
 ## P1 — Bloqueia entrada de parceiro real
 
 Nenhum no momento.
+
+### [RESOLVIDO 28/04] IDOR multi-tenant em endpoints `/cooperativas/`
+
+**Detectado em:** 2026-04-28 (Sprint 13a Dia 3, etapa 1 — audit prévio de segurança)
+
+**Severidade na descoberta:** P0 (bloqueador onboarding Sinergia)
+
+**Status:** ✅ **RESOLVIDO no mesmo dia** (Sprint 13a Dia 3, etapa 1.5)
+
+**Vulnerabilidades encontradas:** 6 endpoints sem isolamento multi-tenant para perfil ADMIN — 4 de READ, 2 de WRITE críticos. ADMIN da Cooperativa A poderia ler/editar/sabotar dados da Cooperativa B (multa, juros, plano, ativo, dados cadastrais, link de convite).
+
+Endpoints afetados:
+- `GET /cooperativas/:id`
+- `GET /cooperativas/:id/painel-parceiro`
+- `GET /cooperativas/:id/qrcode`
+- `GET /cooperativas/financeiro/:id`
+- `PATCH /cooperativas/financeiro/:id` ← **WRITE crítico**
+- `PUT /cooperativas/:id` ← **WRITE crítico**
+
+**Como passou despercebido:** ambiente com 1 parceiro (CoopereBR) + 1 trial. IDOR multi-tenant é invisível sem segundo tenant real. Bug latente, exploração só começaria quando Sinergia (Consórcio) entrasse.
+
+**Fix aplicado:** helper `assertSameTenantOrSuperAdmin(user, cooperativaIdAlvo)` em `backend/src/auth/tenant-guard.helper.ts`, aplicado nos 6 endpoints + novo endpoint `GET /saas/parceiros/:id/saude` (Sprint 13a Dia 3 etapa 3). Specs Jest (helper isolado + controller integrado): 16/16 passing.
+
+**Lições:**
+1. **Audit de segurança como etapa padrão** quando entrega tela ou endpoint que receba `cooperativaId` via parâmetro. Adicionar regra ao `CLAUDE.md`.
+2. **Investigar antes de construir** — esta vulnerabilidade só apareceu porque investigamos as telas existentes ANTES de apontar o chevron (ETAPA 5 do prompt do Dia 2). Se tivéssemos só apontado, IDOR ficaria latente até Sinergia migrar.
+3. Padrão único (helper) deve ser referência pra outros módulos com endpoints `:id` apontando pra cooperativaId — ver débito P2 derivado abaixo.
 
 ---
 
@@ -105,6 +132,30 @@ estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
 **Estimativa:** 60-90 min Code (auditoria) + 1-2 sessões pra reconciliar.
 
 **Bloqueia:** qualidade do planejamento de Sprints futuros. Sem isso, risco de duplicar trabalho ou contradizer decisões anteriores.
+
+### Auditoria geral de IDOR em outros módulos
+
+**Detectado em:** 2026-04-28 (consequência do achado em `/cooperativas/` durante Sprint 13a Dia 3)
+
+**Severidade:** P2 (bloqueia onboarding seguro de segundo parceiro — Sinergia/Consórcio)
+
+**Onde:** todos os módulos backend que aceitam `:id` como parâmetro apontando pra recurso de cooperativa: `cooperados`, `contratos`, `cobrancas`, `usinas`, `ucs`, `faturas`, `motor-proposta`, `convenios`, `clube-vantagens`, `cooper-token`, `notificacoes`, `ocorrencias`, `whatsapp`, `email-monitor`, `relatorios`, `condominios`, `administradoras`, etc.
+
+**Contexto:** o fix de IDOR em `/cooperativas/` revelou padrão. O Roles Guard isolado **não basta** — gating por perfil garante apenas que apenas SUPER_ADMIN/ADMIN cheguem ao método, mas não restringe ADMIN da Cooperativa A de operar sobre recursos da Cooperativa B. Outros módulos podem ter endpoints similares vulneráveis.
+
+**Fix sugerido:** sprint dedicado de auditoria de segurança multi-tenant. Code abre cada controller, identifica endpoints com `:id` que apontam pra recurso de cooperativa, audita filtragem (no controller OU no service), aplica helper `assertSameTenantOrSuperAdmin` ou equivalente onde for necessário. Estimativa: 1-2 dias úteis.
+
+**Bloqueia:** onboarding seguro de Sinergia (Consórcio). Hoje só CoopereBR é tenant real, então nenhuma exploração ativa — mas qualquer onboarding de segundo parceiro reabre risco em todos os módulos não-auditados.
+
+**Prioridade:** alta. **Rodar antes de Sinergia migrar pro SISGD.**
+
+### Auditoria de drift entre docs e código (continuação)
+
+**Achado adicional 28/04 — investigação focada Sprint 13a Dia 2:**
+
+Existe rota `/parceiro/` (singular, 25 subpastas) paralela a `/dashboard/`, com layout próprio, sidebar própria e dashboard próprio. Consome endpoint `/cooperativas/meu-dashboard`. **Não está documentada em CLAUDE.md, MAPA-INTEGRIDADE-SISTEMA.md ou SISGD-VISAO-COMPLETA.md.** É portal admin do parceiro (visão "externa"), paralelo ao `/dashboard/` (visão "interna"). Drift estrutural, não só conteúdo desatualizado — auditoria de drift precisa mapear esta rota inteira.
+
+Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominios, configuracoes, contratos, convenios, convites, enviar-tokens, faturas, financeiro, indicacoes, membros, modelos-cobranca, motor-proposta, planos, receber-tokens, relatorios, tokens-recebidos, ucs, usinas, usuarios, whatsapp.
 
 ---
 

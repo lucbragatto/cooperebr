@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { CooperativasService } from './cooperativas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 import { getTiposDisponiveis } from './tipo-parceiro.helper';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
@@ -19,7 +20,8 @@ export class CooperativasController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('financeiro/:id')
-  getFinanceiro(@Param('id') id: string) {
+  getFinanceiro(@Param('id') id: string, @Request() req: any) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.getFinanceiro(id);
   }
 
@@ -28,7 +30,9 @@ export class CooperativasController {
   updateFinanceiro(
     @Param('id') id: string,
     @Body() body: { multaAtraso?: number; jurosDiarios?: number; diasCarencia?: number },
+    @Request() req: any,
   ) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.updateFinanceiro(id, body);
   }
 
@@ -57,19 +61,22 @@ export class CooperativasController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get(':id/painel-parceiro')
-  painelParceiro(@Param('id') id: string) {
+  painelParceiro(@Param('id') id: string, @Request() req: any) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.painelParceiro(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get(':id/qrcode')
-  async gerarQrCode(@Param('id') id: string) {
+  async gerarQrCode(@Param('id') id: string, @Request() req: any) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.gerarQrCode(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string, @Request() req: any) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.findOne(id);
   }
 
@@ -116,7 +123,9 @@ export class CooperativasController {
       bandeiraAtiva?: boolean;
       bandeiraSincronizacaoAuto?: boolean;
     },
+    @Request() req: any,
   ) {
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.cooperativasService.update(id, body);
   }
 

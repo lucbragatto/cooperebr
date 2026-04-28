@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { getUsuario } from '@/lib/auth';
+import type { SaudeParceiro } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Pencil, ArrowRightLeft, Zap, Loader2, QrCode, Download } from 'lucide-react';
+import { ArrowLeft, Pencil, ArrowRightLeft, Zap, Loader2, QrCode, Download, Activity, CreditCard } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -121,6 +123,20 @@ export default function CooperativaDetailPage() {
   const [contratosSelecionados, setContratosSelecionados] = useState<string[]>([]);
   const [selecionarTodos, setSelecionarTodos] = useState(true);
   const [carregandoContratos, setCarregandoContratos] = useState(false);
+
+  // Saúde SaaS (visível só para SUPER_ADMIN — Sprint 13a Dia 3)
+  const [saude, setSaude] = useState<SaudeParceiro | null>(null);
+  const [perfilUsuario, setPerfilUsuario] = useState<string | null>(null);
+
+  useEffect(() => {
+    const u = getUsuario();
+    setPerfilUsuario(u?.perfil ?? null);
+    if (u?.perfil === 'SUPER_ADMIN') {
+      api.get<SaudeParceiro>(`/saas/parceiros/${id}/saude`)
+        .then((r) => setSaude(r.data))
+        .catch(() => {}); // não bloqueia a tela se falhar
+    }
+  }, [id]);
 
   useEffect(() => {
     api.get<Cooperativa>(`/cooperativas/${id}`)
@@ -262,6 +278,64 @@ export default function CooperativaDetailPage() {
 
       {coop && (
         <>
+          {/* Cards de saúde SaaS — visíveis só pra SUPER_ADMIN (Sprint 13a Dia 3) */}
+          {saude && perfilUsuario === 'SUPER_ADMIN' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <Card
+                className={`p-4 ${
+                  saude.operacional.cor === 'vermelho'
+                    ? 'bg-red-50 border-red-200'
+                    : saude.operacional.cor === 'amarelo'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-green-50 border-green-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <Activity className="w-6 h-6 mt-0.5 text-gray-700" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-600">Saúde operacional (cobranças deste mês)</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {saude.operacional.taxaInadimplencia}% inadimplência
+                    </p>
+                    <p className="text-sm mt-1 text-gray-700">
+                      {saude.operacional.cobrancasMes.pagas} pagas · {saude.operacional.cobrancasMes.vencidas} vencidas · R$ {saude.operacional.receitaPaga.toLocaleString('pt-BR')} recebido
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
+                className={`p-4 ${
+                  saude.plataforma.status === 'inadimplente'
+                    ? 'bg-red-50 border-red-200'
+                    : saude.plataforma.status === 'pendente'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-blue-50 border-blue-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <CreditCard className="w-6 h-6 mt-0.5 text-gray-700" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-600">Status SaaS plataforma</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {saude.plataforma.status === 'inadimplente'
+                        ? 'Inadimplente'
+                        : saude.plataforma.status === 'pendente'
+                        ? 'Pendente'
+                        : 'Em dia'}
+                    </p>
+                    <p className="text-sm mt-1 text-gray-700">
+                      Plano: {saude.plano ?? 'sem plano'} · {saude.statusSaas}
+                      {saude.plataforma.qtdFaturasVencidas > 0 && (
+                        <> · {saude.plataforma.qtdFaturasVencidas} fatura(s) vencida(s) (R$ {saude.plataforma.valorVencido.toLocaleString('pt-BR')})</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-3">

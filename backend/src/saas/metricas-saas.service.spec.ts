@@ -234,3 +234,81 @@ describe('MetricasSaasService.getListaParceirosEnriquecida', () => {
     expect(r[0].membros).toEqual({ total: 0, ativos: 0 });
   });
 });
+
+describe('MetricasSaasService.getSaudeParceiro', () => {
+  const cooperativaFindUnique = jest.fn();
+  const cobrancaGroupBy = jest.fn();
+  const faturaSaasAggregate = jest.fn();
+
+  const prismaMock = {
+    cooperativa: { findUnique: cooperativaFindUnique },
+    cobranca: { groupBy: cobrancaGroupBy },
+    faturaSaas: { aggregate: faturaSaasAggregate },
+  } as any;
+
+  let service: MetricasSaasService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new MetricasSaasService(prismaMock);
+  });
+
+  it('parceiro com 0 cobranças no mês: operacional verde, taxa 0%', async () => {
+    cooperativaFindUnique.mockResolvedValue({
+      id: 'coop-1',
+      nome: 'CoopereBR',
+      statusSaas: 'ATIVO',
+      planoSaas: { nome: 'OURO' },
+    });
+    cobrancaGroupBy.mockResolvedValue([]);
+    faturaSaasAggregate.mockResolvedValue({ _count: { _all: 0 }, _sum: { valorTotal: null } });
+
+    const r = await service.getSaudeParceiro('coop-1');
+
+    expect(r.parceiroNome).toBe('CoopereBR');
+    expect(r.plano).toBe('OURO');
+    expect(r.operacional.cor).toBe('verde');
+    expect(r.operacional.taxaInadimplencia).toBe(0);
+    expect(r.operacional.cobrancasMes).toEqual({ total: 0, pagas: 0, vencidas: 0 });
+    expect(r.plataforma.status).toBe('em_dia');
+  });
+
+  it('parceiro com 5 cobranças, 2 vencidas: operacional vermelho (40% > 20% + total >= 5)', async () => {
+    cooperativaFindUnique.mockResolvedValue({
+      id: 'coop-1',
+      nome: 'Sinergia',
+      statusSaas: 'ATIVO',
+      planoSaas: { nome: 'OURO' },
+    });
+    cobrancaGroupBy.mockResolvedValue([
+      { status: 'PAGO', _count: { _all: 3 }, _sum: { valorPago: 1500 } },
+      { status: 'VENCIDO', _count: { _all: 2 }, _sum: { valorPago: 0 } },
+    ]);
+    faturaSaasAggregate.mockResolvedValue({ _count: { _all: 0 }, _sum: { valorTotal: null } });
+
+    const r = await service.getSaudeParceiro('coop-1');
+
+    expect(r.operacional.cor).toBe('vermelho');
+    expect(r.operacional.taxaInadimplencia).toBe(40);
+    expect(r.operacional.cobrancasMes).toEqual({ total: 5, pagas: 3, vencidas: 2 });
+    expect(r.operacional.receitaPaga).toBe(1500);
+  });
+
+  it('parceiro com FaturaSaas vencida: plataforma inadimplente', async () => {
+    cooperativaFindUnique.mockResolvedValue({
+      id: 'coop-trial',
+      nome: 'CoopereBR Teste',
+      statusSaas: 'TRIAL',
+      planoSaas: { nome: 'PRATA' },
+    });
+    cobrancaGroupBy.mockResolvedValue([]);
+    faturaSaasAggregate.mockResolvedValue({ _count: { _all: 1 }, _sum: { valorTotal: 5900 } });
+
+    const r = await service.getSaudeParceiro('coop-trial');
+
+    expect(r.plataforma.status).toBe('inadimplente');
+    expect(r.plataforma.qtdFaturasVencidas).toBe(1);
+    expect(r.plataforma.valorVencido).toBe(5900);
+    expect(r.statusSaas).toBe('TRIAL');
+  });
+});

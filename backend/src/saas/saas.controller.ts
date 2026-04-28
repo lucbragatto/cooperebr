@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Request } from '@nestjs/common';
 import { SaasService } from './saas.service';
 import { MetricasSaasService } from './metricas-saas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 
-const { SUPER_ADMIN } = PerfilUsuario;
+const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
 @Controller('saas')
 export class SaasController {
@@ -25,6 +26,13 @@ export class SaasController {
   @Get('parceiros')
   getParceiros() {
     return this.metricasSaasService.getListaParceirosEnriquecida();
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('parceiros/:id/saude')
+  getSaudeParceiro(@Param('id') id: string, @Request() req: any) {
+    assertSameTenantOrSuperAdmin(req.user, id);
+    return this.metricasSaasService.getSaudeParceiro(id);
   }
 
   // ─── Planos ───────────────────────────────────────────────

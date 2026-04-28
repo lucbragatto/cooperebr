@@ -216,6 +216,24 @@ export interface ResumoParceiro {
   criadoEm: string;
 }
 
+export interface SaudeParceiro {
+  parceiroId: string;
+  parceiroNome: string;
+  statusSaas: string;
+  plano: string | null;
+  operacional: {
+    cor: 'verde' | 'amarelo' | 'vermelho';
+    taxaInadimplencia: number;
+    cobrancasMes: { total: number; pagas: number; vencidas: number };
+    receitaPaga: number;
+  };
+  plataforma: {
+    status: 'em_dia' | 'pendente' | 'inadimplente';
+    qtdFaturasVencidas: number;
+    valorVencido: number;
+  };
+}
+
 export interface ContextoUsuario {
   tipo: TipoContexto;
   label: string;

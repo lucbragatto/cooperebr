@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 /**
@@ -213,11 +213,14 @@ export class MetricasSaasService {
         },
         _count: { _all: true },
       }),
+      // Alinhado com calcularFaturamentoMesAtual (dataPagamento) — uniformiza Dashboard + Lista.
+      // Cobranças VENCIDAS sem pagamento ficam fora do filtro do mês, o que é correto:
+      // VENCIDO sem pagamento não conta como "deste mês" sob ótica contábil.
       this.prisma.cobranca.groupBy({
         by: ['cooperativaId', 'status'],
         where: {
           cooperativaId: { in: cooperativaIds },
-          dataVencimento: { gte: inicioMes },
+          dataPagamento: { gte: inicioMes },
         },
         _count: { _all: true },
         _sum: { valorPago: true },
@@ -288,6 +291,89 @@ export class MetricasSaasService {
         criadoEm: p.createdAt,
       };
     });
+  }
+
+  /**
+   * Saúde de 1 parceiro específico — usado pelos cards no topo de /dashboard/cooperativas/[id].
+   * Combina visão operacional (cobranças do mês — alinhado com Dashboard via dataPagamento)
+   * + status SaaS plataforma (FaturaSaas vencidas).
+   */
+  async getSaudeParceiro(cooperativaId: string) {
+    const inicioMes = new Date();
+    inicioMes.setDate(1);
+    inicioMes.setHours(0, 0, 0, 0);
+
+    const [parceiro, cobrancasMes, faturasSaasVencidas] = await Promise.all([
+      this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: {
+          id: true,
+          nome: true,
+          statusSaas: true,
+          planoSaas: { select: { nome: true } },
+        },
+      }),
+      this.prisma.cobranca.groupBy({
+        by: ['status'],
+        where: {
+          cooperativaId,
+          dataPagamento: { gte: inicioMes },
+        },
+        _count: { _all: true },
+        _sum: { valorPago: true },
+      }),
+      this.prisma.faturaSaas.aggregate({
+        where: {
+          cooperativaId,
+          status: { in: ['PENDENTE', 'VENCIDO'] },
+          dataVencimento: { lt: new Date() },
+        },
+        _count: { _all: true },
+        _sum: { valorTotal: true },
+      }),
+    ]);
+
+    if (!parceiro) {
+      throw new NotFoundException('Parceiro não encontrado');
+    }
+
+    const totalCobrancas = cobrancasMes.reduce((acc, r) => acc + r._count._all, 0);
+    const vencidas = cobrancasMes.find((r) => r.status === 'VENCIDO')?._count._all ?? 0;
+    const pagas = cobrancasMes.find((r) => r.status === 'PAGO')?._count._all ?? 0;
+    const receitaPaga = Number(
+      cobrancasMes.find((r) => r.status === 'PAGO')?._sum.valorPago ?? 0,
+    );
+
+    const taxaInadimplencia =
+      totalCobrancas > 0 ? Math.round((vencidas / totalCobrancas) * 10000) / 100 : 0;
+
+    let saudeOperacional: 'verde' | 'amarelo' | 'vermelho' = 'verde';
+    if (taxaInadimplencia > 20 && totalCobrancas >= 5) saudeOperacional = 'vermelho';
+    else if (taxaInadimplencia > 10 && totalCobrancas >= 3) saudeOperacional = 'amarelo';
+
+    const valorVencidoSaaS = Number(faturasSaasVencidas._sum.valorTotal ?? 0);
+    const qtdFaturasVencidasSaaS = faturasSaasVencidas._count._all;
+
+    let statusPagamentoSaaS: 'em_dia' | 'pendente' | 'inadimplente' = 'em_dia';
+    if (qtdFaturasVencidasSaaS > 0) statusPagamentoSaaS = 'inadimplente';
+
+    return {
+      parceiroId: parceiro.id,
+      parceiroNome: parceiro.nome,
+      statusSaas: parceiro.statusSaas,
+      plano: parceiro.planoSaas?.nome ?? null,
+      operacional: {
+        cor: saudeOperacional,
+        taxaInadimplencia,
+        cobrancasMes: { total: totalCobrancas, pagas, vencidas },
+        receitaPaga: Math.round(receitaPaga * 100) / 100,
+      },
+      plataforma: {
+        status: statusPagamentoSaaS,
+        qtdFaturasVencidas: qtdFaturasVencidasSaaS,
+        valorVencido: Math.round(valorVencidoSaaS * 100) / 100,
+      },
+    };
   }
 
   /** "Incêndios" = parceiros com >20% de cobranças VENCIDAS (mín 5 cobranças). */

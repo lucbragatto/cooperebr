@@ -204,7 +204,7 @@ export default function ParceirosListPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/dashboard/super-admin/parceiros/${p.id}`}
+                      href={`/dashboard/cooperativas/${p.id}`}
                       className="text-blue-600 hover:text-blue-800 inline-flex"
                       aria-label={`Detalhe ${p.nome}`}
                     >
