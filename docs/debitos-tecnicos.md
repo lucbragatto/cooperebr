@@ -43,6 +43,92 @@ Endpoints afetados:
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### FaturaSaas sem integração Asaas + sem comunicação parceiro + sem fluxo de pagamento (Sprint 6 incompleto)
+
+**Detectado em:** 2026-04-29 (validação INVs 4-8 do Doc-0 Fatia 2)
+
+**Severidade:** P1 — bloqueia receita real do SaaS (Luciano não cobra parceiros automaticamente)
+
+**Onde:** `backend/src/saas/saas.service.ts`, `saas.controller.ts`
+
+**Sintoma:**
+- Cron mensal `0 6 1 * *` cria FaturaSaas no banco. ✅
+- **Sem boleto/PIX/QR code emitido via Asaas.** Parceiro não recebe meio de pagamento.
+- **Sem email/WA enviado pro parceiro** avisando que tem fatura nova/vencendo.
+- **Sem endpoint pra marcar PAGA** — precisaria UPDATE direto no banco.
+
+**Cálculo atual lê apenas 2 componentes** (`mensalidadeBase + percentualReceita`). Outros 8 campos do `PlanoSaas` (taxaSetup, limiteMembros, taxaTokenPerc, limiteTokenMensal, cooperTokenHabilitado, modulosHabilitados, modalidadesModulos, ativo) existem como configuração mas não viram cobrança.
+
+**Fix sugerido:** Sprint dedicado "FaturaSaas v2" com:
+1. Webhook Asaas dedicado pra FaturaSaas (separar de cobranças cooperado).
+2. Cron de comunicação D-7, D-3, D-1 + vencimento.
+3. Endpoint `PATCH /saas/faturas/:id/pagar` (manual + automático via webhook).
+4. Decidir se outros componentes do PlanoSaas viram itens da fatura (taxaSetup só na primeira, etc.).
+
+**Bloqueia:** entrada do primeiro parceiro real que pague Luciano. Hoje só funciona em modo "experimental contábil".
+
+### ContratoUso só implementa "aluguel fixo" — % lucro líquido não existe + sem cron mensal
+
+**Detectado em:** 2026-04-29 (validação INVs 4-8)
+
+**Severidade:** P2 — bloqueia Sprint Portal Proprietário
+
+**Onde:** `backend/src/financeiro/contratos-uso.service.ts`
+
+**Sintoma:**
+- `ContratoUso.percentualRepasse` está no schema mas **nunca é consumido pelo código**.
+- `gerarLancamentoMensal()` (linha 116-151) usa apenas `valorFixoMensal`.
+- **Não há cron** que execute essa função todo mês — só roda uma vez quando contrato é criado (linha 81-83).
+- 0 ContratoUso no banco hoje (não testado em produção).
+
+**Fix sugerido:**
+1. Definir fórmula de "% lucro líquido" (Sprint Portal Proprietário precisa de Luciano):
+   - Receita da usina = soma de `Cobranca.valorLiquido` dos cooperados vinculados a `Contrato.usinaId = X`?
+   - Despesas = `ContaAPagar` da mesma usina?
+   - Lucro líquido = receita − despesas?
+   - `valorRepasse = lucroLiquido × percentualRepasse / 100`?
+2. Implementar cron mensal que roda `gerarLancamentoMensal` para todos `ContratoUso` ATIVO.
+3. UI no portal proprietário mostrando o cálculo discriminado.
+
+**Bloqueia:** Sprint Portal Proprietário. Não está no PLANO-ATE-PRODUCAO atual com escopo definido.
+
+### Hardcode `valorTokenReais = 0.20` em CooperToken (com TODO)
+
+**Detectado em:** 2026-04-29 (validação INV 6)
+
+**Severidade:** P2
+
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:258`
+
+**Sintoma:**
+```ts
+const valorEstimado = Math.round(quantidade * 0.20 * 100) / 100; // TODO: ler valorTokenReais do plano
+```
+
+**Inconsistência adicional (P3):** outros pontos do mesmo service (linhas 451, 561, 670) usam fallback `0.45` quando `plano.valorTokenReais` não está setado. Ou seja, mesmo arquivo tem 2 defaults diferentes (0.20 e 0.45).
+
+**Fix sugerido:** unificar leitura via helper `resolverValorToken(plano)` com fallback único (preferir 0.45 conforme uso majoritário). Tempo: 30 min.
+
+### WhatsApp bot sem testes Jest
+
+**Detectado em:** 2026-04-29 (validação INV 8)
+
+**Severidade:** P3 alto (4051 linhas + 38+ estados sem rede de proteção)
+
+**Onde:** `backend/src/whatsapp/`
+
+**Sintoma:** `find backend/src/whatsapp -name "*.spec.ts"` retorna 0 arquivos. Bot é máquina de estado complexa (lista de 38+ estados em `whatsapp-bot.service.ts:372-385`) sem nenhuma cobertura.
+
+**Fix sugerido:** sprint dedicado de TDD retroativo cobrindo pelo menos:
+1. Roteador de estados (qual estado responde a qual mensagem)
+2. Timeout de 30 min (`whatsapp-bot.service.ts:338`)
+3. Branches de OCR (estados `AGUARDANDO_FOTO_FATURA` e `AGUARDANDO_PROPRIETARIO_FATURA`)
+4. Cadastro express (4 estados `CADASTRO_EXPRESS_*`)
+
+Estimativa: 3-5 dias para 60% de cobertura.
+
+**Bloqueia:** alterações seguras no fluxo do bot. Hoje qualquer refactor é risco alto.
+
 ### Vocabulário hardcoded "Cooperado" em UI/templates (multi-tenant tipo-específico)
 
 **Detectado em:** 2026-04-28 (investigação read-only pré-onboarding Sinergia)
