@@ -1,538 +1,374 @@
-# PLANO ATÉ PRODUÇÃO — SISGD
+# PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-> **Audiência:** Luciano (não-programador, dono do SISGD)
-> **Última atualização:** 2026-04-26 (madrugada)
-> **Status:** roteiro de execução das próximas ~12 semanas
+**Última atualização:** 30/04/2026 (sessão Code Doc-0 Fatia 2 — pilha reorganizada com 10 sprints + Sprint 0 pós-decisões claude.ai 30/04).
+
+> **Audiência:** Luciano (não-programador, dono do SISGD).
+> **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
 > **Documentos vivos relacionados:**
+> - `docs/CONTROLE-EXECUCAO.md` (estado atual, decisões pendentes)
+> - `docs/PRODUTO.md` (visão humana e funcional)
+> - `docs/REGULATORIO-ANEEL.md` (manual técnico-regulatório)
 > - `docs/SISGD-VISAO-COMPLETA.md` (mapa em linguagem humana — quem usa, o que falta)
-> - `docs/MAPA-INTEGRIDADE-SISTEMA.md` (estado técnico atual, sprint a sprint)
+> - `docs/MAPA-INTEGRIDADE-SISTEMA.md` (estado técnico atual, log cronológico)
 > - `docs/debitos-tecnicos.md` (lista consolidada de pendências)
 
 ---
 
 ## Seção 1 — Filosofia do plano
 
-Este documento existe pra responder uma pergunta simples: **o que falta pro SISGD entrar em produção real, com parceiros pagando, sem o Luciano ter que torcer pra dar certo?**
+Este documento responde uma pergunta simples: **o que falta pro SISGD entrar em produção real, com parceiros pagando, sem o Luciano ter que torcer pra dar certo?**
 
-A resposta NÃO é "implementar mais coisas". O SISGD já tem 70+ models, 44 módulos backend e 20+ páginas frontend. O código existe — o que falta é **cola operacional**: telas que o Luciano use pra acompanhar (governança), automatismos que rodem sozinhos (FaturaSaas, lembretes), engines de cálculo que cubram os 3 modelos (FIXO ✅ pronto, COMPENSADOS 🔴 falta, DINAMICO 🔴 falta), conferência com a concessionária (lista compensação, lista homologação) e — só no fim — uma camada de pré-produção real (Asaas em produção, Sungrow ligado, e2e Playwright passando ponta a ponta).
+A resposta NÃO é "implementar mais coisas". O SISGD já tem 80 models, 44 módulos backend, 152 telas. O código existe — falta **cola operacional**:
 
-A ordem dos 15 sprints abaixo respeita uma lógica: **primeiro destravar o que já existe** (webhook Asaas em produção, cron de FaturaSaas, painel Luciano), **depois preencher os modelos de cobrança que faltam** (COMPENSADOS antes de DINAMICO, porque é mais usado), **depois construir governança** (DRE, conciliação, painéis síndico, audit trail), **e por último endurecer pra parceiro real** (templates, login facial, e2e completo, pré-produção).
+- Telas que Luciano usa pra acompanhar (governança).
+- Automatismos que rodam sozinhos (FaturaSaas, lembretes, validações regulatórias).
+- Engines de cálculo que cubram os 3 modelos (FIXO ✅ pronto, COMPENSADOS 🟡 bloqueado, DINAMICO 🔴 falta).
+- Estrutura regulatória ANEEL (5 flags + classes GD + Fio B + auditoria).
+- Camada de pré-produção real (Asaas em produção, validação local com distribuidoras).
 
-A regra de ouro é: **cada sprint entrega algo testável em isolamento**. Nenhum sprint deixa o sistema pior do que estava. Sprint 17 (engine COMPENSADOS) é o mais arriscado — exige snapshot do banco antes, porque mexe em cálculo de cobrança real que afeta dinheiro de cooperado. Sprints 12-13-14 são "destrava o que já tá feito" — baixo risco. Sprints 23-26 são "endurecer pra produção" — médio risco mas alta visibilidade.
+A ordem dos sprints respeita a lógica:
 
-**Importante:** este plano NÃO é contratual. Cada sprint encerra com Luciano validando o que foi entregue antes de abrir o próximo. Se algo der errado no meio, parar, ajustar, voltar. **8-12 semanas é estimativa, não promessa.**
+1. **Sprint 0** — Auditoria Regulatória **emergencial** (resolve risco ativo do caso Exfishes antes de qualquer outra coisa).
+2. **Sprints 1-4** — Destravar o que já existe + portal proprietário + documentos legais.
+3. **Sprint 5** — Estruturar regulação ANEEL completa (5 flags + classes GD + Fio B + concentração).
+4. **Sprint 6** — Auditoria IDOR geral (segurança multi-tenant antes de Sinergia migrar).
+5. **Sprints 7-9** — Construir engines, política, fechamento financeiro, motor pré-venda.
+
+A regra de ouro: **cada sprint entrega algo testável em isolamento**. Nenhum sprint deixa o sistema pior do que estava. **17-23 semanas de Code dedicado é estimativa, não promessa.**
 
 ---
 
-## Seção 2 — Sprints organizados (Sprint 12 a 26)
+## Seção 2 — Sprints concluídos (histórico curto)
+
+> Detalhamento técnico em commits. Mantido aqui apenas como contexto.
+
+| Sprint | Tema | Status | Commit |
+|---|---|---|---|
+| 6 (T10) | Cron mensal FaturaSaas automática | ✅ concluído | `fd35c0d` |
+| 8 | Clube + CooperToken MVP | ✅ concluído | (vários) |
+| 10 | LGPD + email SMTP + WhatsApp pós-reativação | ✅ concluído | (vários, abr/2026) |
+| 11 | Arquitetura UC consolidada + pipeline OCR multi-campo | ✅ concluído | `7583659` + 5 commits Bloco 1 |
+| 12 | Webhook Asaas validado em sandbox + 3 bugs corrigidos | ✅ concluído (sandbox) | `16302e9` |
+| 13a | Painel SISGD + lista parceiros + cards saúde + IDOR fix em 6 endpoints | ✅ concluído | `7f29bd6` + `1569ca8` + outros |
+
+**Sprint 13b (AuditLog ativo + Impersonate)** e **Sprint 13c (edição plano SaaS + suspensão de parceiro)** ainda **não iniciados** — foram **absorvidos** por sprints da nova pilha:
+- AuditLog (interceptor + decorator + tela) → escopo do **Sprint 5** (cobertura regulatória precisa de audit) e **Sprint 6** (IDOR geral verifica audit).
+- Impersonate → pode ser micro-sprint à parte ou parte do **Sprint 7** (governança financeira).
+
+---
+
+## Seção 3 — PILHA NOVA (10 sprints pré-produção plena)
+
+> Pilha reorganizada na sessão claude.ai 30/04 baseada nas 13 decisões estruturantes (`docs/sessoes/2026-04-30-decisoes-doc-0-fatia2.md`).
 
 Formato fixo pra cada sprint:
-
-- **Pra quê serve** — em uma frase, qual problema resolve
-- **Quem ganha** — qual papel humano se beneficia (cooperado, síndico, admin parceiro, Luciano…)
-- **Tempo estimado** — em dias úteis
-- **Pré-requisito** — sprint anterior obrigatório
-- **Bloqueia** — sprints futuros que dependem deste
-- **Tarefas** — lista executável
-- **Critério "passou"** — como saber que terminou
-- **Risco** — baixo / médio / alto + motivo
-- **Custo** — código, infra, dependência externa
+- **Tema** — linha curta.
+- **Severidade** — P0/P1/P2.
+- **Estimativa** — semanas de Code dedicado.
+- **Pode rodar quando** — pré-requisito.
+- **Bloqueia** — sprints futuros que dependem deste.
+- **Escopo** — bullets executáveis.
+- **Critério "passou"** — como saber que terminou.
 
 ---
 
-### Sprint 12 — Webhook Asaas em produção real
+### Sprint 0 — Auditoria Regulatória Emergencial
 
-> **Status atualizado 27/04/2026:** sandbox 100% validado em sessão dedicada (commit `16302e9`, ver `docs/sessoes/2026-04-27-webhook-asaas-sandbox-validado.md`). 3 bugs descobertos e corrigidos no caminho. Sprint reduzido a ~1 dia quando Luciano abrir conta Asaas em produção.
+- **Severidade:** P0 (urgente — risco regulatório ATIVO em produção).
+- **Estimativa:** 1 semana.
+- **Pode rodar quando:** **AGORA** — paralelo a Doc-0 fechar.
+- **Bloqueia:** Sprint 5 depende dos achados desta auditoria pra dimensionar escopo.
 
-- **Pra quê serve:** garantir que pagamentos PIX/boleto recebidos pela conta Asaas atualizam automaticamente as cobranças no sistema (`PAGA`).
-- **Quem ganha:** Luciano (parou de conciliar manual), cooperado (vê status atualizado em tempo real), admin parceiro (não precisa marcar pago à mão).
-- **Tempo estimado:** ~1 dia (era 3 antes da validação sandbox).
-- **Pré-requisito:** Luciano abrir conta Asaas em produção.
-- **Bloqueia:** Sprint 14 (FaturaSaas), Sprint 22 (conciliação).
-- **Tarefas restantes pra produção:**
-  1. ~~Configurar webhook em sandbox~~ ✅ feito 27/04
-  2. ~~Validar token timing-safe + idempotência~~ ✅ feito 27/04
-  3. ~~Confirmar criação de LancamentoCaixa nos 2 modos~~ ✅ AGOSTINHO CLUBE + ADRIANA DESCONTO
-  4. Criar conta Asaas em produção (Luciano)
-  5. Trocar `AsaasConfig.apiKey` e `webhookToken` da CoopereBR pra credenciais produção
-  6. Apontar webhook do dashboard produção pra URL pública (domínio fixo ou ngrok produção)
-  7. Smoke test: 1 PIX real R$ 1 → webhook → PAGA + LancamentoCaixa
-  8. Documentar em `docs/operacao/asaas-producao.md`
-- **Critério "passou":** 1 PIX real de R$ 1,00 entra, webhook chega, cobrança vira `PAGA` sem intervenção manual, log `LancamentoCaixa REALIZADO` registrado.
-- **Risco:** baixo. Código validado em sandbox; só falta credencial produção.
-- **Custo:** R$ 0 (Asaas tem teste grátis até X transações). Dependência externa: Luciano abre conta.
+**Escopo:**
+- Listar UCs ativas com classe GD declarada × classe GD real (cruzar `Uc.id → Contrato.usinaId → Usina.dataHomologacao`).
+- Listar concentrações > 25% por cooperado-usina (ranking).
+- Listar UCs com saldo > 2 meses (proxy: agregar `Cobranca.kwhCompensado` recente vs consumo médio).
+- Listar UCs sem data de protocolo (campo `Usina.dataProtocoloDistribuidora` ainda inexistente — criar antes da auditoria).
+- Auditoria do snapshot do Motor.aceitar (`tarifaContratual` vazia em contratos COMPENSADOS).
+- Relatório executivo (1 PDF + 1 dashboard temporário em `/dashboard/super-admin/auditoria-regulatoria`).
+- Plano corretivo caso a caso (Exfishes + FIGATTA + CRIAR + outros descobertos).
+
+**Critério "passou":** Luciano lê o relatório, identifica em 5 minutos quais cooperados precisam de ação, e tem plano corretivo com prazo definido. Caso Exfishes regularizado.
+
+**Dependências:** nenhuma. **Pode começar enquanto Doc-0 ainda está sendo escrito.**
 
 ---
 
-### Sprint 13 — Painel do Luciano (governança SaaS) — DIVIDIDO em 13a/13b/13c
+### Sprint 1 — FaturaSaas Completo
 
-> **Decisão 28/04/2026:** sprint dividido em 3 fatias entregáveis (não monolítico). Critério de divisão: cada fatia entrega valor independente e fica testável em 1-3 dias.
+- **Severidade:** P1 (bloqueia receita real do SaaS — Luciano não cobra parceiros automaticamente).
+- **Estimativa:** 1-2 semanas.
+- **Pode rodar quando:** independente — paralelo ao Sprint 0.
+- **Bloqueia:** entrada do primeiro parceiro real que pague Luciano.
 
-#### Sprint 13a — Painel super-admin (visão consolidada)
+**Escopo:**
+- Integração FaturaSaas → Asaas (boleto/PIX/QR Code automático separado de cobranças cooperado).
+- Cron de comunicação D-7, D-3, D-1 + vencimento (email + WhatsApp pro parceiro).
+- Endpoint `PATCH /saas/faturas/:id/pagar` (manual + automático via webhook Asaas dedicado).
+- Decisão de produto: outros componentes do `PlanoSaas` (taxaSetup, taxaTokenPerc, etc.) viram itens da fatura ou são governança? Hoje o cálculo lê apenas `mensalidadeBase + percentualReceita`.
+- Reconciliação automática quando webhook Asaas chega.
 
-- **Pra quê serve:** tela consolidada com métricas SaaS — saúde do negócio em 30 segundos.
-- **Tempo estimado:** 3 dias úteis.
-- **Pré-requisito:** nenhum (Sprint 12 produção pode rodar em paralelo).
-- **Bloqueia:** Sprint 13b, Sprint 13c, Sprint 14.
+**Critério "passou":** parceiro recebe email/WA D-3 antes do vencimento, paga via PIX, sistema marca PAGA automaticamente, Luciano vê em painel SISGD.
 
-**Dia 1 — Painel SISGD (✅ 28/04/2026, commit `7f29bd6`):**
-- ✅ AuditLog model + migration + 4 índices
-- ✅ 4 índices cross-tenant em `cobrancas`, `cooperados`, `faturas_saas`
-- ✅ `MetricasSaasService` + endpoint `GET /saas/dashboard`
-- ✅ Tela `/dashboard/super-admin` com 5 cards
-- ✅ Sidebar reorganizada com link "Painel SISGD"
-- ✅ Specs Jest 4/4 passing
-
-**Dia 1 — Saneamento P0 (✅ 28/04/2026, commit `0d53773`):**
-- ✅ Snapshot banco
-- ✅ Limpeza CoopereVerde + Conosórcio Sul (cooperativas-fantasma)
-- ✅ CoopereBR Teste vinculada plano PRATA TRIAL
-- ✅ FaturaSaas teste R$ 5.900 vencida pra exercitar painel
-- ✅ Refactor `gerarFaturaParaCooperativa` exposto público
-
-**Dia 2 — Lista de parceiros enriquecida (próximo):**
-1. `/dashboard/super-admin/parceiros` — lista todos os tenants
-2. Card por parceiro: nome, tipo, MRR estimado, última FaturaSaas, status, taxa inadimplência cooperados
-3. Filtros: ativos, inadimplentes, TRIAL, em onboarding
-4. Ordenação: por MRR, por inadimplência, por data ativação
-5. Smoke test do fluxo
-
-**Dia 3 — Detalhe do parceiro:**
-1. `/dashboard/super-admin/parceiros/[id]` — visão profunda 1 parceiro
-2. Métricas: histórico FaturaSaas, evolução cooperados, evolução receita
-3. Indicadores de saúde: churn, retenção, taxa pagamento em dia
-4. Smoke test integrado (painel → lista → detalhe → ação)
-
-- **Critério "passou":** Luciano abre `/dashboard/super-admin`, vê resumo. Clica em um parceiro, vê detalhe completo. Identifica em 30s qual está atrasado.
-- **Risco:** baixo (só leitura).
-- **Custo total:** ~1500 linhas (Dia 1 já consumiu ~570).
-
-#### Sprint 13b — AuditLog ativo + Impersonate
-
-- **Pra quê serve:** Luciano poder "entrar como" um admin parceiro pra dar suporte, com tudo registrado pra LGPD/compliance.
-- **Tempo estimado:** 3-4 dias úteis.
-- **Pré-requisito:** Sprint 13a Dia 3.
-- **Bloqueia:** Sprint 22 (audit trail global expande este).
-- **Tarefas:**
-  1. `AuditLogInterceptor` NestJS — captura ações sensíveis automaticamente
-  2. Helper `auditLog.gravar(acao, recurso, metadata)` pra usar em services
-  3. Decorator `@Auditavel({ acao: 'cooperativa.suspender' })`
-  4. Endpoint `POST /saas/impersonate/:cooperativaId` (gera JWT temporário com `impersonating=true`)
-  5. Banner visível em todas as telas quando `impersonating === true`
-  6. `POST /saas/impersonate/sair` (volta pro próprio JWT)
-  7. Tela `/dashboard/super-admin/audit-logs` — busca/filtros + export CSV
-  8. Cache 5min no dashboard agregado (Sprint 13a deixou TODO)
-- **Critério "passou":** Luciano impersona admin Hangar, vê dashboard como ele veria, sai do impersonate, abre audit log e vê todas ações registradas com flag `impersonating=true`.
-- **Risco:** médio (segurança crítica).
-- **Custo:** ~1000 linhas + decisão sobre criptografia metadata.
-
-#### Sprint 13c — Edição de plano SaaS + suspensão de parceiro
-
-- **Pra quê serve:** Luciano poder mudar plano de um parceiro, suspender por inadimplência, reativar — sem mexer no banco direto.
-- **Tempo estimado:** 2-3 dias úteis.
-- **Pré-requisito:** Sprint 13b.
-- **Bloqueia:** Sprint 14 (cron precisa saber quais estão suspensos).
-- **Tarefas:**
-  1. Botão "Alterar plano" no detalhe do parceiro → modal com seletor + preview
-  2. Endpoint `PATCH /saas/parceiros/:id/plano` (com auditoria automática via 13b)
-  3. Botão "Suspender" — flag `statusSaas=SUSPENSO`, auth bloqueia login admin parceiro
-  4. Botão "Reativar" — volta `ATIVO`
-  5. Email automático ao admin parceiro em cada mudança (suspenso/reativado)
-  6. Smoke test: mudar plano CoopereBR Teste de PRATA pra OURO, suspender, reativar
-- **Critério "passou":** Luciano testa o fluxo completo, todas as ações aparecem no audit log, parceiro suspenso é bloqueado de logar.
-- **Risco:** médio (impacto em login).
-- **Custo:** ~600 linhas.
+**Dependências:** Asaas em produção (Luciano abre conta).
 
 ---
 
-### Sprint 14 — Cron de FaturaSaas (cobrança automática dos parceiros)
+### Sprint 2 — OCR-Integração + Engine COMPENSADOS/DINAMICO (atômico)
 
-- **Pra quê serve:** todo dia 1 do mês, gerar automaticamente a FaturaSaas que cada parceiro deve pro Luciano (R$ 800/mês fixo + R$ 0,30/cooperado ativo, conforme configurado).
-- **Quem ganha:** Luciano (recebe sem cobrar manual), parceiro (vê valor antes de vencer).
-- **Tempo estimado:** 4 dias úteis.
-- **Pré-requisito:** Sprint 12 + Sprint 13.
-- **Bloqueia:** Sprint 22 (conciliação financeira global).
-- **Tarefas:**
-  1. Cron `@Cron('0 0 1 * *')` em `saas.job.ts`
-  2. Lógica: contar cooperados ativos por parceiro, gerar `FaturaSaas` no Asaas
-  3. Email automático pro admin do parceiro (via `email-config.service`)
-  4. Log no painel Luciano (Sprint 13)
-  5. Teste E2E: rodar cron manualmente, ver fatura criada + email enviado
-- **Critério "passou":** rodada manual gera 1 FaturaSaas pro CoopereBR (parceiro de teste), email chega, painel mostra status `PENDENTE`.
-- **Risco:** baixo-médio. Risco é conta do parceiro receber email errado se SMTP do tenant estiver mal configurado.
-- **Custo:** ~400 linhas. Depende de Sprint 12 ter Asaas em produção.
+- **Severidade:** P1 (sem isso, nenhum parceiro vai pra produção com modelo COMPENSADOS ou DINAMICO).
+- **Estimativa:** 2-3 semanas.
+- **Pode rodar quando:** após Sprint 0 (premissas regulatórias validadas).
+- **Bloqueia:** parceiros que querem COMPENSADOS ou DINAMICO em produção.
 
----
+**Escopo:**
+- Implementar `CREDITOS_DINAMICO` (`NotImplementedException` atual em `faturas.service.ts:1882`) com fórmula revisada (normalização por consumo, não cobrar mais que valor sem desconto).
+- Validar `CREDITOS_COMPENSADOS` com dados reais (ver D-30 derivado: `tarifaContratual` vazia em contratos com plano COMPENSADOS — bug do snapshot do Motor.aceitar).
+- Detecção automática EDP via `kwhCompensado>0` na fatura aprovada → dispara `gerarCobrancaPosFatura` (já existe).
+- Decisão de produto **resolvida**: pipeline OCR alimenta `Cobranca`, **não** o Motor de Proposta. Motor é só pro cadastro inicial.
+- Destravar `BLOQUEIO_MODELOS_NAO_FIXO` quando QA passar.
 
-### Sprint 15 — Cadastro Condomínio atomizado (público)
+**Critério "passou":** 5 cooperados de teste com plano COMPENSADOS recebem cobrança real calculada da fatura EDP do mês. Discrepância vs valor sem cooperativa < 1%. Diagnóstico de fatura real (commit `5ae9dfd`) é o ponto de partida da validação.
 
-- **Pra quê serve:** permitir que síndico cadastre o condomínio inteiro de uma vez (admin do condomínio + N condôminos via CSV ou formulário).
-- **Quem ganha:** síndico (Helena de Moradas Enseada), administradora.
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 14.
-- **Bloqueia:** Sprint 16 (painel agregador depende de ter agregadora cadastrada).
-- **Tarefas:**
-  1. Criar `Cooperativa.tipoParceiro = CONDOMINIO` (já existe no enum)
-  2. Fluxo `/cadastro/condominio`: síndico cadastra, sistema cria tenant + admin + UC do condomínio
-  3. Importação CSV de condôminos (nome, CPF, fração ideal, email, WA)
-  4. Cada condômino vira `Cooperado` com `tipo = CONDOMINIO_MEMBRO`
-  5. Email convite individual (pré-cadastrado, link mágico pra confirmar)
-- **Critério "passou":** Helena cadastra Moradas Enseada, importa 23 condôminos via CSV, todos recebem email convite, 1 confirma e vira ATIVO.
-- **Risco:** médio. CSV import historicamente é fonte de bug.
-- **Custo:** ~800 linhas (form + parser + jobs de envio).
+**Dependências:** Sprint 0 (cooperados regularizados antes de cobrar pelo modelo COMPENSADOS).
 
 ---
 
-### Sprint 16 — Painel Agregador (Hangar Universidade / Condomínio Moradas)
+### Sprint 3 — Banco de Documentos (Assinafy)
 
-- **Pra quê serve:** Carlos (Hangar) e Helena (síndica) precisam ver consumo + economia agregada da agregadora deles, sem ver dados individuais dos cooperados.
-- **Quem ganha:** Carlos, Helena.
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 15.
-- **Bloqueia:** Sprint 21 (painéis síndico detalhado).
-- **Tarefas:**
-  1. Role `AGREGADORA_ADMIN` em `roles.enum.ts`
-  2. `/dashboard/agregadora` com 4 cards: total cooperados, kWh consumido mês, kWh compensado, economia total
-  3. Gráfico evolução mensal (12 meses)
-  4. Lista cooperados (nome + status apenas, sem CPF/valor)
-  5. Acesso bloqueado a dados individuais (LGPD)
-- **Critério "passou":** Carlos abre painel da Hangar, vê 18 professores+alunos, kWh agregado, economia total. Não consegue clicar em cooperado individual.
-- **Risco:** baixo. Já tem dados, só falta agregação visual.
-- **Custo:** ~600 linhas + 1 endpoint agregador no backend.
+- **Severidade:** P1 (resolve débitos D-30H + D-30I + D-30J — risco regulatório ativo).
+- **Estimativa:** 1-2 semanas.
+- **Pode rodar quando:** independente.
+- **Bloqueia:** entrada de parceiro real que exija conformidade jurídica.
 
----
+**Escopo:**
+- Integração Assinafy (provedor de assinatura digital com validade jurídica).
+- 5 templates iniciais SISGD: Proposta + Termo de Adesão + Termo de Responsabilidade + Procuração ANEEL + Contrato.
+- Biblioteca de documentos por parceiro (parceiro customiza templates).
+- Agrupamento de docs em 1 assinatura (uma única jornada de assinatura cobrindo múltiplos documentos).
+- **Atualizar termo + bot** pra remover RN 482/2012 (D-30H, D-30I) e citar Lei 14.300/2022 + RN 1.000/2021.
+- Adicionar cláusula de alocação dinâmica no Termo (D-30J).
+- Schema: novos tipos `TERMO_ADESAO`, `TERMO_RESPONSABILIDADE`, `PROCURACAO_ANEEL` em `ModeloDocumento` (P0-03 do débito atual).
 
-### Sprint 17 — Engine COMPENSADOS (cálculo cobrança modelo 2)
+**Critério "passou":** novo cooperado se cadastra, assina os 5 documentos numa única jornada, recebe PDFs assinados por email com validade jurídica via Assinafy.
 
-- **Pra quê serve:** sistema atualmente só cobra pelo modelo FIXO. COMPENSADOS é o modelo mais usado em cooperativas reais — cobrança proporcional ao kWh efetivamente compensado pela concessionária.
-- **Quem ganha:** parceiros que usam modelo COMPENSADOS (~70% do mercado).
-- **Tempo estimado:** 7 dias úteis (mais arriscado do plano).
-- **Pré-requisito:** Sprint 16. **Snapshot do banco antes de começar (mandatório).**
-- **Bloqueia:** Sprint 18 (DINAMICO), Sprint 22 (conciliação).
-- **Tarefas:**
-  1. Snapshot completo do banco dev e prod (`pg_dump`)
-  2. Criar `engines/compensados.engine.ts` em `cobrancas/`
-  3. Lógica: usar `FaturaProcessada.kwhCompensado` como base, aplicar `Contrato.descontoPercentual`
-  4. Validação cruzada: comparar resultado COMPENSADOS vs FIXO em 10 cobranças históricas
-  5. Tests unit + integração + E2E
-  6. Toggle `MODELO_COMPENSADOS_ATIVO` (default false até validar)
-  7. Auditoria com Luciano: rodar 3 cobranças reais simuladas antes de ligar toggle
-- **Critério "passou":** 3 cobranças reais (CoopereBR) calculadas com COMPENSADOS dão valor dentro de tolerância 1% comparado ao cálculo manual em planilha.
-- **Risco:** **alto**. Mexe em dinheiro real. Bug aqui = parceiro cobra cooperado errado.
-- **Custo:** ~1200 linhas + suite de testes pesada. Snapshot prod (~30 min). Validação manual com Luciano (1 dia).
+**Dependências:** validação jurídica das cláusulas com advogado especializado em ANEEL (recomendado).
 
 ---
 
-### Sprint 18 — Engine DINAMICO (cálculo cobrança modelo 3)
+### Sprint 4 — Portal Proprietário
 
-- **Pra quê serve:** modelo DINAMICO usa tarifa flutuante mês-a-mês conforme bandeira tarifária + Fio B + tributos. Mais complexo, menos usado, mas crítico pra alguns nichos (grandes consumidores).
-- **Quem ganha:** parceiros com cooperados B3/B4 (~10% do mercado).
-- **Tempo estimado:** 6 dias úteis.
-- **Pré-requisito:** Sprint 17 (engine COMPENSADOS validada).
-- **Bloqueia:** Sprint 22 (conciliação).
-- **Tarefas:**
-  1. `engines/dinamico.engine.ts`
-  2. Integração com tabela `BandeiraTarifaria` (já existe)
-  3. Cálculo Fio B 2026 = 60% (`rules/financeiro.md`)
-  4. Validação cruzada com fatura real EDP (3 meses diferentes, 3 bandeiras)
-  5. Toggle `MODELO_DINAMICO_ATIVO`
-- **Critério "passou":** 3 cobranças DINAMICO (3 bandeiras: verde/amarela/vermelha) batem com fatura real ±2%.
-- **Risco:** alto. Bandeiras tarifárias mudam, ANEEL publica resoluções, sistema tem que acompanhar.
-- **Custo:** ~1000 linhas + tabela de bandeiras atualizada via cron mensal.
+- **Severidade:** P1 (Solares e outros proprietários dependem).
+- **Estimativa:** 1-2 semanas.
+- **Pode rodar quando:** após Sprint 1 (FaturaSaas) ou paralelo.
+- **Bloqueia:** entrada de proprietários institucionais (Solares).
 
----
+**Escopo:**
+- ContratoUso 3 modalidades (`valorFixoMensal` + `valorPorUnidade` + `percentualRepasse` × tarifa SCEE sem ICMS).
+- Cron mensal de geração de lançamento (`gerarLancamentoMensal` hoje só roda no `create()` do contrato).
+- UI no `/proprietario` mostrando cálculo discriminado das 3 parcelas.
+- Remover hardcode `R$ 0,50/kWh` em `usinas.service.ts:503,525`.
+- Notificação de repasse via WhatsApp/email.
 
-### Sprint 19 — DRE por parceiro (demonstrativo de resultados)
+**Critério "passou":** proprietário Solares vê dashboard com receita do mês decomposta em 3 parcelas, recebe email no D+5 confirmando lançamento, Luciano consegue acompanhar repasses no painel SISGD.
 
-- **Pra quê serve:** admin do parceiro precisa ver receita/custo/lucro do mês — dado contábil que hoje não existe em lugar nenhum.
-- **Quem ganha:** admin parceiro (decide se aumenta tarifa, se corta despesa).
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 18.
-- **Bloqueia:** Sprint 22 (conciliação).
-- **Tarefas:**
-  1. Page `/dashboard/financeiro/dre`
-  2. Receita: soma `Cobranca.valor` (status PAGA) do mês
-  3. Custo: soma `ContaPagar.valor` (status PAGA) — arrendamento, manutenção, FaturaSaas
-  4. Lucro = Receita - Custo
-  5. Comparativo 3 meses, exportar PDF
-- **Critério "passou":** admin CoopereBR abre DRE de mar/2026, vê receita real, despesa real, lucro real, exporta PDF.
-- **Risco:** médio. Depende de `ContaPagar` estar populado corretamente.
-- **Custo:** ~500 linhas + endpoint agregador.
+**Dependências:** ContratoUso real cadastrado (hoje 0 registros).
 
 ---
 
-### Sprint 20 — Conciliação automática (banco vs sistema)
+### Sprint 5 — Módulo Regulatório ANEEL (estruturante)
 
-- **Pra quê serve:** comparar extrato bancário (Banco do Brasil / Sicoob) com cobranças `PAGA` no sistema, detectar divergências, alertar Luciano.
-- **Quem ganha:** Luciano, admin parceiro.
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 19. **Conta bancária produção configurada (dependência externa).**
+- **Severidade:** P0 estruturante (resolve sintomas detectados em Sprint 0).
+- **Estimativa:** 3-4 semanas.
+- **Pode rodar quando:** após Sprint 0 (insumo de auditoria).
+- **Bloqueia:** Sprint 8 (Política + Engine de Otimização).
+
+**Escopo:**
+- **Schema novo:**
+  - `Usina.classeGd` (enum GD_I/GD_II/GD_III).
+  - `Usina.dataProtocoloDistribuidora` (DateTime).
+  - `Uc.dataProtocoloDistribuidora` (DateTime).
+  - `RegrasFioB` (model dedicado: `ano: Int`, `classeGd: ClasseGd`, `percentualFioB: Decimal`).
+  - `ConfigRegulatoriaParceiro` (1:1 com `Cooperativa`) com 5 flags.
+- **5 flags configuráveis** (cada parceiro):
+  - `multipleUsinasPerUc` (default false)
+  - `multipleClassesGdPerUc` (default false)
+  - `concentracaoMaxPorCooperadoUsina` (default 25)
+  - `misturaClassesMesmaUsina` (default false)
+  - `transferenciaSaldoEntreUcs` (default false — saldo intransferível)
+- **Audit trail obrigatório** — mudança de flag gera `AuditLog`.
+- **Schema N:M Contrato↔Usina** (controlado por flag `multipleUsinasPerUc`):
+  - Modelo de junção `UcUsinaRateio` (`ucId` + `usinaId` + `percentualRateio`, soma=100% por UC).
+- **Cálculo mix de origens** (Fio B ponderado quando UC tem múltiplas usinas).
+- **Validações no Motor.aceitar() + alocarListaEspera + gerarCobrancaPosFatura** consultam as flags.
+- **UI de configuração** `/parceiro/configuracoes/regulatorio` (toggle de cada flag + campo numérico do `concentracaoMax`).
+- **Cron diário** de auditoria de concentração (D-30F).
+- **Seed inicial de RegrasFioB** com tabela 2022-2029 (compatível com decisão claude.ai 30/04).
+
+**Critério "passou":** parceiro abre `/parceiro/configuracoes/regulatorio`, ativa flag `multipleUsinasPerUc=true` (gera audit log), cadastra contrato com 2 usinas, soma de rateio é forçada a 100%, cobrança mensal calcula Fio B ponderado por classe GD.
+
+**Dependências:** Sprint 0 (achados de auditoria orientam migração de UCs existentes).
+
+---
+
+### Sprint 6 — Auditoria IDOR Geral
+
+- **Severidade:** P2 (segurança multi-tenant antes de Sinergia migrar).
+- **Estimativa:** 1 semana.
+- **Pode rodar quando:** independente.
+- **Bloqueia:** onboarding Sinergia.
+
+**Escopo:**
+- Replicar helper `assertSameTenantOrSuperAdmin` em todos os módulos backend que recebem `cooperativaId` via parâmetro:
+  - `cooperados`, `contratos`, `cobrancas`, `usinas`, `ucs`, `faturas`, `convenios`, `clube-vantagens`, `cooper-token`, `indicacoes`, `motor-proposta`, etc.
+- Auditoria de cada endpoint que aceita `:id` ou query `cooperativaId` (lista atual: ~50 endpoints suspeitos).
+- Specs Jest cobrindo cenários de cross-tenant access (ADMIN da Cooperativa A tentando acessar dados da Cooperativa B → 403).
+- Atualização do `CLAUDE.md` raiz com regra: **audit de segurança como etapa padrão** quando entrega tela ou endpoint que receba `cooperativaId` via parâmetro.
+
+**Critério "passou":** suite de specs IDOR rodando verde em CI (16+ cenários cobrindo todos os módulos), zero regressões.
+
+**Dependências:** Sprint 13a já entregou 6 endpoints — restantes seguem o mesmo padrão.
+
+---
+
+### Sprint 7 — DRE + Conciliação + Fechamento Mensal
+
+- **Severidade:** P2 (governança financeira antes de Walter, contador externo).
+- **Estimativa:** 2-3 semanas.
+- **Pode rodar quando:** independente.
+- **Bloqueia:** auditoria contábil oficial.
+
+**Escopo:**
+- Endpoint `GET /financeiro/dre` consolidado (Demonstrativo de Resultado do Exercício).
+- Conciliação BB/Sicoob (extrato bancário vs `LancamentoCaixa`):
+  - Webhook ou polling do banco.
+  - Match automático por valor + data + descrição.
+  - Conciliação manual de não-matches.
+- Fechamento mensal:
+  - Endpoint `POST /financeiro/fechamento/:ano-:mes` (bloqueia lançamentos retroativos).
+  - Reabertura controlada por SUPER_ADMIN com audit log.
+- Tela `/dashboard/financeiro/dre` + `/dashboard/financeiro/conciliacao` + `/dashboard/financeiro/fechamento`.
+
+**Critério "passou":** Walter (contador externo) gera DRE de abr/2026, concilia 100% das transações BB, fecha o mês com 1 clique. Reabertura exige aprovação SUPER_ADMIN.
+
+**Dependências:** nenhuma técnica. **Asaas em produção** ajuda mas não bloqueia.
+
+---
+
+### Sprint 8 — Política de Alocação + Engine de Otimização
+
+- **Severidade:** P1 (resolve causa raiz do caso Exfishes).
+- **Estimativa:** 2-3 semanas.
+- **Pode rodar quando:** após Sprint 5 (estrutura regulatória).
+- **Bloqueia:** Sprint 9 (Motor de Diagnóstico depende de Engine pra projetar economia).
+
+**Escopo:**
+- **Modelo `PoliticaAlocacao`** — faixas configuráveis por parceiro:
+  - `parceiroId` + `faixaMin` + `faixaMax` (consumo kWh) + `classeGdPreferida` + `usinasElegiveis[]`.
+- **Política padrão SISGD** seedada (pequenos→GD II, médios→GD I/II, grandes→GD I) + customização por parceiro.
+- **Modelo `AlocacaoOtima`** — snapshot do estado calculado com timestamp.
+- **Algoritmo de otimização** (programação linear ou heurística greedy + busca local):
+  - Minimiza custo total respeitando: concentração ≤ flag, política de alocação, capacidade da usina, compatibilidade ANEEL, **estabilidade mínima** (cooperado alocado < 3 meses não migra).
+  - Suporta **Split** (uma UC dividida entre múltiplas usinas, controlado por `multipleUsinasPerUc`).
+- **Modos:**
+  - **Sugestão (default)** — engine sugere realocações; admin aprova caso a caso.
+  - **Automático com guard-rails** — engine executa realocações pequenas (até X% por mês); grandes precisam aprovação. **Default OFF.**
+- **Recálculo** periódico (mensal) + sob demanda (trigger admin).
+- **Painel `/parceiro/alocacao`** com sugestões + simulação prévia obrigatória.
+
+**Critério "passou":** admin abre painel de alocação, vê 5 sugestões da engine (cada uma com simulação "antes/depois"), aprova 3 que reduzem custo total em 8% sem violar nenhuma regra. Caso Exfishes não acontece mais (engine bloqueia mudança de classe sem alerta).
+
+**Dependências:** Sprint 5 (estrutura regulatória pronta).
+
+---
+
+### Sprint 9 — Motor de Diagnóstico Pré-Venda
+
+- **Severidade:** P1 estratégico (gancho de vendas concreto).
+- **Estimativa:** 3-4 semanas.
+- **Pode rodar quando:** após Sprints 5 + 8.
 - **Bloqueia:** —
-- **Tarefas:**
-  1. Integração CNAB 240 (BB e Sicoob)
-  2. Cron diário `@Cron('0 8 * * *')` baixa extrato
-  3. Match: `Cobranca.valor + data` vs linha CNAB
-  4. Painel `/dashboard/financeiro/conciliacao` mostra divergências
-  5. Alerta WA pro Luciano se ≥3 divergências
-- **Critério "passou":** 1 dia de conciliação CoopereBR roda, 100% das cobranças PAGAS batem com extrato. 1 divergência fictícia gera alerta WA.
-- **Risco:** médio. CNAB é formato chato, banco às vezes muda layout.
-- **Custo:** ~1500 linhas (parser CNAB + lógica match + tela). Conta produção banco (Luciano).
+
+**Escopo:**
+- **Funil público** `/diagnostico` (rota nova).
+- **Pipeline ingestão** (reutiliza `faturas.service.ts:extrairOcr` — pipeline OCR já validado).
+- **Motor de análise** (regras + LLM híbrido — Claude AI):
+  - Detecta classe GD da fatura.
+  - Calcula economia projetada com plano FIXO/COMPENSADOS/DINAMICO.
+  - Sugere usina compatível.
+  - Projeta 2026-2029 (Fio B progressivo).
+- **Versão Express grátis** (análise resumida em <30s, captcha + rate limit).
+- **Versão Completo paga** (relatório aprofundado, sugestão R$ 199-499 — validar com mercado).
+- **Anti-abuso:** captcha + rate limit (X requests/IP/dia) + cookie de sessão.
+- **Renomear `/faturas/diagnostico` → `/faturas/healthcheck`** (D-30K).
+
+**Critério "passou":** lead acessa `/diagnostico`, sobe fatura PDF, recebe em 30s relatório Express com economia projetada. Se quiser detalhe, paga R$ X e recebe relatório Completo. Conversão Express→Completo > 5%.
+
+**Dependências:** Sprints 5 + 8.
 
 ---
 
-### Sprint 21 — Painel síndico detalhado (Helena de Moradas)
-
-- **Pra quê serve:** síndico precisa enxergar consumo POR APARTAMENTO (com permissão), gerar rateio mensal automático, exportar pra prestação de contas do condomínio.
-- **Quem ganha:** Helena, condôminos (transparência).
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 16 (painel agregador) + Sprint 19 (DRE).
-- **Bloqueia:** —
-- **Tarefas:**
-  1. `/dashboard/sindico/rateio`
-  2. Tabela: apto + nome + fração ideal + kWh + valor + status pagamento
-  3. Botão "gerar rateio mês X" (PDF + ZIP de boletos)
-  4. Histórico de rateios anteriores
-  5. Auditoria: log de quem acessou (LGPD)
-- **Critério "passou":** Helena gera rateio mar/2026 do Moradas Enseada, PDF abre com 23 linhas corretas, ZIP tem 23 boletos.
-- **Risco:** médio. PDF + boleto em massa.
-- **Custo:** ~700 linhas + integração PDF gen.
-
----
-
-### Sprint 22 — Audit trail (rastreabilidade global)
-
-- **Pra quê serve:** registrar quem fez o quê e quando — exigência LGPD + boa prática operacional. Hoje algumas ações são logadas, outras não.
-- **Quem ganha:** Luciano (auditoria), parceiro (defesa em caso de questionamento).
-- **Tempo estimado:** 4 dias úteis.
-- **Pré-requisito:** Sprint 21.
-- **Bloqueia:** Sprint 26 (pré-produção).
-- **Tarefas:**
-  1. Model `AuditLog` (já existe parcialmente, expandir)
-  2. Interceptor NestJS captura toda mutação (POST/PUT/PATCH/DELETE)
-  3. Campos: usuário, IP, ação, antes, depois, timestamp, tenant
-  4. Página `/dashboard/admin/auditoria` (busca por usuário, data, recurso)
-  5. Retenção: 5 anos (LGPD financeiro)
-- **Critério "passou":** 1 alteração de cobrança gera registro em `AuditLog`, busca pela tela retorna o registro.
-- **Risco:** baixo-médio. Performance do interceptor (não pode lentificar).
-- **Custo:** ~600 linhas + index novos no banco.
-
----
-
-### Sprint 23 — Templates personalizáveis por parceiro
-
-- **Pra quê serve:** cada parceiro tem identidade visual diferente (logo, cor, texto de email). Hoje tudo tá hardcoded com cara CoopereBR.
-- **Quem ganha:** parceiros novos (entram com sua marca).
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 22.
-- **Bloqueia:** Sprint 25 (E2E completo).
-- **Tarefas:**
-  1. Model `TemplateParceiro` (logo, cor primária, footer, assinatura email)
-  2. Tela `/dashboard/admin/identidade-visual`
-  3. Engine de template aplica em: PDF cobrança, PDF proposta, email transacional, WA
-  4. Preview ao salvar
-  5. Default: identidade CoopereBR
-- **Critério "passou":** parceiro fictício "Solar do Vale" cria identidade própria, email transacional sai com logo deles.
-- **Risco:** baixo. Cosmético.
-- **Custo:** ~700 linhas + storage de logos (S3 ou local).
-
----
-
-### Sprint 24 — Login facial (KYC + autenticação)
-
-- **Pra quê serve:** alta segurança em ações financeiras (saque PIX excedente, transferência, alteração de dados bancários).
-- **Quem ganha:** todos (segurança), Luciano (compliance).
-- **Tempo estimado:** 4 dias úteis.
-- **Pré-requisito:** Sprint 23.
-- **Bloqueia:** Sprint 26.
-- **Tarefas:**
-  1. Já existe módulo `auth/facial` parcial — finalizar
-  2. Captura foto KYC no cadastro (já existe parte)
-  3. Verificação facial em ações sensíveis (toggle por ação)
-  4. Fallback: senha + email + WA OTP
-  5. Tela de gerenciamento de biometria
-- **Critério "passou":** 1 cooperado real cadastra biometria, faz transação sensível, verificação aprova.
-- **Risco:** médio. Lib de visão computacional pode falhar em cooperado idoso (acessibilidade).
-- **Custo:** ~500 linhas (a maioria já existe) + tuning de threshold.
-
----
-
-### Sprint 25 — Suite E2E Playwright completa
-
-- **Pra quê serve:** testar ponta-a-ponta os 10 fluxos críticos do `MAPA-INTEGRIDADE-SISTEMA.md` automaticamente, antes de qualquer deploy de produção.
-- **Quem ganha:** Luciano (confiança), Claude/dev (regressão automática).
-- **Tempo estimado:** 6 dias úteis.
-- **Pré-requisito:** Sprint 24.
-- **Bloqueia:** Sprint 26.
-- **Tarefas:**
-  1. Atualizar `web-test/` com 10 specs (atualmente 7 funcionais + 5 falhas conhecidas)
-  2. Cobrir: cadastro completo, proposta, assinatura, pagamento, conciliação, rateio, FaturaSaas, painel Luciano, painel síndico, audit
-  3. Rodar em CI antes de qualquer push
-  4. Cobertura mínima: 80% dos fluxos críticos
-- **Critério "passou":** 10/10 specs verde em sequência, tempo total <15min.
-- **Risco:** médio. Testes E2E são chatos de manter (flaky).
-- **Custo:** ~2000 linhas de teste. CI configurado.
-
----
-
-### Sprint 26 — Pré-produção (hardening + smoke)
-
-- **Pra quê serve:** última camada antes de abrir pra parceiro real. Validar performance, segurança, rollback, monitoramento.
-- **Quem ganha:** Luciano (entra em produção sabendo o que faz).
-- **Tempo estimado:** 5 dias úteis.
-- **Pré-requisito:** Sprint 25.
-- **Bloqueia:** **PRODUÇÃO**.
-- **Tarefas:**
-  1. Load test: 500 cooperados simultâneos, 100 webhooks Asaas/min
-  2. Pen test básico (OWASP top 10)
-  3. Backup + rollback testado (`pg_restore` em ambiente de stage)
-  4. Sentry / Plausible / monitoramento real ligado
-  5. Runbook operacional `docs/operacao/runbook.md`
-  6. Documentação Luciano: "como reagir quando der ruim"
-  7. Smoke test final: cadastro → proposta → assinatura → pagamento → conciliação rodando ponta a ponta
-- **Critério "passou":** smoke test passa em <30min, rollback testado dá certo, runbook revisado pelo Luciano.
-- **Risco:** alto se algo aparecer aqui (load test pode revelar gargalo).
-- **Custo:** ~R$ 200/mês (Sentry + monitoramento). 1 dia de Luciano lendo runbook.
-
----
-
-## Seção 3 — Linha do tempo visual
+## Seção 4 — Ordem sugerida de execução
 
 ```
-Semana 1  ████ Sprint 12 (Webhook Asaas prod)
-Semana 2  ████ Sprint 13 (Painel Luciano)
-Semana 3  ████ Sprint 14 (Cron FaturaSaas)
-Semana 4  █████ Sprint 15 (Cadastro Condomínio)
-Semana 5  █████ Sprint 16 (Painel Agregador)
-Semana 6  ███████ Sprint 17 (Engine COMPENSADOS) ← mais arriscado
-Semana 7  ██████ Sprint 18 (Engine DINAMICO)
-Semana 8  █████ Sprint 19 (DRE)
-Semana 9  █████ Sprint 20 (Conciliação CNAB)
-Semana 10 █████ Sprint 21 (Painel Síndico)
-Semana 11 ████ Sprint 22 (Audit Trail)
-          █████ Sprint 23 (Templates Parceiro)
-Semana 12 ████ Sprint 24 (Login Facial)
-          ██████ Sprint 25 (E2E Playwright)
-Semana 13 █████ Sprint 26 (Pré-produção)
-Semana 14 🟢 PRODUÇÃO ABERTA pra parceiro real
+[paralelo, podem começar AGORA]
+  Sprint 0 (Auditoria Reg.) ──┐
+  Sprint 1 (FaturaSaas)    ──┤
+                              │
+[após Sprint 0 + 1]           │
+  Sprint 2 (OCR + DINAMICO)←──┤
+  Sprint 5 (Mod. Regulatório)←┤
+  Sprint 6 (IDOR Geral)    ──┤
+  Sprint 3 (Assinafy)      ──┤  (pode rodar paralelo)
+  Sprint 4 (Portal Proprietário) ──┤
+                              │
+[após Sprint 5]               │
+  Sprint 8 (Política+Engine)←─┤
+                              │
+[após Sprints 5 + 8]          │
+  Sprint 9 (Diagnóstico)   ←──┤
+                              │
+[após todos os anteriores]    │
+  Sprint 7 (DRE+Conciliação)←─┘
 ```
 
-**Total:** ~73 dias úteis ≈ 14-15 semanas se 1 sprint = 1 semana cheia, ou 10-12 semanas com paralelização parcial (Sprint 23 e 24 podem rodar em paralelo, por exemplo).
+**Total estimado:** 17-23 semanas de Code dedicado.
+
+**Marcos críticos:**
+- Sprint 0 + Sprint 5 + Sprint 6 = **base regulatória + segurança** completa (8-9 semanas).
+- Sprints 1 + 2 + 3 + 4 = **destrava produção real** (5-9 semanas).
+- Sprints 8 + 9 = **diferencial de produto** (5-7 semanas).
+- Sprint 7 = **governança financeira** (2-3 semanas).
 
 ---
 
-## Seção 4 — Tabela executiva de progresso
+## Seção 5 — Decisões pendentes (aguardando Luciano)
 
-| Sprint | Tema | Status | % | Dias estimados | Risco |
-|--------|------|--------|---|----------------|-------|
-| 12 | Webhook Asaas prod | 🔴 Não iniciado | 0% | 3 | baixo |
-| 13 | Painel Luciano | 🔴 | 0% | 4 | baixo |
-| 14 | Cron FaturaSaas | 🔴 | 0% | 4 | baixo-médio |
-| 15 | Cadastro Condomínio | 🔴 | 0% | 5 | médio |
-| 16 | Painel Agregador | 🔴 | 0% | 5 | baixo |
-| 17 | **Engine COMPENSADOS** | 🔴 | 0% | 7 | **alto** |
-| 18 | Engine DINAMICO | 🔴 | 0% | 6 | alto |
-| 19 | DRE por parceiro | 🔴 | 0% | 5 | médio |
-| 20 | Conciliação CNAB | 🔴 | 0% | 5 | médio |
-| 21 | Painel Síndico | 🔴 | 0% | 5 | médio |
-| 22 | Audit Trail | 🔴 | 0% | 4 | baixo-médio |
-| 23 | Templates Parceiro | 🔴 | 0% | 5 | baixo |
-| 24 | Login Facial | 🔴 | 0% | 4 | médio |
-| 25 | E2E Playwright | 🔴 | 0% | 6 | médio |
-| 26 | Pré-produção | 🔴 | 0% | 5 | alto |
-| **Total** | | | **0%** | **73 dias úteis** | |
-
-> Atualizar esta tabela ao final de cada sprint (% pronto + status 🟢).
+- [ ] **Quando começar Sprint 0** (Auditoria Regulatória Emergencial) — pode começar imediatamente.
+- [ ] **Quando começar Sprint 1** (FaturaSaas) — pode rodar em paralelo.
+- [ ] **Modo Sugestão sempre vs Modo Automático com guard-rails** (Engine de Otimização Sprint 8) — decisão de produto.
+- [ ] **Cobrança do diagnóstico pré-venda Completo** (Sprint 9) — Express grátis + Completo R$ 199-499 (sugestão claude.ai 30/04 — validar com mercado).
+- [ ] **Consultoria regulatória** — advogado especializado em ANEEL pra validar premissas (limite 25%, mix de classes, transferência de saldo, etc.).
+- [ ] **Asaas em produção** (Luciano abre conta) — pré-requisito Sprint 1.
 
 ---
 
-## Seção 5 — Dependências externas (não-código)
+## Seção 6 — Critérios pra ligar produção real
 
-| Dependência | Bloqueia | Quem resolve | Prazo |
-|-------------|----------|--------------|-------|
-| Conta Asaas em produção | Sprint 12 | Luciano | 2 dias |
-| Decisão arquitetural sobre `Uc.numero` (manter / interno / remover) | Sprint 17 | Luciano + Claude (sessão dedicada) | 1 dia |
-| Snapshot pré-Sprint 17 (mandatório) | Sprint 17 | Claude (executa, Luciano valida) | 30min |
-| Credenciais Sungrow (monitoramento usina) | Sprint 26 (smoke test) | Luciano | 1 semana |
-| D4Sign ou ClickSign (assinatura digital prod) | Sprint 25 (E2E completo) | Luciano | 3 dias (cadastro + integração) |
-| Conta produção Banco do Brasil ou Sicoob (CNAB) | Sprint 20 | Luciano | 1-2 semanas (banco demora) |
-| Domínio fixo (sair do ngrok) | Sprint 12 | Luciano | 1 dia (já tem coopere.com.br) |
-| Certificado SSL prod | Sprint 26 | Claude (Cloudflare) | 1 dia |
+CoopereBR + Sinergia migrando do sistema antigo:
 
-**Total de dependências externas:** 8. **Crítica:** conta banco (Sprint 20 fica esperando se demorar).
-
----
-
-## Seção 6 — Custo estimado total + comparação com receita FaturaSaas
-
-### Custo de execução (estimativa)
-
-| Item | Valor |
-|------|-------|
-| Tempo de Claude (~73 dias úteis) | já contratado/uso pessoal |
-| Asaas (taxa por transação) | R$ 1,99 PIX + 1.99% boleto (varia uso) |
-| Sentry (monitoramento) | ~R$ 130/mês (plano team) |
-| Plausible Analytics | ~R$ 50/mês |
-| Cloudflare Pro (SSL + DDoS) | ~R$ 100/mês |
-| Backup automático Supabase | já incluso no plano atual |
-| D4Sign (assinatura digital) | ~R$ 0,80/assinatura (volume) |
-| Banco (CNAB conciliação) | R$ 0 (geralmente grátis pra cobrança simples) |
-| **Custo mensal recorrente estimado** | **~R$ 280-350/mês** |
-
-### Receita FaturaSaas projetada
-
-Cenário conservador (3 parceiros nos primeiros 3 meses):
-- 3 parceiros × R$ 800 fixo = R$ 2.400/mês
-- ~150 cooperados ativos somados × R$ 0,30 = R$ 45/mês
-- **Total receita inicial:** ~R$ 2.445/mês
-
-Cenário otimista (10 parceiros em 6 meses):
-- 10 × R$ 800 = R$ 8.000
-- ~600 cooperados × R$ 0,30 = R$ 180
-- **Total:** ~R$ 8.180/mês
-
-**Margem operacional:** receita conservadora cobre custo ~7x. Receita otimista cobre ~25x. **Sustentável desde o primeiro parceiro.**
-
-> Custo de implementação dos sprints é zero pra Luciano (Claude executa). Custos diretos só aparecem em produção (Asaas, Sentry, etc.).
+- [x] Sprint 13a concluído (Painel SISGD + lista parceiros + IDOR fix em 6 endpoints).
+- [ ] Doc-0 Fatia 2 concluída (PRODUTO + REGULATORIO + CONTROLE-EXECUCAO) — **fechado nesta sessão Code 30/04**.
+- [ ] Doc-0 Fatias 3-5 concluídas (SISTEMA.md + CLAUDE.md refator + movimentação final).
+- [ ] Sprint 0 concluído (auditoria regulatória regularizou casos Exfishes/FIGATTA/CRIAR).
+- [ ] Sprint 1 concluído (FaturaSaas cobrando parceiros automaticamente).
+- [ ] Sprint 2 concluído (DINAMICO + COMPENSADOS validados).
+- [ ] Sprint 3 concluído (Assinafy + termo atualizado).
+- [ ] Sprint 5 concluído (Módulo Regulatório ANEEL com 5 flags).
+- [ ] Sprint 6 concluído (Auditoria IDOR geral).
+- [ ] Conta Asaas produção configurada (Luciano abre).
+- [ ] Cron FaturaSaas validado em produção real (1 parceiro paga 1 ciclo completo).
 
 ---
 
-## Seção 7 — Como retomar o plano
-
-### No início de cada sprint
-
-1. Abrir este documento
-2. Ler a seção do sprint atual
-3. Confirmar pré-requisitos atendidos
-4. Frase de retomada: **"Iniciando Sprint X — [tema]"**
-5. Claude vai ler:
-   - `CLAUDE.md` (regras permanentes)
-   - `docs/MAPA-INTEGRIDADE-SISTEMA.md` (estado atual)
-   - Esta seção do sprint
-   - `docs/debitos-tecnicos.md` (verificar se algum P1/P2 surgiu)
-
-### Ao final de cada sprint
-
-1. Atualizar tabela executiva (Seção 4) — mudar status pra 🟢
-2. Atualizar `docs/MAPA-INTEGRIDADE-SISTEMA.md` (matriz dos 10 fluxos)
-3. Commit `docs(sprint-X): fechamento + entregas`
-4. Email resumo pra `lucbragatto@gmail.com` (se relevante)
-5. Frase de fechamento: **"Sprint X fechado. Próximo: Sprint X+1"**
-
-### Quando algo der errado no meio
-
-1. **Parar o sprint atual.** Não tentar consertar correndo.
-2. Anotar em `docs/debitos-tecnicos.md` o que apareceu.
-3. Decidir: (a) resolver agora antes de continuar, (b) seguir e tratar depois, (c) replanejar sprint.
-4. Documentar a decisão em `docs/sessoes/YYYY-MM-DD-incidente-sprint-X.md`.
-
-### Quando re-priorizar
-
-Se o cenário mudar (parceiro real entra antes do esperado, problema legal, ANEEL muda regra), este plano **não é sagrado**. Reabrir, reorganizar, manter o que ainda faz sentido. Sprints 12-13-14 são sempre prioridade — sem eles nada roda.
-
----
-
-## Frase final
-
-**"O SISGD não vai entrar em produção porque está pronto. Vai entrar em produção quando estes 15 sprints estiverem fechados, validados pelo Luciano e o smoke test do Sprint 26 passar de ponta a ponta."**
-
-— Plano consolidado em 26/04/2026 madrugada, após sessão de fechamento Sprint 11 + criação SISGD-VISAO-COMPLETA.
+*Plano vivo. Atualizar conforme sprints fecham ou novas descobertas exigem reorganização.*
