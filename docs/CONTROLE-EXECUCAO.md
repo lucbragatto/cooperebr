@@ -56,6 +56,17 @@
 12. **CONTROLE-EXECUCAO.md como arquivo vivo** atualizado em toda sessão.
 13. **Sprint 0 Auditoria Regulatória Emergencial** — P0 urgente, pode rodar antes de Doc-0 fechar.
 
+### Decisão 14 — Regra permanente: validação prévia obrigatória (sessão 30/04 noite)
+
+Todo trabalho novo (claude.ai ou Code) deve começar verificando o que já existe.
+Salva em memória persistente (`regra_validacao_previa_obrigatoria.md`) + `CLAUDE.md`.
+
+Aplica retroativamente a sessões futuras independente de o prompt mencionar.
+
+Origem: Luciano observou em 30/04 que sessões anteriores propunham trabalho sem
+verificação prévia, gerando retrabalho e perda de coerência. Sprint 13 funcionou
+exatamente porque seguiu essa disciplina.
+
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
 - 5 mecanismos de fidelidade são paralelos puros (sem regras de exclusão).

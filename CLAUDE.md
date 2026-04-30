@@ -1,5 +1,23 @@
 # Instruções permanentes — Claude Code no CoopereBR
 
+## Disciplina de validação prévia
+
+**Regra inegociável** — antes de propor ou executar qualquer trabalho novo no projeto,
+sempre verificar o que já existe pensado, escrito ou implementado.
+
+Detalhes em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/regra_validacao_previa_obrigatoria.md`.
+
+Aplica-se a:
+- Code (sessões autônomas com Claude Code CLI)
+- claude.ai web (sessões de planejamento e decisão)
+- Qualquer agente futuro que opere no projeto
+
+**Por quê:** sessões que pulam essa etapa produzem retrabalho e divergência entre
+documentação, código, banco e operação real. A coerência do sistema depende dessa
+disciplina.
+
+**Origem:** definida pelo Luciano em sessão claude.ai 30/04/2026 noite.
+
 ## Antes de qualquer tarefa, SEMPRE ler primeiro (nesta ordem)
 
 1. `docs/COOPEREBR-ALINHAMENTO.md` — estado consolidado do projeto
