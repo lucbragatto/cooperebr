@@ -4,13 +4,202 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-28 (Leitura Total Parte 1: 3 P2 novos — 130+ docs sem fonte única + cobertura testes baixa + MAPA virou log cronológico)
+**Última atualização:** 2026-04-30 (sessão Code Doc-0 Fatia 2 — 12 débitos novos D-30A a D-30L: caso Exfishes + flags regulatórias + RN defasada + spec Assis insumo histórico)
+
+---
+
+## P0 — Bloqueia produção real (descoberto sessão claude.ai 30/04)
+
+### D-30A — Sistema permite alocação > 25% por cooperado-usina (concentração violando regulação)
+
+**Severidade:** P0
+**Detectado em:** 2026-04-30 (sessão claude.ai — caso Exfishes anonimizado)
+**Impacto:** risco regulatório ATIVO em produção
+
+Caso Exfishes (cooperado real, anonimizado) em abril/2026 ocupava **39,55% da Usina A (GD I)** — muito acima do limite 25% adotado por ANEEL/distribuidoras como referência de não-concentração de SCEE. **Sistema não bloqueou nem alertou.**
+
+Investigação em sessão mostrou outras concentrações suspeitas hoje:
+- **FIGATTA**: 35% na Usina GD II (55.000 kWh / 157.000 kWh)
+- **CRIAR Centro de Saúde**: 16% na mesma Usina GD II (25.000 kWh)
+- **Agregado FIGATTA + CRIAR**: 51% em apenas 2 cooperados
+
+**Resolução:**
+- **Sprint 0** (Auditoria Regulatória Emergencial — P0 urgente, paralelo a Doc-0): listar e regularizar.
+- **Sprint 5** (Módulo Regulatório ANEEL): implementar validação automática via flag `concentracaoMaxPorCooperadoUsina` (default 25%), bloqueando aceite no Motor + alocarListaEspera quando ultrapassa.
+
+---
+
+### D-30B — Mudança de classe GD na realocação não detectada — caso Exfishes (R$ 310k/ano)
+
+**Severidade:** P0
+**Detectado em:** 2026-04-30 (sessão claude.ai)
+**Impacto:** R$ 310.000/ano de prejuízo ao cooperado por decisão cega do sistema
+
+Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfishes de Usina A (GD I) para Usina B (GD III). Sistema processou normalmente. Resultado:
+- Fatura saltou de **~R$ 6.600/mês** (média histórica) para **R$ 32.486/mês** (mês imediato pós-realocação).
+- Mudança implícita de **classe GD I → GD III** = mudança de % Fio B (isento → 60% em 2026) = explosão da tarifa efetiva.
+- Sistema tratou a mudança como trivial (só `Contrato.usinaId` mudou no banco). Nenhum alerta, nenhuma simulação prévia.
+
+**Status atual** (informado por Luciano em sessão): Exfishes está com 0,05% na Usina B "queimando saldo"; plano é mover 100% pra Usina A novamente.
+
+**Resolução:**
+- **Sprint 5** (Módulo Regulatório ANEEL): cálculo de classe GD efetiva via `Usina.classeGd` herdada pela UC; validação de mudança de classe no fluxo de realocação com simulação prévia obrigatória (mostrar "ao mover esse cooperado, a fatura projetada vai de X para Y").
+- **Sprint 8** (Política + Engine de Otimização): Engine sugere realocações respeitando classe GD do cooperado; bloqueia realocações que mudam classe sem aprovação explícita.
 
 ---
 
 ## P1 — Bloqueia entrada de parceiro real
 
-Nenhum no momento.
+### D-30C — Schema 1:1 Contrato↔Usina bloqueia UC com créditos de múltiplas usinas
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 (sessão claude.ai)
+**Onde:** `backend/prisma/schema.prisma` model `Contrato` (campo `usinaId String?`)
+
+Schema atual obriga UC a estar atrelada a **uma única usina** via `Contrato.usinaId`. Decisão de produto (Sprint 5): permitir uma UC consumir de **múltiplas usinas** (split inteligente de créditos), controlado por flag `multipleUsinasPerUc`.
+
+**Resolução:** **Sprint 5** — criar modelo de junção N:M (`UcUsinaRateio` ou similar) com `ucId` + `usinaId` + `percentualRateio`. Validação de soma = 100% por UC. Cobrança calculada por par (UC, Usina, mês).
+
+---
+
+### D-30D — Sem campo `dataProtocoloDistribuidora` na UC
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 (mapeamento regulatório — `docs/sessoes/2026-04-30-mapeamento-regulatorio-existente.md`)
+**Onde:** `backend/prisma/schema.prisma` model `Uc`
+
+Hoje schema tem `Usina.dataHomologacao` mas **não tem `Uc.dataProtocoloDistribuidora`** (data em que a UC foi protocolada para SCEE na distribuidora). Esse campo é insumo crítico pra:
+- Determinar **classe GD da UC** com base na data de protocolo (não só na data de homologação da usina).
+- Auditoria regulatória (Sprint 0).
+- Validação Lei 14.300/2022 (cutoff 07/01/2023).
+
+**Resolução:** **Sprint 5** (parte do escopo expandido).
+
+---
+
+### D-30E — Sem `RegrasFioB` cadastrado — tabela 2024-2029 inexistente no sistema
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 (mapeamento regulatório)
+**Onde:** schema sem modelo dedicado
+
+Tabela progressiva do Fio B (2023: 15% → 2029: 100%) **não existe** como dado estruturado no sistema. Spec do Assis (`docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`) propunha `const PERCENTUAL_FIO_B = {...}` em código, mas isso é frágil (ano novo precisa deploy).
+
+**Resolução:** **Sprint 5** — criar modelo `RegrasFioB` (`ano: Int`, `classeGd: ClasseGd`, `percentualFioB: Decimal`). Seed inicial com tabela 2022-2029. UI admin pra ajustar futuros (caso ANEEL revise).
+
+---
+
+### D-30H — Termo de adesão cita RN 482/2012 (defasada desde Lei 14.300/2022)
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 (mapeamento regulatório — commit `71dce8b`)
+**Onde:** `web/app/assinar/page.tsx:33,59`
+
+```tsx
+// linha 33:
+"...conforme regulamentação da ANEEL (Resolução Normativa nº 482/2012 e suas alterações)."
+
+// linha 59:
+"1. Representá-lo(a) perante a distribuidora de energia elétrica para fins de adesão ao sistema
+   de compensação de energia elétrica, nos termos da Resolução Normativa ANEEL nº 482/2012
+   e suas alterações;"
+```
+
+**Impacto:** clientes novos assinando termo legalmente desatualizado. Lei 14.300/2022 + RN 1.000/2021 substituíram a RN 482. Risco de questionamento jurídico.
+
+**Resolução:** **Sprint 3** (Banco de Documentos / Assinafy) — atualizar termo para citar Lei 14.300 + RN 1.000/2021. Validar com advogado especializado em ANEEL antes de publicar.
+
+---
+
+### D-30I — Bot CoopereAI cita RN 482/2012 no system prompt
+
+**Severidade:** P1 (mesmo problema D-30H)
+**Detectado em:** 2026-04-30 (mapeamento regulatório)
+**Onde:** `backend/src/whatsapp/coopere-ai.service.ts:25`
+
+```ts
+// linha 25:
+A CoopereBR é uma cooperativa de energia solar que permite economizar na conta de luz
+sem instalar nada em casa. Atuamos no modelo de Geração Distribuída (GD), regulamentado
+pela ANEEL (Resolução Normativa nº 482/2012).
+```
+
+Bot responde para leads e cooperados citando regulação defasada. Mesmo risco do D-30H em escala maior (todo lead que conversa com bot).
+
+**Resolução:** **Sprint 3** ou Sprint 0 (correção rápida do system prompt). Mudar para "Lei 14.300/2022 e Resolução Normativa ANEEL nº 1.000/2021".
+
+---
+
+### D-30J — Sem cláusula contratual de alocação dinâmica no Termo de Adesão
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 (sessão claude.ai — análise de planilha de cláusulas como referência)
+**Onde:** Termo de Adesão atual
+
+Termo de Adesão atual **não menciona** que cooperado pode ser realocado entre usinas (consequência: caso Exfishes, cooperado pode questionar mudança não-consentida). Lei 14.300 e práticas de mercado exigem cláusula explícita de "alocação dinâmica" autorizada.
+
+**Resolução:** **Sprint 3** — incluir cláusula no template do Termo: "Cooperado autoriza Parceiro a realocar UC entre usinas geradoras vinculadas, respeitando regras da distribuidora local e Lei 14.300/2022. Mudanças que aumentem custo efetivo serão comunicadas com X dias de antecedência."
+
+---
+
+## P2 — Tem mitigação mas precisa resolver antes de produção pública
+
+### D-30F — Sem cron de auditoria de concentração por usina
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 (sessão claude.ai)
+
+Hoje não há cron ou job que rode diariamente/semanalmente verificando se alguma concentração ultrapassa o limite. Sistema é reativo (só valida no aceite/realocação). Caso Exfishes mostra que **mudanças de capacidade da usina ou de consumo do cooperado podem fazer a concentração crescer organicamente** sem qualquer ação explícita.
+
+**Resolução:** **Sprint 5** — cron diário que recalcula `(kwhContrato / Usina.capacidade) × 100` por contrato ATIVO; alerta quando > flag `concentracaoMaxPorCooperadoUsina`.
+
+---
+
+### D-30G — Sem mecanismo de "queima de saldo" ativo (saldo > 2 meses parado)
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 (sessão claude.ai — caso Exfishes)
+
+Caso Exfishes acumulou **118.153 kWh de saldo** (≈ 1,6 meses de consumo do próprio cooperado parado). ANEEL prevê validade de 60 meses do saldo, mas saldos grandes parados:
+- Indicam **superdimensionamento de cota** (cooperado com cota maior que consumo real).
+- Aumentam **risco de perda total** se cooperado sair antes de queimar.
+- Sinal de alerta operacional para o admin.
+
+**Resolução:** **Sprint 0** (auditoria) + **Sprint 5** — relatório de UCs com saldo > 2 meses; sugestão de redução de cota ou realocação.
+
+---
+
+### D-30L — Spec Fio B do Assis (26/03) nunca implementada — marcada como insumo histórico
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 (mapeamento regulatório)
+**Onde:** `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`
+
+Spec detalhada (188 linhas) do Assis (26/03/2026) com schema `tusdFioA`/`tusdFioB`/enum `ModalidadeGD` (`GD1_ATE_75KW`/`GD1_ACIMA_75KW`/`GD2_COMPARTILHADO`), tabela progressiva 2022-2029, refactor do motor de cobrança. **Nunca implementada** — schema atual não tem nenhum desses campos.
+
+**Decisão sessão claude.ai 30/04:** marcar como **insumo histórico**. Arquitetura nova (Sprint 5) usa taxonomia diferente:
+- Spec Assis: `GD1_ATE_75KW`/`GD1_ACIMA_75KW`/`GD2_COMPARTILHADO` (3 modalidades por potência+contexto).
+- Decisão 30/04: **GD I/GD II/GD III** (3 classes por **data de homologação** com cutoff 07/01/2023 e 07/01/2024).
+
+**Resolução:** **Sprint 5** — adotar nova taxonomia. Trechos reutilizáveis da spec (tabela de % Fio B 2022-2029, fórmula `tarifaEfetiva = tusdFioA + (tusdFioB × pct) + TE`) podem ser portados se compatíveis. Spec marcada com banner em REGULATORIO-ANEEL.md Seção 16, Caso C.
+
+---
+
+## P3 — Pequeno, não bloqueia mas é dívida técnica
+
+### D-30K — Conflito de namespace `/diagnostico` entre healthcheck atual e Sprint 9
+
+**Severidade:** P3
+**Detectado em:** 2026-04-30 (mapeamento regulatório)
+**Onde:** `backend/src/faturas/faturas.controller.ts:139` — `@Get('diagnostico')`
+
+Endpoint atual `GET /faturas/diagnostico` é **healthcheck técnico** (verifica config_tenant, faturas_processadas, bucket Supabase, campos novos cooperado). **Sprint 9** introduzirá **Motor de Diagnóstico Pré-Venda** que ocupará rota `/diagnostico` (frontend) + endpoints `/diagnostico/*` (backend). Risco de confusão semântica.
+
+**Resolução:** **Sprint 9** — **renomear** endpoint atual `/faturas/diagnostico` para `/faturas/healthcheck`. Atualizar tela admin que consome (se houver) e documentação.
+
+---
+
+
 
 ### [RESOLVIDO 28/04] IDOR multi-tenant em endpoints `/cooperativas/`
 
