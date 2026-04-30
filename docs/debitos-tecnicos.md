@@ -142,6 +142,27 @@ Termo de Adesão atual **não menciona** que cooperado pode ser realocado entre 
 
 ---
 
+### D-30M — Bônus MLM cascata quebrado
+
+**Severidade:** P1
+**Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
+**Impacto:** indicadores de cooperados pagantes não recebem benefício
+
+Investigação E2E identificou: 9 registros em `Indicacao` com status `PRIMEIRA_FATURA_PAGA`
+mas **0 registros** correspondentes em `BeneficioIndicacao`. Cron ou trigger que
+deveria criar `BeneficioIndicacao` quando primeira fatura é paga não está disparando.
+
+**Verificação:**
+- `SELECT count(*) FROM indicacoes WHERE status = 'PRIMEIRA_FATURA_PAGA';` → 9
+- `SELECT count(*) FROM beneficios_indicacao;` → 0
+
+**Resolução:** investigação dedicada (sprint MLM). Antes de propor fix, verificar:
+1. `grep -rn "BeneficioIndicacao" backend/src/` — onde é criado?
+2. Existe cron que processa indicações pagas e cria bônus?
+3. Alguma flag silencia disparo?
+
+---
+
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
 ### D-30F — Sem cron de auditoria de concentração por usina
@@ -182,6 +203,37 @@ Spec detalhada (188 linhas) do Assis (26/03/2026) com schema `tusdFioA`/`tusdFio
 - Decisão 30/04: **GD I/GD II/GD III** (3 classes por **data de homologação** com cutoff 07/01/2023 e 07/01/2024).
 
 **Resolução:** **Sprint 5** — adotar nova taxonomia. Trechos reutilizáveis da spec (tabela de % Fio B 2022-2029, fórmula `tarifaEfetiva = tusdFioA + (tusdFioB × pct) + TE`) podem ser portados se compatíveis. Spec marcada com banner em REGULATORIO-ANEEL.md Seção 16, Caso C.
+
+---
+
+### D-30N — AuditLog interceptor não ativado
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
+**Impacto:** mudanças de configuração não estão sendo logadas (compliance)
+
+Sprint 13a Dia 1 criou tabela `AuditLog`. Schema OK. **Mas interceptor nunca foi
+ativado**, então 0 registros existem.
+
+**Verificação:** `SELECT count(*) FROM audit_log;` → 0
+
+**Resolução:** **Sprint 5** ou **Sprint 6** (auditoria geral) — implementar
+`AuditLogInterceptor` NestJS + decorator `@Auditavel`.
+
+---
+
+### D-30O — `FaturaProcessada.mesReferencia` null em todas
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
+**Impacto:** campo crítico para vincular fatura a cobrança não populado
+
+Todas as 5 `FaturaProcessada` no banco têm `mesReferencia=null`. OCR Claude AI
+extrai dado da fatura (`dadosExtraidos.mesReferencia` está populado) mas o pipeline
+não copia esse campo pra coluna dedicada.
+
+**Resolução:** **Sprint 2** (OCR-Integração) — popular `FaturaProcessada.mesReferencia`
+ao salvar a fatura processada. Bloqueia `gerarCobrancaPosFatura` que filtra por mês.
 
 ---
 

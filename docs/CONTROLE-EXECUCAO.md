@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-04-30** — sessão Code Doc-0 Fatia 2 completa.
+> Última atualização: **2026-04-30 noite** — sessão Code de fechamento + 3 investigações consolidadas.
 
 ---
 
@@ -33,6 +33,80 @@
 | 9 | Motor de Diagnóstico Pré-Venda | 🔴 não iniciado | P1 estratégico | 3-4 semanas |
 
 **Total estimado**: 17-23 semanas de Code dedicado.
+
+---
+
+## SESSÃO 2026-04-30 NOITE — Investigações realizadas (sem aplicar correções)
+
+**3 investigações concluídas, todas commitadas localmente:**
+
+### 1. Validação de specs históricos (commit `2617d08`)
+- Lidos 7 specs em `docs/specs/` que ficaram fora do mapeamento anterior
+- Relatório: `docs/sessoes/2026-04-30-validacao-specs-historicos.md` (711 linhas)
+- **6 descobertas estruturantes identificadas** (decisões pendentes)
+- **7 ajustes factuais confirmados** (correções pendentes)
+
+### 2. Regra de validação prévia obrigatória (commit `e0d4daa`)
+- Salva em `~/.claude/.../memory/regra_validacao_previa_obrigatoria.md`
+- Atualizada em `CLAUDE.md` (raiz)
+- Decisão 14 registrada
+- **Aplicada em todas as sessões Code futuras automaticamente**
+
+### 3. Estado real de cobrança E2E (commit `f3a0434`)
+- Mapeamento de 16 etapas do pipeline de cobrança
+- Relatório: `docs/sessoes/2026-04-30-estado-cobranca-e2e.md` (282 linhas)
+- **Achado central:** Caminho A (OCR→Cobrança automática) NUNCA rodou em produção
+- **Achado central:** Caminho B (cobrança manual UI + Asaas) maduro, pode ir pra produção em 1-2 semanas
+- **4 achados novos identificados** (catalogação pendente)
+
+---
+
+## PENDÊNCIAS PARA PRÓXIMA SESSÃO
+
+### A — 6 descobertas estruturantes (commit `2617d08`)
+- [ ] Modo Observador implementado mas ausente do PRODUTO.md — decidir se adiciona Camada 12
+- [ ] Hardcode 0.20 CooperToken sem origem em spec — confirmado bug, reclassificar D-29A
+- [ ] 3 specs CooperToken se contradizem na expiração — DECISÃO LUCIANO necessária
+- [ ] Convênios subdocumentado (1456 vs 5 linhas) — decidir expansão Camada 8
+- [ ] 600.000 kWh represados — Luciano declarou "não bloqueia nada" → marcar como ciente
+- [ ] FCFS + VPP ausentes do Doc-0 — DECISÃO LUCIANO se entram no roadmap
+
+### B — 7 ajustes factuais (identificados, a aplicar)
+- [ ] Remover "juiz TJES" do PRODUTO.md (linha 20)
+- [ ] Sinergia + CoopereBR como "clientes confirmados aguardando migração"
+- [ ] Estado atual: SISGD ainda sem cliente em produção
+- [ ] "Assis" não é pessoa, é assistente IA (OpenClaw) — corrigir em 6+ lugares
+- [ ] Limite 25% NÃO se aplica a GD I (direitos adquiridos até 2045)
+- [ ] Caso A (Exfishes) reescrever com narrativa correta
+- [ ] Conversão Express→Cooperado marcar como hipótese
+
+### C — 4 achados novos E2E (commit `f3a0434`)
+- [ ] D-30M — 9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao (bônus MLM cascata quebrado)
+- [ ] D-30N — AuditLog interceptor não ativado (tabela existe, 0 registros)
+- [ ] D-30O — FaturaProcessada.mesReferencia=null em todas — bug OCR
+- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 — bug snapshot Motor.aceitar
+
+### D — Decisão estratégica imediata
+**Recomendação Code:** focar Caminho B (cobrança manual + Asaas produção) — primeira receita real em 1-2 semanas.
+
+Decisão Luciano pendente:
+- [ ] Atacar Caminho B agora? (Sprint Asaas Produção)
+- [ ] Aplicar correções factuais (Prompt 2)?
+- [ ] Tratar 6 descobertas estruturantes?
+- [ ] Outro caminho?
+
+---
+
+## ESTADO REAL DO PRODUTO (descoberto 30/04 noite)
+
+| Componente | Estado |
+|---|---|
+| Caminho A — OCR automático | 🔴 nunca rodou em produção |
+| Caminho B — Cobrança manual + Asaas | 🟢 31 cobranças sandbox PAGAS, pronto pra produção |
+| FaturaSaas | 🟡 cron cria, mas sem Asaas/comunicação/pagamento |
+| MLM cascata | 🔴 quebrado (D-30M) |
+| AuditLog | 🔴 inativo (D-30N) |
+| Doc-0 Fatia 2 | 🟡 escrito mas com pendências A + B + C acima |
 
 ---
 
