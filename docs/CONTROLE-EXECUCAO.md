@@ -156,6 +156,20 @@ de sprints sem cruzar com a antiga. Detectado em 01/05 manhã quando Luciano dis
 Memória renomeada: `regra_validacao_previa_obrigatoria.md` →
 `regra_validacao_previa_e_retomada.md`.
 
+### Decisão 16 — Diagramas C4 + ER salvos como sugestão futura (sessão 01/05 manhã)
+
+Parceiro externo sugeriu gerar diagramas C4 Model + ER Diagram. Análise de
+prioridades concluiu: **não é urgente agora** (priorizar Caminho B, reconciliação
+sprints, pendências), mas é boa ideia pra futuro próximo.
+
+Salvo em memória persistente: `~/.claude/.../memory/sugestoes_pendentes.md`
+(novo arquivo de "sugestões úteis ainda não viradas em sprint").
+
+Reavaliar quando:
+- CoopereBR migrar pro SISGD em produção real (1-2 meses)
+- Houver decisão de procurar investidor / sócio externo
+- Entrar 3º parceiro além CoopereBR + Sinergia
+
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
 - 5 mecanismos de fidelidade são paralelos puros (sem regras de exclusão).
