@@ -1,22 +1,31 @@
 # Instruções permanentes — Claude Code no CoopereBR
 
-## Disciplina de validação prévia
+## Disciplina de validação prévia E retomada
 
-**Regra inegociável** — antes de propor ou executar qualquer trabalho novo no projeto,
-sempre verificar o que já existe pensado, escrito ou implementado.
+**Regra inegociável** — antes de propor ou executar qualquer trabalho novo OU
+retomar trabalho anterior, sempre verificar o estado real do projeto cruzando:
+- Documentação atual (`CONTROLE-EXECUCAO.md` + `PLANO-ATE-PRODUCAO.md`)
+- Código real (schema, services, banco)
+- Git history (commits recentes + branches)
 
-Detalhes em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/regra_validacao_previa_obrigatoria.md`.
+Detalhes em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/regra_validacao_previa_e_retomada.md`.
 
 Aplica-se a:
 - Code (sessões autônomas com Claude Code CLI)
 - claude.ai web (sessões de planejamento e decisão)
-- Qualquer agente futuro que opere no projeto
+- Qualquer agente futuro
 
-**Por quê:** sessões que pulam essa etapa produzem retrabalho e divergência entre
-documentação, código, banco e operação real. A coerência do sistema depende dessa
-disciplina.
+**Por quê:** sessões que pulam essa etapa produzem retrabalho, conflitos de numeração,
+órfãos esquecidos e divergência entre documentação, código, banco e operação real.
+A coerência sistêmica depende dessa disciplina.
 
-**Origem:** definida pelo Luciano em sessão claude.ai 30/04/2026 noite.
+**Exemplos reais de violação documentados:**
+- **30/04 noite:** claude.ai propôs nova numeração de sprints (Sprint 0-9) sem validar
+  com a antiga (Sprint 1-26) → 5 colisões + 6 órfãos. Detectado em 01/05 manhã
+  (commit `1be9b34`).
+- (adicionar futuras violações pra aprendizado contínuo)
+
+**Origem:** sessão claude.ai 30/04/2026 noite + extensão 01/05/2026 manhã.
 
 ## Antes de qualquer tarefa, SEMPRE ler primeiro (nesta ordem)
 

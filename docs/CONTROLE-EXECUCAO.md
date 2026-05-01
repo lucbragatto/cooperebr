@@ -47,7 +47,7 @@
 - **7 ajustes factuais confirmados** (correções pendentes)
 
 ### 2. Regra de validação prévia obrigatória (commit `e0d4daa`)
-- Salva em `~/.claude/.../memory/regra_validacao_previa_obrigatoria.md`
+- Salva em `~/.claude/.../memory/regra_validacao_previa_e_retomada.md`
 - Atualizada em `CLAUDE.md` (raiz)
 - Decisão 14 registrada
 - **Aplicada em todas as sessões Code futuras automaticamente**
@@ -133,13 +133,28 @@ Decisão Luciano pendente:
 ### Decisão 14 — Regra permanente: validação prévia obrigatória (sessão 30/04 noite)
 
 Todo trabalho novo (claude.ai ou Code) deve começar verificando o que já existe.
-Salva em memória persistente (`regra_validacao_previa_obrigatoria.md`) + `CLAUDE.md`.
+Salva em memória persistente (`regra_validacao_previa_e_retomada.md`) + `CLAUDE.md`.
 
 Aplica retroativamente a sessões futuras independente de o prompt mencionar.
 
 Origem: Luciano observou em 30/04 que sessões anteriores propunham trabalho sem
 verificação prévia, gerando retrabalho e perda de coerência. Sprint 13 funcionou
 exatamente porque seguiu essa disciplina.
+
+### Decisão 15 — Regra de validação prévia generalizada + preventiva (sessão 01/05 manhã)
+
+Estende Decisão 14:
+- Vale pra **TODAS as ferramentas** (Code, claude.ai, futuras)
+- Vale pra **TODA retomada** (não só "trabalho novo")
+- Cruza **3 fontes** (doc + código + git) antes de prosseguir
+
+Origem: claude.ai mesmo violou Decisão 14 em 30/04 noite ao propor nova numeração
+de sprints sem cruzar com a antiga. Detectado em 01/05 manhã quando Luciano disse
+"estávamos no 13" — Code descobriu 5 colisões + 6 órfãos (commit `1be9b34`,
+`docs/sessoes/2026-05-01-mapeamento-numeracao-sprints.md`).
+
+Memória renomeada: `regra_validacao_previa_obrigatoria.md` →
+`regra_validacao_previa_e_retomada.md`.
 
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
