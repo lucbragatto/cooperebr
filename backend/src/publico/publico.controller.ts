@@ -10,6 +10,7 @@ import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
+import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 
 @Controller('publico')
@@ -23,6 +24,7 @@ export class PublicoController {
     private faturasService: FaturasService,
     private motorProposta: MotorPropostaService,
     private indicacoes: IndicacoesService,
+    private conveniosMembros: ConveniosMembrosService,
   ) {}
 
   @Public()
@@ -457,14 +459,16 @@ export class PublicoController {
           const convenioId = conveniado?.id ?? membro?.convenioId;
 
           if (convenioId) {
-            const jaVinculado = await this.prisma.convenioCooperado.findFirst({
-              where: { convenioId, cooperadoId },
-            });
-            if (!jaVinculado) {
-              await this.prisma.convenioCooperado.create({
-                data: { convenioId, cooperadoId, ativo: true },
-              });
-              this.logger.log(`[cadastro-v2] Cooperado ${cooperadoId} vinculado ao convênio ${convenioId} via indicação`);
+            // D-30P + D-30Q (01/05): usar adicionarMembro() que popula
+            // indicacaoId via registrarIndicacaoConvenio + chama recalcularFaixa.
+            // Caminho anterior criava direto via Prisma e pulava ambos.
+            try {
+              await this.conveniosMembros.adicionarMembro(convenioId, cooperadoId);
+              this.logger.log(`[cadastro-v2] Cooperado ${cooperadoId} vinculado ao convênio ${convenioId} via indicação (adicionarMembro)`);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : 'erro desconhecido';
+              // Erros esperados (já vinculado, em outro convênio, etc) são fire-and-forget
+              this.logger.warn(`[cadastro-v2] adicionarMembro falhou convenio=${convenioId} cooperado=${cooperadoId}: ${msg}`);
             }
           }
         }

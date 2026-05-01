@@ -9,6 +9,7 @@ import { CooperadosModule } from '../cooperados/cooperados.module';
 import { UcsModule } from '../ucs/ucs.module';
 import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
 import { IndicacoesModule } from '../indicacoes/indicacoes.module';
+import { ConveniosModule } from '../convenios/convenios.module';
 
 const multerLib = require('multer') as { memoryStorage: () => object };
 
@@ -21,6 +22,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     UcsModule,
     forwardRef(() => MotorPropostaModule),
     IndicacoesModule,
+    ConveniosModule,
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [PublicoController],
