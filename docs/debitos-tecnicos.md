@@ -237,6 +237,39 @@ ao salvar a fatura processada. Bloqueia `gerarCobrancaPosFatura` que filtra por 
 
 ---
 
+### D-30P — Caminho público de convênio sem `indicacaoId` ✅ RESOLVIDO
+
+**Severidade:** P2 → ✅ RESOLVIDO em 01/05/2026
+**Detectado em:** investigação 01/05 (commit `5ee9351`)
+**Resolvido em:** commit `fa9dc72` (chamada direta Prisma trocada por `adicionarMembro()`)
+
+Sprint 9B criou caminho público (`/cadastro?ref=`) que vinculava cooperado a
+convênio direto via Prisma, pulando service `adicionarMembro()`. Resultado:
+`ConvenioCooperado.indicacaoId` ficava null em todos os 215 vínculos atuais
+(seed) — quebraria rastreabilidade de cooperados reais quando entrarem.
+
+Fix: caminho público agora usa `adicionarMembro()` que chama
+`registrarIndicacaoConvenio()` se `convenio.registrarComoIndicacao=true`,
+populando `indicacaoId`. 5 specs Jest cobrindo cenários verde.
+
+---
+
+### D-30Q — Caminho público de convênio sem `recalcularFaixa` ✅ RESOLVIDO
+
+**Severidade:** P2 → ✅ RESOLVIDO em 01/05/2026
+**Detectado em:** investigação 01/05 (commit `5ee9351`)
+**Resolvido em:** commit `fa9dc72` (mesma correção do D-30P)
+
+Mesmo caminho público pulava `recalcularFaixa()`, então faixa do convênio
+só atualizava no cron diário 6h depois. Em produção isso significaria
+descontos errados pro novo cooperado durante 6h após cadastro.
+
+Fix: caminho público agora usa `adicionarMembro()` que chama
+`progressaoService.recalcularFaixa(convenioId, 'NOVO_MEMBRO')`. Faixa atualiza
+imediatamente no cadastro.
+
+---
+
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
 ### D-30K — Conflito de namespace `/diagnostico` entre healthcheck atual e Sprint 9

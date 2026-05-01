@@ -170,6 +170,46 @@ Reavaliar quando:
 - Houver decisão de procurar investidor / sócio externo
 - Entrar 3º parceiro além CoopereBR + Sinergia
 
+### Decisão 17 — Sprint 15 + 21 descartados (sessão 01/05 manhã)
+
+Investigação (commits `8151381` + `5ee9351`) confirmou:
+
+**Sprint 15 (Cadastro Condomínio atomizado):** descartado.
+- Definição original era 1 linha solta em `MAPA-INTEGRIDADE-SISTEMA.md:822`.
+- 3 caminhos de Condomínio já cobertos:
+  - **Parceiro** (Solar das Palmeiras): SUPER_ADMIN cadastra como qualquer parceiro.
+  - **Membro PJ** (Churchill, Costa Atlantico, Isla Bonita, Juan Les Pins): cooperado PJ normal.
+  - **Convênio** (Moradas da Enseada): mecânica de Convênio existente.
+- Não há demanda concreta pra fluxo dedicado.
+
+**Sprint 21 (Painel Síndico):** descartado.
+- Helena (síndica do Moradas) é cooperada normal + conveniada do CV-MORADAS.
+- Página de cooperado + tela `/dashboard/convenios/[id]/membros` (admin) atendem.
+- Quando D-30P + D-30Q resolvidos (01/05, commit `fa9dc72`), conveniada gera link e vê quem entrou imediatamente (faixa recalculada na hora).
+
+Não viram `sugestoes_pendentes.md` — função operacional já distribuída em
+telas existentes.
+
+### Decisão 18 — Compromisso processual: definição mínima de sprint (sessão 01/05 manhã)
+
+Sprint precisa, antes de entrar na pilha:
+- **Tema** (1 linha)
+- **Persona/caso de uso real** (quem vai usar)
+- **Critério de pronto** (o que prova que terminou)
+- **Estimativa de tempo** (dias Code)
+- **Dependências** (quais sprints precisam estar prontos)
+
+Sprints com 1 linha solta **não viram sprint** — viram entrada em
+`~/.claude/.../memory/sugestoes_pendentes.md` pra reavaliar quando demanda
+aparecer.
+
+**Origem:** Sprint 15 + 21 tinham 1 linha cada em `MAPA-INTEGRIDADE-SISTEMA.md`.
+Causou investigação cara pra descobrir que não eram sprints viáveis (commits
+`8151381` + `5ee9351`).
+
+**Aplica retroativamente:** revisão futura de `PLANO-ATE-PRODUCAO.md` precisa
+checar que cada sprint tem os 5 itens acima.
+
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
 - 5 mecanismos de fidelidade são paralelos puros (sem regras de exclusão).

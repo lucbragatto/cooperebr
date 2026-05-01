@@ -205,6 +205,14 @@ Sprints antigos sem equivalente direto na pilha nova. Decidir.
 
 ### Sprint 15 — Cadastro Condomínio atomizado
 
+> ✅ **DECIDIDO em 01/05 (Decisão 17):** descartar.
+> Justificativa: investigação `8151381` + `5ee9351`. Função operacional já
+> distribuída em telas existentes (Parceiro via SUPER_ADMIN / Membro PJ via
+> cooperado normal / Convênio via CV-MORADAS).
+> D-30P + D-30Q resolvidos (commit `fa9dc72`) — caminho público de convênio
+> agora funciona corretamente.
+
+
 **Escopo original:** cadastro completo de Condomínio em 1 fluxo (síndico cria condomínio → adiciona unidades → vincula condôminos → gera cobranças agregadas).
 
 **Estado atual:** schema existe (`Condominio` + `UnidadeCondominio` = 1 + 10 registros de teste). Tela `/dashboard/condominios/{,novo,[id]}` existe (3 telas). **Fluxo guiado não está pronto.** Persona Helena (síndica do Moradas da Enseada) está em PRODUTO.md (papel 8).
@@ -246,6 +254,12 @@ Sprints antigos sem equivalente direto na pilha nova. Decidir.
 ---
 
 ### Sprint 21 — Painel Síndico detalhado
+
+> ✅ **DECIDIDO em 01/05 (Decisão 17):** descartar.
+> Justificativa: Helena (síndica do Moradas) é cooperada + conveniada do
+> CV-MORADAS. Página de cooperado + tela admin `/dashboard/convenios/[id]/membros`
+> atendem. Não precisa portal próprio.
+
 
 **Escopo original:** continuação do Sprint 15 — após cadastro do condomínio, síndico tem painel próprio com visão consolidada (consumo das unidades, áreas comuns, cobrança rateada).
 
