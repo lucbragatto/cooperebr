@@ -11,7 +11,7 @@
 | # | Área | Veredito | Síntese |
 |---|---|---|---|
 | 1 | Modelos COMPENSADOS + DINAMICO | 🔴 NÃO PRONTO | Congelamento triplo (Sprint 5) + bug D-30R bloqueia COMPENSADOS; DINAMICO sem implementação |
-| 2 | CooperToken configurável | 🟡 PARCIAL | 4/5 flags em schema; **3 campos desvalorização ausentes** + curva fixa hard-coded 29 dias |
+| 2 | CooperToken configurável | 🟡 PARCIAL | 4/5 flags em schema; **3 campos desvalorização ausentes** + curva fixa hard-coded 29 dias + **0 specs no módulo cooper-token/** |
 | 3 | Modo Observador | 🟡 PARCIAL | Admin-spy WhatsApp/ações funcional 100%; role OBSERVADOR cooperado-leitura **não existe** |
 | 4 | Convênios + ligação | 🟡 PARCIAL | Backend D-30P/Q resolveu vínculo; faltam **token específico** + **landing personalizada** |
 | 5 | FaturaSaas + relatório | 🟡 PARCIAL | Cron + painel OK; **FaturaSaas→Asaas nunca emite** + sem dashboard parceiro + sem breakdown modular |
@@ -91,7 +91,27 @@
 | 4. Ativação Clube por parceiro | ✅ | ✅ | ✅ | Completo |
 | 5. Regras emissão | 🟡 | 🟡 | 🟡 | Parcial |
 
-**Veredito 🟡:** ~70% MVP. Bloqueia produção real **se** parceiro precisar configurar desvalorização diferente da curva 29-dias hard-coded. Sprint pra completar: 3 campos schema + cron desvalorização mensal + cron expiração + telas admin. Estimativa 2-3 dias.
+**Specs Jest — gap completo (revisão posterior à investigação inicial):**
+- `backend/src/cooper-token/` tem **0 arquivos `*.spec.ts`** (4 fontes: `cooper-token.service.ts`, `cooper-token.job.ts`, `cooper-token.controller.ts`, `contabilidade-clube.controller.ts` — todos sem teste)
+- Único spec que toca CooperToken vive em `backend/src/cobrancas/cobrancas.service.spec.ts:235-285` (4 testes do bloco "Modo CLUBE"):
+  - CLUBE: bruto=líquido=100, descontoRegistrado=20 ✅
+  - DESCONTO regressão: bruto=100, líquido=80 ✅
+  - CLUBE com override `valorLiquido` ✅
+  - `modoRemuneracao=null` → tratado como DESCONTO ✅
+- Esses 4 testam o **lado da Cobrança** (gravar `descontoRegistrado` certo) — **não exercitam CooperToken em si**
+- **Funções não testadas em lugar nenhum:**
+  - `creditar()` — idempotência por `eventoOrigemId`
+  - `apurarExcedentes()` — cron diário 6h
+  - `calcularValorAtual()` — curva hard-coded 29 dias (a função mais crítica de produção)
+  - `getSaldo()` — agregação saldo + valor estimado
+  - Eventos `cooper-token.events.ts`
+  - Expiração (cron de limpeza inexistente)
+
+**Veredito 🟡:** ~70% MVP **com qualidade frágil**. Bloqueia produção real por dois eixos:
+1. **Configuração:** parceiro não consegue customizar desvalorização (curva 29-dias hard-coded).
+2. **Qualidade:** função `calcularValorAtual()` (núcleo financeiro do CooperToken) sem 1 spec sequer — qualquer regressão na curva vira surpresa em produção.
+
+Sprint pra completar: 3 campos schema desvalorização + cron desvalorização mensal + cron expiração + telas admin + **specs Jest pra creditar/calcularValorAtual/apurarExcedentes/getSaldo** (mínimo 8 cenários). Estimativa revisada: 3-4 dias (era 2-3, +1 dia pra specs).
 
 ---
 
