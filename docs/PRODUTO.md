@@ -17,13 +17,13 @@ O **SISGD** é uma plataforma SaaS multi-tenant para gestão de **Geração Dist
 **Posicionamento.** SISGD não é "ERP de cooperativa de energia" nem "gateway de pagamento". É **plataforma regulatória + operacional**: traduz Lei 14.300/2022 e regras locais de cada distribuidora em fluxos automatizados, validações regulatórias, motor de cobrança multi-modelo e governança financeira pro dono da plataforma (Luciano) e pros admins de cada parceiro.
 
 **Modelo de negócio.**
-- **Luciano** (dono SISGD, juiz TJES, não programador) cobra cada **Parceiro** mensalmente via FaturaSaas.
-- **Parceiros** (CoopereBR, Sinergia, etc.) cobram seus **Membros** (cooperados, consorciados, associados, condôminos) via Cobrança mensal — esses NÃO pagam Luciano.
-- **CoopereBR** é o primeiro parceiro real (não é o dono do sistema).
+- A **empresa dona do SISGD** (operada pelo Luciano, não programador) cobrará cada **Parceiro** mensalmente via FaturaSaas, quando entrarem em produção.
+- **Parceiros** (CoopereBR, Sinergia, etc.) cobram seus **Membros** (cooperados, consorciados, associados, condôminos) via Cobrança mensal — esses NÃO pagam o SISGD.
+- **CoopereBR + Sinergia** são clientes confirmados aguardando migração — operam hoje em sistema legado e migrarão pro SISGD quando funcionalidades pré-produção estiverem prontas.
 
-**Estado atual** (30/04/2026).
-- 2 parceiros no banco (CoopereBR OURO produção + CoopereBR Teste TRIAL PRATA).
-- ~303 membros ativos da CoopereBR (era 125 em mar/2026 — cresceu 2,4× em 5 semanas).
+**Estado atual** (02/05/2026).
+- **SISGD ainda sem cliente em produção real** — banco dev tem 2 parceiros de teste (CoopereBR OURO + CoopereBR Teste TRIAL PRATA) usados pra validação E2E.
+- ~303 membros ativos no banco dev (era 125 em mar/2026 — cresceu 2,4× em 5 semanas via cadastros de teste).
 - Sprint 13a 3/3 concluído (Painel SISGD operacional, lista parceiros enriquecida, cards saúde, IDOR fix).
 - 10 sprints pré-produção identificados (17-23 semanas de Code dedicado). Ver [PLANO-ATE-PRODUCAO.md](./PLANO-ATE-PRODUCAO.md).
 
@@ -361,7 +361,7 @@ Diagnóstico de fatura real do Luciano (UC `000142138005470`, EDP-ES, mês 2026-
 
 - Schema atual **não tem** campos `classeGd`, `Fio B`, `dataProtocoloDistribuidora`, `RegrasFioB`.
 - Única validação ANEEL real hoje: **mesma distribuidora UC × Usina** (`validarCompatibilidadeAneel`).
-- Spec do Assis (`docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`) tem schema/fórmulas/tabela 2022-2029 prontos — **insumo histórico**, taxonomia diferente da decisão claude.ai 30/04.
+- Spec do OpenClaw (assistente IA usado em iteração anterior) (`docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`) tem schema/fórmulas/tabela 2022-2029 prontos — **insumo histórico**, taxonomia diferente da decisão claude.ai 30/04.
 - Termo de adesão e bot CoopereAI ainda citam **RN 482/2012 (defasada)** — D-30H, D-30I.
 
 > Para detalhamento completo, ver [REGULATORIO-ANEEL.md](./REGULATORIO-ANEEL.md).
@@ -571,7 +571,7 @@ Endpoint atual `GET /faturas/diagnostico` é healthcheck técnico. Sprint 9 reno
 | Validação ANEEL (mesma distribuidora) | 🟢 | `validarCompatibilidadeAneel` ativo |
 | Validação concentração 25% | 🔴 | **Sprint 5** — caso Exfishes provou |
 | Classes GD I/II/III | 🔴 | **Sprint 5** |
-| Tabela Fio B 2022-2029 | 🔴 | **Sprint 5** — spec Assis nunca implementada |
+| Tabela Fio B 2022-2029 | 🔴 | **Sprint 5** — spec OpenClaw nunca implementada |
 | 5 flags regulatórias | 🔴 | **Sprint 5** |
 | Política de Alocação | 🔴 | **Sprint 8** |
 | Engine de Otimização com Split | 🔴 | **Sprint 8** |
@@ -654,14 +654,14 @@ Endpoint atual `GET /faturas/diagnostico` é healthcheck técnico. Sprint 9 reno
 
 **Implicação:** outras concentrações suspeitas existem hoje. **Sprint 0** identifica todos os casos.
 
-### Caso C — Spec Fio B do Assis (insumo histórico)
+### Caso C — Spec Fio B do OpenClaw (assistente IA) (insumo histórico)
 
 **Origem:** `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md` (188 linhas, 26/03/2026).
 
 **Conteúdo:** schema `tusdFioA`/`tusdFioB`/enum `ModalidadeGD` (`GD1_ATE_75KW`/`GD1_ACIMA_75KW`/`GD2_COMPARTILHADO`), tabela progressiva 2022-2029, refactor do motor de cobrança.
 
 **Decisão sessão 30/04:** marcar como **insumo histórico** (D-30L). Arquitetura nova (Sprint 5) usa taxonomia diferente:
-- Spec Assis: 3 modalidades por potência+contexto.
+- Spec OpenClaw: 3 modalidades por potência+contexto.
 - Decisão 30/04: 3 classes GD por **data de homologação** (cutoffs 07/01/2023 e 07/01/2024).
 
 **Aproveitar:** tabela de % Fio B 2022-2029 e fórmula `tarifaEfetiva = tusdFioA + (tusdFioB × pct) + TE` podem ser portadas se compatíveis com a nova taxonomia.

@@ -308,6 +308,59 @@ Formato fixo pra cada sprint:
 
 ---
 
+## Seção 3b — Sub-sprints especializados (Decisão 18 — definição mínima)
+
+Sprints 3 e 5 da pilha são abrangentes. A **Decisão 18** (sessão 01/05) exige
+definição mínima por sprint: tema, persona, critério, estimativa, dependências.
+Esta seção detalha 2 sub-sprints regulatórios críticos que se encaixam dentro
+desses pais e já têm spec/análise pronta.
+
+---
+
+### Sprint 5a — Fio B (Implementação completa)
+
+**Pai:** Sprint 5 (Módulo Regulatório ANEEL).
+
+- **Tema:** Implementar cobrança progressiva de Fio B conforme Lei 14.300/2022 (60% em 2026, 75% 2027, 90% 2028, 100% 2029+) por classe GD.
+- **Persona/caso de uso:** Cooperado em usina GD II ou GD III. Em 2026, Fio B cobrado a 60%. Sem implementação, sistema cobra valor errado e cooperado paga ~21% mais que devido (ou cooperativa absorve prejuízo). Caso A (Apêndice C de PRODUTO.md) ilustra impacto da mudança de classe.
+- **Critério de pronto:**
+  - Schema `Cobranca.fioB` populado em todas cobranças geradas pós-fix
+  - Fórmula aplica progressão correta por ano e classe GD
+  - UI mostra Fio B como linha separada na fatura
+  - Spec do OpenClaw 188 linhas portada integralmente (com adaptação à taxonomia GD I/II/III decidida em 30/04)
+  - Specs Jest cobrindo cenários 2026/2027/2028/2029
+  - Validação E2E: 1 cooperado teste GD II com cobrança gerada e Fio B correto
+- **Estimativa:** 3-5 dias Code.
+- **Dependências:**
+  - Sprint 0 (Auditoria Regulatória) confirmar interpretação correta
+  - Schema `Usina.classeGd` + `RegrasFioB` (parte do Sprint 5)
+  - Validação jurídica (advogado regulatório ANEEL)
+- **Risco:** alto regulatório se não implementado antes de Caminho B (produção real). Cooperativa pode ser autuada por cobrança incorreta.
+- **Origem:** spec em `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md` (188 linhas, 26/03/2026, autor OpenClaw — assistente IA usado em iteração anterior). Marcada como "spec existe mas nunca implementada" desde 30/04 (D-30L).
+
+---
+
+### Sprint 3a — Atualizar referências regulatórias (RN 482/2012 → Lei 14.300/2022)
+
+**Pai:** Sprint 3 (Banco de Documentos / Assinafy).
+
+- **Tema:** Substituir todas referências à RN 482/2012 (revogada) pela Lei 14.300/2022 (vigente desde 07/01/2023) em termo de adesão, mensagens do bot e documentação pública.
+- **Persona/caso de uso:** qualquer parceiro do SISGD em operação (CoopereBR, Sinergia). Termo de adesão atual cita regulamentação revogada — risco jurídico ativo. Bot WhatsApp educa cooperados com referência errada.
+- **Critério de pronto:**
+  - Termo de adesão revisado por advogado regulatório
+  - Todas mensagens do bot atualizadas (verificar `whatsapp-*.service.ts`)
+  - PRODUTO.md + REGULATORIO-ANEEL.md atualizados (parcialmente feito 02/05)
+  - Specs Jest verificam que "RN 482" não aparece em strings de produção
+  - Validação manual: gerar termo + revisão visual
+- **Estimativa:** 1-2 dias Code + revisão jurídica externa (1 semana calendário).
+- **Dependências:**
+  - Decisão Luciano sobre advogado regulatório (pendência ativa em CONTROLE-EXECUCAO)
+  - Sprint 0 (Auditoria Regulatória) idealmente roda primeiro
+- **Risco:** alto jurídico. Cooperado pode contestar contrato baseado em regulamentação revogada.
+- **Origem:** descoberta em sessão claude.ai 30/04 — "Termo de adesão e bot citam RN 482/2012 (defasada desde Lei 14.300/2022) — risco regulatório ativo".
+
+---
+
 ## Seção 4 — Ordem sugerida de execução
 
 ```

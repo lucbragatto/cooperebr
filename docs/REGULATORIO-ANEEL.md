@@ -112,7 +112,7 @@ A REN 1.000/2021 consolida os procedimentos comerciais de distribuidoras de ener
 | 2028 | Isento | 90% | 90% |
 | 2029+ | Isento | 100% | 100% |
 
-> **Insumo histórico:** spec do Assis (`docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`, 26/03/2026) propunha taxonomia diferente (`GD1_ATE_75KW`/`GD1_ACIMA_75KW`/`GD2_COMPARTILHADO`). Decisão claude.ai 30/04 adota a taxonomia GD I/II/III por data de homologação. Trechos da spec do Assis (especialmente fórmulas) podem ser portados se compatíveis. Caso C de [PRODUTO.md](./PRODUTO.md).
+> **Insumo histórico:** spec do OpenClaw (assistente IA usado em iteração anterior) (`docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md`, 26/03/2026) propunha taxonomia diferente (`GD1_ATE_75KW`/`GD1_ACIMA_75KW`/`GD2_COMPARTILHADO`). Decisão claude.ai 30/04 adota a taxonomia GD I/II/III por data de homologação. Trechos da spec do OpenClaw (assistente IA usado em iteração anterior) (especialmente fórmulas) podem ser portados se compatíveis. Caso C de [PRODUTO.md](./PRODUTO.md).
 
 ### Implicações pra schema
 
@@ -193,7 +193,12 @@ Lei 14.300, art. 5º. Aplica-se à usina, não ao titular. Um proprietário pode
 
 **Premissa SISGD baseada em práticas de mercado** — flag `concentracaoMaxPorCooperadoUsina` default `25`.
 
-> ⚠️ **Validação local obrigatória.** ANEEL não estabelece limite explícito de concentração; é prática de mercado adotada por distribuidoras como referência de não-concentração de SCEE (evitar "GD individual disfarçada de compartilhada"). Cada parceiro deve confirmar com sua distribuidora local antes de ativar este limite ou ajustá-lo.
+**Aplicabilidade por classe GD:**
+
+- **GD II e GD III** — limite 25% aplica como referência de não-concentração de SCEE.
+- **GD I** — **NÃO se aplica** o limite 25%. Usinas GD I têm **direitos adquiridos** pré-Lei 14.300/2022 garantidos até **2045** (Lei 14.300 art. 26, regra de transição). Concentrações maiores em GD I são juridicamente legítimas durante esse período.
+
+> ⚠️ **Validação local obrigatória.** ANEEL não estabelece limite explícito de concentração genérico; é prática de mercado adotada por distribuidoras como referência de não-concentração de SCEE para usinas pós-Lei 14.300 (evitar "GD individual disfarçada de compartilhada"). Cada parceiro deve confirmar com sua distribuidora local antes de ativar este limite ou ajustá-lo, e considerar a classe GD da usina (I/II/III) na avaliação.
 
 ### Compatibilidade de distribuidora
 
@@ -639,7 +644,7 @@ Endpoint atual `GET /faturas/diagnostico` é healthcheck técnico (verifica conf
 
 Diferencial: lead recebe **valor antes de virar cooperado**. Concorrência tradicional pede cadastro completo antes de mostrar economia. SISGD entrega análise gratuita em <30s.
 
-Conversão esperada: Express → Completo > 5%, Completo → Cooperado > 30%.
+**Hipótese de conversão (a validar com mercado, não meta estabelecida):** Express → Completo > 5%, Completo → Cooperado > 30%. Esses números são chute educado da sessão claude.ai 30/04 — precisam ser validados com cohort real após Sprint 9 entregar.
 
 ---
 
@@ -803,23 +808,27 @@ Sistema monitora cron diário (Sprint 5). Se distribuidora reverter posição (r
 
 > Anonimização parcial: nomes ofuscados como Caso A/B/C. Números preservados pra valor instrutivo.
 
-### Caso A — Cooperado de Grande Porte (Exfishes)
+### Caso A — Cooperado de Grande Porte (anonimizado)
+
+**Contexto importante:** este caso ocorreu no **sistema legado** que CoopereBR usa
+hoje (não no SISGD em produção real, que ainda não tem cliente). Documenta padrão
+operacional que SISGD precisa **prevenir** quando os parceiros migrarem.
 
 **Linha do tempo:**
 
-- **Abril/2026** — cooperado ocupava **39,55% da Usina A (GD I)**. Limite ANEEL/distribuidoras como referência: **25%**. Sistema não bloqueou nem alertou.
-- **Maio/2026** — alguém realizou **realocação cega** de Usina A (GD I) para Usina B (GD III). Sistema processou normalmente.
-- **Resultado:** fatura saltou de **~R$ 6.600/mês** para **R$ 32.486/mês**. Mudança implícita de classe GD (isento → 60% Fio B em 2026) explica.
-- **Prejuízo:** R$ 310.000/ano se a realocação não fosse revertida.
+- **Abril/2026** — cooperado ocupava **39,55% da Usina A (GD I)**. **Concentração elevada mas juridicamente legítima** — usinas GD I têm direitos adquiridos pré-Lei 14.300/2022 garantidos até 2045 (Lei 14.300 art. 26). Limite 25% **não se aplica a GD I**.
+- **Maio/2026** — admin realizou **realocação consciente** de Usina A (GD I) para Usina B (GD III) — decisão operacional do parceiro. **Sem simulação prévia** que mostrasse impacto da mudança de classe GD na fatura efetiva.
+- **Resultado:** fatura saltou de **~R$ 6.600/mês** para **R$ 32.486/mês**. Causa: mudança de classe GD (GD I isento → GD III com 60% Fio B em 2026) muda completamente o cálculo da fatura efetiva.
+- **Prejuízo evitável:** R$ 310.000/ano se a realocação não fosse revertida — explicado por **falta de simulação prévia**, não por bug regulatório (a operação em si era permitida).
 
-**Status atual** (30/04/2026): cooperado está com 0,05% na Usina B "queimando saldo". Plano: passar 100% pra Usina A. Saldo intransferível entre UCs (default `transferenciaSaldoEntreUcs=false`).
+**Status atual** (02/05/2026): cooperado está com 0,05% na Usina B "queimando saldo". Plano: passar 100% pra Usina A. Saldo intransferível entre UCs (default `transferenciaSaldoEntreUcs=false`).
 
-**Lições regulatórias:**
+**Lições regulatórias (o que SISGD precisa fazer pra evitar quando parceiros migrarem):**
 
-1. **Concentração não validada** permite > 25% — Sprint 0 lista, Sprint 5 valida automaticamente.
-2. **Mudança de classe GD na realocação não detectada** — Sprint 5 cálculo de classe GD efetiva + Sprint 8 Engine bloqueia.
-3. **Saldo grande parado** é sinal de alerta operacional — Sprint 5 monitora.
-4. **Simulação prévia obrigatória** — Sprint 8 entrega.
+1. **Simulação prévia obrigatória de mudança de classe GD** — Sprint 8 Engine de Otimização entrega: ao mover cooperado entre usinas de classes diferentes, mostrar fatura projetada antes/depois antes de confirmar.
+2. **Cálculo de classe GD efetiva** — Sprint 5 implementa, Engine usa pra detectar mudanças.
+3. **Concentração 25% como referência soft (não bloqueio em GD I)** — Sprint 5 valida em GD II/III; em GD I apenas alerta visual de "concentração elevada" sem bloquear.
+4. **Saldo grande parado** é sinal de alerta operacional — Sprint 5 monitora.
 
 ### Caso B — Concentrações Suspeitas Atuais
 
@@ -831,7 +840,7 @@ Investigação em sessão claude.ai 30/04 confirmou outras concentrações fora 
 
 **Implicação:** sintoma não é isolado. **Sprint 0** identifica todos os casos.
 
-### Caso C — Spec Fio B do Assis (insumo histórico)
+### Caso C — Spec Fio B do OpenClaw (assistente IA) (insumo histórico)
 
 **Origem:** `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md` (188 linhas, 26/03/2026).
 
@@ -845,7 +854,7 @@ tarifaEfetiva = tusdFioA + fioB_cobrado + TE
 
 **Decisão sessão 30/04:** marcar como **insumo histórico** (D-30L). Arquitetura nova (Sprint 5) usa taxonomia diferente:
 
-| Aspecto | Spec Assis (26/03) | Decisão claude.ai (30/04) |
+| Aspecto | Spec OpenClaw (26/03) | Decisão claude.ai (30/04) |
 |---|---|---|
 | Taxonomia | 3 modalidades por potência+contexto | 3 classes GD por **data de homologação** |
 | Modalidades/Classes | `GD1_ATE_75KW`, `GD1_ACIMA_75KW`, `GD2_COMPARTILHADO` | `GD_I` (antes 07/01/2023), `GD_II` (07/01/2023-06/01/2024), `GD_III` (≥07/01/2024) |

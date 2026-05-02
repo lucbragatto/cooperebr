@@ -311,6 +311,57 @@ imediatamente no cadastro.
 
 ---
 
+### D-30R — `Motor.aceitar()` não popula `Contrato.tarifaContratual` (snapshot ausente)
+
+**Severidade:** P2
+**Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
+**Validado em:** 2026-05-02 manhã (investigação Code com leitura de código)
+
+**Causa raiz precisa:** `motor-proposta.service.ts:467+` (método `aceitar()`)
+calcula:
+- `valorContrato` (linha 733) — só pra FIXO_MENSAL
+- `tarifaContratualPromocional` (linha 707) — só se há promoção
+- `valorContratoPromocional` (linha 709) — só se há promoção + FIXO
+
+**NÃO calcula `Contrato.tarifaContratual` "normal"** (não-promocional). Campo
+fica `null` em todos os contratos COMPENSADOS criados via Motor.
+
+**Confirmação no banco (snapshot 02/05):**
+- **72 contratos** com `tarifaContratual=null` (100% dos contratos)
+- **0 contratos** com `tarifaContratual` preenchida
+- Maioria CREDITOS_COMPENSADOS (CTR-324704, CTR-652787, CTR-2026-0001, etc.)
+
+**Impacto quando engine COMPENSADOS for ativada:**
+- Cobrança cai em fallback `tarifaApurada = totalAPagar / consumoAtual` 
+- Esse fallback é conceitualmente errado (totalAPagar já tem compensação aplicada)
+- Cooperado pagaria valor errado
+
+**Fix proposto** (~5-10 linhas em `motor-proposta.service.ts:680+`):
+
+Adicionar antes de `tx.contrato.create`:
+```ts
+// Snapshot tarifa contratual normal (não-promocional)
+// Necessário pra COMPENSADOS calcular valor correto.
+const tarifaContratualNormal = Math.round(
+  Number(r.kwhApuradoBase) * (1 - Number(r.descontoPercentual) / 100) * 100000
+) / 100000;
+```
+
+E incluir no `data` do `tx.contrato.create`:
+```ts
+tarifaContratual: tarifaContratualNormal,
+```
+
+**Backfill necessário:** os 72 contratos existentes precisam ter `tarifaContratual`
+populada retroativamente (script de migração one-shot ou cron de backfill).
+
+**Estimativa:** 30 min Code (fix + spec) + 15 min script backfill.
+
+**Resolução:** **Sprint 2** (OCR-Integração + COMPENSADOS) ou **fix antecipado**
+(qualquer momento — bloqueia validação real do COMPENSADOS).
+
+---
+
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
 ### D-30K — Conflito de namespace `/diagnostico` entre healthcheck atual e Sprint 9

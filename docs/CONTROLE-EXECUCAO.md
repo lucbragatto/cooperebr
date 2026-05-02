@@ -12,45 +12,54 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-02 manhã (~1h30min total)
-- **Tipo:** Code (ritual + investigação read-only de 3 débitos)
-- **Resultado:** ritual ativado. D-30M reclassificado P1→P2 (falso positivo). D-30N escopo revisado (não é "ativar", é "implementar do zero"). D-30O causa raiz precisa identificada (`faturas.service.ts:302` não passa `mesReferencia`; fix simples ~5 linhas). Aprendizado meta: classificações por contagem podem mentir.
+- **Quando:** 2026-05-02 manhã (Fase 1 trabalho técnico)
+- **Tipo:** Code (fix + 7 ajustes Doc-0 + 2 sprints catalogados + investigação D-30R)
+- **Resultado:** D-30O **corrigido** (4 specs verde). 7 ajustes factuais Doc-0 aplicados. Sprints 5a (Fio B) + 3a (RN 482) catalogados com Decisão 18. D-30R (snapshot tarifaContratual) investigado: afeta **100% dos 72 contratos** — fix proposto, não aplicado nesta fase.
 
 ### Commits da última sessão
 
 - `1301bb2` docs(ritual): cria ritual de abertura/fechamento de sessao
 - `18845b0` docs(ritual): aprimora Decisao 19 + reorganiza pendencias P1/P2/P3
-- `<este>` docs(processo): reclassifica D-30M + investiga D-30N/D-30O com validacao previa
+- `509002d` docs(processo): reclassifica D-30M + investiga D-30N/D-30O
+- `<este>` feat(fase1): fix D-30O + 7 ajustes Doc-0 + 2 sprints catalogados + D-30R investigado
 
-Push esperado: `18845b0..<este>` → origin/main
+Push esperado: `509002d..<este>` → origin/main
 
-### Arquivos tocados (sessão 02/05)
+### Arquivos tocados (sessão 02/05 — múltiplas fases)
 
-- `~/.claude/.../memory/ritual_abertura_fechamento.md` (ritual + nota meta + aprendizados)
-- `~/.claude/.../memory/MEMORY.md` (índice + pointer ritual)
+- `~/.claude/.../memory/ritual_abertura_fechamento.md` (ritual + aprendizados)
+- `~/.claude/.../memory/MEMORY.md`
 - `CLAUDE.md` (raiz — seção "Ritual de abertura e fechamento")
-- `docs/CONTROLE-EXECUCAO.md` (seção "ONDE PARAMOS" + Decisão 19 + pendências reorganizadas)
-- `docs/debitos-tecnicos.md` (D-30M reclassificado, D-30N escopo, D-30O causa raiz)
-- `docs/sessoes/2026-05-02-investigacao-d30m-d30n-d30o.md` (criado)
+- `backend/src/faturas/faturas.service.ts` (D-30O fix)
+- `backend/src/faturas/faturas.service.d30o.spec.ts` (4 specs novos)
+- `docs/PRODUTO.md` (juiz TJES, Sinergia/CoopereBR, Assis→OpenClaw, estado atual)
+- `docs/REGULATORIO-ANEEL.md` (Assis→OpenClaw, limite 25% por classe GD, Caso A reescrito, Express hipótese)
+- `docs/PLANO-ATE-PRODUCAO.md` (Sprints 5a + 3a catalogados)
+- `docs/debitos-tecnicos.md` (D-30M reclassificado, D-30N escopo, D-30O resolvido, D-30R catalogado)
+- `docs/CONTROLE-EXECUCAO.md`
+- `docs/sessoes/2026-05-02-investigacao-d30m-d30n-d30o.md`
+- `docs/sessoes/2026-05-02-fase1-trabalho-tecnico-consolidado.md`
 
 ### Decisões registradas
 
-- **Decisão 19:** ritual de abertura/fechamento de sessão padronizado
-- **Reclassificações:** D-30M P1→P2 (validação E2E pendente, não bug)
+- **Decisão 19:** ritual de abertura/fechamento de sessão
+- **Reclassificações:** D-30M P1→P2, D-30N escopo expandido, D-30R catalogado novo
+- **Resolvido:** D-30O (commit fase 1)
+- **Catalogados como sprints formais:** Sprint 5a (Fio B), Sprint 3a (RN 482→Lei 14.300)
 
 ### Pendências consolidadas
 
 → Ver seção [PENDÊNCIAS PARA PRÓXIMA SESSÃO](#pendências-para-próxima-sessão) abaixo.
 
-**Total restante:** ~19 itens. **P1 = 0** (D-30M saiu). Crítico real reduziu.
+**Total restante:** ~17 itens. **P1 = 0**. Pendências resolvidas hoje (3): D-30O, 7 ajustes Grupo B, 2 sprints catalogados.
 
 ### Próximos passos imediatos (priorizado conforme P1 → P2 → P3)
 
-A. **D-30O fix antecipado** [P2 — fix simples 5-10 min] — adicionar `mesReferencia` em `faturas.service.ts:302+`. Recomendação Code.
-B. **Caminho B** [Estratégica] — Asaas produção real. 1-2 semanas. Primeira receita.
-C. **Curadoria de sprints** [Processual] — 16 decisões batch em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`. 30-45 min.
-D. **Correções factuais Doc-0** [P3] — 7 ajustes Grupo B. 1h.
-E. **D-30N implementação completa** [P2] — interceptor + decorator + módulo. Absorvido por Sprint 5/6. Não fazer isolado.
+A. **Caminho B** [Estratégica] — Asaas produção real. 1-2 semanas. Primeira receita.
+B. **D-30R fix** [P2 — 30-45 min] — Motor.aceitar() popular tarifaContratual + script backfill (afeta 72 contratos).
+C. **Curadoria de sprints** [Processual] — 16 decisões batch (`docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`).
+D. **Decisões Grupo A Doc-0** [P2] — 6 descobertas estruturantes (Modo Observador, hardcode 0.20, etc.).
+E. **D-30N implementação completa** [P2] — absorvido por Sprint 5/6. Não fazer isolado.
 
 ### Frase de retomada
 
@@ -134,9 +143,9 @@ Anexos opcionais:
 
 ### P2 — Bugs/lacunas confirmadas com leitura de código
 
-- [ ] 🔍 **D-30N** — AuditLog interceptor **não existe** (escopo revisado: implementação completa, não ativação)
-- [ ] 🔍 **D-30O** — FaturaProcessada.mesReferencia=null no caminho `extrair` (`faturas.service.ts:302`). Fix simples ~5 linhas, 5-10 min.
-- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 (bug snapshot Motor.aceitar — não revisado ainda com leitura de código)
+- [ ] 🔍 **D-30N** — AuditLog interceptor **não existe** (escopo revisado: implementação completa, não ativação). Absorvido por Sprint 5/6.
+- [x] 🔍 **D-30O** — ✅ **RESOLVIDO em 02/05** (commit fase 1, fix 5 linhas + 4 specs verde)
+- [ ] 🔍 **D-30R** — Motor.aceitar() não popula `Contrato.tarifaContratual` (afeta **100% dos 72 contratos**). Fix proposto, ~30-45 min Code + script backfill.
 
 ### P2 — Decisões de produto (Doc-0)
 
@@ -149,13 +158,14 @@ Anexos opcionais:
 
 ### P3 — Polish (não bloqueia, melhora qualidade)
 
-- [ ] Remover "juiz TJES" do PRODUTO.md (linha 20) — Grupo B.1
-- [ ] Sinergia + CoopereBR como "clientes confirmados aguardando migração" — Grupo B.2
-- [ ] Estado atual: SISGD ainda sem cliente em produção — Grupo B.3
-- [ ] "Assis" não é pessoa, é assistente IA (OpenClaw) — corrigir em 6+ lugares — Grupo B.4
-- [ ] Limite 25% NÃO se aplica a GD I (direitos adquiridos até 2045) — Grupo B.5
-- [ ] Caso A (Exfishes) reescrever com narrativa correta — Grupo B.6
-- [ ] Conversão Express→Cooperado marcar como hipótese — Grupo B.7
+- [x] ✅ **TODOS RESOLVIDOS em 02/05** (commit fase 1):
+  - [x] Remover "juiz TJES" do PRODUTO.md
+  - [x] Sinergia + CoopereBR como "clientes confirmados aguardando migração"
+  - [x] Estado atual: SISGD ainda sem cliente em produção
+  - [x] "Assis" → "OpenClaw (assistente IA)" — corrigido em 7 lugares
+  - [x] Limite 25% contextualizado por classe GD (não aplica GD I, direitos adquiridos até 2045)
+  - [x] Caso A reescrito (sistema legado, GD I direitos adquiridos, falta simulação prévia)
+  - [x] Conversão Express→Cooperado marcada como hipótese a validar
 
 ### Estratégica — Decisão de produto
 

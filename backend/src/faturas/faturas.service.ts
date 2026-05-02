@@ -310,6 +310,9 @@ export class FaturasService {
         mediaKwhCalculada: media,
         thresholdUtilizado: threshold,
         status: 'PENDENTE',
+        // D-30O fix (02/05/2026): caminho 'extrair' não populava mesReferencia
+        // top-level — só ficava aninhado em dadosExtraidos. Agora copia do OCR.
+        mesReferencia: dadosExtraidos.mesReferencia || null,
         saldoKwhAnterior: dadosExtraidos.saldoKwhAnterior || null,
         saldoKwhAtual: dadosExtraidos.saldoKwhAtual || null,
         validadeCreditos: dadosExtraidos.validadeCreditos
