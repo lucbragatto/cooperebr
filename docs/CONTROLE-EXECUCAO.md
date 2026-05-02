@@ -12,50 +12,41 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-01 manhã
-- **Tipo:** Code execução (curadoria + investigação + fix)
-- **Resultado:** 2 bugs P2 do convênio resolvidos (D-30P + D-30Q). Sprints 15 + 21 descartados (Decisão 17). Decisão 18 registrada (compromisso processual: definição mínima de sprint).
+- **Quando:** 2026-05-02 manhã (~30min)
+- **Tipo:** Code execução (criação de ritual operacional + consolidação melhorias prompt B)
+- **Resultado:** ritual de abertura/fechamento padronizado criado e ativado. Decisão 19 registrada. Pendências reorganizadas em P1/P2/P3 explícito (era mistura de A/B/C/D antes). Aplicação de validação prévia detectou duplicação proposta pelo prompt B e consolidou no arquivo existente em vez de criar paralelo.
 
 ### Commits da última sessão
 
-- `10701e1` docs(processo): consolida decisoes 17+18 + sprints 15/21 descartados
-- `fa9dc72` fix(convenio): caminho publico chama adicionarMembro corretamente
-- `5ee9351` docs(processo): investiga fluxo link convite por convenio
-- `8151381` docs(processo): valida Sprint 15+21 + 3 papeis de Condominio
-- `6c8cb7d` docs(processo): material de decisao curadoria sprints
+- `1301bb2` docs(ritual): cria ritual de abertura/fechamento de sessao
+- `<este>` docs(processo): aprimora ritual + reorganiza pendencias P1/P2/P3 + Decisao 19 final
 
-Push: `026ae8f..10701e1` ✓ origin/main
+Push esperado: `1301bb2..<este>` → origin/main
 
-### Arquivos tocados
+### Arquivos tocados (sessão 02/05)
 
-- `backend/src/publico/publico.controller.ts` (fix D-30P/Q)
-- `backend/src/publico/publico.module.ts` (import ConveniosModule)
-- `backend/src/publico/publico.controller.convenio.spec.ts` (5 specs novos)
-- `docs/CONTROLE-EXECUCAO.md` (Decisões 17 + 18)
-- `docs/debitos-tecnicos.md` (D-30P + D-30Q resolvidos)
-- `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (Sprint 15+21 marcados)
-- `docs/sessoes/2026-05-01-validacao-sprints-15-21.md` (criado)
-- `docs/sessoes/2026-05-01-investigacao-link-convite-convenio.md` (criado)
-- `~/.claude/.../memory/sugestoes_pendentes.md` (Sugestão #2)
+- `~/.claude/.../memory/ritual_abertura_fechamento.md` (criado + aprimorado)
+- `~/.claude/.../memory/MEMORY.md` (índice + pointer ritual)
+- `CLAUDE.md` (raiz — nova seção "Ritual de abertura e fechamento")
+- `docs/CONTROLE-EXECUCAO.md` (seção "ONDE PARAMOS" + Decisão 19 + pendências reorganizadas P1/P2/P3)
 
 ### Decisões registradas
 
-- **Decisão 17:** Sprint 15 (Condomínio) + Sprint 21 (Síndico) descartados
-- **Decisão 18:** compromisso processual de definição mínima de sprint (5 itens)
-- **Débitos resolvidos:** D-30P + D-30Q
+- **Decisão 19:** ritual de abertura/fechamento de sessão padronizado, com regra explícita "agente não escolhe sozinho" (exceção: "tu decide")
 
 ### Pendências consolidadas
 
 → Ver seção [PENDÊNCIAS PARA PRÓXIMA SESSÃO](#pendências-para-próxima-sessão) abaixo.
 
-**Total restante:** 7 pendências.
+**Total restante:** 19 itens (1 P1 + 9 P2 + 7 P3 + 1 estratégica + 1 processual).
 
-### Próximos passos imediatos (priorizado)
+### Próximos passos imediatos (priorizado conforme P1 → P2 → P3)
 
-A. **Aplicar curadoria de sprints** — 16 decisões em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`. Resultado: pilha reconciliada de 14 sprints (não 16, pois Sprint 15+21 já fora).
-B. **Atacar Caminho B** — Asaas produção. Primeira receita real em 1-2 semanas.
-C. **Aplicar correções factuais Doc-0** — 7 ajustes (Grupo B) em PRODUTO.md/REGULATORIO/etc.
-D. **Investigar D-30M** — bônus MLM cascata quebrado (P1).
+A. **D-30M** [P1] — investigar bônus MLM cascata (9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao). 1-2h Code.
+B. **Caminho B** [Estratégica] — Asaas produção real. 1-2 semanas. Primeira receita.
+C. **Curadoria de sprints** [Processual] — 16 decisões batch em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`. 30-45 min.
+D. **Correções factuais Doc-0** [P3] — 7 ajustes Grupo B (juiz TJES, Assis IA, etc.). 1h.
+E. **D-30N + D-30O** [P2] — AuditLog + FaturaProcessada.mesReferencia. 30 min cada.
 
 ### Frase de retomada
 
@@ -125,37 +116,42 @@ Anexos opcionais:
 
 ## PENDÊNCIAS PARA PRÓXIMA SESSÃO
 
-### A — 6 descobertas estruturantes (commit `2617d08`)
-- [ ] Modo Observador implementado mas ausente do PRODUTO.md — decidir se adiciona Camada 12
-- [ ] Hardcode 0.20 CooperToken sem origem em spec — confirmado bug, reclassificar D-29A
-- [ ] 3 specs CooperToken se contradizem na expiração — DECISÃO LUCIANO necessária
-- [ ] Convênios subdocumentado (1456 vs 5 linhas) — decidir expansão Camada 8
-- [ ] 600.000 kWh represados — Luciano declarou "não bloqueia nada" → marcar como ciente
-- [ ] FCFS + VPP ausentes do Doc-0 — DECISÃO LUCIANO se entram no roadmap
+> **Reorganizado em 02/05** por prioridade explícita (Decisão 19 ritual).
+> Agente apresenta P1 → P2 → P3 nessa ordem em toda abertura de sessão.
 
-### B — 7 ajustes factuais (identificados, a aplicar)
-- [ ] Remover "juiz TJES" do PRODUTO.md (linha 20)
-- [ ] Sinergia + CoopereBR como "clientes confirmados aguardando migração"
-- [ ] Estado atual: SISGD ainda sem cliente em produção
-- [ ] "Assis" não é pessoa, é assistente IA (OpenClaw) — corrigir em 6+ lugares
-- [ ] Limite 25% NÃO se aplica a GD I (direitos adquiridos até 2045)
-- [ ] Caso A (Exfishes) reescrever com narrativa correta
-- [ ] Conversão Express→Cooperado marcar como hipótese
+### P1 — Crítico (bloqueia produção real ou cliente real)
 
-### C — 4 achados novos E2E (commit `f3a0434`)
-- [ ] D-30M — 9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao (bônus MLM cascata quebrado)
-- [ ] D-30N — AuditLog interceptor não ativado (tabela existe, 0 registros)
-- [ ] D-30O — FaturaProcessada.mesReferencia=null em todas — bug OCR
-- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 — bug snapshot Motor.aceitar
+- [ ] **D-30M** — Bônus MLM cascata quebrado (9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao)
 
-### D — Decisão estratégica imediata
-**Recomendação Code:** focar Caminho B (cobrança manual + Asaas produção) — primeira receita real em 1-2 semanas.
+### P2 — Importante (precisa resolver antes de produção pública)
 
-Decisão Luciano pendente:
-- [ ] Atacar Caminho B agora? (Sprint Asaas Produção)
-- [ ] Aplicar correções factuais (Prompt 2)?
-- [ ] Tratar 6 descobertas estruturantes?
-- [ ] Outro caminho?
+- [ ] **D-30N** — AuditLog interceptor não ativado (tabela existe, 0 registros)
+- [ ] **D-30O** — FaturaProcessada.mesReferencia=null em todas (bug OCR)
+- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 (bug snapshot Motor.aceitar)
+- [ ] Hardcode 0.20 CooperToken sem origem em spec (confirmado bug, reclassificar D-29A) — Grupo A.2
+- [ ] Modo Observador implementado mas ausente do PRODUTO.md (decidir se adiciona Camada 12) — Grupo A.1
+- [ ] 3 specs CooperToken se contradizem na expiração (DECISÃO LUCIANO) — Grupo A.3
+- [ ] Convênios subdocumentado (1456 vs 5 linhas — decidir expansão Camada 8) — Grupo A.4
+- [ ] 600.000 kWh represados (Luciano declarou "não bloqueia" → marcar como ciente) — Grupo A.5
+- [ ] FCFS + VPP ausentes do Doc-0 (DECISÃO LUCIANO se entram no roadmap) — Grupo A.6
+
+### P3 — Polish (não bloqueia, melhora qualidade)
+
+- [ ] Remover "juiz TJES" do PRODUTO.md (linha 20) — Grupo B.1
+- [ ] Sinergia + CoopereBR como "clientes confirmados aguardando migração" — Grupo B.2
+- [ ] Estado atual: SISGD ainda sem cliente em produção — Grupo B.3
+- [ ] "Assis" não é pessoa, é assistente IA (OpenClaw) — corrigir em 6+ lugares — Grupo B.4
+- [ ] Limite 25% NÃO se aplica a GD I (direitos adquiridos até 2045) — Grupo B.5
+- [ ] Caso A (Exfishes) reescrever com narrativa correta — Grupo B.6
+- [ ] Conversão Express→Cooperado marcar como hipótese — Grupo B.7
+
+### Estratégica — Decisão de produto
+
+- [ ] **Caminho B** (cobrança manual UI + Asaas produção real) — primeira receita real em 1-2 semanas. **Recomendação Code:** atacar primeiro.
+
+### Processual — Curadoria pendente
+
+- [ ] **Curadoria de sprints** — 16 decisões restantes em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (commit `6c8cb7d`). Sprint 15+21 já decididos via Decisão 17.
 
 ---
 
@@ -275,7 +271,8 @@ checar que cada sprint tem os 5 itens acima.
 ### Decisão 19 — Ritual de abertura/fechamento de sessão (sessão 02/05 manhã)
 
 Toda sessão Code (Claude Code CLI) **abre** apresentando "Onde paramos +
-Pendências" antes de iniciar trabalho e **fecha** atualizando o mesmo registro.
+Pendências priorizadas P1/P2/P3" antes de iniciar trabalho e **fecha**
+atualizando o mesmo registro.
 
 Mesmo se sessão for "continuação" no mesmo dia. Mesmo se Luciano disser
 "vamos continuar de onde paramos".
@@ -288,8 +285,14 @@ Mesmo se sessão for "continuação" no mesmo dia. Mesmo se Luciano disser
 - Code (automático, via memória persistente)
 - claude.ai web (Luciano cola `CONTROLE-EXECUCAO.md` ao abrir)
 
-**Origem:** Luciano em 02/05 — necessidade de não perder contexto entre
-sessões e ter pendências sempre visíveis.
+**Regra inegociável dentro do ritual:** agente NÃO escolhe próxima pendência
+sozinho. Apresenta P1 → P2 → P3 e espera escolha. Exceção única: quando
+Luciano disser literal "tu decide" ou "ataca o que for mais urgente".
+
+**Origem específica:** em 01/05 tarde (commit `029bb7aa`-area), Code começou
+a operar autonomamente após "voltei" e escolheu pendência **P2** (hardcode
+0.20 sem origem) ignorando **P1** (D-30M MLM cascata quebrado). Roteiro
+existe pra evitar essa armadilha.
 
 **Complementa:** Decisão 14 (validação prévia) + Decisão 15 (regra estendida).
 
