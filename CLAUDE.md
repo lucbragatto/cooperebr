@@ -1,5 +1,21 @@
 # Instruções permanentes — Claude Code no CoopereBR
 
+## Ritual de abertura e fechamento de sessão
+
+**Inegociável** — toda sessão Code (Claude Code CLI) **abre** apresentando
+"Onde paramos + Pendências" e **fecha** atualizando o mesmo registro vivo.
+
+Formato fixo em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/ritual_abertura_fechamento.md`.
+
+Estado vivo fica em `docs/CONTROLE-EXECUCAO.md` (seção **"ONDE PARAMOS"**).
+
+Aplica:
+- Toda sessão Code, mesmo se for "continuação" ou "mesmo dia"
+- claude.ai web por reflexo (Luciano cola `CONTROLE-EXECUCAO.md` ao abrir)
+
+**Origem:** Luciano em 2026-05-02. Necessidade de não perder contexto entre
+sessões e ter pendências sempre visíveis.
+
 ## Disciplina de validação prévia E retomada
 
 **Regra inegociável** — antes de propor ou executar qualquer trabalho novo OU

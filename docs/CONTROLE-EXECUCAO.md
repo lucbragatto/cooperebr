@@ -1,7 +1,69 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-04-30 noite** — sessão Code de fechamento + 3 investigações consolidadas.
+> Última atualização: **2026-05-02 manhã** — sessão Code de retomada + ritual abertura/fechamento criado.
+
+---
+
+## ONDE PARAMOS
+
+> **Seção viva atualizada via ritual de fechamento (memória `ritual_abertura_fechamento.md`).**
+> Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
+
+### Última sessão
+
+- **Quando:** 2026-05-01 manhã
+- **Tipo:** Code execução (curadoria + investigação + fix)
+- **Resultado:** 2 bugs P2 do convênio resolvidos (D-30P + D-30Q). Sprints 15 + 21 descartados (Decisão 17). Decisão 18 registrada (compromisso processual: definição mínima de sprint).
+
+### Commits da última sessão
+
+- `10701e1` docs(processo): consolida decisoes 17+18 + sprints 15/21 descartados
+- `fa9dc72` fix(convenio): caminho publico chama adicionarMembro corretamente
+- `5ee9351` docs(processo): investiga fluxo link convite por convenio
+- `8151381` docs(processo): valida Sprint 15+21 + 3 papeis de Condominio
+- `6c8cb7d` docs(processo): material de decisao curadoria sprints
+
+Push: `026ae8f..10701e1` ✓ origin/main
+
+### Arquivos tocados
+
+- `backend/src/publico/publico.controller.ts` (fix D-30P/Q)
+- `backend/src/publico/publico.module.ts` (import ConveniosModule)
+- `backend/src/publico/publico.controller.convenio.spec.ts` (5 specs novos)
+- `docs/CONTROLE-EXECUCAO.md` (Decisões 17 + 18)
+- `docs/debitos-tecnicos.md` (D-30P + D-30Q resolvidos)
+- `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (Sprint 15+21 marcados)
+- `docs/sessoes/2026-05-01-validacao-sprints-15-21.md` (criado)
+- `docs/sessoes/2026-05-01-investigacao-link-convite-convenio.md` (criado)
+- `~/.claude/.../memory/sugestoes_pendentes.md` (Sugestão #2)
+
+### Decisões registradas
+
+- **Decisão 17:** Sprint 15 (Condomínio) + Sprint 21 (Síndico) descartados
+- **Decisão 18:** compromisso processual de definição mínima de sprint (5 itens)
+- **Débitos resolvidos:** D-30P + D-30Q
+
+### Pendências consolidadas
+
+→ Ver seção [PENDÊNCIAS PARA PRÓXIMA SESSÃO](#pendências-para-próxima-sessão) abaixo.
+
+**Total restante:** 7 pendências.
+
+### Próximos passos imediatos (priorizado)
+
+A. **Aplicar curadoria de sprints** — 16 decisões em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`. Resultado: pilha reconciliada de 14 sprints (não 16, pois Sprint 15+21 já fora).
+B. **Atacar Caminho B** — Asaas produção. Primeira receita real em 1-2 semanas.
+C. **Aplicar correções factuais Doc-0** — 7 ajustes (Grupo B) em PRODUTO.md/REGULATORIO/etc.
+D. **Investigar D-30M** — bônus MLM cascata quebrado (P1).
+
+### Frase de retomada
+
+> Voltei. Lê `docs/CONTROLE-EXECUCAO.md`.
+
+Anexos opcionais:
+- `docs/CONTROLE-EXECUCAO.md`
+- `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (16 decisões pendentes)
 
 ---
 
@@ -209,6 +271,27 @@ Causou investigação cara pra descobrir que não eram sprints viáveis (commits
 
 **Aplica retroativamente:** revisão futura de `PLANO-ATE-PRODUCAO.md` precisa
 checar que cada sprint tem os 5 itens acima.
+
+### Decisão 19 — Ritual de abertura/fechamento de sessão (sessão 02/05 manhã)
+
+Toda sessão Code (Claude Code CLI) **abre** apresentando "Onde paramos +
+Pendências" antes de iniciar trabalho e **fecha** atualizando o mesmo registro.
+
+Mesmo se sessão for "continuação" no mesmo dia. Mesmo se Luciano disser
+"vamos continuar de onde paramos".
+
+**Onde fica salvo:**
+- Ritual: `~/.claude/.../memory/ritual_abertura_fechamento.md` (formato fixo)
+- Estado vivo: seção **"ONDE PARAMOS"** no topo deste arquivo
+
+**Aplica-se a:**
+- Code (automático, via memória persistente)
+- claude.ai web (Luciano cola `CONTROLE-EXECUCAO.md` ao abrir)
+
+**Origem:** Luciano em 02/05 — necessidade de não perder contexto entre
+sessões e ter pendências sempre visíveis.
+
+**Complementa:** Decisão 14 (validação prévia) + Decisão 15 (regra estendida).
 
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
