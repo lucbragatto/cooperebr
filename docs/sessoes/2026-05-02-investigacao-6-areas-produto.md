@@ -47,7 +47,60 @@
 - COMPENSADOS cálculo (`faturas.service.calcular.spec.ts:117-159`) — 3 testes ✅
 - DINAMICO — **0 testes**
 
-**Veredito 🔴:** congelamento + D-30R + DINAMICO sem implementação. Para destravar COMPENSADOS: aplicar fix D-30R (Motor populando `tarifaContratual`) + backfill 72 contratos + remover bloqueio. DINAMICO requer Sprint dedicado (estimado 3-5 dias).
+**Documentação dedicada (revisão posterior à investigação inicial):**
+- `docs/especificacao-modelos-cobranca.md` ✅ 130 linhas — define os 3 modelos (FIXO, COMPENSADOS, DINAMICO) com fórmulas e personas
+- `docs/FORMULAS-COBRANCA.md` ⚠️ **OBSOLETO** — movido pra `historico/` (CLAUDE.md ainda referencia como fonte de verdade — incoerência documental)
+- `docs/PRODUTO.md` ✅ 709 linhas — visão produto: FIXO "único ativo em produção"; COMPENSADOS "bloqueado flag"; DINAMICO `NotImplementedException:1882`
+- `docs/PLANO-ATE-PRODUCAO.md` ✅ 473 linhas — Sprint 2 traz DINAMICO + COMPENSADOS atômicos (bloqueado por Sprint 0); Sprint 5 implementa `RegrasFioB`, schema N:M `UcUsinaRateio`, Fio B ponderado
+- `docs/REGULATORIO-ANEEL.md` ✅ 954 linhas — Fio B 2022-2029 documentado; classes GD definidas; **mas `Usina.classeGd` enum NÃO existe no schema** + `RegrasFioB` model **NÃO existe**
+- `docs/debitos-tecnicos.md` linhas 314-362 — D-30R catalogado com fix 30-45 min
+- Decisão 17: Sprint 15 + 21 descartadas (sem demanda)
+- Doc-código ALINHADOS no geral; lacunas: ① `FORMULAS-COBRANCA.md` órfão na raiz, ② schema GD/Fio B documentado mas não codificado, ③ DINAMICO especificado mas não implementado
+
+**Funcionalidade Planos comerciais (revisão posterior):**
+
+Schema `Plano` (`schema.prisma:417-457`):
+- `modeloCobranca: ModeloCobranca` (enum 3 valores)
+- `descontoBase` (Decimal 5,2), `baseCalculo` (KWH_CHEIO/SEM_TRIBUTO/COM_ICMS/CUSTOM)
+- `tipoDesconto` (APLICAR_SOBRE_BASE/ABATER_DA_CHEIA) — define se 20% vira 20% real ou ~14% real
+- CooperToken integrado (tokenAtivo, tokenOpcaoCooperado, tokenValorTipo)
+- Multi-tenant: `cooperativaId?` permite planos globais (null) OU por coop
+- Relações: `contratos: Contrato[]`, `propostas: PropostaCooperado[]`
+
+Cadeia override resolução modelo (`faturas.service.ts:1895-1919`):
+1. `Contrato.modeloCobrancaOverride` (maior prioridade)
+2. `Usina.modeloCobrancaOverride`
+3. `ConfigTenant['modelo_cobranca_padrao']` (por cooperativaId)
+4. `Plano.modeloCobranca`
+5. `FIXO_MENSAL` (fallback)
+
+Backend `backend/src/planos/planos.service.ts`:
+- `create()` aceita os 3 modelos no DTO sem bloqueio local
+- `findAtivos(publico=true)` filtra COMPENSADOS/DINAMICO se `BLOQUEIO_MODELOS_NAO_FIXO=true`
+- **Seed `onModuleInit` cria "Plano Básico" `CREDITOS_COMPENSADOS`** ⚠️ — gera plano bloqueado ao subir o app (incoerente com bloqueio Sprint 5)
+- `remove()` bloqueia se contrato ATIVO/PENDENTE_ATIVACAO vinculado
+
+Bloqueio `BLOQUEIO_MODELOS_NAO_FIXO=true` (4 pontos enforcement):
+- `planos.service.ts:58` — filtragem pública
+- `contratos.service.ts:126-147` — valida create/update de contrato
+- `motor-proposta.service.ts:548-549` — bloqueia `aceitar()` proposta
+- `faturas.service.ts:574, 987` — bloqueia calcular cobrança
+
+Frontend admin (`web/app/dashboard/planos/`):
+- `novo/page.tsx:183-196` e `[id]/page.tsx:385-394` — `<select>` com options COMPENSADOS/DINAMICO `disabled` ("bloqueado — Sprint 5") — bloqueio só visual, DTO aceita
+- `page.tsx` listagem — cores por modelo (azul FIXO, verde COMPENSADOS, roxo DINAMICO)
+
+Override Usina/Contrato:
+- DTOs aceitam `modeloCobrancaOverride?` em ambos
+- 🔴 **Sem UI** — só via API direta
+
+**Veredito 🔴 (mantido, contexto enriquecido):** congelamento + D-30R + DINAMICO sem implementação. Bloqueio é **defesa em profundidade saudável** (4 pontos enforcement + UI desabilitada). Lacunas adicionais identificadas:
+1. Seed automático cria Plano `CREDITOS_COMPENSADOS` ao subir — incoerente com bloqueio
+2. UI de override em Usina/Contrato inexistente
+3. `FORMULAS-COBRANCA.md` órfão (CLAUDE.md aponta pra ele mas está em `historico/`)
+4. `RegrasFioB` model + `Usina.classeGd` enum documentados mas não no schema
+
+Para destravar COMPENSADOS: D-30R fix + backfill 72 contratos + remover (ou flexibilizar) `BLOQUEIO_MODELOS_NAO_FIXO` + ativar opções `<select>` no frontend + revisar seed Plano Básico + corrigir referência CLAUDE.md → FORMULAS-COBRANCA.md. DINAMICO requer Sprint dedicado (3-5 dias) + Sprint 5 (Fio B + classes GD) como pré-requisito.
 
 ---
 
