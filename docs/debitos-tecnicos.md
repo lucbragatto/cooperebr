@@ -142,24 +142,32 @@ Termo de Adesão atual **não menciona** que cooperado pode ser realocado entre 
 
 ---
 
-### D-30M — Bônus MLM cascata quebrado
+### D-30M — Validação E2E do bônus MLM cascata pendente
 
-**Severidade:** P1
+**Severidade:** ~~P1~~ → **P2** (reclassificado em 02/05 após validação prévia)
 **Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
-**Impacto:** indicadores de cooperados pagantes não recebem benefício
+**Reclassificado em:** 2026-05-02 manhã (investigação Code com leitura de código)
 
-Investigação E2E identificou: 9 registros em `Indicacao` com status `PRIMEIRA_FATURA_PAGA`
-mas **0 registros** correspondentes em `BeneficioIndicacao`. Cron ou trigger que
-deveria criar `BeneficioIndicacao` quando primeira fatura é paga não está disparando.
+**Diagnóstico atualizado:** **NÃO É BUG.** Pipeline está correto e cabeado:
+- `cobrancas.service.ts:519-528` emite evento `cobranca.primeira.paga` quando `totalPagas === 1`
+- `indicacoes.service.ts:22` ouve com `@OnEvent('cobranca.primeira.paga')`
+- `processarPrimeiraFaturaPaga()` cria `BeneficioIndicacao` na linha 286
 
-**Verificação:**
-- `SELECT count(*) FROM indicacoes WHERE status = 'PRIMEIRA_FATURA_PAGA';` → 9
-- `SELECT count(*) FROM beneficios_indicacao;` → 0
+`ConfigIndicacao` da CoopereBR está ativa:
+- `ativo=true`
+- `modalidade=PERCENTUAL_PRIMEIRA_FATURA`
+- `maxNiveis=2`
+- `niveisConfig=[{nivel:1, percentual:10%}, {nivel:2, percentual:2%}]`
 
-**Resolução:** investigação dedicada (sprint MLM). Antes de propor fix, verificar:
-1. `grep -rn "BeneficioIndicacao" backend/src/` — onde é criado?
-2. Existe cron que processa indicações pagas e cria bônus?
-3. Alguma flag silencia disparo?
+**Por que 9 indicações estão `PRIMEIRA_FATURA_PAGA` com 0 `BeneficioIndicacao`:**
+
+As 9 Indicações foram criadas por **seed histórico** (jun-ago/2025) com `primeiraFaturaPagaEm` já setado. Foram inseridas direto no banco — não passaram pelo fluxo real, por isso evento nunca disparou.
+
+Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indicados** — fluxo real ainda não foi exercitado em produção/sandbox em nenhuma combinação cooperado+indicação.
+
+**Próximo passo:** quando primeiro cooperado indicado pagar via Caminho B (Asaas produção), validar E2E. Se gerar `BeneficioIndicacao` corretamente, **fechar D-30M definitivamente**.
+
+**Não é bug. Não bloqueia produção.**
 
 ---
 
@@ -206,34 +214,67 @@ Spec detalhada (188 linhas) do Assis (26/03/2026) com schema `tusdFioA`/`tusdFio
 
 ---
 
-### D-30N — AuditLog interceptor não ativado
+### D-30N — AuditLog interceptor não implementado (escopo revisado)
 
-**Severidade:** P2
+**Severidade:** P2 (mantida)
 **Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
-**Impacto:** mudanças de configuração não estão sendo logadas (compliance)
+**Revisado em:** 2026-05-02 manhã (validação prévia com leitura de código)
 
-Sprint 13a Dia 1 criou tabela `AuditLog`. Schema OK. **Mas interceptor nunca foi
-ativado**, então 0 registros existem.
+**Diagnóstico anterior:** "interceptor existe mas não foi ativado".
 
-**Verificação:** `SELECT count(*) FROM audit_log;` → 0
+**Diagnóstico revisado:** **interceptor não existe.** Sprint 13a Dia 1 criou
+APENAS o `model AuditLog` no `schema.prisma:1740`. Nenhum arquivo TypeScript
+em `backend/src/` referencia `AuditLog` ou `auditLog` (`grep -rn` retorna 0).
 
-**Resolução:** **Sprint 5** ou **Sprint 6** (auditoria geral) — implementar
-`AuditLogInterceptor` NestJS + decorator `@Auditavel`.
+Schema completo no Prisma (`usuarioId`, `acao`, `recurso`, `metadata`, `ip`,
+índices criados) — pronto pra usar quando interceptor for criado.
+
+**O que falta criar (não apenas ativar):**
+- `AuditLogInterceptor` NestJS
+- Decorator `@Auditavel({ acao: 'cooperativa.suspender' })`
+- Helper `auditLog.gravar(acao, recurso, metadata)` pra usar em services
+- `AuditModule` registrando provider + APP_INTERCEPTOR
+- Aplicar decorator em endpoints sensíveis
+
+**Resolução:** **Sprint 5** ou **Sprint 6** (auditoria geral) — escopo é
+implementação completa, não ativação.
 
 ---
 
 ### D-30O — `FaturaProcessada.mesReferencia` null em todas
 
-**Severidade:** P2
+**Severidade:** P2 (mantida — bug real, fix simples)
 **Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
-**Impacto:** campo crítico para vincular fatura a cobrança não populado
+**Revisado em:** 2026-05-02 manhã (validação prévia com leitura de código)
 
 Todas as 5 `FaturaProcessada` no banco têm `mesReferencia=null`. OCR Claude AI
 extrai dado da fatura (`dadosExtraidos.mesReferencia` está populado) mas o pipeline
 não copia esse campo pra coluna dedicada.
 
-**Resolução:** **Sprint 2** (OCR-Integração) — popular `FaturaProcessada.mesReferencia`
-ao salvar a fatura processada. Bloqueia `gerarCobrancaPosFatura` que filtra por mês.
+**Causa raiz precisa (validação prévia 02/05):** existem **2 caminhos** que chamam
+`criarFaturaProcessada`:
+
+- `faturas.service.ts:463` (caminho `upload-concessionaria`) — **passa**
+  `mesReferencia: dto.mesReferencia` ✓ corretamente
+- `faturas.service.ts:302` (caminho `extrair` — OCR direto via wizard admin
+  ou `/cadastro` público) — **NÃO passa** `mesReferencia` ✗
+
+Todas as 5 `FaturaProcessada` no banco vieram do caminho `:302` (caminho
+`upload-concessionaria` nunca foi exercitado em produção).
+
+**Fix simples:** ~3 linhas em `faturas.service.ts:302+`:
+```ts
+const fatura = await this.criarFaturaProcessada({
+  cooperadoId: dto.cooperadoId,
+  ucId: dto.ucId ?? null,
+  mesReferencia: dadosExtraidos.mesReferencia ?? null,  // ← ADICIONAR
+  ...
+});
+```
+
+**Estimativa:** 5-10 min Code + 1-2 specs Jest. Pode ir antes do Sprint 2.
+
+**Resolução:** **Sprint 2** (OCR-Integração) ou **fix antecipado** (qualquer momento).
 
 ---
 

@@ -12,41 +12,45 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-02 manhã (~30min)
-- **Tipo:** Code execução (criação de ritual operacional + consolidação melhorias prompt B)
-- **Resultado:** ritual de abertura/fechamento padronizado criado e ativado. Decisão 19 registrada. Pendências reorganizadas em P1/P2/P3 explícito (era mistura de A/B/C/D antes). Aplicação de validação prévia detectou duplicação proposta pelo prompt B e consolidou no arquivo existente em vez de criar paralelo.
+- **Quando:** 2026-05-02 manhã (~1h30min total)
+- **Tipo:** Code (ritual + investigação read-only de 3 débitos)
+- **Resultado:** ritual ativado. D-30M reclassificado P1→P2 (falso positivo). D-30N escopo revisado (não é "ativar", é "implementar do zero"). D-30O causa raiz precisa identificada (`faturas.service.ts:302` não passa `mesReferencia`; fix simples ~5 linhas). Aprendizado meta: classificações por contagem podem mentir.
 
 ### Commits da última sessão
 
 - `1301bb2` docs(ritual): cria ritual de abertura/fechamento de sessao
-- `<este>` docs(processo): aprimora ritual + reorganiza pendencias P1/P2/P3 + Decisao 19 final
+- `18845b0` docs(ritual): aprimora Decisao 19 + reorganiza pendencias P1/P2/P3
+- `<este>` docs(processo): reclassifica D-30M + investiga D-30N/D-30O com validacao previa
 
-Push esperado: `1301bb2..<este>` → origin/main
+Push esperado: `18845b0..<este>` → origin/main
 
 ### Arquivos tocados (sessão 02/05)
 
-- `~/.claude/.../memory/ritual_abertura_fechamento.md` (criado + aprimorado)
+- `~/.claude/.../memory/ritual_abertura_fechamento.md` (ritual + nota meta + aprendizados)
 - `~/.claude/.../memory/MEMORY.md` (índice + pointer ritual)
-- `CLAUDE.md` (raiz — nova seção "Ritual de abertura e fechamento")
-- `docs/CONTROLE-EXECUCAO.md` (seção "ONDE PARAMOS" + Decisão 19 + pendências reorganizadas P1/P2/P3)
+- `CLAUDE.md` (raiz — seção "Ritual de abertura e fechamento")
+- `docs/CONTROLE-EXECUCAO.md` (seção "ONDE PARAMOS" + Decisão 19 + pendências reorganizadas)
+- `docs/debitos-tecnicos.md` (D-30M reclassificado, D-30N escopo, D-30O causa raiz)
+- `docs/sessoes/2026-05-02-investigacao-d30m-d30n-d30o.md` (criado)
 
 ### Decisões registradas
 
-- **Decisão 19:** ritual de abertura/fechamento de sessão padronizado, com regra explícita "agente não escolhe sozinho" (exceção: "tu decide")
+- **Decisão 19:** ritual de abertura/fechamento de sessão padronizado
+- **Reclassificações:** D-30M P1→P2 (validação E2E pendente, não bug)
 
 ### Pendências consolidadas
 
 → Ver seção [PENDÊNCIAS PARA PRÓXIMA SESSÃO](#pendências-para-próxima-sessão) abaixo.
 
-**Total restante:** 19 itens (1 P1 + 9 P2 + 7 P3 + 1 estratégica + 1 processual).
+**Total restante:** ~19 itens. **P1 = 0** (D-30M saiu). Crítico real reduziu.
 
 ### Próximos passos imediatos (priorizado conforme P1 → P2 → P3)
 
-A. **D-30M** [P1] — investigar bônus MLM cascata (9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao). 1-2h Code.
+A. **D-30O fix antecipado** [P2 — fix simples 5-10 min] — adicionar `mesReferencia` em `faturas.service.ts:302+`. Recomendação Code.
 B. **Caminho B** [Estratégica] — Asaas produção real. 1-2 semanas. Primeira receita.
 C. **Curadoria de sprints** [Processual] — 16 decisões batch em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`. 30-45 min.
-D. **Correções factuais Doc-0** [P3] — 7 ajustes Grupo B (juiz TJES, Assis IA, etc.). 1h.
-E. **D-30N + D-30O** [P2] — AuditLog + FaturaProcessada.mesReferencia. 30 min cada.
+D. **Correções factuais Doc-0** [P3] — 7 ajustes Grupo B. 1h.
+E. **D-30N implementação completa** [P2] — interceptor + decorator + módulo. Absorvido por Sprint 5/6. Não fazer isolado.
 
 ### Frase de retomada
 
@@ -118,18 +122,26 @@ Anexos opcionais:
 
 > **Reorganizado em 02/05** por prioridade explícita (Decisão 19 ritual).
 > Agente apresenta P1 → P2 → P3 nessa ordem em toda abertura de sessão.
+> Pendências marcadas com 🔍 foram **revisadas com leitura de código** (não só contagem de registros).
 
 ### P1 — Crítico (bloqueia produção real ou cliente real)
 
-- [ ] **D-30M** — Bônus MLM cascata quebrado (9 Indicação PRIMEIRA_FATURA_PAGA com 0 BeneficioIndicacao)
+*(Vazio — D-30M reclassificado P1→P2 em 02/05 após validação prévia.)*
 
-### P2 — Importante (precisa resolver antes de produção pública)
+### P2 — Validação E2E pendente (não é bug)
 
-- [ ] **D-30N** — AuditLog interceptor não ativado (tabela existe, 0 registros)
-- [ ] **D-30O** — FaturaProcessada.mesReferencia=null em todas (bug OCR)
-- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 (bug snapshot Motor.aceitar)
-- [ ] Hardcode 0.20 CooperToken sem origem em spec (confirmado bug, reclassificar D-29A) — Grupo A.2
-- [ ] Modo Observador implementado mas ausente do PRODUTO.md (decidir se adiciona Camada 12) — Grupo A.1
+- [ ] 🔍 **D-30M** — Bônus MLM cascata: pipeline OK, validar quando primeiro indicado pagar via Caminho B Asaas. (Era P1; reclassificado 02/05.)
+
+### P2 — Bugs/lacunas confirmadas com leitura de código
+
+- [ ] 🔍 **D-30N** — AuditLog interceptor **não existe** (escopo revisado: implementação completa, não ativação)
+- [ ] 🔍 **D-30O** — FaturaProcessada.mesReferencia=null no caminho `extrair` (`faturas.service.ts:302`). Fix simples ~5 linhas, 5-10 min.
+- [ ] Cobranca.tarifaContratual=null em CTR-324704 + CTR-652787 (bug snapshot Motor.aceitar — não revisado ainda com leitura de código)
+
+### P2 — Decisões de produto (Doc-0)
+
+- [ ] Hardcode 0.20 CooperToken sem origem em spec (Grupo A.2)
+- [ ] Modo Observador implementado mas ausente do PRODUTO.md — adicionar Camada 12 (Grupo A.1)
 - [ ] 3 specs CooperToken se contradizem na expiração (DECISÃO LUCIANO) — Grupo A.3
 - [ ] Convênios subdocumentado (1456 vs 5 linhas — decidir expansão Camada 8) — Grupo A.4
 - [ ] 600.000 kWh represados (Luciano declarou "não bloqueia" → marcar como ciente) — Grupo A.5
