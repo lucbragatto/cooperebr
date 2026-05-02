@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 30/04/2026 (sessão Code Doc-0 Fatia 2 — pilha reorganizada com 10 sprints + Sprint 0 pós-decisões claude.ai 30/04).
+**Última atualização:** 02/05/2026 (Fase 1 sessão Code — D-30O resolvido + 7 ajustes Doc-0 + Sprints 5a/3a catalogados + D-30R catalogado).
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -14,7 +14,48 @@
 
 ---
 
-## Seção 1 — Filosofia do plano
+## Seção 0 — Estado atual em 1 página (02/05/2026)
+
+### O que está pronto (concluído)
+
+- **Sprints históricos:** 1-13a (133 commits git, abr-mar/2026)
+- **Caminho B (cobrança manual + Asaas sandbox):** 31 cobranças PAGAS validadas (commit `16302e9`)
+- **Webhook Asaas sandbox:** 3 bugs P1 corrigidos
+- **Painel SISGD super-admin:** lista parceiros + cards saúde + IDOR fix
+- **Doc-0 Fatia 2:** PRODUTO.md + REGULATORIO-ANEEL.md + CONTROLE-EXECUCAO.md
+- **Convênios fluxo público:** D-30P + D-30Q resolvidos (commit `fa9dc72`)
+- **D-30O:** mesReferencia OCR resolvido (02/05, commit `7ea6943`)
+- **Doc-0 Grupo B:** 7 ajustes factuais aplicados
+
+### O que falta — ordem prioritária
+
+**Crítico estratégico:**
+1. **Caminho B em produção real** — Asaas conta produção + primeiro cooperado pagante. Estimativa: 1-2 semanas.
+2. **Sprint 0** — Auditoria Regulatória Emergencial (casos Exfishes/FIGATTA/CRIAR).
+3. **D-30R fix** — Motor.aceitar não popula tarifaContratual (afeta 100% dos 72 contratos). 30-45 min Code, bloqueia Sprint 2.
+
+**Pré-produção (10 sprints da pilha + 2 sub-sprints):**
+- Sprints 0-9 da pilha pré-produção (17-23 semanas Code)
+- Sprint 5a (Fio B) + Sprint 3a (RN 482) — sub-sprints regulatórios
+
+**Pendências decisórias com Luciano (Fase 2 claude.ai):**
+- 6 descobertas Grupo A (Modo Observador, Hardcode 0.20, FCFS+VPP, etc.)
+- 6 decisões estratégicas (Sprint 0 quando começar, advogado regulatório, etc.)
+- 16 decisões da curadoria de sprints
+
+### O que NÃO entra na pilha
+
+- Login facial (Sprint 24 antigo) — `sugestoes_pendentes.md`
+- Diagramas C4 + ER — `sugestoes_pendentes.md` (reavaliar quando CoopereBR migrar)
+- Token dedicado de convênio + landing personalizada — `sugestoes_pendentes.md` (aguarda Sprint 1)
+
+### P1 atual: **0 itens críticos abertos**
+
+(D-30M reclassificado P1→P2 em 02/05 após validação prévia.)
+
+---
+
+
 
 Este documento responde uma pergunta simples: **o que falta pro SISGD entrar em produção real, com parceiros pagando, sem o Luciano ter que torcer pra dar certo?**
 
@@ -22,7 +63,7 @@ A resposta NÃO é "implementar mais coisas". O SISGD já tem 80 models, 44 mód
 
 - Telas que Luciano usa pra acompanhar (governança).
 - Automatismos que rodam sozinhos (FaturaSaas, lembretes, validações regulatórias).
-- Engines de cálculo que cubram os 3 modelos (FIXO ✅ pronto, COMPENSADOS 🟡 bloqueado, DINAMICO 🔴 falta).
+- Engines de cálculo que cubram os 3 modelos (FIXO ✅ pronto, COMPENSADOS 🟡 bloqueado + falta snapshot tarifaContratual D-30R, DINAMICO 🔴 falta).
 - Estrutura regulatória ANEEL (5 flags + classes GD + Fio B + auditoria).
 - Camada de pré-produção real (Asaas em produção, validação local com distribuidoras).
 
@@ -411,13 +452,18 @@ desses pais e já têm spec/análise pronta.
 CoopereBR + Sinergia migrando do sistema antigo:
 
 - [x] Sprint 13a concluído (Painel SISGD + lista parceiros + IDOR fix em 6 endpoints).
-- [ ] Doc-0 Fatia 2 concluída (PRODUTO + REGULATORIO + CONTROLE-EXECUCAO) — **fechado nesta sessão Code 30/04**.
+- [x] **Doc-0 Fatia 2 concluída** (PRODUTO + REGULATORIO + CONTROLE-EXECUCAO — 30/04 noite).
+- [x] **D-30O resolvido** (mesReferencia OCR — 02/05 manhã, commit `7ea6943`).
+- [x] **7 ajustes factuais Doc-0 aplicados** (Grupo B completo — 02/05 manhã).
+- [x] **Sprints 5a (Fio B) + 3a (RN 482) catalogados** com Decisão 18 (definição mínima).
 - [ ] Doc-0 Fatias 3-5 concluídas (SISTEMA.md + CLAUDE.md refator + movimentação final).
+- [ ] **D-30R fix** — Motor.aceitar() popular `Contrato.tarifaContratual` + script backfill (afeta 100% dos 72 contratos). 30-45 min Code.
+- [ ] **D-30N implementação completa** — `AuditLogInterceptor` + `@Auditavel` + módulo (absorvido por Sprint 5/6).
 - [ ] Sprint 0 concluído (auditoria regulatória regularizou casos Exfishes/FIGATTA/CRIAR).
 - [ ] Sprint 1 concluído (FaturaSaas cobrando parceiros automaticamente).
-- [ ] Sprint 2 concluído (DINAMICO + COMPENSADOS validados).
-- [ ] Sprint 3 concluído (Assinafy + termo atualizado).
-- [ ] Sprint 5 concluído (Módulo Regulatório ANEEL com 5 flags).
+- [ ] Sprint 2 concluído (DINAMICO + COMPENSADOS validados — depende de D-30R fix antes).
+- [ ] Sprint 3 + 3a concluídos (Assinafy + termo Lei 14.300).
+- [ ] Sprint 5 + 5a concluídos (Módulo Regulatório ANEEL com 5 flags + Fio B implementado).
 - [ ] Sprint 6 concluído (Auditoria IDOR geral).
 - [ ] Conta Asaas produção configurada (Luciano abre).
 - [ ] Cron FaturaSaas validado em produção real (1 parceiro paga 1 ciclo completo).
