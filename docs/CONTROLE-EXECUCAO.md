@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — **Fase C.1 concluída** (helper simular-plano + componentes + campos condicionais + avisos V4); B.5 + B + A concluídas no mesmo dia.
+> Última atualização: **2026-05-03 fechamento consolidado** — sessão maratona com **4 fases concluídas** (A + B + B.5 + C.1) + **20 commits** + validação E2E **48/48** ✓.
 
 ---
 
@@ -12,70 +12,60 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-03 noite (sessão Code, ~3h)
-- **Tipo:** Code execução **Fase C.1 — UI plano + simulação (foundation)**
-- **Resultado:** ITENS 1, 2, 3, 8 da Fase C concluídos. Helper `web/lib/simular-plano.ts` com paridade matemática backend (6/6 cenários ✓ via spec ts-node standalone). Componente `<PlanoSimulacao>` painel sticky em tempo real. Campos condicionais por modelo (FIXO mostra kWh, DINAMICO esconde Referência de Valor). Componente `<CombinacaoAtual>` inline com avisos V4. `/dashboard/planos/novo` agora tem layout 2 colunas (form + simulação). Build Next.js limpo. **4 commits.** Próxima: Fase C.2 (promo + vigência + CooperToken expandido + lista enriquecida + confirmação) ou Fase C.3 (display economia em portal/cobranças).
+- **Quando:** 2026-05-03 (maratona ~10-12h, 4 fases sequenciais)
+- **Tipo:** Code (Fase A + B + B.5 + C.1)
+- **Resultado consolidado:**
+  - **Fase A** (manhã): multi-tenant em Planos. 4 bugs cross-tenant resolvidos + lacuna B13 (seed `CREDITOS_COMPENSADOS` → `FIXO_MENSAL`). 20 specs Jest verde. UI condicional por perfil. **4 commits.**
+  - **Fase B** (tarde): D-30R RESOLVIDO + duplo desconto eliminado + DINAMICO implementado + Decisão B33 aplicada. Helper canônico `calcularTarifaContratual` em 5 caminhos. 72 specs Jest verde. **6 commits.**
+  - **Fase B.5** (noite): validação E2E sintética **6/6 ✓** com 8 valores cada (incluindo 4 valores de economia projetada). Cooperativa teste isolada (CNPJ 11.111.111/0001-11). Schema delta `Contrato.valorCheioKwhAceite` + 4 campos `Cobranca`. FIXO grava `valorBruto` (resolve Sprint 7 #4). Decisões B33.5 + B34 + B35 cristalizadas. **4 commits.**
+  - **Fase C.1** (noite mais tarde): UI plano + simulação tempo real. Helper `web/lib/simular-plano.ts` com paridade matemática backend (6/6 ts-node ✓). Componentes `<PlanoSimulacao>` + `<CombinacaoAtual>`. Campos condicionais por modelo. Layout 2 colunas em `/dashboard/planos/novo`. **5 commits.**
+  - **Total:** 19 commits + 1 commit de investigação inicial = **20 commits**. Validação matemática **48/48** (6 cenários × 8 valores ✓).
+- **Próxima sessão:** Fase C.2 (UI plano avançada) ou validação manual da Fase C.1 — decisão Luciano após retomada.
 
-### Sessão anterior (Fase B.5 — noite 03/05)
+### Sessão anterior (mantida pra contexto curto)
 
-- **Quando:** 2026-05-03 noite (sessão Code, ~2h)
-- **Tipo:** Code execução **Fase B.5 — Validação E2E + economia projetada**
-- **Resultado:** **6/6 cenários ✓** validados com precisão de centavo nos 8 valores cada (tarifaContratual + valorBruto/Líquido/Desconto + 4 valores de economia). Cooperativa teste `TESTE-FASE-B5` isolada (CNPJ 11.111.111/0001-11), 6 cooperados teste, 6 contratos com snapshot completo, 6 cobranças geradas. **FIXO agora grava valorBruto** (resolve Sprint 7 #4 — economia FIXO zerada). **4 valores de economia** (mês/ano/5a/15a) gravados em toda cobrança nos 3 modelos. Schema delta: `Contrato.valorCheioKwhAceite` + 4 campos em `Cobranca`. CoopereBR (real) intocada. `.env` continua sem flag de bypass. **Próxima:** canário em 1 cooperado real (recomendação) ou Fase C (UI).
+> 4 fases dentro do dia 03/05 condensadas no resumo único acima. Detalhe completo em `docs/sessoes/2026-05-03-resumo-sessao-completa.md`.
 
-### Sessão anterior (Fase B — tarde 03/05)
-
-- **Quando:** 2026-05-03 tarde (sessão Code, ~4h)
-- **Tipo:** Code execução **Fase B Planos** (engine + snapshots + DINAMICO + validações DTO)
-- **Resultado:** Fase B concluída. **D-30R RESOLVIDO** (5 caminhos populam snapshot via helper canônico). **Duplo desconto eliminado** na engine COMPENSADOS. **DINAMICO implementado** (era `NotImplementedException`). **Decisão B33 aplicada** (tarifaContratual = pós-desconto).
-
-### Sessão anterior (Fase A — manhã 03/05)
-
-- **Quando:** 2026-05-03 manhã (sessão Code, ~3h)
-- **Tipo:** Code execução **Fase A Planos** (multi-tenant + seed)
-- **Resultado:** Fase A concluída. 4 bugs cross-tenant resolvidos + lacuna B13 (seed `CREDITOS_COMPENSADOS` → `FIXO_MENSAL`). 20 specs Jest verde. UI condicional SUPER_ADMIN. Backend sobe limpo via PM2.
-
-### Sessão anterior (mantida pra contexto)
-
-- **Quando:** 2026-05-03 manhã (sessão Code curta, ~2h)
-- **Tipo:** Code investigação read-only (gate crítico D-30R)
-- **Resultado:** Tentativa de fix D-30R parou no gate de semântica. Investigação read-only completa (7 perguntas respondidas) revelou **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine COMPENSADOS. Bug latente. Recomendação: Sprint C1 escopo expandido (5-7 dias) com decisão prévia A/B/C.
-
-### Sessão anterior (mantida pra contexto)
+### Sessão 02/05 (mantida pra contexto longo)
 
 - **Quando:** 2026-05-02 (manhã + tarde, ~7-8h com pausas)
 - **Tipo:** Code (Fase 1 técnica + Fase 2.5 investigações + Fase 2.6 fechamento consolidado)
 - **Resultado:** 12 pendências resolvidas (D-30O fix + 7 ajustes B + 2 sprints catalogados + D-30R catalogado + 6 áreas investigadas + revisão specs CooperToken + Área 1 expandida + SISGD-VISAO movido pra histórico). 2 decisões processuais novas (19 ritual, 20 validação por resposta). 4 débitos catalogados (D-30R, D-30S, D-30T) + 1 sugestão pendente (#3 cron sessões).
 
-### Commits da sessão 2026-05-03
+### Commits da sessão 2026-05-03 (cronologia, 20 commits)
 
-**Fase C.1 UI Plano + Simulação (noite, mais tarde):**
-- `<este-grupo>` feat(web-lib): helper simular-plano + 6 specs paridade backend
-- feat(planos-ui): componente PlanoSimulacao com painel em tempo real
-- feat(planos-ui): campos condicionais por modelo + simulacao integrada
-- feat(planos-ui): helper visual baseCalculo + tipoDesconto + avisos V4
+**Investigação inicial (manhã):**
+- `4caebe9` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
 
-**Fase B.5 (noite):**
-- `a4ebf90` feat(schema): valorCheioKwhAceite (Contrato) + 4 economia (Cobranca)
-- `b0e0345` feat(faturas+motor): FIXO grava valorBruto + 4 economia nos 3 modelos
-- `718ca46` test(fase-b5): seed E2E 6 cenarios validados
-- `840b10f` docs(fase-b5): playbook validacao E2E + tabela 8 colunas + IDs
-
-**Fase B Planos (tarde):**
-- `eb7f0ce` feat(motor): helper calcularTarifaContratual + schema FaturaProcessada (Fase B)
-- `070c1ab` fix(motor): aceitar() + 4 caminhos populam snapshots completos (D-30R)
-- `f5453b7` fix(faturas): COMPENSADOS sem duplo desconto + DINAMICO implementado
-- `00f64df` feat(planos): validacoes DTO V1-V3 + warnings V4 (Fase B)
-- `4c8e946` test(faturas+motor): atualizar specs antigos sem duplo desconto (Fase B)
-- `<este>` docs(fase-b-planos): D-30R resolvido + Decisao B33 aplicada
-
-**Fase A Planos (manhã):**
+**Fase A — Multi-tenant em Planos (manhã, 4 commits):**
 - `69e2d6c` fix(planos): multi-tenant em CRUD + seed FIXO_MENSAL (Fase A)
 - `5f70ce2` test(planos): cobrir multi-tenant Fase A — 20 cenarios
 - `7722ce3` feat(planos-ui): UI condicional por perfil — escopo do plano
 - `78d2d7b` docs(fase-a-planos): registra resolucao bugs cross-tenant + B13
 
-**Investigação engine COMPENSADOS (manhã):**
-- `4caebe9` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
+**Fase B — Engine + snapshots + DINAMICO (tarde, 6 commits):**
+- `eb7f0ce` feat(motor): helper calcularTarifaContratual + schema FaturaProcessada (Fase B)
+- `070c1ab` fix(motor): aceitar() + 4 caminhos populam snapshots completos (D-30R)
+- `f5453b7` fix(faturas): COMPENSADOS sem duplo desconto + DINAMICO implementado
+- `00f64df` feat(planos): validacoes DTO V1-V3 + warnings V4 (Fase B)
+- `4c8e946` test(faturas+motor): atualizar specs antigos sem duplo desconto (Fase B)
+- `1319140` docs(fase-b-planos): D-30R resolvido + Decisao B33 aplicada
+
+**Fase B.5 — Validação E2E + economia projetada (noite, 4 commits):**
+- `a4ebf90` feat(schema): valorCheioKwhAceite (Contrato) + 4 economia (Cobranca)
+- `b0e0345` feat(faturas+motor): FIXO grava valorBruto + 4 economia nos 3 modelos
+- `718ca46` test(fase-b5): seed E2E 6 cenarios validados (cooperativa teste isolada)
+- `840b10f` docs(fase-b5): playbook validacao E2E + tabela 8 colunas + IDs
+
+**Fase C.1 — UI plano + simulação (noite mais tarde, 5 commits):**
+- `8ffeb69` feat(web-lib): helper simular-plano + 6 specs paridade backend (Fase C.1)
+- `cdb1eda` feat(planos-ui): componente <PlanoSimulacao> com painel em tempo real
+- `eb82c0a` feat(planos-ui): campos condicionais por modelo + simulacao integrada
+- `e0c1e7a` feat(planos-ui): helper visual baseCalculo + tipoDesconto + avisos V4
+- `c550ff3` docs(fase-c1): registra conclusao Fase C.1 + 4 commits
+
+**Fechamento (este grupo, 5 commits novos):**
+- (a serem criados) docs(sessao+controle+produto+plano+debitos): consolidacao final 03/05
 
 ### Commits da sessão 2026-05-02
 
@@ -147,8 +137,35 @@ E. **Definir escopo Sugestão #3** (cron análise diária) — decidir hipótese
 
 Anexos opcionais:
 - `docs/CONTROLE-EXECUCAO.md`
-- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (resumo completo da sessão 02/05)
-- `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (16 decisões pendentes)
+- `docs/sessoes/2026-05-03-resumo-sessao-completa.md` (resumo da maratona 03/05)
+- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (resumo da sessão 02/05)
+
+---
+
+## ARQUIVOS PRA LER NA RETOMADA (sessão 04/05/2026)
+
+Ordem recomendada (15 min de leitura total):
+
+1. `docs/CONTROLE-EXECUCAO.md` (este arquivo) — visão geral do estado
+2. `docs/sessoes/2026-05-03-resumo-sessao-completa.md` — o que foi feito em 03/05 (4 fases)
+3. `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md` — playbook validação (referência matemática dos 6 cenários)
+4. `docs/PLANO-ATE-PRODUCAO.md` — onde estamos no roadmap
+
+Opcional (se for atacar Fase C.2 direto):
+5. `web/app/dashboard/planos/novo/page.tsx` — tela atual (referência pra estender)
+6. `web/components/PlanoSimulacao.tsx` — componente reusável (Fase C.1)
+7. `web/components/CombinacaoAtual.tsx` — componente helper visual baseCalculo + tipoDesconto
+8. `web/lib/simular-plano.ts` — helper canônico frontend
+
+---
+
+## FRASE DE RETOMADA — sessão 04/05/2026
+
+Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
+
+> Voltei. Sessão de 03/05 fechou Fases A + B + B.5 + C.1 (20 commits, validação 48/48). Lê `docs/CONTROLE-EXECUCAO.md` + `docs/sessoes/2026-05-03-resumo-sessao-completa.md`.
+>
+> Próximo passo provável: Fase C.2 (UI plano avançada — promo, vigência, CooperToken expandido, lista enriquecida, confirmação). Mas valida UX da C.1 antes comigo (logar em `/dashboard/planos/novo`).
 
 ---
 
@@ -210,24 +227,31 @@ Anexos opcionais:
 
 ## PENDÊNCIAS PARA PRÓXIMA SESSÃO
 
-> **Reorganizado 03/05** após sessão 02/05 (manhã + tarde). Agente apresenta P0 → P1 → P2 → P3 em toda abertura de sessão (Decisão 19).
+> **Reorganizado 03/05 fechamento** após 4 fases concluídas (A + B + B.5 + C.1).
+> Agente apresenta P0 → P1 → P2 → P3 em toda abertura de sessão (Decisão 19).
 > Pendências marcadas com 🔍 foram **revisadas com leitura de código**.
 
-### P0 — Crítico (bloqueia produção real)
+### P0 — Crítico
 
-- [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — Decisão B33 aplicada (tarifaContratual=pós-desconto). 5 caminhos de criação de contrato populam snapshot via helper canônico `calcularTarifaContratual`. Engine COMPENSADOS sem duplo desconto. DINAMICO implementado. Commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`. Forward-only — contratos legados continuam null até serem recriados/backfilled.
-- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Validação E2E sintética concluída na Fase B.5** (6/6 cenários ✓). Próximo pré-requisito pra desativar: **canário em 1 cooperado real** (Opção A do playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`).
+- [ ] **Validação manual da Fase C.1 por Luciano** — logar como SUPER_ADMIN em `/dashboard/planos/novo`, conferir UX (painel sticky, campos condicionais por modelo, avisos V4, simulação tempo real). Pré-requisito antes de Fase C.2.
+- [ ] **Fase C.2 — UI plano avançada** (recomendado próximo): promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, CooperToken expandido (6 campos), lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **6 itens (4-10), ~3-4h Code.**
+- [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`.
+- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Validação E2E sintética 48/48 ✓ na Fase B.5.** Pré-requisitos pra desativar: Fase C.2 + C.3 + canário em 1 cooperado real (Opção A do playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`).
 
-### P1 — Decisões esperadas Luciano (32 itens — B1-B32)
+### P1 — Decisões esperadas Luciano (status atualizado pós sessão 03/05)
 
-Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
+- **Decisões resolvidas durante a sessão 03/05** (4 novas):
+  - ~~B33 Semântica `tarifaContratual`~~ ✅ **RESOLVIDA** — pós-desconto, helper canônico aplicado em 5 caminhos
+  - ~~B33.5 Reset 72 contratos legados~~ ✅ **RESOLVIDA** — não resetar (forward-only)
+  - ~~B34 FIXO lê fatura no aceite~~ ✅ **RESOLVIDA** — `valorCheioKwhAceite` no Contrato
+  - ~~B35 Economia uniforme nos 3 modelos~~ ✅ **RESOLVIDA** — 4 valores em toda Cobrança
 
-- **1 decisão estrutural Fase 03/05** (investigação engine COMPENSADOS):
-  - **B33 — Semântica de `Contrato.tarifaContratual`** (Opção A/B/C) — bloqueia C1 expandido. Material em `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`. Recomendação Code: Opção A com 3 ajustes complementares.
+- **Decisões já resolvidas em fases anteriores:**
+  - ~~B1 D-30R timing~~ ✅ **RESOLVIDA via Fase B**
+  - ~~B2 DINAMICO sprint dedicado~~ ✅ **RESOLVIDA via Fase B** (implementado dentro do mesmo escopo)
+  - ~~B13 Seed `CREDITOS_COMPENSADOS`~~ ✅ **RESOLVIDA via Fase A** (seed muda pra `FIXO_MENSAL`)
 
-- **6 decisões Fase 2.5** (investigação 6 áreas — `docs/sessoes/2026-05-02-investigacao-6-areas-produto.md`):
-  - B1 D-30R timing (fix agora vs Sprint COMPENSADOS) — **complementada por B33 acima**
-  - B2 DINAMICO sprint dedicado vs descartar
+- **6 decisões Fase 2.5 ainda pendentes:**
   - B3 CooperToken desvalorização configurável vs hard-coded 29 dias
   - B4 Modo Observador consolidar admin-spy + cooperado-leitura, ou separar
   - B5 Convênios link-específico now or later
@@ -242,42 +266,48 @@ Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
   - B12 FCFS + VPP no roadmap?
 
 - **4 lacunas Área 1** (revisão 02/05 tarde):
-  - ~~B13 Seed `onModuleInit` cria Plano `CREDITOS_COMPENSADOS` (incoerente com bloqueio)~~ ✅ **RESOLVIDO 03/05** (Fase A — commit `69e2d6c`, seed muda pra `FIXO_MENSAL`)
-  - B14 UI override Usina/Contrato inexistente (só via API)
-  - B15 `FORMULAS-COBRANCA.md` órfão em historico/ vs CLAUDE.md ainda referencia
-  - B16 `RegrasFioB` model + `Usina.classeGd` enum documentados mas não codificados
+  - ~~B13 Seed `onModuleInit` cria Plano `CREDITOS_COMPENSADOS`~~ ✅ **RESOLVIDA via Fase A** (commit `69e2d6c`)
+  - B14 UI override Usina/Contrato inexistente (só via API) — **parcialmente endereçada via UI escopo Fase A**
+  - B15 `FORMULAS-COBRANCA.md` órfão em historico/ vs CLAUDE.md ainda referencia — **parcialmente endereçada via aviso obsolescência em RETOMADA-SESSAO.md (Fase B)**
+  - B16 `RegrasFioB` model + `Usina.classeGd` enum documentados mas não codificados — pendente, depende Sprint 5 regulatório
 
 - **16 decisões curadoria sprints** (`docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` commit `6c8cb7d`):
   - B17-B32 (16 itens — material já consolidado, aguardando passada de batch)
 
-### P1 — Sprints potenciais a catalogar (8 itens — C1-C8)
+### P1 — Sprints potenciais a catalogar (status pós sessão 03/05)
 
-Após decisões B1-B32, sprints surgem com Decisão 18 (5 itens cada):
-
-- C1 COMPENSADOS — **escopo expandido (03/05)**: decisão B33 + fix em 5 caminhos de criação + refatoração engine `:1862` + reescrita 5-10 specs + atualização PRODUTO.md/spec canônica + backfill 72 contratos + smoke E2E. 5-7 dias Code (Opção A) a 9-11 dias (Opção C). Ver `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`.
-- C2 DINAMICO (implementação do zero, depende Sprint 5)
-- C3 CooperToken Configurável (3 campos schema + cron desvalorização + cron expiração + UI admin + specs)
-- C4 Convênios link-específico + landing personalizada
-- C5 Relatório Mensal Membro/Usuário (consumo modular)
-- C6 Planos SaaS Modulares — ativação `@RequireModulo` retroativa
-- C7 D-30R fix Motor.aceitar (sub-sprint isolado se decidido)
-- C8 Funções Venda Fio B (contexto a recuperar — pendente desde 02/05)
+- ~~C1 COMPENSADOS~~ ✅ **EXECUTADO via Fase B** (D-30R + duplo desconto + helper canônico)
+- ~~C2 DINAMICO~~ ✅ **EXECUTADO via Fase B** (NotImplementedException → implementação real)
+- ~~C7 D-30R sub-sprint~~ ✅ **ABSORVIDO em Fase B**
+- C3 CooperToken Configurável (3 campos schema + cron desvalorização + cron expiração + UI admin + specs) — **pendente**
+- C4 Convênios link-específico + landing personalizada — **pendente**
+- C5 Relatório Mensal Membro/Usuário (consumo modular) — **pendente**
+- C6 Planos SaaS Modulares — ativação `@RequireModulo` retroativa — **pendente**
+- C8 Funções Venda Fio B (contexto a recuperar — pendente desde 02/05) — **pendente**
 
 ### P2 — Validação E2E pendente
 
-- [ ] 🔍 **D-30M** — Bônus MLM cascata: pipeline OK, validar quando primeiro indicado pagar via Caminho B Asaas. (Era P1; reclassificado 02/05.)
+- [ ] **Canário 1 cooperado real** — depende Fase C.2 + Fase C.3 + (se necessário) backfill 72 contratos legados. Pré-requisito pra desativar `BLOQUEIO_MODELOS_NAO_FIXO` em produção.
+- [ ] 🔍 **D-30M** — Bônus MLM cascata: pipeline OK, validar quando primeiro indicado pagar via Caminho B Asaas.
 
 ### P2 — Bugs/lacunas confirmadas
 
 - [ ] 🔍 **D-30N** — AuditLog interceptor **não existe**. Absorvido por Sprint 5/6.
-- [x] 🔍 **D-30O** — ✅ **RESOLVIDO em 02/05** (commit `7ea6943`, fix 5 linhas + 4 specs verde)
-- [ ] 🔍 **D-30R** — ver P0 acima
+- [x] 🔍 **D-30O** — ✅ **RESOLVIDO em 02/05** (commit `7ea6943`)
+- [x] 🔍 **D-30R** — ✅ **RESOLVIDO em 03/05** (Fase B, commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`)
+- [ ] **Backfill 72 contratos legados** (only-if-needed) — `tarifaContratual=null` em todos. Necessário SE Luciano quiser ativar COMPENSADOS num cooperado existente sem recriar contrato. Forward-only mantido em Fase B; backfill é decisão futura.
+
+### P3 — Débitos catalogados durante sessão 03/05
+
+- [ ] **3 specs DI pré-existentes falhando** — `cooperados.controller.spec.ts`, `cooperados.service.spec.ts`, `usinas.controller.spec.ts`. Erro DI (UsinasService não resolvido em RootTestModule). Confirmado pré-existente via `git stash`. Não impacta runtime.
+- [ ] **Snapshots na atribuição tardia de plano** (caso `usinas.service.ts:306`) — promoção da lista de espera cria contrato sem plano. Função `atribuirPlanoAoContrato()` deve popular snapshot via helper canônico. Catalogado como exceção #5.
+- [ ] **Whitelist `/cadastro` no interceptor `web/lib/api.ts`** — observação latente da Fase A. Se algum dia alguém chamar `api.get('/planos')` em rota pública (não via `fetch`), visitante anônimo seria redirecionado pra `/login`. Hoje `/cadastro` usa `fetch` direto, então não acontece.
 
 ### P3 — Documentação pendente
 
 - [ ] **Doc-0 Fatia 3** — SISTEMA.md (mapa técnico completo)
 - [ ] **Doc-0 Fatia 4** — CLAUDE.md refator operacional
-- [ ] **Doc-0 Fatia 5** — Movimentação final (MAPA-INTEGRIDADE → histórico, README docs). Parcialmente executado em 03/05 (SISGD-VISAO movido).
+- [ ] **Doc-0 Fatia 5** — Movimentação final. Parcialmente executado em 03/05 (SISGD-VISAO movido).
 - [ ] **D-30S** — Extrair "Jornadas Usuário" do SISGD-VISAO histórico (1-1.5h)
 - [ ] **D-30T** — Extrair "Painéis por Papel" do SISGD-VISAO histórico (1-2h)
 
