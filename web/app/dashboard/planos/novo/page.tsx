@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
 import PlanoSimulacao from '@/components/PlanoSimulacao';
+import CombinacaoAtual from '@/components/CombinacaoAtual';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -450,6 +451,18 @@ export default function NovoPlanoPage() {
               </label>
             </div>
           </div>
+
+          {/* Helper visual baseCalculo + tipoDesconto (Fase C.1 Item 8) */}
+          <CombinacaoAtual
+            modeloCobranca={form.modeloCobranca}
+            baseCalculo={form.baseCalculo}
+            tipoDesconto={form.tipoDesconto}
+            descontoBase={form.descontoBase}
+            referenciaValor={form.referenciaValor}
+            temPromocao={form.temPromocao}
+            descontoPromocional={form.descontoPromocional}
+            mesesPromocao={form.mesesPromocao}
+          />
 
           {form.baseCalculo === 'CUSTOM' && (
             <div className="col-span-2">
