@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — fechamento consolidado sessão 02/05 (Fases 1 + 2.5 + 2.6) + Decisão 20 + SISGD-VISAO movido pra histórico.
+> Última atualização: **2026-05-03** — investigação read-only engine COMPENSADOS + D-30R aprofundado (gate crítico).
 
 ---
 
@@ -12,11 +12,21 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-03 (sessão Code curta, ~2h)
+- **Tipo:** Code investigação read-only (gate crítico D-30R)
+- **Resultado:** Tentativa de fix D-30R parou no gate de semântica. Investigação read-only completa (7 perguntas respondidas) revelou **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine COMPENSADOS — ativa-se imediatamente se D-30R for "corrigido" sem mexer na engine. Bug latente (engine nunca rodou em prod). Recomendação: Sprint C1 escopo expandido (5-7 dias) com decisão prévia A/B/C.
+
+### Sessão anterior (mantida pra contexto)
+
 - **Quando:** 2026-05-02 (manhã + tarde, ~7-8h com pausas)
 - **Tipo:** Code (Fase 1 técnica + Fase 2.5 investigações + Fase 2.6 fechamento consolidado)
 - **Resultado:** 12 pendências resolvidas (D-30O fix + 7 ajustes B + 2 sprints catalogados + D-30R catalogado + 6 áreas investigadas + revisão specs CooperToken + Área 1 expandida + SISGD-VISAO movido pra histórico). 2 decisões processuais novas (19 ritual, 20 validação por resposta). 4 débitos catalogados (D-30R, D-30S, D-30T) + 1 sugestão pendente (#3 cron sessões).
 
-### Commits da última sessão
+### Commits da sessão 2026-05-03
+
+- `<este>` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
+
+### Commits da sessão 2026-05-02
 
 **Fase 1 (manhã):**
 - `1301bb2` docs(ritual): cria ritual abertura/fechamento sessao
@@ -154,15 +164,18 @@ Anexos opcionais:
 
 ### P0 — Crítico (bloqueia produção real)
 
-- [ ] 🔍 **D-30R fix** — Motor.aceitar() não popula `Contrato.tarifaContratual` (100% dos 72 contratos). Decisão pendente B1: fix isolado **agora** ou aguardar Sprint COMPENSADOS.
-- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ativo em 4 pontos enforcement — destravar antes de produção (depende D-30R + Sprint 2 ou 5).
+- [ ] 🔍 **D-30R aprofundado (03/05)** — investigação read-only revelou que problema é estrutural, não fix isolado. **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine `:1862`. **0/72 contratos têm propostaId** (backfill do débito original pegaria zero). 5 caminhos criam Contrato (Motor.aceitar é só 1). Detalhes em `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`. **Aguarda Decisão B33** (semântica A/B/C) antes de qualquer fix.
+- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ativo em 7 pontos enforcement (não 4 — recontagem da investigação 03/05). Confirmado: engine COMPENSADOS NUNCA rodou em produção (0 cobranças com `modeloCobrancaUsado` preenchido). Bug latente. Destravar requer fix estrutural (Sprint C1 expandido).
 
 ### P1 — Decisões esperadas Luciano (32 itens — B1-B32)
 
 Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
 
+- **1 decisão estrutural Fase 03/05** (investigação engine COMPENSADOS):
+  - **B33 — Semântica de `Contrato.tarifaContratual`** (Opção A/B/C) — bloqueia C1 expandido. Material em `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`. Recomendação Code: Opção A com 3 ajustes complementares.
+
 - **6 decisões Fase 2.5** (investigação 6 áreas — `docs/sessoes/2026-05-02-investigacao-6-areas-produto.md`):
-  - B1 D-30R timing (fix agora vs Sprint COMPENSADOS)
+  - B1 D-30R timing (fix agora vs Sprint COMPENSADOS) — **complementada por B33 acima**
   - B2 DINAMICO sprint dedicado vs descartar
   - B3 CooperToken desvalorização configurável vs hard-coded 29 dias
   - B4 Modo Observador consolidar admin-spy + cooperado-leitura, ou separar
@@ -190,7 +203,7 @@ Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
 
 Após decisões B1-B32, sprints surgem com Decisão 18 (5 itens cada):
 
-- C1 COMPENSADOS (D-30R fix + backfill + remoção bloqueio + UI activation)
+- C1 COMPENSADOS — **escopo expandido (03/05)**: decisão B33 + fix em 5 caminhos de criação + refatoração engine `:1862` + reescrita 5-10 specs + atualização PRODUTO.md/spec canônica + backfill 72 contratos + smoke E2E. 5-7 dias Code (Opção A) a 9-11 dias (Opção C). Ver `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`.
 - C2 DINAMICO (implementação do zero, depende Sprint 5)
 - C3 CooperToken Configurável (3 campos schema + cron desvalorização + cron expiração + UI admin + specs)
 - C4 Convênios link-específico + landing personalizada
