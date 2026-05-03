@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { getUsuario } from '@/lib/auth';
 
 const modeloLabel: Record<string, string> = {
   FIXO_MENSAL: 'Fixo Mensal',
@@ -37,12 +38,27 @@ function formatDate(dateStr: string | null) {
 export default function PlanosPage() {
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [perfil, setPerfil] = useState<string | null>(null);
+  const [parceiros, setParceiros] = useState<{ id: string; nome: string }[]>([]);
 
   useEffect(() => {
+    const u = getUsuario();
+    setPerfil(u?.perfil ?? null);
     api.get<Plano[]>('/planos')
       .then((r) => setPlanos(r.data))
       .finally(() => setCarregando(false));
+    if (u?.perfil === 'SUPER_ADMIN') {
+      api.get<{ id: string; nome: string }[]>('/cooperativas')
+        .then((r) => setParceiros(r.data ?? []))
+        .catch(() => {});
+    }
   }, []);
+
+  const ehSuperAdmin = perfil === 'SUPER_ADMIN';
+  const escopoLabel = (cooperativaId: string | null) =>
+    cooperativaId === null
+      ? 'Global'
+      : (parceiros.find((p) => p.id === cooperativaId)?.nome ?? cooperativaId);
 
   return (
     <div>
@@ -67,6 +83,7 @@ export default function PlanosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nome</TableHead>
+                {ehSuperAdmin && <TableHead>Escopo</TableHead>}
                 <TableHead>Modelo de Cobrança</TableHead>
                 <TableHead>Desconto Base</TableHead>
                 <TableHead>Promoção</TableHead>
@@ -80,7 +97,7 @@ export default function PlanosPage() {
               {carregando ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: ehSuperAdmin ? 9 : 8 }).map((_, j) => (
                       <TableCell key={j}>
                         <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
                       </TableCell>
@@ -89,7 +106,7 @@ export default function PlanosPage() {
                 ))
               ) : planos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={ehSuperAdmin ? 9 : 8} className="text-center text-gray-400 py-8">
                     Nenhum plano cadastrado
                   </TableCell>
                 </TableRow>
@@ -97,6 +114,15 @@ export default function PlanosPage() {
                 planos.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.nome}</TableCell>
+                    {ehSuperAdmin && (
+                      <TableCell className="text-xs text-gray-600">
+                        {p.cooperativaId === null ? (
+                          <Badge variant="outline">Global</Badge>
+                        ) : (
+                          escopoLabel(p.cooperativaId)
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeloClass[p.modeloCobranca]}`}

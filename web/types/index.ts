@@ -348,6 +348,7 @@ export interface Plano {
   tokenValorFixo: number | null;
   tokenDescontoMaxPerc: number | null;
   tokenExpiracaoMeses: number | null;
+  cooperativaId: string | null;
   createdAt: string;
   updatedAt: string;
 }

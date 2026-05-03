@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import { getUsuario } from '@/lib/auth';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -83,6 +84,20 @@ export default function PlanoDetailPage() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [togglingAtivo, setTogglingAtivo] = useState(false);
+  const [perfil, setPerfil] = useState<string | null>(null);
+  const [parceiros, setParceiros] = useState<{ id: string; nome: string }[]>([]);
+  // Escopo do plano em edição: 'GLOBAL' ou ID. Só editável por SUPER_ADMIN.
+  const [escopo, setEscopo] = useState<string>('GLOBAL');
+
+  useEffect(() => {
+    const u = getUsuario();
+    setPerfil(u?.perfil ?? null);
+    if (u?.perfil === 'SUPER_ADMIN') {
+      api.get<{ id: string; nome: string }[]>('/cooperativas')
+        .then((r) => setParceiros(r.data ?? []))
+        .catch(() => {});
+    }
+  }, []);
 
   const [form, setForm] = useState({
     nome: '',
@@ -115,6 +130,7 @@ export default function PlanoDetailPage() {
       .then((r) => {
         setPlano(r.data);
         initForm(r.data);
+        setEscopo(r.data.cooperativaId ?? 'GLOBAL');
       })
       .catch(() => setErro('Plano não encontrado.'))
       .finally(() => setCarregando(false));
@@ -209,6 +225,10 @@ export default function PlanoDetailPage() {
         payload.tokenDescontoMaxPerc = form.tokenDescontoMaxPerc !== '' ? parseFloat(String(form.tokenDescontoMaxPerc)) : null;
         payload.tokenExpiracaoMeses = form.tokenExpiracaoMeses !== '' ? parseInt(String(form.tokenExpiracaoMeses)) : null;
       }
+      // Multi-tenant (Fase A): apenas SUPER_ADMIN pode alterar escopo.
+      if (perfil === 'SUPER_ADMIN') {
+        payload.cooperativaId = escopo === 'GLOBAL' ? null : escopo;
+      }
       const { data } = await api.put<Plano>(`/planos/${id}`, payload);
       setPlano(data);
       setModoEdicao(false);
@@ -295,6 +315,16 @@ export default function PlanoDetailPage() {
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="ID" value={plano.id} />
             <Campo label="Desconto Base" value={`${Number(plano.descontoBase).toFixed(2)}%`} />
+            {perfil === 'SUPER_ADMIN' && (
+              <Campo
+                label="Escopo"
+                value={
+                  plano.cooperativaId === null
+                    ? 'Global (todos os parceiros)'
+                    : (parceiros.find((p) => p.id === plano.cooperativaId)?.nome ?? plano.cooperativaId)
+                }
+              />
+            )}
             <Campo label="Descrição" value={plano.descricao} />
             <Campo label="Público" value={plano.publico ? 'Sim' : 'Não'} />
             <Campo label="Tem Promoção" value={plano.temPromocao ? 'Sim' : 'Não'} />
@@ -363,6 +393,25 @@ export default function PlanoDetailPage() {
             <CardTitle>Editar Plano</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
+            {/* Escopo do plano — apenas SUPER_ADMIN edita */}
+            {perfil === 'SUPER_ADMIN' && (
+              <div className="col-span-2">
+                <label className={labelClass}>Escopo do plano</label>
+                <select
+                  className={inputClass}
+                  value={escopo}
+                  onChange={(e) => setEscopo(e.target.value)}
+                >
+                  <option value="GLOBAL">Plano global (todos os parceiros)</option>
+                  {parceiros.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Específico de {p.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="col-span-2">
               <label className={labelClass}>Nome *</label>
               <input

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import type { ModeloCobranca, TipoCampanha, PlanoBaseCalculo, ReferenciaValor, ComponenteCustom } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import { getUsuario } from '@/lib/auth';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -57,6 +58,20 @@ export default function NovoPlanoPage() {
   const router = useRouter();
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
+  const [perfil, setPerfil] = useState<string | null>(null);
+  const [parceiros, setParceiros] = useState<{ id: string; nome: string }[]>([]);
+  // Escopo: 'GLOBAL' (cooperativaId=null) ou ID específico de parceiro. Só editável por SUPER_ADMIN.
+  const [escopo, setEscopo] = useState<string>('GLOBAL');
+
+  useEffect(() => {
+    const u = getUsuario();
+    setPerfil(u?.perfil ?? null);
+    if (u?.perfil === 'SUPER_ADMIN') {
+      api.get<{ id: string; nome: string }[]>('/cooperativas')
+        .then((r) => setParceiros(r.data ?? []))
+        .catch(() => {});
+    }
+  }, []);
 
   const [form, setForm] = useState({
     nome: '',
@@ -121,6 +136,10 @@ export default function NovoPlanoPage() {
       payload.fatorIncremento = form.fatorIncremento !== '' ? parseFloat(form.fatorIncremento as string) : null;
       payload.mostrarDiscriminado = form.mostrarDiscriminado;
       // CooperToken
+      // Multi-tenant (Fase A): SUPER_ADMIN escolhe escopo; ADMIN o backend força próprio tenant.
+      if (perfil === 'SUPER_ADMIN') {
+        payload.cooperativaId = escopo === 'GLOBAL' ? null : escopo;
+      }
       payload.cooperTokenAtivo = form.cooperTokenAtivo;
       if (form.cooperTokenAtivo) {
         payload.tokenOpcaoCooperado = form.tokenOpcaoCooperado;
@@ -159,6 +178,28 @@ export default function NovoPlanoPage() {
           <CardTitle>Dados do Plano</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-6">
+          {/* Escopo do plano — apenas SUPER_ADMIN */}
+          {perfil === 'SUPER_ADMIN' && (
+            <div className="col-span-2">
+              <label className={labelClass}>
+                Escopo do plano
+                <HelpIcon text="Plano global aparece pra todos os parceiros. Plano específico fica restrito ao parceiro escolhido." />
+              </label>
+              <select
+                className={inputClass}
+                value={escopo}
+                onChange={(e) => setEscopo(e.target.value)}
+              >
+                <option value="GLOBAL">Plano global (todos os parceiros)</option>
+                {parceiros.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    Específico de {p.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Nome */}
           <div className="col-span-2">
             <label className={labelClass}>Nome *</label>
