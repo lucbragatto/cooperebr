@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotImplementedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FaturasService } from './faturas.service';
 
 describe('FaturasService — núcleo de cálculo', () => {
@@ -107,8 +107,10 @@ describe('FaturasService — núcleo de cálculo', () => {
     });
   });
 
-  // ─── CREDITOS_COMPENSADOS ─────────────────────────────────────────
-  describe('CREDITOS_COMPENSADOS', () => {
+  // ─── CREDITOS_COMPENSADOS — Fase B (Decisão B33) ─────────────────────
+  // tarifaContratual é PÓS-DESCONTO; engine não aplica desconto novamente.
+  // valorBruto/valorDesconto vêm do valorCheioKwh da fatura (ou tarifa apurada OCR como fallback).
+  describe('CREDITOS_COMPENSADOS (Fase B — sem duplo desconto)', () => {
     const comp = (overrides: any = {}) => contratoBase({
       plano: { modeloCobranca: 'CREDITOS_COMPENSADOS' },
       ...overrides,
@@ -122,67 +124,91 @@ describe('FaturasService — núcleo de cálculo', () => {
       await expect(calc(contrato, fatura)).rejects.toThrow(BadRequestException);
     });
 
-    it('sem tarifaContratual e sem dados OCR pra calcular tarifa → BadRequest', async () => {
+    it('contrato sem tarifaContratual snapshotada → BadRequest (não há mais fallback OCR)', async () => {
+      // Fase B: removido fallback "tarifa apurada do OCR". Contratos sem snapshot
+      // precisam de backfill antes de gerar cobrança COMPENSADOS.
       const contrato = comp({ tarifaContratual: null });
       const fatura = faturaBase({
-        dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 0, totalAPagar: 0 },
+        dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 120, totalAPagar: 114 },
       });
       await expect(calc(contrato, fatura)).rejects.toThrow(BadRequestException);
     });
 
-    it('tarifaContratual prevalece sobre tarifa apurada do OCR', async () => {
+    it('tarifaContratual snapshot é aplicada SEM desconto extra (pós-desconto)', async () => {
+      // Cenário: snapshot já foi calculado no aceite (KWH_CHEIO + 20%).
+      // tarifaContratual = 0.80; 100 kWh compensado → cobrança 80,00 (sem aplicar 20% novamente).
+      const contrato = comp({ tarifaContratual: 0.80, percentualDesconto: 20 });
+      const fatura = faturaBase({
+        valorCheioKwh: 1.00,
+        dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 120, totalAPagar: 120 },
+      });
+      const result = await calc(contrato, fatura);
+      // valorLiquido = kwhCompensado × tarifaContratual = 100 × 0.80 = 80.00
+      expect(result.valorLiquido).toBe(80.0);
+      // valorBruto = kwhCompensado × valorCheioKwhDaFatura = 100 × 1.00 = 100.00
+      expect(result.valorBruto).toBe(100.0);
+      // valorDesconto = bruto - liquido = 20.00 (calculado pra dashboard de economia)
+      expect(result.valorDesconto).toBe(20.0);
+      expect(result.tarifaContratualAplicada).toBe(0.80);
+      expect(result.modeloCobrancaUsado).toBe('CREDITOS_COMPENSADOS');
+    });
+
+    it('valorBruto cai em fallback OCR (totalAPagar/consumo) quando fatura não tem valorCheioKwh', async () => {
+      // valorCheioKwh ausente → fallback usa tarifaApuradaOCR = 114/120 = 0.95.
       const contrato = comp({ tarifaContratual: 0.80, percentualDesconto: 20 });
       const fatura = faturaBase({
         dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 120, totalAPagar: 114 },
       });
       const result = await calc(contrato, fatura);
-      // 100 × 0.80 = 80.00 bruto; 80 × 0.20 = 16.00 desconto; 80 - 16 = 64.00 líquido
-      expect(result.valorBruto).toBe(80.0);
-      expect(result.valorDesconto).toBe(16.0);
-      expect(result.valorLiquido).toBe(64.0);
+      expect(result.valorLiquido).toBe(80.0); // tarifaContratual × kwhCompensado (sem mudar)
+      expect(result.valorBruto).toBe(95.0); // 100 × 0.95 (fallback)
+      expect(result.valorDesconto).toBe(15.0);
       expect(result.tarifaContratualAplicada).toBe(0.80);
-      expect(result.modeloCobrancaUsado).toBe('CREDITOS_COMPENSADOS');
-    });
-
-    it('sem tarifaContratual → usa tarifa apurada do OCR (valorTotal/consumo)', async () => {
-      const contrato = comp({ tarifaContratual: null, percentualDesconto: 20 });
-      const fatura = faturaBase({
-        dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 120, totalAPagar: 114 },
-      });
-      const result = await calc(contrato, fatura);
-      // tarifa apurada = 114/120 = 0.95
-      // 100 × 0.95 = 95.00 bruto; 95 × 0.20 = 19.00 desconto; 95 - 19 = 76.00 líquido
-      expect(result.valorBruto).toBe(95.0);
-      expect(result.valorDesconto).toBe(19.0);
-      expect(result.valorLiquido).toBe(76.0);
-      expect(result.tarifaContratualAplicada).toBeNull();
-    });
-
-    it('descontoOverride prevalece sobre percentualDesconto', async () => {
-      const contrato = comp({
-        tarifaContratual: 1.0,
-        percentualDesconto: 20,
-        descontoOverride: 30,
-      });
-      const fatura = faturaBase({
-        dadosExtraidos: { creditosRecebidosKwh: 100, consumoAtualKwh: 0, totalAPagar: 0 },
-      });
-      const result = await calc(contrato, fatura);
-      // 100 × 1.0 = 100 bruto; 100 × 0.30 = 30 desconto; 100 - 30 = 70 líquido
-      expect(result.valorBruto).toBe(100.0);
-      expect(result.valorDesconto).toBe(30.0);
-      expect(result.valorLiquido).toBe(70.0);
     });
   });
 
-  // ─── CREDITOS_DINAMICO ────────────────────────────────────────────
-  describe('CREDITOS_DINAMICO', () => {
-    it('sempre → NotImplementedException', async () => {
-      const contrato = contratoBase({
-        plano: { modeloCobranca: 'CREDITOS_DINAMICO' },
-        valorContrato: 500,
+  // ─── CREDITOS_DINAMICO — Fase B (Decisão B33) ─────────────────────
+  // Recalcula tarifa todo mês usando valorCheioKwh + tarifaSemImpostos da fatura aprovada.
+  describe('CREDITOS_DINAMICO (Fase B — implementado)', () => {
+    const din = (overrides: any = {}) => contratoBase({
+      plano: { modeloCobranca: 'CREDITOS_DINAMICO' },
+      baseCalculoAplicado: 'KWH_CHEIO',
+      ...overrides,
+    });
+
+    it('fatura sem valorCheioKwh/tarifaSemImpostos → BadRequest', async () => {
+      const contrato = din({ percentualDesconto: 15 });
+      const fatura = faturaBase({
+        dadosExtraidos: { creditosRecebidosKwh: 500, consumoAtualKwh: 600, totalAPagar: 600 },
       });
-      await expect(calc(contrato)).rejects.toThrow(NotImplementedException);
+      await expect(calc(contrato, fatura)).rejects.toThrow(BadRequestException);
+    });
+
+    it('KWH_CHEIO + 15% recalcula tarifa do mês: 1.02 × 0.85 = 0.867 × 500 = 433.50', async () => {
+      const contrato = din({ percentualDesconto: 15, baseCalculoAplicado: 'KWH_CHEIO' });
+      const fatura = faturaBase({
+        valorCheioKwh: 1.02,
+        tarifaSemImpostos: 0.78,
+        dadosExtraidos: { creditosRecebidosKwh: 500, consumoAtualKwh: 600, totalAPagar: 612 },
+      });
+      const result = await calc(contrato, fatura);
+      expect(result.valorLiquido).toBe(433.5);
+      expect(result.valorBruto).toBe(510.0); // 500 × 1.02
+      expect(result.valorDesconto).toBe(76.5);
+      expect(result.tarifaContratualAplicada).toBe(0.867);
+      expect(result.modeloCobrancaUsado).toBe('CREDITOS_DINAMICO');
+    });
+
+    it('SEM_TRIBUTO + 15%: 1.02 - 0.78×0.15 = 0.903 × 500 = 451.50', async () => {
+      const contrato = din({ percentualDesconto: 15, baseCalculoAplicado: 'SEM_TRIBUTO' });
+      const fatura = faturaBase({
+        valorCheioKwh: 1.02,
+        tarifaSemImpostos: 0.78,
+        dadosExtraidos: { creditosRecebidosKwh: 500, consumoAtualKwh: 600, totalAPagar: 612 },
+      });
+      const result = await calc(contrato, fatura);
+      expect(result.valorLiquido).toBe(451.5);
+      expect(result.tarifaContratualAplicada).toBe(0.903);
     });
   });
 
@@ -278,17 +304,21 @@ describe('FaturasService — núcleo de cálculo', () => {
       expect(r.valorLiquido).toBe(1000);
     });
 
-    it('T8: COMPENSADOS usa tarifaContratualPromocional durante promoção', async () => {
+    it('T8 (Fase B): COMPENSADOS usa tarifaContratualPromocional durante promoção, sem duplo desconto', async () => {
+      // Fase B: tarifaContratual e tarifaContratualPromocional são PÓS-DESCONTO.
+      // Engine não aplica desconto novamente. percentualDesconto pode ser qualquer
+      // valor — não influencia o cálculo (era armadilha do bug antigo).
       const contrato = contratoBase({
         plano: { modeloCobranca: 'CREDITOS_COMPENSADOS' },
         numero: 'C-T8-COMP',
         tarifaContratual: 0.90,
-        tarifaContratualPromocional: 0.60, // promocional menor
+        tarifaContratualPromocional: 0.60, // pós-desconto promocional, menor que normal
         dataInicio: new Date('2026-04-01'),
         mesesPromocaoAplicados: 3,
-        percentualDesconto: 0, // isola o efeito da tarifa
+        percentualDesconto: 20, // não isola — não tem mais duplo desconto
       });
       const fatura = faturaBase({
+        valorCheioKwh: 0.90,
         dadosExtraidos: {
           mesReferencia: '2026-05', // dentro da promoção (mês 1 de 3)
           creditosRecebidosKwh: 1000,
@@ -299,8 +329,11 @@ describe('FaturasService — núcleo de cálculo', () => {
 
       const r = await calc(contrato, fatura);
 
-      // 1000 × 0.60 = 600 (usando tarifa promocional, não normal)
-      expect(r.valorBruto).toBe(600);
+      // valorLiquido = 1000 × 0.60 = 600.00 (tarifa promocional pós-desconto direta)
+      expect(r.valorLiquido).toBe(600);
+      // valorBruto = 1000 × valorCheioKwhDaFatura = 1000 × 0.90 = 900.00
+      expect(r.valorBruto).toBe(900);
+      expect(r.valorDesconto).toBe(300);
       expect(r.tarifaContratualAplicada).toBe(0.60);
     });
   });

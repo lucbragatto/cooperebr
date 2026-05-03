@@ -124,7 +124,7 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
     );
   });
 
-  it('FIXO + Tipo I + KWH_CHEIO → snapshots refletem plano', async () => {
+  it('FIXO + Tipo I + KWH_CHEIO → snapshots refletem plano (Fase B)', async () => {
     planoFindUnique.mockResolvedValue({
       modeloCobranca: 'FIXO_MENSAL',
       nome: 'Plano Fixo',
@@ -144,7 +144,11 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
 
     expect(dataContrato.baseCalculoAplicado).toBe('KWH_CHEIO');
     expect(dataContrato.tipoDescontoAplicado).toBe('APLICAR_SOBRE_BASE');
-    expect(dataContrato.valorContrato).toBeCloseTo(0.93494 * 1131, 1);
+    // Fase B: helper calcularTarifaContratual respeita baseCalculo do plano.
+    // KWH_CHEIO + 20% desc: tarifaContratual = kwhApuradoBase × (1 - 0.20) = 1.0928 × 0.80 = 0.87424.
+    // valorContrato = tarifaContratual × kwhContrato = 0.87424 × 1131 = 988.77.
+    expect(dataContrato.tarifaContratual).toBeCloseTo(0.87424, 4);
+    expect(dataContrato.valorContrato).toBeCloseTo(988.77, 1);
     expect(dataContrato.kwhContratoMensal).toBe(1131);
   });
 
