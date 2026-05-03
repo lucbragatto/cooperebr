@@ -396,10 +396,16 @@ model Contrato {
   ultimoReajusteIndice     String?
   // ── Sprint 5: campos pra refatoração da engine de cobrança ──
   valorContrato                Decimal?                  @db.Decimal(10, 2)
+  /// Snapshot pós-desconto (Decisão B33, 03/05/2026): valor R$/kWh que o cooperado paga.
+  /// Já considera plano.baseCalculo + plano.descontoBase no momento do aceite.
+  /// NUNCA aplicar desconto de novo em cima deste campo na engine consumidora.
+  /// CREDITOS_COMPENSADOS: cobrança = kwhCompensado × tarifaContratual.
   tarifaContratual             Decimal?                  @db.Decimal(10, 5)
   dataUltimoReajusteTarifa     DateTime?
   // Snapshots adicionais do plano — preenchidos em aceitar()
   valorContratoPromocional     Decimal?                  @db.Decimal(10, 2)
+  /// Idem tarifaContratual, mas durante período promocional (mesesPromocao).
+  /// Também é pós-desconto. Engine não aplica desconto extra.
   tarifaContratualPromocional  Decimal?                  @db.Decimal(10, 5)
   descontoPromocionalAplicado  Decimal?                  @db.Decimal(5, 2)
   mesesPromocaoAplicados       Int?
@@ -650,6 +656,13 @@ model FaturaProcessada {
   validadeCreditos   DateTime?
   valorSemDesconto   Decimal?     @db.Decimal(10, 2)
   economiaGerada     Decimal?     @db.Decimal(10, 2)
+  // ── Fase B (Decisão B33, 03/05/2026): snapshots da fatura para engines COMPENSADOS/DINAMICO ──
+  // valorCheioKwh = Total fatura ÷ kWh consumidos (R$/kWh com todos tributos).
+  // tarifaSemImpostos = TUSD + TE direto da fatura (R$/kWh sem ICMS/PIS/COFINS).
+  // Usados pelas engines COMPENSADOS (referência pra cálculo de economia exibida)
+  // e DINAMICO (recálculo da tarifa contratada a cada mês). Salvos na aprovação.
+  valorCheioKwh      Decimal?     @db.Decimal(10, 5)
+  tarifaSemImpostos  Decimal?     @db.Decimal(10, 5)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
