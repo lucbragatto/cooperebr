@@ -75,4 +75,11 @@ export class CreatePlanoDto {
 
   @IsOptional() @IsNumber()
   tokenExpiracaoMeses?: number;
+
+  // Multi-tenant (Fase A)
+  // Apenas SUPER_ADMIN pode definir explicitamente. ADMIN tem este campo
+  // automaticamente preenchido com sua cooperativa pelo service (ignora valor enviado).
+  // null = plano global (visível a todos os parceiros).
+  @IsOptional() @IsString()
+  cooperativaId?: string | null;
 }

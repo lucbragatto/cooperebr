@@ -75,4 +75,9 @@ export class UpdatePlanoDto {
 
   @IsOptional() @IsNumber()
   tokenExpiracaoMeses?: number;
+
+  // Multi-tenant (Fase A)
+  // Apenas SUPER_ADMIN pode alterar. Tentativa de mudança por ADMIN gera ForbiddenException.
+  @IsOptional() @IsString()
+  cooperativaId?: string | null;
 }

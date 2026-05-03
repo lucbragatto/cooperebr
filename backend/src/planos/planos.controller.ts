@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req } from '@nestjs/common';
 import { PlanosService } from './planos.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
@@ -6,16 +6,21 @@ import { Public } from '../auth/public.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
+const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
+
 @Controller('planos')
 export class PlanosController {
   constructor(private readonly planosService: PlanosService) {}
 
+  // GET /planos — autenticado. SUPER_ADMIN vê todos; ADMIN/OPERADOR vê próprios + globais.
   @Get()
-  @Public()
-  findAll() {
-    return this.planosService.findAll();
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  findAll(@Req() req: any) {
+    return this.planosService.findAll(req.user);
   }
 
+  // GET /planos/ativos — público (vitrine /cadastro). Aceita ?cooperativaId=X opcional pra
+  // mostrar planos do parceiro X + globais.
   @Get('ativos')
   @Public()
   findAtivos(
@@ -25,27 +30,28 @@ export class PlanosController {
     return this.planosService.findAtivos(cooperativaId, publico === 'true');
   }
 
+  // GET /planos/:id — autenticado, com cross-tenant guard.
   @Get(':id')
-  @Public()
-  findOne(@Param('id') id: string) {
-    return this.planosService.findOne(id);
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  findOne(@Param('id') id: string, @Req() req: any) {
+    return this.planosService.findOne(id, req.user);
   }
 
   @Post()
-  @Roles(PerfilUsuario.ADMIN)
-  create(@Body() dto: CreatePlanoDto) {
-    return this.planosService.create(dto);
+  @Roles(ADMIN)
+  create(@Body() dto: CreatePlanoDto, @Req() req: any) {
+    return this.planosService.create(dto, req.user);
   }
 
   @Put(':id')
-  @Roles(PerfilUsuario.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdatePlanoDto) {
-    return this.planosService.update(id, dto);
+  @Roles(ADMIN)
+  update(@Param('id') id: string, @Body() dto: UpdatePlanoDto, @Req() req: any) {
+    return this.planosService.update(id, dto, req.user);
   }
 
   @Delete(':id')
-  @Roles(PerfilUsuario.ADMIN)
-  remove(@Param('id') id: string) {
-    return this.planosService.remove(id);
+  @Roles(ADMIN)
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.planosService.remove(id, req.user);
   }
 }

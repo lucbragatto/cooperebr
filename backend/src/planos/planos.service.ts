@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
 import { ModeloCobranca, TipoCampanha, Prisma } from '@prisma/client';
+import { PerfilUsuario } from '../auth/perfil.enum';
+
+interface ReqUserLike {
+  perfil: PerfilUsuario | string;
+  cooperativaId?: string | null;
+}
 
 @Injectable()
 export class PlanosService implements OnModuleInit {
@@ -13,23 +19,50 @@ export class PlanosService implements OnModuleInit {
   async onModuleInit() {
     const count = await this.prisma.plano.count();
     if (count === 0) {
+      // Seed: FIXO_MENSAL pois é o único modelo ativo em produção até
+      // Sprint C1+C2 destravar COMPENSADOS+DINAMICO. Plano global (sem cooperativaId).
       await this.prisma.plano.create({
         data: {
           nome: 'Plano Básico',
           descricao: 'Plano padrão com 20% de desconto na conta de energia',
-          modeloCobranca: ModeloCobranca.CREDITOS_COMPENSADOS,
+          modeloCobranca: ModeloCobranca.FIXO_MENSAL,
           descontoBase: 20,
           publico: true,
           ativo: true,
           tipoCampanha: TipoCampanha.PADRAO,
         },
       });
-      this.logger.log('Plano padrão "Plano Básico" criado automaticamente');
+      this.logger.log('Plano padrão "Plano Básico" (FIXO_MENSAL) criado automaticamente');
     }
   }
 
-  findAll() {
+  /**
+   * Lista planos respeitando multi-tenant (Fase A — 03/05/2026).
+   *
+   * - SUPER_ADMIN: vê todos os planos (cross-tenant intencional)
+   * - ADMIN/OPERADOR: vê próprios + globais (cooperativaId=null)
+   * - Sem reqUser: vitrine pública — apenas globais ativos e públicos
+   */
+  findAll(reqUser?: ReqUserLike) {
+    if (reqUser?.perfil === PerfilUsuario.SUPER_ADMIN) {
+      return this.prisma.plano.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    if (reqUser?.cooperativaId) {
+      return this.prisma.plano.findMany({
+        where: {
+          OR: [
+            { cooperativaId: reqUser.cooperativaId },
+            { cooperativaId: null },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    // Sem reqUser ou ADMIN sem cooperativaId vinculada: vitrine pública
     return this.prisma.plano.findMany({
+      where: { cooperativaId: null, publico: true, ativo: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -70,13 +103,50 @@ export class PlanosService implements OnModuleInit {
     });
   }
 
-  async findOne(id: string) {
+  /**
+   * Busca plano por ID com cross-tenant guard.
+   * - SUPER_ADMIN: sempre permitido
+   * - ADMIN/OPERADOR: permitido se plano é do próprio tenant ou global
+   * - Sem reqUser: permitido apenas se plano é global, ativo e público
+   */
+  async findOne(id: string, reqUser?: ReqUserLike) {
     const plano = await this.prisma.plano.findUnique({ where: { id } });
     if (!plano) throw new NotFoundException(`Plano ${id} não encontrado`);
+
+    if (reqUser?.perfil === PerfilUsuario.SUPER_ADMIN) {
+      return plano;
+    }
+    if (reqUser?.cooperativaId) {
+      // Permite próprio tenant ou plano global
+      if (plano.cooperativaId !== null && plano.cooperativaId !== reqUser.cooperativaId) {
+        throw new ForbiddenException('Plano não pertence a esta cooperativa');
+      }
+      return plano;
+    }
+    // Sem reqUser (vitrine pública): só plano global ativo e público
+    if (plano.cooperativaId !== null || !plano.ativo || !plano.publico) {
+      throw new ForbiddenException('Plano não disponível publicamente');
+    }
     return plano;
   }
 
-  create(dto: CreatePlanoDto) {
+  /**
+   * Cria plano respeitando multi-tenant.
+   * - SUPER_ADMIN: pode criar global (dto.cooperativaId=null) ou pra qualquer tenant
+   * - ADMIN: cooperativaId é forçado pra própria cooperativa, ignorando dto
+   */
+  async create(dto: CreatePlanoDto, reqUser: ReqUserLike) {
+    let cooperativaId: string | null;
+    if (reqUser.perfil === PerfilUsuario.SUPER_ADMIN) {
+      // SUPER_ADMIN escolhe escopo livremente. cooperativaId vazio/null = global.
+      cooperativaId = dto.cooperativaId ?? null;
+    } else {
+      // ADMIN: força próprio tenant. Ignora qualquer cooperativaId enviado no body.
+      if (!reqUser.cooperativaId) {
+        throw new ForbiddenException('Usuário ADMIN sem cooperativa vinculada');
+      }
+      cooperativaId = reqUser.cooperativaId;
+    }
     return this.prisma.plano.create({
       data: {
         nome: dto.nome,
@@ -97,6 +167,7 @@ export class PlanosService implements OnModuleInit {
         referenciaValor: dto.referenciaValor ?? 'MEDIA_3M',
         fatorIncremento: dto.fatorIncremento ?? null,
         mostrarDiscriminado: dto.mostrarDiscriminado ?? true,
+        cooperativaId,
         // CooperToken
         cooperTokenAtivo: dto.cooperTokenAtivo ?? false,
         tokenOpcaoCooperado: dto.tokenOpcaoCooperado ?? 'AMBAS',
@@ -108,8 +179,22 @@ export class PlanosService implements OnModuleInit {
     });
   }
 
-  async update(id: string, dto: UpdatePlanoDto) {
-    await this.findOne(id);
+  /**
+   * Atualiza plano respeitando multi-tenant.
+   * - SUPER_ADMIN: pode tudo, inclusive mudar cooperativaId
+   * - ADMIN: bloqueado de mexer em plano de outro tenant ou de mudar cooperativaId
+   */
+  async update(id: string, dto: UpdatePlanoDto, reqUser: ReqUserLike) {
+    const plano = await this.findOne(id, reqUser); // valida cross-tenant
+
+    // ADMIN não pode alterar cooperativaId — apenas SUPER_ADMIN.
+    if (reqUser.perfil !== PerfilUsuario.SUPER_ADMIN && dto.cooperativaId !== undefined) {
+      const ehMudanca = dto.cooperativaId !== plano.cooperativaId;
+      if (ehMudanca) {
+        throw new ForbiddenException('Apenas SUPER_ADMIN pode alterar o escopo (cooperativaId) de um plano');
+      }
+    }
+
     return this.prisma.plano.update({
       where: { id },
       data: {
@@ -131,6 +216,7 @@ export class PlanosService implements OnModuleInit {
         ...(dto.referenciaValor !== undefined && { referenciaValor: dto.referenciaValor }),
         ...(dto.fatorIncremento !== undefined && { fatorIncremento: dto.fatorIncremento }),
         ...(dto.mostrarDiscriminado !== undefined && { mostrarDiscriminado: dto.mostrarDiscriminado }),
+        ...(reqUser.perfil === PerfilUsuario.SUPER_ADMIN && dto.cooperativaId !== undefined && { cooperativaId: dto.cooperativaId }),
         // CooperToken
         ...(dto.cooperTokenAtivo !== undefined && { cooperTokenAtivo: dto.cooperTokenAtivo }),
         ...(dto.tokenOpcaoCooperado !== undefined && { tokenOpcaoCooperado: dto.tokenOpcaoCooperado }),
@@ -142,11 +228,18 @@ export class PlanosService implements OnModuleInit {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
-    const contratos = await this.prisma.contrato.count({
-      where: { planoId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
-    });
+  async remove(id: string, reqUser: ReqUserLike) {
+    await this.findOne(id, reqUser); // valida cross-tenant
+
+    // Count contratos vinculados — filtra por tenant em ADMIN pra evitar falso positivo cross-tenant
+    const whereCount: Prisma.ContratoWhereInput = {
+      planoId: id,
+      status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] },
+    };
+    if (reqUser.perfil !== PerfilUsuario.SUPER_ADMIN && reqUser.cooperativaId) {
+      whereCount.cooperativaId = reqUser.cooperativaId;
+    }
+    const contratos = await this.prisma.contrato.count({ where: whereCount });
     if (contratos > 0) {
       throw new BadRequestException(
         'Não é possível excluir plano com contratos vinculados. Desvincule os contratos antes de remover.',
