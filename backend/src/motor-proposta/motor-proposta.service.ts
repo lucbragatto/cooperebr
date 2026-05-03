@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma.service';
@@ -15,6 +15,7 @@ import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
 import { SimularReajusteDto } from './dto/simular-reajuste.dto';
+import { calcularTarifaContratual, BaseCalculo } from './lib/calcular-tarifa-contratual';
 
 export interface OpcaoCalculo {
   base: 'MES_RECENTE' | 'MEDIA_12M';
@@ -54,6 +55,8 @@ export interface ResultadoCalculo {
 
 @Injectable()
 export class MotorPropostaService {
+  private readonly logger = new Logger(MotorPropostaService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
@@ -667,22 +670,40 @@ export class MotorPropostaService {
         }
       }
 
-      // 9. Criar contrato — com snapshots T3 (Seção 2.3 do doc canônico)
+      // 9. Criar contrato — com snapshots T3/T4 + tarifaContratual (Fase B, Decisão B33).
       const statusContrato = usinaComVaga ? 'PENDENTE_ATIVACAO' : 'LISTA_ESPERA';
-
-      // valorContrato: só para FIXO_MENSAL. R$/kWh × kWh = R$ mensal.
-      // Para COMPENSADOS/DINAMICO fica null (serão preenchidos na T3b via T7/T9).
       const ehFixo = planoSnapshot?.modeloCobranca === 'FIXO_MENSAL';
-      const valorContrato = ehFixo
-        ? Math.round(Number(r.valorCooperado) * Number(r.kwhContrato) * 100) / 100
-        : null;
 
-      // T4 Sprint 5: snapshots promocionais (Seção 2.3).
-      // Só gravam se plano tem promoção configurada e válida. Plano mudando
-      // depois NÃO retroage — snapshot congela o valor do momento do aceite.
-      // Fórmula promocional: mesma do dimensionamento T2, trocando descontoBase
-      // por descontoPromocional. Pra FIXO calcula valorContratoPromocional;
-      // pra COMPENSADOS calcula tarifaContratualPromocional (inerte até T9).
+      // Fase B (Decisão B33, 03/05): snapshots de tarifa via helper canônico.
+      // valorCheioKwh = R$/kWh com tributos da fatura inicial (kwhApuradoBase no Motor).
+      // tarifaSemImpostos = TUSD + TE direto da fatura (tarifaUnitSemTrib no Motor).
+      // Helper respeita plano.baseCalculo (KWH_CHEIO vs SEM_TRIBUTO).
+      const baseCalculoPlano = (planoSnapshot?.baseCalculo ?? 'KWH_CHEIO') as BaseCalculo;
+      const valorCheioKwhBase = Number(r.kwhApuradoBase);
+      const tarifaSemImpostosBase = Number(r.tarifaUnitSemTrib);
+
+      let tarifaContratualBase: number | null = null;
+      let valorContrato: number | null = null;
+      try {
+        tarifaContratualBase = calcularTarifaContratual({
+          valorCheioKwh: valorCheioKwhBase,
+          tarifaSemImpostos: tarifaSemImpostosBase,
+          baseCalculo: baseCalculoPlano,
+          descontoPercentual: Number(r.descontoPercentual),
+        });
+        if (ehFixo) {
+          valorContrato = Math.round(tarifaContratualBase * Number(r.kwhContrato) * 100) / 100;
+        }
+      } catch (err) {
+        // COM_ICMS/CUSTOM ainda não implementados → snapshot fica null,
+        // contrato é criado mas cobrança falhará explicitamente até spec fechar.
+        this.logger?.warn?.(
+          `Snapshot tarifa não calculado: ${(err as Error).message}. baseCalculo=${baseCalculoPlano}.`,
+        );
+      }
+
+      // Snapshots promocionais (T4 Sprint 5 + Fase B).
+      // Mesma fórmula, trocando descontoBase pelo descontoPromocional.
       let valorContratoPromocional: number | null = null;
       let tarifaContratualPromocional: number | null = null;
       let descontoPromocionalAplicado: number | null = null;
@@ -698,16 +719,21 @@ export class MotorPropostaService {
         const descPromoPct = Number(planoSnapshot.descontoPromocional);
         descontoPromocionalAplicado = descPromoPct;
         mesesPromocaoAplicados = Number(planoSnapshot.mesesPromocao);
-
-        // Tarifa promocional: substitui descontoBase do r.valorCooperado pelo
-        // descPromoPct. r.valorCooperado foi calculado com descontoBase%;
-        // ajuste: tarifaPromo = r.kwhApuradoBase × (1 - descPromoPct/100)
-        // (assume Tipo I no legado — consistente com resultado atual do calcular()).
-        const tarifaPromo = Number(r.kwhApuradoBase) * (1 - descPromoPct / 100);
-        tarifaContratualPromocional = Math.round(tarifaPromo * 100000) / 100000;
-        if (ehFixo) {
-          valorContratoPromocional =
-            Math.round(tarifaPromo * Number(r.kwhContrato) * 100) / 100;
+        try {
+          tarifaContratualPromocional = calcularTarifaContratual({
+            valorCheioKwh: valorCheioKwhBase,
+            tarifaSemImpostos: tarifaSemImpostosBase,
+            baseCalculo: baseCalculoPlano,
+            descontoPercentual: descPromoPct,
+          });
+          if (ehFixo) {
+            valorContratoPromocional =
+              Math.round(tarifaContratualPromocional * Number(r.kwhContrato) * 100) / 100;
+          }
+        } catch (err) {
+          this.logger?.warn?.(
+            `Snapshot promocional não calculado: ${(err as Error).message}.`,
+          );
         }
       }
 
@@ -727,9 +753,7 @@ export class MotorPropostaService {
           percentualUsina,
           status: statusContrato as any,
           // Snapshots T3 — Seção 2.3 do REGRAS-PLANOS-E-COBRANCA.md.
-          // baseCalculoAplicado/tipoDescontoAplicado vêm do plano no momento
-          // do aceite, não do cálculo. Se planoSnapshot for null (sem plano
-          // ativo no tenant), os defaults do schema entram em vigor.
+          ...(tarifaContratualBase !== null ? { tarifaContratual: tarifaContratualBase } : {}),
           ...(valorContrato !== null ? { valorContrato } : {}),
           ...(planoSnapshot ? {
             baseCalculoAplicado: planoSnapshot.baseCalculo,

@@ -300,7 +300,19 @@ export class UsinasService {
             data: { status: 'PENDENTE_ATIVACAO', usinaId },
           });
         } else {
-          // Membro promovido sem contrato — criar contrato PENDENTE_ATIVACAO
+          // Membro promovido sem contrato — criar contrato PENDENTE_ATIVACAO.
+          //
+          // ── EXCEÇÃO #5 do mapa de criação de contrato (Fase B, Decisão B33.5) ──
+          // Este caminho cria contrato SEM plano, SEM percentualDesconto e SEM
+          // snapshot de tarifa (tarifaContratual fica null). É intencional:
+          // promoção da fila acontece quando há vaga na usina, antes de admin
+          // atribuir plano comercial. Snapshot deve ser populado no momento da
+          // ATRIBUIÇÃO DO PLANO (caminho separado, ainda não implementado).
+          //
+          // TODO Fase futura: catalogar como débito P3 — "snapshots na atribuição
+          // tardia de plano". Função `atribuirPlanoAoContrato(contratoId, planoId)`
+          // deve calcular tarifa via calcularTarifaContratual + popular snapshots.
+          // Hoje, contrato fica em PENDENTE_ATIVACAO até admin atribuir plano via UI.
           const ucId = item.cooperado.ucs?.[0]?.id;
           if (!ucId) continue; // Sem UC, não pode criar contrato
           const novoContrato = await this.prisma.contrato.create({

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
@@ -6,11 +6,14 @@ import { CooperadosService } from '../cooperados/cooperados.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { calcularTarifaContratual, BaseCalculo } from '../motor-proposta/lib/calcular-tarifa-contratual';
 
 const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 @Injectable()
 export class ContratosService {
+  private readonly logger = new Logger(ContratosService.name);
+
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
@@ -222,7 +225,55 @@ export class ContratosService {
         dataFim.setMonth(dataFim.getMonth() + 12);
       }
 
-      // 6. Criar contrato
+      // 6. Snapshots de tarifa (Fase B, Decisão B33). Best-effort: tenta usar
+      // fatura processada mais recente do cooperado pra calcular. Se ausente
+      // (cooperado novo sem OCR), deixa snapshot null e logga — engine de
+      // cobrança detectará null na primeira cobrança e popula on-demand.
+      let tarifaContratualSnap: number | null = null;
+      let valorContratoSnap: number | null = null;
+      let baseCalculoSnap: string | undefined;
+      let tipoDescontoSnap: any | undefined;
+      if (data.planoId) {
+        const plano = await tx.plano.findUnique({
+          where: { id: data.planoId },
+          select: { modeloCobranca: true, baseCalculo: true, tipoDesconto: true },
+        });
+        const fatura = await tx.faturaProcessada.findFirst({
+          where: {
+            cooperadoId: data.cooperadoId,
+            valorCheioKwh: { not: null },
+            tarifaSemImpostos: { not: null },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { valorCheioKwh: true, tarifaSemImpostos: true },
+        });
+        if (plano && fatura) {
+          baseCalculoSnap = plano.baseCalculo;
+          tipoDescontoSnap = plano.tipoDesconto;
+          try {
+            tarifaContratualSnap = calcularTarifaContratual({
+              valorCheioKwh: Number(fatura.valorCheioKwh),
+              tarifaSemImpostos: Number(fatura.tarifaSemImpostos),
+              baseCalculo: plano.baseCalculo as BaseCalculo,
+              descontoPercentual: data.percentualDesconto,
+            });
+            if (plano.modeloCobranca === 'FIXO_MENSAL' && kwhContratoMensal) {
+              valorContratoSnap = Math.round(tarifaContratualSnap * kwhContratoMensal * 100) / 100;
+            }
+          } catch (err) {
+            this.logger.warn(
+              `Snapshot tarifa não calculado em criação manual: ${(err as Error).message}`,
+            );
+          }
+        } else {
+          this.logger.log(
+            `Contrato manual sem snapshot de tarifa — plano=${!!plano}, fatura=${!!fatura}. ` +
+            `Será populado on-demand na primeira cobrança/fatura aprovada.`,
+          );
+        }
+      }
+
+      // 7. Criar contrato
       const { kwhContratoAnual: _a, kwhContrato: _b, ...rest } = data;
       return tx.contrato.create({
         data: {
@@ -234,6 +285,10 @@ export class ContratosService {
           kwhContratoAnual,
           kwhContratoMensal,
           percentualUsina,
+          ...(tarifaContratualSnap !== null ? { tarifaContratual: tarifaContratualSnap } : {}),
+          ...(valorContratoSnap !== null ? { valorContrato: valorContratoSnap } : {}),
+          ...(baseCalculoSnap ? { baseCalculoAplicado: baseCalculoSnap } : {}),
+          ...(tipoDescontoSnap ? { tipoDescontoAplicado: tipoDescontoSnap } : {}),
         } as any,
         include: { uc: true, usina: true, plano: true, cobrancas: true },
       });

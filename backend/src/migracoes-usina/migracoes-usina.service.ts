@@ -182,6 +182,14 @@ export class MigracoesUsinaService {
       const dataFim = new Date();
       dataFim.setMonth(dataFim.getMonth() + 12);
 
+      // Fase B (Decisão B33): migração herda snapshots do contrato antigo.
+      // Mesma tarifa, mesmo plano, mesmo desconto — só muda usina e kWh contratado.
+      // valorContrato é recalculado se contrato antigo era FIXO (sinalizado por valorContrato != null).
+      let valorContratoMigrado: number | null = null;
+      if (contratoAtivo.tarifaContratual && contratoAtivo.valorContrato !== null) {
+        valorContratoMigrado = Math.round(Number(contratoAtivo.tarifaContratual) * kwhNovo * 100) / 100;
+      }
+
       const contratoNovo = await tx.contrato.create({
         data: {
           numero,
@@ -199,6 +207,14 @@ export class MigracoesUsinaService {
           status: 'ATIVO',
           cooperativaId: contratoAtivo.cooperativaId,
           modeloCobrancaOverride: contratoAtivo.modeloCobrancaOverride,
+          // Herda snapshots do contrato antigo (Fase B)
+          ...(contratoAtivo.tarifaContratual !== null ? { tarifaContratual: contratoAtivo.tarifaContratual } : {}),
+          ...(valorContratoMigrado !== null ? { valorContrato: valorContratoMigrado } : {}),
+          ...(contratoAtivo.baseCalculoAplicado ? { baseCalculoAplicado: contratoAtivo.baseCalculoAplicado } : {}),
+          ...(contratoAtivo.tipoDescontoAplicado ? { tipoDescontoAplicado: contratoAtivo.tipoDescontoAplicado } : {}),
+          ...(contratoAtivo.tarifaContratualPromocional !== null ? { tarifaContratualPromocional: contratoAtivo.tarifaContratualPromocional } : {}),
+          ...(contratoAtivo.descontoPromocionalAplicado !== null ? { descontoPromocionalAplicado: contratoAtivo.descontoPromocionalAplicado } : {}),
+          ...(contratoAtivo.mesesPromocaoAplicados !== null ? { mesesPromocaoAplicados: contratoAtivo.mesesPromocaoAplicados } : {}),
         } as any,
         include: { uc: true, usina: true },
       });

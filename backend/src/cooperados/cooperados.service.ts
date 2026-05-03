@@ -14,6 +14,7 @@ import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 import { FaturasService } from '../faturas/faturas.service';
 import * as jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../auth/jwt-secret';
+import { calcularTarifaContratual, BaseCalculo } from '../motor-proposta/lib/calcular-tarifa-contratual';
 
 const BUCKET = 'documentos-cooperados';
 
@@ -557,7 +558,47 @@ export class CooperadosService {
         const dtFim = new Date(dtInicio);
         dtFim.setMonth(dtFim.getMonth() + 12);
 
-        // 3f. Criar contrato
+        // 3f. Snapshots de tarifa (Fase B, Decisão B33). Best-effort: cooperado novo
+        // pode não ter fatura processada ainda — nesse caso snapshot fica null e é
+        // populado on-demand pela primeira aprovação de fatura/cobrança.
+        let tarifaContratualSnap: number | null = null;
+        let valorContratoSnap: number | null = null;
+        let baseCalculoSnap: string | undefined;
+        let tipoDescontoSnap: any | undefined;
+        if (planoId) {
+          const plano = await tx.plano.findUnique({
+            where: { id: planoId },
+            select: { modeloCobranca: true, baseCalculo: true, tipoDesconto: true },
+          });
+          const fatura = await tx.faturaProcessada.findFirst({
+            where: {
+              cooperadoId: cooperado.id,
+              valorCheioKwh: { not: null },
+              tarifaSemImpostos: { not: null },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { valorCheioKwh: true, tarifaSemImpostos: true },
+          });
+          if (plano && fatura) {
+            baseCalculoSnap = plano.baseCalculo;
+            tipoDescontoSnap = plano.tipoDesconto;
+            try {
+              tarifaContratualSnap = calcularTarifaContratual({
+                valorCheioKwh: Number(fatura.valorCheioKwh),
+                tarifaSemImpostos: Number(fatura.tarifaSemImpostos),
+                baseCalculo: plano.baseCalculo as BaseCalculo,
+                descontoPercentual: percentualDesconto,
+              });
+              if (plano.modeloCobranca === 'FIXO_MENSAL' && mensal) {
+                valorContratoSnap = Math.round(tarifaContratualSnap * mensal * 100) / 100;
+              }
+            } catch {
+              // helper lança em COM_ICMS/CUSTOM ou inputs inválidos — segue sem snapshot
+            }
+          }
+        }
+
+        // 3g. Criar contrato
         contrato = await tx.contrato.create({
           data: {
             cooperadoId: cooperado.id,
@@ -573,6 +614,10 @@ export class CooperadosService {
             kwhContratoMensal: mensal,
             percentualUsina,
             cooperativaId: dto.cooperativaId || cooperativaId,
+            ...(tarifaContratualSnap !== null ? { tarifaContratual: tarifaContratualSnap } : {}),
+            ...(valorContratoSnap !== null ? { valorContrato: valorContratoSnap } : {}),
+            ...(baseCalculoSnap ? { baseCalculoAplicado: baseCalculoSnap } : {}),
+            ...(tipoDescontoSnap ? { tipoDescontoAplicado: tipoDescontoSnap } : {}),
           } as any,
           include: { uc: true, usina: true, plano: true },
         });
