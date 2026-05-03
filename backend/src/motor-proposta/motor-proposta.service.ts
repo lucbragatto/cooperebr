@@ -755,6 +755,8 @@ export class MotorPropostaService {
           // Snapshots T3 — Seção 2.3 do REGRAS-PLANOS-E-COBRANCA.md.
           ...(tarifaContratualBase !== null ? { tarifaContratual: tarifaContratualBase } : {}),
           ...(valorContrato !== null ? { valorContrato } : {}),
+          // Fase B.5: snapshot do valor cheio do kWh no aceite (FIXO usa pra economia retroativa).
+          valorCheioKwhAceite: valorCheioKwhBase,
           ...(planoSnapshot ? {
             baseCalculoAplicado: planoSnapshot.baseCalculo,
             tipoDescontoAplicado: planoSnapshot.tipoDesconto,

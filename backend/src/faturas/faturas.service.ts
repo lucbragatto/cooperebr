@@ -13,6 +13,26 @@ import { RelatorioFaturaService } from './relatorio-fatura.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { calcularTarifaContratual } from '../motor-proposta/lib/calcular-tarifa-contratual';
 
+/**
+ * Fase B.5 (03/05/2026): economia projetada em toda cobrança gerada.
+ * Cálculo simples (sem IPCA, sem reajuste). Frontend usa pra exibir
+ * transparência ao cooperado nos 3 modelos.
+ */
+function projetarEconomia(valorEconomiaMes: number): {
+  valorEconomiaMes: number;
+  valorEconomiaAno: number;
+  valorEconomia5anos: number;
+  valorEconomia15anos: number;
+} {
+  const mes = Math.max(0, Math.round(valorEconomiaMes * 100) / 100);
+  return {
+    valorEconomiaMes: mes,
+    valorEconomiaAno: Math.round(mes * 12 * 100) / 100,
+    valorEconomia5anos: Math.round(mes * 60 * 100) / 100,
+    valorEconomia15anos: Math.round(mes * 180 * 100) / 100,
+  };
+}
+
 const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
@@ -661,6 +681,11 @@ export class FaturasService {
         tarifaContratualAplicada: calc.tarifaContratualAplicada,
         bandeiraAplicada: calc.bandeiraAplicada,
         valorTotalFatura: calc.valorTotalFatura,
+        // Fase B.5: economia projetada nos 3 modelos
+        valorEconomiaMes: calc.valorEconomiaMes,
+        valorEconomiaAno: calc.valorEconomiaAno,
+        valorEconomia5anos: calc.valorEconomia5anos,
+        valorEconomia15anos: calc.valorEconomia15anos,
       },
     });
 
@@ -1048,6 +1073,11 @@ export class FaturasService {
           tarifaContratualAplicada: calc.tarifaContratualAplicada,
           bandeiraAplicada: calc.bandeiraAplicada,
           valorTotalFatura: calc.valorTotalFatura,
+          // Fase B.5: economia projetada nos 3 modelos
+          valorEconomiaMes: calc.valorEconomiaMes,
+          valorEconomiaAno: calc.valorEconomiaAno,
+          valorEconomia5anos: calc.valorEconomia5anos,
+          valorEconomia15anos: calc.valorEconomia15anos,
         },
       });
 
@@ -1781,6 +1811,11 @@ IMPORTANTE:
     tarifaContratualAplicada: number | null;
     bandeiraAplicada: boolean;
     valorTotalFatura: number | null;
+    /** Fase B.5: economia projetada (cálculo simples, sem IPCA). */
+    valorEconomiaMes: number;
+    valorEconomiaAno: number;
+    valorEconomia5anos: number;
+    valorEconomia15anos: number;
   }> {
     const { contrato, fatura, cooperativaId } = args;
 
@@ -1839,15 +1874,21 @@ IMPORTANTE:
             `fixo antes de gerar cobrança.`,
           );
         }
-        // FIXO: valor já embute tudo. Desconto NÃO é aplicado de novo.
-        // TODO T4b/Sprint7: valorBruto aqui deveria ser "valor sem cooperativa"
-        // (estimável via valorTotalOCR) e valorDesconto = valorBruto - valorLiquido.
-        // Hoje reporta economia zero em dashboard — bug pré-existente conhecido.
-        // Ver ticket Sprint 7 #4: "Relatórios de economia FIXO zerados".
+        // Fase B.5 (03/05/2026): FIXO grava valorBruto + economia retroativa.
+        // valorBruto = kwhContratoMensal × valorCheioKwhAceite (snapshot da fatura
+        // do aceite). Resolve "Relatórios de economia FIXO zerados" (Sprint 7 #4).
+        const kwhContratoMensal = Number(contrato.kwhContratoMensal ?? contrato.kwhContrato ?? 0);
+        const valorCheioAceite = Number(contrato.valorCheioKwhAceite ?? 0);
+        const valorLiquido = Math.round(valorContrato * 100) / 100;
+        const valorBruto = kwhContratoMensal > 0 && valorCheioAceite > 0
+          ? Math.round(kwhContratoMensal * valorCheioAceite * 100) / 100
+          : valorLiquido;
+        const valorDesconto = Math.max(0, Math.round((valorBruto - valorLiquido) * 100) / 100);
+        const econ = projetarEconomia(valorDesconto);
         return {
-          valorBruto: valorContrato,
-          valorDesconto: 0,
-          valorLiquido: Math.round(valorContrato * 100) / 100,
+          valorBruto,
+          valorDesconto,
+          valorLiquido,
           kwhEntregue: null,
           kwhCompensado: null,
           modeloCobrancaUsado: 'FIXO_MENSAL',
@@ -1856,6 +1897,7 @@ IMPORTANTE:
           tarifaContratualAplicada: null,
           bandeiraAplicada: false,
           valorTotalFatura: valorTotalOCR,
+          ...econ,
         };
       }
 
@@ -1891,6 +1933,7 @@ IMPORTANTE:
           ? Math.round(kwhCompensadoOCR * valorCheioReferencia * 100) / 100
           : valorLiquido;
         const valorDesconto = Math.max(0, Math.round((valorBruto - valorLiquido) * 100) / 100);
+        const econ = projetarEconomia(valorDesconto);
 
         return {
           valorBruto,
@@ -1904,6 +1947,7 @@ IMPORTANTE:
           tarifaContratualAplicada: tarifaSnapshot || null,
           bandeiraAplicada: bandeiraCobrada,
           valorTotalFatura: valorTotalOCR,
+          ...econ,
         };
       }
 
@@ -1940,6 +1984,7 @@ IMPORTANTE:
         const valorLiquido = Math.round(kwhCompensadoOCR * tarifaContratadaDoMes * 100) / 100;
         const valorBruto = Math.round(kwhCompensadoOCR * valorCheioMes * 100) / 100;
         const valorDesconto = Math.max(0, Math.round((valorBruto - valorLiquido) * 100) / 100);
+        const econ = projetarEconomia(valorDesconto);
 
         return {
           valorBruto,
@@ -1953,6 +1998,7 @@ IMPORTANTE:
           tarifaContratualAplicada: tarifaContratadaDoMes,
           bandeiraAplicada: bandeiraCobrada,
           valorTotalFatura: valorTotalOCR,
+          ...econ,
         };
       }
 

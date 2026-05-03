@@ -233,6 +233,7 @@ export class ContratosService {
       let valorContratoSnap: number | null = null;
       let baseCalculoSnap: string | undefined;
       let tipoDescontoSnap: any | undefined;
+      let valorCheioKwhAceiteSnap: number | null = null; // Fase B.5
       if (data.planoId) {
         const plano = await tx.plano.findUnique({
           where: { id: data.planoId },
@@ -250,6 +251,7 @@ export class ContratosService {
         if (plano && fatura) {
           baseCalculoSnap = plano.baseCalculo;
           tipoDescontoSnap = plano.tipoDesconto;
+          valorCheioKwhAceiteSnap = Number(fatura.valorCheioKwh); // Fase B.5
           try {
             tarifaContratualSnap = calcularTarifaContratual({
               valorCheioKwh: Number(fatura.valorCheioKwh),
@@ -289,6 +291,7 @@ export class ContratosService {
           ...(valorContratoSnap !== null ? { valorContrato: valorContratoSnap } : {}),
           ...(baseCalculoSnap ? { baseCalculoAplicado: baseCalculoSnap } : {}),
           ...(tipoDescontoSnap ? { tipoDescontoAplicado: tipoDescontoSnap } : {}),
+          ...(valorCheioKwhAceiteSnap !== null ? { valorCheioKwhAceite: valorCheioKwhAceiteSnap } : {}),
         } as any,
         include: { uc: true, usina: true, plano: true, cobrancas: true },
       });

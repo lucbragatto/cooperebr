@@ -215,6 +215,9 @@ export class MigracoesUsinaService {
           ...(contratoAtivo.tarifaContratualPromocional !== null ? { tarifaContratualPromocional: contratoAtivo.tarifaContratualPromocional } : {}),
           ...(contratoAtivo.descontoPromocionalAplicado !== null ? { descontoPromocionalAplicado: contratoAtivo.descontoPromocionalAplicado } : {}),
           ...(contratoAtivo.mesesPromocaoAplicados !== null ? { mesesPromocaoAplicados: contratoAtivo.mesesPromocaoAplicados } : {}),
+          // Fase B.5: herda snapshot do valor cheio do aceite
+          ...((contratoAtivo as any).valorCheioKwhAceite != null
+            ? { valorCheioKwhAceite: (contratoAtivo as any).valorCheioKwhAceite } : {}),
         } as any,
         include: { uc: true, usina: true },
       });
