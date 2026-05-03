@@ -283,11 +283,26 @@ Sistema sugere realocações automáticas respeitando:
 
 | Modelo | Como calcula | Estado |
 |---|---|---|
-| **FIXO_MENSAL** | `kwhContratoMensal × tarifaContratual` (preço travado pós-desconto) | 🟢 Implementado e único ativo em produção |
-| **CREDITOS_COMPENSADOS** | `kwhCompensado × tarifaContratual` (snapshot pós-desconto, **sem aplicar desconto novamente**) | 🟢 Implementado (Fase B 03/05/2026), **ainda bloqueado por env `BLOQUEIO_MODELOS_NAO_FIXO`** até validação E2E |
-| **CREDITOS_DINAMICO** | `kwhCompensado × tarifaContratada` recalculada a cada mês via `valorCheioKwh` + `tarifaSemImpostos` da fatura aprovada | 🟢 Implementado (Fase B 03/05/2026), idem bloqueado até validação E2E |
+| **FIXO_MENSAL** | Lê fatura no aceite, calcula `valorContrato` + `valorCheioKwhAceite` snapshots. Cobrança mensal usa snapshots travados (**não usa fatura mensal**). | 🟢 Implementado, validado E2E (Fase B.5) |
+| **CREDITOS_COMPENSADOS** | `kwhCompensado × tarifaContratual` (snapshot pós-desconto, **sem aplicar desconto novamente**) | 🟢 Implementado (Fase B), validado E2E (Fase B.5), bloqueado por flag até canário |
+| **CREDITOS_DINAMICO** | Recalcula `tarifaContratada` a cada mês via `valorCheioKwh` + `tarifaSemImpostos` da fatura aprovada (espera OCR). | 🟢 Implementado (Fase B), validado E2E (Fase B.5), bloqueado por flag até canário |
 
-**Decisão B33 (03/05/2026):** `tarifaContratual` é **pós-desconto** (já considera `plano.baseCalculo` + `plano.descontoBase` no aceite). Engine consumidora **NÃO aplica desconto de novo**. Fim do duplo desconto que existia antes.
+**Decisões aplicadas (03/05/2026):**
+- **B33** — `tarifaContratual` é **pós-desconto**. Engine consumidora **NÃO aplica desconto novamente**. Fim do duplo desconto.
+- **B34** — FIXO_MENSAL lê fatura no aceite, depois trava. Não consulta fatura mensal.
+- **B35** — Toda fatura grava 2 snapshots: `valorCheioKwh` + `tarifaSemImpostos`. Os 3 modelos respeitam `plano.baseCalculo` (KWH_CHEIO vs SEM_TRIBUTO).
+
+**Validação matemática:** **48/48** (6 cenários × 8 valores cada) — ver `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`.
+
+### Economia projetada (Fase B.5, 03/05/2026)
+
+Toda Cobrança gerada (FIXO/COMPENSADOS/DINAMICO) grava 4 valores de economia uniformes:
+- `valorEconomiaMes` = `valorBruto - valorLiquido`
+- `valorEconomiaAno` = mês × 12
+- `valorEconomia5anos` = mês × 60
+- `valorEconomia15anos` = mês × 180
+
+Cálculo simples (sem IPCA, sem reajuste). Frontend exibe pra cooperado em proposta + contrato + cobrança (Fase C.3 ainda pendente).
 
 **Princípio dos modelos** (`docs/especificacao-modelos-cobranca.md`):
 - COMPENSADOS = **tarifa travada**, economia cresce conforme EDP reajusta. Proteção contra alta de tarifa.
