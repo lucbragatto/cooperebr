@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotImplementedException, Logger, Optional, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Optional, Inject } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo, DistribuidoraEnum } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -11,6 +11,7 @@ import { UploadDocumentoDto } from './dto/upload-documento.dto';
 import { UploadConcessionariaDto } from './dto/upload-concessionaria.dto';
 import { RelatorioFaturaService } from './relatorio-fatura.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { calcularTarifaContratual } from '../motor-proposta/lib/calcular-tarifa-contratual';
 
 const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -1659,7 +1660,26 @@ IMPORTANTE:
       );
     }
 
-    // 5) Criar
+    // 5) Snapshots Fase B (Decisão B33): valorCheioKwh + tarifaSemImpostos.
+    // valorCheioKwh = valorSemDesconto reconstruído / consumoAtualKwh
+    //   (em fatura limpa = totalAPagar, em fatura com créditos = soma das linhas Fornecida + CIP).
+    // tarifaSemImpostos = tarifaTUSDSemICMS + tarifaTESemICMS (extraídas pelo OCR).
+    const dadosOCR = (args.dadosExtraidos ?? {}) as any;
+    const consumo = Number(dadosOCR.consumoAtualKwh ?? 0);
+    const valorSem = Number(args.valorSemDesconto ?? dadosOCR.valorSemDesconto ?? 0);
+    const totalAPagar = Number(dadosOCR.totalAPagar ?? 0);
+    const baseValorCheio = valorSem > 0 ? valorSem : (totalAPagar > 0 ? totalAPagar : 0);
+    const valorCheioKwh = consumo > 0 && baseValorCheio > 0
+      ? Math.round((baseValorCheio / consumo) * 100000) / 100000
+      : null;
+
+    const tusdSemICMS = Number(dadosOCR.tarifaTUSDSemICMS ?? 0);
+    const teSemICMS = Number(dadosOCR.tarifaTESemICMS ?? 0);
+    const tarifaSemImpostos = tusdSemICMS > 0 && teSemICMS > 0
+      ? Math.round((tusdSemICMS + teSemICMS) * 100000) / 100000
+      : null;
+
+    // 6) Criar
     return this.prisma.faturaProcessada.create({
       data: {
         cooperativaId: tenantId,
@@ -1681,6 +1701,8 @@ IMPORTANTE:
         validadeCreditos: args.validadeCreditos ?? null,
         valorSemDesconto: args.valorSemDesconto ?? null,
         economiaGerada: args.economiaGerada ?? null,
+        valorCheioKwh,
+        tarifaSemImpostos,
       },
     });
   }
@@ -1838,50 +1860,100 @@ IMPORTANTE:
       }
 
       case 'CREDITOS_COMPENSADOS': {
-        // T4: durante período promocional usa tarifaContratualPromocional; fora, tarifaContratual.
+        // Fase B (Decisão B33, 03/05/2026): tarifaContratual é PÓS-DESCONTO.
+        // Engine NÃO aplica desconto novamente. Cobrança = kwhCompensado × tarifa snapshot.
+        // T4: promoção usa tarifaContratualPromocional; fora dela, tarifaContratual.
         const emPromocao = this.estaEmPeriodoPromocional(contrato, fatura);
-        const tarifaContratual = emPromocao && contrato.tarifaContratualPromocional
+        const tarifaSnapshot = emPromocao && contrato.tarifaContratualPromocional
           ? Number(contrato.tarifaContratualPromocional)
           : Number(contrato.tarifaContratual ?? 0);
-        // Fallback: tarifa apurada da fatura OCR (valorTotal / consumo)
-        const tarifaApuradaOCR = kwhConsumidoOCR > 0 && valorTotalOCR
-          ? Math.round((valorTotalOCR / kwhConsumidoOCR) * 100000) / 100000
-          : 0;
-        const tarifaUsada = tarifaContratual > 0 ? tarifaContratual : tarifaApuradaOCR;
 
-        if (!kwhCompensadoOCR || !tarifaUsada) {
+        if (!kwhCompensadoOCR || !tarifaSnapshot) {
           throw new BadRequestException(
             `Contrato ${contrato.numero} (COMPENSADOS): faltam dados. ` +
-            `kwhCompensado=${kwhCompensadoOCR}, tarifa=${tarifaUsada}. ` +
+            `kwhCompensado=${kwhCompensadoOCR}, tarifaContratual=${tarifaSnapshot}. ` +
             `Verifique se a fatura foi OCR corretamente e se tarifaContratual ` +
-            `está preenchida no contrato.`,
+            `está populada no contrato (snapshot do aceite).`,
           );
         }
 
-        const valorBruto = Math.round(kwhCompensadoOCR * tarifaUsada * 100) / 100;
-        const valorDescontoCalc = Math.round(valorBruto * desconto * 100) / 100;
-        const valorLiquido = Math.round((valorBruto - valorDescontoCalc) * 100) / 100;
+        // valorLiquido (o que o cooperado paga): kwhCompensado × tarifa pós-desconto.
+        const valorLiquido = Math.round(kwhCompensadoOCR * tarifaSnapshot * 100) / 100;
+
+        // valorBruto/valorDesconto: pra dashboards de economia. Usa valorCheioKwh
+        // da fatura do mês (snapshot novo da Fase B). Fallback: tarifa apurada do OCR.
+        const valorCheioMes = fatura?.valorCheioKwh ? Number(fatura.valorCheioKwh) : 0;
+        const tarifaApuradaOCR = kwhConsumidoOCR > 0 && valorTotalOCR
+          ? Math.round((valorTotalOCR / kwhConsumidoOCR) * 100000) / 100000
+          : 0;
+        const valorCheioReferencia = valorCheioMes > 0 ? valorCheioMes : tarifaApuradaOCR;
+        const valorBruto = valorCheioReferencia > 0
+          ? Math.round(kwhCompensadoOCR * valorCheioReferencia * 100) / 100
+          : valorLiquido;
+        const valorDesconto = Math.max(0, Math.round((valorBruto - valorLiquido) * 100) / 100);
 
         return {
           valorBruto,
-          valorDesconto: valorDescontoCalc,
+          valorDesconto,
           valorLiquido,
           kwhEntregue: kwhCompensadoOCR,
           kwhCompensado: kwhCompensadoOCR,
           modeloCobrancaUsado: 'CREDITOS_COMPENSADOS',
           consumoBruto: kwhConsumidoOCR || null,
           tarifaApurada: tarifaApuradaOCR || null,
-          tarifaContratualAplicada: tarifaContratual || null,
+          tarifaContratualAplicada: tarifaSnapshot || null,
           bandeiraAplicada: bandeiraCobrada,
           valorTotalFatura: valorTotalOCR,
         };
       }
 
       case 'CREDITOS_DINAMICO': {
-        throw new NotImplementedException(
-          `Modelo CREDITOS_DINAMICO ainda não implementado. ` +
-          `Previsto pra Sprint 6+. Contrato afetado: ${contrato.numero}.`,
-        );
+        // Fase B (Decisão B33, 03/05/2026): DINAMICO recalcula tarifa a cada mês
+        // com a fatura do próprio mês (valorCheioKwh + tarifaSemImpostos),
+        // aplicando o helper canônico com baseCalculoAplicado snapshot do contrato.
+        if (!fatura?.valorCheioKwh || !fatura?.tarifaSemImpostos) {
+          throw new BadRequestException(
+            `Contrato ${contrato.numero} (DINAMICO): fatura processada do mês sem ` +
+            `valorCheioKwh/tarifaSemImpostos snapshot. OCR precisa extrair antes ` +
+            `da aprovação.`,
+          );
+        }
+        if (!kwhCompensadoOCR) {
+          throw new BadRequestException(
+            `Contrato ${contrato.numero} (DINAMICO): kwhCompensado ausente na fatura.`,
+          );
+        }
+        const baseCalculo = (contrato.baseCalculoAplicado ?? 'KWH_CHEIO') as
+          'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';
+        const descPercent = Number(contrato.descontoOverride ?? contrato.percentualDesconto ?? 0);
+        const valorCheioMes = Number(fatura.valorCheioKwh);
+        const tarifaSemImpostosMes = Number(fatura.tarifaSemImpostos);
+
+        // Helper local importado no topo do arquivo.
+        const tarifaContratadaDoMes = calcularTarifaContratual({
+          valorCheioKwh: valorCheioMes,
+          tarifaSemImpostos: tarifaSemImpostosMes,
+          baseCalculo,
+          descontoPercentual: descPercent,
+        });
+
+        const valorLiquido = Math.round(kwhCompensadoOCR * tarifaContratadaDoMes * 100) / 100;
+        const valorBruto = Math.round(kwhCompensadoOCR * valorCheioMes * 100) / 100;
+        const valorDesconto = Math.max(0, Math.round((valorBruto - valorLiquido) * 100) / 100);
+
+        return {
+          valorBruto,
+          valorDesconto,
+          valorLiquido,
+          kwhEntregue: kwhCompensadoOCR,
+          kwhCompensado: kwhCompensadoOCR,
+          modeloCobrancaUsado: 'CREDITOS_DINAMICO',
+          consumoBruto: kwhConsumidoOCR || null,
+          tarifaApurada: valorCheioMes,
+          tarifaContratualAplicada: tarifaContratadaDoMes,
+          bandeiraAplicada: bandeiraCobrada,
+          valorTotalFatura: valorTotalOCR,
+        };
       }
 
       default: {
