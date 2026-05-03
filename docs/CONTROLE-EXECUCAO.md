@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — Fase B Planos (engine + snapshots + DINAMICO + validações DTO) concluída; D-30R RESOLVIDO; Fase A concluída pela manhã.
+> Última atualização: **2026-05-03** — **Fase B.5 concluída** (validação E2E 6/6 ✓ + economia projetada nos 3 modelos); Fase B + Fase A concluídas no mesmo dia.
 
 ---
 
@@ -12,9 +12,15 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-03 noite (sessão Code, ~2h)
+- **Tipo:** Code execução **Fase B.5 — Validação E2E + economia projetada**
+- **Resultado:** **6/6 cenários ✓** validados com precisão de centavo nos 8 valores cada (tarifaContratual + valorBruto/Líquido/Desconto + 4 valores de economia). Cooperativa teste `TESTE-FASE-B5` isolada (CNPJ 11.111.111/0001-11), 6 cooperados teste, 6 contratos com snapshot completo, 6 cobranças geradas. **FIXO agora grava valorBruto** (resolve Sprint 7 #4 — economia FIXO zerada). **4 valores de economia** (mês/ano/5a/15a) gravados em toda cobrança nos 3 modelos. Schema delta: `Contrato.valorCheioKwhAceite` + 4 campos em `Cobranca`. CoopereBR (real) intocada. `.env` continua sem flag de bypass. **Próxima:** canário em 1 cooperado real (recomendação) ou Fase C (UI).
+
+### Sessão anterior (Fase B — tarde 03/05)
+
 - **Quando:** 2026-05-03 tarde (sessão Code, ~4h)
 - **Tipo:** Code execução **Fase B Planos** (engine + snapshots + DINAMICO + validações DTO)
-- **Resultado:** Fase B concluída. **D-30R RESOLVIDO** (5 caminhos populam snapshot via helper canônico). **Duplo desconto eliminado** na engine COMPENSADOS. **DINAMICO implementado** (era `NotImplementedException`). **Decisão B33 aplicada** (tarifaContratual = pós-desconto). Helper `calcularTarifaContratual` único em 4 arquivos. 15 specs do helper + ajustes 2 specs antigos = 72 specs Fase B verde. Suite total 259/262 (3 pré-existentes não-relacionadas). Reset 72 contratos SKIPPADO por decisão B33.5 (forward-only). Backend sobe limpo. **Próxima:** Fase B.5 (validação E2E com cooperados teste novos) ou Fase C (UI) — decisão Luciano.
+- **Resultado:** Fase B concluída. **D-30R RESOLVIDO** (5 caminhos populam snapshot via helper canônico). **Duplo desconto eliminado** na engine COMPENSADOS. **DINAMICO implementado** (era `NotImplementedException`). **Decisão B33 aplicada** (tarifaContratual = pós-desconto).
 
 ### Sessão anterior (Fase A — manhã 03/05)
 
@@ -35,6 +41,9 @@
 - **Resultado:** 12 pendências resolvidas (D-30O fix + 7 ajustes B + 2 sprints catalogados + D-30R catalogado + 6 áreas investigadas + revisão specs CooperToken + Área 1 expandida + SISGD-VISAO movido pra histórico). 2 decisões processuais novas (19 ritual, 20 validação por resposta). 4 débitos catalogados (D-30R, D-30S, D-30T) + 1 sugestão pendente (#3 cron sessões).
 
 ### Commits da sessão 2026-05-03
+
+**Fase B.5 (noite):**
+- `<este>` (commits sequenciais — schema + engines economia + seed + docs)
 
 **Fase B Planos (tarde):**
 - `eb7f0ce` feat(motor): helper calcularTarifaContratual + schema FaturaProcessada (Fase B)
@@ -192,7 +201,7 @@ Anexos opcionais:
 ### P0 — Crítico (bloqueia produção real)
 
 - [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — Decisão B33 aplicada (tarifaContratual=pós-desconto). 5 caminhos de criação de contrato populam snapshot via helper canônico `calcularTarifaContratual`. Engine COMPENSADOS sem duplo desconto. DINAMICO implementado. Commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`. Forward-only — contratos legados continuam null até serem recriados/backfilled.
-- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Pré-requisito pra desativar:** validação E2E manual com cooperados teste novos (Fase B.5) — criar 1 contrato por modelo (FIXO/COMPENSADOS/DINAMICO), gerar fatura mock, conferir cobrança. Só depois disso `BLOQUEIO=false` em produção.
+- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Validação E2E sintética concluída na Fase B.5** (6/6 cenários ✓). Próximo pré-requisito pra desativar: **canário em 1 cooperado real** (Opção A do playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`).
 
 ### P1 — Decisões esperadas Luciano (32 itens — B1-B32)
 

@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 02/05/2026 (Fase 1 sessão Code — D-30O resolvido + 7 ajustes Doc-0 + Sprints 5a/3a catalogados + D-30R catalogado).
+**Última atualização:** 03/05/2026 noite (Fase B.5 — validação E2E 6/6 ✓ + economia projetada nos 3 modelos).
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -25,13 +25,17 @@
 - **Convênios fluxo público:** D-30P + D-30Q resolvidos (commit `fa9dc72`)
 - **D-30O:** mesReferencia OCR resolvido (02/05, commit `7ea6943`)
 - **Doc-0 Grupo B:** 7 ajustes factuais aplicados
+- **Fase A Planos** (03/05 manhã): multi-tenant + seed FIXO_MENSAL (4 commits)
+- **Fase B Planos** (03/05 tarde): D-30R RESOLVIDO + duplo desconto eliminado + DINAMICO implementado + Decisão B33 (6 commits)
+- **Fase B.5** (03/05 noite): validação E2E sintética **6/6 cenários ✓** com 8 valores cada (incluindo economia projetada). Cooperativa teste isolada `TESTE-FASE-B5`. FIXO agora grava `valorBruto` (resolve Sprint 7 #4 — economia FIXO zerada). Schema delta: `Contrato.valorCheioKwhAceite` + 4 campos economia em `Cobranca`. Playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`.
 
 ### O que falta — ordem prioritária
 
 **Crítico estratégico:**
 1. **Caminho B em produção real** — Asaas conta produção + primeiro cooperado pagante. Estimativa: 1-2 semanas.
 2. **Sprint 0** — Auditoria Regulatória Emergencial (casos Exfishes/FIGATTA/CRIAR).
-3. **D-30R fix** — Motor.aceitar não popula tarifaContratual (afeta 100% dos 72 contratos). 30-45 min Code, bloqueia Sprint 2.
+3. ~~**D-30R fix**~~ ✅ **RESOLVIDO em 03/05 (Fase B + B.5)**. 5 caminhos populam snapshot via helper canônico. Engine COMPENSADOS sem duplo desconto. DINAMICO implementado. Validação E2E 6/6 ✓.
+4. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS (Opção A do playbook B.5). Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO` global.
 
 **Pré-produção (10 sprints da pilha + 2 sub-sprints):**
 - Sprints 0-9 da pilha pré-produção (17-23 semanas Code)
