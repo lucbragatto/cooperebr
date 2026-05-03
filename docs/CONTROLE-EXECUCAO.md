@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — investigação read-only engine COMPENSADOS + D-30R aprofundado (gate crítico).
+> Última atualização: **2026-05-03** — Fase A Planos (multi-tenant + seed) concluída; investigação read-only engine COMPENSADOS + D-30R aprofundado.
 
 ---
 
@@ -12,9 +12,15 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-03 (sessão Code curta, ~2h)
+- **Quando:** 2026-05-03 (sessão Code, ~3h)
+- **Tipo:** Code execução **Fase A Planos** (multi-tenant + seed)
+- **Resultado:** Fase A concluída. 4 bugs cross-tenant resolvidos + lacuna B13 (seed `CREDITOS_COMPENSADOS` → `FIXO_MENSAL`). 20 specs Jest verde. UI condicional SUPER_ADMIN. Backend sobe limpo via PM2. **Próxima:** Fase B (validações DTO + commit do escopo das fórmulas) ou outro tópico decidido por Luciano. Sessão anterior (engine COMPENSADOS read-only) permanece como background — D-30R aguarda decisão B33 antes de qualquer fix.
+
+### Sessão anterior (mantida pra contexto)
+
+- **Quando:** 2026-05-03 manhã (sessão Code curta, ~2h)
 - **Tipo:** Code investigação read-only (gate crítico D-30R)
-- **Resultado:** Tentativa de fix D-30R parou no gate de semântica. Investigação read-only completa (7 perguntas respondidas) revelou **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine COMPENSADOS — ativa-se imediatamente se D-30R for "corrigido" sem mexer na engine. Bug latente (engine nunca rodou em prod). Recomendação: Sprint C1 escopo expandido (5-7 dias) com decisão prévia A/B/C.
+- **Resultado:** Tentativa de fix D-30R parou no gate de semântica. Investigação read-only completa (7 perguntas respondidas) revelou **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine COMPENSADOS. Bug latente. Recomendação: Sprint C1 escopo expandido (5-7 dias) com decisão prévia A/B/C.
 
 ### Sessão anterior (mantida pra contexto)
 
@@ -24,7 +30,14 @@
 
 ### Commits da sessão 2026-05-03
 
-- `<este>` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
+**Fase A Planos (tarde):**
+- `69e2d6c` fix(planos): multi-tenant em CRUD + seed FIXO_MENSAL (Fase A)
+- `5f70ce2` test(planos): cobrir multi-tenant Fase A — 20 cenarios
+- `7722ce3` feat(planos-ui): UI condicional por perfil — escopo do plano
+- `<este>` docs(fase-a-planos): registra resolucao bugs cross-tenant + B13
+
+**Investigação engine COMPENSADOS (manhã):**
+- `4caebe9` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
 
 ### Commits da sessão 2026-05-02
 
@@ -191,7 +204,7 @@ Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
   - B12 FCFS + VPP no roadmap?
 
 - **4 lacunas Área 1** (revisão 02/05 tarde):
-  - B13 Seed `onModuleInit` cria Plano `CREDITOS_COMPENSADOS` (incoerente com bloqueio)
+  - ~~B13 Seed `onModuleInit` cria Plano `CREDITOS_COMPENSADOS` (incoerente com bloqueio)~~ ✅ **RESOLVIDO 03/05** (Fase A — commit `69e2d6c`, seed muda pra `FIXO_MENSAL`)
   - B14 UI override Usina/Contrato inexistente (só via API)
   - B15 `FORMULAS-COBRANCA.md` órfão em historico/ vs CLAUDE.md ainda referencia
   - B16 `RegrasFioB` model + `Usina.classeGd` enum documentados mas não codificados

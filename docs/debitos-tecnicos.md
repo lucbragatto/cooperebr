@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-04-30 (sessão Code Doc-0 Fatia 2 — 12 débitos novos D-30A a D-30L: caso Exfishes + flags regulatórias + RN defasada + spec Assis insumo histórico)
+**Última atualização:** 2026-05-03 (Fase A Planos — 4 bugs cross-tenant resolvidos + lacuna B13 seed FIXO_MENSAL resolvida)
 
 ---
 
@@ -377,6 +377,42 @@ Endpoint atual `GET /faturas/diagnostico` é **healthcheck técnico** (verifica 
 ---
 
 
+
+### [RESOLVIDO 03/05] Bugs cross-tenant em `/planos/` + lacuna B13 seed (Fase A)
+
+**Detectado em:** 2026-05-02 (relatório Code item 1.6) + sessão 02/05 (lacuna B13)
+
+**Severidade:** P1 (cross-tenant em CRUD admin) + P2 (seed incoerente)
+
+**Status:** ✅ **RESOLVIDO em 03/05 (commits `69e2d6c`, `5f70ce2`, `7722ce3`)**
+
+**Problemas encontrados:**
+
+1. `findAll()` sem filtro multi-tenant — qualquer ADMIN via planos cross-tenant.
+2. `findOne(id)` sem cross-tenant guard — ADMIN podia ler plano de outro parceiro pelo ID.
+3. `create()` não populava `cooperativaId` — todo plano nascia global, mesmo o criado por ADMIN.
+4. `remove()` count de contratos sem filtro de tenant — falso positivo cross-tenant podia bloquear delete.
+5. Seed `onModuleInit` criava `Plano Básico` com `CREDITOS_COMPENSADOS` em ambiente bloqueado por `BLOQUEIO_MODELOS_NAO_FIXO=true` — primeiro plano do sistema era inutilizável (lacuna B13).
+
+**Fix aplicado:**
+
+- `findAll(reqUser?)`: SUPER_ADMIN sem filtro; ADMIN próprios + globais; sem reqUser = vitrine pública.
+- `findOne(id, reqUser?)`: cross-tenant guard. ForbiddenException pra ADMIN tentando ler plano de outro parceiro.
+- `create(dto, reqUser)`: SUPER_ADMIN escolhe escopo; ADMIN forçado pra próprio tenant (ignora `dto.cooperativaId`).
+- `update(id, dto, reqUser)`: cross-tenant guard via findOne + bloqueio de mudança de `cooperativaId` por ADMIN.
+- `remove(id, reqUser)`: cross-tenant guard + count de contratos filtrado por tenant em ADMIN.
+- Seed muda pra `FIXO_MENSAL` (modelo ativo único hoje).
+- DTOs `cooperativaId` opcional.
+
+**UI condicional:** SUPER_ADMIN tem campo "Escopo do plano" (Global vs específico de parceiro X). ADMIN não vê campo (backend força próprio tenant).
+
+**Cobertura:** 20 specs Jest verde (10 da Fase A + 10 robustez auxiliar).
+
+**Lições:**
+1. Disciplina multi-tenant precisa ser revisada em todos os módulos com CRUD admin — `lead-expansao` e `cooperativas` já tinham padrão; `planos` ficou de fora até Fase A.
+2. Seeds em `onModuleInit` precisam respeitar flags de bloqueio do projeto. Recomendação genérica: seed cria estado mínimo viável no bloqueio mais conservador.
+
+---
 
 ### [RESOLVIDO 28/04] IDOR multi-tenant em endpoints `/cooperativas/`
 
