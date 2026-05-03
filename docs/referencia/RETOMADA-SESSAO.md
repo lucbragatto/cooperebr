@@ -1,6 +1,15 @@
 # PONTO DE RETOMADA — CoopereBR
 > Atualizado em 18/04/2026 após auditoria crítica do Sprint 4.
 > Substitui o RETOMADA-SESSAO.md anterior (17/04/2026).
+>
+> ⚠️ **OBSOLETO PARCIAL (03/05/2026)** — referências a `FORMULAS-COBRANCA.md`
+> estão **desatualizadas**. Este documento foi superado pelas seguintes fontes:
+> - `docs/CONTROLE-EXECUCAO.md` — estado vivo do projeto (atualizado a cada sessão)
+> - `docs/especificacao-modelos-cobranca.md` — spec atual dos 3 modelos
+> - `docs/referencia/REGRAS-PLANOS-E-COBRANCA.md` — fórmulas detalhadas (substitui FORMULAS-COBRANCA)
+> - `docs/sessoes/2026-05-03-investigacao-engine-compensados.md` — investigação técnica D-30R
+>
+> Mantido neste local pra histórico. NÃO usar pra decisões atuais.
 
 ---
 

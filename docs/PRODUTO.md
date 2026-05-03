@@ -283,9 +283,11 @@ Sistema sugere realocações automáticas respeitando:
 
 | Modelo | Como calcula | Estado |
 |---|---|---|
-| **FIXO_MENSAL** | `kwhContratoMensal × tarifaContratual` (preço travado) | 🟢 Implementado e único ativo em produção |
-| **CREDITOS_COMPENSADOS** | `kwhCompensado da fatura × tarifaContratual × (1 − desconto%)` | 🟡 Implementado, **bloqueado por env `BLOQUEIO_MODELOS_NAO_FIXO`** |
-| **CREDITOS_DINAMICO** | `kwhCompensado × tarifaCheia EDP × (1 − desconto%)` (revisão pendente) | 🔴 `NotImplementedException` em `faturas.service.ts:1882` |
+| **FIXO_MENSAL** | `kwhContratoMensal × tarifaContratual` (preço travado pós-desconto) | 🟢 Implementado e único ativo em produção |
+| **CREDITOS_COMPENSADOS** | `kwhCompensado × tarifaContratual` (snapshot pós-desconto, **sem aplicar desconto novamente**) | 🟢 Implementado (Fase B 03/05/2026), **ainda bloqueado por env `BLOQUEIO_MODELOS_NAO_FIXO`** até validação E2E |
+| **CREDITOS_DINAMICO** | `kwhCompensado × tarifaContratada` recalculada a cada mês via `valorCheioKwh` + `tarifaSemImpostos` da fatura aprovada | 🟢 Implementado (Fase B 03/05/2026), idem bloqueado até validação E2E |
+
+**Decisão B33 (03/05/2026):** `tarifaContratual` é **pós-desconto** (já considera `plano.baseCalculo` + `plano.descontoBase` no aceite). Engine consumidora **NÃO aplica desconto de novo**. Fim do duplo desconto que existia antes.
 
 **Princípio dos modelos** (`docs/especificacao-modelos-cobranca.md`):
 - COMPENSADOS = **tarifa travada**, economia cresce conforme EDP reajusta. Proteção contra alta de tarifa.
@@ -327,7 +329,7 @@ Diagnóstico de fatura real do Luciano (UC `000142138005470`, EDP-ES, mês 2026-
 
 - **Pipeline OCR está produzindo OCR rico** — 50+ campos extraídos: `creditosRecebidosKwh`, `tarifaTUSD`, `tarifaTE`, `valorTotal`, `saldoTotalKwh`, `participacaoSaldo`, históricos consumo.
 - **0 cobranças no banco têm `modeloCobrancaUsado` preenchido.** Confirma que `gerarCobrancaPosFatura` **nunca foi exercitada em produção**. As 34 cobranças existentes são manuais/seed.
-- **Contrato CTR-324704 (Luciano, plano OURO COMPENSADOS) com `tarifaContratual` vazia** — bug do snapshot do Motor.aceitar quando aceitou. Backend cai em fallback `tarifaApurada = totalAPagar / consumo` que é conceitualmente errado (totalAPagar já tem compensação aplicada).
+- ~~**Contrato CTR-324704 (Luciano, plano OURO COMPENSADOS) com `tarifaContratual` vazia**~~ — D-30R **resolvido na Fase B (03/05/2026)**. `Motor.aceitar` + 4 outros caminhos populam snapshot via helper canônico `calcularTarifaContratual`. Contratos legados sem snapshot continuam null (forward-only — backfill é Fase futura).
 - **DINAMICO bruto cobraria R$ 1.489** (mais que o dobro do valor sem desconto da EDP de R$ 781). Fórmula precisa normalização por consumo ou pela participação no saldo.
 
 **Conclusão pra produto:** Sprint 2 (OCR-Integração + DINAMICO) é **obrigatório antes de qualquer parceiro usar COMPENSADOS ou DINAMICO em produção**.

@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — Fase A Planos (multi-tenant + seed) concluída; investigação read-only engine COMPENSADOS + D-30R aprofundado.
+> Última atualização: **2026-05-03** — Fase B Planos (engine + snapshots + DINAMICO + validações DTO) concluída; D-30R RESOLVIDO; Fase A concluída pela manhã.
 
 ---
 
@@ -12,9 +12,15 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-03 (sessão Code, ~3h)
+- **Quando:** 2026-05-03 tarde (sessão Code, ~4h)
+- **Tipo:** Code execução **Fase B Planos** (engine + snapshots + DINAMICO + validações DTO)
+- **Resultado:** Fase B concluída. **D-30R RESOLVIDO** (5 caminhos populam snapshot via helper canônico). **Duplo desconto eliminado** na engine COMPENSADOS. **DINAMICO implementado** (era `NotImplementedException`). **Decisão B33 aplicada** (tarifaContratual = pós-desconto). Helper `calcularTarifaContratual` único em 4 arquivos. 15 specs do helper + ajustes 2 specs antigos = 72 specs Fase B verde. Suite total 259/262 (3 pré-existentes não-relacionadas). Reset 72 contratos SKIPPADO por decisão B33.5 (forward-only). Backend sobe limpo. **Próxima:** Fase B.5 (validação E2E com cooperados teste novos) ou Fase C (UI) — decisão Luciano.
+
+### Sessão anterior (Fase A — manhã 03/05)
+
+- **Quando:** 2026-05-03 manhã (sessão Code, ~3h)
 - **Tipo:** Code execução **Fase A Planos** (multi-tenant + seed)
-- **Resultado:** Fase A concluída. 4 bugs cross-tenant resolvidos + lacuna B13 (seed `CREDITOS_COMPENSADOS` → `FIXO_MENSAL`). 20 specs Jest verde. UI condicional SUPER_ADMIN. Backend sobe limpo via PM2. **Próxima:** Fase B (validações DTO + commit do escopo das fórmulas) ou outro tópico decidido por Luciano. Sessão anterior (engine COMPENSADOS read-only) permanece como background — D-30R aguarda decisão B33 antes de qualquer fix.
+- **Resultado:** Fase A concluída. 4 bugs cross-tenant resolvidos + lacuna B13 (seed `CREDITOS_COMPENSADOS` → `FIXO_MENSAL`). 20 specs Jest verde. UI condicional SUPER_ADMIN. Backend sobe limpo via PM2.
 
 ### Sessão anterior (mantida pra contexto)
 
@@ -30,11 +36,19 @@
 
 ### Commits da sessão 2026-05-03
 
-**Fase A Planos (tarde):**
+**Fase B Planos (tarde):**
+- `eb7f0ce` feat(motor): helper calcularTarifaContratual + schema FaturaProcessada (Fase B)
+- `070c1ab` fix(motor): aceitar() + 4 caminhos populam snapshots completos (D-30R)
+- `f5453b7` fix(faturas): COMPENSADOS sem duplo desconto + DINAMICO implementado
+- `00f64df` feat(planos): validacoes DTO V1-V3 + warnings V4 (Fase B)
+- `4c8e946` test(faturas+motor): atualizar specs antigos sem duplo desconto (Fase B)
+- `<este>` docs(fase-b-planos): D-30R resolvido + Decisao B33 aplicada
+
+**Fase A Planos (manhã):**
 - `69e2d6c` fix(planos): multi-tenant em CRUD + seed FIXO_MENSAL (Fase A)
 - `5f70ce2` test(planos): cobrir multi-tenant Fase A — 20 cenarios
 - `7722ce3` feat(planos-ui): UI condicional por perfil — escopo do plano
-- `<este>` docs(fase-a-planos): registra resolucao bugs cross-tenant + B13
+- `78d2d7b` docs(fase-a-planos): registra resolucao bugs cross-tenant + B13
 
 **Investigação engine COMPENSADOS (manhã):**
 - `4caebe9` docs(investigacao): mapear engine CREDITOS_COMPENSADOS — D-30R + duplo desconto
@@ -177,8 +191,8 @@ Anexos opcionais:
 
 ### P0 — Crítico (bloqueia produção real)
 
-- [ ] 🔍 **D-30R aprofundado (03/05)** — investigação read-only revelou que problema é estrutural, não fix isolado. **5 inconsistências cumulativas** em torno de `Contrato.tarifaContratual`. **Duplo desconto matemático confirmado** na engine `:1862`. **0/72 contratos têm propostaId** (backfill do débito original pegaria zero). 5 caminhos criam Contrato (Motor.aceitar é só 1). Detalhes em `docs/sessoes/2026-05-03-investigacao-engine-compensados.md`. **Aguarda Decisão B33** (semântica A/B/C) antes de qualquer fix.
-- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ativo em 7 pontos enforcement (não 4 — recontagem da investigação 03/05). Confirmado: engine COMPENSADOS NUNCA rodou em produção (0 cobranças com `modeloCobrancaUsado` preenchido). Bug latente. Destravar requer fix estrutural (Sprint C1 expandido).
+- [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — Decisão B33 aplicada (tarifaContratual=pós-desconto). 5 caminhos de criação de contrato populam snapshot via helper canônico `calcularTarifaContratual`. Engine COMPENSADOS sem duplo desconto. DINAMICO implementado. Commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`. Forward-only — contratos legados continuam null até serem recriados/backfilled.
+- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Pré-requisito pra desativar:** validação E2E manual com cooperados teste novos (Fase B.5) — criar 1 contrato por modelo (FIXO/COMPENSADOS/DINAMICO), gerar fatura mock, conferir cobrança. Só depois disso `BLOQUEIO=false` em produção.
 
 ### P1 — Decisões esperadas Luciano (32 itens — B1-B32)
 

@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-05-03 (Fase A Planos — 4 bugs cross-tenant resolvidos + lacuna B13 seed FIXO_MENSAL resolvida)
+**Última atualização:** 2026-05-03 tarde (Fase B Planos — D-30R resolvido + duplo desconto eliminado + DINAMICO implementado + Decisão B33 aplicada)
 
 ---
 
@@ -311,7 +311,25 @@ imediatamente no cadastro.
 
 ---
 
-### D-30R — `Motor.aceitar()` não popula `Contrato.tarifaContratual` (snapshot ausente)
+### D-30R — ✅ RESOLVIDO em 03/05/2026 (Fase B)
+
+**Resolvido em:** commits `eb7f0ce` (helper) + `070c1ab` (5 caminhos) + `f5453b7` (engine) + `4c8e946` (specs).
+
+**Decisão B33 aplicada:** `tarifaContratual` é semanticamente pós-desconto. Engine consumidora não aplica desconto novamente. Helper `calcularTarifaContratual` virou fonte única de verdade pra todos os 5 caminhos de criação de contrato + recálculo mensal DINAMICO.
+
+**Fix expandido cobriu:**
+- Snapshot populado em 4 caminhos (Motor.aceitar, contratos.service.create, cooperados.service, migracoes-usina). 5º caminho (usinas.service:promoverListaEspera) documentado como exceção #5 — contrato sem plano, snapshot deferido pra atribuição tardia.
+- Duplo desconto eliminado em `faturas.service.ts:1840+`.
+- DINAMICO `NotImplementedException` substituído por implementação real usando helper.
+- OCR `criarFaturaProcessada` extrai `valorCheioKwh` + `tarifaSemImpostos` automaticamente.
+
+**Forward-only:** 72 contratos legados não foram backfilled (decisão B33.5 — Caminho C). Continuam com `tarifaContratual=null`. Quando admin tentar cobrar COMPENSADOS sobre contrato legado, engine lança erro explícito ("Contrato sem snapshot — recrie ou backfill").
+
+**Pendente Fase B.5:** validação E2E manual com cooperados teste novos antes de desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
+
+---
+
+### ~~D-30R [HISTÓRICO PRÉ-RESOLUÇÃO] — `Motor.aceitar()` não popula `Contrato.tarifaContratual` (snapshot ausente)~~
 
 **Severidade:** P2
 **Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
