@@ -407,6 +407,11 @@ model Contrato {
   /// Idem tarifaContratual, mas durante período promocional (mesesPromocao).
   /// Também é pós-desconto. Engine não aplica desconto extra.
   tarifaContratualPromocional  Decimal?                  @db.Decimal(10, 5)
+  /// Snapshot do valor cheio do kWh (Total fatura ÷ kWh) na fatura usada no aceite.
+  /// Fase B.5 (03/05/2026): FIXO_MENSAL usa pra calcular valorBruto/economia
+  /// retroativamente (cobrança fixa não tem fatura mensal pra olhar).
+  /// COMPENSADOS/DINAMICO também gravam pra histórico/auditoria.
+  valorCheioKwhAceite          Decimal?                  @db.Decimal(10, 5)
   descontoPromocionalAplicado  Decimal?                  @db.Decimal(5, 2)
   mesesPromocaoAplicados       Int?
   baseCalculoAplicado          String                    @default("KWH_CHEIO")
@@ -553,6 +558,14 @@ model Cobranca {
   tarifaContratualAplicada Decimal?             @db.Decimal(10, 5)
   modeloCobrancaUsado      ModeloCobranca?
   bandeiraAplicada         Boolean?
+  // ── Fase B.5 (03/05/2026): economia projetada nos 3 modelos ──
+  // Calculados em toda cobrança gerada (FIXO/COMPENSADOS/DINAMICO).
+  // Cálculo simples sem IPCA: valorEconomiaMes = valorBruto - valorLiquido,
+  // valorEconomiaAno = mes×12, 5anos = mes×60, 15anos = mes×180.
+  valorEconomiaMes         Decimal?             @db.Decimal(10, 2)
+  valorEconomiaAno         Decimal?             @db.Decimal(10, 2)
+  valorEconomia5anos       Decimal?             @db.Decimal(10, 2)
+  valorEconomia15anos      Decimal?             @db.Decimal(10, 2)
   // ── CooperToken ──
   tokenDescontoQt          Decimal?             @db.Decimal(10, 4)
   tokenDescontoReais       Decimal?             @db.Decimal(10, 2)
