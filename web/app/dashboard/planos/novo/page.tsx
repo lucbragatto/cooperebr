@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
+import PlanoSimulacao from '@/components/PlanoSimulacao';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -78,6 +79,9 @@ export default function NovoPlanoPage() {
     descricao: '',
     modeloCobranca: 'FIXO_MENSAL' as ModeloCobranca,
     descontoBase: 20,
+    // Fase C.1: kWh contratado mensal (apenas FIXO_MENSAL usa pra dimensionar contrato).
+    // Default 500 kWh — alinhado com cenário base da Fase B.5.
+    kwhContratoMensal: 500,
     temPromocao: false,
     descontoPromocional: 0,
     mesesPromocao: 0,
@@ -173,6 +177,9 @@ export default function NovoPlanoPage() {
         </p>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+
       <Card>
         <CardHeader>
           <CardTitle>Dados do Plano</CardTitle>
@@ -255,6 +262,25 @@ export default function NovoPlanoPage() {
             />
             <p className="text-xs text-gray-400 mt-0.5">Desconto aplicado pelo motor de proposta (obrigatório, 1-100%)</p>
           </div>
+
+          {/* kWh contratado/mês — APENAS FIXO_MENSAL (Fase C.1 Item 3) */}
+          {form.modeloCobranca === 'FIXO_MENSAL' && (
+            <div>
+              <label className={labelClass}>
+                kWh contratado/mês
+                <HelpIcon text="Quanto kWh o cooperado consome em média por mês. FIXO_MENSAL congela esse valor × tarifa para fixar a cobrança mensal. COMPENSADOS/DINAMICO usam o consumo real da fatura." />
+              </label>
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                step={1}
+                value={form.kwhContratoMensal}
+                onChange={(e) => setForm({ ...form, kwhContratoMensal: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-xs text-gray-400 mt-0.5">Default 500 kWh — admin ajusta conforme histórico do cooperado</p>
+            </div>
+          )}
 
           {/* Toggle Promoção */}
           <div className="col-span-2 flex items-center gap-3">
@@ -364,22 +390,30 @@ export default function NovoPlanoPage() {
             </select>
           </div>
 
-          <div>
-            <label className={labelClass}>
-              Referência de Valor
-              <HelpIcon text="Qual histórico usar pra dimensionar o contrato do cooperado. Última Fatura: rápido mas volátil. Média 3 meses: equilíbrio (recomendado). Média 12 meses: mais estável, ignora sazonalidade." />
-            </label>
-            <select
-              className={inputClass}
-              value={form.referenciaValor}
-              onChange={(e) => setForm({ ...form, referenciaValor: e.target.value as ReferenciaValor })}
-            >
-              <option value="ULTIMA_FATURA">Última Fatura</option>
-              <option value="MEDIA_3M">Média 3 meses</option>
-              <option value="MEDIA_6M">Média 6 meses</option>
-              <option value="MEDIA_12M">Média 12 meses</option>
-            </select>
-          </div>
+          {/* Referência de Valor — escondida para DINAMICO (sempre usa fatura do mês corrente) */}
+          {form.modeloCobranca !== 'CREDITOS_DINAMICO' && (
+            <div>
+              <label className={labelClass}>
+                Referência de Valor
+                <HelpIcon text="Qual histórico usar pra dimensionar o contrato do cooperado. Última Fatura: rápido mas volátil. Média 3 meses: equilíbrio (recomendado). Média 12 meses: mais estável, ignora sazonalidade." />
+              </label>
+              <select
+                className={inputClass}
+                value={form.referenciaValor}
+                onChange={(e) => setForm({ ...form, referenciaValor: e.target.value as ReferenciaValor })}
+              >
+                <option value="ULTIMA_FATURA">Última Fatura</option>
+                <option value="MEDIA_3M">Média 3 meses</option>
+                <option value="MEDIA_6M">Média 6 meses</option>
+                <option value="MEDIA_12M">Média 12 meses</option>
+              </select>
+            </div>
+          )}
+          {form.modeloCobranca === 'CREDITOS_DINAMICO' && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-800">
+              <strong>DINAMICO:</strong> sempre recalcula tarifa do mês corrente a partir da fatura aprovada. Sem referência histórica.
+            </div>
+          )}
 
           {/* T7 Sprint 5: Tipo de desconto — decisão crítica de produto */}
           <div className="col-span-2">
@@ -564,6 +598,21 @@ export default function NovoPlanoPage() {
           </div>
         </CardContent>
       </Card>
+
+        </div>
+        <div className="lg:col-span-1">
+          <PlanoSimulacao
+            modeloCobranca={form.modeloCobranca}
+            baseCalculo={form.baseCalculo}
+            tipoDesconto={form.tipoDesconto}
+            descontoBase={form.descontoBase}
+            referenciaValor={form.referenciaValor}
+            temPromocao={form.temPromocao}
+            descontoPromocional={form.descontoPromocional}
+            mesesPromocao={form.mesesPromocao}
+          />
+        </div>
+      </div>
     </div>
   );
 }
