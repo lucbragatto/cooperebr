@@ -4,6 +4,7 @@ import { CreatePlanoDto } from './dto/create-plano.dto';
 import { UpdatePlanoDto } from './dto/update-plano.dto';
 import { ModeloCobranca, TipoCampanha, Prisma } from '@prisma/client';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { gerarWarningsPlano } from './lib/warnings-plano';
 
 interface ReqUserLike {
   perfil: PerfilUsuario | string;
@@ -136,6 +137,18 @@ export class PlanosService implements OnModuleInit {
    * - ADMIN: cooperativaId é forçado pra própria cooperativa, ignorando dto
    */
   async create(dto: CreatePlanoDto, reqUser: ReqUserLike) {
+    // V4: warnings não-bloqueantes pra combinações estranhas (Decisão B33).
+    const warnings = gerarWarningsPlano({
+      modeloCobranca: dto.modeloCobranca,
+      baseCalculo: dto.baseCalculo,
+      tipoDesconto: dto.tipoDesconto,
+      referenciaValor: dto.referenciaValor,
+      temPromocao: dto.temPromocao,
+      descontoBase: dto.descontoBase,
+      descontoPromocional: dto.descontoPromocional,
+    });
+    warnings.forEach((w) => this.logger.warn(`[create plano "${dto.nome}"] ${w}`));
+
     let cooperativaId: string | null;
     if (reqUser.perfil === PerfilUsuario.SUPER_ADMIN) {
       // SUPER_ADMIN escolhe escopo livremente. cooperativaId vazio/null = global.

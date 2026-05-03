@@ -1,4 +1,29 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsIn, IsArray, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, IsIn, IsArray, Min, Max, ValidateIf, ArrayNotEmpty, registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+
+/** V2 (Fase B): descontoPromocional > descontoBase quando temPromocao=true. */
+function IsPromoMaiorQueBase(validationOptions?: ValidationOptions) {
+  return function (object: any, propertyName: string) {
+    registerDecorator({
+      name: 'isPromoMaiorQueBase',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const obj = args.object as any;
+          if (obj.temPromocao !== true) return true;
+          if (value === undefined || value === null) return true;
+          const base = Number(obj.descontoBase ?? 0);
+          return Number(value) > base;
+        },
+        defaultMessage(args: ValidationArguments) {
+          const obj = args.object as any;
+          return `descontoPromocional (${args.value}) deve ser maior que descontoBase (${obj.descontoBase})`;
+        },
+      },
+    });
+  };
+}
 
 export class UpdatePlanoDto {
   @IsOptional() @IsString()
@@ -16,10 +41,16 @@ export class UpdatePlanoDto {
   @IsOptional() @IsBoolean()
   temPromocao?: boolean;
 
-  @IsOptional() @IsNumber()
+  // V1+V2: idêntico ao Create. Aplicam apenas se temPromocao=true vier no payload.
+  @ValidateIf((o) => o.temPromocao === true)
+  @IsNumber({}, { message: 'Promoção ativada exige descontoPromocional numérico' })
+  @Min(1, { message: 'Promoção ativada exige descontoPromocional > 0' })
+  @IsPromoMaiorQueBase()
   descontoPromocional?: number;
 
-  @IsOptional() @IsNumber()
+  @ValidateIf((o) => o.temPromocao === true)
+  @IsNumber({}, { message: 'Promoção ativada exige mesesPromocao numérico' })
+  @Min(1, { message: 'Promoção ativada exige mesesPromocao > 0' })
   mesesPromocao?: number;
 
   @IsOptional()
@@ -45,7 +76,10 @@ export class UpdatePlanoDto {
   @IsOptional() @IsIn(['KWH_CHEIO', 'SEM_TRIBUTO', 'COM_ICMS', 'CUSTOM'])
   baseCalculo?: 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';
 
-  @IsOptional() @IsArray()
+  // V3: idêntico ao Create.
+  @ValidateIf((o) => o.baseCalculo === 'CUSTOM')
+  @IsArray()
+  @ArrayNotEmpty({ message: 'baseCalculo=CUSTOM exige componentesCustom não-vazio' })
   componentesCustom?: string[];
 
   @IsOptional() @IsIn(['ULTIMA_FATURA', 'MEDIA_3M', 'MEDIA_6M', 'MEDIA_12M'])
