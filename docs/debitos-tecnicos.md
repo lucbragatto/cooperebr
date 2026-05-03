@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-05-03 tarde (Fase B Planos — D-30R resolvido + duplo desconto eliminado + DINAMICO implementado + Decisão B33 aplicada)
+**Última atualização:** 2026-05-03 fechamento — **maratona de 4 fases concluídas** (A + B + B.5 + C.1) com 20 commits, validação E2E 48/48, e 8 débitos resolvidos (D-30R + duplo desconto + DINAMICO + snapshots T3/T4 + cross-tenant + B13 + FIXO economia zerada + spec T8). 3 débitos P3 catalogados como novos.
 
 ---
 
@@ -381,6 +381,44 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 ---
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
+
+### [NOVOS — sessão 03/05] Débitos P3 catalogados durante a maratona
+
+#### D-FASE-A-1 — 3 specs DI pré-existentes falhando
+
+**Severidade:** P3
+**Detectado em:** 2026-05-03 (Fase B, suite Jest)
+**Onde:** `cooperados.controller.spec.ts`, `cooperados.service.spec.ts`, `usinas.controller.spec.ts`
+
+3 testes "should be defined" falham com `Nest can't resolve dependencies of CooperadosService (UsinasService at index [2])`. Confirmado **pré-existente** via `git stash` (falham mesmo no commit anterior à Fase A). Não impactam runtime — backend sobe limpo via PM2.
+
+**Resolução:** ajustar `RootTestModule` dos 3 specs pra incluir `UsinasService` como provider. ~30 min Code, baixa prioridade.
+
+#### D-FASE-B-1 — Snapshots na atribuição tardia de plano (caso usinas.service.ts:306)
+
+**Severidade:** P3
+**Detectado em:** 2026-05-03 (Fase B, exceção #5 dos 5 caminhos de criação de contrato)
+**Onde:** `backend/src/usinas/usinas.service.ts:306`
+
+Promoção da lista de espera cria contrato **sem plano** (status `PENDENTE_ATIVACAO`, `percentualDesconto: 0`). Snapshot de tarifa não pode ser populado nesse momento porque não há plano associado.
+
+Quando admin **atribui plano depois** via UI (função `atribuirPlanoAoContrato()` ainda não existe), snapshot precisa ser populado via helper canônico `calcularTarifaContratual` lendo fatura mais recente do cooperado.
+
+**Resolução:** criar função `atribuirPlanoAoContrato(contratoId, planoId)` em `contratos.service.ts` que popula `tarifaContratual` + `valorContrato` + `valorCheioKwhAceite` + `baseCalculoAplicado` + `tipoDescontoAplicado`. ~1h Code + UI.
+
+#### D-FASE-A-2 — Whitelist `/cadastro` no interceptor `web/lib/api.ts`
+
+**Severidade:** P3 (latente, não causa dano hoje)
+**Detectado em:** 2026-05-03 (Fase A, observação durante validação multi-tenant)
+**Onde:** `web/lib/api.ts:26-35`
+
+Interceptor de resposta redireciona pra `/login` em caso de 401. Whitelist atual: `/login` e `/portal/login`. **`/cadastro` não está incluído.**
+
+Se algum dia alguém adicionar `api.get('/planos')` numa página dentro de `/cadastro` (em vez de `fetch` direto), visitante anônimo seria redirecionado pra `/login` em vez de receber erro silencioso. Hoje **não acontece** — `/cadastro/page.tsx:200` usa `fetch()` direto e `/planos/ativos` é `@Public`.
+
+**Resolução:** adicionar `/cadastro` na whitelist OU manter convenção "rotas públicas usam `fetch` direto". 5 min Code.
+
+---
 
 ### D-30K — Conflito de namespace `/diagnostico` entre healthcheck atual e Sprint 9
 
