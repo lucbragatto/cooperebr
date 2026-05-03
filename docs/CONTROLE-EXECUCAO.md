@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03** — **Fase B.5 concluída** (validação E2E 6/6 ✓ + economia projetada nos 3 modelos); Fase B + Fase A concluídas no mesmo dia.
+> Última atualização: **2026-05-03** — **Fase C.1 concluída** (helper simular-plano + componentes + campos condicionais + avisos V4); B.5 + B + A concluídas no mesmo dia.
 
 ---
 
@@ -11,6 +11,12 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 2026-05-03 noite (sessão Code, ~3h)
+- **Tipo:** Code execução **Fase C.1 — UI plano + simulação (foundation)**
+- **Resultado:** ITENS 1, 2, 3, 8 da Fase C concluídos. Helper `web/lib/simular-plano.ts` com paridade matemática backend (6/6 cenários ✓ via spec ts-node standalone). Componente `<PlanoSimulacao>` painel sticky em tempo real. Campos condicionais por modelo (FIXO mostra kWh, DINAMICO esconde Referência de Valor). Componente `<CombinacaoAtual>` inline com avisos V4. `/dashboard/planos/novo` agora tem layout 2 colunas (form + simulação). Build Next.js limpo. **4 commits.** Próxima: Fase C.2 (promo + vigência + CooperToken expandido + lista enriquecida + confirmação) ou Fase C.3 (display economia em portal/cobranças).
+
+### Sessão anterior (Fase B.5 — noite 03/05)
 
 - **Quando:** 2026-05-03 noite (sessão Code, ~2h)
 - **Tipo:** Code execução **Fase B.5 — Validação E2E + economia projetada**
@@ -42,8 +48,17 @@
 
 ### Commits da sessão 2026-05-03
 
+**Fase C.1 UI Plano + Simulação (noite, mais tarde):**
+- `<este-grupo>` feat(web-lib): helper simular-plano + 6 specs paridade backend
+- feat(planos-ui): componente PlanoSimulacao com painel em tempo real
+- feat(planos-ui): campos condicionais por modelo + simulacao integrada
+- feat(planos-ui): helper visual baseCalculo + tipoDesconto + avisos V4
+
 **Fase B.5 (noite):**
-- `<este>` (commits sequenciais — schema + engines economia + seed + docs)
+- `a4ebf90` feat(schema): valorCheioKwhAceite (Contrato) + 4 economia (Cobranca)
+- `b0e0345` feat(faturas+motor): FIXO grava valorBruto + 4 economia nos 3 modelos
+- `718ca46` test(fase-b5): seed E2E 6 cenarios validados
+- `840b10f` docs(fase-b5): playbook validacao E2E + tabela 8 colunas + IDs
 
 **Fase B Planos (tarde):**
 - `eb7f0ce` feat(motor): helper calcularTarifaContratual + schema FaturaProcessada (Fase B)
