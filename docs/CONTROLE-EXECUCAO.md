@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-02 manhã** — sessão Code de retomada + ritual abertura/fechamento criado.
+> Última atualização: **2026-05-03** — fechamento consolidado sessão 02/05 (Fases 1 + 2.5 + 2.6) + Decisão 20 + SISGD-VISAO movido pra histórico.
 
 ---
 
@@ -12,54 +12,73 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-02 manhã (Fase 1 trabalho técnico)
-- **Tipo:** Code (fix + 7 ajustes Doc-0 + 2 sprints catalogados + investigação D-30R)
-- **Resultado:** D-30O **corrigido** (4 specs verde). 7 ajustes factuais Doc-0 aplicados. Sprints 5a (Fio B) + 3a (RN 482) catalogados com Decisão 18. D-30R (snapshot tarifaContratual) investigado: afeta **100% dos 72 contratos** — fix proposto, não aplicado nesta fase.
+- **Quando:** 2026-05-02 (manhã + tarde, ~7-8h com pausas)
+- **Tipo:** Code (Fase 1 técnica + Fase 2.5 investigações + Fase 2.6 fechamento consolidado)
+- **Resultado:** 12 pendências resolvidas (D-30O fix + 7 ajustes B + 2 sprints catalogados + D-30R catalogado + 6 áreas investigadas + revisão specs CooperToken + Área 1 expandida + SISGD-VISAO movido pra histórico). 2 decisões processuais novas (19 ritual, 20 validação por resposta). 4 débitos catalogados (D-30R, D-30S, D-30T) + 1 sugestão pendente (#3 cron sessões).
 
 ### Commits da última sessão
 
-- `1301bb2` docs(ritual): cria ritual de abertura/fechamento de sessao
+**Fase 1 (manhã):**
+- `1301bb2` docs(ritual): cria ritual abertura/fechamento sessao
 - `18845b0` docs(ritual): aprimora Decisao 19 + reorganiza pendencias P1/P2/P3
 - `509002d` docs(processo): reclassifica D-30M + investiga D-30N/D-30O
-- `<este>` feat(fase1): fix D-30O + 7 ajustes Doc-0 + 2 sprints catalogados + D-30R investigado
+- `7ea6943` feat(fase1): trabalho tecnico consolidado sessao 02/05
+- `6eca970` docs(plano): atualiza PLANO-ATE-PRODUCAO com Fase 1 02/05
 
-Push esperado: `509002d..<este>` → origin/main
+**Fase 2.5 (tarde):**
+- `06b933f` docs(investigacao): 6 areas de produto read-only — 02/05 tarde
+- `8cb8328` docs(investigacao): adiciona analise de specs CooperToken — gap completo
+- `8e380aa` docs(investigacao): completa Area 1 — documentacao + Planos
 
-### Arquivos tocados (sessão 02/05 — múltiplas fases)
+**Fase 2.6 (fechamento):**
+- `<este>` docs(sessao): consolidacao final 02/05 + Decisao 20 + SISGD-VISAO movido
 
-- `~/.claude/.../memory/ritual_abertura_fechamento.md` (ritual + aprendizados)
+### Arquivos tocados (sessão 02/05 + 03/05 fechamento)
+
+- `~/.claude/.../memory/ritual_abertura_fechamento.md`
+- `~/.claude/.../memory/regra_validacao_previa_e_retomada.md` (Decisão 20 adicionada)
+- `~/.claude/.../memory/sugestoes_pendentes.md` (sugestão #3 adicionada)
 - `~/.claude/.../memory/MEMORY.md`
-- `CLAUDE.md` (raiz — seção "Ritual de abertura e fechamento")
+- `CLAUDE.md` (raiz — disciplina validação Decisões 14/15/20 consolidadas)
 - `backend/src/faturas/faturas.service.ts` (D-30O fix)
-- `backend/src/faturas/faturas.service.d30o.spec.ts` (4 specs novos)
-- `docs/PRODUTO.md` (juiz TJES, Sinergia/CoopereBR, Assis→OpenClaw, estado atual)
-- `docs/REGULATORIO-ANEEL.md` (Assis→OpenClaw, limite 25% por classe GD, Caso A reescrito, Express hipótese)
-- `docs/PLANO-ATE-PRODUCAO.md` (Sprints 5a + 3a catalogados)
-- `docs/debitos-tecnicos.md` (D-30M reclassificado, D-30N escopo, D-30O resolvido, D-30R catalogado)
-- `docs/CONTROLE-EXECUCAO.md`
+- `backend/src/faturas/faturas.service.d30o.spec.ts` (4 specs)
+- `docs/PRODUTO.md` (7 ajustes Grupo B)
+- `docs/REGULATORIO-ANEEL.md` (Assis→OpenClaw, limite 25% por classe, Caso A reescrito)
+- `docs/PLANO-ATE-PRODUCAO.md` (Sprints 5a + 3a, Seção 0)
+- `docs/debitos-tecnicos.md` (D-30M, D-30N, D-30O, D-30R + D-30S + D-30T)
+- `docs/MAPA-INTEGRIDADE-SISTEMA.md` (referências SISGD-VISAO contextualizadas histórico)
+- `docs/CONTROLE-EXECUCAO.md` (este arquivo)
+- `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` (movido)
 - `docs/sessoes/2026-05-02-investigacao-d30m-d30n-d30o.md`
 - `docs/sessoes/2026-05-02-fase1-trabalho-tecnico-consolidado.md`
+- `docs/sessoes/2026-05-02-investigacao-6-areas-produto.md`
+- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (Bloco 9)
 
-### Decisões registradas
+### Decisões registradas (cronológicas — completar lista total no fim do arquivo)
 
-- **Decisão 19:** ritual de abertura/fechamento de sessão
+- **Decisão 19** (02/05 manhã): ritual abertura/fechamento de sessão
+- **Decisão 20** (03/05 fechamento): validação prévia em CADA resposta + verificação de conflito antes de propor sprint
 - **Reclassificações:** D-30M P1→P2, D-30N escopo expandido, D-30R catalogado novo
-- **Resolvido:** D-30O (commit fase 1)
-- **Catalogados como sprints formais:** Sprint 5a (Fio B), Sprint 3a (RN 482→Lei 14.300)
+- **Resolvido:** D-30O (commit `7ea6943`)
+- **Catalogados como sprints formais (Decisão 18):** Sprint 5a (Fio B), Sprint 3a (RN 482→Lei 14.300)
+- **Catalogados como débitos:** D-30R (Motor.aceitar), D-30S (extrair Jornadas), D-30T (extrair Painéis)
+- **Catalogada como sugestão:** #3 Cron Análise Diária Sessões
+- **Movido pra histórico:** SISGD-VISAO-COMPLETA.md (substituído por PRODUTO.md)
 
 ### Pendências consolidadas
 
 → Ver seção [PENDÊNCIAS PARA PRÓXIMA SESSÃO](#pendências-para-próxima-sessão) abaixo.
 
-**Total restante:** ~17 itens. **P1 = 0**. Pendências resolvidas hoje (3): D-30O, 7 ajustes Grupo B, 2 sprints catalogados.
+**Total restante:** ~32 decisões pendentes (B1-B32) + ~8 sprints potenciais (C1-C8).
+**P1 = 0**. Pendências resolvidas hoje: 12.
 
-### Próximos passos imediatos (priorizado conforme P1 → P2 → P3)
+### Próximos passos imediatos (priorizado P0 → P1 → P2 → P3)
 
-A. **Caminho B** [Estratégica] — Asaas produção real. 1-2 semanas. Primeira receita.
-B. **D-30R fix** [P2 — 30-45 min] — Motor.aceitar() popular tarifaContratual + script backfill (afeta 72 contratos).
-C. **Curadoria de sprints** [Processual] — 16 decisões batch (`docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md`).
-D. **Decisões Grupo A Doc-0** [P2] — 6 descobertas estruturantes (Modo Observador, hardcode 0.20, etc.).
-E. **D-30N implementação completa** [P2] — absorvido por Sprint 5/6. Não fazer isolado.
+A. **Decisões batch B1-B32** [Processual urgente] — sessão dedicada só a decisões (~2-3h). Sem decisões, sprints potenciais ficam parados.
+B. **D-30R fix** [P0/P2 — 30-45 min] — Motor.aceitar() popular tarifaContratual + script backfill (72 contratos).
+C. **Caminho B Asaas produção** [Estratégica] — primeira receita real em 1-2 semanas.
+D. **Doc-0 Fatia 3** (SISTEMA.md) — pré-condição pra Fatias 4 + 5 + débitos D-30S/D-30T.
+E. **Definir escopo Sugestão #3** (cron análise diária) — decidir hipótese A/B/C/D/E.
 
 ### Frase de retomada
 
@@ -67,6 +86,7 @@ E. **D-30N implementação completa** [P2] — absorvido por Sprint 5/6. Não fa
 
 Anexos opcionais:
 - `docs/CONTROLE-EXECUCAO.md`
+- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (resumo completo da sessão 02/05)
 - `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (16 decisões pendentes)
 
 ---
@@ -81,7 +101,7 @@ Anexos opcionais:
 | 2/5 — PRODUTO + REGULATORIO | ✅ **CONCLUÍDA** | (commits desta sessão) | PRODUTO.md, REGULATORIO-ANEEL.md, CONTROLE-EXECUCAO.md, sessão decisões, +12 débitos, plano atualizado |
 | 3/5 — SISTEMA.md | 🔴 pendente | — | Mapa técnico (44 módulos, 152 telas, 80 models, schema completo) |
 | 4/5 — CLAUDE.md refator | 🔴 pendente | — | Reformatação operacional do CLAUDE.md raiz |
-| 5/5 — Movimentação final | 🔴 pendente | — | SISGD-VISAO/MAPA-INTEGRIDADE → histórico, README docs |
+| 5/5 — Movimentação final | 🟡 parcial | (03/05) | ✅ SISGD-VISAO movido pra `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md`. Pendente: MAPA-INTEGRIDADE → histórico, README docs |
 
 ### Sprints pré-produção (10 totais — pilha reorganizada 30/04)
 
@@ -129,51 +149,98 @@ Anexos opcionais:
 
 ## PENDÊNCIAS PARA PRÓXIMA SESSÃO
 
-> **Reorganizado em 02/05** por prioridade explícita (Decisão 19 ritual).
-> Agente apresenta P1 → P2 → P3 nessa ordem em toda abertura de sessão.
-> Pendências marcadas com 🔍 foram **revisadas com leitura de código** (não só contagem de registros).
+> **Reorganizado 03/05** após sessão 02/05 (manhã + tarde). Agente apresenta P0 → P1 → P2 → P3 em toda abertura de sessão (Decisão 19).
+> Pendências marcadas com 🔍 foram **revisadas com leitura de código**.
 
-### P1 — Crítico (bloqueia produção real ou cliente real)
+### P0 — Crítico (bloqueia produção real)
 
-*(Vazio — D-30M reclassificado P1→P2 em 02/05 após validação prévia.)*
+- [ ] 🔍 **D-30R fix** — Motor.aceitar() não popula `Contrato.tarifaContratual` (100% dos 72 contratos). Decisão pendente B1: fix isolado **agora** ou aguardar Sprint COMPENSADOS.
+- [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ativo em 4 pontos enforcement — destravar antes de produção (depende D-30R + Sprint 2 ou 5).
 
-### P2 — Validação E2E pendente (não é bug)
+### P1 — Decisões esperadas Luciano (32 itens — B1-B32)
+
+Sessão dedicada de decisões batch (~2-3h estimado). Material compilado:
+
+- **6 decisões Fase 2.5** (investigação 6 áreas — `docs/sessoes/2026-05-02-investigacao-6-areas-produto.md`):
+  - B1 D-30R timing (fix agora vs Sprint COMPENSADOS)
+  - B2 DINAMICO sprint dedicado vs descartar
+  - B3 CooperToken desvalorização configurável vs hard-coded 29 dias
+  - B4 Modo Observador consolidar admin-spy + cooperado-leitura, ou separar
+  - B5 Convênios link-específico now or later
+  - B6 Planos modulares `@RequireModulo` retroativo (~50 endpoints) ou só novos
+
+- **6 decisões estratégicas originais** (Doc-0):
+  - B7 Hardcode 0.20 CooperToken
+  - B8 Modo Observador no PRODUTO.md (Camada 12)
+  - B9 3 specs CooperToken contraditórios na expiração
+  - B10 Convênios subdocumentado (Camada 8 expansão)
+  - B11 600.000 kWh represados (marcar como ciente)
+  - B12 FCFS + VPP no roadmap?
+
+- **4 lacunas Área 1** (revisão 02/05 tarde):
+  - B13 Seed `onModuleInit` cria Plano `CREDITOS_COMPENSADOS` (incoerente com bloqueio)
+  - B14 UI override Usina/Contrato inexistente (só via API)
+  - B15 `FORMULAS-COBRANCA.md` órfão em historico/ vs CLAUDE.md ainda referencia
+  - B16 `RegrasFioB` model + `Usina.classeGd` enum documentados mas não codificados
+
+- **16 decisões curadoria sprints** (`docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` commit `6c8cb7d`):
+  - B17-B32 (16 itens — material já consolidado, aguardando passada de batch)
+
+### P1 — Sprints potenciais a catalogar (8 itens — C1-C8)
+
+Após decisões B1-B32, sprints surgem com Decisão 18 (5 itens cada):
+
+- C1 COMPENSADOS (D-30R fix + backfill + remoção bloqueio + UI activation)
+- C2 DINAMICO (implementação do zero, depende Sprint 5)
+- C3 CooperToken Configurável (3 campos schema + cron desvalorização + cron expiração + UI admin + specs)
+- C4 Convênios link-específico + landing personalizada
+- C5 Relatório Mensal Membro/Usuário (consumo modular)
+- C6 Planos SaaS Modulares — ativação `@RequireModulo` retroativa
+- C7 D-30R fix Motor.aceitar (sub-sprint isolado se decidido)
+- C8 Funções Venda Fio B (contexto a recuperar — pendente desde 02/05)
+
+### P2 — Validação E2E pendente
 
 - [ ] 🔍 **D-30M** — Bônus MLM cascata: pipeline OK, validar quando primeiro indicado pagar via Caminho B Asaas. (Era P1; reclassificado 02/05.)
 
-### P2 — Bugs/lacunas confirmadas com leitura de código
+### P2 — Bugs/lacunas confirmadas
 
-- [ ] 🔍 **D-30N** — AuditLog interceptor **não existe** (escopo revisado: implementação completa, não ativação). Absorvido por Sprint 5/6.
-- [x] 🔍 **D-30O** — ✅ **RESOLVIDO em 02/05** (commit fase 1, fix 5 linhas + 4 specs verde)
-- [ ] 🔍 **D-30R** — Motor.aceitar() não popula `Contrato.tarifaContratual` (afeta **100% dos 72 contratos**). Fix proposto, ~30-45 min Code + script backfill.
+- [ ] 🔍 **D-30N** — AuditLog interceptor **não existe**. Absorvido por Sprint 5/6.
+- [x] 🔍 **D-30O** — ✅ **RESOLVIDO em 02/05** (commit `7ea6943`, fix 5 linhas + 4 specs verde)
+- [ ] 🔍 **D-30R** — ver P0 acima
 
-### P2 — Decisões de produto (Doc-0)
+### P3 — Documentação pendente
 
-- [ ] Hardcode 0.20 CooperToken sem origem em spec (Grupo A.2)
-- [ ] Modo Observador implementado mas ausente do PRODUTO.md — adicionar Camada 12 (Grupo A.1)
-- [ ] 3 specs CooperToken se contradizem na expiração (DECISÃO LUCIANO) — Grupo A.3
-- [ ] Convênios subdocumentado (1456 vs 5 linhas — decidir expansão Camada 8) — Grupo A.4
-- [ ] 600.000 kWh represados (Luciano declarou "não bloqueia" → marcar como ciente) — Grupo A.5
-- [ ] FCFS + VPP ausentes do Doc-0 (DECISÃO LUCIANO se entram no roadmap) — Grupo A.6
+- [ ] **Doc-0 Fatia 3** — SISTEMA.md (mapa técnico completo)
+- [ ] **Doc-0 Fatia 4** — CLAUDE.md refator operacional
+- [ ] **Doc-0 Fatia 5** — Movimentação final (MAPA-INTEGRIDADE → histórico, README docs). Parcialmente executado em 03/05 (SISGD-VISAO movido).
+- [ ] **D-30S** — Extrair "Jornadas Usuário" do SISGD-VISAO histórico (1-1.5h)
+- [ ] **D-30T** — Extrair "Painéis por Papel" do SISGD-VISAO histórico (1-2h)
 
-### P3 — Polish (não bloqueia, melhora qualidade)
+### P3 — Ajustes factuais Doc-0 (Grupo B)
 
-- [x] ✅ **TODOS RESOLVIDOS em 02/05** (commit fase 1):
-  - [x] Remover "juiz TJES" do PRODUTO.md
-  - [x] Sinergia + CoopereBR como "clientes confirmados aguardando migração"
-  - [x] Estado atual: SISGD ainda sem cliente em produção
-  - [x] "Assis" → "OpenClaw (assistente IA)" — corrigido em 7 lugares
-  - [x] Limite 25% contextualizado por classe GD (não aplica GD I, direitos adquiridos até 2045)
-  - [x] Caso A reescrito (sistema legado, GD I direitos adquiridos, falta simulação prévia)
-  - [x] Conversão Express→Cooperado marcada como hipótese a validar
+- [x] ✅ **TODOS RESOLVIDOS em 02/05** (commit `7ea6943`):
+  - juiz TJES removido, Sinergia/CoopereBR aguardando migração, sem cliente em produção
+  - Assis → OpenClaw (7 ocorrências)
+  - Limite 25% por classe GD (não aplica GD I, direitos adquiridos 2045)
+  - Caso A reescrito (sistema legado, GD I direitos adquiridos)
+  - Express→Cooperado marcado como hipótese
 
-### Estratégica — Decisão de produto
+### Estratégica
 
-- [ ] **Caminho B** (cobrança manual UI + Asaas produção real) — primeira receita real em 1-2 semanas. **Recomendação Code:** atacar primeiro.
+- [ ] **Caminho B** (cobrança manual UI + Asaas produção real) — primeira receita real em 1-2 semanas
+- [ ] Quando atacar Sprint 0 (Auditoria Regulatória)
+- [ ] Conta Asaas produção (criar/migrar)
 
-### Processual — Curadoria pendente
+### Sugestões pendentes (sem prazo)
 
-- [ ] **Curadoria de sprints** — 16 decisões restantes em `docs/sessoes/2026-05-01-curadoria-sprints-decisoes.md` (commit `6c8cb7d`). Sprint 15+21 já decididos via Decisão 17.
+- #1 Diagramas C4 + ER (reavaliar quando CoopereBR migrar)
+- #2 Token dedicado convênio + landing personalizada (depende Sprint 1 trazer comunicação)
+- #3 Cron Análise Diária Sessões (escopo a definir — hipóteses A/B/C/D/E)
+
+### Processual
+
+- [ ] **Aplicar Decisão 20 retroativamente** — revisar sprints catalogados (5a, 3a) pra checar se passariam pelo gate "verificação de conflito"
 
 ---
 
@@ -318,6 +385,25 @@ existe pra evitar essa armadilha.
 
 **Complementa:** Decisão 14 (validação prévia) + Decisão 15 (regra estendida).
 
+### Decisão 20 — Validação prévia em CADA resposta + verificação de conflito antes de propor sprint (sessão 02/05 + 03/05 fechamento)
+
+Estende Decisões 14 e 15 com granularidade fina:
+
+**Em cada pergunta:** Code/claude.ai verifica documentação + funções + sessões anteriores sobre o tema **antes de responder**. Não responde "de cabeça".
+
+**Antes de propor sprint:** verifica conflito com pilha existente, sub-sprints (Decisão 18), débitos, sugestões pendentes. Se conflito detectado: **reporta + pergunta** antes de propor.
+
+**Origem:** sessão 02/05 violou múltiplas vezes a regra dentro da mesma sessão:
+- Investigação 6 áreas omitiu specs Jest no CooperToken (Luciano cobrou)
+- Investigação Área 1 omitiu documentação dedicada + funcionalidade Planos completa (Luciano cobrou)
+- Code respondia "de cabeça" sem verificar docs/sessões antes de cada resposta individual
+
+**Memória persistente atualizada:** `regra_validacao_previa_e_retomada.md` ganhou seção "EXTENSÃO 02/05/2026 — VALIDAÇÃO PRÉVIA EM CADA RESPOSTA".
+
+**CLAUDE.md raiz atualizado:** seção "Disciplina de validação prévia (Decisões 14, 15, 20)" consolidada.
+
+**Aplica retroativamente:** sprints catalogados em sessões anteriores precisam revisão pra checar se passariam pelo gate de conflito.
+
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
 - 5 mecanismos de fidelidade são paralelos puros (sem regras de exclusão).
@@ -328,7 +414,7 @@ existe pra evitar essa armadilha.
 ### Sessão claude.ai 2026-04-28 (Leitura Total)
 - 152 telas em 5 super-rotas (87 dashboard, 28 parceiro, 16 portal, 5 proprietario, 2 agregador, 14 públicas).
 - 49 telas (33%) invisíveis nos docs principais.
-- 5 itens 🔴 do SISGD-VISAO já estavam ✅.
+- 5 itens 🔴 do SISGD-VISAO (hoje em `docs/historico/`) já estavam ✅.
 - Listas EDP existem (drift do doc).
 - Captura em `docs/sessoes/2026-04-28-leitura-total-parte1.md` + `parte2.md`.
 
@@ -359,7 +445,7 @@ existe pra evitar essa armadilha.
 | `docs/sessoes/2026-04-30-decisoes-doc-0-fatia2.md` | ✅ criado nesta sessão |
 | `docs/sessoes/2026-04-30-mapeamento-regulatorio-existente.md` | ✅ criado nesta sessão (commit `71dce8b`) |
 | `docs/sessoes/2026-04-30-diagnostico-fatura-real.md` | ✅ criado nesta sessão (commit `5ae9dfd`) |
-| `docs/SISGD-VISAO-COMPLETA.md` | Intacto — mover na Fatia 5 |
+| `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` | ✅ **movido em 03/05** — substituído por PRODUTO.md. 2 seções únicas catalogadas como D-30S + D-30T |
 | `docs/MAPA-INTEGRIDADE-SISTEMA.md` | Intacto — atualizar a cada sprint |
 
 ---

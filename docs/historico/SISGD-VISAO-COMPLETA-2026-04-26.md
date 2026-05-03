@@ -1,3 +1,24 @@
+# SISGD-VISAO-COMPLETA.md (HISTÓRICO)
+
+> **Movido pra histórico em 03/05/2026.**
+>
+> Última edição: 26/04/2026 (commit `087e3bd`)
+>
+> **Substituído por Doc-0:**
+> - `docs/PRODUTO.md` (Camadas + Apêndices) — visão humana atual
+> - `docs/REGULATORIO-ANEEL.md` — manual técnico-regulatório
+> - `docs/SISTEMA.md` — em construção (Doc-0 Fatia 3)
+> - `CLAUDE.md` (raiz) — operacional Claude Code
+>
+> **2 seções únicas valiosas catalogadas pra extração futura:**
+> - Seção 2 "Três histórias completas" → débito formal D-30S em `docs/debitos-tecnicos.md` (extrair pra `docs/JORNADAS-USUARIO.md`)
+> - Seção 5 "Painéis necessários por papel" → débito formal D-30T em `docs/debitos-tecnicos.md` (extrair pra `docs/PAINEIS-POR-PAPEL.md`)
+>
+> Investigação de propósito: sessão 02/05/2026 tarde (relatório acima).
+> Movimentação executada em 03/05/2026 (Fase 2.6 — fechamento consolidado).
+
+---
+
 # SISGD — Visão completa (linguagem humana)
 
 > **Pra quem é este documento:** Luciano (dono do projeto, juiz TJES, não-programador).

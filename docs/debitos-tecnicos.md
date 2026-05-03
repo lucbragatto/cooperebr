@@ -570,7 +570,7 @@ estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
 
 **Severidade:** P2
 
-**Onde:** `docs/MAPA-INTEGRIDADE-SISTEMA.md`, `docs/SISGD-VISAO-COMPLETA.md`, `docs/PLANO-ATE-PRODUCAO.md`, `CLAUDE.md`
+**Onde:** `docs/MAPA-INTEGRIDADE-SISTEMA.md`, `docs/PRODUTO.md` (substituiu SISGD-VISAO movido pra histórico), `docs/PLANO-ATE-PRODUCAO.md`, `CLAUDE.md`
 
 **Contexto:** Documentos foram atualizados ao longo do tempo mas há suspeita de drift. Sintomas:
 
@@ -611,7 +611,7 @@ estado/cidade (ES → EDP_ES) recupera ~91 registros em 15 min.
 
 **Contexto:** Inventário Parte 1 revelou 130+ arquivos `.md`, **42.144 linhas total**. Quatro arquivos declaram-se "fonte única da verdade" simultaneamente:
 
-- `docs/SISGD-VISAO-COMPLETA.md` (635 linhas, narrativa humana, atualizado 2026-04-26)
+- `docs/PRODUTO.md` (708 linhas, visão humana atual — substituiu SISGD-VISAO movido pra `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` em 03/05/2026)
 - `docs/COOPEREBR-ALINHAMENTO.md` (473 linhas, "documento único definitivo", atualizado 2026-04-23)
 - `docs/RAIO-X-PROJETO.md` (1.018 linhas, "snapshot do banco e sidebar", gerado 2026-04-20)
 - `docs/MAPA-INTEGRIDADE-SISTEMA.md` (986 linhas, atualizado a cada sprint)
@@ -672,7 +672,7 @@ Não serve mais como bússola de "onde está cada coisa" — funciona como log d
 
 **Achado adicional 28/04 — investigação focada Sprint 13a Dia 2:**
 
-Existe rota `/parceiro/` (singular, 25 subpastas) paralela a `/dashboard/`, com layout próprio, sidebar própria e dashboard próprio. Consome endpoint `/cooperativas/meu-dashboard`. **Não está documentada em CLAUDE.md, MAPA-INTEGRIDADE-SISTEMA.md ou SISGD-VISAO-COMPLETA.md.** É portal admin do parceiro (visão "externa"), paralelo ao `/dashboard/` (visão "interna"). Drift estrutural, não só conteúdo desatualizado — auditoria de drift precisa mapear esta rota inteira.
+Existe rota `/parceiro/` (singular, 25 subpastas) paralela a `/dashboard/`, com layout próprio, sidebar própria e dashboard próprio. Consome endpoint `/cooperativas/meu-dashboard`. **Não está documentada em CLAUDE.md, MAPA-INTEGRIDADE-SISTEMA.md ou PRODUTO.md.** É portal admin do parceiro (visão "externa"), paralelo ao `/dashboard/` (visão "interna"). Drift estrutural, não só conteúdo desatualizado — auditoria de drift precisa mapear esta rota inteira.
 
 Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominios, configuracoes, contratos, convenios, convites, enviar-tokens, faturas, financeiro, indicacoes, membros, modelos-cobranca, motor-proposta, planos, receber-tokens, relatorios, tokens-recebidos, ucs, usinas, usuarios, whatsapp.
 
@@ -946,11 +946,63 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 **Fix:** adicionar regra ao `CLAUDE.md`:
 
-> Antes de qualquer prompt construtivo, Code abre e lê (1) CLAUDE.md, (2) docs/SISGD-VISAO-COMPLETA.md (área), (3) docs/MAPA-INTEGRIDADE-SISTEMA.md (área), (4) docs/PLANO-ATE-PRODUCAO.md (sprint vigente). Retorna mapa específico antes de codar.
+> Antes de qualquer prompt construtivo, Code abre e lê (1) CLAUDE.md, (2) docs/PRODUTO.md (área), (3) docs/MAPA-INTEGRIDADE-SISTEMA.md (área), (4) docs/PLANO-ATE-PRODUCAO.md (sprint vigente). Retorna mapa específico antes de codar.
 
 **Aplicação:** próxima sessão. Aplicar junto com auditoria de drift.
 
 **Bloqueia:** qualidade dos próximos sprints.
+
+---
+
+### D-30S — Extrair "Jornadas de Usuário" do SISGD-VISAO histórico
+
+**Severidade:** P3 — preserva conhecimento valioso
+
+**Detectado em:** 02/05/2026 (investigação de propósito SISGD-VISAO — sessão 2 da tarde)
+
+**Origem:** `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` Seção 2 "Três histórias completas" (linhas ~64-130)
+
+**Tema:** extrair narrativas fim-a-fim de Ana (cooperada), Carlos (Hangar Academia) e Helena (síndica Moradas) pra `docs/JORNADAS-USUARIO.md` (novo arquivo Doc-0 ou apêndice em PRODUTO.md).
+
+**Persona/caso de uso:** onboarding de novo time + pitch pra parceiro novo + audit operacional ("história de Ana ainda funciona em 2026?").
+
+**Critério de pronto:**
+- Arquivo `docs/JORNADAS-USUARIO.md` criado (ou apêndice E em PRODUTO.md)
+- 3 histórias transcritas com formato passo-a-passo + status [OK/PARCIAL/FALTA]
+- Contagem honesta atualizada com Sprint 13a + correções factuais Grupo B (juiz TJES removido, OpenClaw, classes GD)
+- Header explicando origem (SISGD-VISAO histórico)
+
+**Estimativa:** 1-1.5h Code
+
+**Dependências:** Doc-0 Fatia 3 (SISTEMA.md) idealmente concluído antes — pra referenciar arquitetura técnica nas histórias.
+
+**Resolução:** quando atacado, marcar D-30S como resolvido + atualizar referências em PRODUTO.md.
+
+---
+
+### D-30T — Extrair "Painéis por Papel" do SISGD-VISAO histórico
+
+**Severidade:** P3 — insumo pra catalogar sprints futuros de UX
+
+**Detectado em:** 02/05/2026 (investigação de propósito SISGD-VISAO)
+
+**Origem:** `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` Seção 5 "Painéis necessários por papel"
+
+**Tema:** extrair especificação operacional de 6 painéis (Luciano, Marcos, Ana, Carlos, Helena+Patrícia, Walter) pra `docs/PAINEIS-POR-PAPEL.md` (novo arquivo) ou Apêndice E em PRODUTO.md.
+
+**Persona/caso de uso:** catalogar sprints futuros de UX/UI por persona. Cada painel não-implementado = sprint potencial.
+
+**Critério de pronto:**
+- Arquivo criado com 6 painéis especificados
+- 5.1 Painel Luciano atualizado (Sprint 13a Dia 1 entregou `/dashboard/super-admin`)
+- Cada painel marca sprints relacionados (já catalogados ou potenciais)
+- Header explicando origem
+
+**Estimativa:** 1-2h Code
+
+**Dependências:** atualizar conforme Sprint 13a Dia 2/3 + Decisões 17-19.
+
+**Resolução:** quando atacado, atualizar PRODUTO.md Apêndice A (Semáforo Executivo) com referências aos painéis.
 
 ---
 

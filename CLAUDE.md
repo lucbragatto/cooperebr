@@ -16,32 +16,39 @@ Aplica:
 **Origem:** Luciano em 2026-05-02. Necessidade de não perder contexto entre
 sessões e ter pendências sempre visíveis.
 
-## Disciplina de validação prévia E retomada
+## Disciplina de validação prévia (Decisões 14, 15, 20)
 
-**Regra inegociável** — antes de propor ou executar qualquer trabalho novo OU
-retomar trabalho anterior, sempre verificar o estado real do projeto cruzando:
-- Documentação atual (`CONTROLE-EXECUCAO.md` + `PLANO-ATE-PRODUCAO.md`)
-- Código real (schema, services, banco)
-- Git history (commits recentes + branches)
+**Regra inegociável** — em três granularidades cumulativas:
+
+**Antes de cada resposta** (Decisão 20, 02/05/2026): verificar docs + código +
+sessões anteriores sobre o tema. NÃO responder "de cabeça".
+
+**Antes de propor sprint** (Decisão 20): verificar pilha existente
+(`PLANO-ATE-PRODUCAO.md`) + sub-sprints (Decisão 18) + débitos
+(`debitos-tecnicos.md`) + sugestões (`sugestoes_pendentes.md`). Se conflito:
+**reportar + perguntar** antes de propor.
+
+**Antes de retomar sessão** (Decisão 15, 01/05/2026): ler `CONTROLE-EXECUCAO.md` +
+cruzar `git log -20` + verificar memória persistente.
+
+**Antes de trabalho novo** (Decisão 14, 30/04/2026): cruzar `docs/` + código +
+schema + git antes de propor solução.
 
 Detalhes em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/regra_validacao_previa_e_retomada.md`.
 
-Aplica-se a:
-- Code (sessões autônomas com Claude Code CLI)
-- claude.ai web (sessões de planejamento e decisão)
-- Qualquer agente futuro
+Aplica-se a Code, claude.ai e qualquer agente futuro.
 
 **Por quê:** sessões que pulam essa etapa produzem retrabalho, conflitos de numeração,
-órfãos esquecidos e divergência entre documentação, código, banco e operação real.
-A coerência sistêmica depende dessa disciplina.
+órfãos esquecidos, divergência entre documentação/código/banco/operação. A coerência
+sistêmica depende dessa disciplina.
 
-**Exemplos reais de violação documentados:**
-- **30/04 noite:** claude.ai propôs nova numeração de sprints (Sprint 0-9) sem validar
-  com a antiga (Sprint 1-26) → 5 colisões + 6 órfãos. Detectado em 01/05 manhã
-  (commit `1be9b34`).
-- (adicionar futuras violações pra aprendizado contínuo)
+**Violações documentadas:**
+- **30/04 noite:** claude.ai propôs nova numeração de sprints sem validar com a antiga
+  → 5 colisões + 6 órfãos (commit `1be9b34`).
+- **02/05 (manhã+tarde):** múltiplas violações dentro da mesma sessão (specs CooperToken
+  omitidos, Planos comerciais omitidos, respostas "de cabeça"). Decisão 20 nasceu daqui.
 
-**Origem:** sessão claude.ai 30/04/2026 noite + extensão 01/05/2026 manhã.
+**Origem:** sessões claude.ai 30/04 (Decisão 14), 01/05 (Decisão 15), 02/05 (Decisão 20).
 
 ## Antes de qualquer tarefa, SEMPRE ler primeiro (nesta ordem)
 
@@ -67,7 +74,8 @@ Parceiros (cooperativas/consórcios/associações/condomínios) pagam Luciano pe
 Membros dos parceiros pagam seus parceiros (não pagam Luciano).
 **CoopereBR é UM parceiro entre vários possíveis, NÃO o dono do sistema.**
 
-Detalhes em `docs/COOPEREBR-ALINHAMENTO.md` e `docs/SISGD-VISAO-COMPLETA.md`.
+Detalhes em `docs/COOPEREBR-ALINHAMENTO.md` e `docs/PRODUTO.md` (visão humana atual).
+Histórico: `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md`.
 
 ## Vocabulário multi-tipo (regra dura)
 
@@ -311,7 +319,7 @@ Documentos vivos permanentes (ler ao iniciar sessão):
 - docs/MAPA-INTEGRIDADE-SISTEMA.md (atualizar a cada sprint)
 - docs/PLANO-ATE-PRODUCAO.md (roteiro de sprints até produção)
 - docs/COOPEREBR-ALINHAMENTO.md
-- docs/SISGD-VISAO-COMPLETA.md (visão humana do produto)
+- docs/PRODUTO.md (visão humana do produto — substitui SISGD-VISAO movido pra histórico em 03/05/2026)
 - docs/debitos-tecnicos.md (P1/P2/P3 vivos)
 - docs/especificacao-clube-cooper-token.md
 - docs/especificacao-contabilidade-clube.md

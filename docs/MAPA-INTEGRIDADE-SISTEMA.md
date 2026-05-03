@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-04-28 (Sprint 13a P0 + Dia 1 — Painel SISGD operacional + AuditLog preparado + 4 índices cross-tenant)
+**Última atualização:** 2026-05-03 (fechamento sessão 02/05 — Sprint 13a 3/3 fechado + Decisões 17-20 + Sprints 5a/3a + SISGD-VISAO movido pra histórico)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -785,7 +785,7 @@ reais não vinculam automaticamente ao cooperado mesmo existindo UC no banco.
 
 Após fechamento do Sprint 11 (Bloco 2), discussão revelou lacuna não mapeada anteriormente: **camada de visualização/governança**. Funcionalidades existem mas não têm painel consolidado por papel pra serem operadas/auditadas.
 
-Decisão: antes de Sprint 12, gerar documento mestre `docs/SISGD-VISAO-COMPLETA.md` em linguagem humana (pro Luciano, não-programador) consolidando:
+Decisão histórica: antes de Sprint 12, gerou-se documento mestre `docs/SISGD-VISAO-COMPLETA.md` em linguagem humana (pro Luciano, não-programador). **Movido pra histórico em 03/05/2026** (`docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md`); substituído por `docs/PRODUTO.md` (Doc-0 Fatia 2). Conteúdo consolidado:
 - 12 papéis humanos do sistema
 - 3 histórias completas (cooperado solto, Hangar agregadora, Condomínio Moradas)
 - Inventário existe vs falta
@@ -798,13 +798,13 @@ Sprint 12 será definido **a partir** desse documento, não antes.
 
 ## Sessão 26/04 noite + madrugada — entrega do plano até produção
 
-Após criação do `SISGD-VISAO-COMPLETA.md` (commit `272f14f`) e snapshot de pivô estratégico (commit `275b314`), Luciano pediu organização completa em 4 etapas executadas nesta sessão:
+Após criação do `SISGD-VISAO-COMPLETA.md` (commit `272f14f`, hoje em `docs/historico/`) e snapshot de pivô estratégico (commit `275b314`), Luciano pediu organização completa em 4 etapas executadas nesta sessão:
 
 ### Documentos vivos atualizados/criados
 
 | Documento | Tipo | Status |
 |-----------|------|--------|
-| `docs/SISGD-VISAO-COMPLETA.md` | Mapa em linguagem humana | ✅ Atualizado (4 linhas inventário + Seção 4.1 Mapa fidelidade + Seção 4.2 Operação EDP) |
+| `docs/PRODUTO.md` | Mapa em linguagem humana | ✅ Substituiu SISGD-VISAO em 03/05/2026 (Doc-0 Fatia 2). Histórico: `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` |
 | `docs/PLANO-ATE-PRODUCAO.md` | Roteiro 15 sprints (Sprint 12 a 26) | 🆕 Criado |
 | `docs/MAPA-INTEGRIDADE-SISTEMA.md` | Estado técnico (este doc) | ✅ Atualizado (esta seção) |
 | `memory/project_sprint11_dia3.md` | Continuidade de contexto | ✅ Atualizado |
@@ -984,3 +984,55 @@ Pra evitar table scan quando o painel agrega métricas multi-cooperativa:
 - Conta Asaas produção (Luciano abrir) — bloqueia Sprint 12 produção
 - Decisão arquitetural `Uc.numero` — bloqueia Sprint 17 (engine COMPENSADOS)
 - Conta bancária BB/Sicoob — bloqueia Sprint 20
+
+---
+
+## Atualização 02/05/2026 + 03/05/2026 — fechamento sessão consolidada
+
+### Sprint 13a 3/3 fechado
+
+- **Dia 1** (28/04, painel SISGD `/dashboard/super-admin`) ✅ entregue
+- **Dia 2** (lista parceiros enriquecida + filtros) ✅ entregue
+- **Dia 3** (IDOR fix + cards saúde por parceiro) ✅ entregue
+
+### Sprints da pilha — descartes e novos catalogados
+
+**Descartados (Decisão 17, 01/05):**
+- ~~Sprint 15 — Cadastro Condomínio atomizado~~ — 3 caminhos cobertos (Parceiro/Membro PJ/Convênio)
+- ~~Sprint 21 — Painel Síndico~~ — função distribuída em telas existentes
+
+**Catalogados como sub-sprints formais (Decisão 18, 02/05):**
+- **Sprint 5a** — Fio B Lei 14.300/2022 (3-5 dias, sub de Sprint 5)
+- **Sprint 3a** — RN 482 → Lei 14.300 em termos + bot (1-2 dias, sub de Sprint 3)
+
+### Decisões processuais 17-20 registradas em CONTROLE-EXECUCAO.md
+
+- **Decisão 17** (01/05): Sprint 15+21 descartadas
+- **Decisão 18** (01/05): definição mínima de sprint (5 itens)
+- **Decisão 19** (02/05): ritual abertura/fechamento de sessão
+- **Decisão 20** (02/05+03/05): validação prévia em CADA resposta + verificação de conflito antes de propor sprint
+
+### Doc-0 Fatia 5 (movimentação) — parcialmente executada
+
+- ✅ `docs/SISGD-VISAO-COMPLETA.md` movido pra `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md`
+- ✅ Substituído por `docs/PRODUTO.md` (Doc-0 Fatia 2)
+- ✅ 9 referências em arquivos vivos atualizadas
+- ✅ 2 seções únicas catalogadas como débitos: D-30S (Jornadas) + D-30T (Painéis)
+- 🔴 Pendente: `docs/MAPA-INTEGRIDADE-SISTEMA.md` (este arquivo) → manter ou mover histórico (decisão Luciano)
+- 🔴 Pendente: README docs/
+
+### Referência de fórmulas atualizada
+
+- ❌ `FORMULAS-COBRANCA.md` → órfão em `docs/historico/` (CLAUDE.md ainda referenciava — corrigir como B15)
+- ✅ `docs/especificacao-modelos-cobranca.md` (130 linhas) — fonte atual
+
+### Débitos novos catalogados na sessão
+
+- **D-30R** — Motor.aceitar não popula tarifaContratual (100% dos 72 contratos)
+- **D-30S** — Extrair Jornadas Usuário do SISGD-VISAO histórico (P3, 1-1.5h)
+- **D-30T** — Extrair Painéis por Papel do SISGD-VISAO histórico (P3, 1-2h)
+
+### D-30O resolvido em 02/05
+
+- Caminho `extrair` em `faturas.service.ts` populando `mesReferencia`
+- Commit `7ea6943` — fix 5 linhas + 4 specs verde

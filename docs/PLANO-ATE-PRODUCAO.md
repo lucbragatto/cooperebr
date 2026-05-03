@@ -6,9 +6,8 @@
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
 > **Documentos vivos relacionados:**
 > - `docs/CONTROLE-EXECUCAO.md` (estado atual, decisões pendentes)
-> - `docs/PRODUTO.md` (visão humana e funcional)
+> - `docs/PRODUTO.md` (visão humana e funcional — substitui SISGD-VISAO movido pra `docs/historico/` em 03/05/2026)
 > - `docs/REGULATORIO-ANEEL.md` (manual técnico-regulatório)
-> - `docs/SISGD-VISAO-COMPLETA.md` (mapa em linguagem humana — quem usa, o que falta)
 > - `docs/MAPA-INTEGRIDADE-SISTEMA.md` (estado técnico atual, log cronológico)
 > - `docs/debitos-tecnicos.md` (lista consolidada de pendências)
 
