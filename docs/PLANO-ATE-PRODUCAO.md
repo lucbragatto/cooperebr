@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 03/05/2026 noite (Fase B.5 — validação E2E 6/6 ✓ + economia projetada nos 3 modelos).
+**Última atualização:** 03/05/2026 fechamento — **4 fases concluídas no dia** (A + B + B.5 + C.1) com 20 commits e validação E2E 48/48.
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -25,17 +25,23 @@
 - **Convênios fluxo público:** D-30P + D-30Q resolvidos (commit `fa9dc72`)
 - **D-30O:** mesReferencia OCR resolvido (02/05, commit `7ea6943`)
 - **Doc-0 Grupo B:** 7 ajustes factuais aplicados
-- **Fase A Planos** (03/05 manhã): multi-tenant + seed FIXO_MENSAL (4 commits)
-- **Fase B Planos** (03/05 tarde): D-30R RESOLVIDO + duplo desconto eliminado + DINAMICO implementado + Decisão B33 (6 commits)
-- **Fase B.5** (03/05 noite): validação E2E sintética **6/6 cenários ✓** com 8 valores cada (incluindo economia projetada). Cooperativa teste isolada `TESTE-FASE-B5`. FIXO agora grava `valorBruto` (resolve Sprint 7 #4 — economia FIXO zerada). Schema delta: `Contrato.valorCheioKwhAceite` + 4 campos economia em `Cobranca`. Playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`.
+- **Fase A Planos** ✅ (03/05 manhã): multi-tenant + seed FIXO_MENSAL (4 commits)
+- **Fase B Planos** ✅ (03/05 tarde): D-30R RESOLVIDO + duplo desconto eliminado + DINAMICO implementado + Decisão B33 (6 commits)
+- **Fase B.5** ✅ (03/05 noite): validação E2E sintética **6/6 cenários ✓** com 8 valores cada (incluindo economia projetada). Cooperativa teste isolada `TESTE-FASE-B5`. FIXO grava `valorBruto`. Schema delta. Decisões B33.5 + B34 + B35 (4 commits).
+- **Fase C.1** ✅ (03/05 noite mais tarde): UI plano + simulação tempo real. Helper `web/lib/simular-plano.ts` paridade backend (6/6 ✓). `<PlanoSimulacao>` + `<CombinacaoAtual>`. Campos condicionais por modelo. Layout 2 colunas em `/dashboard/planos/novo` (5 commits).
 
 ### O que falta — ordem prioritária
 
 **Crítico estratégico:**
-1. **Caminho B em produção real** — Asaas conta produção + primeiro cooperado pagante. Estimativa: 1-2 semanas.
-2. **Sprint 0** — Auditoria Regulatória Emergencial (casos Exfishes/FIGATTA/CRIAR).
-3. ~~**D-30R fix**~~ ✅ **RESOLVIDO em 03/05 (Fase B + B.5)**. 5 caminhos populam snapshot via helper canônico. Engine COMPENSADOS sem duplo desconto. DINAMICO implementado. Validação E2E 6/6 ✓.
-4. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS (Opção A do playbook B.5). Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO` global.
+1. **Validação manual Fase C.1 por Luciano** (próximo passo imediato). Logar como SUPER_ADMIN em `/dashboard/planos/novo`, conferir UX.
+2. **Fase C.2** — UI plano avançada (promo + vigência + CooperToken expandido + lista enriquecida + confirmação). 6 itens, 3-4h Code.
+3. **Fase C.3** — Display economia em proposta + contrato + cobrança (3 telas adaptadas). 1.5-2h Code.
+4. **Backfill 72 contratos legados** (only-if-needed) — pré-condição se canário escolher cooperado existente.
+5. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS. Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
+6. **Caminho B em produção real** — Asaas conta produção. Pode acontecer em paralelo com Fase C.
+7. **Sprint 0** — Auditoria Regulatória Emergencial. Independente do canário.
+
+**Sequência sugerida:** Validação manual C.1 → C.2 → C.3 → backfill (se necessário) → canário → desativar flag → produção real.
 
 **Pré-produção (10 sprints da pilha + 2 sub-sprints):**
 - Sprints 0-9 da pilha pré-produção (17-23 semanas Code)
