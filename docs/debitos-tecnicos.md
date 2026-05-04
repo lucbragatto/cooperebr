@@ -1098,6 +1098,36 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-30U — Fórmula órfã em motor.dimensionarPropostaParaPlano (COM_ICMS/CUSTOM)
+
+**Severidade:** P2
+
+**Origem:** sessão 04/05/2026 (investigação read-only Fase C.1.1)
+
+**Descrição:** `motor-proposta.service.ts:313-334` calcula COM_ICMS/CUSTOM com fórmula real, mas o helper canônico `calcular-tarifa-contratual.ts` (4 callers — contratos, cooperados, faturas, motor.aceitar) lança `NotImplementedException` pro mesmo input. Proposta calculada com fórmula → aceite explode.
+
+**Hoje blindado por:** `@IsIn` no DTO impede criar/atualizar plano com essas bases via API (commit desta sessão). Fluxo via UI bloqueado por `<option disabled>`.
+
+**Resolução:** (a) remover ramo COM_ICMS/CUSTOM do motor.dimensionar fazendo throw também, OU (b) consolidar 3 fontes numa só (ver D-30V).
+
+**Gatilho:** independente de produto — é bug latente que vale resolver mesmo se UI v2 nunca expor as 4.
+
+---
+
+### D-30V — Unificar 3 fontes de verdade do cálculo de tarifa contratual
+
+**Severidade:** P3
+
+**Origem:** sessão 04/05/2026 (investigação read-only Fase C.1.1)
+
+**Descrição:** Frontend (`simular-plano.ts`), motor.dimensionarPropostaParaPlano e helper canônico calculam (ou deixam de calcular) o mesmo input em 3 lugares, com comportamentos divergentes pra COM_ICMS/CUSTOM (return 0 silencioso / fórmula real / throw NotImplementedException).
+
+**Resolução:** helper canônico vira fonte única; motor e frontend chamam ele.
+
+**Gatilho:** quando produto reverter Sprint 5 ponto 3 (UI v2 expondo as 4) OU quando spec ANEEL Sprint 0/5 fechar com fórmulas validadas pra ICMS por estado/classe e componentes CUSTOM.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

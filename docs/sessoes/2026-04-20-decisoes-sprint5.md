@@ -59,6 +59,16 @@ Quatro valores possíveis:
 UI v1 esconde `COM_ICMS` e `CUSTOM` (pouco uso, complicariam a interface). Admin que precisar
 configura via API. Ficam no schema e DTO.
 
+#### ATUALIZAÇÃO 2026-05-04
+
+Decisão original obsoleta na prática desde Fase B. A Fase B introduziu helper canônico `calcular-tarifa-contratual.ts` que lança `NotImplementedException` pra COM_ICMS/CUSTOM no aceite, em 4 callers (contratos, cooperados, faturas, motor.aceitar). Como consequência, "ficam no schema/DTO mas configura via API" virou letra morta — plano salvo com COM_ICMS/CUSTOM via API explode no aceite.
+
+**Estado atual:**
+- UI v1 e API v1 aceitam apenas KWH_CHEIO e SEM_TRIBUTO (`@IsIn` no DTO)
+- COM_ICMS e CUSTOM ficam no schema/enum mas não podem ser criados/atualizados
+- Reabertura depende de: spec ANEEL fechada (Sprint 0/5) + decisão de produto sobre UI v2
+- Débitos relacionados: D-30U (fórmula órfã em motor.dimensionar), D-30V (unificação das 3 fontes)
+
 ### 4. Fórmula KWH_CHEIO nos dois contextos
 
 **Contexto 1 — fatura limpa (dimensionamento de novo cooperado sem GD):**

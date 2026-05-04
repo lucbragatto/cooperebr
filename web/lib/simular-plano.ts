@@ -1,8 +1,8 @@
 /**
  * Simulação de plano em TypeScript puro pra UI (Fase C.1, 03/05/2026).
  *
- * Replica matematicamente o helper canônico do backend:
- *   backend/src/motor-proposta/lib/calcular-tarifa-contratual.ts
+ * Replica matematicamente o helper canônico backend lib/calcular-tarifa-contratual.ts —
+ * cobre as mesmas 2 baseCalculo intencionalmente (Sprint 5 ponto 3).
  *
  * Decisão Luciano (Gate 1 da Fase C): replicar fórmula no frontend pra
  * simulação em tempo real sem ida ao backend. Paridade verificada por
@@ -71,8 +71,8 @@ export function arredondar2(n: number): number {
 /**
  * Calcula tarifa contratada conforme baseCalculo + tipoDesconto do plano.
  *
- * Paridade com backend/src/motor-proposta/motor-proposta.service.ts:308-360
- * (fonte canônica REAL de uso). Implementa as 4 combinações:
+ * Paridade com helper canônico backend (lib/calcular-tarifa-contratual.ts).
+ * Cobre 2 das 4 baseCalculo por decisão Sprint 5 v1. Implementa as 4 combinações:
  *
  *   KWH_CHEIO + APLICAR_SOBRE_BASE → valorCheio × (1 − desc)
  *   KWH_CHEIO + ABATER_DA_CHEIA    → valorCheio − (valorCheio × desc)  ⇒ mesmo valor

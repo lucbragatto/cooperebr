@@ -73,7 +73,7 @@ export class UpdatePlanoDto {
   dataFimVigencia?: string;
 
   // Base de Cálculo
-  @IsOptional() @IsIn(['KWH_CHEIO', 'SEM_TRIBUTO', 'COM_ICMS', 'CUSTOM'])
+  @IsOptional() @IsIn(['KWH_CHEIO', 'SEM_TRIBUTO'], { message: 'baseCalculo COM_ICMS/CUSTOM ainda não disponível — fórmula não implementada (Sprint 5 v1)' })
   baseCalculo?: 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';
 
   // V3: idêntico ao Create.
