@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 04/05/2026 fechamento sessão claude.ai — Sprint 5 ponto 3 atualizado, Fase C.1.1 validada manualmente, 9 commits no dia (4 Code de manhã + 5 claude.ai tarde/noite).
+**Última atualização:** 04/05/2026 noite — Sprint CooperToken Consolidado catalogado.
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -39,12 +39,13 @@
 **Crítico estratégico:**
 1. **Fase C.2** — UI plano avançada (promo + vigência + CooperToken expandido + lista enriquecida + confirmação). 6 itens, 3-4h Code.
 2. **Fase C.3** — Display economia em proposta + contrato + cobrança (3 telas adaptadas). 1.5-2h Code.
-3. **Backfill 72 contratos legados** (only-if-needed) — pré-condição se canário escolher cooperado existente.
-4. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS. Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
-5. **Caminho B em produção real** — Asaas conta produção. Pode acontecer em paralelo com Fase C.
-6. **Sprint 0** — Auditoria Regulatória Emergencial. Independente do canário.
+3. **Sprint CooperToken Consolidado** (catalogado 04/05 noite) — separar configuração de governança CooperToken do `Plano` pra `ConfigCooperToken` (escopo cooperativa). 14-18h. Pré-requisito: specs Jest do módulo (0 hoje). Pode rodar em paralelo com canário do Sprint 5.
+4. **Backfill 72 contratos legados** (only-if-needed) — pré-condição se canário escolher cooperado existente.
+5. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS. Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
+6. **Caminho B em produção real** — Asaas conta produção. Pode acontecer em paralelo com Fase C.
+7. **Sprint 0** — Auditoria Regulatória Emergencial. Independente do canário.
 
-**Sequência sugerida:** C.2 → C.3 → backfill (se necessário) → canário → desativar flag → produção real.
+**Sequência sugerida:** C.2 → C.3 → Sprint CooperToken Consolidado (paralelo ao canário) → backfill (se necessário) → canário → desativar flag → produção real.
 
 **Pré-produção (10 sprints da pilha + 2 sub-sprints):**
 - Sprints 0-9 da pilha pré-produção (17-23 semanas Code)

@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-04 fechamento sessão claude.ai** — Sprint 5 ponto 3 atualizado, 5 commits, Fase C.1.1 validada.
+> Última atualização: **2026-05-04 noite** — Sprint CooperToken Consolidado catalogado (14-18h, executar depois de C.2 + C.3).
 
 ---
 
@@ -12,23 +12,37 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-04 (claude.ai, ~3-4h)
+- **Quando:** 2026-05-04 noite (claude.ai, ~1.5h investigação + decisão)
+- **Tipo:** claude.ai (investigação read-only + decisão estruturante)
+- **Resultado:**
+  - 2 investigações read-only no Code (mapeamento amplo + 5 lacunas) sobre arquitetura CooperToken
+  - **Decisão estruturante:** promover ao status de sprint próprio formal — "Sprint CooperToken Consolidado" (14-18h)
+  - Escopo definitivo: schema delta (10 campos saem do Plano, 1 fica) + estender `ConfigCooperToken` + refator 4 services + UI nova + remover campos UI Plano + **pré-requisito P0: escrever specs Jest do módulo (~6-8h, hoje 0 specs)**
+  - Migração de dados será trivial (banco vazio nos campos relevantes — investigação confirmou)
+  - Sequência aprovada: Fase C.2 → Fase C.3 → Sprint CooperToken Consolidado
+- **Commits:** 0 código (só investigação + atualização memória)
+- **Próxima sessão:** Fase C.2 + C.3 em sessão Code fresca (~5-6h juntos), depois Sprint CooperToken Consolidado
+- **Detalhe completo:** `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md`
+
+### Sessão anterior
+
+- **Quando:** 2026-05-04 tarde (claude.ai, ~3-4h)
 - **Tipo:** claude.ai (housekeeping git + Sprint 5 ponto 3 atualizado + validação manual Fase C.1.1)
 - **Resultado:**
   - **Housekeeping git:** 3 commits sem impacto funcional (df0de86 PM2 .env, 722914f .gitignore configs locais + backups/, 71ec415 script setar-webhook-token-asaas idempotente)
   - **Sprint 5 ponto 3 atualizado:** decisão original (UI v1 esconde COM_ICMS/CUSTOM, configura via API) ficou obsoleta desde Fase B porque helper canônico lança NotImplementedException no aceite. Aplicado: `<option disabled>` na UI + `@IsIn(['KWH_CHEIO','SEM_TRIBUTO'])` no DTO + nota datada na sessão Sprint 5 + 2 débitos catalogados (D-30U fórmula órfã motor.dimensionar, D-30V unificação 3 fontes). 2 commits (ca0c0af UI, e097b0a backend+docs).
   - **Validação manual Fase C.1.1: PASSOU.** 4 bugs UX corrigidos no Code de manhã foram validados. Falso bug detectado durante validação (0.87960 vs 0.90300) descoberto como confusão de premissa: plano testado tem descontoBase=18, helper correto.
 - **Commits:** 5 (df0de86, 722914f, 71ec415, ca0c0af, e097b0a) — todos pushados pra origin/main.
-- **Próxima sessão:** Fase C.2 (UI plano avançada — promo defaults + vigência + CooperToken expandido + lista enriquecida + confirmação) ou outra prioridade conforme Luciano.
+- **Detalhe completo:** `docs/sessoes/2026-05-04-resumo-sessao-claude-ai.md`
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 2026-05-04 manhã (Code, ~1-2h)
 - **Tipo:** Code (Fase C.1.1 — correções UX pós-validação)
 - **Resultado:** 4 bugs UX corrigidos em /dashboard/planos/novo e /[id]. Helper simular-plano ampliado pra 10 cenários ts-node verde. **Validada manualmente em 04/05 tarde (sessão claude.ai).**
 - **Commits:** 4 (5062933, 6c452fe, cb1ec43, f68c5c6).
 
-### Sessão anterior anterior (mantida pra contexto curto)
+### Sessão 03/05 (mantida pra contexto curto)
 
 - **Quando:** 2026-05-03 (maratona ~10-12h, 4 fases sequenciais)
 - **Tipo:** Code (Fase A + B + B.5 + C.1)
@@ -210,6 +224,7 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 | 7 | DRE + Conciliação + Fechamento | 🔴 não iniciado | P2 | 2-3 semanas |
 | 8 | Política + Engine de Otimização | 🔴 não iniciado | P1 | 2-3 semanas |
 | 9 | Motor de Diagnóstico Pré-Venda | 🔴 não iniciado | P1 estratégico | 3-4 semanas |
+| CT | CooperToken Consolidado | 🔴 não iniciado, **catalogado 04/05 noite** | P1 | 14-18h Code (Etapa 1 specs ~6-8h, Etapa 2 refator ~8-10h) |
 
 **Total estimado**: 17-23 semanas de Code dedicado.
 
@@ -294,7 +309,7 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 - ~~C1 COMPENSADOS~~ ✅ **EXECUTADO via Fase B** (D-30R + duplo desconto + helper canônico)
 - ~~C2 DINAMICO~~ ✅ **EXECUTADO via Fase B** (NotImplementedException → implementação real)
 - ~~C7 D-30R sub-sprint~~ ✅ **ABSORVIDO em Fase B**
-- C3 CooperToken Configurável (3 campos schema + cron desvalorização + cron expiração + UI admin + specs) — **pendente**
+- ~~C3 CooperToken Configurável~~ → **PROMOVIDO a Sprint CooperToken Consolidado em 04/05 noite** — escopo expandido (consolidação arquitetural completa, não só campos extras). Ver `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md`.
 - C4 Convênios link-específico + landing personalizada — **pendente**
 - C5 Relatório Mensal Membro/Usuário (consumo modular) — **pendente**
 - C6 Planos SaaS Modulares — ativação `@RequireModulo` retroativa — **pendente**
@@ -531,6 +546,7 @@ Estende Decisões 14 e 15 com granularidade fina:
 
 ## DECISÕES PENDENTES (aguardando Luciano)
 
+- **Quando começar Sprint CooperToken Consolidado** — pode rodar em paralelo com canário (independente do subsistema FIXO/COMPENSADOS/DINAMICO).
 - Quando começar **Sprint 0** (Auditoria Regulatória Emergencial) — pode rodar antes de Doc-0 fechar (paralelo).
 - Quando começar **Sprint 1** (FaturaSaas Completo) — pode rodar em paralelo.
 - **Modo Sugestão sempre vs Modo Automático com guard-rails** (Engine de Otimização) — decisão de produto.
