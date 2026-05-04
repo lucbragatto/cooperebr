@@ -222,7 +222,7 @@ for (const c of CENARIOS) {
   const epsilon = 0.001; // 1/10 de centavo de tolerância
   const diff = (k: keyof typeof c.esperado) => {
     const exp = c.esperado[k];
-    const obt = (r as any)[k];
+    const obt = r[k] as number;
     if (Math.abs(obt - exp) > epsilon) {
       divs.push(`  ${k}: esperado ${exp}, obtido ${obt}`);
     }
