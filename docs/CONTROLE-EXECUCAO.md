@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-03 fechamento consolidado** — sessão maratona com **4 fases concluídas** (A + B + B.5 + C.1) + **20 commits** + validação E2E **48/48** ✓.
+> Última atualização: **2026-05-04 Fase C.1.1 fechada** — 4 itens de UX corrigidos pós-validação manual de Luciano em 04/05.
 
 ---
 
@@ -11,6 +11,19 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 2026-05-04 (curta, ~1-2h)
+- **Tipo:** Code (Fase C.1.1 — correções UX pós-validação)
+- **Resultado:**
+  - **Bug 1 corrigido:** trocar tipoDesconto na UI agora altera simulação. Helper `web/lib/simular-plano.ts` recebe e respeita tipoDesconto. Paridade matemática com motor-proposta.service.ts:308-360 (4 combinações reais). Spec ts-node ampliado de 6 → 10 cenários, todos verdes.
+  - **Bug 2 corrigido:** aviso V4 redundância reescrito em texto educativo ("para KWH_CHEIO os dois modos resultam no mesmo valor; a escolha só importa quando SEM_TRIBUTO").
+  - **Bug 3 corrigido:** simulação adicionada na tela `/dashboard/planos/[id]` (visualização e edição). Tipo Plano em `web/types/index.ts` ganha campo tipoDesconto. Modo edição também ganhou radio APLICAR_SOBRE_BASE × ABATER_DA_CHEIA + helper visual `<CombinacaoAtual>` (estavam só no /novo).
+  - **Bug 4 corrigido:** dropdown Modelo de Cobrança em /novo e /[id] desbloqueia COMPENSADOS/DINAMICO quando perfil = SUPER_ADMIN. Aviso laranja inline alerta que backend ainda bloqueia aceitar/processar fatura.
+- **Achado importante (gate 2):** helper canônico backend (`calcular-tarifa-contratual.ts`, criado na Fase B) está **PARCIAL** — só implementa 2 das 4 combinações baseCalculo × tipoDesconto. A fonte real de uso é `motor-proposta.service.ts:308-360`, que cobre as 4. Frontend foi pareado com o motor (não com o helper canônico). Recomendado catalogar como débito P3 a unificação dos dois caminhos.
+- **Commits:** 4 (5062933, 6c452fe, cb1ec43, f68c5c6).
+- **Próxima sessão:** Luciano valida manualmente as 4 correções; se OK, segue pra Fase C.2 (UI plano avançada).
+
+### Sessão anterior
 
 - **Quando:** 2026-05-03 (maratona ~10-12h, 4 fases sequenciais)
 - **Tipo:** Code (Fase A + B + B.5 + C.1)
