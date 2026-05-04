@@ -4,6 +4,7 @@
       name: 'cooperebr-whatsapp',
       script: 'index.mjs',
       cwd: 'C:/Users/Luciano/cooperebr/whatsapp-service',
+      node_args: '--env-file=.env',
       watch: false,
       autorestart: true,
       max_restarts: 20,
