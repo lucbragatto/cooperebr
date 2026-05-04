@@ -13,13 +13,15 @@
  *
  * Sem dependência de Jest. Sem rede. Sem banco.
  */
-import { simularPlano, SimularPlanoInput, ModeloCobranca, BaseCalculo } from '../lib/simular-plano';
+import { simularPlano, SimularPlanoInput, ModeloCobranca, BaseCalculo, TipoDesconto } from '../lib/simular-plano';
 
 const CENARIOS: Array<{
   numero: number;
   descricao: string;
   modeloCobranca: ModeloCobranca;
   baseCalculo: BaseCalculo;
+  tipoDesconto?: TipoDesconto;
+  descontoBase?: number;
   esperado: {
     tarifaContratada: number;
     valorBruto: number;
@@ -47,9 +49,10 @@ const CENARIOS: Array<{
   },
   {
     numero: 2,
-    descricao: 'FIXO_MENSAL + SEM_TRIBUTO + 15%',
+    descricao: 'FIXO_MENSAL + SEM_TRIBUTO + 15% (ABATER_DA_CHEIA — padrão Fase B.5)',
     modeloCobranca: 'FIXO_MENSAL',
     baseCalculo: 'SEM_TRIBUTO',
+    tipoDesconto: 'ABATER_DA_CHEIA',
     esperado: {
       tarifaContratada: 0.903,
       valorBruto: 510.0,
@@ -77,9 +80,10 @@ const CENARIOS: Array<{
   },
   {
     numero: 4,
-    descricao: 'CREDITOS_COMPENSADOS + SEM_TRIBUTO + 15%',
+    descricao: 'CREDITOS_COMPENSADOS + SEM_TRIBUTO + 15% (ABATER_DA_CHEIA — padrão Fase B.5)',
     modeloCobranca: 'CREDITOS_COMPENSADOS',
     baseCalculo: 'SEM_TRIBUTO',
+    tipoDesconto: 'ABATER_DA_CHEIA',
     esperado: {
       tarifaContratada: 0.903,
       valorBruto: 510.0,
@@ -107,9 +111,10 @@ const CENARIOS: Array<{
   },
   {
     numero: 6,
-    descricao: 'CREDITOS_DINAMICO + SEM_TRIBUTO + 15%',
+    descricao: 'CREDITOS_DINAMICO + SEM_TRIBUTO + 15% (ABATER_DA_CHEIA — padrão Fase B.5)',
     modeloCobranca: 'CREDITOS_DINAMICO',
     baseCalculo: 'SEM_TRIBUTO',
+    tipoDesconto: 'ABATER_DA_CHEIA',
     esperado: {
       tarifaContratada: 0.903,
       valorBruto: 510.0,
@@ -118,6 +123,78 @@ const CENARIOS: Array<{
       valorEconomiaAno: 702.0,
       valorEconomia5anos: 3510.0,
       valorEconomia15anos: 10530.0,
+    },
+  },
+  // Fase C.1.1 — 4 cenários cobrindo combinações baseCalculo × tipoDesconto.
+  // Paridade matemática com motor-proposta.service.ts:308-360 (fonte canônica
+  // real de uso). Inputs idênticos ao cenário do bug reportado por Luciano:
+  // descontoBase=20, valorCheio=1.02, semImpostos=0.78, kwh=500.
+  {
+    numero: 7,
+    descricao: 'KWH_CHEIO + APLICAR_SOBRE_BASE + 20% (helper Tipo I)',
+    modeloCobranca: 'FIXO_MENSAL',
+    baseCalculo: 'KWH_CHEIO',
+    tipoDesconto: 'APLICAR_SOBRE_BASE',
+    descontoBase: 20,
+    esperado: {
+      tarifaContratada: 0.816,
+      valorBruto: 510.0,
+      valorLiquido: 408.0,
+      valorEconomiaMes: 102.0,
+      valorEconomiaAno: 1224.0,
+      valorEconomia5anos: 6120.0,
+      valorEconomia15anos: 18360.0,
+    },
+  },
+  {
+    numero: 8,
+    descricao: 'KWH_CHEIO + ABATER_DA_CHEIA + 20% (mesmo valor — redundância V4)',
+    modeloCobranca: 'FIXO_MENSAL',
+    baseCalculo: 'KWH_CHEIO',
+    tipoDesconto: 'ABATER_DA_CHEIA',
+    descontoBase: 20,
+    esperado: {
+      tarifaContratada: 0.816,
+      valorBruto: 510.0,
+      valorLiquido: 408.0,
+      valorEconomiaMes: 102.0,
+      valorEconomiaAno: 1224.0,
+      valorEconomia5anos: 6120.0,
+      valorEconomia15anos: 18360.0,
+    },
+  },
+  {
+    numero: 9,
+    descricao: 'SEM_TRIBUTO + APLICAR_SOBRE_BASE + 20% (rara — abaixo de TUSD+TE)',
+    modeloCobranca: 'FIXO_MENSAL',
+    baseCalculo: 'SEM_TRIBUTO',
+    tipoDesconto: 'APLICAR_SOBRE_BASE',
+    descontoBase: 20,
+    esperado: {
+      tarifaContratada: 0.624,
+      valorBruto: 510.0,
+      valorLiquido: 312.0,
+      valorEconomiaMes: 198.0,
+      valorEconomiaAno: 2376.0,
+      valorEconomia5anos: 11880.0,
+      valorEconomia15anos: 35640.0,
+    },
+  },
+  {
+    numero: 10,
+    descricao: 'SEM_TRIBUTO + ABATER_DA_CHEIA + 20% (padrão mercado GD)',
+    modeloCobranca: 'FIXO_MENSAL',
+    baseCalculo: 'SEM_TRIBUTO',
+    tipoDesconto: 'ABATER_DA_CHEIA',
+    descontoBase: 20,
+    esperado: {
+      tarifaContratada: 0.864,
+      valorBruto: 510.0,
+      valorLiquido: 432.0,
+      valorEconomiaMes: 78.0,
+      valorEconomiaAno: 936.0,
+      valorEconomia5anos: 4680.0,
+      valorEconomia15anos: 14040.0,
     },
   },
 ];
@@ -134,7 +211,13 @@ let falhas = 0;
 console.log('=== Spec paridade web/lib/simular-plano vs backend (Fase C.1) ===\n');
 
 for (const c of CENARIOS) {
-  const r = simularPlano({ ...INPUT_BASE, modeloCobranca: c.modeloCobranca, baseCalculo: c.baseCalculo });
+  const r = simularPlano({
+    ...INPUT_BASE,
+    modeloCobranca: c.modeloCobranca,
+    baseCalculo: c.baseCalculo,
+    ...(c.tipoDesconto !== undefined && { tipoDesconto: c.tipoDesconto }),
+    ...(c.descontoBase !== undefined && { descontoBase: c.descontoBase }),
+  });
   const divs: string[] = [];
   const epsilon = 0.001; // 1/10 de centavo de tolerância
   const diff = (k: keyof typeof c.esperado) => {
@@ -162,9 +245,9 @@ for (const c of CENARIOS) {
 
 console.log('');
 if (falhas === 0) {
-  console.log('✓ TODOS OS 6 CENÁRIOS PARIDADE OK');
+  console.log(`✓ TODOS OS ${CENARIOS.length} CENÁRIOS PARIDADE OK`);
   process.exit(0);
 } else {
-  console.log(`✗ ${falhas}/6 cenário(s) com divergência`);
+  console.log(`✗ ${falhas}/${CENARIOS.length} cenário(s) com divergência`);
   process.exit(1);
 }

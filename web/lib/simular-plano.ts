@@ -69,30 +69,46 @@ export function arredondar2(n: number): number {
 }
 
 /**
- * Calcula tarifa contratada conforme baseCalculo do plano.
- * Mesma fórmula de backend/src/motor-proposta/lib/calcular-tarifa-contratual.ts.
+ * Calcula tarifa contratada conforme baseCalculo + tipoDesconto do plano.
+ *
+ * Paridade com backend/src/motor-proposta/motor-proposta.service.ts:308-360
+ * (fonte canônica REAL de uso). Implementa as 4 combinações:
+ *
+ *   KWH_CHEIO + APLICAR_SOBRE_BASE → valorCheio × (1 − desc)
+ *   KWH_CHEIO + ABATER_DA_CHEIA    → valorCheio − (valorCheio × desc)  ⇒ mesmo valor
+ *   SEM_TRIBUTO + APLICAR_SOBRE_BASE → tarifaSemImpostos × (1 − desc)  ⇒ paga abaixo de TUSD+TE
+ *   SEM_TRIBUTO + ABATER_DA_CHEIA  → valorCheio − (tarifaSemImpostos × desc)  ⇒ padrão mercado GD
  */
 export function calcularTarifaContratada(
   valorCheioKwh: number,
   tarifaSemImpostos: number,
   baseCalculo: BaseCalculo,
   descontoPercentual: number,
+  tipoDesconto: TipoDesconto = 'APLICAR_SOBRE_BASE',
 ): number {
   if (!Number.isFinite(valorCheioKwh) || valorCheioKwh <= 0) return 0;
   if (!Number.isFinite(descontoPercentual) || descontoPercentual < 0 || descontoPercentual > 100) return 0;
 
   const desc = descontoPercentual / 100;
 
+  // tarifaBase: R$/kWh da base escolhida pelo admin (depende de baseCalculo).
+  let tarifaBase: number;
   if (baseCalculo === 'KWH_CHEIO') {
-    return arredondar5(valorCheioKwh * (1 - desc));
-  }
-  if (baseCalculo === 'SEM_TRIBUTO') {
+    tarifaBase = valorCheioKwh;
+  } else if (baseCalculo === 'SEM_TRIBUTO') {
     if (!Number.isFinite(tarifaSemImpostos) || tarifaSemImpostos <= 0) return 0;
-    const descontoEmReais = tarifaSemImpostos * desc;
-    return arredondar5(valorCheioKwh - descontoEmReais);
+    tarifaBase = tarifaSemImpostos;
+  } else {
+    // COM_ICMS / CUSTOM: ainda não implementados (paridade com backend).
+    return 0;
   }
-  // COM_ICMS / CUSTOM: ainda não implementados (paridade com backend).
-  return 0;
+
+  // Tipo I (APLICAR_SOBRE_BASE) × Tipo II (ABATER_DA_CHEIA) — Seções 4.2/4.3 das REGRAS-PLANOS.
+  if (tipoDesconto === 'ABATER_DA_CHEIA') {
+    const abatimentoPorKwh = tarifaBase * desc;
+    return arredondar5(valorCheioKwh - abatimentoPorKwh);
+  }
+  return arredondar5(tarifaBase * (1 - desc));
 }
 
 function calcularFase(
@@ -104,6 +120,7 @@ function calcularFase(
     input.tarifaSemImpostos,
     input.baseCalculo,
     descontoPct,
+    input.tipoDesconto,
   );
   const ehFixo = input.modeloCobranca === 'FIXO_MENSAL';
   const valorContratado = ehFixo
@@ -144,12 +161,12 @@ function gerarAvisos(input: SimularPlanoInput): string[] {
   }
   if (input.tipoDesconto === 'ABATER_DA_CHEIA' && input.baseCalculo === 'KWH_CHEIO') {
     avisos.push(
-      'Combinação redundante: ABATER_DA_CHEIA + KWH_CHEIO é matematicamente igual a APLICAR_SOBRE_BASE + KWH_CHEIO. Prefira a forma direta.',
+      'Para baseCalculo=KWH_CHEIO os dois modos de aplicação resultam no mesmo valor. A escolha entre "Sobre o total" e "Sobre a parte da energia" só muda o resultado quando baseCalculo=SEM_TRIBUTO. Pode manter ou trocar — não afeta o cooperado.',
     );
   }
   if (input.tipoDesconto === 'APLICAR_SOBRE_BASE' && input.baseCalculo === 'SEM_TRIBUTO') {
     avisos.push(
-      'APLICAR_SOBRE_BASE + SEM_TRIBUTO produz economia efetiva acima de 40%. Faz sentido só em acordos específicos — confira se é intencional.',
+      'Combinação rara: cooperado pagaria abaixo da TUSD+TE (sem ICMS/PIS/COFINS embutidos), gerando economia efetiva acima de 40%. Faz sentido só em acordos específicos — confira se é intencional.',
     );
   }
   if (input.baseCalculo === 'COM_ICMS' || input.baseCalculo === 'CUSTOM') {
