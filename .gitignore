@@ -143,3 +143,11 @@ backend/.env
 tests/reports/
 test-results/
 playwright-report/
+
+# Configurações locais do Claude Code
+.claude/settings.local.json
+.claude/skills/
+web/.claude/
+
+# Backups locais (NUNCA commitar — podem conter dados reais de cooperados)
+backups/
