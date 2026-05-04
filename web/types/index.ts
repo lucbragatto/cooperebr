@@ -337,6 +337,7 @@ export interface Plano {
   dataInicioVigencia: string | null;
   dataFimVigencia: string | null;
   baseCalculo: string;
+  tipoDesconto: 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA';
   componentesCustom: string[];
   referenciaValor: string;
   fatorIncremento: number | null;

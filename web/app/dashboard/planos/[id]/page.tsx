@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
+import PlanoSimulacao from '@/components/PlanoSimulacao';
+import CombinacaoAtual from '@/components/CombinacaoAtual';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -104,6 +106,7 @@ export default function PlanoDetailPage() {
     descricao: '',
     modeloCobranca: 'FIXO_MENSAL' as ModeloCobranca,
     descontoBase: 0,
+    kwhContratoMensal: 500,
     temPromocao: false,
     descontoPromocional: 0,
     mesesPromocao: 0,
@@ -112,6 +115,7 @@ export default function PlanoDetailPage() {
     dataInicioVigencia: '',
     dataFimVigencia: '',
     baseCalculo: 'KWH_CHEIO' as PlanoBaseCalculo,
+    tipoDesconto: 'APLICAR_SOBRE_BASE' as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA',
     componentesCustom: [] as ComponenteCustom[],
     referenciaValor: 'MEDIA_3M' as ReferenciaValor,
     fatorIncremento: '' as string | number,
@@ -153,7 +157,9 @@ export default function PlanoDetailPage() {
       dataFimVigencia: p.dataFimVigencia
         ? p.dataFimVigencia.substring(0, 10)
         : '',
+      kwhContratoMensal: 500,
       baseCalculo: (p.baseCalculo ?? 'KWH_CHEIO') as PlanoBaseCalculo,
+      tipoDesconto: (p.tipoDesconto ?? 'APLICAR_SOBRE_BASE'),
       componentesCustom: (p.componentesCustom ?? []) as ComponenteCustom[],
       referenciaValor: (p.referenciaValor ?? 'MEDIA_3M') as ReferenciaValor,
       fatorIncremento: p.fatorIncremento != null ? Number(p.fatorIncremento) : '',
@@ -212,6 +218,7 @@ export default function PlanoDetailPage() {
         payload.dataFimVigencia = null;
       }
       payload.baseCalculo = form.baseCalculo;
+      payload.tipoDesconto = form.tipoDesconto;
       payload.componentesCustom = form.baseCalculo === 'CUSTOM' ? form.componentesCustom : [];
       payload.referenciaValor = form.referenciaValor;
       payload.fatorIncremento = form.fatorIncremento !== '' ? parseFloat(String(form.fatorIncremento)) : null;
@@ -289,7 +296,11 @@ export default function PlanoDetailPage() {
         </p>
       )}
 
-      {plano && !modoEdicao && (
+      {plano && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+
+      {!modoEdicao && (
         <>
         <Card>
           <CardHeader>
@@ -352,6 +363,14 @@ export default function PlanoDetailPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-6">
             <Campo label="Base de Cálculo" value={baseCalculoLabel[plano.baseCalculo] ?? plano.baseCalculo} />
+            <Campo
+              label="Como o desconto é aplicado"
+              value={
+                (plano.tipoDesconto ?? 'APLICAR_SOBRE_BASE') === 'ABATER_DA_CHEIA'
+                  ? 'Sobre a parte da energia (padrão mercado GD)'
+                  : 'Sobre o total da base (admin honesto)'
+              }
+            />
             <Campo label="Referência de Valor" value={referenciaValorLabel[plano.referenciaValor] ?? plano.referenciaValor} />
             {plano.baseCalculo === 'CUSTOM' && (
               <Campo label="Componentes" value={plano.componentesCustom?.join(', ') || '—'} />
@@ -386,7 +405,7 @@ export default function PlanoDetailPage() {
         </>
       )}
 
-      {plano && modoEdicao && (
+      {modoEdicao && (
         <>
         <Card>
           <CardHeader>
@@ -438,9 +457,23 @@ export default function PlanoDetailPage() {
                 onChange={(e) => setForm({ ...form, modeloCobranca: e.target.value as ModeloCobranca })}
               >
                 <option value="FIXO_MENSAL">Fixo Mensal</option>
-                <option value="CREDITOS_COMPENSADOS" disabled>Créditos Compensados (bloqueado — Sprint 5)</option>
-                <option value="CREDITOS_DINAMICO" disabled>Créditos Dinâmico (bloqueado — Sprint 5)</option>
+                {perfil === 'SUPER_ADMIN' ? (
+                  <>
+                    <option value="CREDITOS_COMPENSADOS">Créditos Compensados</option>
+                    <option value="CREDITOS_DINAMICO">Créditos Dinâmico</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="CREDITOS_COMPENSADOS" disabled>Créditos Compensados (bloqueado — Sprint 5)</option>
+                    <option value="CREDITOS_DINAMICO" disabled>Créditos Dinâmico (bloqueado — Sprint 5)</option>
+                  </>
+                )}
               </select>
+              {perfil === 'SUPER_ADMIN' && form.modeloCobranca !== 'FIXO_MENSAL' && (
+                <p className="text-xs text-orange-600 mt-1">
+                  ⚠ Backend ainda bloqueia <strong>aceitar proposta</strong> e <strong>processar fatura</strong> com este modelo enquanto BLOQUEIO_MODELOS_NAO_FIXO=true.
+                </p>
+              )}
             </div>
 
             <div>
@@ -572,6 +605,46 @@ export default function PlanoDetailPage() {
                 <option value="MEDIA_12M">Média 12 meses</option>
               </select>
             </div>
+
+            {/* Como o desconto é aplicado — define APLICAR_SOBRE_BASE × ABATER_DA_CHEIA */}
+            <div className="col-span-2">
+              <label className={labelClass}>Como o desconto é aplicado?</label>
+              <div className="flex flex-col gap-2 mt-1">
+                <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-700">
+                  <input
+                    type="radio"
+                    name="tipoDesconto"
+                    value="APLICAR_SOBRE_BASE"
+                    checked={form.tipoDesconto === 'APLICAR_SOBRE_BASE'}
+                    onChange={(e) => setForm({ ...form, tipoDesconto: e.target.value as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA' })}
+                    className="mt-0.5"
+                  />
+                  <span><strong>Sobre o total da conta.</strong> Se anunciar 20% de desconto, cooperado economiza 20% reais.</span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-700">
+                  <input
+                    type="radio"
+                    name="tipoDesconto"
+                    value="ABATER_DA_CHEIA"
+                    checked={form.tipoDesconto === 'ABATER_DA_CHEIA'}
+                    onChange={(e) => setForm({ ...form, tipoDesconto: e.target.value as 'APLICAR_SOBRE_BASE' | 'ABATER_DA_CHEIA' })}
+                    className="mt-0.5"
+                  />
+                  <span><strong>Sobre a parte da energia.</strong> Padrão do mercado GD brasileiro.</span>
+                </label>
+              </div>
+            </div>
+
+            <CombinacaoAtual
+              modeloCobranca={form.modeloCobranca}
+              baseCalculo={form.baseCalculo}
+              tipoDesconto={form.tipoDesconto}
+              descontoBase={form.descontoBase}
+              referenciaValor={form.referenciaValor}
+              temPromocao={form.temPromocao}
+              descontoPromocional={form.descontoPromocional}
+              mesesPromocao={form.mesesPromocao}
+            />
 
             {form.baseCalculo === 'CUSTOM' && (
               <div className="col-span-2">
@@ -716,6 +789,22 @@ export default function PlanoDetailPage() {
           </CardContent>
         </Card>
         </>
+      )}
+
+          </div>
+          <div className="lg:col-span-1">
+            <PlanoSimulacao
+              modeloCobranca={modoEdicao ? form.modeloCobranca : plano.modeloCobranca}
+              baseCalculo={modoEdicao ? form.baseCalculo : (plano.baseCalculo as 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM')}
+              tipoDesconto={modoEdicao ? form.tipoDesconto : (plano.tipoDesconto ?? 'APLICAR_SOBRE_BASE')}
+              descontoBase={modoEdicao ? form.descontoBase : Number(plano.descontoBase)}
+              referenciaValor={modoEdicao ? form.referenciaValor : (plano.referenciaValor as 'ULTIMA_FATURA' | 'MEDIA_3M' | 'MEDIA_6M' | 'MEDIA_12M')}
+              temPromocao={modoEdicao ? form.temPromocao : plano.temPromocao}
+              descontoPromocional={modoEdicao ? form.descontoPromocional : (plano.descontoPromocional != null ? Number(plano.descontoPromocional) : 0)}
+              mesesPromocao={modoEdicao ? form.mesesPromocao : (plano.mesesPromocao ?? 0)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
