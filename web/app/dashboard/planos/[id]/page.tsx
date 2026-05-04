@@ -41,8 +41,8 @@ const modeloLabel: Record<string, string> = {
 const baseCalculoLabel: Record<string, string> = {
   KWH_CHEIO: 'kWh Cheio (todos componentes)',
   SEM_TRIBUTO: 'Sem Tributos (TUSD + TE)',
-  COM_ICMS: 'Com ICMS (TUSD + TE + ICMS)',
-  CUSTOM: 'Personalizado',
+  COM_ICMS: 'Com ICMS (TUSD + TE + ICMS) — indisponível UI v1',
+  CUSTOM: 'Personalizado — indisponível UI v1',
 };
 
 const referenciaValorLabel: Record<string, string> = {
@@ -587,8 +587,8 @@ export default function PlanoDetailPage() {
               >
                 <option value="KWH_CHEIO">kWh Cheio (todos componentes)</option>
                 <option value="SEM_TRIBUTO">Sem Tributos (TUSD + TE)</option>
-                <option value="COM_ICMS">Com ICMS (TUSD + TE + ICMS)</option>
-                <option value="CUSTOM">Personalizado</option>
+                <option value="COM_ICMS" disabled>Com ICMS (TUSD + TE + ICMS) — via API (Sprint 5 v1)</option>
+                <option value="CUSTOM" disabled>Personalizado — via API (Sprint 5 v1)</option>
               </select>
             </div>
 

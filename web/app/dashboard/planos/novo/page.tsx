@@ -392,7 +392,7 @@ export default function NovoPlanoPage() {
           <div>
             <label className={labelClass}>
               Base de Cálculo
-              <HelpIcon text="Sobre qual valor o desconto é aplicado. kWh Cheio: valor total da fatura (admin honesto). Sem Tributos: só TUSD+TE — prática padrão do mercado GD brasileiro. Com ICMS / Personalizado: opções avançadas." />
+              <HelpIcon text="Sobre qual valor o desconto é aplicado. kWh Cheio: valor total da fatura (admin honesto). Sem Tributos: só TUSD+TE — prática padrão do mercado GD brasileiro. Com ICMS / Personalizado: indisponíveis na UI v1 (decisão Sprint 5)." />
             </label>
             <select
               className={inputClass}
@@ -401,8 +401,8 @@ export default function NovoPlanoPage() {
             >
               <option value="KWH_CHEIO">kWh Cheio (todos componentes)</option>
               <option value="SEM_TRIBUTO">Sem Tributos (TUSD + TE)</option>
-              <option value="COM_ICMS">Com ICMS (TUSD + TE + ICMS)</option>
-              <option value="CUSTOM">Personalizado</option>
+              <option value="COM_ICMS" disabled>Com ICMS (TUSD + TE + ICMS) — via API (Sprint 5 v1)</option>
+              <option value="CUSTOM" disabled>Personalizado — via API (Sprint 5 v1)</option>
             </select>
           </div>
 

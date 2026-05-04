@@ -171,7 +171,7 @@ function gerarAvisos(input: SimularPlanoInput): string[] {
   }
   if (input.baseCalculo === 'COM_ICMS' || input.baseCalculo === 'CUSTOM') {
     avisos.push(
-      `baseCalculo "${input.baseCalculo}" ainda não tem fórmula implementada — simulação retorna zero. Use KWH_CHEIO ou SEM_TRIBUTO.`,
+      `Plano configurado com baseCalculo "${input.baseCalculo}" — modo não disponível na UI v1 nem na API v1 (decisão Sprint 5 v1, fórmula não implementada). Pra editar, troque pra KWH_CHEIO ou SEM_TRIBUTO. Reabertura depende de spec ANEEL.`,
     );
   }
   if (
