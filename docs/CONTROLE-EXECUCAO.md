@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-04 Fase C.1.1 fechada** — 4 itens de UX corrigidos pós-validação manual de Luciano em 04/05.
+> Última atualização: **2026-05-04 fechamento sessão claude.ai** — Sprint 5 ponto 3 atualizado, 5 commits, Fase C.1.1 validada.
 
 ---
 
@@ -12,18 +12,23 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-04 (curta, ~1-2h)
-- **Tipo:** Code (Fase C.1.1 — correções UX pós-validação)
+- **Quando:** 2026-05-04 (claude.ai, ~3-4h)
+- **Tipo:** claude.ai (housekeeping git + Sprint 5 ponto 3 atualizado + validação manual Fase C.1.1)
 - **Resultado:**
-  - **Bug 1 corrigido:** trocar tipoDesconto na UI agora altera simulação. Helper `web/lib/simular-plano.ts` recebe e respeita tipoDesconto. Paridade matemática com motor-proposta.service.ts:308-360 (4 combinações reais). Spec ts-node ampliado de 6 → 10 cenários, todos verdes.
-  - **Bug 2 corrigido:** aviso V4 redundância reescrito em texto educativo ("para KWH_CHEIO os dois modos resultam no mesmo valor; a escolha só importa quando SEM_TRIBUTO").
-  - **Bug 3 corrigido:** simulação adicionada na tela `/dashboard/planos/[id]` (visualização e edição). Tipo Plano em `web/types/index.ts` ganha campo tipoDesconto. Modo edição também ganhou radio APLICAR_SOBRE_BASE × ABATER_DA_CHEIA + helper visual `<CombinacaoAtual>` (estavam só no /novo).
-  - **Bug 4 corrigido:** dropdown Modelo de Cobrança em /novo e /[id] desbloqueia COMPENSADOS/DINAMICO quando perfil = SUPER_ADMIN. Aviso laranja inline alerta que backend ainda bloqueia aceitar/processar fatura.
-- **Achado importante (gate 2):** helper canônico backend (`calcular-tarifa-contratual.ts`, criado na Fase B) está **PARCIAL** — só implementa 2 das 4 combinações baseCalculo × tipoDesconto. A fonte real de uso é `motor-proposta.service.ts:308-360`, que cobre as 4. Frontend foi pareado com o motor (não com o helper canônico). Recomendado catalogar como débito P3 a unificação dos dois caminhos.
-- **Commits:** 4 (5062933, 6c452fe, cb1ec43, f68c5c6).
-- **Próxima sessão:** Luciano valida manualmente as 4 correções; se OK, segue pra Fase C.2 (UI plano avançada).
+  - **Housekeeping git:** 3 commits sem impacto funcional (df0de86 PM2 .env, 722914f .gitignore configs locais + backups/, 71ec415 script setar-webhook-token-asaas idempotente)
+  - **Sprint 5 ponto 3 atualizado:** decisão original (UI v1 esconde COM_ICMS/CUSTOM, configura via API) ficou obsoleta desde Fase B porque helper canônico lança NotImplementedException no aceite. Aplicado: `<option disabled>` na UI + `@IsIn(['KWH_CHEIO','SEM_TRIBUTO'])` no DTO + nota datada na sessão Sprint 5 + 2 débitos catalogados (D-30U fórmula órfã motor.dimensionar, D-30V unificação 3 fontes). 2 commits (ca0c0af UI, e097b0a backend+docs).
+  - **Validação manual Fase C.1.1: PASSOU.** 4 bugs UX corrigidos no Code de manhã foram validados. Falso bug detectado durante validação (0.87960 vs 0.90300) descoberto como confusão de premissa: plano testado tem descontoBase=18, helper correto.
+- **Commits:** 5 (df0de86, 722914f, 71ec415, ca0c0af, e097b0a) — todos pushados pra origin/main.
+- **Próxima sessão:** Fase C.2 (UI plano avançada — promo defaults + vigência + CooperToken expandido + lista enriquecida + confirmação) ou outra prioridade conforme Luciano.
 
 ### Sessão anterior
+
+- **Quando:** 2026-05-04 manhã (Code, ~1-2h)
+- **Tipo:** Code (Fase C.1.1 — correções UX pós-validação)
+- **Resultado:** 4 bugs UX corrigidos em /dashboard/planos/novo e /[id]. Helper simular-plano ampliado pra 10 cenários ts-node verde. **Validada manualmente em 04/05 tarde (sessão claude.ai).**
+- **Commits:** 4 (5062933, 6c452fe, cb1ec43, f68c5c6).
+
+### Sessão anterior anterior (mantida pra contexto curto)
 
 - **Quando:** 2026-05-03 (maratona ~10-12h, 4 fases sequenciais)
 - **Tipo:** Code (Fase A + B + B.5 + C.1)
@@ -33,11 +38,7 @@
   - **Fase B.5** (noite): validação E2E sintética **6/6 ✓** com 8 valores cada (incluindo 4 valores de economia projetada). Cooperativa teste isolada (CNPJ 11.111.111/0001-11). Schema delta `Contrato.valorCheioKwhAceite` + 4 campos `Cobranca`. FIXO grava `valorBruto` (resolve Sprint 7 #4). Decisões B33.5 + B34 + B35 cristalizadas. **4 commits.**
   - **Fase C.1** (noite mais tarde): UI plano + simulação tempo real. Helper `web/lib/simular-plano.ts` com paridade matemática backend (6/6 ts-node ✓). Componentes `<PlanoSimulacao>` + `<CombinacaoAtual>`. Campos condicionais por modelo. Layout 2 colunas em `/dashboard/planos/novo`. **5 commits.**
   - **Total:** 19 commits + 1 commit de investigação inicial = **20 commits**. Validação matemática **48/48** (6 cenários × 8 valores ✓).
-- **Próxima sessão:** Fase C.2 (UI plano avançada) ou validação manual da Fase C.1 — decisão Luciano após retomada.
-
-### Sessão anterior (mantida pra contexto curto)
-
-> 4 fases dentro do dia 03/05 condensadas no resumo único acima. Detalhe completo em `docs/sessoes/2026-05-03-resumo-sessao-completa.md`.
+- **Detalhe completo:** `docs/sessoes/2026-05-03-resumo-sessao-completa.md`.
 
 ### Sessão 02/05 (mantida pra contexto longo)
 
@@ -122,10 +123,11 @@
 
 - **Decisão 19** (02/05 manhã): ritual abertura/fechamento de sessão
 - **Decisão 20** (03/05 fechamento): validação prévia em CADA resposta + verificação de conflito antes de propor sprint
+- **Sprint 5 ponto 3 atualizado** (04/05 noite — sessão claude.ai): UI v1 e API v1 só aceitam KWH_CHEIO/SEM_TRIBUTO. Decisão original "configura via API" virou letra morta desde Fase B (helper canônico throw NotImplementedException). Aplicado via `<option disabled>` + `@IsIn` no DTO + nota datada na sessão Sprint 5.
 - **Reclassificações:** D-30M P1→P2, D-30N escopo expandido, D-30R catalogado novo
 - **Resolvido:** D-30O (commit `7ea6943`)
 - **Catalogados como sprints formais (Decisão 18):** Sprint 5a (Fio B), Sprint 3a (RN 482→Lei 14.300)
-- **Catalogados como débitos:** D-30R (Motor.aceitar), D-30S (extrair Jornadas), D-30T (extrair Painéis)
+- **Catalogados como débitos:** D-30R (Motor.aceitar), D-30S (extrair Jornadas), D-30T (extrair Painéis), **D-30U (P2 — fórmula órfã motor.dimensionar, 04/05)**, **D-30V (P3 — unificação 3 fontes de verdade, 04/05)**
 - **Catalogada como sugestão:** #3 Cron Análise Diária Sessões
 - **Movido pra histórico:** SISGD-VISAO-COMPLETA.md (substituído por PRODUTO.md)
 
@@ -246,8 +248,8 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 
 ### P0 — Crítico
 
-- [ ] **Validação manual da Fase C.1 por Luciano** — logar como SUPER_ADMIN em `/dashboard/planos/novo`, conferir UX (painel sticky, campos condicionais por modelo, avisos V4, simulação tempo real). Pré-requisito antes de Fase C.2.
-- [ ] **Fase C.2 — UI plano avançada** (recomendado próximo): promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, CooperToken expandido (6 campos), lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **6 itens (4-10), ~3-4h Code.**
+- [x] ✅ **Validação manual da Fase C.1 + C.1.1 por Luciano** — VALIDADA em 04/05 tarde (sessão claude.ai). 4 bugs UX corrigidos pelo Code de manhã passaram. Falso bug 0.87960 diagnosticado como premissa errada do operador (plano com descontoBase=18, não 15).
+- [ ] **Fase C.2 — UI plano avançada** (próximo passo recomendado): promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, CooperToken expandido (6 campos), lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **6 itens (4-10), ~3-4h Code.**
 - [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`.
 - [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Validação E2E sintética 48/48 ✓ na Fase B.5.** Pré-requisitos pra desativar: Fase C.2 + C.3 + canário em 1 cooperado real (Opção A do playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`).
 
