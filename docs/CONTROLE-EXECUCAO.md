@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-04 noite** — Sprint CooperToken Consolidado catalogado (14-18h, executar depois de C.2 + C.3).
+> Última atualização: **2026-05-05 manhã** — investigação jornada ponta-a-ponta (14 etapas, 4 gaps detectados, 4 decisões pendentes D-J-1 a D-J-4).
 
 ---
 
@@ -12,6 +12,20 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-05 manhã (~2h investigação read-only)
+- **Tipo:** Code + claude.ai (sem código)
+- **Resultado:**
+  - 3 investigações read-only: validação opções claude.ai + escopo literal C.2 + **mapeamento jornada ponta-a-ponta em 14 etapas**
+  - **4 gaps detectados na jornada:** etapa 5 (aprovação admin do plano 🔴), etapa 9 (lista de espera sem rota dedicada 🟡), etapa 11 (**aprovação concessionária inexistente no schema** 🔴), etapa 12-A (Caminho A OCR→cobrança nunca rodou em prod 🔴)
+  - **4 decisões pendentes (D-J-1 a D-J-4)** que devem ser respondidas antes de partir pra C.2/C.3 — ver `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md` seção 4
+  - **Caveat C.2 item 4:** "CooperToken expandido" é trabalho **condenado** pelo Sprint CT Consolidado (campos do Plano vão sair). Recomendação: C.2 reduzida (5 itens, sem item 4)
+  - **Estimativa primeira receita real CoopereBR:** 12-20h Code + 1-2 semanas operacional (otimista); 30-40h + 3-4 semanas (realista com Sprint CT + Sprint 0)
+- **Commits:** 0 código nesta sessão
+- **Próxima sessão:** responder D-J-1 a D-J-4 → C.2 reduzida + C.3 (~3-5h Code) → operacional Asaas produção
+- **Detalhe completo:** `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md`
+
+### Sessão anterior
+
 - **Quando:** 2026-05-04 noite (claude.ai, ~1.5h investigação + decisão)
 - **Tipo:** claude.ai (investigação read-only + decisão estruturante)
 - **Resultado:**
@@ -21,10 +35,9 @@
   - Migração de dados será trivial (banco vazio nos campos relevantes — investigação confirmou)
   - Sequência aprovada: Fase C.2 → Fase C.3 → Sprint CooperToken Consolidado
 - **Commits:** 0 código (só investigação + atualização memória)
-- **Próxima sessão:** Fase C.2 + C.3 em sessão Code fresca (~5-6h juntos), depois Sprint CooperToken Consolidado
 - **Detalhe completo:** `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md`
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 2026-05-04 tarde (claude.ai, ~3-4h)
 - **Tipo:** claude.ai (housekeeping git + Sprint 5 ponto 3 atualizado + validação manual Fase C.1.1)
@@ -35,7 +48,7 @@
 - **Commits:** 5 (df0de86, 722914f, 71ec415, ca0c0af, e097b0a) — todos pushados pra origin/main.
 - **Detalhe completo:** `docs/sessoes/2026-05-04-resumo-sessao-claude-ai.md`
 
-### Sessão anterior anterior
+### Sessão 04/05 manhã (mantida pra contexto)
 
 - **Quando:** 2026-05-04 manhã (Code, ~1-2h)
 - **Tipo:** Code (Fase C.1.1 — correções UX pós-validação)
@@ -264,7 +277,17 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 ### P0 — Crítico
 
 - [x] ✅ **Validação manual da Fase C.1 + C.1.1 por Luciano** — VALIDADA em 04/05 tarde (sessão claude.ai). 4 bugs UX corrigidos pelo Code de manhã passaram. Falso bug 0.87960 diagnosticado como premissa errada do operador (plano com descontoBase=18, não 15).
-- [ ] **Fase C.2 — UI plano avançada** (próximo passo recomendado): promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, CooperToken expandido (6 campos), lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **6 itens (4-10), ~3-4h Code.**
+- [ ] **4 decisões pendentes D-J-1 a D-J-4** (urgentes — bloqueiam C.2/C.3) — ver `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md` seção 4:
+  - **D-J-1:** etapa 11 (aprovação concessionária) é gap real ou processo manual fora do sistema?
+  - **D-J-2:** etapa 5 (aprovação admin do plano) é intencional ou gap?
+  - **D-J-3:** item 4 da C.2 (CooperToken expandido) entra ou fica fora? (recomendação: ficar fora — trabalho condenado pelo Sprint CT Consolidado)
+  - **D-J-4:** sequência C.2+C.3 juntos vs só C.3 primeiro?
+- [ ] **Fase C.2 — UI plano avançada** (após D-J-3 respondida): 5 itens (com D-J-3=fora) ou 6 itens (com D-J-3=dentro). Itens: promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, [CooperToken expandido — condicional], lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **~3-4h Code.**
+- [ ] **Fase C.3 — Display economia em proposta + contrato + cobrança** (3 telas, ~1.5-2h Code). Backend já preenche os 4 valores; é só frontend.
+- [ ] **Gap jornada — etapa 11 (aprovação concessionária)** — sem campo `aprovadoConcessionaria` em Cooperado no schema atual. Decisão D-J-1 define se é P0 (vira sistema) ou P2/P3 (processo manual fora).
+- [ ] **Gap jornada — etapa 5 (aprovação admin do plano)** — aceite vai direto pra contrato, sem revisão admin. Decisão D-J-2 define se é intencional ou gap.
+- [ ] **Gap jornada — etapa 12-A (Caminho A OCR→cobrança)** — nunca rodou em produção. Pré-requisito Sprint 2 OCR-Integração.
+- [ ] **Gap jornada — etapa 9 (lista de espera sem rota dedicada)** — funciona via Step7+cooperados, mas sem tela própria. P3.
 - [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`.
 - [ ] 🔍 **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativo nos 7 enforcement points. **Validação E2E sintética 48/48 ✓ na Fase B.5.** Pré-requisitos pra desativar: Fase C.2 + C.3 + canário em 1 cooperado real (Opção A do playbook `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`).
 
