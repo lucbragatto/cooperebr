@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-05 manhã** — investigação jornada ponta-a-ponta (14 etapas, 4 gaps detectados, 4 decisões pendentes D-J-1 a D-J-4).
+> Última atualização: **2026-05-05 tarde** — reframe etapa 11 (parcial, não inexistente) + D-J-5 catalogada + Decisão 21 (investigação 3 frentes).
 
 ---
 
@@ -12,19 +12,33 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-05 tarde (~2h investigação read-only)
+- **Tipo:** claude.ai (sem código)
+- **Resultado:**
+  - 2 investigações read-only: escopo real Fase C.3 + reframe etapa 11 (aprovação concessionária)
+  - **Reframe etapa 11:** 80% implementada (não inexistente como manhã afirmou) — schema TEM `Cooperado.protocoloConcessionaria` + enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA`; backend TEM 9 callers + `enviarCadastroAprovado()`. Falta APENAS UI admin. **1 cooperado real CoopereBR travado nesse status no banco.**
+  - **C.3 confirmada como hipótese (b):** 1 frase repetida em 4 docs, sem decomposição. Estimativa "1.5-2h" frágil sem playbook.
+  - **D-J-1 reformulada:** de "construir aprovação concessionária 2-4h" pra "fechar UI admin de transição ~1-2h, absorvível em C.2/C.3"
+  - **D-J-5 nova catalogada:** Fase C.3 precisa playbook antes de virar Code (15-30 min de spec)
+  - **Decisão 21 catalogada:** investigação schema/código deve cobrir 3 frentes (campo literal + enum/state machine + comentários) sem `head -N` truncando
+- **Commits:** 1 (fechamento docs)
+- **Próxima sessão:** responder D-J-1 a D-J-5 → C.2 reduzida + C.3 + UI etapa 11 numa única sessão Code (~5-7h)
+- **Detalhe completo:** `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`
+
+### Sessão anterior
+
 - **Quando:** 2026-05-05 manhã (~2h investigação read-only)
 - **Tipo:** Code + claude.ai (sem código)
 - **Resultado:**
   - 3 investigações read-only: validação opções claude.ai + escopo literal C.2 + **mapeamento jornada ponta-a-ponta em 14 etapas**
-  - **4 gaps detectados na jornada:** etapa 5 (aprovação admin do plano 🔴), etapa 9 (lista de espera sem rota dedicada 🟡), etapa 11 (**aprovação concessionária inexistente no schema** 🔴), etapa 12-A (Caminho A OCR→cobrança nunca rodou em prod 🔴)
-  - **4 decisões pendentes (D-J-1 a D-J-4)** que devem ser respondidas antes de partir pra C.2/C.3 — ver `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md` seção 4
-  - **Caveat C.2 item 4:** "CooperToken expandido" é trabalho **condenado** pelo Sprint CT Consolidado (campos do Plano vão sair). Recomendação: C.2 reduzida (5 itens, sem item 4)
-  - **Estimativa primeira receita real CoopereBR:** 12-20h Code + 1-2 semanas operacional (otimista); 30-40h + 3-4 semanas (realista com Sprint CT + Sprint 0)
-- **Commits:** 0 código nesta sessão
-- **Próxima sessão:** responder D-J-1 a D-J-4 → C.2 reduzida + C.3 (~3-5h Code) → operacional Asaas produção
+  - 4 gaps detectados (etapas 5, 9, 11, 12-A) — etapa 11 corrigida em 05/05 tarde
+  - 4 decisões pendentes (D-J-1 a D-J-4) catalogadas
+  - Caveat C.2 item 4 (CooperToken expandido = condenado pelo Sprint CT Consolidado)
+  - Estimativa primeira receita: 12-20h Code + 1-2 sem operacional (otimista)
+- **Commits:** 0 código (1 commit de docs)
 - **Detalhe completo:** `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md`
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 2026-05-04 noite (claude.ai, ~1.5h investigação + decisão)
 - **Tipo:** claude.ai (investigação read-only + decisão estruturante)
@@ -37,7 +51,7 @@
 - **Commits:** 0 código (só investigação + atualização memória)
 - **Detalhe completo:** `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md`
 
-### Sessão anterior anterior
+### Sessão 04/05 tarde (mantida pra contexto)
 
 - **Quando:** 2026-05-04 tarde (claude.ai, ~3-4h)
 - **Tipo:** claude.ai (housekeeping git + Sprint 5 ponto 3 atualizado + validação manual Fase C.1.1)
@@ -277,14 +291,15 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 ### P0 — Crítico
 
 - [x] ✅ **Validação manual da Fase C.1 + C.1.1 por Luciano** — VALIDADA em 04/05 tarde (sessão claude.ai). 4 bugs UX corrigidos pelo Code de manhã passaram. Falso bug 0.87960 diagnosticado como premissa errada do operador (plano com descontoBase=18, não 15).
-- [ ] **4 decisões pendentes D-J-1 a D-J-4** (urgentes — bloqueiam C.2/C.3) — ver `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md` seção 4:
-  - **D-J-1:** etapa 11 (aprovação concessionária) é gap real ou processo manual fora do sistema?
+- [ ] **5 decisões pendentes D-J-1 a D-J-5** (atualizadas 05/05 tarde) — ver `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`:
+  - **D-J-1 (reformulada):** Fechar UI admin pra transição AGUARDANDO_CONCESSIONARIA → APROVADO? Backend e schema 80% prontos (`Cooperado.protocoloConcessionaria` + enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA` + 9 callers + `enviarCadastroAprovado()`); falta só UI. ~1-2h Code, absorvível em C.2/C.3. **1 cooperado real CoopereBR travado nesse status no banco** — não é puramente teórico.
   - **D-J-2:** etapa 5 (aprovação admin do plano) é intencional ou gap?
   - **D-J-3:** item 4 da C.2 (CooperToken expandido) entra ou fica fora? (recomendação: ficar fora — trabalho condenado pelo Sprint CT Consolidado)
   - **D-J-4:** sequência C.2+C.3 juntos vs só C.3 primeiro?
+  - **D-J-5 (nova 05/05 tarde):** Fase C.3 precisa playbook antes de virar Code? Hoje C.3 é 1 frase repetida em 4 docs sem decomposição (quais 3 telas, em que parte, formatação dos 4 valores, toggle ou sempre visível). Sem spec de 15-30 min antes, "1.5h vira 4h" no meio. (a) Escrever playbook; (b) Ir direto e ajustar.
 - [ ] **Fase C.2 — UI plano avançada** (após D-J-3 respondida): 5 itens (com D-J-3=fora) ou 6 itens (com D-J-3=dentro). Itens: promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, [CooperToken expandido — condicional], lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **~3-4h Code.**
 - [ ] **Fase C.3 — Display economia em proposta + contrato + cobrança** (3 telas, ~1.5-2h Code). Backend já preenche os 4 valores; é só frontend.
-- [ ] **Gap jornada — etapa 11 (aprovação concessionária)** — sem campo `aprovadoConcessionaria` em Cooperado no schema atual. Decisão D-J-1 define se é P0 (vira sistema) ou P2/P3 (processo manual fora).
+- [ ] **Gap jornada — etapa 11 (aprovação concessionária)** — **CORRIGIDO 05/05 tarde:** está 80% mapeada (schema + backend), falta UI admin de transição. 1 cooperado real CoopereBR travado em AGUARDANDO_CONCESSIONARIA hoje (banco confirmado). D-J-1 reformulada — não é mais "gap inexistente", é "fechar UI admin (~1-2h)".
 - [ ] **Gap jornada — etapa 5 (aprovação admin do plano)** — aceite vai direto pra contrato, sem revisão admin. Decisão D-J-2 define se é intencional ou gap.
 - [ ] **Gap jornada — etapa 12-A (Caminho A OCR→cobrança)** — nunca rodou em produção. Pré-requisito Sprint 2 OCR-Integração.
 - [ ] **Gap jornada — etapa 9 (lista de espera sem rota dedicada)** — funciona via Step7+cooperados, mas sem tela própria. P3.
@@ -550,6 +565,21 @@ Estende Decisões 14 e 15 com granularidade fina:
 **CLAUDE.md raiz atualizado:** seção "Disciplina de validação prévia (Decisões 14, 15, 20)" consolidada.
 
 **Aplica retroativamente:** sprints catalogados em sessões anteriores precisam revisão pra checar se passariam pelo gate de conflito.
+
+### Decisão 21 — Investigação de schema/código deve cobrir 3 frentes (sessão 05/05 tarde)
+
+Antes de afirmar "X não existe no código":
+- (a) Buscar campo/identificador literal
+- (b) Verificar enum / state machine alternativo (sistema pode usar status em vez de campo dedicado)
+- (c) Inspecionar comentários e docs adjacentes
+
+Output sem `head -N` truncando — se passar de 100 linhas, refinar busca, não truncar.
+
+**Origem:** sessão 05/05 manhã marcou etapa 11 (aprovação concessionária) como `🔴 inexistente` baseado em busca incompleta — `head -20` truncou matches do schema (linhas 125 e 232 ficaram fora do output) + busca por campo literal `aprovadoConcessionaria` ignorou enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA` que é o mecanismo real. Investigação corrigida em 05/05 tarde revelou implementação 80% pronta.
+
+**Complementa:** Decisão 14 (validação prévia em geral), Decisão 15 (regra estendida), Decisão 20 (validação em cada resposta).
+
+**Aplica retroativamente:** revisar afirmações "X não existe" feitas em sessões anteriores quando houver dúvida.
 
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).

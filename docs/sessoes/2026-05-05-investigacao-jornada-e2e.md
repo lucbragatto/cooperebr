@@ -52,16 +52,21 @@ C.3 entrega esse display em 3 telas (proposta + contrato + cobrança) — backen
 **Notas factuais:**
 - Schema linhas 836-844 (`aprovadoEm`/`aprovadoPor`/`modoAprovacao`) são da PROPOSTA (aprovação remota WA/email/presencial), NÃO da concessionária.
 - Schema linhas 752-753 são de `TarifaConcessionaria` (aprovação de tarifa pelo admin), NÃO do cooperado.
-- Etapa 11 conforme jornada listada por Luciano **NÃO existe no schema atual** — é gap.
+- Etapa 11 conforme jornada listada por Luciano **está mapeada parcialmente** — ver correção 2026-05-05 tarde abaixo.
+
+> **CORREÇÃO 2026-05-05 tarde:** O parágrafo acima e a tabela da etapa 11 originalmente diziam "🔴 inexistente no schema atual". Investigação posterior revelou erro factual: schema TEM `Cooperado.protocoloConcessionaria` (linha 125) + `StatusCooperado.AGUARDANDO_CONCESSIONARIA` (linha 232), backend TEM 9 callers em 5 services + `email.service.ts:116 enviarCadastroAprovado()`. Falta APENAS UI admin de transição manual. Reframe: etapa 11 é 🟡 (parcial), não 🔴 (inexistente). Causa do erro original: `head -20` truncou matches do schema. Detalhe completo em `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`.
 
 ## 4. Decisões pendentes Luciano (urgentes pra desbloquear C.2/C.3)
 
+> **NOTA 2026-05-05 tarde:** D-J-1 reformulada após investigação que corrigiu etapa 11. D-J-5 nova catalogada.
+
 | Decisão | Opções | Impacto |
 |---|---|---|
-| **D-J-1: Etapa 11 (aprov. concessionária) é gap real ou processo manual fora do sistema?** | (a) Sistema → vira P0/P1 antes de C.2 (~2-4h schema+UI); (b) Manual → segue C.2 → C.3 → CT como está | Alto — pode reordenar tudo |
+| **D-J-1 (reformulada): Fechar UI admin pra transição AGUARDANDO_CONCESSIONARIA → APROVADO?** | (a) Fazer agora (~1-2h, absorvível em C.2/C.3 — 1 cooperado real CoopereBR já travado nesse status no banco); (b) Adiar até canário | Médio — perde caráter de bloqueador, mas tem cooperado real esperando |
 | **D-J-2: Etapa 5 (aprov. admin do plano) é intencional ou gap?** | (a) Intencional (aceite direto sem revisão) → confirmar e seguir; (b) Gap → adicionar fluxo (~1-2h) | Médio |
 | **D-J-3: Item 4 da C.2 (CooperToken expandido) entra ou fica fora?** | (a) Entra → 30-60 min trabalho condenado; (b) Fica fora → C.2 vira 5 itens sem desperdício | Pequeno mas evitável |
 | **D-J-4: Sequência C.2 → C.3 vs C.3 primeiro?** | (a) C.2+C.3 juntos ~3-5h (com D-J-3=b); (b) Só C.3 ~1.5-2h se hoje pouco tempo | Pequeno |
+| **D-J-5 (nova 05/05 tarde): Fase C.3 precisa playbook antes de virar Code?** | (a) Sim — 15-30 min de spec (quais 3 telas exatamente, em que parte, formatação dos 4 valores); (b) Não — ir direto e ajustar no caminho | Pequeno mas sub-dimensionar é risco |
 
 ## 5. Estimativas até produção real (recalculadas)
 
