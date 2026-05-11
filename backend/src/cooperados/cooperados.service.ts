@@ -809,6 +809,90 @@ export class CooperadosService {
     return cooperado;
   }
 
+  /**
+   * Transição AGUARDANDO_CONCESSIONARIA → APROVADO (etapa 11 da jornada).
+   *
+   * Aplicado em 11/05/2026 (D-J-1 reformulada em 05/05 tarde). Endpoint
+   * dedicado pra fechar a UI admin de transição manual. Backend e schema
+   * já tinham 80% — esta operação:
+   *   - Valida status atual = AGUARDANDO_CONCESSIONARIA
+   *   - Valida multi-tenant (ADMIN/OPERADOR só aprova da própria cooperativa;
+   *     SUPER_ADMIN bypassa)
+   *   - Popula `protocoloConcessionaria` (snapshot da decisão)
+   *   - Transita status → APROVADO (cooperado entra na fila de espera de usina)
+   *   - Registra histórico de transição
+   *   - Dispara email `enviarCadastroAprovado` (whitelist LGPD em dev)
+   *
+   * Próxima transição (APROVADO → ATIVO) já é coberta pelo `update` genérico
+   * + cascata de contratos (linhas 734-776).
+   */
+  async aprovarConcessionaria(
+    id: string,
+    dto: { protocoloConcessionaria: string },
+    requester: { perfil?: string; cooperativaId?: string | null },
+  ) {
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        email: true,
+        status: true,
+        cooperativaId: true,
+        ambienteTeste: true,
+      },
+    });
+    if (!cooperado) {
+      throw new NotFoundException(`Cooperado ${id} não encontrado`);
+    }
+
+    // Multi-tenant: SUPER_ADMIN bypassa; demais só na própria cooperativa.
+    if (
+      requester.perfil !== 'SUPER_ADMIN' &&
+      cooperado.cooperativaId !== requester.cooperativaId
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão para aprovar cooperado de outra cooperativa',
+      );
+    }
+
+    if (cooperado.status !== 'AGUARDANDO_CONCESSIONARIA') {
+      throw new ConflictException(
+        `Cooperado precisa estar em AGUARDANDO_CONCESSIONARIA pra ser aprovado (status atual: ${cooperado.status})`,
+      );
+    }
+
+    const atualizado = await this.prisma.cooperado.update({
+      where: { id },
+      data: {
+        status: 'APROVADO',
+        protocoloConcessionaria: dto.protocoloConcessionaria.trim(),
+      },
+    });
+
+    await this.prisma.historicoStatusCooperado.create({
+      data: {
+        cooperadoId: id,
+        cooperativaId: cooperado.cooperativaId ?? undefined,
+        statusAnterior: 'AGUARDANDO_CONCESSIONARIA',
+        statusNovo: 'APROVADO',
+      },
+    });
+
+    await this.notificacoes.criar({
+      tipo: 'COOPERADO_APROVADO',
+      titulo: 'Concessionária aprovou',
+      mensagem: `${cooperado.nomeCompleto} foi aprovado pela concessionária (protocolo registrado). Pronto pra entrar na alocação de usina.`,
+      cooperadoId: id,
+      link: `/dashboard/cooperados/${id}`,
+    });
+
+    // Email — whitelist LGPD filtra em dev.
+    this.emailService.enviarCadastroAprovado(atualizado as any).catch(() => {});
+
+    return atualizado;
+  }
+
   /** P1-1: Ao churnar cooperado, marcar Indicacao como CANCELADO e recalcular indicadosAtivos do indicador */
   private async decrementarIndicadosAtivosNoChurn(cooperadoId: string) {
     // Buscar indicações onde este cooperado é o indicado (nivel 1 = direto)

@@ -9,6 +9,7 @@ import { CreateCooperadoDto } from './dto/create-cooperado.dto';
 import { UpdateCooperadoDto } from './dto/update-cooperado.dto';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
+import { AprovarConcessionariaDto } from './dto/aprovar-concessionaria.dto';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { UcsService } from '../ucs/ucs.service';
@@ -424,6 +425,16 @@ export class CooperadosController {
   @Post(':id/alocar-usina')
   alocarUsina(@Param('id') id: string, @Body() body: { usinaId: string }) {
     return this.cooperadosService.alocarUsina(id, body.usinaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Post(':id/aprovar-concessionaria')
+  aprovarConcessionaria(
+    @Param('id') id: string,
+    @Body() dto: AprovarConcessionariaDto,
+    @Req() req: any,
+  ) {
+    return this.cooperadosService.aprovarConcessionaria(id, dto, req.user);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

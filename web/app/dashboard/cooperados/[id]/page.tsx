@@ -502,6 +502,8 @@ export default function CooperadoPerfilPage() {
 
   // Dialogs
   const [dialogAtivarContrato, setDialogAtivarContrato] = useState<Contrato | null>(null);
+  const [dialogAprovarConc, setDialogAprovarConc] = useState(false);
+  const [protocoloAprovacao, setProtocoloAprovacao] = useState('');
   const [formAtivar, setFormAtivar] = useState({ protocoloConcessionaria: '', dataInicioCreditos: today(), observacoes: '' });
   const [dialogEncerrarContrato, setDialogEncerrarContrato] = useState<Contrato | null>(null);
   const [dialogDarBaixa, setDialogDarBaixa] = useState<Cobranca | null>(null);
@@ -672,6 +674,30 @@ export default function CooperadoPerfilPage() {
       showToast('sucesso', 'Dados atualizados com sucesso.');
     } catch { showToast('erro', 'Erro ao atualizar dados.'); }
     finally { setSalvando(false); }
+  }
+
+  async function aprovarConcessionaria() {
+    const protocolo = protocoloAprovacao.trim();
+    if (protocolo.length < 3) {
+      showToast('erro', 'Protocolo deve ter ao menos 3 caracteres.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      const { data } = await api.post<CooperadoCompleto>(
+        `/cooperados/${id}/aprovar-concessionaria`,
+        { protocoloConcessionaria: protocolo },
+      );
+      setCooperado(p => p ? { ...p, status: 'APROVADO', protocoloConcessionaria: data.protocoloConcessionaria, updatedAt: data.updatedAt } : p);
+      setDialogAprovarConc(false);
+      setProtocoloAprovacao('');
+      showToast('sucesso', `${tipoMembro} aprovado pela concessionária. Próximo passo: alocar usina.`);
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? `Erro ao aprovar ${tipoMembro.toLowerCase()}.`;
+      showToast('erro', Array.isArray(msg) ? msg.join(' / ') : String(msg));
+    } finally {
+      setSalvando(false);
+    }
   }
 
   async function ativarCooperado() {
@@ -1143,6 +1169,12 @@ export default function CooperadoPerfilPage() {
                     <Button onClick={ativarCooperado} disabled={salvando} className="bg-green-600 hover:bg-green-700">
                       {salvando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
                       Ativar {tipoMembro}
+                    </Button>
+                  )}
+                  {cooperado.status === 'AGUARDANDO_CONCESSIONARIA' && (
+                    <Button onClick={() => { setProtocoloAprovacao(''); setDialogAprovarConc(true); }} disabled={salvando} variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Marcar concessionária aprovada
                     </Button>
                   )}
                   {(cooperado.status === 'ATIVO' || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS') && (
@@ -2221,6 +2253,44 @@ export default function CooperadoPerfilPage() {
             <Button variant="outline" onClick={() => setDialogAtivarContrato(null)}>Cancelar</Button>
             <Button className="bg-green-600 hover:bg-green-700" onClick={ativarContrato} disabled={salvando || !formAtivar.protocoloConcessionaria || !formAtivar.dataInicioCreditos}>
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}Confirmar Ativacao
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Aprovar Concessionária (etapa 11, D-J-1) */}
+      <Dialog open={dialogAprovarConc} onOpenChange={v => { if (!v) { setDialogAprovarConc(false); setProtocoloAprovacao(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Concessionária aprovou o cadastro?</DialogTitle>
+            <DialogDescription>
+              Esta ação muda o status do {tipoMembro.toLowerCase()} para <strong>APROVADO</strong>, registra o protocolo da concessionária e dispara o email de confirmação.
+              Após isso, o próximo passo é alocar em usina.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className={lbl}>Protocolo de aprovação da concessionária *</label>
+              <input
+                type="text"
+                className={cls}
+                placeholder="Ex: PROT-EDP-2026-789012"
+                value={protocoloAprovacao}
+                onChange={e => setProtocoloAprovacao(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-1">Mínimo 3 caracteres. Snapshot da decisão fica no cadastro.</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDialogAprovarConc(false); setProtocoloAprovacao(''); }}>Cancelar</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={aprovarConcessionaria}
+              disabled={salvando || protocoloAprovacao.trim().length < 3}
+            >
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+              Confirmar aprovação
             </Button>
           </DialogFooter>
         </DialogContent>
