@@ -1146,6 +1146,44 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-30Y — ✅ RESOLVIDO em 2026-05-11 — Validação E2E manual /aprovar-proposta (4 valores Fase C.3)
+
+**Severidade original:** P2 (gap de validação ponta-a-ponta)
+
+**Origem:** Fase 5 / Commit 4 (`ecf39cd`) entregou `<EconomiaProjetada>` em 3 telas (cobrança / contrato / proposta). Cobrança Fase B.5 e contrato com `valorCheioKwhAceite` foram validados via curl, mas a tela cooperado-facing `/aprovar-proposta?token=...` (que renderiza no fluxo público) precisava validação visual manual pra fechar o ciclo C.3.
+
+**Validação 2026-05-11 (esta sessão):**
+
+- **Script ad-hoc** `backend/scripts/criar-proposta-teste-c3.ts` (artefato local, não commitado) gerou 2 propostas teste na CoopereBR Teste (TRIAL, cooperativaId `cmn7qygzg0000uoawdtfvokt5`), cenário canônico Fase B.5 #1: FIXO_MENSAL + KWH_CHEIO + 15% + 500 kWh/mês + valorCheio R$ 1,02/kWh.
+
+- **Tokens usados:**
+  - `3d79da21...` (1ª rodada, exercitada e depois aceita pelo Luciano em validação visual)
+  - `2a817667...` (2ª rodada, mantida em PENDENTE durante o screenshot final)
+
+- **Endpoint backend** `GET /motor-proposta/proposta-por-token/<token>` retornou JSON com `economia5Anos` e `economia15Anos` calculados on-the-fly (Commit 4, `motor-proposta.service.ts:1229-1239`):
+  ```
+  economiaMensal:    "76.5"   (Prisma Decimal, string)
+  economiaAnual:     "918"
+  economia5Anos:     4590     (mensal × 60, calculado no endpoint)
+  economia15Anos:    13770    (mensal × 180)
+  ```
+
+- **Componente `<EconomiaProjetada>`** renderizou corretamente no card lateral "Projeção de economia":
+  - Economia mensal:  R$ 76,50
+  - 1 ano:            R$ 918,00
+  - 5 anos:           R$ 4.590,00
+  - 15 anos:          R$ 13.770,00
+
+- **2 screenshots** confirmados visualmente pelo Luciano em janela anônima (incognito) — bloco verde renderizado abaixo do card destaque, sem regressão na UI pré-existente.
+
+**Cleanup pós-validação:** Os 2 cooperados teste (`cmp19l9o80002vagglo64nag5` + `cmp19vejv0002vaucyl5auzsj`) foram deletados via cascata (proposta → UC → cooperado). Banco volta ao estado original — nenhum lixo de teste.
+
+**Confirma matemática:** `mensal × 12 = anual` ✓, `mensal × 60 = economia5Anos` ✓, `mensal × 180 = economia15Anos` ✓. Backend retorna valores em formato Prisma Decimal (string) ou number direto — `<EconomiaProjetada>` coerce robustamente (testado em `web/scripts/test-economia-projetada.ts`, 29/29 verde).
+
+**Resolução:** D-30Y FECHADO. Tela cooperado-facing valida ponta-a-ponta. Fase C.3 cooperado-facing 100% funcional.
+
+---
+
 ### D-30X — Whitelist LGPD bypassada por `NODE_ENV=production` em PM2 dev
 
 **Severidade:** P3 (operacional, não bloqueia produção mas pode vazar email em dev)
