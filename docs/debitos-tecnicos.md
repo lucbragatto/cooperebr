@@ -1225,6 +1225,36 @@ Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
 
 ---
 
+### D-30Z — Migração `opcaoToken` → `modoRemuneracao` incompleta (85 cooperados)
+
+**Severidade:** P3 documental
+
+**Origem:** descoberto em 2026-05-11 durante validação Fase 7.1 dos 5 achados do adendo §11 da spec CooperToken.
+
+**Tema:** 85 cooperados em estado intermediário entre o campo legado `Cooperado.opcaoToken` (schema.prisma:180, `@deprecated` na linha 179, default `"A"`) e o campo atual `Cooperado.modoRemuneracao` (schema.prisma:178, default `DESCONTO`).
+
+**Números frescos do banco (11/05/2026):**
+
+- 317 cooperados com `opcaoToken='A'`
+- 232 cooperados com `modoRemuneracao='DESCONTO'`
+- **Diferença: 85 cooperados** sem migração completa entre os 2 campos
+
+**A fazer:**
+
+1. Script SQL backfill que (a) audita cada um dos 85 cooperados via dry-run, (b) define para qual `modoRemuneracao` cada um migra baseado no `opcaoToken` legado (mapeamento `'A' → DESCONTO` presumido, mas conferir caso a caso por se houver `opcaoToken='B'` ou outros valores no estado intermediário), (c) executa com aprovação supervisionada, (d) após migração 100%, remover `@deprecated` ou mover `opcaoToken` para histórico.
+
+**Severidade P3 documental:** não bloqueia desenvolvimento, mas relatórios/queries que filtram por `modoRemuneracao` (e ignoram `opcaoToken`) subestimam a base de cooperados em modo desconto em 85 registros (~26%).
+
+**Risco real:** análises tipo "FATURA_CHEIA_TOKEN é o caminho menos popular" baseadas só em `modoRemuneracao` partem de número errado. Em produção, decisões de produto podem ser tomadas com dado subestimado.
+
+**Hoje blindado por:** nada — qualquer query nova precisa cruzar os 2 campos OU rodar este backfill.
+
+**Bloqueia:** nada imediatamente. Vale acompanhar quando Sprint CooperToken Consolidado fechar (Etapa 2 pode absorver naturalmente como parte do refator).
+
+**Origem específica do achado:** Code rodou `SELECT COUNT(*) FROM cooperados WHERE opcao_token='A'` (317) e `SELECT COUNT(*) FROM cooperados WHERE modo_remuneracao='DESCONTO'` (232) durante validação do ACHADO 4 da spec — discrepância flagrada e elevada a débito pelo Luciano.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

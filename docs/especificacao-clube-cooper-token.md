@@ -1,3 +1,9 @@
+> ⚠️ ATENÇÃO — Esta spec foi escrita antes de 30/04/2026. Antes de
+> implementar qualquer item, LEIA a Seção 11 (adendos pós-04/05/2026)
+> ao final do arquivo. Divergências validadas: identidade do produto,
+> numeração de sprints, arquitetura ConfigCooperToken, estado real
+> do MVP, pré-requisitos do refator.
+
 # Especificação — Módulo Clube + CooperToken
 
 ## 1. Visão geral
@@ -257,3 +263,101 @@ Antes de implementar:
 1. Luciano decide as perguntas em aberto
 2. Code entrega plano de Sprint 8 em etapas pequenas
 3. Cada etapa = 1 commit, revisão antes de próxima
+
+---
+
+## 11. Adendos pós-04/05/2026 — não retroatualizar §1-§10
+
+> Esta spec foi escrita antes da reorganização Doc-0 (30/04) e da
+> investigação CooperToken (04/05). As seções §1-§10 são preservadas
+> como pensamento original do produto. Esta seção 11 documenta
+> divergências validadas (Decisão 20) — leia antes de implementar
+> qualquer item da spec.
+
+### 11.1. Identidade do produto
+
+O produto chama-se **SISGD** (Sistema de Geração Distribuída),
+plataforma SaaS multi-tenant. **CoopereBR é UM dos parceiros possíveis**,
+não o produto. Outros parceiros confirmados aguardando migração:
+Sinergia. Sistema atende 4 tipos de parceiro (COOPERATIVA / CONSORCIO
+/ ASSOCIACAO / CONDOMINIO) — ver `docs/PRODUTO.md` e `CLAUDE.md` raiz.
+
+§1-§10 desta spec usam "CoopereBR" como sinônimo de plataforma — ler
+como SISGD.
+
+### 11.2. Numeração de sprints
+
+A numeração de sprints citada em §3.8, §7, §8 está desatualizada desde
+a reorganização da pilha pré-produção em 30/04/2026:
+
+- Sprint 8 atual = Política de Alocação + Engine de Otimização
+  (`docs/PLANO-ATE-PRODUCAO.md:312`) — não MVP Clube
+- Sprint 9 atual = Motor de Diagnóstico Pré-Venda (`PLANO:339`) — não rede interna
+- Sprint 10+ atual = não existe na pilha
+
+Trabalho do Clube CooperToken hoje vive em **"Sprint CooperToken
+Consolidado"** (catalogado 04/05 noite em `PLANO:42`, 14-18h Code, 2 etapas).
+Ver `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md`.
+
+### 11.3. Arquitetura — estender ConfigCooperToken (não criar ConfigDesvalorizacao)
+
+§8.9 propõe criar schema novo `ConfigDesvalorizacao`. Decisão
+04/05/2026: **estender o modelo `ConfigCooperToken` existente**
+(`backend/prisma/schema.prisma:2037`), não criar modelo novo.
+
+`ConfigCooperToken` já tem na linha 2042:
+`valorTokenReais Decimal @default(0.45) @db.Decimal(10, 2)`
+
+Isso conecta com §11.5: parte do refator do hardcode 0.20 (D-29A) é
+simplesmente trocar o literal em `cooper-token.service.ts:258` por
+leitura deste campo do `ConfigCooperToken` da cooperativa.
+
+### 11.4. Estado real do MVP — o que já existe vs o que falta
+
+§8 lista 18 itens como "a fazer". Aproximadamente **60-70% já existem**
+no schema/código, com bases vazias ou pouco uso.
+
+Modelos confirmados no schema (números frescos do banco rodados em 11/05/2026):
+
+| Item §8 | Schema | Banco (registros) | Status |
+|---|---|---|---|
+| Cooperado.modoRemuneracao | linha 178 | 232 em `DESCONTO` | ✅ |
+| Cooperado.opcaoToken (deprecated) | linha 180 | 317 em `'A'` | 🟡 |
+| Plano.tokenExpiracaoMeses | linha 463 | — | ✅ |
+| ProgressaoClube | linha 1695 | 2 entries | ✅/🟡 |
+| CooperTokenLedger | linha 1935 | 9 entries | ✅ |
+| CooperTokenSaldo | linha 1960 | 5 saldos | ✅ |
+| CooperTokenSaldoParceiro | linha 2054 | 1 entry | ✅ |
+| CooperTokenCompra | linha 2069 | 0 entries | ✅ |
+| OfertaClube | linha 2087 | 0 ofertas | 🟡 |
+| ResgateClubeVantagens | linha 2112 | 0 resgates | 🟡 |
+
+**Nuance descoberta nesta validação (11/05):** 317 cooperados em
+`opcaoToken='A'` (legado, deprecated) vs 232 em `modoRemuneracao='DESCONTO'`
+(modelo atual). Diferença de **85 cooperados** em estado intermediário
+pendente de migração entre os 2 campos. Catalogado como **D-30Z**
+(P3 documental) — não bloqueia, mas afeta queries que filtram só
+pelo campo novo.
+
+Cruzar com `docs/PRODUTO.md` linhas 458-475 antes de implementar
+qualquer item da §8.
+
+### 11.5. Pré-requisitos P0 do refator (Sprint CooperToken Consolidado)
+
+Antes de mexer no código financeiro do módulo cooper-token:
+
+1. **Criar specs Jest do módulo** — hoje zero arquivos `.spec.ts` em
+   `backend/src/cooper-token/**` (confirmado 11/05: 6 arquivos no
+   diretório — controller, service, events, job, module,
+   contabilidade-clube — todos sem spec). Pré-requisito P0 catalogado
+   na sessão 04/05 noite (sem código D-29 dedicado).
+
+2. **Remover hardcode 0.20** — `cooper-token.service.ts:258` tem
+   `Math.round(quantidade * 0.20 * 100) / 100` com TODO. Catalogado
+   como **D-29A** (P2) em `docs/sessoes/2026-04-29-validacao-invs-4-8.md:264`.
+   Refator: ler de `ConfigCooperToken.valorTokenReais` (default 0.45
+   na linha 2042 do schema).
+
+3. **Ler decisão completa** em
+   `docs/sessoes/2026-05-04-noite-investigacao-coopertoken.md` antes
+   de propor refator.

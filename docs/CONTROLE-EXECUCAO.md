@@ -22,9 +22,11 @@
   - **Playbook Fase C.3 criado:** `docs/playbooks/playbook-fase-c3.md` com 6 decisões (D-P-1..D-P-6) e sequência de implementação
   - **Fase 3 — UI etapa 11:** [preencher após execução]
   - **Fase 4 — C.2 reduzida (5 itens):** [preencher após execução]
-  - **Fase 5 — C.3 (3 telas):** [preencher após execução]
-- **Commits:** [preencher hashes ao final — esperado 4 commits]
-- **Próxima sessão:** apresentar P0→P3, considerar backfill 72 contratos + canário OU Sprint CT Consolidado Etapa 1 (specs) OU sessão decisões batch B17-B32 OU Sprint 0 Auditoria Regulatória
+  - **Fase 5 — C.3 (3 telas):** entregue — `<EconomiaProjetada>` em cobrança + contrato + proposta (Commit 4 `ecf39cd`)
+  - **Fase 6 — D-30Y RESOLVIDO:** validação E2E manual `/aprovar-proposta` confirmada por Luciano via 2 screenshots (Commit 6 `fecbe2a`)
+  - **Fase 7 — Adendo §11 spec CooperToken:** aplicado (Commit 7) — 5 achados validados + 1 lateral (D-30Z) catalogado
+- **Commits:** 7+ (df0de86 dia 04/05 housekeeping → fecbe2a D-30Y → commit 7 Fase 7)
+- **Próxima sessão:** apresentar P0→P3, considerar Sprint CT Consolidado Etapa 1 (specs Jest cooper-token) OU Sprint 0 Auditoria Regulatória (passos iniciais) OU sessão decisões batch B17-B32
 
 ### Sessão anterior
 
@@ -180,6 +182,7 @@
 - **Decisão 19** (02/05 manhã): ritual abertura/fechamento de sessão
 - **Decisão 20** (03/05 fechamento): validação prévia em CADA resposta + verificação de conflito antes de propor sprint
 - **Sprint 5 ponto 3 atualizado** (04/05 noite — sessão claude.ai): UI v1 e API v1 só aceitam KWH_CHEIO/SEM_TRIBUTO. Decisão original "configura via API" virou letra morta desde Fase B (helper canônico throw NotImplementedException). Aplicado via `<option disabled>` + `@IsIn` no DTO + nota datada na sessão Sprint 5.
+- **Adendo §11 spec CooperToken** (11/05 sessão Code, Commit 7): não retroatualiza §1-§10. 5 achados validados antes (Decisão 20): identidade SISGD vs CoopereBR, numeração de sprints (8/9/10), ConfigCooperToken vs ConfigDesvalorizacao, estado real do MVP, pré-requisitos P0 do refator. **D-30Z** catalogado (P3 documental, 85 cooperados intermediários `opcaoToken→modoRemuneracao`).
 - **Reclassificações:** D-30M P1→P2, D-30N escopo expandido, D-30R catalogado novo
 - **Resolvido:** D-30O (commit `7ea6943`)
 - **Catalogados como sprints formais (Decisão 18):** Sprint 5a (Fio B), Sprint 3a (RN 482→Lei 14.300)
