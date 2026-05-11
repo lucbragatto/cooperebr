@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-11** — fecha 5 D-J + cataloga Decisão 22 + D-30W + executa Fase C.2+C.3+UI etapa 11.
+> Última atualização: **2026-05-11 maratona fechada** — 9 commits, 4 fases técnicas + 4 documentais. **D-31 (P1 crítico) catalogado** como bloqueador potencial de Sprint 5+canário.
 
 ---
 
@@ -12,21 +12,21 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-11 (Code, sessão longa — housekeeping + 3 fases de execução)
-- **Tipo:** Code (housekeeping documental + UI etapa 11 + Fase C.2 reduzida + Fase C.3)
-- **Resultado:**
-  - **Housekeeping:** 5 D-J fechadas pela sessão claude.ai prévia (11/05): D-J-1=a, D-J-2=intencional+D-30W, D-J-3=fora+sugestão #4, D-J-4=juntos com urgência, D-J-5=playbook escrito
-  - **Decisão 22 catalogada:** D-J-2 nuance — admin revisa cada aceite na fase de testes; automatizar quando Sprint 5 (flags ANEEL) + Sprint 8 (Engine Otimização) fecharem
-  - **Débito D-30W catalogado:** aprovação admin do plano automatizada após Sprint 5+8 (P2 processual)
-  - **Sugestão pendente #4 adicionada:** polir UX dos 6 campos CooperToken no Plano pós Sprint CT Consolidado
-  - **Playbook Fase C.3 criado:** `docs/playbooks/playbook-fase-c3.md` com 6 decisões (D-P-1..D-P-6) e sequência de implementação
-  - **Fase 3 — UI etapa 11:** [preencher após execução]
-  - **Fase 4 — C.2 reduzida (5 itens):** [preencher após execução]
-  - **Fase 5 — C.3 (3 telas):** entregue — `<EconomiaProjetada>` em cobrança + contrato + proposta (Commit 4 `ecf39cd`)
-  - **Fase 6 — D-30Y RESOLVIDO:** validação E2E manual `/aprovar-proposta` confirmada por Luciano via 2 screenshots (Commit 6 `fecbe2a`)
-  - **Fase 7 — Adendo §11 spec CooperToken:** aplicado (Commit 7) — 5 achados validados + 1 lateral (D-30Z) catalogado
-- **Commits:** 7+ (df0de86 dia 04/05 housekeeping → fecbe2a D-30Y → commit 7 Fase 7)
-- **Próxima sessão:** apresentar P0→P3, considerar Sprint CT Consolidado Etapa 1 (specs Jest cooper-token) OU Sprint 0 Auditoria Regulatória (passos iniciais) OU sessão decisões batch B17-B32
+- **Quando:** 2026-05-11 (Code maratona, manhã → tarde)
+- **Tipo:** Code (4 fases técnicas + 4 documentais — execução pós-sessão claude.ai prévia que validou 5 D-J)
+- **Resultado completo:**
+  - **5 D-J fechadas** (D-J-1=a / D-J-2=intencional+D-30W / D-J-3=fora+sugestão #4 / D-J-4=juntos urgência / D-J-5=playbook escrito)
+  - **UI etapa 11:** cooperado real CoopereBR **MARCIO MACIEL destravado** via endpoint dedicado POST /cooperados/:id/aprovar-concessionaria + DTO `@MinLength(3)` + service multi-tenant (SUPER_ADMIN bypass) + 6 specs + Dialog admin (Commit `8853d97`)
+  - **Fase C.2 reduzida:** 5 itens UI plano avançada — `validacoes-plano.ts` (20 specs ts-node) + Item 5 snapshot+confirmação salvar via `_count.contratos` filtrado por tenant em `findAll`/`findOne` (Commit `6d2510e`)
+  - **Fase C.3:** `<EconomiaProjetada>` reusável (29 specs ts-node) em cobrança + contrato (recálculo via `simular-plano`) + proposta (backend retorna `economia5Anos`/`15Anos` on-the-fly). Backwards-compat preservada. (Commit `ecf39cd`)
+  - **D-30Y resolvido:** validação E2E manual /aprovar-proposta com 2 propostas teste sintéticas (CoopereBR Teste) + 2 screenshots Luciano confirmou os 4 valores (Commit `fecbe2a`)
+  - **Adendo §11 spec CooperToken:** 5 achados validados via Decisão 21 (sem `head -N` truncando) + D-30Z catalogado (85 cooperados em estado intermediário `opcaoToken → modoRemuneracao`) (Commit `69902f6`)
+  - **Sprint 0 passos iniciais:** relatório auditoria concentração >25% gerado (62 contratos analisados, 0 casos detectados) — **achado meta crítico D-31 descoberto:** `Contrato.percentualUsina` zerado/irrealista no banco, EXFISHES histórico aparece a 0% (Commit `851a39e`)
+  - **Decisão 22 catalogada:** aprovação admin do plano permanece manual até Sprint 5+8 fecharem
+- **Débitos:** D-30W (P2), D-30X (P3), **D-30Y ✅ RESOLVIDO**, D-30Z (P3), **D-31 (P1 provisório CRÍTICO)** + D-30A status 11/05 atualizado
+- **Commits da sessão (9):** `5cde3e0`, `8853d97`, `f30be3c`, `6d2510e`, `ecf39cd`, `fecbe2a`, `69902f6`, `851a39e`, (commit 9 fechamento)
+- **Detalhe completo:** `docs/sessoes/2026-05-11-execucao-maratona.md`
+- **Próxima sessão Code:** prioridade — **investigar D-31** antes de Sprint 5/canário. Alternativas: Sprint CT Consolidado Etapa 1 (specs Jest, 6-8h) OU decisões batch B17-B32 (claude.ai) OU Asaas conta produção (operacional)
 
 ### Sessão anterior
 

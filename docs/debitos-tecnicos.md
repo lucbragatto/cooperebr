@@ -1243,6 +1243,35 @@ Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
 
 ---
 
+### D-31 (Carece investigação — provisório P1) — Campo `Contrato.percentualUsina` zerado/irrealista no banco
+
+**Tema:** Auditoria de concentração de 2026-05-11 (Fase 8 Sprint 0 passos iniciais) revelou que `Contrato.percentualUsina` está populado com valores irrealisticamente baixos (0,00% em quase todos os 62 contratos ATIVO + PENDENTE_ATIVACAO analisados). `Usina Linhares` na CoopereBR: **61 cooperados, soma ≈ 0%**. Matematicamente impossível dado que a usina está em operação atendendo cota real.
+
+**Impacto crítico:** auditoria de concentração ANEEL (limite 25%) não funciona com input zerado. Mesmo quando Sprint 5 entregar a flag `concentracaoMaxPorCooperadoUsina`, o cálculo vai operar sobre dados furados. **EXFISHES histórico** (caso que motivou D-30A na sessão 30/04) **aparece a 0%** no banco atual — sistema não detectaria hoje o que detectou em abril.
+
+**Hipóteses (carecem investigação):**
+
+1. **(a) Bug de cálculo** — campo deveria ser populado em algum momento (criação do contrato? alocação na usina? cron?) e não está. Verificar `motor-proposta.service.ts:aceitar()` + `usinas.service.ts:promoverDaLista*` + `cooperados.service.ts:alocarUsina`.
+2. **(b) Campo legado abandonado** — sistema migrou pra outra métrica (ex: `kwhContratoAnual / Usina.capacidadeKwh × 100`) e `percentualUsina` ficou stale. Cruzar com queries que efetivamente decidem alocação.
+3. **(c) Mistura** — alguns contratos novos populam, antigos não, e a amostra do banco dev está enviesada pra antigos zerados.
+
+**A fazer (próxima sessão Code dedicada):**
+
+1. Investigar onde `percentualUsina` é gravado (grep no backend: `percentualUsina` `=` `data:`).
+2. Verificar se há cron ou trigger que atualiza periodicamente.
+3. Decidir: corrigir cálculo OU substituir auditoria por outra fórmula (ex: `kwhContratoAnual / Usina.capacidadeKwh × 100`).
+4. Re-rodar auditoria com dados corretos.
+
+**Severidade provisória:** P1 — carece investigação pra confirmar escala.
+- Pode ser **P0** se afeta cobrança/alocação real (Caso Exfishes era cobrança real impactada).
+- Pode ser **P2** se é só campo legado sem uso operacional, e outra métrica governa decisões.
+
+**Bloqueio:** Sprint 5 (Módulo Regulatório ANEEL — flag `concentracaoMaxPorCooperadoUsina`) e canário 1 cooperado real dependem deste achado estar resolvido. Sem `percentualUsina` confiável, ativar a flag em prod gera falsos negativos massivos.
+
+**Origem:** Fase 8 da sessão Code maratona 2026-05-11 (commit `851a39e`). Achado meta descoberto durante auditoria estrutural — o relatório de hoje (`docs/relatorios/2026-05-11-auditoria-concentracao-25-pct.md`) subestima concentrações reais por input incompleto.
+
+---
+
 ### D-30Z — Migração `opcaoToken` → `modoRemuneracao` incompleta (85 cooperados)
 
 **Severidade:** P3 documental

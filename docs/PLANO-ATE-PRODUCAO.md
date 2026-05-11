@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 04/05/2026 noite — Sprint CooperToken Consolidado catalogado.
+**Última atualização:** 11/05/2026 — sessão Code maratona fechada (9 commits, 4 fases técnicas + 4 documentais).
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -33,19 +33,27 @@
 - **Validação manual Fase C.1.1** ✅ (04/05 tarde, claude.ai): 4 bugs validados manualmente por Luciano. Falso bug 0.87960 diagnosticado como confusão de premissa (plano testado tem descontoBase=18, não 15).
 - **Housekeeping git** ✅ (04/05 manhã, claude.ai): 3 commits sem impacto funcional (PM2 .env, .gitignore configs locais + backups/, script setar-webhook-token-asaas idempotente).
 - **Sprint 5 ponto 3 atualizado** ✅ (04/05 noite, claude.ai): UI v1 desabilita COM_ICMS/CUSTOM no `<select>` + `@IsIn(['KWH_CHEIO','SEM_TRIBUTO'])` em `CreatePlanoDto` e `UpdatePlanoDto` + nota datada na sessão Sprint 5 + débitos D-30U (P2) e D-30V (P3) catalogados (2 commits).
+- **Sessão Code maratona 11/05** ✅ (9 commits, 4 fases técnicas + 4 documentais):
+  - **UI etapa 11** (cooperado real CoopereBR destravado, MARCIO MACIEL — AGUARDANDO_CONCESSIONARIA → APROVADO via endpoint dedicado + DTO + service + spec + dialog, D-J-1 fechada). Commit `8853d97`.
+  - **Fase C.2 reduzida** (5 itens UI plano avançada — promo defaults+validação, simulação 2 fases, vigência+Campanha, lista enriquecida, confirmação salvar; CooperToken expandido fora). Commit `6d2510e`.
+  - **Fase C.3** (display economia projetada em 3 telas — proposta+contrato+cobrança via `<EconomiaProjetada>` reusable). Commit `ecf39cd`.
+  - **D-30Y validado E2E** (2 propostas teste sintéticas, 2 screenshots de Luciano confirmando renderização dos 4 valores). Commit `fecbe2a`.
+  - **Sprint 0 passos iniciais** (relatório auditoria concentração >25% — 62 contratos analisados, 0 casos detectados; achado meta **D-31** catalogado: `percentualUsina` zerado/irrealista no banco). Commit `851a39e`.
+  - **Adendo §11 spec CooperToken** (5 achados validados via Decisão 21 + D-30Z catalogado: migração `opcaoToken` → `modoRemuneracao` incompleta com 85 cooperados). Commit `69902f6`.
+  - **Débitos novos:** D-30W (P2 — aprovação admin automatizada pós Sprint 5+8), D-30X (P3 — whitelist LGPD bypass NODE_ENV), D-30Z (P3 — 85 cooperados intermediários), **D-31 (P1 provisório — `percentualUsina` zerado)**. D-30Y resolvido.
 
 ### O que falta — ordem prioritária
 
-**Crítico estratégico:**
-1. **Fase C.2** — UI plano avançada (promo + vigência + CooperToken expandido + lista enriquecida + confirmação). 6 itens, 3-4h Code.
-2. **Fase C.3** — Display economia em proposta + contrato + cobrança (3 telas adaptadas). 1.5-2h Code.
-3. **Sprint CooperToken Consolidado** (catalogado 04/05 noite) — separar configuração de governança CooperToken do `Plano` pra `ConfigCooperToken` (escopo cooperativa). 14-18h. Pré-requisito: specs Jest do módulo (0 hoje). Pode rodar em paralelo com canário do Sprint 5.
+**Crítico estratégico (atualizado pós-sessão 11/05):**
+1. **Investigação D-31** — `Contrato.percentualUsina` zerado/irrealista no banco (descoberto na auditoria Sprint 0). **Bloqueia Sprint 5 + canário** — sem dado confiável de concentração, flag `concentracaoMaxPorCooperadoUsina` da Sprint 5 vai operar sobre input furado. 2-4h Code dedicado.
+2. **Sprint CooperToken Consolidado Etapa 1** — specs Jest do módulo `cooper-token/` (zero hoje). Pré-requisito P0 do refator. 6-8h Code, sessão dedicada.
+3. **Asaas conta produção** (operacional, depende Luciano abrir) — primeira receita real CoopereBR em 1-2 semanas.
 4. **Backfill 72 contratos legados** (only-if-needed) — pré-condição se canário escolher cooperado existente.
-5. **Canário** — 1 cooperado real CoopereBR migra de FIXO pra COMPENSADOS. Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
-6. **Caminho B em produção real** — Asaas conta produção. Pode acontecer em paralelo com Fase C.
-7. **Sprint 0** — Auditoria Regulatória Emergencial. Independente do canário.
+5. **Canário 1 cooperado real CoopereBR** — migra de FIXO pra COMPENSADOS. Pré-condição pra desativar `BLOQUEIO_MODELOS_NAO_FIXO`. Depende D-31 resolvido.
+6. **Sprint 0 completo** — cron + dashboard `/dashboard/super-admin/auditoria-regulatoria`. Continuidade dos passos iniciais executados em 11/05.
+7. **Sprint CooperToken Consolidado Etapa 2** — refator schema + 4 services + UI nova. 8-10h Code. Pré-requisito: Etapa 1 (specs Jest).
 
-**Sequência sugerida:** C.2 → C.3 → Sprint CooperToken Consolidado (paralelo ao canário) → backfill (se necessário) → canário → desativar flag → produção real.
+**Sequência sugerida:** Investigação D-31 → (paralelo) Sprint CT Etapa 1 + Asaas produção → backfill → canário → desativar flag → produção real → Sprint CT Etapa 2 → Sprint 0 completo.
 
 **Pré-produção (10 sprints da pilha + 2 sub-sprints):**
 - Sprints 0-9 da pilha pré-produção (17-23 semanas Code)
