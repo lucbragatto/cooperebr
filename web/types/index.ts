@@ -352,6 +352,8 @@ export interface Plano {
   cooperativaId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Fase C.2 — contagem de contratos ATIVO/PENDENTE_ATIVACAO vinculados. Vem do `_count.contratos` no findAll/findOne. */
+  _count?: { contratos: number };
 }
 
 export type PlanoBaseCalculo = 'KWH_CHEIO' | 'SEM_TRIBUTO' | 'COM_ICMS' | 'CUSTOM';

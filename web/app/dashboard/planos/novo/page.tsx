@@ -10,6 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
 import PlanoSimulacao from '@/components/PlanoSimulacao';
 import CombinacaoAtual from '@/components/CombinacaoAtual';
+import { validarPromo, validarVigencia, sugerirDefaultsPromo } from '@/lib/validacoes-plano';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -298,11 +299,18 @@ export default function NovoPlanoPage() {
             </div>
           )}
 
-          {/* Toggle Promoção */}
+          {/* Toggle Promoção — Item 1 da Fase C.2 (defaults + validação visual) */}
           <div className="col-span-2 flex items-center gap-3">
             <Toggle
               checked={form.temPromocao}
-              onChange={(v) => setForm((prev) => ({ ...prev, temPromocao: v }))}
+              onChange={(v) => {
+                if (v) {
+                  const defaults = sugerirDefaultsPromo(form.descontoBase, form.descontoPromocional, form.mesesPromocao);
+                  setForm((prev) => ({ ...prev, temPromocao: true, ...defaults }));
+                } else {
+                  setForm((prev) => ({ ...prev, temPromocao: false }));
+                }
+              }}
             />
             <span className="text-sm text-gray-700">Tem período promocional?</span>
           </div>
@@ -332,6 +340,16 @@ export default function NovoPlanoPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, mesesPromocao: parseInt(e.target.value) || 0 }))}
                 />
               </div>
+              {(() => {
+                const v = validarPromo(form.temPromocao, form.descontoBase, form.descontoPromocional, form.mesesPromocao);
+                if (!v.mensagem) return null;
+                const cor = v.tipo === 'erro' ? 'bg-red-50 text-red-700 border-red-200' : v.tipo === 'aviso' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200';
+                return (
+                  <div className={`col-span-2 text-sm px-3 py-2 rounded border ${cor}`}>
+                    {v.tipo === 'erro' ? '⚠ ' : v.tipo === 'ok' ? '✓ ' : '⚠ '}{v.mensagem}
+                  </div>
+                );
+              })()}
             </>
           )}
 
@@ -344,16 +362,19 @@ export default function NovoPlanoPage() {
             <span className="text-sm text-gray-700">Plano público? (visível na captação)</span>
           </div>
 
-          {/* Tipo Campanha */}
+          {/* Tipo Campanha — Item 3 da Fase C.2 (validação Campanha + tooltip) */}
           <div>
-            <label className={labelClass}>Tipo</label>
+            <label className={labelClass}>
+              Tipo
+              <span className="ml-1 text-xs text-gray-400" title="Padrão: plano vigente continuamente, sem data fim. Campanha: plano com vigência limitada (data início + fim obrigatórias).">ⓘ</span>
+            </label>
             <select
               className={inputClass}
               value={form.tipoCampanha}
               onChange={(e) => setForm({ ...form, tipoCampanha: e.target.value as TipoCampanha })}
             >
-              <option value="PADRAO">Padrão</option>
-              <option value="CAMPANHA">Campanha</option>
+              <option value="PADRAO">Padrão (sem vigência limitada)</option>
+              <option value="CAMPANHA">Campanha (com data início + fim)</option>
             </select>
           </div>
 
@@ -377,6 +398,16 @@ export default function NovoPlanoPage() {
                   onChange={(e) => setForm({ ...form, dataFimVigencia: e.target.value })}
                 />
               </div>
+              {(() => {
+                const v = validarVigencia(form.tipoCampanha, form.dataInicioVigencia, form.dataFimVigencia);
+                if (!v.mensagem) return null;
+                const cor = v.tipo === 'erro' ? 'bg-red-50 text-red-700 border-red-200' : v.tipo === 'aviso' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200';
+                return (
+                  <div className={`col-span-2 text-sm px-3 py-2 rounded border ${cor}`}>
+                    {v.tipo === 'erro' ? '⚠ ' : v.tipo === 'ok' ? '✓ ' : '⚠ '}{v.mensagem}
+                  </div>
+                );
+              })()}
             </>
           )}
 

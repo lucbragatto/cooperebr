@@ -45,8 +45,27 @@ export class PlanosService implements OnModuleInit {
    * - Sem reqUser: vitrine pública — apenas globais ativos e públicos
    */
   findAll(reqUser?: ReqUserLike) {
+    // Fase C.2 — Item 4: contagem de contratos vivos por plano pra lista enriquecida.
+    // ADMIN/OPERADOR vê só contratos do próprio tenant (não vaza cross-tenant).
+    // SUPER_ADMIN vê total agregado entre tenants.
+    const incluirContagem: Prisma.PlanoInclude = {
+      _count: {
+        select: {
+          contratos: {
+            where: {
+              status: { in: ['ATIVO' as const, 'PENDENTE_ATIVACAO' as const] as any },
+              ...(reqUser?.perfil !== PerfilUsuario.SUPER_ADMIN && reqUser?.cooperativaId
+                ? { cooperativaId: reqUser.cooperativaId }
+                : {}),
+            },
+          },
+        },
+      },
+    };
+
     if (reqUser?.perfil === PerfilUsuario.SUPER_ADMIN) {
       return this.prisma.plano.findMany({
+        include: incluirContagem,
         orderBy: { createdAt: 'desc' },
       });
     }
@@ -58,10 +77,11 @@ export class PlanosService implements OnModuleInit {
             { cooperativaId: null },
           ],
         },
+        include: incluirContagem,
         orderBy: { createdAt: 'desc' },
       });
     }
-    // Sem reqUser ou ADMIN sem cooperativaId vinculada: vitrine pública
+    // Sem reqUser ou ADMIN sem cooperativaId vinculada: vitrine pública (sem contagem).
     return this.prisma.plano.findMany({
       where: { cooperativaId: null, publico: true, ativo: true },
       orderBy: { createdAt: 'desc' },
@@ -111,7 +131,29 @@ export class PlanosService implements OnModuleInit {
    * - Sem reqUser: permitido apenas se plano é global, ativo e público
    */
   async findOne(id: string, reqUser?: ReqUserLike) {
-    const plano = await this.prisma.plano.findUnique({ where: { id } });
+    // Fase C.2 — Item 5: inclui _count.contratos pra UI mostrar confirmação
+    // antes de salvar mudança crítica em plano JÁ em uso.
+    const incluirContagem: Prisma.PlanoInclude | undefined = reqUser
+      ? {
+          _count: {
+            select: {
+              contratos: {
+                where: {
+                  status: { in: ['ATIVO' as const, 'PENDENTE_ATIVACAO' as const] as any },
+                  ...(reqUser.perfil !== PerfilUsuario.SUPER_ADMIN && reqUser.cooperativaId
+                    ? { cooperativaId: reqUser.cooperativaId }
+                    : {}),
+                },
+              },
+            },
+          },
+        }
+      : undefined;
+
+    const plano = await this.prisma.plano.findUnique({
+      where: { id },
+      ...(incluirContagem ? { include: incluirContagem } : {}),
+    });
     if (!plano) throw new NotFoundException(`Plano ${id} não encontrado`);
 
     if (reqUser?.perfil === PerfilUsuario.SUPER_ADMIN) {

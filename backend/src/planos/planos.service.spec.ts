@@ -41,13 +41,24 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
   });
 
   describe('findAll() — listagem com filtro tenant', () => {
-    it('Test 1: SUPER_ADMIN findAll() retorna todos os planos sem filtro', async () => {
+    it('Test 1: SUPER_ADMIN findAll() retorna todos os planos sem filtro (com _count agregado)', async () => {
       planoFindMany.mockResolvedValueOnce([{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]);
       await service.findAll(userSuper);
-      expect(planoFindMany).toHaveBeenCalledWith({ orderBy: { createdAt: 'desc' } });
+      expect(planoFindMany).toHaveBeenCalledWith({
+        include: {
+          _count: {
+            select: {
+              contratos: {
+                where: { status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     });
 
-    it('Test 2: ADMIN findAll() retorna apenas próprios + globais', async () => {
+    it('Test 2: ADMIN findAll() retorna próprios + globais com _count filtrado por tenant', async () => {
       planoFindMany.mockResolvedValueOnce([]);
       await service.findAll(userAdminA);
       expect(planoFindMany).toHaveBeenCalledWith({
@@ -56,6 +67,15 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
             { cooperativaId: 'coop-A' },
             { cooperativaId: null },
           ],
+        },
+        include: {
+          _count: {
+            select: {
+              contratos: {
+                where: { status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] }, cooperativaId: 'coop-A' },
+              },
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       });

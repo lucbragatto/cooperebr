@@ -87,9 +87,10 @@ export default function PlanosPage() {
                 <TableHead>Modelo de Cobrança</TableHead>
                 <TableHead>Desconto Base</TableHead>
                 <TableHead>Promoção</TableHead>
+                <TableHead>Vigência</TableHead>
+                <TableHead>Em uso</TableHead>
                 <TableHead>Público</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Vigência</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -106,66 +107,85 @@ export default function PlanosPage() {
                 ))
               ) : planos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={ehSuperAdmin ? 9 : 8} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={ehSuperAdmin ? 10 : 9} className="text-center text-gray-400 py-8">
                     Nenhum plano cadastrado
                   </TableCell>
                 </TableRow>
               ) : (
-                planos.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.nome}</TableCell>
-                    {ehSuperAdmin && (
-                      <TableCell className="text-xs text-gray-600">
-                        {p.cooperativaId === null ? (
-                          <Badge variant="outline">Global</Badge>
+                planos.map((p) => {
+                  const emUso = p._count?.contratos ?? 0;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.nome}</TableCell>
+                      {ehSuperAdmin && (
+                        <TableCell className="text-xs text-gray-600">
+                          {p.cooperativaId === null ? (
+                            <Badge variant="outline">Global</Badge>
+                          ) : (
+                            escopoLabel(p.cooperativaId)
+                          )}
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeloClass[p.modeloCobranca]}`}
+                        >
+                          {modeloLabel[p.modeloCobranca]}
+                        </span>
+                      </TableCell>
+                      <TableCell>{Number(p.descontoBase).toFixed(1)}%</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {p.temPromocao && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border bg-green-100 text-green-700 border-green-200 w-fit">
+                              Promoção {Number(p.descontoPromocional ?? 0).toFixed(1)}%
+                            </span>
+                          )}
+                          {p.tipoCampanha === 'CAMPANHA' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border bg-orange-100 text-orange-700 border-orange-200 w-fit">
+                              CAMPANHA
+                            </span>
+                          ) : (
+                            !p.temPromocao && <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-500">
+                        {p.tipoCampanha === 'CAMPANHA'
+                          ? `${formatDate(p.dataInicioVigencia)} – ${formatDate(p.dataFimVigencia)}`
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {emUso > 0 ? (
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-200" title="Contratos ATIVO + PENDENTE_ATIVACAO vinculados a este plano">
+                            {emUso} contrato{emUso === 1 ? '' : 's'}
+                          </Badge>
                         ) : (
-                          escopoLabel(p.cooperativaId)
+                          <span className="text-gray-400 text-xs">—</span>
                         )}
                       </TableCell>
-                    )}
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeloClass[p.modeloCobranca]}`}
-                      >
-                        {modeloLabel[p.modeloCobranca]}
-                      </span>
-                    </TableCell>
-                    <TableCell>{Number(p.descontoBase).toFixed(1)}%</TableCell>
-                    <TableCell>
-                      {p.tipoCampanha === 'CAMPANHA' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border bg-orange-100 text-orange-700 border-orange-200">
-                          CAMPANHA
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">Padrão</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {p.publico ? (
-                        <Badge variant="default">Sim</Badge>
-                      ) : (
-                        <Badge variant="outline">Não</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {p.ativo ? (
-                        <Badge variant="default">Ativo</Badge>
-                      ) : (
-                        <Badge variant="secondary">Inativo</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">
-                      {p.tipoCampanha === 'CAMPANHA'
-                        ? `${formatDate(p.dataInicioVigencia)} – ${formatDate(p.dataFimVigencia)}`
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/dashboard/planos/${p.id}`}>
-                        <Button variant="ghost" size="sm">Ver</Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      <TableCell>
+                        {p.publico ? (
+                          <Badge variant="default">Sim</Badge>
+                        ) : (
+                          <Badge variant="outline">Não</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {p.ativo ? (
+                          <Badge variant="default">Ativo</Badge>
+                        ) : (
+                          <Badge variant="secondary">Inativo</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/dashboard/planos/${p.id}`}>
+                          <Button variant="ghost" size="sm">Ver</Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

@@ -7,10 +7,14 @@ import type { Plano, ModeloCobranca, TipoCampanha, PlanoBaseCalculo, ReferenciaV
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { ArrowLeft, Pencil, AlertTriangle } from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
 import PlanoSimulacao from '@/components/PlanoSimulacao';
 import CombinacaoAtual from '@/components/CombinacaoAtual';
+import { validarPromo, validarVigencia, sugerirDefaultsPromo } from '@/lib/validacoes-plano';
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -83,6 +87,10 @@ export default function PlanoDetailPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [modoEdicao, setModoEdicao] = useState(false);
+  /** Fase C.2 Item 5: snapshot dos campos críticos no início da edição, pra detectar mudanças críticas no salvar. */
+  const [snapshotCritico, setSnapshotCritico] = useState<Record<string, unknown> | null>(null);
+  const [dialogConfirmarSalvar, setDialogConfirmarSalvar] = useState(false);
+  const [camposAlterados, setCamposAlterados] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [togglingAtivo, setTogglingAtivo] = useState(false);
@@ -174,16 +182,74 @@ export default function PlanoDetailPage() {
     });
   }
 
+  /** Fase C.2 Item 5: campos cuja mudança afeta cálculo/cobrança de contratos vinculados. */
+  const CAMPOS_CRITICOS: Array<keyof typeof form> = [
+    'descontoBase', 'modeloCobranca', 'baseCalculo', 'tipoDesconto',
+    'referenciaValor', 'temPromocao', 'descontoPromocional', 'mesesPromocao',
+    'cooperTokenAtivo', 'tipoCampanha',
+  ];
+
+  function snapshotCriticoDe(p: Plano | typeof form): Record<string, unknown> {
+    const snap: Record<string, unknown> = {};
+    for (const k of CAMPOS_CRITICOS) {
+      snap[k] = (p as any)[k];
+    }
+    return snap;
+  }
+
   function iniciarEdicao() {
     if (!plano) return;
     initForm(plano);
+    setSnapshotCritico(snapshotCriticoDe(plano));
     setMensagem('');
     setModoEdicao(true);
   }
 
   function cancelar() {
     setModoEdicao(false);
+    setSnapshotCritico(null);
     setMensagem('');
+  }
+
+  function diffCamposCriticos(): string[] {
+    if (!snapshotCritico) return [];
+    const atual = snapshotCriticoDe(form);
+    const labels: Record<string, string> = {
+      descontoBase: 'Desconto Base',
+      modeloCobranca: 'Modelo de Cobrança',
+      baseCalculo: 'Base de Cálculo',
+      tipoDesconto: 'Tipo de Desconto',
+      referenciaValor: 'Referência de Valor',
+      temPromocao: 'Tem Promoção',
+      descontoPromocional: 'Desconto Promocional',
+      mesesPromocao: 'Meses de Promoção',
+      cooperTokenAtivo: 'CooperToken Ativo',
+      tipoCampanha: 'Tipo (Padrão/Campanha)',
+    };
+    const diff: string[] = [];
+    for (const k of CAMPOS_CRITICOS) {
+      if (String(atual[k] ?? '') !== String(snapshotCritico[k] ?? '')) {
+        diff.push(labels[k] ?? k);
+      }
+    }
+    return diff;
+  }
+
+  /** Fase C.2 Item 5: pre-flight check antes do PATCH. Se plano tem contratos vinculados e
+   *  algum campo crítico mudou, abre modal de confirmação. Senão segue direto. */
+  function iniciarSalvar() {
+    if (!form.nome.trim()) {
+      setMensagem('O nome é obrigatório.');
+      return;
+    }
+    const emUso = plano?._count?.contratos ?? 0;
+    const diff = diffCamposCriticos();
+    if (emUso > 0 && diff.length > 0) {
+      setCamposAlterados(diff);
+      setDialogConfirmarSalvar(true);
+      return;
+    }
+    salvar();
   }
 
   async function salvar() {
@@ -494,7 +560,14 @@ export default function PlanoDetailPage() {
             <div className="col-span-2 flex items-center gap-3">
               <Toggle
                 checked={form.temPromocao}
-                onChange={(v) => setForm((prev) => ({ ...prev, temPromocao: v }))}
+                onChange={(v) => {
+                  if (v) {
+                    const defaults = sugerirDefaultsPromo(form.descontoBase, form.descontoPromocional, form.mesesPromocao);
+                    setForm((prev) => ({ ...prev, temPromocao: true, ...defaults }));
+                  } else {
+                    setForm((prev) => ({ ...prev, temPromocao: false }));
+                  }
+                }}
               />
               <span className="text-sm text-gray-700">Tem período promocional?</span>
             </div>
@@ -524,6 +597,16 @@ export default function PlanoDetailPage() {
                     onChange={(e) => setForm({ ...form, mesesPromocao: parseInt(e.target.value) || 0 })}
                   />
                 </div>
+                {(() => {
+                  const v = validarPromo(form.temPromocao, form.descontoBase, form.descontoPromocional, form.mesesPromocao);
+                  if (!v.mensagem) return null;
+                  const cor = v.tipo === 'erro' ? 'bg-red-50 text-red-700 border-red-200' : v.tipo === 'aviso' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200';
+                  return (
+                    <div className={`col-span-2 text-sm px-3 py-2 rounded border ${cor}`}>
+                      {v.tipo === 'erro' ? '⚠ ' : v.tipo === 'ok' ? '✓ ' : '⚠ '}{v.mensagem}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -536,14 +619,17 @@ export default function PlanoDetailPage() {
             </div>
 
             <div>
-              <label className={labelClass}>Tipo</label>
+              <label className={labelClass}>
+                Tipo
+                <span className="ml-1 text-xs text-gray-400" title="Padrão: plano vigente continuamente, sem data fim. Campanha: plano com vigência limitada (data início + fim obrigatórias).">ⓘ</span>
+              </label>
               <select
                 className={inputClass}
                 value={form.tipoCampanha}
                 onChange={(e) => setForm({ ...form, tipoCampanha: e.target.value as TipoCampanha })}
               >
-                <option value="PADRAO">Padrão</option>
-                <option value="CAMPANHA">Campanha</option>
+                <option value="PADRAO">Padrão (sem vigência limitada)</option>
+                <option value="CAMPANHA">Campanha (com data início + fim)</option>
               </select>
             </div>
 
@@ -567,6 +653,16 @@ export default function PlanoDetailPage() {
                     onChange={(e) => setForm({ ...form, dataFimVigencia: e.target.value })}
                   />
                 </div>
+                {(() => {
+                  const v = validarVigencia(form.tipoCampanha, form.dataInicioVigencia, form.dataFimVigencia);
+                  if (!v.mensagem) return null;
+                  const cor = v.tipo === 'erro' ? 'bg-red-50 text-red-700 border-red-200' : v.tipo === 'aviso' ? 'bg-yellow-50 text-yellow-800 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200';
+                  return (
+                    <div className={`col-span-2 text-sm px-3 py-2 rounded border ${cor}`}>
+                      {v.tipo === 'erro' ? '⚠ ' : v.tipo === 'ok' ? '✓ ' : '⚠ '}{v.mensagem}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -779,7 +875,7 @@ export default function PlanoDetailPage() {
             )}
 
             <div className="col-span-2 flex gap-3 mt-2">
-              <Button onClick={salvar} disabled={salvando}>
+              <Button onClick={iniciarSalvar} disabled={salvando}>
                 {salvando ? 'Salvando...' : 'Salvar'}
               </Button>
               <Button variant="outline" onClick={cancelar} disabled={salvando}>
@@ -806,6 +902,39 @@ export default function PlanoDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Fase C.2 Item 5: confirmação antes de salvar mudanças críticas em plano em uso */}
+      <Dialog open={dialogConfirmarSalvar} onOpenChange={(v) => { if (!v) setDialogConfirmarSalvar(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              Plano em uso — confirma alteração?
+            </DialogTitle>
+            <DialogDescription>
+              Este plano tem <strong>{plano?._count?.contratos ?? 0} contrato{(plano?._count?.contratos ?? 0) === 1 ? '' : 's'}</strong> ATIVO/PENDENTE_ATIVACAO vinculado{(plano?._count?.contratos ?? 0) === 1 ? '' : 's'}.
+              Você está alterando campos que afetam o cálculo de cobrança.
+              A mudança vale a partir da próxima cobrança gerada — cobranças já existentes não são recalculadas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm font-medium text-gray-700 mb-2">Campos alterados:</p>
+            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+              {camposAlterados.map((c) => <li key={c}>{c}</li>)}
+            </ul>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDialogConfirmarSalvar(false)}>Cancelar</Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={() => { setDialogConfirmarSalvar(false); salvar(); }}
+              disabled={salvando}
+            >
+              Confirmar e salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
