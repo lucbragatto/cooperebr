@@ -1128,6 +1128,24 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-30W — Aprovação admin do plano automatizada após Sprint 5+8
+
+**Severidade:** P2 processual
+
+**Origem:** sessão claude.ai 2026-05-11 respondendo D-J-2 (Decisão 22)
+
+**Tema:** Hoje (fase de testes/amadurecimento) admin revisa cada aceite de proposta manualmente antes de virar contrato. Decisão de Luciano em 11/05/2026 (Decisão 22) é manter revisão manual nessa fase. Não é gap — é intencional.
+
+**A fazer (quando):** quando Sprint 5 (5 flags ANEEL — limite 25% por cooperado/usina, mix de classes, concentração, transferência saldo, mistura classes mesma usina) e Sprint 8 (Engine de Otimização com Split + Sugestão default + guard-rails) estiverem prontos, transição admin → automática com validação por flags + sugestão da engine.
+
+**Hoje blindado por:** processo manual do admin. Nenhum aceite vira contrato sem revisão humana.
+
+**Severidade P2 processual:** não bloqueia produção, mas precisa ser revisitado quando os 2 sprints fecharem pra desbloquear escala (não dá pra escalar pra centenas de aceites/dia revisando manualmente).
+
+**Complementa:** Decisão 22 em `CONTROLE-EXECUCAO.md`.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

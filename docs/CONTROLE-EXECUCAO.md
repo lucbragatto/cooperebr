@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-05 tarde** — reframe etapa 11 (parcial, não inexistente) + D-J-5 catalogada + Decisão 21 (investigação 3 frentes).
+> Última atualização: **2026-05-11** — fecha 5 D-J + cataloga Decisão 22 + D-30W + executa Fase C.2+C.3+UI etapa 11.
 
 ---
 
@@ -12,20 +12,35 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-11 (Code, sessão longa — housekeeping + 3 fases de execução)
+- **Tipo:** Code (housekeeping documental + UI etapa 11 + Fase C.2 reduzida + Fase C.3)
+- **Resultado:**
+  - **Housekeeping:** 5 D-J fechadas pela sessão claude.ai prévia (11/05): D-J-1=a, D-J-2=intencional+D-30W, D-J-3=fora+sugestão #4, D-J-4=juntos com urgência, D-J-5=playbook escrito
+  - **Decisão 22 catalogada:** D-J-2 nuance — admin revisa cada aceite na fase de testes; automatizar quando Sprint 5 (flags ANEEL) + Sprint 8 (Engine Otimização) fecharem
+  - **Débito D-30W catalogado:** aprovação admin do plano automatizada após Sprint 5+8 (P2 processual)
+  - **Sugestão pendente #4 adicionada:** polir UX dos 6 campos CooperToken no Plano pós Sprint CT Consolidado
+  - **Playbook Fase C.3 criado:** `docs/playbooks/playbook-fase-c3.md` com 6 decisões (D-P-1..D-P-6) e sequência de implementação
+  - **Fase 3 — UI etapa 11:** [preencher após execução]
+  - **Fase 4 — C.2 reduzida (5 itens):** [preencher após execução]
+  - **Fase 5 — C.3 (3 telas):** [preencher após execução]
+- **Commits:** [preencher hashes ao final — esperado 4 commits]
+- **Próxima sessão:** apresentar P0→P3, considerar backfill 72 contratos + canário OU Sprint CT Consolidado Etapa 1 (specs) OU sessão decisões batch B17-B32 OU Sprint 0 Auditoria Regulatória
+
+### Sessão anterior
+
 - **Quando:** 2026-05-05 tarde (~2h investigação read-only)
 - **Tipo:** claude.ai (sem código)
 - **Resultado:**
   - 2 investigações read-only: escopo real Fase C.3 + reframe etapa 11 (aprovação concessionária)
-  - **Reframe etapa 11:** 80% implementada (não inexistente como manhã afirmou) — schema TEM `Cooperado.protocoloConcessionaria` + enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA`; backend TEM 9 callers + `enviarCadastroAprovado()`. Falta APENAS UI admin. **1 cooperado real CoopereBR travado nesse status no banco.**
-  - **C.3 confirmada como hipótese (b):** 1 frase repetida em 4 docs, sem decomposição. Estimativa "1.5-2h" frágil sem playbook.
+  - **Reframe etapa 11:** 80% implementada (não inexistente como manhã afirmou) — schema TEM `Cooperado.protocoloConcessionaria` + enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA`; backend TEM 9 callers + `enviarCadastroAprovado()`. Falta APENAS UI admin.
+  - **C.3 confirmada como hipótese (b):** 1 frase repetida em 4 docs, sem decomposição.
   - **D-J-1 reformulada:** de "construir aprovação concessionária 2-4h" pra "fechar UI admin de transição ~1-2h, absorvível em C.2/C.3"
-  - **D-J-5 nova catalogada:** Fase C.3 precisa playbook antes de virar Code (15-30 min de spec)
-  - **Decisão 21 catalogada:** investigação schema/código deve cobrir 3 frentes (campo literal + enum/state machine + comentários) sem `head -N` truncando
-- **Commits:** 1 (fechamento docs)
-- **Próxima sessão:** responder D-J-1 a D-J-5 → C.2 reduzida + C.3 + UI etapa 11 numa única sessão Code (~5-7h)
+  - **D-J-5 nova catalogada:** Fase C.3 precisa playbook antes de virar Code
+  - **Decisão 21 catalogada:** investigação schema/código deve cobrir 3 frentes
+- **Commits:** 1 (fechamento docs — c0f9b70)
 - **Detalhe completo:** `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 2026-05-05 manhã (~2h investigação read-only)
 - **Tipo:** Code + claude.ai (sem código)
@@ -38,7 +53,7 @@
 - **Commits:** 0 código (1 commit de docs)
 - **Detalhe completo:** `docs/sessoes/2026-05-05-investigacao-jornada-e2e.md`
 
-### Sessão anterior anterior
+### Sessão 04/05 noite (mantida pra contexto)
 
 - **Quando:** 2026-05-04 noite (claude.ai, ~1.5h investigação + decisão)
 - **Tipo:** claude.ai (investigação read-only + decisão estruturante)
@@ -291,16 +306,16 @@ Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
 ### P0 — Crítico
 
 - [x] ✅ **Validação manual da Fase C.1 + C.1.1 por Luciano** — VALIDADA em 04/05 tarde (sessão claude.ai). 4 bugs UX corrigidos pelo Code de manhã passaram. Falso bug 0.87960 diagnosticado como premissa errada do operador (plano com descontoBase=18, não 15).
-- [ ] **5 decisões pendentes D-J-1 a D-J-5** (atualizadas 05/05 tarde) — ver `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`:
-  - **D-J-1 (reformulada):** Fechar UI admin pra transição AGUARDANDO_CONCESSIONARIA → APROVADO? Backend e schema 80% prontos (`Cooperado.protocoloConcessionaria` + enum `StatusCooperado.AGUARDANDO_CONCESSIONARIA` + 9 callers + `enviarCadastroAprovado()`); falta só UI. ~1-2h Code, absorvível em C.2/C.3. **1 cooperado real CoopereBR travado nesse status no banco** — não é puramente teórico.
-  - **D-J-2:** etapa 5 (aprovação admin do plano) é intencional ou gap?
-  - **D-J-3:** item 4 da C.2 (CooperToken expandido) entra ou fica fora? (recomendação: ficar fora — trabalho condenado pelo Sprint CT Consolidado)
-  - **D-J-4:** sequência C.2+C.3 juntos vs só C.3 primeiro?
-  - **D-J-5 (nova 05/05 tarde):** Fase C.3 precisa playbook antes de virar Code? Hoje C.3 é 1 frase repetida em 4 docs sem decomposição (quais 3 telas, em que parte, formatação dos 4 valores, toggle ou sempre visível). Sem spec de 15-30 min antes, "1.5h vira 4h" no meio. (a) Escrever playbook; (b) Ir direto e ajustar.
-- [ ] **Fase C.2 — UI plano avançada** (após D-J-3 respondida): 5 itens (com D-J-3=fora) ou 6 itens (com D-J-3=dentro). Itens: promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, [CooperToken expandido — condicional], lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **~3-4h Code.**
-- [ ] **Fase C.3 — Display economia em proposta + contrato + cobrança** (3 telas, ~1.5-2h Code). Backend já preenche os 4 valores; é só frontend.
-- [ ] **Gap jornada — etapa 11 (aprovação concessionária)** — **CORRIGIDO 05/05 tarde:** está 80% mapeada (schema + backend), falta UI admin de transição. 1 cooperado real CoopereBR travado em AGUARDANDO_CONCESSIONARIA hoje (banco confirmado). D-J-1 reformulada — não é mais "gap inexistente", é "fechar UI admin (~1-2h)".
-- [ ] **Gap jornada — etapa 5 (aprovação admin do plano)** — aceite vai direto pra contrato, sem revisão admin. Decisão D-J-2 define se é intencional ou gap.
+- [x] ✅ **5 decisões D-J-1 a D-J-5 RESOLVIDAS** (sessão claude.ai 11/05/2026):
+  - **D-J-1 ✅:** (a) Fazer agora. UI etapa 11 entra nesta sessão Code (~1-2h).
+  - **D-J-2 ✅:** Intencional **com revisão temporária**. Catalogado D-30W (P2 processual). Admin revisa cada aceite na fase de testes; automatizar quando Sprint 5 (flags ANEEL) + Sprint 8 (Engine Otimização) fecharem. **Decisão 22 catalogada.**
+  - **D-J-3 ✅:** (b) Fica fora. Item "CooperToken expandido" NÃO entra na C.2 reduzida. Sugestão pendente #4 catalogada na memória persistente (polir UX pós Sprint CT Consolidado).
+  - **D-J-4 ✅:** (a) C.2 + C.3 juntos com urgência. Meta da sessão Code: finalizar o quanto antes.
+  - **D-J-5 ✅:** (a) Playbook escrito em sessão claude.ai 11/05 — `docs/playbooks/playbook-fase-c3.md` (6 decisões D-P-1..D-P-6 + sequência de implementação).
+- [ ] **Fase C.2 reduzida** (5 itens, D-J-3=fora): promo defaults + validação visual, simulação 2 fases, vigência + validação Campanha, lista enriquecida (escopo + indicadores), confirmação antes de salvar mudanças críticas. **~3-4h Code — em execução nesta sessão.**
+- [ ] **Fase C.3** (3 telas com 4 valores de economia projetada). Backend já preenche; é só frontend + 1 endpoint backend ampliado. **~1.5-2h Code — em execução nesta sessão (seguir playbook D-P-1..D-P-6).**
+- [ ] **UI etapa 11 (aprovação concessionária)** — D-J-1=a, fechando UI admin de transição AGUARDANDO_CONCESSIONARIA → APROVADO. Cooperado real travado: MARCIO MACIEL (CoopereBR). **~1-2h Code — em execução nesta sessão.**
+- [x] ✅ **Gap jornada — etapa 5 (aprovação admin do plano)** — D-J-2 respondida: intencional com revisão temporária. Catalogado como D-30W pra revisitar pós Sprint 5+8.
 - [ ] **Gap jornada — etapa 12-A (Caminho A OCR→cobrança)** — nunca rodou em produção. Pré-requisito Sprint 2 OCR-Integração.
 - [ ] **Gap jornada — etapa 9 (lista de espera sem rota dedicada)** — funciona via Step7+cooperados, mas sem tela própria. P3.
 - [x] ✅ **D-30R RESOLVIDO em 03/05 (Fase B)** — commits `eb7f0ce`, `070c1ab`, `f5453b7`, `4c8e946`.
@@ -580,6 +595,24 @@ Output sem `head -N` truncando — se passar de 100 linhas, refinar busca, não 
 **Complementa:** Decisão 14 (validação prévia em geral), Decisão 15 (regra estendida), Decisão 20 (validação em cada resposta).
 
 **Aplica retroativamente:** revisar afirmações "X não existe" feitas em sessões anteriores quando houver dúvida.
+
+### Decisão 22 — Aprovação admin do plano permanece manual até Sprint 5+8 (sessão claude.ai 2026-05-11)
+
+D-J-2 da sessão 05/05 manhã perguntou: etapa 5 (aprovação admin do plano antes de virar contrato) é intencional ou gap?
+
+**Resposta de Luciano (11/05/2026):** Intencional **com revisão temporária**. Na fase de testes/amadurecimento, admin revisa cada aceite de proposta manualmente antes de virar contrato. Não é gap.
+
+**Quando automatizar:** transição admin → automática só faz sentido quando:
+- **Sprint 5** (5 flags ANEEL — limite 25%, mix de classes, concentração por cooperado, transferência saldo, mistura classes mesma usina) estiver pronto;
+- **Sprint 8** (Engine de Otimização com Split + Sugestão default + guard-rails) estiver pronto.
+
+Aí a transição vira automática com validação por flags + sugestão da engine.
+
+**Catalogado como débito processual:** `D-30W` (P2) em `docs/debitos-tecnicos.md` — pra revisitar quando os 2 sprints fecharem.
+
+**Origem:** Luciano em sessão claude.ai 11/05/2026 respondendo D-J-2.
+
+**Complementa:** decisão 30/04 sobre 5 flags regulatórias por parceiro (REGULATORIO-ANEEL.md).
 
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
