@@ -27,6 +27,24 @@ Investigação em sessão mostrou outras concentrações suspeitas hoje:
 - **Sprint 0** (Auditoria Regulatória Emergencial — P0 urgente, paralelo a Doc-0): listar e regularizar.
 - **Sprint 5** (Módulo Regulatório ANEEL): implementar validação automática via flag `concentracaoMaxPorCooperadoUsina` (default 25%), bloqueando aceite no Motor + alocarListaEspera quando ultrapassa.
 
+**Status 2026-05-11 (Sprint 0 passos iniciais):**
+
+Relatório de auditoria gerado em `docs/relatorios/2026-05-11-auditoria-concentracao-25-pct.md` cobrindo 62 contratos (ATIVO + PENDENTE_ATIVACAO com `percentualUsina`) em 3 cooperativas (CoopereBR 71 contratos / Teste 0 / TESTE-FASE-B5 6).
+
+**Achados:**
+- Casos > 25%: **0** ✅
+- Casos limítrofes (20-25%): **0**
+- Cross-check nominais:
+  - ⚪ **FIGATTA** — limpo (não encontrado no banco atual)
+  - ⚪ **CRIAR** — limpo
+  - 🟢 **EXFISHES** — presente (`EXFISHES TERMINAL PESQUEIRO SPE LTDA` na CoopereBR / Usina Linhares) com **0,00%**
+
+**Achado meta importante (Decisão 21):** distribuição por usina mostra valores irrealisticamente baixos — `Usina Linhares` da CoopereBR tem **61 cooperados** com `percentualUsina = 0,00%` cada. Soma da coluna `percentualUsina` ≈ 0%. Significa que o campo está populado mas não reflete a alocação real — provavelmente não foi calculado/atualizado depois da criação inicial dos contratos. **Vale catalogar como achado novo** em sessão futura (não bloqueia P0 estrutural, mas torna a auditoria visualmente "vazia" quando talvez houvesse concentração real escondida no `kwhContratoAnual`/`kwhContrato` × `usina.capacidadeKwh`).
+
+**O risco P0 permanece estrutural:** sistema continua sem flag de proteção `concentracaoMaxPorCooperadoUsina`. Quando rodar em prod com centenas/milhares de contratos COM `percentualUsina` populado corretamente, probabilidade de surgir caso > 25% aumenta. Estrutura do relatório está pronta pra rodar em prod (mesma query agrupando por tenant).
+
+**Próximos passos (continuação Sprint 0):** cron diário + dashboard `/dashboard/super-admin/auditoria-regulatoria` + investigação do achado meta (`percentualUsina` zerado em 61 contratos).
+
 ---
 
 ### D-30B — Mudança de classe GD na realocação não detectada — caso Exfishes (R$ 310k/ano)
