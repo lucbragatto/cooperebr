@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil, CheckCircle, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
+import EconomiaProjetada from '@/components/EconomiaProjetada';
 
 const statusClasses: Record<string, string> = {
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -197,6 +198,14 @@ export default function CobrancaDetailPage() {
                 <span>{formatBRL(cobranca.valorLiquido)}</span>
               </div>
             </div>
+
+            {/* Fase C.3: economia projetada — fallback "—" pra cobranças legadas (Fase B.5+ preenche) */}
+            <EconomiaProjetada
+              valorEconomiaMes={cobranca.valorEconomiaMes}
+              valorEconomiaAno={cobranca.valorEconomiaAno}
+              valorEconomia5anos={cobranca.valorEconomia5anos}
+              valorEconomia15anos={cobranca.valorEconomia15anos}
+            />
 
             <div className="grid grid-cols-2 gap-6">
               <Campo label="Criado em" value={new Date(cobranca.createdAt).toLocaleString('pt-BR')} />

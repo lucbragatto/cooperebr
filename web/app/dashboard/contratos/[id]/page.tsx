@@ -6,7 +6,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '@/lib/api';
-import type { Contrato, StatusContrato } from '@/types';
+import type { Contrato, StatusContrato, Plano } from '@/types';
+import EconomiaProjetada from '@/components/EconomiaProjetada';
+import { simularPlano } from '@/lib/simular-plano';
+import type { ModeloCobranca, BaseCalculo, TipoDesconto } from '@/lib/simular-plano';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,7 +70,7 @@ export default function ContratoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { tipoMembro } = useTipoParceiro();
-  const [contrato, setContrato] = useState<(Contrato & { kwhContratoAnual?: number | null; kwhContratoMensal?: number | null; kwhContrato?: number | null; descontoOverride?: number | null; percentualUsina?: number | null }) | null>(null);
+  const [contrato, setContrato] = useState<(Contrato & { kwhContratoAnual?: number | null; kwhContratoMensal?: number | null; kwhContrato?: number | null; descontoOverride?: number | null; percentualUsina?: number | null; valorCheioKwhAceite?: number | null; plano?: Plano | null }) | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [sheetAberto, setSheetAberto] = useState(false);
@@ -177,6 +180,53 @@ export default function ContratoDetailPage() {
             <Campo label="Data Fim" value={contrato.dataFim ? new Date(contrato.dataFim).toLocaleDateString('pt-BR') : '—'} />
             <Campo label="Criado em" value={new Date(contrato.createdAt).toLocaleString('pt-BR')} />
             <Campo label="Atualizado em" value={new Date(contrato.updatedAt).toLocaleString('pt-BR')} />
+          </CardContent>
+
+          {/* Fase C.3: economia projetada — recalculada via simular-plano.ts.
+              Snapshot `valorCheioKwhAceite` (Fase B.5) é o que torna o cálculo possível.
+              Contratos pré-03/05/2026 não têm o snapshot → mostra aviso visual (Reforço 2). */}
+          <CardContent>
+            {(() => {
+              const kwhMensal = contrato.kwhContratoMensal != null
+                ? Number(contrato.kwhContratoMensal)
+                : (contrato.kwhContratoAnual != null ? Number(contrato.kwhContratoAnual) / 12 : null);
+              const valorCheio = contrato.valorCheioKwhAceite != null ? Number(contrato.valorCheioKwhAceite) : null;
+              const plano = contrato.plano;
+
+              if (!valorCheio || !kwhMensal || !plano) {
+                return (
+                  <EconomiaProjetada
+                    valorEconomiaMes={null}
+                    valorEconomiaAno={null}
+                    valorEconomia5anos={null}
+                    valorEconomia15anos={null}
+                    avisoLegado="Cálculo indisponível — contrato pré-Fase B.5 (03/05/2026) sem snapshot de tarifa cheia. Recriar contrato resolve."
+                  />
+                );
+              }
+
+              const r = simularPlano({
+                valorCheioKwh: valorCheio,
+                tarifaSemImpostos: 0.78, // default EDP TUSD+TE (snapshot real não persistido no Contrato; aproximação)
+                baseCalculo: (plano.baseCalculo ?? 'KWH_CHEIO') as BaseCalculo,
+                descontoBase: Number(plano.descontoBase),
+                kwhContratoMensal: kwhMensal,
+                modeloCobranca: plano.modeloCobranca as ModeloCobranca,
+                tipoDesconto: (plano.tipoDesconto ?? 'APLICAR_SOBRE_BASE') as TipoDesconto,
+                temPromocao: plano.temPromocao,
+                descontoPromocional: plano.descontoPromocional != null ? Number(plano.descontoPromocional) : undefined,
+                mesesPromocao: plano.mesesPromocao != null ? Number(plano.mesesPromocao) : undefined,
+              });
+
+              return (
+                <EconomiaProjetada
+                  valorEconomiaMes={r.valorEconomiaMes}
+                  valorEconomiaAno={r.valorEconomiaAno}
+                  valorEconomia5anos={r.valorEconomia5anos}
+                  valorEconomia15anos={r.valorEconomia15anos}
+                />
+              );
+            })()}
           </CardContent>
         </Card>
       )}

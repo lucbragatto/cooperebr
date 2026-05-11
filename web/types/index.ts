@@ -99,6 +99,11 @@ export interface Contrato {
   kwhContrato?: number | null;
   percentualUsina?: number | null;
   descontoOverride?: number | null;
+  /** Snapshot capturado no aceite (Fase B.5 — 03/05/2026). Pré-Fase B.5: null. */
+  valorCheioKwhAceite?: number | null;
+  /** Plano vinculado (snapshot do aceite). */
+  planoId?: string | null;
+  plano?: Plano;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +126,11 @@ export interface Cobranca {
   tipoBandeira?: string;
   createdAt: string;
   updatedAt: string;
+  // ── Economia projetada (Fase B.5 — schema.prisma:565-568, exibido na C.3) ──
+  valorEconomiaMes?: number | null;
+  valorEconomiaAno?: number | null;
+  valorEconomia5anos?: number | null;
+  valorEconomia15anos?: number | null;
 }
 
 export interface Ocorrencia {

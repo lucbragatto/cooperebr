@@ -1226,7 +1226,17 @@ export class MotorPropostaService {
       include: { cooperado: { select: { nomeCompleto: true, cpf: true, email: true, telefone: true } } },
     });
     if (!proposta) throw new NotFoundException('Proposta não encontrada ou token inválido');
-    return proposta;
+
+    // Fase C.3: estender retorno com economia5Anos + economia15Anos (D-P-6 do playbook).
+    // Backwards-compat: economiaMensal/economiaAnual existentes ficam intactos.
+    // Cálculo simples sem IPCA: 5anos = mensal × 60, 15anos = mensal × 180 (mesmo padrão da Fase B.5).
+    const mensal = Number(proposta.economiaMensal);
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    return {
+      ...proposta,
+      economia5Anos: round2(mensal * 60),
+      economia15Anos: round2(mensal * 180),
+    };
   }
 
   async aprovarRemoto(token: string, nome: string, aceite: boolean) {

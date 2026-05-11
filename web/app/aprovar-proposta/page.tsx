@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import EconomiaProjetada from '@/components/EconomiaProjetada';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -12,6 +13,9 @@ interface PropostaData {
   descontoPercentual: number;
   economiaMensal: number;
   economiaAnual: number;
+  /** Fase C.3 (Reforço 3): campos novos retornados pelo backend, backwards-compat (clientes antigos ignoram). */
+  economia5Anos?: number;
+  economia15Anos?: number;
   valorCooperado: number;
   valorMesRecente: number;
   kwhMesRecente: number;
@@ -181,12 +185,22 @@ function AprovarPropostaContent() {
               </div>
             </div>
 
-            {/* Economia destacada */}
+            {/* Economia destacada (mensal + ano) */}
             <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 text-white text-center">
               <p className="text-sm opacity-90">Sua economia estimada</p>
               <p className="text-3xl font-bold mt-1">{fmtBRL(proposta?.economiaMensal)}<span className="text-base font-normal opacity-80">/mês</span></p>
               <p className="text-sm opacity-80 mt-1">{fmtBRL(proposta?.economiaAnual)} por ano</p>
             </div>
+
+            {/* Fase C.3: card detalhado com projeção 1/5/15 anos (D-P-6 do playbook) */}
+            <EconomiaProjetada
+              valorEconomiaMes={proposta?.economiaMensal ?? null}
+              valorEconomiaAno={proposta?.economiaAnual ?? null}
+              valorEconomia5anos={proposta?.economia5Anos ?? null}
+              valorEconomia15anos={proposta?.economia15Anos ?? null}
+              titulo="Projeção de economia"
+            />
+
 
             {/* Campo nome */}
             <div>

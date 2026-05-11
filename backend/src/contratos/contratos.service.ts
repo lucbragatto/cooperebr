@@ -34,7 +34,8 @@ export class ContratosService {
   async findOne(id: string, cooperativaId?: string) {
     const contrato = await this.prisma.contrato.findUnique({
       where: { id },
-      include: { cooperado: true, uc: true, usina: true },
+      // Fase C.3: incluir plano pra UI calcular economia projetada via simular-plano.
+      include: { cooperado: true, uc: true, usina: true, plano: true },
     });
     if (!contrato) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
     if (cooperativaId && contrato.cooperativaId !== cooperativaId) {
