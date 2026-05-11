@@ -1146,6 +1146,47 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-30X — Whitelist LGPD bypassada por `NODE_ENV=production` em PM2 dev
+
+**Severidade:** P3 (operacional, não bloqueia produção mas pode vazar email em dev)
+
+**Origem:** sessão Code 2026-05-11 — testes da Fase 3 (UI etapa 11) com cooperado real MARCIO MACIEL revelaram o problema.
+
+**Tema:** `backend/src/common/safety/whitelist-teste.ts:28` faz curto-circuito quando `process.env.NODE_ENV === 'production'`:
+
+```ts
+export function podeEnviarEmDev(destino: string, tipo: 'WA' | 'EMAIL'): boolean {
+  if (process.env.NODE_ENV === 'production') return true;
+  // ... else aplica whitelist (lucbragatto@gmail.com / telefones Luciano)
+}
+```
+
+Mas `ecosystem.config.cjs` do PM2 **local de dev** define `NODE_ENV: 'production'` em `cooperebr-backend` e `cooperebr-whatsapp`. Resultado: a whitelist NÃO filtra emails/WA no ambiente dev quando rodando via PM2 — qualquer destino (incluindo `@removido.invalid` ou número fake) entra no `transporter.sendMail`/sender WA.
+
+**Confirmado em 11/05/2026:** durante teste da Fase 3, a chamada `enviarCadastroAprovado` pra MARCIO MACIEL (email `pipo-6qac20-removido@removido.invalid`) gerou log "E-mail enviado" (linha 68 de `email.service.ts`) — o nodemailer tentou enviar de fato. Falhou silenciosamente porque `.invalid` não tem MX, mas em emails reais com formato válido o envio aconteceria.
+
+**Hoje blindado por:**
+- Em modo `npm run start:dev` (sem PM2) — funciona certo, NODE_ENV não vira "production"
+- Cooperados de teste em CoopereBR têm emails mascarados (LGPD). Domínios fake (`@removido.invalid`) não têm MX → silently fail no envio real
+- Whitelist WA: telefones de teste são `+5511000000000` etc — números inválidos, não chega em ninguém
+
+**Risco real:**
+- Em dev local rodando via PM2, qualquer cooperado COM email/telefone reais (importação de produção, dado de cliente real em teste) faria envio real
+- Sprint 1 (FaturaSaas Completo) e Sprint 6 (IDOR) podem trazer dados reais pra dev — risco aumenta
+
+**A fazer (qualquer dos 3 caminhos):**
+1. **Trocar NODE_ENV no ecosystem.config.cjs** pra `development` em PM2 dev. Production real continua `production` (variável de ambiente do servidor real, não do file commitado).
+2. **OU criar `ENV_OVERRIDE_WHITELIST=true`** explícita que força whitelist independente de NODE_ENV. Padrão "false" em prod, "true" em dev local.
+3. **OU mover whitelist** pra checar baseado em outro sinal (ex: hostname `localhost`, ou flag `WHITELIST_ATIVA=true` em `.env` local).
+
+Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
+
+**Bloqueio:** Caminho 1 pode ter side effects (outros módulos podem usar `NODE_ENV=production` pra cache/optimização). Validar antes de aplicar.
+
+**Origem específica do achado:** Commit 8853d97 (UI etapa 11) — teste com MARCIO MACIEL via curl mostrou log de envio pra `@removido.invalid` em PM2 dev. Confirma que whitelist não estava ativa.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
