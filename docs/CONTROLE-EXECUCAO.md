@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-11 maratona fechada** — 9 commits, 4 fases técnicas + 4 documentais. **D-31 (P1 crítico) catalogado** como bloqueador potencial de Sprint 5+canário.
+> Última atualização: **2026-05-13** — Fase B concluída (B.0 INDEX + SISTEMA esqueleto, B.1+B.2 débitos atualizados/decompostos, B.3 Sprint Cadastros+Financeiro Consolidado catalogado com 11 fatias).
 
 ---
 
@@ -11,6 +11,18 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 2026-05-13 (Fase B claude.ai + Code, sequência B.0 → B.6)
+- **Tipo:** Code (execução documental) + claude.ai (revisão + decisões)
+- **Resultado:**
+  - **B.0** (commit `94bf9dc`): `docs/INDEX.md` novo (82 linhas) + `docs/SISTEMA.md` rewrite (346 linhas, era stub 24) + `docs/README.md` atualizado apontando pro INDEX. Fix mínimo Seção 3 ("Comunicação 4 não 3").
+  - **B.1+B.2** (commit `049db42`): D-31 reframed P1→P2 (só guard preventivo, sem backfill — dados fictícios revelados em 12/05); D-32 catalogado P1 STANDBY (migração `kwhContrato` legado → `kwhContratoAnual` novo, 61 contratos NULL); D-30R adiado indefinidamente (72 contratos legados, substituído por re-cadastro via Caminho A); D-29F decomposto em D-29F.1 (cron geração) + D-29F.2 (envio Asaas) + D-29F.3 (comunicação D-7/D-3/D-1); D-33 catalogado P1 (dual-path Asaas `AsaasConfig` legado vs `ConfigGateway` atual — bloqueia Fatia A canário); D-34 catalogado P3 (encryption UI `****MzY5` — 30min investigação).
+  - **B.3** (commit `cbce0aa`): Sprint Cadastros+Financeiro Consolidado catalogado em `PLANO-ATE-PRODUCAO.md` Seção 3c — **11 fatias em 3 horizontes**: CURTO (A canário, B multa/juros, C CooperToken Etapa 1, D3 FaturaSaas, H SISTEMA.md em 4 sub-fases) + MÉDIO (D1 conciliação, D2 DRE, G débitos cumulativos) + LONGO (E polish cadastros, F painel super-admin, L UI auto-config Asaas) + sub-fatia dual-path Asaas (D-33) pré-Fatia A. Sequência operacional Opção 4 confirmada (8 passos numerados).
+  - **5 achados-chave do dia (Decisão 23 aplicada):** (1) `AsaasConfig` sandbox CoopereBR existe desde 23/03 (criado em Sprint 7/8 antigo — memória do Luciano tinha esquecido); (2) dual-path Asaas ATIVO entre `AsaasConfig` (legado, tail `dfe8`) vs `ConfigGateway` (atual multi-tenant, tail `2776`); (3) **3 models gateway** coexistem no schema (`AsaasConfig` + `ConfigGateway` + `ConfigGatewayPlataforma` — não 1 como assumido); (4) `ConfigTenant` key-value email multi-tenant operacional; (5) hipótese "backend multi-tenant pronto, falta UI parceiro auto-config" **CONFIRMADA** — bloqueia Sinergia entrar mas não bloqueia canário CoopereBR (super admin configura por enquanto).
+- **Commits:** 4 (`94bf9dc` B.0 + `049db42` B.1+B.2 + `cbce0aa` B.3 + B.4/B.5/B.6 pendente fechamento)
+- **Próxima sessão:** **ETAPA 1 do Plano Mestre** — H.2 SISTEMA.md base (45 módulos + 80 models + 152 telas detalhados, 2-3d Code).
+
+### Sessão anterior
 
 - **Quando:** 2026-05-11 (Code maratona, manhã → tarde)
 - **Tipo:** Code (4 fases técnicas + 4 documentais — execução pós-sessão claude.ai prévia que validou 5 D-J)
@@ -23,12 +35,11 @@
   - **Adendo §11 spec CooperToken:** 5 achados validados via Decisão 21 (sem `head -N` truncando) + D-30Z catalogado (85 cooperados em estado intermediário `opcaoToken → modoRemuneracao`) (Commit `69902f6`)
   - **Sprint 0 passos iniciais:** relatório auditoria concentração >25% gerado (62 contratos analisados, 0 casos detectados) — **achado meta crítico D-31 descoberto:** `Contrato.percentualUsina` zerado/irrealista no banco, EXFISHES histórico aparece a 0% (Commit `851a39e`)
   - **Decisão 22 catalogada:** aprovação admin do plano permanece manual até Sprint 5+8 fecharem
-- **Débitos:** D-30W (P2), D-30X (P3), **D-30Y ✅ RESOLVIDO**, D-30Z (P3), **D-31 (P1 provisório CRÍTICO)** + D-30A status 11/05 atualizado
+- **Débitos:** D-30W (P2), D-30X (P3), **D-30Y ✅ RESOLVIDO**, D-30Z (P3), **D-31 (P1 provisório CRÍTICO — reframed em 13/05 pra P2 só guard)** + D-30A status 11/05 atualizado
 - **Commits da sessão (9):** `5cde3e0`, `8853d97`, `f30be3c`, `6d2510e`, `ecf39cd`, `fecbe2a`, `69902f6`, `851a39e`, (commit 9 fechamento)
 - **Detalhe completo:** `docs/sessoes/2026-05-11-execucao-maratona.md`
-- **Próxima sessão Code:** prioridade — **investigar D-31** antes de Sprint 5/canário. Alternativas: Sprint CT Consolidado Etapa 1 (specs Jest, 6-8h) OU decisões batch B17-B32 (claude.ai) OU Asaas conta produção (operacional)
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 2026-05-05 tarde (~2h investigação read-only)
 - **Tipo:** claude.ai (sem código)
@@ -42,7 +53,7 @@
 - **Commits:** 1 (fechamento docs — c0f9b70)
 - **Detalhe completo:** `docs/sessoes/2026-05-05-tarde-investigacao-c3-etapa11.md`
 
-### Sessão anterior anterior
+### Sessão 2026-05-05 manhã (mantida pra contexto)
 
 - **Quando:** 2026-05-05 manhã (~2h investigação read-only)
 - **Tipo:** Code + claude.ai (sem código)
@@ -199,20 +210,22 @@
 
 ### Próximos passos imediatos (priorizado P0 → P1 → P2 → P3)
 
-A. **Decisões batch B1-B32** [Processual urgente] — sessão dedicada só a decisões (~2-3h). Sem decisões, sprints potenciais ficam parados.
-B. **D-30R fix** [P0/P2 — 30-45 min] — Motor.aceitar() popular tarifaContratual + script backfill (72 contratos).
-C. **Caminho B Asaas produção** [Estratégica] — primeira receita real em 1-2 semanas.
-D. **Doc-0 Fatia 3** (SISTEMA.md) — pré-condição pra Fatias 4 + 5 + débitos D-30S/D-30T.
-E. **Definir escopo Sugestão #3** (cron análise diária) — decidir hipótese A/B/C/D/E.
+**Fase B ✅ CONCLUÍDA em 13/05** (B.0 INDEX+SISTEMA esqueleto + B.1+B.2 débitos + B.3 Sprint Consolidado + B.4/B.5/B.6 fechamento). 11 fatias do Sprint Cadastros+Financeiro Consolidado catalogadas em `PLANO-ATE-PRODUCAO.md` Seção 3c.
+
+**Sequência operacional Opção 4 (Plano Mestre, confirmada 12/05):**
+
+A. **ETAPA 1 — H.2 SISTEMA.md base** [P0 — 2-3d Code] — 45 módulos + 80 models + 152 telas detalhados. Marco M1.
+B. **Sub-fatia D-33 dual-path Asaas** [P1 — 1-2d Code] — refator `asaas.service.ts:65` `getConfig()` pra ler `ConfigGateway` em vez de `AsaasConfig` legado. Pré-req Fatia A.
+C. **Fatia A canário Caminho A real** [P0 — 2-4d Code] — 1 cooperado real fim a fim Asaas sandbox CoopereBR. Marco M2.
+D. **Fatia H.3 + D3 em paralelo** [Marco M3] — ligações cross-módulo + FaturaSaas completo Luciano→Parceiro (D-29F.1+.2+.3 decompostos).
+E. **Fatia H.4 + B em paralelo** [Marco M4] — fluxos end-to-end + multa/juros mínimo.
+F. **Fatia C** [Marco M6 — janela disponível] — specs Jest módulo CooperToken (6-8h, autônomo).
+G. **Médio prazo** — D1 (conciliação BB/Sicoob) + D2 (DRE/fechamento) + G (débitos cumulativos).
+H. **Longo prazo** — E (polish cadastros) + F (painel super-admin) + L (UI auto-config Asaas parceiro).
 
 ### Frase de retomada
 
-> Voltei. Lê `docs/CONTROLE-EXECUCAO.md`.
-
-Anexos opcionais:
-- `docs/CONTROLE-EXECUCAO.md`
-- `docs/sessoes/2026-05-03-resumo-sessao-completa.md` (resumo da maratona 03/05)
-- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (resumo da sessão 02/05)
+> Ver seção canônica [`## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)`](#frase-de-retomada--próxima-sessão-code-etapa-1) abaixo. Frase DIRETA pronta pra colar no Claude Code (VS Code) — comanda ação imediata em vez de descrever plano (feedback `feedback_frase_retomada_direta.md` 12/05 noite).
 
 ---
 
@@ -233,13 +246,48 @@ Opcional (se for atacar Fase C.2 direto):
 
 ---
 
-## FRASE DE RETOMADA — sessão 04/05/2026
+## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)
 
-Pra colar amanhã ao abrir nova sessão Code OU claude.ai:
+Cola direto no Claude Code (VS Code) quando voltar:
 
-> Voltei. Sessão de 03/05 fechou Fases A + B + B.5 + C.1 (20 commits, validação 48/48). Lê `docs/CONTROLE-EXECUCAO.md` + `docs/sessoes/2026-05-03-resumo-sessao-completa.md`.
->
-> Próximo passo provável: Fase C.2 (UI plano avançada — promo, vigência, CooperToken expandido, lista enriquecida, confirmação). Mas valida UX da C.1 antes comigo (logar em `/dashboard/planos/novo`).
+```
+Code, estou em sessão ATIVA NESTE MOMENTO pra ETAPA 1 do
+Plano Mestre. NÃO fecha sessão.
+
+PRÓXIMO PASSO IMEDIATO:
+1. Lê docs/CONTROLE-EXECUCAO.md (header diz 2026-05-13)
+2. Lê docs/SISTEMA.md (esqueleto 15 seções, status H.1 ✅
+   entregue commit 94bf9dc)
+3. Apresenta P0→P3 ATUAL (Decisão 19) — sem propor próximo passo
+4. Pergunta: "OK pra iniciar Fatia H.2 — preencher SISTEMA.md base?"
+5. AGUARDA minha resposta antes de continuar
+
+Plano da ETAPA 1 (Fatia H.2 SISTEMA.md base, 2-3 dias Code):
+- Dia 1: investigação ampla backend (45 módulos + 80 models Prisma)
+  → preencher Seções 1, 2, 3, 4 do SISTEMA.md com refinamento
+    das 14 categorias preliminares + correção das duplicações
+    detectadas em H.1
+- Dia 2: investigação ampla frontend (152 telas em 5 super-rotas
+  + jornadas)
+  → preencher Seções 5, 6 com diagramas de sequência por fluxo
+  → confirmar discrepância 151 vs 152 telas (Seção 5)
+- Dia 3: crons, agents, memória, integrações externas
+  → preencher Seções 7, 8, 9, 10, 11, 12
+  → revisão final + ajustar inconsistências do esqueleto H.1
+
+Critério de pronto Fatia H.2: qualquer pessoa nova lê SISTEMA.md em
+30-45 min e entende a topologia. Validado contra código real (zero
+ficção — Decisão 14/15/20/21/23).
+
+Worktree: C:\Users\Luciano\cooperebr (main)
+Edit > Write. Sem head -N truncando. Validação SQL antes de afirmar
+números (Decisão 23).
+
+NÃO inicia H.2 sem meu OK explícito.
+NÃO fecha sessão sem ordem minha.
+
+COMEÇA agora pelo passo 1.
+```
 
 ---
 
@@ -618,6 +666,23 @@ Aí a transição vira automática com validação por flags + sugestão da engi
 
 **Complementa:** decisão 30/04 sobre 5 flags regulatórias por parceiro (REGULATORIO-ANEEL.md).
 
+### Decisão 23 — Memória de catálogo pode inflar números — validar via SQL antes de planejar (catalogada 12/05, formalizada 13/05)
+
+**Regra inegociável:** memória de catálogo (incluindo a do Luciano e a de catálogo histórico do projeto) pode inflar números — **sempre validar via SQL antes de transformar afirmação em premissa de planejamento.**
+
+**Origem:** "31 cobranças PAGAS via Asaas sandbox" era **ficção da memória**. Sprint 12 validou apenas payload sintético (webhook conferido com fixture). `AsaasCobranca` tabela = **0 registros**. 31 PAGAS = **100% baixa manual**, zero Asaas real. Investigação Code 12/05 desfez a hipótese.
+
+**Aplica retroativamente a:**
+- **Memória do Luciano** — esqueceu config Asaas sandbox criada Sprint 7/8 (achado-chave 1 do dia 13/05: `AsaasConfig` CoopereBR existe desde 23/03).
+- **Memória de sessões anteriores** — catálogo desatualizado (ex.: dual-path Asaas só virou explícito em 13/05).
+- **Análises externas de outras IAs** — quando outra IA afirmar estado do sistema, exigir validação SQL antes de assumir.
+
+**Operacionalização:** qualquer afirmação categórica ("zero", "nunca", "não existe", "X cobranças PAGAS") merece validação SQL antes de virar premissa. Code respeitou Decisão 23 em **12/05 tarde** (desfez 31 PAGAS via SQL) e **13/05 manhã** (validou os 5 achados-chave via `SELECT` direto antes de propor decomposição D-29F).
+
+**Complementa:** Decisão 14 (validação prévia em geral), Decisão 15 (regra estendida), Decisão 20 (validação em cada resposta), Decisão 21 (3 frentes na investigação schema/código).
+
+**Origem:** Luciano em sessão Code 12/05 noite revelou que dados que tinham sido tratados como reais nas sessões anteriores (61 contratos zerados em D-31, 31 PAGAS Asaas sandbox) eram fictícios/baixa-manual. Decisão formalizada em sessão Fase B de 13/05.
+
 ### Sessão claude.ai 2026-04-29 (Validação INVs 4-8)
 - 20 de 23 afirmações claude.ai confirmadas (3 divergências corrigidas).
 - 5 mecanismos de fidelidade são paralelos puros (sem regras de exclusão).
@@ -680,11 +745,20 @@ Aí a transição vira automática com validação por flags + sugestão da engi
 
 ## PRÓXIMOS PASSOS IMEDIATOS
 
-1. **Luciano valida** PRODUTO.md + REGULATORIO-ANEEL.md (próxima sessão claude.ai).
-2. **Decidir início de Sprint 0** (Auditoria Regulatória Emergencial) — pode começar imediatamente.
-3. **Decidir início de Sprint 1** (FaturaSaas Completo) — pode rodar em paralelo.
-4. **Considerar consulta a advogado** especializado em ANEEL pra validar premissas regulatórias.
-5. **Fatia 3** do Doc-0 — começar SISTEMA.md (mapa técnico completo).
+**Fase B ✅ CONCLUÍDA em 13/05** — B.0 INDEX+SISTEMA esqueleto + B.1+B.2 débitos + B.3 Sprint Consolidado catalogado (11 fatias). 4 commits: `94bf9dc` + `049db42` + `cbce0aa` + (B.4-B.6 fechamento).
+
+**Sequência Plano Mestre Opção 4 (decidida 12/05 noite, confirmada 13/05):**
+
+1. **ETAPA 1 — H.2 SISTEMA.md base** (2-3d Code) — 45 módulos + 80 models + 152 telas. **Marco M1.**
+2. **Sub-fatia D-33 dual-path Asaas** (1-2d Code) — pré-req Fatia A.
+3. **Fatia A canário Caminho A real** (2-4d Code) — 1 cooperado real fim a fim. **Marco M2.**
+4. **Fatia H.3 + D3** em paralelo (2d + 5-8d) — **Marco M3.**
+5. **Fatia H.4 + B** em paralelo (1-2d + 3-5d) — **Marco M4.**
+6. **Fatia C** (6-8h autônomo em janela disponível) — **Marco M6.**
+7. **Médio prazo (45-90d):** D1 + D2 + G.
+8. **Longo prazo (90+d):** E + F + L.
+
+**Referências detalhadas:** `docs/PLANO-ATE-PRODUCAO.md` Seção 3c (11 fatias com tema/persona/critério/estimativa/dependências por fatia, cumprindo Decisão 18).
 
 ---
 
