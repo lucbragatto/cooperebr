@@ -427,7 +427,7 @@ desses pais e já têm spec/análise pronta.
 
 **Origem:** investigação ampla read-only de 12/05 (commit `89ee5ea` + appendix `07a8c20`) varreu 3 caminhos de Cadastros + 12 componentes Financeiros e identificou 11 fatias entregáveis. Decisão tomada em 12/05 noite — **Plano Mestre Opção 4**.
 
-**Visão:** consolidar 11 fatias que atravessam Cadastros (3 caminhos de entrada) + Financeiro (12 componentes), distribuídas em 3 horizontes (curto / médio / longo). Sequência operacional preferida: **Opção 4** — H.2 base → Sub-fatia dual-path Asaas → Fatia A canário → H.3+D3 paralelo → H.4+B paralelo → Fatia C em janela.
+**Visão:** consolidar 11 fatias que atravessam Cadastros (3 caminhos de entrada) + Financeiro (12 componentes), distribuídas em 3 horizontes (curto / médio / longo). Sequência operacional preferida: **Opção 4 (revisada 13/05 noite)** — H.2 base → ~~Sub-fatia dual-path Asaas~~ → Fatia A canário → H.3+D3 paralelo → H.4+B paralelo → Fatia C em janela. (D-33 reframed P2 latente — não bloqueia mais Fatia A.)
 
 **Cumpre Decisão 18:** cada fatia tem tema, persona, critério de pronto, estimativa, dependências.
 
@@ -444,7 +444,7 @@ desses pais e já têm spec/análise pronta.
 - **Critério de pronto:** 1 cobrança com `faturaProcessadaId` + `modeloCobrancaUsado` + `asaasChargeId` + status `PAGA` via webhook chegando.
 - **Estimativa:** 2-4 dias Code (config sandbox CoopereBR já existe).
 - **Dependências:**
-  - **D-33 — Sub-fatia consolidação dual-path Asaas (1-2d)** precisa fechar antes.
+  - ~~**D-33 — Sub-fatia consolidação dual-path Asaas (1-2d)** precisa fechar antes.~~ **Removido 13/05 noite** — D-33 reframed P2 latente (UI + service usam `AsaasConfig` consistentemente, sem dessincronia ativa). Caminho B (docs only) aprovado. Fatia A pode rodar sem D-33 fechar.
   - Decisão produto Luciano sobre qual cooperado teste usar.
   - UI auto-config parceiro **NÃO bloqueia** (config CoopereBR já feita via super admin).
 - **Marco:** **M2** do Plano Mestre.
@@ -538,30 +538,31 @@ desses pais e já têm spec/análise pronta.
 - **Persona:** admin parceiro configura **a SUA conta** Asaas (importante quando Sinergia migrar — não dá pra ser via super admin com credenciais de outro tenant).
 - **Critério de pronto:** admin parceiro logado vê **só sua config** + audit de mudanças no AuditLog.
 - **Estimativa:** 3-5 dias Code.
-- **Dependências:** **D-33 consolidação dual-path Asaas antes** (sem isso, UI grava em `ConfigGateway` mas service lê de `AsaasConfig` legado).
+- **Dependências:** **D-33 reframed 13/05 noite** — Fatia L precisa **migrar leitura junto com escrita** (`AsaasService.getConfig:65/79/349` pra `ConfigGateway`) caso decida que UI parceiro escreve em `ConfigGateway`. Sub-tarefa absorvida no escopo Fatia L. Sem isso, dispara dessincronia LATENTE virando ATIVA.
 - **Severidade:** **P2** — não bloqueia hoje (Luciano configura via super admin com dados CoopereBR), mas precisa **antes de Sinergia** entrar.
 
 ---
 
-### Sub-fatia pré-Fatia A — Consolidação dual-path Asaas
+### ~~Sub-fatia pré-Fatia A — Consolidação dual-path Asaas~~ — REFRAMED 13/05 NOITE (Caminho B)
 
 - **Catalogada como D-33** em `docs/debitos-tecnicos.md`.
-- **Tema:** refatorar `asaas.service.ts:65` `getConfig()` pra ler de `ConfigGateway` (atual) em vez de `AsaasConfig` (legado); deprecar `AsaasConfig` no schema com `@deprecated`.
-- **Estimativa:** 1-2 dias Code.
-- **Pré-requisito da Fatia A** — sem isso, canário pode usar credenciais erradas em runtime.
+- **Status:** 🟡 **P2 LATENTE / DOCUMENTADO** — não bloqueia mais Fatia A.
+- **Reframe (13/05 noite — Fase 1 investigação read-only):** UI super admin + service + webhook usam `AsaasConfig` legado **consistentemente**. Zero dessincronia ATIVA hoje (5 `AsaasCobranca` sandbox CoopereBR provam). Risco LATENTE só dispara se Fatia L escrever em `ConfigGateway` sem migrar leitura.
+- **Decidido Caminho B** (docs only — 45 min) ao invés de Caminho A (refator 1-2d Code) porque (a) operação atual funciona, (b) refator tem risco de encryption `ConfigGateway` não-validada, (c) próximo refator natural é Fatia L (UI parceiro).
+- **Sub-tarefa absorvida em Fatia L:** quando Fatia L começar, incluir migração de leitura junto com escrita ConfigGateway.
 
 ---
 
-### Sequência operacional (Opção 4 — confirmada 12/05)
+### Sequência operacional (Opção 4 — revisada 13/05 noite)
 
-1. **H.2 SISTEMA.md base** (M1) — ETAPA 1 do Plano Mestre.
-2. **Sub-fatia dual-path Asaas** (D-33).
+1. **H.2 SISTEMA.md base** (M1) — ETAPA 1 do Plano Mestre. ✅ ENTREGUE 13/05 (commits `94bf9dc` + `382f40e` + `0528cd8` + `464e4d3`).
+2. ~~**Sub-fatia dual-path Asaas** (D-33).~~ **REFRAMED Caminho B 13/05 noite — não é mais passo bloqueante.**
 3. **Fatia A canário** (M2).
 4. **H.3 + D3 em paralelo** (M3 quando D3 fecha).
 5. **H.4 + B em paralelo** (M4 quando B fecha).
 6. **Fatia C** em janela disponível (M6).
 7. **Médio prazo:** D1 + D2 + G.
-8. **Longo prazo:** E + F + L.
+8. **Longo prazo:** E + F + **L** (L absorve refator D-33 quando começar).
 
 ---
 

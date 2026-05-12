@@ -149,16 +149,26 @@
   ```
   **Vazio confirmado** — bloqueia D-29F.2 (envio FaturaSaas via Asaas). Fatia D3 do Plano Mestre.
 
-### 2.5 Asaas multi-tenant — dual-path ativo (D-33)
+### 2.5 Asaas multi-tenant — dual-path LATENTE (D-33 reframed 13/05 noite)
 
-`asaas.service.ts:65` `getConfig(cooperativaId)` resolve credenciais por tenant. **2 models coexistem com risco de dessincronia:**
+`asaas.service.ts:65` `getConfig(cooperativaId)` resolve credenciais por tenant. **2 models coexistem, mas o uso real hoje é consistente:**
 
 | Model | Status | Forma das credenciais | Tail visível | Origem |
 |---|---|---|---|---|
-| **`AsaasConfig`** (LEGADO) | `@@map("asaas_configs")` — comentário "manter por compat sandbox" | `apiKey: String` direto (390 chars — encryption visível, D-34) | `dfe8` | criado 23/03 (Sprint 7/8 antigo) |
-| **`ConfigGateway`** (ATUAL multi-tenant) | escrito pela UI super admin desde 22/04 | `credenciais: Json` (formato `{ apiKey: "..." }`) | (não calculado nesta validação) | criado 22/04 |
+| **`AsaasConfig`** (LEGADO) | `@@map("asaas_configs")` — comentário "manter por compat sandbox" | `apiKey: String` direto (390 chars — encryption AES-256-GCM via `AsaasService.encrypt`, D-34) | `dfe8` | criado 23/03 (Sprint 7/8 antigo) |
+| **`ConfigGateway`** (ATUAL multi-tenant) | populado por seed/script manual (zero `configGateway.create/update/upsert` em código rodável) | `credenciais: Json` (formato `{ apiKey: "..." }`) | `2776` | criado 22/04 |
 
-**Risco:** UI escreve em `ConfigGateway`; service `asaas.service.ts:65` lê de `AsaasConfig` legado. Em runtime, sistema pode usar credencial errada quando admin atualizar via UI. Catalogado **D-33 (P1)** — sub-fatia pré-Fatia A do Plano Mestre.
+**Reframe Fase 1 D-33 (13/05 noite — investigação read-only revelou):**
+- **UI super admin** (`/dashboard/configuracoes/asaas` → `POST /asaas/config` → `AsaasController.salvarConfig` → `AsaasService.salvarConfig:81`) escreve em **`AsaasConfig` (legado)**.
+- **Service** (`AsaasService.getConfig:65`) lê de **`AsaasConfig` (legado)**.
+- **Webhook** (`AsaasService.processarWebhook:349`) lê de **`AsaasConfig` (legado)**.
+- **`GatewayPagamentoService`** (`gateway-pagamento.service.ts:35,70`) lê de `ConfigGateway` apenas pra resolver qual adapter usar; depois delega pro `AsaasAdapter` que delega pro `AsaasService` que lê de novo `AsaasConfig`.
+
+**Conclusão:** UI + service + webhook consistentes em **`AsaasConfig`**. **Sem dessincronia ATIVA hoje.** Os 5 `AsaasCobranca` validados em Sprint 12 (sandbox) provam que o caminho funciona.
+
+**Risco LATENTE:** se UI futura (ex.: **Fatia L — UI auto-config Asaas no painel parceiro**) escrever em `ConfigGateway` sem migrar a leitura do `AsaasService` (linhas 65, 81, 349), aí sim dispara dessincronia. **Próxima UI parceiro DEVE migrar leitura junto** — incluir esse passo no escopo da Fatia L como pré-requisito.
+
+**D-33 hoje:** **🟡 P2 LATENTE / DOCUMENTADO** (era P1 ATIVO no catálogo original). Não bloqueia mais Fatia A canário (Caminho B aprovado 13/05 noite — docs only, sem refator). Reavaliar quando Fatia L começar — provavelmente absorvido lá como sub-tarefa.
 
 ### 2.6 Cooperativas hoje no banco (3 registros)
 
@@ -221,7 +231,7 @@ LOC = linhas de `.ts` excluindo `.spec.ts`. Endpoints = decorators `@Get/Post/Pu
 |---|---:|---:|---:|---:|---|
 | `financeiro` | 1.640 | 0 | 30 | 0 | Contábil (PlanoContas, LancamentoCaixa, ContratoUso). Sem specs. |
 | `integracao-bancaria` | 1.339 | 0 | 11 | 1 | BB + Sicoob. Sem specs (débito P3 catalogado). |
-| `asaas` | 612 | 0 | 9 | 0 | Adapter + Customer. **`asaas.service.ts:65` ainda lê `AsaasConfig` legado** (D-33 P1). |
+| `asaas` | 612 | 0 | 9 | 0 | Adapter + Customer. **`asaas.service.ts:65` lê `AsaasConfig` legado consistentemente com UI + webhook** (D-33 P2 latente — reframed 13/05). |
 | `gateway-pagamento` | 430 | 1 | 0 | 0 | Adapter pattern. 0 endpoints (consumido por outros módulos). |
 | `bandeira-tarifaria` | 351 | 0 | 7 | 1 | Cron mensal sincroniza ANEEL. |
 | `configuracao-cobranca` | 217 | 0 | 5 | 0 | Regras desconto por usina/cooperativa. |
@@ -340,7 +350,7 @@ H.1 listou **6 entidades inexistentes** no schema (gap "14 cats somam 68" se exp
 | 4 | **Núcleo — Cobrança & Fatura** | 4 | `Cobranca`, `FaturaProcessada`, `GeracaoMensal`, `BandeiraTarifaria` |
 | 5 | **Regulatório / Tarifas** | 4 | `TarifaConcessionaria`, `HistoricoReajuste`, `HistoricoReajusteTarifa`, `ConfiguracaoMotor` |
 | 6 | **Financeiro — Contábil** | 5 | `PlanoContas`, `LancamentoCaixa`, `ContratoUso`, `ContaAPagar`, `TransferenciaPix` |
-| 7 | **Financeiro — Pagamentos & Gateways** | 9 | `FormaPagamentoCooperado`, `ConfiguracaoBancaria`, `CobrancaBancaria`, `ConfigGateway`, `ConfigGatewayPlataforma`, `CobrancaGateway`, `AsaasConfig` (LEGADO — D-33), `AsaasCustomer`, `AsaasCobranca` (count=0 hoje — Decisão 23) |
+| 7 | **Financeiro — Pagamentos & Gateways** | 9 | `FormaPagamentoCooperado`, `ConfiguracaoBancaria`, `CobrancaBancaria`, `ConfigGateway` (atual, populado por seed), `ConfigGatewayPlataforma`, `CobrancaGateway`, `AsaasConfig` (LEGADO — usado por UI + service consistentemente, D-33 P2 latente), `AsaasCustomer`, `AsaasCobranca` (5 — Sprint 12 sandbox) |
 | 8 | **SaaS multi-tenant** | 2 | `PlanoSaas`, `FaturaSaas` |
 | 9 | **Comercial — Convênios** | 4 | `ContratoConvenio`, `ConvenioCooperado`, `HistoricoFaixaConvenio`, `ConversaoCreditoSemUc` |
 | 10 | **Comercial — MLM / Indicação** | 4 | `ConfigIndicacao`, `Indicacao`, `BeneficioIndicacao`, `ConviteIndicacao` |
@@ -367,7 +377,7 @@ H.1 listou **6 entidades inexistentes** no schema (gap "14 cats somam 68" se exp
 | `ConfigTenant` | 19 | 15 chaves email (smtp + monitor) + tarifas mínimas + parâmetros MMGD |
 | `AsaasCobranca` | **5** | Sandbox CoopereBR (criadas 23-27/04 durante Sprint 12 validation). Status `RECEIVED`, valores R$ 8/12/20/40/500. Cobrancas linkadas estão `PAGO`. Detalhe completo em §6 fluxo Caminho B. |
 | `AsaasCustomer` | 62 | Customers Asaas registrados (sandbox) |
-| `CobrancaGateway` | 7 | Camada de adapter (não mais usada — `asaas.service.ts` ainda lê de `AsaasConfig` legado, D-33) |
+| `CobrancaGateway` | 7 | Camada de adapter persistente (registros via `GatewayPagamentoService.emitirCobranca`). Caminho ortogonal ao `AsaasService` direto — D-33 reframed P2 latente. |
 | `FaturaProcessada` | 17 | 12 são seeds B.5; 1 caso real OCR (João Santos 03/2026) |
 | `FaturaSaas` | 3 | PENDENTES, sem `asaasCobrancaId` populado |
 | `AuditLog` | 0 | Inativo — D-30N (interceptor não implementado) |
@@ -612,7 +622,7 @@ SELECT COUNT(*) FROM faturas_processadas; → 17
                                 │
                                 ▼ (se gateway Asaas configurado)
                   GatewayPagamentoService.emitirCobranca()
-                    └─ AsaasAdapter (atual = AsaasService LEGADO — D-33)
+                    └─ AsaasAdapter → AsaasService (lê AsaasConfig legado consistentemente — D-33 P2 latente)
                                 │
                                 ▼ POST Asaas API
                   Asaas API → cria Charge (PIX + boleto)
@@ -650,7 +660,7 @@ SELECT COUNT(*) FROM cobranca_gateway;       → 7
 > **Correção retroativa Decisão 23:** Sessão 12/05 noite e Dia 1 do H.2 (commit `382f40e` §4.4) afirmaram "AsaasCobranca = 0" e "31 PAGAS = 100% baixa manual". **Errado.** Re-validação 13/05 noite via SQL revelou os 5 registros sandbox. Memória estava inflada — Decisão 23 cumpre seu propósito ao re-validar.
 
 **Bloqueios pra produção real (Fatia A canário):**
-- D-33 (dual-path Asaas — `getConfig()` lê `AsaasConfig` legado em vez de `ConfigGateway` atual)
+- ~~D-33~~ **NÃO bloqueia mais** (reframed 13/05 — UI + service usam `AsaasConfig` consistente, sem dessincronia ativa). Reavaliar quando Fatia L começar.
 - Conta Asaas-CoopereBR em produção (sandbox já funciona — provado pelos 5 registros)
 
 **Referências cruzadas:**
@@ -1036,11 +1046,11 @@ AuditoriaRegulatoriaService.executar()
 
   | Model | Tabela | Status | Forma das credenciais |
   |---|---|---|---|
-  | `AsaasConfig` | `asaas_configs` | **LEGADO** (D-33) — schema diz "manter por compat sandbox" | `apiKey: String` direto (390 chars com encryption AES — D-34) |
-  | `ConfigGateway` | `config_gateways` | **ATUAL** multi-tenant — escrito pela UI super admin desde 22/04/2026 | `credenciais: Json` (`{ apiKey: ... }`) |
-  | `ConfigGatewayPlataforma` | `config_gateway_plataforma` | Singleton SISGD para Asaas-Luciano (FaturaSaas) | `credenciais: Json` |
+  | `AsaasConfig` | `asaas_configs` | **LEGADO mas em uso CONSISTENTE** (UI + service + webhook) — schema diz "manter por compat sandbox" | `apiKey: String` direto (390 chars com encryption AES-256-GCM via `AsaasService.encrypt` — D-34) |
+  | `ConfigGateway` | `config_gateways` | **ATUAL** multi-tenant — populado por seed/script manual (zero `configGateway.create/update/upsert` em código rodável). Lido apenas por `GatewayPagamentoService` pra resolver qual adapter usar | `credenciais: Json` (`{ apiKey: ... }`) |
+  | `ConfigGatewayPlataforma` | `config_gateway_plataforma` | Singleton SISGD para Asaas-Luciano (FaturaSaas) — vazio | `credenciais: Json` |
 
-- **Risco D-33 ativo:** UI escreve em `ConfigGateway`, mas `asaas.service.ts:64` `getConfig()` ainda lê de `AsaasConfig` legado (`prisma.asaasConfig.findUnique({ where: { cooperativaId } })`). Fix planejado em sub-fatia pré-Fatia A.
+- **Reframe D-33 (13/05 noite — Fase 1 investigação read-only):** UI super admin (`/dashboard/configuracoes/asaas` → `POST /asaas/config`) escreve em `AsaasConfig`. Service (`asaas.service.ts:65/79/349`) lê de `AsaasConfig`. **Sem dessincronia ativa hoje** — caminho consistente. Os 5 `AsaasCobranca` validados Sprint 12 provam que funciona end-to-end. Risco é **LATENTE**: futura UI parceiro (Fatia L) precisa migrar leitura junto se decidir escrever em `ConfigGateway`. **Severidade D-33 baixada P1 → P2 latente.** Caminho B (docs only) aprovado em 13/05; refator código adiado pra absorção natural na Fatia L.
 - **Encryption (D-34):** `asaas.service.ts:salvarConfig` chama `this.encrypt(data.apiKey)` antes de persistir; `getConfigMasked` chama `this.decrypt(config.apiKey)` antes de retornar. Algoritmo a documentar (env `ASAAS_ENCRYPT_KEY` referenciado).
 - **Endpoints backend que consomem Asaas:** 9 em `asaas.controller.ts` (`config`, `testar-conexao`, `customers`, `cobrancas`, etc.).
 - **Webhook in:** `POST /webhooks/asaas` (HMAC-SHA256 — verificado contra `webhookToken` de `AsaasConfig`).
@@ -1130,7 +1140,7 @@ AuditoriaRegulatoriaService.executar()
 
 | # | Integração | Estado | Bloqueador |
 |---:|---|---|---|
-| 1 | Asaas | 🟡 sandbox OK, prod 🔴 | D-33 dual-path + abrir conta produção |
+| 1 | Asaas | 🟡 sandbox OK, prod 🔴 | Abrir conta Asaas-CoopereBR produção (D-33 reframed P2 latente — não bloqueia mais) |
 | 2 | BB + Sicoob | 🟡 código existe, 0 specs | Fatia D1 (conciliação) |
 | 3 | Banestes | 🔴 não iniciado | Sprint 7 / adendo 12/05 |
 | 4 | Anthropic Claude | 🟢 OCR funcional | — |
@@ -1350,7 +1360,7 @@ enum PerfilUsuario {
 - **Diretório:** `backend/src/gateway-pagamento/` (430 LOC, 1 spec).
 - **Adapters:** Asaas (legado via `asaas.service.ts`), futuros BB/Sicoob/Banestes.
 - **Princípio:** nunca chamar `AsaasService` direto de fora do módulo `asaas/` — usar `GatewayPagamentoService`. Exceção documentada: `pix-excedente.service.ts` (transferência PIX específica).
-- **Risco D-33:** `asaas.service.ts:64` lê `AsaasConfig` legado, UI escreve em `ConfigGateway` atual. Sub-fatia pré-Fatia A.
+- **D-33 reframed (13/05):** `asaas.service.ts:65` lê `AsaasConfig` legado, **UI também escreve em `AsaasConfig` legado** — consistente. Risco LATENTE só se Fatia L (UI parceiro auto-config) escrever em `ConfigGateway` sem migrar leitura. Caminho B (docs only) aprovado.
 
 ### 11.5 UI v1 só KWH_CHEIO/SEM_TRIBUTO (Sprint 5 ponto 3)
 
@@ -1503,7 +1513,7 @@ pm2 restart cooperebr-backend
 | Componente | Estado | Bloqueador |
 |---|---|---|
 | Caminho A OCR | 🟡 cru (1 caso histórico real + 12 seeds) | Canário Caminho A real (Fatia A) |
-| Caminho B Asaas E2E | 🟡 sandbox OK (5 `AsaasCobranca` validadas Sprint 12), produção 🔴 | D-33 dual-path + abrir conta produção |
+| Caminho B Asaas E2E | 🟡 sandbox OK (5 `AsaasCobranca` validadas Sprint 12), produção 🔴 | Abrir conta Asaas-CoopereBR produção (D-33 reframed P2 latente — não bloqueia mais) |
 | FaturaSaas Luciano→Parceiro | 🔴 ConfigGatewayPlataforma vazio (count=0) | Luciano abrir conta Asaas-SISGD + Fatia D3 (D-29F.1+.2+.3) |
 | MLM cascata | 🟡 cabeado, 10 indicações + 0 benefícios | D-30M aguarda 1º indicado pagar via Caminho B |
 | AuditLog interceptor | 🔴 inativo (count=0) | D-30N — Sprint 5/6 |

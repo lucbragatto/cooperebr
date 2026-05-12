@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-13** — Fase B concluída (B.0 INDEX + SISTEMA esqueleto, B.1+B.2 débitos atualizados/decompostos, B.3 Sprint Cadastros+Financeiro Consolidado catalogado com 11 fatias).
+> Última atualização: **2026-05-13 noite** — Fatia H.2 SISTEMA.md ✅ entregue (M1 do Plano Mestre) + D-33 reframed P1→P2 latente via Caminho B (docs only, sem código).
 
 ---
 
@@ -12,15 +12,16 @@
 
 ### Última sessão
 
-- **Quando:** 2026-05-13 (Fase B claude.ai + Code, sequência B.0 → B.6)
-- **Tipo:** Code (execução documental) + claude.ai (revisão + decisões)
+- **Quando:** 2026-05-13 (claude.ai + Code, dia inteiro: Fase B + Fatia H.2 + Sub-fatia D-33 Caminho B)
+- **Tipo:** Code (execução documental + investigação read-only) + claude.ai (revisão + decisões)
 - **Resultado:**
-  - **B.0** (commit `94bf9dc`): `docs/INDEX.md` novo (82 linhas) + `docs/SISTEMA.md` rewrite (346 linhas, era stub 24) + `docs/README.md` atualizado apontando pro INDEX. Fix mínimo Seção 3 ("Comunicação 4 não 3").
-  - **B.1+B.2** (commit `049db42`): D-31 reframed P1→P2 (só guard preventivo, sem backfill — dados fictícios revelados em 12/05); D-32 catalogado P1 STANDBY (migração `kwhContrato` legado → `kwhContratoAnual` novo, 61 contratos NULL); D-30R adiado indefinidamente (72 contratos legados, substituído por re-cadastro via Caminho A); D-29F decomposto em D-29F.1 (cron geração) + D-29F.2 (envio Asaas) + D-29F.3 (comunicação D-7/D-3/D-1); D-33 catalogado P1 (dual-path Asaas `AsaasConfig` legado vs `ConfigGateway` atual — bloqueia Fatia A canário); D-34 catalogado P3 (encryption UI `****MzY5` — 30min investigação).
-  - **B.3** (commit `cbce0aa`): Sprint Cadastros+Financeiro Consolidado catalogado em `PLANO-ATE-PRODUCAO.md` Seção 3c — **11 fatias em 3 horizontes**: CURTO (A canário, B multa/juros, C CooperToken Etapa 1, D3 FaturaSaas, H SISTEMA.md em 4 sub-fases) + MÉDIO (D1 conciliação, D2 DRE, G débitos cumulativos) + LONGO (E polish cadastros, F painel super-admin, L UI auto-config Asaas) + sub-fatia dual-path Asaas (D-33) pré-Fatia A. Sequência operacional Opção 4 confirmada (8 passos numerados).
-  - **5 achados-chave do dia (Decisão 23 aplicada):** (1) `AsaasConfig` sandbox CoopereBR existe desde 23/03 (criado em Sprint 7/8 antigo — memória do Luciano tinha esquecido); (2) dual-path Asaas ATIVO entre `AsaasConfig` (legado, tail `dfe8`) vs `ConfigGateway` (atual multi-tenant, tail `2776`); (3) **3 models gateway** coexistem no schema (`AsaasConfig` + `ConfigGateway` + `ConfigGatewayPlataforma` — não 1 como assumido); (4) `ConfigTenant` key-value email multi-tenant operacional; (5) hipótese "backend multi-tenant pronto, falta UI parceiro auto-config" **CONFIRMADA** — bloqueia Sinergia entrar mas não bloqueia canário CoopereBR (super admin configura por enquanto).
-- **Commits:** 4 (`94bf9dc` B.0 + `049db42` B.1+B.2 + `cbce0aa` B.3 + B.4/B.5/B.6 pendente fechamento)
-- **Próxima sessão:** **ETAPA 1 do Plano Mestre** — H.2 SISTEMA.md base (45 módulos + 80 models + 152 telas detalhados, 2-3d Code).
+  - **Fase B** (4 commits): `94bf9dc` INDEX+SISTEMA esqueleto (B.0) + `049db42` débitos (B.1+B.2) + `cbce0aa` Sprint Consolidado (B.3) + `e5eb360` controle+frase (B.4+B.5+B.6).
+  - **Decisão 24 cleanup** (commit `b0663c9`): consolidar frase de retomada local único + grep amplo antes de atualizar.
+  - **Fatia H.2 SISTEMA.md base** (3 commits — **M1 do Plano Mestre entregue**): `382f40e` Dia 1 (backend 45 módulos + 80 models + correção retroativa AsaasCobranca=5) + `0528cd8` Dia 2 (frontend 152 telas + 10 fluxos críticos) + `464e4d3` Dia 3 (integrações + crons + auth + observabilidade + decisões + env vars). SISTEMA.md cresceu de 24 → 1.542 linhas. Pessoa nova lê em ~45 min.
+  - **Sub-fatia D-33 Caminho B** (1 commit pendente neste prompt): Fase 1 investigação read-only revelou que **D-33 era LATENTE, não ATIVO** (UI + service + webhook usam `AsaasConfig` consistente). Reframe P1→P2 latente em 4 docs (SISTEMA.md + debitos + plano + controle). **Zero código tocado.** Fatia A liberada (não depende mais D-33).
+  - **2 aplicações Decisão 23 em 24h:** (1) 12/05 noite — desfeita memória "31 PAGAS = 100% baixa manual / AsaasCobranca=0" (real: 5 via Asaas sandbox + 26 manual). (2) 13/05 noite — desfeita premissa "UI escreve em ConfigGateway / dual-path ATIVO" (real: UI escreve em AsaasConfig consistente / D-33 LATENTE).
+- **Commits:** 8 (`94bf9dc` + `049db42` + `cbce0aa` + `e5eb360` + `b0663c9` + `382f40e` + `0528cd8` + `464e4d3` + commit D-33 reframe pendente).
+- **Próxima sessão:** **Fatia A canário Caminho A real** (2-4d Code) — 1 cooperado real fim a fim Asaas sandbox CoopereBR. Marco M2. Liberada (D-33 não bloqueia mais). OU outra prioridade Luciano.
 
 ### Sessão anterior
 
@@ -192,6 +193,8 @@
 
 - **Decisão 19** (02/05 manhã): ritual abertura/fechamento de sessão
 - **Decisão 20** (03/05 fechamento): validação prévia em CADA resposta + verificação de conflito antes de propor sprint
+- **Decisão 23 aplicada 2× em 24h** (12/05 noite + 13/05 noite): (1) desfeita memória "AsaasCobranca=0 / 31 PAGAS = 100% baixa manual" → real é 5 via Asaas sandbox + 26 manual (Sprint 12 validation); (2) desfeita premissa "UI escreve em ConfigGateway / dual-path D-33 ATIVO" → real é UI escreve em AsaasConfig consistentemente / D-33 LATENTE só. Padrão: afirmação categórica de memória catalogada vira hipótese a re-validar via SQL/grep antes de planejar refator.
+- **Decisão 24** (13/05 noite): frase de retomada vive em UM SÓ LUGAR + grep amplo (`voltei|frase de retomada|como retomar`) antes de atualizar (memória `ritual_abertura_fechamento.md`).
 - **Sprint 5 ponto 3 atualizado** (04/05 noite — sessão claude.ai): UI v1 e API v1 só aceitam KWH_CHEIO/SEM_TRIBUTO. Decisão original "configura via API" virou letra morta desde Fase B (helper canônico throw NotImplementedException). Aplicado via `<option disabled>` + `@IsIn` no DTO + nota datada na sessão Sprint 5.
 - **Adendo §11 spec CooperToken** (11/05 sessão Code, Commit 7): não retroatualiza §1-§10. 5 achados validados antes (Decisão 20): identidade SISGD vs CoopereBR, numeração de sprints (8/9/10), ConfigCooperToken vs ConfigDesvalorizacao, estado real do MVP, pré-requisitos P0 do refator. **D-30Z** catalogado (P3 documental, 85 cooperados intermediários `opcaoToken→modoRemuneracao`).
 - **Reclassificações:** D-30M P1→P2, D-30N escopo expandido, D-30R catalogado novo
@@ -214,9 +217,9 @@
 
 **Sequência operacional Opção 4 (Plano Mestre, confirmada 12/05):**
 
-A. **ETAPA 1 — H.2 SISTEMA.md base** [P0 — 2-3d Code] — 45 módulos + 80 models + 152 telas detalhados. Marco M1.
-B. **Sub-fatia D-33 dual-path Asaas** [P1 — 1-2d Code] — refator `asaas.service.ts:65` `getConfig()` pra ler `ConfigGateway` em vez de `AsaasConfig` legado. Pré-req Fatia A.
-C. **Fatia A canário Caminho A real** [P0 — 2-4d Code] — 1 cooperado real fim a fim Asaas sandbox CoopereBR. Marco M2.
+A. ✅ **ETAPA 1 — H.2 SISTEMA.md base** [P0 — 2-3d Code] — **CONCLUÍDA 13/05** (Marco M1 entregue, 4 commits, 1.542 linhas).
+B. ~~**Sub-fatia D-33 dual-path Asaas**~~ [P1 — 1-2d Code] — **REFRAMED 13/05 noite via Caminho B** (docs only, sem código). D-33 P1→P2 latente. **Não bloqueia mais Fatia A.**
+C. **Fatia A canário Caminho A real** [P0 — 2-4d Code] — 1 cooperado real fim a fim Asaas sandbox CoopereBR. Marco M2. **Liberada** (D-33 não é mais pré-req).
 D. **Fatia H.3 + D3 em paralelo** [Marco M3] — ligações cross-módulo + FaturaSaas completo Luciano→Parceiro (D-29F.1+.2+.3 decompostos).
 E. **Fatia H.4 + B em paralelo** [Marco M4] — fluxos end-to-end + multa/juros mínimo.
 F. **Fatia C** [Marco M6 — janela disponível] — specs Jest módulo CooperToken (6-8h, autônomo).
@@ -750,7 +753,7 @@ Aí a transição vira automática com validação por flags + sugestão da engi
 **Sequência Plano Mestre Opção 4 (decidida 12/05 noite, confirmada 13/05):**
 
 1. **ETAPA 1 — H.2 SISTEMA.md base** (2-3d Code) — 45 módulos + 80 models + 152 telas. **Marco M1.**
-2. **Sub-fatia D-33 dual-path Asaas** (1-2d Code) — pré-req Fatia A.
+2. ~~**Sub-fatia D-33 dual-path Asaas** (1-2d Code) — pré-req Fatia A.~~ **REFRAMED Caminho B 13/05 noite — D-33 P2 latente, não bloqueia mais.**
 3. **Fatia A canário Caminho A real** (2-4d Code) — 1 cooperado real fim a fim. **Marco M2.**
 4. **Fatia H.3 + D3** em paralelo (2d + 5-8d) — **Marco M3.**
 5. **Fatia H.4 + B** em paralelo (1-2d + 3-5d) — **Marco M4.**

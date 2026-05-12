@@ -1410,33 +1410,61 @@ Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
 
 ---
 
-### D-33 — Dual-path Asaas (dessincronia `AsaasConfig` vs `ConfigGateway`)
+### D-33 — Dual-path Asaas — 🟡 P2 LATENTE / DOCUMENTADO (reframed 13/05 noite)
 
-**Severidade:** **P1** — sandbox tolera (ambas tail diferentes mas testáveis), produção causa bug operacional (sistema pode usar credencial "errada" em runtime).
+**Status:** 🟡 **P2 LATENTE / DOCUMENTADO** — risco existe mas não está dispando hoje. NÃO marcar como RESOLVIDO. Reavaliar quando Fatia L (UI parceiro auto-config Asaas) começar.
 
-**Tema:** dois models de gateway pra Asaas coexistem no schema com credenciais diferentes:
-- **`AsaasConfig`** (LEGADO, `schema.prisma:1346` com comentário "manter por compat sandbox"): 1 registro CoopereBR sandbox tail `dfe8`, criado 23/03, updated 27/04.
+**Severidade:** **P2** (era P1 no catálogo original 13/05 manhã). Reduzida porque não há dessincronia ATIVA — apenas LATENTE.
+
+**Tema original (13/05 manhã — premissa parcialmente errada):** dois models de gateway pra Asaas coexistem no schema com credenciais diferentes:
+- **`AsaasConfig`** (LEGADO, `schema.prisma:1348` — corrigido linha): 1 registro CoopereBR sandbox tail `dfe8`, criado 23/03, updated 27/04.
 - **`ConfigGateway`** (ATUAL multi-tenant): 1 registro CoopereBR `ASAAS` sandbox tail `2776`, criado 22/04.
-- **UI super admin** escreve em `ConfigGateway`.
+- ~~**UI super admin** escreve em `ConfigGateway`.~~ **ERRADO** — ver Reframe abaixo.
 - **`asaas.service.ts:65`** `getConfig()` lê de `AsaasConfig`.
 
-Resultado: sistema pode usar credencial errada em runtime quando admin atualiza via UI mas service continua lendo do model legado.
+### Reframe Fase 1 (13/05 noite) — investigação read-only revelou:
 
-**Persona:** cooperado real esperando cobrança gerada (precisa da credencial atualizada) vs admin que configurou credenciais via UI super admin (espera que valha).
+**UI super admin NÃO escreve em `ConfigGateway`.** O caminho real:
+- `/dashboard/configuracoes/asaas` → `POST /asaas/config` → `AsaasController.salvarConfig:38` → `AsaasService.salvarConfig:81` → `prisma.asaasConfig.upsert(...)` → escreve em **`AsaasConfig` (legado)**.
+- `AsaasService.getConfig:65` lê de `AsaasConfig`.
+- `AsaasService.processarWebhook:349` lê de `AsaasConfig`.
+- `GatewayPagamentoService.resolverAdapter:35,70` lê de `ConfigGateway` apenas pra resolver qual adapter usar; depois delega pro `AsaasAdapter` que delega pro `AsaasService` que lê de novo `AsaasConfig`.
 
-**Critério de pronto:**
-1. `asaas.service.ts:65` `getConfig()` refatorado pra ler de `ConfigGateway` via adapter (preferindo `ConfigGateway`, fallback `AsaasConfig` durante transição).
-2. `AsaasConfig` deprecado no schema (campo `@deprecated` + comentário apontando pra `ConfigGateway`).
-3. Spec Jest cobrindo cenário "ambas configs populadas, usa atual `ConfigGateway`".
-4. 1 cobrança Asaas teste fim a fim usando credenciais lidas de `ConfigGateway`.
+**Conclusão:** UI + service + webhook **consistentes em `AsaasConfig`**. **Zero dessincronia ATIVA hoje.** Os 5 `AsaasCobranca` validados em Sprint 12 (sandbox CoopereBR) provam que o caminho funciona end-to-end.
 
-**Estimativa:** 1-2 dias Code (sub-fatia do **Plano Mestre B.3**).
+**Risco real:** **LATENTE** — futura UI parceiro (Fatia L do Plano Mestre — UI auto-config Asaas no painel `/parceiro/`) precisa migrar leitura junto se decidir escrever em `ConfigGateway`. Sem isso, dispara dessincronia.
 
-**Dependências:** nenhuma técnica.
+### Decisão 13/05 noite — Caminho B aprovado
 
-**Bloqueia:** **Fatia A canário** — recomendo fechar essa sub-fatia (consolidação dual-path) **antes** de exercitar E2E real com cooperado de produção, senão dessincronia pode causar erro só visível em prod.
+Optado pelo **Caminho B (docs only)** ao invés de **Caminho A (refator 1-2d Code)** porque:
+1. Operação atual funciona (5 cobranças sandbox provadas).
+2. Refator de `getConfig` pra ler `ConfigGateway` tem risco de encryption não-validada (`ConfigGateway.credenciais` populado via seed/script — não validei se cifrado no mesmo formato `iv:enc:tag` AES-256-GCM).
+3. Próxima cobrança real (Fatia A canário) usa mesmo caminho consistente que UI — sem regressão esperada.
 
-**Origem:** investigação Code 13/05 manhã (item 7 do prompt refinado).
+**Reavaliar quando:** Fatia L começar — provavelmente absorvido lá como sub-tarefa "migrar leitura junto com escrita".
+
+### Bloqueio (atualizado)
+
+~~**Bloqueia Fatia A canário**~~ → **NÃO bloqueia mais.** Fatia A pode rodar sem D-33 fechar. Caminho consistente atual (UI escreve `AsaasConfig`, service lê `AsaasConfig`) é o mesmo que canário usaria.
+
+### Persona (atualizada)
+
+**Persona:** futuro engenheiro implementando **Fatia L** que assumir "service lê de `ConfigGateway`" e escrever só em `ConfigGateway` (sem migrar leitura) — quebra silenciosamente. Risco de regressão Fatia L → Fatia A.
+
+### Critério de pronto (revisado)
+
+D-33 **fica aberto como sentinela** (não fechar). Critério de pronto vira:
+1. **Fatia L incluir migração de leitura junto com escrita ConfigGateway** (sub-tarefa do escopo Fatia L).
+2. OU **decisão explícita** de manter `AsaasConfig` legado indefinidamente (`ConfigGateway` vira só metadata pra `GatewayPagamentoService` resolver adapter).
+3. Spec Jest dual-path quando refator acontecer (Fatia L ou outra).
+
+### Estimativa atual
+
+- **Caminho B (já entregue 13/05):** 45 min docs (Reframe em SISTEMA.md + debitos + plano + controle).
+- **Caminho A (não escolhido):** 1-2 dias Code se vier a ser necessário.
+- **Caminho C (não escolhido):** 3-5 dias Code se decidir consolidar de vez.
+
+**Origem:** investigação Code 13/05 manhã (item 7 do prompt refinado) catalogou D-33. **Reframe** Fase 1 D-33 noite 13/05 (Caminho B).
 
 ---
 
