@@ -1026,92 +1026,444 @@ AuditoriaRegulatoriaService.executar()
 
 ## 7. Integrações externas
 
-A preencher em H.2 com seção por integração.
+> Visão macro (tabela 5.1) já vista em §5/§6. Esta seção detalha **cada integração** com credenciais, endpoints consumidos, error handling e monitoramento.
 
-| Integração | Propósito | Estado | Models / Services |
-|---|---|---|---|
-| **Asaas** | Cobrança (PIX + boleto + webhook) | 🟡 Sandbox CoopereBR configurado (apiKey 390 chars). E2E nunca exercitado | `AsaasConfig` (legado), `ConfigGateway`, `asaas.service.ts`, `asaas.adapter.ts` |
-| **Banco do Brasil (BB)** | Boleto + conciliação | 🟡 Código em `integracao-bancaria/` (1339 linhas, 0 specs) | `ConfiguracaoBancaria`, `CobrancaBancaria` |
-| **Sicoob** | Idem | 🟡 Idem BB | Idem |
-| **Banestes** | Banco capixaba — a integrar | 🔴 Não iniciado (catalogado adendo 12/05) | A criar |
-| **Claude AI (Anthropic)** | OCR + CoopereAI | 🟢 OCR funcional (16 endpoints em `faturas/`). CoopereAI conceitual + heartbeat | Direct SDK |
-| **Email (IMAP + SMTP)** | Recebimento de faturas + envio de notificações | 🟡 Multi-tenant via `ConfigTenant` (CoopereBR com 11 chaves). Whitelist LGPD em dev (D-30X) | `email-monitor`, `email`, `ConfigTenantService` |
-| **WhatsApp** | Bot + envios direcionados | 🟡 6932 linhas, 0 specs. Em produção. | `whatsapp/`, `whatsapp-service/` |
-| **Assinafy** | Assinatura eletrônica (Sprint 3 refinado) | 🔴 Spec existe, integração não iniciada | A integrar |
-| **ANEEL** | Bandeiras tarifárias | 🟢 Cron mensal sincroniza | `bandeira-tarifaria/` |
-| **Supabase** | DB Postgres + Auth | 🟢 Em produção | Prisma client |
+### 7.1 Asaas (PIX + boleto + webhook)
 
-**Para cada integração em H.2:**
-- credenciais (modelo + variáveis env)
-- endpoints consumidos
-- error handling
-- monitoramento
+- **Propósito:** gateway principal para cobrança de cooperado (Caminho B Fluxo 3) e — via singleton SISGD — cobrança de parceiro (FaturaSaas Fluxo 8).
+- **Estado:** 🟡 sandbox CoopereBR funcionou (5 `AsaasCobranca` validadas Sprint 12 — correção retroativa Decisão 23, ver §6 Fluxo 3). Produção real ainda não exercitada.
+- **3 models de configuração coexistem:**
+
+  | Model | Tabela | Status | Forma das credenciais |
+  |---|---|---|---|
+  | `AsaasConfig` | `asaas_configs` | **LEGADO** (D-33) — schema diz "manter por compat sandbox" | `apiKey: String` direto (390 chars com encryption AES — D-34) |
+  | `ConfigGateway` | `config_gateways` | **ATUAL** multi-tenant — escrito pela UI super admin desde 22/04/2026 | `credenciais: Json` (`{ apiKey: ... }`) |
+  | `ConfigGatewayPlataforma` | `config_gateway_plataforma` | Singleton SISGD para Asaas-Luciano (FaturaSaas) | `credenciais: Json` |
+
+- **Risco D-33 ativo:** UI escreve em `ConfigGateway`, mas `asaas.service.ts:64` `getConfig()` ainda lê de `AsaasConfig` legado (`prisma.asaasConfig.findUnique({ where: { cooperativaId } })`). Fix planejado em sub-fatia pré-Fatia A.
+- **Encryption (D-34):** `asaas.service.ts:salvarConfig` chama `this.encrypt(data.apiKey)` antes de persistir; `getConfigMasked` chama `this.decrypt(config.apiKey)` antes de retornar. Algoritmo a documentar (env `ASAAS_ENCRYPT_KEY` referenciado).
+- **Endpoints backend que consomem Asaas:** 9 em `asaas.controller.ts` (`config`, `testar-conexao`, `customers`, `cobrancas`, etc.).
+- **Webhook in:** `POST /webhooks/asaas` (HMAC-SHA256 — verificado contra `webhookToken` de `AsaasConfig`).
+- **Counts banco hoje:**
+  ```
+  AsaasConfig=1 · ConfigGateway=1 · ConfigGatewayPlataforma=0 ·
+  AsaasCobranca=5 · AsaasCustomer=62 · CobrancaGateway=7
+  ```
+- **Env vars:** `ASAAS_ENCRYPT_KEY` (encryption credentials), `ASAAS_PIX_EXCEDENTE_ATIVO` (flag financeira).
+- **Error handling:** retry em `asaas.adapter.ts`. Falha de webhook gera log mas não bloqueia.
+- **Monitoramento:** PM2 logs + `EmailLog` quando notificação Asaas falha.
+
+### 7.2 Banco do Brasil (BB) + Sicoob
+
+- **Propósito:** boleto registrado + conciliação bancária (Fatia D1 do Plano Mestre).
+- **Estado:** 🟡 código em `integracao-bancaria/` (1.339 LOC, **0 specs**).
+- **Models:** `ConfiguracaoBancaria`, `CobrancaBancaria`, `CobrancaGateway` (camada adapter).
+- **Endpoints expostos:** 11 em `integracao-bancaria.controller.ts`.
+- **Cron:** `integracao-bancaria.service.ts:327` (`@Cron('5 6 * * *')`) — sincroniza boletos diariamente 06:05.
+- **Env vars:** `WEBHOOK_BANCO_TOKEN` (HMAC para webhook in).
+- **Bloqueio produção:** Fatia D1 do Plano Mestre (1 sem Code) + 0 specs (débito P3).
+
+### 7.3 Banestes
+
+- **Propósito:** banco capixaba — provedor regional CoopereBR.
+- **Estado:** 🔴 **NÃO INICIADO** — catalogado em adendo da sessão 12/05 (Sprint 7 do Plano Original). Sem código, sem credenciais, sem model dedicado.
+- **A criar:** model `BanestesConfig` (ou reutilizar `ConfigGateway` com `gateway='BANESTES'`), adapter no padrão de `gateway-pagamento/`.
+
+### 7.4 Anthropic / Claude AI
+
+- **Propósito:** (a) OCR de fatura concessionária (Fluxo 2 Caminho A); (b) agente conceitual CoopereAI (heartbeat + FAQ).
+- **Estado:** 🟢 OCR funcional fim a fim em 1 caso real histórico (João Santos 03/2026). CoopereAI conceitual ativo via heartbeat.
+- **Forma:** `@anthropic-ai/sdk` v0.86.1 — **direct SDK, sem MCP**.
+- **Models consumidos:** Claude (latest) — versão controlada por env `COOPEREAI_MODEL`.
+- **Env vars:** `ANTHROPIC_API_KEY` (chave única backend), `COOPEREAI_MODEL`, `COOPEREAI_MAX_TOKENS`.
+- **Endpoints consumidores no backend:** OCR em `faturas.service.ts` (16 endpoints `/faturas/*`); CoopereAI em `whatsapp/whatsapp-coopereai.service.ts`.
+- **Error handling:** retry com backoff em OCR; CoopereAI tem fallback "agente indisponível".
+- **Monitoramento:** logs PM2 + custos via dashboard Anthropic (externo).
+
+### 7.5 Email (IMAP + SMTP)
+
+- **Propósito:** (a) recebimento de fatura via IMAP (Fluxo 2); (b) envio de notificações via SMTP (cobranças, boas-vindas, propostas).
+- **Estado:** 🟡 multi-tenant via `ConfigTenant` (15 chaves email por tenant — `email.smtp.*` + `email.monitor.*`).
+- **Cron IMAP:** `email-recebimento.service.ts:26` (`@Cron(CronExpression.EVERY_5_MINUTES)`); `email-monitor.service.ts:81` (`@Cron('0 0 6 * * *')` — 1×/dia 06:00 reprocessa).
+- **Cron SMTP:** `email/email.service.ts` cron interno + chamadas síncronas.
+- **Env vars (fallback global, usado quando `ConfigTenant` vazio):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`, `EMAIL_SECURE`, `EMAIL_IMAP_*`, `IMAP_*` (legado).
+- **Whitelist LGPD em dev:** `D-30X` ativo — `WHITELIST_ATIVA` em `.env` controla bypass por ambiente.
+- **Counts:** `EmailLog=5` (3 ENVIADO + 2 ERRO — sub-utilizado, intercept não chega em todo envio).
+- **ConfigTenant chaves email hoje (15):** `email.smtp.host/port/user/pass/secure/from`, `email.monitor.host/port/user/pass/ativo`, etc.
+
+### 7.6 WhatsApp
+
+- **Propósito:** bot conversacional + envios direcionados (cobrança, MLM, alertas).
+- **Estado:** 🟡 em produção, **6.932 LOC + 0 specs** (maior módulo, débito P3 catalogado).
+- **2 processos coexistem:**
+  - `backend/src/whatsapp/` — module NestJS (6.932 LOC, 5 crons, 27 endpoints).
+  - `whatsapp-service/index.mjs` — serviço standalone separado (PM2 `cooperebr-whatsapp`), usa `BACKEND_WEBHOOK_URL` pra avisar backend de eventos.
+- **Webhook in:** `POST /webhooks/whatsapp` (autenticado por `WHATSAPP_WEBHOOK_SECRET`).
+- **Env vars backend:** `ADMIN_WHATSAPP_NUMBER`, `WA_COBRANCA_HABILITADO`, `WA_INADIMPLENTES_HABILITADO`, `WA_MLM_CONVITES_HABILITADO`, `WA_ALERTA_VENCIMENTO_HABILITADO`, `NUMEROS_EQUIPE`.
+- **Env vars whatsapp-service:** `BACKEND_WEBHOOK_URL`, `COOPERE_AI_URL`, `WHATSAPP_WEBHOOK_SECRET`, `PORT`.
+- **Crons:** 5 em backend (`whatsapp-cobranca.service.ts` — 3 crons; `whatsapp-conversa.job.ts` — 1; `whatsapp-mlm.service.ts` — 1).
+
+### 7.7 Assinafy
+
+- **Propósito:** assinatura eletrônica de termo de adesão e contratos (Sprint 3 do Plano Mestre — refinado adendo 12/05).
+- **Estado:** 🔴 **NÃO INICIADO**. Spec existe, integração não codificada. Tela `web/app/assinar/page.tsx` é stub.
+- **A criar:** adapter pattern em novo módulo `assinafy/`, env `ASSINAFY_API_KEY`.
+
+### 7.8 ANEEL (bandeira tarifária)
+
+- **Propósito:** sincronização da cor da bandeira tarifária (verde/amarela/vermelha) por mês.
+- **Estado:** 🟢 cron mensal funcional.
+- **Cron:** `bandeira-aneel.service.ts:126` (`@Cron('0 6 1 * *')` — dia 1 do mês 06:00).
+- **Model:** `BandeiraTarifaria`.
+- **Endpoint público ANEEL:** consultado via HTTP direto (sem SDK).
+- **Sem env vars dedicadas.**
+
+### 7.9 Supabase (Postgres + Auth + Storage)
+
+- **Propósito:** banco PostgreSQL gerenciado + Auth (não-Prisma para casos pontuais) + Storage (uploads).
+- **Estado:** 🟢 em produção, único provedor de banco hoje.
+- **Forma:** Prisma client conecta via `DATABASE_URL`. Auth/Storage via `@supabase/supabase-js` com `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`.
+- **Env vars:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+- **Engine Prisma:** `query_engine_bg.wasm` (v6 — não mais `.dll.node`). Lock no .wasm exige `pm2 stop` antes de `prisma generate`.
+
+### 7.10 Resumo: status das 9 integrações externas
+
+| # | Integração | Estado | Bloqueador |
+|---:|---|---|---|
+| 1 | Asaas | 🟡 sandbox OK, prod 🔴 | D-33 dual-path + abrir conta produção |
+| 2 | BB + Sicoob | 🟡 código existe, 0 specs | Fatia D1 (conciliação) |
+| 3 | Banestes | 🔴 não iniciado | Sprint 7 / adendo 12/05 |
+| 4 | Anthropic Claude | 🟢 OCR funcional | — |
+| 5 | Email IMAP+SMTP | 🟡 multi-tenant, sub-loggado | EmailLog interceptor mais amplo |
+| 6 | WhatsApp | 🟡 prod sem specs | Débito P3 (specs Jest) |
+| 7 | Assinafy | 🔴 não iniciado | Sprint 3 |
+| 8 | ANEEL bandeira | 🟢 cron OK | — |
+| 9 | Supabase | 🟢 prod | — |
 
 ---
 
-## 8. Crons agendados (24 ativos)
+## 8. Crons agendados (26 ativos + 1 comentado)
 
-A preencher em H.2 com tabela completa.
+> **Validação Decisão 23:** `grep -rE "^\s*@Cron\(" backend/src` retorna **27 ocorrências** — 26 ativas + 1 comentada em `monitoramento-usinas.service.ts:21` (`// @Cron('* * * * *')`). H.1 esqueleto dizia "24 ativos" — drift corrigido.
 
-Referência completa: `docs/relatorios/2026-05-12-mapeamento-cadastros-e-financeiro.md` §0.10 (25 crons mapeados, sendo 1 comentado em `monitoramento-usinas`).
+### 8.1 Tabela completa (ordenada por horário)
 
-**Critérios pra H.2:**
-- expressão cron + janela
-- função
-- side effects (escreve onde, envia o quê)
-- spec coverage (zero em quase todos)
+| # | Arquivo | Linha | Expressão | Janela | Função | Spec? |
+|---:|---|---:|---|---|---|:---:|
+| 1 | `email/email-recebimento.service.ts` | 26 | `EVERY_5_MINUTES` | 5 em 5 min | Polling IMAP — busca novos emails de fatura | — |
+| 2 | `observador/observador.service.ts` | 273 | `EVERY_5_MINUTES` | 5 em 5 min | Modo leitura — sincroniza ObservacaoAtiva | — |
+| 3 | `whatsapp/whatsapp-conversa.job.ts` | 13 | `EVERY_HOUR` | a cada hora | Limpeza/expiração de conversas WA | — |
+| 4 | `documentos/documentos-aprovacao.job.ts` | 17 | `0 */1 * * *` | hora cheia | Reprocessa documentos aguardando aprovação | — |
+| 5 | `cooper-token/cooper-token.job.ts` | 120 | `0 2 1 * *` | dia 1 do mês 02:00 | Reset/snapshot mensal CooperToken | — |
+| 6 | `cobrancas/cobrancas.job.ts` | 123 | `EVERY_DAY_AT_2AM` | 02:00 | Retentativas de cobrança via Asaas | — |
+| 7 | `convenios/convenios.job.ts` | 12 | `0 3 * * *` | 03:00 | Recálculo de faixas de convênio diário | — |
+| 8 | `cooperados/cooperados.job.ts` | 11 | `0 3 * * *` | 03:00 | Atualiza status cooperado (PENDENTE → ATIVO etc.) | — |
+| 9 | `cooperados/cooperados.job.ts` | 24 | `0 3 * * *` | 03:00 | Job auxiliar cooperado | — |
+| 10 | `convite-indicacao/convite-indicacao.job.ts` | 63 | `0 3 * * *` | 03:00 | Cleanup de convites expirados | — |
+| 11 | `cobrancas/cobrancas.job.ts` | 145 | `EVERY_DAY_AT_3AM` | 03:00 | Atualiza status A_VENCER → VENCIDO | — |
+| 12 | `bandeira-tarifaria/bandeira-aneel.service.ts` | 126 | `0 6 1 * *` | dia 1 mês 06:00 | Sync bandeira ANEEL | — |
+| 13 | `email-monitor/email-monitor.service.ts` | 81 | `0 0 6 * * *` | 06:00 (1×/dia) | Reprocessamento IMAP completo | 1 |
+| 14 | `saas/saas.service.ts` | 130 | `0 6 1 * *` | dia 1 mês 06:00 | Geração mensal FaturaSaas (Fluxo 8 — D-29F.1) | 2 (`saas` + `metricas-saas`) |
+| 15 | `cooper-token/cooper-token.job.ts` | 20 | `0 6 * * *` | 06:00 | Job diário CooperToken (notificações?) | — |
+| 16 | `integracao-bancaria/integracao-bancaria.service.ts` | 327 | `5 6 * * *` | 06:05 | Sync boletos BB/Sicoob | — |
+| 17 | `cobrancas/cobrancas.job.ts` | 205 | `15 6 * * *` | 06:15 | Notificações de cobrança (WA + email) | — |
+| 18 | `relatorios/posicao-cooperado.job.ts` | 11 | `0 7 * * *` | 07:00 | Snapshot posição cooperado (relatório) | — |
+| 19 | `cobrancas/cobrancas.job.ts` | 23 | `0 8 * * *` | 08:00 | **Geração diária de Cobrança** (Fluxo 7) | 1 (`cobrancas`) |
+| 20 | `whatsapp/whatsapp-cobranca.service.ts` | 27 | `0 8 5 * *` (BR) | dia 5 mês 08:00 | Lembrete cobrança 5 dias antes vencimento | — |
+| 21 | `motor-proposta/motor-proposta.job.ts` | 21 | `EVERY_DAY_AT_9AM` | 09:00 | Job motor proposta (recálculos?) | — |
+| 22 | `whatsapp/whatsapp-cobranca.service.ts` | 217 | `0 9 * * *` (BR) | 09:00 | Envio diário WA cobrança | — |
+| 23 | `clube-vantagens/clube-vantagens.job.ts` | 15 | `0 9 1 * *` | dia 1 mês 09:00 | Resumo mensal Clube Vantagens (env `CLUBE_RESUMO_MENSAL_HABILITADO`) | — |
+| 24 | `whatsapp/whatsapp-cobranca.service.ts` | 441 | `30 9 * * *` (BR) | 09:30 | Envio diário WA inadimplentes | — |
+| 25 | `convite-indicacao/convite-indicacao.job.ts` | 20 | `0 10 * * *` | 10:00 | Envio diário de convites pendentes | — |
+| 26 | `whatsapp/whatsapp-mlm.service.ts` | 20 | `0 10 1 * *` (BR) | dia 1 mês 10:00 | Resumo mensal MLM | — |
+| **27 (comentado)** | `monitoramento-usinas/monitoramento-usinas.service.ts` | 21 | `// @Cron('* * * * *')` | (desativado) | Monitoramento de usinas a cada minuto — desativado por carga | — |
+
+### 8.2 Cobertura de specs em crons
+
+**Apenas 4 dos 26 crons têm spec do service que os contém:**
+
+| Cron | Spec |
+|---|---|
+| `email-monitor` | `email-monitor.service.spec.ts` (1 spec) |
+| `saas` (geração FaturaSaas) | `saas.service.spec.ts` + `metricas-saas.service.spec.ts` |
+| `cobrancas` (geração diária) | `cobrancas.service.spec.ts` (cobre helper, não cron diretamente) |
+
+**22 crons sem spec dedicado** — débito de cobertura. Catalogar em Fatia G.
+
+### 8.3 Distribuição por horário
+
+- **Polling rápido (5 min):** 2 crons (IMAP + Observador)
+- **Hora cheia:** 2 crons (WA conversa + documentos)
+- **02:00:** 2 crons (CooperToken mensal + cobranças retentativa)
+- **03:00:** 5 crons (atualização status diária)
+- **06:00–06:15:** 6 crons (geração diária + ANEEL + IMAP + sync bancos + notif cobrança)
+- **07:00:** 1 cron (snapshot relatório)
+- **08:00:** 2 crons (cobrança + WA cobrança mensal)
+- **09:00–09:30:** 4 crons (motor + WA cobrança + clube + WA inadimplentes)
+- **10:00:** 2 crons (convites + WA MLM mensal)
+
+**Janela crítica:** 06:00–06:15 concentra 6 crons. Risco de pico CPU em ambiente single-instance.
+
+### 8.4 Referência cruzada
+
+Detalhamento adicional (categorias por domínio) em `docs/relatorios/2026-05-12-mapeamento-cadastros-e-financeiro.md` §0.10 (mapeamento original que apontou 25 crons — corrigido aqui pra 26 ativos + 1 comentado).
 
 ---
 
 ## 9. Autenticação, autorização e sessão
 
-A preencher em H.2 com:
-- JWT (gerado pelo `auth/`)
-- Roles: `SUPER_ADMIN`, `ADMIN`, `OPERADOR`, `COOPERADO`, `AGREGADOR` (enum `PerfilUsuario`)
-- Guards: `JwtAuthGuard`, `RolesGuard`
-- Facial recognition (campo `Usuario.fotoFacialUrl`)
-- Reset token (`Usuario.resetToken`)
-- Token de assinatura remota (`Cooperado.tokenAssinatura` + expiry)
-- Multi-tenant guard: cooperativaId sempre do JWT, não do body/query
+### 9.1 JWT
+
+- **Emissor:** módulo `auth/` (1.392 LOC, 1 spec — `tenant-guard.helper.spec.ts`).
+- **Forma:** Bearer token em header `Authorization` (e cookie HTTP-only para sessões web).
+- **Payload:** `{ userId, perfil, cooperativaId? }` — `cooperativaId` ausente para `SUPER_ADMIN` (passa via query/header explícito).
+- **Env var:** `JWT_SECRET` (obrigatório — sem fallback).
+- **Refresh:** não há refresh token rotativo — sessão expira e usuário re-loga.
+- **Frontend:** interceptor `web/lib/api.ts` injeta `Authorization: Bearer ...` automaticamente; 401 → redirect `/login`.
+
+### 9.2 Roles (5 perfis — enum `PerfilUsuario`)
+
+```prisma
+enum PerfilUsuario {
+  SUPER_ADMIN   // SISGD-global, atravessa tenants
+  ADMIN         // Admin parceiro (escopo cooperativaId)
+  OPERADOR      // Operador parceiro (escopo cooperativaId, perms reduzidas)
+  COOPERADO     // Cooperado/Consorciado/etc. (acesso /portal)
+  AGREGADOR     // Visão consolidada (/agregador)
+}
+```
+
+**Distribuição banco hoje (validado SQL):** 3 SUPER_ADMIN + 3 ADMIN + 3 COOPERADO = 9 usuários (operacional dev/teste).
+
+### 9.3 Guards
+
+| Guard | Localização | Responsabilidade |
+|---|---|---|
+| `JwtAuthGuard` | `auth/jwt-auth.guard.ts` | Valida JWT + popula `req.user` |
+| `RolesGuard` | `auth/roles.guard.ts` | Filtra por `@Roles(...)` decorator no controller/método |
+| `ModuloGuard` | `auth/modulo.guard.ts` | Filtra por módulos ativos no `PlanoSaas` do tenant |
+| `TenantGuardHelper` | `auth/tenant-guard.helper.ts` | Helper para forçar `cooperativaId` em queries (1 spec) |
+
+**Multi-tenant inegociável:** `cooperativaId` SEMPRE vem do JWT (`req.user.cooperativaId`), NUNCA de body/query/path. SUPER_ADMIN é exceção controlada — bypass via query `?cooperativaId=...` em endpoints específicos (ex.: `asaas.controller.ts:42` `getConfig`).
+
+### 9.4 Facial recognition
+
+- **Campo:** `Usuario.fotoFacialUrl` (string opcional — URL para foto armazenada).
+- **Onde:** `auth/facial/facial.controller.ts` (`@UseGuards(JwtAuthGuard)`).
+- **Estado:** funcional em alguns fluxos de login, mas não obrigatório.
+
+### 9.5 Reset de senha
+
+- **Campo:** `Usuario.resetToken` + `Usuario.resetTokenExpiry`.
+- **Fluxo:** `/esqueci-senha` → email com link → `/redefinir-senha?token=...` → atualiza `passwordHash`, limpa token.
+
+### 9.6 Token de assinatura remota (cooperado)
+
+- **Campo:** `Cooperado.tokenAssinatura` + `tokenAssinaturaExpiraEm`.
+- **Uso:** cooperado recebe email/WA com link `/portal/assinar/[token]` (também usado em `/aprovar-proposta?token=...` para Fluxo 4).
+- **Expiry:** configurável (default ~7 dias) — token consumido após primeiro aceite.
+
+### 9.7 SUPER_ADMIN secret
+
+- **Env var:** `SUPER_ADMIN_SECRET_KEY` — usada pra gerar primeiro super-admin via script.
+- **Telefone alerta:** `SUPER_ADMIN_PHONE` (notifica eventos críticos).
 
 ---
 
 ## 10. Observabilidade e auditoria
 
-A preencher em H.2 com:
-- **AuditLog:** schema existe, interceptor inativo (D-30N P2). Sprint 5/6 ativa.
-- **EmailLog:** 5 registros total no banco (3 ENVIADO). Pode estar sub-utilizado.
-- **HistoricoStatusCooperado:** ativo, rastreia transições.
-- **Observador (`observador/`):** modo leitura para cooperados (admin-spy + cooperado-leitura coexistem — B4 pendente).
-- **PM2 logs:** `pm2 logs cooperebr-backend`. Sem agregação central ainda.
+### 10.1 AuditLog (interceptor inativo — D-30N)
+
+- **Schema:** model `AuditLog` existe (categoria 1 da §4 — Tenant + Auth + Segurança).
+- **Estado banco (validado SQL):** **`SELECT COUNT(*) FROM audit_logs` → 0**. Nenhum registro escrito.
+- **Causa:** `AuditLogInterceptor` + decorator `@Auditavel` + módulo dedicado **não implementados**. D-30N catalogado P2.
+- **Resolução planejada:** Sprint 5/6 (absorvido por Auditoria IDOR Geral + Módulo Regulatório ANEEL).
+- **Bloqueio:** auditoria de ações administrativas críticas (atribuição de plano, mudança de status, override regulatório) não tem rastreabilidade hoje.
+
+### 10.2 EmailLog
+
+- **Schema:** model `EmailLog` (categoria 14 da §4 — Comunicação).
+- **Estado banco (validado SQL):**
+  ```
+  EmailLog total: 5
+  por status: ENVIADO=3, ERRO=2
+  ```
+- **Cobertura:** sub-utilizado. Nem todos os envios SMTP passam por `EmailLog.create` — interceptor mais amplo seria útil. Débito P3 implícito.
+- **Primeiro envio funcional:** Sprint 10 (pós-LGPD compliance — whitelist + flag ambienteTeste + 112 registros mascarados).
+
+### 10.3 HistoricoStatusCooperado
+
+- **Schema:** model `HistoricoStatusCooperado` (categoria 2 da §4 — Núcleo).
+- **Estado banco (validado SQL):** **1 registro**. Rastreio de transição `Cooperado.status` (PENDENTE → APROVADO → ATIVO etc.) está parcial — só evento histórico preservado.
+- **Esperado:** todo update de `status` em `Cooperado` deveria gerar entrada. Validar interceptor / hook em `cooperados.service.ts`.
+
+### 10.4 Observador (modo leitura)
+
+- **Schema:** `ObservacaoAtiva` + `LogObservacao` (categoria 16 da §4).
+- **Estado banco (validado SQL):** **`ObservacaoAtiva=0` + `LogObservacao=0`**. Modo leitura nunca foi exercitado em produção.
+- **Decisão B4 pendente:** consolidar admin-spy + cooperado-leitura ou separar em 2 padrões. Cron `observador.service.ts:273` (5 em 5 min) ativo, mas sem dados pra processar.
+
+### 10.5 PM2 logs
+
+- **Comando:** `pm2 logs cooperebr-backend --lines 30`.
+- **Limite:** sem agregação central (sem ELK/Datadog/Sentry). Logs ficam locais ao processo PM2.
+- **Logs do Whatsapp Service:** `pm2 logs cooperebr-whatsapp` separado.
+
+### 10.6 Resumo: cobertura observabilidade
+
+| Camada | Coverage | Estado |
+|---|---|---|
+| AuditLog ações administrativas | 0% | 🔴 D-30N |
+| EmailLog envios SMTP | parcial | 🟡 sub-utilizado |
+| HistoricoStatusCooperado | 1 evento | 🟡 interceptor incompleto |
+| Observador modo leitura | nunca usado | 🟡 B4 pendente |
+| PM2 logs | local | 🟡 sem agregação central |
 
 ---
 
 ## 11. Decisões arquiteturais ativas
 
-A preencher em H.2 com:
-- Helper canônico `calcularTarifaContratual` em 5 caminhos (Fase B 03/05, decisão B33)
-- `Contrato.valorCheioKwhAceite` snapshot no aceite (decisão B34)
-- 4 valores de economia projetada uniformes nos 3 modelos (decisão B35)
-- `BLOQUEIO_MODELOS_NAO_FIXO=true` em prod (a desativar pós-canário)
-- 5 flags regulatórias ANEEL configuráveis por parceiro (decisão 30/04)
-- Adapter pattern de gateways (`gateway-pagamento/`)
-- Sprint 5 ponto 3: UI v1 só `KWH_CHEIO`/`SEM_TRIBUTO` (`@IsIn` no DTO)
+### 11.1 Fórmulas e helpers canônicos
+
+- **Helper `calcularTarifaContratual`** (`backend/src/motor-proposta/lib/calcular-tarifa-contratual.ts`) é **fonte única de verdade** pra cálculo de tarifa pós-desconto. Aplicado em **5 caminhos** (Fase B 03/05, **Decisão B33**):
+  - `motor-proposta.service.ts:aceitar()`
+  - `contratos.service.ts:create()`
+  - `cooperados.service.ts` (alocação)
+  - `migracoes-usina.service.ts`
+  - Engine DINAMICO (recálculo mensal)
+- **Spec dedicado:** `calcular-tarifa-contratual.spec.ts` (cobertura específica).
+
+### 11.2 Snapshots no Contrato
+
+- **`Contrato.tarifaContratual`** populada via helper canônico no momento de criação (Fase B 03/05). Forward-only — 72 contratos legados ficam `null` (D-30R adiado indefinidamente).
+- **`Contrato.valorCheioKwhAceite`** snapshot do `valorCheioKwh` da fatura de referência no momento do aceite (Decisão **B34**) — usado pra DINAMICO calcular sem ler fatura nova.
+- **4 valores de economia projetada** uniformes em Cobranca + Contrato + Proposta (Decisão **B35**, Fase C.3 11/05) — `<EconomiaProjetada>` reusable component (29 specs ts-node).
+
+### 11.3 Bloqueios operacionais
+
+- **`BLOQUEIO_MODELOS_NAO_FIXO=true`** em prod hoje — engine COMPENSADOS/DINAMICO desativada até canário Fatia A validar.
+- **5 flags regulatórias ANEEL** configuráveis por parceiro (decisão 30/04 — `concentracaoMaxPorCooperadoUsina`, `mixClassesGd`, `transferenciaSaldo`, etc.). Codificação no Sprint 5.
+- **Aprovação admin do plano permanece manual** até Sprint 5+8 fecharem (Decisão **22**, 11/05) — D-30W catalogado pra revisitar.
+
+### 11.4 Gateways via adapter pattern
+
+- **Diretório:** `backend/src/gateway-pagamento/` (430 LOC, 1 spec).
+- **Adapters:** Asaas (legado via `asaas.service.ts`), futuros BB/Sicoob/Banestes.
+- **Princípio:** nunca chamar `AsaasService` direto de fora do módulo `asaas/` — usar `GatewayPagamentoService`. Exceção documentada: `pix-excedente.service.ts` (transferência PIX específica).
+- **Risco D-33:** `asaas.service.ts:64` lê `AsaasConfig` legado, UI escreve em `ConfigGateway` atual. Sub-fatia pré-Fatia A.
+
+### 11.5 UI v1 só KWH_CHEIO/SEM_TRIBUTO (Sprint 5 ponto 3)
+
+- **Decisão atualizada 04/05 noite:** UI v1 e API v1 só aceitam `KWH_CHEIO` ou `SEM_TRIBUTO` como `BaseCalculo`. Decisão original "configura via API" virou letra morta desde Fase B (helper canônico throw `NotImplementedException` para outros).
+- **Aplicação:** `<option disabled>` no frontend + `@IsIn(['KWH_CHEIO', 'SEM_TRIBUTO'])` no DTO.
+
+### 11.6 Ritual de sessão e validação prévia
+
+- **Decisão 19** (02/05): ritual abertura/fechamento — toda sessão Code abre com "Onde paramos + Pendências" e fecha atualizando.
+- **Decisões 14/15/20/21/23** (cumulativas): validação prévia em **cada resposta** + verificação de conflito antes de propor sprint + busca em 3 frentes (literal + enum + comentário) + validação SQL antes de afirmar números.
+- **Decisão 24** (NOVA — 13/05 noite): **frase de retomada vive em UM SÓ LUGAR** no `CONTROLE-EXECUCAO.md`. Antes de atualizar, rodar `grep -in "voltei|frase de retomada|como retomar" docs/CONTROLE-EXECUCAO.md` pra evitar versões divergentes.
+
+### 11.7 Forward-only para legados
+
+- **Decisão B33.5** (Fase B 03/05): 72 contratos legados não foram backfilled (`tarifaContratual=null`). Engine COMPENSADOS lança erro explícito ("Contrato sem snapshot — recrie ou backfill").
+- **D-30R adiado indefinidamente** (12/05): backfill provavelmente substituído por re-cadastro/import correto via Caminho A canário.
+- **D-32 catalogado** (12/05): migração `Contrato.kwhContrato` legado → `kwhContratoAnual` novo (61 NULL) também STANDBY.
+
+### 11.8 Reframe baseado em dados fictícios (D-31)
+
+- **Reframe 12/05:** D-31 deixou de ser P1 com backfill (62 contratos com `percentualUsina=0`) e virou **P2 só guard preventivo** — dados atuais são fictícios (import sistema antigo), não cooperados reais. Backfill seria pintar zero sobre zero.
+- **Auditoria ANEEL** passa a usar fórmula on-the-fly `kwhContratoAnual / Usina.capacidadeKwh × 100`, ignorando `percentualUsina` persistido.
 
 ---
 
 ## 12. Variáveis de ambiente críticas
 
-A preencher em H.2 com:
-- `DATABASE_URL` (Supabase)
-- `ASAAS_PIX_EXCEDENTE_ATIVO` (não ativar em prod sem instrução explícita)
-- `ASAAS_ENCRYPT_KEY` (criptografia futura, TODO no schema)
-- `BLOQUEIO_MODELOS_NAO_FIXO`
-- `EMAIL_*` (fallback global)
-- `WHITELIST_ATIVA` (LGPD em dev — D-30X)
-- `JWT_SECRET`
-- Anthropic / Claude AI key (OCR + CoopereAI)
-- Em H.2: tabela completa com defaults e onde cada uma é consumida
+> **Validação Decisão 23:** lista extraída via `grep -rE "process\.env\." backend/src` — **47 vars únicas no backend** + 4 no `whatsapp-service`.
+
+### 12.1 Banco e infra
+
+| Var | Onde consumido | Default | Crítico |
+|---|---|---|---|
+| `DATABASE_URL` | Prisma client (`prisma/schema.prisma`) | — | ✅ obrigatória |
+| `SUPABASE_URL` | `supabase.client.ts` | — | ✅ obrigatória |
+| `SUPABASE_SERVICE_KEY` | `supabase.client.ts` | — | ✅ secret |
+| `PORT` | `main.ts` | 3000 | — |
+| `NODE_ENV` | múltiplos (cuidado: D-30X) | `development` | ✅ controla LGPD whitelist |
+| `CORS_ORIGINS` | `main.ts` | (vazio) | — |
+| `FRONTEND_URL` | links em emails/WA | `http://localhost:3001` | — |
+| `PORTAL_URL` | links cooperado | `http://localhost:3001/portal` | — |
+
+### 12.2 Auth e segurança
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `JWT_SECRET` | `auth/` JWT module | — | ✅ obrigatória, secret |
+| `SUPER_ADMIN_SECRET_KEY` | script seed super-admin | — | ✅ secret |
+| `SUPER_ADMIN_PHONE` | alertas críticos | — | — |
+| `ADMIN_PHONE` / `ADMIN_WHATSAPP_NUMBER` | escalação WA | — | — |
+
+### 12.3 Asaas + financeiro
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `ASAAS_ENCRYPT_KEY` | `asaas.service.ts:encrypt/decrypt` (D-34 confirmado Dia 1) | — | ✅ obrigatória se Asaas ativo |
+| `ASAAS_PIX_EXCEDENTE_ATIVO` | `pix-excedente.service.ts` | `false` | ⚠️ **NÃO ativar em prod sem instrução explícita Luciano** |
+| `BLOQUEIO_MODELOS_NAO_FIXO` | `contratos`, `motor-proposta`, `faturas`, `planos` (8 arquivos) | `true` em prod | ✅ pré-canário Fatia A |
+| `WEBHOOK_BANCO_TOKEN` | `integracao-bancaria/` (HMAC webhook in) | — | ✅ secret |
+
+### 12.4 Email
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `EMAIL_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` / `_SECURE` | `email/` (fallback global) | — | ✅ se ConfigTenant vazio |
+| `EMAIL_IMAP_HOST` / `_PORT` / `_USER` / `_PASS` | `email-monitor/` (fallback global IMAP) | — | ✅ se ConfigTenant vazio |
+| `EMAIL_IMAP_ATIVO` | flag liga/desliga IMAP global | `true` | — |
+| `IMAP_HOST` / `_PORT` / `_USER` / `_PASS` | legado (substituído por `EMAIL_IMAP_*`) | — | 🟡 dual-path env |
+
+### 12.5 WhatsApp (backend)
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `WHATSAPP_SERVICE_URL` | backend → whatsapp-service | `http://localhost:3002` | — |
+| `WHATSAPP_WEBHOOK_SECRET` | webhook in HMAC | — | ✅ secret |
+| `WA_COBRANCA_HABILITADO` | flag envio cobrança | `true` | — |
+| `WA_INADIMPLENTES_HABILITADO` | flag envio inadimplentes | `true` | — |
+| `WA_MLM_CONVITES_HABILITADO` | flag envio MLM | `true` | — |
+| `WA_ALERTA_VENCIMENTO_HABILITADO` | flag envio alerta | `true` | — |
+| `NUMEROS_EQUIPE` | escalação para equipe (CSV) | — | — |
+
+### 12.6 Anthropic / CoopereAI
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | OCR (`faturas/`) + CoopereAI (`whatsapp/`) | — | ✅ secret |
+| `COOPEREAI_MODEL` | model name Claude | (latest) | — |
+| `COOPEREAI_MAX_TOKENS` | limite resposta | (default SDK) | — |
+| `COOPERTOKEN_QR_SECRET` | QR Code resgate (`cooper-token/`) | — | ✅ secret |
+
+### 12.7 Flags / features experimentais
+
+| Var | Onde | Default | Crítico |
+|---|---|---|---|
+| `CADASTRO_V2_ATIVO` | `publico/` cadastro path v2 | `false` | — |
+| `CADASTRO_VALIDACOES_ATIVAS` | flag validações cadastro | `true` | — |
+| `CLUBE_RESUMO_MENSAL_HABILITADO` | cron resumo Clube (item 23 §8) | `true` | — |
+| `NOTIFICACOES_ATIVAS` | flag global notificações | `true` | — |
+| `SUPORTE_TELEFONE` | exibido em UIs | — | — |
+
+### 12.8 WhatsApp Service (separado — `whatsapp-service/index.mjs`)
+
+| Var | Default | Crítico |
+|---|---|---|
+| `BACKEND_WEBHOOK_URL` | `http://localhost:3000/webhooks/whatsapp` | ✅ |
+| `COOPERE_AI_URL` | URL do agente CoopereAI | — |
+| `WHATSAPP_WEBHOOK_SECRET` | mesmo secret do backend (matching) | ✅ secret |
+| `PORT` | `3002` | — |
+
+### 12.9 D-30X — Whitelist LGPD em dev
+
+- **Var:** não há `WHITELIST_ATIVA` separada — controle implícito via `NODE_ENV`. Em `production`, whitelist desativa e envios reais habilitam.
+- **Risco:** PM2 dev com `NODE_ENV=production` por engano bypassa whitelist (incidente 11/05 — MARCIO MACIEL log enviou email pra `@removido.invalid`). Catalogado D-30X (P3).
 
 ---
 
@@ -1146,22 +1498,26 @@ pm2 restart cooperebr-backend
 
 ## 14. Estado de maturidade por componente
 
-A preencher em H.2 com matriz consolidada.
-
-**Resumo atual (validado 13/05):**
+> Matriz consolidada (validada 13/05 — H.2 Dia 3). Refinamentos do esqueleto H.1 aplicados após correções retroativas Decisão 23.
 
 | Componente | Estado | Bloqueador |
 |---|---|---|
-| Caminho A OCR | 🔴 cru (1 caso histórico) | Canário Caminho A real (Fatia A) |
-| Caminho B Asaas E2E | 🔴 nunca rodou (AsaasCobranca=0) | Auditoria dual-path AsaasConfig vs ConfigGateway |
-| FaturaSaas Luciano→Parceiro | 🔴 ConfigGatewayPlataforma vazio | Luciano abrir conta Asaas produção + Fatia D3 |
-| MLM cascata | 🔴 D-30M aberto | 1º indicado pagar |
-| AuditLog interceptor | 🔴 inativo D-30N | Sprint 5/6 |
-| CooperToken | 🟡 MVP funcional, 0 specs | Sprint CT Consolidado Etapa 1 |
-| Multi-tenant queries | 🟢 cooperativaId em queries | — |
-| Asaas multi-tenant | 🟢 técnico pronto (asaas.service.ts:64) | UI no painel parceiro pendente |
-| Fase C.3 economia projetada | 🟢 entregue 11/05 (29 specs) | — |
+| Caminho A OCR | 🟡 cru (1 caso histórico real + 12 seeds) | Canário Caminho A real (Fatia A) |
+| Caminho B Asaas E2E | 🟡 sandbox OK (5 `AsaasCobranca` validadas Sprint 12), produção 🔴 | D-33 dual-path + abrir conta produção |
+| FaturaSaas Luciano→Parceiro | 🔴 ConfigGatewayPlataforma vazio (count=0) | Luciano abrir conta Asaas-SISGD + Fatia D3 (D-29F.1+.2+.3) |
+| MLM cascata | 🟡 cabeado, 10 indicações + 0 benefícios | D-30M aguarda 1º indicado pagar via Caminho B |
+| AuditLog interceptor | 🔴 inativo (count=0) | D-30N — Sprint 5/6 |
+| CooperToken | 🟡 MVP funcional (9 ledger entries), 0 specs | Sprint CT Consolidado Etapa 1 (Fatia C, 6-8h) |
+| Multi-tenant queries | 🟢 `cooperativaId` em queries | — |
+| **Backend Asaas multi-tenant** | 🟢 **técnico pronto** (3 models gateway: ConfigGateway atual + ConfigGatewayPlataforma global + AsaasConfig legado; ConfigTenant 19 chaves email; `asaas.service.ts:64`) | **UI parceiro auto-config Asaas** (Fatia L do Plano Mestre — bloqueia Sinergia entrar, não bloqueia canário CoopereBR) |
+| Fase C.3 economia projetada | 🟢 entregue 11/05 (29 specs ts-node, `<EconomiaProjetada>` reusable) | — |
 | 5 flags regulatórias ANEEL | 🔴 não codificadas | Sprint 5 |
+| EmailLog | 🟡 5 registros (3 ENVIADO + 2 ERRO), interceptor sub-utilizado | Débito P3 implícito |
+| HistoricoStatusCooperado | 🟡 1 evento histórico, interceptor incompleto | Hook em `cooperados.service.ts` |
+| Observador modo leitura | 🟡 0 registros, B4 pendente | Decisão produto: consolidar admin-spy + cooperado-leitura ou separar |
+| Convênios + link público | 🟢 215 cooperados, D-30P/Q resolvidos | — |
+| ANEEL bandeira tarifária | 🟢 cron mensal funcional | — |
+| Helper canônico `calcularTarifaContratual` | 🟢 fonte única em 5 caminhos (Fase B B33) | — |
 
 ---
 
