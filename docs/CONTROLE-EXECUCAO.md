@@ -228,7 +228,7 @@ H. **Longo prazo** — E (polish cadastros) + F (painel super-admin) + L (UI aut
 
 ### Frase de retomada
 
-> Ver seção canônica [`## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)`](#frase-de-retomada--próxima-sessão-code-etapa-1) abaixo. Frase DIRETA pronta pra colar no Claude Code (VS Code) — comanda ação imediata em vez de descrever plano (feedback `feedback_frase_retomada_direta.md` 12/05 noite).
+> Ver seção canônica [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo. Frase DIRETA pronta pra colar no Claude Code (VS Code) — comanda ação imediata em vez de descrever plano (feedback `feedback_frase_retomada_direta.md` 12/05 noite).
 
 ---
 
@@ -249,47 +249,44 @@ Opcional (se for atacar Fase C.2 direto):
 
 ---
 
-## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)
+## FRASE DE RETOMADA — próxima sessão Code
 
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Code, estou em sessão ATIVA NESTE MOMENTO pra ETAPA 1 do
-Plano Mestre. NÃO fecha sessão.
+Code, estou em sessão ATIVA NESTE MOMENTO. NÃO fecha sessão.
 
 PRÓXIMO PASSO IMEDIATO:
-1. Lê docs/CONTROLE-EXECUCAO.md (header diz 2026-05-13)
-2. Lê docs/SISTEMA.md (esqueleto 15 seções, status H.1 ✅
-   entregue commit 94bf9dc)
-3. Apresenta P0→P3 ATUAL (Decisão 19) — sem propor próximo passo
-4. Pergunta: "OK pra iniciar Fatia H.2 — preencher SISTEMA.md base?"
+1. Lê docs/CONTROLE-EXECUCAO.md (header diz 2026-05-13 — sessão
+   maratona consolidada)
+2. Lê docs/SISTEMA.md (1542 linhas, M1 Plano Mestre entregue)
+3. Apresenta P0→P3 ATUAL (Decisão 19) — SEM propor próximo passo
+4. Pergunta qual frente Luciano quer atacar entre:
+   a) Fatia A canário Caminho A real (2-4d Code) — M2 primeira
+      receita real. NÃO mais bloqueada por D-33 (reframed Caminho B).
+   b) Fatia C Sprint CooperToken Etapa 1 (6-8h autônomo) — specs
+      Jest cooper-token. claude.ai talvez já tenha lido specs
+      durante a noite.
+   c) Decisões batch B17-B32 (sessão claude.ai 2-3h, sem Code)
+   d) Fatia H.3 ligações cross-módulo (2d Code, continuação H.2)
+   e) Outra prioridade
 5. AGUARDA minha resposta antes de continuar
 
-Plano da ETAPA 1 (Fatia H.2 SISTEMA.md base, 2-3 dias Code):
-- Dia 1: investigação ampla backend (45 módulos + 80 models Prisma)
-  → preencher Seções 1, 2, 3, 4 do SISTEMA.md com refinamento
-    das 14 categorias preliminares + correção das duplicações
-    detectadas em H.1
-- Dia 2: investigação ampla frontend (152 telas em 5 super-rotas
-  + jornadas)
-  → preencher Seções 5, 6 com diagramas de sequência por fluxo
-  → confirmar discrepância 151 vs 152 telas (Seção 5)
-- Dia 3: crons, agents, memória, integrações externas
-  → preencher Seções 7, 8, 9, 10, 11, 12
-  → revisão final + ajustar inconsistências do esqueleto H.1
+Contexto sessão 13/05 (maratona, 6 commits):
+- M1 Plano Mestre ✅ entregue — Fatia H.2 SISTEMA.md base 1542 linhas
+  (H.1 esqueleto 94bf9dc + Dia 1 382f40e + Dia 2 0528cd8 + Dia 3 464e4d3)
+- Sub-tarefa Decisão 24 cleanup ✅ (b0663c9 — frase retomada local único)
+- D-33 reframed Caminho B ✅ (1d40285 — latente, não ativo, não bloqueia A)
+- Decisão 23 aplicada 2× em 24h (AsaasCobranca=5 + D-33 latente vs ativo)
+- Decisão 24 catalogada (frase retomada local único)
+- Feedback Fase 1 read-only obrigatória catalogado (memória persistente)
 
-Critério de pronto Fatia H.2: qualquer pessoa nova lê SISTEMA.md em
-30-45 min e entende a topologia. Validado contra código real (zero
-ficção — Decisão 14/15/20/21/23).
+Aplica Decisões 14/15/18/19/20/21/22/23/24.
+Edit > Write. Sem head -N. Read-only nas investigações.
+Fase 1 read-only OBRIGATÓRIA antes de Fase 2 refator (código de produção).
+NÃO escolhe próximo passo sozinho.
 
-Worktree: C:\Users\Luciano\cooperebr (main)
-Edit > Write. Sem head -N truncando. Validação SQL antes de afirmar
-números (Decisão 23).
-
-NÃO inicia H.2 sem meu OK explícito.
-NÃO fecha sessão sem ordem minha.
-
-COMEÇA agora pelo passo 1.
+COMEÇA pelo passo 1.
 ```
 
 ---
@@ -769,7 +766,7 @@ Aí a transição vira automática com validação por flags + sugestão da engi
 
 ### Frase única canônica
 
-Frase de retomada vive em **um só lugar** — seção [`## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)`](#frase-de-retomada--próxima-sessão-code-etapa-1) acima.
+Frase de retomada vive em **um só lugar** — seção [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) acima.
 
 Aplica-se a Code e claude.ai. **Decisão 24** (13/05 noite): grep amplo (`voltei|frase de retomada|como retomar`) antes de atualizar — frase única no `CONTROLE-EXECUCAO` evita versões divergentes que confundem retomada.
 
