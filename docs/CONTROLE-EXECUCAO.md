@@ -764,13 +764,11 @@ Aí a transição vira automática com validação por flags + sugestão da engi
 
 ## COMO RETOMAR
 
-### Próxima sessão claude.ai
+### Frase única canônica
 
-> Voltei. Doc-0 Fatia 2 fechada. Lê `docs/CONTROLE-EXECUCAO.md`.
+Frase de retomada vive em **um só lugar** — seção [`## FRASE DE RETOMADA — próxima sessão Code (ETAPA 1)`](#frase-de-retomada--próxima-sessão-code-etapa-1) acima.
 
-### Próxima sessão Code
-
-> Lê `docs/CONTROLE-EXECUCAO.md` + memória persistente. Aguarda instrução.
+Aplica-se a Code e claude.ai. **Decisão 24** (13/05 noite): grep amplo (`voltei|frase de retomada|como retomar`) antes de atualizar — frase única no `CONTROLE-EXECUCAO` evita versões divergentes que confundem retomada.
 
 ### Comandos pra subir ambiente local
 
