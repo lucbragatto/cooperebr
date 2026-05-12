@@ -375,54 +375,652 @@ H.1 listou **6 entidades inexistentes** no schema (gap "14 cats somam 68" se exp
 
 ---
 
-## 5. Frontend — 5 super-rotas e 152 telas
+## 5. Frontend — 5 super-rotas + raiz pública = 152 telas
 
-A preencher em H.2 com listagem por super-rota + estado de cada tela.
+### 5.1 Contagem geral (validada 2026-05-13)
 
-| Super-rota | Telas | Audiência | Estado |
+```
+find web/app -name "page.tsx" -type f | wc -l → 152
+find web/app -name "layout.tsx" -type f      → 6 (1 root + 5 super-rotas)
+find web/app -maxdepth 1 -name "page.tsx"    → 1 (root web/app/page.tsx)
+```
+
+**Distribuição por super-rota / raiz** (validada via `awk -F'/' '{print $3}' | sort | uniq -c`):
+
+| Super-rota / Raiz | Telas | Audiência | Layout | Estado |
+|---|---:|---|---|---|
+| `/dashboard/*` | **90** | Admin parceiro + SUPER_ADMIN | `dashboard/layout.tsx` (sidebar dinâmica por perfil) | 🟢 Núcleo, 🟡 polish residual |
+| `/parceiro/*` | **31** | Admin parceiro (visão tenant — paralelo a `/dashboard`) | `parceiro/layout.tsx` (sidebar com filtro `useModulos`) | 🟡 Crescendo (Sinergia onboarding futuro) |
+| `/portal/*` | **15** | Cooperado/Consorciado/Associado/Condômino | `portal/layout.tsx` (bottom-nav mobile-first) | 🟢 Funcional após Fase C.3 |
+| `/proprietario/*` | **4** | Proprietário de usina | `proprietario/layout.tsx` (sidebar 4 itens) | 🔴 Pendente Sprint 4 |
+| `/agregador/*` | **2** | Agregador (visão consolidada) | `agregador/layout.tsx` (sidebar 3 itens) | 🔴 Embrião |
+| **Públicas (raiz)** | **10** | Sem login | `app/layout.tsx` (root) | 🟡 `/cadastro` é anti-pattern (1553 linhas, Fatia E) |
+| **Total** | **152** | | | |
+
+**Raiz pública (10 telas — listagem completa):**
+
+| Caminho | Propósito | Estado |
+|---|---|---|
+| `web/app/page.tsx` | Landing root (redireciona pra login) | 🟢 |
+| `web/app/login/page.tsx` | Login admin/operador | 🟢 |
+| `web/app/entrar/page.tsx` | Login alternativo (a consolidar?) | 🟡 dupla entrada |
+| `web/app/portal/login/page.tsx` (sob `/portal`) | Login cooperado | 🟢 (não conta na raiz) |
+| `web/app/cadastro/page.tsx` | Cadastro público (1553 linhas — Fatia E) | 🟡 anti-pattern |
+| `web/app/aprovar-proposta/page.tsx` | Cooperado aceita proposta (Fluxo 4) | 🟢 (Fase C.3 fechou) |
+| `web/app/assinar/page.tsx` | Assinatura via Assinafy | 🔴 stub (Sprint 3 não iniciou) |
+| `web/app/convite/[codigo]/page.tsx` | Aceitar convite MLM | 🟡 |
+| `web/app/esqueci-senha/page.tsx` | Recuperação senha | 🟢 |
+| `web/app/redefinir-senha/page.tsx` | Token reset senha | 🟢 |
+| `web/app/selecionar-contexto/page.tsx` | Switch tenant (multi-papel) | 🟢 |
+
+> **Discrepância 151 vs 152 (esqueleto H.1) — RESOLVIDA:** H.1 disse "Públicas (raiz) | 9". Real são **10** (esqueceu `web/app/page.tsx` raiz). Soma certa: 90+31+15+4+2+10 = **152 ✓**.
+
+### 5.2 Estrutura de navegação (sidebars / bottom-nav)
+
+**Padrão:** **sem abstração compartilhada.** Cada layout define array `navItems` / `navSections` inline. Não existe `web/lib/menu.ts`.
+
+| Super-rota | Padrão | Itens em menu | Filtro de exibição |
+|---|---|---:|---|
+| `/dashboard` | `getNavSections()` por perfil (`COOPERADO`/`OPERADOR`/`ADMIN`/`SUPER_ADMIN`) | ~28 raízes | filtro por `PerfilUsuario` |
+| `/parceiro` | `allNavSections` array | ~22 raízes | `useModulos()` (filtra por módulos ativos) |
+| `/portal` | `navItems` array (5 itens) | 5 | nenhum (todos cooperados veem mesma nav) |
+| `/proprietario` | `navItems` array (4 itens) | 4 | nenhum |
+| `/agregador` | `navItems` array (3 itens) | 3 | nenhum |
+
+**Hooks de contexto compartilhados:** `useContexto()` (cooperativa + módulos ativos), `useModulos()` (filtro nav), `useTipoParceiro()` (vocabulário multi-tipo — usado em **21 arquivos**).
+
+### 5.3 Telas órfãs (acessíveis via URL direto, sem link em menu)
+
+**11 telas sem linkagem no menu:**
+
+| Caminho | Super-rota | Por que está órfã | Ação |
 |---|---|---|---|
-| `/dashboard/*` | 90 | Admin parceiro + SUPER_ADMIN | 🟢 Núcleo, 🟡 polish residual |
-| `/parceiro/*` | 31 | Admin parceiro (visão tenant) | 🟡 Crescendo |
-| `/portal/*` | 15 | Cooperado/Consorciado/etc. | 🟢 Funcional após Fase C.3 |
-| `/proprietario/*` | 4 | Proprietário de usina | 🔴 Pendente Sprint 4 |
-| `/agregador/*` | 2 | Agregador (visão consolidada) | 🔴 Embrião |
-| Públicas (raiz) | 9 | Sem login (`/cadastro`, `/login`, `/aprovar-proposta`, etc.) | 🟡 `/cadastro` 1553 linhas (anti-pattern) |
+| `/portal/login` | portal | Login específico cooperado (separado do bottom-nav) | OK — entrada via redirect |
+| `/portal/assinar/[token]` | portal | Acesso via token único | OK — link via email |
+| `/portal/conta` | portal | Vinculada via header? Verificar | Auditar |
+| `/portal/clube` | portal | CooperToken — referência cruzada via `/portal/tokens` | OK |
+| `/portal/creditos` | portal | Créditos detalhados | Auditar |
+| `/portal/desligamento` | portal | Solicitação saída | OK — fluxo lateral |
+| `/portal/faturas-concessionaria` | portal | Histórico fatura distribuidora | Auditar |
+| `/portal/ranking` | portal | Ranking comunidade | Auditar |
+| `/portal/tokens` | portal | Wallet CooperToken | Auditar |
+| `/dashboard/relatorios/conferencia-kwh` | dashboard | Relatório técnico | Vincular |
+| `/dashboard/contabilidade-clube` | dashboard | Visão contábil tokens | Vincular |
 
-**Para cada tela em H.2:**
-- caminho (`web/app/.../page.tsx`)
-- componentes principais
-- API endpoints consumidos
-- estado (🔴/🟡/🟢)
+> **Detalhamento de cada tela órfã** + decisão "vincular OU mover pra arquivo" fica para H.4 (revisão final). Não bloqueia H.2 base.
 
-Referência: Leitura Total 28/04 (`sessoes/2026-04-28-leitura-total-parte1.md` + `parte2.md`).
+### 5.4 Padrão de consumo de API
+
+**Cliente HTTP único:** `web/lib/api.ts` — instância Axios com:
+- `baseURL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'`
+- Interceptor request: injeta `Authorization: Bearer <token>` (cookie) + `X-Cooperativa-Id` (localStorage)
+- Interceptor response: 401 → redirect `/login`
+
+```
+grep -rE "api\.(get|post|put|patch|delete)\(" web/app web/components web/lib → 357 chamadas
+endpoints únicos consumidos no frontend                                       → 208
+endpoints HTTP no backend (controllers)                                       → 448
+fetch() direto (não-api.ts)                                                   → 20 (assets/Next.js internals, sem URL hardcoded externa)
+```
+
+**Gap = 240 endpoints backend SEM consumo direto pelo frontend** (~54% dos 448). Distribuição esperada:
+- **Webhooks** (Asaas, BB, Sicoob) — chamados por terceiros, não pela UI.
+- **Endpoints internos** consumidos por outros services (não exposto pra UI).
+- **Endpoints dead-code / em transição** — débito a auditar (catalogar em Fatia G débitos cumulativos).
+- **CRUD admin não-implementado em UI** — ex.: alguns endpoints de `motor-proposta` (32 endpoints, ~10 em UI).
+
+> **Auditoria detalhada de endpoints órfãos** fica pra Fatia G (débitos cumulativos). Não bloqueia H.2 base.
+
+### 5.5 Telas sem chamadas API (27 estáticas)
+
+`page.tsx` que NÃO chamam nenhum endpoint backend (renderização puramente estática ou via props/server):
+
+- `/login`, `/page.tsx` (raiz), `/dashboard/cooperados/novo`, `/dashboard/cooperados/[id]/fatura`, `/dashboard/meu-convite` — formulários simples / placeholders.
+- 11+ páginas em `/parceiro/*` — painel parceiro renderizado puro (delegação pra componentes filhos que fazem fetch).
+- 2 páginas em `/dashboard/super-admin/` — agregam métricas via componentes específicos.
+
+**Não significam órfãs:** páginas estáticas + páginas com data fetching delegado a componentes child.
+
+### 5.6 Observação: vocabulário multi-tipo
+
+- **21 arquivos** usam `useTipoParceiro` (validado `grep -lE "useTipoParceiro"`).
+- **~131 telas** ainda têm "Cooperado/Cooperados" hardcoded — débito P2 catalogado em `debitos-tecnicos.md` (bloqueia onboarding Sinergia/Consórcio em produção).
+
+### 5.7 Referência
+
+Listagem completa por tela (caminho + componentes + endpoints consumidos + estado por tela) em **H.4 (revisão final)** — exige walkthrough manual de 152 arquivos. Esta seção entrega contagem agregada + estrutura macro.
+
+Base anterior: Leitura Total 28/04 (`sessoes/2026-04-28-leitura-total-parte1.md` + `parte2.md`).
 
 ---
 
-## 6. Fluxos críticos end-to-end
+## 6. Fluxos críticos end-to-end (10 fluxos)
 
-A preencher em H.2 com diagrama + sequência de cada fluxo.
+> Diagramas de sequência em texto. Estado real **validado via SQL** (Decisão 23). Referências cruzadas a outros fluxos no fim de cada bloco.
 
-**10 fluxos críticos identificados** (refinar em H.2 — base: `MAPA-INTEGRIDADE-SISTEMA.md`):
+### Fluxo 1 — Cadastro novo cooperado
 
-1. **Cadastro novo cooperado** (Caminho público `/cadastro` OU admin wizard 7 steps)
-2. **Caminho A — OCR automático** (Email → OCR Claude → FaturaProcessada → Cobranca)
-   - Estado real: 1 caso histórico (João Santos, mar/2026). 12 de 17 FaturaProcessada são seeds B.5.
-3. **Caminho B — Cobrança manual + Asaas** (Admin lança → Asaas → Webhook → PAGA)
-   - Estado real: 31 PAGAS no banco = 100% baixa manual (AsaasCobranca tabela = 0). Asaas E2E nunca exercitado.
-4. **Aprovação de proposta** (Cooperado aceita → AGUARDANDO_CONCESSIONARIA → APROVADO → ATIVO)
-   - UI etapa 11 entregue 11/05 (MARCIO MACIEL destravado).
-5. **CooperToken — emissão e resgate** (modoRemuneracao=CLUBE → tokens → desconto futuro)
-6. **MLM cascata** (indicador → indicado → bônus em N níveis) — D-30M ainda não validado E2E
-7. **Cron geração mensal de cobrança** (`saas.service.ts:130` + `cobrancas.job.ts`)
-8. **FaturaSaas Luciano → Parceiro** (cron mensal cria, mas ConfigGatewayPlataforma vazio = não envia)
-9. **Convênio e link de membro** (D-30P/Q resolvidos 01/05)
-10. **Auditoria regulatória ANEEL** (limite 25% + 5 flags) — Sprint 0/5 pendente
+**Gatilho:** humano (público OU admin).
 
-**Para cada fluxo em H.2:**
-- diagrama de sequência (Telas → Endpoints → Services → Models)
-- gatilhos (manual / cron / webhook)
-- estado real (rodou ou não, com quantos casos)
-- referências cruzadas a fluxos relacionados
+**2 caminhos coexistem:**
+
+```
+CAMINHO PÚBLICO (/cadastro)                CAMINHO ADMIN (wizard 7 steps)
+──────────────────────────────              ─────────────────────────────
+[Visitante anônimo]                         [Admin logado /dashboard]
+       │                                           │
+       ▼                                           ▼
+web/app/cadastro/page.tsx                  web/app/dashboard/cooperados/novo/page.tsx
+(1553 linhas — anti-pattern)               (7 steps wizard — padrão admin)
+       │                                           │
+       ▼                                           ▼
+POST /publico/cadastro                     POST /cooperados (multi-step)
+(publico.controller.ts)                    (cooperados.controller.ts)
+       │                                           │
+       └────────────────┬──────────────────────────┘
+                        ▼
+              CooperadosService.create()
+                        │
+                        ▼
+         ┌──────────────┼──────────────┐
+         ▼              ▼              ▼
+      Cooperado      Uc (1+)      Contrato (provisório)
+      status=        relação       Plano default
+      PENDENTE       cooperadoId
+                        │
+                        ▼
+              MotorPropostaService.simular()
+                        │ retorna economia projetada (4 valores)
+                        ▼
+              [aguarda aceite cooperado → Fluxo 4]
+```
+
+**Estado real (validado SQL):**
+```
+SELECT status, COUNT(*) FROM cooperados GROUP BY status;
+→ ATIVO 309 · PENDENTE 6 · APROVADO 1 · ATIVO_RECEBENDO_CREDITOS 1
+```
+Total 317 cooperados em 3 cooperativas. **6 PENDENTE** = cadastros em curso (aguardando aceite ou aprovação concessionária).
+
+**Referências cruzadas:**
+- → Fluxo 4 (Aprovação proposta — quando cooperado aceita)
+- → Fluxo 9 (Convênio — se cadastro veio via convênio)
+- ← Fluxo 6 (MLM — se cadastro veio com `convitecodigo`)
+
+**Débitos:** Fatia E (refator `/cadastro` de 1553 linhas pra padrão 7 steps).
+
+---
+
+### Fluxo 2 — Caminho A: OCR automático de fatura
+
+**Gatilho:** cron `email-monitor.service.ts:81` (1×/dia 06:00) OU disparo manual via `POST /email-monitor/processar`.
+
+```
+[IMAP server CoopereBR]
+       │
+       ▼
+EmailMonitorService.processar()
+  ├─ conecta IMAP via ConfigTenant chaves email.monitor.*
+  ├─ filtra emails de distribuidoras (regex remetente)
+  └─ baixa PDFs anexos
+       │
+       ▼
+FaturasService.processarOcr(pdf)
+       │
+       ▼
+Anthropic Claude SDK (OCR multi-campo)
+  → extrai: numeroUC, kWh, tarifa, vencimento, fioB, ICMS, etc.
+       │
+       ▼
+FaturaProcessada (PERSISTE)
+  ├─ vincula a Uc.numero existente OU pendente
+  └─ status = AGUARDANDO_CONCILIACAO
+       │
+       ▼
+FaturasService.matchingComCobranca()
+  → tenta vincular FaturaProcessada → Cobranca já existente
+  → se vincula: atualiza Cobranca com valorCheioKwh, tarifaSemImpostos
+```
+
+**Estado real (validado SQL):**
+```
+SELECT COUNT(*) FROM faturas_processadas; → 17
+```
+- **1 caso histórico real:** João Santos (mar/2026, OCR funcional fim a fim).
+- **12 de 17 são seeds** da Fase B.5 (validação E2E sintética).
+- **4 de 17** são reprocessamentos / testes pontuais.
+
+**Referências cruzadas:**
+- → Fluxo 3 (matching com Cobranca existente)
+- → Fluxo 7 (cron geração mensal usa OCR pra dimensionar próxima cobrança DINAMICO)
+
+---
+
+### Fluxo 3 — Caminho B: Cobrança manual + Asaas
+
+**Gatilho:** humano (admin lança via UI) OU cron `cobrancas.job.ts:23` (geração diária 08:00).
+
+```
+[Admin /dashboard/cobrancas/nova]                [Cron cobrancas.job.ts]
+              │                                            │
+              └─────────────────┬──────────────────────────┘
+                                ▼
+                  CobrancasService.create()
+                    ├─ calcula via helper canônico (FIXO/COMPENSADOS/DINAMICO)
+                    ├─ aplica multa+juros se vencida (Fatia B futuro)
+                    └─ persiste Cobranca status=A_VENCER
+                                │
+                                ▼ (se gateway Asaas configurado)
+                  GatewayPagamentoService.emitirCobranca()
+                    └─ AsaasAdapter (atual = AsaasService LEGADO — D-33)
+                                │
+                                ▼ POST Asaas API
+                  Asaas API → cria Charge (PIX + boleto)
+                    → retorna asaasId
+                                │
+                                ▼
+                  AsaasCobranca (PERSISTE)
+                    ├─ asaasId, valor, cobrancaId
+                    └─ status = PENDING
+                                │
+                                ▼ (cooperado paga)
+                  Asaas Webhook → POST /webhooks/asaas
+                    ├─ valida HMAC-SHA256
+                    └─ atualiza AsaasCobranca.status = RECEIVED
+                                │
+                                ▼
+                  CobrancaService.marcarComoPaga()
+                    └─ Cobranca.status = PAGO + dataPagamento
+```
+
+**Estado real (validado SQL):**
+```
+SELECT status, COUNT(*) FROM cobrancas GROUP BY status;
+→ PAGO 31 · A_VENCER 6 · VENCIDO 3
+
+SELECT COUNT(*) FROM asaas_cobrancas;        → 5 (todas RECEIVED)
+SELECT COUNT(*) FROM asaas_customers;        → 62
+SELECT COUNT(*) FROM cobranca_gateway;       → 7
+```
+
+**Distribuição real das 31 PAGAS:**
+- **5 via Asaas sandbox** (16%) — `AsaasCobranca` criadas 23-27/04 durante Sprint 12 sandbox validation. Valores R$ 8/12/20/40/500. Cobrancas linkadas estão `PAGO`.
+- **26 via baixa manual** (84%) — admin marcou pago direto na UI sem Asaas Charge.
+
+> **Correção retroativa Decisão 23:** Sessão 12/05 noite e Dia 1 do H.2 (commit `382f40e` §4.4) afirmaram "AsaasCobranca = 0" e "31 PAGAS = 100% baixa manual". **Errado.** Re-validação 13/05 noite via SQL revelou os 5 registros sandbox. Memória estava inflada — Decisão 23 cumpre seu propósito ao re-validar.
+
+**Bloqueios pra produção real (Fatia A canário):**
+- D-33 (dual-path Asaas — `getConfig()` lê `AsaasConfig` legado em vez de `ConfigGateway` atual)
+- Conta Asaas-CoopereBR em produção (sandbox já funciona — provado pelos 5 registros)
+
+**Referências cruzadas:**
+- ← Fluxo 2 (FaturaProcessada via OCR atualiza valorCheioKwh da Cobranca antes de emitir)
+- → Fluxo 7 (cron geração mensal cria Cobranca via este caminho)
+- → Fluxo 8 (FaturaSaas usa mesmo padrão Asaas, mas via ConfigGatewayPlataforma — vazio)
+
+---
+
+### Fluxo 4 — Aprovação de proposta + concessionária
+
+**Gatilho:** cooperado aceita proposta via tela pública (Fase C.3 fechou em 11/05).
+
+```
+[Cooperado: /aprovar-proposta?token=...]
+              │
+              ▼
+PUBLICO/cooperado-publico.controller.ts
+   POST /publico/proposta/aceitar
+              │
+              ▼
+MotorPropostaService.aceitar()
+   ├─ valida token
+   ├─ congela tarifa (helper calcular-tarifa-contratual.ts)
+   ├─ cria/atualiza Contrato status=PENDENTE
+   ├─ marca Cooperado.status = AGUARDANDO_CONCESSIONARIA
+   └─ envia email "aguardando concessionária"
+              │
+              ▼
+[Cooperado submete protocolo concessionária via /portal/conta]
+              │
+              ▼
+[Admin: /dashboard/cooperados/[id] — etapa 11]
+   POST /cooperados/:id/aprovar-concessionaria
+              │
+              ▼
+CooperadosService.aprovarConcessionaria()
+   ├─ valida protocoloConcessionaria @MinLength(3)
+   ├─ multi-tenant (SUPER_ADMIN bypass)
+   ├─ atualiza Cooperado.status = APROVADO
+   └─ chama enviarCadastroAprovado() (email confirmação)
+              │
+              ▼
+[Aguarda 1ª fatura concessionária OCR (Fluxo 2)]
+              │
+              ▼
+Cooperado.status = ATIVO
+   └─ Contrato.status = ATIVO
+```
+
+**Estado real (validado SQL):**
+```
+SELECT status, COUNT(*) FROM contratos GROUP BY status;
+→ ATIVO 76 · PENDENTE_ATIVACAO 1 · ENCERRADO 1
+
+SELECT status, COUNT(*) FROM cooperados GROUP BY status;
+→ ATIVO 309 · PENDENTE 6 · APROVADO 1 · ATIVO_RECEBENDO_CREDITOS 1
+```
+
+**MARCIO MACIEL destravado** em 11/05 commit `8853d97` — primeiro caso real Caminho UI etapa 11.
+
+**Referências cruzadas:**
+- ← Fluxo 1 (cadastro precede aprovação)
+- → Fluxo 7 (cron geração mensal só ativa pós Cooperado=ATIVO)
+
+---
+
+### Fluxo 5 — CooperToken: emissão e resgate
+
+**Gatilho:** Cooperado com `modoRemuneracao=CLUBE` recebe tokens em vez de desconto direto na fatura.
+
+```
+[Mensalmente, ao gerar Cobranca]
+              │
+              ▼
+CobrancasService.calcularEconomia()
+   ├─ se modoRemuneracao=DESCONTO: aplica desconto direto
+   └─ se modoRemuneracao=CLUBE:
+              │
+              ▼
+   CooperTokenService.emitirTokens()
+      ├─ valor = economia × valorTokenReais (hardcode 0.20 — D-29A)
+      ├─ persiste em CooperTokenLedger (tipo=EMISSAO)
+      └─ atualiza CooperTokenSaldo (cooperadoId)
+              │
+              ▼
+[Cooperado: /portal/tokens — wallet]
+              │
+              ▼ (resgate via parceiro do clube)
+   POST /cooper-token/resgatar
+              │
+              ▼
+   CooperTokenService.resgatar()
+      ├─ valida saldo
+      ├─ persiste CooperTokenLedger (tipo=RESGATE, operacao=DEBITO)
+      ├─ atualiza CooperTokenSaldo
+      └─ vincula a OfertaClube ou ResgateClubeVantagens
+```
+
+**Estado real (validado SQL):**
+```
+SELECT COUNT(*) FROM cooper_token_ledger;        → 9 entradas
+SELECT COUNT(*) FROM cooper_token_saldo;         → 5 saldos ativos
+SELECT COUNT(*) FROM cooper_tokens_compras;      → registros teste
+```
+
+**Volume baixo** — módulo `cooper-token/` tem 2.671 LOC e **0 specs**. Pré-req P0 do Sprint CooperToken Consolidado (Fatia C — escrever specs antes de refator). 4.9 tokens emitidos por engano antes do conserto CLUBE (débito P3 catalogado).
+
+**Modelo migracional incompleto:** 85 cooperados em estado intermediário entre `opcaoToken` (legado) e `modoRemuneracao` (novo) — D-30Z catalogado.
+
+**Referências cruzadas:**
+- → Fluxo 9 (resgate pode ser em parceiro do convênio)
+
+---
+
+### Fluxo 6 — MLM cascata (indicação)
+
+**Gatilho:** cooperado A indica cooperado B; quando B paga 1ª cobrança, A recebe bônus.
+
+```
+[Cooperado A: /portal/indicacoes]
+              │
+              ▼
+POST /indicacoes/criar-convite
+              │
+              ▼
+   ConviteIndicacaoService.criar()
+      ├─ gera codigo único
+      ├─ persiste ConviteIndicacao status=PENDENTE
+      └─ envia link via WhatsApp/email
+              │
+              ▼
+[Cooperado B: /convite/[codigo] → /cadastro?conviteCodigo=...]
+              │
+              ▼
+   PublicoController.cadastro({ conviteCodigo })
+      ├─ cria Cooperado B
+      ├─ persiste Indicacao { indicadorId: A, indicadoId: B }
+      └─ marca ConviteIndicacao status=ACEITO
+              │
+              ▼ [Fluxo 1 + 4 — B vira ATIVO]
+              ▼ [Fluxo 3 — B paga 1ª cobrança]
+              │
+              ▼ Event listener (cobranca.paga.first)
+   IndicacaoService.aplicarBonus()
+      ├─ identifica indicador A
+      ├─ percorre cascata até N níveis (config)
+      ├─ persiste BeneficioIndicacao { indicacaoId, valor }
+      └─ aplica como crédito futuro pra A
+```
+
+**Estado real (validado SQL):**
+```
+SELECT COUNT(*) FROM indicacao;              → 10
+SELECT COUNT(*) FROM beneficio_indicacao;    → 0
+```
+
+**D-30M aberto:** pipeline OK e cabeado (event emitter + listener + create) mas **0 BeneficioIndicacao** no banco. As 10 indicações vieram de seed/cadastro mas nenhum indicado pagou via Caminho B real ainda. Validação E2E pendente (catalogada P2).
+
+**Referências cruzadas:**
+- → Fluxo 3 (gatilho é pagamento via Caminho B)
+- → Fluxo 1 (link convite leva ao cadastro)
+
+---
+
+### Fluxo 7 — Cron geração mensal de cobrança
+
+**Gatilho:** cron `cobrancas.job.ts:23` (`@Cron('0 8 * * *')` — todo dia 08:00).
+
+```
+[Cron diário 08:00]
+       │
+       ▼
+CobrancasJob.gerarCobrancasDoMes()
+       │
+       ▼
+   Itera Cooperado.status=ATIVO em todos tenants
+       │
+       ▼ pra cada cooperado:
+   ┌──────────────────────────────────────────────┐
+   │ 1. Verifica se já existe Cobranca do mês     │
+   │    (idempotência)                            │
+   │ 2. Lê Contrato.modeloCobranca:               │
+   │    - FIXO: usa valorContrato congelado       │
+   │    - COMPENSADOS: dimensiona via FaturaProc. │
+   │      mais recente da UC (Fluxo 2)            │
+   │    - DINAMICO: lê valorCheioKwh on-the-fly   │
+   │ 3. Aplica desconto / Fio B / bandeira        │
+   │ 4. Chama CooperTokenService.emitir() se      │
+   │    modoRemuneracao=CLUBE (Fluxo 5)           │
+   │ 5. Persiste Cobranca status=A_VENCER         │
+   │ 6. Se gateway Asaas: emite Charge (Fluxo 3)  │
+   └──────────────────────────────────────────────┘
+       │
+       ▼
+[Outros crons relacionados, mesma job:]
+   - 02:00 retentativas (ressincroniza Asaas)
+   - 03:00 atualiza status (vence A_VENCER pra VENCIDO)
+   - 06:15 envia notificações (WA/email)
+```
+
+**Estado real:** 4 crons em `cobrancas.job.ts` ativos. Geração 100% manual hoje (admin faz via tela `/dashboard/cobrancas/nova`) porque **`BLOQUEIO_MODELOS_NAO_FIXO=true`** ainda ativa em prod. Quando desativar (canário Fatia A), cron passa a gerar automaticamente.
+
+**Referências cruzadas:**
+- → Fluxo 3 (caminho de cobrança)
+- → Fluxo 5 (CooperToken)
+- ← Fluxo 2 (OCR alimenta dimensionamento DINAMICO)
+
+---
+
+### Fluxo 8 — FaturaSaas Luciano → Parceiro
+
+**Gatilho:** cron `saas.service.ts:130` (`@Cron('0 6 1 * *')` — dia 1 do mês 06:00).
+
+```
+[Cron mensal dia 1, 06:00]
+       │
+       ▼
+SaasService.gerarFaturasDoMes()
+       │
+       ▼
+   Itera Cooperativa.status=ATIVO
+       │
+       ▼ pra cada parceiro:
+   ┌──────────────────────────────────────────┐
+   │ Lê PlanoSaas vinculado                   │
+   │ Calcula valor:                           │
+   │   - mensalidadeBase (sempre)             │
+   │   - + percentualReceita × receitaMes     │
+   │ (ignora 8 outros campos PlanoSaas — D29F)│
+   │ Persiste FaturaSaas status=PENDENTE      │
+   └──────────────────────────────────────────┘
+       │
+       ▼ ❌ NÃO ACONTECE HOJE:
+   GatewayPlataformaService.emitirAsaas(faturaSaas)
+   └─ leria de ConfigGatewayPlataforma (count = 0!)
+   └─ enviaria Asaas Charge pra cobrar parceiro via Asaas-Luciano
+       │
+       ▼ ❌ NÃO ACONTECE HOJE:
+   Cron D-7/D-3/D-1 → email/WA pro parceiro lembrar
+```
+
+**Estado real (validado SQL):**
+```
+SELECT status, COUNT(*) FROM faturas_saas GROUP BY status;
+→ PENDENTE 3 (todas sem asaasCobrancaId)
+
+SELECT COUNT(*) FROM config_gateway_plataforma; → 0
+```
+
+**3 FaturaSaas PENDENTE no banco** (CoopereBR Teste R$ 5.900 vencida 10/04 + 2 outras). Nenhuma com `asaasCobrancaId` populado. Parceiro não recebe link de pagamento, sem email/WA pra lembrar, sem endpoint pra marcar paga via UI.
+
+**Decomposto em 3 sub-débitos P1:**
+- **D-29F.1** — cron de geração (validar/criar)
+- **D-29F.2** — envio via Asaas (`ConfigGatewayPlataforma` vazio bloqueia)
+- **D-29F.3** — comunicação D-7/D-3/D-1
+
+**Bloqueio operacional:** Luciano abrir conta **Asaas-SISGD** em produção (Asaas dele, não do parceiro).
+
+**Referências cruzadas:**
+- ← Fluxo 3 (mesmo padrão Asaas, mas modelo gateway diferente — `ConfigGatewayPlataforma` em vez de `ConfigGateway`)
+
+---
+
+### Fluxo 9 — Convênio + link de membro público
+
+**Gatilho:** organização institucional (ex.: Hangar Academia) gera link público; visitantes cadastram-se via link.
+
+```
+[Convênio configurado por admin /dashboard/convenios/[id]]
+       │
+       ▼
+ContratoConvenio criado
+   ├─ vincula Convenio (PJ) ↔ Cooperativa (parceiro SISGD)
+   └─ define faixas de bonificação (% por volume de membros)
+       │
+       ▼
+[Link público: /cadastro?convenioCodigo=...]
+       │
+       ▼
+PublicoController.cadastro({ convenioCodigo })
+   ├─ cria Cooperado normalmente (Fluxo 1)
+   ├─ persiste ConvenioCooperado { cooperadoId, convenioId }
+   ├─ vincula indicacaoId (se vier — D-30P fixou em 01/05)
+   └─ chama recalcularFaixa() (D-30Q fixou em 01/05)
+       │
+       ▼
+HistoricoFaixaConvenio (registra mudança de tier)
+       │
+       ▼
+[Quando membro PJ paga primeira fatura:]
+   Convênio sobe faixa → bonificação maior próximo mês
+```
+
+**Estado real (validado SQL):**
+```
+SELECT COUNT(*) FROM contrato_convenios;     → 2
+SELECT COUNT(*) FROM convenio_cooperados;    → 215
+```
+
+**215 cooperados** vinculados a convênios (Hangar Academia, AESMP, ASSEJUFES — membros PJ da CoopereBR). 2 contratos de convênio ativos.
+
+**D-30P + D-30Q resolvidos** em 01/05 (commit `fa9dc72`) — caminho público de convênio agora vincula `indicacaoId` corretamente e recalcula faixa.
+
+**Referências cruzadas:**
+- → Fluxo 1 (cadastro segue mesmo caminho)
+- → Fluxo 6 (indicação pode vir junto via convênio)
+
+---
+
+### Fluxo 10 — Auditoria regulatória ANEEL
+
+**Gatilho:** cron diário (planejado para Sprint 5 — não existe ainda).
+
+```
+[Cron 06:00 — A IMPLEMENTAR no Sprint 5]
+       │
+       ▼
+AuditoriaRegulatoriaService.executar()
+       │
+       ▼
+   Pra cada Usina:
+       │
+       ▼
+   ┌──────────────────────────────────────────────┐
+   │ 1. Limite 25%: percentualUsina × cooperados  │
+   │    (D-31 reframed — usar fórmula on-the-fly  │
+   │     kwhContratoAnual / Usina.capacidadeKwh)  │
+   │ 2. Mix de classes (GD I/II/III) — Fio B      │
+   │    (Sprint 5a)                               │
+   │ 3. Concentração por cooperado-usina          │
+   │ 4. Transferência de saldo (D-30G)            │
+   │ 5. Mistura classes mesma usina (D-30B/G)     │
+   └──────────────────────────────────────────────┘
+       │
+       ▼
+   Se violação detectada:
+       └─ persiste em AuditLog (D-30N — interceptor não impl.!)
+       └─ alerta WhatsApp/email pro admin
+       └─ flag bloqueio operacional (configurável por parceiro)
+```
+
+**Estado real:** **NÃO EXISTE em código** — Sprint 0 (Auditoria Regulatória Emergencial) e Sprint 5 (Módulo Regulatório ANEEL) ainda não iniciaram. Auditoria manual gerada como relatório one-shot em 11/05 (`docs/relatorios/2026-05-11-auditoria-concentracao-25-pct.md`) revelou 0 violações — mas com input fictício (D-31 reframed).
+
+**Bloqueios:**
+- **AuditLog inativo** (D-30N) — Sprint 5/6
+- **Flags ANEEL** (`concentracaoMaxPorCooperadoUsina`, etc.) — Sprint 5
+- **`RegrasFioB`** model não cadastrado — D-30E
+
+**Referências cruzadas:**
+- ← Fluxo 1 (cadastro pode ser bloqueado por flag)
+- ← Fluxo 4 (aprovação admin do plano também — D-30W decisão 22)
+- ← Fluxo 7 (cron de cobrança para com violação? a definir Sprint 5)
+
+---
+
+### 6.11 Resumo: estado real dos 10 fluxos
+
+| # | Fluxo | Caminho real exercitado? | Estado |
+|---:|---|---|---|
+| 1 | Cadastro novo cooperado | Sim — 317 cooperados, 6 PENDENTE | 🟢 |
+| 2 | Caminho A (OCR) | 1 caso real (João Santos), 12 seeds + 4 testes | 🟡 frágil |
+| 3 | Caminho B (manual + Asaas) | 31 PAGAS — 5 via Asaas sandbox + 26 baixa manual | 🟡 sandbox OK, prod 🔴 |
+| 4 | Aprovação proposta | MARCIO MACIEL destravado 11/05 (1 caso UI) | 🟢 |
+| 5 | CooperToken emissão/resgate | 9 ledger entries, volume baixo | 🟡 |
+| 6 | MLM cascata | 10 indicações, 0 benefícios — D-30M | 🟡 cabeado, sem E2E |
+| 7 | Cron geração mensal | 4 crons ativos, mas geração manual hoje | 🟡 |
+| 8 | FaturaSaas Luciano→Parceiro | Cron OK, 3 PENDENTE, sem envio Asaas — D-29F | 🔴 não envia |
+| 9 | Convênio + link público | 215 cooperados via convênio, D-30P/Q OK | 🟢 |
+| 10 | Auditoria ANEEL | NÃO EXISTE — Sprint 0/5 | 🔴 |
 
 ---
 
