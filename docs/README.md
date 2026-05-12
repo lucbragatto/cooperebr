@@ -2,6 +2,10 @@
 
 Estrutura dos documentos do projeto.
 
+> **Índice canônico:** veja [`INDEX.md`](./INDEX.md) — entrada única
+> que aponta pra `SISTEMA.md` (esqueleto vivo do sistema), planos,
+> controles e fontes vivas. Use como ponto de partida.
+
 ## Organização
 
 - **`referencia/`** — descrições vivas do sistema: arquitetura,
