@@ -423,6 +423,148 @@ desses pais e já têm spec/análise pronta.
 
 ---
 
+## Seção 3c — Sprint Cadastros+Financeiro Consolidado (decidido 12/05 noite)
+
+**Origem:** investigação ampla read-only de 12/05 (commit `89ee5ea` + appendix `07a8c20`) varreu 3 caminhos de Cadastros + 12 componentes Financeiros e identificou 11 fatias entregáveis. Decisão tomada em 12/05 noite — **Plano Mestre Opção 4**.
+
+**Visão:** consolidar 11 fatias que atravessam Cadastros (3 caminhos de entrada) + Financeiro (12 componentes), distribuídas em 3 horizontes (curto / médio / longo). Sequência operacional preferida: **Opção 4** — H.2 base → Sub-fatia dual-path Asaas → Fatia A canário → H.3+D3 paralelo → H.4+B paralelo → Fatia C em janela.
+
+**Cumpre Decisão 18:** cada fatia tem tema, persona, critério de pronto, estimativa, dependências.
+
+**Marcos:** M1 = H.2 base entregue · M2 = Fatia A canário fim a fim · M3 = D3 FaturaSaas pagando Luciano · M4 = Fatia B multa/juros em prod · M5 = H.3+H.4 fechados · M6 = Fatia C specs CooperToken.
+
+---
+
+### Horizonte CURTO (30-45 dias) — 5 fatias
+
+#### Fatia A — Canário Caminho A real
+
+- **Tema:** 1 cooperado real percorre cadastro → cobrança → pagamento via Asaas sandbox CoopereBR fim a fim.
+- **Persona:** 2º caso real após João Santos (mar/2026 — único Caminho A confirmado em produção).
+- **Critério de pronto:** 1 cobrança com `faturaProcessadaId` + `modeloCobrancaUsado` + `asaasChargeId` + status `PAGA` via webhook chegando.
+- **Estimativa:** 2-4 dias Code (config sandbox CoopereBR já existe).
+- **Dependências:**
+  - **D-33 — Sub-fatia consolidação dual-path Asaas (1-2d)** precisa fechar antes.
+  - Decisão produto Luciano sobre qual cooperado teste usar.
+  - UI auto-config parceiro **NÃO bloqueia** (config CoopereBR já feita via super admin).
+- **Marco:** **M2** do Plano Mestre.
+
+#### Fatia B — Multa/juros mínimo
+
+- **Tema:** cobrança vencida calcula multa + juros automaticamente.
+- **Persona:** cooperado em atraso paga valor correto (multa + juros) na próxima emissão.
+- **Critério de pronto:** cron de verificação diária + cálculo persistido na `Cobranca` + comunicação cooperado + spec Jest.
+- **Estimativa:** 3-5 dias Code.
+- **Dependências:** **decisão produto Luciano** sobre `%` multa, juros diário, carência — precisa estar definida antes de Code começar.
+- **Marco:** **M4**.
+
+#### Fatia C — Sprint CooperToken Consolidado Etapa 1
+
+- **Já catalogado em 04/05** (sessão claude.ai — referência cruzada).
+- **Tema:** specs Jest do módulo `cooper-token` (zero hoje, 2671 linhas — pré-req P0 do refator arquitetural).
+- **Persona:** assistente futuro mexer no módulo CooperToken sem rede de proteção.
+- **Estimativa:** 6-8h Code (sessão dedicada de manhã).
+- **Dependências:** nenhuma (autônomo).
+- **Marco:** **M6**.
+
+#### Fatia D3 — FaturaSaas completo (Luciano → Parceiro)
+
+- **Tema:** cron geração mensal + envio Asaas-SISGD + comunicação D-7/D-3/D-1 + reconciliação webhook.
+- **Persona:** Luciano cobrando parceiros automaticamente (CoopereBR hoje, Sinergia futuro).
+- **Critério de pronto:** 1 FaturaSaas paga via **Asaas-Luciano** com webhook chegando + `LancamentoCaixa` registrado.
+- **Estimativa:** 5-8 dias Code + 1-2 semanas operacional (Luciano abrir conta Asaas-SISGD produção).
+- **Dependências:** **Luciano abrir conta Asaas-SISGD produção**. Decompõe operacionalmente em **D-29F.1** (cron geração) + **D-29F.2** (envio Asaas) + **D-29F.3** (comunicação) — todos catalogados em `debitos-tecnicos.md`.
+- **Marco:** **M3**.
+
+#### Fatia H — SISTEMA.md em 4 sub-fases
+
+- **Persona:** novo dev / nova sessão Code lê `SISTEMA.md` em ~30 min e entende a topologia inteira (45 módulos + 80 models + 152 telas + ligações + fluxos).
+- **Sub-fases:**
+  - **H.1 ✅ ENTREGUE 13/05** (commit `94bf9dc`): `INDEX.md` canônico + esqueleto `SISTEMA.md` 15 seções (346 linhas).
+  - **H.2 — SISTEMA.md base** (45 módulos + 80 models + 152 telas) — 2-3 dias Code. **ETAPA 1 do Plano Mestre.**
+  - **H.3 — Ligações cross-módulo** — 2 dias Code.
+  - **H.4 — Fluxos end-to-end consolidados** — 1-2 dias Code.
+- **Marco:** **M1** (quando H.2 base entregue) + **M5** (quando H.2 + H.3 + H.4 todos fechados).
+
+---
+
+### Horizonte MÉDIO (45-90 dias) — 3 fatias
+
+#### Fatia D1 — Conciliação bancária BB/Sicoob
+
+- **Tema:** import de extrato bancário + match automático com `LancamentoCaixa` + UI de conciliação manual pros não-matches.
+- **Persona:** Walter (contador externo) concilia mês 100% em janela curta.
+- **Critério de pronto:** import extrato funcional + match >80% automático + UI manual pros restantes + spec Jest.
+- **Estimativa:** 1 semana Code (1339 linhas existentes em `integracao-bancaria/` + 0 specs).
+- **Dependências:** nenhuma técnica imediata.
+
+#### Fatia D2 — DRE / fechamento mensal
+
+- **Tema:** `GET /financeiro/dre` + endpoint fechamento + reabertura controlada (`SUPER_ADMIN`) + UI.
+- **Persona:** Walter gera DRE do mês + fecha + reabre se necessário com auditoria.
+- **Critério de pronto:** DRE consolidada por parceiro + fechamento bloqueia novos lançamentos no mês fechado + reabertura registra em AuditLog + UI usável.
+- **Estimativa:** 1-2 semanas Code.
+- **Dependências:** **D1 ajuda mas não bloqueia** (D2 pode rodar com lançamentos manuais).
+
+#### Fatia G — Débitos cumulativos
+
+- **Tema:** consolidar **D-31 guard** (P2) + **D-30X whitelist LGPD** (P3) + **D-30Z 85 cooperados** (P3) + 3 specs DI (P3) + telas duplicadas + **D-30M MLM validação** (P2) + **D-30U fórmula órfã** (P2).
+- **Persona:** manutenção saudável da base, sem bloqueio operacional.
+- **Estimativa:** 1 semana Code.
+- **Dependências:** **D-30M** depende de 1º indicado pagar via Caminho B real antes de validar E2E.
+
+---
+
+### Horizonte LONGO (90+ dias) — 3 fatias
+
+#### Fatia E — Polish cadastros
+
+- **Tema:** refator `/cadastro` (1553 linhas em 1 arquivo) → padrão **7 steps** do admin (já validado em outras telas).
+- **Persona:** manutenibilidade futura (nenhum impacto operacional imediato).
+- **Estimativa:** 3-5 dias Code.
+- **Dependências:** nenhuma.
+
+#### Fatia F — Painel super-admin completo
+
+- **Tema:** revisita `/dashboard/super-admin` com cards expandidos + relatórios financeiros consolidados.
+- **Persona:** Luciano usa o painel diariamente (precisa ser produtivo).
+- **Estimativa:** 1 semana Code.
+- **Dependências:** **D2 (DRE)** idealmente fechada antes — Painel mostra DRE consolidada.
+
+#### Fatia L — UI auto-config Asaas no painel parceiro
+
+- **NOVA — catalogada 12/05 noite.**
+- **Tema:** réplica de `/dashboard/configuracoes/asaas` (super admin) em `/parceiro/configuracoes/asaas` (admin parceiro) com permissão tenant-scoped.
+- **Persona:** admin parceiro configura **a SUA conta** Asaas (importante quando Sinergia migrar — não dá pra ser via super admin com credenciais de outro tenant).
+- **Critério de pronto:** admin parceiro logado vê **só sua config** + audit de mudanças no AuditLog.
+- **Estimativa:** 3-5 dias Code.
+- **Dependências:** **D-33 consolidação dual-path Asaas antes** (sem isso, UI grava em `ConfigGateway` mas service lê de `AsaasConfig` legado).
+- **Severidade:** **P2** — não bloqueia hoje (Luciano configura via super admin com dados CoopereBR), mas precisa **antes de Sinergia** entrar.
+
+---
+
+### Sub-fatia pré-Fatia A — Consolidação dual-path Asaas
+
+- **Catalogada como D-33** em `docs/debitos-tecnicos.md`.
+- **Tema:** refatorar `asaas.service.ts:65` `getConfig()` pra ler de `ConfigGateway` (atual) em vez de `AsaasConfig` (legado); deprecar `AsaasConfig` no schema com `@deprecated`.
+- **Estimativa:** 1-2 dias Code.
+- **Pré-requisito da Fatia A** — sem isso, canário pode usar credenciais erradas em runtime.
+
+---
+
+### Sequência operacional (Opção 4 — confirmada 12/05)
+
+1. **H.2 SISTEMA.md base** (M1) — ETAPA 1 do Plano Mestre.
+2. **Sub-fatia dual-path Asaas** (D-33).
+3. **Fatia A canário** (M2).
+4. **H.3 + D3 em paralelo** (M3 quando D3 fecha).
+5. **H.4 + B em paralelo** (M4 quando B fecha).
+6. **Fatia C** em janela disponível (M6).
+7. **Médio prazo:** D1 + D2 + G.
+8. **Longo prazo:** E + F + L.
+
+---
+
 ## Seção 4 — Ordem sugerida de execução
 
 ```
