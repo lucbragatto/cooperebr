@@ -645,3 +645,229 @@ Code apresenta P0→P3. Luciano decide.
 ---
 
 *Investigação concluída em 12/05/2026. Read-only estrito, sem mutação. Aguarda decisão Luciano sobre fatiamento.*
+
+---
+
+# Appendix — Sub-investigações 12/05 tarde
+
+> Adição pós-relatório principal: 3 missões focadas em (1) identificação dos 17 FaturaProcessada, (2) mapeamento dos 2 fluxos Asaas (FaturaSaas Luciano→Parceiro vs Cobrança Parceiro→Membro) com nuance multi-tenant, (3) dimensionamento separado Fatia D3 vs Fatia A.
+
+## A.1. Identificação dos 17 FaturaProcessada
+
+**Composição completa:**
+
+| Coop | Quantidade | Origem | cobrancaGeradaId |
+|---|---|---|---|
+| TESTE-FASE-B5 — Validação Engines | 12 | Seeds 03/05 (Fase B.5) | TODAS null |
+| CoopereBR | 5 | Legados mar/2026 | 1 populado (`pnbsm75n`) |
+
+**Detalhe dos 12 da TESTE-FASE-B5 (todos 03/05/2026, status APROVADA):**
+- 6 cooperados teste × 2 faturas cada (uma `mes='ACEITE_INICIAL'` + uma `mes='2026-05'`)
+- Cobertura: TESTE-B5-FIXO-CHEIO, TESTE-B5-FIXO-SEMTRIB, TESTE-B5-COMP-CHEIO, TESTE-B5-COMP-SEMTRIB, TESTE-B5-DIN-CHEIO, TESTE-B5-DIN-SEMTRIB
+- **Nenhuma virou cobrança** (`cobrancaGeradaId=null` em todas) — seeds não chamaram pipeline pós-OCR
+
+**Detalhe dos 5 da CoopereBR (legados mar/2026):**
+- 1 PENDENTE: LUCIANO COSTA BRAGATTO (26/03) — em revisão
+- 4 APROVADA: DERLI CAZOTTO VEICULOS (17/03), Carlos Pereira (16/03), Ana Oliveira (16/03), **João Santos da Silva** (16/03)
+- **Apenas 1 (João Santos)** tem `cobrancaGeradaId=pnbsm75n` — o ÚNICO caso real de Caminho A produção
+
+**Conclusão sobre "Caminho A nunca rodou em produção" (sessão 30/04):**
+
+| Premissa | Realidade |
+|---|---|
+| "Caminho A nunca rodou em produção" | **Imprecisa.** Rodou EXATAMENTE 1 vez em mar/2026 (João Santos). 12 dos 17 são seeds Fase B.5 (não conta como produção). 4 são fatura processada sem cobrança gerada (caminho parou no meio). |
+
+A premissa estava 95% correta — só não captou a 1 exceção histórica. **Caminho A é praticamente cru.**
+
+## A.2. Fluxo 1 — FaturaSaas (Luciano → Parceiro)
+
+**Schema:** `model FaturaSaas` com campos `competencia` (DateTime), `valorBase`, `valorReceita`, `valorTotal`, `dataVencimento`, `dataPagamento`, `asaasCobrancaId`, `volumeTokensMes`, `receitaTokens`.
+
+**Banco — 3 FaturaSaas totais (todas PENDENTES):**
+
+| id (sufixo) | Cooperativa | competência | valorTotal | venc | pago | asaas |
+|---|---|---|---|---|---|---|
+| `atse2els` | CoopereBR Teste | abr/2026 | R$ 5.900 | 10/04 | — | null |
+| `lfn1hn6s` | CoopereBR Teste | mai/2026 | R$ 5.900 | 10/05 | — | null |
+| `589cwmb2` | CoopereBR | mai/2026 | R$ 9.999 | 10/05 | — | null |
+
+**Achado crítico:** `asaasCobrancaId` é NULL em todas as 3 FaturaSaas. Nenhuma chegou a virar cobrança Asaas. **FaturaSaas é gerada pelo cron mensal (saas.service.ts:130 — `0 6 1 * *`) mas não dispara criação no Asaas automaticamente.**
+
+**Endpoints SaaS (`/saas/`, 11 endpoints):**
+- GET /saas/faturas (lista)
+- POST /saas/faturas/gerar (gera mensal)
+- GET /saas/dashboard (métricas)
+- GET /saas/parceiros + /saas/parceiros/:id/saude
+- CRUD /saas/planos
+
+**Endpoints Asaas pra criação (`/asaas/`):**
+- POST /asaas/cobrancas (criar)
+- GET /asaas/cobrancas/:cooperadoId (listar por cooperado)
+- POST /asaas/webhook (receber eventos)
+
+**Webhook handler:** existe (`asaas.controller.ts:129 — POST /webhook`).
+
+**Comunicação D-7/D-3/D-1 ao PARCEIRO:** **não existe pra FaturaSaas.** Os crons `cobrancas.job.ts:23 lembretesPreVencimento` e `whatsapp-cobranca.service.ts:441 cronAlertarVencimentoProximo` cobrem só cobranças cooperado-facing. Nenhum cron mira FaturaSaas pendentes.
+
+**Reconciliação automática quando webhook chega:**
+- Webhook receiver existe (`/asaas/webhook`)
+- Não validei se ele atualiza `FaturaSaas.status` quando recebe `PAYMENT_RECEIVED`
+
+## A.3. Fluxo 2 — Cobrança (Parceiro → Membro)
+
+**Banco:**
+- `AsaasCobranca` model: **0 registros** (tabela vazia)
+- `Cobranca` model: 40 totais, 31 PAGAS, todas da **CoopereBR** (não TESTE-FASE-B5 nem Teste)
+- 31 PAGAS — mas como `AsaasCobranca`=0, **as 31 foram dadas baixa MANUAL via endpoint `/cobrancas/:id/dar-baixa`** sem passar por Asaas
+
+**Asaas service — multi-tenant CONFIRMADO:**
+
+`backend/src/asaas/asaas.service.ts`:
+
+```typescript
+async getConfig(cooperativaId: string) {
+  return this.prisma.asaasConfig.findUnique({ where: { cooperativaId } });
+}
+
+async getApiClient(cooperativaId: string): Promise<AxiosInstance> {
+  const config = await this.getConfig(cooperativaId);
+  // ... constrói client Axios com apiKey do tenant
+}
+
+async criarOuBuscarCustomer(cooperadoId, cooperativaId) {
+  const client = await this.getApiClient(cooperativaId);
+  // ...
+}
+```
+
+✅ **Cada parceiro tem suas próprias credenciais Asaas.** Sistema resolve client por `cooperativaId`. Não há single-tenant hardcoded.
+
+**AsaasConfig no banco — 1 registro:**
+
+| coop | ambiente | ativo | webhook_token |
+|---|---|---|---|
+| CoopereBR | **sandbox** | true | populado (len=64) |
+
+**Confirma:**
+- CoopereBR já tem AsaasConfig em **sandbox** (operacional Luciano)
+- CoopereBR Teste: SEM AsaasConfig
+- TESTE-FASE-B5: SEM AsaasConfig
+
+**Tela admin `/dashboard/configuracoes/asaas/`:** existe (confirmado em `ls web/app/dashboard/configuracoes/` — pasta `asaas` presente). Não medi linhas.
+
+## A.4. Esclarecimento "31 cobranças sandbox" (memória Sprint 12)
+
+**Realidade vs memória:**
+
+| Premissa | Realidade |
+|---|---|
+| "31 cobranças PAGAS validadas em sandbox" (Sprint 12, abr/2026) | **31 cobranças PAGAS EXISTEM**, todas CoopereBR. **Mas zero passaram por Asaas** (AsaasCobranca=0). Foram dadas baixa manual via `/cobrancas/:id/dar-baixa`. Sprint 12 sandbox testou outra coisa (webhook handler, signature validation), não 31 cobranças completas. |
+
+**Conclusão:** memória inflada. 31 cobranças PAGAS no banco → mas NENHUMA passou por integração Asaas real. Sprint 12 webhook foi validado com payload sintético, não com cobranças que vieram da experiência completa "criar cobrança Asaas → cooperado paga → webhook → marcar PAGA".
+
+## A.5. D-29F catalogado em 29/04 — reframed pra estado atual
+
+| Item D-29F | Sim/Não | Detalhe |
+|---|---|---|
+| FaturaSaas tem schema + cron de geração? | ✅ Sim | `saas.service.ts:130` cron mensal dia 1 6h |
+| Asaas testado em sandbox FaturaSaas? | 🔴 NÃO | Nenhuma das 3 FaturaSaas no banco tem `asaasCobrancaId` populado |
+| Comunicação D-7/D-3/D-1 ao parceiro? | 🔴 NÃO | Crons existem mas miram cobranças cooperado-facing |
+| Reconciliação webhook FaturaSaas? | ❓ DESCONHECIDO | Webhook `/asaas/webhook` existe; não validei se atualiza `FaturaSaas.status` |
+
+**Reframe:** D-29F seguia P2 catalogado mas estado real é mais granular — **3 sub-pendências internas** (sandbox + comunicação + reconciliação).
+
+## A.6. `/dashboard/configuracoes/asaas`
+
+Confirmado: pasta `web/app/dashboard/configuracoes/asaas/` existe. Lista completa de telas `/configuracoes/`:
+
+- `asaas/` (provavelmente CRUD credenciais Asaas do parceiro)
+- `bandeiras/`
+- `documentos/`
+- `email/`
+- `email-faturas/`
+- `financeiro/`
+- `seguranca/`
+
+Não medi linhas individuais nesta sub-investigação. Tela admin existe pra cada parceiro configurar suas credenciais — coerente com multi-tenant do service.
+
+## A.7. Dimensionamento Fatia D3 (FaturaSaas) vs Fatia A (Cobrança Membro)
+
+### Fatia D3 — FaturaSaas (Luciano → Parceiro) Completo
+
+**O que já existe:**
+- ✅ Schema `FaturaSaas` completo (`competencia`, `valorBase/Receita/Total`, `asaasCobrancaId`, `volumeTokensMes`)
+- ✅ Cron mensal de geração (`saas.service.ts:130`)
+- ✅ Endpoints `/saas/faturas`, `/saas/faturas/gerar`
+- ✅ 11 endpoints `/saas/*` (parceiros + planos + saude)
+- ✅ Painel SISGD super-admin (Sprint 13a Dia 1 — 145 linhas)
+- ✅ Multi-tenant Asaas resolvido (credenciais por parceiro funciona)
+- ✅ Conta Asaas DO LUCIANO em sandbox aberta (Luciano confirmou 2-3 testes)
+
+**O que falta:**
+- 🔴 Geração de FaturaSaas chamando Asaas (`POST /asaas/cobrancas` com `cooperativaId` do parceiro) — hoje cria FaturaSaas no banco mas não dispara Asaas
+- 🔴 Comunicação D-7/D-3/D-1 ao PARCEIRO (não há cron mirando FaturaSaas pendentes; só lembretes cobranca cooperado-facing)
+- 🔴 Reconciliação automática FaturaSaas via webhook (PAYMENT_RECEIVED → marca PAGA)
+- 🔴 Abrir conta Asaas Luciano **produção** (operacional, não-Code)
+- 🟡 Painel super-admin pode mostrar inadimplência FaturaSaas (mencionado mas não validei)
+
+**Estimativa Code:** **5-8 dias**
+- 1d — disparar Asaas pra cada FaturaSaas no cron mensal
+- 2d — comunicação D-7/D-3/D-1 ao parceiro (templates + cron + WhatsApp)
+- 1d — reconciliação webhook (atualiza FaturaSaas.status)
+- 2-3d — testes E2E sandbox completo (gerar → pagar → webhook → reconciliar)
+- 1d — spec coverage
+
+**Operacional adicional (Luciano):** 1-2 semanas (abrir conta Asaas produção + transição de sandbox).
+
+### Fatia A — Cobrança Parceiro → Membro (caminho crítico produção)
+
+**O que já existe:**
+- ✅ Pipeline OCR completo (faturas: 3.538 linhas, 4 specs, 16 endpoints)
+- ✅ Asaas service multi-tenant (credenciais por cooperativaId)
+- ✅ Webhook handler `/asaas/webhook`
+- ✅ Cron geração cobranças (`cobrancas.job.ts`)
+- ✅ Crons WhatsApp lembretes D-7/D-3/D-1 + abordar inadimplentes
+- ✅ Cron cálculo multa/juros (`cobrancas.job.ts:145`)
+- ✅ Endpoint `/cobrancas/:id/dar-baixa` (manual)
+- ✅ Tela admin `/dashboard/cobrancas/[id]` com `<EconomiaProjetada>`
+- ✅ Tela cooperado `/portal/financeiro` (527 linhas)
+- ✅ AsaasConfig da CoopereBR em sandbox
+
+**O que falta:**
+- 🔴 **Criar conta Asaas CoopereBR sandbox** (Luciano confirmou: zero — nem sandbox nem produção do PARCEIRO)
+  - Modelo: `AsaasConfig` da CoopereBR principal já existe no banco com ambiente=sandbox, mas Luciano disse "conta Asaas do parceiro CoopereBR: zero". Vale confirmar se é a mesma conta ou se a config existente é stale/teste
+- 🔴 Validar fluxo "criar cobrança Asaas → webhook → marcar PAGA" com cooperado real CoopereBR
+  - As 31 PAGAS atuais não passaram por Asaas (manual). Caminho Asaas real nunca foi exercitado em produção
+- 🟡 Multi-tenant do webhook (identificar qual parceiro pelo evento Asaas) — não validei
+- 🔴 Comunicação cooperado D-7/D-3/D-1 — crons EXISTEM mas só dispararam pra cobranças via Asaas (que hoje é zero). Validar com fluxo Asaas real
+- 🟡 Reconciliação Asaas → Cobranca.status (idem D3)
+
+**Estimativa Code:** **3-5 dias** (Asaas + integração + validação)
+- 1d — auditoria AsaasConfig CoopereBR existente (é sandbox real do Luciano-Parceiro ou stale do desenvolvimento?)
+- 1d — fluxo POST `/asaas/cobrancas` integrado ao cron de geração de cobrança cooperado
+- 1d — reconciliação webhook → Cobranca.status (já existe webhook handler?)
+- 1-2d — testes E2E sandbox (1 cooperado teste CoopereBR Teste cobrado via Asaas sandbox → webhook → marcar PAGA)
+
+**Operacional adicional (Luciano):** Modelo Asaas Luciano (Fatia D3) serve como TEMPLATE pra criar config CoopereBR. **Não precisa "criar conta nova" se a conta existente for válida.** Validar.
+
+### C — Tabela comparativa premissas
+
+| Premissa antiga | Premissa real pós-investigação |
+|---|---|
+| "Caminho A nunca rodou em produção" (sessão 30/04) | **Quase correto.** Rodou exatamente 1 vez (João Santos, mar/2026). Outras 16 são seeds Fase B.5 ou faturas processadas sem cobrança gerada. |
+| "Caminho B (cobrança manual + Asaas sandbox) maduro, 31 cobranças PAGAS" | **Imprecisa.** 31 PAGAS existem (todas CoopereBR) mas ZERO passaram por Asaas. Foram dadas baixa manual via `/cobrancas/:id/dar-baixa`. Sprint 12 "webhook Asaas validado em sandbox" foi com payload sintético, não fluxo completo. |
+| "Sprint 12 webhook Asaas validado em sandbox" | **Era webhook genérico (signature validation), não fluxo end-to-end.** AsaasCobranca model está VAZIO no banco. |
+| "Multi-tenant queries por cooperativaId" | ✅ **Confirmado.** Asaas também é multi-tenant: `asaas.service.ts:64` lê config por `cooperativaId`, `getApiClient(cooperativaId)` constrói client com apiKey do tenant. |
+| "AsaasConfig da CoopereBR existe" | ✅ **Existe**, em ambiente=sandbox, ativo=true. Mas Luciano disse "conta Asaas do parceiro CoopereBR: zero" — possível discrepância entre o que está no banco (stale?) e o que Luciano lembra. Vale auditoria pontual. |
+
+## Achados extras desta sub-investigação
+
+1. **AsaasCobranca model está VAZIO** — sistema tem o model mas nenhuma cobrança Asaas foi criada. Confirma que fluxo Asaas-real é cru.
+2. **João Santos da Silva (CoopereBR, mar/2026)** é o único caso histórico de Caminho A produção. Vale catalogar como "primeiro cooperado real exercitou pipeline OCR completo" — referência pra futura validação canário.
+3. **3 FaturaSaas PENDENTES no banco** somam R$ 21.799 não cobrados — Luciano não recebeu de fato (todas com `dataPagamento=null` e `asaasCobrancaId=null`).
+4. **AsaasConfig CoopereBR ambiente=sandbox** existente conflita com fala de Luciano "conta Asaas parceiro CoopereBR: zero" — auditoria pontual de 5 min resolve se é stale ou ativa.
+5. **Tela `/dashboard/configuracoes/asaas/`** existe — admin já tem UI pra configurar credenciais por parceiro. Bom sinal pra adoção multi-tenant Asaas em produção.
+
+---
+
+*Sub-investigação concluída 12/05/2026. Read-only estrito. Aguarda decisão Luciano sobre formalização do "Sprint Cadastros + Financeiro Consolidado" e ordem das 7 fatias propostas.*
