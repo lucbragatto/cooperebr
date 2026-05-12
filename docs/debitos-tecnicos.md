@@ -343,6 +343,12 @@ imediatamente no cadastro.
 
 **Forward-only:** 72 contratos legados não foram backfilled (decisão B33.5 — Caminho C). Continuam com `tarifaContratual=null`. Quando admin tentar cobrar COMPENSADOS sobre contrato legado, engine lança erro explícito ("Contrato sem snapshot — recrie ou backfill").
 
+**Backfill dos 72 contratos legados — ADIADO INDEFINIDAMENTE (atualizado 2026-05-12):**
+
+- **Razão:** provavelmente substituído por **re-cadastro/import correto** quando produção real subir via Caminho A (Fatia A canário). Backfill cego sobre dados fictícios é antitrabalho.
+- **Não bloqueia nada operacional hoje:** `BLOQUEIO_MODELOS_NAO_FIXO=true` protege — engine COMPENSADOS/DINAMICO desativada em prod.
+- **Reavaliar quando:** canário Caminho A validar 1 cooperado real em COMPENSADOS. Se re-cadastro virar caminho preferido, backfill é arquivado. Se persistir necessidade de migrar legados, abre nova sub-fatia em Fatia A.
+
 **Pendente Fase B.5:** validação E2E manual com cooperados teste novos antes de desativar `BLOQUEIO_MODELOS_NAO_FIXO`.
 
 ---
@@ -519,7 +525,9 @@ Endpoints afetados:
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
-### FaturaSaas sem integração Asaas + sem comunicação parceiro + sem fluxo de pagamento (Sprint 6 incompleto)
+### D-29F — FaturaSaas sem integração Asaas + sem comunicação parceiro + sem fluxo de pagamento (Sprint 6 incompleto) — DECOMPOSTO EM 2026-05-12
+
+**Status:** 🟡 **DECOMPOSTO em 12/05** em 3 sub-débitos (D-29F.1, D-29F.2, D-29F.3) — entrada original preservada abaixo como histórico/contexto. Apontar pros sub-débitos em qualquer trabalho novo.
 
 **Detectado em:** 2026-04-29 (validação INVs 4-8 do Doc-0 Fatia 2)
 
@@ -527,7 +535,7 @@ Endpoints afetados:
 
 **Onde:** `backend/src/saas/saas.service.ts`, `saas.controller.ts`
 
-**Sintoma:**
+**Sintoma original (29/04):**
 - Cron mensal `0 6 1 * *` cria FaturaSaas no banco. ✅
 - **Sem boleto/PIX/QR code emitido via Asaas.** Parceiro não recebe meio de pagamento.
 - **Sem email/WA enviado pro parceiro** avisando que tem fatura nova/vencendo.
@@ -535,13 +543,76 @@ Endpoints afetados:
 
 **Cálculo atual lê apenas 2 componentes** (`mensalidadeBase + percentualReceita`). Outros 8 campos do `PlanoSaas` (taxaSetup, limiteMembros, taxaTokenPerc, limiteTokenMensal, cooperTokenHabilitado, modulosHabilitados, modalidadesModulos, ativo) existem como configuração mas não viram cobrança.
 
-**Fix sugerido:** Sprint dedicado "FaturaSaas v2" com:
-1. Webhook Asaas dedicado pra FaturaSaas (separar de cobranças cooperado).
-2. Cron de comunicação D-7, D-3, D-1 + vencimento.
-3. Endpoint `PATCH /saas/faturas/:id/pagar` (manual + automático via webhook).
-4. Decidir se outros componentes do PlanoSaas viram itens da fatura (taxaSetup só na primeira, etc.).
+**Reframe 12/05:** sub-investigação confirmou 3 FaturaSaas PENDENTES no banco sem `asaasCobrancaId` populado + `ConfigGatewayPlataforma` vazio (0 registros). Estado real é mais granular — quebrado nos 3 sub-débitos abaixo (geração, envio, comunicação).
+
+**Sub-débitos:**
+- **D-29F.1** — Cron de geração mensal FaturaSaas (validar/criar)
+- **D-29F.2** — Envio FaturaSaas via Asaas (ConfigGatewayPlataforma)
+- **D-29F.3** — Comunicação D-7/D-3/D-1 pro parceiro
 
 **Bloqueia:** entrada do primeiro parceiro real que pague Luciano. Hoje só funciona em modo "experimental contábil".
+
+### D-29F.1 — Cron de geração mensal FaturaSaas
+
+**Severidade:** **P1**
+
+**Tema:** confirmar existência + completude do cron que gera `FaturaSaas` mensalmente para parceiros. Sprint 6 = T10 catalogou a criação, mas o estado real precisa ser validado (a sub-investigação 12/05 encontrou 3 FaturaSaas PENDENTES sem geração automática evidente).
+
+**Persona:** Luciano cobrando parceiros (CoopereBR hoje, Sinergia futuro).
+
+**Critério de pronto:**
+1. Cron `@Cron` ativo e identificável em `saas.service.ts` (ou módulo equivalente).
+2. Spec Jest cobrindo o cron (gera 1 FaturaSaas pra parceiro fictício, valida valores).
+3. 1 FaturaSaas gerada automaticamente no banco de teste em ambiente local.
+
+**Estimativa:** 2-4h Code (depende se cron existe e precisa só revisão, ou precisa criar do zero).
+
+**Dependências:** nenhuma técnica.
+
+**Origem:** decomposição D-29F em 12/05 + appendix da sub-investigação Code 12/05 noite confirmou 3 FaturaSaas PENDENTES no banco sem geração automática evidente.
+
+### D-29F.2 — Envio FaturaSaas via Asaas (ConfigGatewayPlataforma)
+
+**Severidade:** **P1**
+
+**Tema:** `ConfigGatewayPlataforma` está **VAZIO no banco** (0 registros). FaturaSaas geradas (3 PENDENTES) não têm `asaasCobrancaId` populado. Falta integração de envio: FaturaSaas precisa virar Asaas Charge no momento da geração e expor link de pagamento pro parceiro.
+
+**Persona:** Luciano cobrando parceiros via **Asaas DELE** (Asaas-SISGD, não via Asaas do parceiro — esse é o Asaas do parceiro pra cobrar membros).
+
+**Critério de pronto:**
+1. `ConfigGatewayPlataforma` populado com credenciais Asaas-SISGD produção.
+2. FaturaSaas envia automaticamente Asaas Charge ao ser gerada (`asaasCobrancaId` populado).
+3. Webhook dedicado FaturaSaas funcional (separado do webhook de cobrança de cooperado).
+
+**Estimativa:** 1-2 semanas Code + dependência operacional (Luciano abrir conta Asaas dele em produção).
+
+**Dependências:** Luciano-SISGD abrir conta Asaas produção.
+
+**Bloqueia:** **M3 do Plano Mestre** (Fatia D3).
+
+**Origem:** decomposição D-29F em 12/05 + sub-investigação Code 12/05 noite confirmou `ConfigGatewayPlataforma` vazio + 3 FaturaSaas sem `asaasCobrancaId`.
+
+### D-29F.3 — Comunicação D-7/D-3/D-1 pro parceiro
+
+**Severidade:** **P1**
+
+**Tema:** parceiro precisa receber email/WhatsApp 7 dias / 3 dias / 1 dia antes do vencimento da FaturaSaas (lembrando de pagar o SaaS).
+
+**Persona:** parceiro (CoopereBR admin) lembrado de pagar SaaS antes de vencer.
+
+**Critério de pronto:**
+1. 3 crons agendados (D-7, D-3, D-1) em `saas.service.ts` (ou módulo equivalente).
+2. Templates email pros 3 momentos.
+3. Templates WhatsApp pros 3 momentos.
+4. Spec Jest cobrindo disparo correto baseado em vencimento da FaturaSaas.
+
+**Estimativa:** 3-5 dias Code.
+
+**Dependências:** **D-29F.1** (cron geração) + **D-29F.2** (envio Asaas) idealmente fechados primeiro — sem FaturaSaas válida no banco, comunicação não tem o que avisar.
+
+**Pode rodar em paralelo:** sim, após D-29F.1 + D-29F.2 estarem entregues.
+
+**Origem:** decomposição D-29F em 12/05.
 
 ### ContratoUso só implementa "aluguel fixo" — % lucro líquido não existe + sem cron mensal
 
@@ -1243,32 +1314,35 @@ Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
 
 ---
 
-### D-31 (Carece investigação — provisório P1) — Campo `Contrato.percentualUsina` zerado/irrealista no banco
+### D-31 — 🟡 REFRAMED em 2026-05-12 — Guard preventivo `kwhAnual=null → percentualUsina=null` (sem backfill, dados fictícios)
 
-**Tema:** Auditoria de concentração de 2026-05-11 (Fase 8 Sprint 0 passos iniciais) revelou que `Contrato.percentualUsina` está populado com valores irrealisticamente baixos (0,00% em quase todos os 62 contratos ATIVO + PENDENTE_ATIVACAO analisados). `Usina Linhares` na CoopereBR: **61 cooperados, soma ≈ 0%**. Matematicamente impossível dado que a usina está em operação atendendo cota real.
+**Status:** 🟡 REFRAMED. Escopo original (investigação ampla + backfill dos 61 contratos zerados) **descartado** — investigação 12/05 revelou que dados atuais são **fictícios** (import do sistema antigo, não cooperados reais operacionais). Backfill seria pintar zero sobre zero.
 
-**Impacto crítico:** auditoria de concentração ANEEL (limite 25%) não funciona com input zerado. Mesmo quando Sprint 5 entregar a flag `concentracaoMaxPorCooperadoUsina`, o cálculo vai operar sobre dados furados. **EXFISHES histórico** (caso que motivou D-30A na sessão 30/04) **aparece a 0%** no banco atual — sistema não detectaria hoje o que detectou em abril.
+**Severidade nova:** **P2** (era P1 provisório). Sem dados reais em prod hoje, não há cobrança/alocação errada acontecendo. Guard preventivo evita que próximo cooperado real cadastrado (via Caminho A canário) caia no mesmo poço.
 
-**Hipóteses (carecem investigação):**
+**Escopo redefinido (sub-fatia de Fatia G):**
 
-1. **(a) Bug de cálculo** — campo deveria ser populado em algum momento (criação do contrato? alocação na usina? cron?) e não está. Verificar `motor-proposta.service.ts:aceitar()` + `usinas.service.ts:promoverDaLista*` + `cooperados.service.ts:alocarUsina`.
-2. **(b) Campo legado abandonado** — sistema migrou pra outra métrica (ex: `kwhContratoAnual / Usina.capacidadeKwh × 100`) e `percentualUsina` ficou stale. Cruzar com queries que efetivamente decidem alocação.
-3. **(c) Mistura** — alguns contratos novos populam, antigos não, e a amostra do banco dev está enviesada pra antigos zerados.
+1. **Guard no código:** ao gravar `Contrato`, se `kwhContratoAnual=null` então `percentualUsina=null` (não 0). Tentativa explícita de gravar `0` vira `null` silenciosamente. Valor real de `kwhContratoAnual` calcula `percentualUsina` on-the-fly via fórmula `kwhContratoAnual / Usina.capacidadeKwh × 100`.
+2. **Spec Jest** cobrindo 3 cenários:
+   - (a) `kwhContratoAnual=null` + `percentualUsina=null` → OK, persiste como está.
+   - (b) `kwhContratoAnual=null` + tentativa de gravar `percentualUsina=0` → guard transforma em `null` silenciosamente (não lança).
+   - (c) `kwhContratoAnual=valor real` → calcula `percentualUsina` on-the-fly e grava o valor correto.
+3. **Cobrir 5 services** que tocam o campo (mapeados na Fase 0 da sessão 12/05):
+   - `contratos.service.ts` (create/update)
+   - `motor-proposta.service.ts` (`aceitar()`)
+   - `cooperados.service.ts` (`alocarUsina`)
+   - `migracoes-usina.service.ts`
+   - seed paths (qualquer script de import)
 
-**A fazer (próxima sessão Code dedicada):**
+**NÃO inclui backfill.** Dados atuais são fictícios — re-import correto via Caminho A canário substitui naturalmente. Backfill cego sobre dados fictícios é antitrabalho.
 
-1. Investigar onde `percentualUsina` é gravado (grep no backend: `percentualUsina` `=` `data:`).
-2. Verificar se há cron ou trigger que atualiza periodicamente.
-3. Decidir: corrigir cálculo OU substituir auditoria por outra fórmula (ex: `kwhContratoAnual / Usina.capacidadeKwh × 100`).
-4. Re-rodar auditoria com dados corretos.
+**Origem da reframe:** Luciano em 2026-05-12 noite revelou que os 61 contratos zerados são import do sistema antigo, não cooperados reais. Investigação original D-31 (Fase 8 da sessão maratona 11/05, commit `851a39e`) tratou os dados como reais — ficou inválida.
 
-**Severidade provisória:** P1 — carece investigação pra confirmar escala.
-- Pode ser **P0** se afeta cobrança/alocação real (Caso Exfishes era cobrança real impactada).
-- Pode ser **P2** se é só campo legado sem uso operacional, e outra métrica governa decisões.
+**Estimativa:** 30-45 min Code (guard + spec + smoke nos 5 services).
 
-**Bloqueio:** Sprint 5 (Módulo Regulatório ANEEL — flag `concentracaoMaxPorCooperadoUsina`) e canário 1 cooperado real dependem deste achado estar resolvido. Sem `percentualUsina` confiável, ativar a flag em prod gera falsos negativos massivos.
+**Bloqueio:** **Não bloqueia nada operacional** — nenhum cooperado real cadastrado ainda. Bloqueia **canário Caminho A** (Fatia A) — guard precisa estar no código antes do primeiro cadastro real, senão D-31 ressuscita com dados reais.
 
-**Origem:** Fase 8 da sessão Code maratona 2026-05-11 (commit `851a39e`). Achado meta descoberto durante auditoria estrutural — o relatório de hoje (`docs/relatorios/2026-05-11-auditoria-concentracao-25-pct.md`) subestima concentrações reais por input incompleto.
+**Auditoria de concentração ANEEL** (Sprint 5 — flag `concentracaoMaxPorCooperadoUsina`): passa a usar fórmula on-the-fly `kwhContratoAnual / Usina.capacidadeKwh × 100` direto, ignorando `percentualUsina` persistido. Cálculo fica correto sem depender do campo persistido estar populado.
 
 ---
 
@@ -1299,6 +1373,96 @@ Estimativa: 30 min (caminho 1 ou 2), 1h (caminho 3 — mais limpo).
 **Bloqueia:** nada imediatamente. Vale acompanhar quando Sprint CooperToken Consolidado fechar (Etapa 2 pode absorver naturalmente como parte do refator).
 
 **Origem específica do achado:** Code rodou `SELECT COUNT(*) FROM cooperados WHERE opcao_token='A'` (317) e `SELECT COUNT(*) FROM cooperados WHERE modo_remuneracao='DESCONTO'` (232) durante validação do ACHADO 4 da spec — discrepância flagrada e elevada a débito pelo Luciano.
+
+---
+
+### D-32 — Migração `Contrato.kwhContrato` (legado) → `kwhContratoAnual` (novo) — incompleta
+
+**Status:** **STANDBY** (aguardando produção real subir via Caminho A canário).
+
+**Severidade:** **P1** — bloqueia entrada de produção real **CoopereBR** pra membros legados (61 contratos com `kwhContratoAnual=NULL`). Não bloqueia desenvolvimento nem teste (todos os contratos novos vão pro campo correto).
+
+**Tema:** Schema tem dois campos coexistindo: `Contrato.kwhContrato` (legado, presumido mensal) e `Contrato.kwhContratoAnual` (novo, anual explícito). Migração ficou incompleta — 61 contratos legados permanecem com `kwhContratoAnual=NULL` apontando dados só em `kwhContrato`. Persona futuro engenheiro que ler somente `kwhContratoAnual` (campo "correto") vai assumir base de cooperados ATIVOS menor que a real.
+
+**Impacto persona:** relatórios, dashboards, métricas SaaS e auditorias ANEEL que filtrem por `kwhContratoAnual NOT NULL` excluem silenciosamente os 61 legados. Nada quebra explicitamente — só dados subestimados.
+
+**Critério de pronto:**
+
+1. **Auditoria caso a caso** dos 61 contratos legados — listar cooperado, UC, valor de `kwhContrato`, data do contrato, fonte de dados.
+2. **Decisão produto Luciano** sobre unidade do legado:
+   - Hipótese A: `kwhContrato` era **mensal** → `kwhContratoAnual = kwhContrato × 12`.
+   - Hipótese B: `kwhContrato` era **anual direto** → `kwhContratoAnual = kwhContrato` (rename só).
+   - Hipótese C: **mistura** (alguns mensais, outros anuais) → migrar caso a caso com decisão manual.
+3. **Script backfill supervisionado**: dry-run primeiro (mostra ANTES/DEPOIS de cada um dos 61), aguardar aprovação Luciano, executar.
+4. **Validação pós-backfill**: relatório com 0 contratos ATIVOS com `kwhContratoAnual=NULL`.
+5. **Limpar `kwhContrato`**: marcar `@deprecated` no schema ou remover após 30 dias de estabilidade.
+
+**Dependências:**
+
+- **Decisão produto Luciano** sobre unidade do legado (não dá pra inferir do schema sozinho).
+- **Caminho A canário rodar** (Fatia A) — pode substituir backfill por **re-cadastro/import correto** quando produção real subir. Se canário valida o re-cadastro como caminho preferido, **D-32 vira "ADIADO indefinidamente"** como D-30R Forward-only.
+
+**Estimativa:** 3-4h Code (auditoria + script + dry-run + execução supervisionada) + revisão Luciano por cooperado nos casos ambíguos.
+
+**Status atual:** **AGUARDANDO** decisão de subir produção real. Enquanto banco for fictício/teste, débito fica catalogado mas inerte.
+
+**Origem:** sessão Code 12/05 noite (investigação ampla Plano Mestre Opção 4) — Fase 0 mapeou os 5 services que tocam `kwhContratoAnual` e revelou os 61 contratos legados com NULL. Catalogado nesta sessão (B.1 da Fatia H).
+
+---
+
+### D-33 — Dual-path Asaas (dessincronia `AsaasConfig` vs `ConfigGateway`)
+
+**Severidade:** **P1** — sandbox tolera (ambas tail diferentes mas testáveis), produção causa bug operacional (sistema pode usar credencial "errada" em runtime).
+
+**Tema:** dois models de gateway pra Asaas coexistem no schema com credenciais diferentes:
+- **`AsaasConfig`** (LEGADO, `schema.prisma:1346` com comentário "manter por compat sandbox"): 1 registro CoopereBR sandbox tail `dfe8`, criado 23/03, updated 27/04.
+- **`ConfigGateway`** (ATUAL multi-tenant): 1 registro CoopereBR `ASAAS` sandbox tail `2776`, criado 22/04.
+- **UI super admin** escreve em `ConfigGateway`.
+- **`asaas.service.ts:65`** `getConfig()` lê de `AsaasConfig`.
+
+Resultado: sistema pode usar credencial errada em runtime quando admin atualiza via UI mas service continua lendo do model legado.
+
+**Persona:** cooperado real esperando cobrança gerada (precisa da credencial atualizada) vs admin que configurou credenciais via UI super admin (espera que valha).
+
+**Critério de pronto:**
+1. `asaas.service.ts:65` `getConfig()` refatorado pra ler de `ConfigGateway` via adapter (preferindo `ConfigGateway`, fallback `AsaasConfig` durante transição).
+2. `AsaasConfig` deprecado no schema (campo `@deprecated` + comentário apontando pra `ConfigGateway`).
+3. Spec Jest cobrindo cenário "ambas configs populadas, usa atual `ConfigGateway`".
+4. 1 cobrança Asaas teste fim a fim usando credenciais lidas de `ConfigGateway`.
+
+**Estimativa:** 1-2 dias Code (sub-fatia do **Plano Mestre B.3**).
+
+**Dependências:** nenhuma técnica.
+
+**Bloqueia:** **Fatia A canário** — recomendo fechar essa sub-fatia (consolidação dual-path) **antes** de exercitar E2E real com cooperado de produção, senão dessincronia pode causar erro só visível em prod.
+
+**Origem:** investigação Code 13/05 manhã (item 7 do prompt refinado).
+
+---
+
+### D-34 — Discrepância UI `****MzY5` Asaas (encryption?)
+
+**Severidade:** **P3** — não bloqueia operação, mas investigar pra confirmar segurança e documentar.
+
+**Tema:** UI super admin (`/dashboard/configuracoes/asaas`) mostra "API Key: ****MzY5" como tail visível, mas **nenhum dos 2 registros no banco bate**:
+- `AsaasConfig` tail `dfe8`
+- `ConfigGateway` tail `2776`
+- UI mostra tail `MzY5`
+
+`apiKey` tem **390 caracteres** (vs ~180 esperado pra chave Asaas que começa com `$aact_`) — provavelmente encryption funcionando, e a UI mostra o valor **decifrado** (não o cifrado persistido).
+
+**Persona:** Luciano + admin parceiro futuro que for configurar credenciais via UI super admin (precisa entender o que está vendo).
+
+**Critério de pronto:**
+1. Validar via inspeção de `web/app/dashboard/configuracoes/asaas/page.tsx` (e service de leitura no backend).
+2. Confirmar `ASAAS_ENCRYPT_KEY` presente em `.env` + identificar algoritmo usado.
+3. Documentar encryption no `SISTEMA.md` (Seção 12 env vars).
+
+**Estimativa:** 30 min Code (investigação separada — leitura de 1-2 arquivos + grep da chave de env).
+
+**Dependências:** nenhuma.
+
+**Origem:** investigação Code 13/05 manhã (item 4 do prompt refinado).
 
 ---
 
