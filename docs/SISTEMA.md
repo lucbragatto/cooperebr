@@ -39,97 +39,339 @@
 
 ## 1. Stack e arquitetura geral
 
-A preencher em H.2 com:
-- **Backend:** NestJS 10+, TypeScript strict, Prisma ORM 6.19, PostgreSQL (Supabase). PM2 gerencia `cooperebr-backend` (porta 3000, build `dist/src/main.js`).
-- **Frontend:** Next.js 16 App Router, React 19, Tailwind, Shadcn/UI. Terminal vivo `cd web ; npm run dev` (porta 3001). Não gerenciado por PM2.
-- **WhatsApp Service:** módulo separado em `whatsapp-service/`. PM2 gerencia `cooperebr-whatsapp`.
-- **OCR:** Claude AI (Anthropic SDK direto, sem MCP).
-- **Email pipeline:** IMAP → detecção → OCR → FaturaProcessada (1 caso histórico real: João Santos 03/2026).
-- **Pagamentos:** Asaas (PIX + boleto) com webhook HMAC-SHA256. Outros gateways previstos via adapter (BB, Sicoob, Itau).
-- **Diagrama de alto nível:** preencher em H.2 (caixas: Frontend ↔ Backend ↔ Postgres + integrações laterais).
+### 1.1 Versões (validadas via `package.json` em 2026-05-13)
+
+| Camada | Tecnologia | Versão |
+|---|---|---|
+| Backend framework | NestJS (`@nestjs/core`, `@nestjs/common`) | **11.0.1** |
+| Backend scheduler | `@nestjs/schedule` (decorator `@Cron`) | **6.1.1** |
+| Backend ORM | Prisma + `@prisma/client` (engine `query_engine_bg.wasm`) | **6.19.2** |
+| TypeScript | `typescript` strict | **5.7.3** |
+| OCR / agente | `@anthropic-ai/sdk` (Claude direto, sem MCP) | **0.86.1** |
+| Frontend framework | Next.js (App Router) | **16.1.6** |
+| React | `react` | **19.2.3** |
+| Estilo | Tailwind CSS | **4.x** |
+| Componentes | Shadcn/UI (Radix por baixo) | — (sem versão fixa, gerados) |
+| DB | PostgreSQL via **Supabase** | — (managed) |
+| Process manager | PM2 (apenas backend + whatsapp-service) | — |
+
+### 1.2 Diagrama de alto nível
+
+```
+                     ┌──────────────────────────────────────┐
+                     │           NAVEGADOR (cliente)        │
+                     │   /dashboard /parceiro /portal /...  │
+                     └──────────────────┬───────────────────┘
+                                        │ HTTPS (cookies + JWT)
+                                        ▼
+            ┌────────────────────────────────────────────────────┐
+            │     FRONTEND Next.js 16 App Router (porta 3001)    │
+            │   web/app/* (Server + Client Components)           │
+            │   Terminal vivo `npm run dev` — NÃO está em PM2    │
+            └─────────┬───────────────────┬──────────────────────┘
+                      │ fetch / api.ts    │
+                      ▼                   │
+   ┌────────────────────────────────┐     │
+   │  BACKEND NestJS 11 (porta 3000)│     │
+   │  45 módulos · 448 endpoints    │     │
+   │  PM2 `cooperebr-backend`       │     │
+   │  build dist/src/main.js        │     │
+   └─┬────────┬───────────┬─────────┘     │
+     │        │           │               │
+     ▼        ▼           ▼               │
+   ┌────┐ ┌──────┐  ┌───────────┐         │
+   │ DB │ │ Cron │  │ Webhooks  │◀────────┘ (Asaas → /webhooks/asaas)
+   │ pg │ │ 26   │  │ HMAC-SHA  │
+   │via │ │ jobs │  │           │
+   │Pri │ │ ativos │  └───────────┘
+   │sma │ └──────┘
+   └─┬──┘
+     │  Supabase (managed PostgreSQL)
+     │
+     ▼
+   ┌─────────────────────────────────────────────────────┐
+   │          80 models · prisma/schema.prisma           │
+   └─────────────────────────────────────────────────────┘
+
+   Integrações laterais (saídas do backend):
+   ├── Anthropic Claude SDK   → OCR fatura · CoopereAI conceitual
+   ├── Asaas API + Webhook    → PIX/boleto multi-tenant (sandbox CoopereBR)
+   ├── BB / Sicoob / Banestes → Boletos + conciliação (BB+Sicoob 1339 LOC, Banestes 🔴 não iniciado)
+   ├── IMAP (recebimento)     → email-monitor → OCR → FaturaProcessada (1 caso real)
+   ├── SMTP (envio)           → email-config.service multi-tenant via ConfigTenant
+   ├── WhatsApp Service       → módulo separado whatsapp-service/ (PM2 cooperebr-whatsapp)
+   ├── ANEEL bandeiras        → cron mensal puxa cor da bandeira
+   └── Assinafy               → 🔴 não iniciado (Sprint 3 catalogado)
+```
+
+### 1.3 Notas operacionais
+
+- **PM2 gerencia 2 processos:** `cooperebr-backend` (porta 3000, build compilado) e `cooperebr-whatsapp`. Frontend Next.js dev é terminal vivo (não-PM2).
+- **Engine Prisma:** v6 usa `query_engine_bg.wasm` (não mais `.dll.node`). Lock no `.wasm` exige `pm2 stop` antes de `prisma generate`/`db push` (regra em `CLAUDE.md`).
+- **Build:** `scripts/` está excluído de `tsconfig.build.json` — utilitários standalone via `ts-node`, não vão pro `dist/`.
+- **Caminho A (OCR automático):** 1 único caso real histórico (João Santos, 03/2026). 12 dos 17 `FaturaProcessada` no banco são seeds B.5.
+- **Caminho B (cobrança manual + Asaas):** 31 cobranças PAGAS no banco — **5 via Asaas sandbox** (16% — registros `AsaasCobranca` criados Sprint 12 entre 23-27/04, status `RECEIVED`) e **26 via baixa manual** (84%). E2E Asaas em sandbox CoopereBR funcionou; produção real ainda não exercitada.
 
 ---
 
 ## 2. Modelo multi-tenant
 
-A preencher em H.2 com:
-- **Tabela legado `Cooperativa`** representa qualquer parceiro (COOPERATIVA / CONSORCIO / ASSOCIACAO / CONDOMINIO via `tipoParceiro`).
-- **Vocabulário multi-tipo:** hook `useTipoParceiro()` em `web/hooks/`. Cooperado/Consorciado/Associado/Condômino.
-- **Filtro obrigatório:** toda query Prisma filtra por `cooperativaId`. `SUPER_ADMIN` pode cross-tenant via guards específicos.
-- **Schema de config por tenant:** 3 patterns coexistem — `ConfigGateway` (gateway de pagamento), `ConfigTenant` (key-value email + outros), campos diretos em `Cooperativa` (multa/juros/SaaS). `ConfigGatewayPlataforma` é singleton SISGD-global.
-- **Asaas multi-tenant:** `asaas.service.ts:64` resolve `apiKey` por `cooperativaId`. UI super admin escreve em `ConfigGateway` desde 22/04/2026.
-- **Modelo legado AsaasConfig:** mantido por compat com sandbox. Risco de dessincronia com `ConfigGateway` — a tratar em sub-fatia (ver B.3 do Plano Mestre).
-- **3 cooperativas hoje no banco:** CoopereBR (produção), CoopereBR Teste, TESTE-FASE-B5.
+### 2.1 Tabela raiz e tipo de parceiro
+
+- **`Cooperativa`** (tabela `cooperativas`) é a entidade-tenant raiz. Herdou nome do legado mas representa **qualquer parceiro** via campo `tipoParceiro: String` (default `"COOPERATIVA"`, valores aceitos: `COOPERATIVA | CONSORCIO | ASSOCIACAO | CONDOMINIO`).
+- **Estado real do banco hoje (validado 2026-05-13 via SQL — Decisão 23):**
+  ```
+  SELECT "tipoParceiro" as tipo, COUNT(*) FROM cooperativas GROUP BY "tipoParceiro";
+  → [{ tipo: "COOPERATIVA", n: 3 }]
+  ```
+  3 cooperativas, todas tipo `COOPERATIVA`. Onboarding de Sinergia (CONSORCIO), Associação ou Condomínio ainda **não exercitado** em prod.
+- **Vocabulário multi-tipo:** hook `useTipoParceiro()` em `web/hooks/useTipoParceiro.ts` mapeia `tipoParceiro` → `{ tipoMembro, tipoMembroPlural }` (Cooperado/Consorciado/Associado/Condômino). Adotado em ~21 telas; ainda há ~50 telas + 73 exceptions backend com termo hardcoded (débito P2 catalogado em `debitos-tecnicos.md`).
+
+### 2.2 Filtro obrigatório por tenant
+
+- **Toda query Prisma filtra por `cooperativaId`** — guard de tenant aplicado via `tenant-guard.helper.ts` (1 spec).
+- **`SUPER_ADMIN`** (definido em `PerfilUsuario` enum) pode atravessar tenants via bypass explícito em endpoints específicos (ex.: `cooperados.service.ts:aprovar-concessionaria` permite SUPER_ADMIN cross-tenant — coberto por spec).
+- **JWT carrega `cooperativaId`** — nunca é lido do body/query da requisição.
+
+### 2.3 Patterns de configuração por tenant (3 coexistem)
+
+| Pattern | Onde | Quando usar | Estado banco hoje |
+|---|---|---|---|
+| **Campos diretos em `Cooperativa`** | `cooperativas` table (multa, juros, percentualCotaSaas, etc.) | Configs estruturais herdadas (1 valor por tenant, sempre presente) | 3 registros |
+| **`ConfigTenant`** (key-value) | `config_tenant` table (chave/valor por `cooperativaId`) | Email SMTP/IMAP, mínimos faturáveis, parâmetros tarifa MMGD | **19 registros** (15 chaves email + `minimo_*` + `mmgd_percentuais_fev2026` + `geracao_historico` + `threshold_meses_atipicos` + `modeloCobranca_*`) |
+| **`ConfigGateway`** (multi-tenant atual) | `config_gateways` table — campo `credenciais: Json` carrega `{apiKey: ...}` | Gateway de pagamento por tenant (Asaas hoje; previsto BB/Sicoob via adapter) | 1 registro (CoopereBR ASAAS sandbox, ativo) |
+
+### 2.4 Configs SISGD-globais (singletons fora do tenant)
+
+- **`ConfigGatewayPlataforma`** — singleton SISGD para `Asaas-Luciano` (cobra parceiros via SaaS).
+  ```
+  SELECT COUNT(*) FROM config_gateway_plataforma; → 0
+  ```
+  **Vazio confirmado** — bloqueia D-29F.2 (envio FaturaSaas via Asaas). Fatia D3 do Plano Mestre.
+
+### 2.5 Asaas multi-tenant — dual-path ativo (D-33)
+
+`asaas.service.ts:65` `getConfig(cooperativaId)` resolve credenciais por tenant. **2 models coexistem com risco de dessincronia:**
+
+| Model | Status | Forma das credenciais | Tail visível | Origem |
+|---|---|---|---|---|
+| **`AsaasConfig`** (LEGADO) | `@@map("asaas_configs")` — comentário "manter por compat sandbox" | `apiKey: String` direto (390 chars — encryption visível, D-34) | `dfe8` | criado 23/03 (Sprint 7/8 antigo) |
+| **`ConfigGateway`** (ATUAL multi-tenant) | escrito pela UI super admin desde 22/04 | `credenciais: Json` (formato `{ apiKey: "..." }`) | (não calculado nesta validação) | criado 22/04 |
+
+**Risco:** UI escreve em `ConfigGateway`; service `asaas.service.ts:65` lê de `AsaasConfig` legado. Em runtime, sistema pode usar credencial errada quando admin atualizar via UI. Catalogado **D-33 (P1)** — sub-fatia pré-Fatia A do Plano Mestre.
+
+### 2.6 Cooperativas hoje no banco (3 registros)
+
+- **CoopereBR** — produção, plano OURO, 307 cooperados (299 ATIVOS).
+- **CoopereBR Teste** — TRIAL, plano PRATA, 4 ATIVOS, 1 FaturaSaas PENDENTE.
+- **TESTE-FASE-B5** — sintética (validação E2E B.5 de 03/05).
+
+### 2.7 Hierarquia de papéis (`PerfilUsuario`)
+
+Lista canônica em `prisma/schema.prisma` enum `PerfilUsuario`. Detalhar tabela `papel × permissão × escopo` em **H.3 (ligações cross-módulo)** — fora do escopo Dia 1.
 
 ---
 
 ## 3. Domínios e módulos backend (45)
 
-A preencher em H.2 com tabela por domínio + linhas de código + cobertura de specs por módulo.
+### 3.1 Contagem geral (validada 2026-05-13)
 
-Estrutura atual (45 entradas em `backend/src/`):
+```
+find backend/src -maxdepth 2 -name "*.module.ts" → 45
+find backend/src -name "*.spec.ts"               → 28 specs files
+grep "@(Get|Post|Put|Patch|Delete)" *.controller.ts → 448 endpoints
+grep "^\s*@Cron\("                               → 26 ativos + 1 comentado
+```
 
-**Núcleo de operação (8)**
-- `cooperados`, `contratos`, `usinas`, `cobrancas`, `faturas`, `motor-proposta`, `ucs`, `propostas` (em cooperados/motor)
+**Distribuição por categoria** (44 módulos categorizados + `app.module.ts` raiz = 45):
 
-**Financeiro (8)**
-- `financeiro`, `configuracao-cobranca`, `geracao-mensal`, `contas-pagar`, `asaas`, `gateway-pagamento`, `integracao-bancaria`, `bandeira-tarifaria`
+| Categoria | N | Módulos |
+|---|---|---|
+| Núcleo de operação | 7 | `cooperados`, `contratos`, `usinas`, `cobrancas`, `faturas`, `motor-proposta`, `ucs` |
+| Financeiro | 8 | `financeiro`, `configuracao-cobranca`, `geracao-mensal`, `contas-pagar`, `asaas`, `gateway-pagamento`, `integracao-bancaria`, `bandeira-tarifaria` |
+| Comunicação | 4 | `whatsapp`, `notificacoes`, `email`, `email-monitor` |
+| Comercial / fidelidade | 6 | `convenios`, `cooper-token`, `indicacoes`, `clube-vantagens`, `lead-expansao`, `convite-indicacao` |
+| Multi-tenant SaaS | 3 | `cooperativas`, `saas`, `planos` |
+| Auth e segurança | 1 | `auth` |
+| Operacional | 8 | `relatorios`, `observador`, `migracoes-usina`, `publico`, `documentos`, `modelos-cobranca`, `modelos-mensagem`, `prestadores` |
+| Auxiliares | 7 | `administradoras`, `condominios`, `config-tenant`, `conversao-credito`, `fluxo-etapas`, `monitoramento-usinas`, `ocorrencias` |
+| **Soma** | **44** | + `app.module.ts` raiz = **45** ✓ |
 
-**Comunicação (4)**
-- `whatsapp` (6932 linhas, 0 specs), `notificacoes`, `email`, `email-monitor`
+> **Correção vs esqueleto H.1 (Decisão 23):** H.1 dizia "Núcleo (8)" listando `propostas` como 8º item. `propostas` **não é módulo standalone** — vive dentro de `cooperados/` e `motor-proposta/`. H.1 também dizia "Auxiliares (8)" incluindo `common` — `common/` é pasta de utilities (sem `.module.ts`), não conta. Categorias corrigidas: Núcleo 8→7, Auxiliares 8→7. Soma fecha 44+root=45.
 
-**Comercial / fidelidade (6)**
-- `convenios`, `cooper-token` (2671 linhas, 0 specs — pré-req Sprint CT), `indicacoes`, `clube-vantagens`, `lead-expansao`, `convite-indicacao`
+### 3.2 Tabela detalhada por módulo (LOC + specs + endpoints + crons)
 
-**Multi-tenant SaaS (3)**
-- `cooperativas`, `saas` (FaturaSaas), `planos`
+LOC = linhas de `.ts` excluindo `.spec.ts`. Endpoints = decorators `@Get/Post/Put/Patch/Delete` em `*.controller.ts`. Crons = `@Cron` ativos (não-comentados).
 
-**Auth e segurança (1)**
-- `auth` (JWT + facial)
+#### Núcleo de operação (7)
 
-**Operacional (8)**
-- `relatorios`, `observador`, `migracoes-usina`, `publico` (cadastro público), `documentos`, `modelos-cobranca`, `modelos-mensagem`, `prestadores`
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `cooperados` | 2.435 | 4 | 34 | 2 | Maior módulo do núcleo. Specs cobrem `aprovar-concessionaria`, `guard-ativacao`, controller, service. |
+| `motor-proposta` | 2.614 | 3 | 32 | 1 | Engine de cálculo (FIXO/COMPENSADOS/DINAMICO). Specs cobrem `aceitar`, helper `calcular-tarifa-contratual`, base. |
+| `faturas` | 2.713 | 4 | 16 | 0 | OCR Claude + matching. Specs cobrem `calcular`, `d30o`, `factory`, `matching`. |
+| `cobrancas` | 1.604 | 1 | 10 | 4 | Núcleo de receita. Crons em `cobrancas.job.ts` (geração + retentativas). |
+| `usinas` | 791 | 2 | 12 | 0 | Cadastro + alocação. Specs em controller + service. |
+| `contratos` | 679 | 1 | 7 | 0 | Spec do service. |
+| `ucs` | 293 | 2 | 6 | 0 | Specs em controller + service. |
 
-**Auxiliares (8)**
-- `administradoras`, `common`, `condominios`, `config-tenant`, `conversao-credito`, `fluxo-etapas`, `monitoramento-usinas` (cron comentado!), `ocorrencias`
+#### Financeiro (8)
 
-**Para cada módulo em H.2:**
-- linhas de código
-- specs (% cobertura)
-- endpoints expostos
-- crons internos
-- dependências cross-module
-- estado de maturidade (🔴/🟡/🟢)
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `financeiro` | 1.640 | 0 | 30 | 0 | Contábil (PlanoContas, LancamentoCaixa, ContratoUso). Sem specs. |
+| `integracao-bancaria` | 1.339 | 0 | 11 | 1 | BB + Sicoob. Sem specs (débito P3 catalogado). |
+| `asaas` | 612 | 0 | 9 | 0 | Adapter + Customer. **`asaas.service.ts:65` ainda lê `AsaasConfig` legado** (D-33 P1). |
+| `gateway-pagamento` | 430 | 1 | 0 | 0 | Adapter pattern. 0 endpoints (consumido por outros módulos). |
+| `bandeira-tarifaria` | 351 | 0 | 7 | 1 | Cron mensal sincroniza ANEEL. |
+| `configuracao-cobranca` | 217 | 0 | 5 | 0 | Regras desconto por usina/cooperativa. |
+| `contas-pagar` | 207 | 0 | 5 | 0 | AP (arrendamento, manutenção). |
+| `geracao-mensal` | 164 | 0 | 5 | 0 | kWh gerado por usina/mês. |
+
+#### Comunicação (4)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `whatsapp` | **6.932** | 0 | 27 | 5 | **Maior módulo do projeto.** 0 specs (débito P3 catalogado). 5 crons (cobranças + conversa + MLM). |
+| `email` | 1.007 | 1 | 8 | 1 | Spec em `email-config.service`. Cron de envio. |
+| `email-monitor` | 610 | 1 | 2 | 1 | IMAP → OCR. Cron 1×/dia 06:00. |
+| `notificacoes` | 120 | 0 | 4 | 0 | Multi-canal (WS + WA + email). |
+
+#### Comercial / fidelidade (6)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `cooper-token` | **2.671** | **0** | 28 | 2 | **Pré-req P0 do Sprint CT Consolidado** (Fatia C do Plano Mestre — escrever specs antes de refator). |
+| `convenios` | 1.416 | 1 | 18 | 1 | Spec de progressão. Cron diário 03:00. |
+| `clube-vantagens` | 1.147 | 0 | 15 | 1 | Cron mensal dia 1 09:00. |
+| `convite-indicacao` | 724 | 0 | 8 | 2 | 2 crons (envio + cleanup). |
+| `indicacoes` | 683 | 0 | 11 | 0 | MLM cascata (D-30M aguarda E2E real). |
+| `lead-expansao` | 240 | 0 | 4 | 0 | Leads de vendas. |
+
+#### Multi-tenant SaaS (3)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `saas` | 788 | 2 | 11 | 1 | Cron `0 6 1 * *` (`saas.service.ts:130`) gera `FaturaSaas` mensal — **D-29F.1 valida**. Specs em `metricas-saas` + `saas.service`. |
+| `planos` | 671 | 1 | 6 | 0 | Spec do service. |
+| `cooperativas` | 433 | 1 | 12 | 0 | Spec do controller. |
+
+#### Auth e segurança (1)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `auth` | 1.392 | 1 | 19 | 0 | JWT + facial. Spec do `tenant-guard.helper`. |
+
+#### Operacional (8)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `migracoes-usina` | 746 | 0 | 7 | 0 | Migração entre plantas. |
+| `publico` | 698 | 1 | 6 | 0 | Cadastro público. Spec do controller (convênio). |
+| `relatorios` | 668 | 0 | 5 | 1 | Cron `posicao-cooperado` 07:00. |
+| `observador` | 408 | 0 | 5 | 1 | Modo leitura. Cron a cada 5 min. |
+| `documentos` | 350 | 0 | 5 | 1 | Cron horário (aprovação). |
+| `modelos-mensagem` | 112 | 0 | 5 | 0 | — |
+| `prestadores` | 110 | 0 | 5 | 0 | — |
+| `modelos-cobranca` | 91 | 0 | 4 | 0 | — |
+
+#### Auxiliares (7)
+
+| Módulo | LOC | Specs | Endpoints | Crons | Notas |
+|---|---:|---:|---:|---:|---|
+| `monitoramento-usinas` | 453 | 0 | 7 | 0 | **`@Cron` está comentado** no service:21 (`// @Cron('* * * * *')`). Não dispara. |
+| `ocorrencias` | 128 | 0 | 6 | 0 | — |
+| `condominios` | 254 | 0 | 8 | 0 | Multi-tipo (CONDOMINIO). |
+| `config-tenant` | 205 | 0 | 7 | 0 | Key-value email + outros. |
+| `fluxo-etapas` | 152 | 0 | 5 | 0 | — |
+| `conversao-credito` | 151 | 0 | 5 | 0 | Crédito sem UC. |
+| `administradoras` | 107 | 0 | 5 | 0 | — |
+
+### 3.3 Concentração e maturidade
+
+**Top 5 maiores módulos por LOC:**
+1. `whatsapp` (6.932) — **0 specs**
+2. `faturas` (2.713) — 4 specs
+3. `cooper-token` (2.671) — **0 specs** (pré-req Fatia C)
+4. `motor-proposta` (2.614) — 3 specs
+5. `cooperados` (2.435) — 4 specs
+
+**Módulos sem specs (29 de 45 — 64%):** débito de cobertura. Núcleo crítico cobre ~30% (5 dos 7 módulos do núcleo têm spec).
+
+**Estado de maturidade** (🟢 produção / 🟡 funcional com débito / 🔴 não-iniciado): a refinar em H.4 (fluxos end-to-end). Candidatos 🔴 hoje: nenhum dos 45 módulos é "não-iniciado" (todos têm código). 🟡 maioria. 🟢 quem passou validação E2E real (cooperados, contratos, usinas, faturas via João Santos).
+
+**Dependências cross-module** detalhadas em **H.3** (fora do escopo Dia 1).
 
 ---
 
-## 4. Schema Prisma — 80 models em categorias
+## 4. Schema Prisma — 80 models em 18 categorias
 
-A preencher em H.2 com tabela de 80 models classificados.
+### 4.1 Contagem geral
 
-**Categorias preliminares (a refinar em H.2):**
+```
+grep -c "^model " backend/prisma/schema.prisma → 80 models
+```
 
-1. **Identidade e tenants (5):** Cooperativa, Usuario, Cooperado, Administradora, Condominio
-2. **Geração e consumo (8):** Usina, Uc, GeracaoMensal, FaturaProcessada, Contrato, ContratoUso, BandeiraTarifaria, PoliticaBandeira
-3. **Cobrança e financeiro (12):** Cobranca, AsaasCobranca, CobrancaGateway, CobrancaBancaria, LancamentoCaixa, FaturaSaas, ContaAPagar, TransferenciaPix, ConfiguracaoCobranca, ConfiguracaoNotificacaoCobranca, FormaPagamentoCooperado, ModeloCobrancaConfig
-4. **Gateway de pagamento (5):** ConfigGateway, ConfigGatewayPlataforma, AsaasConfig (legado), AsaasCustomer, ConfiguracaoBancaria
-5. **Motor de proposta (3):** PropostaCooperado, MotorConfiguracao, ConfiguracaoMotor
-6. **Fidelidade / CooperToken (6):** CooperTokenLedger, CooperTokenSaldo, CooperTokenSaldoParceiro, ConfigCooperToken, OfertaClube, ResgateClubeVantagens, ConfigClubeVantagens, ProgressaoClube
-7. **Indicações / convênios / convites (6):** Indicacao, ConviteIndicacao, BeneficioIndicacao, Convenio, ConvenioCooperado, ContratoConvenio, ConfigIndicacao
-8. **Documentos e modelos (4):** DocumentoCooperado, ModeloDocumento, ModeloMensagem, MigracaoUsina
-9. **SaaS / planos (3):** PlanoSaas, FaturaSaas, ModulosAtivos (campo em Cooperativa)
-10. **Auditoria e logs (4):** AuditLog (inativo — D-30N), EmailLog, Notificacao, HistoricoStatusCooperado
-11. **Multi-tenant key-value (1):** ConfigTenant
-12. **Operacional (5):** Ocorrencia, Prestador, ObservacaoAtiva, ListaEspera, ConversaoCreditoSemUc
-13. **Configurações pontuais (4):** ConfigCooperToken, UsinaMonitoramentoConfig, ConfigClubeVantagens, ConfigDesvalorizacao
-14. **Unidades / condomínio (2):** UnidadeCondominio, RepresentanteLegal
+### 4.2 Erros do esqueleto H.1 corrigidos (Decisão 23 — validação SQL/grep)
 
-**Para cada model em H.2:**
-- tabela `@@map`
-- chave primária + uniques
-- relações principais
-- filtros multi-tenant aplicáveis
-- estado (em uso / vazio / legado a deprecar)
+H.1 listou **6 entidades inexistentes** no schema (gap "14 cats somam 68" se explicava parcialmente assim) + 3 duplicações:
+
+| Listado em H.1 | Realidade no schema | Correção |
+|---|---|---|
+| `MotorConfiguracao` | só existe `ConfiguracaoMotor` | mantida 1 entrada apenas |
+| `PoliticaBandeira` | é **enum**, não model | removida da contagem |
+| `Convenio` (standalone) | só existem `ContratoConvenio` + `ConvenioCooperado` | removida |
+| `ModulosAtivos` | é **campo** em `Cooperativa`, não model | removida |
+| `RepresentanteLegal` | não existe no schema | removida |
+| `ConfigDesvalorizacao` | não existe no schema | removida |
+| `FaturaSaas` (duplicada em "Cobrança" + "SaaS") | 1 model | mantida só em SaaS |
+| `ConfigCooperToken` (duplicada em "Fidelidade" + "Configurações pontuais") | 1 model | mantida só em CooperToken |
+| `ConfigClubeVantagens` (duplicada em "Fidelidade" + "Configurações pontuais") | 1 model | mantida só em Clube Vantagens |
+
+### 4.3 Categorização refinada — 18 categorias somando 80
+
+> **Soma valida 80** (3+10+3+4+4+5+9+2+4+4+5+5+3+7+4+2+4+2 = 80). Para o detalhamento de cada model (uniques, relações, estado em uso/vazio/legado), ver **H.2 Dia 3** (revisão final) e **H.3** (ligações cross-módulo).
+
+| # | Categoria | N | Models |
+|---:|---|---:|---|
+| 1 | **Tenant + Auth + Segurança** | 3 | `Cooperativa`, `Usuario`, `AuditLog` |
+| 2 | **Núcleo — Cadastro & Contratos** | 10 | `Cooperado`, `DocumentoCooperado`, `Uc`, `Usina`, `Contrato`, `Plano`, `PropostaCooperado`, `ListaEspera`, `MigracaoUsina`, `HistoricoStatusCooperado` |
+| 3 | **Núcleo — Monitoramento Usina** | 3 | `UsinaMonitoramentoConfig`, `UsinaLeitura`, `UsinaAlerta` |
+| 4 | **Núcleo — Cobrança & Fatura** | 4 | `Cobranca`, `FaturaProcessada`, `GeracaoMensal`, `BandeiraTarifaria` |
+| 5 | **Regulatório / Tarifas** | 4 | `TarifaConcessionaria`, `HistoricoReajuste`, `HistoricoReajusteTarifa`, `ConfiguracaoMotor` |
+| 6 | **Financeiro — Contábil** | 5 | `PlanoContas`, `LancamentoCaixa`, `ContratoUso`, `ContaAPagar`, `TransferenciaPix` |
+| 7 | **Financeiro — Pagamentos & Gateways** | 9 | `FormaPagamentoCooperado`, `ConfiguracaoBancaria`, `CobrancaBancaria`, `ConfigGateway`, `ConfigGatewayPlataforma`, `CobrancaGateway`, `AsaasConfig` (LEGADO — D-33), `AsaasCustomer`, `AsaasCobranca` (count=0 hoje — Decisão 23) |
+| 8 | **SaaS multi-tenant** | 2 | `PlanoSaas`, `FaturaSaas` |
+| 9 | **Comercial — Convênios** | 4 | `ContratoConvenio`, `ConvenioCooperado`, `HistoricoFaixaConvenio`, `ConversaoCreditoSemUc` |
+| 10 | **Comercial — MLM / Indicação** | 4 | `ConfigIndicacao`, `Indicacao`, `BeneficioIndicacao`, `ConviteIndicacao` |
+| 11 | **Comercial — CooperToken** | 5 | `CooperTokenLedger`, `CooperTokenSaldo`, `ConfigCooperToken`, `CooperTokenSaldoParceiro`, `CooperTokenCompra` |
+| 12 | **Comercial — Clube Vantagens** | 5 | `ConfigClubeVantagens`, `ProgressaoClube`, `HistoricoProgressao`, `OfertaClube`, `ResgateClubeVantagens` |
+| 13 | **Comercial — Leads / Feedback** | 3 | `LeadExpansao`, `LeadWhatsapp`, `NpsResposta` |
+| 14 | **Comunicação** | 7 | `Notificacao`, `ConfiguracaoNotificacaoCobranca`, `ConversaWhatsapp`, `MensagemWhatsapp`, `ModeloMensagem`, `ListaContatos`, `EmailLog` |
+| 15 | **Operacional — Docs & Configurações** | 4 | `ModeloDocumento`, `ModeloCobrancaConfig`, `ConfiguracaoCobranca`, `FluxoEtapa` |
+| 16 | **Observador (modo leitura)** | 2 | `ObservacaoAtiva`, `LogObservacao` |
+| 17 | **Estruturas externas** | 4 | `Prestador`, `Administradora`, `Condominio`, `UnidadeCondominio` |
+| 18 | **Config genérica + Ocorrências** | 2 | `ConfigTenant`, `Ocorrencia` |
+| **Total** | | **80** | ✓ |
+
+### 4.4 Models notáveis (estado banco hoje — Decisão 23 aplicada)
+
+| Model | Count | Observação |
+|---|---:|---|
+| `Cooperativa` | 3 | Todas tipo `COOPERATIVA` (Sinergia/Consórcio futuro) |
+| `Cooperado` | 311 | 299 ATIVOS na CoopereBR + 4 na CoopereBR Teste + outros |
+| `Contrato` | 72 | 100% `tarifaContratual=null` (forward-only após Fase B — D-30R adiado) |
+| `AsaasConfig` | 1 | LEGADO sandbox CoopereBR (`apiKey` 390 chars enc. — D-34) |
+| `ConfigGateway` | 1 | ATUAL CoopereBR ASAAS sandbox (apiKey dentro `credenciais` JSON) |
+| `ConfigGatewayPlataforma` | **0** | Vazio — bloqueia D-29F.2 envio FaturaSaas |
+| `ConfigTenant` | 19 | 15 chaves email (smtp + monitor) + tarifas mínimas + parâmetros MMGD |
+| `AsaasCobranca` | **5** | Sandbox CoopereBR (criadas 23-27/04 durante Sprint 12 validation). Status `RECEIVED`, valores R$ 8/12/20/40/500. Cobrancas linkadas estão `PAGO`. Detalhe completo em §6 fluxo Caminho B. |
+| `AsaasCustomer` | 62 | Customers Asaas registrados (sandbox) |
+| `CobrancaGateway` | 7 | Camada de adapter (não mais usada — `asaas.service.ts` ainda lê de `AsaasConfig` legado, D-33) |
+| `FaturaProcessada` | 17 | 12 são seeds B.5; 1 caso real OCR (João Santos 03/2026) |
+| `FaturaSaas` | 3 | PENDENTES, sem `asaasCobrancaId` populado |
+| `AuditLog` | 0 | Inativo — D-30N (interceptor não implementado) |
+| `EmailLog` | 1+ | Primeiro envio SMTP funcional pós Sprint 10 |
 
 ---
 
