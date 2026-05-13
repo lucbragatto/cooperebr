@@ -103,21 +103,43 @@ Se tarifa não validada no dia da cobrança:
 - Opção A: aguarda admin validar
 - Opção B: usa fallback FIXO com ajuste retroativo (Sprint 14)
 
-## Estado atual (24/04/2026)
+## Estado atual (atualizado 2026-05-14 pós-Fase B)
 
-- FIXO_MENSAL: FUNCIONAL
-- CREDITOS_COMPENSADOS: BLOQUEADO (BLOQUEIO_MODELOS_NAO_FIXO=true)
-- CREDITOS_DINAMICO: BLOQUEADO (mesmo flag)
+- **FIXO_MENSAL: FUNCIONAL E ATIVO EM PRODUÇÃO**
+  - Engine: `faturas.service.ts:1862-1902` (Fase B.5)
+  - Snapshot Contrato: `valorContrato`, `valorCheioKwhAceite`
+- **CREDITOS_COMPENSADOS: IMPLEMENTADO + VALIDADO E2E SINTÉTICO 6/6 ✓ (runtime bloqueado)**
+  - Engine: `faturas.service.ts:1904-1952` (Fase B — Decisão B33, sem duplo desconto)
+  - Snapshots Contrato: `tarifaContratual`, `valorCheioKwhAceite`, `baseCalculoAplicado`, `tipoDescontoAplicado`
+  - Runtime ainda bloqueado por `BLOQUEIO_MODELOS_NAO_FIXO` (default `true`)
+  - Validação humana E2E + canário 1 cooperado real pendentes
+- **CREDITOS_DINAMICO: IMPLEMENTADO + VALIDADO E2E SINTÉTICO 6/6 ✓ (runtime bloqueado)**
+  - Engine: `faturas.service.ts:1954-2003` via helper canônico `lib/calcular-tarifa-contratual.ts`
+  - Snapshots FaturaProcessada: `valorCheioKwh`, `tarifaSemImpostos`
+  - Runtime ainda bloqueado pelo mesmo flag
 
-## Implementação planejada (Sprint 14)
+### Frontend (Fase C.1, commit `cb1ec43`)
 
-- 1 service compartilhado que consome créditos compensados
-- 2 modos de cálculo: travado (COMPENSADOS) vs dinâmico (DINAMICO)
-- Integração com TarifaConcessionaria pra DINAMICO
-- Fallback provisório com ajuste retroativo
-- Desligar BLOQUEIO_MODELOS_NAO_FIXO após validação
+- **SUPER_ADMIN:** vê os 3 modelos habilitados no dropdown `/dashboard/planos/novo` com aviso laranja sobre bloqueio runtime
+- **ADMIN parceiro:** vê COMPENSADOS/DINAMICO com `disabled`
+- `PlanosService.create()` **não** tem guard — permite criar planos COMPENSADOS/DINAMICO no banco (foram criados 6 planos `B5-*` na cooperativa de teste `TESTE-FASE-B5` pelo seed `seed-fase-b5.ts`)
 
-Estimativa: 5-8 dias.
+### 7 enforcement points runtime ainda ATIVOS
+
+1. `motor-proposta.service.ts:551-558` — `aceitar()` proposta
+2. `faturas.service.ts:595-602` — `gerarCobrancaPosFatura` (Caminho A OCR)
+3. `faturas.service.ts:1013-1021` — `aprovarFatura` loop por contratos
+4. `contratos.service.ts:125-127` — helper `isBloqueioAtivo()`
+5. `contratos.service.ts:129-150, 335-338` — `validarModeloNaoBloqueado()` + bloqueio em `update()`
+6. `contratos/dto/{create,update}-contrato.dto.ts` — decorator `@IsModeloNaoBloqueado`
+7. `planos.service.ts:91-96` — esconde planos não-FIXO da vitrine pública
+
+## Pré-condições pra desligar BLOQUEIO_MODELOS_NAO_FIXO
+
+1. Validação humana E2E com cooperados teste novos (Fase B.5 — playbook em `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md`)
+2. Canário 1 cooperado CoopereBR migrando FIXO→COMPENSADOS em produção
+3. Fase C.2 (UI plano avançada) + Fase C.3 (display economia)
+4. Após canário ok: setar env `BLOQUEIO_MODELOS_NAO_FIXO=false` no `.env` de prod + restart PM2
 
 ## Perguntas em aberto pra Sprint 14
 

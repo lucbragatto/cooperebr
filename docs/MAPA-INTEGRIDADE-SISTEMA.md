@@ -386,11 +386,11 @@ Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na pr
 | Marcação de vencidas (cron 2h) | FUNCIONAL | `cobrancas.job.ts:17` | Diário às 2h |
 | Multa e juros (cron 3h) | FUNCIONAL | `cobrancas.job.ts:39` | Calcula por carência configurável |
 | Notificação vencidas WA (cron 6h15) | FUNCIONAL | `cobrancas.job.ts:99` | Com rate-limit configurável |
-| Engine COMPENSADOS/DINAMICO | BLOQUEADO | `faturas.service.ts:499-507` | `BLOQUEIO_MODELOS_NAO_FIXO` ativo — só FIXO_MENSAL funciona |
+| Engine COMPENSADOS/DINAMICO | IMPLEMENTADO + E2E SINTÉTICO ✓ / RUNTIME BLOQUEADO | `faturas.service.ts:1904-2003` (Fase B 03/05) | Engines prontas + 6/6 cenários ✓ no seed `seed-fase-b5.ts`. `BLOQUEIO_MODELOS_NAO_FIXO=true` (default) bloqueia em 7 enforcement points runtime. Pré-condições pra desligar: validação humana E2E + canário 1 cooperado + Fases C.2/C.3 |
 | GeracaoMensal vinculada à Cobrança | NAO_EXISTE | — | Não há FK entre `GeracaoMensal` e `Cobranca` |
 | FaturaProcessada vinculada à Cobrança | PARCIAL | `cobrancas.service.ts` | `cobrancaGeradaId` existe em FaturaProcessada mas fluxo inverso não |
 
-**% Pronto:** 80%. Principal limitação: engine bloqueada para modelos não-FIXO.
+**% Pronto:** 88%. Engines COMPENSADOS/DINAMICO implementadas + validação E2E sintética ✓ (Fase B 03/05). Runtime ainda bloqueado aguardando validação humana E2E + canário 1 cooperado.
 
 ---
 
