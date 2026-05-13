@@ -10,6 +10,10 @@
 > **Seção viva atualizada via ritual de fechamento (memória `ritual_abertura_fechamento.md`).**
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
+### Achados laterais pendentes (não fecham sessão, só anotação)
+
+- **2026-05-14 tarde — D-45 catalogado (P2):** wizard `/dashboard/cooperados/novo` com cadeia de erros visíveis (409 cooperados, 400 motor calcular, 404 propostas/enviar-email órfão, 400 motor aceitar). "Bug que antes não dava" — possível regressão recente. Cooperado-piloto MARCIO MACIEL ficou em estado intermediário. Detalhes + cenário reprodução em `debitos-tecnicos.md` D-45. Investigar antes da próxima tentativa de cadastro real via UI (ou bypass via Prisma).
+
 ### Última sessão
 
 - **Quando:** 2026-05-05 tarde (~2h investigação read-only)

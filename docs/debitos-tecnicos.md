@@ -1128,6 +1128,50 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-45 — Wizard `/dashboard/cooperados/novo` com 3+ endpoints quebrados / órfãos / DTOs frágeis
+
+**Severidade:** P2 (afeta jornada admin de cadastro real Caminho A; UI da Fase B/C.1)
+
+**Origem:** sessão 14/05/2026 tarde (Luciano explorando UI durante etapa pilotos; cooperado MARCIO MACIEL exibido em proposta gerada). 2 screenshots compartilhados com Console DevTools mostrando cadeia de erros.
+
+**Erros observados na cadeia do wizard:**
+
+1. **`POST /cooperados` → 409 Conflict** — comportamento esperado quando CPF/email duplica (`cooperados.service.ts:425-431`). UI tem fluxo "usar cooperado existente" elegante (`Step2Dados.tsx:173-191`). **Não é bug**, mas se a UI já consultou o CPF antes via `findByCpf` e seguiu pro POST, é fricção evitável.
+
+2. **`POST /motor-proposta/calcular` → 400 Bad Request (2 ocorrências)** — DTO `dto/calcular-proposta.dto.ts:41-43` declara `planoId!` como `@IsNotEmpty() @IsString()`. Frontend `Step3Simulacao.tsx:95-99` dispara auto-cálculo no mount do step com `planoId: planoSelecionadoId || undefined`. Se chega ao Step 3 sem plano selecionado → 400 inevitável + retry humano via Recalcular dispara novo 400. **Fix:** bloquear `useEffect` de auto-calcular até `planoSelecionadoId` estar setado.
+
+3. **`POST /propostas/enviar-email` → 404 Not Found** — **endpoint NÃO EXISTE no backend**. Único módulo é `motor-proposta` (search confirmou: nenhum `@Controller('propostas')`). Frontend `Step4Proposta.tsx:67` chama URL órfã, resíduo de refactor antigo. UI ainda exibe "✅ Proposta enviada via Email" como falso positivo + dispara handler externo `mailto:` no navegador (visível no Console: `Launched external handler for 'mailto:lucbragatto@gmail.com?subject=Proposta...`). **Fix:** ou criar endpoint real ou remover chamada e usar SMTP do motor diretamente.
+
+4. **`POST /motor-proposta/aceitar` → 400 Bad Request** — controller usa `@Body() body: any` (sem `class-validator` no DTO de aceitar). Validação acontece dentro do service e cruza 7 enforcement points. Causa concreta no caso MARCIO precisa investigação (pode ser BLOQUEIO_MODELOS_NAO_FIXO se plano não-FIXO, campos obrigatórios no body do front, ou estado inconsistente da proposta). **Fix prerequisito:** tipar DTO `AceitarPropostaDto` com `class-validator` pra retornar erros legíveis em vez de 400 genérico.
+
+**Impacto:**
+- Cadastro real Caminho A via UI **não fecha o loop** atualmente (Step 4 envia email falso, Step 6 não recebe `aceitar` ok)
+- Cooperado-piloto MARCIO MACIEL (sessão 11/05) ficou em estado intermediário: proposta gerada mas aceite com erro 400
+- Fricciona piloto canário planejado pra Fatia A
+- "Bug que antes não dava" (palavras do Luciano) — sugere regressão recente; cross-check git log do `web/app/dashboard/cooperados/novo/` pode identificar commit causador
+
+**Cenário de reprodução (passar pra próxima investigação):**
+1. Abrir `/dashboard/cooperados/novo` como SUPER_ADMIN logado em CoopereBR
+2. Step 1: upload fatura EDP qualquer → aguardar OCR
+3. Step 2: completar dados, salvar (cria cooperado + UC)
+4. Step 3: NÃO clicar em plano → motor calcula auto → 400 (esperado pelo DTO)
+5. Selecionar plano → tentar Recalcular → 400 persiste? (investigar — pode ser estado React)
+6. Step 4: clicar "Enviar proposta por email" → 404 + mailto: handler
+7. Step 6 ou tela aceite: clicar "Aceitar proposta" → 400
+
+**Resolução planejada (sub-tarefas):**
+- [ ] Cross-check git log `web/app/dashboard/cooperados/novo/**` últimos 30 dias → identificar regressão
+- [ ] Tipar `AceitarPropostaDto` com class-validator + retornar mensagens específicas
+- [ ] Remover ou redirecionar `/propostas/enviar-email` → `/motor-proposta/proposta/:id/enviar-email`
+- [ ] Guard no `useEffect` do Step3Simulacao bloqueando auto-cálculo sem planoId
+- [ ] E2E Playwright cobrindo wizard completo (atualmente sem cobertura)
+
+**Estimativa fix:** 4-6h Code (3-4h investigação + tipagem + 1-2h fixes + verificação)
+
+**Bloqueio:** não bloqueia Fatia A canário se canário for via Prisma direto. **BLOQUEIA** se canário for via UI.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
