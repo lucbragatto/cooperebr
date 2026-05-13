@@ -1494,6 +1494,86 @@ D-33 **fica aberto como sentinela** (não fechar). Critério de pronto vira:
 
 ---
 
+### D-48 — 🚨 SEGURANÇA P1 — Isolamento multi-tenant ausente em 6 sites de leitura/criação de Contrato↔Usina
+
+**Severidade:** P1 SEGURANÇA (chapéu, 6 sub-itens)
+
+**Origem:** sessão 14/05/2026 tarde (continuação) — Sub-Fase A canário travou no DIEGO 6/6 com `ForbiddenException: Violação multi-tenant no contrato CTR-2026-0004`. Investigação revelou bug NÃO é só motor-proposta — é padrão sistêmico em **6 caminhos** que leem `Usina` no fluxo de criação/atualização de Contrato.
+
+**Manifestações já em produção:**
+- `CTR-2026-0003` (Luciana Meireles, cooperado seed ambienteTeste=true): Contrato CoopereBR vinculado a Usina **Solar Serra** que pertence a **CoopereBR Teste**. Status ATIVO há 6 semanas. 1 cobrança VENCIDO gerada. Criado via caminho não-motor-proposta (`propostaId=null` — provavelmente `contratos.controller POST /contratos` direto).
+- `CTR-2026-0004` (DIEGO, sessão 14/05): mesmo padrão — Contrato CoopereBR vinculado a TESTE-USINA-B5 de TESTE-FASE-B5. Foi este que disparou a investigação.
+
+**Princípio violado:** Defense-in-depth multi-tenant. Hoje a defesa depende exclusivamente do frontend disciplinado enviar IDs corretos. Atacante passando `usinaId` válido de outro tenant via API teria sucesso na criação de contrato cross-tenant — e só seria pego depois, na geração de cobrança (`faturas.service.ts:1844`).
+
+#### Sub-itens (6 sites com bug)
+
+**D-48.1 — `motor-proposta.service.ts:639`** — `tx.usina.findMany({ where: { capacidadeKwh, distribuidora } })` no `aceitar()`. **Fix cirúrgico:** adicionar `cooperativaId: dono.cooperativaId` (já no escopo, linhas 480-489). Mesmo padrão já existe na linha 526 (Plano findFirst). **1 linha.**
+
+**D-48.2 — `motor-proposta.service.ts:1152`** — `tx.usina.findUnique({ where: { id: usinaId } })` no recálculo de % na ativação de contrato. **Fix:** adicionar `cooperativaId: contrato.cooperativaId` no `where`. Severidade baixa (usinaId já vem de contrato existente — mas leitura cruza tenant).
+
+**D-48.3 — `cooperados.service.ts:498, 523` (`cadastroCompleto`)** — 2 chamadas `tx.usina.findUnique({ where: { id: usinaId } })` em validação ANEEL + capacidade. **Fix:** adicionar `cooperativaId: dto.cooperativaId ?? cooperativaId` (disponível no escopo linhas 447/464).
+
+**D-48.4 — `cooperados.service.ts:1279` (`alocarUsina`)** — `prisma.usina.findUnique({ where: { id: usinaId } })`. Método **NÃO recebe `cooperativaId` na assinatura**. `cooperado.cooperativaId` está disponível via cooperado carregado (linhas 1256-1267) mas não é usado. **Fix:** propagar `cooperado.cooperativaId` para o `where` da query. Alternativa mais segura: mudar assinatura pra receber `cooperativaId` explícito.
+
+**D-48.5 — `migracoes-usina.service.ts:110, 435, 442`** — 3 chamadas `findUnique({ id })` em `migrarCooperado` e `migrarTodosDeUsina`. `dto.cooperativaId` disponível (validado em SEC-07 linhas 73-84) mas não propagado pra query de Usina. **Fix:** adicionar `cooperativaId: dto.cooperativaId` (com bypass SUPER_ADMIN se `null`).
+
+**D-48.6 — `contratos.service.ts:68` (`validarCapacidadeUsina`) — CRÍTICO** — helper usado tanto em `create` quanto `update` de Contrato via HTTP. NEM o DTO NEM o controller (`contratos.controller.ts:41,47`) injetam `cooperativaId` do usuário autenticado. Defesa atual depende exclusivamente do frontend mandar IDs corretos. **Fix exige:**
+- Adicionar parâmetro `cooperativaId` na assinatura de `validarCapacidadeUsina`, `create`, `update`
+- Injetar `@CurrentUser() user` (ou similar) em `contratos.controller`
+- Atualizar callers internos (se houver fora do controller)
+- Atualizar specs Jest que testam `create`/`update` sem `cooperativaId`
+
+**D-48.7 — `usinas.service.ts:261` (`verificarListaEspera`) — médio** — método "trust the caller" cria Contrato (linha 318) herdando `usina.cooperativaId` como tenant do novo contrato. Validação de quem pode chamar fica 100% no controller. **Fix conceitual:** adicionar guard que valida `req.user.cooperativaId === usina.cooperativaId` (ou bypass SUPER_ADMIN).
+
+#### Fix completo (escopo B2 — escolhido em 14/05 tarde)
+
+**Estimativa:** 6-8h Code distribuídas:
+- 2-3h patches 6 sites + alterações de assinatura
+- 1-2h injetar `@CurrentUser` em `contratos.controller` + revisão callers
+- 1-2h specs Jest (provavelmente 8-12 specs afetadas)
+- 1h build + rebuild + restart PM2 + smoke test
+- 30min auditoria SQL pré e pós (contratos divergentes)
+
+#### Saneamento de casos manifestados (junto com fix)
+
+**SQL UPDATE pra corrigir os 2 contratos divergentes já existentes:**
+
+```sql
+-- CTR-2026-0004 (DIEGO) — recuperar pra usina-linhares
+UPDATE contratos
+SET usina_id = 'usina-linhares', 
+    percentual_usina = ROUND((490::numeric / 150000) * 100 * 10000) / 10000
+WHERE id = 'cmp4jpk2o000bvagcgxaai4t3';
+
+-- CTR-2026-0003 (Luciana seed ambienteTeste=true) — saneamento
+UPDATE contratos
+SET usina_id = 'usina-linhares',
+    percentual_usina = ROUND((1000::numeric / 150000) * 100 * 10000) / 10000
+WHERE id = 'cmncg235l0001uowo72x7kx6k';
+```
+
+#### Risco do fix
+
+**Médio-alto.** Mudança de assinatura em `contratos.service`/`controller` exige atualizar TODOS os callers. Specs Jest existentes podem precisar refator. Mitigação: rodar `npm test` (suite Jest) entre cada patch + smoke E2E após rebuild.
+
+#### Bloqueio
+
+**Sub-Fase A canário 14/05 BLOQUEADA** até D-48.1 (motor-proposta:639) resolver — DIEGO travou exatamente nele.
+
+Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de segurança ativo** em produção (CTR-2026-0003 é evidência).
+
+#### Recomendação cronológica
+
+1. **D-48.1** primeiro (1 linha) — destrava Sub-Fase A
+2. Recuperar DIEGO + CTR-2026-0003 via SQL UPDATE
+3. Re-rodar Sub-Fase A pros 3 cooperados restantes
+4. **D-48.2 a D-48.7** em sequência — patches + specs Jest
+5. Smoke test completo via API HTTP (criar Contrato com `usinaId` errado deve retornar 403/404)
+6. Commit isolado por sub-item ou commit consolidado D-48-fix (decidir conforme custo)
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
