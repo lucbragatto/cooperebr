@@ -57,15 +57,25 @@ export class ContratosService {
    * kwhContratoAnual = total anual do contrato.
    * capacidadeKwh da usina = capacidade anual.
    * percentualUsina = kwhContratoAnual / capacidadeKwh × 100
+   *
+   * D-48.6: `cooperativaId` é obrigatório (ou null pra SUPER_ADMIN bypass) pra
+   * garantir isolamento multi-tenant — usina deve pertencer ao mesmo tenant
+   * do contrato sendo criado/atualizado.
    */
   private async validarCapacidadeUsina(
     usinaId: string,
     kwhContratoAnual: number,
+    cooperativaId: string | null | undefined,
     excludeContratoId?: string,
     tx?: any,
   ): Promise<number> {
     const db = tx ?? this.prisma;
-    const usina = await db.usina.findUnique({ where: { id: usinaId } });
+    const usina = await db.usina.findFirst({
+      where: {
+        id: usinaId,
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+    });
     if (!usina || !usina.capacidadeKwh || Number(usina.capacidadeKwh) <= 0) {
       return 0; // sem capacidade definida — não bloqueia
     }
@@ -150,18 +160,21 @@ export class ContratosService {
     }
   }
 
-  async create(data: {
-    cooperadoId: string;
-    ucId: string;
-    usinaId?: string;
-    planoId?: string;
-    dataInicio: Date | string;
-    dataFim?: Date | string;
-    percentualDesconto: number;
-    kwhContratoAnual?: number;
-    kwhContrato?: number;
-    modeloCobrancaOverride?: string | null;
-  }) {
+  async create(
+    data: {
+      cooperadoId: string;
+      ucId: string;
+      usinaId?: string;
+      planoId?: string;
+      dataInicio: Date | string;
+      dataFim?: Date | string;
+      percentualDesconto: number;
+      kwhContratoAnual?: number;
+      kwhContrato?: number;
+      modeloCobrancaOverride?: string | null;
+    },
+    cooperativaId?: string | null,
+  ) {
     // Sprint 5: bloquear criação em modelos COMPENSADOS/DINAMICO
     await this.validarModeloNaoBloqueado(data.modeloCobrancaOverride, data.planoId);
 
@@ -205,9 +218,10 @@ export class ContratosService {
       }
 
       // 3. Validar capacidade da usina e calcular percentualUsina com base no ANUAL
+      // D-48.6: passa cooperativaId pra garantir que a usina é do mesmo tenant.
       let percentualUsina: number | undefined;
       if (data.usinaId && kwhContratoAnual) {
-        percentualUsina = await this.validarCapacidadeUsina(data.usinaId, kwhContratoAnual, undefined, tx);
+        percentualUsina = await this.validarCapacidadeUsina(data.usinaId, kwhContratoAnual, cooperativaId, undefined, tx);
       }
 
       // 4. Gerar número do contrato (dentro da tx para evitar duplicação)
@@ -315,18 +329,22 @@ export class ContratosService {
     return contrato;
   }
 
-  async update(id: string, data: Partial<{
-    ucId: string;
-    usinaId: string;
-    planoId: string;
-    dataInicio: Date;
-    dataFim: Date;
-    percentualDesconto: number;
-    kwhContratoAnual: number;
-    kwhContrato: number;
-    status: string;
-    modeloCobrancaOverride: string | null;
-  }>) {
+  async update(
+    id: string,
+    data: Partial<{
+      ucId: string;
+      usinaId: string;
+      planoId: string;
+      dataInicio: Date;
+      dataFim: Date;
+      percentualDesconto: number;
+      kwhContratoAnual: number;
+      kwhContrato: number;
+      status: string;
+      modeloCobrancaOverride: string | null;
+    }>,
+    cooperativaId?: string | null,
+  ) {
     if (data.modeloCobrancaOverride !== undefined) {
       const modelos = ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
       if (data.modeloCobrancaOverride !== null && !modelos.includes(data.modeloCobrancaOverride)) {
@@ -376,7 +394,8 @@ export class ContratosService {
           ?? (contratoAtual.kwhContratoAnual ? Number(contratoAtual.kwhContratoAnual) : Number(contratoAtual.kwhContrato ?? 0) * 12);
 
         if (usinaId && kwhContratoAnual > 0) {
-          const percentualUsina = await this.validarCapacidadeUsina(usinaId, kwhContratoAnual, id, tx);
+          // D-48.6: propaga cooperativaId pro filtro tenant da usina.
+          const percentualUsina = await this.validarCapacidadeUsina(usinaId, kwhContratoAnual, cooperativaId, id, tx);
           (data as any).percentualUsina = percentualUsina;
         }
 

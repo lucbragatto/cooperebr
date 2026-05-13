@@ -107,8 +107,13 @@ export class MigracoesUsinaService {
     }
 
     const usinaOrigem = contratoAtivo.usina;
+    // D-48.5: isolamento multi-tenant — usina destino deve ser do mesmo tenant
+    // (SUPER_ADMIN bypass quando dto.cooperativaId === null — SEC-07 já valida cooperado).
     const usinaDestino = await this.prisma.usina.findUnique({
-      where: { id: dto.usinaDestinoId },
+      where: {
+        id: dto.usinaDestinoId,
+        ...(dto.cooperativaId !== null ? { cooperativaId: dto.cooperativaId } : {}),
+      },
     });
     if (!usinaDestino) {
       throw new NotFoundException('Usina destino não encontrada.');
@@ -432,15 +437,21 @@ export class MigracoesUsinaService {
    * Migra todos os cooperados de uma usina para outra.
    */
   async migrarTodosDeUsina(dto: MigrarTodosDto) {
+    // D-48.5: isolamento multi-tenant em ambas as usinas
+    // (SUPER_ADMIN bypass quando dto.cooperativaId === null).
+    const tenantFilter = dto.cooperativaId !== null
+      ? { cooperativaId: dto.cooperativaId }
+      : {};
+
     const usinaOrigem = await this.prisma.usina.findUnique({
-      where: { id: dto.usinaOrigemId },
+      where: { id: dto.usinaOrigemId, ...tenantFilter },
     });
     if (!usinaOrigem) {
       throw new NotFoundException('Usina origem não encontrada.');
     }
 
     const usinaDestino = await this.prisma.usina.findUnique({
-      where: { id: dto.usinaDestinoId },
+      where: { id: dto.usinaDestinoId, ...tenantFilter },
     });
     if (!usinaDestino) {
       throw new NotFoundException('Usina destino não encontrada.');

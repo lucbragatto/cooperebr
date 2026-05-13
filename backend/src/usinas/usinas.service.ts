@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -257,9 +257,14 @@ export class UsinasService {
     return this.prisma.usina.delete({ where: { id } });
   }
 
-  async verificarListaEspera(usinaId: string) {
+  async verificarListaEspera(usinaId: string, cooperativaId?: string | null) {
+    // D-48.7: isolamento multi-tenant — caller deve ser do mesmo tenant da usina.
+    // cooperativaId null = SUPER_ADMIN bypass.
     const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
     if (!usina || !usina.capacidadeKwh) return { promovidos: [] };
+    if (cooperativaId && usina.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Usina não pertence à sua cooperativa.');
+    }
 
     const capacidadeAnual = Number(usina.capacidadeKwh);
 

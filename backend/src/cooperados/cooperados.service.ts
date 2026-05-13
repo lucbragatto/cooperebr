@@ -494,8 +494,12 @@ export class CooperadosService {
         const { usinaId, planoId, dataInicio, percentualDesconto, kwhContrato, kwhContratoAnual } = dto.contrato;
 
         // 3a. Validar regra ANEEL: mesma distribuidora UC x Usina
+        // D-48.3: isolamento multi-tenant — usina deve ser da mesma cooperativa.
         if (usinaId) {
-          const usina = await tx.usina.findUnique({ where: { id: usinaId }, select: { distribuidora: true } });
+          const usina = await tx.usina.findUnique({
+            where: { id: usinaId, cooperativaId: dto.cooperativaId ?? cooperativaId },
+            select: { distribuidora: true },
+          });
           if (uc.distribuidora && usina?.distribuidora) {
             const ucDist = uc.distribuidora.toUpperCase().trim();
             const usinaDist = usina.distribuidora.toUpperCase().trim();
@@ -518,9 +522,12 @@ export class CooperadosService {
         }
 
         // 3c. Validar capacidade da usina
+        // D-48.3: isolamento multi-tenant também na 2ª consulta.
         let percentualUsina: number | undefined;
         if (usinaId && anual) {
-          const usina = await tx.usina.findUnique({ where: { id: usinaId } });
+          const usina = await tx.usina.findUnique({
+            where: { id: usinaId, cooperativaId: dto.cooperativaId ?? cooperativaId },
+          });
           if (usina?.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
             const capacidadeAnual = Number(usina.capacidadeKwh);
             const contratosAtivos = await tx.contrato.findMany({
@@ -1276,7 +1283,10 @@ export class CooperadosService {
     const uc = cooperado.ucs[0];
     if (!uc) throw new BadRequestException('Cooperado não possui UC cadastrada');
 
-    const usina = await this.prisma.usina.findUnique({ where: { id: usinaId } });
+    // D-48.4: isolamento multi-tenant — usina deve pertencer à cooperativa do cooperado.
+    const usina = await this.prisma.usina.findUnique({
+      where: { id: usinaId, cooperativaId: cooperado.cooperativaId ?? undefined },
+    });
     if (!usina) throw new NotFoundException('Usina não encontrada');
 
     // Regra ANEEL: mesma distribuidora (validação centralizada)

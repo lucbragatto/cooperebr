@@ -37,14 +37,16 @@ export class ContratosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
-  create(@Body() body: CreateContratoDto) {
-    return this.contratosService.create(body);
+  create(@Body() body: CreateContratoDto, @Req() req: any) {
+    // D-48.6: injeta cooperativaId do JWT — usina será filtrada por tenant.
+    return this.contratosService.create(body, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateContratoDto) {
-    return this.contratosService.update(id, dto as any);
+  update(@Param('id') id: string, @Body() dto: UpdateContratoDto, @Req() req: any) {
+    // D-48.6: idem create.
+    return this.contratosService.update(id, dto as any, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

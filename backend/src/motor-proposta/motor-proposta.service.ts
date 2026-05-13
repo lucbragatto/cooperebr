@@ -632,7 +632,11 @@ export class MotorPropostaService {
       }
 
       // 5. Buscar usina com capacidade disponível (filtrando por distribuidora da UC — regra ANEEL)
-      const whereUsina: any = { capacidadeKwh: { not: null } };
+      // D-48.1: isolamento multi-tenant — só usinas da mesma cooperativa do cooperado.
+      const whereUsina: any = {
+        capacidadeKwh: { not: null },
+        cooperativaId: dono.cooperativaId,
+      };
       if (ucDisponivel.distribuidora) {
         whereUsina.distribuidora = ucDisponivel.distribuidora;
       }
@@ -1149,7 +1153,10 @@ export class MotorPropostaService {
 
     // Transação SERIALIZABLE para evitar race condition no percentualUsina
     await this.prisma.$transaction(async (tx) => {
-      const usina = await tx.usina.findUnique({ where: { id: usinaId } });
+      // D-48.2: isolamento multi-tenant — usina deve pertencer ao mesmo tenant do contrato.
+      const usina = await tx.usina.findUnique({
+        where: { id: usinaId, cooperativaId: contratoCompleto?.cooperativaId ?? undefined },
+      });
       let percentualUsina: number | null = null;
       if (contratoCompleto && usina && usina.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
         const kwhAnual = Number(contratoCompleto.kwhContrato ?? 0) * 12;

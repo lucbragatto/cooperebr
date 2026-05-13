@@ -51,8 +51,9 @@ export class UsinasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post(':id/verificar-espera')
-  verificarEspera(@Param('id') id: string) {
-    return this.usinasService.verificarListaEspera(id);
+  verificarEspera(@Param('id') id: string, @Req() req: any) {
+    // D-48.7: injeta cooperativaId do JWT (null = SUPER_ADMIN bypass).
+    return this.usinasService.verificarListaEspera(id, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
