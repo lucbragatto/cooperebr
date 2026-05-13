@@ -9,7 +9,7 @@ interface Step5Props {
 
 const MODELOS = [
   {
-    value: 'FIXO',
+    value: 'FIXO_MENSAL',
     label: 'Fixo',
     desc: 'Valor fixo mensal por membro, independente do consumo.',
     bloqueado: false,
@@ -17,13 +17,13 @@ const MODELOS = [
   {
     value: 'CREDITOS_COMPENSADOS',
     label: 'Créditos Compensados',
-    desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).',
+    desc: 'Engine implementada (Fase B). Runtime aguardando canário CoopereBR + flag BLOQUEIO_MODELOS_NAO_FIXO=false.',
     bloqueado: true,
   },
   {
-    value: 'DINAMICO',
+    value: 'CREDITOS_DINAMICO',
     label: 'Dinâmico',
-    desc: 'Bloqueado — Sprint 5 (refatoração do cálculo em andamento).',
+    desc: 'Engine implementada (Fase B). Runtime aguardando canário CoopereBR + flag BLOQUEIO_MODELOS_NAO_FIXO=false.',
     bloqueado: true,
   },
 ];
@@ -43,9 +43,9 @@ export default function Step5Cobranca({ defaultValues, onSubmit }: Step5Props) {
   function handleSubmit() {
     onSubmit({
       tipo,
-      valorFixo: tipo === 'FIXO' ? valorFixo : undefined,
+      valorFixo: tipo === 'FIXO_MENSAL' ? valorFixo : undefined,
       valorKwh: tipo === 'CREDITOS_COMPENSADOS' ? valorKwh : undefined,
-      percentualDesconto: tipo === 'DINAMICO' ? percentualDesconto : undefined,
+      percentualDesconto: tipo === 'CREDITOS_DINAMICO' ? percentualDesconto : undefined,
       descontoPadrao,
       multaAtraso,
       jurosDiarios,
@@ -78,7 +78,7 @@ export default function Step5Cobranca({ defaultValues, onSubmit }: Step5Props) {
 
       {tipo && (
         <div className="space-y-4 border-t border-neutral-100 pt-4">
-          {tipo === 'FIXO' && (
+          {tipo === 'FIXO_MENSAL' && (
             <div>
               <label className={lbl}>Valor mensal (R$)</label>
               <input className={cls} type="number" step="0.01" value={valorFixo} onChange={(e) => setValorFixo(e.target.value)} placeholder="0,00" />
@@ -92,7 +92,7 @@ export default function Step5Cobranca({ defaultValues, onSubmit }: Step5Props) {
             </div>
           )}
 
-          {tipo === 'DINAMICO' && (
+          {tipo === 'CREDITOS_DINAMICO' && (
             <div>
               <label className={lbl}>Percentual de desconto (%)</label>
               <input className={cls} type="number" step="0.1" value={percentualDesconto} onChange={(e) => setPercentualDesconto(e.target.value)} placeholder="15" />
