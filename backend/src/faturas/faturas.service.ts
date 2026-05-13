@@ -662,6 +662,7 @@ export class FaturasService {
     const cobranca = await this.prisma.cobranca.create({
       data: {
         contratoId: contrato.id,
+        cooperativaId: contrato.cooperativaId, // D-50 fix — popular tenant
         mesReferencia: mesNum,
         anoReferencia: anoNum,
         valorBruto: calc.valorBruto,

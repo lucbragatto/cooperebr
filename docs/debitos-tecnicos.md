@@ -1574,6 +1574,26 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
+### D-50 — `gerarCobrancaPosFatura` cria `Cobranca` sem `cooperativaId` ✅ RESOLVIDO
+
+**Severidade:** P1 (afeta listagem operacional)
+
+**Origem:** sessão 14/05/2026 tarde-noite. Detectado por Luciano em validação visual `/dashboard/cobrancas` (4 cobranças piloto invisíveis). Diagnóstico read-only do Code confirmou causa.
+
+**Causa raiz:** `faturas.service.ts:662-690` (método `gerarCobrancaPosFatura`) criava `Cobranca` sem passar `cooperativaId` no objeto `data`. Schema permite nullable (`Cobranca.cooperativaId String?`), ficava `null`. `GET /cobrancas` filtra por `cooperativaId = user.cooperativaId`, excluindo registros `null`.
+
+**Bug LATENTE desde commit `b0e0345` (Fase B.5, 03/05/2026), NÃO regressão.** Manifestou-se em 14/05 porque foi o primeiro uso E2E real de `gerarCobrancaPosFatura` com cooperado real CoopereBR (Sub-Fase A canário). 17 `FaturaProcessada` anteriores eram 12 seeds Fase B.5 (não chamavam pipeline pós-OCR) + 5 legados sem cobrança gerada.
+
+**Fix:** adicionar `cooperativaId: contrato.cooperativaId` ao `data` do `prisma.cobranca.create`. Padrão já existia em `cobrancas.service.ts:191`.
+
+**Saneamento:** 4 cobranças piloto existentes atualizadas via script `backend/scripts/saneamento-d50-cooperativa-id.ts`. Validação pós-fix: 38 cobranças CoopereBR + 0 cobranças com `cooperativaId` null.
+
+**Manifestação adjacente fora do escopo D-50:** `faturas.service.ts:1054` (gerarCobrancasLote) tem o mesmo padrão de criação sem `cooperativaId`. Não corrigido nesta task pra manter escopo D-50 cirúrgico. Catalogar separadamente se necessário em sessão dedicada (D-50.2 ou bug novo).
+
+**Status:** ✅ RESOLVIDO (commit final desta sessão).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
