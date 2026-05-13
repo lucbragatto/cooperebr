@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>SISGD CoopereBR - Jornada do Membro v1.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
+header{border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px}
+.title-block h1{color:#1e3a8a;margin:0 0 4px 0;font-size:28px}
+.subtitle{color:#6b7280;font-size:14px}
+.version-block{text-align:right;font-size:13px;color:#6b7280}
+.version-block strong{color:#1e3a8a;font-size:15px}
+.exec{background:#eff6ff;border-left:4px solid #2563eb;padding:16px 20px;border-radius:4px;margin:16px 0 24px}
+.exec h2{color:#1e40af;margin:0 0 8px;font-size:16px}
+.legend{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0 32px;padding:12px 16px;background:#f9fafb;border-radius:6px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:14px}
+.dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:#16a34a}.dot.parcial{background:#ca8a04}.dot.gap{background:#dc2626}.dot.bloqueado{background:#6b7280}
+.diagram-container{border:1px solid #e5e7eb;border-radius:8px;padding:20px;background:#fff;overflow-x:auto;margin:16px 0}
+.mermaid{display:flex;justify-content:center}
+section{margin:32px 0}
+section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
+.status-table{width:100%;border-collapse:collapse;margin:16px 0}
+.status-table th,.status-table td{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px}
+.status-table th{background:#f9fafb;font-weight:600}
+.status-table tr:hover{background:#f9fafb}
+.gap-card{background:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:12px 0}
+.gap-card.critico{background:#fef2f2;border-color:#dc2626}
+.gap-card.bloqueio{background:#f9fafb;border-color:#6b7280}
+.gap-card h3{margin:0 0 8px;font-size:16px}
+.gap-card.critico h3{color:#991b1b}
+.gap-card.bloqueio h3{color:#374151}
+.next-steps{background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:4px}
+.next-steps h2{color:#14532d;border:none;padding:0}
+.next-steps ol{margin:8px 0;padding-left:20px}
+.next-steps li{margin:6px 0}
+.changelog{background:#fafafa;border:1px solid #e5e7eb;border-radius:4px;padding:16px 20px;margin-top:32px;font-size:13px}
+.changelog h2{color:#6b7280;border:none;padding:0;font-size:14px;text-transform:uppercase;letter-spacing:0.5px}
+.changelog ul{margin:6px 0;padding-left:20px}
+.changelog li{margin:4px 0}
+@media print{body{max-width:100%}.diagram-container{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header>
+<div class="title-block">
+<h1>Jornada do Membro - SISGD CoopereBR</h1>
+<div class="subtitle">Mapa operacional do fluxo do cadastro a fatura mensal</div>
+</div>
+<div class="version-block">
+<strong>Versao 1.0</strong><br>
+Atualizado: 14/05/2026<br>
+Proxima revisao: a cada sessao com mudanca de estado
+</div>
+</header>
+
+<div class="exec">
+<h2>Resumo executivo</h2>
+<p>O sistema tem 10 fases que ligam o membro novo ate o pagamento mensal. <strong>Hoje (14/05/2026) a jornada inteira foi provada end-to-end</strong> em modelo FIXO_MENSAL com 4 cooperados-piloto reais (DIEGO, CAROLINA, ALMIR, THEOMAX) gerando R$ 2.542,26 em cobrancas. Faltam 2 categorias: (1) <strong>liberar os 2 outros modelos de cobranca</strong> (creditos compensados e dinamico) - engines prontas, falta destravar; (2) <strong>polir 6 pontos catalogados</strong> de UI e fluxo automatizado de aprovacao concessionaria.</p>
+</div>
+
+<div class="legend">
+<div class="legend-item"><span class="dot ok"></span>Funciona em producao</div>
+<div class="legend-item"><span class="dot parcial"></span>Funciona parcialmente</div>
+<div class="legend-item"><span class="dot gap"></span>Falta (gap a resolver)</div>
+<div class="legend-item"><span class="dot bloqueado"></span>Implementado mas travado</div>
+</div>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TB
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d,font-weight:bold
+  classDef parcial fill:#fef3c7,stroke:#ca8a04,color:#713f12,font-weight:bold
+  classDef gap fill:#fecaca,stroke:#dc2626,color:#7f1d1d,font-weight:bold
+  classDef bloqueado fill:#e5e7eb,stroke:#6b7280,color:#1f2937,font-weight:bold
+
+  subgraph F1[" 1. Entrada do membro "]
+    E1A[Cadastro web publico]:::ok
+    E1B[Cadastro pelo admin<br/>wizard 7 passos]:::parcial
+    E1C[Cadastro rapido sem fatura]:::ok
+    E2[Upload da fatura]:::ok
+    E3[OCR extrai dados]:::ok
+    E4[Cria cadastro<br/>com unidade consumidora]:::ok
+    E1A --> E2
+    E1B --> E2
+    E1C --> E4
+    E2 --> E3 --> E4
+  end
+
+  subgraph F2[" 2. Simulacao e plano "]
+    P1[Sistema calcula economia]:::ok
+    P2{Escolha do plano}:::ok
+    P3[FIXO MENSAL]:::ok
+    P4[Creditos Compensados]:::bloqueado
+    P5[Creditos Dinamicos]:::bloqueado
+    P6[Apresenta proposta]:::ok
+    E4 --> P1 --> P2
+    P2 --> P3 --> P6
+    P2 --> P4 --> P6
+    P2 --> P5 --> P6
+  end
+
+  subgraph F3[" 3. Aceitacao e assinatura "]
+    A1[Membro aceita proposta]:::parcial
+    A2[Assina termo<br/>via Assinafy]:::parcial
+    A3[Cria contrato<br/>pendente ativacao]:::ok
+    P6 --> A1 --> A2 --> A3
+  end
+
+  subgraph F4[" 4. Aprovacao interna "]
+    AP1{Validacoes ok?}:::gap
+    AP2[Aprovacao automatica]:::gap
+    AP3[Admin aprova]:::ok
+    A3 --> AP1
+    AP1 --> AP2
+    AP1 --> AP3
+  end
+
+  subgraph F5[" 5. Alocacao usina "]
+    AL1{Usina tem<br/>capacidade?}:::ok
+    AL2[Vincula usina<br/>+ % calculado]:::ok
+    AL3[Lista de espera]:::ok
+    AL4[Cron promove<br/>quando abre vaga]:::ok
+    AP2 --> AL1
+    AP3 --> AL1
+    AL1 --> AL2
+    AL1 --> AL3
+    AL3 -.-> AL4 -.-> AL1
+  end
+
+  subgraph F6[" 6. Envio a concessionaria "]
+    LC1[Admin gera lista]:::ok
+    LC2[Envia a EDP-ES]:::ok
+    LC3[WhatsApp + email<br/>avisa membro]:::parcial
+    LC4[Aguardando<br/>concessionaria]:::ok
+    AL2 --> LC1 --> LC2 --> LC3
+    LC1 --> LC4
+  end
+
+  subgraph F7[" 7. Aprovacao concessionaria "]
+    AC1{Como vem<br/>o sinal?}:::gap
+    AC2[Email EDP]:::gap
+    AC3[1a fatura GD chega]:::parcial
+    AC4[Admin confirma]:::ok
+    AC5[Sistema avisa membro<br/>cadastro aprovado]:::ok
+    AC6[Cadastro ATIVO]:::ok
+    LC4 --> AC1
+    AC1 --> AC2 --> AC5
+    AC1 --> AC3 --> AC5
+    AC1 --> AC4 --> AC5
+    AC5 --> AC6
+  end
+
+  subgraph F8[" 8. Operacao mensal "]
+    OP1[Email-monitor<br/>detecta fatura]:::ok
+    OP2[OCR extrai consumo<br/>+ creditos]:::ok
+    OP3[Engine gera cobranca]:::ok
+    OP4[Engine FIXO]:::ok
+    OP5[Engine Compensados]:::bloqueado
+    OP6[Engine Dinamico]:::bloqueado
+    OP7[Cobranca criada<br/>+ lancamento previsto]:::ok
+    AC6 --> OP1 --> OP2 --> OP3
+    OP3 --> OP4 --> OP7
+    OP3 --> OP5 --> OP7
+    OP3 --> OP6 --> OP7
+  end
+
+  subgraph F9[" 9. Cobranca e pagamento "]
+    CB1[Asaas gera boleto/PIX]:::ok
+    CB2[WhatsApp + email<br/>avisa membro]:::ok
+    CB3[Membro paga]:::ok
+    CB4[Webhook<br/>confirma pagamento]:::ok
+    CB5[Sistema da baixa]:::ok
+    CB6[Tokens creditados<br/>se plano CLUBE]:::ok
+    OP7 --> CB1 --> CB2 --> CB3 --> CB4 --> CB5 --> CB6
+  end
+
+  subgraph F10[" 10. Crons automaticos "]
+    CR1[Vencidas 02h]:::ok
+    CR2[Multa+juros 03h]:::ok
+    CR3[Aviso WA 06h15]:::ok
+    CR4[Fatura SaaS<br/>do parceiro]:::ok
+    OP7 -.-> CR1 --> CR2 --> CR3
+    CB5 -.-> CR4
+  end
+</div>
+</div>
+
+<section>
+<h2>Pontos criticos catalogados</h2>
+
+<div class="gap-card bloqueio">
+<h3>Engines Creditos Compensados e Dinamico - travadas</h3>
+<p><strong>O que e:</strong> 2 modelos onde o membro paga proporcional aos creditos solares compensados. Tecnicamente prontos (testados em laboratorio em 03/05/2026), mas ha um travamento ativo no sistema (BLOQUEIO_MODELOS_NAO_FIXO) impedindo uso real.</p>
+<p><strong>O que falta:</strong> rodar 1 cooperado real como canario (AMAGES tem 2 UCs com creditos ativos), validar, destravar. Mapeado como Sub-Fase B.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>Wizard de cadastro pelo admin - 4 bugs (D-45)</h3>
+<p><strong>O que e:</strong> tela /dashboard/cooperados/novo de 7 passos. Tem endpoint inexistente (envio email proposta retorna 404), motor calcula sem plano selecionado, e 2 erros no aceite. Hoje cadastro funciona via outros caminhos (script ou direto).</p>
+<p><strong>O que falta:</strong> fix dos 4 endpoints + testes. Estimativa 4-6 horas tecnicas.</p>
+</div>
+
+<div class="gap-card">
+<h3>Aprovacao automatica vs admin - regra nao definida</h3>
+<p><strong>O que e:</strong> hoje toda aprovacao passa por admin. Fluxo automatizado mapeado mas sem regra clara de decisao.</p>
+<p><strong>O que falta:</strong> sessao de produto pra definir criterios: KYC ok + ANEEL ok + capacidade ok = aprovacao automatica?</p>
+</div>
+
+<div class="gap-card">
+<h3>Deteccao automatica de aprovacao da concessionaria</h3>
+<p><strong>O que e:</strong> hoje admin marca manualmente quando EDP aprova. Email-monitor existe mas detector especifico (email EDP OU 1a fatura GD) nao implementado.</p>
+<p><strong>O que falta:</strong> Sprint dedicado pra regex email EDP + detector fatura GD.</p>
+</div>
+
+<div class="gap-card">
+<h3>Assinatura digital Assinafy - nao validada recente</h3>
+<p><strong>O que e:</strong> servico de assinatura termo + procuracao. Integrado mas sem teste end-to-end recente.</p>
+<p><strong>O que falta:</strong> teste manual de fluxo completo. Estimativa 1-2 horas.</p>
+</div>
+
+<div class="gap-card">
+<h3>Comunicacao periodica durante aguardo concessionaria</h3>
+<p><strong>O que e:</strong> notificacao inicial existe; atualizacoes regulares (semanal?) durante aguardo nao.</p>
+<p><strong>O que falta:</strong> cron periodico de status + comunicacao proativa.</p>
+</div>
+
+</section>
+
+<section>
+<h2>Status detalhado por etapa</h2>
+<table class="status-table">
+<thead><tr><th>Etapa</th><th>Funcao</th><th>Status</th><th>Observacao</th></tr></thead>
+<tbody>
+<tr><td>1A</td><td>Cadastro web publico (/cadastro)</td><td>OK</td><td>Validado historicamente</td></tr>
+<tr><td>1B</td><td>Wizard admin /dashboard/cooperados/novo</td><td>Parcial</td><td>D-45: 4 bugs catalogados</td></tr>
+<tr><td>1C</td><td>POST /cooperados direto</td><td>OK</td><td>Validado 14/05 (Sub-Fase A)</td></tr>
+<tr><td>2</td><td>OCR Claude AI</td><td>OK</td><td>Sprint 11 validou</td></tr>
+<tr><td>3-4</td><td>Criacao Cooperado + UC</td><td>OK</td><td>4 criados em 14/05</td></tr>
+<tr><td>5</td><td>Motor calcular FIXO</td><td>OK</td><td>Validado 14/05</td></tr>
+<tr><td>5</td><td>Motor calcular Compensados/Dinamico</td><td>Travado</td><td>Engines prontas Fase B, runtime bloqueado</td></tr>
+<tr><td>6-7</td><td>Aceitar proposta + criar contrato</td><td>OK</td><td>Snapshots Fase B funcionando</td></tr>
+<tr><td>8</td><td>Assinatura Assinafy</td><td>Parcial</td><td>Nao testado recente</td></tr>
+<tr><td>9</td><td>Aprovacao automatica vs admin</td><td>Gap</td><td>Regra nao clara</td></tr>
+<tr><td>10</td><td>Alocacao usina ou lista espera</td><td>OK</td><td>D-48 corrigiu isolamento tenant em 14/05</td></tr>
+<tr><td>11</td><td>Lista concessionaria + envio EDP</td><td>OK</td><td>Tela funcional, envio manual</td></tr>
+<tr><td>12</td><td>Deteccao aprovacao concessionaria</td><td>Parcial</td><td>Manual ok; automacao nao implementada</td></tr>
+<tr><td>13</td><td>Ativacao cadastro (PENDENTE -> ATIVO)</td><td>OK</td><td>Validado</td></tr>
+<tr><td>14</td><td>Operacao mensal cobranca FIXO</td><td>OK</td><td>4 cobrancas 14/05, valores corretos</td></tr>
+<tr><td>14</td><td>Operacao mensal Compensados/Dinamico</td><td>Travado</td><td>Mesmo travamento do plano</td></tr>
+<tr><td>15</td><td>Asaas boleto/PIX</td><td>OK</td><td>Sprint 12 sandbox validado</td></tr>
+<tr><td>16</td><td>Webhook + baixa</td><td>OK</td><td>Sprint 12</td></tr>
+<tr><td>17</td><td>WhatsApp notifica</td><td>OK</td><td>Sprint 10</td></tr>
+<tr><td>18</td><td>Crons recorrentes</td><td>OK</td><td>Em producao</td></tr>
+</tbody>
+</table>
+</section>
+
+<div class="next-steps">
+<h2>Proximos passos sugeridos</h2>
+<ol>
+<li><strong>Investigar bug B2 (15 min):</strong> verificar por que as 4 cobrancas novas nao aparecem em /dashboard/cobrancas.</li>
+<li><strong>Sub-Fase B AMAGES (2-3 horas):</strong> ativar Creditos Compensados via canario, validar engine em producao real, destravar o sistema.</li>
+<li><strong>Sub-canario Asaas+WhatsApp real (1-2 horas):</strong> tirar 1 piloto do modo teste (CAROLINA R$ 142,32 - menor exposicao), validacao operacional final.</li>
+<li><strong>Sprint D-45 (4-6 horas):</strong> corrigir os 4 bugs do wizard de cadastro.</li>
+<li><strong>Sprint deteccao automatica EDP (escopo a definir):</strong> implementar detector via email-monitor.</li>
+</ol>
+</div>
+
+<div class="changelog">
+<h2>Historico de versoes</h2>
+<ul>
+<li><strong>v1.0 - 14/05/2026:</strong> versao inicial. 4 cooperados-piloto FIXO_MENSAL em producao. D-48 P1 SEGURANCA fechado (7 patches multi-tenant). 6 pontos criticos catalogados (D-45/D-46/D-47/Engines travadas/Assinafy/Aprovacao auto).</li>
+</ul>
+</div>
+
+<script>
+mermaid.initialize({startOnLoad:true,theme:'default',flowchart:{useMaxWidth:true,htmlLabels:true,curve:'basis'}});
+</script>
+
+</body>
+</html>
