@@ -29,6 +29,11 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **P1-02** Cópia assinada pós-assinatura → ✅ RESOLVIDO (`motor-proposta.service.ts:enviarCopiaAssinada`)
 - **P1-03** Email D-3/D-1 antes vencimento → ✅ RESOLVIDO (`cobrancas.job.ts:lembretesPreVencimento`)
 
+## GAPS RESOLVIDOS EM 14-15/05/2026 (Sub-Fase A canário)
+
+- **D-48 P1 SEGURANÇA — Isolamento multi-tenant ausente em 6 sites Usina** → ✅ RESOLVIDO. 7 patches (`motor-proposta.service.ts:639,1152`, `cooperados.service.ts:498,523,1279`, `migracoes-usina.service.ts:110,440,448`, `contratos.service.ts:68` + assinatura `create`/`update`, `contratos.controller.ts` + `@Req()`, `usinas.service.ts:261` + `usinas.controller.ts` + `@Req()`). Saneamento de 2 contratos divergentes manifestados (CTR-2026-0004, CTR-2026-0003). Auditoria pós-fix: 0 contratos com usina cross-tenant. Detalhe em `docs/sessoes/2026-05-15-sub-fase-a-fixo-canario-fechado.md`.
+- **Sub-Fase A canário FIXO_MENSAL** → ✅ FECHADA. 4 cooperados-piloto reais (DIEGO, CAROLINA, ALMIR, THEOMAX PJ) processados pelo pipeline completo (Cooperado→UC→FaturaProcessada→Proposta→Contrato ATIVO→Cobrança). Motor de cobrança FIXO_MENSAL validado E2E real. Total R$ 2.542,26 / economia R$ 558,05/mês.
+
 ---
 
 ## SPRINT 11 — PROGRESSO

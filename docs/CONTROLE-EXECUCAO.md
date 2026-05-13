@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-13 noite** — Fatia H.2 SISTEMA.md ✅ entregue (M1 do Plano Mestre) + D-33 reframed P1→P2 latente via Caminho B (docs only, sem código).
+> Última atualização: **2026-05-15 madrugada** — Sub-Fase A canário FIXO_MENSAL FECHADA + D-48 P1 SEGURANÇA resolvido (6 sites) + saneamento 2 contratos divergentes + auditoria multi-tenant zero divergências.
 
 ---
 
@@ -12,6 +12,26 @@
 
 ### Última sessão
 
+- **Quando:** 2026-05-14 tarde → 2026-05-15 madrugada (sessão Code longa cobrindo D-48 fix + Sub-Fase A canário FIXO_MENSAL)
+- **Tipo:** Code (execução completa — patches código + scripts + saneamento + canário real)
+- **Resultado:**
+  - **D-48 P1 SEGURANÇA RESOLVIDO** — 7 patches em 5 arquivos: `motor-proposta.service.ts` (D-48.1+.2), `cooperados.service.ts` (D-48.3+.4), `migracoes-usina.service.ts` (D-48.5), `contratos.service.ts` + `contratos.controller.ts` (D-48.6 CRÍTICO — mudança assinatura + `@Req()`), `usinas.service.ts` + `usinas.controller.ts` (D-48.7). Build limpo, 23/26 specs Jest passam (3 falhas pré-existentes DI registration sem regressão).
+  - **Saneamento 2 contratos divergentes manifestados pelo D-48:**
+    - CTR-2026-0004 (DIEGO, Sub-Fase A 14/05): usinaId TESTE-USINA-B5 → usina-linhares; pct 4,0833 → 0,3267.
+    - CTR-2026-0003 (Luciana, seed mar/2026): usinaId Solar Serra → usina-linhares; pct 0,025 → 0,6667.
+  - **Sub-Fase A canário FIXO_MENSAL FECHADA — 4 cooperados-piloto reais CoopereBR (ambienteTeste=true):**
+    - CTR-2026-0004 DIEGO (R$ 447,68 / econ R$ 98,27)
+    - CTR-2026-0005 CAROLINA (R$ 142,32 / econ R$ 31,24)
+    - CTR-2026-0006 ALMIR (R$ 940,93 / econ R$ 206,54)
+    - CTR-2026-0007 THEOMAX PJ (R$ 1.011,33 / econ R$ 222,00)
+    - **Total: R$ 2.542,26 / economia R$ 558,05/mês.** Cobranças geradas via engine FIXO_MENSAL real (faturas.service.ts:1862-1902).
+  - **Auditoria multi-tenant global pós-fix:** **0 contratos divergentes** (`u.cooperativaId != ct.cooperativaId`).
+  - **Sub-step 0 (14/05 tarde):** Usina Linhares.distribuidora `"EDP ES"` → `"EDP_ES"` (mantido — confirmado por Luciano).
+- **Commits:** 4 (`e2cd14e` D-48 catalog cherry-pick + commits 1-2-3 desta sessão).
+- **Próxima sessão:** validar visualmente `/dashboard/cooperados` + `/dashboard/cobrancas` Luciano. Decidir entre **Sub-Fase B AMAGES CREDITOS_COMPENSADOS** (desligar BLOQUEIO_MODELOS_NAO_FIXO temp) OU **sub-canário Asaas+WA real** em 1 dos 4 (CAROLINA R$ 142,32 recomendada — menor valor exposto).
+
+### Sessão anterior — 2026-05-13
+
 - **Quando:** 2026-05-13 (claude.ai + Code, dia inteiro: Fase B + Fatia H.2 + Sub-fatia D-33 Caminho B)
 - **Tipo:** Code (execução documental + investigação read-only) + claude.ai (revisão + decisões)
 - **Resultado:**
@@ -20,8 +40,7 @@
   - **Fatia H.2 SISTEMA.md base** (3 commits — **M1 do Plano Mestre entregue**): `382f40e` Dia 1 (backend 45 módulos + 80 models + correção retroativa AsaasCobranca=5) + `0528cd8` Dia 2 (frontend 152 telas + 10 fluxos críticos) + `464e4d3` Dia 3 (integrações + crons + auth + observabilidade + decisões + env vars). SISTEMA.md cresceu de 24 → 1.542 linhas. Pessoa nova lê em ~45 min.
   - **Sub-fatia D-33 Caminho B** (1 commit pendente neste prompt): Fase 1 investigação read-only revelou que **D-33 era LATENTE, não ATIVO** (UI + service + webhook usam `AsaasConfig` consistente). Reframe P1→P2 latente em 4 docs (SISTEMA.md + debitos + plano + controle). **Zero código tocado.** Fatia A liberada (não depende mais D-33).
   - **2 aplicações Decisão 23 em 24h:** (1) 12/05 noite — desfeita memória "31 PAGAS = 100% baixa manual / AsaasCobranca=0" (real: 5 via Asaas sandbox + 26 manual). (2) 13/05 noite — desfeita premissa "UI escreve em ConfigGateway / dual-path ATIVO" (real: UI escreve em AsaasConfig consistente / D-33 LATENTE).
-- **Commits:** 8 (`94bf9dc` + `049db42` + `cbce0aa` + `e5eb360` + `b0663c9` + `382f40e` + `0528cd8` + `464e4d3` + commit D-33 reframe pendente).
-- **Próxima sessão:** **Fatia A canário Caminho A real** (2-4d Code) — 1 cooperado real fim a fim Asaas sandbox CoopereBR. Marco M2. Liberada (D-33 não bloqueia mais). OU outra prioridade Luciano.
+- **Commits:** 8 (`94bf9dc` + `049db42` + `cbce0aa` + `e5eb360` + `b0663c9` + `382f40e` + `0528cd8` + `464e4d3`).
 
 ### Sessão anterior
 
