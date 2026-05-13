@@ -97,7 +97,7 @@
    ├── Anthropic Claude SDK   → OCR fatura · CoopereAI conceitual
    ├── Asaas API + Webhook    → PIX/boleto multi-tenant (sandbox CoopereBR)
    ├── BB / Sicoob / Banestes → Boletos + conciliação (BB+Sicoob 1339 LOC, Banestes 🔴 não iniciado)
-   ├── IMAP (recebimento)     → email-monitor → OCR → FaturaProcessada (1 caso real)
+   ├── IMAP (recebimento)     → email-monitor → OCR → FaturaProcessada (zero produção real — ver §6 Fluxo 2)
    ├── SMTP (envio)           → email-config.service multi-tenant via ConfigTenant
    ├── WhatsApp Service       → módulo separado whatsapp-service/ (PM2 cooperebr-whatsapp)
    ├── ANEEL bandeiras        → cron mensal puxa cor da bandeira
@@ -109,7 +109,7 @@
 - **PM2 gerencia 2 processos:** `cooperebr-backend` (porta 3000, build compilado) e `cooperebr-whatsapp`. Frontend Next.js dev é terminal vivo (não-PM2).
 - **Engine Prisma:** v6 usa `query_engine_bg.wasm` (não mais `.dll.node`). Lock no `.wasm` exige `pm2 stop` antes de `prisma generate`/`db push` (regra em `CLAUDE.md`).
 - **Build:** `scripts/` está excluído de `tsconfig.build.json` — utilitários standalone via `ts-node`, não vão pro `dist/`.
-- **Caminho A (OCR automático):** 1 único caso real histórico (João Santos, 03/2026). 12 dos 17 `FaturaProcessada` no banco são seeds B.5.
+- **Caminho A (OCR automático):** ZERO casos em produção real. 17 `FaturaProcessada` no banco são 12 seeds Fase B.5 + 5 legados CoopereBR mar/2026 (todos `ambienteTeste=true` ou sem contrato/cobrança vinculados). Caso "João Santos da Silva mar/2026" mencionado em sessões 30/04 e 12/05 foi re-validado em 14/05 (Bloco A Fatia A Etapa 1b) e desfeito: `ambienteTeste=true`, 0 contratos, 0 cobranças, `cobrancaGeradaId=pnbsm75n` inexistente na tabela. **Caminho A NUNCA rodou em produção real** (Decisão 23 aplicada 3× em 48h).
 - **Caminho B (cobrança manual + Asaas):** 31 cobranças PAGAS no banco — **5 via Asaas sandbox** (16% — registros `AsaasCobranca` criados Sprint 12 entre 23-27/04, status `RECEIVED`) e **26 via baixa manual** (84%). E2E Asaas em sandbox CoopereBR funcionou; produção real ainda não exercitada.
 
 ---
@@ -308,7 +308,7 @@ LOC = linhas de `.ts` excluindo `.spec.ts`. Endpoints = decorators `@Get/Post/Pu
 
 **Módulos sem specs (29 de 45 — 64%):** débito de cobertura. Núcleo crítico cobre ~30% (5 dos 7 módulos do núcleo têm spec).
 
-**Estado de maturidade** (🟢 produção / 🟡 funcional com débito / 🔴 não-iniciado): a refinar em H.4 (fluxos end-to-end). Candidatos 🔴 hoje: nenhum dos 45 módulos é "não-iniciado" (todos têm código). 🟡 maioria. 🟢 quem passou validação E2E real (cooperados, contratos, usinas, faturas via João Santos).
+**Estado de maturidade** (🟢 produção / 🟡 funcional com débito / 🔴 não-iniciado): a refinar em H.4 (fluxos end-to-end). Candidatos 🔴 hoje: nenhum dos 45 módulos é "não-iniciado" (todos têm código). 🟡 maioria. 🟢 quem passou validação E2E sintética (cooperados, contratos, usinas — Fase B.5 03/05). Módulo `faturas` ainda 🟡: pipeline OCR maduro mas SEM passagem em produção real (correção retroativa 14/05 — Decisão 23).
 
 **Dependências cross-module** detalhadas em **H.3** (fora do escopo Dia 1).
 
@@ -378,7 +378,7 @@ H.1 listou **6 entidades inexistentes** no schema (gap "14 cats somam 68" se exp
 | `AsaasCobranca` | **5** | Sandbox CoopereBR (criadas 23-27/04 durante Sprint 12 validation). Status `RECEIVED`, valores R$ 8/12/20/40/500. Cobrancas linkadas estão `PAGO`. Detalhe completo em §6 fluxo Caminho B. |
 | `AsaasCustomer` | 62 | Customers Asaas registrados (sandbox) |
 | `CobrancaGateway` | 7 | Camada de adapter persistente (registros via `GatewayPagamentoService.emitirCobranca`). Caminho ortogonal ao `AsaasService` direto — D-33 reframed P2 latente. |
-| `FaturaProcessada` | 17 | 12 são seeds B.5; 1 caso real OCR (João Santos 03/2026) |
+| `FaturaProcessada` | 17 | 12 seeds Fase B.5 + 5 legados CoopereBR mar/2026 (todos `ambienteTeste=true` ou sem cobrança vinculada). Zero produção real — correção retroativa 14/05 via Decisão 23 (era "1 caso João Santos", mas re-validação SQL mostrou inexistência da cobrança `pnbsm75n`). |
 | `FaturaSaas` | 3 | PENDENTES, sem `asaasCobrancaId` populado |
 | `AuditLog` | 0 | Inativo — D-30N (interceptor não implementado) |
 | `EmailLog` | 1+ | Primeiro envio SMTP funcional pós Sprint 10 |
@@ -596,9 +596,11 @@ FaturasService.matchingComCobranca()
 ```
 SELECT COUNT(*) FROM faturas_processadas; → 17
 ```
-- **1 caso histórico real:** João Santos (mar/2026, OCR funcional fim a fim).
-- **12 de 17 são seeds** da Fase B.5 (validação E2E sintética).
-- **4 de 17** são reprocessamentos / testes pontuais.
+- **ZERO casos em produção real.** Pipeline existe e maduro, mas nunca exercitado por cooperado real.
+- **12 de 17 são seeds** da Fase B.5 (validação E2E sintética, 03/05/2026).
+- **5 de 17 são legados CoopereBR mar/2026** (DERLI, Carlos Pereira, Ana Oliveira, João Santos, LUCIANO BRAGATTO) — todos `ambienteTeste=true` ou sem cobrança vinculada na tabela `cobrancas` hoje.
+
+> **Correção retroativa 14/05 — Decisão 23 aplicada 3× em 48h:** sessão 30/04 (`docs/sessoes/2026-04-30-estado-cobranca-e2e.md`) e relatório 12/05 (§0.1 + §A.1) afirmavam "1 caso real Caminho A: João Santos da Silva, `cobrancaGeradaId=pnbsm75n`". Re-validação SQL 14/05 (Bloco A Fatia A Etapa 1b) mostrou: cooperado existe, mas com `ambienteTeste=true`, distribuidora `OUTRAS`, 0 contratos, 0 cobranças. Cobrança `pnbsm75n` **não existe na tabela**. Memória estava inflada — o caso histórico ou foi deletado em cleanup posterior ou nunca esteve completo. **Caminho A nunca rodou em produção real.**
 
 **Referências cruzadas:**
 - → Fluxo 3 (matching com Cobranca existente)
@@ -1022,7 +1024,7 @@ AuditoriaRegulatoriaService.executar()
 | # | Fluxo | Caminho real exercitado? | Estado |
 |---:|---|---|---|
 | 1 | Cadastro novo cooperado | Sim — 317 cooperados, 6 PENDENTE | 🟢 |
-| 2 | Caminho A (OCR) | 1 caso real (João Santos), 12 seeds + 4 testes | 🟡 frágil |
+| 2 | Caminho A (OCR) | ZERO produção real — 12 seeds + 5 legados mar/2026 sem cobrança gerada (correção 14/05 Decisão 23) | 🔴 cru |
 | 3 | Caminho B (manual + Asaas) | 31 PAGAS — 5 via Asaas sandbox + 26 baixa manual | 🟡 sandbox OK, prod 🔴 |
 | 4 | Aprovação proposta | MARCIO MACIEL destravado 11/05 (1 caso UI) | 🟢 |
 | 5 | CooperToken emissão/resgate | 9 ledger entries, volume baixo | 🟡 |
@@ -1082,7 +1084,7 @@ AuditoriaRegulatoriaService.executar()
 ### 7.4 Anthropic / Claude AI
 
 - **Propósito:** (a) OCR de fatura concessionária (Fluxo 2 Caminho A); (b) agente conceitual CoopereAI (heartbeat + FAQ).
-- **Estado:** 🟢 OCR funcional fim a fim em 1 caso real histórico (João Santos 03/2026). CoopereAI conceitual ativo via heartbeat.
+- **Estado:** 🟡 OCR maduro tecnicamente (12 seeds Fase B.5 validam pipeline) mas SEM passagem em produção real (correção retroativa 14/05 — Decisão 23). CoopereAI conceitual ativo via heartbeat.
 - **Forma:** `@anthropic-ai/sdk` v0.86.1 — **direct SDK, sem MCP**.
 - **Models consumidos:** Claude (latest) — versão controlada por env `COOPEREAI_MODEL`.
 - **Env vars:** `ANTHROPIC_API_KEY` (chave única backend), `COOPEREAI_MODEL`, `COOPEREAI_MAX_TOKENS`.
@@ -1512,7 +1514,7 @@ pm2 restart cooperebr-backend
 
 | Componente | Estado | Bloqueador |
 |---|---|---|
-| Caminho A OCR | 🟡 cru (1 caso histórico real + 12 seeds) | Canário Caminho A real (Fatia A) |
+| Caminho A OCR | 🔴 cru (zero produção real — 12 seeds + 5 legados sem cobrança; correção 14/05 Decisão 23) | Canário Caminho A real (Fatia A — Cenário 1c: precisa cooperado novo via /cadastro ou sintético) |
 | Caminho B Asaas E2E | 🟡 sandbox OK (5 `AsaasCobranca` validadas Sprint 12), produção 🔴 | Abrir conta Asaas-CoopereBR produção (D-33 reframed P2 latente — não bloqueia mais) |
 | FaturaSaas Luciano→Parceiro | 🔴 ConfigGatewayPlataforma vazio (count=0) | Luciano abrir conta Asaas-SISGD + Fatia D3 (D-29F.1+.2+.3) |
 | MLM cascata | 🟡 cabeado, 10 indicações + 0 benefícios | D-30M aguarda 1º indicado pagar via Caminho B |

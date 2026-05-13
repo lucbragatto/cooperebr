@@ -440,7 +440,7 @@ desses pais e já têm spec/análise pronta.
 #### Fatia A — Canário Caminho A real
 
 - **Tema:** 1 cooperado real percorre cadastro → cobrança → pagamento via Asaas sandbox CoopereBR fim a fim.
-- **Persona:** 2º caso real após João Santos (mar/2026 — único Caminho A confirmado em produção).
+- **Persona:** 1º caso real (João Santos não conta — `ambienteTeste=true`, confirmado Decisão 23 14/05 manhã).
 - **Critério de pronto:** 1 cobrança com `faturaProcessadaId` + `modeloCobrancaUsado` + `asaasChargeId` + status `PAGA` via webhook chegando.
 - **Estimativa:** 2-4 dias Code (config sandbox CoopereBR já existe).
 - **Dependências:**

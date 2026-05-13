@@ -10,6 +10,19 @@
 > dados pessoais (CPF/email/nome) não expostos, secrets não impressos,
 > nenhuma mutação no banco/arquivo/config.
 
+> ## ⚠️ Errata retroativa 14/05/2026 — Decisão 23 aplicada 3× em 48h
+>
+> Várias afirmações deste relatório sobre **"João Santos da Silva = único caso real de Caminho A em produção"** (§0.1, §A.1 Appendix, §C Tabela comparativa, §Achados extras item 2, §Achados laterais item 1) **estão desfeitas**.
+>
+> **Re-validação 14/05** (Bloco A Fatia A Etapa 1b, sessão Code) via SQL direto na produção:
+> - João Santos da Silva (`cmmnf5dl10000uo70ta9698mi`) existe, mas com `ambienteTeste=true`, distribuidora `OUTRAS`, **0 contratos, 0 cobranças**.
+> - Cobrança `pnbsm75n` **não existe na tabela `cobrancas`**.
+> - Sessão `2026-04-30-estado-cobranca-e2e.md` linha 36 já flageava "só 1 com `cobrancaGeradaId` (referência inválida — cobrança não está na tabela)" — alerta foi perdido na propagação.
+>
+> **Conclusão real:** Caminho A **NUNCA rodou em produção real**. Os 17 `FaturaProcessada` no banco são 12 seeds Fase B.5 + 5 legados CoopereBR mar/2026 com `ambienteTeste=true` ou sem cobrança gerada. Pipeline existe e técnico, mas zero passagem viva.
+>
+> **As afirmações abaixo neste relatório referentes a "pipeline rodou X vezes em produção", "1 caso real", "primeiro cooperado real" devem ser lidas como HIPÓTESE DERRUBADA.** Mantidas inalteradas pra preservar histórico de raciocínio.
+
 ## ⚠️ Alerta operacional
 
 Durante a investigação detectei **25 crons ativos** no backend (lista em
@@ -163,7 +176,9 @@ Nenhum foi disparado manualmente. Read-only do banco não foi afetado.
 
 ### 0.1 Caminho A — pipeline email→OCR→FaturaProcessada→Cobrança
 
-**Status:** 🟡 PARCIAL — **achado importante: pipeline RODOU 6 vezes em produção** (não "nunca rodou" como catalogado em 30/04)
+> ⚠️ **Errata 14/05 — ver bloco no topo do arquivo.** O "achado importante: pipeline rodou 6 vezes em produção" foi **derrubado** em 14/05. Re-validação SQL mostrou que as 6 cobranças com `faturaProcessadaId` ≠ null são seeds Fase B.5, e que João Santos (único candidato a caso real) tem `ambienteTeste=true` + 0 contratos + 0 cobranças. Pipeline existe tecnicamente — **zero passagem em produção real**.
+
+**Status:** 🔴 CRU — pipeline maduro tecnicamente mas ZERO produção real (correção retroativa 14/05 via Decisão 23).
 
 **Arquivos:**
 - `backend/src/email-monitor/` — 4 arquivos, 684 linhas, 1 spec
@@ -528,12 +543,14 @@ Nenhum foi disparado manualmente. Read-only do banco não foi afetado.
 
 ## Achados laterais
 
-### 1. **Caminho A já rodou em produção** — desatualização da memória 30/04
+### 1. ~~**Caminho A já rodou em produção** — desatualização da memória 30/04~~ ❌ ACHADO DERRUBADO 14/05
 
-Sessão de 30/04 catalogou "Caminho A nunca rodou em produção" como achado central. Banco atual mostra **17 FaturaProcessada nos últimos 90 dias + 6 cobranças com `faturaProcessadaId` ≠ null**. Algo mudou. Hipóteses:
-- Seeds da Fase B.5 (03/05) podem ter populado essas 6
-- Testes Sprint 12 sandbox (validados 27/04) podem ter gerado registros
-- Vale auditoria pontual pra confirmar se é teste ou produção real
+> ⚠️ **Errata 14/05** — ver bloco no topo do arquivo. A auditoria pontual sugerida abaixo foi feita em 14/05 (Bloco A Fatia A Etapa 1b). Resultado: **Caminho A NÃO rodou em produção**. As 6 cobranças com `faturaProcessadaId` ≠ null são todas seeds/legados sem cooperado real ATIVO + não-teste. Sessão 30/04 estava certa — "Caminho A nunca rodou em produção" é factual.
+
+~~Sessão de 30/04 catalogou "Caminho A nunca rodou em produção" como achado central. Banco atual mostra 17 FaturaProcessada nos últimos 90 dias + 6 cobranças com `faturaProcessadaId` ≠ null. Algo mudou. Hipóteses:~~
+- ~~Seeds da Fase B.5 (03/05) podem ter populado essas 6~~ → **CONFIRMADO sim, são seeds**
+- ~~Testes Sprint 12 sandbox (validados 27/04) podem ter gerado registros~~ → **plausível, mas não há cooperado real**
+- ~~Vale auditoria pontual pra confirmar se é teste ou produção real~~ → **feita 14/05, é teste**
 
 ### 2. **CADASTRO público quase não usado** (3 propostas em 90 dias)
 
@@ -653,6 +670,8 @@ Code apresenta P0→P3. Luciano decide.
 > Adição pós-relatório principal: 3 missões focadas em (1) identificação dos 17 FaturaProcessada, (2) mapeamento dos 2 fluxos Asaas (FaturaSaas Luciano→Parceiro vs Cobrança Parceiro→Membro) com nuance multi-tenant, (3) dimensionamento separado Fatia D3 vs Fatia A.
 
 ## A.1. Identificação dos 17 FaturaProcessada
+
+> ⚠️ **Errata 14/05 — ver bloco no topo do arquivo.** A afirmação "Apenas 1 (João Santos) tem `cobrancaGeradaId=pnbsm75n` — o ÚNICO caso real de Caminho A produção" abaixo está **derrubada**: re-validação 14/05 mostrou que a cobrança `pnbsm75n` não existe na tabela, João Santos tem `ambienteTeste=true` + 0 contratos. Os 5 legados CoopereBR mar/2026 são todos seeds históricos sem passagem viva.
 
 **Composição completa:**
 
