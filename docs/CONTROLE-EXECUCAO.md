@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-05 tarde** — reframe etapa 11 (parcial, não inexistente) + D-J-5 catalogada + Decisão 21 (investigação 3 frentes).
+> Última atualização: **2026-05-14 tarde** — Sub-Fase A canário NÃO rodou + 3 débitos catalogados (D-45/D-46/D-47) + D-WIZARD resolvido `0448f9b`.
 
 ---
 
@@ -10,11 +10,29 @@
 > **Seção viva atualizada via ritual de fechamento (memória `ritual_abertura_fechamento.md`).**
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
-### Achados laterais pendentes (não fecham sessão, só anotação)
-
-- **2026-05-14 tarde — D-45 catalogado (P2):** wizard `/dashboard/cooperados/novo` com cadeia de erros visíveis (409 cooperados, 400 motor calcular, 404 propostas/enviar-email órfão, 400 motor aceitar). "Bug que antes não dava" — possível regressão recente. Cooperado-piloto MARCIO MACIEL ficou em estado intermediário. Detalhes + cenário reprodução em `debitos-tecnicos.md` D-45. Investigar antes da próxima tentativa de cadastro real via UI (ou bypass via Prisma).
-
 ### Última sessão
+
+- **Quando:** 2026-05-14 tarde (claude.ai + Code, alta entropia)
+- **Tipo:** claude.ai (orquestração) + Code (Fase 1 read-only Sub-Fase A)
+- **Resultado:**
+  - ✅ **D-WIZARD resolvido** commit `0448f9b` — Step5Cobranca.tsx enum (`'FIXO'`→`'FIXO_MENSAL'`, `'DINAMICO'`→`'CREDITOS_DINAMICO'`) + descs pós-Fase B
+  - ✅ **D-45 catalogado** (P2) commit `d814a62` — wizard `/dashboard/cooperados/novo` com 4 erros encadeados (409 cooperados, 400 motor calcular, 404 propostas/enviar-email órfão, 400 motor aceitar)
+  - ✅ **D-46 catalogado** (P2 chapéu + 12 sub-itens) commit `ed5134b` — divergências spec↔Plano/engine via sub-agente claude.ai dispatched. 4 ALTAS + 4 MÉDIAS + 4 BAIXAS
+  - ✅ **D-47 catalogado** (P3) — confusão nomes OURO/PRATA Plano (membro) ↔ PlanoSaas (parceiro)
+  - ✅ **Docs alinhados pós-Fase B** commit `cc5472e` — especificacao-modelos-cobranca + MAPA-INTEGRIDADE refletem engines COMPENSADOS/DINAMICO implementadas + validação E2E sintética 6/6
+  - ❌ **Sub-Fase A canário NÃO RODOU** — Code parou em Fase 1 read-only aguardando 3 OKs que respondi no claude.ai mas não empaqueteimos como prompt copy-paste pro Code colar
+  - ❌ **Sub-Fase B AMAGES adiada** — depende de Sub-Fase A fechar
+  - **Decisão 23 aplicada 5× em 48h** (4× anteriores + esta sessão: "engines bloqueadas" virou "implementadas + 13 divergências")
+- **Commits Code:** 0 (Code só leu, não tocou produção)
+- **Commits docs:** 4 (`cc5472e`, `d814a62`, `ed5134b`, `0448f9b`)
+- **Detalhe completo:** `docs/sessoes/2026-05-14-tarde-realinhamento-pilotos.md`
+- **Próxima sessão Code:** retomar com prompt embutido nesse doc (Sub-Fase A copy-paste)
+
+### Achados laterais pendentes (de sessões anteriores)
+
+(seção mantida pra futuros achados de sessões claude.ai-only que não fecham sub-fase mas precisam ficar visíveis)
+
+### Sessão anterior
 
 - **Quando:** 2026-05-05 tarde (~2h investigação read-only)
 - **Tipo:** claude.ai (sem código)
@@ -193,12 +211,13 @@ E. **Definir escopo Sugestão #3** (cron análise diária) — decidir hipótese
 
 ### Frase de retomada
 
-> Voltei. Lê `docs/CONTROLE-EXECUCAO.md`.
+> Code: abra `docs/sessoes/2026-05-14-tarde-realinhamento-pilotos.md`, vá direto na seção **PROMPT SUB-FASE A PRONTO PARA EXECUTAR** e execute o prompt EXATAMENTE como está. Não improvise, não invente, não pule passos. Reporta exceção e para se qualquer SELECT/INSERT falhar.
 
-Anexos opcionais:
-- `docs/CONTROLE-EXECUCAO.md`
-- `docs/sessoes/2026-05-03-resumo-sessao-completa.md` (resumo da maratona 03/05)
-- `docs/sessoes/2026-05-02-resumo-sessao-completa.md` (resumo da sessão 02/05)
+Anexos opcionais (ordem):
+- `docs/sessoes/2026-05-14-tarde-realinhamento-pilotos.md` — autocrítica + prompt embedded
+- `docs/CONTROLE-EXECUCAO.md` (este arquivo) — estado vivo
+- `docs/debitos-tecnicos.md` D-45/D-46/D-47 — débitos novos
+- `docs/sessoes/2026-05-03-fase-b5-validacao-e2e.md` — referência engine FIXO/COMPENSADOS/DINAMICO
 
 ---
 

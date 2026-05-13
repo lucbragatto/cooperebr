@@ -1244,6 +1244,36 @@ FIXO usa `valorContratoPromocional` (1864-1867). COMPENSADOS usa `tarifaContratu
 
 ---
 
+### D-47 — Nomes idênticos `OURO`/`PRATA` em 2 tabelas diferentes (Plano membro ↔ PlanoSaas parceiro)
+
+**Severidade:** P3
+
+**Origem:** sessão 14/05/2026 tarde — Luciano apontou olhando tela `/dashboard/saas/planos` que pareceu confusão entre 2 catálogos.
+
+**Descrição:** O `seed.ts:194-220` cria registros na tabela `Plano` (cooperativa→membro) com nomes `'PLANO OURO'` e `'PLANO PRATA'`. Já existem registros na tabela `PlanoSaas` (SISGD→parceiro) com nomes `'OURO'` e `'PRATA'` (mensalidade R$ 9.999 / R$ 5.900, ver `metricas-saas.service.spec.ts:175`).
+
+**Tabelas afetadas:**
+- `Plano` (schema linha 428) — oferta cooperativa→membro, com `modeloCobranca`/`descontoBase`
+- `PlanoSaas` (schema linha 1398) — oferta SISGD→parceiro, com mensalidade+setup+%receita+limiteMembros
+
+**Risco:**
+- Admin lê doc/print de tela e confunde "Plano OURO" (qual? membro 20% desconto ou parceiro R$ 9.999?)
+- Investigação técnica fica ambígua — qualquer report que diga "PLANO OURO" precisa qualificar qual tabela
+- Decisão 23 amplificada: memória do projeto pode inflar com a confusão (já aconteceu em screenshots desta sessão)
+
+**Fix sugerido:**
+- Opção A (renomear seed `Plano` cooperativa→membro): editar `seed.ts:194-220` pra usar nomes inequívocos (ex: `'CoopereBR Premium 20%'` em vez de `'PLANO OURO'`, `'CoopereBR Standard 15%'` em vez de `'PLANO PRATA'`). 1 SQL `UPDATE planos SET nome = ... WHERE id IN ('plano-ouro', 'plano-prata')` no banco vivo + atualizar seed.
+- Opção B (renomear seed `PlanoSaas` SISGD→parceiro): mais agressivo, exige atualizar `metricas-saas.service.spec.ts` + comunicação interna.
+- Opção C (deixar como está + criar convenção doc): sempre prefixar "Plano (membro)" ou "PlanoSaas (parceiro)" em documentação. Não resolve UX.
+
+**Recomendação:** Opção A. Os 3 planos em `seed.ts:194-220` (`PLANO OURO`, `PLANO PRATA`, `CONSUMO DE CREDITOS DE KWH`) já estão flagados em D-46.SEED por outro motivo (`CREDITOS_COMPENSADOS + publico=true`). Renomear + setar `publico=false` num único swap resolve D-47 + parte de D-46.SEED.
+
+**Estimativa fix:** 30min Code (5min seed + 5min SQL UPDATE prod + 10min testes Jest + 10min commit/doc).
+
+**Bloqueio:** não bloqueia operação. Bloqueia clareza de comunicação técnica.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
