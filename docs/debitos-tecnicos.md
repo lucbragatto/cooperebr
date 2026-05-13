@@ -1172,6 +1172,78 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 ---
 
+### D-46 — Divergências spec↔Plano/engine (chapéu, 12 sub-itens)
+
+**Severidade macro:** P2 (com sub-itens P1 internos — ver lista)
+
+**Origem:** sessão 14/05/2026 tarde — sub-agente claude.ai investigação focada após Luciano apontar que primeira varredura (commit `cc5472e`) não havia comparado specs ↔ catálogo de planos. Sub-agente cobriu schema/code/seeds/Jest sem SQL live.
+
+**Resumo:** 13 divergências catalogadas (1 já fechada em commit `0448f9b` = sub-item W). Restam 12 abertas: 4 ALTAS + 4 MÉDIAS + 4 BAIXAS.
+
+#### Sub-itens ALTOS (P1 internos)
+
+**D-46.W — RESOLVIDO `0448f9b`** — Step5Cobranca.tsx wizard parceiros enviava `'FIXO'`/`'DINAMICO'` (enum errado) ao backend. Schema Prisma usa `FIXO_MENSAL`/`CREDITOS_DINAMICO`. Qualquer cadastro de parceiro via wizard explodia em Prisma enum mismatch. **Fix:** 1 commit, 8 substituições. Wizard agora bate com schema canônico.
+
+**D-46.1 — `baseCalculo` triplamente inconsistente.**
+TS type aceita 4 valores (`KWH_CHEIO`/`SEM_TRIBUTO`/`COM_ICMS`/`CUSTOM`). DTO `@IsIn` bloqueia 2 em runtime (`create-plano.dto.ts:81`). Helper canônico `calcular-tarifa-contratual.ts:64-74` lança `NotImplementedException` se receber COM_ICMS/CUSTOM.
+**Risco:** Plano criado via SQL/seed com COM_ICMS/CUSTOM quebra DINAMICO em runtime com 500.
+**Fix:** ou implementar helper pros 4 valores OU restringir TS type pros 2 funcionais.
+
+**D-46.2 — `tipoDesconto` é gravado em 3 lugares e NUNCA lido pelo engine de cobrança recorrente.**
+Schema, DTO, ContratoSnapshot, motor-proposta gravam. Engine `faturas.service.ts:1850-2010` ignora completamente. UI permite escolher entre dois valores que produzem cobrança idêntica em COMPENSADOS/DINAMICO.
+**Risco:** UX engana cliente — "escolhi modelo diferente" mas cobrança igual. Spec promete comportamento que não existe.
+**Fix:** OU engine implementa diferença comportamental (preferível) OU schema remove campo + UI esconde.
+
+**D-46.5 — Engine emite token via `tokenPorKwhExcedente > 0`, ignora `cooperTokenAtivo`.**
+`faturas.service.ts:1145`: condição é `Number(plano.tokenPorKwhExcedente ?? 0) > 0`. Não checa `plano.cooperTokenAtivo === true`.
+**Risco:** Plano com `cooperTokenAtivo=false` mas `tokenPorKwhExcedente>0` emite tokens (vice-versa não emite). Estado inconsistente dos 2 campos = bug silencioso.
+**Fix:** trocar condição engine pra `cooperTokenAtivo === true && tokenPorKwhExcedente > 0`.
+
+**D-46.7 — 5 campos token no schema ausentes do DTO + frontend type.**
+`tokenPorKwhExcedente`, `valorTokenReais`, `tokenSocialAtivo`, `tokenFlexAtivo`, `modoToken` — todos no `model Plano` mas inexistentes em `create-plano.dto.ts`/`update-plano.dto.ts` + `web/types/index.ts:325`.
+**Risco:** Admin não configura via UI/API. 3 deles SÃO LIDOS pelo engine (`tokenPorKwhExcedente`, `valorTokenReais`, `modoToken`) → defaults forever (0.45 R$, 1.0/kWh, DESCONTO_DIRETO). `tokenSocialAtivo`/`tokenFlexAtivo` órfãos completos.
+**Fix:** adicionar 5 campos ao DTO + UI; OU remover do schema os 2 órfãos completos.
+
+#### Sub-itens MÉDIOS
+
+**D-46.3 — `referenciaValor`, `fatorIncremento`, `mostrarDiscriminado` só vivem no motor-proposta (aceite), engine cobrança ignora.**
+Motor-proposta `:289-397` usa pros 3 dimensionar `kwhContrato` na proposta. Engine cobrança recorrente nunca lê.
+**Risco:** Admin altera `referenciaValor` em plano existente esperando efeito recorrente — sem efeito.
+**Fix:** documentar escopo "só aceite" OU mover campo pra Proposta (não Plano).
+
+**D-46.4 — Promoção temporal NÃO funciona em CREDITOS_DINAMICO.**
+FIXO usa `valorContratoPromocional` (1864-1867). COMPENSADOS usa `tarifaContratualPromocional` (1907-1911). DINAMICO `:1954-2003` não chama `estaEmPeriodoPromocional()`.
+**Risco:** Cliente DINAMICO em promoção paga desconto base, não promocional.
+**Fix:** replicar pattern de COMPENSADOS no DINAMICO. Adicionar spec Jest T4 DINAMICO.
+
+**D-46.6 — 5 vocabulários CooperToken (reforça D-35).**
+`modoRemuneracao` (Cooperado: DESCONTO/CLUBE), `tokenOpcaoCooperado` (Plano: OPCAO_A/OPCAO_B/AMBAS), `modoToken` (Plano: DESCONTO_DIRETO/FATURA_CHEIA_TOKEN), "Caminho/Opção/Modo" em texto livre. 4 specs divergentes.
+**Risco:** Decisão futura de canonização exige migration cuidadosa multi-modelo.
+**Fix:** sessão de canonização vocabulário CooperToken + Sprint dedicado.
+
+**D-46.SEED — Seeds criam 3 planos COMPENSADOS `publico=true`, escondidos pela flag.**
+`seed.ts:200-234` cria `PLANO OURO 20%`, `PLANO PRATA 15%`, `CONSUMO DE CREDITOS DE KWH 18%` — todos `CREDITOS_COMPENSADOS` + `publico=true` + `ativo=true`. `findAtivos()` (planos.service.ts:91-96) esconde pela flag `BLOQUEIO_MODELOS_NAO_FIXO`.
+**Risco crítico se Sub-fase B AMAGES rodar:** desligar a flag vaza os 3 planos pra vitrine pública automaticamente.
+**Mitigação pré-canário:** `UPDATE planos SET publico=false WHERE nome IN ('PLANO OURO','PLANO PRATA','CONSUMO DE CREDITOS DE KWH')`. Ou corrigir seed pra `publico=false` por default em planos legados.
+
+#### Sub-itens BAIXOS
+
+**D-46.O1 — `tipoCampanha` (PADRAO/CAMPANHA) sem efeito runtime.** Schema tem; engine + motor-proposta ignoram. Display only.
+
+**D-46.O2 — `dataInicioVigencia`/`dataFimVigencia` sem enforcement.** Plano "expira" mas continua aplicável.
+
+**D-46.8 — `modoToken` lido com cast `as any` (`cobrancas.service.ts:203`).** Mascarra que query upstream não está selecionando o campo. Bug latente se schema renomear.
+
+**D-46.SPEC — `especificacao-modelos-cobranca.md` (canônica) não documenta cruzamento Modelo × baseCalculo.** Specs Jest cobrem 6 combinações sem doc oficial.
+
+**Estimativa fix conjunto:** 16-24h Code dividido em fatias (ALTAS 8-12h + MÉDIAS 6-9h + BAIXAS 2-3h). Spec-INCOMP é 30min de doc.
+
+**Bloqueio:** D-46.SEED **BLOQUEIA Sub-fase B** se desligar BLOQUEIO_MODELOS_NAO_FIXO sem antes setar `publico=false` nos 3 planos legados. Demais sub-itens não bloqueiam canário.
+
+**Relatório completo:** sub-agente retornou ~600 linhas; resumo nesta entrada cobre 95% da informação acionável.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
