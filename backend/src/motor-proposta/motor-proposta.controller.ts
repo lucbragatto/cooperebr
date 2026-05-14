@@ -136,8 +136,9 @@ export class MotorPropostaController {
   }
 
   @Get('historico/:cooperadoId')
-  historico(@Param('cooperadoId') cooperadoId: string) {
-    return this.service.historico(cooperadoId);
+  historico(@Param('cooperadoId') cooperadoId: string, @Req() req: any) {
+    // D-48-motor IDOR fix.
+    return this.service.historico(cooperadoId, req.user?.cooperativaId);
   }
 
   @Post('tarifa-concessionaria')
@@ -157,13 +158,15 @@ export class MotorPropostaController {
   }
 
   @Put('tarifa-concessionaria/:id')
-  atualizarTarifa(@Param('id') id: string, @Body() dto: TarifaConcessionariaDto) {
-    return this.service.atualizarTarifa(id, dto);
+  atualizarTarifa(@Param('id') id: string, @Body() dto: TarifaConcessionariaDto, @Req() req: any) {
+    // D-48-motor IDOR fix.
+    return this.service.atualizarTarifa(id, dto, req.user?.cooperativaId);
   }
 
   @Delete('tarifa-concessionaria/:id')
-  excluirTarifa(@Param('id') id: string) {
-    return this.service.excluirTarifa(id);
+  excluirTarifa(@Param('id') id: string, @Req() req: any) {
+    // D-48-motor IDOR fix.
+    return this.service.excluirTarifa(id, req.user?.cooperativaId);
   }
 
   @Get('historico-reajustes')
@@ -176,6 +179,10 @@ export class MotorPropostaController {
     return this.service.simularReajuste(dto);
   }
 
+  // D-48-motor: aplicar reajuste afeta múltiplos contratos em escala
+  // (todos cooperados associados à tarifa). Restrito a SUPER_ADMIN —
+  // ADMIN não dispara reajuste em massa.
+  @Roles(SUPER_ADMIN)
   @Post('aplicar-reajuste')
   aplicarReajuste(@Body() dto: SimularReajusteDto) {
     return this.service.aplicarReajuste(dto);
@@ -189,8 +196,9 @@ export class MotorPropostaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('lista-espera/:id/alocar')
-  alocarListaEspera(@Param('id') id: string, @Body('usinaId') usinaId: string) {
-    return this.service.alocarListaEspera(id, usinaId);
+  alocarListaEspera(@Param('id') id: string, @Body('usinaId') usinaId: string, @Req() req: any) {
+    // D-48-motor IDOR fix.
+    return this.service.alocarListaEspera(id, usinaId, req.user?.cooperativaId);
   }
 
   // ── Aprovação remota ──────────────────────────────────────────

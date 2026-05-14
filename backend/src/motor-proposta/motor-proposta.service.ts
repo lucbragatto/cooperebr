@@ -966,9 +966,13 @@ export class MotorPropostaService {
     });
   }
 
-  async historico(cooperadoId: string) {
+  async historico(cooperadoId: string, cooperativaId?: string) {
+    // D-48-motor IDOR fix: filtro tenant via PropostaCooperado.cooperativaId.
     return this.prisma.propostaCooperado.findMany({
-      where: { cooperadoId },
+      where: {
+        cooperadoId,
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       include: { plano: true },
     });
@@ -1006,14 +1010,32 @@ export class MotorPropostaService {
     });
   }
 
-  async atualizarTarifa(id: string, dto: TarifaConcessionariaDto) {
+  async atualizarTarifa(id: string, dto: TarifaConcessionariaDto, cooperativaId?: string) {
+    // D-48-motor IDOR fix: ADMIN só pode editar tarifas da própria cooperativa
+    // (tarifaConcessionaria.cooperativaId === tenant). Tarifas globais
+    // (cooperativaId null) só SUPER_ADMIN edita (caller passa cooperativaId undefined).
+    if (cooperativaId) {
+      const t = await this.prisma.tarifaConcessionaria.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!t) throw new NotFoundException('Tarifa não encontrada');
+    }
     return this.prisma.tarifaConcessionaria.update({
       where: { id },
       data: { ...dto, dataVigencia: new Date(dto.dataVigencia) } as any,
     });
   }
 
-  async excluirTarifa(id: string) {
+  async excluirTarifa(id: string, cooperativaId?: string) {
+    // D-48-motor IDOR fix: mesmo padrão de atualizarTarifa.
+    if (cooperativaId) {
+      const t = await this.prisma.tarifaConcessionaria.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!t) throw new NotFoundException('Tarifa não encontrada');
+    }
     return this.prisma.tarifaConcessionaria.delete({ where: { id } });
   }
 
@@ -1125,9 +1147,13 @@ export class MotorPropostaService {
     });
   }
 
-  async alocarListaEspera(listaEsperaId: string, usinaId: string) {
-    const entrada = await this.prisma.listaEspera.findUnique({
-      where: { id: listaEsperaId },
+  async alocarListaEspera(listaEsperaId: string, usinaId: string, cooperativaId?: string) {
+    // D-48-motor IDOR fix: filtro tenant via cooperado.cooperativaId.
+    const entrada = await this.prisma.listaEspera.findFirst({
+      where: {
+        id: listaEsperaId,
+        ...(cooperativaId ? { cooperado: { cooperativaId } } : {}),
+      },
       include: {
         contrato: { select: { numero: true } },
         cooperado: { select: { nomeCompleto: true } },
