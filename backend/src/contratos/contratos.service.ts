@@ -44,9 +44,13 @@ export class ContratosService {
     return contrato;
   }
 
-  async findByCooperado(cooperadoId: string) {
+  async findByCooperado(cooperadoId: string, cooperativaId?: string) {
+    // D-48-contratos IDOR fix: filtro tenant.
     return this.prisma.contrato.findMany({
-      where: { cooperadoId },
+      where: {
+        cooperadoId,
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
       include: { uc: true, usina: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -406,7 +410,15 @@ export class ContratosService {
     return this.prisma.contrato.update({ where: { id }, data: data as any });
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string) {
+    // D-48-contratos IDOR fix: valida tenant antes de checar cobrancas e deletar.
+    if (cooperativaId) {
+      const ct = await this.prisma.contrato.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!ct) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+    }
     const cobrancas = await this.prisma.cobranca.count({ where: { contratoId: id } });
     if (cobrancas > 0) {
       throw new BadRequestException(
@@ -420,9 +432,10 @@ export class ContratosService {
     protocoloConcessionaria: string;
     dataInicioCreditos: string;
     observacoes?: string;
-  }) {
-    const contrato = await this.prisma.contrato.findUnique({
-      where: { id },
+  }, cooperativaId?: string) {
+    // D-48-contratos IDOR fix: filtro tenant via findFirst.
+    const contrato = await this.prisma.contrato.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
       include: { cooperado: true },
     });
     if (!contrato) throw new NotFoundException(`Contrato com id ${id} não encontrado`);

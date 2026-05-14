@@ -25,14 +25,16 @@ export class ContratosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get('cooperado/:cooperadoId')
-  findByCooperado(@Param('cooperadoId') cooperadoId: string) {
-    return this.contratosService.findByCooperado(cooperadoId);
+  findByCooperado(@Param('cooperadoId') cooperadoId: string, @Req() req: any) {
+    // D-48-contratos IDOR fix.
+    return this.contratosService.findByCooperado(cooperadoId, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post(':id/ativar')
-  ativar(@Param('id') id: string, @Body() body: { protocoloConcessionaria: string; dataInicioCreditos: string; observacoes?: string }) {
-    return this.contratosService.ativar(id, body);
+  ativar(@Param('id') id: string, @Body() body: { protocoloConcessionaria: string; dataInicioCreditos: string; observacoes?: string }, @Req() req: any) {
+    // D-48-contratos IDOR fix.
+    return this.contratosService.ativar(id, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -51,7 +53,8 @@ export class ContratosController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.contratosService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    // D-48-contratos IDOR fix.
+    return this.contratosService.remove(id, req.user?.cooperativaId);
   }
 }
