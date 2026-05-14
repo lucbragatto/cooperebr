@@ -1675,6 +1675,263 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
+### D-35 — Vocabulário CooperToken não consolidado (5 vocabulários coexistindo)
+
+**Severidade:** P2
+
+**Origem:** sessão 04/05/2026 noite (investigação CooperToken ampla) + relatório `docs/relatorios/2026-05-14-mapeamento-coopertoken-amplo.md`.
+
+**Descrição:** 5 vocabulários coexistem no sistema descrevendo a mesma escolha binária do cooperado entre receber desconto ou acumular tokens:
+1. "Caminho DESCONTO / Caminho CLUBE" (`docs/especificacao-clube-cooper-token.md`)
+2. "Opção A / Opção B" (`docs/specs/COOPERTOKEN-FUNDAMENTOS.md`)
+3. "Plano DESCONTO / Plano Token" (`docs/specs/ESTRATEGIA-COOPERTOKEN-COMPLETA.md`)
+4. `modoRemuneracao` enum `DESCONTO`/`CLUBE` (schema Cooperado)
+5. `modoToken` String `DESCONTO_DIRETO`/`FATURA_CHEIA_TOKEN`/`AMBAS` (schema Plano)
++ campo legado `opcaoToken` `"A"`/`"B"` `@deprecated` (schema Cooperado)
+
+**Manifestação:** specs divergem entre si. Code novo precisa ler 5 specs pra entender o mesmo conceito. Decisão produto pendente antes do Sprint CooperToken Consolidado Etapa 2 (refator 4 services).
+
+**Fix proposto:** sessão claude.ai dedicada (~2-3h) escolhendo 1 vocabulário canônico (recomendação: `modoRemuneracao` no Cooperado + retirar `modoToken` do Plano) + atualizar 5 specs + migration de dados (campo legado `opcaoToken` ainda popula 317 cooperados, só 232 migrados pra `modoRemuneracao`).
+
+**Estimativa:** 2-3h decisão + 4-6h Code (migration + atualizar specs + UI).
+
+**Bloqueio:** bloqueia Sprint CooperToken Consolidado Etapa 2.
+
+---
+
+### D-36 — FCFS (Fundo Cooperativo de Fomento Solar) catalogado em spec, zero implementação
+
+**Severidade:** P2 estratégico
+
+**Origem:** `docs/specs/COOPERTOKEN-FUNDAMENTOS.md` (02/04, aprovado por Luciano + Assis) detalha FCFS como conceito estruturante.
+
+**Descrição:** FCFS captura spread entre token vendido e token recebido pra financiar novas usinas + EV. Spec detalhada, 0% código.
+
+**Fix proposto:** Sprint dedicado pós-canário AMAGES. Schema novo (`FCFSLedger`, `FCFSEvento`) + service de aporte/saída + integração com `LancamentoCaixa` + relatório.
+
+**Estimativa:** 1-2 sprints (depende escopo).
+
+**Bloqueio:** não bloqueia operação. Bloqueia capitalização estruturada.
+
+---
+
+### D-37 — Eletroposto/EV catalogado em 2 specs, zero implementação
+
+**Severidade:** P2 estratégico
+
+**Origem:** `docs/specs/ESTRATEGIA-INOVACAO-2026.md` + `docs/specs/SPEC-COOPERTOKEN-v1.md` detalham EV/Eletroposto como drenagem de 600k kWh + monetização tokens.
+
+**Descrição:** Token aceito em eletroposto cooperativo. Motorista compra via MST. Spec detalhada, 0% código.
+
+**Fix proposto:** Sprint dedicado pós-Tarifa Branca + smart meters. Schema novo (`Eletroposto`, `Carregamento`, `TokenTransacaoEV`) + integração OCPP + UI motorista.
+
+**Estimativa:** 2-3 sprints (depende parceria externa).
+
+**Bloqueio:** não bloqueia operação. Janela competitiva 2026-2028.
+
+---
+
+### D-38 — Token x Convênio gap maior (NENHUMA spec aborda)
+
+**Severidade:** P1 estrutural
+
+**Origem:** Luciano apontou em 13/05/2026 noite. `docs/specs/PLANO-CONVENIOS-2026-04-01.md` (1457 linhas) **não menciona token nenhuma vez**.
+
+**Descrição:** 3 conexões possíveis não documentadas:
+1. Benefício do convênio em tokens (alternativa ao % desconto)
+2. Indicação via convênio paga BONUS_INDICACAO automático
+3. Conveniado recebe tokens proporcional ao tamanho do convênio
+
+**Fix proposto:** Spec dedicada `docs/especificacao-token-convenio.md` (~4-6h spec) + decisão produto qual conexão priorizar + implementação escolhida (2-3 dias Code).
+
+**Estimativa:** spec 4-6h + implementação 2-3 dias depende decisão.
+
+**Bloqueio:** convênios existentes (215 ConvenioCooperado em CoopereBR) operam sem token hoje, sem prejuízo imediato.
+
+---
+
+### D-39 — Splits 2% hardcoded em `creditar()`
+
+**Severidade:** P2
+
+**Origem:** mapeamento CooperToken 14/05/2026.
+
+**Descrição:** `cooper-token.service.ts:258` tem `0.20` hardcoded com TODO mas não foi tratado. Schema permite configurar splits 50/30/20 (cedente/SISGD/cooperativa) via `ConfigCooperToken` mas código ignora.
+
+**Fix proposto:** ler split de `ConfigCooperToken` em vez de constante. Migration pra popular valores default.
+
+**Estimativa:** 30min Code.
+
+---
+
+### D-40 — Decay HARDCODED 10/20/26/29 dias
+
+**Severidade:** P2
+
+**Origem:** mapeamento CooperToken 14/05.
+
+**Descrição:** `cooper-token.service.ts:282,322` aplicam decay temporal com dias fixos 10/20/26/29. Spec `especificacao-clube-cooper-token.md` define decay configurável via `ConfigCooperToken`.
+
+**Fix proposto:** ler campos de decay de `ConfigCooperToken` (`prazoExpiracaoMeses`, `periodoGracaDias`, `taxaDesvalorizacao`, `pisoValor`). Migration pra popular default 10/20/26/29 se não configurado.
+
+**Estimativa:** 1h Code.
+
+---
+
+### D-41 — 600k kWh saldo escritural não tokenizado
+
+**Severidade:** P2 estratégico
+
+**Origem:** `docs/specs/COOPERTOKEN-FUNDAMENTOS.md` + `docs/specs/SPEC-COOPERTOKEN-v1.md`.
+
+**Descrição:** Spec define que 600k kWh do saldo escritural da CoopereBR seriam estoque inicial pra emissão de tokens lastreados. Hoje 0 tokens emitidos com lastro real (só emissão via BONUS_INDICACAO + GERACAO_EXCEDENTE event-driven).
+
+**Fix proposto:** Sprint Token Genesis — emitir tokens lastreados em saldo escritural + atualizar UI Plano com opção "comprar tokens" + integração MST (D-44).
+
+**Estimativa:** 1 sprint dedicado.
+
+---
+
+### D-42 — Contabilidade Clube sem ponte `LancamentoCaixa`
+
+**Severidade:** P2
+
+**Origem:** `docs/especificacao-contabilidade-clube.md` prevê 4 eventos contábeis + 3 categorias novas no plano de contas.
+
+**Descrição:** `contabilidade-clube.controller.ts` (71 linhas) tem só 1 endpoint `GET /relatorio` read-only. Sem classificação automática + sem ponte com `LancamentoCaixa`.
+
+**Fix proposto:** integrar `CooperTokenLedger` eventos com `LancamentoCaixa` PREVISTO/REALIZADO + criar 3 categorias no plano de contas via seed + classificação Sprint 11 preparatório.
+
+**Estimativa:** 4-6h Code.
+
+---
+
+### D-43 — VPP (Virtual Power Plant) catalogado em spec, zero implementação
+
+**Severidade:** P2 estratégico (tese guia)
+
+**Origem:** `docs/specs/ESTRATEGIA-INOVACAO-2026.md` define VPP como tese central do CoopereBR. Adendo 14/05/2026 noite (memória persistente `project_leitura_noturna_coopertoken_14_05.md`).
+
+**Descrição:** CoopereBR em transição de cooperativa de GD pra Virtual Power Plant — usina virtual que agrega recursos distribuídos e os opera coordenadamente. Token = camada de inteligência da VPP. Spec detalhada, 0% código dedicado.
+
+**Implicação técnica imediata:** decisões arquiteturais devem considerar tese VPP mesmo sem implementar Flex/Social agora.
+
+**Fix proposto:** quando Tarifa Branca + smart meters chegarem (2027+). Sprint Token Flex + Token Social.
+
+**Estimativa:** projeto multi-sprint (1+ ano).
+
+**Bloqueio:** janela competitiva 2026-2028 ES residencial.
+
+---
+
+### D-44 — MST (Mercado Secundário de Tokens) — VPP embrionária proposta
+
+**Severidade:** P1 estratégica
+
+**Origem:** Luciano em 14/05/2026 madrugada. Memória persistente `project_mst_vpp_embrionario_14_05.md`.
+
+**Descrição:** Mercado interno cooperativo onde tokens próximos da expiração circulam entre cooperados via oferta onerosa com desconto. Sistema detecta deficitário via OCR fatura. SISGD oferta ao parceiro que oferta ao cooperado. Cedente recebe % do valor.
+
+**Modo recomendado MVP:** E + F híbrido (cooperado deficitário prioritário + cooperativa intermedia clearing).
+
+**Fix proposto:** Sprint dedicado 5 fases (8-13d Code total):
+- Fase 1 (2-3d): MVP marketplace manual — schema + endpoints + tela admin simples
+- Fase 2 (1-2d): Cron Modo F — cooperativa compra automático 7 dias antes da expiração
+- Fase 3 (2-3d): Detecção deficitário via OCR + notificação proativa Modo E
+- Fase 4 (2-3d): Marketplace P2P portal cooperado
+- Fase 5 (1-2d): Splits configuráveis + FCFS + relatórios
+
+**Estimativa:** 8-13 dias Code + 1 sprint produto (10 regras críticas + 7 riscos catalogados).
+
+**Bloqueio:** depende vocabulário CT (D-35) consolidado. Pode virar Etapa 3 do Sprint CT Consolidado.
+
+---
+
+### D-45 — Wizard `/dashboard/cooperados/novo` com 4 erros encadeados
+
+**Severidade:** P2
+
+**Origem:** sessão 13/05/2026 tarde. Luciano explorando UI. 4 erros visíveis no Console DevTools.
+
+**Descrição dos 4 erros:**
+1. `POST /cooperados` 409 Conflict — esperado quando CPF/email dup, mas UI poderia consultar antes via findByCpf
+2. `POST /motor-proposta/calcular` 400 Bad Request — `Step3Simulacao.tsx:95-99` dispara auto-cálculo no mount sem `planoId` setado. DTO `dto/calcular-proposta.dto.ts:41-43` exige `@IsNotEmpty() planoId`
+3. `POST /propostas/enviar-email` 404 Not Found — endpoint NÃO EXISTE no backend (só existe `/motor-proposta`). Frontend `Step4Proposta.tsx:67` chama URL órfã, resíduo de refactor antigo
+4. `POST /motor-proposta/aceitar` 400 Bad Request — controller usa `@Body() body: any` sem class-validator no DTO. Validação acontece dentro do service e retorna erros genéricos
+
+**Manifestação:** Cooperado-piloto MARCIO MACIEL (sessão 11/05) ficou em estado intermediário. Bloqueia cadastro via UI — hoje funciona só via Prisma direto.
+
+**Fix proposto:**
+- Bloquear useEffect auto-cálculo no Step3Simulacao sem planoId
+- Criar endpoint `POST /motor-proposta/proposta/:id/enviar-email` no controller OU redirecionar Step4Proposta pra ele
+- Tipar `AceitarPropostaDto` com class-validator
+- Step2Dados: consultar findByCpf antes de POST (evita 409)
+
+**Estimativa:** 4-6h Code (3-4h investigação + tipagem + 1-2h fixes + verificação).
+
+**Bloqueio:** não bloqueia canário via Prisma direto. **BLOQUEIA se canário for via UI** ou se Luciano abrir cadastro pra ADMIN parceiro.
+
+---
+
+### D-46 — Divergências spec↔Plano/engine (chapéu, 12 sub-itens)
+
+**Severidade:** P2 (com sub-itens P1 internos)
+
+**Origem:** sessão 13/05/2026 tarde-noite — sub-agente claude.ai investigação focada. 13 divergências catalogadas. 1 resolvida em commit `0448f9b` (D-46.W).
+
+**Resumo dos 12 sub-itens abertos:**
+
+#### Sub-itens ALTOS
+
+**D-46.1** — `baseCalculo` triplamente inconsistente. TS type aceita 4 valores, DTO `@IsIn` bloqueia 2 em runtime, helper canônico lança `NotImplementedException`.
+
+**D-46.2** — `tipoDesconto` gravado em 3 lugares, NUNCA lido pelo engine de cobrança recorrente. UX engana cliente.
+
+**D-46.5** — Engine emite token via `tokenPorKwhExcedente > 0`, ignora `cooperTokenAtivo`. Estado inconsistente possível.
+
+**D-46.7** — 5 campos token (`tokenPorKwhExcedente`, `valorTokenReais`, `tokenSocialAtivo`, `tokenFlexAtivo`, `modoToken`) ausentes do DTO + UI. Defaults forever.
+
+#### Sub-itens MÉDIOS
+
+**D-46.3** — `referenciaValor`/`fatorIncremento`/`mostrarDiscriminado` só usados no aceite, engine cobrança ignora.
+
+**D-46.4** — Promoção temporal NÃO funciona em CREDITOS_DINAMICO.
+
+**D-46.6** — 5 vocabulários CooperToken (reforça D-35).
+
+**D-46.SEED** — Seeds criam 3 planos COMPENSADOS `publico=true`, escondidos pela flag. **BLOQUEIA Sub-Fase B** se desligar BLOQUEIO sem mitigação prévia: `UPDATE planos SET publico=false WHERE nome IN ('PLANO OURO','PLANO PRATA','CONSUMO DE CREDITOS DE KWH')`.
+
+#### Sub-itens BAIXOS
+
+**D-46.O1** — `tipoCampanha` sem efeito runtime.
+**D-46.O2** — `dataInicioVigencia`/`dataFimVigencia` sem enforcement.
+**D-46.8** — `modoToken` via cast `as any` em `cobrancas.service.ts:203`.
+**D-46.SPEC** — `especificacao-modelos-cobranca.md` não cruza Modelo x baseCalculo.
+
+**Estimativa fix conjunto:** 16-24h Code distribuídas. ALTAS 8-12h + MÉDIAS 6-9h + BAIXAS 2-3h.
+
+**Bloqueio:** D-46.SEED bloqueia Sub-Fase B. Demais sub-itens não bloqueiam canário.
+
+---
+
+### D-47 — Nomes idênticos OURO/PRATA em 2 tabelas diferentes (Plano membro ↔ PlanoSaas parceiro)
+
+**Severidade:** P3
+
+**Origem:** sessão 13/05/2026 tarde — Luciano apontou tela `/dashboard/saas/planos`.
+
+**Descrição:** `seed.ts:194-220` cria registros na tabela `Plano` com nomes `'PLANO OURO'` e `'PLANO PRATA'`. Já existem registros na tabela `PlanoSaas` com nomes `'OURO'` e `'PRATA'` (mensalidade R$ 9999/R$ 5900).
+
+**Risco:** admin lê doc/print e confunde "Plano OURO" (membro 20% desconto vs parceiro R$ 9999). Investigação técnica fica ambígua.
+
+**Fix proposto (Opção A recomendada):** renomear seed `Plano` membro pra `'CoopereBR Premium 20%'` e `'CoopereBR Standard 15%'`. SQL `UPDATE planos SET nome = ... WHERE id IN ('plano-ouro', 'plano-prata')` + atualizar seed.
+
+**Estimativa fix:** 30min Code (5min seed + 5min SQL + 10min testes Jest + 10min commit/doc).
+
+**Bloqueio:** não bloqueia operação. Bloqueia clareza técnica.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
