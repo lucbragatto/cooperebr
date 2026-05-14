@@ -28,13 +28,13 @@
   - **Regra inegociável bilateral de fechamento adicionada ao `CLAUDE.md`** (commit `83776d8`). 3 itens obrigatórios: doc-sessão + CONTROLE-EXECUCAO + HTML jornada. Sistema bilateral claude.ai+Code.
   - **HTML profissional `docs/diagramas/jornada-membro.html`** criado v1.0 e atualizado pra v1.1 com mudanças do dia.
   - **Decisão 23 aplicada 5× em 48h** — memória do projeto sistemicamente desatualizada. Reforço da Fase 1 read-only obrigatória.
-- **Commits:** 10 (`32f1d37`, `0448f9b`, `e2cd14e`, `74c05e3`, `323d66d`, `bded89d`, `309389e`, `c7256e8`, `102640e`, `78b2285`) + 1 regra (`83776d8`) + 1 fechamento docs (este commit).
+- **Commits do dia:** 14 (`32f1d37`, `0448f9b`, `e2cd14e`, `74c05e3`, `323d66d`, `bded89d`, `309389e`, `c7256e8`, `102640e`, `78b2285`, `83776d8` regra, `a6ce3e3` fechamento parcial, + este commit + cleanup final).
 - **Detalhe completo:** `docs/sessoes/2026-05-13-canario-fixo-d48-d50-d55-fechado.md`
-- **Próxima ação:** validar visualmente round 2 (D-51 detalhe + D-53 completo + D-55) + decidir Caminho A/B do txt/HTML diagrama jornada.
+- **Inventário SISGD completo** será entregue pela claude.ai durante a noite via sub-agentes paralelos (~50-60min). Saída em `docs/diagramas/inventario-sisgd-completo.html` v1.0.
 
-### Frase de retomada
+### Frase de retomada COMANDANTE
 
-> Code: abra `docs/sessoes/2026-05-13-canario-fixo-d48-d50-d55-fechado.md` seção "Próximo passo único". Se Luciano disser "vamos pelo txt", esperar Luciano comparar diagrama atual com `OneDrive/Documentos/descricao diagrama claude.txt` e decidir Caminho A (refazer v1.0) vs Caminho B (v1.1 expandido) antes de tocar código.
+> Code: Luciano vai abrir o `docs/diagramas/inventario-sisgd-completo.html` entregue durante a noite. Aguarda decisão dele de qual área atacar primeiro antes de tocar código. Se decisão for txt/HTML jornada, ele compara `OneDrive/Documentos/descricao diagrama claude.txt` com `jornada-membro.html` v1.1 e decide Caminho A (refazer) vs Caminho B (v1.2 expandido). Não iniciar nenhuma frente sem decisão explícita.
 
 ### Sessão anterior — 2026-05-13 manhã (Fatia H.2 + D-33 reframe)
 

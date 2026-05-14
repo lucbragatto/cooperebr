@@ -86,19 +86,21 @@
 
 - **Decisão 23 aplicada 5× em 48h** — memória do projeto sistemicamente desatualizada. Reforço do hábito Fase 1 read-only obrigatória.
 - **claude.ai virou reativo a screenshots** em vez de proativo coordenador. Reforço do padrão "claude.ai coordena, Code executa".
-- **Sessão maratona acumulou 10 commits sem doc-sessão** — originou regra inegociável bilateral de fechamento (commit anterior `CLAUDE.md`).
+- **Sessão maratona acumulou 14 commits sem doc-sessão** — originou regra inegociável bilateral de fechamento (`CLAUDE.md` commit `83776d8`).
+- **Luciano corrigiu data**: hoje é 2026-05-13, não 14/05 como claude.ai estava registrando em alguns artefatos.
 
-## Pendências abertas
+## Pendências abertas pra amanhã
 
-1. **Validação visual round 2** (D-51 detalhe, D-53 completo, D-55): Luciano valida após Ctrl+F5
-2. **txt/HTML diagrama**: Luciano enviou descrição em `OneDrive/descricao diagrama claude.txt` com expansões importantes (cadastro sem UC, opção tokens, fluxo doc+assinatura, realocação inteligente entre usinas, protocolos concessionária). **Decidir Caminho A (refazer v1.0) ou Caminho B (v1.1 expandido).**
-3. **Sub-Fase B AMAGES**: cadastrar AMAGES 2 UCs em `CREDITOS_COMPENSADOS` + desligar `BLOQUEIO_MODELOS_NAO_FIXO` (mitigação D-46.SEED antes: `UPDATE publico=false` nos 3 planos legados)
-4. **Sub-canário CAROLINA Asaas+WA real**: tirar `ambienteTeste`, gerar boleto/PIX real, WA notifica
-5. **Cadastro de Usinas** — HTML separado (pedido Luciano)
-6. **D-45 wizard cadastro** (4-6h Code)
-7. **D-46 ALTAS** (8-12h Code distribuídas)
-8. **D-54 LancamentoCaixa** (1-2h Code com saneamento retroativo)
+1. **Validação visual final round 2** (zoom 100% D-53 + 1 cobrança `A_VENCER` pra D-51 detalhe). Pequena pendência opcional.
+2. **txt/HTML diagrama jornada**: Luciano enviou descrição expandida em `OneDrive/Documentos/descricao diagrama claude.txt`. **Decidir Caminho A (refazer v1.0) vs Caminho B (v1.2 expandido)** com cadastro sem UC, tokens, fluxo doc+assinatura, realocação usinas, protocolos concessionária.
+3. **INVENTÁRIO SISGD COMPLETO** será entregue pela claude.ai durante a noite via sub-agentes paralelos (~50-60min). Saída em `docs/diagramas/inventario-sisgd-completo.html` v1.0. Amanhã de manhã Luciano abre e revisa.
+4. **Sub-Fase B AMAGES** CREDITOS_COMPENSADOS: cadastrar 2 UCs + desligar `BLOQUEIO_MODELOS_NAO_FIXO` (mitigar D-46.SEED primeiro com `UPDATE publico=false` nos 3 planos legados).
+5. **Sub-canário CAROLINA Asaas+WA real**: tirar `ambienteTeste`, gerar boleto/PIX real, WA notifica.
+6. **Cadastro de Usinas** — HTML separado (pedido Luciano).
+7. **D-45 wizard cadastro** (4-6h sessão dedicada).
+8. **D-46 ALTAS** (8-12h distribuídas).
+9. **D-54 LancamentoCaixa** (1-2h com saneamento retroativo).
 
-## Próximo passo único
+## Próximo passo único (amanhã)
 
-**Decidir Caminho A vs B do txt/HTML diagrama** com base em `OneDrive/Documentos/descricao diagrama claude.txt`. Depois Sub-Fase B AMAGES OU sub-canário CAROLINA.
+Luciano abre `inventario-sisgd-completo.html` (entregue durante a noite). Decide priorização baseada em gaps. Provável: tratar item-a-item ou comparar com txt/HTML jornada antes de Sub-Fase B AMAGES.
