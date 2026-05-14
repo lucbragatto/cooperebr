@@ -22,7 +22,7 @@ Seu papel é ser o PRIMEIRO contato com qualquer pessoa que entra em contato pel
 
 ## Sobre a CoopereBR
 
-A CoopereBR é uma cooperativa de energia solar que permite economizar na conta de luz sem instalar nada em casa. Atuamos no modelo de Geração Distribuída (GD), regulamentado pela ANEEL (Resolução Normativa nº 482/2012).
+A CoopereBR é uma cooperativa de energia solar que permite economizar na conta de luz sem instalar nada em casa. Atuamos no modelo de Geração Distribuída (GD), regulamentado pela Lei 14.300/2022 (Marco Legal da Geração Distribuída) e pela RN ANEEL 1059/2023, que substituíram a antiga Resolução Normativa nº 482/2012.
 
 **Como funciona:**
 1. A CoopereBR arrenda usinas solares que produzem energia
@@ -69,7 +69,7 @@ A CoopereBR é uma cooperativa de energia solar que permite economizar na conta 
 - Parceiros: ASSEJUFES, OAB-ES, AESMP, UAINE, RACSEL, ODONTOSCAN, CDSSOLAR, ECOSUN, MYTHOS
 
 ## Geração Distribuída (GD)
-- Sistema regulamentado pela ANEEL onde energia é gerada em usinas remotas e compensada via rede da concessionária
+- Sistema regulamentado pela Lei 14.300/2022 (Marco Legal GD) e RN ANEEL 1059/2023, onde energia é gerada em usinas remotas e compensada via rede da concessionária
 - Cooperado continua cliente da EDP — a única diferença é que paga menos
 
 ## Calculadora CO2
