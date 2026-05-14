@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-13 maratona** — Sub-Fase A canário FIXO_MENSAL FECHADA + D-48 P1 SEGURANÇA (7 patches) + D-50/.2/D-51/D-52/D-53/D-55 fechados + D-54/D-45/D-46/D-47 catalogados + regra inegociável bilateral de fechamento adicionada ao CLAUDE.md.
+> Última atualização: **2026-05-14 noite** — **Fase 2 Hardening A→I completa** em 7 commits. D-48 + D-50/.2 + D-30N + B1 cross-talk RESOLVIDOS. 34+ endpoints com IDOR fix. Helmet/HSTS/CSP ativos. AuditLog interceptor global ativo. Smoke cross-tenant 2/2 PASS.
 
 ---
 
@@ -12,25 +12,26 @@
 
 ### Última sessão
 
-- **Quando:** 13-14/05/2026 (sessão maratona ~30h corridas)
+- **Quando:** 13-14/05/2026 (sessão maratona ~36h corridas; fechamento 14/05 noite com Fase 2 Hardening completa)
 - **Tipo:** claude.ai (coordenação) + Code (execução) + 7 sub-agentes claude.ai paralelos (noite 13/05 inventário)
 - **Resultado:**
   - **M2 entregue:** canário FIXO_MENSAL E2E real (4 cooperados-piloto DIEGO/CAROLINA/ALMIR/THEOMAX, total R$ 2.542,26/mês)
   - **M3 entregue:** 1ª receita técnica real — sub-canário CAROLINA Asaas sandbox + ngrok + WhatsApp + email + webhook PAYMENT_RECEIVED → cobrança PAGO + LancamentoCaixa REALIZADO + email confirmação automático (latência webhook→email: 5s)
   - **D-48 P1 SEGURANÇA fechado** (7 patches multi-tenant em motor-proposta, cooperados, migracoes-usina, contratos, usinas) + saneamento 2 contratos divergentes
-  - **11 débitos resolvidos:** D-30I (Lei 14.300) + D-45 3/4 sub-fixes + D-50 + D-50.2 + D-51 (listagem + detalhe) + D-52 + D-53 + D-54 + D-55 + `/cooperativas/minha` endpoint + saneamento
+  - **Fase 2 Hardening A→I completa em 7 commits** (`3106e6d` 2A IDOR cobranças + `fef024a` 2B IDOR contratos + Fase 2C IDOR faturas + 2D IDOR motor-proposta + 2E IDOR financeiro/lancamentos/convenios + `e6ee6e5` 2G Helmet/HSTS/CSP + `8fd28dc` 2H delete legacy /parceiro/membros + redirect 301 + `26836ab` 2F AuditLog interceptor global). **Bonus em 2I:** smoke cross-tenant detectou vulnerabilidade real `PUT /cooperados/:id` aceitando cross-tenant → fix imediato no `cooperados.service.update/remove` (recebem `cooperativaId` opcional).
+  - **34+ endpoints com IDOR fix.** 18 endpoints com `@AuditLog`. **Smoke E2E cross-tenant 2/2 PASS** após fix bonus.
+  - **D-30N (AuditLog) RESOLVIDO** + **D-48 RESOLVIDO** + **D-50/.2 RESOLVIDOS** + B1 cross-talk RESOLVIDO.
+  - **11 débitos resolvidos no canário:** D-30I (Lei 14.300) + D-45 3/4 sub-fixes + D-50 + D-50.2 + D-51 (listagem + detalhe) + D-52 + D-53 + D-54 + D-55 + `/cooperativas/minha` endpoint + saneamento
   - **13 débitos catalogados formalmente** D-35..D-47 (movidos de memória persistente pro `debitos-tecnicos.md`)
-  - **3 sugestões em memória persistente** #5 orquestrador, #6 script auto HTML, #7 OBSERVABILIDADE TOTAL (Luciano pediu pra ser lembrado)
+  - **3 sugestões em memória persistente** #5 orquestrador, #6 script auto HTML, #7 OBSERVABILIDADE TOTAL
   - **2 regras inegociáveis bilaterais** ativas no CLAUDE.md: fechamento sessão (`83776d8`) + contatos teste sempre Luciano com refinamento Gmail `+suffix` (`62e58d2` + `f13f631`)
-  - **HTML jornada-membro v1.0 → v1.3** + **HTML inventário-sisgd v1.0 → v1.1** (via 7 sub-agentes, 96 itens, 20 gaps)
-  - **Fase 2 Hardening PARCIAL:** sub-fases **2A IDOR cobranças** (`3106e6d`, 6 endpoints) + **2B IDOR contratos** (`fef024a`, 3 endpoints) concluídas. **2C..2I pendentes** (~28-42h Code restantes).
-- **Commits totais do dia:** 24 (range `cc5472e..fef024a` + commit deste fechamento).
-- **Detalhe completo:** `docs/sessoes/2026-05-14-maratona-canario-d48-d50-d55-subcanario-carolina-fase2-parcial.md`
-- **Próxima sessão Code:** continuar Fase 2 Hardening pela sub-fase 2C (IDOR faturas).
+  - **HTML jornada-membro v1.0 → v2.0** + **HTML inventário-sisgd v1.0 → v1.1** + **HTML cadastro-usinas v1.0** (via 7 sub-agentes, 96 itens, 20 gaps)
+- **Detalhe completo:** `docs/sessoes/2026-05-14-maratona-canario-d48-d50-d55-subcanario-carolina-fase2-parcial.md` + `docs/sessoes/2026-05-14-fase2-hardening-completo.md` (NOVO neste fechamento).
+- **Próxima sessão:** Sinergia onboarding (2º parceiro real) destravado — pré-requisito Fase 2 Hardening cumprido.
 
 ### Frase de retomada COMANDANTE
 
-> Code: continuar Fase 2 Hardening pela sub-fase 2C (IDOR faturas — 3 endpoints). Padrão replicado das 2A+2B já concluídas: filtro tenant direto no service via `findFirst({ where: { id, cooperativaId } })` em vez de `findUnique`. Endpoints alvo: `POST /faturas/processar`, `PATCH /faturas/:id/aprovar`, `PATCH /faturas/documentos/:id/status`. Prompt original Fase 2 em `docs/sessoes/2026-05-14-maratona-canario-d48-d50-d55-subcanario-carolina-fase2-parcial.md` seção "Fase 2 Hardening". Após 2C, seguir 2D motor-proposta, 2E financeiro. Pausa estratégica antes de 2F AuditLog (sub-fase complexa, requer cabeça fresca). ngrok + cooperebr-whatsapp PM2 podem estar ainda ativos do sub-canário CAROLINA — checar `pm2 list` antes de tocar.
+> Code: Fase 2 Hardening (A→I) completa. Próximo bloco: avaliar onboarding **Sinergia** como 2º parceiro real (pré-requisito Hardening atendido) OU retomar Plano Mestre por outra fatia. Antes de tocar código, ler `docs/CONTROLE-EXECUCAO.md` seção "ONDE PARAMOS" + `docs/PLANO-ATE-PRODUCAO.md` pra escolher o próximo passo. PM2 status: `cooperebr-backend` online, `cooperebr-whatsapp` online (sessão Baileys persistida). Smoke cross-tenant: `npx ts-node backend/scripts/smoke-fase2-cross-tenant.ts` (esperado 2/2 PASS).
 
 ### Sessão anterior — 2026-05-13 manhã (Fatia H.2 + D-33 reframe)
 

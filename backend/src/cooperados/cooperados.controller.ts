@@ -398,13 +398,13 @@ export class CooperadosController {
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @AuditLog({ acao: 'cooperado.atualizar', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateCooperadoDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateCooperadoDto, @Req() req: any) {
     const { termoAdesaoAceitoEm, dataInicioCreditos, ...rest } = dto;
     return this.cooperadosService.update(id, {
       ...rest,
       ...(termoAdesaoAceitoEm && { termoAdesaoAceitoEm: new Date(termoAdesaoAceitoEm) }),
       ...(dataInicioCreditos && { dataInicioCreditos: new Date(dataInicioCreditos) }),
-    } as any);
+    } as any, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
@@ -413,11 +413,12 @@ export class CooperadosController {
   async alterarModoRemuneracao(
     @Param('id') id: string,
     @Body() body: { modoRemuneracao: 'DESCONTO' | 'CLUBE' },
+    @Req() req: any,
   ) {
     if (!['DESCONTO', 'CLUBE'].includes(body.modoRemuneracao)) {
       throw new BadRequestException('modoRemuneracao deve ser DESCONTO ou CLUBE');
     }
-    return this.cooperadosService.update(id, { modoRemuneracao: body.modoRemuneracao } as any);
+    return this.cooperadosService.update(id, { modoRemuneracao: body.modoRemuneracao } as any, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -446,8 +447,8 @@ export class CooperadosController {
   @Roles(SUPER_ADMIN, ADMIN)
   @AuditLog({ acao: 'cooperado.deletar', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.cooperadosService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.cooperadosService.remove(id, req.user?.cooperativaId);
   }
 
   // ─── Ações em Lote ──────────────────────────────────────────────────────────

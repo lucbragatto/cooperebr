@@ -691,18 +691,23 @@ export class CooperadosService {
     bairro: string;
     cidade: string;
     estado: string;
-  }>) {
+  }>, cooperativaId?: string) {
     // Converter dataNascimento string → Date se presente
     const prismaData: any = { ...data };
     if (prismaData.dataNascimento && typeof prismaData.dataNascimento === 'string') {
       prismaData.dataNascimento = new Date(prismaData.dataNascimento);
     }
 
-    // Buscar status anterior para lógica condicional
-    const anterior = await this.prisma.cooperado.findUnique({
-      where: { id },
+    // Fase 2I IDOR fix: bloquear cross-tenant. Se cooperativaId vier do JWT,
+    // exige que o cooperado pertença à mesma cooperativa. SUPER_ADMIN (sem
+    // cooperativaId no JWT) passa direto, conforme padrão dos outros services.
+    const anterior = await this.prisma.cooperado.findFirst({
+      where: cooperativaId ? { id, cooperativaId } : { id },
       select: { status: true, ambienteTeste: true },
     });
+    if (!anterior) {
+      throw new NotFoundException(`Cooperado ${id} não encontrado`);
+    }
 
     // Sprint 11 Bloco 2 Fase D — guard de ativação
     // Não permite mudar status pra ATIVO se alguma UC do cooperado não tem
@@ -989,7 +994,16 @@ export class CooperadosService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string) {
+    // Fase 2I IDOR fix: bloquear cross-tenant.
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: cooperativaId ? { id, cooperativaId } : { id },
+      select: { id: true },
+    });
+    if (!cooperado) {
+      throw new NotFoundException(`Cooperado ${id} não encontrado`);
+    }
+
     const contratosAtivos = await this.prisma.contrato.count({
       where: { cooperadoId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
     });

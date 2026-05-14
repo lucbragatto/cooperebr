@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-05-03 (fechamento sessão 02/05 — Sprint 13a 3/3 fechado + Decisões 17-20 + Sprints 5a/3a + SISGD-VISAO movido pra histórico)
+**Última atualização:** 2026-05-14 noite — Fase 2 Hardening A→I completa (D-48 + D-30N + D-50/.2 + B1 cross-talk RESOLVIDOS, 34+ endpoints IDOR, Helmet/HSTS/CSP, AuditLog interceptor global)
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas
@@ -33,6 +33,17 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 
 - **D-48 P1 SEGURANÇA — Isolamento multi-tenant ausente em 6 sites Usina** → ✅ RESOLVIDO. 7 patches (`motor-proposta.service.ts:639,1152`, `cooperados.service.ts:498,523,1279`, `migracoes-usina.service.ts:110,440,448`, `contratos.service.ts:68` + assinatura `create`/`update`, `contratos.controller.ts` + `@Req()`, `usinas.service.ts:261` + `usinas.controller.ts` + `@Req()`). Saneamento de 2 contratos divergentes manifestados (CTR-2026-0004, CTR-2026-0003). Auditoria pós-fix: 0 contratos com usina cross-tenant. Detalhe em `docs/sessoes/2026-05-15-sub-fase-a-fixo-canario-fechado.md`.
 - **Sub-Fase A canário FIXO_MENSAL** → ✅ FECHADA. 4 cooperados-piloto reais (DIEGO, CAROLINA, ALMIR, THEOMAX PJ) processados pelo pipeline completo (Cooperado→UC→FaturaProcessada→Proposta→Contrato ATIVO→Cobrança). Motor de cobrança FIXO_MENSAL validado E2E real. Total R$ 2.542,26 / economia R$ 558,05/mês.
+
+## GAPS RESOLVIDOS EM 14/05/2026 noite (Fase 2 Hardening A→I)
+
+- **Fase 2A-2E (IDOR sistêmico)** → ✅ RESOLVIDO. 34+ endpoints com `findFirst({where: {id, cooperativaId}})` substituindo `findUnique`. Cobre cobranças, contratos, faturas, motor-proposta, financeiro (planoContas/lancamentos/convenios/contratos-uso/forma-pagamento).
+- **Fase 2G (Hardening HTTP)** → ✅ RESOLVIDO. Helmet + HSTS (180d) + CSP (reportOnly dev / enforce prod) + .env.example completo. Commit `e6ee6e5`.
+- **Fase 2H (B1 cross-talk legacy /parceiro/membros)** → ✅ RESOLVIDO. Redirect 301 + delete folder + sidebar nav atualizada. Commit `8fd28dc`.
+- **Fase 2F (D-30N AuditLog interceptor)** → ✅ RESOLVIDO. Módulo `backend/src/audit/` com service + decorator + interceptor APP global + 18 endpoints sensíveis decorados. Commit `26836ab`.
+- **Fase 2I (Bonus IDOR fix `cooperados.service.update/remove`)** → ✅ RESOLVIDO. Smoke cross-tenant detectou PUT cooperado HTTP 200 vulnerável → fix imediato com `cooperativaId` opcional. Smoke pós-fix 2/2 PASS.
+- **D-30N (AuditLog)** → ✅ RESOLVIDO (Fase 2F).
+- **D-50/.2 (cobranças sem cooperativaId)** → ✅ RESOLVIDOS na maratona (commits anteriores).
+- **B1 cross-talk** → ✅ RESOLVIDO (mitigado server-side via 2A-2E + UI legacy deletada via 2H).
 
 ---
 

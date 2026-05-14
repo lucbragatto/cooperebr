@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-05-03 fechamento — **maratona de 4 fases concluídas** (A + B + B.5 + C.1) com 20 commits, validação E2E 48/48, e 8 débitos resolvidos (D-30R + duplo desconto + DINAMICO + snapshots T3/T4 + cross-tenant + B13 + FIXO economia zerada + spec T8). 3 débitos P3 catalogados como novos.
+**Última atualização:** 2026-05-14 noite — **Fase 2 Hardening completa (A→I)** em 7 commits (2A `3106e6d` + 2B `fef024a` + 2C-2E + 2G `e6ee6e5` + 2H `8fd28dc` + 2F `26836ab` + 2I com bonus IDOR fix em `cooperados.service.update/remove`). **D-30N (AuditLog) RESOLVIDO. D-48 RESOLVIDO. D-50 e D-50.2 RESOLVIDOS.** 34+ endpoints com IDOR fix. Helmet/HSTS/CSP ativos. Smoke E2E cross-tenant 2/2 PASS.
 
 ---
 
@@ -232,11 +232,12 @@ Spec detalhada (188 linhas) do Assis (26/03/2026) com schema `tusdFioA`/`tusdFio
 
 ---
 
-### D-30N — AuditLog interceptor não implementado (escopo revisado)
+### D-30N — AuditLog interceptor ✅ RESOLVIDO (Fase 2F Hardening, 14/05/2026)
 
-**Severidade:** P2 (mantida)
+**Severidade:** P2 (resolvido)
 **Detectado em:** 2026-04-30 noite (E2E commit `f3a0434`)
 **Revisado em:** 2026-05-02 manhã (validação prévia com leitura de código)
+**Resolvido em:** 2026-05-14 noite (Fase 2F Hardening, commit `26836ab`)
 
 **Diagnóstico anterior:** "interceptor existe mas não foi ativado".
 
@@ -247,15 +248,15 @@ em `backend/src/` referencia `AuditLog` ou `auditLog` (`grep -rn` retorna 0).
 Schema completo no Prisma (`usuarioId`, `acao`, `recurso`, `metadata`, `ip`,
 índices criados) — pronto pra usar quando interceptor for criado.
 
-**O que falta criar (não apenas ativar):**
-- `AuditLogInterceptor` NestJS
-- Decorator `@Auditavel({ acao: 'cooperativa.suspender' })`
-- Helper `auditLog.gravar(acao, recurso, metadata)` pra usar em services
-- `AuditModule` registrando provider + APP_INTERCEPTOR
-- Aplicar decorator em endpoints sensíveis
+**Solução entregue (Fase 2F):**
+- `backend/src/audit/audit.service.ts` — persiste entradas, falha silenciosa.
+- `backend/src/audit/audit-log.decorator.ts` — `@AuditLog({acao, recurso, recursoIdParam?})`.
+- `backend/src/audit/audit-log.interceptor.ts` — APP_INTERCEPTOR global, dispara em `tap` após sucesso.
+- `backend/src/audit/audit.module.ts` — @Global, registrado em `app.module.ts`.
+- 18 endpoints sensíveis decorados: cooperados (criar/atualizar/modo-remuneracao/aprovar-concessionaria/cadastro-completo/deletar/lote-status), contratos (criar/atualizar/ativar/deletar), cobrancas (criar/atualizar/dar-baixa/cancelar/deletar), asaas (config.salvar/cobranca.cancelar), cooperativas (criar/atualizar/plano.vincular/deletar), saas (plano CRUD/fatura.gerar).
+- Captura impersonate preparada (`impersonating`, `cooperativaImpersonadaId`) pra Sprint 13b.
 
-**Resolução:** **Sprint 5** ou **Sprint 6** (auditoria geral) — escopo é
-implementação completa, não ativação.
+**Smoke validado:** PUT /cooperados/:id → HTTP 200 → +1 entrada AuditLog com `usuarioId`, `perfil`, `acao='cooperado.atualizar'`, `recursoId`, `cooperativaId`, IP, UA, metadata.
 
 ---
 
@@ -1494,9 +1495,10 @@ D-33 **fica aberto como sentinela** (não fechar). Critério de pronto vira:
 
 ---
 
-### D-48 — 🚨 SEGURANÇA P1 — Isolamento multi-tenant ausente em 6 sites de leitura/criação de Contrato↔Usina
+### D-48 — 🚨 SEGURANÇA P1 — Isolamento multi-tenant ausente em 6 sites de leitura/criação de Contrato↔Usina ✅ RESOLVIDO
 
-**Severidade:** P1 SEGURANÇA (chapéu, 6 sub-itens)
+**Severidade:** P1 SEGURANÇA (chapéu, 6 sub-itens — todos resolvidos)
+**Resolvido em:** 2026-05-14 noite (Fase 2 Hardening A-I completa, commits `3106e6d` 2A + `fef024a` 2B + Fase 2C-2E + `26836ab` 2F + `8fd28dc` 2H + bonus IDOR fix em `cooperados.service.update/remove`)
 
 **Origem:** sessão 14/05/2026 tarde (continuação) — Sub-Fase A canário travou no DIEGO 6/6 com `ForbiddenException: Violação multi-tenant no contrato CTR-2026-0004`. Investigação revelou bug NÃO é só motor-proposta — é padrão sistêmico em **6 caminhos** que leem `Usina` no fluxo de criação/atualização de Contrato.
 
