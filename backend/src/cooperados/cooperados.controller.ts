@@ -10,6 +10,7 @@ import { UpdateCooperadoDto } from './dto/update-cooperado.dto';
 import { FaturaMensalDto } from './dto/fatura-mensal.dto';
 import { CadastroCompletoDto } from './dto/cadastro-completo.dto';
 import { AprovarConcessionariaDto } from './dto/aprovar-concessionaria.dto';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { UcsService } from '../ucs/ucs.service';
@@ -129,6 +130,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, AGREGADOR)
+  @AuditLog({ acao: 'cooperado.criar', recurso: 'Cooperado' })
   @Post()
   create(@Body() body: CreateCooperadoDto, @Req() req: any) {
     const { termoAdesaoAceitoEm, cooperativaId, ...rest } = body;
@@ -143,6 +145,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.cadastro-completo', recurso: 'Cooperado' })
   @Post('cadastro-completo')
   cadastroCompleto(@Body() body: CadastroCompletoDto, @Req() req: any) {
     return this.cooperadosService.cadastroCompleto(body, req.user?.cooperativaId);
@@ -393,6 +396,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.atualizar', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateCooperadoDto) {
     const { termoAdesaoAceitoEm, dataInicioCreditos, ...rest } = dto;
@@ -404,6 +408,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cooperado.modo-remuneracao', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Put(':id/modo-remuneracao')
   async alterarModoRemuneracao(
     @Param('id') id: string,
@@ -428,6 +433,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.aprovar-concessionaria', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Post(':id/aprovar-concessionaria')
   aprovarConcessionaria(
     @Param('id') id: string,
@@ -438,6 +444,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cooperado.deletar', recurso: 'Cooperado', recursoIdParam: 'id' })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.cooperadosService.remove(id);
@@ -464,6 +471,7 @@ export class CooperadosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cooperado.lote-status', recurso: 'Cooperado' })
   @Post('batch/status')
   alterarStatusLote(@Body() body: { cooperadoIds: string[]; status: string }, @Req() req: any) {
     return this.cooperadosService.alterarStatusLote(body, req.user?.cooperativaId, req.user?.id);

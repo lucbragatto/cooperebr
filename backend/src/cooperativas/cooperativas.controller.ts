@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 import { getTiposDisponiveis } from './tipo-parceiro.helper';
+import { AuditLog } from '../audit/audit-log.decorator';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -81,6 +82,7 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'cooperativa.criar', recurso: 'Cooperativa' })
   @Post()
   create(
     @Body()
@@ -135,6 +137,7 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cooperativa.atualizar', recurso: 'Cooperativa', recursoIdParam: 'id' })
   @Put(':id')
   update(
     @Param('id') id: string,
@@ -162,6 +165,7 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'cooperativa.plano.vincular', recurso: 'Cooperativa', recursoIdParam: 'id' })
   @Patch(':id/plano')
   vincularPlano(
     @Param('id') id: string,
@@ -171,6 +175,7 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'cooperativa.deletar', recurso: 'Cooperativa', recursoIdParam: 'id' })
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.cooperativasService.remove(id);

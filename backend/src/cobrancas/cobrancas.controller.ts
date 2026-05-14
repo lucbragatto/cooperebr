@@ -4,6 +4,7 @@ import { CobrancasService } from './cobrancas.service';
 import { CobrancaPdfService } from './cobranca-pdf.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { AuditLog } from '../audit/audit-log.decorator';
 import * as fs from 'fs';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
@@ -38,6 +39,7 @@ export class CobrancasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cobranca.criar', recurso: 'Cobranca' })
   @Post()
   create(
     @Req() req: any,
@@ -58,6 +60,7 @@ export class CobrancasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cobranca.atualizar', recurso: 'Cobranca', recursoIdParam: 'id' })
   @Put(':id')
   update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     // D-48-cobrancas IDOR fix.
@@ -65,6 +68,7 @@ export class CobrancasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cobranca.dar-baixa', recurso: 'Cobranca', recursoIdParam: 'id' })
   @Patch(':id/dar-baixa')
   darBaixa(
     @Param('id') id: string,
@@ -76,6 +80,7 @@ export class CobrancasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cobranca.cancelar', recurso: 'Cobranca', recursoIdParam: 'id' })
   @Patch(':id/cancelar')
   cancelar(
     @Param('id') id: string,
@@ -105,6 +110,7 @@ export class CobrancasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cobranca.deletar', recurso: 'Cobranca', recursoIdParam: 'id' })
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: any) {
     // D-48-cobrancas IDOR fix.

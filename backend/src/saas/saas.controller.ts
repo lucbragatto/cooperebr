@@ -4,6 +4,7 @@ import { MetricasSaasService } from './metricas-saas.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
+import { AuditLog } from '../audit/audit-log.decorator';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -50,12 +51,14 @@ export class SaasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'saas.plano.vincular', recurso: 'PlanoSaas' })
   @Post('planos/vincular')
   vincularPlano(@Body() body: { cooperativaId: string; planoSaasId: string | null }) {
     return this.saasService.vincularPlano(body.cooperativaId, body.planoSaasId);
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'saas.plano.criar', recurso: 'PlanoSaas' })
   @Post('planos')
   createPlano(
     @Body() body: {
@@ -73,6 +76,7 @@ export class SaasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'saas.plano.atualizar', recurso: 'PlanoSaas', recursoIdParam: 'id' })
   @Patch('planos/:id')
   updatePlano(
     @Param('id') id: string,
@@ -92,6 +96,7 @@ export class SaasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'saas.plano.deletar', recurso: 'PlanoSaas', recursoIdParam: 'id' })
   @Delete('planos/:id')
   deletePlano(@Param('id') id: string) {
     return this.saasService.deletePlano(id);
@@ -106,6 +111,7 @@ export class SaasController {
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'saas.fatura.gerar', recurso: 'FaturaSaas' })
   @Post('faturas/gerar')
   gerarFaturas() {
     return this.saasService.gerarFaturasMensal();

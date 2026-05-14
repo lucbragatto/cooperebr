@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CreateContratoDto } from './dto/create-contrato.dto';
 import { UpdateContratoDto } from './dto/update-contrato.dto';
+import { AuditLog } from '../audit/audit-log.decorator';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -31,6 +32,7 @@ export class ContratosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'contrato.ativar', recurso: 'Contrato', recursoIdParam: 'id' })
   @Post(':id/ativar')
   ativar(@Param('id') id: string, @Body() body: { protocoloConcessionaria: string; dataInicioCreditos: string; observacoes?: string }, @Req() req: any) {
     // D-48-contratos IDOR fix.
@@ -38,6 +40,7 @@ export class ContratosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'contrato.criar', recurso: 'Contrato' })
   @Post()
   create(@Body() body: CreateContratoDto, @Req() req: any) {
     // D-48.6: injeta cooperativaId do JWT — usina será filtrada por tenant.
@@ -45,6 +48,7 @@ export class ContratosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'contrato.atualizar', recurso: 'Contrato', recursoIdParam: 'id' })
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto, @Req() req: any) {
     // D-48.6: idem create.
@@ -52,6 +56,7 @@ export class ContratosController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'contrato.deletar', recurso: 'Contrato', recursoIdParam: 'id' })
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: any) {
     // D-48-contratos IDOR fix.

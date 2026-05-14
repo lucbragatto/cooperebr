@@ -52,6 +52,7 @@ import { BandeiraTarifariaModule } from './bandeira-tarifaria/bandeira-tarifaria
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -101,6 +102,7 @@ import { ModuloGuard } from './auth/modulo.guard';
     LeadExpansaoModule,
     ContasPagarModule,
     BandeiraTarifariaModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [

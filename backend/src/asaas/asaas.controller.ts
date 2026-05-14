@@ -14,6 +14,7 @@ import { AsaasService } from './asaas.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { AuditLog } from '../audit/audit-log.decorator';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -24,6 +25,7 @@ export class AsaasController {
   // ─── Config ──────────────────────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'asaas.config.salvar', recurso: 'AsaasConfig' })
   @Post('config')
   salvarConfig(
     @Req() req: any,
@@ -85,6 +87,7 @@ export class AsaasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'asaas.cobranca.cancelar', recurso: 'AsaasCobranca', recursoIdParam: 'asaasId' })
   @Post('cobrancas/:asaasId/cancelar')
   cancelarCobranca(
     @Param('asaasId') asaasId: string,
