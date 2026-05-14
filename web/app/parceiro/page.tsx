@@ -116,7 +116,7 @@ export default function ParceiroDashboardPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <a href="/parceiro/membros" className="block p-4">
+          <a href="/dashboard/cooperados" className="block p-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-50 text-blue-600">
                 <Users className="w-5 h-5" />

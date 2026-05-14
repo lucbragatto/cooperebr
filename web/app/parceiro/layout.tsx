@@ -50,7 +50,7 @@ const allNavSections: NavSection[] = [
   {
     title: 'Operacional',
     items: [
-      { href: '/parceiro/membros', label: 'Membros', icon: Users, modulo: 'membros' },
+      { href: '/dashboard/cooperados', label: 'Membros', icon: Users, modulo: 'membros' },
       { href: '/parceiro/usinas', label: 'Usinas', icon: Sun, modulo: 'usinas' },
       { href: '/parceiro/ucs', label: 'UCs', icon: Building2, modulo: 'ucs' },
       { href: '/parceiro/contratos', label: 'Contratos', icon: FileText, modulo: 'contratos' },
