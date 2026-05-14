@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>SISGD CoopereBR - Jornada do Membro v1.4</title>
+<title>SISGD CoopereBR - Jornada do Membro v2.0</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
@@ -21,24 +21,35 @@ header{border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;di
 .mermaid{display:flex;justify-content:center}
 section{margin:32px 0}
 section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
-.status-table{width:100%;border-collapse:collapse;margin:16px 0}
-.status-table th,.status-table td{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px}
-.status-table th{background:#f9fafb;font-weight:600}
+section h3{color:#1e40af;margin-top:24px}
+.status-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+.status-table th,.status-table td{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb}
+.status-table th{background:#f9fafb;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#374151}
 .status-table tr:hover{background:#f9fafb}
 .gap-card{background:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:12px 0}
 .gap-card.critico{background:#fef2f2;border-color:#dc2626}
+.gap-card.alto{background:#fff7ed;border-color:#ea580c}
 .gap-card.bloqueio{background:#f9fafb;border-color:#6b7280}
-.gap-card h3{margin:0 0 8px;font-size:16px}
-.gap-card.critico h3{color:#991b1b}
+.gap-card h3{margin:0 0 8px;font-size:16px;color:#7f1d1d}
+.gap-card.alto h3{color:#9a3412}
 .gap-card.bloqueio h3{color:#374151}
+.gap-card .meta{font-size:12px;color:#6b7280;margin-bottom:8px}
+.priority-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase}
+.priority-badge.p0{background:#fecaca;color:#7f1d1d}
+.priority-badge.p1{background:#fed7aa;color:#9a3412}
+.priority-badge.p2{background:#fef3c7;color:#854d0e}
+.priority-badge.p3{background:#e0e7ff;color:#3730a3}
 .next-steps{background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:4px}
 .next-steps h2{color:#14532d;border:none;padding:0}
 .next-steps ol{margin:8px 0;padding-left:20px}
-.next-steps li{margin:6px 0}
+.next-steps li{margin:8px 0}
 .changelog{background:#fafafa;border:1px solid #e5e7eb;border-radius:4px;padding:16px 20px;margin-top:32px;font-size:13px}
 .changelog h2{color:#6b7280;border:none;padding:0;font-size:14px;text-transform:uppercase;letter-spacing:0.5px}
 .changelog ul{margin:6px 0;padding-left:20px}
 .changelog li{margin:4px 0}
+.companion{background:#eef2ff;border:1px solid #c7d2fe;border-radius:4px;padding:12px 16px;margin:16px 0;font-size:14px}
+.companion a{color:#3730a3;font-weight:600;text-decoration:none}
+.companion a:hover{text-decoration:underline}
 @media print{body{max-width:100%}.diagram-container{page-break-inside:avoid}}
 </style>
 </head>
@@ -47,10 +58,10 @@ section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
 <header>
 <div class="title-block">
 <h1>Jornada do Membro - SISGD CoopereBR</h1>
-<div class="subtitle">Mapa operacional do fluxo do cadastro a fatura mensal</div>
+<div class="subtitle">Mapa operacional v2.0 - incorpora expansoes dos 5 quadros + adendo do txt Luciano</div>
 </div>
 <div class="version-block">
-<strong>Versao 1.4</strong><br>
+<strong>Versao 2.0</strong><br>
 Atualizado: 14/05/2026<br>
 Proxima revisao: a cada sessao com mudanca de estado
 </div>
@@ -58,7 +69,20 @@ Proxima revisao: a cada sessao com mudanca de estado
 
 <div class="exec">
 <h2>Resumo executivo</h2>
-<p>O sistema tem 10 fases que ligam o membro novo ate o pagamento mensal. <strong>Em 13/05/2026 a jornada inteira foi provada end-to-end</strong> em modelo FIXO_MENSAL com 4 cooperados-piloto reais (DIEGO, CAROLINA, ALMIR, THEOMAX) gerando R$ 2.542,26 em cobrancas. <strong>Polimento UI cobrancas concluido</strong> (D-50/D-50.2/D-51/D-52/D-53/D-55 fechados — listagem e detalhe funcionais). Faltam: (1) <strong>liberar os 2 outros modelos de cobranca</strong> (creditos compensados e dinamico) - engines prontas, falta destravar (Sub-Fase B AMAGES); (2) <strong>sub-canario CAROLINA Asaas+WA real</strong>; (3) D-45 (wizard), D-46 (12 divergencias spec<->Plano), D-47 (nomes OURO/PRATA), D-54 (LancamentoCaixa) catalogados.</p>
+<p>v2.0 incorpora expansoes do txt do Luciano sobre os <strong>5 quadros + adendo</strong> da jornada. Mudancas vs v1.4:</p>
+<ul>
+<li><strong>Quadro 1:</strong> branch SEM_UC (indicador puro sem unidade consumidora) - banco pronto, UI invisivel</li>
+<li><strong>Quadro 2:</strong> decisao explicita modoRemuneracao DESCONTO vs CLUBE + conexao com MST (D-44)</li>
+<li><strong>Quadro 3:</strong> sub-fluxo upload docs + Assinafy + 3 crons proativos (lembrete doc / aviso admin / lembrete email EDP) - 0% hoje</li>
+<li><strong>Quadro 4:</strong> bifurcacao aprovacao automatica vs manual (web publico OK / wizard admin D-45)</li>
+<li><strong>Quadro 5:</strong> realocacao inteligente multi-usina (soma de folgas, restricoes GD/concessionaria, lista-por-lista) - 0% hoje</li>
+<li><strong>Quadros 6/7/8:</strong> automacao concessionaria (polling EDP, leitor email homologacao, fetcher MMGD) - 5% hoje (so protocolo texto)</li>
+<li><strong>Adendo:</strong> cadastro de usinas expandido vive em <a href="cadastro-usinas.html">cadastro-usinas.html v1.0</a></li>
+</ul>
+</div>
+
+<div class="companion">
+📎 <strong>Documento companheiro:</strong> <a href="cadastro-usinas.html">cadastro-usinas.html v1.0</a> cobre cadastro de Usina + particao % kWh + listas concessionaria + operacao recorrente em detalhe.
 </div>
 
 <div class="legend">
@@ -76,155 +100,204 @@ flowchart TB
   classDef gap fill:#fecaca,stroke:#dc2626,color:#7f1d1d,font-weight:bold
   classDef bloqueado fill:#e5e7eb,stroke:#6b7280,color:#1f2937,font-weight:bold
 
-  subgraph F1[" 1. Entrada do membro "]
-    E1A[Cadastro web publico]:::ok
-    E1B[Cadastro pelo admin<br/>wizard 7 passos]:::parcial
-    E1C[Cadastro rapido sem fatura]:::ok
-    E2[Upload da fatura]:::ok
-    E3[OCR extrai dados]:::ok
-    E4[Cria cadastro<br/>com unidade consumidora]:::ok
-    E1A --> E2
-    E1B --> E2
-    E1C --> E4
-    E2 --> E3 --> E4
+  subgraph Q1[" Quadro 1 - Cadastro do membro (expandido) "]
+    Q1A[Entrada do membro<br/>cadastro web OU admin]:::ok
+    Q1B{tipoCooperado?}:::gap
+    Q1C[COM_UC<br/>upload fatura concessionaria]:::ok
+    Q1D[OCR Claude extrai dados<br/>numero UC distribuidora consumo]:::ok
+    Q1E[SEM_UC<br/>indicador puro<br/>sem fatura]:::gap
+    Q1F[Cria Cooperado + UC<br/>+ FaturaProcessada]:::ok
+    Q1G[Cria Cooperado<br/>sem UC<br/>banco pronto<br/>UI nao expoe]:::gap
+    Q1A --> Q1B
+    Q1B -- COM_UC --> Q1C --> Q1D --> Q1F
+    Q1B -- SEM_UC --> Q1E --> Q1G
   end
 
-  subgraph F2[" 2. Simulacao e plano "]
-    P1[Sistema calcula economia]:::ok
-    P2{Escolha do plano}:::ok
-    P3[FIXO MENSAL]:::ok
-    P4[Creditos Compensados]:::bloqueado
-    P5[Creditos Dinamicos]:::bloqueado
-    P6[Apresenta proposta]:::ok
-    E4 --> P1 --> P2
-    P2 --> P3 --> P6
-    P2 --> P4 --> P6
-    P2 --> P5 --> P6
+  subgraph Q2[" Quadro 2 - Plano + escolha desconto vs tokens "]
+    Q2A[Sistema simula economia<br/>motor-proposta.calcular]:::ok
+    Q2B[Membro escolhe Plano<br/>cooperativa configura]:::ok
+    Q2C{modoRemuneracao?}:::parcial
+    Q2D[DESCONTO<br/>imediato na fatura]:::ok
+    Q2E[CLUBE<br/>acumula tokens<br/>ledger CooperToken]:::bloqueado
+    Q2F[Apresenta proposta<br/>economia projetada 4 horizontes]:::ok
+    Q2G[Tokens proximos expiracao<br/>ofertados via MST D-44<br/>modo E+F hibrido]:::gap
+    Q2H[SEM_UC ganha tokens<br/>via indicacao<br/>converte futuro<br/>OU saca MST]:::gap
+    Q1F --> Q2A
+    Q1G --> Q2A
+    Q2A --> Q2B --> Q2C
+    Q2C -- DESCONTO --> Q2D --> Q2F
+    Q2C -- CLUBE --> Q2E --> Q2F
+    Q2E -.expira em 7-30d.-> Q2G
+    Q1G -.indica novos.-> Q2H
   end
 
-  subgraph F3[" 3. Aceitacao e assinatura "]
-    A1[Membro aceita proposta]:::parcial
-    A2[Assina termo<br/>via Assinafy]:::parcial
-    A3[Cria contrato<br/>pendente ativacao]:::ok
-    P6 --> A1 --> A2 --> A3
+  subgraph Q3[" Quadro 3 - Upload docs + contrato + 3 crons proativos "]
+    Q3A[Membro recebe lista docs<br/>PF: RG/CPF/comprovante<br/>PJ: CNPJ/contrato social]:::parcial
+    Q3B[Sistema gera<br/>contrato + termo + procuracao<br/>templates parametrizados]:::parcial
+    Q3C[Envia assinatura digital<br/>Assinafy = zero codigo<br/>D-30P P1]:::gap
+    Q3D[Cron a<br/>lembrete WA+email doc pendente<br/>diario ate completar]:::gap
+    Q3E[Cron b<br/>aviso admin resumo diario<br/>docs pendente > 3d]:::gap
+    Q3F[Cron c<br/>lembrete email parceiro<br/>portal EDP receber faturas]:::gap
+    Q3G[Aceite juridico fragil<br/>so flag boolean termoAdesaoAceito]:::parcial
+    Q2F --> Q3A --> Q3B --> Q3C --> Q3G
+    Q3A -.diariamente.-> Q3D
+    Q3A -.> 3 dias.-> Q3E
+    Q3B -.pos cadastro UC.-> Q3F
   end
 
-  subgraph F4[" 4. Aprovacao interna "]
-    AP1{Validacoes ok?}:::gap
-    AP2[Aprovacao automatica]:::gap
-    AP3[Admin aprova]:::ok
-    A3 --> AP1
-    AP1 --> AP2
-    AP1 --> AP3
+  subgraph Q4[" Quadro 4 - Aprovacao automatica vs manual "]
+    Q4A{Validacoes OK<br/>CPF/CNPJ + UC + docs<br/>+ assinatura?}:::gap
+    Q4B[Aprovacao automatica<br/>web publico /cadastro<br/>CADASTRO_V2_ATIVO=true]:::ok
+    Q4C[Aprovacao manual<br/>admin /dashboard/cooperados/[id]<br/>wizard D-45 P2 - 4 erros]:::parcial
+    Q4D[Cooperado.status APROVADO<br/>Contrato.status PENDENTE_ATIVACAO]:::ok
+    Q3G --> Q4A
+    Q4A -- Tudo OK --> Q4B --> Q4D
+    Q4A -- Pendencias --> Q4C --> Q4D
   end
 
-  subgraph F5[" 5. Alocacao usina "]
-    AL1{Usina tem<br/>capacidade?}:::ok
-    AL2[Vincula usina<br/>+ % calculado]:::ok
-    AL3[Lista de espera]:::ok
-    AL4[Cron promove<br/>quando abre vaga]:::ok
-    AP2 --> AL1
-    AP3 --> AL1
-    AL1 --> AL2
-    AL1 --> AL3
-    AL3 -.-> AL4 -.-> AL1
+  subgraph Q5[" Quadro 5 - Realocacao inteligente multi-usina "]
+    Q5A[Motor avalia<br/>capacidade vs demanda]:::ok
+    Q5B{Usina unica<br/>com vaga<br/>compativel?}:::ok
+    Q5C[Aloca em usina unica<br/>% kWh calculado]:::ok
+    Q5D{Multiplas usinas<br/>somando folgas<br/>atendem?}:::gap
+    Q5E[Motor soma folgas N usinas<br/>+ analisa restricoes<br/>classe GD I/II/III<br/>+ concessionaria EDP-ES]:::gap
+    Q5F[Gera proposta-rascunho N to M<br/>realocacao cooperados<br/>entre usinas]:::gap
+    Q5G[Admin aprova<br/>lista-por-lista<br/>nao bulk total]:::gap
+    Q5H[Gera CSV por usina<br/>uma lista por concessionaria]:::parcial
+    Q5I[Lista de Espera]:::ok
+    Q5J[Caso Exfishes<br/>D-30B P0 R$ 310k/ano<br/>schema sem classeGd]:::gap
+    Q5K[MST D-44 P1<br/>tokens expirando<br/>preferencia deficitarios]:::gap
+    Q4D --> Q5A --> Q5B
+    Q5B -- Sim --> Q5C
+    Q5B -- Nao --> Q5D
+    Q5D -- Sim --> Q5E --> Q5F --> Q5G --> Q5H
+    Q5D -- Nao --> Q5I
+    Q5E -.violacao GD.-> Q5J
+    Q5E -.> Q5K
+    Q5C --> Q5H
   end
 
-  subgraph F6[" 6. Envio a concessionaria "]
-    LC1[Admin gera lista]:::ok
-    LC2[Envia a EDP-ES]:::ok
-    LC3[WhatsApp + email<br/>avisa membro]:::parcial
-    LC4[Aguardando<br/>concessionaria]:::ok
-    AL2 --> LC1 --> LC2 --> LC3
-    LC1 --> LC4
+  subgraph Q678[" Quadros 6/7/8 - Automacao concessionaria "]
+    Q6A[Sistema gera protocolo<br/>admin digita manual hoje<br/>5% automatizado]:::parcial
+    Q6B[Sistema envia lista EDP<br/>email/portal manual]:::parcial
+    Q7A[Polling site EDP<br/>verifica status protocolo<br/>diario]:::gap
+    Q7B[Leitor email homologacao<br/>regex EDP retorno]:::gap
+    Q7C[Fetcher MMGD mensal<br/>baixa geracao por usina]:::gap
+    Q8A[Trigger automatico<br/>fatura GD recebida<br/>libera cobranca]:::parcial
+    Q8B[Notifica membro WA + email<br/>homologacao concluida]:::parcial
+    Q8C[Relatorio MMGD mensal]:::gap
+    Q5H --> Q6A --> Q6B
+    Q6B --> Q7A --> Q7B --> Q7C
+    Q7C --> Q8A --> Q8B --> Q8C
   end
 
-  subgraph F7[" 7. Aprovacao concessionaria "]
-    AC1{Como vem<br/>o sinal?}:::gap
-    AC2[Email EDP]:::gap
-    AC3[1a fatura GD chega]:::parcial
-    AC4[Admin confirma]:::ok
-    AC5[Sistema avisa membro<br/>cadastro aprovado]:::ok
-    AC6[Cadastro ATIVO]:::ok
-    LC4 --> AC1
-    AC1 --> AC2 --> AC5
-    AC1 --> AC3 --> AC5
-    AC1 --> AC4 --> AC5
-    AC5 --> AC6
-  end
-
-  subgraph F8[" 8. Operacao mensal "]
-    OP1[Email-monitor<br/>detecta fatura]:::ok
-    OP2[OCR extrai consumo<br/>+ creditos]:::ok
-    OP3[Engine gera cobranca]:::ok
-    OP4[Engine FIXO]:::ok
-    OP5[Engine Compensados]:::bloqueado
-    OP6[Engine Dinamico]:::bloqueado
-    OP7[Cobranca criada<br/>+ lancamento previsto]:::ok
-    AC6 --> OP1 --> OP2 --> OP3
-    OP3 --> OP4 --> OP7
-    OP3 --> OP5 --> OP7
-    OP3 --> OP6 --> OP7
-  end
-
-  subgraph F9[" 9. Cobranca e pagamento "]
-    CB1[Asaas gera boleto/PIX]:::ok
-    CB2[WhatsApp + email<br/>avisa membro]:::ok
-    CB3[Membro paga]:::ok
-    CB4[Webhook<br/>confirma pagamento]:::ok
-    CB5[Sistema da baixa]:::ok
-    CB6[Tokens creditados<br/>se plano CLUBE]:::ok
-    OP7 --> CB1 --> CB2 --> CB3 --> CB4 --> CB5 --> CB6
-  end
-
-  subgraph F10[" 10. Crons automaticos "]
-    CR1[Vencidas 02h]:::ok
-    CR2[Multa+juros 03h]:::ok
-    CR3[Aviso WA 06h15]:::ok
-    CR4[Fatura SaaS<br/>do parceiro]:::ok
-    OP7 -.-> CR1 --> CR2 --> CR3
-    CB5 -.-> CR4
+  subgraph QF[" Operacao mensal pos-homologacao "]
+    QFA[email-monitor cron 6h<br/>recebe fatura concessionaria]:::ok
+    QFB[OCR Claude extrai<br/>consumo + creditos compensados]:::ok
+    QFC[Engine FIXO_MENSAL<br/>M2 + M3 validados<br/>13-14/05]:::ok
+    QFD[Engines COMPENSADOS<br/>+ DINAMICO<br/>BLOQUEIO_MODELOS_NAO_FIXO]:::bloqueado
+    QFE[Cobranca gerada<br/>+ LancamentoCaixa PREVISTO<br/>D-54 fix 14/05]:::ok
+    QFF[Asaas sandbox<br/>boleto/PIX gerado<br/>webhook round-trip 5s]:::ok
+    QFG[WhatsApp + email<br/>notifica membro]:::ok
+    QFH[Pagamento -> webhook<br/>cobranca PAGO<br/>LancamentoCaixa REALIZADO]:::ok
+    Q8C --> QFA --> QFB --> QFC --> QFE
+    QFB -.modo bloqueado.-> QFD
+    QFE --> QFF --> QFG --> QFH
   end
 </div>
 </div>
 
 <section>
-<h2>Pontos criticos catalogados</h2>
+<h2>Gaps criticos consolidados (13 do txt Luciano)</h2>
 
-<div class="gap-card bloqueio">
-<h3>Engines Creditos Compensados e Dinamico - travadas</h3>
-<p><strong>O que e:</strong> 2 modelos onde o membro paga proporcional aos creditos solares compensados. Tecnicamente prontos (testados em laboratorio em 03/05/2026), mas ha um travamento ativo no sistema (BLOQUEIO_MODELOS_NAO_FIXO) impedindo uso real.</p>
-<p><strong>O que falta:</strong> rodar 1 cooperado real como canario (AMAGES tem 2 UCs com creditos ativos), validar, destravar. Mapeado como Sub-Fase B.</p>
+<div class="gap-card critico">
+<h3>1. Quadro 1 - Cadastro SEM_UC invisivel na UI</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> Origem: SA1 inventario + quadro 1 do txt</div>
+<p><strong>O que e:</strong> enum TipoCooperado.SEM_UC existe no schema, service trata em 5 pontos, endpoint aceita. UI nunca expoe a escolha — wizard obriga upload fatura, /cadastro publico idem.</p>
+<p><strong>Bloqueio:</strong> caso de uso "rede de indicadores remunerada em tokens" (D-44 MST, Sprint CT). <strong>Custo fix: 4-6h Code.</strong></p>
+</div>
+
+<div class="gap-card alto">
+<h3>2. Quadro 2 - 5 vocabularios CooperToken coexistindo</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> D-35 + D-46.6 catalogados</div>
+<p><strong>O que e:</strong> mesmo conceito (escolha desconto vs tokens) tem 5 nomes: Caminho DESCONTO/CLUBE, Opcao A/B, Plano DESCONTO/Token, modoRemuneracao enum, modoToken String. Specs divergem.</p>
+<p><strong>Fix:</strong> Sprint CT Consolidado (21-26h) unifica vocabulario + migration 85 cooperados intermediarios.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>3. Quadro 2 - MST D-44 P1 estrategica nao implementada</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> D-44 catalogado 14/05</div>
+<p><strong>O que e:</strong> Mercado Secundario de Tokens - tokens proximos expiracao circulam entre cooperados via oferta onerosa. Modo E+F hibrido (deficitario prioritario + cooperativa intermedia).</p>
+<p><strong>Fix:</strong> Sprint dedicado 5 fases (8-13d Code). Pode virar Etapa 3 Sprint CT.</p>
 </div>
 
 <div class="gap-card critico">
-<h3>Wizard de cadastro pelo admin - 4 bugs (D-45)</h3>
-<p><strong>O que e:</strong> tela /dashboard/cooperados/novo de 7 passos. Tem endpoint inexistente (envio email proposta retorna 404), motor calcula sem plano selecionado, e 2 erros no aceite. Hoje cadastro funciona via outros caminhos (script ou direto).</p>
-<p><strong>O que falta:</strong> fix dos 4 endpoints + testes. Estimativa 4-6 horas tecnicas.</p>
+<h3>4. Quadro 3 - Cron lembrete upload documento</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: txt quadro 3a</div>
+<p><strong>O que e:</strong> hoje so existe cron de auto-aprovacao apos N horas (`documentos-aprovacao.job.ts`) - faz o OPOSTO. Cooperado some sem enviar doc fica PENDENTE indefinidamente.</p>
+<p><strong>Fix:</strong> 3-4h Code (cron diario + template WA+email).</p>
 </div>
 
-<div class="gap-card">
-<h3>Aprovacao automatica vs admin - regra nao definida</h3>
-<p><strong>O que e:</strong> hoje toda aprovacao passa por admin. Fluxo automatizado mapeado mas sem regra clara de decisao.</p>
-<p><strong>O que falta:</strong> sessao de produto pra definir criterios: KYC ok + ANEEL ok + capacidade ok = aprovacao automatica?</p>
+<div class="gap-card critico">
+<h3>5. Quadro 3 - Cron aviso admin doc pendente > 3 dias</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> Origem: txt quadro 3b</div>
+<p><strong>O que e:</strong> admin nao recebe resumo de quem ficou parado. Operacionalmente cego.</p>
+<p><strong>Fix:</strong> 2-3h Code (cron diario + agregacao + email admin).</p>
 </div>
 
-<div class="gap-card">
-<h3>Deteccao automatica de aprovacao da concessionaria</h3>
-<p><strong>O que e:</strong> hoje admin marca manualmente quando EDP aprova. Email-monitor existe mas detector especifico (email EDP OU 1a fatura GD) nao implementado.</p>
-<p><strong>O que falta:</strong> Sprint dedicado pra regex email EDP + detector fatura GD.</p>
+<div class="gap-card critico">
+<h3>6. Quadro 3 - Lembrete email parceiro no portal EDP</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> Origem: txt quadro 3c</div>
+<p><strong>O que e:</strong> apos cadastro UC, membro precisa salvar email institucional do parceiro no portal EDP pra receber faturas. Schema tem `Cooperado.emailFaturasAtivo` mas UI nunca pede confirmacao nem cron lembra.</p>
+<p><strong>Fix:</strong> 2-3h Code (cron + UI confirmacao no portal cooperado).</p>
 </div>
 
-<div class="gap-card">
-<h3>Assinatura digital Assinafy - nao validada recente</h3>
-<p><strong>O que e:</strong> servico de assinatura termo + procuracao. Integrado mas sem teste end-to-end recente.</p>
-<p><strong>O que falta:</strong> teste manual de fluxo completo. Estimativa 1-2 horas.</p>
+<div class="gap-card alto">
+<h3>7. Quadro 3 - Assinafy zero codigo (D-30P P1)</h3>
+<div class="meta"><span class="priority-badge p1">P1 JURIDICO</span></div>
+<p><strong>O que e:</strong> aceite hoje e flag boolean `termoAdesaoAceito` sem assinatura digital de termo + procuracao. Juridicamente fragil.</p>
+<p><strong>Fix:</strong> 2-3 sprints (integracao Assinafy + UI + validacoes).</p>
 </div>
 
-<div class="gap-card">
-<h3>Comunicacao periodica durante aguardo concessionaria</h3>
-<p><strong>O que e:</strong> notificacao inicial existe; atualizacoes regulares (semanal?) durante aguardo nao.</p>
-<p><strong>O que falta:</strong> cron periodico de status + comunicacao proativa.</p>
+<div class="gap-card alto">
+<h3>8. Quadro 4 - Wizard admin D-45 P2 (4 erros encadeados)</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> 3/4 sub-fixes resolvidos commit 7bc0793</div>
+<p><strong>Status atual:</strong> sub-fixes 1+2+3 resolvidos 14/05. Falta sub-fix 4 (Step2Dados findByCpf antes do POST, prioridade baixa UX).</p>
+</div>
+
+<div class="gap-card critico">
+<h3>9. Quadro 5 - Realocacao inteligente multi-usina = 0%</h3>
+<div class="meta"><span class="priority-badge p1">P1 ESTRATEGICO</span> Origem: txt quadro 5</div>
+<p><strong>O que e:</strong> hoje motor escolhe primeira usina com vaga (linear). Sem soma de folgas, sem analise classe GD + concessionaria, sem proposta-rascunho, sem aprovacao lista-por-lista, sem historico.</p>
+<p><strong>Fix:</strong> Sprint 8 dedicado (16-24h Code algoritmo + UI). Destrava onboarding 2o parceiro Sinergia.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>10. Quadro 5 - Caso Exfishes D-30B P0 R$ 310k/ano ATIVO</h3>
+<div class="meta"><span class="priority-badge p0">P0 REGULATORIO</span></div>
+<p><strong>O que e:</strong> schema Usina sem campo classeGd. Migracoes nao validam cross-class (GD I -> GD II). Caso real Exfishes: prejuizo retroativo R$ 310k/ano em creditos mal compensados.</p>
+<p><strong>Fix:</strong> Sprint 5 schema regulatorio (4-6 dias Code). Detalhes em <a href="cadastro-usinas.html">cadastro-usinas.html</a>.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>11. Quadros 6/7/8 - Automacao concessionaria = 0%</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: txt quadros 6/7/8</div>
+<p><strong>O que e:</strong> hoje admin digita protocolo manual (`contratos.service.ts:399 ativar()`). Sem polling site EDP, sem leitor email homologacao, sem fetcher MMGD, sem trigger "fatura GD recebida -> libera cobranca". Maior gargalo operacional.</p>
+<p><strong>Fix:</strong> 24-32h Code (2-3 sprints dedicados).</p>
+</div>
+
+<div class="gap-card alto">
+<h3>12. Quadros 6/7/8 - Notificacao WhatsApp aprovacao concessionaria</h3>
+<div class="meta"><span class="priority-badge p1">P1</span></div>
+<p><strong>O que e:</strong> `cooperados.service.ts:836-901 aprovarConcessionaria` cria notificacao interna + envia email mas NAO dispara WhatsApp. Membro nao recebe noticia mais aguardada no canal que usa todo dia.</p>
+<p><strong>Fix:</strong> 1-2h Code (integrar whatsappCicloVida.notificarAprovacao).</p>
+</div>
+
+<div class="gap-card bloqueio">
+<h3>13. Engines COMPENSADOS + DINAMICO bloqueadas</h3>
+<div class="meta"><span class="priority-badge p1">P1 BLOQUEIO</span> Origem: SA2 inventario</div>
+<p><strong>O que e:</strong> engines validadas E2E sintetico 6/6 (Fase B 03/05), Decisao B33 corrigiu semantica. 7 enforcement points blindam `BLOQUEIO_MODELOS_NAO_FIXO=true` em producao. So FIXO_MENSAL roda hoje.</p>
+<p><strong>Pre-requisito:</strong> Sub-Fase B AMAGES (canario CREDITOS_COMPENSADOS real, 2-3 dias). Mitigacao previa D-46.SEED (`UPDATE planos SET publico=false` 3 planos legados).</p>
 </div>
 
 </section>
@@ -232,49 +305,61 @@ flowchart TB
 <section>
 <h2>Status detalhado por etapa</h2>
 <table class="status-table">
-<thead><tr><th>Etapa</th><th>Funcao</th><th>Status</th><th>Observacao</th></tr></thead>
+<thead><tr><th>Quadro</th><th>Etapa</th><th>Status</th><th>Observacao</th></tr></thead>
 <tbody>
-<tr><td>1A</td><td>Cadastro web publico (/cadastro)</td><td>OK</td><td>Validado historicamente</td></tr>
-<tr><td>1B</td><td>Wizard admin /dashboard/cooperados/novo</td><td>Parcial</td><td>D-45: 4 bugs catalogados</td></tr>
-<tr><td>1C</td><td>POST /cooperados direto</td><td>OK</td><td>Validado 14/05 (Sub-Fase A)</td></tr>
-<tr><td>2</td><td>OCR Claude AI</td><td>OK</td><td>Sprint 11 validou</td></tr>
-<tr><td>3-4</td><td>Criacao Cooperado + UC</td><td>OK</td><td>4 criados em 14/05</td></tr>
-<tr><td>5</td><td>Motor calcular FIXO</td><td>OK</td><td>Validado 14/05</td></tr>
-<tr><td>5</td><td>Motor calcular Compensados/Dinamico</td><td>Travado</td><td>Engines prontas Fase B, runtime bloqueado</td></tr>
-<tr><td>6-7</td><td>Aceitar proposta + criar contrato</td><td>OK</td><td>Snapshots Fase B funcionando</td></tr>
-<tr><td>8</td><td>Assinatura Assinafy</td><td>Parcial</td><td>Nao testado recente</td></tr>
-<tr><td>9</td><td>Aprovacao automatica vs admin</td><td>Gap</td><td>Regra nao clara</td></tr>
-<tr><td>10</td><td>Alocacao usina ou lista espera</td><td>OK</td><td>D-48 corrigiu isolamento tenant em 14/05</td></tr>
-<tr><td>11</td><td>Lista concessionaria + envio EDP</td><td>OK</td><td>Tela funcional, envio manual</td></tr>
-<tr><td>12</td><td>Deteccao aprovacao concessionaria</td><td>Parcial</td><td>Manual ok; automacao nao implementada</td></tr>
-<tr><td>13</td><td>Ativacao cadastro (PENDENTE -> ATIVO)</td><td>OK</td><td>Validado</td></tr>
-<tr><td>14</td><td>Operacao mensal cobranca FIXO</td><td>OK</td><td>4 cobrancas 14/05, valores corretos</td></tr>
-<tr><td>14</td><td>Operacao mensal Compensados/Dinamico</td><td>Travado</td><td>Mesmo travamento do plano</td></tr>
-<tr><td>15</td><td>Asaas boleto/PIX</td><td>OK</td><td>Sprint 12 sandbox validado</td></tr>
-<tr><td>16</td><td>Webhook + baixa</td><td>OK</td><td>Sprint 12</td></tr>
-<tr><td>17</td><td>WhatsApp notifica</td><td>OK</td><td>Sprint 10</td></tr>
-<tr><td>18</td><td>Crons recorrentes</td><td>OK</td><td>Em producao</td></tr>
+<tr><td>1</td><td>Cadastro COM_UC via web publico</td><td style="color:#16a34a;font-weight:600">OK</td><td>/cadastro V2 ativo</td></tr>
+<tr><td>1</td><td>Cadastro COM_UC via wizard admin</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>D-45 P2 (3/4 sub-fixes resolvidos)</td></tr>
+<tr><td>1</td><td>Cadastro SEM_UC (indicador puro)</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Banco pronto, UI invisivel (4-6h fix)</td></tr>
+<tr><td>1</td><td>OCR Claude da fatura</td><td style="color:#16a34a;font-weight:600">OK</td><td>Sprint 11 validou</td></tr>
+<tr><td>2</td><td>Simulacao economia (4 horizontes)</td><td style="color:#16a34a;font-weight:600">OK</td><td>Fase B.5 + Fase C.3 fecharam</td></tr>
+<tr><td>2</td><td>modoRemuneracao DESCONTO</td><td style="color:#16a34a;font-weight:600">OK</td><td>FIXO_MENSAL E2E validado 13-14/05</td></tr>
+<tr><td>2</td><td>modoRemuneracao CLUBE (tokens)</td><td style="color:#6b7280;font-weight:600">Bloqueado</td><td>5 vocabularios coexistindo (D-35)</td></tr>
+<tr><td>2</td><td>MST D-44 tokens expirando</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Proposta 14/05 madrugada, 8-13d Code</td></tr>
+<tr><td>3</td><td>Lista docs obrigatorios</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Listagem OK, validacao automatica fragil</td></tr>
+<tr><td>3</td><td>Geracao contrato + termo + procuracao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Templates parametrizados parcial</td></tr>
+<tr><td>3</td><td>Assinatura digital Assinafy</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Zero codigo, D-30P P1</td></tr>
+<tr><td>3</td><td>Cron a - lembrete WA+email doc pendente</td><td style="color:#dc2626;font-weight:600">Gap</td><td>3-4h Code</td></tr>
+<tr><td>3</td><td>Cron b - aviso admin doc > 3 dias</td><td style="color:#dc2626;font-weight:600">Gap</td><td>2-3h Code</td></tr>
+<tr><td>3</td><td>Cron c - lembrete email portal EDP</td><td style="color:#dc2626;font-weight:600">Gap</td><td>2-3h Code</td></tr>
+<tr><td>4</td><td>Aprovacao automatica web publico</td><td style="color:#16a34a;font-weight:600">OK</td><td>CADASTRO_V2_ATIVO=true</td></tr>
+<tr><td>4</td><td>Aprovacao manual admin</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Wizard D-45</td></tr>
+<tr><td>5</td><td>Alocacao usina unica (vaga compativel)</td><td style="color:#16a34a;font-weight:600">OK</td><td>motor-proposta linear</td></tr>
+<tr><td>5</td><td>Lista de Espera</td><td style="color:#16a34a;font-weight:600">OK</td><td>Manual via tela admin</td></tr>
+<tr><td>5</td><td>Realocacao inteligente multi-usina</td><td style="color:#dc2626;font-weight:600">Gap</td><td>0% - quadro 5 do txt - 16-24h Code</td></tr>
+<tr><td>5</td><td>Validacao classe GD I/II/III</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Caso Exfishes D-30B P0 R$ 310k/ano</td></tr>
+<tr><td>6</td><td>Protocolo concessionaria automatico</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>So campo texto, 5% automatizado</td></tr>
+<tr><td>7</td><td>Polling site EDP</td><td style="color:#dc2626;font-weight:600">Gap</td><td>0% - quadros 7 do txt</td></tr>
+<tr><td>7</td><td>Leitor email homologacao</td><td style="color:#dc2626;font-weight:600">Gap</td><td>email-monitor existe, falta detector EDP</td></tr>
+<tr><td>7</td><td>Fetcher MMGD mensal</td><td style="color:#dc2626;font-weight:600">Gap</td><td>0% - relatorio manual</td></tr>
+<tr><td>8</td><td>Trigger fatura GD -> cobranca</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Admin marca manual</td></tr>
+<tr><td>8</td><td>Notificacao membro WhatsApp homologacao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>So email - 1-2h fix</td></tr>
+<tr><td>Op</td><td>email-monitor cron 6h</td><td style="color:#16a34a;font-weight:600">OK</td><td>1x dia 6h</td></tr>
+<tr><td>Op</td><td>Engine FIXO_MENSAL</td><td style="color:#16a34a;font-weight:600">OK</td><td>M2 + M3 validados 13-14/05</td></tr>
+<tr><td>Op</td><td>Engines COMPENSADOS/DINAMICO</td><td style="color:#6b7280;font-weight:600">Bloqueado</td><td>BLOQUEIO_MODELOS_NAO_FIXO=true</td></tr>
+<tr><td>Op</td><td>Asaas boleto/PIX + webhook</td><td style="color:#16a34a;font-weight:600">OK</td><td>Sandbox validado 14/05 (latencia 5s)</td></tr>
+<tr><td>Op</td><td>LancamentoCaixa PREVISTO/REALIZADO</td><td style="color:#16a34a;font-weight:600">OK</td><td>D-54 fix Caminho A 14/05</td></tr>
 </tbody>
 </table>
 </section>
 
+<section>
 <div class="next-steps">
-<h2>Proximos passos sugeridos</h2>
+<h2>Proximos passos priorizados</h2>
 <ol>
-<li><strong>Aguardar inventario-sisgd-completo.html</strong> entregue durante a noite pela claude.ai via sub-agentes paralelos (~50-60min). Amanha de manha Luciano abre e revisa pra priorizar frentes.</li>
-<li><strong>Decidir Caminho A vs B do txt/HTML diagrama jornada:</strong> Luciano comparara descricao em OneDrive (cadastro sem UC, opcao tokens, fluxo doc+assinatura, realocacao inteligente, protocolos concessionaria) com este v1.1. Caminho A = refazer / Caminho B = v1.2 expandido.</li>
-<li><strong>Validacao visual final round 2 (Luciano, 5 min, opcional):</strong> Ctrl+F5 em /dashboard/cobrancas — badge "A vencer" azul (D-51 detalhe), tabela responsiva em zoom 100% (D-53 completo), Dar Baixa preserva Cooperado+Contrato (D-55).</li>
-<li><strong>Sub-Fase B AMAGES (2-3 horas):</strong> cadastrar AMAGES 2 UCs em CREDITOS_COMPENSADOS, destravar BLOQUEIO_MODELOS_NAO_FIXO. Pre-req: mitigacao D-46.SEED (UPDATE publico=false nos 3 planos legados).</li>
-<li><strong>Sub-canario CAROLINA Asaas+WhatsApp real (1-2 horas):</strong> tirar ambienteTeste, gerar boleto/PIX real, WA notifica. CAROLINA R$ 142,32 — menor exposicao.</li>
-<li><strong>D-54 LancamentoCaixa (1-2 horas):</strong> replicar logica de Caminho B em gerarCobrancaPosFatura + saneamento retroativo das 4 piloto.</li>
-<li><strong>D-45 wizard cadastro (4-6 horas):</strong> corrigir os 4 bugs do wizard /dashboard/cooperados/novo.</li>
-<li><strong>D-46 ALTAS (8-12 horas distribuidas):</strong> 12 divergencias spec<->Plano.</li>
+<li><strong>Sub-Fase A canario (M2) + Sub-Fase B AMAGES (M4):</strong> M2 + M3 ja entregues 13-14/05. Sub-Fase B AMAGES CREDITOS_COMPENSADOS depende mitigacao D-46.SEED previa (UPDATE planos publico=false). 2-3 dias Code.</li>
+<li><strong>Sprint CooperToken Consolidado (21-26h):</strong> unifica 5 vocabularios coexistentes (D-35 + D-46.6) + fecha D-35..D-43 (FCFS, EV, Token x Convenio, splits, decay, 600k kWh, contabilidade, VPP). 3 etapas: refator schema + UI + migration 85 cooperados intermediarios. Inclui MST D-44 como Etapa 3.</li>
+<li><strong>Cadastro SEM_UC visivel UI (4-6h Code):</strong> destrava indicador puro (banco pronto, UI invisivel). Habilita rede de indicadores remunerada em tokens. Custo baixo, ROI estrategico alto.</li>
+<li><strong>Sprint 3 lembretes proativos quadro 3 (8-12h Code):</strong> cron a (lembrete doc pendente) + cron b (aviso admin > 3d) + cron c (lembrete email portal EDP) + notificacao WA aprovacao concessionaria. Atende quadros 3/6/7/8 do txt do Luciano.</li>
+<li><strong>Sprint 8 Realocacao Inteligente Multi-Usina (16-24h Code):</strong> algoritmo de otimizacao + restricoes (classe GD + concessionaria) + telas aprovacao lista-por-lista + historico. Destrava onboarding 2o parceiro Sinergia. Inclui validacao caso Exfishes D-30B P0.</li>
+<li><strong>Sprint Automacao Concessionaria (24-32h Code):</strong> protocolo automatico + polling site EDP + leitor email homologacao + fetcher MMGD + trigger fatura -> cobranca. Destrava operacao em escala. Quadros 6/7/8 do txt.</li>
 </ol>
 </div>
+</section>
 
 <div class="changelog">
 <h2>Historico de versoes</h2>
 <ul>
+<li><strong>v2.0 - 14/05/2026:</strong> reescrita majoritaria do Mermaid principal incorporando expansoes do txt do Luciano sobre os 5 quadros + adendo. Mudancas: (Q1) branch SEM_UC adicionada; (Q2) decisao explicita DESCONTO vs CLUBE + conexao MST D-44; (Q3) sub-fluxo upload docs + Assinafy + 3 crons proativos a/b/c; (Q4) bifurcacao aprovacao automatica vs manual; (Q5) realocacao inteligente multi-usina detalhada com restricoes GD + caso Exfishes + MST; (Q6/7/8) automacao concessionaria expandida (protocolo + polling + leitor email + fetcher MMGD); (Adendo) link companion pra cadastro-usinas.html v1.0. Secao gaps consolida 13 gaps criticos do txt vinculados a debitos formais.</li>
 <li><strong>v1.4 - 14/05/2026:</strong> documento companheiro cadastro-usinas.html v1.0 criado - cobre fluxo cadastro Usina + particao % kWh entre membros + listas aprovacao/envio concessionaria + operacao recorrente. Atende quadro 5 + adendo + quadros 6/7/8 do txt Luciano.</li>
 <li><strong>v1.3 - 14/05/2026 (fechamento maratona):</strong> M3 entregue (sub-canario CAROLINA Asaas+webhook+WA+email E2E real, latencia 5s). D-30I CoopereAI Lei 14.300 + D-54 LancamentoCaixa Caminho A + /cooperativas/minha resolvidos. Fase 2 Hardening 2A+2B concluidas (9 endpoints IDOR fix em cobrancas+contratos). 13 debitos catalogados formalmente D-35..D-47. 2 regras inegociaveis bilaterais ativas (fechamento + contatos teste com refinamento Gmail +suffix). Decisao 23 aplicada 5+ vezes em 48h. Fase 2 sub-fases 2C..2I pendentes (~28-42h Code).</li>
 <li><strong>v1.2 - 14/05/2026:</strong> inventario-sisgd-completo.html v1.0 criado durante noite 13/05 via 7 sub-agentes claude.ai paralelos - 96 itens × 9 fontes cruzadas - 20 gaps criticos identificados. Bump versao header.</li>
