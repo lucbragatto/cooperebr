@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>SISGD CoopereBR - Cadastro de Usinas v1.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
+header{border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px}
+.title-block h1{color:#1e3a8a;margin:0 0 4px 0;font-size:28px}
+.subtitle{color:#6b7280;font-size:14px}
+.version-block{text-align:right;font-size:13px;color:#6b7280}
+.version-block strong{color:#1e3a8a;font-size:15px}
+.exec{background:#eff6ff;border-left:4px solid #2563eb;padding:16px 20px;border-radius:4px;margin:16px 0 24px}
+.exec h2{color:#1e40af;margin:0 0 8px;font-size:16px}
+.legend{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0 32px;padding:12px 16px;background:#f9fafb;border-radius:6px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:14px}
+.dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:#16a34a}.dot.parcial{background:#ca8a04}.dot.gap{background:#dc2626}.dot.bloqueado{background:#6b7280}
+.diagram-container{border:1px solid #e5e7eb;border-radius:8px;padding:20px;background:#fff;overflow-x:auto;margin:16px 0}
+.mermaid{display:flex;justify-content:center}
+section{margin:32px 0}
+section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
+.status-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+.status-table th,.status-table td{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb}
+.status-table th{background:#f9fafb;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#374151}
+.gap-card{background:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:12px 0}
+.gap-card.critico{background:#fef2f2;border-color:#dc2626}
+.gap-card.alto{background:#fff7ed;border-color:#ea580c}
+.gap-card h3{margin:0 0 8px;font-size:16px;color:#7f1d1d}
+.gap-card.alto h3{color:#9a3412}
+.gap-card .meta{font-size:12px;color:#6b7280;margin-bottom:8px}
+.next-steps{background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:4px}
+.next-steps h2{color:#14532d;border:none;padding:0}
+.next-steps ol{margin:8px 0;padding-left:20px}
+.next-steps li{margin:8px 0}
+.changelog{background:#fafafa;border:1px solid #e5e7eb;border-radius:4px;padding:16px 20px;margin-top:32px;font-size:13px}
+.changelog h2{color:#6b7280;border:none;padding:0;font-size:14px;text-transform:uppercase;letter-spacing:0.5px}
+.priority-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase}
+.priority-badge.p0{background:#fecaca;color:#7f1d1d}
+.priority-badge.p1{background:#fed7aa;color:#9a3412}
+.priority-badge.p2{background:#fef3c7;color:#854d0e}
+.priority-badge.p3{background:#e0e7ff;color:#3730a3}
+@media print{body{max-width:100%}.diagram-container{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header>
+<div class="title-block">
+<h1>Cadastro de Usinas - SISGD CoopereBR</h1>
+<div class="subtitle">Fluxo completo: cadastro + particao % kWh entre membros + listas aprovacao + envio concessionaria + operacao recorrente</div>
+</div>
+<div class="version-block">
+<strong>Versao 1.0</strong><br>
+Criado: 14/05/2026<br>
+Origem: txt Luciano quadro 5 + adendo + inventario SISGD SA4
+</div>
+</header>
+
+<div class="exec">
+<h2>Resumo executivo</h2>
+<p>Fluxo de cadastro de usina e alocacao de membros tem <strong>6 fases</strong>: cadastro da usina (A), alocacao % kWh entre membros (B), listas aprovacao interna (C), envio concessionaria (D), aprovacao concessionaria (E), operacao recorrente (F). Estado real: <strong>cadastro basico funciona (~60%)</strong>, mas <strong>4 grandes blocos sao gap (0%)</strong> conforme descrito por Luciano no txt: cadastro expandido (classe GD, forma aquisicao, forma pagamento dono), realocacao inteligente multi-usina, automacao concessionaria, operacao recorrente (crons concentracao/queima/MMGD). Caso Exfishes R$ 310k/ano ativo (D-30B P0) por falta de campo classeGd.</p>
+</div>
+
+<div class="legend">
+<div class="legend-item"><span class="dot ok"></span>Funciona em producao</div>
+<div class="legend-item"><span class="dot parcial"></span>Funciona parcialmente</div>
+<div class="legend-item"><span class="dot gap"></span>Falta (gap a resolver)</div>
+<div class="legend-item"><span class="dot bloqueado"></span>Implementado mas travado</div>
+</div>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TB
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d,font-weight:bold
+  classDef parcial fill:#fef3c7,stroke:#ca8a04,color:#713f12,font-weight:bold
+  classDef gap fill:#fecaca,stroke:#dc2626,color:#7f1d1d,font-weight:bold
+  classDef bloqueado fill:#e5e7eb,stroke:#6b7280,color:#1f2937,font-weight:bold
+
+  subgraph FA[" Fase A - Cadastro da Usina "]
+    A1[Admin acessa<br/>/dashboard/usinas/nova]:::ok
+    A2[Dados basicos<br/>nome, potencia, capacidade, cidade/estado]:::ok
+    A3{Classe GD I/II/III}:::gap
+    A4[Distribuidora<br/>EDP_ES, OUTRAS]:::parcial
+    A5[Forma aquisicao<br/>Propria/Cessao/Aluguel]:::gap
+    A6[Forma pagamento dono<br/>Fixo/Percentual]:::gap
+    A7[Endereco completo<br/>CEP, num, bairro]:::gap
+    A8[Dono PF/PJ<br/>cooperado ou externo?]:::parcial
+    A9[(Usina criada<br/>schema.prisma:321)]:::ok
+    A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> A7 --> A8 --> A9
+  end
+
+  subgraph FB[" Fase B - Alocacao % kWh entre Membros "]
+    B1[Cooperado aceita proposta<br/>motor-proposta.aceitar]:::ok
+    B2{Usina mesma<br/>distribuidora<br/>tem capacidade?}:::ok
+    B3[Aloca em usina unica<br/>% calculado]:::ok
+    B4[Lista de Espera]:::ok
+    B5{Multiplas usinas<br/>folgas somadas<br/>atendem?<br/>quadro 5 txt}:::gap
+    B6[Sistema reanalisa<br/>+ remaneja cooperados<br/>entre usinas]:::gap
+    B7[Validar:<br/>mesma concessionaria +<br/>mesma classe GD]:::gap
+    B8[Demonstracao ao admin<br/>"se mover A B C cabera em D"]:::gap
+    B9[Admin aprova plano<br/>de realocacao]:::gap
+    B10[Gera listas por usina<br/>tirando/passando + novos %]:::gap
+    B11[Historico de realocacao<br/>+ relatorios]:::gap
+
+    A9 --> B1
+    B1 --> B2
+    B2 -- "Sim" --> B3
+    B2 -- "Nao" --> B5
+    B5 -- "Sim" --> B6 --> B7 --> B8 --> B9 --> B10 --> B11
+    B5 -- "Nao" --> B4
+  end
+
+  subgraph FC[" Fase C - Listas Aprovacao Interna "]
+    C1[Sistema agrupa UCs novas<br/>+ realocacoes pendentes]:::parcial
+    C2[Tela /dashboard/listas-concessionaria<br/>OU /dashboard/usinas/listas]:::ok
+    C3[Admin revisa lista<br/>por usina]:::ok
+    C4[Admin aprova lista]:::ok
+
+    B3 --> C1
+    B10 --> C1
+    C1 --> C2 --> C3 --> C4
+  end
+
+  subgraph FD[" Fase D - Envio Concessionaria "]
+    D1[Admin gera CSV/Planilha<br/>migracoes-usina.gerarLista]:::ok
+    D2[Admin envia EDP<br/>email/portal manual]:::ok
+    D3[EDP gera protocolo<br/>nao automatizado]:::gap
+    D4[Sistema armazena<br/>protocoloConcessionaria<br/>Cooperado / Contrato]:::parcial
+
+    C4 --> D1 --> D2 --> D3 --> D4
+  end
+
+  subgraph FE[" Fase E - Aprovacao Concessionaria "]
+    E1{Como vem o sinal?<br/>quadros 6 7 8 txt}:::gap
+    E2[Email EDP<br/>com numero protocolo]:::gap
+    E3[Polling site EDP<br/>relatorio MMGD]:::gap
+    E4[1a fatura GD chega<br/>via email-monitor]:::parcial
+    E5[Admin confirma manual<br/>contratos.ativar]:::ok
+    E6[Sistema ativa<br/>Cooperado.status ATIVO<br/>Contrato.status ATIVO]:::ok
+    E7[Avisa membro<br/>WhatsApp + email]:::parcial
+
+    D4 --> E1
+    E1 --> E2 --> E5
+    E1 --> E3 --> E5
+    E1 --> E4 --> E5
+    E5 --> E6 --> E7
+  end
+
+  subgraph FF[" Fase F - Operacao Recorrente "]
+    F1[Cron concentracao > 25%<br/>D-30F]:::gap
+    F2[Cron queima saldo > 2 meses<br/>D-30G]:::gap
+    F3[Monitoramento Sungrow<br/>desativado Sprint 6]:::bloqueado
+    F4[Relatorio MMGD mensal]:::gap
+    F5[Cobrancas geradas<br/>via Caminho A]:::ok
+
+    E6 --> F1
+    E6 --> F2
+    E6 --> F3
+    E6 --> F4
+    E6 --> F5
+  end
+</div>
+</div>
+
+<section>
+<h2>Pontos criticos catalogados</h2>
+
+<div class="gap-card critico">
+<h3>D-30B P0 - Caso Exfishes R$ 310k/ano ativo</h3>
+<div class="meta"><span class="priority-badge p0">P0 REGULATORIO</span> Origem: investigacao 20/04 Sprint 11</div>
+<p><strong>O que e:</strong> Schema Usina nao tem campo classeGd. Migracoes entre usinas nao validam se cooperado esta indo de GD I -> GD II (que tem regras tarifarias diferentes). Caso real Exfishes: cooperado migrado sem validacao gerou prejuizo retroativo estimado R$ 310k/ano em creditos mal compensados.</p>
+<p><strong>Fix:</strong> Sprint 5 schema regulatorio - adicionar enum ClasseGd + validacao em motor-proposta.aceitar + migracoes-usina. Custo: 4-6 dias Code dedicado.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>Cadastro de Usina expandido = 0%</h3>
+<div class="meta"><span class="priority-badge p0">P0</span> Origem: adendo txt Luciano</div>
+<p><strong>O que falta:</strong> schema Usina nao tem classeGd, formaAquisicao (CESSAO/ALUGUEL/PROPRIA), formaPagamentoDono (VALOR_FIXO/PERCENTUAL_ARRECADACAO), valor/percentual do pagamento, endereco completo, mediaMensalPrevistaKwh distinta de producaoMensalKwh. UI nova (/dashboard/usinas/nova) so pede o basico.</p>
+<p><strong>Fix:</strong> migration schema + atualizar UI cadastro + atualizar UI detalhe. Custo: 6-8h Code.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>Realocacao inteligente multi-usina = 0%</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> Origem: quadro 5 do txt</div>
+<p><strong>O que falta:</strong> motor escolhe primeira usina com vaga (linear). Sem soma de folgas multi-usina, sem analise mesma distribuidora + classe GD, sem proposta-rascunho de remanejamento, sem aprovacao admin lista-por-lista, sem historico/relatorio.</p>
+<p><strong>Fix:</strong> Sprint dedicado 8. Algoritmo otimizacao + telas aprovacao por usina + historico MigracaoUsina ja existe (schema 1823). Custo: 16-24h Code.</p>
+</div>
+
+<div class="gap-card critico">
+<h3>Automacao concessionaria = 0%</h3>
+<div class="meta"><span class="priority-badge p1">P1</span> Origem: quadros 6/7/8 do txt</div>
+<p><strong>O que falta:</strong> sem geracao automatica de protocolo na EDP, sem polling site EDP por numero de protocolo, sem leitor de email de homologacao (regex), sem fetcher de relatorio MMGD da cooperativa, sem trigger "1a fatura GD chega -> libera cobranca automatico".</p>
+<p><strong>Fix:</strong> Sprint dedicado pos-canario AMAGES. Email-monitor ja existe, falta detector especifico. Custo: 2-3 sprints.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>D-30C 1:1 Contrato↔Usina bloqueia UC com creditos multiplas usinas</h3>
+<div class="meta"><span class="priority-badge p1">P1</span></div>
+<p><strong>O que e:</strong> Schema atual nao suporta UC recebendo creditos de mais de 1 usina simultaneamente. Caso real possivel em GD II com multiplos arranjos de geracao distribuida.</p>
+<p><strong>Fix:</strong> schema novo ContratoUsina N:M + migration. Sprint 5.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>D-30D sem dataProtocoloDistribuidora na UC</h3>
+<div class="meta"><span class="priority-badge p1">P1</span></div>
+<p><strong>O que e:</strong> Cooperado.protocoloConcessionaria existe (campo texto), mas data do protocolo nao registrada. Importante pra audit + calculo de prazo de aprovacao EDP.</p>
+<p><strong>Fix:</strong> migration + atualizar contratos.ativar. Sprint 5.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>D-30F/G crons concentracao + queima saldo</h3>
+<div class="meta"><span class="priority-badge p2">P2</span></div>
+<p><strong>D-30F:</strong> sem cron de auditoria de concentracao > 25% por cooperado-usina (ANEEL exige limite).<br>
+<strong>D-30G:</strong> sem mecanismo de queima de saldo > 2 meses parado.</p>
+<p><strong>Fix:</strong> 2 crons novos. Custo: 4-6h cada.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>Monitoramento Sungrow desativado</h3>
+<div class="meta"><span class="priority-badge p2">P2</span></div>
+<p><strong>O que e:</strong> monitoramento-usinas.service.ts:21 cron comentado desde Sprint 6 ("ativar Sprint 9+"). Telemetria de geracao em tempo real desativada.</p>
+<p><strong>Fix:</strong> reativar cron + validar credenciais Sungrow + tela monitoramento. Custo: 1-2 sprints.</p>
+</div>
+
+<div class="gap-card">
+<h3>D-30L Spec Fio B nunca implementada</h3>
+<div class="meta"><span class="priority-badge p2">P2</span></div>
+<p>docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md tem tabela 2024-2029. Schema sem model RegrasFioB. Calculo Fio B 2026=60% hardcoded em codigo.</p>
+<p><strong>Fix:</strong> schema RegrasFioB + seed tabela ANEEL + service que le da tabela. Sprint 5.</p>
+</div>
+
+</section>
+
+<section>
+<h2>Status detalhado por etapa</h2>
+<table class="status-table">
+<thead><tr><th>Fase</th><th>Etapa</th><th>Status</th><th>Observacao</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>Cadastro basico (nome, potencia, capacidade)</td><td style="color:#16a34a;font-weight:600">OK</td><td>UI /usinas/nova funciona</td></tr>
+<tr><td>A</td><td>Distribuidora vinculada</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Schema enum DistribuidoraEnum, mas Usina.distribuidora ainda String (D-48 corrigiu match)</td></tr>
+<tr><td>A</td><td>Classe GD I/II/III</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30B P0 - caso Exfishes R$ 310k</td></tr>
+<tr><td>A</td><td>Forma aquisicao (cessao/aluguel/propria)</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Schema nao tem campo</td></tr>
+<tr><td>A</td><td>Forma pagamento dono</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Schema nao tem campo</td></tr>
+<tr><td>A</td><td>Endereco completo + dono cooperado</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Campos schema basicos OK, UI sem seletor cooperado-dono</td></tr>
+<tr><td>B</td><td>Alocacao single-usina</td><td style="color:#16a34a;font-weight:600">OK</td><td>motor-proposta linear, D-48.1 corrigiu tenant</td></tr>
+<tr><td>B</td><td>Lista de espera + promocao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Manual via /motor-proposta/lista-espera, sem cron auto</td></tr>
+<tr><td>B</td><td>Realocacao inteligente multi-usina</td><td style="color:#dc2626;font-weight:600">Gap</td><td>0% - quadro 5 do txt</td></tr>
+<tr><td>C</td><td>Geracao listas internas</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Agrupa UCs novas, sem distincao realocacao vs novo</td></tr>
+<tr><td>C</td><td>Admin revisa + aprova</td><td style="color:#16a34a;font-weight:600">OK</td><td>Tela /dashboard/usinas/listas funcional</td></tr>
+<tr><td>D</td><td>Geracao CSV por usina</td><td style="color:#16a34a;font-weight:600">OK</td><td>migracoes-usina.gerarListaConcessionaria</td></tr>
+<tr><td>D</td><td>Envio EDP</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Manual - admin baixa CSV e envia por fora</td></tr>
+<tr><td>D</td><td>Protocolo EDP armazenado</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Campo texto livre, sem data, sem fluxo</td></tr>
+<tr><td>E</td><td>Deteccao automatica aprovacao</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Quadros 6/7/8 - 0%</td></tr>
+<tr><td>E</td><td>Ativacao manual via admin</td><td style="color:#16a34a;font-weight:600">OK</td><td>contratos.ativar() funcional</td></tr>
+<tr><td>E</td><td>Notificacao membro aprovacao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>So email, sem WhatsApp (gap inventario SA5)</td></tr>
+<tr><td>F</td><td>Cobrancas geradas Caminho A</td><td style="color:#16a34a;font-weight:600">OK</td><td>M2 + M3 validados 13-14/05</td></tr>
+<tr><td>F</td><td>Cron concentracao > 25%</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30F</td></tr>
+<tr><td>F</td><td>Cron queima saldo > 2 meses</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30G</td></tr>
+<tr><td>F</td><td>Monitoramento Sungrow</td><td style="color:#6b7280;font-weight:600">Bloqueado</td><td>Cron desativado Sprint 6</td></tr>
+<tr><td>F</td><td>Relatorio MMGD mensal</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Manual via portal EDP</td></tr>
+</tbody>
+</table>
+</section>
+
+<div class="next-steps">
+<h2>Proximos passos sugeridos</h2>
+<ol>
+<li><strong>Sprint regulatorio (1 semana):</strong> schema Usina expandido (classeGd, formaAquisicao, formaPagamentoDono) + UI cadastro nova + validacoes ANEEL. <strong>Fecha caso Exfishes D-30B P0 R$ 310k/ano.</strong></li>
+<li><strong>Sprint Realocacao Inteligente (2-3 sprints):</strong> algoritmo otimizacao multi-usina (quadro 5 txt) + telas aprovacao + historico.</li>
+<li><strong>Sprint Automacao Concessionaria (2-3 sprints):</strong> detector email EDP + polling site + fetcher MMGD (quadros 6/7/8 txt).</li>
+<li><strong>Sprint crons recorrentes (3-4 dias):</strong> D-30F concentracao + D-30G queima saldo + reativar Sungrow.</li>
+<li><strong>D-30D dataProtocoloDistribuidora (2-3h):</strong> migration + atualizar contratos.ativar.</li>
+<li><strong>Notificacao WA aprovacao concessionaria (1-2h):</strong> Sprint 3 lembretes proativos (txt quadros 6/7/8).</li>
+</ol>
+</div>
+
+<div class="changelog">
+<h2>Historico de versoes</h2>
+<ul>
+<li><strong>v1.0 - 14/05/2026:</strong> versao inicial. 6 fases mapeadas (A cadastro / B alocacao % kWh / C listas internas / D envio concessionaria / E aprovacao / F operacao recorrente). 8 gaps criticos catalogados. Caso Exfishes D-30B P0 destacado. Quadro 5 + adendo + quadros 6/7/8 do txt Luciano incorporados.</li>
+</ul>
+</div>
+
+<script>
+mermaid.initialize({startOnLoad:true,theme:'default',flowchart:{useMaxWidth:true,htmlLabels:true,curve:'basis'}});
+</script>
+
+</body>
+</html>
