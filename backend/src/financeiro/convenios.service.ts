@@ -17,9 +17,10 @@ export class ConveniosService {
     });
   }
 
-  async findOne(id: string) {
-    const convenio = await this.prisma.contratoConvenio.findUnique({
-      where: { id },
+  async findOne(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
       include: {
         cooperados: {
           include: { cooperado: { select: { id: true, nomeCompleto: true, cpf: true } } },
@@ -51,10 +52,11 @@ export class ConveniosService {
     diaEnvioRelatorio?: number;
     diaDesconto?: number;
     cooperativaId?: string;
-  }) {
+  }, callerCooperativaId?: string) {
+    // D-48-financeiro IDOR fix: força tenant do caller.
     const numero = await this.gerarNumero();
     return this.prisma.contratoConvenio.create({
-      data: { ...data, numero },
+      data: { ...data, numero, cooperativaId: callerCooperativaId ?? data.cooperativaId },
     });
   }
 
@@ -67,15 +69,19 @@ export class ConveniosService {
     diaEnvioRelatorio: number;
     diaDesconto: number;
     status: string;
-  }>) {
-    await this.findOne(id);
+  }>, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    await this.findOne(id, cooperativaId);
     return this.prisma.contratoConvenio.update({ where: { id }, data });
   }
 
-  async vincularCooperado(convenioId: string, data: { cooperadoId: string; matricula?: string }) {
-    await this.findOne(convenioId);
+  async vincularCooperado(convenioId: string, data: { cooperadoId: string; matricula?: string }, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: convênio E cooperado precisam pertencer ao tenant.
+    await this.findOne(convenioId, cooperativaId);
 
-    const cooperado = await this.prisma.cooperado.findUnique({ where: { id: data.cooperadoId } });
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: data.cooperadoId, ...(cooperativaId ? { cooperativaId } : {}) },
+    });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     const existente = await this.prisma.convenioCooperado.findUnique({
@@ -99,7 +105,9 @@ export class ConveniosService {
     });
   }
 
-  async desvincularCooperado(convenioId: string, cooperadoId: string) {
+  async desvincularCooperado(convenioId: string, cooperadoId: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: convênio precisa pertencer ao tenant.
+    await this.findOne(convenioId, cooperativaId);
     const vinculo = await this.prisma.convenioCooperado.findUnique({
       where: { convenioId_cooperadoId: { convenioId, cooperadoId } },
     });
@@ -111,9 +119,10 @@ export class ConveniosService {
     });
   }
 
-  async relatorio(convenioId: string, competencia: string) {
-    const convenio = await this.prisma.contratoConvenio.findUnique({
-      where: { id: convenioId },
+  async relatorio(convenioId: string, competencia: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, ...(cooperativaId ? { cooperativaId } : {}) },
       include: {
         cooperados: {
           where: { ativo: true },

@@ -28,9 +28,10 @@ export class LancamentosService {
     });
   }
 
-  async findOne(id: string) {
-    const lancamento = await this.prisma.lancamentoCaixa.findUnique({
-      where: { id },
+  async findOne(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: findFirst com filtro tenant.
+    const lancamento = await this.prisma.lancamentoCaixa.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
       include: {
         planoContas: true,
         cooperado: { select: { id: true, nomeCompleto: true } },
@@ -57,10 +58,14 @@ export class LancamentosService {
     convenioId?: string;
     observacoes?: string;
     cooperativaId?: string;
-  }) {
+  }, callerCooperativaId?: string) {
+    // D-48-financeiro IDOR fix: força tenant do caller (ADMIN não cria
+    // lançamentos pra outra cooperativa). SUPER_ADMIN passa undefined.
+    const resolvedCoopId = callerCooperativaId ?? data.cooperativaId;
     return this.prisma.lancamentoCaixa.create({
       data: {
         ...data,
+        cooperativaId: resolvedCoopId,
         dataVencimento: data.dataVencimento ? new Date(data.dataVencimento) : null,
         dataPagamento: data.dataPagamento ? new Date(data.dataPagamento) : null,
       },
@@ -87,8 +92,9 @@ export class LancamentosService {
     return this.prisma.lancamentoCaixa.update({ where: { id }, data: updateData });
   }
 
-  async realizar(id: string, dataPagamento?: Date | string) {
-    await this.findOne(id);
+  async realizar(id: string, dataPagamento?: Date | string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    await this.findOne(id, cooperativaId);
     return this.prisma.lancamentoCaixa.update({
       where: { id },
       data: {
@@ -98,8 +104,9 @@ export class LancamentosService {
     });
   }
 
-  async cancelar(id: string) {
-    await this.findOne(id);
+  async cancelar(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    await this.findOne(id, cooperativaId);
     return this.prisma.lancamentoCaixa.update({
       where: { id },
       data: { status: 'CANCELADO' },

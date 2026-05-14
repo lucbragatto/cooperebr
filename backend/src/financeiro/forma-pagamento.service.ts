@@ -5,7 +5,15 @@ import { PrismaService } from '../prisma.service';
 export class FormaPagamentoService {
   constructor(private prisma: PrismaService) {}
 
-  async findByCooperado(cooperadoId: string) {
+  async findByCooperado(cooperadoId: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: valida tenant do cooperado primeiro.
+    if (cooperativaId) {
+      const coop = await this.prisma.cooperado.findFirst({
+        where: { id: cooperadoId, cooperativaId },
+        select: { id: true },
+      });
+      if (!coop) throw new NotFoundException('Cooperado não encontrado');
+    }
     const forma = await this.prisma.formaPagamentoCooperado.findUnique({
       where: { cooperadoId },
     });
@@ -22,8 +30,11 @@ export class FormaPagamentoService {
     banco?: string;
     dadosGateway?: any;
     ativo?: boolean;
-  }) {
-    const cooperado = await this.prisma.cooperado.findUnique({ where: { id: cooperadoId } });
+  }, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: cooperado precisa pertencer ao tenant do caller.
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: cooperadoId, ...(cooperativaId ? { cooperativaId } : {}) },
+    });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     const existente = await this.prisma.formaPagamentoCooperado.findUnique({

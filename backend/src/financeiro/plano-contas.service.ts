@@ -52,8 +52,15 @@ export class PlanoContasService implements OnModuleInit {
     });
   }
 
-  async findOne(id: string) {
-    const conta = await this.prisma.planoContas.findUnique({ where: { id } });
+  async findOne(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: findFirst com filtro tenant.
+    // PlanoContas global (cooperativaId=null) é visível a todos via findAll;
+    // findOne valida que ADMIN só lê próprios + globais.
+    const conta = await this.prisma.planoContas.findFirst({
+      where: cooperativaId
+        ? { id, OR: [{ cooperativaId }, { cooperativaId: null }] }
+        : { id },
+    });
     if (!conta) throw new NotFoundException(`Plano de contas com id ${id} não encontrado`);
     return conta;
   }
@@ -76,15 +83,32 @@ export class PlanoContasService implements OnModuleInit {
     grupo: string;
     descricao: string;
     ativo: boolean;
-  }>) {
-    await this.findOne(id);
+  }>, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: ADMIN só edita planos do próprio tenant
+    // (globais cooperativaId=null reservados a SUPER_ADMIN).
+    if (cooperativaId) {
+      const exists = await this.prisma.planoContas.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException(`Plano de contas com id ${id} não encontrado`);
+    } else {
+      await this.findOne(id);
+    }
     return this.prisma.planoContas.update({ where: { id }, data });
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix: mesma regra de update.
+    if (cooperativaId) {
+      const exists = await this.prisma.planoContas.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException(`Plano de contas com id ${id} não encontrado`);
+    }
     const lancamentos = await this.prisma.lancamentoCaixa.count({ where: { planoContasId: id } });
     if (lancamentos > 0) {
-      // Desativar em vez de excluir se há lançamentos vinculados
       return this.prisma.planoContas.update({ where: { id }, data: { ativo: false } });
     }
     return this.prisma.planoContas.delete({ where: { id } });

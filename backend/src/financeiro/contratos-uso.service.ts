@@ -18,9 +18,10 @@ export class ContratosUsoService {
     });
   }
 
-  async findOne(id: string) {
-    const contrato = await this.prisma.contratoUso.findUnique({
-      where: { id },
+  async findOne(id: string, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    const contrato = await this.prisma.contratoUso.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
       include: {
         cooperado: { select: { id: true, nomeCompleto: true, cpf: true } },
         usina: { select: { id: true, nome: true } },
@@ -98,8 +99,9 @@ export class ContratosUsoService {
     dataFim: Date | string;
     status: string;
     observacoes: string;
-  }>) {
-    await this.findOne(id);
+  }>, cooperativaId?: string) {
+    // D-48-financeiro IDOR fix.
+    await this.findOne(id, cooperativaId);
     const updateData: any = { ...data };
     if (data.dataFim) updateData.dataFim = new Date(data.dataFim);
     return this.prisma.contratoUso.update({

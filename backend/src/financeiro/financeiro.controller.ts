@@ -39,20 +39,21 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('plano-contas/:id')
-  findOnePlanoContas(@Param('id') id: string) {
-    return this.planoContasService.findOne(id);
+  findOnePlanoContas(@Param('id') id: string, @Req() req: any) {
+    // D-48-financeiro IDOR fix.
+    return this.planoContasService.findOne(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Patch('plano-contas/:id')
-  updatePlanoContas(@Param('id') id: string, @Body() body: any) {
-    return this.planoContasService.update(id, body);
+  updatePlanoContas(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.planoContasService.update(id, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete('plano-contas/:id')
-  removePlanoContas(@Param('id') id: string) {
-    return this.planoContasService.remove(id);
+  removePlanoContas(@Param('id') id: string, @Req() req: any) {
+    return this.planoContasService.remove(id, req.user?.cooperativaId);
   }
 
   // ─── Lançamentos ───────────────────────────────────────────
@@ -71,8 +72,9 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('lancamentos')
-  createLancamento(@Body() body: any) {
-    return this.lancamentosService.create(body);
+  createLancamento(@Body() body: any, @Req() req: any) {
+    // D-48-financeiro IDOR fix.
+    return this.lancamentosService.create(body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
@@ -95,14 +97,14 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Patch('lancamentos/:id/realizar')
-  realizarLancamento(@Param('id') id: string, @Body() body?: { dataPagamento?: string }) {
-    return this.lancamentosService.realizar(id, body?.dataPagamento);
+  realizarLancamento(@Param('id') id: string, @Body() body: { dataPagamento?: string } | undefined, @Req() req: any) {
+    return this.lancamentosService.realizar(id, body?.dataPagamento, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Patch('lancamentos/:id/cancelar')
-  cancelarLancamento(@Param('id') id: string) {
-    return this.lancamentosService.cancelar(id);
+  cancelarLancamento(@Param('id') id: string, @Req() req: any) {
+    return this.lancamentosService.cancelar(id, req.user?.cooperativaId);
   }
 
   // ─── Contratos de Uso ──────────────────────────────────────
@@ -115,20 +117,21 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('contratos-uso')
-  createContratoUso(@Body() body: any) {
-    return this.contratosUsoService.create(body);
+  createContratoUso(@Body() body: any, @Req() req: any) {
+    // D-48-financeiro IDOR fix: força tenant do caller.
+    return this.contratosUsoService.create({ ...body, cooperativaId: req.user?.cooperativaId ?? body.cooperativaId });
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('contratos-uso/:id')
-  findOneContratoUso(@Param('id') id: string) {
-    return this.contratosUsoService.findOne(id);
+  findOneContratoUso(@Param('id') id: string, @Req() req: any) {
+    return this.contratosUsoService.findOne(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Patch('contratos-uso/:id')
-  updateContratoUso(@Param('id') id: string, @Body() body: any) {
-    return this.contratosUsoService.update(id, body);
+  updateContratoUso(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.contratosUsoService.update(id, body, req.user?.cooperativaId);
   }
 
   // ─── Convênios ─────────────────────────────────────────────
@@ -141,32 +144,32 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('convenios')
-  createConvenio(@Body() body: any) {
-    return this.conveniosService.create(body);
+  createConvenio(@Body() body: any, @Req() req: any) {
+    return this.conveniosService.create(body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('convenios/:id')
-  findOneConvenio(@Param('id') id: string) {
-    return this.conveniosService.findOne(id);
+  findOneConvenio(@Param('id') id: string, @Req() req: any) {
+    return this.conveniosService.findOne(id, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Patch('convenios/:id')
-  updateConvenio(@Param('id') id: string, @Body() body: any) {
-    return this.conveniosService.update(id, body);
+  updateConvenio(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.conveniosService.update(id, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('convenios/:id/cooperados')
-  vincularCooperado(@Param('id') id: string, @Body() body: { cooperadoId: string; matricula?: string }) {
-    return this.conveniosService.vincularCooperado(id, body);
+  vincularCooperado(@Param('id') id: string, @Body() body: { cooperadoId: string; matricula?: string }, @Req() req: any) {
+    return this.conveniosService.vincularCooperado(id, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Delete('convenios/:id/cooperados/:cooperadoId')
-  desvincularCooperado(@Param('id') id: string, @Param('cooperadoId') cooperadoId: string) {
-    return this.conveniosService.desvincularCooperado(id, cooperadoId);
+  desvincularCooperado(@Param('id') id: string, @Param('cooperadoId') cooperadoId: string, @Req() req: any) {
+    return this.conveniosService.desvincularCooperado(id, cooperadoId, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -174,10 +177,11 @@ export class FinanceiroController {
   async relatorioConvenio(
     @Param('id') id: string,
     @Query('competencia') competencia: string,
+    @Req() req: any,
     @Query('format') format?: string,
     @Res({ passthrough: true }) res?: any,
   ) {
-    const relatorio = await this.conveniosService.relatorio(id, competencia);
+    const relatorio = await this.conveniosService.relatorio(id, competencia, req.user?.cooperativaId);
 
     if (format === 'csv' && res) {
       const csv = this.conveniosService.relatorioCsv(relatorio);
@@ -193,20 +197,21 @@ export class FinanceiroController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get('forma-pagamento/:cooperadoId')
-  findFormaPagamento(@Param('cooperadoId') cooperadoId: string) {
-    return this.formaPagamentoService.findByCooperado(cooperadoId);
+  findFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Req() req: any) {
+    // D-48-financeiro IDOR fix.
+    return this.formaPagamentoService.findByCooperado(cooperadoId, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('forma-pagamento/:cooperadoId')
-  createFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Body() body: any) {
-    return this.formaPagamentoService.createOrUpdate(cooperadoId, body);
+  createFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Body() body: any, @Req() req: any) {
+    return this.formaPagamentoService.createOrUpdate(cooperadoId, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Patch('forma-pagamento/:cooperadoId')
-  updateFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Body() body: any) {
-    return this.formaPagamentoService.createOrUpdate(cooperadoId, body);
+  updateFormaPagamento(@Param('cooperadoId') cooperadoId: string, @Body() body: any, @Req() req: any) {
+    return this.formaPagamentoService.createOrUpdate(cooperadoId, body, req.user?.cooperativaId);
   }
 
   // ─── PIX Excedente ─────────────────────────────────────────
