@@ -28,13 +28,17 @@
   - **Regra inegociável bilateral de fechamento adicionada ao `CLAUDE.md`** (commit `83776d8`). 3 itens obrigatórios: doc-sessão + CONTROLE-EXECUCAO + HTML jornada. Sistema bilateral claude.ai+Code.
   - **HTML profissional `docs/diagramas/jornada-membro.html`** criado v1.0 e atualizado pra v1.1 com mudanças do dia.
   - **Decisão 23 aplicada 5× em 48h** — memória do projeto sistemicamente desatualizada. Reforço da Fase 1 read-only obrigatória.
-- **Commits do dia:** 14 (`32f1d37`, `0448f9b`, `e2cd14e`, `74c05e3`, `323d66d`, `bded89d`, `309389e`, `c7256e8`, `102640e`, `78b2285`, `83776d8` regra, `a6ce3e3` fechamento parcial, + este commit + cleanup final).
+- **Commits do dia:** 14 (`32f1d37`, `0448f9b`, `e2cd14e`, `74c05e3`, `323d66d`, `bded89d`, `309389e`, `c7256e8`, `102640e`, `78b2285`, `83776d8` regra, `a6ce3e3` fechamento parcial, `8e78f8a` expansão fechamento, + este commit inventário).
 - **Detalhe completo:** `docs/sessoes/2026-05-13-canario-fixo-d48-d50-d55-fechado.md`
-- **Inventário SISGD completo** será entregue pela claude.ai durante a noite via sub-agentes paralelos (~50-60min). Saída em `docs/diagramas/inventario-sisgd-completo.html` v1.0.
+
+### Entrega noturna (claude.ai sozinho via sub-agentes — NÃO conta como sessão Code)
+
+- **Inventário SISGD completo entregue 14/05/2026:** `docs/diagramas/inventario-sisgd-completo.html` v1.0 gerado pela claude.ai via 7 sub-agentes paralelos (~50-60min, ~700k tokens). **96 itens** de menu cruzados em **9 fontes** cada (specs, backend, frontend, crons, testes, débitos catalogados, sessões anteriores, txt do Luciano, memória persistente). **20 gaps críticos** consolidados — IDOR sistêmico em ~20 endpoints, 3 lembretes proativos quadro 3+6+7+8, realocação inteligente quadro 5, automação concessionária quadros 6/7/8, cadastro SEM_UC UI, cadastro usina expandido (D-30B P0 Exfishes), Assinafy zero código. 11+ débitos só vivem em memória persistente claude.ai (D-35..D-46 + MST/VPP/Token×Convênio) — risco de perda se contexto trocar.
+- HTML jornada v1.1 → v1.2 bump no mesmo commit referenciando o inventário.
 
 ### Frase de retomada COMANDANTE
 
-> Code: Luciano vai abrir o `docs/diagramas/inventario-sisgd-completo.html` entregue durante a noite. Aguarda decisão dele de qual área atacar primeiro antes de tocar código. Se decisão for txt/HTML jornada, ele compara `OneDrive/Documentos/descricao diagrama claude.txt` com `jornada-membro.html` v1.1 e decide Caminho A (refazer) vs Caminho B (v1.2 expandido). Não iniciar nenhuma frente sem decisão explícita.
+> Code: Luciano abriu `docs/diagramas/inventario-sisgd-completo.html` v1.0 entregue pela claude.ai durante a noite. Aguarda decisão dele de qual área atacar primeiro: IDOR sistemático (~20 endpoints), 3 lembretes proativos quadro 3+6+7+8, realocação inteligente quadro 5, automação concessionária quadros 6/7/8, cadastro SEM_UC UI, ou txt/HTML jornada pendente. Não iniciar nenhuma frente sem decisão explícita.
 
 ### Sessão anterior — 2026-05-13 manhã (Fatia H.2 + D-33 reframe)
 

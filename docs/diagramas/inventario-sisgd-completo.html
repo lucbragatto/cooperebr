@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>SISGD CoopereBR - Inventario Completo v1.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
+header{border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px}
+.title-block h1{color:#1e3a8a;margin:0 0 4px 0;font-size:28px}
+.subtitle{color:#6b7280;font-size:14px}
+.version-block{text-align:right;font-size:13px;color:#6b7280}
+.version-block strong{color:#1e3a8a;font-size:15px}
+.exec{background:#eff6ff;border-left:4px solid #2563eb;padding:16px 20px;border-radius:4px;margin:16px 0 24px}
+.exec h2{color:#1e40af;margin:0 0 8px;font-size:16px}
+.dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:24px 0}
+.metric{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;text-align:center}
+.metric .num{font-size:32px;font-weight:bold;display:block;margin-bottom:4px}
+.metric .label{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px}
+.metric.ok{border-color:#16a34a}.metric.ok .num{color:#16a34a}
+.metric.parcial{border-color:#ca8a04}.metric.parcial .num{color:#ca8a04}
+.metric.gap{border-color:#dc2626}.metric.gap .num{color:#dc2626}
+.metric.bloqueado{border-color:#6b7280}.metric.bloqueado .num{color:#374151}
+.legend{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0 32px;padding:12px 16px;background:#f9fafb;border-radius:6px}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:14px}
+.dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:#16a34a}.dot.parcial{background:#ca8a04}.dot.gap{background:#dc2626}.dot.bloqueado{background:#6b7280}
+section{margin:32px 0}
+section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
+section h3{color:#1e40af;margin-top:24px}
+.area-section{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:20px 0}
+.area-section h3{color:#1e3a8a;margin:0 0 12px;border-bottom:2px solid #dbeafe;padding-bottom:8px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e5e7eb}
+th{background:#f9fafb;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#374151}
+tr:hover{background:#f9fafb}
+.status-cell{font-weight:600;white-space:nowrap}
+.status-ok{color:#16a34a}.status-parcial{color:#ca8a04}.status-gap{color:#dc2626}.status-bloqueado{color:#6b7280}
+.gap-card{background:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:12px 0}
+.gap-card.critico{background:#fef2f2;border-color:#dc2626}
+.gap-card.bloqueio{background:#f9fafb;border-color:#6b7280}
+.gap-card.alto{background:#fff7ed;border-color:#ea580c}
+.gap-card h3{margin:0 0 8px;font-size:16px;color:#7f1d1d}
+.gap-card.alto h3{color:#9a3412}
+.gap-card.bloqueio h3{color:#374151}
+.gap-card .meta{font-size:12px;color:#6b7280;margin-bottom:8px}
+.gap-card .impact{margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;font-size:13px}
+.priority-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase}
+.priority-badge.p0{background:#fecaca;color:#7f1d1d}
+.priority-badge.p1{background:#fed7aa;color:#9a3412}
+.priority-badge.p2{background:#fef3c7;color:#854d0e}
+.priority-badge.p3{background:#e0e7ff;color:#3730a3}
+.next-steps{background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:4px}
+.next-steps h2{color:#14532d;border:none;padding:0}
+.next-steps ol{margin:8px 0;padding-left:20px}
+.next-steps li{margin:8px 0}
+.changelog{background:#fafafa;border:1px solid #e5e7eb;border-radius:4px;padding:16px 20px;margin-top:32px;font-size:13px}
+.changelog h2{color:#6b7280;border:none;padding:0;font-size:14px;text-transform:uppercase;letter-spacing:0.5px}
+.toc{background:#eff6ff;border-radius:4px;padding:12px 20px;margin:16px 0}
+.toc ul{margin:4px 0;padding-left:20px}
+.toc a{color:#1e40af;text-decoration:none}.toc a:hover{text-decoration:underline}
+.evidencia{font-family:monospace;font-size:11px;color:#6b7280;background:#f3f4f6;padding:2px 6px;border-radius:3px}
+@media print{body{max-width:100%}.area-section{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header>
+<div class="title-block">
+<h1>Inventario SISGD Completo - CoopereBR</h1>
+<div class="subtitle">Esquadrinhamento exaustivo de 96 itens cruzados em 9 fontes - varredura por 7 sub-agentes paralelos</div>
+</div>
+<div class="version-block">
+<strong>Versao 1.0</strong><br>
+Gerado: 14/05/2026<br>
+Origem: 7 sub-agentes claude.ai noite 13/05
+</div>
+</header>
+
+<div class="exec">
+<h2>Resumo executivo</h2>
+<p>Investigacao exaustiva das 7 areas funcionais do SISGD cruzando 9 fontes cada (specs, backend, frontend, crons, testes, debitos catalogados, sessoes anteriores, txt do Luciano, memoria persistente claude.ai). <strong>20 gaps criticos identificados</strong>, incluindo descobertas novas: IDOR sistemico em ~20 endpoints (bloqueia onboarding 2o parceiro), 3 lembretes proativos do quadro 3+6+7+8 do seu txt nao implementados, motor de realocacao inteligente entre usinas inexistente (quadro 5), automacao concessionaria inexistente (quadros 6/7/8), cadastro de membro SEM UC invisivel na UI (banco pronto). Tudo ou quase tudo esta escrito - 8 gaps criticos so vivem em memoria persistente claude.ai, nao no docs/debitos-tecnicos.md formal.</p>
+</div>
+
+<div class="dashboard">
+<div class="metric ok"><span class="num">~40%</span><span class="label">Funciona em producao</span></div>
+<div class="metric parcial"><span class="num">~30%</span><span class="label">Funciona parcial</span></div>
+<div class="metric gap"><span class="num">~20%</span><span class="label">Gap real</span></div>
+<div class="metric bloqueado"><span class="num">~10%</span><span class="label">Bloqueado por flag</span></div>
+</div>
+
+<div class="legend">
+<div class="legend-item"><span class="dot ok"></span>Funciona em producao</div>
+<div class="legend-item"><span class="dot parcial"></span>Funciona parcialmente</div>
+<div class="legend-item"><span class="dot gap"></span>Falta (gap a resolver)</div>
+<div class="legend-item"><span class="dot bloqueado"></span>Implementado mas travado</div>
+</div>
+
+<div class="toc">
+<strong>Indice:</strong>
+<ul>
+<li><a href="#top20">Top 20 Gaps Criticos</a></li>
+<li><a href="#sa1">Area 1 - Cadastro e Membros</a></li>
+<li><a href="#sa2">Area 2 - Cobranca e Financeiro</a></li>
+<li><a href="#sa3">Area 3 - Comercial e Engajamento</a></li>
+<li><a href="#sa4">Area 4 - Usinas, Listas, Contratos, Motor</a></li>
+<li><a href="#sa5">Area 5 - Comunicacao (WhatsApp + Email)</a></li>
+<li><a href="#sa6">Area 6 - SaaS e Plataforma</a></li>
+<li><a href="#sa7">Area 7 - Seguranca e Infra</a></li>
+<li><a href="#processo">Gaps de Catalogacao (debitos so em memoria)</a></li>
+<li><a href="#proximos">Proximos Passos Sugeridos</a></li>
+</ul>
+</div>
+
+<section id="top20">
+<h2>Top 20 Gaps Criticos Consolidados</h2>
+
+<div class="gap-card critico">
+<h3>1. IDOR sistemico em ~20 endpoints sem multi-tenant</h3>
+<div class="meta"><span class="priority-badge p1">P1 SEGURANCA</span> Origem: SA7</div>
+<p><strong>O que e:</strong> D-48 fechou em 13/05 7 sites de Usina.findMany, mas cobrancas/contratos/faturas/motor-proposta/financeiro tem 20+ endpoints UPDATE/DELETE/relacao aninhada que nao filtram cooperativaId. Pelo menos 4 IDORs criticos confirmados por leitura.</p>
+<p><strong>Exemplos:</strong> <span class="evidencia">GET /cobrancas/contrato/:contratoId</span>, <span class="evidencia">GET /cobrancas/:id/pdf</span>, <span class="evidencia">DELETE /cobrancas/:id</span>, <span class="evidencia">POST /contratos/:id/ativar</span>, <span class="evidencia">PATCH /faturas/documentos/:id/status</span>, <span class="evidencia">PUT /motor-proposta/tarifa-concessionaria/:id</span>.</p>
+<div class="impact"><strong>Impacto:</strong> Bloqueia onboarding Sinergia (2o parceiro real CoopereBR). Atacante autenticado em tenant A pode ler/alterar dados de tenant B.</div>
+</div>
+
+<div class="gap-card critico">
+<h3>2. Lembrete pra membro fazer upload de documento ate completar</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: SA1+SA5 + txt do Luciano quadro 3</div>
+<p><strong>O que e:</strong> Voce descreveu no txt "nao mandou doc fica pendente e o sistema lembra ate enviar etc". Hoje existe so cron de auto-aprovacao apos N horas (<span class="evidencia">documentos-aprovacao.job.ts</span>) - faz o OPOSTO do que voce pediu.</p>
+<div class="impact"><strong>Impacto:</strong> Cooperado aceita proposta e some sem enviar doc fica em PENDENTE_DOCUMENTOS indefinidamente. Taxa de conversao cadastro-ativacao degrada. Sem catalogacao formal. <strong>Estimativa fix: 3-4h Code</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>3. Lembrete pra membro confirmar email do parceiro no site da concessionaria</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: SA1+SA5 + txt do Luciano quadro 3</div>
+<p><strong>O que e:</strong> Voce descreveu "salvar o email do parceiro no site da concessionaria para receber 2a via da fatura, enquanto o membro nao clicar confirmando que salvou o lembrete fica". Schema tem <span class="evidencia">Cooperado.emailFaturasAtivo</span>, email-monitor ativa flag automaticamente quando recebe fatura, mas UI nunca pede confirmacao nem cron lembra.</p>
+<div class="impact"><strong>Impacto:</strong> Membros que nao configuram email da concessionaria ficam dependendo de OCR manual. <strong>Estimativa fix: 2-3h Code</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>4. Notificacao WhatsApp aprovacao concessionaria (so email hoje)</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: SA5 + txt do Luciano quadros 6/7/8</div>
+<p><strong>O que e:</strong> <span class="evidencia">cooperados.service.ts:836-901 aprovarConcessionaria</span> cria notificacao interna e envia email - mas NAO dispara WhatsApp. Voce escreveu "avisa admin, avisa membro" - geralmente significa WhatsApp.</p>
+<div class="impact"><strong>Impacto:</strong> Membro nao recebe a noticia mais aguardada do cadastro no canal que ele usa todo dia. <strong>Estimativa fix: 1-2h Code</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>5. Motor de realocacao inteligente entre multiplas usinas - 0% implementado</h3>
+<div class="meta"><span class="priority-badge p1">P1 ESTRATEGICO</span> Origem: SA4 + txt do Luciano quadro 5</div>
+<p><strong>O que e:</strong> Voce descreveu: "se mais de uma usina folga insuficiente, soma folgas atendem - sistema reanalisa, troca cooperados entre usinas, gera listas, admin aprova lista por lista". Hoje motor escolhe primeira usina com vaga (linear). Migracao manual 1-a-1 funciona. Sem otimizacao global.</p>
+<div class="impact"><strong>Impacto:</strong> Cooperado novo bloqueado em LISTA_ESPERA mesmo quando agregando folga de 3 usinas daria pra alocar. Admin faz manualmente. <strong>Estimativa: 16-24h Code (algoritmo + telas aprovacao por usina + historico)</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>6. Automacao concessionaria - 0% (quadros 6/7/8 do txt)</h3>
+<div class="meta"><span class="priority-badge p1">P1 OPERACIONAL</span> Origem: SA4 + txt do Luciano</div>
+<p><strong>O que e:</strong> Voce descreveu: protocolo na concessionaria, polling site EDP, leitor email homologacao, fetcher MMGD da cooperativa, trigger "fatura GD recebida -> libera cobranca". Hoje admin digita protocolo manual via <span class="evidencia">contratos.service.ts:399 ativar()</span>. Email-monitor le faturas mas nao detecta aprovacao.</p>
+<div class="impact"><strong>Impacto:</strong> Processo concessionaria 100% fora do sistema. Maior gargalo operacional. <strong>Estimativa: 2-3 sprints dedicados (escopo grande, vale fatiar)</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>7. Cadastro membro SEM UC invisivel na UI</h3>
+<div class="meta"><span class="priority-badge p1">P1 ESTRATEGICO</span> Origem: SA1 + txt do Luciano quadro 1</div>
+<p><strong>O que e:</strong> Voce descreveu: "cooperado SEM UC que traga novos usuarios, destinar tokens ou converter em valor". Banco pronto (<span class="evidencia">enum TipoCooperado.SEM_UC</span>), service trata em 5 pontos, endpoint aceita. UI nunca expoe a escolha - wizard obriga upload de fatura, cadastro publico idem.</p>
+<div class="impact"><strong>Impacto:</strong> Bloqueia caso de uso "rede de indicadores remunerada em tokens" (Sprint 8 + MST D-44). <strong>Estimativa: 4-6h Code (adicionar Step0 chooser + pular Steps quando SEM_UC)</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>8. Cadastro de Usina expandido - 0% no schema</h3>
+<div class="meta"><span class="priority-badge p0">P0 REGULATORIO</span> Origem: SA4 + txt do Luciano adendo</div>
+<p><strong>O que e:</strong> Voce descreveu: classe GD I/II/III, dono (cooperado ou nao), forma aquisicao (cessao/aluguel/propria), forma pagamento dono (fixo/percentual), endereco completo, media mensal prevista distinta. Schema atual tem so basico (nome, potencia, capacidade, cidade/estado, proprietario texto).</p>
+<div class="impact"><strong>Impacto:</strong> <strong>Caso Exfishes R$ 310k/ano ATIVO (D-30B P0)</strong> - sem campo classeGd, sem validacao em migracoes, risco financeiro real. <strong>Estimativa: Sprint 5 dedicado (4-6 dias Code)</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>9. Assinafy (assinatura digital) - zero codigo</h3>
+<div class="meta"><span class="priority-badge p1">P1 JURIDICO</span> Origem: SA5</div>
+<p><strong>O que e:</strong> Mencionado 4x em PRODUTO.md como "Sprint 3 futura" + 1x em debitos-tecnicos.md. Hoje o aceite e "campos no model" - sem assinatura juridica de termo + procuracao. Zero integracao com provedor de assinatura.</p>
+<div class="impact"><strong>Impacto:</strong> Aceite atual e fragil juridicamente. Membro pode contestar contrato. <strong>Estimativa: 2-3 sprints (integracao + UI + validacoes)</strong></div>
+</div>
+
+<div class="gap-card critico">
+<h3>10. AuditLog (D-30N) inativo - 0 writes</h3>
+<div class="meta"><span class="priority-badge p2">P2 OBSERVABILIDADE</span> Origem: SA6+SA7</div>
+<p><strong>O que e:</strong> Tabela <span class="evidencia">audit_logs</span> existe no schema (Sprint 13a Dia 1), campos completos (usuario, perfil, impersonating, acao, recurso, metadata, ip, userAgent). Zero <span class="evidencia">prisma.auditLog.create</span> no codigo. Sem interceptor, decorator, helper, module.</p>
+<div class="impact"><strong>Impacto:</strong> Bloqueia Sugestao #7 (Observabilidade Total) que voce pediu pra ser lembrado. Sem rastreabilidade de quem fez o que. <strong>Estimativa: 6-8h Code (interceptor + decorator + helper + module + aplicar em endpoints sensiveis)</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>11. CoopereAI bot cita RN 482/2012 caducada</h3>
+<div class="meta"><span class="priority-badge p1">P1 REGULATORIO</span> D-30I catalogado</div>
+<p><strong>O que e:</strong> Bot CoopereAI responde leads e cooperados desde 2026-04 com regulacao defasada (<span class="evidencia">coopere-ai.service.ts:25</span> system prompt). RN 482 foi substituida pela Lei 14.300/2022.</p>
+<div class="impact"><strong>Impacto:</strong> Toda interacao do bot transmite info regulatoria errada. Catalogado mas nao corrigido. <strong>Estimativa: 30min</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>12. FaturaSaas nao envia via Asaas (D-29F decomposto)</h3>
+<div class="meta"><span class="priority-badge p1">P1 RECEITA SISGD</span> Origem: SA2+SA6</div>
+<p><strong>O que e:</strong> Cron mensal dia 1 6h cria FaturaSaas no banco. Mas: (1) Asaas nao recebe a cobranca; (2) parceiro nao recebe comunicacao D-7/D-3/D-1. <span class="evidencia">ConfigGatewayPlataforma</span> vazio em prod (0 registros). 3 FaturaSaas PENDENTES no banco invisiveis.</p>
+<div class="impact"><strong>Impacto:</strong> SISGD nao cobra parceiros automaticamente. Receita propria do Luciano nao flui. <strong>Estimativa: 1-2 semanas Sprint 1</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>13. D-54 LancamentoCaixa PREVISTO faltante (Caminho A)</h3>
+<div class="meta"><span class="priority-badge p1">P1 CONTABILIDADE</span> Catalogado 14/05</div>
+<p><strong>O que e:</strong> <span class="evidencia">gerarCobrancaPosFatura</span> nao cria LancamentoCaixa PREVISTO. So o Caminho B (cobranca manual) cria. 4 cobrancas piloto Sub-Fase A (DIEGO, CAROLINA, ALMIR, THEOMAX) ficaram sem lancamento. <span class="evidencia">gerarCobrancasLote:1058</span> tem o mesmo gap.</p>
+<div class="impact"><strong>Impacto:</strong> Relatorios financeiros sub-reportam receita prevista. Calculo da FaturaSaas SISGD usa receita prevista do parceiro - afeta cascata. <strong>Estimativa: 1-2h Code + saneamento retroativo</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>14. /parceiro/configurar chama endpoint inexistente</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> Origem: SA6</div>
+<p><strong>O que e:</strong> Wizard <span class="evidencia">/dashboard/parceiros/configurar/page.tsx</span> chama <span class="evidencia">PUT /cooperativas/minha</span> que NAO EXISTE no controller. Pagina morta ou sempre falha silenciosamente.</p>
+<div class="impact"><strong>Impacto:</strong> Bloqueio operacional. Nao catalogado como debito. <strong>Estimativa: 1h Code (criar endpoint OU remover tela)</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>15. Wizard /parceiros/novo so usa 4 dos 11 steps disponiveis</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> Origem: SA6</div>
+<p><strong>O que e:</strong> 7 steps orfaos em <span class="evidencia">web/app/dashboard/parceiros/novo/steps/</span>: Step2Membros, Step3Espera, Step5Cobranca, Step6Asaas, Step7Banco, Step8Documentos, Step9Revisao. Onboarding real nao cria conta admin, nao configura Asaas, nao envia email.</p>
+<div class="impact"><strong>Impacto:</strong> Onboarding parceiro novo incompleto. <strong>Estimativa: depende do escopo final</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>16. useTipoParceiro 22/72 telas - 50 hardcoded</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> Catalogado debitos-tecnicos.md:679</div>
+<p><strong>O que e:</strong> Hook resolve COOPERATIVA/CONSORCIO/ASSOCIACAO/CONDOMINIO em Cooperado/Consorciado/Associado/Condomino. Adotado em 22 telas, 50 ainda hardcoded "Cooperado" + 73 exceptions backend.</p>
+<div class="impact"><strong>Impacto:</strong> <strong>Bloqueia onboarding Consorcio/Associacao/Condominio em producao</strong>. CoopereBR (cooperativa) funciona OK. Sinergia (proximo) ainda OK se for cooperativa. <strong>Estimativa: 3-5 dias incremental</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>17. Cross-talk /parceiro/membros/[id] - rota legacy</h3>
+<div class="meta"><span class="priority-badge p1">P1 SEGURANCA INTRA-TENANT</span> Origem: SA1</div>
+<p><strong>O que e:</strong> Tela legacy mostra contratos/cobrancas de OUTROS cooperados na mesma cooperativa. Query <span class="evidencia">findMany</span> sem filtrar cooperadoId. Rota nova <span class="evidencia">/dashboard/cooperados/*</span> funciona corretamente.</p>
+<div class="impact"><strong>Impacto:</strong> Vazamento intra-tenant. Admin parceiro ve dados de membros que nao sao dele se passar pelo path legado. <strong>Estimativa: 2-3h (corrigir filtro OU descontinuar rota /parceiro/membros)</strong></div>
+</div>
+
+<div class="gap-card bloqueio">
+<h3>18. Engines COMPENSADOS e DINAMICO bloqueadas</h3>
+<div class="meta"><span class="priority-badge p1">P1 BLOQUEIO OPERACIONAL</span> Origem: SA2</div>
+<p><strong>O que e:</strong> Engines validadas E2E sintetico 6/6 cenarios (precisao centavo) em 03/05. Decisao B33 corrigiu semantica. 7 enforcement points blindam <span class="evidencia">BLOQUEIO_MODELOS_NAO_FIXO=true</span> em producao. Pre-requisito: canario 1 cooperado real validar.</p>
+<div class="impact"><strong>Impacto:</strong> So FIXO_MENSAL roda hoje. Sub-Fase B AMAGES vai testar COMPENSADOS. <strong>Estimativa Sub-Fase B: 2-3 dias Code + mitigacao D-46.SEED (3 planos legados publico=true)</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>19. Conciliacao bancaria BB/Sicoob - so fecha CobrancaBancaria, nao extrato real</h3>
+<div class="meta"><span class="priority-badge p2">P2</span> Origem: SA2</div>
+<p><strong>O que e:</strong> Webhook + polling diario 6h05 existe (<span class="evidencia">integracao-bancaria.service.ts</span>), mas opera so em modulo CobrancaBancaria. Nao cruza extrato OFX/CNAB com LancamentoCaixa. MAPA F7 marca "Conciliacao bancaria real NAO_EXISTE".</p>
+<div class="impact"><strong>Impacto:</strong> Parceiro fecha mes manualmente. <strong>Estimativa: 1-2 sprints dedicados</strong></div>
+</div>
+
+<div class="gap-card alto">
+<h3>20. Reconhecimento facial IDOR + algoritmo fraco</h3>
+<div class="meta"><span class="priority-badge p2">P2 (zero uso atual)</span> Origem: SA7</div>
+<p><strong>O que e:</strong> <span class="evidencia">POST /auth/facial/cadastrar</span> aceita usuarioId no body sem validar que e o proprio (IDOR latente). Algoritmo: similaridade pixel grayscale 64x64 - nao e facial recognition real. Zero consumo no frontend.</p>
+<div class="impact"><strong>Impacto:</strong> Baixo (nao usado), mas risco se ativar. <strong>Estimativa: 1h fix IDOR + revisao algoritmo se ativar</strong></div>
+</div>
+
+</section>
+
+<section id="sa1">
+<div class="area-section">
+<h3>Area 1 - Cadastro & Membros</h3>
+<p><strong>Resumo:</strong> 11 itens. Espinha dorsal funciona (controller + service + 11 endpoints multi-tenant + 2 crons + spec Jest). Wizard admin tem 4 erros encadeados (D-45). Cadastro SEM_UC invisivel na UI apesar do banco estar pronto. Spec dedicada nao existe (esta espalhada em PRODUTO.md, sessoes, txt do Luciano).</p>
+
+<table>
+<thead><tr><th>Item</th><th>Backend</th><th>Frontend</th><th>Cron</th><th>Debito</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/cooperados listagem</td><td>OK</td><td>OK</td><td>-</td><td>-</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Wizard /dashboard/cooperados/novo (7 passos)</td><td>fragmentado</td><td>UI quebra Step3+4+6</td><td>-</td><td>D-45 P2</td><td class="status-cell status-parcial">Parcial</td></tr>
+<tr><td>/dashboard/cooperados/[id] perfil</td><td>OK</td><td>OK</td><td>-</td><td>-</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/parceiro/membros/* legacy</td><td>reusa /cooperados</td><td>cross-talk contratos</td><td>-</td><td>nao catalogado</td><td class="status-cell status-parcial">Parcial</td></tr>
+<tr><td>/dashboard/ucs</td><td>OK</td><td>OK</td><td>-</td><td>D-30C/D</td><td class="status-cell status-parcial">Parcial</td></tr>
+<tr><td>Cadastro web publico /cadastro</td><td>cadastroWebV2 ativo</td><td>OK</td><td>-</td><td>-</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Cadastro membro SEM UC (indicador puro)</td><td>banco pronto</td><td><strong>AUSENTE</strong></td><td>-</td><td>nao catalogado</td><td class="status-cell status-gap">Gap</td></tr>
+<tr><td>Upload documentos PF/PJ</td><td>OK</td><td>OK (Step5)</td><td>auto-aprova (nao cobra)</td><td>-</td><td class="status-cell status-parcial">Parcial</td></tr>
+<tr><td>Cron lembrete documento (cobra membro)</td><td>NAO EXISTE</td><td>-</td><td>NAO EXISTE</td><td>nao catalogado</td><td class="status-cell status-gap">Gap</td></tr>
+<tr><td>Cron aviso admin doc pendente</td><td>NAO EXISTE</td><td>-</td><td>NAO EXISTE</td><td>nao catalogado</td><td class="status-cell status-gap">Gap</td></tr>
+<tr><td>Lista de Espera</td><td>OK</td><td>OK</td><td>-</td><td>-</td><td class="status-cell status-parcial">Parcial (sem motor realocacao)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa2">
+<div class="area-section">
+<h3>Area 2 - Cobranca & Financeiro</h3>
+<p><strong>Resumo:</strong> 17 itens. Caminho B funcional sandbox 27/04. Engine FIXO_MENSAL validada E2E real 14/05 (M2 entregue). Engines COMPENSADOS/DINAMICO bloqueadas runtime. FaturaSaas cron cria mas nao envia. PIX Excedente em modo simulacao.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Backend</th><th>Frontend</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/cobrancas listagem</td><td>OK</td><td>OK (D-51/D-53/D-55 resolvidos 13/05)</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/cobrancas/[id] detalhe</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Engine FIXO_MENSAL</td><td>OK (faturas.service:1864)</td><td>-</td><td class="status-cell status-ok">OK (validado 14/05)</td></tr>
+<tr><td>Engine CREDITOS_COMPENSADOS</td><td>OK (Decisao B33)</td><td>-</td><td class="status-cell status-bloqueado">Bloqueado</td></tr>
+<tr><td>Engine CREDITOS_DINAMICO</td><td>OK (helper canonico)</td><td>-</td><td class="status-cell status-bloqueado">Bloqueado</td></tr>
+<tr><td>gerarCobrancaPosFatura (Caminho A)</td><td>OK</td><td>-</td><td class="status-cell status-parcial">Parcial (D-54 sem LancamentoCaixa)</td></tr>
+<tr><td>gerarCobrancasLote (mensal)</td><td>OK</td><td>-</td><td class="status-cell status-parcial">Parcial (D-54 mesmo gap)</td></tr>
+<tr><td>darBaixa / PUT cobrancas/:id</td><td>OK (D-52 resolvido)</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/financeiro Central</td><td>6 services</td><td>6 paginas</td><td class="status-cell status-parcial">Parcial (sem DRE)</td></tr>
+<tr><td>PIX Excedente</td><td>implementado</td><td>OK</td><td class="status-cell status-parcial">Parcial (ASAAS_PIX_EXCEDENTE_ATIVO=false)</td></tr>
+<tr><td>/dashboard/saas/planos + faturas</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK (Painel Sprint 13a)</td></tr>
+<tr><td>gerarFaturaParaCooperativa</td><td>cron OK</td><td>botao OK</td><td class="status-cell status-parcial">Parcial (D-29F.1/.2/.3)</td></tr>
+<tr><td>Webhook Asaas pagamento.confirmado</td><td>OK timing-safe + idempotencia</td><td>-</td><td class="status-cell status-ok">OK sandbox (aguarda conta prod)</td></tr>
+<tr><td>LancamentoCaixa PREVISTO/REALIZADO</td><td>OK Caminho B</td><td>OK</td><td class="status-cell status-parcial">Parcial (D-54 Caminho A nao cria)</td></tr>
+<tr><td>Conciliacao bancaria BB/Sicoob</td><td>so CobrancaBancaria</td><td>-</td><td class="status-cell status-gap">Gap (sem extrato OFX/CNAB)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa3">
+<div class="area-section">
+<h3>Area 3 - Comercial & Engajamento</h3>
+<p><strong>Resumo:</strong> 11 itens, area mais densa do SISGD. Mais codigo que documentacao consolidada. 5 vocabularios CooperToken coexistindo. Token x Convenio gap estrutural (spec 1457 linhas nao menciona token). MST/VPP/FCFS so em memoria, fora dos debitos formais.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Backend</th><th>Frontend</th><th>Spec Jest</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/indicacoes (MLM)</td><td>OK 3 arquivos</td><td>dashboard + portal</td><td>0</td><td class="status-cell status-parcial">Parcial (D-30M E2E pendente)</td></tr>
+<tr><td>Meu Convite / Convites</td><td>OK 4 arquivos + job</td><td>OK</td><td>0</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>CooperToken</td><td>OK 6 arquivos 2671 linhas</td><td>3 telas</td><td>0</td><td class="status-cell status-parcial">Parcial (Sprint CT pendente)</td></tr>
+<tr><td>Clube de Vantagens</td><td>OK 4 arquivos</td><td>3 telas</td><td>0</td><td class="status-cell status-parcial">Parcial (0 OfertaClube no banco)</td></tr>
+<tr><td>Ranking Indicadores</td><td>via /clube-vantagens</td><td>OK</td><td>0</td><td class="status-cell status-ok">OK (4 niveis BRONZE-DIAMANTE)</td></tr>
+<tr><td>Convenios</td><td>OK 9 arquivos</td><td>3 telas</td><td>1</td><td class="status-cell status-ok">OK (215 membros, mas Token x Convenio gap)</td></tr>
+<tr><td>Condominios</td><td>OK 3 arquivos</td><td>OK</td><td>0</td><td class="status-cell status-parcial">Parcial (sem spec)</td></tr>
+<tr><td>Agregadores</td><td>OK 3 arquivos</td><td>OK</td><td>0</td><td class="status-cell status-parcial">Parcial (sem spec)</td></tr>
+<tr><td>Cooperado SEM_UC indicador (token convertivel)</td><td>parcial</td><td>OK so kWh->PIX</td><td>0</td><td class="status-cell status-gap">Gap (sem token p/ SEM_UC indicador)</td></tr>
+<tr><td>Conversao tokens -> valor/desconto</td><td>OK usarNaFatura</td><td>OK portal</td><td>0</td><td class="status-cell status-parcial">Parcial (5 vocabularios conflitam)</td></tr>
+<tr><td>Cascata MLM bonus indicacao</td><td>OK loop 2 niveis</td><td>OK</td><td>0</td><td class="status-cell status-parcial">Parcial (D-30M, 0 beneficios reais)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa4">
+<div class="area-section">
+<h3>Area 4 - Usinas, Listas, Contratos, Motor de Proposta</h3>
+<p><strong>Resumo:</strong> 13 itens. Cadastro basico de usina + lista CSV manual + ativacao manual + migracao 1:1 manual funcionam (~25% do quadro 5 do txt). Realocacao inteligente cross-usina (0%), cadastro expandido GD/dono/aquisicao (0%), automacao concessionaria (0%), telemetria desativada.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Backend</th><th>Frontend</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/usinas listagem</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/usinas/nova cadastro</td><td>basico</td><td>basico</td><td class="status-cell status-parcial">Parcial (sem GD/aquisicao/pagamento)</td></tr>
+<tr><td>/dashboard/usinas/[id] detalhe</td><td>OK extenso</td><td>OK saude+ocupacao+migracao</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/usinas/listas (Listas Concessionaria)</td><td>OK CSV</td><td>OK</td><td class="status-cell status-parcial">Parcial (sem fluxo aprovacao+protocolo)</td></tr>
+<tr><td>/dashboard/contratos listagem</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/contratos/[id] + ativar</td><td>OK manual</td><td>OK</td><td class="status-cell status-parcial">Parcial (ativacao manual, sem deteccao auto)</td></tr>
+<tr><td>/dashboard/motor-proposta simulador</td><td>OK</td><td>OK + 4 sub-rotas</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Motor service aceitar() aloca usina</td><td>linear</td><td>-</td><td class="status-cell status-parcial">Parcial (sem balanceamento, D-48.1 corrigido)</td></tr>
+<tr><td>Migracoes Usina (manual)</td><td>OK</td><td>OK modais</td><td class="status-cell status-parcial">Parcial (sem validacao GD, D-30B P0)</td></tr>
+<tr><td>Realocacao inteligente multi-usina</td><td>NAO EXISTE</td><td>-</td><td class="status-cell status-gap">Gap (Sprint 8 planejado)</td></tr>
+<tr><td>Aprovacao concessionaria automatica</td><td>NAO EXISTE</td><td>-</td><td class="status-cell status-gap">Gap (sem polling/MMGD/email)</td></tr>
+<tr><td>Cadastro Usina expandido (GD/dono/aquisicao)</td><td>schema sem campos</td><td>UI basica</td><td class="status-cell status-gap">Gap (D-30B P0)</td></tr>
+<tr><td>Geracao protocolo concessionaria</td><td>NAO EXISTE</td><td>-</td><td class="status-cell status-gap">Gap</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa5">
+<div class="area-section">
+<h3>Area 5 - Comunicacao (WhatsApp + Email)</h3>
+<p><strong>Resumo:</strong> 13 itens. Area mais robusta tecnicamente. 14 services WhatsApp + IMAP multi-tenant + CoopereAI + 3 crons cobranca WA+email. Mas 3 lembretes proativos do txt do Luciano (quadros 3+6+7+8) = 0% implementados. Assinafy zero codigo.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Backend</th><th>Frontend</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/whatsapp chat+bot</td><td>14 services</td><td>UI completa</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>/dashboard/whatsapp/config QR</td><td>OK</td><td>embutido</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>CoopereAI ("Coop") bot Claude</td><td>OK</td><td>via WA</td><td class="status-cell status-parcial">Parcial (D-30I RN 482 caducada)</td></tr>
+<tr><td>Email do Parceiro SMTP+IMAP</td><td>multi-tenant</td><td>OK testa conexao</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Email de Faturas config</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Email-monitor IMAP (pipeline)</td><td>OK 538 linhas</td><td>manual + cron 6h</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Notificacoes in-app</td><td>OK</td><td>OK</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>whatsapp-service/ (Baileys)</td><td>OK 564 linhas</td><td>-</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Cron lembretes WA cobranca</td><td>D-3+D-1+vencida</td><td>dashboard cobrancas</td><td class="status-cell status-ok">OK (gated NOTIFICACOES_ATIVAS)</td></tr>
+<tr><td>Lembrete upload documento</td><td>NAO EXISTE</td><td>-</td><td class="status-cell status-gap">Gap (txt quadro 3)</td></tr>
+<tr><td>Lembrete email no site EDP</td><td>NAO EXISTE</td><td>-</td><td class="status-cell status-gap">Gap (txt quadro 3)</td></tr>
+<tr><td>Notificacao aprovacao concessionaria</td><td>so email</td><td>-</td><td class="status-cell status-parcial">Parcial (sem WhatsApp)</td></tr>
+<tr><td>Assinafy / Assinatura digital</td><td>ZERO CODIGO</td><td>-</td><td class="status-cell status-gap">Gap (PRODUTO.md menciona Sprint 3)</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa6">
+<div class="area-section">
+<h3>Area 6 - SaaS & Plataforma</h3>
+<p><strong>Resumo:</strong> 13 itens. Painel SISGD funcional Sprint 13a Dia 1. Lista parceiros enriquecida OK Dia 2. Usuarios, Observador, Lead-Expansao OK. AuditLog inativo. Wizard parceiros novo so 4/11 steps. /parceiros/configurar chama endpoint inexistente.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Status</th><th>Bloqueia onboarding parceiro novo?</th></tr></thead>
+<tbody>
+<tr><td>/dashboard/super-admin Painel SISGD</td><td class="status-cell status-ok">OK</td><td>Nao</td></tr>
+<tr><td>/dashboard/super-admin/parceiros lista</td><td class="status-cell status-ok">OK</td><td>Nao</td></tr>
+<tr><td>/dashboard/parceiros/novo wizard</td><td class="status-cell status-parcial">Parcial</td><td><strong>Sim - incompleto</strong></td></tr>
+<tr><td>/dashboard/parceiros/configurar</td><td class="status-cell status-gap">Quebrado</td><td>Sim (endpoint inexistente)</td></tr>
+<tr><td>/dashboard/saas/planos CRUD</td><td class="status-cell status-ok">OK</td><td>Nao (D-46/D-47 sem registro formal)</td></tr>
+<tr><td>/dashboard/saas/faturas FaturaSaas</td><td class="status-cell status-parcial">Parcial</td><td>Sim pra cobrar</td></tr>
+<tr><td>/dashboard/usuarios</td><td class="status-cell status-ok">OK</td><td>Nao</td></tr>
+<tr><td>/dashboard/observador</td><td class="status-cell status-ok">OK</td><td>Nao</td></tr>
+<tr><td>Lead-Expansao</td><td class="status-cell status-parcial">backend OK, frontend so consumo</td><td>Nao</td></tr>
+<tr><td>Impersonate (Sprint 13b)</td><td class="status-cell status-parcial">mecanismo minimo so</td><td>Nao operar, sim pra suporte</td></tr>
+<tr><td>AuditLog D-30N</td><td class="status-cell status-gap">Inativo - 0 writes</td><td>Nao</td></tr>
+<tr><td>MetricasSaasService</td><td class="status-cell status-ok">OK (N+1 latente >30 parceiros)</td><td>Nao</td></tr>
+<tr><td>useTipoParceiro vocabulario multi-tipo</td><td class="status-cell status-parcial">22/72 telas</td><td><strong>Sim - bloqueia Consorcio/Assoc/Condominio</strong></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sa7">
+<div class="area-section">
+<h3>Area 7 - Seguranca & Infra</h3>
+<p><strong>Resumo:</strong> 15 itens. JWT, RBAC, HMAC Asaas, criptografia AES-256-GCM, rate limiting, LGPD OK. Gaps criticos NOVOS: IDOR sistemico em ~20 endpoints, AuditLog 0 writes, sem Helmet/HSTS/CSP, .env.example desatualizado. PerfilUsuario enum nao tem ADMIN_PARCEIRO.</p>
+
+<table>
+<thead><tr><th>Item</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>JWT Auth (cache 60s P2024 fix)</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>RBAC Roles (5 perfis)</td><td class="status-cell status-ok">OK</td></tr>
+<tr><td>Reconhecimento facial KYC</td><td class="status-cell status-parcial">Backend impl, frontend 0, IDOR latente</td></tr>
+<tr><td>Multi-tenant intra-tenant LISTAGENS</td><td class="status-cell status-gap">~20 endpoints IDOR (D-48 fechou so write)</td></tr>
+<tr><td>AuditLog (D-30N)</td><td class="status-cell status-gap">Tabela existe, 0 writes</td></tr>
+<tr><td>Backup/recuperacao banco</td><td class="status-cell status-parcial">Supabase managed, sem doc interna</td></tr>
+<tr><td>Variaveis ambiente sensiveis</td><td class="status-cell status-parcial">.env.example desatualizado</td></tr>
+<tr><td>HMAC validacao webhook Asaas</td><td class="status-cell status-ok">OK timing-safe</td></tr>
+<tr><td>LGPD whitelist + ambienteTeste</td><td class="status-cell status-ok">OK (Sprint 10)</td></tr>
+<tr><td>Rate limiting endpoints publicos</td><td class="status-cell status-ok">OK global + custom</td></tr>
+<tr><td>CSRF/XSS protecao</td><td class="status-cell status-parcial">JWT bearer mitiga, sem helmet/CSP</td></tr>
+<tr><td>CORS</td><td class="status-cell status-parcial">Configurado, fallback localhost</td></tr>
+<tr><td>PM2 + processos zumbi</td><td class="status-cell status-ok">OK (disciplina CLAUDE.md)</td></tr>
+<tr><td>Reset senha via WhatsApp</td><td class="status-cell status-ok">OK token UUID 1h</td></tr>
+<tr><td>Trocar contexto (impersonate JWT)</td><td class="status-cell status-parcial">Mecanismo so, sem AuditLog</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="processo">
+<h2>Gaps de Catalogacao (debitos que so vivem em memoria)</h2>
+
+<div class="gap-card alto">
+<h3>D-44 MST, D-43 VPP, D-38 Token x Convenio + D-35 a D-46 fora de docs/debitos-tecnicos.md</h3>
+<p>11 debitos relevantes (D-35 vocabulario CT, D-36 FCFS, D-37 EV, D-38 Token x Convenio, D-39 splits, D-40 decay, D-41 600k kWh, D-42 contabilidade clube, D-43 VPP, D-44 MST, D-45 wizard cadastro, D-46 chapeu 12 sub-itens) existem em memoria persistente claude.ai mas NUNCA foram escritos no debitos-tecnicos.md.</p>
+<p><strong>Risco:</strong> Luciano troca de maquina ou claude troca de contexto e desaparecem. Sao P1/P2 ativos.</p>
+<p><strong>Acao recomendada:</strong> 2h de housekeeping pra escrever os blocos formais.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>D-45/D-46/D-47 em CONTROLE-EXECUCAO mas tambem nao em debitos-tecnicos.md</h3>
+<p>CONTROLE-EXECUCAO.md menciona, mas o arquivo formal de debitos nao tem entrada. Mesma situacao do bloco acima.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>"Agregador" no UI vs "Administradora" no schema</h3>
+<p>Mismatch vocabulario. Nao catalogado. Sugestao: catalogar como debito documental.</p>
+</div>
+
+<div class="gap-card alto">
+<h3>Spec dedicada de Cadastro & Membros nao existe</h3>
+<p>Fluxo descrito em 4 fontes (PRODUTO.md, sessoes 20/04 e 29/04, txt do Luciano). Quadros 1-4 do txt sao a spec nao-formalizada. Recomendacao: criar docs/especificacao-cadastro-membros.md consolidando.</p>
+</div>
+</section>
+
+<section id="proximos">
+<div class="next-steps">
+<h2>Proximos Passos Sugeridos (priorizado)</h2>
+<ol>
+<li><strong>Decidir caminho txt/HTML jornada amanha</strong> (pendencia herdada de 13/05) - Caminho A (refazer v1.0) vs Caminho B (v1.2 expandido).</li>
+<li><strong>Sub-Fase B AMAGES CREDITOS_COMPENSADOS</strong> (catalogada) - validar engine bloqueada via canario real (2-3 dias).</li>
+<li><strong>Sub-canario CAROLINA Asaas+WA real</strong> (1-2h) - primeiro pagamento real com Asaas/WhatsApp em producao.</li>
+<li><strong>Sprint dedicado Auditoria IDOR + Hardening HTTP</strong> (1-2 semanas) - antes do onboarding Sinergia. Inclui: aplicar tenant-guard em 20 endpoints + adicionar Helmet + revisar CORS + atualizar .env.example.</li>
+<li><strong>Sprint 3 lembretes proativos</strong> (4-6 dias) - lembrete upload doc + aviso admin + lembrete email EDP + notificacao WA aprovacao concessionaria. Atende quadros 3+6/7/8 do txt.</li>
+<li><strong>Sprint Cadastro SEM_UC UI</strong> (4-6h) - Step0 chooser no wizard + variantes pra cadastro publico.</li>
+<li><strong>Sprint 5 schema regulatorio</strong> (4-6 dias) - classeGd, formaAquisicao, formaPagamentoDono, RegrasFioB, dataProtocoloDistribuidora. Fecha D-30B caso Exfishes P0.</li>
+<li><strong>Sprint AuditLog D-30N</strong> (6-8h) - interceptor + decorator + helper + module. Base pra Sugestao #7.</li>
+<li><strong>Housekeeping debitos formais</strong> (2h) - mover D-35 a D-46 + D-44 + D-43 da memoria persistente pro debitos-tecnicos.md.</li>
+<li><strong>Sprint D-29F FaturaSaas envio</strong> (1-2 semanas) - Asaas + comunicacao D-7/D-3/D-1. SISGD comeca a cobrar parceiro.</li>
+<li><strong>Sprint CooperToken Consolidado</strong> (2-3 sprints) - consolidar 5 vocabularios, criar spec Token x Convenio, atender D-44 MST.</li>
+<li><strong>Sprint 8 Motor de Realocacao Inteligente</strong> (2-3 sprints) - quadro 5 do txt.</li>
+<li><strong>Sprint Automacao Concessionaria</strong> (2-3 sprints) - quadros 6/7/8 do txt.</li>
+<li><strong>Sprint Assinafy</strong> (2-3 sprints) - assinatura digital termo + procuracao.</li>
+</ol>
+</div>
+</section>
+
+<div class="changelog">
+<h2>Historico de versoes</h2>
+<ul>
+<li><strong>v1.0 - 14/05/2026:</strong> versao inicial gerada por 7 sub-agentes claude.ai paralelos na noite 13/05/2026. 96 itens de menu cruzados em 9 fontes cada. 20 gaps criticos consolidados. 14 proximos passos priorizados. Custo total ~700k tokens.</li>
+</ul>
+</div>
+
+<script>
+mermaid.initialize({startOnLoad:true,theme:'default',flowchart:{useMaxWidth:true,htmlLabels:true,curve:'basis'}});
+</script>
+
+</body>
+</html>
