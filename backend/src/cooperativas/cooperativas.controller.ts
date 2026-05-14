@@ -103,6 +103,38 @@ export class CooperativasController {
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
+  @Put('minha')
+  updateMinha(
+    @Body()
+    body: {
+      nome?: string;
+      cnpj?: string;
+      email?: string;
+      telefone?: string;
+      endereco?: string;
+      numero?: string;
+      bairro?: string;
+      cidade?: string;
+      estado?: string;
+      cep?: string;
+      ativo?: boolean;
+      tipoParceiro?: string;
+      bandeiraAtiva?: boolean;
+      bandeiraSincronizacaoAuto?: boolean;
+    },
+    @Request() req: any,
+  ) {
+    // D-30Y2 fix: tela /dashboard/parceiros/configurar consome este endpoint.
+    // Usa cooperativaId do JWT em vez de :id no path — admin nunca pode
+    // editar outra cooperativa por esta rota.
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Usuário não vinculado a uma cooperativa');
+    }
+    return this.cooperativasService.update(cooperativaId, body);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
   @Put(':id')
   update(
     @Param('id') id: string,
