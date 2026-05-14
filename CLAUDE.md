@@ -131,6 +131,24 @@ sempre e impreterivelmente meu celular e meu email para testes".
 se contatos devem ser substituídos. Claude.ai catalogou em memória
 persistente `regra_contato_teste_impreterivel.md`.
 
+**Refinamento email com `+suffix` (14/05/2026):**
+
+Luciano é cooperado real CoopereBR com email `lucbragatto@gmail.com`. Por
+unique constraint Prisma, nenhum outro cooperado pode usar o mesmo email
+base.
+
+Solução: padrão Gmail `+suffix` (RFC-compliant). Aliases:
+- `lucbragatto+carolina@gmail.com`
+- `lucbragatto+diego@gmail.com`
+- `lucbragatto+almir@gmail.com`
+- `lucbragatto+theomax@gmail.com`
+- `lucbragatto+amages@gmail.com`
+- `lucbragatto+marcio@gmail.com`
+- Futuros: `lucbragatto+<novo>@gmail.com`
+
+Whitelist em `backend/src/common/safety/whitelist-teste.ts` já lista os 6
+aliases canônicos. Gmail roteia tudo pra mesma caixa.
+
 ## Disciplina de validação prévia (Decisões 14, 15, 20)
 
 **Regra inegociável** — em três granularidades cumulativas:

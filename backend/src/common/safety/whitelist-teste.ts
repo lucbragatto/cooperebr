@@ -18,6 +18,16 @@ export const WHITELIST_TELEFONES_TESTE: string[] = [
 
 export const WHITELIST_EMAILS_TESTE: string[] = [
   'lucbragatto@gmail.com', // Luciano (admin dev)
+  // Aliases Gmail +suffix pra sub-canários (refinamento regra 14/05).
+  // Gmail roteia todos pra mesma caixa do lucbragatto@gmail.com.
+  // Origem: Luciano é cooperado real CoopereBR (CPF 89089324704),
+  // unique constraint Prisma impede outros usarem mesmo email base.
+  'lucbragatto+carolina@gmail.com',
+  'lucbragatto+diego@gmail.com',
+  'lucbragatto+almir@gmail.com',
+  'lucbragatto+theomax@gmail.com',
+  'lucbragatto+amages@gmail.com',
+  'lucbragatto+marcio@gmail.com',
 ];
 
 function normalizarTelefone(tel: string): string {
