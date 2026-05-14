@@ -700,6 +700,37 @@ export class FaturasService {
       },
     });
 
+    // D-54 fix: criar LancamentoCaixa PREVISTO (Contas a Receber).
+    // Mesmo padrão de cobrancas.service.ts:345-371 (Caminho B).
+    // Caminho A (este método) não criava — relatórios financeiros + FaturaSaas
+    // SISGD sub-reportavam receita prevista.
+    try {
+      const nomeCooperado = contrato.cooperado?.nomeCompleto || 'Cooperado';
+      const mesRef = `${String(mesNum).padStart(2, '0')}/${anoNum}`;
+      const competencia = `${anoNum}-${String(mesNum).padStart(2, '0')}`;
+      const planoContas = await this.prisma.planoContas.findFirst({
+        where: { codigo: '1.1.01' },
+      });
+      await this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `Mensalidade - ${nomeCooperado} - ${mesRef}`,
+          valor: calc.valorLiquido,
+          competencia,
+          dataVencimento: vencimento,
+          status: 'PREVISTO',
+          cooperativaId: contrato.cooperativaId || undefined,
+          cooperadoId: contrato.cooperadoId || undefined,
+          planoContasId: planoContas?.id || undefined,
+          observacoes: `Ref. cobrança ${cobranca.id}`,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `D-54: Falha ao criar LancamentoCaixa PREVISTO (Caminho A): ${(err as Error).message}`,
+      );
+    }
+
     // Notificação
     await this.notificacoes.criar({
       tipo: 'COBRANCA_GERADA',
@@ -1088,6 +1119,33 @@ export class FaturasService {
         where: { id: fatura.id },
         data: { cobrancaGeradaId: cobrancaCriada.id },
       });
+
+      // D-54 fix: criar LancamentoCaixa PREVISTO no lote também (mesmo padrão).
+      try {
+        const nomeCooperadoLote = contrato.cooperado?.nomeCompleto || 'Cooperado';
+        const competencia = `${anoReferencia}-${String(mesReferencia).padStart(2, '0')}`;
+        const planoContas = await this.prisma.planoContas.findFirst({
+          where: { codigo: '1.1.01' },
+        });
+        await this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'RECEITA',
+            descricao: `Mensalidade - ${nomeCooperadoLote} - ${mesRef}`,
+            valor: calc.valorLiquido,
+            competencia,
+            dataVencimento: vencimento,
+            status: 'PREVISTO',
+            cooperativaId: contrato.cooperativaId || undefined,
+            cooperadoId: contrato.cooperadoId || undefined,
+            planoContasId: planoContas?.id || undefined,
+            observacoes: `Ref. cobrança ${cobrancaCriada.id}`,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `D-54: Falha ao criar LancamentoCaixa PREVISTO (lote): ${(err as Error).message}`,
+        );
+      }
 
       cobrancasCriadas++;
       avisos.push(`Contrato ${contrato.numero}: modelo ${calc.modeloCobrancaUsado}`);

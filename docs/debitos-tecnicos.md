@@ -1632,7 +1632,7 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
-### D-54 — `LancamentoCaixa` PREVISTO faltante em `gerarCobrancaPosFatura`
+### D-54 — `LancamentoCaixa` PREVISTO faltante em `gerarCobrancaPosFatura` ✅ RESOLVIDO
 
 **Severidade:** P1 latente
 
@@ -1655,7 +1655,7 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 **Bloqueio:** não bloqueia Sub-Fase A canário completo (cobranças existem, cobrável). Bloqueia fidelidade dos relatórios financeiros.
 
-**Status:** CATALOGADO 14/05/2026 noite (commit consolidado D-50.2 + D-51 + D-52 + D-53).
+**Status:** ✅ RESOLVIDO 14/05/2026. Patch em `faturas.service.ts` aplicou padrão idêntico de `cobrancas.service.ts:345-371` em ambos `gerarCobrancaPosFatura` E `gerarCobrancasLote` (bug-gêmeo). Saneamento retroativo via `backend/scripts/saneamento-d54-lancamento-previsto.ts` criou 4 LancamentoCaixa PREVISTO pras 4 cobranças piloto Sub-Fase A (DIEGO R$ 447,68 / CAROLINA R$ 142,32 / ALMIR R$ 940,93 / THEOMAX R$ 1.011,33).
 
 ---
 
