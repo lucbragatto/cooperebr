@@ -393,7 +393,14 @@ export class CobrancasService {
     if (data.dataVencimento && typeof data.dataVencimento === 'string') {
       data.dataVencimento = normalizarData(data.dataVencimento, 'dataVencimento');
     }
-    return this.prisma.cobranca.update({ where: { id }, data: data as any });
+    // D-55 fix: retornar com mesmo include do findOne — sem isso a UI
+    // sobrescreve o estado com objeto plano e perde contrato.cooperado
+    // após Dar Baixa / Editar (tela detalhe fica com "—").
+    return this.prisma.cobranca.update({
+      where: { id },
+      data: data as any,
+      include: { contrato: { include: { cooperado: true } } },
+    });
   }
 
   async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string) {

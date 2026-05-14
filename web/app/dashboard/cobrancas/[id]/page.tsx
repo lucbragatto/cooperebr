@@ -13,6 +13,7 @@ import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 import EconomiaProjetada from '@/components/EconomiaProjetada';
 
 const statusClasses: Record<string, string> = {
+  A_VENCER: 'bg-blue-100 text-blue-800 border-blue-200',
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   PAGO: 'bg-green-100 text-green-800 border-green-200',
   VENCIDO: 'bg-red-100 text-red-800 border-red-200',
@@ -20,6 +21,7 @@ const statusClasses: Record<string, string> = {
 };
 
 const statusLabel: Record<string, string> = {
+  A_VENCER: 'A vencer',
   PENDENTE: 'Pendente',
   PAGO: 'Pago',
   VENCIDO: 'Vencido',
@@ -150,8 +152,8 @@ export default function CobrancaDetailPage() {
               <span>
                 Cobrança {String(cobranca.mesReferencia).padStart(2, '0')}/{cobranca.anoReferencia}
               </span>
-              <Badge className={statusClasses[cobranca.status]}>
-                {statusLabel[cobranca.status]}
+              <Badge className={statusClasses[cobranca.status] || statusClasses.PENDENTE}>
+                {statusLabel[cobranca.status] || cobranca.status}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -161,7 +163,7 @@ export default function CobrancaDetailPage() {
               <Campo label={tipoMembro} value={(cobranca as any).contrato?.cooperado ? <Link href={`/dashboard/cooperados/${(cobranca as any).contrato.cooperado.id ?? (cobranca as any).contrato.cooperadoId}`} className="text-blue-600 hover:underline font-medium">{(cobranca as any).contrato.cooperado.nomeCompleto}</Link> : '—'} />
               <Campo label="Contrato" value={cobranca.contrato ? <Link href={`/dashboard/contratos/${cobranca.contratoId}`} className="text-blue-600 hover:underline font-medium">{cobranca.contrato.numero}</Link> : '—'} />
               <Campo label="Mês/Ano Referência" value={`${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`} />
-              <Campo label="Status" value={statusLabel[cobranca.status]} />
+              <Campo label="Status" value={statusLabel[cobranca.status] || cobranca.status} />
               <Campo label="Vencimento" value={new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR')} />
               <Campo label="Pagamento" value={cobranca.dataPagamento ? new Date(cobranca.dataPagamento).toLocaleDateString('pt-BR') : null} />
             </div>
@@ -228,6 +230,7 @@ export default function CobrancaDetailPage() {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as StatusCobranca })}
               >
+                <option value="A_VENCER">A vencer</option>
                 <option value="PENDENTE">Pendente</option>
                 <option value="PAGO">Pago</option>
                 <option value="VENCIDO">Vencido</option>

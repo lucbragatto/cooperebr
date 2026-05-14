@@ -83,9 +83,9 @@ export default function CobrancasPage() {
             {carregando ? 'Carregando...' : `${cobrancas.length} registros`}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          {/* D-53 fix: overflow-x-auto pra tabela caber em telas estreitas */}
-          <div className="overflow-x-auto">
+        <CardContent className="p-0 overflow-x-auto">
+          {/* D-53 fix: overflow-x-auto direto no CardContent — div interno
+              não gerava scroll porque o Card pai expandia pra acomodar. */}
           <Table>
             <TableHeader>
               <TableRow>
@@ -179,7 +179,6 @@ export default function CobrancasPage() {
               )}
             </TableBody>
           </Table>
-          </div>
         </CardContent>
       </Card>
     </div>
