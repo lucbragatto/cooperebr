@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
 
 const statusClasses: Record<string, string> = {
+  A_VENCER: 'bg-blue-100 text-blue-800 border-blue-200',
   PENDENTE: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   PAGO: 'bg-green-100 text-green-800 border-green-200',
   VENCIDO: 'bg-red-100 text-red-800 border-red-200',
@@ -26,6 +27,7 @@ const statusClasses: Record<string, string> = {
 };
 
 const statusLabel: Record<string, string> = {
+  A_VENCER: 'A vencer',
   PENDENTE: 'Pendente',
   PAGO: 'Pago',
   VENCIDO: 'Vencido',
@@ -82,6 +84,8 @@ export default function CobrancasPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
+          {/* D-53 fix: overflow-x-auto pra tabela caber em telas estreitas */}
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -149,6 +153,7 @@ export default function CobrancasPage() {
                           }}
                           onBlur={() => setEditandoStatus(null)}
                         >
+                          <option value="A_VENCER">A vencer</option>
                           <option value="PENDENTE">Pendente</option>
                           <option value="PAGO">Pago</option>
                           <option value="VENCIDO">Vencido</option>
@@ -174,6 +179,7 @@ export default function CobrancasPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

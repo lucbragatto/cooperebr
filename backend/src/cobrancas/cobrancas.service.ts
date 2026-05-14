@@ -381,10 +381,19 @@ export class CobrancasService {
     valorDesconto: number;
     valorLiquido: number;
     status: 'A_VENCER' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
-    dataVencimento: Date;
-    dataPagamento: Date;
+    dataVencimento: Date | string;
+    dataPagamento: Date | string;
   }>) {
-    return this.prisma.cobranca.update({ where: { id }, data });
+    // D-52 fix: normalizar datas vindas como string ISO curto (YYYY-MM-DD)
+    // do input HTML date — Prisma rejeita "YYYY-MM-DD", exige DateTime ISO-8601
+    // completo. Mesmo padrão de normalizarData() já usado em create.
+    if (data.dataPagamento && typeof data.dataPagamento === 'string') {
+      data.dataPagamento = normalizarData(data.dataPagamento, 'dataPagamento');
+    }
+    if (data.dataVencimento && typeof data.dataVencimento === 'string') {
+      data.dataVencimento = normalizarData(data.dataVencimento, 'dataVencimento');
+    }
+    return this.prisma.cobranca.update({ where: { id }, data: data as any });
   }
 
   async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string) {

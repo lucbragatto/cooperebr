@@ -1588,9 +1588,90 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 **Saneamento:** 4 cobranças piloto existentes atualizadas via script `backend/scripts/saneamento-d50-cooperativa-id.ts`. Validação pós-fix: 38 cobranças CoopereBR + 0 cobranças com `cooperativaId` null.
 
-**Manifestação adjacente fora do escopo D-50:** `faturas.service.ts:1054` (gerarCobrancasLote) tem o mesmo padrão de criação sem `cooperativaId`. Não corrigido nesta task pra manter escopo D-50 cirúrgico. Catalogar separadamente se necessário em sessão dedicada (D-50.2 ou bug novo).
+**Manifestação adjacente fora do escopo D-50:** `faturas.service.ts:1054` (gerarCobrancasLote) tem o mesmo padrão de criação sem `cooperativaId`. **Corrigida posteriormente como D-50.2** (commit consolidado pós-canário 14/05 noite).
 
 **Status:** ✅ RESOLVIDO (commit final desta sessão).
+
+---
+
+### D-50.2 — `gerarCobrancasLote` cria `Cobranca` sem `cooperativaId` ✅ RESOLVIDO
+
+**Severidade:** P1 latente (mesmo padrão D-50, bug-gêmeo)
+
+**Origem:** sessão 14/05/2026 tarde-noite. Manifestação adjacente reportada durante D-50 — fora do escopo cirúrgico daquele commit, catalogada e corrigida no commit consolidado pós-canário.
+
+**Causa raiz:** `faturas.service.ts:1054` (método `gerarCobrancasLote`) tinha o mesmo padrão de criação que `gerarCobrancaPosFatura` — não passava `cooperativaId` no objeto `data`. Bomba-relógio: o próximo lote teria gerado novas cobranças órfãs.
+
+**Fix:** adicionar `cooperativaId: contrato.cooperativaId` ao `data` do `prisma.cobranca.create`. Identico ao D-50.
+
+**Status:** ✅ RESOLVIDO (commit consolidado D-50.2 + D-51 + D-52 + D-53 + catalog D-54).
+
+---
+
+### D-51 — Frontend `/dashboard/cobrancas` sem label/cor para status `A_VENCER` ✅ RESOLVIDO
+
+**Severidade:** P3 UX
+
+**Origem:** sessão 14/05/2026 tarde-noite. Após validação visual pós Sub-Fase A, as 4 cobranças piloto apareciam com **badge sem texto** (só cor padrão) porque `statusLabel` e `statusClasses` em `web/app/dashboard/cobrancas/page.tsx:21-33` não tinham entrada `A_VENCER`. Cobranças criadas via `gerarCobrancaPosFatura` ficam com `status='A_VENCER'` (faturas.service.ts:672), enum válido no schema mas órfão no frontend.
+
+**Fix:** adicionar entrada `A_VENCER: 'A vencer'` (rótulo) e `A_VENCER: 'bg-blue-100 text-blue-800 border-blue-200'` (cor) em ambos os Records, mais opção no `<select>` de mudança de status (linhas 152-156).
+
+**Status:** ✅ RESOLVIDO (commit consolidado).
+
+---
+
+### D-53 — Tabela `/dashboard/cobrancas` sem scroll horizontal ✅ RESOLVIDO
+
+**Severidade:** P3 UX
+
+**Origem:** sessão 14/05/2026 tarde-noite. Validação visual mostrou que a tabela tem 9 colunas (Cooperado, Contrato, Mês/Ano, Bruto, Desconto, Líquido, Vencimento, Status, Ações) e em telas comuns (1366px) só cabe reduzindo zoom. Sem `overflow-x:auto` no container.
+
+**Fix:** envolver `<Table>` em `<div className="overflow-x-auto">` dentro do `<CardContent>`. Container ganha scroll horizontal sem afetar layout.
+
+**Status:** ✅ RESOLVIDO (commit consolidado).
+
+---
+
+### D-54 — `LancamentoCaixa` PREVISTO faltante em `gerarCobrancaPosFatura`
+
+**Severidade:** P1 latente
+
+**Origem:** sessão 14/05/2026 tarde-noite, durante diagnóstico D-52 (read-only). Code reportou que `gerarCobrancaPosFatura` NÃO cria `LancamentoCaixa` PREVISTO. Só o Caminho B (`cobrancas.service.create` manual) cria.
+
+**Causa raiz:** `faturas.service.ts:662-700` (gerarCobrancaPosFatura) omite criação de `LancamentoCaixa` PREVISTO. Memória do projeto + `MAPA-INTEGRIDADE-SISTEMA` diziam que `LancamentoCaixa` PREVISTO é criado na geração da cobrança — mas isso só é verdade pro Caminho B.
+
+**Manifestação:** as 4 cobranças piloto Sub-Fase A (commit `bded89d`) não têm `LancamentoCaixa` PREVISTO associado. SELECT `lancamentos_caixa WHERE cobrancaId IN (4 ids piloto)` retorna **0 registros** (confirmado em 14/05 noite).
+
+**Impacto:** afeta relatórios financeiros (receita prevista sub-reportada) + fluxo de FaturaSaas SISGD (cobrança do parceiro calculada com base em previsto).
+
+**Bug LATENTE desde commit `b0e0345` (Fase B.5, 03/05/2026), não regressão.** Mesma situação do D-50 (gap manifesta agora com primeiro uso E2E real).
+
+**Fix proposto (sessão dedicada futura):**
+- Replicar lógica de criação de `LancamentoCaixa` PREVISTO de `cobrancas.service.ts:272-298` dentro de `gerarCobrancaPosFatura`
+- Saneamento retroativo: criar `LancamentoCaixa` PREVISTO pras 4 cobranças piloto existentes
+- Mesma verificação em `gerarCobrancasLote` (provavelmente tem o mesmo gap)
+
+**Estimativa fix:** 1-2h Code (decisão saneamento + patch + spec + rebuild + verificação).
+
+**Bloqueio:** não bloqueia Sub-Fase A canário completo (cobranças existem, cobrável). Bloqueia fidelidade dos relatórios financeiros.
+
+**Status:** CATALOGADO 14/05/2026 noite (commit consolidado D-50.2 + D-51 + D-52 + D-53).
+
+---
+
+### D-52 — PUT `/cobrancas/:id` retorna 500 em `dataPagamento` string ✅ RESOLVIDO
+
+**Severidade:** P1 bloqueante (impede dar baixa via UI)
+
+**Origem:** sessão 14/05/2026 tarde-noite. Luciano clicou "Dar Baixa" em cobrança DIEGO no dashboard e recebeu 500. Logs PM2 mostraram `PrismaClientValidationError: Invalid value for argument 'dataPagamento': premature end of input. Expected ISO-8601 DateTime.`. UI envia `"2026-05-13"` do `<input type="date">`, Prisma rejeita.
+
+**Causa raiz:** `cobrancas.service.ts:387` (método `update`) passava `body` direto pro `prisma.cobranca.update` sem normalizar `dataPagamento`/`dataVencimento`. Função helper `normalizarData()` já existia no mesmo arquivo (linha 38, usada no `create`) mas não era chamada no `update`.
+
+**Fix:** adicionar 4 linhas no início do `update` chamando `normalizarData()` em `data.dataPagamento` e `data.dataVencimento` quando `typeof === 'string'`. Mesmo padrão do `create` (linhas 170-181). Tipos da assinatura ampliados pra `Date | string`.
+
+**Manifestação adjacente:** caminho UI "Dar Baixa" deveria idealmente usar `PATCH /:id/dar-baixa` (já existe em `cobrancas.controller.ts:66`) em vez de PUT genérico. Migração UI fica como sugestão futura (sem débito formal pra não inflar).
+
+**Status:** ✅ RESOLVIDO (commit consolidado).
 
 ---
 
