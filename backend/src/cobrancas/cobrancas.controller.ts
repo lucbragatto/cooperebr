@@ -32,8 +32,9 @@ export class CobrancasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get('contrato/:contratoId')
-  findByContrato(@Param('contratoId') contratoId: string) {
-    return this.cobrancasService.findByContrato(contratoId);
+  findByContrato(@Param('contratoId') contratoId: string, @Req() req: any) {
+    // D-48-cobrancas IDOR fix: filtro tenant via contrato.cooperativaId.
+    return this.cobrancasService.findByContrato(contratoId, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -58,8 +59,9 @@ export class CobrancasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.cobrancasService.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    // D-48-cobrancas IDOR fix.
+    return this.cobrancasService.update(id, body, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -67,8 +69,10 @@ export class CobrancasController {
   darBaixa(
     @Param('id') id: string,
     @Body() body: { dataPagamento: string; valorPago: number; metodoPagamento?: 'PIX' | 'BOLETO' | 'TRANSFERENCIA' | 'DINHEIRO' },
+    @Req() req: any,
   ) {
-    return this.cobrancasService.darBaixa(id, body.dataPagamento, body.valorPago, body.metodoPagamento);
+    // D-48-cobrancas IDOR fix.
+    return this.cobrancasService.darBaixa(id, body.dataPagamento, body.valorPago, body.metodoPagamento, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -76,13 +80,17 @@ export class CobrancasController {
   cancelar(
     @Param('id') id: string,
     @Body() body: { motivo: string },
+    @Req() req: any,
   ) {
-    return this.cobrancasService.cancelar(id, body.motivo);
+    // D-48-cobrancas IDOR fix.
+    return this.cobrancasService.cancelar(id, body.motivo, req.user?.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
   @Get(':id/pdf')
-  async gerarPdf(@Param('id') id: string, @Res() res: Response) {
+  async gerarPdf(@Param('id') id: string, @Res() res: Response, @Req() req: any) {
+    // D-48-cobrancas IDOR fix: valida tenant via findOne antes de gerar PDF.
+    await this.cobrancasService.findOne(id, req.user?.cooperativaId);
     const pdfPath = await this.cobrancaPdf.gerarPdf(id);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="fatura-${id}.pdf"`);
@@ -98,7 +106,8 @@ export class CobrancasController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.cobrancasService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    // D-48-cobrancas IDOR fix.
+    return this.cobrancasService.remove(id, req.user?.cooperativaId);
   }
 }

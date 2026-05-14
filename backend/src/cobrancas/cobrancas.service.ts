@@ -105,9 +105,13 @@ export class CobrancasService {
     return cobranca;
   }
 
-  async findByContrato(contratoId: string) {
+  async findByContrato(contratoId: string, cooperativaId?: string) {
+    // D-48-cobrancas IDOR fix: filtro tenant via contrato.
     return this.prisma.cobranca.findMany({
-      where: { contratoId },
+      where: {
+        contratoId,
+        ...(cooperativaId ? { contrato: { cooperativaId } } : {}),
+      },
       orderBy: [{ anoReferencia: 'desc' }, { mesReferencia: 'desc' }],
     });
   }
@@ -373,29 +377,37 @@ export class CobrancasService {
     return cobranca;
   }
 
-  async update(id: string, data: Partial<{
-    mesReferencia: number;
-    anoReferencia: number;
-    valorBruto: number;
-    percentualDesconto: number;
-    valorDesconto: number;
-    valorLiquido: number;
-    status: 'A_VENCER' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
-    dataVencimento: Date | string;
-    dataPagamento: Date | string;
-  }>) {
-    // D-52 fix: normalizar datas vindas como string ISO curto (YYYY-MM-DD)
-    // do input HTML date — Prisma rejeita "YYYY-MM-DD", exige DateTime ISO-8601
-    // completo. Mesmo padrão de normalizarData() já usado em create.
+  async update(
+    id: string,
+    data: Partial<{
+      mesReferencia: number;
+      anoReferencia: number;
+      valorBruto: number;
+      percentualDesconto: number;
+      valorDesconto: number;
+      valorLiquido: number;
+      status: 'A_VENCER' | 'PAGO' | 'VENCIDO' | 'CANCELADO';
+      dataVencimento: Date | string;
+      dataPagamento: Date | string;
+    }>,
+    cooperativaId?: string,
+  ) {
+    // D-52 fix: normalizar datas vindas como string ISO curto (YYYY-MM-DD).
     if (data.dataPagamento && typeof data.dataPagamento === 'string') {
       data.dataPagamento = normalizarData(data.dataPagamento, 'dataPagamento');
     }
     if (data.dataVencimento && typeof data.dataVencimento === 'string') {
       data.dataVencimento = normalizarData(data.dataVencimento, 'dataVencimento');
     }
-    // D-55 fix: retornar com mesmo include do findOne — sem isso a UI
-    // sobrescreve o estado com objeto plano e perde contrato.cooperado
-    // após Dar Baixa / Editar (tela detalhe fica com "—").
+    // D-48-cobrancas IDOR fix: validar tenant antes do update.
+    if (cooperativaId) {
+      const cob = await this.prisma.cobranca.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!cob) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    }
+    // D-55 fix: retornar com mesmo include do findOne.
     return this.prisma.cobranca.update({
       where: { id },
       data: data as any,
@@ -403,9 +415,10 @@ export class CobrancasService {
     });
   }
 
-  async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string) {
-    const cobranca = await this.prisma.cobranca.findUnique({
-      where: { id },
+  async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string, cooperativaId?: string) {
+    // D-48-cobrancas IDOR fix: findFirst com filtro tenant.
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
       include: { contrato: { include: { cooperado: true } } },
     });
     if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
@@ -638,8 +651,11 @@ export class CobrancasService {
     return cobrancaAtualizada;
   }
 
-  async cancelar(id: string, motivo: string) {
-    const cobranca = await this.prisma.cobranca.findUnique({ where: { id } });
+  async cancelar(id: string, motivo: string, cooperativaId?: string) {
+    // D-48-cobrancas IDOR fix: findFirst com filtro tenant.
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: { id, ...(cooperativaId ? { cooperativaId } : {}) },
+    });
     if (!cobranca) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
     if (cobranca.status === 'CANCELADO') {
       throw new BadRequestException('Esta cobrança já está cancelada');
@@ -680,7 +696,15 @@ export class CobrancasService {
     return cobrancaAtualizada;
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string) {
+    // D-48-cobrancas IDOR fix: valida tenant antes do delete.
+    if (cooperativaId) {
+      const cob = await this.prisma.cobranca.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!cob) throw new NotFoundException(`Cobrança com id ${id} não encontrada`);
+    }
     return this.prisma.cobranca.delete({ where: { id } });
   }
 
