@@ -1,5 +1,16 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-05-14 noite — Fase 2 Hardening A→I completa (D-48 + D-30N + D-50/.2 + B1 cross-talk RESOLVIDOS, 34+ endpoints IDOR, Helmet/HSTS/CSP, AuditLog interceptor global)
+**Última atualização:** 2026-05-14 noite — Fase 2 Hardening A→I completa (D-48 + D-30N + D-50/.2 + B1 cross-talk RESOLVIDOS, 35 endpoints IDOR, Helmet/HSTS/CSP, AuditLog interceptor global)
+
+## Matriz executiva (14/05/2026 noite)
+
+| Indicador | Antes | Depois | Evidência |
+|---|---|---|---|
+| Segurança multi-tenant | 🔴 | 🟢 | D-48 fechado, 35 endpoints com IDOR fix (Fase 2A-2E + bonus 2I) |
+| Auditoria | 🔴 | 🟢 | D-30N fechado, AuditLog interceptor global ativo, 18 endpoints decorados |
+| Hardening HTTP | 🔴 | 🟢 | D-50 fechado, Helmet + HSTS + CSP ativos (6 headers confirmados) |
+| Pipeline Asaas E2E | 🟡 | 🟢 | Sub-canário CAROLINA validou round-trip webhook→email (5s latência) |
+
+
 **Data da auditoria inicial:** 2026-04-24
 **Auditor:** Claude Sonnet 4.6 (modo somente-leitura)
 **Escopo:** 10 fluxos end-to-end, análise de código + testes + lacunas

@@ -1940,6 +1940,63 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
+### D-novo-A — Conta Asaas sandbox no nome PF Luciano (bloqueia ativação produção real)
+
+**Severidade:** P2 (infra comercial)
+**Detectado em:** 2026-05-14 (sub-canário CAROLINA — validação visual boleto sandbox)
+**Categoria:** infraestrutura comercial (não código)
+
+**Estado atual:**
+- Receiver name: "Luciano Costa Bragatto"
+- CPF: 890.893.247-04 (PF Luciano)
+- Email: lucbragatto@gmail.com
+- Telefone: (XX) XXXXX-1348
+
+**Esperado em produção real:**
+- Receiver name: "CoopereBR" (razão social PJ completa)
+- CNPJ (não CPF) — CoopereBR como cooperativa
+- Email institucional `contato@cooperebr.com.br`
+- Telefone institucional CoopereBR
+
+**Impacto:**
+- Sandbox: zero (é teste)
+- Produção real: cooperado vê "Luciano Costa Bragatto" recebendo o dinheiro — confusão de marca + risco de desconfiança.
+
+**Fix proposto:** abrir conta Asaas produção com PJ CoopereBR (CNPJ) + reconfigurar `AsaasConfig.cooperativaId` apontando pra conta PJ correta.
+
+**Bloqueio:** ativação Asaas produção real bloqueada até resolver.
+
+---
+
+### D-novo-B — Descrição da cobrança Asaas confusa ("Mensalidade SISGD")
+
+**Severidade:** P3 (UX/branding)
+**Detectado em:** 2026-05-14 (sub-canário CAROLINA — validação visual boleto sandbox)
+**Categoria:** código (string template)
+
+**Estado atual:** `"Mensalidade SISGD 05/2026 - CTR-2026-0005"`
+
+**Análise:**
+- "SISGD" é a plataforma (Luciano dono) — cooperado paga a CoopereBR, não SISGD.
+- "05/2026" = competência (mês corrente).
+- Cobrança é referente a fatura `mesReferencia=01/2026` (consumo JAN/2026).
+- "CTR-2026-0005" = id do contrato (OK).
+
+**Esperado:** `"CoopereBR — Fatura 01/2026 (CTR-2026-0005)"` ou `"Cobrança CoopereBR mês referência 01/2026"`.
+
+**Impacto:**
+- Cooperado lê "Mensalidade SISGD" e não entende o que está pagando.
+- Confunde competência (05/2026) com referência da fatura (01/2026).
+- Onboarding novos parceiros (Sinergia): vocabulário interno "SISGD" exposto.
+
+**Fix proposto:**
+- Localizar template em `backend/src/gateway-pagamento/gateway-pagamento.service.ts` OU `backend/src/asaas/asaas.service.ts`.
+- Trocar pra usar nome da cooperativa + `mesReferencia` da fatura (não competência).
+
+**Estimativa:** 1-2h Code (1 string template + ajuste 2-3 callers + smoke).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

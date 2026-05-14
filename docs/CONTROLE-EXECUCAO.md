@@ -31,7 +31,7 @@
 
 ### Frase de retomada COMANDANTE
 
-> Code: Fase 2 Hardening (A→I) completa. Próximo bloco: avaliar onboarding **Sinergia** como 2º parceiro real (pré-requisito Hardening atendido) OU retomar Plano Mestre por outra fatia. Antes de tocar código, ler `docs/CONTROLE-EXECUCAO.md` seção "ONDE PARAMOS" + `docs/PLANO-ATE-PRODUCAO.md` pra escolher o próximo passo. PM2 status: `cooperebr-backend` online, `cooperebr-whatsapp` online (sessão Baileys persistida). Smoke cross-tenant: `npx ts-node backend/scripts/smoke-fase2-cross-tenant.ts` (esperado 2/2 PASS).
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único).
 
 ### Sessão anterior — 2026-05-13 manhã (Fatia H.2 + D-33 reframe)
 
@@ -276,39 +276,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Code, estou em sessão ATIVA NESTE MOMENTO. NÃO fecha sessão.
-
-PRÓXIMO PASSO IMEDIATO:
-1. Lê docs/CONTROLE-EXECUCAO.md (header diz 2026-05-13 — sessão
-   maratona consolidada)
-2. Lê docs/SISTEMA.md (1542 linhas, M1 Plano Mestre entregue)
-3. Apresenta P0→P3 ATUAL (Decisão 19) — SEM propor próximo passo
-4. Pergunta qual frente Luciano quer atacar entre:
-   a) Fatia A canário Caminho A real (2-4d Code) — M2 primeira
-      receita real. NÃO mais bloqueada por D-33 (reframed Caminho B).
-   b) Fatia C Sprint CooperToken Etapa 1 (6-8h autônomo) — specs
-      Jest cooper-token. claude.ai talvez já tenha lido specs
-      durante a noite.
-   c) Decisões batch B17-B32 (sessão claude.ai 2-3h, sem Code)
-   d) Fatia H.3 ligações cross-módulo (2d Code, continuação H.2)
-   e) Outra prioridade
-5. AGUARDA minha resposta antes de continuar
-
-Contexto sessão 13/05 (maratona, 6 commits):
-- M1 Plano Mestre ✅ entregue — Fatia H.2 SISTEMA.md base 1542 linhas
-  (H.1 esqueleto 94bf9dc + Dia 1 382f40e + Dia 2 0528cd8 + Dia 3 464e4d3)
-- Sub-tarefa Decisão 24 cleanup ✅ (b0663c9 — frase retomada local único)
-- D-33 reframed Caminho B ✅ (1d40285 — latente, não ativo, não bloqueia A)
-- Decisão 23 aplicada 2× em 24h (AsaasCobranca=5 + D-33 latente vs ativo)
-- Decisão 24 catalogada (frase retomada local único)
-- Feedback Fase 1 read-only obrigatória catalogado (memória persistente)
-
-Aplica Decisões 14/15/18/19/20/21/22/23/24.
-Edit > Write. Sem head -N. Read-only nas investigações.
-Fase 1 read-only OBRIGATÓRIA antes de Fase 2 refator (código de produção).
-NÃO escolhe próximo passo sozinho.
-
-COMEÇA pelo passo 1.
+Continuando plano A→H ordem otimizada (decidido 14/05/2026 noite após Fase 2 Hardening). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_blocos_a_h_ordem_otimizada_14_05.md. Executar BLOCO A — Sub-Fase B AMAGES (4-6h): 4º cooperado piloto + 2ª cooperativa real no SaaS. Aplicar regra contatos teste (lucbragatto+amages@gmail.com + 27981341348). Mini-fechamento obrigatório ao terminar (commit + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE matriz OPERACIONAL + atualizar inventario-visual-sisgd se status mudar). Marco esperado: M4 — 2ª cooperativa real no SISGD.
 ```
 
 ---
