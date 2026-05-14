@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventário Visual SISGD — Mestre v1.0</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1280px; margin: 0 auto; padding: 24px; color: #1f2937; line-height: 1.6; background: #fafafa; }
+  h1 { color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { color: #1e40af; margin-top: 48px; border-left: 4px solid #2563eb; padding-left: 12px; }
+  h3 { color: #1e3a8a; margin-top: 32px; }
+  h4 { color: #334155; margin-top: 20px; margin-bottom: 8px; }
+  .meta { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+  .intro { background: #eff6ff; border-left: 4px solid #2563eb; padding: 16px 20px; border-radius: 4px; margin: 16px 0; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; padding: 12px; background: #f1f5f9; border-radius: 8px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: #16a34a; }
+  .dot.parcial { background: #f59e0b; }
+  .dot.gap { background: #dc2626; }
+  .dot.bloqueado { background: #6b7280; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; vertical-align: top; font-size: 14px; }
+  th { background: #f8fafc; font-weight: 600; color: #334155; }
+  tr:hover { background: #f9fafb; }
+  .status-ok { color: #16a34a; font-weight: 600; }
+  .status-parcial { color: #f59e0b; font-weight: 600; }
+  .status-gap { color: #dc2626; font-weight: 600; }
+  .status-bloqueado { color: #6b7280; font-weight: 600; }
+  .group-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin: 24px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+  .group-header h3 { margin: 0; }
+  .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge.ok { background: #dcfce7; color: #15803d; }
+  .badge.parcial { background: #fef3c7; color: #b45309; }
+  .badge.gap { background: #fee2e2; color: #b91c1c; }
+  .badge.bloqueado { background: #f3f4f6; color: #4b5563; }
+  .badge.placeholder { background: #ede9fe; color: #6d28d9; }
+  .mermaid { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin: 20px 0; text-align: center; }
+  .funcoes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+  .func-card { background: #f8fafc; border-left: 4px solid #2563eb; border-radius: 4px; padding: 14px; font-size: 13px; }
+  .func-card.ok { border-left-color: #16a34a; }
+  .func-card.parcial { border-left-color: #f59e0b; }
+  .func-card.gap { border-left-color: #dc2626; }
+  .func-card.bloqueado { border-left-color: #6b7280; }
+  .func-card h4 { margin: 0 0 8px 0; font-size: 14px; color: #0f172a; }
+  .func-card .status-line { font-size: 12px; color: #475569; margin-top: 6px; }
+  .func-card code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  .placeholder-card { background: #fafaf9; border: 2px dashed #d6d3d1; padding: 40px 20px; text-align: center; color: #78716c; border-radius: 8px; margin: 20px 0; }
+  ul { padding-left: 20px; }
+  li { margin: 6px 0; }
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #be123c; }
+  .callout { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  .callout.danger { background: #fef2f2; border-left-color: #dc2626; }
+  .callout.info { background: #eff6ff; border-left-color: #2563eb; }
+  .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #64748b; font-size: 13px; }
+  .nav-links { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+  .nav-links a { color: #2563eb; text-decoration: none; padding: 6px 12px; background: #eff6ff; border-radius: 6px; font-size: 14px; }
+  .nav-links a:hover { background: #dbeafe; }
+</style>
+</head>
+<body>
+
+<h1>Inventário Visual SISGD — Mestre v1.0</h1>
+<p class="meta">Versão 1.0 • 14/05/2026 • Mapa visual dos 5 grupos do menu SISGD com diagramas Mermaid por função. v1.0 detalha grupo OPERACIONAL; outros 4 grupos com placeholder pra v1.1+.</p>
+
+<div class="intro">
+  <strong>Propósito:</strong> visão executiva — onde cada função do menu está hoje (OK / Parcial / Gap / Bloqueado) e como elas se conectam. Para o Luciano e parceiros futuros verem em 1 olhada se o sistema está pronto pra escalar (onboarding Sinergia, AMAGES, novos cooperados). Substitui inventário textual sem diagramas (v1.0 anterior).
+</div>
+
+<div class="legend">
+  <strong>Legenda:</strong>
+  <span><span class="dot ok"></span> OK em produção</span>
+  <span><span class="dot parcial"></span> Parcial</span>
+  <span><span class="dot gap"></span> Gap (não implementado)</span>
+  <span><span class="dot bloqueado"></span> Bloqueado (flag/regulação)</span>
+</div>
+
+<div class="nav-links">
+  <a href="#visao-geral">Visão geral</a>
+  <a href="#operacional">OPERACIONAL</a>
+  <a href="#faturamento">FATURAMENTO</a>
+  <a href="#comercial">COMERCIAL</a>
+  <a href="#gestao-global">GESTÃO GLOBAL</a>
+  <a href="#administracao">ADMINISTRAÇÃO</a>
+  <a href="#prox-passos">Próximos passos</a>
+</div>
+
+<h2 id="visao-geral">Visão geral — 5 grupos do menu SISGD</h2>
+
+<div class="mermaid">
+graph TD
+  USER[Usuário SISGD<br/>admin parceiro / cooperado / super admin]
+  USER --> OPE[OPERACIONAL<br/>dia-a-dia do parceiro<br/>14 funções]
+  USER --> FAT[FATURAMENTO<br/>cobrança + financeiro<br/>~10 funções]
+  USER --> COM[COMERCIAL<br/>engajamento + token<br/>~8 funções]
+  USER --> GES[GESTÃO GLOBAL<br/>SISGD multi-parceiro<br/>~6 funções]
+  USER --> ADM[ADMINISTRAÇÃO<br/>config + segurança<br/>~7 funções]
+
+  OPE -.kWh+contratos.-> FAT
+  COM -.tokens+descontos.-> FAT
+  OPE -.cooperados.-> COM
+  GES -.parceiros+planos SaaS.-> ADM
+  ADM -.usuários+roles.-> OPE
+
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef parcial fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  classDef gap fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef user fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+
+  class USER user
+  class OPE,FAT,GES parcial
+  class COM,ADM gap
+</div>
+
+<h3>Tabela master — estado por grupo</h3>
+
+<table>
+<thead>
+<tr><th>Grupo</th><th>Status global</th><th>Funções (qtd aproximada)</th><th>Bloqueio se houver</th><th>Próximo passo</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>OPERACIONAL</strong></td>
+  <td><span class="status-parcial">Parcial</span></td>
+  <td>14 (5 OK + 4 parcial + 4 gap + 1 bloqueado)</td>
+  <td>Realocação multi-usina (Sprint 8) + Automação concessionária</td>
+  <td>Sub-Fase B AMAGES + cron lembrete doc</td>
+</tr>
+<tr>
+  <td><strong>FATURAMENTO</strong></td>
+  <td><span class="status-parcial">Parcial</span></td>
+  <td>~10 (engine FIXO OK, COMPENSADOS/DINAMICO bloqueados, FaturaSaas não envia, conciliação meio nome)</td>
+  <td>D-29F FaturaSaas, D-54 LancamentoCaixa PREVISTO</td>
+  <td>Sub-canário CAROLINA fechou pipeline Asaas (M3 14/05)</td>
+</tr>
+<tr>
+  <td><strong>COMERCIAL</strong></td>
+  <td><span class="status-gap">Gap denso</span></td>
+  <td>~8 (5 vocabulários CooperToken, Token×Convênio gap, MST/VPP só em memória)</td>
+  <td>D-35..D-46 (11 débitos), Sprint CT Consolidado 21-26h</td>
+  <td>Sprint CT Consolidado pós Sub-Fase B</td>
+</tr>
+<tr>
+  <td><strong>GESTÃO GLOBAL</strong></td>
+  <td><span class="status-parcial">Parcial</span></td>
+  <td>~6 (Painel SISGD OK, FaturaSaas cron gera mas não envia, Impersonate mínimo)</td>
+  <td>Onboarding 2º parceiro (Sinergia) bloqueado por IDOR + AuditLog</td>
+  <td>Fase 2 Hardening (2F-2I em execução)</td>
+</tr>
+<tr>
+  <td><strong>ADMINISTRAÇÃO</strong></td>
+  <td><span class="status-gap">Gap crítico</span></td>
+  <td>~7 (JWT/RBAC OK, AuditLog 0 writes, Helmet ausente, .env.example desatualizado)</td>
+  <td>D-30N AuditLog, hardening HTTP</td>
+  <td>Fase 2 Hardening 2F + 2G (em execução)</td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout info">
+  <strong>Ligações cross-grupo:</strong> OPERACIONAL alimenta FATURAMENTO (kWh contratados viram cobranças); COMERCIAL alimenta FATURAMENTO (tokens viram descontos); GESTÃO GLOBAL define planos SaaS que ADMINISTRAÇÃO aplica; ADMINISTRAÇÃO gerencia usuários que operam OPERACIONAL. Quebra em qualquer ponto = quebra na cadeia.
+</div>
+
+<h2 id="operacional">Grupo 1 — OPERACIONAL (14 funções)</h2>
+
+<div class="group-card">
+<div class="group-header">
+  <h3>Dia-a-dia do parceiro (cooperativa/consórcio/associação/condomínio)</h3>
+  <span class="badge parcial">Parcial — 5 OK / 4 parcial / 4 gap / 1 bloqueado</span>
+</div>
+
+<p>Funções que o admin do parceiro usa diariamente: cadastrar membros, gerir usinas, processar faturas da concessionária, emitir cobranças, comunicar com cooperados. <strong>É o coração operacional do SaaS.</strong></p>
+
+<h4>Diagrama Mermaid — fluxo operacional principal</h4>
+<div class="mermaid">
+graph TD
+  CAD[1. Cadastro Cooperado<br/>público + admin]
+  USN[2. Cadastro Usina]
+  UC[3. Cadastro UC]
+  CTR[4. Cadastro Contrato]
+  DOC[5. Aprovação Documentos]
+  FAT[6. Recepção Fatura EDP<br/>OCR Claude AI]
+  GER[7. Geração Mensal Cobranças]
+  MOT[8. Motor de Proposta]
+  REA[9. Realocação Multi-Usina]
+  LIS[10. Listas Migração EDP]
+  COM[11. Comunicação WhatsApp]
+  EMA[12. Comunicação Email]
+  DASH[13. Dashboard Operacional]
+  NOT[14. Notificações in-app]
+
+  CAD --> UC
+  UC --> CTR
+  USN --> CTR
+  CTR --> MOT
+  MOT --> DOC
+  DOC --> REA
+  REA --> LIS
+  LIS --> FAT
+  FAT --> GER
+  GER --> COM
+  GER --> EMA
+  GER --> NOT
+  GER --> DASH
+
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef parcial fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  classDef gap fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef bloqueado fill:#f3f4f6,stroke:#6b7280,color:#374151
+
+  class CAD,USN,UC,FAT,COM,EMA,DASH ok
+  class CTR,DOC,GER,MOT parcial
+  class REA,LIS,NOT gap
+</div>
+
+<h4>14 funções detalhadas</h4>
+
+<div class="funcoes-grid">
+
+<div class="func-card ok">
+  <h4>1. Cadastro Cooperado (público)</h4>
+  <p>Wizard <code>/cadastro</code> funcional. CADASTRO_V2_ATIVO=true.</p>
+  <p class="status-line"><span class="status-ok">OK</span> • alimenta motor proposta + documentos</p>
+</div>
+
+<div class="func-card parcial">
+  <h4>2. Cadastro Cooperado (admin wizard)</h4>
+  <p><code>/dashboard/cooperados/novo</code> — D-45 P2, cadeia de 4 erros (propostas/enviar-email 404, 409 cooperados, 400 motor).</p>
+  <p class="status-line"><span class="status-parcial">Parcial</span> • workaround Prisma direto • 4-6h fix</p>
+</div>
+
+<div class="func-card parcial">
+  <h4>3. Cadastro Usina</h4>
+  <p>Básico funcional (~60%). Falta classeGd, formaAquisicao, formaPagamentoDono (adendo Luciano). Caso Exfishes D-30B P0.</p>
+  <p class="status-line"><span class="status-parcial">Parcial</span> • ver <code>cadastro-usinas.html</code> v1.0</p>
+</div>
+
+<div class="func-card ok">
+  <h4>4. Cadastro UC</h4>
+  <p>Sprint 11 consolidou arquitetura (numero/numeroUC/distribuidora/numeroConcessionariaOriginal). 326 UCs normalizadas.</p>
+  <p class="status-line"><span class="status-ok">OK</span> • multi-distribuidora</p>
+</div>
+
+<div class="func-card parcial">
+  <h4>5. Cadastro Contrato</h4>
+  <p>Cooperado↔UC↔Usina funciona. Mas wizard quebrado (D-45), e percentualUsina pode zerar em casos limítrofes (D-31 reframed P2).</p>
+  <p class="status-line"><span class="status-parcial">Parcial</span> • Plano Mestre Opção 4</p>
+</div>
+
+<div class="func-card gap">
+  <h4>6. Aprovação Documentos</h4>
+  <p>Upload OK. Cron <code>documentos-aprovacao.job.ts</code> auto-aprova. Mas <strong>3 lembretes proativos = 0%</strong> (a/b/c quadro 3 txt).</p>
+  <p class="status-line"><span class="status-gap">Gap</span> • Assinafy D-30P • 8-12h</p>
+</div>
+
+<div class="func-card ok">
+  <h4>7. Recepção Fatura EDP (OCR)</h4>
+  <p>Pipeline IMAP → detecção → OCR Claude AI multi-campo. Sprint 11 consolidou. E2E fatura Luciano validada.</p>
+  <p class="status-line"><span class="status-ok">OK</span> • SA5 robusto tecnicamente</p>
+</div>
+
+<div class="func-card parcial">
+  <h4>8. Geração Mensal Cobranças</h4>
+  <p>Engine FIXO ✅. <strong>Engines COMPENSADOS/DINAMICO bloqueadas</strong> (BLOQUEIO_MODELOS_NAO_FIXO em 7 sites). D-54 LancamentoCaixa PREVISTO faltante em 4 piloto.</p>
+  <p class="status-line"><span class="status-parcial">Parcial</span> • Sub-canário CAROLINA validou Asaas M3</p>
+</div>
+
+<div class="func-card parcial">
+  <h4>9. Motor de Proposta</h4>
+  <p>Cálculo economia + alocação + PDF proposta funcional (45KB service). Mas D-46.1 a D-46.7 inconsistências (5 vocabulários CooperToken).</p>
+  <p class="status-line"><span class="status-parcial">Parcial</span> • Sprint CT Consolidado fecha</p>
+</div>
+
+<div class="func-card gap">
+  <h4>10. Realocação Multi-Usina</h4>
+  <p><strong>0% hoje.</strong> Migração 1↔1 funciona, mas N↔M com classe GD I/II/III + concessionária + lista-por-lista = não existe. Bloqueia escala (quadro 5 txt).</p>
+  <p class="status-line"><span class="status-gap">Gap</span> • Sprint 8 • 16-24h</p>
+</div>
+
+<div class="func-card gap">
+  <h4>11. Listas Migração EDP</h4>
+  <p>CSV manual hoje (~40%). Sem geração de protocolo automática, sem polling site EDP, sem leitor email homologação, sem fetcher MMGD. Quadros 6/7/8 = 5%.</p>
+  <p class="status-line"><span class="status-gap">Gap</span> • Sprint Automação Concessionária • 24-32h</p>
+</div>
+
+<div class="func-card ok">
+  <h4>12. Comunicação WhatsApp</h4>
+  <p>14 services + bot conversacional + CoopereAI Claude + 3 crons cobrança. Sub-canário CAROLINA validou pipeline. <strong>Mas CoopereAI cita RN 482 caducada</strong> (D-30I).</p>
+  <p class="status-line"><span class="status-ok">OK</span> • risco regulatório a corrigir</p>
+</div>
+
+<div class="func-card ok">
+  <h4>13. Comunicação Email (SMTP+IMAP)</h4>
+  <p>Pipeline IMAP multi-tenant OK. SMTP funcional desde Sprint 10. Sub-canário CAROLINA: latência webhook→email = 5s.</p>
+  <p class="status-line"><span class="status-ok">OK</span> • LGPD whitelist dev ativa</p>
+</div>
+
+<div class="func-card ok">
+  <h4>14. Dashboard Operacional + Notificações</h4>
+  <p>WebSocket + Notificações multi-canal. Dashboard parceiro funcional. Painel SISGD super-admin operacional (Sprint 13a Dia 1).</p>
+  <p class="status-line"><span class="status-ok">OK</span> • observabilidade D-30N pendente</p>
+</div>
+
+</div>
+
+<div class="callout danger">
+  <strong>Gaps críticos do grupo OPERACIONAL:</strong>
+  <ul style="margin: 8px 0 0 0;">
+    <li><strong>Realocação multi-usina (10)</strong> — bloqueia onboarding parceiros com múltiplas usinas em escala</li>
+    <li><strong>Automação concessionária (11)</strong> — admin digita protocolo manual hoje, EDP só responde por email</li>
+    <li><strong>3 crons proativos (6)</strong> — membro fica parado sem lembrete de doc, admin não recebe alerta de pendência</li>
+    <li><strong>Cadastro Usina expandido (3)</strong> — classeGd faltante = risco Exfishes R$ 310k/ano ATIVO</li>
+  </ul>
+</div>
+
+</div>
+
+<h2 id="faturamento">Grupo 2 — FATURAMENTO</h2>
+
+<div class="group-card">
+<div class="group-header">
+  <h3>Cobrança + financeiro + conciliação</h3>
+  <span class="badge placeholder">v1.1 — em construção</span>
+</div>
+
+<p>Cobre: gateway Asaas (PIX + boleto), conciliação bancária BB/Sicoob, lançamentos caixa, plano de contas, contas a pagar (módulo AP novo), inadimplência, relatórios financeiros, FaturaSaas (SISGD cobra parceiros).</p>
+
+<div class="placeholder-card">
+  <strong>Detalhamento Mermaid + 10 funções pendente pra v1.1</strong><br>
+  Estado conhecido: Engine FIXO OK • COMPENSADOS/DINAMICO bloqueadas por flag • Webhook Asaas HMAC OK (sub-canário CAROLINA validou 14/05) • FaturaSaas cron gera mas não envia (D-29F.1/2/3) • Conciliação BB/Sicoob é metade do nome (só fecha CobrancaBancaria, não cruza OFX/CNAB) • D-54 LancamentoCaixa PREVISTO faltante em gerarCobrancaPosFatura e gerarCobrancasLote:1058
+</div>
+</div>
+
+<h2 id="comercial">Grupo 3 — COMERCIAL</h2>
+
+<div class="group-card">
+<div class="group-header">
+  <h3>Engajamento + CooperToken + Indicações + Convênios</h3>
+  <span class="badge placeholder">v1.2 — em construção</span>
+</div>
+
+<p>Cobre: CooperToken (Clube de fidelidade), Indicações MLM com cascata, Clube de Vantagens (tiers BRONZE→DIAMANTE), Convênios institucionais, Leads de expansão, Planos comerciais (configuração).</p>
+
+<div class="placeholder-card">
+  <strong>Detalhamento Mermaid + 8 funções pendente pra v1.2</strong><br>
+  Estado conhecido: <strong>Área mais densa de débitos</strong> — 5 vocabulários CooperToken coexistindo (Caminho DESCONTO/CLUBE, Opção A/B, Plano Desconto/Token, modoRemuneracao, modoToken, opcaoToken @deprecated) • Token×Convênio gap estrutural (spec 1457 linhas não menciona token) • MST D-44 + VPP D-43 + 9 débitos D-35..D-43 em memória • Sprint CT Consolidado 21-26h após Sub-Fase B
+</div>
+</div>
+
+<h2 id="gestao-global">Grupo 4 — GESTÃO GLOBAL (SUPER_ADMIN)</h2>
+
+<div class="group-card">
+<div class="group-header">
+  <h3>SISGD multi-parceiro — gestão da plataforma SaaS</h3>
+  <span class="badge placeholder">v1.3 — em construção</span>
+</div>
+
+<p>Cobre: Painel SISGD super-admin, Lista de parceiros enriquecida, FaturaSaas (cobrança automática dos parceiros), Métricas globais (MRR, inadimplência, churn), Onboarding parceiros, Wizard novo parceiro.</p>
+
+<div class="placeholder-card">
+  <strong>Detalhamento Mermaid + 6 funções pendente pra v1.3</strong><br>
+  Estado conhecido: Painel SISGD operacional (Sprint 13a) • Lista parceiros enriquecida funcional • Wizard /parceiros/novo usa só 4 de 11 steps disponíveis • /parceiros/configurar chama endpoint inexistente PUT /cooperativas/minha • FaturaSaas cron gera mas não envia (D-29F) • Impersonate mecanismo existe sem tela • <strong>Bloqueio Sinergia (2º parceiro real): Fase 2 Hardening em execução</strong>
+</div>
+</div>
+
+<h2 id="administracao">Grupo 5 — ADMINISTRAÇÃO</h2>
+
+<div class="group-card">
+<div class="group-header">
+  <h3>Config + segurança + auditoria + integrações</h3>
+  <span class="badge placeholder">v1.4 — em construção</span>
+</div>
+
+<p>Cobre: Gestão de usuários por parceiro, Roles (SUPER_ADMIN/ADMIN/OPERADOR/COOPERADO/AGREGADOR), Configurações cooperativa, AuditLog, Integrações (EDP, gateways Asaas/futuro), Backups/logs, Reconhecimento facial (módulo separado com débitos).</p>
+
+<div class="placeholder-card">
+  <strong>Detalhamento Mermaid + 7 funções pendente pra v1.4</strong><br>
+  Estado conhecido: JWT OK • RBAC OK • HMAC Asaas OK • Criptografia AES OK • Rate limiting OK • LGPD whitelist OK • <strong>AuditLog D-30N = 0 writes</strong> (tabela existe, interceptor não) • Helmet/HSTS/CSP ausentes (Fase 2G em execução) • .env.example desatualizado • Reconhecimento facial: IDOR + algoritmo grayscale 64x64 fraco • ADMIN_PARCEIRO no prompt não existe no enum
+</div>
+</div>
+
+<h2 id="prox-passos">Próximos passos priorizados</h2>
+
+<table>
+<thead>
+<tr><th>#</th><th>Ação</th><th>Grupo</th><th>Estimativa</th><th>Destrava</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td><strong>Fase 2 Hardening 2F+2G+2H+2I</strong> (em execução)</td><td>ADMINISTRAÇÃO + GESTÃO GLOBAL</td><td>10-15h</td><td>Onboarding Sinergia</td></tr>
+<tr><td>2</td><td><strong>Sub-Fase B AMAGES</strong> (4º cooperado piloto)</td><td>OPERACIONAL + FATURAMENTO</td><td>4-6h</td><td>Marco M4 — 2ª cooperativa entra no SaaS real</td></tr>
+<tr><td>3</td><td><strong>Sprint CT Consolidado</strong> (unifica 5 vocabulários, fecha D-35..D-46)</td><td>COMERCIAL</td><td>21-26h</td><td>Token operacional sem ambiguidade</td></tr>
+<tr><td>4</td><td><strong>Cadastro SEM_UC visível UI</strong> (banco pronto)</td><td>OPERACIONAL</td><td>4-6h</td><td>Indicador puro (caso MLM Sprint 8)</td></tr>
+<tr><td>5</td><td><strong>3 crons proativos</strong> (a/b/c quadro 3 txt)</td><td>OPERACIONAL</td><td>8-12h</td><td>Onboarding sem retrabalho admin</td></tr>
+<tr><td>6</td><td><strong>Sprint 8 Realocação Multi-Usina</strong></td><td>OPERACIONAL</td><td>16-24h</td><td>Onboarding 2º parceiro com múltiplas usinas</td></tr>
+<tr><td>7</td><td><strong>Sprint Automação Concessionária</strong> (protocolo + polling + MMGD)</td><td>OPERACIONAL</td><td>24-32h</td><td>Operação em escala sem digitação manual</td></tr>
+<tr><td>8</td><td><strong>Sprint Assinafy</strong> (assinatura digital)</td><td>OPERACIONAL + ADMINISTRAÇÃO</td><td>12-16h</td><td>Aceite jurídico robusto</td></tr>
+</tbody>
+</table>
+
+<h2>Como esse documento evolui</h2>
+
+<ul>
+  <li><strong>v1.0 (hoje):</strong> esqueleto mestre + grupo OPERACIONAL detalhado com 14 funções</li>
+  <li><strong>v1.1:</strong> grupo FATURAMENTO detalhado (~10 funções + diagrama Mermaid próprio)</li>
+  <li><strong>v1.2:</strong> grupo COMERCIAL detalhado (~8 funções + diagrama)</li>
+  <li><strong>v1.3:</strong> grupo GESTÃO GLOBAL detalhado (~6 funções + diagrama)</li>
+  <li><strong>v1.4:</strong> grupo ADMINISTRAÇÃO detalhado (~7 funções + diagrama)</li>
+  <li><strong>v2.0:</strong> todos os grupos consolidados + matriz de ligações cross-grupo + indicadores de saúde sistêmica</li>
+</ul>
+
+<h2>Changelog</h2>
+
+<ul>
+  <li><strong>v1.0 (14/05/2026):</strong> primeira versão. Estrutura mestre com 5 grupos + visão geral Mermaid + tabela master + grupo OPERACIONAL detalhado com 14 cards de função + 4 grupos placeholder + 8 próximos passos priorizados. Substitui inventário textual v1.0 anterior (sem diagramas Mermaid) que foi criticado por não ser visual.</li>
+</ul>
+
+<div class="footer">
+  Inventário Visual SISGD • Mestre v1.0 • CoopereBR / SISGD • 14/05/2026<br>
+  Companion docs: <code>jornada-membro.html</code> v2.0 (5 quadros + adendo), <code>cadastro-usinas.html</code> v1.0 (6 fases)
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' } });
+</script>
+
+</body>
+</html>
