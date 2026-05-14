@@ -243,7 +243,7 @@ export class FaturasService {
     );
   }
 
-  async processarFatura(dto: ProcessarFaturaDto): Promise<{
+  async processarFatura(dto: ProcessarFaturaDto, cooperativaId?: string): Promise<{
     faturaId: string;
     dadosExtraidos: DadosExtraidos;
     mediaKwhCalculada: number;
@@ -255,6 +255,13 @@ export class FaturasService {
   }> {
     // 1. Chamar Claude API
     try { await this.prisma.$queryRaw`SELECT 1`; } catch (e) { throw new InternalServerErrorException(`DB: ${(e as Error).message}`); }
+
+    // D-48-faturas IDOR fix: cooperado precisa pertencer ao tenant do caller.
+    const cooperadoCheck = await this.prisma.cooperado.findFirst({
+      where: { id: dto.cooperadoId, ...(cooperativaId ? { cooperativaId } : {}) },
+      select: { id: true, cooperativaId: true },
+    });
+    if (!cooperadoCheck) throw new BadRequestException('Cooperado não encontrado');
 
     // 1a. Buscar plano se fornecido
     let planoInfo: { id: string; nome: string; descontoBase: number; modeloCobranca: string } | null = null;
@@ -949,13 +956,17 @@ export class FaturasService {
     });
   }
 
-  async aprovarFatura(id: string): Promise<{
+  async aprovarFatura(id: string, cooperativaId?: string): Promise<{
     sucesso: boolean;
     cobrancasCriadas: number;
     avisos: string[];
   }> {
-    const fatura = await this.prisma.faturaProcessada.findUnique({
-      where: { id },
+    // D-48-faturas IDOR fix: findFirst com filtro tenant via cooperado.cooperativaId.
+    const fatura = await this.prisma.faturaProcessada.findFirst({
+      where: {
+        id,
+        ...(cooperativaId ? { cooperado: { cooperativaId } } : {}),
+      },
       include: { cooperado: true, uc: true },
     });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');

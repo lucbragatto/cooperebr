@@ -72,8 +72,9 @@ export class FaturasController {
 
   @Post('processar')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
-  processar(@Body() dto: ProcessarFaturaDto): Promise<unknown> {
-    return this.faturasService.processarFatura(dto);
+  processar(@Body() dto: ProcessarFaturaDto, @Req() req: any): Promise<unknown> {
+    // D-48-faturas IDOR fix: valida que cooperado do dto pertence ao tenant.
+    return this.faturasService.processarFatura(dto, req.user?.cooperativaId);
   }
 
   @Post('upload-concessionaria')
@@ -108,8 +109,9 @@ export class FaturasController {
 
   @Patch(':id/aprovar')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
-  aprovar(@Param('id') id: string): Promise<unknown> {
-    return this.faturasService.aprovarFatura(id);
+  aprovar(@Param('id') id: string, @Req() req: any): Promise<unknown> {
+    // D-48-faturas IDOR fix.
+    return this.faturasService.aprovarFatura(id, req.user?.cooperativaId);
   }
 
   @Patch(':id/rejeitar')
@@ -147,6 +149,7 @@ export class FaturasController {
   async atualizarStatusDocumento(
     @Param('id') id: string,
     @Body() body: { status: 'APROVADO' | 'REPROVADO'; motivoRejeicao?: string },
+    @Req() req: any,
   ) {
     if (!['APROVADO', 'REPROVADO'].includes(body.status)) {
       throw new BadRequestException('Status deve ser APROVADO ou REPROVADO');
@@ -154,7 +157,13 @@ export class FaturasController {
     if (body.status === 'REPROVADO' && !body.motivoRejeicao?.trim()) {
       throw new BadRequestException('Motivo de rejeição é obrigatório para reprovação');
     }
-    const doc = await this.prisma.documentoCooperado.findUnique({ where: { id } });
+    // D-48-faturas IDOR fix: documento pertence a cooperado que pertence a tenant.
+    const doc = await this.prisma.documentoCooperado.findFirst({
+      where: {
+        id,
+        ...(req.user?.cooperativaId ? { cooperado: { cooperativaId: req.user.cooperativaId } } : {}),
+      },
+    });
     if (!doc) throw new NotFoundException('Documento não encontrado');
 
     return this.prisma.documentoCooperado.update({
