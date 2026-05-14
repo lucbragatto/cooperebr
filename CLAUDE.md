@@ -99,6 +99,38 @@ aconteceu. Sem regra forte, débitos se acumulam invisíveis.
 Detalhamento completo em memória persistente claude.ai
 `~/.claude/projects/C--Users-Luciano-cooperebr/memory/regra_fechamento_sessao_inegociavel.md`.
 
+## Contatos de teste — REGRA INEGOCIÁVEL (14/05/2026)
+
+Para QUALQUER teste que dispare comunicação real (SMTP, WhatsApp,
+Asaas boleto/PIX, notificações) OU movimentação financeira real:
+
+**Substituir IMPRETERIVELMENTE contatos do cooperado por:**
+- Telefone/WhatsApp: `27981341348`
+- Email: `lucbragatto@gmail.com`
+
+**CPF/CNPJ mantém** (Asaas valida CPF da pessoa física/jurídica real).
+
+**Aplicação obrigatória:**
+- Testes de envio Asaas (boleto/PIX em produção)
+- Testes WhatsApp (notificações, lembretes, confirmações)
+- Testes email (faturas, comunicações, lembretes)
+- Sub-canários (CAROLINA, AMAGES, qualquer outro)
+- Desativação de `ambienteTeste=true` em piloto
+- Testes E2E que envolvam SMTP/IMAP/WA/Asaas
+
+**Quando NÃO aplicar:**
+- Cadastros via wizard normal (mantém dados reais + `ambienteTeste=true`)
+- Testes sintéticos (whitelist LGPD já bloqueia)
+- Operações read-only no banco
+
+**Origem:** Luciano em 14/05/2026 — "todos os dados são extraídos do
+sistema que temos, embora sejam reais, não podemos contatá-los, use
+sempre e impreterivelmente meu celular e meu email para testes".
+
+**Bilateral:** Code verifica antes de qualquer disparo real e pergunta
+se contatos devem ser substituídos. Claude.ai catalogou em memória
+persistente `regra_contato_teste_impreterivel.md`.
+
 ## Disciplina de validação prévia (Decisões 14, 15, 20)
 
 **Regra inegociável** — em três granularidades cumulativas:
