@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>SISGD CoopereBR - Jornada do Membro v1.2</title>
+<title>SISGD CoopereBR - Jornada do Membro v1.3</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
 body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
@@ -50,8 +50,8 @@ section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
 <div class="subtitle">Mapa operacional do fluxo do cadastro a fatura mensal</div>
 </div>
 <div class="version-block">
-<strong>Versao 1.2</strong><br>
-Atualizado: 14/05/2026<br>
+<strong>Versao 1.3</strong><br>
+Atualizado: 14/05/2026 (fechamento maratona)<br>
 Proxima revisao: a cada sessao com mudanca de estado
 </div>
 </header>
@@ -275,6 +275,7 @@ flowchart TB
 <div class="changelog">
 <h2>Historico de versoes</h2>
 <ul>
+<li><strong>v1.3 - 14/05/2026 (fechamento maratona):</strong> M3 entregue (sub-canario CAROLINA Asaas+webhook+WA+email E2E real, latencia 5s). D-30I CoopereAI Lei 14.300 + D-54 LancamentoCaixa Caminho A + /cooperativas/minha resolvidos. Fase 2 Hardening 2A+2B concluidas (9 endpoints IDOR fix em cobrancas+contratos). 13 debitos catalogados formalmente D-35..D-47. 2 regras inegociaveis bilaterais ativas (fechamento + contatos teste com refinamento Gmail +suffix). Decisao 23 aplicada 5+ vezes em 48h. Fase 2 sub-fases 2C..2I pendentes (~28-42h Code).</li>
 <li><strong>v1.2 - 14/05/2026:</strong> inventario-sisgd-completo.html v1.0 criado durante noite 13/05 via 7 sub-agentes claude.ai paralelos - 96 itens × 9 fontes cruzadas - 20 gaps criticos identificados. Bump versao header.</li>
 <li><strong>v1.1 - 2026-05-13:</strong> M2 entregue (4 cooperados FIXO canario) + D-48 P1 SEGURANCA fechado (7 patches multi-tenant) + 6 polimentos UI cobrancas (D-50 listagem, D-50.2 lote, D-51 listagem+detalhe, D-52 normalizarData, D-53 overflow CardContent, D-55 include update) + 4 debitos catalogados (D-45/D-46/D-47/D-54) + 3 sugestoes em memoria persistente claude.ai (#5 orquestrador / #6 script auto HTML / #7 observabilidade total). Regra inegociavel de fechamento de sessao bilateral catalogada no CLAUDE.md (commit 83776d8). Decisao 23 aplicada 5x em 48h.</li>
 <li><strong>v1.0 - 13/05/2026:</strong> versao inicial. 4 cooperados-piloto FIXO_MENSAL em producao. D-48 P1 SEGURANCA fechado (7 patches multi-tenant). 6 pontos criticos catalogados (D-45/D-46/D-47/Engines travadas/Assinafy/Aprovacao auto).</li>
