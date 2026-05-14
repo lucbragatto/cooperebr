@@ -1847,7 +1847,7 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
-### D-45 — Wizard `/dashboard/cooperados/novo` com 4 erros encadeados
+### D-45 — Wizard `/dashboard/cooperados/novo` com 4 erros encadeados ✅ PARCIALMENTE RESOLVIDO (3/4)
 
 **Severidade:** P2
 
@@ -1870,6 +1870,12 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 **Estimativa:** 4-6h Code (3-4h investigação + tipagem + 1-2h fixes + verificação).
 
 **Bloqueio:** não bloqueia canário via Prisma direto. **BLOQUEIA se canário for via UI** ou se Luciano abrir cadastro pra ADMIN parceiro.
+
+**Status (14/05/2026):** Sub-fixes 1, 2 e 3 RESOLVIDOS. Sub-fix 4 (Step2Dados findByCpf opcional) deixado fora desta sessão (prioridade baixa, UX). Mudanças aplicadas:
+- Sub-fix 1: `Step3Simulacao.tsx:95-99` bloqueia auto-cálculo até `planoSelecionadoId` setado.
+- Sub-fix 2: `Step4Proposta.tsx:64-87` removeu chamada órfã `POST /propostas/enviar-email` 404. Usa mailto: direto.
+- Sub-fix 3: criado `motor-proposta/dto/aceitar-proposta.dto.ts` + controller tipado.
+- Sub-fix 4: pendente futura sessão UX.
 
 ---
 

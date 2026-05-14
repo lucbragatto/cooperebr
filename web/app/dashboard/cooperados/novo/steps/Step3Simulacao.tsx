@@ -91,12 +91,18 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
     api.get<PlanoOption[]>('/planos/ativos').then(r => setPlanosAtivos(r.data)).catch(() => {});
   }, []);
 
-  // Auto-calcular ao montar se cooperadoId disponível e sem resultado ainda
+  // Auto-calcular ao montar se cooperadoId + planoSelecionadoId disponíveis.
+  // D-45 fix sub-fix 1: bloqueia auto-cálculo sem planoId — DTO motor-proposta
+  // exige @IsNotEmpty() planoId, antes disparava 400 no mount.
   useEffect(() => {
     if (!cooperadoId || resultadoMotor) return;
+    if (!planoSelecionadoId) {
+      setErroCalculo('Selecione um plano antes de simular.');
+      return;
+    }
     chamarMotor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooperadoId]);
+  }, [cooperadoId, planoSelecionadoId]);
 
   // Recalcular ao trocar plano ou base de desconto
   useEffect(() => {

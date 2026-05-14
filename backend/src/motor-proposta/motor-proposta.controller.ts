@@ -10,6 +10,7 @@ import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
+import { AceitarPropostaDto } from './dto/aceitar-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
 import { SimularReajusteDto } from './dto/simular-reajuste.dto';
@@ -48,10 +49,11 @@ export class MotorPropostaController {
 
   // T3 PARTE 4: restringido a ADMIN/SUPER_ADMIN (OPERADOR removido para reduzir superfície).
   // Ver comentário de dívida técnica no topo de MotorPropostaService.aceitar().
+  // D-45 fix sub-fix 3: body tipado com class-validator (AceitarPropostaDto).
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('aceitar')
-  aceitar(@Body() body: any, @Req() req: any) {
-    return this.service.aceitar(body, req.user?.cooperativaId, req.user?.id);
+  aceitar(@Body() body: AceitarPropostaDto, @Req() req: any) {
+    return this.service.aceitar(body as any, req.user?.cooperativaId, req.user?.id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

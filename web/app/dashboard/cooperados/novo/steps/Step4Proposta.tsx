@@ -62,16 +62,12 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
   }
 
   async function enviarEmail() {
+    // D-45 fix sub-fix 2: endpoint backend /propostas/enviar-email não existe
+    // (resíduo de refactor antigo, gerava 404 no console). Por enquanto usa
+    // mailto: direto. Endpoint dedicado pode ser criado em sessão futura
+    // quando definir provider SMTP + template + tracking de envio.
     setEnviando(true); setErro('');
     try {
-      await api.post('/propostas/enviar-email', {
-        email: emailEnvio,
-        nome: dadosPessoais.nomeCompleto,
-        simulacao,
-      });
-      onChange({ propostaEnviada: true, canalEnvio: 'email' });
-    } catch {
-      // fallback: abrir mailto
       const subject = encodeURIComponent('Proposta CoopereBR');
       const body = encodeURIComponent(
         `Olá ${dadosPessoais.nomeCompleto},\n\n` +
@@ -82,6 +78,8 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
       );
       window.open(`mailto:${emailEnvio}?subject=${subject}&body=${body}`, '_blank');
       onChange({ propostaEnviada: true, canalEnvio: 'email' });
+    } catch {
+      setErro('Erro ao abrir cliente de email.');
     } finally {
       setEnviando(false);
     }
