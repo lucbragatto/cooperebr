@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-14 noite** — **Fase 2 Hardening A→I completa** em 7 commits. D-48 + D-50/.2 + D-30N + B1 cross-talk RESOLVIDOS. 34+ endpoints com IDOR fix. Helmet/HSTS/CSP ativos. AuditLog interceptor global ativo. Smoke cross-tenant 2/2 PASS.
+> Última atualização: **2026-05-15** — **Bloco A Sub-Fase B AMAGES fechado**. Marco M4 redefinido: 1ª validação engine COMPENSADOS em ambiente real. AMAGES (5º cooperado piloto PJ) + 2 UCs (PUTIRI A4 VERDE + SEDE ADM B3 CONVENCIONAL) + Contrato CTR-2026-0008 + cobrança R$ 979,20 calculada pela engine COMPENSADOS via PATCH HTTP. D-46.SEED RESOLVIDO permanente.
 
 ---
 
@@ -11,6 +11,23 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 15/05/2026 (sessão Code dedicada — Bloco A Sub-Fase B AMAGES)
+- **Tipo:** Code (execução completa com 2 checkpoints intermediários + Fase 1 read-only obrigatória)
+- **Resultado:**
+  - **Marco M4 entregue** (redefinido em 15/05): 1ª validação engine COMPENSADOS em ambiente real
+  - **AMAGES = 5º cooperado piloto PJ** da CoopereBR (Associação dos Magistrados do Espírito Santo, CNPJ 27.053.685/0001-90), `ambienteTeste=false`, contatos = Luciano (regra inegociável)
+  - **2 UCs reais**: PUTIRI (`0.001.334.421.054-40`, A4 VERDE, Aracruz/ES) + SEDE ADM (`0.002.399.394.054-06`, B3 CONVENCIONAL, Vitória/ES) — dados extraídos de PDFs EDP mar/2026 reais
+  - **PLANO AMAGES COMPENSADOS** (publico=false, descontoBase 18%, cooperativaId CoopereBR)
+  - **Contrato CTR-2026-0008** (Usina Linhares EDP_ES, kWh anual 101.028, kWh mensal 8.419, percentualUsina 5,6127%, tarifaContratual R$ 0,19557)
+  - **Cobrança R$ 979,20** gerada via `PATCH /faturas/<id>/aprovar` HTTP real — modeloCobrancaUsado=CREDITOS_COMPENSADOS, 6/6 campos batem com expectativa (kwhCompensado × tarifaContratual)
+  - **LancamentoCaixa PREVISTO** R$ 979,20 criado automaticamente (D-54 não ressurgiu)
+  - **D-46.SEED RESOLVIDO permanente** — 5 planos globais COMPENSADOS `publico=false` (decisão Luciano: não religar)
+  - **Ciclo BLOQUEIO**: pm2 stop → `.env BLOQUEIO=false` → build → restart (passo 2) → engine COMPENSADOS rodou → pm2 stop → `.env BLOQUEIO=true` → build → restart (passo 8). Backend pós-fechamento volta ao default seguro.
+- **Commits desta sessão:** `ccde5ec` (D-46.SEED + investigação) + `a09a66e` (AMAGES E2E)
+- **Próxima sessão:** **Bloco H — Cadastro Usina expandido** (`classeGd` + `formaAquisicao` + `formaPagamentoDono`). Mitiga risco P0 D-30A/D-30B Exfishes R$ 310k/ano. Destrava Bloco E (realocação multi-usina) + Bloco F (automação concessionária).
+
+### Sessão anterior
 
 - **Quando:** 13-14/05/2026 (sessão maratona ~36h corridas; fechamento 14/05 noite com Fase 2 Hardening completa)
 - **Tipo:** claude.ai (coordenação) + Code (execução) + 7 sub-agentes claude.ai paralelos (noite 13/05 inventário)
@@ -276,7 +293,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Continuando plano A→H ordem otimizada (decidido 14/05/2026 noite após Fase 2 Hardening). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_blocos_a_h_ordem_otimizada_14_05.md. Executar BLOCO A — Sub-Fase B AMAGES (4-6h): 4º cooperado piloto + 2ª cooperativa real no SaaS. Aplicar regra contatos teste (lucbragatto+amages@gmail.com + 27981341348). Mini-fechamento obrigatório ao terminar (commit + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE matriz OPERACIONAL + atualizar inventario-visual-sisgd se status mudar). Marco esperado: M4 — 2ª cooperativa real no SISGD.
+Continuando plano A→H ordem otimizada. Bloco A (Sub-Fase B AMAGES) fechado 15/05 — engine COMPENSADOS validada E2E (commits ccde5ec + a09a66e). Próximo: BLOCO H — Cadastro Usina expandido (classeGd + formaAquisicao + formaPagamentoDono + endereço + seletor cooperado-dono UI). 6-10h. Mitiga risco P0 D-30A/D-30B Exfishes R$ 310k/ano e destrava Bloco E (realocação multi-usina) + Bloco F (automação concessionária). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_blocos_a_h_ordem_otimizada_14_05.md. Fase 1 read-only obrigatória antes de schema migration. Mini-fechamento obrigatório ao terminar (commit + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE + atualizar inventario-visual-sisgd + cadastro-usinas.html).
 ```
 
 ---

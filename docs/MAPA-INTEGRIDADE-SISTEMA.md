@@ -9,6 +9,7 @@
 | Auditoria | 🔴 | 🟢 | D-30N fechado, AuditLog interceptor global ativo, 18 endpoints decorados |
 | Hardening HTTP | 🔴 | 🟢 | D-50 fechado, Helmet + HSTS + CSP ativos (6 headers confirmados) |
 | Pipeline Asaas E2E | 🟡 | 🟢 | Sub-canário CAROLINA validou round-trip webhook→email (5s latência) |
+| Engine COMPENSADOS | 🟡 | 🟢 | Sub-Fase B AMAGES 15/05 validou E2E real: CTR-2026-0008 + cobrança R$ 979,20 calculada via PATCH /faturas/aprovar (commits `ccde5ec` + `a09a66e`) |
 
 
 **Data da auditoria inicial:** 2026-04-24
@@ -55,6 +56,12 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **D-30N (AuditLog)** → ✅ RESOLVIDO (Fase 2F).
 - **D-50/.2 (cobranças sem cooperativaId)** → ✅ RESOLVIDOS na maratona (commits anteriores).
 - **B1 cross-talk** → ✅ RESOLVIDO (mitigado server-side via 2A-2E + UI legacy deletada via 2H).
+
+## GAPS RESOLVIDOS EM 15/05/2026 (Bloco A Sub-Fase B AMAGES)
+
+- **D-46.SEED (planos COMPENSADOS vazando em vitrine pública)** → ✅ RESOLVIDO. UPDATE planos SET publico=false em 5 planos globais (decisão Luciano permanente). Commit `ccde5ec`. Script `backend/scripts/mitigacao-d46-seed.ts` idempotente.
+- **Engine COMPENSADOS sem validação E2E real** → ✅ RESOLVIDO. AMAGES (CTR-2026-0008) gerou cobrança R$ 979,20 = 5006,89 kWh × R$ 0,19557 via PATCH /faturas/<id>/aprovar real. Validação 6/6 PASS (modelo + kwh + tarifa + bruto + desconto + líquido). LancamentoCaixa PREVISTO criado automaticamente (D-54 não ressurgiu). Commit `a09a66e`.
+- **Marco M4 — 1ª validação engine COMPENSADOS em ambiente real** ✅ ENTREGUE.
 
 ---
 

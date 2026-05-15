@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-05-14 noite — **Fase 2 Hardening completa (A→I)** em 7 commits (2A `3106e6d` + 2B `fef024a` + 2C-2E + 2G `e6ee6e5` + 2H `8fd28dc` + 2F `26836ab` + 2I com bonus IDOR fix em `cooperados.service.update/remove`). **D-30N (AuditLog) RESOLVIDO. D-48 RESOLVIDO. D-50 e D-50.2 RESOLVIDOS.** 34+ endpoints com IDOR fix. Helmet/HSTS/CSP ativos. Smoke E2E cross-tenant 2/2 PASS.
+**Última atualização:** 2026-05-15 — **Bloco A Sub-Fase B AMAGES fechado** (commits `ccde5ec` + `a09a66e`). Marco M4 redefinido: 1ª validação engine COMPENSADOS em ambiente real (cooperado AMAGES PJ + 2 UCs + Plano + Contrato CTR-2026-0008 + cobrança R$ 979,20 calculada pela engine via PATCH /faturas/aprovar). **D-46.SEED RESOLVIDO** (5 planos publico=false permanente). LancamentoCaixa PREVISTO criado automaticamente (D-54 não ressurgiu).
 
 ---
 
@@ -1907,7 +1907,7 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 **D-46.6** — 5 vocabulários CooperToken (reforça D-35).
 
-**D-46.SEED** — Seeds criam 3 planos COMPENSADOS `publico=true`, escondidos pela flag. **BLOQUEIA Sub-Fase B** se desligar BLOQUEIO sem mitigação prévia: `UPDATE planos SET publico=false WHERE nome IN ('PLANO OURO','PLANO PRATA','CONSUMO DE CREDITOS DE KWH')`.
+**D-46.SEED** ✅ RESOLVIDO (15/05/2026, commit `ccde5ec`) — 5 planos COMPENSADOS globais marcados `publico=false` **PERMANENTE** (decisão Luciano não religar). Eram: `Plano Residencial 15%`, `Campanha Lançamento 20%`, `PLANO OURO`, `PLANO PRATA`, `CONSUMO DE CREDITOS DE KWH`. Sem `tarifaContratual` snapshot, engine COMPENSADOS não consegue calcular — esses planos seriam armadilha se vazassem em vitrine pública. Script reusável: `backend/scripts/mitigacao-d46-seed.ts`.
 
 #### Sub-itens BAIXOS
 
@@ -1918,7 +1918,7 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 **Estimativa fix conjunto:** 16-24h Code distribuídas. ALTAS 8-12h + MÉDIAS 6-9h + BAIXAS 2-3h.
 
-**Bloqueio:** D-46.SEED bloqueia Sub-Fase B. Demais sub-itens não bloqueiam canário.
+**Bloqueio:** D-46.SEED ✅ RESOLVIDO 15/05 (mitigação permanente). Demais sub-itens não bloqueiam canário. **Sub-Fase B AMAGES já rodou** (commit `a09a66e`) e validou engine COMPENSADOS E2E real (CTR-2026-0008, valorLiquido R$ 979,20).
 
 ---
 
