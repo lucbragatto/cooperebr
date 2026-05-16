@@ -321,11 +321,18 @@ enum DistribuidoraEnum {
 model Usina {
   id                      String                    @id @default(cuid())
   nome                    String
+  // Bloco H' (16/05/2026): apelido interno (ex: "cooperebr1" / "cooperebr2") — não substitui nome ANEEL
+  apelidoInterno          String?
   potenciaKwp             Decimal                   @db.Decimal(10, 2)
   capacidadeKwh           Decimal?                  @db.Decimal(15, 2)
   producaoMensalKwh       Decimal?                  @db.Decimal(15, 2)
   cidade                  String
   estado                  String
+  // Bloco H': endereço completo (cidade + estado já existiam)
+  enderecoLogradouro      String?
+  enderecoNumero          String?
+  enderecoBairro          String?
+  enderecoCep             String?
   statusHomologacao       StatusUsina               @default(CADASTRADA)
   dataHomologacao         DateTime?
   dataInicioProducao      DateTime?
@@ -343,6 +350,17 @@ model Usina {
   proprietarioTipo        String                    @default("PF")
   proprietarioCooperadoId String?
   proprietarioCooperado   Cooperado?                @relation("UsinaProprietario", fields: [proprietarioCooperadoId], references: [id])
+  // Bloco H': contrato/dados PJ titular junto à distribuidora
+  cnpjUsina               String?
+  formaAquisicao          FormaAquisicao?
+  formaPagamentoDono      FormaPagamentoDono?
+  valorAluguelFixo        Decimal?                  @db.Decimal(10, 2)
+  percentualGeracaoDono   Decimal?                  @db.Decimal(5, 2)
+  numeroContratoEdp       String?
+  dataContratoEdp         DateTime?
+  // Nota Bloco H' (16/05/2026): classeGd / RegrasFioB / guards de classificação NÃO foram
+  // adicionados aqui de propósito — sistema permanece neutro enquanto litígio CoopereBR×EDP corre.
+  // Tudo isso fica em Sprint "Módulo Classificação GD" separado, plugável pós-dossiê.
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
   contratos               Contrato[]
@@ -355,6 +373,19 @@ model Usina {
   contasAPagar            ContaAPagar[]
 
   @@map("usinas")
+}
+
+// Bloco H' (16/05/2026) — modalidade de aquisição da usina pela cooperativa.
+enum FormaAquisicao {
+  CESSAO   // cooperativa recebeu cessão de uso da usina por terceiro
+  ALUGUEL  // cooperativa aluga (arrenda) a usina
+  PROPRIA  // usina é da própria cooperativa
+}
+
+// Bloco H' (16/05/2026) — como o dono da usina é remunerado pela cooperativa.
+enum FormaPagamentoDono {
+  FIXO        // valor fixo mensal acordado em contrato
+  PERCENTUAL  // % sobre receita/geração
 }
 
 enum StatusUsina {

@@ -108,11 +108,16 @@ export class UsinasService {
 
   async create(data: {
     nome: string;
+    apelidoInterno?: string;
     potenciaKwp: number;
     capacidadeKwh?: number;
     producaoMensalKwh?: number;
     cidade: string;
     estado: string;
+    enderecoLogradouro?: string;
+    enderecoNumero?: string;
+    enderecoBairro?: string;
+    enderecoCep?: string;
     statusHomologacao?: string;
     observacoes?: string;
     modeloCobrancaOverride?: string | null;
@@ -124,8 +129,19 @@ export class UsinasService {
     proprietarioEmail?: string;
     proprietarioTipo?: string;
     proprietarioCooperadoId?: string;
+    cnpjUsina?: string;
+    formaAquisicao?: 'CESSAO' | 'ALUGUEL' | 'PROPRIA';
+    formaPagamentoDono?: 'FIXO' | 'PERCENTUAL';
+    valorAluguelFixo?: number;
+    percentualGeracaoDono?: number;
+    numeroContratoEdp?: string;
+    dataContratoEdp?: string | Date;
   }) {
-    const usina = await this.prisma.usina.create({ data: data as any });
+    const prismaData: any = { ...data };
+    if (prismaData.dataContratoEdp && typeof prismaData.dataContratoEdp === 'string') {
+      prismaData.dataContratoEdp = new Date(prismaData.dataContratoEdp);
+    }
+    const usina = await this.prisma.usina.create({ data: prismaData });
 
     // Notificar leads de expansão quando usina entra em produção na distribuidora
     if (data.distribuidora && data.statusHomologacao === 'EM_PRODUCAO') {
@@ -151,11 +167,16 @@ export class UsinasService {
 
   async update(id: string, data: Partial<{
     nome: string;
+    apelidoInterno: string | null;
     potenciaKwp: number;
     capacidadeKwh: number | null;
     producaoMensalKwh: number | null;
     cidade: string;
     estado: string;
+    enderecoLogradouro: string | null;
+    enderecoNumero: string | null;
+    enderecoBairro: string | null;
+    enderecoCep: string | null;
     statusHomologacao: string;
     dataHomologacao: string;
     dataInicioProducao: string;
@@ -167,6 +188,13 @@ export class UsinasService {
     proprietarioEmail: string | null;
     proprietarioTipo: string;
     proprietarioCooperadoId: string | null;
+    cnpjUsina: string | null;
+    formaAquisicao: 'CESSAO' | 'ALUGUEL' | 'PROPRIA' | null;
+    formaPagamentoDono: 'FIXO' | 'PERCENTUAL' | null;
+    valorAluguelFixo: number | null;
+    percentualGeracaoDono: number | null;
+    numeroContratoEdp: string | null;
+    dataContratoEdp: string | null;
   }>) {
     const usina = await this.prisma.usina.findUnique({ where: { id } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
@@ -240,6 +268,23 @@ export class UsinasService {
     const propFields = ['proprietarioNome', 'proprietarioCpfCnpj', 'proprietarioTelefone', 'proprietarioEmail', 'proprietarioTipo', 'proprietarioCooperadoId'] as const;
     for (const f of propFields) {
       if ((data as any)[f] !== undefined) updateData[f] = (data as any)[f];
+    }
+
+    // Bloco H' (16/05/2026) — campos novos
+    const blocoHLinhaFields = [
+      'apelidoInterno',
+      'enderecoLogradouro', 'enderecoNumero', 'enderecoBairro', 'enderecoCep',
+      'cnpjUsina', 'formaAquisicao', 'formaPagamentoDono',
+      'valorAluguelFixo', 'percentualGeracaoDono',
+      'numeroContratoEdp',
+    ] as const;
+    for (const f of blocoHLinhaFields) {
+      if ((data as any)[f] !== undefined) updateData[f] = (data as any)[f];
+    }
+    if (data.dataContratoEdp !== undefined) {
+      updateData.dataContratoEdp = data.dataContratoEdp
+        ? new Date(data.dataContratoEdp + 'T00:00:00.000Z')
+        : null;
     }
 
     return this.prisma.usina.update({ where: { id }, data: updateData });
