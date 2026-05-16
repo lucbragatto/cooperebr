@@ -664,4 +664,72 @@ export class PublicoController {
       return { ok: false, error: 'Erro ao salvar lead' };
     }
   }
+
+  /**
+   * Bloco C (16/05/2026) — Cadastro público de cooperado SEM unidade consumidora.
+   * Cooperado SEM_UC participa apenas de MLM (indicação) + CooperToken Clube.
+   * Não exige UC, distribuidora ou contrato.
+   */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('cadastro-sem-uc')
+  async cadastroSemUc(
+    @Body()
+    body: {
+      nome: string;
+      cpf: string;
+      email: string;
+      telefone?: string;
+      tipoPessoa?: 'PF' | 'PJ';
+      codigoRef?: string;
+      cooperativaId?: string;
+      representanteLegalNome?: string;
+      representanteLegalCpf?: string;
+      representanteLegalCargo?: string;
+    },
+    @Query('tenant') tenantParam?: string,
+  ) {
+    const cooperativaId = body.cooperativaId ?? tenantParam;
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId ou query param ?tenant= é obrigatório');
+    }
+    if (!body.nome || !body.cpf || !body.email) {
+      throw new BadRequestException('Nome, CPF/CNPJ e email são obrigatórios');
+    }
+
+    const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
+    const telefoneLimpo = body.telefone ? body.telefone.replace(/\D/g, '') : undefined;
+
+    try {
+      const cooperado = await this.prisma.cooperado.create({
+        data: {
+          nomeCompleto: body.nome.trim(),
+          cpf: cpfLimpo,
+          email: body.email.trim(),
+          telefone: telefoneLimpo,
+          tipoPessoa: body.tipoPessoa ?? 'PF',
+          tipoCooperado: 'SEM_UC',
+          status: 'PENDENTE',
+          cooperativaId,
+          modoRemuneracao: 'CLUBE',
+          termoAdesaoAceito: true,
+          termoAdesaoAceitoEm: new Date(),
+          representanteLegalNome: body.representanteLegalNome ?? null,
+          representanteLegalCpf: body.representanteLegalCpf
+            ? body.representanteLegalCpf.replace(/\D/g, '')
+            : null,
+          representanteLegalCargo: body.representanteLegalCargo ?? null,
+        },
+        select: { id: true, nomeCompleto: true, tipoCooperado: true, status: true, codigoIndicacao: true },
+      });
+      this.logger.log(`Cooperado SEM_UC criado via cadastro público: ${cooperado.id} (${cooperado.nomeCompleto})`);
+      return { ok: true, data: cooperado };
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new ConflictException('CPF/CNPJ ou email já cadastrado');
+      }
+      this.logger.error(`Erro ao salvar cooperado SEM_UC: ${err?.message}`);
+      throw new BadRequestException('Erro ao salvar cooperado SEM_UC');
+    }
+  }
 }
