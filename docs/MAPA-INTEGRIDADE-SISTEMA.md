@@ -10,6 +10,8 @@
 | Hardening HTTP | 🔴 | 🟢 | D-50 fechado, Helmet + HSTS + CSP ativos (6 headers confirmados) |
 | Pipeline Asaas E2E | 🟡 | 🟢 | Sub-canário CAROLINA validou round-trip webhook→email (5s latência) |
 | Engine COMPENSADOS | 🟡 | 🟢 | Sub-Fase B AMAGES 15/05 validou E2E real: CTR-2026-0008 + cobrança R$ 979,20 calculada via PATCH /faturas/aprovar (commits `ccde5ec` + `a09a66e`) |
+| Cadastro Usina | 🟡 | 🟢 | Bloco H' 16/05 — schema expandido (11 campos + 2 enums), saneamentos AMAGES + Exfishes, Cooperebr2 criada, UI condicional (commits `2024b13` + `15db027` + `9dada58`) |
+| Cadastro SEM_UC UI | 🔴 | 🟢 | Bloco C 16/05 — 2 páginas dedicadas + endpoint público + badge + banners. Smoke 6/6 PASS (commits `ae708e3` + `22345ce`) |
 
 
 **Data da auditoria inicial:** 2026-04-24
@@ -56,6 +58,12 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **D-30N (AuditLog)** → ✅ RESOLVIDO (Fase 2F).
 - **D-50/.2 (cobranças sem cooperativaId)** → ✅ RESOLVIDOS na maratona (commits anteriores).
 - **B1 cross-talk** → ✅ RESOLVIDO (mitigado server-side via 2A-2E + UI legacy deletada via 2H).
+
+## GAPS RESOLVIDOS EM 16/05/2026 (Sessão maratona — Bloco H' + Bloco C)
+
+- **Cadastro Usina** 🟡 Parcial → 🟢 OK. Schema expandido (11 campos + 2 enums FormaAquisicao/FormaPagamentoDono), saneamentos AMAGES + Exfishes (CTR-000134 estado dirty), Cooperebr2 cadastrada (Linhares 2, CUSD EDP-ES-04123/2025), apelidoInterno cooperebr1/cooperebr2, UI cadastro com campos condicionais FIXO/PERCENTUAL. **`classeGd`/`RegrasFioB`/guards intencionalmente fora** (Sprint Módulo Classificação GD separado pós-dossiê judicial). Commits `2024b13` + `15db027` + `9dada58`.
+- **Cadastro SEM_UC UI** (gap inventário SISGD 13/05) → ✅ RESOLVIDO. 2 páginas dedicadas (`/dashboard/cooperados/novo-sem-uc` admin + `/cadastro/sem-uc` público) + endpoint `POST /publico/cadastro-sem-uc` + badge SEM_UC listagem + banners de redirect nos wizards COM_UC. Smoke E2E 6/6 PASS. Zero migração schema (TipoCooperado.SEM_UC já existia). Commits `ae708e3` + `22345ce`.
+- **D-30B caso Exfishes** (R$ 310k/ano) → 🟡 saneamento aplicado em 16/05 (CTR-000134 com kwhContratoAnual=720.000, percentualUsina=8%, vínculo migrado pra Cooperebr2). Tratamento regulatório completo aguarda Sprint Módulo Classificação GD pós-dossiê.
 
 ## GAPS RESOLVIDOS EM 15/05/2026 (Bloco A Sub-Fase B AMAGES)
 

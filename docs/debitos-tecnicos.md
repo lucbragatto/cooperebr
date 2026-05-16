@@ -1968,6 +1968,27 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
+### D-novo-E — Reflexos sistêmicos pós-reforma estatutária CoopereBR (AGE 17/06/2026)
+
+**Severidade:** P2
+**Detectado em:** 2026-05-16 (sessão maratona — preparação reforma estatutária)
+**Estimativa:** 8-12h Code
+
+A reforma estatutária da CoopereBR (AGE 17/06/2026) implementará:
+- Estatuto reformado v3 (preserva Lei 5.764/71 ato cooperativo)
+- Edital + Ata AGE/AGE 2026-06-17
+- Requisitos funcionais módulo Compliance (catalogados em `docs/templates-documentos/06-institucional-parceiros/coopere-br/`)
+
+**Reflexos no SISGD após reforma aprovada:**
+- Atualizar Termo de Adesão atual com cláusulas pós-reforma (ato cooperativo, alocação dinâmica, audit trail obrigatório)
+- Atualizar `web/app/assinar/page.tsx:33,59` (D-30H já catalogado — RN 482/2012 → Lei 14.300/2022 + estatuto v3)
+- Validar bot CoopereAI prompt sobre regime cooperativo atualizado (D-30I já parcialmente resolvido)
+- Implementar requisitos do módulo Compliance (catalogado como sprint dedicado 108h — `requisitos-funcionais-modulo-compliance.md`)
+
+**Bloqueio:** depende AGE 17/06/2026 acontecer + ata aprovada. Não bloqueia desenvolvimento técnico nem outros blocos. Sprint pode rodar em paralelo a B/D/E/F/G após AGE.
+
+---
+
 ### D-novo-D — Definir formaPagamentoDono + valor concreto para usinas existentes (Bloco H')
 
 **Severidade:** P3 (UI permite ajuste a qualquer tempo)

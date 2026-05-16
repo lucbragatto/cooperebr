@@ -1,7 +1,43 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-16** — **Bloco C (Cadastro SEM_UC UI) fechado**. Marco M6: TipoCooperado.SEM_UC visível na UI admin (`/dashboard/cooperados/novo-sem-uc`) + UI pública (`/cadastro/sem-uc` + endpoint `POST /publico/cadastro-sem-uc`) + badge SEM_UC na listagem + banners de redirect nos wizards COM_UC. Smoke E2E 6/6 PASS. Zero migração schema (TipoCooperado.SEM_UC já existia).
+> Última atualização: **2026-05-16 sessão maratona FECHADA** — Bloco H' (M5) + Bloco C (M6) + Dossiê judicial CoopereBR×EDP v1.1 + Repositório templates documentos (3 camadas) + Reforma estatutária CoopereBR preservada (AGE 17/06/2026 prevista).
+
+---
+
+## ONDE PARAMOS — 16/05/2026 (sessão maratona fechada)
+
+### Marcos entregues hoje
+- **M5 — Bloco H' Cadastro Usina expandido** FECHADO (smoke 5/5 PASS, commits `2024b13` + `15db027` + `9dada58`)
+- **M6 — Bloco C Cadastro SEM_UC UI** FECHADO (smoke E2E 6/6 PASS, commits `ae708e3` + `22345ce`)
+- **Dossiê judicial CoopereBR × EDP v1.1** consolidado em 4 documentos `docs/juridico/` (commit `5274920`)
+- **Repositório templates documentos** refatorado em 3 camadas multi-tenant — `docs/templates-documentos/` com 27 arquivos (commit `b09acb2`)
+- **Reforma estatutária CoopereBR** preservada (AGE 17/06/2026 prevista — edital + ata + estatuto v3 + spec compliance)
+- **2 sprints novos catalogados:** Módulo Documentos (46h), Módulo Compliance (108h)
+
+### Frase comandante (próxima sessão)
+
+> Sessão maratona 16/05/2026 fechada com Bloco H' (M5) + Bloco C (M6) + Dossiê judicial v1.1 + Repositório templates documentos consolidado. Próximo: **Bloco D — 3 crons proativos** (8-12h Code). Quadro 3 txt Luciano: (a) cron lembrete documentos pendentes 48h pós-cadastro; (b) cron alerta admin se cooperado parado 7+ dias em status APROVADO/AGUARDANDO_CONCESSIONARIA; (c) cron email automático EDP solicitando fatura mensal. Ler primeiro `~/.claude/projects/C--Users-Luciano-cooperebr/memory/fechamento_sessao_maratona_16_05.md` + `bloco_h_linha_fechado_16_05.md` + `plano_h_linha_modular_16_05.md`. Fase 1 read-only obrigatória — auditar crons existentes em `backend/src/**/*.job.ts` + `@Cron` + `@nestjs/schedule`. HTML cadastro-usinas v1.1 pendente colagem manual (claude.ai entregou conteúdo).
+
+### Pendências abertas
+- HTML cadastro-usinas v1.1 (Luciano cola, claude.ai entregou conteúdo)
+- Dossiê judicial — documentos pendentes (acórdão Tema 986 STJ, despachos ANEEL Cooperebr1/2, contrato adesão Exfishes)
+- Aguarda AGE 17/06/2026 — reforma estatutária
+- Confirmação CNPJ SISGDSOLAR (49.950.705 vs 58.103.611)
+- Confirmação regime jurídico Sinergia (Lei 6.404/76 vs 11.795/2008)
+
+### Plano A→H restante (262-310h Code = 11-14 sessões)
+4. **D — 3 crons proativos** (8-12h) — PRÓXIMO
+5. B — Sprint CT Consolidado (21-26h)
+6. E — Realocação Multi-Usina (16-24h)
+7. F — Automação Concessionária (24-32h)
+8. G — Sprint Assinafy (12-16h)
+9. Sprint Módulo Documentos (46h)
+10. Sprint Módulo Compliance (108h)
+11. Sprint Módulo Classificação GD (8-12h) — depende dossiê judicial
+12. D-novo-E reflexos reforma estatutária (8-12h) — depende AGE 17/06
+
+---
 
 ---
 
@@ -324,7 +360,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Continuando plano A→H ordem otimizada. Bloco C (Cadastro SEM_UC UI) fechado 16/05 — 2 páginas + 1 endpoint público, smoke 6/6 PASS. Próximo: BLOCO D — 3 crons proativos (8-12h Code). Quadro 3 txt Luciano: (a) cron lembrete documentos pendentes 48h pós-cadastro; (b) cron alerta admin se cooperado parado 7+ dias em status APROVADO/AGUARDANDO_CONCESSIONARIA; (c) cron email automático EDP solicitando fatura mensal. Onboarding sem retrabalho admin. Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md. Fase 1 read-only obrigatória — auditar crons existentes em backend/src/**/*.job.ts + @Cron + schedule. Mini-fechamento obrigatório.
+Sessão maratona 16/05/2026 fechada com Bloco H' (M5) + Bloco C (M6) + Dossiê judicial v1.1 + Repositório templates documentos consolidado. Próximo: BLOCO D — 3 crons proativos (8-12h Code). Quadro 3 txt Luciano: (a) cron lembrete documentos pendentes 48h pós-cadastro; (b) cron alerta admin se cooperado parado 7+ dias em status APROVADO/AGUARDANDO_CONCESSIONARIA; (c) cron email automático EDP solicitando fatura mensal. Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/fechamento_sessao_maratona_16_05.md + bloco_h_linha_fechado_16_05.md + plano_h_linha_modular_16_05.md. Fase 1 read-only obrigatória — auditar crons existentes em backend/src/**/*.job.ts + @Cron + @nestjs/schedule. HTML cadastro-usinas v1.1 pendente colagem manual (claude.ai entregou conteúdo). Mini-fechamento obrigatório.
 ```
 
 ---
