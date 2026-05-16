@@ -1968,6 +1968,23 @@ Demais 5 sub-itens não bloqueiam Sub-Fase A, mas representam **risco de seguran
 
 ---
 
+### D-novo-D — Definir formaPagamentoDono + valor concreto para usinas existentes (Bloco H')
+
+**Severidade:** P3 (UI permite ajuste a qualquer tempo)
+**Detectado em:** 2026-05-16 (Bloco H' Cadastro Usina expandido — decisão Luciano flexibilizou pagamento dono)
+
+Schema Usina agora aceita `formaPagamentoDono` (FIXO/PERCENTUAL/null) + `valorAluguelFixo` (se FIXO) + `percentualGeracaoDono` (se PERCENTUAL), mas:
+- Cooperebr1 (Linhares 1): `formaAquisicao=ALUGUEL`, `formaPagamentoDono=null`, valores null.
+- Cooperebr2 (Linhares 2): `formaAquisicao=ALUGUEL`, `formaPagamentoDono=null`, valores null.
+
+**Fix:** após acordo formal entre parceiro (CoopereBR) e dono de cada usina, preencher via UI `/dashboard/usinas/[id]` ou script:
+- Escolher `FIXO` (com `valorAluguelFixo > 0`) OU `PERCENTUAL` (com `0,01 ≤ percentualGeracaoDono ≤ 100`).
+- Replicar pras demais usinas (Solar Norte, Sul, Palmeiras, Guarapari, Serra).
+
+**Bloqueio:** nada operacional — apenas relatórios financeiros completos sobre custo de arrendamento ficam incompletos.
+
+---
+
 ### D-novo-B — Descrição da cobrança Asaas confusa ("Mensalidade SISGD")
 
 **Severidade:** P3 (UX/branding)

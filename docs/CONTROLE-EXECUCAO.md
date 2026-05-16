@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-15** — **Bloco A Sub-Fase B AMAGES fechado**. Marco M4 redefinido: 1ª validação engine COMPENSADOS em ambiente real. AMAGES (5º cooperado piloto PJ) + 2 UCs (PUTIRI A4 VERDE + SEDE ADM B3 CONVENCIONAL) + Contrato CTR-2026-0008 + cobrança R$ 979,20 calculada pela engine COMPENSADOS via PATCH HTTP. D-46.SEED RESOLVIDO permanente.
+> Última atualização: **2026-05-16** — **Bloco H' (Cadastro Usina expandido modularizado) fechado**. Marco M5 entregue: schema Usina expandido com 11 campos novos + 2 enums (FormaAquisicao/FormaPagamentoDono); AMAGES saneada (`ambienteTeste=true`); Exfishes CTR-000134 saneado e migrado pra Cooperebr2; Cooperebr2 (Linhares 2) cadastrada; Cooperebr1 apelidada; UI cadastro estendida com campos condicionais. `classeGd`/`RegrasFioB`/guards NÃO foram adicionados — ficam em Sprint Módulo Classificação GD separado (litígio CoopereBR×EDP em curso).
 
 ---
 
@@ -11,6 +11,22 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 16/05/2026 (Bloco H' Cadastro Usina expandido modularizado)
+- **Tipo:** Code (execução completa com Fase 1 read-only + 4 checkpoints)
+- **Resultado:**
+  - **Marco M5 entregue:** schema Usina expandido (11 campos + 2 enums) sem `classeGd`/`RegrasFioB`/guards (modularizado pelo litígio judicial)
+  - **AMAGES Opção A:** `ambienteTeste: false → true` (referência externa, preserva smoke M4)
+  - **Exfishes CTR-000134:** saneado (kwhContratoAnual=720.000, percentualUsina=8) + migrado pra Cooperebr2
+  - **Cooperebr2 cadastrada:** `cmp8fkxvt0001valkj8utb8vr` (Linhares 2, 1.000 kWp, 157.000 kWh, EDP_ES, CUSD EDP-ES-04123/2025 + EDP-ES-04124/2025)
+  - **Cooperebr1 apelidada:** `apelidoInterno='cooperebr1'` + `formaAquisicao=ALUGUEL`
+  - **D-novo-D catalogado** (P3): definir formaPagamentoDono concreto após acordo parceiro↔dono
+  - **UI cadastro usina estendida:** campos condicionais FIXO/PERCENTUAL na `/dashboard/usinas/nova`
+- **Sub-tarefas concluídas:** H'.1 (schema), H'.2 (migration 2 rounds), H'.3 (AMAGES), H'.4 (Exfishes), H'.5 (Cooperebr2), H'.6 (apelidos), H'.7 (UI), H'.9 (smoke 5/5 PASS), H'.10 (este fechamento). H'.8 (HTML) pendente — claude.ai redige.
+- **Detalhe:** `docs/sessoes/2026-05-16-bloco-h-linha-fechado.md`
+- **Próximo:** Bloco C — Cadastro SEM_UC UI (4-6h)
+
+### Sessão anterior
 
 - **Quando:** 15/05/2026 (sessão Code dedicada — Bloco A Sub-Fase B AMAGES)
 - **Tipo:** Code (execução completa com 2 checkpoints intermediários + Fase 1 read-only obrigatória)
@@ -293,7 +309,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Continuando plano A→H ordem otimizada. Bloco A (Sub-Fase B AMAGES) fechado 15/05 — engine COMPENSADOS validada E2E (commits ccde5ec + a09a66e). Próximo: BLOCO H — Cadastro Usina expandido (classeGd + formaAquisicao + formaPagamentoDono + endereço + seletor cooperado-dono UI). 6-10h. Mitiga risco P0 D-30A/D-30B Exfishes R$ 310k/ano e destrava Bloco E (realocação multi-usina) + Bloco F (automação concessionária). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_blocos_a_h_ordem_otimizada_14_05.md. Fase 1 read-only obrigatória antes de schema migration. Mini-fechamento obrigatório ao terminar (commit + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE + atualizar inventario-visual-sisgd + cadastro-usinas.html).
+Continuando plano A→H ordem otimizada. Bloco H' (Cadastro Usina modularizado) fechado 16/05 — schema expandido 11 campos + 2 enums sem classeGd/RegrasFioB/guards (litígio judicial). Próximo: BLOCO C — Cadastro SEM_UC UI (4-6h Code). Banco já suporta `tipoCooperado.SEM_UC`; falta UI visível em /dashboard/cooperados/novo. Destrava MLM/D-44 MST (indicador puro sem UC). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md (sequência consolidada). Fase 1 read-only obrigatória. Mini-fechamento obrigatório ao terminar (commits + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE + sessões/2026-05-XX-bloco-c-sem-uc.md).
 ```
 
 ---
