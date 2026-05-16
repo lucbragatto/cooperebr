@@ -286,7 +286,9 @@ function TabelaCooperados({
                   <div className="flex items-center gap-1">
                     <Link href={`/dashboard/cooperados/${c.id}`} className="font-medium text-blue-600 hover:underline">{c.nomeCompleto}</Link>
                     {c.tipoCooperado === 'SEM_UC' && (
-                      <span className="ml-2 text-xs text-gray-400">(sem UC)</span>
+                      <Badge className="ml-2 bg-amber-100 text-amber-800 border-amber-200" title="Cooperado SEM unidade consumidora (Indicador Puro / MLM / CooperToken)">
+                        SEM_UC
+                      </Badge>
                     )}
                     <button
                       title="Observar este membro"

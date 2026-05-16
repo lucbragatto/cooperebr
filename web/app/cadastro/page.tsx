@@ -597,8 +597,16 @@ function CadastroPageInner() {
   // ─── Render steps ────────────────────────────────────────
 
   function renderStep0() {
+    const tenantParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tenant') : null;
+    const refParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
+    const semUcHref = `/cadastro/sem-uc${tenantParam ? `?tenant=${tenantParam}${refParam ? `&ref=${refParam}` : ''}` : ''}`;
     return (
       <div className="space-y-4">
+        {/* Banner Bloco C — link pro cadastro SEM_UC */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+          Sem conta de luz no seu nome? <a href={semUcHref} className="underline font-semibold">Quero ser apenas Indicador (MLM/Tokens) →</a>
+        </div>
+
         {/* Upload fatura section */}
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
           <h3 className="font-semibold text-gray-800 flex items-center gap-2">

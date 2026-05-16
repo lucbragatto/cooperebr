@@ -263,6 +263,16 @@ export default function NovoMembroWizard() {
         </Link>
       </div>
 
+      {etapa === 0 && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 flex items-start gap-2">
+          <span className="font-semibold">Sem unidade consumidora?</span>
+          <span>
+            Se este {tipoMembro.toLowerCase()} é apenas <strong>Indicador Puro</strong> (sem UC, participa só de MLM/CooperToken),
+            use o <Link href="/dashboard/cooperados/novo-sem-uc" className="underline font-semibold">cadastro simplificado SEM_UC →</Link>
+          </span>
+        </div>
+      )}
+
       <ProgressBar current={etapa} total={STEP_LABELS.length} />
       <Stepper etapa={etapa} labels={STEP_LABELS} />
 

@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-16** — **Bloco H' (Cadastro Usina expandido modularizado) fechado**. Marco M5 entregue: schema Usina expandido com 11 campos novos + 2 enums (FormaAquisicao/FormaPagamentoDono); AMAGES saneada (`ambienteTeste=true`); Exfishes CTR-000134 saneado e migrado pra Cooperebr2; Cooperebr2 (Linhares 2) cadastrada; Cooperebr1 apelidada; UI cadastro estendida com campos condicionais. `classeGd`/`RegrasFioB`/guards NÃO foram adicionados — ficam em Sprint Módulo Classificação GD separado (litígio CoopereBR×EDP em curso).
+> Última atualização: **2026-05-16** — **Bloco C (Cadastro SEM_UC UI) fechado**. Marco M6: TipoCooperado.SEM_UC visível na UI admin (`/dashboard/cooperados/novo-sem-uc`) + UI pública (`/cadastro/sem-uc` + endpoint `POST /publico/cadastro-sem-uc`) + badge SEM_UC na listagem + banners de redirect nos wizards COM_UC. Smoke E2E 6/6 PASS. Zero migração schema (TipoCooperado.SEM_UC já existia).
 
 ---
 
@@ -11,6 +11,21 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 16/05/2026 (Bloco C — Cadastro SEM_UC UI)
+- **Tipo:** Code (execução completa Fase 1 read-only + Fase 2 mutação + smoke + fechamento)
+- **Resultado:**
+  - **Marco M6 entregue:** SEM_UC acessível pela UI sem refactor de wizard
+  - **2 páginas novas:** `/dashboard/cooperados/novo-sem-uc` (admin) + `/cadastro/sem-uc` (público)
+  - **1 endpoint novo:** `POST /publico/cadastro-sem-uc` no `publico.controller.ts` (com Throttle, sem auth, exige `?tenant=`)
+  - **Banners de redirect** em ambos wizards COM_UC (admin step 0 + público step 0)
+  - **Badge SEM_UC** dourado na listagem `/dashboard/cooperados`
+  - **Smoke 6/6 PASS** — admin (HTTP 201, status=ATIVO, modoRemuneracao=DESCONTO) + público (HTTP 201, status=PENDENTE, modoRemuneracao=CLUBE), ambos com 0 UCs + 0 contratos
+  - **Zero alteração schema** — `enum TipoCooperado` já tinha `SEM_UC`
+- **Detalhe:** `docs/sessoes/2026-05-16-bloco-c-sem-uc-ui-fechado.md`
+- **Próximo:** Bloco D — 3 crons proativos (8-12h)
+
+### Sessão anterior
 
 - **Quando:** 16/05/2026 (Bloco H' Cadastro Usina expandido modularizado)
 - **Tipo:** Code (execução completa com Fase 1 read-only + 4 checkpoints)
@@ -309,7 +324,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Continuando plano A→H ordem otimizada. Bloco H' (Cadastro Usina modularizado) fechado 16/05 — schema expandido 11 campos + 2 enums sem classeGd/RegrasFioB/guards (litígio judicial). Próximo: BLOCO C — Cadastro SEM_UC UI (4-6h Code). Banco já suporta `tipoCooperado.SEM_UC`; falta UI visível em /dashboard/cooperados/novo. Destrava MLM/D-44 MST (indicador puro sem UC). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md (sequência consolidada). Fase 1 read-only obrigatória. Mini-fechamento obrigatório ao terminar (commits + push + CONTROLE-EXECUCAO + MAPA-INTEGRIDADE + sessões/2026-05-XX-bloco-c-sem-uc.md).
+Continuando plano A→H ordem otimizada. Bloco C (Cadastro SEM_UC UI) fechado 16/05 — 2 páginas + 1 endpoint público, smoke 6/6 PASS. Próximo: BLOCO D — 3 crons proativos (8-12h Code). Quadro 3 txt Luciano: (a) cron lembrete documentos pendentes 48h pós-cadastro; (b) cron alerta admin se cooperado parado 7+ dias em status APROVADO/AGUARDANDO_CONCESSIONARIA; (c) cron email automático EDP solicitando fatura mensal. Onboarding sem retrabalho admin. Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md. Fase 1 read-only obrigatória — auditar crons existentes em backend/src/**/*.job.ts + @Cron + schedule. Mini-fechamento obrigatório.
 ```
 
 ---
