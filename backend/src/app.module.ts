@@ -53,6 +53,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
 import { AuditModule } from './audit/audit.module';
+import { NotificacoesProativasModule } from './notificacoes-proativas/notificacoes-proativas.module';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { AuditModule } from './audit/audit.module';
     ContasPagarModule,
     BandeiraTarifariaModule,
     AuditModule,
+    NotificacoesProativasModule,
   ],
   controllers: [AppController],
   providers: [
