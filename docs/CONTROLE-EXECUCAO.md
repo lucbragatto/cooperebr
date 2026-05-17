@@ -85,7 +85,7 @@
   - **Exfishes CTR-000134:** saneado (kwhContratoAnual=720.000, percentualUsina=8) + migrado pra Cooperebr2
   - **Cooperebr2 cadastrada:** `cmp8fkxvt0001valkj8utb8vr` (Linhares 2, 1.000 kWp, 157.000 kWh, EDP_ES, CUSD EDP-ES-04123/2025 + EDP-ES-04124/2025)
   - **Cooperebr1 apelidada:** `apelidoInterno='cooperebr1'` + `formaAquisicao=ALUGUEL`
-  - **D-novo-D catalogado** (P3): definir formaPagamentoDono concreto após acordo parceiro↔dono
+  - **D-novo-D catalogado** (P3): definir formaPagamentoDono concreto após acordo parceiro↔dono. Mini-Bloco H'.9 (17/05) ampliou enum com `HIBRIDO` (FIXO + PERCENTUAL juntos) — UI + DTO class-validator com `@ValidateIf` cruzado entregues.
   - **UI cadastro usina estendida:** campos condicionais FIXO/PERCENTUAL na `/dashboard/usinas/nova`
 - **Sub-tarefas concluídas:** H'.1 (schema), H'.2 (migration 2 rounds), H'.3 (AMAGES), H'.4 (Exfishes), H'.5 (Cooperebr2), H'.6 (apelidos), H'.7 (UI), H'.9 (smoke 5/5 PASS), H'.10 (este fechamento). H'.8 (HTML) pendente — claude.ai redige.
 - **Detalhe:** `docs/sessoes/2026-05-16-bloco-h-linha-fechado.md`

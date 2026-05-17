@@ -12,7 +12,7 @@ Contratos celebrados pela CoopereBR com cooperados-donos de usinas, parceiros op
 **Conteúdo previsto:**
 - Identificação da usina (dados ANEEL, capacidade, classe GD, endereço, coordenadas)
 - Forma de cessão (CESSAO, ALUGUEL ou PROPRIA — corresponde ao enum `FormaAquisicao` do schema Usina)
-- Forma de pagamento ao dono (FIXO ou PERCENTUAL — `FormaPagamentoDono`)
+- Forma de pagamento ao dono (FIXO, PERCENTUAL ou HIBRIDO — `FormaPagamentoDono`; HIBRIDO combina valor fixo + percentual no mesmo contrato)
 - Vigência e renovação automática
 - Responsabilidades operacionais do dono
 - Garantia de geração mínima

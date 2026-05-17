@@ -135,9 +135,9 @@ graph TD
 <tbody>
 <tr><td><code>apelidoInterno</code></td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>"cooperebr1", "cooperebr2", etc.</td></tr>
 <tr><td><code>formaAquisicao</code></td><td>FormaAquisicao?</td><td><span class="badge novo">novo H'</span></td><td>CESSAO / ALUGUEL / PROPRIA</td></tr>
-<tr><td><code>formaPagamentoDono</code></td><td>FormaPagamentoDono?</td><td><span class="badge novo">novo H'</span></td><td>FIXO / PERCENTUAL — parceiro define (D-novo-D)</td></tr>
-<tr><td><code>valorAluguelFixo</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>R$ mensal se FIXO</td></tr>
-<tr><td><code>percentualGeracaoDono</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>0-100% se PERCENTUAL</td></tr>
+<tr><td><code>formaPagamentoDono</code></td><td>FormaPagamentoDono?</td><td><span class="badge novo">novo H'</span></td><td>FIXO / PERCENTUAL / HIBRIDO — parceiro define (D-novo-D + H'.9)</td></tr>
+<tr><td><code>valorAluguelFixo</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>R$ mensal se FIXO ou HIBRIDO</td></tr>
+<tr><td><code>percentualGeracaoDono</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>0-100% se PERCENTUAL ou HIBRIDO</td></tr>
 <tr><td><code>enderecoLogradouro</code> + variantes</td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>Endereço completo</td></tr>
 <tr><td><code>cnpjUsina</code></td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>CNPJ titular EDP (pode ≠ proprietarioCpfCnpj)</td></tr>
 <tr><td><code>dataContratoEdp</code></td><td>DateTime?</td><td><span class="badge novo">novo H'</span></td><td>Data assinatura CUSD</td></tr>
@@ -154,7 +154,7 @@ graph TD
 <p>Schema expandido (11 campos novos), UI cadastro completa, validação client-side e DTO backend com class-validator.</p>
 <ul>
   <li>✅ Backend + UI prontos (M5 — Bloco H')</li>
-  <li>✅ Validações condicionais (FIXO → valorAluguelFixo, PERCENTUAL → percentualGeracaoDono)</li>
+  <li>✅ Validações condicionais (FIXO → valorAluguelFixo, PERCENTUAL → percentualGeracaoDono, HIBRIDO → ambos — H'.9 17/05)</li>
   <li>✅ Endereço completo + CNPJ titular separado</li>
   <li>✅ Vinculação a cooperativa multi-tenant</li>
   <li>✅ Cadastro de cooperado COM_UC e SEM_UC unificado (M6 — Bloco C)</li>

@@ -1993,16 +1993,23 @@ A reforma estatutária da CoopereBR (AGE 17/06/2026) implementará:
 
 **Severidade:** P3 (UI permite ajuste a qualquer tempo)
 **Detectado em:** 2026-05-16 (Bloco H' Cadastro Usina expandido — decisão Luciano flexibilizou pagamento dono)
+**Atualizado em:** 2026-05-17 (mini-bloco H'.9 — opção HIBRIDO aprovada por Luciano após visita à tela `/dashboard/usinas/nova`)
 
-Schema Usina agora aceita `formaPagamentoDono` (FIXO/PERCENTUAL/null) + `valorAluguelFixo` (se FIXO) + `percentualGeracaoDono` (se PERCENTUAL), mas:
+Schema Usina aceita `formaPagamentoDono` (FIXO/PERCENTUAL/**HIBRIDO**/null) + `valorAluguelFixo` (se FIXO ou HIBRIDO) + `percentualGeracaoDono` (se PERCENTUAL ou HIBRIDO), mas:
 - Cooperebr1 (Linhares 1): `formaAquisicao=ALUGUEL`, `formaPagamentoDono=null`, valores null.
 - Cooperebr2 (Linhares 2): `formaAquisicao=ALUGUEL`, `formaPagamentoDono=null`, valores null.
 
 **Fix:** após acordo formal entre parceiro (CoopereBR) e dono de cada usina, preencher via UI `/dashboard/usinas/[id]` ou script:
-- Escolher `FIXO` (com `valorAluguelFixo > 0`) OU `PERCENTUAL` (com `0,01 ≤ percentualGeracaoDono ≤ 100`).
+- Escolher `FIXO` (com `valorAluguelFixo > 0`) OU `PERCENTUAL` (com `0,01 ≤ percentualGeracaoDono ≤ 100`) OU **`HIBRIDO`** (com **AMBOS** preenchidos — valorAluguelFixo > 0 E 0,01 ≤ percentualGeracaoDono ≤ 100).
 - Replicar pras demais usinas (Solar Norte, Sul, Palmeiras, Guarapari, Serra).
 
 **Bloqueio:** nada operacional — apenas relatórios financeiros completos sobre custo de arrendamento ficam incompletos.
+
+**Sub-débito relacionado D-novo-D.1 — opção HIBRIDO faltante no enum (resolvido 2026-05-17):**
+- Tela `/dashboard/usinas/nova` mostrava só "Fixo mensal" e "Percentual sobre geração" — sem opção combinada.
+- Schema tinha `valorAluguelFixo` e `percentualGeracaoDono` separados (ambos opcionais), mas enum `FormaPagamentoDono` só tinha 2 valores.
+- Mini-bloco H'.9 adicionou `HIBRIDO` ao enum + DTO class-validator + UI lógica condicional (1-1.5h Code).
+- 100% das 10 usinas com `formaPagamentoDono=null` na data — migração puramente aditiva, sem `--accept-data-loss`.
 
 ---
 
