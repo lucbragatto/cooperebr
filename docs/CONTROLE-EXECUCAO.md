@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-17 noite — Mini-Sprint Bugs Usinas+Listas FECHADO** (Marco M9). 4 bugs fixados + saneamento Cooperebr2 duplicada + schema @unique + Bug 3 regressão resolvida + 3 anomalias pós-fix (ratio→percent + refresh header) + decisão produto MENSAL embutida (D-novo-H catalogado, ~6-8h Code futuro). Bloco B Etapa 1 PAUSADO (Fase 1 ✅; Fase 2 specs Jest 6-8h aguarda retomada). **Próximo: Sprint Usinas+Listas Sub-Fase 1** — Code aguarda OK Luciano com respostas das 10 perguntas decisórias da Fase 1 read-only ampla.
+> Última atualização: **2026-05-17 noite final — Maratona FECHADA com 3 marcos** (M7 Bloco D + M9 Mini-Sprint Bugs Usinas+Listas + M10 parcial Sub-Fase 1 Listas Concessionária Fases 1-3). 15+ commits do dia. **Sub-Fase 1 Fase 4** (trigger ativação automática + WA/email cooperado homologado, 2-3h) PENDENTE pra próxima sessão — **antes invocar subagent `cooperebr-qa-funcional` pra primeira ronda QA** validando tudo de 17/05. 9 memórias novas catalogadas. Subagent project-specific disponível em `~/.claude/agents/cooperebr-qa-funcional.md`.
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### Frase comandante (próxima sessão)
 
-> Mini-Sprint Bugs Usinas+Listas FECHADO 17/05 noite (Marco M9, 4 commits `085ae53`+`4876829`+`a31cbe7`+`54f336c` pushed). 4 bugs visuais + 3 anomalias pós-fix + saneamento Cooperebr2 + schema `@unique` entregues. **Próximo: Sprint Usinas+Listas Concessionária Sub-Fase 1** (esqueleto operacional 18-26h em 5 fases: schema `EnvioListaConcessionaria` + `EnvioListaCooperado` + status individual + backend service multi-tenant + frontend 2 abas + trigger pós-homologação + tests). Ler primeiro `~/.claude/projects/C--Users-Luciano-cooperebr/memory/pausa_bloco_b_sprint_usinas_listas_17_05.md` + `decisao_convencao_mensal_oficial_17_05.md` + doc-sessão `docs/sessoes/2026-05-17-mini-sprint-bugs-usinas.md`. **AGUARDA OK Luciano** com respostas das 10 perguntas decisórias da Fase 1 read-only ampla (granularidade envio lote/individual, status por cooperado vs por usina, trigger ativação contrato, polling EDP escopo, classeGd opcional, módulo novo vs reusar migracoes-usina, periodicidade EDP-ES, formato CSV EDP, dependência Sprint 5 regulatório, conflito Bloco E). NÃO INICIAR Fase 2 implementação sem OK explícito. D-novo-H (refator MENSAL ~6-8h) catalogado — não bloqueia Sub-Fase 1.
+> Sessão maratona 17/05/2026 fechada com 3 marcos (M7 Bloco D, M9 Mini-Sprint Bugs Usinas+Listas, M10 parcial Sub-Fase 1 Listas Concessionária Fases 1-3). **Próxima sessão Code arranca invocando subagent `cooperebr-qa-funcional` pra primeira ronda QA** — validar Bloco D crons + Mini-Sprint Bugs Usinas+Listas + Sub-Fase 1 Listas Concessionária Fases 1-3. Após relatório QA + decisão Luciano sobre fixes, retomar **Sub-Fase 1 Fase 4** (trigger ativação automática + WA/email cooperado homologado, 2-3h Code, aplicar `regra_contato_teste_impreterivel`). Memórias novas catalogadas em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/` (9 arquivos do dia 17/05). Subagent `~/.claude/agents/cooperebr-qa-funcional.md` disponível. Doc-sessão: `docs/sessoes/2026-05-17-maratona-bloco-d-mini-sprint-bugs-sub-fase-1-listas.md`.
 
 ### Pendências abertas
 - HTML cadastro-usinas v1.1 (Luciano cola, claude.ai entregou conteúdo)
