@@ -128,6 +128,9 @@ export default function UsinasPage() {
                         <Link href={`/dashboard/usinas/${u.id}`} className="text-blue-600 hover:underline font-medium">
                           {u.nome}
                         </Link>
+                        <div className="text-[10px] text-gray-400 font-mono mt-0.5" title={`${u.id} · criado ${new Date(u.createdAt).toLocaleString('pt-BR')}`}>
+                          {u.id.slice(0, 8)} · {new Date(u.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
                       </TableCell>
                       <TableCell>{Number(u.potenciaKwp).toFixed(2)}</TableCell>
                       <TableCell>{u.capacidadeKwh ? Number(u.capacidadeKwh).toFixed(2) : '—'}</TableCell>
