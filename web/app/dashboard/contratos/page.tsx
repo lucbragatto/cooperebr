@@ -125,17 +125,18 @@ export default function ContratosPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto">
+          <Table className="min-w-[1200px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Número</TableHead>
-                <TableHead>{tipoMembro}</TableHead>
-                <TableHead>UC</TableHead>
-                <TableHead>Usina</TableHead>
-                <TableHead>Desconto (%)</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data Início</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="w-32">Número</TableHead>
+                <TableHead className="min-w-[200px]">{tipoMembro}</TableHead>
+                <TableHead className="w-32">UC</TableHead>
+                <TableHead className="min-w-[180px]">Usina</TableHead>
+                <TableHead className="w-24">Desconto (%)</TableHead>
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-28">Data Início</TableHead>
+                <TableHead className="w-24 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -158,11 +159,15 @@ export default function ContratosPage() {
               ) : (
                 contratosFiltrados.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.numero}</TableCell>
-                    <TableCell>{c.cooperado?.nomeCompleto ?? '—'}</TableCell>
-                    <TableCell>{c.uc?.numero ?? '—'}</TableCell>
-                    <TableCell>{c.usina?.nome ?? '—'}</TableCell>
-                    <TableCell>{c.percentualDesconto}%</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{c.numero}</TableCell>
+                    <TableCell className="truncate max-w-[200px]" title={c.cooperado?.nomeCompleto ?? ''}>
+                      {c.cooperado?.nomeCompleto ?? '—'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{c.uc?.numero ?? '—'}</TableCell>
+                    <TableCell className="truncate max-w-[180px]" title={c.usina?.nome ?? ''}>
+                      {c.usina?.nome ?? '—'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{c.percentualDesconto}%</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {editandoStatus === c.id ? (
@@ -225,6 +230,7 @@ export default function ContratosPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
