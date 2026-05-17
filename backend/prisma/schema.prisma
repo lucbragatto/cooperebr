@@ -55,6 +55,7 @@ model Cooperativa {
   configClubeVantagens      ConfigClubeVantagens?
   transferencias            TransferenciaPix[]
   migracoesUsina            MigracaoUsina[]
+  enviosLista               EnvioListaConcessionaria[]
   // ── CooperToken ──
   cooperTokenLedger         CooperTokenLedger[]
   configCooperToken         ConfigCooperToken?
@@ -91,6 +92,8 @@ model Usuario {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   observacoes      ObservacaoAtiva[]
+  enviosValidados  EnvioListaConcessionaria[] @relation("EnvioListaValidador")
+  enviosEnviados   EnvioListaConcessionaria[] @relation("EnvioListaEnviador")
 
   @@map("usuarios")
 }
@@ -171,6 +174,7 @@ model Cooperado {
   unidadesCondominio      UnidadeCondominio[]
   transferencias          TransferenciaPix[]
   migracoesUsina          MigracaoUsina[]
+  enviosLista             EnvioListaCooperado[]
   // Token de assinatura remota (cadastro por proxy)
   tokenAssinatura         String?
   tokenAssinaturaExp      DateTime?
@@ -372,6 +376,10 @@ model Usina {
   alertas                 UsinaAlerta[]
   contratosUso            ContratoUso[]
   contasAPagar            ContaAPagar[]
+  enviosLista             EnvioListaConcessionaria[]
+  // Sprint Usinas+Listas Sub-Fase 1 (17/05/2026 noite) — campo informativo opcional,
+  // sem guard, registra a classificação GD I/II/III enquanto litígio CoopereBR×EDP corre.
+  classeGdAnotada         String?
 
   @@map("usinas")
 }
@@ -454,6 +462,7 @@ model Contrato {
   cobrancas                Cobranca[]
   listaEspera              ListaEspera?
   historicoReajusteTarifa  HistoricoReajusteTarifa[]
+  enviosLista              EnvioListaCooperado[]
 
   @@map("contratos")
 }
@@ -2234,4 +2243,84 @@ model BandeiraTarifaria {
 
   @@index([cooperativaId, dataInicio, dataFim])
   @@map("bandeiras_tarifarias")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sprint Usinas+Listas Concessionária Sub-Fase 1 (17/05/2026 noite)
+// Esqueleto operacional do fluxo de 9 etapas (memória `spec_modulo_listas_concessionaria_17_05.md`):
+// RASCUNHO → VALIDADA → PRONTA_PARA_ENVIO → ENVIADA → PROTOCOLADA → HOMOLOGADO_PARCIAL/TOTAL.
+// numeroInterno: LIST-{apelidoInterno||id.slice(0,6)}-YYYYMM-NNN (decisão 17/05).
+// classeGdAnotada vive em Usina (informativo, sem guard). D-novo-H trata convenção mensal depois.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model EnvioListaConcessionaria {
+  id                              String                    @id @default(cuid())
+  numeroInterno                   String                    @unique // LIST-{usinaApelido||id6}-YYYYMM-NNN
+  cooperativaId                   String
+  cooperativa                     Cooperativa               @relation(fields: [cooperativaId], references: [id])
+  usinaId                         String
+  usina                           Usina                     @relation(fields: [usinaId], references: [id])
+  status                          StatusEnvioConcessionaria @default(RASCUNHO)
+
+  geradaEm                        DateTime                  @default(now())
+  validadaEm                      DateTime?
+  validadaPorId                   String?
+  validadaPor                     Usuario?                  @relation("EnvioListaValidador", fields: [validadaPorId], references: [id])
+  enviadaEm                       DateTime?
+  enviadaPorId                    String?
+  enviadaPor                      Usuario?                  @relation("EnvioListaEnviador", fields: [enviadaPorId], references: [id])
+  canalEnvio                      String? // "email" | "portal" | "fisico"
+  protocoloEm                     DateTime?
+  numeroProtocoloConcessionaria   String?
+  liberadaEm                      DateTime?
+  observacoes                     String?
+
+  cooperados                      EnvioListaCooperado[]
+
+  createdAt                       DateTime                  @default(now())
+  updatedAt                       DateTime                  @updatedAt
+
+  @@index([cooperativaId, status])
+  @@index([usinaId, geradaEm])
+  @@map("envios_lista_concessionaria")
+}
+
+model EnvioListaCooperado {
+  id                       String                   @id @default(cuid())
+  envioId                  String
+  envio                    EnvioListaConcessionaria @relation(fields: [envioId], references: [id], onDelete: Cascade)
+  contratoId               String
+  contrato                 Contrato                 @relation(fields: [contratoId], references: [id])
+  cooperadoId              String
+  cooperado                Cooperado                @relation(fields: [cooperadoId], references: [id])
+  ucNumero                 String
+  // Snapshot imutável dos valores no momento da validação (alinhado com Contrato.percentualUsina Decimal(8,4))
+  kwhContratoSnapshot      Decimal                  @db.Decimal(15, 2)
+  percentualUsinaSnapshot  Decimal                  @db.Decimal(8, 4)
+  statusIndividual         StatusEnvioCooperado     @default(PENDENTE)
+  dataHomologacao          DateTime?
+  observacaoIndividual     String?
+  createdAt                DateTime                 @default(now())
+
+  @@index([envioId, statusIndividual])
+  @@index([cooperadoId, statusIndividual])
+  @@map("envio_lista_cooperados")
+}
+
+enum StatusEnvioConcessionaria {
+  RASCUNHO
+  VALIDADA
+  PRONTA_PARA_ENVIO
+  ENVIADA
+  PROTOCOLADA
+  HOMOLOGADO_PARCIAL
+  HOMOLOGADO_TOTAL
+  REJEITADA
+  CANCELADA
+}
+
+enum StatusEnvioCooperado {
+  PENDENTE
+  HOMOLOGADO
+  REJEITADO
 }

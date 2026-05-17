@@ -39,6 +39,7 @@ import { CondominiosModule } from './condominios/condominios.module';
 import { AdministradorasModule } from './administradoras/administradoras.module';
 import { ObservadorModule } from './observador/observador.module';
 import { MigracoesUsinaModule } from './migracoes-usina/migracoes-usina.module';
+import { EnvioListaConcessionariaModule } from './envio-lista-concessionaria/envio-lista-concessionaria.module';
 import { EmailModule } from './email/email.module';
 import { RelatoriosModule } from './relatorios/relatorios.module';
 import { CooperTokenModule } from './cooper-token/cooper-token.module';
@@ -93,6 +94,7 @@ import { NotificacoesProativasModule } from './notificacoes-proativas/notificaco
     AdministradorasModule,
     ObservadorModule,
     MigracoesUsinaModule,
+    EnvioListaConcessionariaModule,
     EmailModule,
     RelatoriosModule,
     CooperTokenModule,
