@@ -9,6 +9,9 @@ import {
   templateDocumentoReprovado,
   templateContratoGerado,
   templateTeste,
+  templateLembreteDocsPendentes,
+  templateAlertaAdminDocsParados,
+  templateLembreteEmailEdp,
 } from './email-templates';
 import { PrismaService } from '../prisma.service';
 import { podeEnviarEmDev } from '../common/safety/whitelist-teste';
@@ -171,6 +174,62 @@ export class EmailService {
   async enviarTeste(emailDestino: string, cooperativaId?: string | null): Promise<boolean> {
     const html = templateTeste();
     return this.enviarEmail(emailDestino, 'E-mail de Teste — CoopereBR', html, undefined, cooperativaId);
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // Bloco D (16/05/2026) — 3 crons proativos
+  // ──────────────────────────────────────────────────────────────────
+
+  async enviarLembreteDocsPendentes(
+    cooperado: CooperadoEmail,
+    docsPendentes: Array<{ tipo: string; status: 'PENDENTE' | 'REPROVADO'; motivo?: string | null }>,
+    tentativa: number,
+  ): Promise<boolean> {
+    if (!cooperado.email) return false;
+    const html = templateLembreteDocsPendentes(cooperado.nomeCompleto, docsPendentes, tentativa);
+    const sufixo = tentativa > 1 ? ` (${tentativa}º lembrete)` : '';
+    return this.enviarEmail(
+      cooperado.email,
+      `[CoopereBR] Faltam documentos${sufixo} 🔴`,
+      html,
+      undefined,
+      cooperado.cooperativaId,
+    );
+  }
+
+  async enviarAlertaAdminDocsParados(
+    emailAdmin: string,
+    nomeCooperativa: string,
+    diasLimite: number,
+    cooperados: Array<{ nome: string; diasParado: number; docsPendentes: number }>,
+    cooperativaId?: string | null,
+  ): Promise<boolean> {
+    if (cooperados.length === 0) return false;
+    const html = templateAlertaAdminDocsParados(nomeCooperativa, diasLimite, cooperados);
+    return this.enviarEmail(
+      emailAdmin,
+      `[Admin ${nomeCooperativa}] ${cooperados.length} cooperado(s) com docs > ${diasLimite}d parados`,
+      html,
+      undefined,
+      cooperativaId,
+    );
+  }
+
+  async enviarLembreteEmailEdp(
+    cooperado: CooperadoEmail,
+    emailInstitucionalParceiro: string,
+    reforco: boolean,
+  ): Promise<boolean> {
+    if (!cooperado.email) return false;
+    const html = templateLembreteEmailEdp(cooperado.nomeCompleto, emailInstitucionalParceiro, reforco);
+    const prefixo = reforco ? '🔔 [Reforço] ' : '';
+    return this.enviarEmail(
+      cooperado.email,
+      `${prefixo}Salve nosso email no portal EDP — CoopereBR`,
+      html,
+      undefined,
+      cooperado.cooperativaId,
+    );
   }
 
   async buscarLogs(page = 1, limit = 20) {
