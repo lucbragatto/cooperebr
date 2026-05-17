@@ -12,6 +12,7 @@
 | Engine COMPENSADOS | 🟡 | 🟢 | Sub-Fase B AMAGES 15/05 validou E2E real: CTR-2026-0008 + cobrança R$ 979,20 calculada via PATCH /faturas/aprovar (commits `ccde5ec` + `a09a66e`) |
 | Cadastro Usina | 🟡 | 🟢 | Bloco H' 16/05 — schema expandido (11 campos + 2 enums), saneamentos AMAGES + Exfishes, Cooperebr2 criada, UI condicional (commits `2024b13` + `15db027` + `9dada58`) |
 | Cadastro SEM_UC UI | 🔴 | 🟢 | Bloco C 16/05 — 2 páginas dedicadas + endpoint público + badge + banners. Smoke 6/6 PASS (commits `ae708e3` + `22345ce`) |
+| Crons proativos (lembrete docs, alerta admin, lembrete EDP) | 🔴 | 🟢 | Bloco D 17/05 — módulo `notificacoes-proativas/` + 3 `@Cron` + 3 templates email + whitelist guard. Smoke 9/9 PASS (commits `fd902af` + notificações) |
 
 
 **Data da auditoria inicial:** 2026-04-24
@@ -440,19 +441,23 @@ Os 3 gaps são faces do mesmo problema: **ciclo de ativação do cooperado na pr
 
 | Etapa | Status | Arquivo | Gap |
 |-------|--------|---------|-----|
-| `LancamentoCaixa` CRUD | FUNCIONAL | `financeiro/lancamentos.service.ts` | Completo |
-| Plano de contas CRUD | FUNCIONAL | `financeiro/plano-contas.service.ts` | — |
+| `LancamentoCaixa` CRUD | FUNCIONAL | `financeiro/lancamentos.service.ts` | Campo `naturezaAto` é String livre, não filtrado — Sprint Contabilidade Tributária Segregada vai promover pra enum |
+| Plano de contas CRUD | FUNCIONAL | `financeiro/plano-contas.service.ts` | Plano genérico só com 4 tributos (INSS/FGTS/IRRF/ISS); Sprint Contabilidade Tributária Segregada vai criar templates por `tipoParceiro` (cooperativa/consorcio/associacao/condominio) |
 | Livro-caixa por competência | FUNCIONAL | `financeiro.controller.ts:79` | — |
 | `ContaAPagar` CRUD | FUNCIONAL | `contas-pagar.service.ts` | Categorias: arrendamento, manutenção, etc. |
 | `ContaReceber` (receitas) | PARCIAL | `lancamentos.service.ts` | Lançamentos RECEITA existem, sem módulo dedicado ContaReceber |
 | Contabilidade Clube (tokens) | FUNCIONAL | `contabilidade-clube.controller.ts` | Provisões, emissão, expiração |
-| DRE (Demonstração Resultado) | NAO_EXISTE | — | **CRÍTICO:** Sem endpoint de DRE consolidado |
-| Conciliação bancária real | NAO_EXISTE | `integracao-bancaria/` | BB e Sicoob têm serviços mas webhook BB existe; conciliação automática NÃO existe |
-| Fechamento de mês | NAO_EXISTE | — | Sem processo de fechamento contábil |
+| DRE (Demonstração Resultado) | NAO_EXISTE | — | **CRÍTICO:** Sem endpoint de DRE consolidado. Sprint 7 cobre versão genérica; Sprint Contabilidade Tributária Segregada (#8) cobre 3 DREs paralelas (Próprio/Auxiliar/Não Cooperativo) + consolidada |
+| Conciliação bancária real | NAO_EXISTE | `integracao-bancaria/` | BB e Sicoob têm serviços mas webhook BB existe; conciliação automática NÃO existe (Sprint 7) |
+| Fechamento de mês | NAO_EXISTE | — | Sem processo de fechamento contábil (Sprint 7) |
 | Relatório financeiro admin | FUNCIONAL | `web/app/dashboard/financeiro/` | Lançamentos, contas a pagar |
-| PIX Excedente | IMPLEMENTADO MAS NÃO TESTADO | `pix-excedente.service.ts` | `ASAAS_PIX_EXCEDENTE_ATIVO=false` em prod |
+| PIX Excedente | IMPLEMENTADO MAS NÃO TESTADO | `pix-excedente.service.ts` | `ASAAS_PIX_EXCEDENTE_ATIVO=false` em prod. ÚNICO caso real de retenção tributária estruturada (IR/PIS/COFINS) |
+| **Segregação Ato Cooperativo Próprio × Auxiliar × Não Cooperativo** | **NAO_EXISTE** | — | **CRÍTICO P1 catalogado 17/05/2026:** Sprint Contabilidade Tributária Segregada (61h Code, posição #8 roadmap). Base jurídica: Lei 5.764/71 Art. 79 + STF Tema 536 + STJ Tema 986 ressalva. Benefício inicial APROVADO: APENAS `ENERGIA_SCEE`. Ver `docs/especificacao-contabilidade-cooperativa-segregada.md` |
+| **Apuração tributária por natureza** (PIS/COFINS/IRPJ/CSLL/ICMS isentos sobre ato próprio) | **NAO_EXISTE** | — | Sprint Contabilidade Tributária Segregada (#8) |
+| **Demonstrativos fiscais defensáveis** (Memorial de Cálculo, Não-Lucratividade, Repasses) | **NAO_EXISTE** | — | Sprint Contabilidade Tributária Segregada (#8) |
+| **Integração SPED/NF3e/eSocial/e-Financeira** | **NAO_EXISTE** | — | Sprint Compliance Fiscal SEPARADO (D-55 catalogado 17/05/2026, posição #12, 40-60h estimadas) |
 
-**% Pronto:** 50%. Bloqueadores: sem DRE, sem fechamento de mês, conciliação bancária ausente.
+**% Pronto:** 50% (financeiro genérico) + 5% (tributário — só PIX excedente) = ~50% global. **Gap cooperativo:** 0% (será coberto por Sprint Contabilidade Tributária Segregada #8, 61h Code, ENERGIA_SCEE como benefício inicial). **Bloqueadores Sprint 7:** sem DRE, sem fechamento de mês, conciliação bancária ausente. **Bloqueadores compliance fiscal:** sem segregação cooperativa, sem apuração tributária, sem demonstrativos defensáveis, sem SPED/NF3e.
 
 ---
 

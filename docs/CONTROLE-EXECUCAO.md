@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-16 sessão maratona FECHADA** — Bloco H' (M5) + Bloco C (M6) + Dossiê judicial CoopereBR×EDP v1.1 + Repositório templates documentos (3 camadas) + Reforma estatutária CoopereBR preservada (AGE 17/06/2026 prevista).
+> Última atualização: **2026-05-17 — Bloco D (3 crons proativos) FECHADO**. Marco M7. Novo módulo `notificacoes-proativas/` com 3 crons (lembrete docs cooperado 10:00, alerta admin agregado 08:00, lembrete email portal EDP 11:00). Bug crítico whitelist guard detectado no smoke + corrigido. Smoke 9/9 PASS.
 
 ---
 
@@ -47,6 +47,20 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 17/05/2026 (Bloco D — 3 crons proativos)
+- **Tipo:** Code (Fase 1 read-only + Fase 2 mutação + smoke + fechamento)
+- **Resultado:**
+  - **Marco M7 entregue:** Quadro 3 txt Luciano implementado (3 crons proativos operacionais)
+  - **Novo módulo** `backend/src/notificacoes-proativas/` (service + job + module) — registrado em `app.module.ts`
+  - **3 templates email novos** + **3 métodos** `EmailService` (multi-tenant via cooperativaId)
+  - **9 ConfigTenant chaves** seedadas em 2 cooperativas (CoopereBR + CoopereBR Teste)
+  - **Bug crítico whitelist guard:** primeiro smoke gravou 72 markers `lembrete_edp:1` false-positive em dev (whitelist barrou envio silenciosamente). Fix aplicado (`podeEnviarEmDev` pre-check), 72 markers revertidos, segundo smoke 9/9 PASS
+  - **Anti-spam:** CRON A max 5 tentativas/cooperado; CRON B 1 email/tenant agregado; CRON C 2 lembretes (primário + reforço se admin marcar EDP-PENDENTE)
+- **Detalhe:** `docs/sessoes/2026-05-17-bloco-d-3-crons-proativos.md`
+- **Próximo:** Bloco B — Sprint CT Consolidado (21-26h)
+
+### Sessão anterior
 
 - **Quando:** 16/05/2026 (Bloco C — Cadastro SEM_UC UI)
 - **Tipo:** Code (execução completa Fase 1 read-only + Fase 2 mutação + smoke + fechamento)
@@ -360,7 +374,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Sessão maratona 16/05/2026 fechada com Bloco H' (M5) + Bloco C (M6) + Dossiê judicial v1.1 + Repositório templates documentos consolidado. Próximo: BLOCO D — 3 crons proativos (8-12h Code). Quadro 3 txt Luciano: (a) cron lembrete documentos pendentes 48h pós-cadastro; (b) cron alerta admin se cooperado parado 7+ dias em status APROVADO/AGUARDANDO_CONCESSIONARIA; (c) cron email automático EDP solicitando fatura mensal. Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/fechamento_sessao_maratona_16_05.md + bloco_h_linha_fechado_16_05.md + plano_h_linha_modular_16_05.md. Fase 1 read-only obrigatória — auditar crons existentes em backend/src/**/*.job.ts + @Cron + @nestjs/schedule. HTML cadastro-usinas v1.1 pendente colagem manual (claude.ai entregou conteúdo). Mini-fechamento obrigatório.
+Bloco D (3 crons proativos) fechado 17/05 — marco M7. Próximo: BLOCO B — Sprint CT Consolidado (21-26h Code). Unifica 5 vocabulários CooperToken (Caminho DESCONTO/CLUBE, Opção A/B, Plano Desconto/Token, modoRemuneracao, modoToken, opcaoToken @deprecated) ANTES de Sprint E (realocação multi-usina) + Sprint F (automação concessionária) herdarem ambiguidade. Inclui Token×Convênio (D-38). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md + fechamento_sessao_maratona_16_05.md + relatórios CT em docs/relatorios/. Fase 1 read-only obrigatória — auditar `modoRemuneracao`/`opcaoToken`/`modoToken`/`tokenOpcaoCooperado` em schema + service cooper-token + UI relacionada. HTML cadastro-usinas v1.1 segue pendente colagem manual Luciano (não bloqueia).
 ```
 
 ---
