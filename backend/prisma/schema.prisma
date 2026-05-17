@@ -386,6 +386,7 @@ enum FormaAquisicao {
 enum FormaPagamentoDono {
   FIXO        // valor fixo mensal acordado em contrato
   PERCENTUAL  // % sobre receita/geração
+  HIBRIDO     // valor fixo mensal + % sobre geração (ambos juntos — mini-bloco H'.9, 17/05/2026)
 }
 
 enum StatusUsina {

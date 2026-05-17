@@ -3,6 +3,8 @@ import { UsinasService } from './usinas.service';
 import { UsinasAnaliticoService } from './usinas-analitico.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { CreateUsinaDto } from './dto/create-usina.dto';
+import { UpdateUsinaDto } from './dto/update-usina.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -70,14 +72,14 @@ export class UsinasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post()
-  create(@Body() body: any) {
-    return this.usinasService.create(body);
+  create(@Body() body: CreateUsinaDto) {
+    return this.usinasService.create(body as any);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.usinasService.update(id, body);
+  update(@Param('id') id: string, @Body() body: UpdateUsinaDto) {
+    return this.usinasService.update(id, body as any);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

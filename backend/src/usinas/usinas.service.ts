@@ -131,7 +131,7 @@ export class UsinasService {
     proprietarioCooperadoId?: string;
     cnpjUsina?: string;
     formaAquisicao?: 'CESSAO' | 'ALUGUEL' | 'PROPRIA';
-    formaPagamentoDono?: 'FIXO' | 'PERCENTUAL';
+    formaPagamentoDono?: 'FIXO' | 'PERCENTUAL' | 'HIBRIDO';
     valorAluguelFixo?: number;
     percentualGeracaoDono?: number;
     numeroContratoEdp?: string;
@@ -190,7 +190,7 @@ export class UsinasService {
     proprietarioCooperadoId: string | null;
     cnpjUsina: string | null;
     formaAquisicao: 'CESSAO' | 'ALUGUEL' | 'PROPRIA' | null;
-    formaPagamentoDono: 'FIXO' | 'PERCENTUAL' | null;
+    formaPagamentoDono: 'FIXO' | 'PERCENTUAL' | 'HIBRIDO' | null;
     valorAluguelFixo: number | null;
     percentualGeracaoDono: number | null;
     numeroContratoEdp: string | null;

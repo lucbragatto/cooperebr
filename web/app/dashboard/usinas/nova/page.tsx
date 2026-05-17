@@ -86,19 +86,19 @@ export default function NovaUsinaPage() {
       if (form.cnpjUsina) payload.cnpjUsina = form.cnpjUsina;
       if (form.formaAquisicao) payload.formaAquisicao = form.formaAquisicao;
       if (form.formaPagamentoDono) payload.formaPagamentoDono = form.formaPagamentoDono;
-      if (form.formaPagamentoDono === 'FIXO') {
+      if (form.formaPagamentoDono === 'FIXO' || form.formaPagamentoDono === 'HIBRIDO') {
         const valor = parseFloat(form.valorAluguelFixo);
         if (isNaN(valor) || valor <= 0) {
-          setErro('valorAluguelFixo é obrigatório (> 0) quando formaPagamentoDono = FIXO.');
+          setErro(`valorAluguelFixo é obrigatório (> 0) quando formaPagamentoDono = ${form.formaPagamentoDono}.`);
           setSalvando(false);
           return;
         }
         payload.valorAluguelFixo = valor;
       }
-      if (form.formaPagamentoDono === 'PERCENTUAL') {
+      if (form.formaPagamentoDono === 'PERCENTUAL' || form.formaPagamentoDono === 'HIBRIDO') {
         const pct = parseFloat(form.percentualGeracaoDono);
         if (isNaN(pct) || pct <= 0 || pct > 100) {
-          setErro('percentualGeracaoDono deve ser entre 0,01 e 100 quando formaPagamentoDono = PERCENTUAL.');
+          setErro(`percentualGeracaoDono deve ser entre 0,01 e 100 quando formaPagamentoDono = ${form.formaPagamentoDono}.`);
           setSalvando(false);
           return;
         }
@@ -294,12 +294,13 @@ export default function NovaUsinaPage() {
                     <option value="">— A definir —</option>
                     <option value="FIXO">Fixo mensal</option>
                     <option value="PERCENTUAL">Percentual sobre geração</option>
+                    <option value="HIBRIDO">Fixo + Percentual</option>
                   </select>
                 </div>
               )}
             </div>
 
-            {form.formaPagamentoDono === 'FIXO' && (
+            {(form.formaPagamentoDono === 'FIXO' || form.formaPagamentoDono === 'HIBRIDO') && (
               <div className="space-y-1">
                 <Label htmlFor="valorAluguelFixo">Valor do aluguel/cessão (R$/mês) *</Label>
                 <Input
@@ -314,7 +315,7 @@ export default function NovaUsinaPage() {
               </div>
             )}
 
-            {form.formaPagamentoDono === 'PERCENTUAL' && (
+            {(form.formaPagamentoDono === 'PERCENTUAL' || form.formaPagamentoDono === 'HIBRIDO') && (
               <div className="space-y-1">
                 <Label htmlFor="percentualGeracaoDono">Percentual da geração ao dono (%) *</Label>
                 <Input
