@@ -322,7 +322,8 @@ model Usina {
   id                      String                    @id @default(cuid())
   nome                    String
   // Bloco H' (16/05/2026): apelido interno (ex: "cooperebr1" / "cooperebr2") — não substitui nome ANEEL
-  apelidoInterno          String?
+  // Mini-Sprint Bugs Usinas+Listas (17/05/2026 noite): @unique impede recorrência da duplicação Cooperebr2
+  apelidoInterno          String?                   @unique
   potenciaKwp             Decimal                   @db.Decimal(10, 2)
   capacidadeKwh           Decimal?                  @db.Decimal(15, 2)
   producaoMensalKwh       Decimal?                  @db.Decimal(15, 2)
