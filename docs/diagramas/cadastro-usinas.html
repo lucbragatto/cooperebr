@@ -1,290 +1,253 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<title>SISGD CoopereBR - Cadastro de Usinas v1.0</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastro e Operação de Usinas — SISGD v1.1</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 <style>
-body{font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:1400px;margin:24px auto;padding:20px;color:#1f2937;background:#fff;line-height:1.5}
-header{border-bottom:2px solid #e5e7eb;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px}
-.title-block h1{color:#1e3a8a;margin:0 0 4px 0;font-size:28px}
-.subtitle{color:#6b7280;font-size:14px}
-.version-block{text-align:right;font-size:13px;color:#6b7280}
-.version-block strong{color:#1e3a8a;font-size:15px}
-.exec{background:#eff6ff;border-left:4px solid #2563eb;padding:16px 20px;border-radius:4px;margin:16px 0 24px}
-.exec h2{color:#1e40af;margin:0 0 8px;font-size:16px}
-.legend{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0 32px;padding:12px 16px;background:#f9fafb;border-radius:6px}
-.legend-item{display:flex;align-items:center;gap:8px;font-size:14px}
-.dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
-.dot.ok{background:#16a34a}.dot.parcial{background:#ca8a04}.dot.gap{background:#dc2626}.dot.bloqueado{background:#6b7280}
-.diagram-container{border:1px solid #e5e7eb;border-radius:8px;padding:20px;background:#fff;overflow-x:auto;margin:16px 0}
-.mermaid{display:flex;justify-content:center}
-section{margin:32px 0}
-section h2{color:#1e3a8a;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
-.status-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
-.status-table th,.status-table td{text-align:left;padding:10px 12px;border-bottom:1px solid #e5e7eb}
-.status-table th{background:#f9fafb;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#374151}
-.gap-card{background:#fffbeb;border-left:4px solid #f59e0b;padding:16px 20px;border-radius:4px;margin:12px 0}
-.gap-card.critico{background:#fef2f2;border-color:#dc2626}
-.gap-card.alto{background:#fff7ed;border-color:#ea580c}
-.gap-card h3{margin:0 0 8px;font-size:16px;color:#7f1d1d}
-.gap-card.alto h3{color:#9a3412}
-.gap-card .meta{font-size:12px;color:#6b7280;margin-bottom:8px}
-.next-steps{background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:4px}
-.next-steps h2{color:#14532d;border:none;padding:0}
-.next-steps ol{margin:8px 0;padding-left:20px}
-.next-steps li{margin:8px 0}
-.changelog{background:#fafafa;border:1px solid #e5e7eb;border-radius:4px;padding:16px 20px;margin-top:32px;font-size:13px}
-.changelog h2{color:#6b7280;border:none;padding:0;font-size:14px;text-transform:uppercase;letter-spacing:0.5px}
-.priority-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase}
-.priority-badge.p0{background:#fecaca;color:#7f1d1d}
-.priority-badge.p1{background:#fed7aa;color:#9a3412}
-.priority-badge.p2{background:#fef3c7;color:#854d0e}
-.priority-badge.p3{background:#e0e7ff;color:#3730a3}
-@media print{body{max-width:100%}.diagram-container{page-break-inside:avoid}}
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1280px; margin: 0 auto; padding: 24px; color: #1f2937; line-height: 1.6; background: #fafafa; }
+  h1 { color: #0f172a; border-bottom: 3px solid #2563eb; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { color: #1e40af; margin-top: 40px; border-left: 4px solid #2563eb; padding-left: 12px; }
+  h3 { color: #1e3a8a; margin-top: 28px; }
+  .meta { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; padding: 12px; background: #f1f5f9; border-radius: 8px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: #16a34a; }
+  .dot.parcial { background: #f59e0b; }
+  .dot.gap { background: #dc2626; }
+  .dot.bloqueado { background: #6b7280; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; vertical-align: top; font-size: 14px; }
+  th { background: #f8fafc; font-weight: 600; color: #334155; }
+  tr:hover { background: #f9fafb; }
+  .status-ok { color: #16a34a; font-weight: 600; }
+  .status-parcial { color: #f59e0b; font-weight: 600; }
+  .status-gap { color: #dc2626; font-weight: 600; }
+  .status-bloqueado { color: #6b7280; font-weight: 600; }
+  .callout { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 16px 0; border-radius: 4px; font-size: 14px; }
+  .callout.danger { background: #fef2f2; border-left-color: #dc2626; }
+  .callout.info { background: #eff6ff; border-left-color: #2563eb; }
+  .callout.success { background: #f0fdf4; border-left-color: #16a34a; }
+  .fase { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .fase-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px; }
+  .fase-header h3 { margin: 0; }
+  .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge.ok { background: #dcfce7; color: #15803d; }
+  .badge.parcial { background: #fef3c7; color: #b45309; }
+  .badge.gap { background: #fee2e2; color: #b91c1c; }
+  .badge.bloqueado { background: #f3f4f6; color: #4b5563; }
+  .badge.novo { background: #dbeafe; color: #1e40af; }
+  .mermaid { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin: 20px 0; text-align: center; }
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #be123c; }
+  ul { padding-left: 20px; }
+  li { margin: 6px 0; }
+  .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #64748b; font-size: 13px; }
 </style>
 </head>
 <body>
 
-<header>
-<div class="title-block">
-<h1>Cadastro de Usinas - SISGD CoopereBR</h1>
-<div class="subtitle">Fluxo completo: cadastro + particao % kWh entre membros + listas aprovacao + envio concessionaria + operacao recorrente</div>
-</div>
-<div class="version-block">
-<strong>Versao 1.0</strong><br>
-Criado: 14/05/2026<br>
-Origem: txt Luciano quadro 5 + adendo + inventario SISGD SA4
-</div>
-</header>
+<h1>Cadastro e Operação de Usinas — SISGD v1.1</h1>
+<p class="meta">Versão 1.1 • 16/05/2026 • Atualiza v1.0 com fechamento Blocos H' (M5) + C (M6) — schema expandido + saneamentos + UI + SEM_UC UI</p>
 
-<div class="exec">
-<h2>Resumo executivo</h2>
-<p>Fluxo de cadastro de usina e alocacao de membros tem <strong>6 fases</strong>: cadastro da usina (A), alocacao % kWh entre membros (B), listas aprovacao interna (C), envio concessionaria (D), aprovacao concessionaria (E), operacao recorrente (F). Estado real: <strong>cadastro basico funciona (~60%)</strong>, mas <strong>4 grandes blocos sao gap (0%)</strong> conforme descrito por Luciano no txt: cadastro expandido (classe GD, forma aquisicao, forma pagamento dono), realocacao inteligente multi-usina, automacao concessionaria, operacao recorrente (crons concentracao/queima/MMGD). Caso Exfishes R$ 310k/ano ativo (D-30B P0) por falta de campo classeGd.</p>
+<div class="callout success">
+  <strong>Marcos M5 + M6 entregues (15-16/05/2026):</strong> Bloco H' concluído com schema Usina expandido (11 campos novos + 2 enums), saneamento de AMAGES + Exfishes + Cooperebr1 + criação de Cooperebr2, UI de cadastro completa (smoke 5/5 PASS). Bloco C concluído com UI de cadastro SEM_UC visível (indicador puro destravado pra MLM + MST).
 </div>
 
 <div class="legend">
-<div class="legend-item"><span class="dot ok"></span>Funciona em producao</div>
-<div class="legend-item"><span class="dot parcial"></span>Funciona parcialmente</div>
-<div class="legend-item"><span class="dot gap"></span>Falta (gap a resolver)</div>
-<div class="legend-item"><span class="dot bloqueado"></span>Implementado mas travado</div>
+  <strong>Legenda:</strong>
+  <span><span class="dot ok"></span> OK em produção</span>
+  <span><span class="dot parcial"></span> Parcial</span>
+  <span><span class="dot gap"></span> Gap (não implementado)</span>
+  <span><span class="dot bloqueado"></span> Bloqueado (flag/regulação/litígio)</span>
 </div>
 
-<div class="diagram-container">
+<h2>Visão geral — Fluxo de Cadastro e Operação de Usinas</h2>
+
 <div class="mermaid">
-flowchart TB
-  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d,font-weight:bold
-  classDef parcial fill:#fef3c7,stroke:#ca8a04,color:#713f12,font-weight:bold
-  classDef gap fill:#fecaca,stroke:#dc2626,color:#7f1d1d,font-weight:bold
-  classDef bloqueado fill:#e5e7eb,stroke:#6b7280,color:#1f2937,font-weight:bold
+graph TD
+  A[Fase A: Cadastro Usina<br/>schema expandido v1.1]
+  B[Fase B: Alocação % kWh<br/>cooperados membros]
+  C[Fase C: Listas Internas<br/>aprovação admin]
+  D[Fase D: Envio EDP<br/>protocolo concessionária]
+  E[Fase E: Aprovação EDP<br/>homologação]
+  F[Fase F: Operação Recorrente<br/>compensação SCEE]
+  G[Fase G: Classificação GD<br/>módulo separado pós-litígio]
 
-  subgraph FA[" Fase A - Cadastro da Usina "]
-    A1[Admin acessa<br/>/dashboard/usinas/nova]:::ok
-    A2[Dados basicos<br/>nome, potencia, capacidade, cidade/estado]:::ok
-    A3{Classe GD I/II/III}:::gap
-    A4[Distribuidora<br/>EDP_ES, OUTRAS]:::parcial
-    A5[Forma aquisicao<br/>Propria/Cessao/Aluguel]:::gap
-    A6[Forma pagamento dono<br/>Fixo/Percentual]:::gap
-    A7[Endereco completo<br/>CEP, num, bairro]:::gap
-    A8[Dono PF/PJ<br/>cooperado ou externo?]:::parcial
-    A9[(Usina criada<br/>schema.prisma:321)]:::ok
-    A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> A7 --> A8 --> A9
-  end
+  A --> B
+  B --> C
+  C --> D
+  D --> E
+  E --> F
+  F -.aplicar quando.- G
 
-  subgraph FB[" Fase B - Alocacao % kWh entre Membros "]
-    B1[Cooperado aceita proposta<br/>motor-proposta.aceitar]:::ok
-    B2{Usina mesma<br/>distribuidora<br/>tem capacidade?}:::ok
-    B3[Aloca em usina unica<br/>% calculado]:::ok
-    B4[Lista de Espera]:::ok
-    B5{Multiplas usinas<br/>folgas somadas<br/>atendem?<br/>quadro 5 txt}:::gap
-    B6[Sistema reanalisa<br/>+ remaneja cooperados<br/>entre usinas]:::gap
-    B7[Validar:<br/>mesma concessionaria +<br/>mesma classe GD]:::gap
-    B8[Demonstracao ao admin<br/>"se mover A B C cabera em D"]:::gap
-    B9[Admin aprova plano<br/>de realocacao]:::gap
-    B10[Gera listas por usina<br/>tirando/passando + novos %]:::gap
-    B11[Historico de realocacao<br/>+ relatorios]:::gap
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef parcial fill:#fef3c7,stroke:#f59e0b,color:#78350f
+  classDef gap fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef bloqueado fill:#f3f4f6,stroke:#6b7280,color:#374151
 
-    A9 --> B1
-    B1 --> B2
-    B2 -- "Sim" --> B3
-    B2 -- "Nao" --> B5
-    B5 -- "Sim" --> B6 --> B7 --> B8 --> B9 --> B10 --> B11
-    B5 -- "Nao" --> B4
-  end
-
-  subgraph FC[" Fase C - Listas Aprovacao Interna "]
-    C1[Sistema agrupa UCs novas<br/>+ realocacoes pendentes]:::parcial
-    C2[Tela /dashboard/listas-concessionaria<br/>OU /dashboard/usinas/listas]:::ok
-    C3[Admin revisa lista<br/>por usina]:::ok
-    C4[Admin aprova lista]:::ok
-
-    B3 --> C1
-    B10 --> C1
-    C1 --> C2 --> C3 --> C4
-  end
-
-  subgraph FD[" Fase D - Envio Concessionaria "]
-    D1[Admin gera CSV/Planilha<br/>migracoes-usina.gerarLista]:::ok
-    D2[Admin envia EDP<br/>email/portal manual]:::ok
-    D3[EDP gera protocolo<br/>nao automatizado]:::gap
-    D4[Sistema armazena<br/>protocoloConcessionaria<br/>Cooperado / Contrato]:::parcial
-
-    C4 --> D1 --> D2 --> D3 --> D4
-  end
-
-  subgraph FE[" Fase E - Aprovacao Concessionaria "]
-    E1{Como vem o sinal?<br/>quadros 6 7 8 txt}:::gap
-    E2[Email EDP<br/>com numero protocolo]:::gap
-    E3[Polling site EDP<br/>relatorio MMGD]:::gap
-    E4[1a fatura GD chega<br/>via email-monitor]:::parcial
-    E5[Admin confirma manual<br/>contratos.ativar]:::ok
-    E6[Sistema ativa<br/>Cooperado.status ATIVO<br/>Contrato.status ATIVO]:::ok
-    E7[Avisa membro<br/>WhatsApp + email]:::parcial
-
-    D4 --> E1
-    E1 --> E2 --> E5
-    E1 --> E3 --> E5
-    E1 --> E4 --> E5
-    E5 --> E6 --> E7
-  end
-
-  subgraph FF[" Fase F - Operacao Recorrente "]
-    F1[Cron concentracao > 25%<br/>D-30F]:::gap
-    F2[Cron queima saldo > 2 meses<br/>D-30G]:::gap
-    F3[Monitoramento Sungrow<br/>desativado Sprint 6]:::bloqueado
-    F4[Relatorio MMGD mensal]:::gap
-    F5[Cobrancas geradas<br/>via Caminho A]:::ok
-
-    E6 --> F1
-    E6 --> F2
-    E6 --> F3
-    E6 --> F4
-    E6 --> F5
-  end
-</div>
+  class A ok
+  class B,F parcial
+  class C,D,E gap
+  class G bloqueado
 </div>
 
-<section>
-<h2>Pontos criticos catalogados</h2>
+<h2>Estado das 2 usinas Linhares (pós-Bloco H')</h2>
 
-<div class="gap-card critico">
-<h3>D-30B P0 - Caso Exfishes R$ 310k/ano ativo</h3>
-<div class="meta"><span class="priority-badge p0">P0 REGULATORIO</span> Origem: investigacao 20/04 Sprint 11</div>
-<p><strong>O que e:</strong> Schema Usina nao tem campo classeGd. Migracoes entre usinas nao validam se cooperado esta indo de GD I -> GD II (que tem regras tarifarias diferentes). Caso real Exfishes: cooperado migrado sem validacao gerou prejuizo retroativo estimado R$ 310k/ano em creditos mal compensados.</p>
-<p><strong>Fix:</strong> Sprint 5 schema regulatorio - adicionar enum ClasseGd + validacao em motor-proposta.aceitar + migracoes-usina. Custo: 4-6 dias Code dedicado.</p>
-</div>
-
-<div class="gap-card critico">
-<h3>Cadastro de Usina expandido = 0%</h3>
-<div class="meta"><span class="priority-badge p0">P0</span> Origem: adendo txt Luciano</div>
-<p><strong>O que falta:</strong> schema Usina nao tem classeGd, formaAquisicao (CESSAO/ALUGUEL/PROPRIA), formaPagamentoDono (VALOR_FIXO/PERCENTUAL_ARRECADACAO), valor/percentual do pagamento, endereco completo, mediaMensalPrevistaKwh distinta de producaoMensalKwh. UI nova (/dashboard/usinas/nova) so pede o basico.</p>
-<p><strong>Fix:</strong> migration schema + atualizar UI cadastro + atualizar UI detalhe. Custo: 6-8h Code.</p>
-</div>
-
-<div class="gap-card critico">
-<h3>Realocacao inteligente multi-usina = 0%</h3>
-<div class="meta"><span class="priority-badge p1">P1</span> Origem: quadro 5 do txt</div>
-<p><strong>O que falta:</strong> motor escolhe primeira usina com vaga (linear). Sem soma de folgas multi-usina, sem analise mesma distribuidora + classe GD, sem proposta-rascunho de remanejamento, sem aprovacao admin lista-por-lista, sem historico/relatorio.</p>
-<p><strong>Fix:</strong> Sprint dedicado 8. Algoritmo otimizacao + telas aprovacao por usina + historico MigracaoUsina ja existe (schema 1823). Custo: 16-24h Code.</p>
-</div>
-
-<div class="gap-card critico">
-<h3>Automacao concessionaria = 0%</h3>
-<div class="meta"><span class="priority-badge p1">P1</span> Origem: quadros 6/7/8 do txt</div>
-<p><strong>O que falta:</strong> sem geracao automatica de protocolo na EDP, sem polling site EDP por numero de protocolo, sem leitor de email de homologacao (regex), sem fetcher de relatorio MMGD da cooperativa, sem trigger "1a fatura GD chega -> libera cobranca automatico".</p>
-<p><strong>Fix:</strong> Sprint dedicado pos-canario AMAGES. Email-monitor ja existe, falta detector especifico. Custo: 2-3 sprints.</p>
-</div>
-
-<div class="gap-card alto">
-<h3>D-30C 1:1 Contrato↔Usina bloqueia UC com creditos multiplas usinas</h3>
-<div class="meta"><span class="priority-badge p1">P1</span></div>
-<p><strong>O que e:</strong> Schema atual nao suporta UC recebendo creditos de mais de 1 usina simultaneamente. Caso real possivel em GD II com multiplos arranjos de geracao distribuida.</p>
-<p><strong>Fix:</strong> schema novo ContratoUsina N:M + migration. Sprint 5.</p>
-</div>
-
-<div class="gap-card alto">
-<h3>D-30D sem dataProtocoloDistribuidora na UC</h3>
-<div class="meta"><span class="priority-badge p1">P1</span></div>
-<p><strong>O que e:</strong> Cooperado.protocoloConcessionaria existe (campo texto), mas data do protocolo nao registrada. Importante pra audit + calculo de prazo de aprovacao EDP.</p>
-<p><strong>Fix:</strong> migration + atualizar contratos.ativar. Sprint 5.</p>
-</div>
-
-<div class="gap-card alto">
-<h3>D-30F/G crons concentracao + queima saldo</h3>
-<div class="meta"><span class="priority-badge p2">P2</span></div>
-<p><strong>D-30F:</strong> sem cron de auditoria de concentracao > 25% por cooperado-usina (ANEEL exige limite).<br>
-<strong>D-30G:</strong> sem mecanismo de queima de saldo > 2 meses parado.</p>
-<p><strong>Fix:</strong> 2 crons novos. Custo: 4-6h cada.</p>
-</div>
-
-<div class="gap-card alto">
-<h3>Monitoramento Sungrow desativado</h3>
-<div class="meta"><span class="priority-badge p2">P2</span></div>
-<p><strong>O que e:</strong> monitoramento-usinas.service.ts:21 cron comentado desde Sprint 6 ("ativar Sprint 9+"). Telemetria de geracao em tempo real desativada.</p>
-<p><strong>Fix:</strong> reativar cron + validar credenciais Sungrow + tela monitoramento. Custo: 1-2 sprints.</p>
-</div>
-
-<div class="gap-card">
-<h3>D-30L Spec Fio B nunca implementada</h3>
-<div class="meta"><span class="priority-badge p2">P2</span></div>
-<p>docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md tem tabela 2024-2029. Schema sem model RegrasFioB. Calculo Fio B 2026=60% hardcoded em codigo.</p>
-<p><strong>Fix:</strong> schema RegrasFioB + seed tabela ANEEL + service que le da tabela. Sprint 5.</p>
-</div>
-
-</section>
-
-<section>
-<h2>Status detalhado por etapa</h2>
-<table class="status-table">
-<thead><tr><th>Fase</th><th>Etapa</th><th>Status</th><th>Observacao</th></tr></thead>
+<table>
+<thead>
+<tr><th>Usina</th><th>Apelido</th><th>Contrato EDP</th><th>Potência</th><th>Capacidade</th><th>Classe GD aplicada<br/>(litígio)</th><th>Operação</th></tr>
+</thead>
 <tbody>
-<tr><td>A</td><td>Cadastro basico (nome, potencia, capacidade)</td><td style="color:#16a34a;font-weight:600">OK</td><td>UI /usinas/nova funciona</td></tr>
-<tr><td>A</td><td>Distribuidora vinculada</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Schema enum DistribuidoraEnum, mas Usina.distribuidora ainda String (D-48 corrigiu match)</td></tr>
-<tr><td>A</td><td>Classe GD I/II/III</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30B P0 - caso Exfishes R$ 310k</td></tr>
-<tr><td>A</td><td>Forma aquisicao (cessao/aluguel/propria)</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Schema nao tem campo</td></tr>
-<tr><td>A</td><td>Forma pagamento dono</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Schema nao tem campo</td></tr>
-<tr><td>A</td><td>Endereco completo + dono cooperado</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Campos schema basicos OK, UI sem seletor cooperado-dono</td></tr>
-<tr><td>B</td><td>Alocacao single-usina</td><td style="color:#16a34a;font-weight:600">OK</td><td>motor-proposta linear, D-48.1 corrigiu tenant</td></tr>
-<tr><td>B</td><td>Lista de espera + promocao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Manual via /motor-proposta/lista-espera, sem cron auto</td></tr>
-<tr><td>B</td><td>Realocacao inteligente multi-usina</td><td style="color:#dc2626;font-weight:600">Gap</td><td>0% - quadro 5 do txt</td></tr>
-<tr><td>C</td><td>Geracao listas internas</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Agrupa UCs novas, sem distincao realocacao vs novo</td></tr>
-<tr><td>C</td><td>Admin revisa + aprova</td><td style="color:#16a34a;font-weight:600">OK</td><td>Tela /dashboard/usinas/listas funcional</td></tr>
-<tr><td>D</td><td>Geracao CSV por usina</td><td style="color:#16a34a;font-weight:600">OK</td><td>migracoes-usina.gerarListaConcessionaria</td></tr>
-<tr><td>D</td><td>Envio EDP</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>Manual - admin baixa CSV e envia por fora</td></tr>
-<tr><td>D</td><td>Protocolo EDP armazenado</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Campo texto livre, sem data, sem fluxo</td></tr>
-<tr><td>E</td><td>Deteccao automatica aprovacao</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Quadros 6/7/8 - 0%</td></tr>
-<tr><td>E</td><td>Ativacao manual via admin</td><td style="color:#16a34a;font-weight:600">OK</td><td>contratos.ativar() funcional</td></tr>
-<tr><td>E</td><td>Notificacao membro aprovacao</td><td style="color:#ca8a04;font-weight:600">Parcial</td><td>So email, sem WhatsApp (gap inventario SA5)</td></tr>
-<tr><td>F</td><td>Cobrancas geradas Caminho A</td><td style="color:#16a34a;font-weight:600">OK</td><td>M2 + M3 validados 13-14/05</td></tr>
-<tr><td>F</td><td>Cron concentracao > 25%</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30F</td></tr>
-<tr><td>F</td><td>Cron queima saldo > 2 meses</td><td style="color:#dc2626;font-weight:600">Gap</td><td>D-30G</td></tr>
-<tr><td>F</td><td>Monitoramento Sungrow</td><td style="color:#6b7280;font-weight:600">Bloqueado</td><td>Cron desativado Sprint 6</td></tr>
-<tr><td>F</td><td>Relatorio MMGD mensal</td><td style="color:#dc2626;font-weight:600">Gap</td><td>Manual via portal EDP</td></tr>
+<tr>
+  <td><strong>Linhares 1</strong><br/><code>usina-linhares</code></td>
+  <td>cooperebr1</td>
+  <td>2022 (pré-Lei 14.300)</td>
+  <td>1.250 kWp</td>
+  <td>150.000 kWh/mês</td>
+  <td><span class="status-ok">GD I</span> (regime SCEE pleno, Art. 26 Lei 14.300)</td>
+  <td>67 contratos<br/>113.028 kWh/ano alocados</td>
+</tr>
+<tr>
+  <td><strong>Linhares 2</strong> 🆕<br/><code>cmp8fkxvt0001valkj8utb8vr</code></td>
+  <td>cooperebr2</td>
+  <td><strong>EDP-ES-04123/2025</strong><br/>(assinado 14/04/2025)</td>
+  <td>1.000 kWp (1 MW)</td>
+  <td>157.000 kWh/mês</td>
+  <td><span class="status-gap">GD III aplicado</span> ⚠️ (contestado pela CoopereBR — vide dossiê judicial)</td>
+  <td>Em onboarding (~46 cooperados)<br/>Exfishes vinculada (8%)</td>
+</tr>
 </tbody>
 </table>
-</section>
 
-<div class="next-steps">
-<h2>Proximos passos sugeridos</h2>
-<ol>
-<li><strong>Sprint regulatorio (1 semana):</strong> schema Usina expandido (classeGd, formaAquisicao, formaPagamentoDono) + UI cadastro nova + validacoes ANEEL. <strong>Fecha caso Exfishes D-30B P0 R$ 310k/ano.</strong></li>
-<li><strong>Sprint Realocacao Inteligente (2-3 sprints):</strong> algoritmo otimizacao multi-usina (quadro 5 txt) + telas aprovacao + historico.</li>
-<li><strong>Sprint Automacao Concessionaria (2-3 sprints):</strong> detector email EDP + polling site + fetcher MMGD (quadros 6/7/8 txt).</li>
-<li><strong>Sprint crons recorrentes (3-4 dias):</strong> D-30F concentracao + D-30G queima saldo + reativar Sungrow.</li>
-<li><strong>D-30D dataProtocoloDistribuidora (2-3h):</strong> migration + atualizar contratos.ativar.</li>
-<li><strong>Notificacao WA aprovacao concessionaria (1-2h):</strong> Sprint 3 lembretes proativos (txt quadros 6/7/8).</li>
-</ol>
+<div class="callout info">
+  <strong>Sobre a controvérsia GD III × GD II Cooperebr2:</strong> Linhares 2 está classificada pela EDP-ES como GD III, gerando salto tarifário de 8,1× na UC EXFISHES. CoopereBR contesta na frente administrativa (EDP) e judicial (Vitória/ES) — dossiê em <code>docs/juridico/</code>. Tese central: REN ANEEL 1.059/2023 Art. 655-P, IV exige beneficiado ≥25%, e o maior beneficiário Cooperebr2 é apenas 8% (Exfishes). Classificação correta seria GD II.
 </div>
 
-<div class="changelog">
-<h2>Historico de versoes</h2>
+<h2>Schema Usina — Expansão H' aplicada</h2>
+
+<table>
+<thead>
+<tr><th>Campo</th><th>Tipo</th><th>Status</th><th>Observação</th></tr>
+</thead>
+<tbody>
+<tr><td><code>apelidoInterno</code></td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>"cooperebr1", "cooperebr2", etc.</td></tr>
+<tr><td><code>formaAquisicao</code></td><td>FormaAquisicao?</td><td><span class="badge novo">novo H'</span></td><td>CESSAO / ALUGUEL / PROPRIA</td></tr>
+<tr><td><code>formaPagamentoDono</code></td><td>FormaPagamentoDono?</td><td><span class="badge novo">novo H'</span></td><td>FIXO / PERCENTUAL — parceiro define (D-novo-D)</td></tr>
+<tr><td><code>valorAluguelFixo</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>R$ mensal se FIXO</td></tr>
+<tr><td><code>percentualGeracaoDono</code></td><td>Decimal?</td><td><span class="badge novo">novo H'</span></td><td>0-100% se PERCENTUAL</td></tr>
+<tr><td><code>enderecoLogradouro</code> + variantes</td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>Endereço completo</td></tr>
+<tr><td><code>cnpjUsina</code></td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>CNPJ titular EDP (pode ≠ proprietarioCpfCnpj)</td></tr>
+<tr><td><code>dataContratoEdp</code></td><td>DateTime?</td><td><span class="badge novo">novo H'</span></td><td>Data assinatura CUSD</td></tr>
+<tr><td><code>numeroContratoEdp</code></td><td>String?</td><td><span class="badge novo">novo H'</span></td><td>EDP-ES-04123/2025 etc.</td></tr>
+<tr><td><code>classeGd</code></td><td>—</td><td><span class="badge bloqueado">NÃO adicionado</span></td><td>Fica para Sprint Módulo Classificação GD (pós-dossiê)</td></tr>
+<tr><td>RegrasFioB</td><td>—</td><td><span class="badge bloqueado">NÃO adicionado</span></td><td>Idem — Módulo Classificação GD</td></tr>
+</tbody>
+</table>
+
+<h2>Fases operacionais detalhadas</h2>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase A — Cadastro de Usina</h3><span class="badge ok">OK pós-H'</span></div>
+<p>Schema expandido (11 campos novos), UI cadastro completa, validação client-side e DTO backend com class-validator.</p>
 <ul>
-<li><strong>v1.0 - 14/05/2026:</strong> versao inicial. 6 fases mapeadas (A cadastro / B alocacao % kWh / C listas internas / D envio concessionaria / E aprovacao / F operacao recorrente). 8 gaps criticos catalogados. Caso Exfishes D-30B P0 destacado. Quadro 5 + adendo + quadros 6/7/8 do txt Luciano incorporados.</li>
+  <li>✅ Backend + UI prontos (M5 — Bloco H')</li>
+  <li>✅ Validações condicionais (FIXO → valorAluguelFixo, PERCENTUAL → percentualGeracaoDono)</li>
+  <li>✅ Endereço completo + CNPJ titular separado</li>
+  <li>✅ Vinculação a cooperativa multi-tenant</li>
+  <li>✅ Cadastro de cooperado COM_UC e SEM_UC unificado (M6 — Bloco C)</li>
 </ul>
 </div>
 
+<div class="fase">
+<div class="fase-header"><h3>Fase B — Alocação de % kWh entre cooperados</h3><span class="badge parcial">Parcial</span></div>
+<p>Membros recebem créditos da usina conforme percentualUsina no contrato. Realocação 1↔1 funciona, multi-usina N↔M ainda não.</p>
+<ul>
+  <li>✅ Contrato vinculado a usina (1:1)</li>
+  <li>✅ Saneamento Exfishes (CTR-000134 vinculado a Cooperebr2, 8%, 720.000 kWh/ano)</li>
+  <li>🔴 Realocação inteligente multi-usina N↔M: <strong>Bloco E pendente (16-24h Code)</strong></li>
+</ul>
+</div>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase C — Listas internas (admin)</h3><span class="badge gap">Gap</span></div>
+<p>Listas pré-aprovação admin (qual cooperado vai para qual usina). Hoje CSV manual.</p>
+</div>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase D — Envio EDP (protocolo concessionária)</h3><span class="badge gap">Gap</span></div>
+<p>Admin digita protocolo manual hoje. <strong>Bloco F (Automação Concessionária)</strong> automatiza.</p>
+</div>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase E — Aprovação EDP (homologação)</h3><span class="badge gap">Gap</span></div>
+<p>Polling site EDP + leitor email homologação + fetcher MMGD = 0% hoje.</p>
+</div>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase F — Operação recorrente</h3><span class="badge parcial">Parcial</span></div>
+<p>Engine FIXO ✅ (5 pilotos + AMAGES smoke) + COMPENSADOS ✅ (smoke M4 14/05) + DINAMICO ⚪ bloqueado.</p>
+</div>
+
+<div class="fase">
+<div class="fase-header"><h3>Fase G — Classificação GD (módulo separado)</h3><span class="badge bloqueado">Bloqueado por litígio</span></div>
+<p>RegrasFioB + classificador Art. 655-P + simulador impacto + guard cross-class. <strong>Aguarda fechamento do dossiê CoopereBR × EDP</strong>. Estimado em 8-12h Code quando ativado.</p>
+</div>
+
+<h2>Gaps críticos remanescentes (pós-H' + C)</h2>
+
+<table>
+<thead>
+<tr><th>#</th><th>Gap</th><th>Severidade</th><th>Próximo bloco</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>D-novo-D — formaPagamentoDono Cooperebr1/2 a definir (parceiro↔dono)</td><td>P3</td><td>Resolução via UI quando contratos auditados</td></tr>
+<tr><td>2</td><td>Realocação Multi-Usina N↔M inteligente</td><td>P2</td><td>Bloco E (16-24h)</td></tr>
+<tr><td>3</td><td>Automação Concessionária (protocolo + polling + MMGD)</td><td>P2</td><td>Bloco F (24-32h)</td></tr>
+<tr><td>4</td><td>3 crons proativos (lembrete doc + alerta admin + email EDP)</td><td>P2</td><td>Bloco D — PRÓXIMO (8-12h)</td></tr>
+<tr><td>5</td><td>Sprint CT Consolidado (unifica 5 vocabulários)</td><td>P2</td><td>Bloco B (21-26h)</td></tr>
+<tr><td>6</td><td>Sprint Assinafy (assinatura digital)</td><td>P1 jurídico</td><td>Bloco G (12-16h)</td></tr>
+<tr><td>7</td><td>Sprint Contabilidade Cooperativa Segregada (NOVO catalogado)</td><td>P2</td><td>Sprint #8 (61h)</td></tr>
+<tr><td>8</td><td>Módulo Documentos Multi-Tenant (templates editáveis)</td><td>P2</td><td>Sprint pós-G (46h)</td></tr>
+<tr><td>9</td><td>Módulo Classificação GD (RegrasFioB + simulador)</td><td>P2</td><td>Pós-dossiê (8-12h)</td></tr>
+<tr><td>10</td><td>D-novo-E — Reflexos reforma estatutária 17/06/2026</td><td>P2</td><td>Pós-AGE (8-12h)</td></tr>
+</tbody>
+</table>
+
+<h2>Próximos passos priorizados (atualizado pós-H' + C)</h2>
+
+<table>
+<thead>
+<tr><th>#</th><th>Ação</th><th>Estimativa</th><th>Destrava</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td><strong>Bloco D — 3 crons proativos</strong></td><td>8-12h</td><td>Onboarding sem retrabalho admin (quadro 3 do txt)</td></tr>
+<tr><td>2</td><td>Bloco B — Sprint CT Consolidado</td><td>21-26h</td><td>Token operacional sem ambiguidade</td></tr>
+<tr><td>3</td><td>Bloco E — Realocação Multi-Usina</td><td>16-24h</td><td>Onboarding 2º parceiro com múltiplas usinas</td></tr>
+<tr><td>4</td><td>Bloco F — Automação Concessionária</td><td>24-32h</td><td>Operação em escala sem digitação manual</td></tr>
+<tr><td>5</td><td>Sprint Contabilidade Cooperativa Segregada 🆕</td><td>61h</td><td>Defesa fiscal + dossiê judicial + foundation pra Convênios/Mobilidade</td></tr>
+<tr><td>6</td><td>Bloco G — Sprint Assinafy</td><td>12-16h</td><td>Aceite jurídico robusto + pré-req Documentos</td></tr>
+<tr><td>7</td><td>Sprint Módulo Documentos</td><td>46h</td><td>Templates editáveis + onboarding parceiro automático</td></tr>
+<tr><td>8</td><td>Sprint Módulo Classificação GD</td><td>8-12h</td><td>Aplicar quando dossiê judicial fechar</td></tr>
+</tbody>
+</table>
+
+<h2>Changelog</h2>
+
+<ul>
+  <li><strong>v1.1 (16/05/2026):</strong> Fechamento Blocos H' (M5) + C (M6). Schema Usina expandido (11 campos + 2 enums). Saneamento AMAGES (ambienteTeste=true) + Exfishes (CTR-000134 vinculado Cooperebr2, kwhContratoAnual=720k, percentualUsina=8%) + Cooperebr1 (apelido + ALUGUEL) + criação Cooperebr2 (1 MW, EDP_ES). UI cadastro usina completa com campos condicionais. UI cadastro cooperado com escolha SEM_UC visível (indicador puro destravado). Módulo Classificação GD documentado como sprint futuro (pós-dossiê). Sprint Contabilidade Cooperativa Segregada catalogado (61h). D-novo-D + D-novo-E catalogados.</li>
+  <li><strong>v1.0 (14/05/2026):</strong> Primeira versão. 6 fases (A cadastro / B alocação % / C listas internas / D envio EDP / E aprovação / F operação recorrente) + Mermaid + 8 gaps críticos + tabela 22 etapas + 6 próximos passos.</li>
+</ul>
+
+<div class="footer">
+  Cadastro e Operação de Usinas SISGD • v1.1 • CoopereBR • 16/05/2026<br>
+  Companion docs: <code>jornada-membro.html</code> v2.0 (5 quadros + adendo), <code>inventario-visual-sisgd.html</code> v1.0 (mestre 5 grupos)
+</div>
+
 <script>
-mermaid.initialize({startOnLoad:true,theme:'default',flowchart:{useMaxWidth:true,htmlLabels:true,curve:'basis'}});
+  mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' } });
 </script>
 
 </body>
