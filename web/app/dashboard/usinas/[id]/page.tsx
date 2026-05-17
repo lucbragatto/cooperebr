@@ -125,7 +125,10 @@ export default function UsinaDetailPage() {
   const [dualListaAberto, setDualListaAberto] = useState(false);
   const [migrarSucessoDestino, setMigrarSucessoDestino] = useState('');
   const [inlineAjustarId, setInlineAjustarId] = useState('');
+  // Bug 3 (17/05/2026 noite): UX %/kWh dual — 2 inputs mutuamente exclusivos.
+  // inlineAjustarValor = percentual; inlineAjustarKwh = kWh/mês.
   const [inlineAjustarValor, setInlineAjustarValor] = useState('');
+  const [inlineAjustarKwh, setInlineAjustarKwh] = useState('');
   const [inlineAjustarProcessando, setInlineAjustarProcessando] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
@@ -139,16 +142,25 @@ export default function UsinaDetailPage() {
       .finally(() => setCarregando(false));
   }, [id]);
 
+  // Anomalia 3 fix (17/05/2026 noite): helper que recarrega lista + recalcula capacidadeInfo
+  // pra que o header "Capacidade utilizada" reflita o estado novo após ajustar/migrar.
+  // Substitui chamadas pontuais a /lista-concessionaria que esqueciam de atualizar capacidadeInfo.
+  async function recarregarCooperadosAlocados() {
+    try {
+      const r = await api.get(`/usinas/${id}/lista-concessionaria`);
+      const cooperados = r.data.cooperados || [];
+      setCooperadosAlocados(cooperados);
+      const total = Number(r.data.usina?.capacidadeKwh || 0);
+      const usado = cooperados.reduce((acc: number, c: any) => acc + Number(c.kwhContratado || 0), 0);
+      setCapacidadeInfo({ usado, total });
+    } catch {
+      // silently ignore
+    }
+  }
+
   useEffect(() => {
     if (!usina) return;
-    api.get(`/usinas/${id}/lista-concessionaria`)
-      .then((r) => {
-        setCooperadosAlocados(r.data.cooperados || []);
-        const total = Number(r.data.usina?.capacidadeKwh || 0);
-        const usado = (r.data.cooperados || []).reduce((acc: number, c: any) => acc + Number(c.kwhContratado || 0), 0);
-        setCapacidadeInfo({ usado, total });
-      })
-      .catch(() => { /* silently ignore */ });
+    recarregarCooperadosAlocados();
 
     api.get(`/usinas/${id}/distribuicao`)
       .then((r) => setDistribuicao(r.data))
@@ -257,7 +269,7 @@ export default function UsinaDetailPage() {
       setMigrarMsg('Migração realizada com sucesso!');
       setMigrarModalAberto(false);
       setMigrarSucessoDestino(migrarUsinaDestinoId);
-      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      recarregarCooperadosAlocados();
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
       api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
     } catch (e: any) {
@@ -283,7 +295,7 @@ export default function UsinaDetailPage() {
       }
       setAjustarMsg('Ajuste realizado com sucesso!');
       setAjustarModalAberto(false);
-      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      recarregarCooperadosAlocados();
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
     } catch (e: any) {
       const msg = e?.response?.data?.message || 'Erro ao ajustar.';
@@ -306,7 +318,7 @@ export default function UsinaDetailPage() {
       setMigrarTodosResultado(data);
       setMigrarTodosMsg(`Migração concluída: ${data.sucesso}/${data.total} com sucesso.`);
       setMigrarSucessoDestino(migrarTodosDestinoId);
-      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      recarregarCooperadosAlocados();
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
       api.get(`/migracoes-usina/historico-usina/${id}`).then((r) => setHistoricoMigracoes(r.data || [])).catch(() => {});
     } catch (e: any) {
@@ -318,19 +330,26 @@ export default function UsinaDetailPage() {
   }
 
   async function handleInlineAjustar(cooperadoId: string) {
-    if (!inlineAjustarValor) return;
+    // Bug 2 + Bug 3 fix (17/05/2026 noite): exige cooperadoId + envia % OU kWh (não ambos).
+    if (!cooperadoId) return;
+    if (!inlineAjustarValor && !inlineAjustarKwh) return;
     setInlineAjustarProcessando(true);
     try {
       await api.post('/migracoes-usina/ajustar-kwh', {
         cooperadoId,
-        percentualNovo: Number(inlineAjustarValor),
+        percentualNovo: inlineAjustarValor ? Number(inlineAjustarValor) : undefined,
+        kwhNovo: inlineAjustarKwh ? Number(inlineAjustarKwh) : undefined,
       });
       setInlineAjustarId('');
       setInlineAjustarValor('');
-      api.get(`/usinas/${id}/lista-concessionaria`).then((r) => setCooperadosAlocados(r.data.cooperados || [])).catch(() => {});
+      setInlineAjustarKwh('');
+      recarregarCooperadosAlocados();
       api.get(`/usinas/${id}/distribuicao`).then((r) => setDistribuicao(r.data)).catch(() => {});
-    } catch {
-      setMensagem('Erro ao ajustar percentual.');
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('[ajustar-kwh] erro', e?.response?.status, e?.response?.data, e?.message);
+      const msg = e?.response?.data?.message || 'Erro ao ajustar.';
+      setMensagem(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setInlineAjustarProcessando(false);
     }
@@ -366,13 +385,16 @@ export default function UsinaDetailPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-3">
+              <CardTitle className="flex items-center gap-3 flex-wrap">
                 {usina.nome}
                 {status && (
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[status] ?? 'bg-gray-100 text-gray-600'}`}>
                     {statusLabels[status] ?? status}
                   </span>
                 )}
+                <span className="text-[10px] text-gray-400 font-mono ml-1" title={usina.id}>id: {usina.id.slice(0, 8)}</span>
+                <span className="text-[10px] text-gray-400">· criado {new Date(usina.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                <span className="text-[10px] text-gray-400">· atualizado {new Date(usina.updatedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
@@ -666,24 +688,44 @@ export default function UsinaDetailPage() {
                                 className="w-16 border border-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
                                 type="number"
                                 step="0.01"
-                                placeholder="%"
+                                placeholder="% Usina"
+                                aria-label="Percentual da usina"
+                                title="Percentual (%) — exclui kWh"
                                 value={inlineAjustarValor}
-                                onChange={(e) => setInlineAjustarValor(e.target.value)}
+                                onChange={(e) => { setInlineAjustarValor(e.target.value); if (e.target.value) setInlineAjustarKwh(''); }}
                                 autoFocus
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineAjustar(c.cooperadoId); if (e.key === 'Escape') setInlineAjustarId(''); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineAjustar(c.cooperadoId); if (e.key === 'Escape') { setInlineAjustarId(''); setInlineAjustarValor(''); setInlineAjustarKwh(''); } }}
                               />
-                              <Button size="sm" className="h-6 px-2 text-xs" disabled={inlineAjustarProcessando} onClick={() => handleInlineAjustar(c.cooperadoId)}>
+                              <span className="text-[10px] text-gray-400">ou</span>
+                              <input
+                                className="w-20 border border-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                                type="number"
+                                step="0.01"
+                                placeholder="kWh/mês"
+                                aria-label="kWh por mês"
+                                title="kWh/mês — exclui %"
+                                value={inlineAjustarKwh}
+                                onChange={(e) => { setInlineAjustarKwh(e.target.value); if (e.target.value) setInlineAjustarValor(''); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleInlineAjustar(c.cooperadoId); if (e.key === 'Escape') { setInlineAjustarId(''); setInlineAjustarValor(''); setInlineAjustarKwh(''); } }}
+                              />
+                              <Button
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                disabled={inlineAjustarProcessando}
+                                title={(!inlineAjustarValor && !inlineAjustarKwh) ? 'Preencha % ou kWh' : 'Salvar'}
+                                onClick={() => handleInlineAjustar(c.cooperadoId)}
+                              >
                                 {inlineAjustarProcessando ? <Loader2 className="h-3 w-3 animate-spin" /> : 'OK'}
                               </Button>
-                              <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => setInlineAjustarId('')}>X</Button>
+                              <Button size="sm" variant="ghost" className="h-6 px-1 text-xs" onClick={() => { setInlineAjustarId(''); setInlineAjustarValor(''); setInlineAjustarKwh(''); }}>X</Button>
                             </div>
                           ) : (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2"
-                              title="Ajustar %"
-                              onClick={() => { setInlineAjustarId(c.cooperadoId); setInlineAjustarValor(''); }}
+                              title="Ajustar % ou kWh"
+                              onClick={() => { setInlineAjustarId(c.cooperadoId); setInlineAjustarValor(''); setInlineAjustarKwh(''); }}
                             >
                               <Zap className="h-3.5 w-3.5" />
                             </Button>
@@ -879,7 +921,7 @@ export default function UsinaDetailPage() {
               <select className={selCls} value={migrarCooperadoId} onChange={(e) => { setMigrarCooperadoId(e.target.value); buscarContratosAtivos(e.target.value); }}>
                 <option value="">Selecione...</option>
                 {(distribuicao?.cooperados ?? []).map((c: any) => (
-                  <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — UC {c.ucNumero}</option>
+                  <option key={`${c.cooperadoId}_${c.ucNumero ?? ''}`} value={c.cooperadoId}>{c.nome} — UC {c.ucNumero}</option>
                 ))}
               </select>
             </div>
@@ -955,7 +997,7 @@ export default function UsinaDetailPage() {
               <select className={selCls} value={ajustarCooperadoId} onChange={(e) => { setAjustarCooperadoId(e.target.value); buscarContratosAtivos(e.target.value); }}>
                 <option value="">Selecione...</option>
                 {(distribuicao?.cooperados ?? []).map((c: any) => (
-                  <option key={c.cooperadoId} value={c.cooperadoId}>{c.nome} — {c.kwhContratado} kWh</option>
+                  <option key={`${c.cooperadoId}_${c.ucNumero ?? ''}`} value={c.cooperadoId}>{c.nome} — {c.kwhContratado} kWh</option>
                 ))}
               </select>
             </div>

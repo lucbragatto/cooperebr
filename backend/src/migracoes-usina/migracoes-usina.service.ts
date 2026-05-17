@@ -62,6 +62,14 @@ export class MigracoesUsinaService {
    * Encerra contrato antigo, cria novo contrato, registra histórico.
    */
   async migrarCooperado(dto: MigrarCooperadoDto) {
+    // Mini-Sprint Bugs Usinas+Listas (17/05/2026 noite) — guard preventivo
+    // alinhado ao mesmo problema do ajustarKwh (Bug 2). Sem DTO no controller.
+    if (!dto.cooperadoId) {
+      throw new BadRequestException('cooperadoId é obrigatório.');
+    }
+    if (!dto.usinaDestinoId) {
+      throw new BadRequestException('usinaDestinoId é obrigatório.');
+    }
     if (!dto.kwhNovo && !dto.percentualNovo) {
       throw new BadRequestException(
         'Informe kwhNovo ou percentualNovo para a migração.',
@@ -154,10 +162,12 @@ export class MigracoesUsinaService {
       const numero = await this.contratosService.gerarNumeroContrato(tx);
 
       // Calcular percentual na usina destino
+      // Mini-Sprint Bugs Usinas+Listas (17/05/2026 noite) — Anomalia 1 fix (bug-gêmeo ao ajustarKwh):
+      // gravava percentualUsina como ratio (0.22) em vez de percent inteiro (22).
       const capDestino = Number(usinaDestino.capacidadeKwh ?? 0);
       const percentualNovo =
         capDestino > 0
-          ? Math.round((kwhContratoAnual / capDestino) * 10000) / 10000
+          ? Math.round((kwhContratoAnual / capDestino) * 10000) / 100
           : 0;
 
       // Validar capacidade da usina destino
@@ -284,6 +294,13 @@ export class MigracoesUsinaService {
    * Ajusta kWh/percentual do cooperado na mesma usina.
    */
   async ajustarKwh(dto: AjustarKwhDto) {
+    // Mini-Sprint Bugs Usinas+Listas (17/05/2026 noite) — guard Bug 2:
+    // controller usa @Body() body: any sem DTO; se frontend manda cooperadoId undefined
+    // (cenário inline-ajustar com cooperadoId vazio), Prisma.findUnique({ where: { id: undefined } })
+    // lança PrismaClientValidationError -> 500. Guard explícito antes do findUnique.
+    if (!dto.cooperadoId) {
+      throw new BadRequestException('cooperadoId é obrigatório.');
+    }
     if (!dto.kwhNovo && !dto.percentualNovo) {
       throw new BadRequestException(
         'Informe kwhNovo ou percentualNovo para o ajuste.',
@@ -342,9 +359,14 @@ export class MigracoesUsinaService {
 
     const kwhNovo = Math.round((kwhContratoAnual / 12) * 100) / 100;
     const capUsina = Number(contratoAtivo.usina?.capacidadeKwh ?? 0);
+    // Mini-Sprint Bugs Usinas+Listas (17/05/2026 noite) — Anomalia 1 fix:
+    // Math.round(x * 10000) / 10000 gravava percentualUsina como ratio (0.22) em vez de
+    // percent inteiro (22). Convenção do sistema (usinas.service.ts:433,449) usa
+    // Math.round(x * 10000) / 100. NOTA: a interpretação ANUAL de kwhContratoAnual/capUsina
+    // permanece (D-novo-H trata convenção mensal posteriormente).
     const percentualNovo =
       capUsina > 0
-        ? Math.round((kwhContratoAnual / capUsina) * 10000) / 10000
+        ? Math.round((kwhContratoAnual / capUsina) * 10000) / 100
         : 0;
 
     // Atualizar contrato em transação serializable

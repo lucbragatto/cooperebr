@@ -516,6 +516,11 @@ export class UsinasService {
           ? Number(c.percentualUsina)
           : (capacidade > 0 ? Math.round((kwh / capacidade) * 10000) / 100 : 0);
         return {
+          // Bug 3 regressão fix (17/05/2026 noite): UI inline-ajustar consumia c.cooperadoId
+          // que não existia no shape — frontend abortava no guard sem chamar API. Expor IDs.
+          cooperadoId: c.cooperado.id,
+          contratoId: c.id,
+          ucId: c.ucId,
           nomeCompleto: c.cooperado.nomeCompleto,
           cpf: c.cooperado.cpf,
           numeroUC: c.uc?.numero ?? '',
