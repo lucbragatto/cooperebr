@@ -1,6 +1,6 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 11/05/2026 — sessão Code maratona fechada (9 commits, 4 fases técnicas + 4 documentais).
+**Última atualização:** 17/05/2026 — Sprint Contabilidade Tributária Segregada APROVADO (61h Code, posição #8, benefício inicial APENAS `ENERGIA_SCEE`). Ver `docs/especificacao-contabilidade-cooperativa-segregada.md`.
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -293,12 +293,13 @@ Formato fixo pra cada sprint:
 
 ---
 
-### Sprint 7 — DRE + Conciliação + Fechamento Mensal
+### Sprint 7 — DRE + Conciliação + Fechamento Mensal (genérico)
 
 - **Severidade:** P2 (governança financeira antes de Walter, contador externo).
 - **Estimativa:** 2-3 semanas.
 - **Pode rodar quando:** independente.
 - **Bloqueia:** auditoria contábil oficial.
+- **Não confundir com Sprint Contabilidade Tributária Segregada** (que cobre segregação cooperativa específica). Sprint 7 = base genérica. São complementares.
 
 **Escopo:**
 - Endpoint `GET /financeiro/dre` consolidado (Demonstrativo de Resultado do Exercício).
@@ -314,6 +315,61 @@ Formato fixo pra cada sprint:
 **Critério "passou":** Walter (contador externo) gera DRE de abr/2026, concilia 100% das transações BB, fecha o mês com 1 clique. Reabertura exige aprovação SUPER_ADMIN.
 
 **Dependências:** nenhuma técnica. **Asaas em produção** ajuda mas não bloqueia.
+
+---
+
+### Sprint Contabilidade Tributária Segregada — 🆕 APROVADO 17/05/2026
+
+- **Severidade:** P1 (compliance jurídico cooperativo + defesa fiscal + foundation pra módulos futuros).
+- **Estimativa:** 61h Code em 4 fases.
+- **Pode rodar quando:** após Bloco F (Automação Concessionária) — posição #8 do roadmap A→H.
+- **Bloqueia:** auditoria fiscal Receita Federal segura + onboarding de cooperativa #2 com plano de contas modelo.
+- **Aprovação Luciano:** ✅ 17/05/2026 — ver `~/.claude/projects/C--Users-Luciano-cooperebr/memory/decisao_modulo_contabilidade_tributaria_17_05.md`.
+- **Especificação completa:** `docs/especificacao-contabilidade-cooperativa-segregada.md`.
+
+**Escopo (4 fases, 61h Code):**
+
+**Fase 1 — Schema + Núcleo Contábil (12h):**
+- Novo enum `NaturezaContabil` (10 valores)
+- Novo enum `NaturezaCooperativa` (PROPRIO/AUXILIAR/NAO_COOPERATIVO)
+- Promoção `LancamentoCaixa.naturezaAto` String → enum (migração 2 passos com auditoria prévia)
+- Expansão `PlanoContas` (3 campos novos: `naturezaContabil`, `naturezaCooperativa`, `fundamentoLegal`)
+- 4 templates de plano de contas por `tipoParceiro` (cooperativa.template.ts populado; outros como stubs)
+
+**Fase 2 — Módulo Convênios Segregados (16h):**
+- Model `Convenio` com `tipoBeneficio` + `fluxoFinanceiro` + `classificacaoFiscal`
+- **Tipo de benefício inicial APROVADO: APENAS `ENERGIA_SCEE`** (outros ficam no enum mas service rejeita em produção via flag `feature_convenios_outros_tipos` default `false`)
+- Fluxo: aporte → conta INGRESSO_CUSTEIO_ATO_AUXILIAR; repasse → DESPESA_REPASSE_CONVENIO; custo interno → DESPESA_OPERACIONAL_CONVENIO
+- Validação zero retenção indevida (transparência total)
+
+**Fase 3 — DRE Segregada (14h):**
+- DRE Ato Cooperativo Próprio (sobras líquidas, sem tributos)
+- DRE Ato Cooperativo Auxiliar (zero resultado, mera recomposição)
+- DRE Atos NÃO Cooperativos (tributação plena PIS/COFINS/IRPJ/CSLL/ICMS)
+- DRE Consolidada (soma + identificação por natureza)
+
+**Fase 4 — Relatórios Fiscais + UI (19h):**
+- Demonstrativo de Não-Lucratividade
+- Demonstrativo de Repasses
+- Memorial de Cálculo Fiscal Segregado (defesa Receita Federal)
+- Apuração tributária por natureza
+- 4 telas: plano-contas, convenios, dre-segregada, relatorios-fiscais
+
+**Módulo novo:** `backend/src/contabilidade-tributaria/` (separado de `financeiro/` atual que permanece intocado como cama-base).
+
+**Base jurídica (não inventada — fontes consagradas):**
+- Lei 5.764/71 Art. 79 (ato cooperativo)
+- STF Tema 536 / RE 599.362/RJ (PIS/COFINS não incide sobre ato cooperativo típico)
+- STJ Tema 986 ressalva / REsp 1.692.023/MT (SCEE é empréstimo gratuito, não operação de mercado)
+- CRFB Art. 5º XVIII + 146 III "c" + 174 § 2º (proteção constitucional)
+- Estatuto Reformado v3 CoopereBR Art. 11 §§ 1º-3º (exigência estatutária pós AGE 17/06/2026)
+
+**Critério "passou":** CoopereBR gera Memorial de Cálculo Fiscal Segregado de mai/2026 mostrando: (1) Ato Próprio = R$ 0 tributos com fundamentação STF Tema 536; (2) Auxiliar = trânsito integral pra provedores externos (recomposição de custos); (3) Não Cooperativo = tributação plena. Walter (contador externo) valida documento como defensável em auditoria Receita Federal. Convênio ENERGIA_SCEE operacional. Tentativa de criar convênio com `tipoBeneficio !== ENERGIA_SCEE` retorna 400.
+
+**Dependências:** Sprint 6 (IDOR fixes — para audit log seguro) + AuditLog interceptor (D-30N) ativo.
+
+**Não cobre (vai pra sprint separado futuro):**
+- SPED / NF3e / eSocial / e-Financeira → Sprint Compliance Fiscal (40-60h estimadas, ainda não detalhado)
 
 ---
 
@@ -588,15 +644,21 @@ desses pais e já têm spec/análise pronta.
                               │
 [após todos os anteriores]    │
   Sprint 7 (DRE+Conciliação)←─┘
+  Sprint Contabilidade        ←─┘  (🆕 17/05/2026, posição #8 roadmap A→H,
+   Tributária Segregada              após Bloco F Automação Concessionária)
+  Sprint Compliance Fiscal    ←─┘  (futuro — SPED/NF3e/eSocial,
+   (SPED/NF3e/eSocial)               pós Contabilidade Tributária Segregada)
 ```
 
-**Total estimado:** 17-23 semanas de Code dedicado.
+**Total estimado:** 17-23 semanas (anterior) + 61h Contabilidade Tributária Segregada + 40-60h Compliance Fiscal estimadas = ~20-27 semanas de Code dedicado.
 
 **Marcos críticos:**
 - Sprint 0 + Sprint 5 + Sprint 6 = **base regulatória + segurança** completa (8-9 semanas).
 - Sprints 1 + 2 + 3 + 4 = **destrava produção real** (5-9 semanas).
 - Sprints 8 + 9 = **diferencial de produto** (5-7 semanas).
-- Sprint 7 = **governança financeira** (2-3 semanas).
+- Sprint 7 = **governança financeira genérica** (2-3 semanas).
+- **🆕 Sprint Contabilidade Tributária Segregada = compliance jurídico cooperativo** (61h Code = ~2 semanas). Cobre Lei 5.764/71 Art. 79 + STF Tema 536 + STJ Tema 986 ressalva. Benefício inicial: APENAS `ENERGIA_SCEE`.
+- Sprint Compliance Fiscal = integrações fiscais externas (SPED/NF3e/eSocial), 40-60h estimadas, ainda não detalhado.
 
 ---
 

@@ -2035,6 +2035,49 @@ Schema Usina agora aceita `formaPagamentoDono` (FIXO/PERCENTUAL/null) + `valorAl
 
 ---
 
+### D-55 — Sprint Compliance Fiscal (SPED/NF3e/eSocial/e-Financeira) — futuro
+
+**Severidade:** P3 (estratégico, não bloqueia operação atual)
+**Origem:** Sessão 17/05/2026 — decisão Luciano de **separar** integrações fiscais externas do Sprint Contabilidade Tributária Segregada (que entra na posição #8 do roadmap A→H).
+
+**Contexto:**
+- Sprint Contabilidade Tributária Segregada (61h Code, posição #8) cobre: segregação Ato Cooperativo Próprio × Auxiliar × Não Cooperativo + DRE segregada + apuração tributária + demonstrativos fiscais defensáveis (Memorial de Cálculo).
+- **NÃO cobre:** geração/transmissão de SPED Fiscal, SPED Contribuições, SPED ECF, SPED ECD, NF3e (Nota Fiscal de Energia Elétrica Eletrônica), eSocial, e-Financeira.
+- Esses módulos vão para Sprint Compliance Fiscal SEPARADO.
+
+**Por quê separado:**
+- Cada integração fiscal externa é complexa (~10-15h Code) — somar tudo no sprint #8 estouraria 100h+.
+- Trigger de prioridade pode ser diferente (auditoria Receita Federal vs reforma estatutária CoopereBR).
+- Requer biblioteca de validação fiscal externa (sped-validator, nfe3e-emit) ou homologação direta com Receita/SEFAZ.
+
+**Escopo (não detalhado ainda):**
+- SPED Fiscal (EFD-ICMS/IPI) — escrituração fiscal digital
+- SPED Contribuições (PIS/COFINS)
+- SPED ECF (Escrituração Contábil Fiscal — anual, substitui DIPJ)
+- SPED ECD (Escrituração Contábil Digital — substitui Livro Diário e Razão)
+- NF3e — Nota Fiscal de Energia Elétrica Eletrônica (cooperativas geradoras precisam emitir)
+- eSocial — folha de pagamento + tributos previdenciários
+- e-Financeira — declaração de movimentação financeira (Receita Federal)
+
+**Estimativa:** 40-60h Code (a detalhar quando chegar a vez).
+
+**Posição no roadmap:** #12 (após Sprint Contabilidade Tributária Segregada #8, após Sprint G Assinafy #9, após Sprint Módulo Documentos #10, após Sprint Módulo Compliance #11).
+
+**Pré-requisitos:**
+- Sprint Contabilidade Tributária Segregada (#8) concluído — fornece a NaturezaContabil + DRE segregada que alimentam SPED
+- Definição de regime tributário da CoopereBR (Lucro Presumido / Simples Nacional / Lucro Real) — alguns SPEDs variam por regime
+- Cadastro de tributos por município (ICMS varia por estado, ISS por município) — ainda não modelado no schema
+
+**Status:** 📋 Catalogado em 17/05/2026, aguarda Sprint Contabilidade Tributária Segregada (#8) concluir para começar refinamento.
+
+**Não confundir com:**
+- Sprint Contabilidade Tributária Segregada (#8) — segregação cooperativa
+- Sprint 7 (DRE+Conciliação+Fechamento Mensal genérico) — base operacional financeira
+
+**Ver também:** `docs/especificacao-contabilidade-cooperativa-segregada.md`, memória `decisao_modulo_contabilidade_tributaria_17_05.md`.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
