@@ -4,6 +4,29 @@ Histórico de versões dos documentos jurídicos e contratuais.
 
 ---
 
+## [v1.2] — 17/05/2026 (princípio multi-tenant para templates)
+
+### Mudança de princípio diretivo
+
+**Diretriz Luciano:** "deixa o cnpj do sisgdsolar em branco para preencher no futuro, não esqueça que cada novo parceiro editará seus próprios dados ao assinar para usar o sistema"
+
+**Razão:** os dados da provedora SISGDSOLAR (CNPJ, sede, representante legal) podem variar ao longo do tempo. Templates devem ser entregues com esses campos **em branco** para preenchimento contextual a cada adesão de parceiro novo.
+
+### Refatorado
+
+- `00-contratos-saas-instituicoes/modelo-contrato-saas-parceiro-v1.md`:
+  CNPJ + sede + representante legal da SISGDSOLAR → em branco com instrução "(preenchimento pela SISGDSOLAR ao firmar contrato)"
+- `00-contratos-saas-instituicoes/README.md`: pendência atualizada
+- `01-termos-adesao/modelo-coopere-br-blindado-v2.md` (legacy): CNPJ "[a confirmar — 49.950.705/0001-69 ou 58.103.611/0001-45]" → em branco
+- `README.md` raiz: novo princípio diretivo universal #8 (Multi-Tenant — Templates em branco)
+- Pendência "esclarecer divergência CNPJ" no roadmap → **resolvida por princípio multi-tenant** (não há mais divergência a esclarecer — campo fica em branco no template)
+
+### Preservado intacto
+
+- Arquivos em `01-termos-adesao/originais/` — transcrições históricas dos termos antigos assinados (Jucielly v1, Pandini v2). São fotografia documental, mantêm os CNPJs originais.
+
+---
+
 ## [v1.1] — 16/05/2026 (mesmo dia da v1.0, reorganização estrutural)
 
 ### Mudança arquitetural
@@ -46,7 +69,7 @@ Histórico de versões dos documentos jurídicos e contratuais.
 ### Pendente
 - Revisão por advogado especializado em Direito Regulatório (energia)
 - Aprovação Luciano dos modelos propostos
-- Esclarecimento sobre divergência de CNPJ do SISGDSOLAR (49.950.705/0001-69 × 58.103.611/0001-45)
+- ~~Esclarecimento sobre divergência de CNPJ do SISGDSOLAR (49.950.705/0001-69 × 58.103.611/0001-45)~~ → **Resolvido em v1.2 por princípio multi-tenant** (CNPJ fica em branco no template)
 
 ---
 

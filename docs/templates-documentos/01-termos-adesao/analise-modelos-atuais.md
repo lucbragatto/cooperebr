@@ -251,5 +251,5 @@ A cláusula expressa caracterizando atos regulatórios como força maior:
 1. Aprovação Luciano do modelo blindado v2
 2. Revisão por advogado especializado
 3. Validação com 5-10 cooperados-piloto
-4. Esclarecimento sobre CNPJ SISGDSOLAR (49.950.705 × 58.103.611)
+4. ~~Esclarecimento sobre CNPJ SISGDSOLAR (49.950.705 × 58.103.611)~~ → **Resolvido 17/05/2026 por princípio multi-tenant:** CNPJ fica em branco no template; cada adesão preenche dados atualizados da provedora ao firmar Contrato SaaS
 5. Comunicação formal aos cooperados existentes sobre o upgrade contratual

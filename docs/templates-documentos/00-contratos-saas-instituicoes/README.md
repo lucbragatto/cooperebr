@@ -56,7 +56,7 @@ SISGDSOLAR (Plataforma SaaS)
 
 ## Pendências
 
-- [ ] Esclarecer CNPJ atual do SISGDSOLAR (49.950.705/0001-69 OU 58.103.611/0001-45)
+- [ ] CNPJ + sede + representante legal da SISGDSOLAR ficam em branco no template (preenchimento pela SISGDSOLAR a cada nova adesão de parceiro — dados podem variar ao longo do tempo)
 - [ ] Definir planos SaaS comerciais (alinhar com `PlanoSaas` do schema)
 - [ ] Definir SLA (uptime, suporte, performance)
 - [ ] Definir tabela de preços

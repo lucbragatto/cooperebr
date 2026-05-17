@@ -19,7 +19,7 @@
 
 **OPERADORA TÉCNICA DO SISTEMA:**
 - Razão Social: SISGDSOLAR TECNOLOGIA LTDA
-- CNPJ: [a confirmar — 49.950.705/0001-69 ou 58.103.611/0001-45]
+- CNPJ: __________________________ (preenchimento pela SISGDSOLAR ao firmar Contrato SaaS — varia por adesão de parceiro)
 - Função: prestador de serviços técnicos de gestão e monitoramento do SCEE
 
 **PARCEIRA USINA GERADORA (quando aplicável):**
@@ -238,7 +238,7 @@ CPF: 094.687.627-42
 ---
 
 **SISGDSOLAR TECNOLOGIA LTDA** (operadora técnica, quando aplicável)
-CNPJ: [a confirmar antes de uso oficial]
+CNPJ: __________________________ (preenchimento pela SISGDSOLAR ao firmar Contrato SaaS)
 
 ____________________________________________
 Representante legal: ______________________

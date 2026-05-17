@@ -12,9 +12,9 @@
 
 **CONTRATADA (Provedora SaaS):**
 - Razão Social: SISGDSOLAR TECNOLOGIA LTDA
-- CNPJ: [a confirmar — 49.950.705/0001-69 OU 58.103.611/0001-45]
-- Sede: [a confirmar — Av. Fernando Ferrari 500 OU Av. Nossa Senhora da Penha 2598, Vitória/ES]
-- Representante legal: [a preencher]
+- CNPJ: __________________________ (preenchimento pela SISGDSOLAR ao firmar contrato)
+- Sede: __________________________ (preenchimento pela SISGDSOLAR ao firmar contrato)
+- Representante legal: __________________________ (preenchimento pela SISGDSOLAR ao firmar contrato)
 
 **CONTRATANTE (Instituição Parceira):**
 - Razão Social: ______________________________________
@@ -188,7 +188,7 @@ CPF: ______________________________________
 ## NOTAS DE USO
 
 ### Pendências antes de oficializar
-- [ ] Esclarecer CNPJ atual SISGDSOLAR (49.950.705/0001-69 OU 58.103.611/0001-45)
+- [ ] Preencher CNPJ + sede + representante legal da SISGDSOLAR no ato da assinatura do contrato (template deixa em branco propositadamente — dados da SISGDSOLAR variam ao longo do tempo)
 - [ ] Definir planos SaaS comerciais finais (BRONZE/PRATA/OURO ou tabela personalizada)
 - [ ] Definir SLA específico
 - [ ] Definir tabela de preços vigente

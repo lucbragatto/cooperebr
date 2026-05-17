@@ -75,6 +75,11 @@ docs/templates-documentos/
 5. **Suporte a assinatura eletrônica** (MP 2.200-2/2001, Lei 14.063/2020)
 6. **Conformidade LGPD** (Lei 13.709/2018)
 7. **Versionamento semântico** + changelog
+8. **Princípio Multi-Tenant — Templates em branco para preenchimento contextual:**
+   - Os templates entregues pela plataforma SISGDSOLAR vêm com **campos da provedora em branco** (CNPJ, sede, representante legal)
+   - **Cada parceiro novo edita seus próprios dados** ao firmar o Contrato SaaS (Camada 2)
+   - Os dados da SISGDSOLAR (provedora) podem variar ao longo do tempo — preenchimento contextual a cada adesão
+   - **Dados fixos no template (não em branco):** apenas razão social da SISGDSOLAR e identificadores das instituições parceiras já estabelecidas (CoopereBR, Sinergia)
 
 ### Para CoopereBR especificamente:
 
@@ -111,7 +116,7 @@ docs/templates-documentos/
 - [ ] Aprovação Luciano dos modelos das Camadas 1, 2 e 3
 - [ ] Revisão por advogado especializado
 - [ ] Confirmação regime jurídico Consórcio Sinergia
-- [ ] Esclarecimento CNPJ SISGDSOLAR (49.950.705/0001-69 × 58.103.611/0001-45)
+- [x] ~~Esclarecimento CNPJ SISGDSOLAR (49.950.705/0001-69 × 58.103.611/0001-45)~~ → **Resolvido por princípio multi-tenant 17/05/2026:** CNPJ SISGDSOLAR fica **em branco** nos templates. Cada parceiro novo preenche dados atualizados da provedora ao firmar Contrato SaaS (Camada 2) — dados da SISGDSOLAR variam ao longo do tempo
 
 ### Médio prazo (próximo mês)
 - [ ] Contrato de Cessão de Usina (cooperado-dono → CoopereBR)
