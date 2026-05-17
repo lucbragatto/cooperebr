@@ -2077,6 +2077,39 @@ Schema Usina aceita `formaPagamentoDono` (FIXO/PERCENTUAL/**HIBRIDO**/null) + `v
 
 **Status:** 📋 Catalogado em 17/05/2026, aguarda Sprint Contabilidade Tributária Segregada (#8) concluir para começar refinamento.
 
+---
+
+### D-novo-H — Refator técnico convenção `capacidadeKwh` MENSAL (P1 estratégico)
+
+**Severidade:** P1 estratégico (não bloqueia operação atual; afeta `ajustarKwh`/`migrarCooperado` e cadastros de 2 usinas legado)
+**Detectado em:** 2026-05-17 noite (Mini-Sprint Bugs Usinas — Fase 4.5 read-only ampliada)
+**Decisão produto:** ✅ RESOLVIDA 2026-05-17 noite — convenção **MENSAL** oficial (memória `decisao_convencao_mensal_oficial_17_05.md`)
+
+**Contexto:** sistema tinha convenção polissêmica simultânea:
+- `usinas.service.ts:418-451` (`distribuicaoCreditos` + `gerarListaConcessionaria`) + 4 usinas reais (Linhares 1/2 CoopereBR, Solar Norte/Sul) seguem **MENSAL**
+- `contratos.service.ts:60-63` (comentário literal "anual") + `migracoes-usina.service.ts` (`ajustarKwh` + `migrarCooperado`) + 2 usinas legado (Solar Guarapari 600k, Solar Serra 480k) tratavam como **ANUAL**
+- `motor-proposta` + `cobrancas` não usam `capacidadeKwh` direto — neutros
+
+**Decisão Luciano:** oficializar MENSAL como universal (cadastros captam mensal, faturas concessionária mensais, SCEE mensal, operação cooperativa mensal).
+
+**Escopo Sprint D-novo-H (~6-8h Code, decisão produto pré-aprovada economiza 2-3h):**
+1. **Auditoria (1h):** SQL detectando `capacidadeKwh ≈ producaoMensalKwh × 12` (suspeitas ANUAL); dry-run UPDATE
+2. **Migração dados (1h):** `UPDATE usinas SET capacidadeKwh = capacidadeKwh / 12` nas usinas detectadas (Solar Guarapari 600k → 50k; Solar Serra 480k → 40k); validar pós-migração
+3. **Refator backend (3-4h):**
+   - `contratos.service.ts:60-63`: comentário "anual" → "mensal"; renomear `capacidadeAnual` → `capacidadeMensal` (linhas 87, 532)
+   - `migracoes-usina.service.ts:ajustarKwh`: `kwhContratoAnual = (percentualNovo/100) × cap × 12`
+   - `migracoes-usina.service.ts:migrarCooperado`: mesmo fix
+   - `usinas-analitico.service.ts:97-128`: clarificar comentários/labels
+4. **UI labels (0.5h):** `web/app/dashboard/usinas/{nova,[id]}/page.tsx` — "Capacidade (kWh/mês)" + "Produção Mensal (kWh/mês)" explícito
+5. **Smoke E2E (1h):** cadastrar nova usina, ajustar % cooperado, verificar `kwh` bate com 22% × cap mensal
+6. **Docs + commits (0.5h):** atualizar CLAUDE.md regra "MENSAL é convenção oficial" + CONTROLE-EXECUCAO
+
+**Bloqueio:** nada operacional — sistema funciona com workaround mental do admin (ajustarKwh entrega 1/12 do esperado).
+
+**Conexões:** Sprint Usinas+Listas Sub-Fase 1 (próximo após mini-sprint) pode aproveitar oportunisticamente pra UI labels se barato.
+
+**Status:** 📋 Catalogado em 2026-05-17 noite, aguarda agenda Code (P1 mas sem urgência operacional).
+
 **Não confundir com:**
 - Sprint Contabilidade Tributária Segregada (#8) — segregação cooperativa
 - Sprint 7 (DRE+Conciliação+Fechamento Mensal genérico) — base operacional financeira

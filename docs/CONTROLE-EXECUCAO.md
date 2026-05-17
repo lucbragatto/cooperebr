@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-17 — Bloco D (3 crons proativos) FECHADO**. Marco M7. Novo módulo `notificacoes-proativas/` com 3 crons (lembrete docs cooperado 10:00, alerta admin agregado 08:00, lembrete email portal EDP 11:00). Bug crítico whitelist guard detectado no smoke + corrigido. Smoke 9/9 PASS.
+> Última atualização: **2026-05-17 noite — Mini-Sprint Bugs Usinas+Listas FECHADO** (Marco M9). 4 bugs fixados + saneamento Cooperebr2 duplicada + schema @unique + Bug 3 regressão resolvida + 3 anomalias pós-fix (ratio→percent + refresh header) + decisão produto MENSAL embutida (D-novo-H catalogado, ~6-8h Code futuro). Bloco B Etapa 1 PAUSADO (Fase 1 ✅; Fase 2 specs Jest 6-8h aguarda retomada). **Próximo: Sprint Usinas+Listas Sub-Fase 1** — Code aguarda OK Luciano com respostas das 10 perguntas decisórias da Fase 1 read-only ampla.
 
 ---
 
