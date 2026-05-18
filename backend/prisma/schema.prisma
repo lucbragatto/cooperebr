@@ -69,6 +69,9 @@ model Cooperativa {
   /// @deprecated Substituído por politicaBandeira. Remover no Sprint 6 após eliminar engine órfã calcularCobrancaMensal.
   bandeiraAtiva             Boolean                           @default(false)
   bandeiraSincronizacaoAuto Boolean                           @default(false)
+  // ── Sprint 8 — Realocação Multi-Usina (Engine Otimização Proativa) ──
+  politicasAlocacao         PoliticaAlocacao[]
+  alocacoesOtimas           AlocacaoOtima[]
 
   @@map("cooperativas")
 }
@@ -460,6 +463,10 @@ model Contrato {
   mesesPromocaoAplicados       Int?
   baseCalculoAplicado          String                    @default("KWH_CHEIO")
   tipoDescontoAplicado         TipoDesconto              @default(APLICAR_SOBRE_BASE)
+  /// Classe GD aplicada à cobrança deste contrato (Caminho B — Sprint 8 + Sprint 5a Neutro).
+  /// Input manual do admin até Sprint 5 completo (dossiê judicial CoopereBR × EDP fechar).
+  /// Nullable em contratos existentes (preenchimento gradual via UI).
+  classeGdAplicada             ClasseGdAplicada?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   cobrancas                Cobranca[]
@@ -2326,4 +2333,69 @@ enum StatusEnvioCooperado {
   PENDENTE
   HOMOLOGADO
   REJEITADO
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 8 / Bloco E — Realocação Multi-Usina (Engine Otimização Proativa)
+// Catalogado 18/05/2026 (M14.A).
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Classe GD aplicada (input manual no Contrato — Caminho B aprovado 18/05/2026
+/// em `decisao_caminho_b_fio_b_neutro_18_05.md`). Quando Sprint 5 completo rodar
+/// (pós-dossiê judicial), passa a herdar de `Usina.classeGd`.
+enum ClasseGdAplicada {
+  GD_I    // <75 kW (microgeração)
+  GD_II   // 75kW-500kW (minigeração I)
+  GD_III  // 500kW-5MW (minigeração II)
+}
+
+enum StatusAlocacaoOtima {
+  SUGERIDA
+  APROVADA_PARCIAL
+  APROVADA_TOTAL
+  DESCARTADA
+}
+
+/// Política de alocação configurável por parceiro — define faixas de consumo
+/// e suas classes GD preferidas + usinas elegíveis. Engine consulta para
+/// orientar otimização. Política padrão SISGD é seedada inicialmente.
+model PoliticaAlocacao {
+  id                String            @id @default(cuid())
+  cooperativaId     String
+  cooperativa       Cooperativa       @relation(fields: [cooperativaId], references: [id])
+  nome              String            // "Pequenos GD_II", "Médios GD_I/II", etc
+  faixaMin          Decimal           @db.Decimal(10, 2)  // kWh/mês mínimo (inclusive)
+  faixaMax          Decimal?          @db.Decimal(10, 2)  // kWh/mês máximo (inclusive); null = sem teto
+  classeGdPreferida ClasseGdAplicada?
+  usinasElegiveis   String[]          @default([])       // IDs de usinas elegíveis (vazio = todas da cooperativa)
+  prioridade        Int               @default(0)         // ordem de aplicação quando múltiplas matcham (maior primeiro)
+  ativa             Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([cooperativaId, ativa, prioridade])
+  @@map("politicas_alocacao")
+}
+
+/// Snapshot de uma simulação de otimização de alocação. Engine grava antes
+/// de aplicar; admin aprova caso a caso via UI.
+model AlocacaoOtima {
+  id                   String              @id @default(cuid())
+  cooperativaId        String
+  cooperativa          Cooperativa         @relation(fields: [cooperativaId], references: [id])
+  calculadaEm          DateTime            @default(now())
+  /// Snapshot completo: { realocacoes: [{ contratoId, usinaAtualId, usinaSugeridaId, economiaProjetada, motivos[] }],
+  ///   custoTotalAntes, custoTotalDepois, economiaTotal, contratosAvaliados, realocacoesSugeridas }
+  snapshot             Json
+  status               StatusAlocacaoOtima @default(SUGERIDA)
+  aprovadasContratoIds String[]            @default([])     // IDs dos contratos cujas realocações foram efetivamente aplicadas
+  observacoes          String?
+  geradaPorUserId      String?
+  aprovadaPorUserId    String?
+  aplicadaEm           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([cooperativaId, status, calculadaEm])
+  @@map("alocacoes_otimas")
 }
