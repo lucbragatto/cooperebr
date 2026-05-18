@@ -2186,6 +2186,32 @@ const moduleRef = await Test.createTestingModule({
 
 ---
 
+### D-novo-N — Falha sistêmica regra contatos teste (P0 RESOLVIDO 18/05/2026)
+
+**Severidade:** P0 (segurança/LGPD — sistema disparava comunicação real pra contatos do banco em dev)
+**Status:** ✅ **RESOLVIDO** em 18/05/2026 noite (commits do dia)
+**Detectado em:** 2026-05-18 (smoke Sub-Fase 1 Fase 4 — Luciano recebeu email no `+fase4banco` em vez do `+fase4envio` override)
+
+**Sintoma:** Durante smoke do trigger ativação cooperado homologado, sistema enviou email REAL pra `lucbragatto+fase4banco@gmail.com` (banco) em vez do override `+fase4envio`. Em PROD real com cooperado real, teria sido SPAM real pra cooperado que NÃO autorizou contato.
+
+**Causa raiz:** `ecosystem.config.cjs:36` força `env: { NODE_ENV: 'production' }` no PM2 (intencional — Nest roda `dist/` compilado). Resultado: `NODE_ENV='production'` SEMPRE, em dev local E prod real. TODO check `process.env.NODE_ENV !== 'production'` no projeto estava estruturalmente quebrado:
+- `whitelist-teste.ts:podeEnviarEmDev` retornava `true` sempre (bypassed)
+- `whatsapp-sender.service.ts:80` guard nativo WA bypassed
+- `email.service.ts:65` guard nativo Email bypassed (por isso email foi enviado)
+- `cooperado-homologado.listener.ts:80` (Fase 4 novo) override sempre PRODUCAO_REAL
+
+**Fix aplicado — defense in depth 3 camadas:**
+
+1. **Camada 1** — `backend/src/common/safety/ambiente.ts` (NOVO) — `isAmbienteReal()` lê `AMBIENTE_REAL === 'true'` (opt-in produção, default ausente = dev). `ecosystem.config.cjs` propaga via `AMBIENTE_REAL: process.env.AMBIENTE_REAL || 'false'`. `.env.example` documenta.
+2. **Camada 2** — listener respeita `cooperado.ambienteTeste` (`@default(false)` no schema). Cooperado teste SEMPRE override, mesmo em prod real.
+3. **Camada 3** — `ehEmailFake`/`ehTelefoneFake` em `whitelist-teste.ts` detectam padrões fake (`.invalid`, `@removido`, `0{6,}`, `9{6,}`, `9{4,}\d{0,4}0{4,}$`, prefixos `551199988/551199900/551172620/551175410/551178110`, < 10 dígitos, `INATIVO-`). Validação pré-dispatch + reescrita do `podeEnviarEmDev`.
+
+**Smoke re-executado 18/05 noite:** ✅ confirmado Luciano — email recebido em `lucbragatto+homologado@gmail.com`, WhatsApp em `27981341348`, log mostra `motivo: 'DEV_AMBIENTE'`, `contatoOriginal ≠ contatoEnvio`.
+
+**Reforço regra:** TODO listener/service de comunicação DEVE ter as 3 camadas. NUNCA usar `NODE_ENV` pra discriminar dev/prod. Catalogado postmortem em `~/.claude/projects/.../memory/falha_regra_contatos_teste_18_05.md` + atualização `regra_contato_teste_impreterivel.md`.
+
+---
+
 ### D-novo-M — IMAP self-signed certificate ERROR diário 06:00 (P3 pré-existente)
 
 **Severidade:** P3 (ERROR no log diário — pipeline IMAP cai 1×/dia, retoma na próxima tentativa)
