@@ -299,3 +299,37 @@ export function templateRelatorioConvenio(
     <p style="margin:0;font-size:13px;color:${COR_SUBTEXTO};">Acesse o portal para mais detalhes.</p>
   `);
 }
+
+// Sub-Fase 1 Fase 4 (M12, 18/05/2026) — Listas Concessionária
+export function templateCooperadoHomologado(
+  nomeCooperado: string,
+  nomeCooperativa: string,
+  nomeUsina: string,
+  dataHomologacao: Date,
+  numeroProtocolo: string | null,
+): string {
+  const dataFmt = dataHomologacao.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return layout(`Adesão homologada — bem-vindo ao SCEE`, `
+    <h2 style="margin:0 0 16px;color:${COR_TEXTO};font-size:20px;">Sua adesão foi homologada, ${nomeCooperado}! 🎉</h2>
+    <p style="margin:0 0 12px;line-height:1.6;">
+      A concessionária <strong>confirmou seu cadastro</strong> no Sistema de Compensação
+      de Energia Elétrica (SCEE) em <strong>${dataFmt}</strong>.
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px;overflow:hidden;">
+      <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:${COR_SUBTEXTO};">Cooperativa</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-weight:600;">${nomeCooperativa}</td></tr>
+      <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:${COR_SUBTEXTO};">Usina geradora</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-weight:600;">${nomeUsina}</td></tr>
+      <tr><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;color:${COR_SUBTEXTO};">Data homologação</td><td style="padding:10px 14px;border-bottom:1px solid #e2e8f0;font-weight:600;">${dataFmt}</td></tr>
+      ${numeroProtocolo ? `<tr><td style="padding:10px 14px;color:${COR_SUBTEXTO};">Protocolo concessionária</td><td style="padding:10px 14px;font-weight:600;">${numeroProtocolo}</td></tr>` : ''}
+    </table>
+    <h3 style="margin:20px 0 8px;font-size:16px;">O que acontece agora?</h3>
+    <ul style="margin:0;padding-left:20px;line-height:1.8;">
+      <li>Sua próxima fatura virá com os <strong>créditos aplicados</strong></li>
+      <li>Os créditos têm validade de <strong>60 meses</strong> conforme regra ANEEL</li>
+      <li>Você pode acompanhar tudo pelo portal da ${nomeCooperativa}</li>
+    </ul>
+    ${botao('Acessar Portal', `${LINK_PORTAL}/portal`)}
+    <p style="margin:16px 0 0;font-size:14px;color:${COR_SUBTEXTO};">
+      Dúvidas? Responda este e-mail ou fale pelo WhatsApp. Bem-vindo à energia limpa! ☀️
+    </p>
+  `);
+}

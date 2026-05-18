@@ -421,6 +421,9 @@ model Contrato {
   proposta                 PropostaCooperado?        @relation(fields: [propostaId], references: [id])
   dataInicio               DateTime
   dataFim                  DateTime?
+  /// Preenchido pelo trigger envio-lista quando cooperado é HOMOLOGADO pela concessionária
+  /// e contrato transita de PENDENTE_ATIVACAO → ATIVO (Sub-Fase 1 Fase 4, 18/05/2026).
+  dataAtivacao             DateTime?
   percentualDesconto       Decimal                   @db.Decimal(5, 2)
   kwhContrato              Decimal?                  @db.Decimal(10, 5)
   percentualUsina          Decimal?                  @db.Decimal(8, 4)

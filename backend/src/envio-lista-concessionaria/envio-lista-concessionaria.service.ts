@@ -2,13 +2,19 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, StatusEnvioConcessionaria, StatusEnvioCooperado } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { CanalEnvio, MarcarEnviadoDto } from './dto/marcar-enviado.dto';
 import { RegistrarProtocoloDto } from './dto/registrar-protocolo.dto';
 import { RegistrarHomologacaoDto, StatusHomologacaoInput } from './dto/registrar-homologacao.dto';
+import {
+  ENVIO_LISTA_EVENTS,
+  CooperadoHomologadoEvent,
+} from './envio-lista-concessionaria.events';
 
 const SERIALIZABLE_TX = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -29,7 +35,12 @@ export interface PaginacaoDto {
 
 @Injectable()
 export class EnvioListaConcessionariaService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(EnvioListaConcessionariaService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
   // Helpers internos
@@ -423,16 +434,41 @@ export class EnvioListaConcessionariaService {
     const novoStatusIndividual: StatusEnvioCooperado =
       dto.statusIndividual === StatusHomologacaoInput.HOMOLOGADO ? 'HOMOLOGADO' : 'REJEITADO';
 
+    const dataHomologacaoEfetiva = dto.dataHomologacao
+      ? new Date(dto.dataHomologacao)
+      : new Date();
+
     const resultado = await this.prisma.$transaction(async (tx) => {
       // Atualizar linha individual
       await tx.envioListaCooperado.update({
         where: { id: linha.id },
         data: {
           statusIndividual: novoStatusIndividual,
-          dataHomologacao: dto.dataHomologacao ? new Date(dto.dataHomologacao) : new Date(),
+          dataHomologacao: dataHomologacaoEfetiva,
           observacaoIndividual: dto.observacao,
         },
       });
+
+      // Trigger ativação Contrato (Sub-Fase 1 Fase 4 — M12)
+      // Só quando cooperado é HOMOLOGADO e contrato está PENDENTE_ATIVACAO.
+      let contratoAtivadoAgora = false;
+      if (novoStatusIndividual === 'HOMOLOGADO') {
+        const contrato = await tx.contrato.findUnique({
+          where: { id: linha.contratoId },
+          select: { id: true, status: true },
+        });
+        if (contrato && contrato.status === 'PENDENTE_ATIVACAO') {
+          await tx.contrato.update({
+            where: { id: contrato.id },
+            data: { status: 'ATIVO', dataAtivacao: new Date() },
+          });
+          contratoAtivadoAgora = true;
+        } else if (contrato) {
+          this.logger.log(
+            `[trigger-ativacao] Contrato ${contrato.id} já em status ${contrato.status} — não dispara notificação (evita duplicado em reenvio).`,
+          );
+        }
+      }
 
       // Recarregar todos pra calcular agregado
       const todos = await tx.envioListaCooperado.findMany({
@@ -476,8 +512,26 @@ export class EnvioListaConcessionariaService {
       return {
         envio: envioAtualizado,
         agregado: { total, homologados, pendentes, rejeitados, status: novoStatusEnvio },
+        contratoAtivadoAgora,
       };
     }, SERIALIZABLE_TX);
+
+    // Emit event APÓS commit da transação (evita race condition no listener
+    // que vai buscar dados do contrato/cooperado/usina já consolidados).
+    if (novoStatusIndividual === 'HOMOLOGADO') {
+      const payload: CooperadoHomologadoEvent = {
+        cooperativaId: envio.cooperativaId,
+        cooperadoId,
+        contratoId: linha.contratoId,
+        envioListaId: envioId,
+        envioListaCooperadoId: linha.id,
+        usinaId: envio.usinaId,
+        numeroProtocolo: envio.numeroProtocoloConcessionaria,
+        dataHomologacao: dataHomologacaoEfetiva,
+        contratoAtivadoAgora: resultado.contratoAtivadoAgora,
+      };
+      this.eventEmitter.emit(ENVIO_LISTA_EVENTS.COOPERADO_HOMOLOGADO, payload);
+    }
 
     return resultado;
   }

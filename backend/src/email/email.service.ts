@@ -12,6 +12,7 @@ import {
   templateLembreteDocsPendentes,
   templateAlertaAdminDocsParados,
   templateLembreteEmailEdp,
+  templateCooperadoHomologado,
 } from './email-templates';
 import { PrismaService } from '../prisma.service';
 import { podeEnviarEmDev } from '../common/safety/whitelist-teste';
@@ -229,6 +230,37 @@ export class EmailService {
       html,
       undefined,
       cooperado.cooperativaId,
+    );
+  }
+
+  // Sub-Fase 1 Fase 4 (M12, 18/05/2026) — Listas Concessionária
+  // Recebe `destinatario` separado do `cooperado.email` pra permitir override
+  // de contatos teste no listener (regra contatos teste impreterível).
+  async enviarCooperadoHomologado(
+    destinatario: string,
+    dados: {
+      nomeCooperado: string;
+      nomeCooperativa: string;
+      nomeUsina: string;
+      dataHomologacao: Date;
+      numeroProtocolo: string | null;
+    },
+    cooperativaId?: string | null,
+  ): Promise<boolean> {
+    if (!destinatario) return false;
+    const html = templateCooperadoHomologado(
+      dados.nomeCooperado,
+      dados.nomeCooperativa,
+      dados.nomeUsina,
+      dados.dataHomologacao,
+      dados.numeroProtocolo,
+    );
+    return this.enviarEmail(
+      destinatario,
+      `[${dados.nomeCooperativa}] Adesão homologada — bem-vindo ao SCEE`,
+      html,
+      undefined,
+      cooperativaId,
     );
   }
 
