@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-17 noite final — Maratona FECHADA com 3 marcos** (M7 Bloco D + M9 Mini-Sprint Bugs Usinas+Listas + M10 parcial Sub-Fase 1 Listas Concessionária Fases 1-3). 15+ commits do dia. **Sub-Fase 1 Fase 4** (trigger ativação automática + WA/email cooperado homologado, 2-3h) PENDENTE pra próxima sessão — **antes invocar subagent `cooperebr-qa-funcional` pra primeira ronda QA** validando tudo de 17/05. 9 memórias novas catalogadas. Subagent project-specific disponível em `~/.claude/agents/cooperebr-qa-funcional.md`.
+> Última atualização: **2026-05-18 — Marco M11 entregue: QA Completo + Bug Fix Sprint pós-QA**. Subagent `cooperebr-qa-funcional` rodou primeira ronda completa (45min, 6 bugs detectados). 3 fixados nesta sessão (Bug #1 P1 build web travado 7 dias + Bug #1B P1 Suspense useSearchParams + Bug #4 P2 AuditLog em 7 rotas Sub-Fase 1). 4 catalogados como débitos formais (D-novo-J/K/L/M). 5 commits (`c10f153`..`9444f50`) pushed. **Descoberta operacional:** working tree tinha 207 arquivos reformat Prettier órfão (origem desconhecida) preservados em stash named `reformat-prettier-massivo-pre-18-05-investigar-origem`. **Sub-Fase 1 desbloqueada** pra Fase 4 — em curso na MESMA sessão Code (contexto quente).
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### Frase comandante (próxima sessão)
 
-> Sessão maratona 17/05/2026 fechada com 3 marcos (M7 Bloco D, M9 Mini-Sprint Bugs Usinas+Listas, M10 parcial Sub-Fase 1 Listas Concessionária Fases 1-3). **Próxima sessão Code arranca invocando subagent `cooperebr-qa-funcional` pra primeira ronda QA** — validar Bloco D crons + Mini-Sprint Bugs Usinas+Listas + Sub-Fase 1 Listas Concessionária Fases 1-3. Após relatório QA + decisão Luciano sobre fixes, retomar **Sub-Fase 1 Fase 4** (trigger ativação automática + WA/email cooperado homologado, 2-3h Code, aplicar `regra_contato_teste_impreterivel`). Memórias novas catalogadas em `~/.claude/projects/C--Users-Luciano-cooperebr/memory/` (9 arquivos do dia 17/05). Subagent `~/.claude/agents/cooperebr-qa-funcional.md` disponível. Doc-sessão: `docs/sessoes/2026-05-17-maratona-bloco-d-mini-sprint-bugs-sub-fase-1-listas.md`.
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 18/05 fechamento M11).
 
 ### Pendências abertas
 - HTML cadastro-usinas v1.1 (Luciano cola, claude.ai entregou conteúdo)
@@ -48,6 +48,27 @@
 
 ### Última sessão
 
+- **Quando:** 18/05/2026 (QA Completo + Bug Fix Sprint pós-QA)
+- **Tipo:** Code (subagent QA cooperebr-qa-funcional + Fase 1 read-only ampla + 4 commits cirúrgicos + descoberta operacional)
+- **Resultado:**
+  - **Marco M11 entregue:** primeira ronda QA completa via subagent project-specific (indexado por estar em nova conversa)
+  - **6 bugs detectados** pelo QA — 3 fixados + 4 catalogados como débitos
+  - **Bug #1 (P1 BLOQUEADOR)** — `protocoloConcessionaria` ausente em `CooperadoCompleto`, build web travado 7 dias desde commit `8853d97`. Fix: 1 linha
+  - **Bug #1B (P1 descoberto durante #1)** — `useSearchParams` sem Suspense em `usinas/listas/page.tsx` (Next.js 16). Fix: wrapper Suspense
+  - **Bug #4 (P2)** — 7 rotas mutação Sub-Fase 1 sem `@AuditLog`. Fix: 7 decoradores aplicados
+  - **D-novo-J/K/L/M** catalogados: 8 specs guard-ativacao mock findUnique vs findFirst pós-Fase 2I (P2), 2 controller specs providers ausentes (P2), divergência docs Bloco D 9 vs 14 chaves (P3), IMAP self-signed ERROR diário (P3)
+  - **Descoberta operacional:** working tree tinha 207 arquivos reformat Prettier órfão (origem desconhecida, reflog limpo, zero mudança semântica). Preservado em stash `reformat-prettier-massivo-pre-18-05-investigar-origem` (206 files, +13306/-4569). Sprint Housekeeping catalogado pra futuro
+  - **Doc órfão recuperado:** `docs/relatorios/2026-05-14-mapeamento-coopertoken-amplo.md` (716 linhas, referenciado em memória mas nunca commitado)
+  - **Build web** foi de ❌ pra ✅ (`Compiled successfully in 6.2s`)
+  - **Backend rebuild + PM2 restart OK** + 11 rotas `/envios-lista` mapeadas + AuditLog interceptor global confirmado
+  - **Diretriz nova catalogada:** `git status --short` ANTES de qualquer commit em próximas sessões — se tiver arquivos não-meus, PAUSAR + Decisão 23
+- **Commits da sessão (5):** `c10f153` QA report + `de8683e` Bug #1+#1B + `098f0be` AuditLog #4 + `a7e2b7f` D-novo-J/K/L/M + `9444f50` doc CooperToken órfão
+- **Memórias novas:** `descoberta_reformat_orfao_18_05.md`
+- **Detalhe:** `docs/sessoes/2026-05-18-bug-fix-sprint-pos-qa.md`
+- **Próximo:** Sub-Fase 1 Fase 4 (M12) — trigger ativação + WA/email — na MESMA sessão Code (contexto quente, subagent indexado, sem cache miss)
+
+### Sessão anterior
+
 - **Quando:** 17/05/2026 (Bloco D — 3 crons proativos)
 - **Tipo:** Code (Fase 1 read-only + Fase 2 mutação + smoke + fechamento)
 - **Resultado:**
@@ -60,7 +81,7 @@
 - **Detalhe:** `docs/sessoes/2026-05-17-bloco-d-3-crons-proativos.md`
 - **Próximo:** Bloco B — Sprint CT Consolidado (21-26h)
 
-### Sessão anterior
+### Sessão anterior anterior
 
 - **Quando:** 16/05/2026 (Bloco C — Cadastro SEM_UC UI)
 - **Tipo:** Code (execução completa Fase 1 read-only + Fase 2 mutação + smoke + fechamento)
@@ -374,7 +395,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Bloco D (3 crons proativos) fechado 17/05 — marco M7. Próximo: BLOCO B — Sprint CT Consolidado (21-26h Code). Unifica 5 vocabulários CooperToken (Caminho DESCONTO/CLUBE, Opção A/B, Plano Desconto/Token, modoRemuneracao, modoToken, opcaoToken @deprecated) ANTES de Sprint E (realocação multi-usina) + Sprint F (automação concessionária) herdarem ambiguidade. Inclui Token×Convênio (D-38). Ler primeiro ~/.claude/projects/C--Users-Luciano-cooperebr/memory/plano_h_linha_modular_16_05.md + fechamento_sessao_maratona_16_05.md + relatórios CT em docs/relatorios/. Fase 1 read-only obrigatória — auditar `modoRemuneracao`/`opcaoToken`/`modoToken`/`tokenOpcaoCooperado` em schema + service cooper-token + UI relacionada. HTML cadastro-usinas v1.1 segue pendente colagem manual Luciano (não bloqueia).
+Sessão 18/05 entregou M11 (QA Completo + Bug Fix Sprint). Build verde, AuditLog completo nas 7 rotas Sub-Fase 1, working tree limpo (stash reformat preservado). Em curso na mesma sessão Code: Sub-Fase 1 Fase 4 (M12) — trigger ativação automática Contrato PENDENTE_ATIVACAO → ATIVO + WA/email cooperado homologado, 2-3h Code, REGRA CONTATOS TESTE IMPRETERÍVEL CRÍTICA (override em código pra 27981341348 + lucbragatto+homologado@gmail.com sempre que NODE_ENV !== 'production'). Após Fase 4: fechamento canônico próprio M12 + Fase 5 (tests Jest + docs) em sessão futura. Sub-Fase 1 fecha totalmente após Fase 5. Sprint Housekeeping (~3-5h) catalogado pra futuro: reformat órfão stashed + LF/CRLF + 15 scripts untracked + 13 branches órfãs + 5 worktrees. Diretriz nova: git status --short ANTES de qualquer commit.
 ```
 
 ---
