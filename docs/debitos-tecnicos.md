@@ -2118,6 +2118,100 @@ Schema Usina aceita `formaPagamentoDono` (FIXO/PERCENTUAL/**HIBRIDO**/null) + `v
 
 ---
 
+### D-novo-J — 8 testes `guard-ativacao.spec.ts` falham pós-fix IDOR Fase 2I (P2)
+
+**Severidade:** P2 (testes — não bloqueia produção; mascara regressão futura)
+**Detectado em:** 2026-05-18 (Ronda QA `cooperebr-qa-funcional` — relatório `docs/relatorios/qa-2026-05-18.md` commit `c10f153`)
+
+**Contexto:** Fase 2I do Hardening (14/05) trocou `findUnique` por `findFirst` em `cooperados.service.ts:867` (`canAtivar`) para conseguir aplicar filtro `cooperativaId` no mesmo where (IDOR fix). Spec `cooperados.service.guard-ativacao.spec.ts:43-44` mock continua só com `findUnique`.
+
+**Sintoma:** `npm test` reporta `TypeError: findFirst is not a function` em 8/8 cenários da suite.
+
+**Fix sugerido (~15min, ~10 linhas):**
+```ts
+// cooperados.service.guard-ativacao.spec.ts mock
+cooperado: {
+  findUnique: jest.fn(),
+  findFirst: jest.fn(),   // ← adicionar
+  update: jest.fn(),
+}
+```
++ ajustar `mockResolvedValue` nos 8 casos do `findFirst`.
+
+**Conexão:** Bloco B Etapa 1 Fase 2 (escrita de 13 specs Jest cooper-token, pausada em 17/05) reabrirá essa área de specs — **fix consolidado lá** evita 2 commits no mesmo arquivo.
+
+**Status:** 📋 Catalogado em 2026-05-18, aguarda retomada Bloco B Etapa 1 Fase 2.
+
+---
+
+### D-novo-K — 2 controller specs sem providers ausentes (P2)
+
+**Severidade:** P2 (testes — não bloqueia produção; mascara regressão futura)
+**Detectado em:** 2026-05-18 (Ronda QA `cooperebr-qa-funcional`)
+
+**Sintoma:** `npm test` reporta `Nest can't resolve dependencies of the X (...)` em:
+- `usinas.controller.spec.ts:12` — falta `UsinasAnaliticoService` no `TestingModule.providers`
+- `cooperados.controller.spec.ts:14` — falta `UsinasService` no `TestingModule.providers`
+
+**Causa:** services foram adicionados como dependência do controller (commits da maratona 17/05 ou anteriores) sem atualizar os specs.
+
+**Fix sugerido (~15min, ~10 linhas cada):**
+```ts
+const moduleRef = await Test.createTestingModule({
+  controllers: [XController],
+  providers: [
+    XService,
+    { provide: UsinasAnaliticoService, useValue: { /* mock mínimo */ } },
+    { provide: UsinasService, useValue: { /* mock mínimo */ } },
+  ],
+}).compile();
+```
+
+**Status:** 📋 Catalogado em 2026-05-18 — independente, pode fixar a qualquer momento (não amarrado a sprint).
+
+---
+
+### D-novo-L — Divergência doc-sessão Bloco D: "9 chaves" vs banco 7×2=14 (P3)
+
+**Severidade:** P3 (documentação imprecisa, sem impacto funcional)
+**Detectado em:** 2026-05-18 (Ronda QA `cooperebr-qa-funcional`); já apontado no QA piloto 17/05 (achado #2)
+
+**Sintoma:** Doc `docs/sessoes/2026-05-17-bloco-d-3-crons-proativos.md` afirma "9 ConfigTenant chaves seedadas". Banco tem 7 chaves distintas × 2 cooperativas (CoopereBR + CoopereBR Teste) = 14 entries.
+
+**Causa provável:** redação imprecisa — contagem original confundiu chaves semânticas (categorias) com chaves técnicas distintas.
+
+**Fix:** atualizar doc-sessão 17/05 (linha que cita "9 chaves") para "7 chaves cron/lembrete × 2 cooperativas = 14 entries efetivas".
+
+**Status:** 📋 Catalogado em 2026-05-18 — minor doc-only, fazer junto com próxima atualização da doc-sessão Bloco D ou no fechamento da Fase 4 Sub-Fase 1.
+
+---
+
+### D-novo-M — IMAP self-signed certificate ERROR diário 06:00 (P3 pré-existente)
+
+**Severidade:** P3 (ERROR no log diário — pipeline IMAP cai 1×/dia, retoma na próxima tentativa)
+**Detectado em:** 2026-05-18 (Ronda QA `cooperebr-qa-funcional`); pré-existente desde data não-determinada
+
+**Sintoma:** `pm2 logs cooperebr-backend` mostra ERROR `self-signed certificate` em `email-monitor.service.ts:90` (cron das 06:00).
+
+**Causa provável:** servidor IMAP configurado em `.env` (`EMAIL_MONITOR_HOST` etc.) usa certificado auto-assinado; ImapFlow rejeita por default.
+
+**Fix sugerido (~1 linha):**
+```ts
+// email-monitor.service.ts ImapFlow config
+new ImapFlow({
+  ...
+  tls: { rejectUnauthorized: false },  // ← se certificado autoassinado é esperado
+})
+```
+
+**Decisão pendente Luciano:**
+- (a) Aceitar autoassinado (`rejectUnauthorized: false`) — fix 1 linha, risco baixo (servidor IMAP é interno controlado)
+- (b) Trocar pra certificado válido (Let's Encrypt) no servidor IMAP — fix infra, mais robusto mas exige toque no provedor de email
+
+**Status:** 📋 Catalogado em 2026-05-18 — Luciano decide (a) ou (b) em sessão futura. Não bloqueia operação (cron retoma).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
