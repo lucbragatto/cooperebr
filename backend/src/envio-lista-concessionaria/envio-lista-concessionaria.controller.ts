@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { CreateRascunhoDto } from './dto/create-rascunho.dto';
 import { MarcarEnviadoDto } from './dto/marcar-enviado.dto';
 import { RegistrarProtocoloDto } from './dto/registrar-protocolo.dto';
@@ -46,7 +47,10 @@ export class EnvioListaConcessionariaController {
   // 1. Listar cooperados elegíveis (helper pra UI "Novo envio")
   @Get('cooperados-elegiveis')
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR)
-  async cooperadosElegiveis(@Query('usinaId') usinaId: string, @Req() req: any) {
+  async cooperadosElegiveis(
+    @Query('usinaId') usinaId: string,
+    @Req() req: any,
+  ) {
     return this.service.listarCooperadosElegiveis(usinaId, tenantId(req));
   }
 
@@ -94,6 +98,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 5. Criar rascunho
+  @AuditLog({ acao: 'envio-lista.criar', recurso: 'EnvioListaConcessionaria' })
   @Post()
   @Roles(ADMIN, SUPER_ADMIN)
   async criarRascunho(@Body() body: CreateRascunhoDto, @Req() req: any) {
@@ -105,6 +110,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 6. Validar
+  @AuditLog({ acao: 'envio-lista.validar', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Patch(':id/validar')
   @Roles(ADMIN, SUPER_ADMIN)
   async validar(@Param('id') id: string, @Req() req: any) {
@@ -112,6 +118,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 7. Marcar pronto pra envio
+  @AuditLog({ acao: 'envio-lista.marcar-pra-envio', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Patch(':id/marcar-pra-envio')
   @Roles(ADMIN, SUPER_ADMIN)
   async marcarProntoPraEnvio(@Param('id') id: string, @Req() req: any) {
@@ -119,6 +126,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 8. Marcar como enviado (manual)
+  @AuditLog({ acao: 'envio-lista.marcar-enviado', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Patch(':id/marcar-enviado')
   @Roles(ADMIN, SUPER_ADMIN)
   async marcarEnviado(
@@ -130,6 +138,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 9. Registrar protocolo
+  @AuditLog({ acao: 'envio-lista.registrar-protocolo', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Post(':id/protocolo')
   @Roles(ADMIN, SUPER_ADMIN)
   async registrarProtocolo(
@@ -141,6 +150,7 @@ export class EnvioListaConcessionariaController {
   }
 
   // 10. Registrar homologação individual de cooperado
+  @AuditLog({ acao: 'envio-lista.homologar-cooperado', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Post(':id/homologar/:cooperadoId')
   @Roles(ADMIN, SUPER_ADMIN)
   async registrarHomologacao(
@@ -149,10 +159,16 @@ export class EnvioListaConcessionariaController {
     @Body() body: RegistrarHomologacaoDto,
     @Req() req: any,
   ) {
-    return this.service.registrarHomologacao(id, cooperadoId, body, tenantId(req));
+    return this.service.registrarHomologacao(
+      id,
+      cooperadoId,
+      body,
+      tenantId(req),
+    );
   }
 
   // 11. Cancelar
+  @AuditLog({ acao: 'envio-lista.cancelar', recurso: 'EnvioListaConcessionaria', recursoIdParam: 'id' })
   @Patch(':id/cancelar')
   @Roles(ADMIN, SUPER_ADMIN)
   async cancelar(
