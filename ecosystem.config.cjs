@@ -33,7 +33,13 @@
       wait_ready: true,
       listen_timeout: 30000,
       shutdown_with_message: true,
-      env: { NODE_ENV: 'production' },
+      // NODE_ENV='production' é OBRIGATÓRIO (PM2 roda dist/ compilado, otimizações Node).
+      // AMBIENTE_REAL é o DISCRIMINADOR REAL dev/prod — propaga do .env do usuário
+      // (default ausente = dev local, fail-safe). Ver backend/src/common/safety/ambiente.ts.
+      env: {
+        NODE_ENV: 'production',
+        AMBIENTE_REAL: process.env.AMBIENTE_REAL || 'false',
+      },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: 'C:/Users/Luciano/cooperebr/logs/nest-error.log',
       out_file: 'C:/Users/Luciano/cooperebr/logs/nest-out.log',
