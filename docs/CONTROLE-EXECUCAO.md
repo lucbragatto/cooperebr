@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-18 — Marco M11 entregue: QA Completo + Bug Fix Sprint pós-QA**. Subagent `cooperebr-qa-funcional` rodou primeira ronda completa (45min, 6 bugs detectados). 3 fixados nesta sessão (Bug #1 P1 build web travado 7 dias + Bug #1B P1 Suspense useSearchParams + Bug #4 P2 AuditLog em 7 rotas Sub-Fase 1). 4 catalogados como débitos formais (D-novo-J/K/L/M). 5 commits (`c10f153`..`9444f50`) pushed. **Descoberta operacional:** working tree tinha 207 arquivos reformat Prettier órfão (origem desconhecida) preservados em stash named `reformat-prettier-massivo-pre-18-05-investigar-origem`. **Sub-Fase 1 desbloqueada** pra Fase 4 — em curso na MESMA sessão Code (contexto quente).
+> Última atualização: **2026-05-18 — Marcos M11 + M12 entregues na MESMA sessão Code**. M11 (manhã/tarde): QA Completo via subagent + Bug Fix Sprint pós-QA (5 commits `c10f153..9444f50` + stash named reformat órfão 206 arquivos). M12 (tarde/noite): Sub-Fase 1 Fase 4 — trigger ativação automática Contrato + listener WA/email cooperado homologado (3 commits `4e87874+e1bf552+acc5168`). **Bug crítico D-novo-N P0 descoberto e RESOLVIDO no smoke:** `ecosystem.config.cjs` força `NODE_ENV=production`, invalidando TODOS os checks `NODE_ENV !== 'production'` do projeto (whitelist LGPD, guards WA/Email). Fix defense in depth 3 camadas: `isAmbienteReal()` + `cooperado.ambienteTeste` + pattern detection `ehEmailFake`/`ehTelefoneFake`. Smoke re-executado ✅ Luciano. **Diretriz nova INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod — sempre `isAmbienteReal()`. Sub-Fase 1 Fase 5 (tests Jest + docs, 3-5h) pendente pra sessão futura.
 
 ---
 
@@ -48,24 +48,36 @@
 
 ### Última sessão
 
-- **Quando:** 18/05/2026 (QA Completo + Bug Fix Sprint pós-QA)
-- **Tipo:** Code (subagent QA cooperebr-qa-funcional + Fase 1 read-only ampla + 4 commits cirúrgicos + descoberta operacional)
-- **Resultado:**
-  - **Marco M11 entregue:** primeira ronda QA completa via subagent project-specific (indexado por estar em nova conversa)
-  - **6 bugs detectados** pelo QA — 3 fixados + 4 catalogados como débitos
-  - **Bug #1 (P1 BLOQUEADOR)** — `protocoloConcessionaria` ausente em `CooperadoCompleto`, build web travado 7 dias desde commit `8853d97`. Fix: 1 linha
-  - **Bug #1B (P1 descoberto durante #1)** — `useSearchParams` sem Suspense em `usinas/listas/page.tsx` (Next.js 16). Fix: wrapper Suspense
-  - **Bug #4 (P2)** — 7 rotas mutação Sub-Fase 1 sem `@AuditLog`. Fix: 7 decoradores aplicados
-  - **D-novo-J/K/L/M** catalogados: 8 specs guard-ativacao mock findUnique vs findFirst pós-Fase 2I (P2), 2 controller specs providers ausentes (P2), divergência docs Bloco D 9 vs 14 chaves (P3), IMAP self-signed ERROR diário (P3)
-  - **Descoberta operacional:** working tree tinha 207 arquivos reformat Prettier órfão (origem desconhecida, reflog limpo, zero mudança semântica). Preservado em stash `reformat-prettier-massivo-pre-18-05-investigar-origem` (206 files, +13306/-4569). Sprint Housekeeping catalogado pra futuro
-  - **Doc órfão recuperado:** `docs/relatorios/2026-05-14-mapeamento-coopertoken-amplo.md` (716 linhas, referenciado em memória mas nunca commitado)
-  - **Build web** foi de ❌ pra ✅ (`Compiled successfully in 6.2s`)
-  - **Backend rebuild + PM2 restart OK** + 11 rotas `/envios-lista` mapeadas + AuditLog interceptor global confirmado
-  - **Diretriz nova catalogada:** `git status --short` ANTES de qualquer commit em próximas sessões — se tiver arquivos não-meus, PAUSAR + Decisão 23
-- **Commits da sessão (5):** `c10f153` QA report + `de8683e` Bug #1+#1B + `098f0be` AuditLog #4 + `a7e2b7f` D-novo-J/K/L/M + `9444f50` doc CooperToken órfão
-- **Memórias novas:** `descoberta_reformat_orfao_18_05.md`
-- **Detalhe:** `docs/sessoes/2026-05-18-bug-fix-sprint-pos-qa.md`
-- **Próximo:** Sub-Fase 1 Fase 4 (M12) — trigger ativação + WA/email — na MESMA sessão Code (contexto quente, subagent indexado, sem cache miss)
+- **Quando:** 18/05/2026 (Marcos M11 + M12 entregues em janela única — mesma sessão Code)
+- **Tipo:** Code (subagent QA + Bug Fix Sprint + Sub-Fase 1 Fase 4 + bug crítico investigado + fechamentos canônicos M11 + M12)
+
+**M11 — QA Completo + Bug Fix Sprint pós-QA (manhã/tarde, 5 commits)**
+- Primeira ronda QA completa via subagent project-specific (45min). 6 bugs detectados — 3 fixados + 4 catalogados.
+- Bug #1 (P1 BLOQUEADOR) — `protocoloConcessionaria` ausente em `CooperadoCompleto`, build web travado 7 dias. Fix 1 linha.
+- Bug #1B (P1 descoberto durante #1) — `useSearchParams` sem Suspense (Next.js 16). Fix wrapper Suspense.
+- Bug #4 (P2) — 7 rotas mutação Sub-Fase 1 sem `@AuditLog`. Fix 7 decoradores.
+- D-novo-J/K/L/M catalogados (specs + IMAP + docs minor).
+- Descoberta operacional: 207 arquivos reformat Prettier órfão preservados em stash named.
+- Doc órfão recuperado (CooperToken 14/05, 716 linhas).
+- Diretriz nova: `git status --short` ANTES de qualquer commit.
+- Commits M11 (5): `c10f153` QA + `de8683e` #1+#1B + `098f0be` #4 + `a7e2b7f` D-J/K/L/M + `9444f50` doc + `e59a8f4` fechamento.
+- Detalhe: `docs/sessoes/2026-05-18-bug-fix-sprint-pos-qa.md`
+
+**M12 — Sub-Fase 1 Fase 4 + Fix Crítico D-novo-N (tarde/noite, 3 commits + 1 fechamento)**
+- Schema delta: `Contrato.dataAtivacao DateTime?` (aditivo puro, `npx prisma db push`).
+- Trigger no `registrarHomologacao`: cooperado HOMOLOGADO + contrato PENDENTE_ATIVACAO → ATIVO + `dataAtivacao=now()` + EventEmitter.
+- Listener `cooperado-homologado.listener.ts` NOVO — WhatsApp + Email com defense in depth 3 camadas.
+- Template `cooperadoHomologadoEmail` (9º Bloco D) + método `enviarCooperadoHomologado`.
+- **Bug crítico D-novo-N P0 descoberto no smoke:** `ecosystem.config.cjs` força `NODE_ENV=production` no PM2 (intencional pra rodar dist/), invalidando TODO check `NODE_ENV !== 'production'` (whitelist LGPD, guards WA/Email, override do listener). Email DISPAROU pra contato banco em vez de override.
+- **Fix 3 camadas:** (1) `isAmbienteReal()` lê `AMBIENTE_REAL=true` opt-in, (2) respeito `cooperado.ambienteTeste`, (3) `ehEmailFake`/`ehTelefoneFake` pattern detection final.
+- Reescrita `podeEnviarEmDev` em `whitelist-teste.ts` conserta automaticamente WA + Email services.
+- Smoke re-executado ✅ Luciano confirmou WhatsApp em `27981341348` + email em `lucbragatto+homologado@gmail.com`.
+- Commits M12 (3): `4e87874` AMBIENTE_REAL + safety helpers + `e1bf552` feature trigger 3 camadas + `acc5168` débito D-novo-N + scripts smoke.
+- Memórias: `falha_regra_contatos_teste_18_05.md` NOVO + `regra_contato_teste_impreterivel.md` EDIT (seção falha sistêmica + 3 camadas obrigatórias).
+- **Diretriz nova INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod. Sempre `isAmbienteReal()`. Todo listener/service de comunicação DEVE ter as 3 camadas.
+- Detalhe: `docs/sessoes/2026-05-18-sub-fase-1-fase-4-trigger-ativacao.md`
+
+- **Próximo:** Sub-Fase 1 Fase 5 (M13) — tests Jest + docs (3-5h) — sessão FUTURA. Sub-Fase 1 fecha totalmente após M13.
 
 ### Sessão anterior
 
@@ -395,7 +407,7 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Sessão 18/05 entregou M11 (QA Completo + Bug Fix Sprint). Build verde, AuditLog completo nas 7 rotas Sub-Fase 1, working tree limpo (stash reformat preservado). Em curso na mesma sessão Code: Sub-Fase 1 Fase 4 (M12) — trigger ativação automática Contrato PENDENTE_ATIVACAO → ATIVO + WA/email cooperado homologado, 2-3h Code, REGRA CONTATOS TESTE IMPRETERÍVEL CRÍTICA (override em código pra 27981341348 + lucbragatto+homologado@gmail.com sempre que NODE_ENV !== 'production'). Após Fase 4: fechamento canônico próprio M12 + Fase 5 (tests Jest + docs) em sessão futura. Sub-Fase 1 fecha totalmente após Fase 5. Sprint Housekeeping (~3-5h) catalogado pra futuro: reformat órfão stashed + LF/CRLF + 15 scripts untracked + 13 branches órfãs + 5 worktrees. Diretriz nova: git status --short ANTES de qualquer commit.
+Sessão 18/05 entregou M11 (QA Completo + Bug Fix Sprint) + M12 (Sub-Fase 1 Fase 4 — trigger ativação Contrato + listener WA/email 3 camadas defense in depth) na MESMA janela Code (9 commits no dia: c10f153, de8683e, 098f0be, a7e2b7f, 9444f50, e59a8f4, 4e87874, e1bf552, acc5168 + fechamento M12). Bug crítico D-novo-N P0 RESOLVIDO durante smoke (ecosystem.config.cjs força NODE_ENV=production invalidando whitelist LGPD inteira). Próxima sessão Code arranca Sub-Fase 1 Fase 5 (M13) — tests Jest do envio-lista service + cooperado-homologado listener (mocks AMBIENTE_REAL/ambienteTeste/patterns fake) + docs operacionais + smoke regression. Sub-Fase 1 fecha totalmente após M13. Pré-requisito Fase 5: ler `docs/sessoes/2026-05-18-sub-fase-1-fase-4-trigger-ativacao.md` + memória `falha_regra_contatos_teste_18_05.md` antes de escrever tests. Sprint Housekeeping (~3-5h) carry-over: reformat órfão stashed + LF/CRLF + 15 scripts untracked + 13 branches órfãs. NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal().
 ```
 
 ---
