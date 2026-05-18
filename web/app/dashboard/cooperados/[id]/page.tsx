@@ -113,6 +113,7 @@ interface CooperadoCompleto {
   preferenciaCobranca: string | null;
   representanteLegalNome: string | null; representanteLegalCpf: string | null; representanteLegalCargo: string | null;
   codigoIndicacao?: string; cooperadoIndicadorId?: string | null;
+  protocoloConcessionaria: string | null;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
 

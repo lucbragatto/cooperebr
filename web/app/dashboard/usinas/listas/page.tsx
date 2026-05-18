@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -60,7 +60,7 @@ function fmtDateTime(s: string | null): string {
   catch { return '—'; }
 }
 
-export default function ListasConcessionariaPage() {
+function ListasConcessionariaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { tipoMembroPlural } = useTipoParceiro();
@@ -442,5 +442,13 @@ export default function ListasConcessionariaPage() {
       )}
 
     </div>
+  );
+}
+
+export default function ListasConcessionariaPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>}>
+      <ListasConcessionariaContent />
+    </Suspense>
   );
 }
