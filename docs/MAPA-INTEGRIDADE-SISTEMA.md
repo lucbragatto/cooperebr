@@ -1,18 +1,20 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-05-14 noite — Fase 2 Hardening A→I completa (D-48 + D-30N + D-50/.2 + B1 cross-talk RESOLVIDOS, 35 endpoints IDOR, Helmet/HSTS/CSP, AuditLog interceptor global)
+**Última atualização:** 2026-05-18 noite — **Sub-Fase 1 Sprint Listas Concessionária COMPLETA** (M10 Fases 1-3 + M12 Fase 4 + M13 Fase 5). Trigger ativação automática Contrato + listener WA/email 3 camadas defense in depth + cobertura testes 95-100% + bug crítico D-novo-N RESOLVIDO (NODE_ENV inútil como discriminador, fix 3 camadas: AMBIENTE_REAL + cooperado.ambienteTeste + pattern detection).
 
-## Matriz executiva (14/05/2026 noite)
+## Matriz executiva (18/05/2026 noite)
 
 | Indicador | Antes | Depois | Evidência |
 |---|---|---|---|
 | Segurança multi-tenant | 🔴 | 🟢 | D-48 fechado, 35 endpoints com IDOR fix (Fase 2A-2E + bonus 2I) |
-| Auditoria | 🔴 | 🟢 | D-30N fechado, AuditLog interceptor global ativo, 18 endpoints decorados |
+| Auditoria | 🔴 | 🟢 | D-30N fechado, AuditLog interceptor global ativo, 18 endpoints decorados + 7 rotas envio-lista (Bug #4 M11) |
 | Hardening HTTP | 🔴 | 🟢 | D-50 fechado, Helmet + HSTS + CSP ativos (6 headers confirmados) |
 | Pipeline Asaas E2E | 🟡 | 🟢 | Sub-canário CAROLINA validou round-trip webhook→email (5s latência) |
 | Engine COMPENSADOS | 🟡 | 🟢 | Sub-Fase B AMAGES 15/05 validou E2E real: CTR-2026-0008 + cobrança R$ 979,20 calculada via PATCH /faturas/aprovar (commits `ccde5ec` + `a09a66e`) |
 | Cadastro Usina | 🟡 | 🟢 | Bloco H' 16/05 — schema expandido (11 campos + 2 enums), saneamentos AMAGES + Exfishes, Cooperebr2 criada, UI condicional (commits `2024b13` + `15db027` + `9dada58`) |
 | Cadastro SEM_UC UI | 🔴 | 🟢 | Bloco C 16/05 — 2 páginas dedicadas + endpoint público + badge + banners. Smoke 6/6 PASS (commits `ae708e3` + `22345ce`) |
 | Crons proativos (lembrete docs, alerta admin, lembrete EDP) | 🔴 | 🟢 | Bloco D 17/05 — módulo `notificacoes-proativas/` + 3 `@Cron` + 3 templates email + whitelist guard. Smoke 9/9 PASS (commits `fd902af` + notificações) |
+| **Listas Concessionária E2E** | 🔴 | 🟢 | **Sub-Fase 1 COMPLETA 17-18/05** — fluxo 9 estados RASCUNHO→HOMOLOGADO_TOTAL + trigger ativação automática + listener WA/email 3 camadas. 11 endpoints multi-tenant + 13 cenários trigger + 133 specs Jest 95-100% cobertura |
+| **Discriminador dev/prod (`isAmbienteReal`)** | 🔴 | 🟢 | **D-novo-N RESOLVIDO 18/05** — `NODE_ENV` inútil (PM2 força production em dev). Fix 3 camadas defense in depth aplicado projeto inteiro. **Diretriz INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod, sempre `isAmbienteReal()` |
 
 
 **Data da auditoria inicial:** 2026-04-24
@@ -59,6 +61,17 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **D-30N (AuditLog)** → ✅ RESOLVIDO (Fase 2F).
 - **D-50/.2 (cobranças sem cooperativaId)** → ✅ RESOLVIDOS na maratona (commits anteriores).
 - **B1 cross-talk** → ✅ RESOLVIDO (mitigado server-side via 2A-2E + UI legacy deletada via 2H).
+
+## GAPS RESOLVIDOS EM 17-18/05/2026 (Sub-Fase 1 Sprint Listas Concessionária COMPLETA)
+
+- **M10 Fases 1+2 (17/05)** — schema delta + backend completo. 2 models novos (`EnvioListaConcessionaria` + `EnvioListaCooperado`), 2 enums (`StatusEnvioConcessionaria` 9 estados + `StatusEnvioCooperado` 3 estados), 1 campo aditivo (`Usina.classeGdAnotada`), 11 endpoints `/envios-lista` multi-tenant com `@AuditLog`, 5 DTOs `class-validator`, 11 métodos no service com helper `carregarEnvio` + `gerarNumeroInterno` + `validarTransicao`. Snapshot imutável de cooperados no momento da geração. Commit `56b8fee`.
+- **M10 Fase 3 (17/05)** — frontend completo. 2 abas em `/dashboard/usinas/listas` (Visão geral + Envios em curso), página própria `/dashboard/listas-concessionaria/novo?usinaId=X` (padrão UX Tipo B — usinas com 50-100 cooperados), tela detalhe `/dashboard/listas-concessionaria/[id]` com timeline + 4 dialogs (validar / marcar enviado / registrar protocolo / registrar homologação). Commit `12faf3f`.
+- **M12 Fase 4 (18/05 tarde/noite)** — trigger ativação automática + listener WA/email. Campo `Contrato.dataAtivacao DateTime?` aditivo, transição `PENDENTE_ATIVACAO → ATIVO + dataAtivacao=now()` dentro do `registrarHomologacao` com flag `contratoAtivadoAgora` pra evitar duplicação em reenvios, emit `envio-lista.cooperado-homologado` APÓS commit da tx. Listener `cooperado-homologado.listener.ts` NOVO com **3 camadas defense in depth** (Camada 1 `isAmbienteReal()` + Camada 2 `cooperado.ambienteTeste` + Camada 3 `ehEmailFake`/`ehTelefoneFake`) + template email `templateCooperadoHomologado` (9º do projeto). Smoke ✅ confirmado Luciano (WA em `27981341348` + email em `lucbragatto+homologado@gmail.com`). Commits `4e87874` + `e1bf552` + `acc5168`.
+- **D-novo-N P0 RESOLVIDO (18/05)** — descoberto durante smoke M12 Fase 4. `ecosystem.config.cjs` força `NODE_ENV=production` no PM2 (intencional pra rodar `dist/`), invalidando TODO check `NODE_ENV !== 'production'` do projeto (whitelist LGPD, guards WA/Email, override do listener). Fix sistêmico: `backend/src/common/safety/ambiente.ts` NOVO + reescrita `whitelist-teste.ts` com `ehEmailFake`/`ehTelefoneFake` + `podeEnviarEmDev` corrigido (conserta WhatsappSenderService + EmailService automaticamente). **Diretriz INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod no projeto. Detalhe em `falha_regra_contatos_teste_18_05.md` + `docs/sessoes/2026-05-18-sub-fase-1-fase-4-trigger-ativacao.md`.
+- **M13 Fase 5 (18/05 noite)** — specs Jest baseline + docs operacionais + smoke regression. **133 cenários passing** (`safety/whitelist-teste.spec.ts` 56 + `envio-lista-concessionaria.service.spec.ts` 58 + `cooperado-homologado.listener.spec.ts` 19). Cobertura nos 5 arquivos críticos: 95.69-100% (Stmts/Branch/Funcs/Lines). Zero regressão no baseline. Commits `bf28c16` + `4ae43ca` + `671052f` + commit consolidado docs+fechamento.
+- **Bug #1 P1 BLOQUEADOR (M11 18/05 manhã)** — `protocoloConcessionaria` ausente em `CooperadoCompleto` travava build web 7 dias. Fix 1 linha. Detalhe em `docs/sessoes/2026-05-18-bug-fix-sprint-pos-qa.md`.
+- **Bug #1B P1 (M11)** — `useSearchParams` sem Suspense (Next.js 16). Fix wrapper Suspense.
+- **Bug #4 P2 (M11)** — 7 rotas de mutação do envio-lista sem `@AuditLog`. Fix 7 decoradores.
 
 ## GAPS RESOLVIDOS EM 16/05/2026 (Sessão maratona — Bloco H' + Bloco C)
 

@@ -51,6 +51,7 @@ Relatório de auditoria gerado em `docs/relatorios/2026-05-11-auditoria-concentr
 
 **Severidade:** P0
 **Detectado em:** 2026-04-30 (sessão claude.ai)
+**Status 18/05 noite:** 🟡 **AVANÇO PARCIAL** — Sprint 8 / Bloco E (M14.A — commit `2ffed62`) entregou `AlocacaoValidadorService.validarClasseGd` que bloqueia mudança de classe quando `Contrato.classeGdAplicada` (Caminho B, novo campo) está populado E `Usina.classeGdAnotada` da usina destino diverge. Engine de otimização proativa não sugere movimentações que violem. **Bloqueio completo aguarda:** (a) Sprint 5a Neutro (entrega UI pra admin popular `classeGdAplicada` por contrato) + (b) backfill manual de `Usina.classeGdAnotada` por usina. Hoje validador retorna `warn` (não bloqueia) quando qualquer dos dois campos é null.
 **Impacto:** R$ 310.000/ano de prejuízo ao cooperado por decisão cega do sistema
 
 Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfishes de Usina A (GD I) para Usina B (GD III). Sistema processou normalmente. Resultado:
@@ -2079,11 +2080,12 @@ Schema Usina aceita `formaPagamentoDono` (FIXO/PERCENTUAL/**HIBRIDO**/null) + `v
 
 ---
 
-### D-novo-H — Refator técnico convenção `capacidadeKwh` MENSAL (P1 estratégico)
+### D-novo-H — Refator técnico convenção `capacidadeKwh` MENSAL (P1 estratégico — DADOS RESOLVIDOS, código pendente)
 
 **Severidade:** P1 estratégico (não bloqueia operação atual; afeta `ajustarKwh`/`migrarCooperado` e cadastros de 2 usinas legado)
 **Detectado em:** 2026-05-17 noite (Mini-Sprint Bugs Usinas — Fase 4.5 read-only ampliada)
 **Decisão produto:** ✅ RESOLVIDA 2026-05-17 noite — convenção **MENSAL** oficial (memória `decisao_convencao_mensal_oficial_17_05.md`)
+**Status 18/05 noite:** 🟡 **SANEAMENTO DE DADOS APLICADO** dentro do Sprint 8 (M14.A — commit `39ef190`). Solar Guarapari 600.000 → 50.000 kWh/mês + Solar Serra 480.000 → 40.000 kWh/mês via `backend/scripts/sanear-usinas-anual-sprint8.ts` (0 cooperados afetados em ambas — risco zero). Refator de código continua aberto (contratos.service.ts, migracoes-usina.service.ts, UI labels).
 
 **Contexto:** sistema tinha convenção polissêmica simultânea:
 - `usinas.service.ts:418-451` (`distribuicaoCreditos` + `gerarListaConcessionaria`) + 4 usinas reais (Linhares 1/2 CoopereBR, Solar Norte/Sul) seguem **MENSAL**
