@@ -44,12 +44,26 @@ export class WhatsappFluxoMotorService {
   /**
    * Processar mensagem recebida usando fluxo dinâmico do banco.
    * Retorna true se processou, false se deve cair no bot hardcoded (fallback).
+   *
+   * SEGURANÇA MULTI-TENANT: `conversa.cooperativaId` é propagado para
+   * `buscarEtapa()`. Sem ele, o motor só consulta etapas globais
+   * (cooperativaId=null), impedindo que uma conversa do tenant A receba
+   * resposta configurada pelo tenant B.
    */
   async processarComFluxoDinamico(
     msg: MensagemRecebida,
-    conversa: { id: string; telefone: string; estado: string; cooperadoId?: string | null; dadosTemp?: any },
+    conversa: {
+      id: string;
+      telefone: string;
+      estado: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
   ): Promise<boolean> {
-    const etapa = await this.buscarEtapa(conversa.estado);
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    const etapa = await this.buscarEtapa(conversa.estado, cooperativaId);
     if (!etapa) {
       this.logger.debug(`Nenhuma etapa dinâmica para estado "${conversa.estado}" — fallback hardcoded`);
       return false;
@@ -73,10 +87,14 @@ export class WhatsappFluxoMotorService {
     });
 
     // Buscar etapa do próximo estado para enviar mensagem de entrada
-    const proximaEtapa = await this.buscarEtapa(proximoEstado);
+    const proximaEtapa = await this.buscarEtapa(proximoEstado, cooperativaId);
     if (proximaEtapa?.modeloMensagemId) {
-      const modelo = await this.prisma.modeloMensagem.findUnique({
-        where: { id: proximaEtapa.modeloMensagemId },
+      // Modelo precisa também respeitar tenant (não vazar template custom de outra coop)
+      const modelo = await this.prisma.modeloMensagem.findFirst({
+        where: {
+          id: proximaEtapa.modeloMensagemId,
+          ...this.filtroTenantSomenteLeitura(cooperativaId),
+        },
       });
       if (modelo) {
         const vars = this.extrairVariaveis(conversa);
@@ -91,17 +109,26 @@ export class WhatsappFluxoMotorService {
       await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp);
     }
 
-    this.logger.log(`Motor dinâmico: ${conversa.estado} → ${proximoEstado} (telefone: ${msg.telefone})`);
+    this.logger.log(`Motor dinâmico: ${conversa.estado} → ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
     return true;
   }
 
   /**
    * Buscar etapa ativa pelo estado atual.
+   *
+   * SEGURANÇA MULTI-TENANT:
+   * - `cooperativaId` definido → retorna etapas do tenant OU globais.
+   * - `cooperativaId` undefined → retorna APENAS etapas globais
+   *   (cooperativaId=null). Antes do fix permitia qualquer etapa de
+   *   qualquer tenant, vazando configuração entre cooperativas.
    */
   private async buscarEtapa(estado: string, cooperativaId?: string): Promise<FluxoEtapaComModelo | null> {
-    const where: any = { estado, ativo: true };
+    const where: Record<string, unknown> = { estado, ativo: true };
+
     if (cooperativaId) {
       where.OR = [{ cooperativaId }, { cooperativaId: null }];
+    } else {
+      where.cooperativaId = null;
     }
 
     const etapa = await this.prisma.fluxoEtapa.findFirst({
@@ -115,6 +142,17 @@ export class WhatsappFluxoMotorService {
       ...etapa,
       gatilhos: Array.isArray(etapa.gatilhos) ? (etapa.gatilhos as unknown as Gatilho[]) : [],
     } as FluxoEtapaComModelo;
+  }
+
+  /**
+   * Filtro multi-tenant para leitura (ModeloMensagem) dentro do motor.
+   * Mesma semântica de buscarEtapa.
+   */
+  private filtroTenantSomenteLeitura(cooperativaId?: string): Record<string, unknown> {
+    if (cooperativaId) {
+      return { OR: [{ cooperativaId }, { cooperativaId: null }] };
+    }
+    return { cooperativaId: null };
   }
 
   /**
