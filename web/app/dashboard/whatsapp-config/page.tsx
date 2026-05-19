@@ -420,16 +420,16 @@ function ModalMensagem({
 
             <div>
               <Label>Categoria</Label>
-              <Select value={categoria} onValueChange={(v) => setCategoria(v ?? 'BOT')}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent side="top" className="max-h-48 overflow-y-auto">
-                  {CATEGORIAS.map((c) => (
-                    <SelectItem key={c} value={c}>{c === 'COBRANCA' ? 'COBRANÇA' : c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="BOT">BOT</option>
+                <option value="COBRANCA">COBRANÇA</option>
+                <option value="MLM">MLM</option>
+                <option value="MANUAL">MANUAL</option>
+              </select>
             </div>
 
             <div>
@@ -960,17 +960,16 @@ function ModalEtapa({
             </div>
             <div>
               <Label>Ação automática</Label>
-              <Select value={acaoAutomatica} onValueChange={(v) => setAcaoAutomatica(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Nenhuma" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
-                  {ACOES_AUTOMATICAS.map((a) => (
-                    <SelectItem key={a} value={a}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={acaoAutomatica}
+                onChange={(e) => setAcaoAutomatica(e.target.value)}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Nenhuma</option>
+                {ACOES_AUTOMATICAS.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -985,7 +984,7 @@ function ModalEtapa({
                       : 'Nenhuma'}
                   </span>
                 </SelectTrigger>
-                <SelectContent side="top" className="max-h-48 overflow-y-auto">
+                <SelectContent className="max-h-48 overflow-y-auto">
                   <SelectItem value="">Nenhuma</SelectItem>
                   {modelos.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
@@ -1003,7 +1002,7 @@ function ModalEtapa({
                       : 'Nenhuma'}
                   </span>
                 </SelectTrigger>
-                <SelectContent side="top" className="max-h-48 overflow-y-auto">
+                <SelectContent className="max-h-48 overflow-y-auto">
                   <SelectItem value="">Nenhuma</SelectItem>
                   {modelos.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
