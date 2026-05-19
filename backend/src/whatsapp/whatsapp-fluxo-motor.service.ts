@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
 
 interface MensagemRecebida {
   telefone: string;
@@ -31,11 +32,6 @@ interface FluxoEtapaComModelo {
   modeloMensagem?: { id: string; conteudo: string; nome: string } | null;
 }
 
-/**
- * Subconjunto da Cooperativa exposto aos templates do Assis.
- * Carregado uma vez por mensagem recebida (sem N+1: o motor e chamado
- * 1 vez por mensagem, nao em loop).
- */
 interface ContextoCooperativa {
   nome: string;
   email: string | null;
@@ -191,11 +187,6 @@ export class WhatsappFluxoMotorService {
     }
   }
 
-  /**
-   * Carrega subconjunto da Cooperativa para renderizar variaveis de tenant.
-   * Retorna null quando cooperativaId e undefined ou cooperativa nao existe.
-   * Nunca lanca - fallback string vazia em extrairVariaveis.
-   */
   private async carregarContextoCooperativa(
     cooperativaId: string | undefined,
   ): Promise<ContextoCooperativa | null> {
@@ -221,11 +212,6 @@ export class WhatsappFluxoMotorService {
     }
   }
 
-  /**
-   * Extrai variaveis da conversa + tenant para substituicao em templates.
-   * MULTI-TENANT: variaveis tenant so populadas se cooperativa carregada
-   * com o tenant correto. Ausente -> string vazia (nao vaza dado).
-   */
   extrairVariaveis(
     conversa: { dadosTemp?: any },
     cooperativa?: ContextoCooperativa | null,
@@ -236,6 +222,7 @@ export class WhatsappFluxoMotorService {
 
     const resultado = dados.resultado ?? {};
     const coop = cooperativa ?? null;
+    const labelMembro = getLabelMembro(coop?.tipoParceiro);
 
     return {
       nome: String(dados.titular ?? ''),
@@ -261,6 +248,10 @@ export class WhatsappFluxoMotorService {
       email_suporte: coop?.email ?? '',
       telefone_suporte: coop?.telefone ?? '',
       tipo_parceiro: coop?.tipoParceiro ?? '',
+      // Fase 6 - tipo_membro / tipo_membro_plural lowercased via helper.
+      // Fallback "membro" / "membros" quando tenant ausente ou tipo desconhecido.
+      tipo_membro: labelMembro.singular.toLowerCase(),
+      tipo_membro_plural: labelMembro.plural.toLowerCase(),
       site: '',
     };
   }
@@ -269,25 +260,6 @@ export class WhatsappFluxoMotorService {
   // Fase 3 - Simulacao in-memory (preview de fluxo sem disparar Baileys)
   // ==========================================================================
 
-  /**
-   * Simula UM turno do fluxo sem persistir conversa nem disparar Baileys.
-   *
-   * Reusa toda a logica de runtime (buscarEtapa, avaliarGatilhos,
-   * renderizarTemplate, extrairVariaveis com variaveis tenant da Fase 2)
-   * para que o preview corresponda 1:1 ao que aconteceria de verdade.
-   *
-   * SEGURANCA:
-   * - Zero side effect em banco (nao chama prisma.conversaWhatsapp.*).
-   * - Zero disparo (nao chama sender.enviarMensagem).
-   * - Nao incrementa usosCount do modelo.
-   * - Acoes automaticas (CRIAR_LEAD, GERAR_PROPOSTA, NOTIFICAR_EQUIPE)
-   *   sao APENAS reportadas, nao executadas.
-   *
-   * MULTI-TENANT:
-   * - cooperativaId controla isolamento igual ao runtime real.
-   * - Sem cooperativaId, so consulta etapas/modelos globais.
-   * - Variaveis tenant vazias quando sem cooperativa (fallback Fase 2).
-   */
   async simular(input: SimulacaoInput): Promise<SimulacaoOutput> {
     const cooperativaId = input.cooperativaId ?? undefined;
     const estadoInicial = input.estadoInicial ?? 'INICIAL';
@@ -357,10 +329,6 @@ export class WhatsappFluxoMotorService {
     };
   }
 }
-
-// ============================================================================
-// Tipos publicos da simulacao (Fase 3)
-// ============================================================================
 
 export interface SimulacaoInput {
   mensagem: string;

@@ -24,24 +24,21 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   });
 
   // ============================================================
-  // Funcoes puras (Fase 1)
+  // Fase 1 - Funcoes puras
   // ============================================================
   describe('avaliarGatilhos() - funcao pura', () => {
     it('Match case-insensitive', () => {
       const r = service.avaliarGatilhos('ok', [{ resposta: 'OK', proximoEstado: 'X' }]);
       expect(r).toBe('X');
     });
-
     it('Wildcard * casa qualquer texto nao-vazio', () => {
       const r = service.avaliarGatilhos('qualquer', [{ resposta: '*', proximoEstado: 'X' }]);
       expect(r).toBe('X');
     });
-
     it('Wildcard * NAO casa texto vazio', () => {
       const r = service.avaliarGatilhos('', [{ resposta: '*', proximoEstado: 'X' }]);
       expect(r).toBeNull();
     });
-
     it('Retorna null quando nenhum gatilho bate', () => {
       const r = service.avaliarGatilhos('xyz', [{ resposta: 'OK', proximoEstado: 'X' }]);
       expect(r).toBeNull();
@@ -53,7 +50,6 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       const r = service.renderizarTemplate('Oi {{nome}}!', { nome: 'Joao' });
       expect(r).toBe('Oi Joao!');
     });
-
     it('Mesma variavel aparece multiplas vezes', () => {
       const r = service.renderizarTemplate('{{x}}-{{x}}', { x: 'A' });
       expect(r).toBe('A-A');
@@ -61,23 +57,15 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   });
 
   // ============================================================
-  // Isolamento Fase 1 - propagacao de cooperativaId em buscarEtapa
+  // Fase 1 - Isolamento via cooperativaId no buscarEtapa
   // ============================================================
   describe('processarComFluxoDinamico() - propaga cooperativaId', () => {
     it('Conversa COM cooperativaId -> buscarEtapa usa OR [tenant + null]', async () => {
       etapaFindFirst.mockResolvedValueOnce(null);
-
-      const conversa = {
-        id: 'c1',
-        telefone: '5527981341348',
-        estado: 'MENU',
-        cooperativaId: 'coop-A',
-      };
       await service.processarComFluxoDinamico(
-        { telefone: conversa.telefone, tipo: 'texto', corpo: 'oi' },
-        conversa,
+        { telefone: '5527981341348', tipo: 'texto', corpo: 'oi' },
+        { id: 'c1', telefone: '5527981341348', estado: 'MENU', cooperativaId: 'coop-A' },
       );
-
       const where = etapaFindFirst.mock.calls[0][0].where;
       expect(where).toMatchObject({
         estado: 'MENU',
@@ -86,55 +74,31 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       });
     });
 
-    it('Conversa SEM cooperativaId -> buscarEtapa filtra cooperativaId: null (NAO retorna qualquer etapa)', async () => {
+    it('Conversa SEM cooperativaId -> buscarEtapa filtra cooperativaId: null', async () => {
       etapaFindFirst.mockResolvedValueOnce(null);
-
-      const conversa = {
-        id: 'c1',
-        telefone: '5527981341348',
-        estado: 'MENU',
-        cooperativaId: null,
-      };
       await service.processarComFluxoDinamico(
-        { telefone: conversa.telefone, tipo: 'texto', corpo: 'oi' },
-        conversa,
+        { telefone: '5527981341348', tipo: 'texto', corpo: 'oi' },
+        { id: 'c1', telefone: '5527981341348', estado: 'MENU', cooperativaId: null },
       );
-
       const where = etapaFindFirst.mock.calls[0][0].where;
-      expect(where).toMatchObject({
-        estado: 'MENU',
-        ativo: true,
-        cooperativaId: null,
-      });
+      expect(where).toMatchObject({ estado: 'MENU', ativo: true, cooperativaId: null });
       expect(where).not.toHaveProperty('OR');
     });
 
-    it('Modelo de mensagem do proximo estado tambem respeita escopo tenant', async () => {
+    it('Modelo do proximo estado tambem respeita escopo tenant', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
+        id: 'e1', cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROXIMO' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-A',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: 'coop-A', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
-      modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        conteudo: 'mensagem',
-        cooperativaId: 'coop-A',
-      });
+      modeloFindFirst.mockResolvedValueOnce({ id: 'm1', conteudo: 'mensagem', cooperativaId: 'coop-A' });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'CoopereBR',
-        email: null,
-        telefone: null,
-        cidade: null,
-        estado: null,
-        tipoParceiro: 'COOPERATIVA',
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
       });
       conversaUpdate.mockResolvedValueOnce({});
 
@@ -154,6 +118,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
   // ============================================================
   // Fase 2 - Variaveis de tenant em templates
+  // (+ Fase 6 adendo: tipo_membro / tipo_membro_plural)
   // ============================================================
   describe('extrairVariaveis() - variaveis de tenant', () => {
     it('Sem cooperativa carregada -> variaveis de tenant retornam string vazia (sem crash)', () => {
@@ -167,12 +132,16 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(vars.tipo_parceiro).toBe('');
       expect(vars.site).toBe('');
       expect(vars.nome).toBe('Joao');
+      // Fase 6 - sem tipo, fallback "membro"/"membros"
+      expect(vars.tipo_membro).toBe('membro');
+      expect(vars.tipo_membro_plural).toBe('membros');
     });
 
     it('Cooperativa undefined (parametro omitido) tambem cai em fallback vazio', () => {
       const vars = service.extrairVariaveis({ dadosTemp: {} });
       expect(vars.parceiro).toBe('');
       expect(vars.cidade).toBe('');
+      expect(vars.tipo_membro).toBe('membro');
     });
 
     it('Cooperativa carregada -> variaveis de tenant populadas corretamente', () => {
@@ -194,18 +163,36 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(vars.email_suporte).toBe('contato@cooperebr.com.br');
       expect(vars.telefone_suporte).toBe('27999999999');
       expect(vars.tipo_parceiro).toBe('COOPERATIVA');
+      // Fase 6 - tipo_membro derivado do tipoParceiro
+      expect(vars.tipo_membro).toBe('cooperado');
+      expect(vars.tipo_membro_plural).toBe('cooperados');
+    });
+
+    // Fase 6 - mapeamento explicito para cada tipoParceiro do helper
+    it.each([
+      ['COOPERATIVA', 'cooperado', 'cooperados'],
+      ['CONSORCIO', 'consorciado', 'consorciados'],
+      ['ASSOCIACAO', 'associado', 'associados'],
+      ['CONDOMINIO', 'condômino', 'condôminos'],
+      ['DESCONHECIDO', 'membro', 'membros'],
+    ])('tipo_membro / tipo_membro_plural para tipoParceiro=%s -> %s / %s', (tipo, singular, plural) => {
+      const vars = service.extrairVariaveis(
+        { dadosTemp: {} },
+        {
+          nome: 'X', email: null, telefone: null,
+          cidade: null, estado: null, tipoParceiro: tipo,
+        },
+      );
+      expect(vars.tipo_membro).toBe(singular);
+      expect(vars.tipo_membro_plural).toBe(plural);
     });
 
     it('Campos opcionais null da Cooperativa viram string vazia (nao literal "null")', () => {
       const vars = service.extrairVariaveis(
         { dadosTemp: {} },
         {
-          nome: 'Cooperativa X',
-          email: null,
-          telefone: null,
-          cidade: null,
-          estado: null,
-          tipoParceiro: 'CONSORCIO',
+          nome: 'Cooperativa X', email: null, telefone: null,
+          cidade: null, estado: null, tipoParceiro: 'CONSORCIO',
         },
       );
       expect(vars.parceiro).toBe('Cooperativa X');
@@ -221,28 +208,14 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
       const varsTenantA = service.extrairVariaveis(
         { dadosTemp: { titular: 'Joao' } },
-        {
-          nome: 'CoopereBR',
-          email: null,
-          telefone: null,
-          cidade: 'Vitoria',
-          estado: 'ES',
-          tipoParceiro: 'COOPERATIVA',
-        },
+        { nome: 'CoopereBR', email: null, telefone: null, cidade: 'Vitoria', estado: 'ES', tipoParceiro: 'COOPERATIVA' },
       );
       const textoA = service.renderizarTemplate(template, varsTenantA);
       expect(textoA).toBe('Ola Joao, fale com CoopereBR!');
 
       const varsTenantB = service.extrairVariaveis(
         { dadosTemp: { titular: 'Maria' } },
-        {
-          nome: 'Hangar Academia',
-          email: null,
-          telefone: null,
-          cidade: 'Vila Velha',
-          estado: 'ES',
-          tipoParceiro: 'ASSOCIACAO',
-        },
+        { nome: 'Hangar Academia', email: null, telefone: null, cidade: 'Vila Velha', estado: 'ES', tipoParceiro: 'ASSOCIACAO' },
       );
       const textoB = service.renderizarTemplate(template, varsTenantB);
       expect(textoB).toBe('Ola Maria, fale com Hangar Academia!');
@@ -255,119 +228,75 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   describe('processarComFluxoDinamico() - carregamento de cooperativa', () => {
     it('Conversa COM cooperativaId -> carrega cooperativa 1x e injeta nas variaveis renderizadas', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
+        id: 'e1', cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-A',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: 'coop-A', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        conteudo: 'Oi {{nome}}, bem-vindo a {{parceiro}}!',
-        cooperativaId: null,
+        id: 'm1', conteudo: 'Oi {{nome}}, bem-vindo a {{parceiro}}!', cooperativaId: null,
       });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'CoopereBR',
-        email: null,
-        telefone: null,
-        cidade: null,
-        estado: null,
-        tipoParceiro: 'COOPERATIVA',
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
       });
       conversaUpdate.mockResolvedValueOnce({});
 
       await service.processarComFluxoDinamico(
         { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
-        {
-          id: 'c1',
-          telefone: '+5527981341348',
-          estado: 'MENU',
-          cooperativaId: 'coop-A',
-          dadosTemp: { titular: 'Luciano' },
-        },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU', cooperativaId: 'coop-A', dadosTemp: { titular: 'Luciano' } },
       );
 
       expect(cooperativaFindUnique).toHaveBeenCalledTimes(1);
       expect(cooperativaFindUnique).toHaveBeenCalledWith({
         where: { id: 'coop-A' },
         select: expect.objectContaining({
-          nome: true,
-          email: true,
-          telefone: true,
-          cidade: true,
-          estado: true,
-          tipoParceiro: true,
+          nome: true, email: true, telefone: true,
+          cidade: true, estado: true, tipoParceiro: true,
         }),
       });
-      expect(enviarMensagem).toHaveBeenCalledWith(
-        '+5527981341348',
-        'Oi Luciano, bem-vindo a CoopereBR!',
-      );
+      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Luciano, bem-vindo a CoopereBR!');
     });
 
-    it('Conversa SEM cooperativaId -> nao carrega cooperativa; {{parceiro}} renderiza vazio (fallback)', async () => {
+    it('Conversa SEM cooperativaId -> nao carrega cooperativa; {{parceiro}} vazio', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: null,
+        id: 'e1', cooperativaId: null,
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: null,
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: null, modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        conteudo: 'Oi {{nome}}, fale com {{parceiro}}',
-        cooperativaId: null,
+        id: 'm1', conteudo: 'Oi {{nome}}, fale com {{parceiro}}', cooperativaId: null,
       });
       conversaUpdate.mockResolvedValueOnce({});
 
       await service.processarComFluxoDinamico(
         { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
-        {
-          id: 'c1',
-          telefone: '+5527981341348',
-          estado: 'MENU',
-          cooperativaId: null,
-          dadosTemp: { titular: 'Anonimo' },
-        },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU', cooperativaId: null, dadosTemp: { titular: 'Anonimo' } },
       );
 
       expect(cooperativaFindUnique).not.toHaveBeenCalled();
-      expect(enviarMensagem).toHaveBeenCalledWith(
-        '+5527981341348',
-        'Oi Anonimo, fale com ',
-      );
+      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Anonimo, fale com ');
     });
 
-    it('Cooperativa referenciada nao existe (id quebrado) -> fallback vazio, motor nao crasha', async () => {
+    it('Cooperativa referenciada nao existe -> fallback vazio, motor nao crasha', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-zumbi',
+        id: 'e1', cooperativaId: 'coop-zumbi',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-zumbi',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: 'coop-zumbi', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        conteudo: 'Oi {{nome}}, parceiro: {{parceiro}}',
-        cooperativaId: null,
+        id: 'm1', conteudo: 'Oi {{nome}}, parceiro: {{parceiro}}', cooperativaId: null,
       });
       cooperativaFindUnique.mockResolvedValueOnce(null);
       conversaUpdate.mockResolvedValueOnce({});
@@ -375,20 +304,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       await expect(
         service.processarComFluxoDinamico(
           { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
-          {
-            id: 'c1',
-            telefone: '+5527981341348',
-            estado: 'MENU',
-            cooperativaId: 'coop-zumbi',
-            dadosTemp: { titular: 'Teste' },
-          },
+          { id: 'c1', telefone: '+5527981341348', estado: 'MENU', cooperativaId: 'coop-zumbi', dadosTemp: { titular: 'Teste' } },
         ),
       ).resolves.toBe(true);
 
-      expect(enviarMensagem).toHaveBeenCalledWith(
-        '+5527981341348',
-        'Oi Teste, parceiro: ',
-      );
+      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Teste, parceiro: ');
     });
   });
 
@@ -396,15 +316,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   // Fase 3 - Simulacao in-memory (zero side effect)
   // ============================================================
   describe('simular() - preview de fluxo sem disparar Baileys', () => {
-    it('Sem etapa para estado inicial -> retorna transicionou=false + motivoFallback', async () => {
+    it('Sem etapa para estado inicial -> transicionou=false + motivoFallback', async () => {
       etapaFindFirst.mockResolvedValueOnce(null);
-
       const r = await service.simular({
-        mensagem: 'oi',
-        cooperativaId: 'coop-A',
-        estadoInicial: 'ESTADO_INEXISTENTE',
+        mensagem: 'oi', cooperativaId: 'coop-A', estadoInicial: 'ESTADO_INEXISTENTE',
       });
-
       expect(r.transicionou).toBe(false);
       expect(r.estadoFinal).toBe('ESTADO_INEXISTENTE');
       expect(r.gatilhoAvaliado).toBeNull();
@@ -414,55 +330,39 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
     it('Nenhum gatilho bateu -> transicionou=false + motivoFallback', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
+        id: 'e1', cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'P' }],
         modeloMensagemId: null,
       });
-
       const r = await service.simular({
-        mensagem: 'xyz',
-        cooperativaId: 'coop-A',
-        estadoInicial: 'MENU',
+        mensagem: 'xyz', cooperativaId: 'coop-A', estadoInicial: 'MENU',
       });
-
       expect(r.transicionou).toBe(false);
       expect(r.motivoFallback).toContain('Nenhum gatilho');
     });
 
-    it('Simulacao bem-sucedida -> retorna sequencia com texto renderizado + variaveis tenant da Fase 2', async () => {
+    it('Simulacao bem-sucedida -> sequencia com texto renderizado + variaveis tenant Fase 2', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
+        id: 'e1', cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-A',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: 'CRIAR_LEAD',
+        id: 'e2', cooperativaId: 'coop-A', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: 'CRIAR_LEAD',
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        nome: 'boas_vindas',
+        id: 'm1', nome: 'boas_vindas',
         conteudo: 'Oi {{nome}}, bem-vindo a {{parceiro}} de {{cidade}}!',
         cooperativaId: null,
       });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'CoopereBR',
-        email: null,
-        telefone: null,
-        cidade: 'Vitoria',
-        estado: 'ES',
-        tipoParceiro: 'COOPERATIVA',
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: 'Vitoria', estado: 'ES', tipoParceiro: 'COOPERATIVA',
       });
 
       const r = await service.simular({
-        mensagem: 'OK',
-        cooperativaId: 'coop-A',
-        estadoInicial: 'MENU',
+        mensagem: 'OK', cooperativaId: 'coop-A', estadoInicial: 'MENU',
         dadosTemp: { titular: 'Luciano' },
       });
 
@@ -478,76 +378,52 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
     it('ZERO side effect: nao chama conversaWhatsapp.update, nao chama sender, nao incrementa uso', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
+        id: 'e1', cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-A',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: 'coop-A', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        nome: 'msg',
-        conteudo: 'Oi {{nome}}',
-        cooperativaId: 'coop-A',
+        id: 'm1', nome: 'msg', conteudo: 'Oi {{nome}}', cooperativaId: 'coop-A',
       });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'CoopereBR',
-        email: null,
-        telefone: null,
-        cidade: null,
-        estado: null,
-        tipoParceiro: 'COOPERATIVA',
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
       });
 
       await service.simular({
-        mensagem: 'OK',
-        cooperativaId: 'coop-A',
-        estadoInicial: 'MENU',
+        mensagem: 'OK', cooperativaId: 'coop-A', estadoInicial: 'MENU',
         dadosTemp: { titular: 'X' },
       });
 
-      // Garantias criticas: nada de side effect
       expect(conversaUpdate).not.toHaveBeenCalled();
       expect(enviarMensagem).not.toHaveBeenCalled();
       expect(incrementarUso).not.toHaveBeenCalled();
     });
 
-    it('ISOLAMENTO: simular sem cooperativaId -> nao carrega cooperativa; variaveis tenant ficam vazias', async () => {
+    it('ISOLAMENTO: simular sem cooperativaId -> nao carrega cooperativa; variaveis tenant vazias', async () => {
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: null,
+        id: 'e1', cooperativaId: null,
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
         modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: null,
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: null, modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        nome: 'msg',
-        conteudo: 'Oi {{nome}}, parceiro: [{{parceiro}}]',
-        cooperativaId: null,
+        id: 'm1', nome: 'msg', conteudo: 'Oi {{nome}}, parceiro: [{{parceiro}}]', cooperativaId: null,
       });
 
       const r = await service.simular({
-        mensagem: 'OK',
-        estadoInicial: 'MENU',
-        dadosTemp: { titular: 'Anonimo' },
+        mensagem: 'OK', estadoInicial: 'MENU', dadosTemp: { titular: 'Anonimo' },
       });
 
       expect(cooperativaFindUnique).not.toHaveBeenCalled();
       expect(r.mensagensEnviadas[0].texto).toBe('Oi Anonimo, parceiro: []');
-      // E o filtro de etapa usou cooperativaId: null (so globais)
       const where = etapaFindFirst.mock.calls[0][0].where;
       expect(where).toMatchObject({ cooperativaId: null });
     });
@@ -555,73 +431,45 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     it('ISOLAMENTO: simular como tenant A NAO renderiza variaveis de tenant B', async () => {
       // Tenant A simula primeiro
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e1',
-        cooperativaId: 'coop-A',
-        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
-        modeloMensagemId: null,
+        id: 'e1', cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }], modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e2',
-        cooperativaId: 'coop-A',
-        modeloMensagemId: 'm1',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e2', cooperativaId: 'coop-A', modeloMensagemId: 'm1',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm1',
-        nome: 'msg',
-        conteudo: 'Parceiro: {{parceiro}}',
-        cooperativaId: null,
+        id: 'm1', nome: 'msg', conteudo: 'Parceiro: {{parceiro}}', cooperativaId: null,
       });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'CoopereBR',
-        email: null,
-        telefone: null,
-        cidade: null,
-        estado: null,
-        tipoParceiro: 'COOPERATIVA',
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
       });
 
       const rA = await service.simular({
-        mensagem: 'OK',
-        cooperativaId: 'coop-A',
-        estadoInicial: 'MENU',
+        mensagem: 'OK', cooperativaId: 'coop-A', estadoInicial: 'MENU',
       });
       expect(rA.mensagensEnviadas[0].texto).toBe('Parceiro: CoopereBR');
 
-      // Tenant B simula em seguida — vars devem ser de B, nunca de A
+      // Tenant B simula em seguida - vars devem ser de B, nunca de A
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e3',
-        cooperativaId: 'coop-B',
-        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
-        modeloMensagemId: null,
+        id: 'e3', cooperativaId: 'coop-B',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }], modeloMensagemId: null,
       });
       etapaFindFirst.mockResolvedValueOnce({
-        id: 'e4',
-        cooperativaId: 'coop-B',
-        modeloMensagemId: 'm2',
-        gatilhos: [],
-        acaoAutomatica: null,
+        id: 'e4', cooperativaId: 'coop-B', modeloMensagemId: 'm2',
+        gatilhos: [], acaoAutomatica: null,
       });
       modeloFindFirst.mockResolvedValueOnce({
-        id: 'm2',
-        nome: 'msg',
-        conteudo: 'Parceiro: {{parceiro}}',
-        cooperativaId: null,
+        id: 'm2', nome: 'msg', conteudo: 'Parceiro: {{parceiro}}', cooperativaId: null,
       });
       cooperativaFindUnique.mockResolvedValueOnce({
-        nome: 'Hangar Academia',
-        email: null,
-        telefone: null,
-        cidade: null,
-        estado: null,
-        tipoParceiro: 'ASSOCIACAO',
+        nome: 'Hangar Academia', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'ASSOCIACAO',
       });
 
       const rB = await service.simular({
-        mensagem: 'OK',
-        cooperativaId: 'coop-B',
-        estadoInicial: 'MENU',
+        mensagem: 'OK', cooperativaId: 'coop-B', estadoInicial: 'MENU',
       });
       expect(rB.mensagensEnviadas[0].texto).toBe('Parceiro: Hangar Academia');
       expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
