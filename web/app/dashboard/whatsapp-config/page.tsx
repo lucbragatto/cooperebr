@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { PhoneFrame } from '@/components/whatsapp-config/PhoneFrame';
 import { SimuladorCelular } from '@/components/whatsapp-config/SimuladorCelular';
+import { getUsuario } from '@/lib/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -841,7 +842,7 @@ function AbaFluxo() {
       {/* Simulador in-memory (Fase 5 — POST /whatsapp/simular, zero side effects) */}
       {simuladorAberto && (
         <SimuladorCelular
-          cooperativaId={null}
+          cooperativaId={(getUsuario() as { cooperativaId?: string | null } | null)?.cooperativaId ?? null}
           etapaInicial="INICIAL"
           onFechar={() => setSimuladorAberto(false)}
         />
