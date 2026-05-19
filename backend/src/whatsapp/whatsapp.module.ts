@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { WhatsappFaturaController } from './whatsapp-fatura.controller';
+import { WhatsappSimulacaoController } from './whatsapp-simulacao.controller';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
@@ -23,7 +24,7 @@ import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.m
 
 @Module({
   imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, forwardRef(() => ConviteIndicacaoModule)],
-  controllers: [WhatsappFaturaController],
+  controllers: [WhatsappFaturaController, WhatsappSimulacaoController],
   providers: [
     WhatsappFaturaService,
     WhatsappBotService,

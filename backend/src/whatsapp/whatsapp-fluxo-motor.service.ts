@@ -264,4 +264,124 @@ export class WhatsappFluxoMotorService {
       site: '',
     };
   }
+
+  // ==========================================================================
+  // Fase 3 - Simulacao in-memory (preview de fluxo sem disparar Baileys)
+  // ==========================================================================
+
+  /**
+   * Simula UM turno do fluxo sem persistir conversa nem disparar Baileys.
+   *
+   * Reusa toda a logica de runtime (buscarEtapa, avaliarGatilhos,
+   * renderizarTemplate, extrairVariaveis com variaveis tenant da Fase 2)
+   * para que o preview corresponda 1:1 ao que aconteceria de verdade.
+   *
+   * SEGURANCA:
+   * - Zero side effect em banco (nao chama prisma.conversaWhatsapp.*).
+   * - Zero disparo (nao chama sender.enviarMensagem).
+   * - Nao incrementa usosCount do modelo.
+   * - Acoes automaticas (CRIAR_LEAD, GERAR_PROPOSTA, NOTIFICAR_EQUIPE)
+   *   sao APENAS reportadas, nao executadas.
+   *
+   * MULTI-TENANT:
+   * - cooperativaId controla isolamento igual ao runtime real.
+   * - Sem cooperativaId, so consulta etapas/modelos globais.
+   * - Variaveis tenant vazias quando sem cooperativa (fallback Fase 2).
+   */
+  async simular(input: SimulacaoInput): Promise<SimulacaoOutput> {
+    const cooperativaId = input.cooperativaId ?? undefined;
+    const estadoInicial = input.estadoInicial ?? 'INICIAL';
+    const corpo = (input.mensagem ?? '').trim();
+
+    const conversaFake = {
+      dadosTemp: input.dadosTemp ?? {},
+    };
+
+    const etapaAtual = await this.buscarEtapa(estadoInicial, cooperativaId);
+    if (!etapaAtual) {
+      return {
+        estadoInicial,
+        estadoFinal: estadoInicial,
+        transicionou: false,
+        gatilhoAvaliado: null,
+        motivoFallback: 'Nenhuma etapa dinamica para o estado inicial - cairia no fallback hardcoded',
+        mensagensEnviadas: [],
+        acaoAutomatica: null,
+      };
+    }
+
+    const proximoEstado = this.avaliarGatilhos(corpo, etapaAtual.gatilhos);
+    if (!proximoEstado) {
+      return {
+        estadoInicial,
+        estadoFinal: estadoInicial,
+        transicionou: false,
+        gatilhoAvaliado: null,
+        motivoFallback: 'Nenhum gatilho da etapa atual bateu - cairia no fallback hardcoded',
+        mensagensEnviadas: [],
+        acaoAutomatica: null,
+      };
+    }
+
+    const proximaEtapa = await this.buscarEtapa(proximoEstado, cooperativaId);
+    const mensagensEnviadas: SimulacaoMensagem[] = [];
+
+    if (proximaEtapa?.modeloMensagemId) {
+      const modelo = await this.prisma.modeloMensagem.findFirst({
+        where: {
+          id: proximaEtapa.modeloMensagemId,
+          ...this.filtroTenantSomenteLeitura(cooperativaId),
+        },
+      });
+      if (modelo) {
+        const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+        const vars = this.extrairVariaveis(conversaFake, cooperativa);
+        const texto = this.renderizarTemplate(modelo.conteudo, vars);
+        mensagensEnviadas.push({
+          modeloId: modelo.id,
+          modeloNome: modelo.nome,
+          texto,
+          variaveisUsadas: vars,
+        });
+      }
+    }
+
+    return {
+      estadoInicial,
+      estadoFinal: proximoEstado,
+      transicionou: true,
+      gatilhoAvaliado: corpo,
+      motivoFallback: null,
+      mensagensEnviadas,
+      acaoAutomatica: proximaEtapa?.acaoAutomatica ?? null,
+    };
+  }
+}
+
+// ============================================================================
+// Tipos publicos da simulacao (Fase 3)
+// ============================================================================
+
+export interface SimulacaoInput {
+  mensagem: string;
+  cooperativaId?: string | null;
+  estadoInicial?: string;
+  dadosTemp?: Record<string, unknown>;
+}
+
+export interface SimulacaoMensagem {
+  modeloId: string;
+  modeloNome: string;
+  texto: string;
+  variaveisUsadas: Record<string, string>;
+}
+
+export interface SimulacaoOutput {
+  estadoInicial: string;
+  estadoFinal: string;
+  transicionou: boolean;
+  gatilhoAvaliado: string | null;
+  motivoFallback: string | null;
+  mensagensEnviadas: SimulacaoMensagem[];
+  acaoAutomatica: string | null;
 }

@@ -391,4 +391,240 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
     });
   });
+
+  // ============================================================
+  // Fase 3 - Simulacao in-memory (zero side effect)
+  // ============================================================
+  describe('simular() - preview de fluxo sem disparar Baileys', () => {
+    it('Sem etapa para estado inicial -> retorna transicionou=false + motivoFallback', async () => {
+      etapaFindFirst.mockResolvedValueOnce(null);
+
+      const r = await service.simular({
+        mensagem: 'oi',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'ESTADO_INEXISTENTE',
+      });
+
+      expect(r.transicionou).toBe(false);
+      expect(r.estadoFinal).toBe('ESTADO_INEXISTENTE');
+      expect(r.gatilhoAvaliado).toBeNull();
+      expect(r.motivoFallback).toContain('Nenhuma etapa dinamica');
+      expect(r.mensagensEnviadas).toEqual([]);
+    });
+
+    it('Nenhum gatilho bateu -> transicionou=false + motivoFallback', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'P' }],
+        modeloMensagemId: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'xyz',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'MENU',
+      });
+
+      expect(r.transicionou).toBe(false);
+      expect(r.motivoFallback).toContain('Nenhum gatilho');
+    });
+
+    it('Simulacao bem-sucedida -> retorna sequencia com texto renderizado + variaveis tenant da Fase 2', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: 'coop-A',
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: 'CRIAR_LEAD',
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        nome: 'boas_vindas',
+        conteudo: 'Oi {{nome}}, bem-vindo a {{parceiro}} de {{cidade}}!',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR',
+        email: null,
+        telefone: null,
+        cidade: 'Vitoria',
+        estado: 'ES',
+        tipoParceiro: 'COOPERATIVA',
+      });
+
+      const r = await service.simular({
+        mensagem: 'OK',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'MENU',
+        dadosTemp: { titular: 'Luciano' },
+      });
+
+      expect(r.transicionou).toBe(true);
+      expect(r.estadoFinal).toBe('PROX');
+      expect(r.gatilhoAvaliado).toBe('OK');
+      expect(r.mensagensEnviadas).toHaveLength(1);
+      expect(r.mensagensEnviadas[0].texto).toBe('Oi Luciano, bem-vindo a CoopereBR de Vitoria!');
+      expect(r.mensagensEnviadas[0].modeloId).toBe('m1');
+      expect(r.mensagensEnviadas[0].modeloNome).toBe('boas_vindas');
+      expect(r.acaoAutomatica).toBe('CRIAR_LEAD');
+    });
+
+    it('ZERO side effect: nao chama conversaWhatsapp.update, nao chama sender, nao incrementa uso', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: 'coop-A',
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        nome: 'msg',
+        conteudo: 'Oi {{nome}}',
+        cooperativaId: 'coop-A',
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR',
+        email: null,
+        telefone: null,
+        cidade: null,
+        estado: null,
+        tipoParceiro: 'COOPERATIVA',
+      });
+
+      await service.simular({
+        mensagem: 'OK',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'MENU',
+        dadosTemp: { titular: 'X' },
+      });
+
+      // Garantias criticas: nada de side effect
+      expect(conversaUpdate).not.toHaveBeenCalled();
+      expect(enviarMensagem).not.toHaveBeenCalled();
+      expect(incrementarUso).not.toHaveBeenCalled();
+    });
+
+    it('ISOLAMENTO: simular sem cooperativaId -> nao carrega cooperativa; variaveis tenant ficam vazias', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: null,
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: null,
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        nome: 'msg',
+        conteudo: 'Oi {{nome}}, parceiro: [{{parceiro}}]',
+        cooperativaId: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'OK',
+        estadoInicial: 'MENU',
+        dadosTemp: { titular: 'Anonimo' },
+      });
+
+      expect(cooperativaFindUnique).not.toHaveBeenCalled();
+      expect(r.mensagensEnviadas[0].texto).toBe('Oi Anonimo, parceiro: []');
+      // E o filtro de etapa usou cooperativaId: null (so globais)
+      const where = etapaFindFirst.mock.calls[0][0].where;
+      expect(where).toMatchObject({ cooperativaId: null });
+    });
+
+    it('ISOLAMENTO: simular como tenant A NAO renderiza variaveis de tenant B', async () => {
+      // Tenant A simula primeiro
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: 'coop-A',
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        nome: 'msg',
+        conteudo: 'Parceiro: {{parceiro}}',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR',
+        email: null,
+        telefone: null,
+        cidade: null,
+        estado: null,
+        tipoParceiro: 'COOPERATIVA',
+      });
+
+      const rA = await service.simular({
+        mensagem: 'OK',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'MENU',
+      });
+      expect(rA.mensagensEnviadas[0].texto).toBe('Parceiro: CoopereBR');
+
+      // Tenant B simula em seguida — vars devem ser de B, nunca de A
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e3',
+        cooperativaId: 'coop-B',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e4',
+        cooperativaId: 'coop-B',
+        modeloMensagemId: 'm2',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm2',
+        nome: 'msg',
+        conteudo: 'Parceiro: {{parceiro}}',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'Hangar Academia',
+        email: null,
+        telefone: null,
+        cidade: null,
+        estado: null,
+        tipoParceiro: 'ASSOCIACAO',
+      });
+
+      const rB = await service.simular({
+        mensagem: 'OK',
+        cooperativaId: 'coop-B',
+        estadoInicial: 'MENU',
+      });
+      expect(rB.mensagensEnviadas[0].texto).toBe('Parceiro: Hangar Academia');
+      expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
+    });
+  });
 });
