@@ -985,7 +985,7 @@ function ModalEtapa({
                       : 'Nenhuma'}
                   </span>
                 </SelectTrigger>
-                <SelectContent side="top">
+                <SelectContent side="top" className="max-h-48 overflow-y-auto">
                   <SelectItem value="">Nenhuma</SelectItem>
                   {modelos.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
@@ -1003,7 +1003,7 @@ function ModalEtapa({
                       : 'Nenhuma'}
                   </span>
                 </SelectTrigger>
-                <SelectContent side="top">
+                <SelectContent side="top" className="max-h-48 overflow-y-auto">
                   <SelectItem value="">Nenhuma</SelectItem>
                   {modelos.map((m) => (
                     <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
