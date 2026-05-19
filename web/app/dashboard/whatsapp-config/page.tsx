@@ -22,6 +22,8 @@ import {
   MessageSquare, Bot, Plus, Pencil, Trash2, Send, Eye, ChevronUp, ChevronDown,
   ArrowLeft, Zap, Wrench, Play,
 } from 'lucide-react';
+import { PhoneFrame } from '@/components/whatsapp-config/PhoneFrame';
+import { SimuladorCelular } from '@/components/whatsapp-config/SimuladorCelular';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -476,11 +478,13 @@ function ModalMensagem({
               </div>
               {conteudo && (
                 <div className="mt-3">
-                  <div className="text-xs text-gray-500 mb-1">Com valores de exemplo:</div>
-                  <div className="bg-green-50 rounded-lg p-3 border border-green-200 max-w-[280px]">
-                    <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                      {renderPreview(conteudo)}
-                    </div>
+                  <div className="text-xs text-gray-500 mb-2">Com valores de exemplo (preview WhatsApp):</div>
+                  <div className="flex justify-center">
+                    <PhoneFrame nomeContato="Assis">
+                      <div className="bg-white rounded-tr-xl rounded-br-xl rounded-tl-sm p-2 text-sm max-w-[85%] self-start shadow-sm whitespace-pre-wrap">
+                        {renderPreview(conteudo)}
+                      </div>
+                    </PhoneFrame>
                   </div>
                 </div>
               )}
@@ -515,6 +519,7 @@ function AbaFluxo() {
   const [telefoneTeste, setTelefoneTeste] = useState('');
   const [testando, setTestando] = useState(false);
   const [testeLog, setTesteLog] = useState<string[]>([]);
+  const [simuladorAberto, setSimuladorAberto] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -577,6 +582,10 @@ function AbaFluxo() {
     return etapa.ativo && !!etapa.modeloMensagemId && Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0;
   };
 
+  // TODO: remover após validar simulador (Fase 5 — POST /whatsapp/simular in-memory).
+  // Esta função envia mensagens REAIS via /modelos-mensagem/:id/testar.
+  // Substituída pelo SimuladorCelular abaixo. Mantida temporariamente
+  // pra possibilitar rollback se o simulador apresentar problema.
   const handleTestarFluxo = async () => {
     if (!telefoneTeste) return;
     setTestando(true);
@@ -622,7 +631,7 @@ function AbaFluxo() {
           <Button variant="outline" onClick={handlePreview}>
             <Eye className="w-4 h-4 mr-1" /> Visualizar fluxo
           </Button>
-          <Button variant="outline" onClick={() => { setTestarAberto(true); setTesteLog([]); }}>
+          <Button variant="outline" onClick={() => setSimuladorAberto(true)}>
             <Play className="w-4 h-4 mr-1" /> Testar fluxo
           </Button>
         </div>
@@ -828,6 +837,15 @@ function AbaFluxo() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Simulador in-memory (Fase 5 — POST /whatsapp/simular, zero side effects) */}
+      {simuladorAberto && (
+        <SimuladorCelular
+          cooperativaId={null}
+          etapaInicial="INICIAL"
+          onFechar={() => setSimuladorAberto(false)}
+        />
+      )}
     </>
   );
 }
