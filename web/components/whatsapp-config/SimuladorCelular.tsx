@@ -237,12 +237,16 @@ export function SimuladorCelular({
                 <CardTitle className="text-sm">Estado atual</CardTitle>
               </CardHeader>
               <CardContent>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Para o simulador responder, ative pelo menos uma etapa com estado
+                  <strong> INICIAL</strong> em &quot;Fluxo do Bot&quot;.
+                </p>
                 <Badge variant="outline" className="font-mono text-xs">
                   {estadoAtual}
                 </Badge>
-                <p className="text-xs text-gray-500 mt-2">
-                  Simulação in-memory — zero side effects (não cria conversa, não
-                  envia WhatsApp real, não conta usos).
+                <p className="text-xs text-muted-foreground mt-3 border-t pt-2">
+                  Simulação in-memory — zero side effects. Não envia WhatsApp real,
+                  não cria conversa, não conta usos.
                 </p>
               </CardContent>
             </Card>
