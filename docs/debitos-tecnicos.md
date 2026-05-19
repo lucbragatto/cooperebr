@@ -2240,6 +2240,107 @@ new ImapFlow({
 
 ---
 
+### D-WA-01 — Revisão de tom dos templates WA + variantes _padrao e _neutro por categoria de parceiro (P3)
+
+**Severidade:** P3 (ajuste cosmético/branding por tipo de parceiro)
+**Detectado em:** 2026-05-19 (Cowork — refator WhatsApp Fases 1-6)
+
+**Sintoma:** templates atuais do bot Assis usam emojis pesados ("🌞", "💰", "✅", "🎉") adequados pra cooperativas de energia solar (CoopereBR), mas podem soar fora de tom em associações profissionais (AESMP — Ministério Público / ASSEJUFES — Justiça Federal) que têm cultura institucional mais sóbria.
+
+**Fix sugerido:**
+- Criar variantes `_padrao` (com emojis, default pra cooperativas de energia) e `_neutro` (sem emojis, default pra associações profissionais) de cada template
+- Adicionar campo `Cooperativa.tomComunicacao` (enum `PADRAO` / `NEUTRO`) ou inferir via `tipoParceiro` + categoria de negócio
+- Renderizar variante correta em runtime via `extrairVariaveis` (mesmo motor da Fase 2)
+- Convenção `cooperativaId=null` mantém ambos os pares globais
+
+**Estimativa:** 4-6h Code (duplicar 17 templates do seed + 1 campo schema + lógica de seleção runtime)
+
+**Status:** 📋 Catalogado em 2026-05-19 — não bloqueia onboarding CoopereBR (já usa _padrao). Resolver antes de onboarding 1ª associação profissional.
+
+---
+
+### D-WA-02 — Campo `site` no schema Cooperativa para `{{site}}` em templates WA (P2)
+
+**Severidade:** P2 (variável de template renderiza vazio silenciosamente)
+**Detectado em:** 2026-05-19 (Cowork — refator WhatsApp Fase 2)
+
+**Sintoma:** templates WhatsApp já usam variável `{{site}}` (esperando URL do parceiro), mas campo `site` **não existe no schema `Cooperativa`** atual. Em runtime, `extrairVariaveis` retorna string vazia → texto renderizado fica com lacuna visível ("Acesse  para mais info" em vez de "Acesse https://cooperebr.com.br para mais info").
+
+**Fix sugerido:**
+- Migration aditiva pura: `ALTER TABLE cooperativas ADD COLUMN site TEXT;`
+- Atualizar `carregarContextoCooperativa()` em `whatsapp-fluxo-motor.service.ts` pra incluir `site` no select
+- Popular manualmente CoopereBR + CoopereBR Teste com URLs reais
+- UI de edição de cooperativa ganha campo `site` (validação URL simples)
+
+**Estimativa:** 1-2h Code (migration + select + UI + seed)
+
+**Status:** 📋 Catalogado em 2026-05-19 — sem risco (aditiva). Resolver junto com próximo touchpoint em `Cooperativa` ou em sprint dedicado.
+
+---
+
+### D-WA-03 — `seed-mensagens.ts` redundante com `seed-fluxo-padrao.ts` (P2)
+
+**Severidade:** P2 (risco operacional — quem roda por último ganha)
+**Detectado em:** 2026-05-19 (Cowork — refator WhatsApp Fase 6)
+
+**Sintoma:** `backend/prisma/seed-mensagens.ts` (antigo) e `backend/prisma/seed-fluxo-padrao.ts` (refatorado Fase 6) tocam os **mesmos IDs de `ModeloMensagem`** com **conteúdos divergentes**:
+- `seed-mensagens.ts`: hardcoded "CoopereBR" antigo (pré-Fase 6, sem variáveis multi-tenant)
+- `seed-fluxo-padrao.ts`: templates parametrizados com `{{parceiro}}`/`{{tipo_parceiro}}`/etc
+
+Se alguém rodar `seed-mensagens.ts` depois do refator, **sobrescreve o trabalho da Fase 6** e quebra multi-tenant silenciosamente. Conversa de tenant A passa a renderizar hardcode CoopereBR.
+
+**Fix sugerido:**
+- (a) **Deletar `seed-mensagens.ts`** (preferido — código deprecado)
+- (b) Renomear pra `seed-mensagens.deprecated.ts` + adicionar header com aviso big-red e `throw new Error('Use seed-fluxo-padrao.ts')` ao topo
+
+**Estimativa:** 15min Code
+
+**Status:** 📋 Catalogado em 2026-05-19 — não bloqueia produção (script só roda manualmente), mas é armadilha aguardando alguém pisar. Resolver no Sprint Housekeeping ou junto com próxima sessão WA.
+
+---
+
+### D-WA-04 — Bug do harness Cowork: Edit/Write trunca arquivos acima de ~10KB (P3)
+
+**Severidade:** P3 (afeta produtividade Cowork, não impacta produção CoopereBR)
+**Detectado em:** 2026-05-19 (Cowork — refator WhatsApp Fases 1-6)
+
+**Sintoma:** durante a sessão maratona do Cowork, ferramentas `Edit`/`Write` do harness Cowork (Anthropic) truncaram silenciosamente arquivos acima de ~10KB. Exigiu **4 regravações via `cat` heredoc** durante a sessão pra contornar.
+
+**Fix sugerido:**
+- Reportar ao time Anthropic (não é nosso bug)
+- Workaround Cowork: usar `cat > arquivo.ts <<'EOF' ... EOF` pra arquivos grandes em vez de `Write`/`Edit`
+
+**Estimativa:** N/A (fora do nosso escopo — bug do harness)
+
+**Status:** 📋 Catalogado em 2026-05-19 — apenas registro. Não impacta produção CoopereBR. Não impacta Claude Code (harness diferente — `Write` foi usado nesta sessão pra arquivos de até 26KB sem problema, ex: `docs/workflows/QA-FUNCIONAL-FASEADO.md` com 694 linhas / 25KB).
+
+---
+
+### D-novo-P — Handoff Assis → wizard `/cadastro` (Fase 9 do roteiro WhatsApp, P2)
+
+**Severidade:** P2 (operacionalmente lead conversa com Assis e nunca vira Cooperado — funil quebrado)
+**Detectado em:** 2026-05-19 (Cowork — análise completa Fase 9 do roteiro WA)
+
+**Sintoma:** quando lead confirma interesse no Assis (bot WhatsApp), **nenhum handoff acontece pro wizard `/cadastro`**. 5 gaps mapeados pelo Cowork:
+
+1. **Lead nunca vira Cooperado.** Conversa WhatsApp permanece como `LeadWhatsapp` / `ConversaWhatsapp` solto; admin precisa recadastrar manualmente.
+2. **Dados OCR perdidos no caminho.** Lead sobe foto da fatura no Assis → OCR Claude extrai → mas dados ficam só na conversa, não chegam no wizard.
+3. **Cálculo de 20% economia hardcoded** no Assis vs motor real (`motor-proposta.service.ts`). Lead recebe simulação que difere da proposta final → fricção/desconfiança.
+4. **Documentos não pedidos pelo Assis.** Lead chega no wizard sem CNH/comprovante/etc. — wizard pede do zero, lead desiste.
+5. **Assinatura eletrônica sem ponte WA.** Termo de Adesão + Procuração assinados no wizard, mas lead não recebe link de volta no WhatsApp pra acompanhar status.
+
+**Fix sugerido (Cowork — "tudo já existe, é costura"):**
+- 1 endpoint novo `POST /whatsapp/handoff-wizard` em `whatsapp-fluxo-motor` que recebe `conversaId` + `cooperativaId`, gera token JWT temporário + payload `dadosPreCadastro` (incluindo OCR extraído) e retorna URL pro wizard
+- 1 campo/tabela nova pra carregar OCR cross-channel (provavelmente `DadosPreCadastro` model novo OU campo JSON em `LeadWhatsapp`/`ConversaWhatsapp`)
+- 1 leitura no wizard `/cadastro` que aceita `?handoff=<token>` e popula campos via `dadosPreCadastro`
+- 1 step opcional "email concessionária" pro Assis pedir antes do handoff (resolve gap 4 parcialmente)
+
+**Estimativa:** 2-3 dias Code (engloba 4 módulos: whatsapp, motor-proposta, cooperados/service, web/app/cadastro)
+
+**Status:** 📋 Catalogado em 2026-05-19 — desenho visual do fluxo entregue pelo Cowork na sessão. Encaixa em sprint dedicado WA Fase 9 após Sprint 5a Neutro Fio B + Sprint Conformidade.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
