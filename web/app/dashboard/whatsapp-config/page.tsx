@@ -424,7 +424,7 @@ function ModalMensagem({
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent side="top" className="max-h-48 overflow-y-auto">
                   {CATEGORIAS.map((c) => (
                     <SelectItem key={c} value={c}>{c === 'COBRANCA' ? 'COBRANÇA' : c}</SelectItem>
                   ))}
