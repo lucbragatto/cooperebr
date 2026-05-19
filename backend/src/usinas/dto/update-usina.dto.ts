@@ -84,4 +84,8 @@ export class UpdateUsinaDto {
 
   @IsOptional() @IsString() numeroContratoEdp?: string | null;
   @IsOptional() @IsString() dataContratoEdp?: string | null;
+
+  /// Sprint 8 (M14.B) — anotação de classe GD por usina (string, sem enum hard
+  /// até dossiê regulatório fechar). Valores aceitos: 'GD_I', 'GD_II', 'GD_III'.
+  @IsOptional() @IsString() classeGdAnotada?: string | null;
 }
