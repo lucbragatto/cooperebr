@@ -31,6 +31,20 @@ interface FluxoEtapaComModelo {
   modeloMensagem?: { id: string; conteudo: string; nome: string } | null;
 }
 
+/**
+ * Subconjunto da Cooperativa exposto aos templates do Assis.
+ * Carregado uma vez por mensagem recebida (sem N+1: o motor e chamado
+ * 1 vez por mensagem, nao em loop).
+ */
+interface ContextoCooperativa {
+  nome: string;
+  email: string | null;
+  telefone: string | null;
+  cidade: string | null;
+  estado: string | null;
+  tipoParceiro: string;
+}
+
 @Injectable()
 export class WhatsappFluxoMotorService {
   private readonly logger = new Logger(WhatsappFluxoMotorService.name);
@@ -41,15 +55,6 @@ export class WhatsappFluxoMotorService {
     private sender: WhatsappSenderService,
   ) {}
 
-  /**
-   * Processar mensagem recebida usando fluxo dinâmico do banco.
-   * Retorna true se processou, false se deve cair no bot hardcoded (fallback).
-   *
-   * SEGURANÇA MULTI-TENANT: `conversa.cooperativaId` é propagado para
-   * `buscarEtapa()`. Sem ele, o motor só consulta etapas globais
-   * (cooperativaId=null), impedindo que uma conversa do tenant A receba
-   * resposta configurada pelo tenant B.
-   */
   async processarComFluxoDinamico(
     msg: MensagemRecebida,
     conversa: {
@@ -65,31 +70,25 @@ export class WhatsappFluxoMotorService {
 
     const etapa = await this.buscarEtapa(conversa.estado, cooperativaId);
     if (!etapa) {
-      this.logger.debug(`Nenhuma etapa dinâmica para estado "${conversa.estado}" — fallback hardcoded`);
+      this.logger.debug(`Nenhuma etapa dinamica para estado "${conversa.estado}" - fallback hardcoded`);
       return false;
     }
 
     const corpo = (msg.corpo ?? '').trim();
-
-    // Avaliar gatilhos
     const proximoEstado = this.avaliarGatilhos(corpo, etapa.gatilhos);
 
     if (!proximoEstado) {
-      // Nenhum gatilho bateu — o motor não sabe processar, fallback
-      this.logger.debug(`Nenhum gatilho bateu para estado "${conversa.estado}" com corpo "${corpo}" — fallback`);
+      this.logger.debug(`Nenhum gatilho bateu para estado "${conversa.estado}" com corpo "${corpo}" - fallback`);
       return false;
     }
 
-    // Transicionar para próximo estado
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: { estado: proximoEstado },
     });
 
-    // Buscar etapa do próximo estado para enviar mensagem de entrada
     const proximaEtapa = await this.buscarEtapa(proximoEstado, cooperativaId);
     if (proximaEtapa?.modeloMensagemId) {
-      // Modelo precisa também respeitar tenant (não vazar template custom de outra coop)
       const modelo = await this.prisma.modeloMensagem.findFirst({
         where: {
           id: proximaEtapa.modeloMensagemId,
@@ -97,31 +96,22 @@ export class WhatsappFluxoMotorService {
         },
       });
       if (modelo) {
-        const vars = this.extrairVariaveis(conversa);
+        const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+        const vars = this.extrairVariaveis(conversa, cooperativa);
         const texto = this.renderizarTemplate(modelo.conteudo, vars);
         await this.sender.enviarMensagem(msg.telefone, texto);
         await this.modeloMensagem.incrementarUso(modelo.id);
       }
     }
 
-    // Executar ação automática da próxima etapa
     if (proximaEtapa?.acaoAutomatica) {
       await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp);
     }
 
-    this.logger.log(`Motor dinâmico: ${conversa.estado} → ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
+    this.logger.log(`Motor dinamico: ${conversa.estado} -> ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
     return true;
   }
 
-  /**
-   * Buscar etapa ativa pelo estado atual.
-   *
-   * SEGURANÇA MULTI-TENANT:
-   * - `cooperativaId` definido → retorna etapas do tenant OU globais.
-   * - `cooperativaId` undefined → retorna APENAS etapas globais
-   *   (cooperativaId=null). Antes do fix permitia qualquer etapa de
-   *   qualquer tenant, vazando configuração entre cooperativas.
-   */
   private async buscarEtapa(estado: string, cooperativaId?: string): Promise<FluxoEtapaComModelo | null> {
     const where: Record<string, unknown> = { estado, ativo: true };
 
@@ -144,10 +134,6 @@ export class WhatsappFluxoMotorService {
     } as FluxoEtapaComModelo;
   }
 
-  /**
-   * Filtro multi-tenant para leitura (ModeloMensagem) dentro do motor.
-   * Mesma semântica de buscarEtapa.
-   */
   private filtroTenantSomenteLeitura(cooperativaId?: string): Record<string, unknown> {
     if (cooperativaId) {
       return { OR: [{ cooperativaId }, { cooperativaId: null }] };
@@ -155,10 +141,6 @@ export class WhatsappFluxoMotorService {
     return { cooperativaId: null };
   }
 
-  /**
-   * Avaliar gatilhos da etapa contra a mensagem recebida.
-   * Retorna próximo estado ou null se nenhum gatilho bateu.
-   */
   avaliarGatilhos(corpo: string, gatilhos: Gatilho[]): string | null {
     if (!gatilhos || gatilhos.length === 0) return null;
 
@@ -167,7 +149,6 @@ export class WhatsappFluxoMotorService {
     for (const gatilho of gatilhos) {
       const resposta = (gatilho.resposta ?? '').toUpperCase().trim();
       if (resposta === '*') {
-        // Wildcard — qualquer resposta de texto
         if (corpoUpper.length > 0) return gatilho.proximoEstado;
       } else if (corpoUpper === resposta) {
         return gatilho.proximoEstado;
@@ -177,9 +158,6 @@ export class WhatsappFluxoMotorService {
     return null;
   }
 
-  /**
-   * Renderizar template substituindo variáveis {{chave}}.
-   */
   renderizarTemplate(template: string, vars: Record<string, string>): string {
     let texto = template;
     for (const [chave, valor] of Object.entries(vars)) {
@@ -188,54 +166,82 @@ export class WhatsappFluxoMotorService {
     return texto;
   }
 
-  /**
-   * Executar ação automática.
-   */
   private async executarAcao(
     acao: string,
     conversa: { id: string; telefone: string; cooperadoId?: string | null },
-    dados: any,
+    _dados: any,
   ): Promise<void> {
     try {
       switch (acao) {
         case 'CRIAR_LEAD':
-          this.logger.log(`Ação CRIAR_LEAD para conversa ${conversa.id}`);
-          // Lead é criado pelo bot hardcoded no handleConfirmacaoProposta
+          this.logger.log(`Acao CRIAR_LEAD para conversa ${conversa.id}`);
           break;
-
         case 'GERAR_PROPOSTA':
-          this.logger.log(`Ação GERAR_PROPOSTA para conversa ${conversa.id}`);
-          // Proposta é gerada pelo bot hardcoded no handleConfirmacaoDados
+          this.logger.log(`Acao GERAR_PROPOSTA para conversa ${conversa.id}`);
           break;
-
         case 'NOTIFICAR_EQUIPE':
-          this.logger.log(`Ação NOTIFICAR_EQUIPE para conversa ${conversa.id} — telefone: ${conversa.telefone}`);
-          // TODO: integrar com notificação (email, Slack, etc.)
+          this.logger.log(`Acao NOTIFICAR_EQUIPE para conversa ${conversa.id} - telefone: ${conversa.telefone}`);
           break;
-
         default:
-          this.logger.warn(`Ação desconhecida: ${acao}`);
+          this.logger.warn(`Acao desconhecida: ${acao}`);
       }
     } catch (err) {
-      this.logger.error(`Erro ao executar ação "${acao}": ${err.message}`);
+      const message = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.error(`Erro ao executar acao "${acao}": ${message}`);
     }
   }
 
   /**
-   * Extrair variáveis da conversa para substituição em templates.
+   * Carrega subconjunto da Cooperativa para renderizar variaveis de tenant.
+   * Retorna null quando cooperativaId e undefined ou cooperativa nao existe.
+   * Nunca lanca - fallback string vazia em extrairVariaveis.
    */
-  private extrairVariaveis(conversa: { dadosTemp?: any }): Record<string, string> {
+  private async carregarContextoCooperativa(
+    cooperativaId: string | undefined,
+  ): Promise<ContextoCooperativa | null> {
+    if (!cooperativaId) return null;
+
+    try {
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: {
+          nome: true,
+          email: true,
+          telefone: true,
+          cidade: true,
+          estado: true,
+          tipoParceiro: true,
+        },
+      });
+      return coop ?? null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(`Falha ao carregar contexto da cooperativa ${cooperativaId}: ${message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extrai variaveis da conversa + tenant para substituicao em templates.
+   * MULTI-TENANT: variaveis tenant so populadas se cooperativa carregada
+   * com o tenant correto. Ausente -> string vazia (nao vaza dado).
+   */
+  extrairVariaveis(
+    conversa: { dadosTemp?: any },
+    cooperativa?: ContextoCooperativa | null,
+  ): Record<string, string> {
     const dados = conversa.dadosTemp ?? {};
-    const fmt = (v: number) =>
+    const fmt = (v: number): string =>
       v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const resultado = dados.resultado ?? {};
+    const coop = cooperativa ?? null;
 
     return {
       nome: String(dados.titular ?? ''),
       titular: String(dados.titular ?? ''),
       endereco: String(dados.enderecoInstalacao ?? ''),
-      uc: String(dados.numeroUC ?? '—'),
+      uc: String(dados.numeroUC ?? '-'),
       distribuidora: String(dados.distribuidora ?? ''),
       economia: resultado.economiaMensal ? `R$ ${fmt(resultado.economiaMensal)}` : '',
       economiaMensal: resultado.economiaMensal ? fmt(resultado.economiaMensal) : '',
@@ -248,6 +254,14 @@ export class WhatsappFluxoMotorService {
       link: '',
       link_pagamento: '',
       percentual: '',
+      parceiro: coop?.nome ?? '',
+      cooperativa: coop?.nome ?? '',
+      cidade: coop?.cidade ?? '',
+      estado_parceiro: coop?.estado ?? '',
+      email_suporte: coop?.email ?? '',
+      telefone_suporte: coop?.telefone ?? '',
+      tipo_parceiro: coop?.tipoParceiro ?? '',
+      site: '',
     };
   }
 }

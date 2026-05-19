@@ -1,10 +1,11 @@
 import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
 
-describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () => {
+describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () => {
   let service: WhatsappFluxoMotorService;
   const etapaFindFirst = jest.fn();
   const modeloFindFirst = jest.fn();
   const conversaUpdate = jest.fn();
+  const cooperativaFindUnique = jest.fn();
   const enviarMensagem = jest.fn();
   const incrementarUso = jest.fn();
 
@@ -12,6 +13,7 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
     fluxoEtapa: { findFirst: etapaFindFirst },
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
     conversaWhatsapp: { update: conversaUpdate },
+    cooperativa: { findUnique: cooperativaFindUnique },
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
@@ -21,18 +23,21 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
     service = new WhatsappFluxoMotorService(prismaMock, modeloMensagemMock, senderMock);
   });
 
-  describe('avaliarGatilhos() — função pura', () => {
+  // ============================================================
+  // Funcoes puras (Fase 1)
+  // ============================================================
+  describe('avaliarGatilhos() - funcao pura', () => {
     it('Match case-insensitive', () => {
       const r = service.avaliarGatilhos('ok', [{ resposta: 'OK', proximoEstado: 'X' }]);
       expect(r).toBe('X');
     });
 
-    it('Wildcard * casa qualquer texto não-vazio', () => {
+    it('Wildcard * casa qualquer texto nao-vazio', () => {
       const r = service.avaliarGatilhos('qualquer', [{ resposta: '*', proximoEstado: 'X' }]);
       expect(r).toBe('X');
     });
 
-    it('Wildcard * NÃO casa texto vazio', () => {
+    it('Wildcard * NAO casa texto vazio', () => {
       const r = service.avaliarGatilhos('', [{ resposta: '*', proximoEstado: 'X' }]);
       expect(r).toBeNull();
     });
@@ -43,21 +48,24 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
     });
   });
 
-  describe('renderizarTemplate() — função pura', () => {
-    it('Substitui variáveis simples', () => {
-      const r = service.renderizarTemplate('Oi {{nome}}!', { nome: 'João' });
-      expect(r).toBe('Oi João!');
+  describe('renderizarTemplate() - funcao pura', () => {
+    it('Substitui variaveis simples', () => {
+      const r = service.renderizarTemplate('Oi {{nome}}!', { nome: 'Joao' });
+      expect(r).toBe('Oi Joao!');
     });
 
-    it('Mesma variável aparece múltiplas vezes', () => {
+    it('Mesma variavel aparece multiplas vezes', () => {
       const r = service.renderizarTemplate('{{x}}-{{x}}', { x: 'A' });
       expect(r).toBe('A-A');
     });
   });
 
-  describe('processarComFluxoDinamico() — propaga cooperativaId', () => {
-    it('Conversa COM cooperativaId → buscarEtapa usa OR [tenant + null]', async () => {
-      etapaFindFirst.mockResolvedValueOnce(null); // simula sem etapa, retorna false rápido
+  // ============================================================
+  // Isolamento Fase 1 - propagacao de cooperativaId em buscarEtapa
+  // ============================================================
+  describe('processarComFluxoDinamico() - propaga cooperativaId', () => {
+    it('Conversa COM cooperativaId -> buscarEtapa usa OR [tenant + null]', async () => {
+      etapaFindFirst.mockResolvedValueOnce(null);
 
       const conversa = {
         id: 'c1',
@@ -78,7 +86,7 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
       });
     });
 
-    it('Conversa SEM cooperativaId → buscarEtapa filtra cooperativaId: null (NÃO retorna qualquer etapa)', async () => {
+    it('Conversa SEM cooperativaId -> buscarEtapa filtra cooperativaId: null (NAO retorna qualquer etapa)', async () => {
       etapaFindFirst.mockResolvedValueOnce(null);
 
       const conversa = {
@@ -101,15 +109,13 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
       expect(where).not.toHaveProperty('OR');
     });
 
-    it('Modelo de mensagem do próximo estado também respeita escopo tenant', async () => {
-      // 1ª chamada: encontra etapa atual com gatilho
+    it('Modelo de mensagem do proximo estado tambem respeita escopo tenant', async () => {
       etapaFindFirst.mockResolvedValueOnce({
         id: 'e1',
         cooperativaId: 'coop-A',
         gatilhos: [{ resposta: 'OK', proximoEstado: 'PROXIMO' }],
         modeloMensagemId: null,
       });
-      // 2ª chamada: encontra próxima etapa
       etapaFindFirst.mockResolvedValueOnce({
         id: 'e2',
         cooperativaId: 'coop-A',
@@ -122,6 +128,14 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
         conteudo: 'mensagem',
         cooperativaId: 'coop-A',
       });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR',
+        email: null,
+        telefone: null,
+        cidade: null,
+        estado: null,
+        tipoParceiro: 'COOPERATIVA',
+      });
       conversaUpdate.mockResolvedValueOnce({});
 
       await service.processarComFluxoDinamico(
@@ -129,13 +143,252 @@ describe('WhatsappFluxoMotorService — isolamento multi-tenant em runtime', () 
         { id: 'c1', telefone: '+5527981341348', estado: 'MENU', cooperativaId: 'coop-A' },
       );
 
-      // modelo deve ser buscado com filtro tenant
       const where = modeloFindFirst.mock.calls[0][0].where;
       expect(where).toMatchObject({
         id: 'm1',
         OR: [{ cooperativaId: 'coop-A' }, { cooperativaId: null }],
       });
       expect(enviarMensagem).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Fase 2 - Variaveis de tenant em templates
+  // ============================================================
+  describe('extrairVariaveis() - variaveis de tenant', () => {
+    it('Sem cooperativa carregada -> variaveis de tenant retornam string vazia (sem crash)', () => {
+      const vars = service.extrairVariaveis({ dadosTemp: { titular: 'Joao' } }, null);
+      expect(vars.parceiro).toBe('');
+      expect(vars.cooperativa).toBe('');
+      expect(vars.cidade).toBe('');
+      expect(vars.estado_parceiro).toBe('');
+      expect(vars.email_suporte).toBe('');
+      expect(vars.telefone_suporte).toBe('');
+      expect(vars.tipo_parceiro).toBe('');
+      expect(vars.site).toBe('');
+      expect(vars.nome).toBe('Joao');
+    });
+
+    it('Cooperativa undefined (parametro omitido) tambem cai em fallback vazio', () => {
+      const vars = service.extrairVariaveis({ dadosTemp: {} });
+      expect(vars.parceiro).toBe('');
+      expect(vars.cidade).toBe('');
+    });
+
+    it('Cooperativa carregada -> variaveis de tenant populadas corretamente', () => {
+      const vars = service.extrairVariaveis(
+        { dadosTemp: { titular: 'Maria' } },
+        {
+          nome: 'CoopereBR',
+          email: 'contato@cooperebr.com.br',
+          telefone: '27999999999',
+          cidade: 'Vitoria',
+          estado: 'ES',
+          tipoParceiro: 'COOPERATIVA',
+        },
+      );
+      expect(vars.parceiro).toBe('CoopereBR');
+      expect(vars.cooperativa).toBe('CoopereBR');
+      expect(vars.cidade).toBe('Vitoria');
+      expect(vars.estado_parceiro).toBe('ES');
+      expect(vars.email_suporte).toBe('contato@cooperebr.com.br');
+      expect(vars.telefone_suporte).toBe('27999999999');
+      expect(vars.tipo_parceiro).toBe('COOPERATIVA');
+    });
+
+    it('Campos opcionais null da Cooperativa viram string vazia (nao literal "null")', () => {
+      const vars = service.extrairVariaveis(
+        { dadosTemp: {} },
+        {
+          nome: 'Cooperativa X',
+          email: null,
+          telefone: null,
+          cidade: null,
+          estado: null,
+          tipoParceiro: 'CONSORCIO',
+        },
+      );
+      expect(vars.parceiro).toBe('Cooperativa X');
+      expect(vars.cidade).toBe('');
+      expect(vars.email_suporte).toBe('');
+      expect(vars.telefone_suporte).toBe('');
+      expect(vars.cidade).not.toBe('null');
+      expect(vars.email_suporte).not.toBe('null');
+    });
+
+    it('ISOLAMENTO: {{parceiro}} de tenant A NUNCA aparece em template renderizado pra tenant B', () => {
+      const template = 'Ola {{nome}}, fale com {{parceiro}}!';
+
+      const varsTenantA = service.extrairVariaveis(
+        { dadosTemp: { titular: 'Joao' } },
+        {
+          nome: 'CoopereBR',
+          email: null,
+          telefone: null,
+          cidade: 'Vitoria',
+          estado: 'ES',
+          tipoParceiro: 'COOPERATIVA',
+        },
+      );
+      const textoA = service.renderizarTemplate(template, varsTenantA);
+      expect(textoA).toBe('Ola Joao, fale com CoopereBR!');
+
+      const varsTenantB = service.extrairVariaveis(
+        { dadosTemp: { titular: 'Maria' } },
+        {
+          nome: 'Hangar Academia',
+          email: null,
+          telefone: null,
+          cidade: 'Vila Velha',
+          estado: 'ES',
+          tipoParceiro: 'ASSOCIACAO',
+        },
+      );
+      const textoB = service.renderizarTemplate(template, varsTenantB);
+      expect(textoB).toBe('Ola Maria, fale com Hangar Academia!');
+
+      expect(varsTenantB.parceiro).not.toContain('CoopereBR');
+      expect(varsTenantA.parceiro).not.toContain('Hangar');
+    });
+  });
+
+  describe('processarComFluxoDinamico() - carregamento de cooperativa', () => {
+    it('Conversa COM cooperativaId -> carrega cooperativa 1x e injeta nas variaveis renderizadas', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: 'coop-A',
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        conteudo: 'Oi {{nome}}, bem-vindo a {{parceiro}}!',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR',
+        email: null,
+        telefone: null,
+        cidade: null,
+        estado: null,
+        tipoParceiro: 'COOPERATIVA',
+      });
+      conversaUpdate.mockResolvedValueOnce({});
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'MENU',
+          cooperativaId: 'coop-A',
+          dadosTemp: { titular: 'Luciano' },
+        },
+      );
+
+      expect(cooperativaFindUnique).toHaveBeenCalledTimes(1);
+      expect(cooperativaFindUnique).toHaveBeenCalledWith({
+        where: { id: 'coop-A' },
+        select: expect.objectContaining({
+          nome: true,
+          email: true,
+          telefone: true,
+          cidade: true,
+          estado: true,
+          tipoParceiro: true,
+        }),
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        'Oi Luciano, bem-vindo a CoopereBR!',
+      );
+    });
+
+    it('Conversa SEM cooperativaId -> nao carrega cooperativa; {{parceiro}} renderiza vazio (fallback)', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: null,
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: null,
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        conteudo: 'Oi {{nome}}, fale com {{parceiro}}',
+        cooperativaId: null,
+      });
+      conversaUpdate.mockResolvedValueOnce({});
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'MENU',
+          cooperativaId: null,
+          dadosTemp: { titular: 'Anonimo' },
+        },
+      );
+
+      expect(cooperativaFindUnique).not.toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        'Oi Anonimo, fale com ',
+      );
+    });
+
+    it('Cooperativa referenciada nao existe (id quebrado) -> fallback vazio, motor nao crasha', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-zumbi',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'PROX' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: 'coop-zumbi',
+        modeloMensagemId: 'm1',
+        gatilhos: [],
+        acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        conteudo: 'Oi {{nome}}, parceiro: {{parceiro}}',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce(null);
+      conversaUpdate.mockResolvedValueOnce({});
+
+      await expect(
+        service.processarComFluxoDinamico(
+          { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
+          {
+            id: 'c1',
+            telefone: '+5527981341348',
+            estado: 'MENU',
+            cooperativaId: 'coop-zumbi',
+            dadosTemp: { titular: 'Teste' },
+          },
+        ),
+      ).resolves.toBe(true);
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        'Oi Teste, parceiro: ',
+      );
     });
   });
 });
