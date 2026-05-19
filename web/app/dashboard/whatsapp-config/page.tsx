@@ -976,39 +976,29 @@ function ModalEtapa({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Mensagem ao entrar</Label>
-              <Select value={modeloMensagemId} onValueChange={(v) => setModeloMensagemId(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <span className="truncate">
-                    {modeloMensagemId
-                      ? (modelos.find((m) => m.id === modeloMensagemId)?.nome ?? modeloMensagemId)
-                      : 'Nenhuma'}
-                  </span>
-                </SelectTrigger>
-                <SelectContent className="max-h-48 overflow-y-auto">
-                  <SelectItem value="">Nenhuma</SelectItem>
-                  {modelos.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={modeloMensagemId}
+                onChange={(e) => setModeloMensagemId(e.target.value)}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Nenhuma</option>
+                {modelos.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nome}</option>
+                ))}
+              </select>
             </div>
             <div>
               <Label>Mensagem follow-up</Label>
-              <Select value={modeloFollowupId} onValueChange={(v) => setModeloFollowupId(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <span className="truncate">
-                    {modeloFollowupId
-                      ? (modelos.find((m) => m.id === modeloFollowupId)?.nome ?? modeloFollowupId)
-                      : 'Nenhuma'}
-                  </span>
-                </SelectTrigger>
-                <SelectContent className="max-h-48 overflow-y-auto">
-                  <SelectItem value="">Nenhuma</SelectItem>
-                  {modelos.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={modeloFollowupId}
+                onChange={(e) => setModeloFollowupId(e.target.value)}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Nenhuma</option>
+                {modelos.map((m) => (
+                  <option key={m.id} value={m.id}>{m.nome}</option>
+                ))}
+              </select>
             </div>
           </div>
 
