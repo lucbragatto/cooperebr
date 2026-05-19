@@ -1,5 +1,5 @@
 # MAPA DE INTEGRIDADE DO SISTEMA — COOPEREBR (SISGD)
-**Última atualização:** 2026-05-18 noite — **Sub-Fase 1 Sprint Listas Concessionária COMPLETA** (M10 Fases 1-3 + M12 Fase 4 + M13 Fase 5). Trigger ativação automática Contrato + listener WA/email 3 camadas defense in depth + cobertura testes 95-100% + bug crítico D-novo-N RESOLVIDO (NODE_ENV inútil como discriminador, fix 3 camadas: AMBIENTE_REAL + cooperado.ambienteTeste + pattern detection).
+**Última atualização:** 2026-05-18 noite tarde — **Sub-Fase 1 Listas Concessionária COMPLETA + Sprint 8 / Bloco E Realocação Multi-Usina COMPLETO** (M10 Fases 1-3 + M12 Fase 4 + M13 Fase 5 + M14.A backend + M14.B frontend/cron/finalização). Engine de Otimização Proativa com greedy + 4 validadores (concentração 25% / distribuidora / classe GD / estabilidade 90d) + painel 3 abas + cron mensal dia 5. Resolve causa raiz caso Exfishes (D-30B avanço). Trigger ativação automática Contrato + listener WA/email 3 camadas defense in depth + cobertura testes 90-100% + bug crítico D-novo-N RESOLVIDO + saneamento D-novo-H parcial (2 usinas ANUAL → MENSAL).
 
 ## Matriz executiva (18/05/2026 noite)
 
@@ -15,6 +15,8 @@
 | Crons proativos (lembrete docs, alerta admin, lembrete EDP) | 🔴 | 🟢 | Bloco D 17/05 — módulo `notificacoes-proativas/` + 3 `@Cron` + 3 templates email + whitelist guard. Smoke 9/9 PASS (commits `fd902af` + notificações) |
 | **Listas Concessionária E2E** | 🔴 | 🟢 | **Sub-Fase 1 COMPLETA 17-18/05** — fluxo 9 estados RASCUNHO→HOMOLOGADO_TOTAL + trigger ativação automática + listener WA/email 3 camadas. 11 endpoints multi-tenant + 13 cenários trigger + 133 specs Jest 95-100% cobertura |
 | **Discriminador dev/prod (`isAmbienteReal`)** | 🔴 | 🟢 | **D-novo-N RESOLVIDO 18/05** — `NODE_ENV` inútil (PM2 força production em dev). Fix 3 camadas defense in depth aplicado projeto inteiro. **Diretriz INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod, sempre `isAmbienteReal()` |
+| **Realocação Multi-Usina (Engine Otimização Proativa)** | 🔴 | 🟢 | **Sprint 8 / Bloco E COMPLETO 18/05** — `AlocacaoEngineService` greedy + 4 validadores (concentração 25% D-30A / distribuidora ANEEL / classeGd D-30B / estabilidade 90d) + 11 endpoints + painel 3 abas (`/dashboard/parceiro/alocacao`) + cron mensal dia 5 03:00 BRT. Schema delta: 2 models novos + 2 enums + `Contrato.classeGdAplicada` (Caminho B). 50 specs (cobertura 90.98%). Saneamento 2 usinas ANUAL embutido (Solar Guarapari + Solar Serra → MENSAL). |
+| **Convenção MENSAL dados (D-novo-H parcial)** | 🔴 | 🟡 | **SANEAMENTO APLICADO** dentro Sprint 8 — Solar Guarapari 600.000→50.000 + Solar Serra 480.000→40.000 kWh/mês (0 cooperados afetados). Refator de código (`contratos.service.ts` + `migracoes-usina.service.ts` + UI labels) continua aberto pra sprint dedicado. |
 
 
 **Data da auditoria inicial:** 2026-04-24
@@ -61,6 +63,13 @@ Sprint 10 destravou problemas silenciosos que bloqueavam o sistema há meses:
 - **D-30N (AuditLog)** → ✅ RESOLVIDO (Fase 2F).
 - **D-50/.2 (cobranças sem cooperativaId)** → ✅ RESOLVIDOS na maratona (commits anteriores).
 - **B1 cross-talk** → ✅ RESOLVIDO (mitigado server-side via 2A-2E + UI legacy deletada via 2H).
+
+## GAPS RESOLVIDOS EM 18/05/2026 noite tarde (Sprint 8 / Bloco E — Realocação Multi-Usina COMPLETO)
+
+- **M14.A — Backend Engine de Otimização (18/05)** — schema delta (`Contrato.classeGdAplicada` + 2 models PoliticaAlocacao + AlocacaoOtima + 2 enums), 11 endpoints multi-tenant `/alocacao` + `/politicas-alocacao` com `@AuditLog`, algoritmo greedy + busca local (swap-2 placeholder), 4 validadores (concentração 25% / distribuidora / classeGd / estabilidade 90d), seed 3 políticas padrão SISGD × 3 cooperativas = 9 entries. Saneamento embutido das 2 usinas ANUAL legado (Solar Guarapari 600k→50k + Solar Serra 480k→40k via `sanear-usinas-anual-sprint8.ts`, 0 cooperados afetados). Cobertura 90.98% (50 specs). Commits `473d0ee` + `39ef190` + `2ffed62` + `6663eb2`.
+- **M14.B — Frontend painel + Cron + Finalização (18/05)** — `/dashboard/parceiro/alocacao` com 3 abas (Estado atual + classeGdAnotada inline Tipo A / Sugestões / Políticas CRUD) + tela detalhe `/dashboard/parceiro/alocacao/[id]` (Tipo B padrão UX) com aprovação caso-a-caso. Cron `@Cron('0 3 5 * *')` em `AlocacaoJob` itera cooperativas, cria notificação `ALOCACAO_SUGERIDA` quando economia proxy ≥ threshold. Seed `classeGdAnotada` em 3 usinas CoopereBR (cooperebr1 + cooperebr2 + Solar Norte = GD_II). DTO update-usina ampliado.
+- **D-30B (caso Exfishes R$ 310k/ano)** → 🟡 **AVANÇO PARCIAL** — `validarClasseGd` bloqueia mudança de classe quando `Contrato.classeGdAplicada` + `Usina.classeGdAnotada` populados. Bloqueio total aguarda Sprint 5a Neutro entregar UI input + backfill manual.
+- **D-novo-H (convenção MENSAL)** → 🟡 **DADOS RESOLVIDOS** — saneamento 2 usinas legado aplicado dentro Sprint 8. Refator técnico de código continua aberto.
 
 ## GAPS RESOLVIDOS EM 17-18/05/2026 (Sub-Fase 1 Sprint Listas Concessionária COMPLETA)
 

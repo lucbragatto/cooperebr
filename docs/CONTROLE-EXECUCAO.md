@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-18 — Marcos M11 + M12 entregues na MESMA sessão Code**. M11 (manhã/tarde): QA Completo via subagent + Bug Fix Sprint pós-QA (5 commits `c10f153..9444f50` + stash named reformat órfão 206 arquivos). M12 (tarde/noite): Sub-Fase 1 Fase 4 — trigger ativação automática Contrato + listener WA/email cooperado homologado (3 commits `4e87874+e1bf552+acc5168`). **Bug crítico D-novo-N P0 descoberto e RESOLVIDO no smoke:** `ecosystem.config.cjs` força `NODE_ENV=production`, invalidando TODOS os checks `NODE_ENV !== 'production'` do projeto (whitelist LGPD, guards WA/Email). Fix defense in depth 3 camadas: `isAmbienteReal()` + `cooperado.ambienteTeste` + pattern detection `ehEmailFake`/`ehTelefoneFake`. Smoke re-executado ✅ Luciano. **Diretriz nova INEGOCIÁVEL:** NUNCA usar `NODE_ENV` pra discriminar dev/prod — sempre `isAmbienteReal()`. Sub-Fase 1 Fase 5 (tests Jest + docs, 3-5h) pendente pra sessão futura.
+> Última atualização: **2026-05-18 — Maratona M11 + M12 + M13 + M14 (Sub-Fase 1 Listas Concessionária COMPLETA + Sprint 8 / Bloco E Realocação Multi-Usina COMPLETO)**. 19 commits no dia (`c10f153..9d3d2dd` + fechamento). M11 QA + Bug Fix; M12 trigger ativação + 3 camadas D-novo-N; M13 specs Jest 183 cenários + docs operacionais Sub-Fase 1; M14.A backend engine greedy + 4 validadores + 11 endpoints + saneamento 2 usinas ANUAL; M14.B frontend painel 3 abas + cron mensal dia 5 + seed classeGd. Sistema avançou ~70% → ~80% rumo a produção. **Próximo marco: M15 — Sprint 5a Neutro (Fio B completo, Caminho B aprovado).** Detalhe: `docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md`.
 
 ---
 
@@ -407,7 +407,19 @@ Opcional (se for atacar Fase C.2 direto):
 Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
-Sessão 18/05 entregou M11 (QA Completo + Bug Fix Sprint) + M12 (Sub-Fase 1 Fase 4 — trigger ativação Contrato + listener WA/email 3 camadas defense in depth) na MESMA janela Code (9 commits no dia: c10f153, de8683e, 098f0be, a7e2b7f, 9444f50, e59a8f4, 4e87874, e1bf552, acc5168 + fechamento M12). Bug crítico D-novo-N P0 RESOLVIDO durante smoke (ecosystem.config.cjs força NODE_ENV=production invalidando whitelist LGPD inteira). Próxima sessão Code arranca Sub-Fase 1 Fase 5 (M13) — tests Jest do envio-lista service + cooperado-homologado listener (mocks AMBIENTE_REAL/ambienteTeste/patterns fake) + docs operacionais + smoke regression. Sub-Fase 1 fecha totalmente após M13. Pré-requisito Fase 5: ler `docs/sessoes/2026-05-18-sub-fase-1-fase-4-trigger-ativacao.md` + memória `falha_regra_contatos_teste_18_05.md` antes de escrever tests. Sprint Housekeeping (~3-5h) carry-over: reformat órfão stashed + LF/CRLF + 15 scripts untracked + 13 branches órfãs. NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal().
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents disponíveis.
+   Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
+
+2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
+   Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
+   Esperado pós-fechamento M13+M14: working tree limpo, último commit é o de fechamento conjunto.
+
+PASSO 1 — Frase de retomada principal:
+
+Sessão 18/05 entregou maratona M11 + M12 + M13 + M14 em janela Code única (19 commits c10f153..9d3d2dd + fechamento). M11 QA via subagent + Bug Fix Sprint; M12 Sub-Fase 1 Fase 4 trigger ativação Contrato + listener WA/email 3 camadas defense in depth + Bug D-novo-N P0 RESOLVIDO; M13 specs Jest baseline 183 cenários (envio-lista 133 + alocacao 50) + docs Sub-Fase 1 100% + smoke regression Luciano OK 20:33; M14 Sprint 8 / Bloco E Realocação Multi-Usina COMPLETO — backend engine greedy + 4 validadores (concentração 25% D-30A / distribuidora ANEEL / classeGd D-30B / estabilidade 90d) + 11 endpoints multi-tenant + painel /dashboard/parceiro/alocacao 3 abas (Estado atual inline Tipo A + Sugestões + Políticas) + tela detalhe Tipo B + cron mensal dia 5 03:00 BRT + saneamento 2 usinas ANUAL (Solar Guarapari/Solar Serra ÷12) + seed classeGdAnotada 3 usinas CoopereBR GD_II + cobertura 90.98%. Próxima sessão Code arranca **Sprint 5a Neutro (Fio B completo, Caminho B aprovado 18/05)** — schema Cobranca.fioB + RegrasFioB 2024-2029 + UI input classeGdAplicada no Contrato + cron progressão anual + substituir custo proxy do Engine Sprint 8 por R$ real. Estimativa: 3-5 dias Code dedicado. Spec base `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md` + memória `decisao_caminho_b_fio_b_neutro_18_05.md`. Pré-requisito: ler `docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md` + memória do Caminho B antes de implementar. Carry-overs: Sprint Housekeeping ~3-5h + HTML jornada Sugestão #6 + D-novo-H refator técnico ~6-8h + smoke E2E Sprint 8 via UI pendente Luciano. Diretrizes inegociáveis ativas: NUNCA NODE_ENV pra discriminar dev/prod (sempre isAmbienteReal); 3 camadas defense in depth obrigatórias em listener/service comunicação real; convenção MENSAL oficial; padrão UX dual Tipo A/B/C; não trabalhar paralelo com claude.ai; git status --short ANTES de commitar.
 ```
 
 ---
