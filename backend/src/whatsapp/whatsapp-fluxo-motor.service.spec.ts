@@ -6,6 +6,8 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const modeloFindFirst = jest.fn();
   const conversaUpdate = jest.fn();
   const cooperativaFindUnique = jest.fn();
+  const cooperadoFindUnique = jest.fn();
+  const cooperadoUpdate = jest.fn();
   const enviarMensagem = jest.fn();
   const incrementarUso = jest.fn();
 
@@ -14,6 +16,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
     conversaWhatsapp: { update: conversaUpdate },
     cooperativa: { findUnique: cooperativaFindUnique },
+    cooperado: { findUnique: cooperadoFindUnique, update: cooperadoUpdate },
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
@@ -796,6 +799,144 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       });
       expect(rB.mensagensEnviadas[0].texto).toBe('Parceiro: Hangar Academia');
       expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
+    });
+  });
+
+  // ============================================================
+  // R5 (20/05) — Acao ENVIAR_LINK_INDICACAO (Convidar amigo)
+  // Testada via processarComFluxoDinamico() (acao roda na transicao para
+  // etapa com acaoAutomatica='ENVIAR_LINK_INDICACAO').
+  // ============================================================
+  describe('executarAcao(ENVIAR_LINK_INDICACAO) - via processarComFluxoDinamico', () => {
+    const baseConversa = (over: Record<string, unknown> = {}) => ({
+      id: 'conv-1',
+      telefone: '+5527981341348',
+      estado: 'MENU',
+      cooperativaId: 'coop-A',
+      ...over,
+    });
+
+    const setupTransicaoParaEnvioConvite = () => {
+      // etapa atual MENU com gatilho "4" -> ENVIAR_CONVITE
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-menu', cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: '4', proximoEstado: 'ENVIAR_CONVITE' }],
+        modeloMensagemId: null,
+      });
+      // proxima etapa ENVIAR_CONVITE com acaoAutomatica
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-convite', cooperativaId: null,
+        gatilhos: [], modeloMensagemId: null,
+        acaoAutomatica: 'ENVIAR_LINK_INDICACAO',
+      });
+      conversaUpdate.mockResolvedValueOnce({});
+    };
+
+    it('R5 SEM cooperadoId -> manda mensagem de cadastro, nao busca cooperado, nao gera codigo', async () => {
+      setupTransicaoParaEnvioConvite();
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+        baseConversa({ cooperadoId: null }),
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('precisa ser cooperado'),
+      );
+      expect(cooperadoFindUnique).not.toHaveBeenCalled();
+      expect(cooperadoUpdate).not.toHaveBeenCalled();
+    });
+
+    it('R5 COM cooperadoId + codigoIndicacao existente -> envia link com codigo ja salvo', async () => {
+      setupTransicaoParaEnvioConvite();
+      cooperadoFindUnique.mockResolvedValueOnce({
+        id: 'coop-luciano', codigoIndicacao: 'ABCD1234', nomeCompleto: 'Luciano',
+      });
+
+      const envBackup = process.env.FRONTEND_URL;
+      process.env.FRONTEND_URL = 'https://app.cooperebr.com.br';
+      try {
+        await service.processarComFluxoDinamico(
+          { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+          baseConversa({ cooperadoId: 'coop-luciano' }),
+        );
+      } finally {
+        if (envBackup === undefined) delete process.env.FRONTEND_URL;
+        else process.env.FRONTEND_URL = envBackup;
+      }
+
+      expect(cooperadoFindUnique).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano' },
+        select: { id: true, codigoIndicacao: true, nomeCompleto: true },
+      });
+      // codigo ja existe -> NAO gera novo, NAO update
+      expect(cooperadoUpdate).not.toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('https://app.cooperebr.com.br/entrar?ref=ABCD1234'),
+      );
+    });
+
+    it('R5 COM cooperadoId + codigoIndicacao null -> gera 8 chars A-Z0-9, persiste, envia link', async () => {
+      setupTransicaoParaEnvioConvite();
+      cooperadoFindUnique.mockResolvedValueOnce({
+        id: 'coop-luciano', codigoIndicacao: null, nomeCompleto: 'Luciano',
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+        baseConversa({ cooperadoId: 'coop-luciano' }),
+      );
+
+      expect(cooperadoUpdate).toHaveBeenCalledTimes(1);
+      const updateCall = cooperadoUpdate.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: 'coop-luciano' });
+      expect(typeof updateCall.data.codigoIndicacao).toBe('string');
+      expect(updateCall.data.codigoIndicacao).toMatch(/^[A-Z0-9]{8}$/);
+
+      // link enviado contem o codigo recem-gerado
+      const codigoGerado = updateCall.data.codigoIndicacao as string;
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining(`/entrar?ref=${codigoGerado}`),
+      );
+    });
+
+    it('R5 cooperadoId aponta pra cooperado inexistente -> NAO envia, loga warn', async () => {
+      setupTransicaoParaEnvioConvite();
+      cooperadoFindUnique.mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+        baseConversa({ cooperadoId: 'cooperado-zumbi' }),
+      );
+
+      expect(enviarMensagem).not.toHaveBeenCalled();
+      expect(cooperadoUpdate).not.toHaveBeenCalled();
+    });
+
+    it('R5 ZERO SIDE EFFECT em simular(): acao reportada mas NAO executada', async () => {
+      // simular() retorna acaoAutomatica no output mas nao chama executarAcao
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: '4', proximoEstado: 'ENVIAR_CONVITE' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2', cooperativaId: null, nome: 'Convite', estado: 'ENVIAR_CONVITE',
+        gatilhos: [], modeloMensagemId: null,
+        acaoAutomatica: 'ENVIAR_LINK_INDICACAO',
+      });
+
+      const r = await service.simular({
+        mensagem: '4', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.acaoAutomatica).toBe('ENVIAR_LINK_INDICACAO');
+      // simular nao chama executarAcao -> nao busca cooperado, nao envia, nao persiste
+      expect(cooperadoFindUnique).not.toHaveBeenCalled();
+      expect(cooperadoUpdate).not.toHaveBeenCalled();
+      expect(enviarMensagem).not.toHaveBeenCalled();
     });
   });
 

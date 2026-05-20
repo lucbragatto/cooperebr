@@ -191,6 +191,9 @@ export class WhatsappFluxoMotorService {
         case 'NOTIFICAR_EQUIPE':
           this.logger.log(`Acao NOTIFICAR_EQUIPE para conversa ${conversa.id} - telefone: ${conversa.telefone}`);
           break;
+        case 'ENVIAR_LINK_INDICACAO':
+          await this.executarEnviarLinkIndicacao(conversa);
+          break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
       }
@@ -198,6 +201,71 @@ export class WhatsappFluxoMotorService {
       const message = err instanceof Error ? err.message : 'erro desconhecido';
       this.logger.error(`Erro ao executar acao "${acao}": ${message}`);
     }
+  }
+
+  /**
+   * R5 (20/05) — Acao ENVIAR_LINK_INDICACAO.
+   * Cabea o fluxo "Convidar amigo" do bot dinamico (estado ENVIAR_CONVITE).
+   * - Se a conversa nao tem cooperadoId, manda mensagem amigavel de cadastro.
+   * - Se tem, busca/gera codigoIndicacao de 8 chars (mesmo padrao do
+   *   whatsapp-bot.service.ts:720) e envia o link /entrar?ref=<codigo>.
+   * - NAO injeta whatsapp-bot.service nem whatsapp-mlm.service — bot ja depende
+   *   do motor, seria dependencia circular. So usa Prisma + Sender que ja estao
+   *   injetados.
+   * - simular() NAO chama executarAcao — esta acao roda apenas no bot real
+   *   (processarComFluxoDinamico). No simulador, a acao aparece em
+   *   "Acoes reportadas" sem efetivar nada.
+   */
+  private async executarEnviarLinkIndicacao(
+    conversa: { id: string; telefone: string; cooperadoId?: string | null },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para convidar amigos voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui pra obter seu link personalizado!',
+      );
+      this.logger.log(
+        `ENVIAR_LINK_INDICACAO: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    const cooperado = await this.prisma.cooperado.findUnique({
+      where: { id: conversa.cooperadoId },
+      select: { id: true, codigoIndicacao: true, nomeCompleto: true },
+    });
+    if (!cooperado) {
+      this.logger.warn(
+        `ENVIAR_LINK_INDICACAO: cooperadoId ${conversa.cooperadoId} nao encontrado no banco`,
+      );
+      return;
+    }
+
+    let codigo = cooperado.codigoIndicacao;
+    if (!codigo) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      codigo = Array.from(
+        { length: 8 },
+        () => chars[Math.floor(Math.random() * chars.length)],
+      ).join('');
+      await this.prisma.cooperado.update({
+        where: { id: cooperado.id },
+        data: { codigoIndicacao: codigo },
+      });
+      this.logger.log(
+        `ENVIAR_LINK_INDICACAO: codigoIndicacao gerado para cooperado ${cooperado.id} -> ${codigo}`,
+      );
+    }
+
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${baseUrl}/entrar?ref=${codigo}`;
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `🎁 Seu link de indicacao personalizado:\n\n${link}\n\nCompartilhe com amigos, familiares e colegas! Quando seu indicado pagar a primeira fatura, voce recebe seu beneficio automaticamente.`,
+    );
+    this.logger.log(
+      `ENVIAR_LINK_INDICACAO: link enviado para ${conversa.telefone} (codigo=${codigo})`,
+    );
   }
 
   private async carregarContextoCooperativa(
