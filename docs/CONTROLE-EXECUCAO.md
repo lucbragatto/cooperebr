@@ -1,7 +1,44 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-19 noite — D-novo-R fix motor dinâmico P1 produção + Simulador UX Fases A/B/C**. 4 commits (`a0e0f06` fix buscarEtapa() prioriza tenant sobre global + `b0a92c8` Fase A+B painel etapa em uso + botão ▶ Testar em cada etapa + `483fb2b` Fase C botão ▶ Pré-visualizar em modelo + fechamento). 39/39 specs verdes whatsapp-fluxo-motor (era 27). Falha catalogada: conflito numeração D-novo-Q (Decisão 14 violada) corrigido — meu fix vira D-novo-R, D-novo-Q ORIGINAL (Contatos Teste persistentes) catalogado formalmente em débitos pela primeira vez. **Próximo marco mantido: M15 — Sprint 5a Neutro Fio B (3-5 dias Code).** Detalhe: `docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md`.
+> Última atualização: **2026-05-20 — M16 Bloco UX Simulador WhatsApp + Saneamento Fluxo do Bot**. 9 commits empacotados (de91302..0a94aac) + commit fechamento. Sub-débito UX + 6 fixes (R2/R3/R4/R5/R1/R6) + 2 OBS revisão + relatório completo do banco de mensagens/fluxo. 56/56 specs verdes whatsapp-fluxo-motor (era 27 ontem). Estado pós-saneamento: zero estados-destino órfãos, zero hardcodes "CoopereBR", zero modelos duplicados. **Próximo marco mantido: M15 — Sprint 5a Neutro Fio B (3-5 dias Code).** Detalhe: `docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md`.
+
+---
+
+## ONDE PARAMOS — 20/05/2026 (Code — M16 UX Simulador + Saneamento Fluxo do Bot)
+
+### Marcos entregues nesta sessão (9 commits)
+- **Sub-débito UX simulador RESOLVIDO** (`de91302`) — bolha bot inicial com mensagem da etapa + painel "Respostas que o bot aceita" + atalhos clicáveis abaixo do input. Elimina "digitei e não sei o que aconteceu".
+- **R2 RESOLVIDO** (`e9e039c`) — 2 modelos com hardcode "CoopereBR" trocados por `{{parceiro}}` no banco + seed alinhado.
+- **R3 RESOLVIDO** (`c9ad444` + resíduo `c51651d`) — botão ▶ da lista de etapas passa `etapa.id` agora; backend `etapaIdForcado` com `findFirst {id, OR tenant|null}`. Resolve "3 menus iguais". Resíduo: id vale até a 1ª transição (não consome no ping).
+- **R4 RESOLVIDO** (`c9ad444`) — simulador avisa explicitamente ao transicionar pra estado sem etapa ativa ("no WhatsApp real cairia no fluxo hardcoded").
+- **R5 RESOLVIDO** (`9ed2220` + `fa7ad66` + `f486efd`) — "Convidar amigo" no fluxo dinâmico. Ação `ENVIAR_LINK_INDICACAO` no motor + etapa GLOBAL nova + gatilho 4 cabeado em Entrada Dinâmica TENANT e Menu Principal GLOBAL. **Hardening OBS 1:** findFirst com cooperativaId (multi-tenant). **OBS 2:** modelo curto "Beleza! Vou te enviar 👇" + ação envia só link+CTA (sem redundância).
+- **R1 Saneamento RESOLVIDO** (`db4605c`) — 4 etapas inativas duplicadas DELETADAS (ordens 8/9/10/11, dump preservado). Confirmado ZERO modelos duplicados no banco (falso positivo do relatório anterior).
+- **R6 Saneamento RESOLVIDO** (`0a94aac`) — 5 etapas órfãs REATIVADAS + 1 modelo novo (`aguardando_dispositivo_email`). ZERO estados-destino órfãos pós-saneamento.
+- **Relatório completo** `docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md` — 320 linhas em linguagem humana, 6 seções (Banco / Fluxo / Mapa / Faltando / Repetido / Sugestões) + síntese. Untracked → empacotado no commit fechamento.
+
+### Validação
+- **56/56 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 27 no início ontem)
+- Backend `nest build` limpo em todas as rodadas, frontend `tsc --noEmit` limpo
+- PM2 restartado 4x sem erros
+- Scripts de dados rodaram com ANTES/DEPOIS visível e idempotentes
+- `diag-fluxo-bot.ts` confirma: 25 etapas, 13 ATIVAS, ZERO estados-destino órfãos
+
+### Pendências carry-over (sub-débitos catalogados pra sprint dedicada futura)
+- Menu Cooperado opções 1/2/5 viram loop (Ver créditos / Ver fatura / Indicar amigo) — campo `acao` em gatilho não é processado pelo motor
+- Atualizar Contrato — 4 opções voltam ao menu sem ação real
+- Atualizar Cadastro — 4 estados-destino não existem
+- Cadastro por Proxy — 4 etapas inativas sem modelo
+- NPS — gatilhos 0-10 ausentes
+- MENU_FATURA / MENU_INADIMPLENTE — decisão produto
+- Variável `{{site}}` retorna vazio (modelo `ajuda`)
+- 2 etapas ATIVAS duplicadas em INICIAL (mortas pro CoopereBR, perigosas pra parceiro novo)
+- **D-novo-Q Contatos Teste persistentes** (6-8h Code)
+- **Sprint Housekeeping** (~3-5h)
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 20/05 fechamento M16).
 
 ---
 
@@ -77,20 +114,36 @@
 
 ### Última sessão
 
+- **Quando:** 20/05/2026 (Code — M16 UX Simulador + Saneamento Fluxo do Bot)
+- **Tipo:** Code (sub-débito UX simulador + investigação ampla 4 problemas relatados + 6 fixes R1-R6 + 2 OBS revisão + relatório completo banco mensagens/fluxo)
+- **Resultado:**
+  - **Sub-débito UX simulador RESOLVIDO** — bolha bot inicial + painel "Respostas que o bot aceita" + atalhos clicáveis. Backend renderiza `mensagemEtapaAtual`; resumo da etapa expõe `gatilhos`.
+  - **R2 — hardcode "CoopereBR" eliminado** em 2 modelos (`menu_principal`, `nps_aguardando_nota`) + seed alinhado em 4 pontos.
+  - **R3 — botão ▶ testa etapa exata** via `etapaIdForcado` no SimulacaoInput. Resolve "3 menus iguais". Backend `findFirst {id, OR tenant|null}` (seguro). Resíduo: id vale até a 1ª transição, não consome no ping.
+  - **R4 — `avisoTransicao`** quando bot transiciona pra estado sem etapa ativa. Elimina "bot mudo".
+  - **R5 — "Convidar amigo" cabeado no dinâmico:** ação `ENVIAR_LINK_INDICACAO` no motor + etapa GLOBAL nova `ENVIAR_CONVITE` + gatilho 4 em Entrada Dinâmica e Menu Principal. **OBS 1:** hardening multi-tenant `findFirst({id, cooperativaId})`. **OBS 2:** modelo curto "Beleza! Vou te enviar 👇" + ação envia só link+CTA (sem redundância).
+  - **R1 Saneamento:** 4 etapas inativas duplicadas DELETADAS (ordens 8/9/10/11). Confirmado ZERO modelos duplicados (relatório anterior tinha falso positivo).
+  - **R6 Saneamento:** 5 etapas órfãs REATIVADAS + 1 modelo novo (`aguardando_dispositivo_email`). Pós-saneamento: ZERO estados-destino órfãos.
+  - **Relatório completo** `docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md` (320 linhas, 6 seções) — banco + fluxo + mapa + faltando + repetido + sugestões em linguagem humana.
+  - **56/56 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 27 ontem): +3 sub-débito UX + 3 R4 + 4 R3 + 5 R5 + 2 OBS 1.
+- **Commits da sessão (9):** `de91302` sub-débito UX + `e9e039c` R2 + `c9ad444` R3+R4 + `c51651d` R3 resíduo + `9ed2220` R5 backend + `fa7ad66` R5 dados + `f486efd` OBS 1+2 + `db4605c` R1 limpeza + `0a94aac` R6 reativação + commit deste fechamento.
+- **Próximo:** **M15 Sprint 5a Neutro Fio B** (3-5 dias Code) — todos os pré-requisitos cumpridos (sub-débito UX + saneamento do bot).
+- **Detalhe:** `docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md`
+
+### Sessão anterior
+
 - **Quando:** 19/05/2026 noite (Code — D-novo-R fix motor dinâmico + Simulador UX Fases A/B/C)
 - **Tipo:** Code (investigação read-only buscarEtapa → fix P1 produção → 3 fases UX simulador → correção retroativa Decisão 14)
 - **Resultado:**
-  - **D-novo-R P1 produção RESOLVIDO** — `buscarEtapa()` priorizava global sobre tenant via `OR + orderBy ordem asc`. Em produção CoopereBR: "Receber fatura" global (ordem 1, 0 gatilhos) vencia "Entrada Dinâmica" tenant (ordem 28, 3 gatilhos). Cooperado real nunca usou personalização do tenant desde implementação do motor. Fix: 2 queries explícitas tenant-primeiro.
-  - **Fase A simulador** — `etapaAtual` + `etapaProxima` no `SimulacaoOutput` + painel mostra "Etapa em uso: <nome> [do parceiro/global]". Resolve pergunta UX do Luciano. +2 bugs latentes corrigidos (mismatch `conteudo`/`texto` + gambiarra `simular('início')`).
-  - **Fase B simulador** — Botão ▶ verde em cada linha de etapa abre simulador no estado dela. Permite testar etapas no meio do fluxo sem percorrer INICIAL.
-  - **Fase C simulador** — Endpoint POST /whatsapp/preview-modelo + componente PreviewModelo. Botão ▶ verde em cada modelo mostra mensagem renderizada com vars do tenant no PhoneFrame.
-  - **39/39 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 27): +4 Fase A + 5 Fase C + 2 regressão D-novo-R
-  - **Falha catalogada Decisão 14:** conflito numeração D-novo-Q (meu fix vs Contatos Teste reservado), corrigido renomeando meu fix pra D-novo-R + catalogação formal D-novo-Q ORIGINAL nos débitos pela primeira vez (antes só em memória).
-- **Commits da sessão (4):** `a0e0f06` fix motor + `b0a92c8` Fase A+B + `483fb2b` Fase C + commit deste fechamento.
-- **Próximo:** Validação visual Luciano amanhã + sub-débito UX simulador (~30-45 min: gatilhos esperados + mensagem bot inicial) + carry-over M15 Sprint 5a Neutro Fio B.
+  - **D-novo-R P1 produção RESOLVIDO** — `buscarEtapa()` priorizava global sobre tenant. Em produção CoopereBR: "Receber fatura" global (ordem 1, 0 gatilhos) vencia "Entrada Dinâmica" tenant (ordem 28, 3 gatilhos). Cooperado real nunca usou personalização do tenant. Fix: 2 queries explícitas tenant-primeiro.
+  - **Fase A simulador** — `etapaAtual` + `etapaProxima` no `SimulacaoOutput` + painel mostra "Etapa em uso: <nome> [do parceiro/global]".
+  - **Fase B simulador** — Botão ▶ verde em cada linha de etapa abre simulador no estado dela.
+  - **Fase C simulador** — Endpoint POST /whatsapp/preview-modelo + componente PreviewModelo.
+  - **39/39 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts`.
+- **Commits (4):** `a0e0f06` + `b0a92c8` + `483fb2b` + fechamento.
 - **Detalhe:** `docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md`
 
-### Sessão anterior
+### Sessão anterior 2
 
 - **Quando:** 18/05/2026 (Marcos M11 + M12 entregues em janela única — mesma sessão Code)
 - **Tipo:** Code (subagent QA + Bug Fix Sprint + Sub-Fase 1 Fase 4 + bug crítico investigado + fechamentos canônicos M11 + M12)
@@ -458,58 +511,49 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento da sessão 19/05 noite
-   (mensagem começa com "docs(sessao+debitos+controle): fechamento 19/05 noite").
+   Esperado: working tree limpo, último commit é o de fechamento M16 da sessão 20/05
+   (mensagem começa com "docs(sessao): fechamento M16").
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — VALIDAÇÃO VISUAL primeiro (regra inegociável 19/05 noite, Luciano deve confirmar antes de avançar):
+PASSO 1 — Iniciando M15 Sprint 5a Neutro Fio B (3-5 dias Code dedicado).
 
-Antes de qualquer código novo, peço pro Luciano abrir http://localhost:3001/dashboard/whatsapp-config
-e confirmar com print:
-(a) Aba "Fluxo do Bot" — botão ▶ verde aparece em cada linha de etapa ATIVA. Clica numa
-    etapa → simulador abre, painel mostra "Etapa em uso: <nome> [do parceiro/global]".
-(b) Aba "Banco de Mensagens" — botão ▶ verde aparece em cada linha de modelo. Clica →
-    PhoneFrame mostra a mensagem renderizada com {{parceiro}}, {{cidade}} etc. substituídos.
-(c) Variáveis substituídas aparecem listadas no painel lateral do preview.
+OBJETIVO: cobrar Fio B real do cooperado em vez do custo proxy do Engine de Otimização
+(Sprint 8). Esquema: Cobranca.fioB novo + RegrasFioB 2024-2029 alimentadas via seed +
+UI input classeGdAplicada no formulário de Contrato + cron de progressão anual +
+substituir o proxy do AlocacaoEngineService por R$ real na avaliação de economia.
 
-Se algo NÃO estiver como esperado, NÃO seguir pra próxima tarefa. Investigar + ajustar.
+ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23).
+- Ler docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md inteiro
+- Ler docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md (Sprint 8 / M14.A+B
+  Engine de Otimização — Cobranca.classeGdAplicada já existe no schema)
+- Ler docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md (sessão 20/05)
+- Ler docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md (estado fluxo bot pós-saneamento)
+- Ler memória decisao_caminho_b_fio_b_neutro_18_05.md
+- Mapear: estado atual do schema (Cobranca, Contrato.classeGdAplicada do Sprint 8),
+  AlocacaoEngineService.validarClasseGd (já existe), Caminho B Fio B Neutro decidido,
+  tabelas ANEEL de tarifa Fio B vigentes por ano/classe GD
 
-PASSO 2 — Sub-débito UX simulador (~30-45 min, opcional dependendo do que Luciano decidir):
+DEPOIS reportar a Fase 1 ao Luciano e aguardar OK antes de Fase 2 (escrita).
 
-Resolve o problema "digitei e nada aconteceu" que aparece quando o gatilho da etapa
-não casa (ex: usuário digita "ola" mas etapa só aceita "1", "2", "3"). Hoje aparece
-bolha amarela "Nenhum gatilho da etapa atual bateu - cairia no fallback hardcoded"
-sem dizer quais gatilhos existem.
-
-Plano (perguntar pro Luciano se quer encadear):
-- Bolha inicial do bot mostrar mensagem renderizada da etapa atual (hoje só tem
-  instrução genérica). Backend já retorna modeloMensagemId — só carregar modelo +
-  renderizar via renderizarTemplate() e exibir como bolha "bot" branca.
-- Painel listar gatilhos esperados ("Esperando: 1 → MENU_COOPERADO, 2 → BAIXAR_FATURA, *")
-- Botões de atalho clicáveis embaixo do input — clica num gatilho e dispara
-
-PASSO 3 — Próximo grande marco se PASSOS 1 e 2 OK: M15 Sprint 5a Neutro Fio B (3-5 dias Code dedicado):
-
-Schema Cobranca.fioB + RegrasFioB 2024-2029 + UI input classeGdAplicada no Contrato +
-cron progressão anual + substituir custo proxy do Engine Sprint 8 por R$ real.
-Spec base: docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md
-Memória obrigatória: decisao_caminho_b_fio_b_neutro_18_05.md
-Pré-requisito: ler docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md
-            + docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md
-            (sessão de ontem).
-Pré-requisito DURO: sub-débito UX simulador acima resolvido OU adiado explicitamente
-pelo Luciano. Não começar Sprint 5a com simulador WA pendente em débito invisível.
+DECISOES PENDENTES PRO LUCIANO (do M16 fechado hoje — sub-débitos do bot dinâmico):
+Não bloqueiam M15. Catalogadas em docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md
+seção "Catalogados pra próxima sprint":
+- Menu Cooperado opções 1/2/5 viram loop
+- Atualizar Contrato — 4 opções voltam ao menu sem ação real
+- Atualizar Cadastro — 4 estados-destino não existem
+- Cadastro por Proxy — 4 etapas inativas sem modelo
+- NPS, MENU_FATURA, MENU_INADIMPLENTE — decisão produto
+- {{site}} retorna vazio
+- 2 etapas ATIVAS duplicadas em INICIAL (decisão se desativar uma)
 
 CARRY-OVERS (catalogados, escolher slot):
-- D-novo-Q Contatos Teste persistentes (6-8h Code, escopo completo na memória
-  debito_d_novo_q_contatos_teste_persistentes_19_05.md + docs/debitos-tecnicos.md
-  seção D-novo-Q). Slot natural: Sprint Housekeeping ou pré-Sinergia.
+- D-novo-Q Contatos Teste persistentes (6-8h Code)
 - Sprint Housekeeping ~3-5h (stash reformat Prettier + .gitattributes CRLF + scripts órfãos)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
-- Sub-débito UX simulador (PASSO 2 acima)
+- Sub-débitos R6+ do bot dinâmico (lista acima)
 
 DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
@@ -518,10 +562,10 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - Padrão UX dual Tipo A (inline)/B (página própria)/C (dialog) — não misturar
 - NÃO trabalhar paralelo com claude.ai (memória regra_nao_trabalhar_paralelo_com_code_17_05.md)
 - git status --short ANTES de qualquer commit (diretriz 18/05)
-- Decisão 14: grep amplo ANTES de catalogar débito novo (lição reforçada 19/05 noite)
+- Decisão 14: grep amplo ANTES de catalogar débito novo
 - Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita em código de produção
-- Smoke programático com dados reais > teste visual sozinho (lição 19/05: smoke pegou
-  o bug D-novo-R com mais confiança que ping visual)
+- Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId (multi-tenant)
+- Smoke programático com dados reais > teste visual sozinho
 ```
 
 ---
