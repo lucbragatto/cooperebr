@@ -9,6 +9,8 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CurrentUser } from '../auth/current-user.decorator';
 import {
+  PreviewModeloInput,
+  PreviewModeloOutput,
   SimulacaoInput,
   SimulacaoOutput,
   WhatsappFluxoMotorService,
@@ -23,6 +25,12 @@ interface UsuarioAutenticado {
 interface SimularBody {
   mensagem: string;
   estadoInicial?: string;
+  dadosTemp?: Record<string, unknown>;
+  cooperativaId?: string | null; // apenas SUPER_ADMIN pode definir; demais sao ignorados
+}
+
+interface PreviewModeloBody {
+  modeloId: string;
   dadosTemp?: Record<string, unknown>;
   cooperativaId?: string | null; // apenas SUPER_ADMIN pode definir; demais sao ignorados
 }
@@ -75,6 +83,33 @@ export class WhatsappSimulacaoController {
     };
 
     return this.motor.simular(input);
+  }
+
+  /**
+   * Fase C - Preview isolado de modelo de mensagem.
+   * Renderiza um modelo com as variaveis do tenant logado sem disparar fluxo
+   * nem incrementar contador de uso. Usado pelo botao "Pre-visualizar" no
+   * Banco de Mensagens da tela /dashboard/whatsapp-config.
+   */
+  @Roles(PerfilUsuario.ADMIN, PerfilUsuario.SUPER_ADMIN)
+  @Post('preview-modelo')
+  async previewModelo(
+    @Body() body: PreviewModeloBody,
+    @CurrentUser() user: UsuarioAutenticado,
+  ): Promise<PreviewModeloOutput> {
+    if (!body || typeof body.modeloId !== 'string' || body.modeloId.length === 0) {
+      throw new BadRequestException('Campo "modeloId" e obrigatorio (string nao vazia)');
+    }
+
+    const cooperativaId = this.resolverEscopo(body.cooperativaId, user);
+
+    const input: PreviewModeloInput = {
+      modeloId: body.modeloId,
+      cooperativaId,
+      dadosTemp: body.dadosTemp,
+    };
+
+    return this.motor.previewModelo(input);
   }
 
   /**

@@ -363,6 +363,56 @@ export class WhatsappFluxoMotorService {
       acaoAutomatica: etapa.acaoAutomatica,
     };
   }
+
+  // ==========================================================================
+  // Fase C - Preview isolado de modelo (renderiza template sem fluxo)
+  // ==========================================================================
+
+  /**
+   * Renderiza um modelo de mensagem com as variaveis do tenant logado,
+   * sem disparar fluxo, sem persistir, sem enviar WA. Usado pelo botao
+   * "Pre-visualizar" no Banco de Mensagens da tela /dashboard/whatsapp-config.
+   *
+   * Respeita escopo tenant: usuario so consegue ver modelos do proprio
+   * tenant ou globais (cooperativaId=null).
+   */
+  async previewModelo(input: PreviewModeloInput): Promise<PreviewModeloOutput> {
+    const cooperativaId = input.cooperativaId ?? undefined;
+
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        id: input.modeloId,
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+
+    if (!modelo) {
+      return {
+        encontrado: false,
+        modeloId: input.modeloId,
+        modeloNome: null,
+        categoria: null,
+        texto: null,
+        variaveisUsadas: {},
+        escopo: null,
+      };
+    }
+
+    const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+    const conversaFake = { dadosTemp: input.dadosTemp ?? {} };
+    const vars = this.extrairVariaveis(conversaFake, cooperativa);
+    const texto = this.renderizarTemplate(modelo.conteudo, vars);
+
+    return {
+      encontrado: true,
+      modeloId: modelo.id,
+      modeloNome: modelo.nome,
+      categoria: modelo.categoria,
+      texto,
+      variaveisUsadas: vars,
+      escopo: modelo.cooperativaId === null ? 'GLOBAL' : 'TENANT',
+    };
+  }
 }
 
 export interface SimulacaoInput {
@@ -400,4 +450,22 @@ export interface SimulacaoOutput {
   etapaAtual: SimulacaoEtapaResumo | null;
   /** Etapa para a qual o motor transicionaria (null = nao transicionou ou nao tem etapa). */
   etapaProxima: SimulacaoEtapaResumo | null;
+}
+
+// Fase C - Preview de modelo de mensagem (sem fluxo)
+export interface PreviewModeloInput {
+  modeloId: string;
+  cooperativaId?: string | null;
+  dadosTemp?: Record<string, unknown>;
+}
+
+export interface PreviewModeloOutput {
+  encontrado: boolean;
+  modeloId: string;
+  modeloNome: string | null;
+  categoria: string | null;
+  texto: string | null;
+  variaveisUsadas: Record<string, string>;
+  /** Escopo derivado: TENANT se cooperativaId != null, GLOBAL se null. */
+  escopo: 'TENANT' | 'GLOBAL' | null;
 }

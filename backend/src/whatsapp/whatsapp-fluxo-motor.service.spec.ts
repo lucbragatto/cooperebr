@@ -602,4 +602,91 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
     });
   });
+
+  // ============================================================
+  // Fase C - Preview isolado de modelo (sem fluxo)
+  // ============================================================
+  describe('previewModelo() - preview isolado de modelo de mensagem', () => {
+    it('Modelo nao encontrado -> encontrado=false + texto=null', async () => {
+      modeloFindFirst.mockResolvedValueOnce(null);
+      const r = await service.previewModelo({
+        modeloId: 'modelo-inexistente',
+        cooperativaId: 'coop-A',
+      });
+      expect(r.encontrado).toBe(false);
+      expect(r.texto).toBeNull();
+      expect(r.modeloNome).toBeNull();
+      expect(r.escopo).toBeNull();
+    });
+
+    it('Modelo TENANT encontrado -> renderiza com variaveis do tenant', async () => {
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1',
+        nome: 'Boas-vindas',
+        categoria: 'BOT',
+        conteudo: 'Ola {{nome}}, bem-vindo a {{parceiro}}!',
+        cooperativaId: 'coop-A',
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
+      });
+
+      const r = await service.previewModelo({
+        modeloId: 'm1',
+        cooperativaId: 'coop-A',
+        dadosTemp: { titular: 'Joao' },
+      });
+
+      expect(r.encontrado).toBe(true);
+      expect(r.texto).toBe('Ola Joao, bem-vindo a CoopereBR!');
+      expect(r.modeloNome).toBe('Boas-vindas');
+      expect(r.categoria).toBe('BOT');
+      expect(r.escopo).toBe('TENANT');
+      expect(r.variaveisUsadas.parceiro).toBe('CoopereBR');
+    });
+
+    it('Modelo GLOBAL (cooperativaId=null) -> escopo=GLOBAL', async () => {
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-global',
+        nome: 'Template Generico',
+        categoria: 'BOT',
+        conteudo: 'Mensagem padrao',
+        cooperativaId: null,
+      });
+
+      const r = await service.previewModelo({
+        modeloId: 'm-global',
+      });
+
+      expect(r.encontrado).toBe(true);
+      expect(r.escopo).toBe('GLOBAL');
+      expect(r.texto).toBe('Mensagem padrao');
+    });
+
+    it('ISOLAMENTO: query usa OR [tenant + null] (nao deixa ver modelo de outro tenant)', async () => {
+      modeloFindFirst.mockResolvedValueOnce(null);
+      await service.previewModelo({ modeloId: 'm-de-outro-tenant', cooperativaId: 'coop-A' });
+      const where = modeloFindFirst.mock.calls[0][0].where;
+      expect(where).toMatchObject({
+        id: 'm-de-outro-tenant',
+        OR: [{ cooperativaId: 'coop-A' }, { cooperativaId: null }],
+      });
+    });
+
+    it('ZERO SIDE EFFECT: previewModelo nao incrementa uso nem persiste nada', async () => {
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm1', nome: 'X', categoria: 'BOT', conteudo: 'oi', cooperativaId: 'coop-A',
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'C', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
+      });
+      await service.previewModelo({ modeloId: 'm1', cooperativaId: 'coop-A' });
+
+      expect(incrementarUso).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+      expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
 });

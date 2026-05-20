@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { PhoneFrame } from '@/components/whatsapp-config/PhoneFrame';
 import { SimuladorCelular } from '@/components/whatsapp-config/SimuladorCelular';
+import { PreviewModelo } from '@/components/whatsapp-config/PreviewModelo';
 import { getUsuario } from '@/lib/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -188,6 +189,8 @@ function AbaMensagens() {
   const [telefoneTeste, setTelefoneTeste] = useState('');
   const [enviandoTeste, setEnviandoTeste] = useState(false);
   const [filtroCategoria, setFiltroCategoria] = useState<string>('');
+  // Fase C: id do modelo selecionado pra pre-visualizar in-memory (POST /whatsapp/preview-modelo)
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const carregarModelos = useCallback(async () => {
     try {
@@ -289,7 +292,16 @@ function AbaMensagens() {
                         <Button variant="ghost" size="icon-sm" onClick={() => handleToggleAtivo(m)} title={m.ativo ? 'Desativar' : 'Ativar'}>
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" onClick={() => setModalTeste(m.id)} title="Enviar teste">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setPreviewId(m.id)}
+                          title="Pré-visualizar mensagem (in-memory, zero side effect)"
+                          className="text-green-700 hover:text-green-800 hover:bg-green-50"
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setModalTeste(m.id)} title="Enviar teste real para WhatsApp">
                           <Send className="w-4 h-4" />
                         </Button>
                         <Button variant="ghost" size="icon-sm" onClick={() => { setEditando(m); setModalAberto(true); }} title="Editar">
@@ -338,6 +350,15 @@ function AbaMensagens() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Fase C: Pré-visualização in-memory de modelo (zero side effects) */}
+      {previewId && (
+        <PreviewModelo
+          modeloId={previewId}
+          cooperativaId={(getUsuario() as { cooperativaId?: string | null } | null)?.cooperativaId ?? null}
+          onFechar={() => setPreviewId(null)}
+        />
+      )}
     </>
   );
 }
