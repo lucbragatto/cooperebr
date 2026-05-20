@@ -8,7 +8,7 @@ const mensagens = [
     nome: 'boas_vindas',
     categoria: 'BOT',
     conteudo:
-      '👋 Olá! Sou o assistente da *CoopereBR*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸',
+      '👋 Olá! Sou o assistente da *{{parceiro}}*.\n\nPara começar, envie uma *foto* ou *PDF* da sua conta de energia elétrica e eu faço uma simulação de economia para você! 📸',
   },
   {
     id: 'msg-processando-fatura',
@@ -31,7 +31,7 @@ const mensagens = [
     //Resultado da simulação de economia',
     categoria: 'BOT',
     conteudo:
-      '🌱 *Sua simulação CoopereBR:*\n\n📊 Fatura média atual: R$ {{valorFaturaMedia}}\n💚 Com a CoopereBR: R$ {{valorComDesconto}} (-{{desconto}}%)\n💵 Economia mensal: R$ {{economiaMensal}}\n📅 Economia anual: R$ {{economiaAnual}}\n{{mesesGratis}}\nQuer receber a proposta completa em PDF?\nResponda *SIM*',
+      '🌱 *Sua simulação {{parceiro}}:*\n\n📊 Fatura média atual: R$ {{valorFaturaMedia}}\n💚 Com a {{parceiro}}: R$ {{valorComDesconto}} (-{{desconto}}%)\n💵 Economia mensal: R$ {{economiaMensal}}\n📅 Economia anual: R$ {{economiaAnual}}\n{{mesesGratis}}\nQuer receber a proposta completa em PDF?\nResponda *SIM*',
   },
   {
     id: 'msg-proposta-pdf',
@@ -39,7 +39,7 @@ const mensagens = [
     //Proposta resumo enviada como texto (PDF futuro)',
     categoria: 'BOT',
     conteudo:
-      '📋 *PROPOSTA COOPEREBR*\n━━━━━━━━━━━━━━━━━━━━\n\n👤 *{{titular}}*\n📍 {{endereco}}\n🔌 UC: {{uc}}\n\n📊 *Dados da simulação:*\n• Consumo considerado: {{kwhContrato}} kWh/mês\n• Desconto: {{desconto}}%\n• Economia mensal: R$ {{economiaMensal}}\n• Economia anual: R$ {{economiaAnual}}\n\n━━━━━━━━━━━━━━━━━━━━\n_Proposta válida por 30 dias_',
+      '📋 *PROPOSTA {{parceiro}}*\n━━━━━━━━━━━━━━━━━━━━\n\n👤 *{{titular}}*\n📍 {{endereco}}\n🔌 UC: {{uc}}\n\n📊 *Dados da simulação:*\n• Consumo considerado: {{kwhContrato}} kWh/mês\n• Desconto: {{desconto}}%\n• Economia mensal: R$ {{economiaMensal}}\n• Economia anual: R$ {{economiaAnual}}\n\n━━━━━━━━━━━━━━━━━━━━\n_Proposta válida por 30 dias_',
   },
   {
     id: 'msg-confirmacao-cadastro',
@@ -63,7 +63,7 @@ const mensagens = [
     //Resposta para ajuda/help/dúvida',
     categoria: 'BOT',
     conteudo:
-      'Estou aqui para ajudar! Para falar com nossa equipe, acesse: cooperebr.com.br\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
+      'Estou aqui para ajudar! Para falar com nossa equipe da {{parceiro}}, é só responder por aqui.\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
   },
   {
     id: 'msg-cancelar',
