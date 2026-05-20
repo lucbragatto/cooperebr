@@ -1,7 +1,36 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-18 — Maratona M11 + M12 + M13 + M14 (Sub-Fase 1 Listas Concessionária COMPLETA + Sprint 8 / Bloco E Realocação Multi-Usina COMPLETO)**. 19 commits no dia (`c10f153..9d3d2dd` + fechamento). M11 QA + Bug Fix; M12 trigger ativação + 3 camadas D-novo-N; M13 specs Jest 183 cenários + docs operacionais Sub-Fase 1; M14.A backend engine greedy + 4 validadores + 11 endpoints + saneamento 2 usinas ANUAL; M14.B frontend painel 3 abas + cron mensal dia 5 + seed classeGd. Sistema avançou ~70% → ~80% rumo a produção. **Próximo marco: M15 — Sprint 5a Neutro (Fio B completo, Caminho B aprovado).** Detalhe: `docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md`.
+> Última atualização: **2026-05-19 noite — D-novo-R fix motor dinâmico P1 produção + Simulador UX Fases A/B/C**. 4 commits (`a0e0f06` fix buscarEtapa() prioriza tenant sobre global + `b0a92c8` Fase A+B painel etapa em uso + botão ▶ Testar em cada etapa + `483fb2b` Fase C botão ▶ Pré-visualizar em modelo + fechamento). 39/39 specs verdes whatsapp-fluxo-motor (era 27). Falha catalogada: conflito numeração D-novo-Q (Decisão 14 violada) corrigido — meu fix vira D-novo-R, D-novo-Q ORIGINAL (Contatos Teste persistentes) catalogado formalmente em débitos pela primeira vez. **Próximo marco mantido: M15 — Sprint 5a Neutro Fio B (3-5 dias Code).** Detalhe: `docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md`.
+
+---
+
+## ONDE PARAMOS — 19/05/2026 noite (Code — D-novo-R fix motor + Simulador UX Fases A/B/C)
+
+### Marcos entregues nesta sessão
+- **D-novo-R RESOLVIDO (P1 produção)** — `buscarEtapa()` priorizava etapa global sobre tenant via `OR + orderBy ordem asc`. Em produção: "Receber fatura" (global, ordem 1, 0 gatilhos) vencia "Entrada Dinâmica" (CoopereBR, ordem 28, 3 gatilhos). **Cooperado real nunca usou personalização do tenant desde implementação do motor dinâmico.** Fix: 2 queries explícitas (tenant exato primeiro, fallback global).
+- **Fase A** — `SimulacaoOutput` expõe `etapaAtual {id, nome, escopo: TENANT|GLOBAL}` + `etapaProxima`. Painel do simulador mostra "Etapa em uso: <nome> [do parceiro/global]" + "Transicionou para: <nome>" após transição. Resolve a pergunta "como saber qual fluxo está sendo testado". Bonus: corrigidos 2 bugs latentes (mismatch `conteudo`/`texto` em bolhas + gambiarra `simular('início')` substituída por bolha sistema + ping).
+- **Fase B** — Botão ▶ verde em cada linha de etapa ativa no Fluxo do Bot. Abre simulador com `estadoInicial = etapa.estado`. Permite testar etapas no meio do fluxo (MENU_COOPERADO, AGUARDANDO_OCR) sem percorrer todo o caminho do INICIAL.
+- **Fase C** — Endpoint novo `POST /whatsapp/preview-modelo` + componente `PreviewModelo.tsx`. Botão ▶ verde em cada linha de modelo no Banco de Mensagens. Mostra mensagem renderizada com vars do tenant no PhoneFrame + painel lateral com nome, categoria, escopo e variáveis substituídas.
+- **Falha catalogada Decisão 14** — Inicialmente catalogei meu fix como D-novo-Q no commit `a0e0f06`, conflitando com D-novo-Q ORIGINAL reservado 19/05 tarde (Contatos Teste persistentes, memória `debito_d_novo_q_contatos_teste_persistentes_19_05.md`). Não fiz grep amplo antes de catalogar. Corrigido: meu fix vira D-novo-R nos débitos + script smoke renomeado. **Lição reforçada:** Decisão 14 vale também pra numeração de débitos, não só sprints.
+- **D-novo-Q ORIGINAL (Contatos Teste persistentes) catalogado formalmente em débitos** pela primeira vez — antes só vivia em memória. Escopo completo, decisões aprovadas, 6-8h Code, slot sugerido Sprint Housekeeping ou pré-Sinergia.
+
+### Validação
+- 39/39 specs verdes em `whatsapp-fluxo-motor.service.spec.ts` (era 27 no início da sessão)
+- Backend `nest build` limpo, frontend `tsc --noEmit` limpo
+- PM2 restartado 3x sem erros, endpoints novos confirmados no RouterExplorer
+- Smoke programático `backend/scripts/smoke-d-novo-r-buscar-etapa.ts` confirma divergência entre lógica antiga (escolhia global) e nova (escolhe tenant) com dados reais do CoopereBR
+- Luciano confirmou print: painel mostrando "Etapa em uso: Entrada Dinâmica [do parceiro]" ✅
+
+### Pendências carry-over
+- **Validação visual Luciano amanhã** dos 3 botões ▶ no `/dashboard/whatsapp-config` (etapa, modelo + painel atualizado)
+- **Sub-débito UX simulador** (~30-45 min Code): bolha inicial mostrar mensagem da etapa + lista de gatilhos esperados no painel + botões de atalho clicáveis. Resolve confusão "digitei e não respondeu" quando gatilho não casa (caso "ola" → "Nenhum gatilho bateu" sem dizer quais existem).
+- **D-novo-Q Contatos Teste persistentes** (6-8h): aprovado, escopo completo, escolher slot
+- **M15 Sprint 5a Neutro Fio B** (3-5 dias): próximo marco prioritário, carry-over de 18/05
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 19/05 noite fechamento D-novo-R + Simulador UX).
 
 ---
 
@@ -47,6 +76,21 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 19/05/2026 noite (Code — D-novo-R fix motor dinâmico + Simulador UX Fases A/B/C)
+- **Tipo:** Code (investigação read-only buscarEtapa → fix P1 produção → 3 fases UX simulador → correção retroativa Decisão 14)
+- **Resultado:**
+  - **D-novo-R P1 produção RESOLVIDO** — `buscarEtapa()` priorizava global sobre tenant via `OR + orderBy ordem asc`. Em produção CoopereBR: "Receber fatura" global (ordem 1, 0 gatilhos) vencia "Entrada Dinâmica" tenant (ordem 28, 3 gatilhos). Cooperado real nunca usou personalização do tenant desde implementação do motor. Fix: 2 queries explícitas tenant-primeiro.
+  - **Fase A simulador** — `etapaAtual` + `etapaProxima` no `SimulacaoOutput` + painel mostra "Etapa em uso: <nome> [do parceiro/global]". Resolve pergunta UX do Luciano. +2 bugs latentes corrigidos (mismatch `conteudo`/`texto` + gambiarra `simular('início')`).
+  - **Fase B simulador** — Botão ▶ verde em cada linha de etapa abre simulador no estado dela. Permite testar etapas no meio do fluxo sem percorrer INICIAL.
+  - **Fase C simulador** — Endpoint POST /whatsapp/preview-modelo + componente PreviewModelo. Botão ▶ verde em cada modelo mostra mensagem renderizada com vars do tenant no PhoneFrame.
+  - **39/39 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 27): +4 Fase A + 5 Fase C + 2 regressão D-novo-R
+  - **Falha catalogada Decisão 14:** conflito numeração D-novo-Q (meu fix vs Contatos Teste reservado), corrigido renomeando meu fix pra D-novo-R + catalogação formal D-novo-Q ORIGINAL nos débitos pela primeira vez (antes só em memória).
+- **Commits da sessão (4):** `a0e0f06` fix motor + `b0a92c8` Fase A+B + `483fb2b` Fase C + commit deste fechamento.
+- **Próximo:** Validação visual Luciano amanhã + sub-débito UX simulador (~30-45 min: gatilhos esperados + mensagem bot inicial) + carry-over M15 Sprint 5a Neutro Fio B.
+- **Detalhe:** `docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md`
+
+### Sessão anterior
 
 - **Quando:** 18/05/2026 (Marcos M11 + M12 entregues em janela única — mesma sessão Code)
 - **Tipo:** Code (subagent QA + Bug Fix Sprint + Sub-Fase 1 Fase 4 + bug crítico investigado + fechamentos canônicos M11 + M12)
@@ -411,15 +455,73 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents disponíveis.
-   Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
+   Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
+2. Rodar `git status --short` (diretriz inegociável 18/05).
+   Esperado: working tree limpo, último commit é o de fechamento da sessão 19/05 noite
+   (mensagem começa com "docs(sessao+debitos+controle): fechamento 19/05 noite").
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
-   Esperado pós-fechamento M13+M14: working tree limpo, último commit é o de fechamento conjunto.
 
-PASSO 1 — Frase de retomada principal:
+3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-Sessão 18/05 entregou maratona M11 + M12 + M13 + M14 em janela Code única (19 commits c10f153..9d3d2dd + fechamento). M11 QA via subagent + Bug Fix Sprint; M12 Sub-Fase 1 Fase 4 trigger ativação Contrato + listener WA/email 3 camadas defense in depth + Bug D-novo-N P0 RESOLVIDO; M13 specs Jest baseline 183 cenários (envio-lista 133 + alocacao 50) + docs Sub-Fase 1 100% + smoke regression Luciano OK 20:33; M14 Sprint 8 / Bloco E Realocação Multi-Usina COMPLETO — backend engine greedy + 4 validadores (concentração 25% D-30A / distribuidora ANEEL / classeGd D-30B / estabilidade 90d) + 11 endpoints multi-tenant + painel /dashboard/parceiro/alocacao 3 abas (Estado atual inline Tipo A + Sugestões + Políticas) + tela detalhe Tipo B + cron mensal dia 5 03:00 BRT + saneamento 2 usinas ANUAL (Solar Guarapari/Solar Serra ÷12) + seed classeGdAnotada 3 usinas CoopereBR GD_II + cobertura 90.98%. Próxima sessão Code arranca **Sprint 5a Neutro (Fio B completo, Caminho B aprovado 18/05)** — schema Cobranca.fioB + RegrasFioB 2024-2029 + UI input classeGdAplicada no Contrato + cron progressão anual + substituir custo proxy do Engine Sprint 8 por R$ real. Estimativa: 3-5 dias Code dedicado. Spec base `docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md` + memória `decisao_caminho_b_fio_b_neutro_18_05.md`. Pré-requisito: ler `docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md` + memória do Caminho B antes de implementar. Carry-overs: Sprint Housekeeping ~3-5h + HTML jornada Sugestão #6 + D-novo-H refator técnico ~6-8h + smoke E2E Sprint 8 via UI pendente Luciano. Diretrizes inegociáveis ativas: NUNCA NODE_ENV pra discriminar dev/prod (sempre isAmbienteReal); 3 camadas defense in depth obrigatórias em listener/service comunicação real; convenção MENSAL oficial; padrão UX dual Tipo A/B/C; não trabalhar paralelo com claude.ai; git status --short ANTES de commitar.
+PASSO 1 — VALIDAÇÃO VISUAL primeiro (regra inegociável 19/05 noite, Luciano deve confirmar antes de avançar):
+
+Antes de qualquer código novo, peço pro Luciano abrir http://localhost:3001/dashboard/whatsapp-config
+e confirmar com print:
+(a) Aba "Fluxo do Bot" — botão ▶ verde aparece em cada linha de etapa ATIVA. Clica numa
+    etapa → simulador abre, painel mostra "Etapa em uso: <nome> [do parceiro/global]".
+(b) Aba "Banco de Mensagens" — botão ▶ verde aparece em cada linha de modelo. Clica →
+    PhoneFrame mostra a mensagem renderizada com {{parceiro}}, {{cidade}} etc. substituídos.
+(c) Variáveis substituídas aparecem listadas no painel lateral do preview.
+
+Se algo NÃO estiver como esperado, NÃO seguir pra próxima tarefa. Investigar + ajustar.
+
+PASSO 2 — Sub-débito UX simulador (~30-45 min, opcional dependendo do que Luciano decidir):
+
+Resolve o problema "digitei e nada aconteceu" que aparece quando o gatilho da etapa
+não casa (ex: usuário digita "ola" mas etapa só aceita "1", "2", "3"). Hoje aparece
+bolha amarela "Nenhum gatilho da etapa atual bateu - cairia no fallback hardcoded"
+sem dizer quais gatilhos existem.
+
+Plano (perguntar pro Luciano se quer encadear):
+- Bolha inicial do bot mostrar mensagem renderizada da etapa atual (hoje só tem
+  instrução genérica). Backend já retorna modeloMensagemId — só carregar modelo +
+  renderizar via renderizarTemplate() e exibir como bolha "bot" branca.
+- Painel listar gatilhos esperados ("Esperando: 1 → MENU_COOPERADO, 2 → BAIXAR_FATURA, *")
+- Botões de atalho clicáveis embaixo do input — clica num gatilho e dispara
+
+PASSO 3 — Próximo grande marco se PASSOS 1 e 2 OK: M15 Sprint 5a Neutro Fio B (3-5 dias Code dedicado):
+
+Schema Cobranca.fioB + RegrasFioB 2024-2029 + UI input classeGdAplicada no Contrato +
+cron progressão anual + substituir custo proxy do Engine Sprint 8 por R$ real.
+Spec base: docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md
+Memória obrigatória: decisao_caminho_b_fio_b_neutro_18_05.md
+Pré-requisito: ler docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md
+            + docs/sessoes/2026-05-19-noite-d-novo-r-fix-motor-e-simulador-uxabc.md
+            (sessão de ontem).
+Pré-requisito DURO: sub-débito UX simulador acima resolvido OU adiado explicitamente
+pelo Luciano. Não começar Sprint 5a com simulador WA pendente em débito invisível.
+
+CARRY-OVERS (catalogados, escolher slot):
+- D-novo-Q Contatos Teste persistentes (6-8h Code, escopo completo na memória
+  debito_d_novo_q_contatos_teste_persistentes_19_05.md + docs/debitos-tecnicos.md
+  seção D-novo-Q). Slot natural: Sprint Housekeeping ou pré-Sinergia.
+- Sprint Housekeeping ~3-5h (stash reformat Prettier + .gitattributes CRLF + scripts órfãos)
+- HTML jornada Sugestão #6
+- D-novo-H refator técnico ~6-8h
+- Sub-débito UX simulador (PASSO 2 acima)
+
+DIRETRIZES INEGOCIÁVEIS ATIVAS:
+- NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
+- 3 camadas defense in depth obrigatórias em listener/service de comunicação real
+- Convenção MENSAL oficial pra capacidade usina / consumo médio / kwhContrato
+- Padrão UX dual Tipo A (inline)/B (página própria)/C (dialog) — não misturar
+- NÃO trabalhar paralelo com claude.ai (memória regra_nao_trabalhar_paralelo_com_code_17_05.md)
+- git status --short ANTES de qualquer commit (diretriz 18/05)
+- Decisão 14: grep amplo ANTES de catalogar débito novo (lição reforçada 19/05 noite)
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita em código de produção
+- Smoke programático com dados reais > teste visual sozinho (lição 19/05: smoke pegou
+  o bug D-novo-R com mais confiança que ping visual)
 ```
 
 ---

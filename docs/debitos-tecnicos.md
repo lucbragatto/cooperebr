@@ -2341,7 +2341,9 @@ Se alguém rodar `seed-mensagens.ts` depois do refator, **sobrescreve o trabalho
 
 ---
 
-### D-novo-Q — `buscarEtapa()` priorizava etapa global sobre tenant em runtime (P1 produção — RESOLVIDO 2026-05-19 noite)
+### D-novo-R — `buscarEtapa()` priorizava etapa global sobre tenant em runtime (P1 produção — RESOLVIDO 2026-05-19 noite)
+
+> **⚠️ Nota de catalogação (19/05 noite):** este débito foi inicialmente registrado como D-novo-Q no commit `a0e0f06` por falha de validação prévia (Decisão 14). O código D-novo-Q estava reservado desde 19/05 tarde pra "Contatos Teste persistentes" (memória `debito_d_novo_q_contatos_teste_persistentes_19_05.md`). Renomeado pra D-novo-R em 19/05 noite — a entrada D-novo-Q (contatos teste) está preservada logo abaixo. Commit `a0e0f06` permanece com referência antiga; trate como D-novo-R.
 
 **Severidade:** P1 PRODUÇÃO (bug silencioso afetou TODO o motor dinâmico desde a implementação)
 **Detectado em:** 2026-05-19 noite (investigação simulador celular — Luciano reportou que "Entrada Dinâmica" do CoopereBR nunca respondia)
@@ -2373,6 +2375,46 @@ Tenant SEMPRE vence se existir, independente de ordem. Comportamento explícito 
 **Status:** ✅ RESOLVIDO em 2026-05-19 noite. Commit cobrindo fix do motor + ajustes de specs + catalogação aqui.
 
 **Lição:** quando duas linhas de defesa (tenant + global) precisam de prioridade explícita, NÃO confiar em ordem numérica controlada por usuário. Usar queries separadas com semântica clara.
+
+---
+
+### D-novo-Q — Contatos Teste persistentes em banco + tela SUPER_ADMIN (P2 — aprovado, aguarda janela)
+
+**Severidade:** P2 (operacional — hoje funciona pra Luciano via hardcoded, mas não escala pra Sinergia / Walter contador / QA externo)
+**Detectado em:** 2026-05-19 tarde (Luciano aprovou escopo completo)
+**Memória detalhada:** `~/.claude/projects/C--Users-Luciano-cooperebr/memory/debito_d_novo_q_contatos_teste_persistentes_19_05.md`
+
+**Problema atual:**
+Hardcoded em `backend/src/common/safety/whitelist-teste.ts` desde fix D-novo-N (18/05): telefone `27981341348` + email `lucbragatto+homologado@gmail.com`. Funciona pra Luciano, mas:
+- Não escala (Sinergia futura, Walter contador, QA externo)
+- Mudança de número exige rebuild + deploy
+- Não auditável (quem usou contato teste quando?)
+- Não permite múltiplos canais de QA simultâneos
+
+**Decisões aprovadas Luciano 19/05 tarde:**
+1. **Escopo:** Global SISGD (apenas SUPER_ADMIN edita)
+2. **Quantidade:** Lista com flag `ativo` (permite 5-10+ contatos)
+3. **Canais fase 1:** WhatsApp + Email (SMS/Push/Asaas fase 2)
+4. **Modo:** Override fixo (primeiro contato teste ativo da lista vence)
+5. **3 camadas defense in depth preservadas:** apenas troca fonte (hardcoded → banco). Hardcoded vira fallback last-resort.
+6. **Seed inicial:** popula os 2 valores atuais do Luciano
+
+**Escopo técnico:**
+- Schema novo `ContatoTeste { id, canal: WHATSAPP|EMAIL, valor, nome, ativo, observacao, criadoPor, criadoEm, atualizadoEm }` (memória tem prisma completo)
+- Módulo `backend/src/contatos-teste/` (service + controller + DTO + spec, todos gated SUPER_ADMIN)
+- 4 endpoints `/super-admin/contatos-teste` (GET/POST/PATCH/DELETE soft)
+- Refator `whitelist-teste.ts` consulta `ContatosTesteService.obterPrimeiroAtivo(canal)` em vez de retornar hardcoded
+- Frontend `web/app/dashboard/super-admin/contatos-teste/page.tsx` (tabela 2 abas WA/Email com toggle ativo inline padrão Tipo A + dialog criar/editar Tipo C)
+- Seed inicial popula Luciano
+
+**Estimativa:** 6-8h Code distribuídas (memória tem breakdown por bloco)
+
+**Posicionamento:** NÃO é prioridade imediata. Slots possíveis:
+- (a) Entre Sprint 5a Fio B (M15) e Sprint #8 Contabilidade — sprint próprio ~1 dia
+- (b) **Recomendado:** dentro do Sprint Housekeeping (bundle com stash reformat + scripts órfãos + `.gitattributes` CRLF)
+- (c) Antes do onboarding 2º parceiro (Sinergia) — momento natural
+
+**Status:** 📋 Catalogado em 2026-05-19. Aprovado, escopo completo na memória, prompt Code pronto. Aguarda Luciano definir janela.
 
 ---
 

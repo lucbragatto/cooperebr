@@ -1,5 +1,10 @@
 /**
- * Smoke test D-novo-Q: confirma que buscarEtapa() prioriza tenant sobre global em runtime.
+ * Smoke test D-novo-R: confirma que buscarEtapa() prioriza tenant sobre global em runtime.
+ *
+ * Nota: catalogado inicialmente como D-novo-Q no commit a0e0f06, renomeado pra
+ * D-novo-R em 19/05 noite por conflito de numeração com D-novo-Q (Contatos Teste
+ * persistentes). Ver `docs/debitos-tecnicos.md` seção D-novo-R + memória
+ * `debito_d_novo_q_contatos_teste_persistentes_19_05.md`.
  *
  * Cenário esperado (banco atual):
  *   - "Receber fatura" global INICIAL (cooperativaId=null, 0 gatilhos, ativa)
