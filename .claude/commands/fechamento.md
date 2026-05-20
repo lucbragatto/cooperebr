@@ -1,119 +1,28 @@
 ---
-description: Executa o ritual canônico de fechamento de sessão (doc-sessão + CONTROLE-EXECUCAO + commit + push)
+description: Atalho — invoca a skill canônica fechamento-sessao (template inegociável de fechamento)
 ---
 
-# Ritual de Fechamento de Sessão — execução automática
+# Atalho: invocar skill `fechamento-sessao`
 
-Executar o ritual canônico de fechamento documentado em
-`~/.claude/projects/C--Users-Luciano-cooperebr/memory/ritual_abertura_fechamento.md`
-e na regra inegociável bilateral `regra_fechamento_sessao_inegociavel.md`.
+Esta é a skill canônica que governa fechamento de sessão Code/claude.ai no projeto.
 
-## Checklist obrigatório (executar nesta ordem, todas as etapas)
+**Definição completa:** `.claude/skills/fechamento-sessao/SKILL.md`
 
-### 1. Verificações de estado
+Quando o usuário invocar este slash command, **invocar imediatamente a skill `fechamento-sessao`** via Skill tool. Não duplicar conteúdo aqui — a skill é a fonte única de verdade.
 
-- Rodar `git status --short` (diretriz inegociável 18/05). Se houver arquivos modificados não-meus desta sessão → PAUSAR + Decisão 23.
-- Rodar `git log --oneline -10` pra confirmar commits da sessão.
-- Identificar commits da sessão (do ponto que comecei até agora — usar `git log origin/main..HEAD --oneline` se tiver dúvida).
+A skill cobre:
+- Pré-validações Decisão 23 (working tree limpo, último commit esperado, todos pushed, marco identificado)
+- 5 etapas obrigatórias em ordem fixa:
+  1. Doc-sessão `docs/sessoes/YYYY-MM-DD-<escopo>.md`
+  2. Atualizar `docs/CONTROLE-EXECUCAO.md` (ONDE PARAMOS + FRASE DE RETOMADA — Decisão 24 local único)
+  3. Estruturar frase de retomada (PASSO 0 + PASSO 1 — padrão 18/05)
+  4. Commit + push origin/main
+  5. Apresentar frase no terminal (diretriz inegociável 18/05)
+- Reporte final padronizado
+- Anti-patterns explícitos
 
-### 2. Doc-sessão consolidada
+**Quando ESTE atalho dispara:**
+- Usuário digita `/fechamento` no terminal Code
+- (Sem atalho) usuário diz "fecha a sessão" / "boa noite" / "vou descansar" — eu invoco a skill automaticamente via `when_to_use` da própria skill (não precisa atalho)
 
-Criar `docs/sessoes/YYYY-MM-DD-<tema-curto>.md` com:
-- Resumo executivo (3-5 linhas)
-- Contexto de entrada (o que veio de antes)
-- Entregas detalhadas (cada commit + o que fez)
-- Validação (specs, builds, smoke)
-- Decisões / Regras / Memórias afetadas
-- Pendências carry-over pra próxima sessão
-- Commits da sessão (tabela cronológica)
-- Arquivos tocados (cumulativo)
-
-Nome do arquivo: `YYYY-MM-DD-<periodo>-<tema-curto-em-kebab>.md` (ex: `2026-05-19-noite-d-novo-r-fix-motor.md`).
-
-### 3. Atualizar `docs/CONTROLE-EXECUCAO.md`
-
-- **Header (linha 4):** atualizar "Última atualização" com data + 1 frase do achado central da sessão.
-- **Bloco "## ONDE PARAMOS — <data>":** INSERIR novo bloco no topo (acima do anterior). Não acumular cronologicamente — bloco anterior vira "ONDE PARAMOS — <data anterior>" abaixo.
-- **Seção "### Última sessão":** mover conteúdo atual pra "### Sessão anterior" abaixo e preencher "Última sessão" com info desta sessão (Quando + Tipo + Resultado bullets + Commits + Próximo + Detalhe).
-- **Seção "## FRASE DE RETOMADA — próxima sessão Code":** SUBSTITUIR completamente o conteúdo (Decisão 24 — local único). Frase COMANDANTE, não descritiva (`feedback_frase_retomada_direta.md`):
-  - PASSO 0 — verificações operacionais (git status, pm2 list, subagent disponível)
-  - PASSO 1 — instrução de leitura obrigatória (CONTROLE-EXECUCAO + doc-sessão de hoje + MEMORY.md)
-  - PASSO 2+ — próxima ação concreta + estimativa
-  - CARRY-OVERS catalogados
-  - DIRETRIZES INEGOCIÁVEIS ATIVAS (lista curta)
-- **Decisão 24 — grep amplo OBRIGATÓRIO antes de salvar:**
-  ```
-  grep -in "voltei\|frase de retomada\|como retomar" docs/CONTROLE-EXECUCAO.md
-  ```
-  Se aparecer mais de 1 frase divergente, consolidar pra 1 só + ponteiros nos outros.
-
-### 4. Atualizar `docs/debitos-tecnicos.md` se houve débito novo
-
-- Catalogar débitos novos detectados na sessão.
-- Marcar débitos resolvidos como ✅ RESOLVIDO com referência ao commit.
-- **Decisão 14 (reforçada 19/05 noite):** ANTES de catalogar débito novo com código D-novo-X ou D-WA-X, rodar:
-  ```
-  grep -rn "D-novo-X\|D-WA-X" docs/ ~/.claude/projects/C--Users-Luciano-cooperebr/memory/
-  ```
-  com X = letra alvo, pra confirmar que não está reservado.
-
-### 5. Atualizar memória persistente se aplicável
-
-`~/.claude/projects/C--Users-Luciano-cooperebr/memory/` — adicionar memórias novas (decisões processuais, regras inegociáveis, padrões técnicos, lições) detectadas na sessão.
-
-### 6. Commit consolidado
-
-Mensagem padrão:
-```
-docs(sessao+debitos+controle): fechamento <data> + <tema central>
-
-<descrição: o que entregou na sessão, lições, próximo passo>
-```
-
-Staging: incluir doc-sessão + CONTROLE-EXECUCAO + debitos-tecnicos (se mudou) + memórias novas (se criadas).
-
-### 7. Push pra origin/main
-
-`git push origin main` — autorizado por default em fechamento (Luciano espera estar no remoto pra próxima sessão poder retomar).
-
-### 8. Reportar saída pro Luciano (formato fixo)
-
-```
-═══════════════════════════════════════════════════════════════════
-✅ SESSÃO <data> — FECHADA
-═══════════════════════════════════════════════════════════════════
-
-Commits da sessão (<N>):
-  <hash> <título>
-  ...
-
-Pendências resolvidas hoje (<N>):
-  ✓ <item>
-
-Pendências restantes (<N>):
-  □ <item>
-
-Push: <hash..hash> origin/main  ✓
-
-═══════════════════════════════════════════════════════════════════
-PRÓXIMA SESSÃO
-═══════════════════════════════════════════════════════════════════
-
-Cola "/abertura" no Code quando voltar. Ritual de abertura roda automático.
-
-OU se preferir colar manualmente:
-
-> <frase comandante curta resumindo passo 1 da FRASE DE RETOMADA>
-
-Bom descanso.
-═══════════════════════════════════════════════════════════════════
-```
-
-## Quando NÃO executar (regra do ritual_abertura_fechamento.md)
-
-- "Fatia X concluída" se Luciano ainda tem energia/janela pra próxima
-- "Sprint Y terminou" como evento planejado da pilha
-- Tarefas triviais (typo, lint) sem alterar estado de produto
-- Quando Luciano explicitamente disser "pula o ritual"
-
-Só executar quando NÃO for possível técnica ou fisicamente continuar (fim do dia, "boa noite", computador desligando, tarefa terminada sem próxima ação imediata).
+**Por que mantém este arquivo curto:** Decisão 14 — fonte única de verdade. Conteúdo duplicado é vetor de divergência. A skill é versionada e atualizada com a regra real; este atalho só aponta.
