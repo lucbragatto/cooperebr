@@ -18,6 +18,11 @@ interface MensagemSimulacao {
   variaveisUsadas?: Record<string, string>;
 }
 
+interface GatilhoResumo {
+  resposta: string;
+  proximoEstado: string;
+}
+
 interface EtapaResumo {
   id: string;
   nome: string;
@@ -25,6 +30,7 @@ interface EtapaResumo {
   escopo: 'TENANT' | 'GLOBAL';
   modeloMensagemId: string | null;
   acaoAutomatica: string | null;
+  gatilhos: GatilhoResumo[];
 }
 
 interface RespostaSimular {
@@ -37,6 +43,7 @@ interface RespostaSimular {
   acaoAutomatica?: string | null;
   etapaAtual: EtapaResumo | null;
   etapaProxima: EtapaResumo | null;
+  mensagemEtapaAtual: string | null;
 }
 
 interface BolhaHistorico {
@@ -161,6 +168,17 @@ export function SimuladorCelular({
               timestamp: new Date(),
             },
           ]);
+        } else if (data.mensagemEtapaAtual) {
+          // Sub-debito UX: bolha inicial do bot mostra a mensagem da etapa atual
+          // (o que o cooperado veria ao entrar). Elimina "digitei e nao sei o que aconteceu".
+          setHistorico((prev) => [
+            ...prev,
+            {
+              role: 'bot',
+              conteudo: data.mensagemEtapaAtual as string,
+              timestamp: new Date(),
+            },
+          ]);
         }
       } catch {
         // usuario ainda pode interagir — apenas sem o resumo
@@ -216,10 +234,29 @@ export function SimuladorCelular({
           estadoInicial: etapaInicial,
         });
         setEtapaAtualResumo(data.etapaAtual ?? null);
+        if (data.etapaAtual && data.mensagemEtapaAtual) {
+          setHistorico((prev) => [
+            ...prev,
+            {
+              role: 'bot',
+              conteudo: data.mensagemEtapaAtual as string,
+              timestamp: new Date(),
+            },
+          ]);
+        }
       } catch {
         // ignora
       }
     })();
+  };
+
+  const handleAtalho = (resposta: string) => {
+    if (loading || encerrado) return;
+    setHistorico((prev) => [
+      ...prev,
+      { role: 'user', conteudo: resposta, timestamp: new Date() },
+    ]);
+    simular(resposta);
   };
 
   return (
@@ -295,6 +332,35 @@ export function SimuladorCelular({
                 <Send className="w-4 h-4" />
               </Button>
             </div>
+
+            {/* Sub-debito UX: atalhos clicaveis pros gatilhos literais da etapa atual.
+                Wildcard "*" nao vira botao porque significa "qualquer texto".
+                Micro-help acima (regra regra_help_automatico_paginas_19_05). */}
+            {etapaAtualResumo?.gatilhos &&
+              etapaAtualResumo.gatilhos.filter((g) => g.resposta !== '*').length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <p className="text-[10px] text-muted-foreground">
+                    Clique numa resposta abaixo ou digite a sua no campo.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {etapaAtualResumo.gatilhos
+                      .filter((g) => g.resposta !== '*')
+                      .map((g, i) => (
+                        <Button
+                          key={`atalho-${i}`}
+                          size="sm"
+                          variant="outline"
+                          disabled={loading || encerrado}
+                          onClick={() => handleAtalho(g.resposta)}
+                          className="text-xs h-7 px-2"
+                          title={`Envia "${g.resposta}" → ${g.proximoEstado}`}
+                        >
+                          {g.resposta}
+                        </Button>
+                      ))}
+                  </div>
+                </div>
+              )}
           </div>
 
           {/* Lado direito: painel de estado */}
@@ -351,6 +417,35 @@ export function SimuladorCelular({
                         {etapaProximaResumo.escopo === 'TENANT' ? 'do parceiro' : 'global'}
                       </Badge>
                     </div>
+                  </div>
+                )}
+
+                {/* Sub-debito UX: lista de respostas aceitas pela etapa atual.
+                    Wildcard "*" vira "qualquer texto". Vazio = etapa cai em fallback. */}
+                {etapaAtualResumo && (
+                  <div className="pt-1 border-t">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">
+                      Respostas que o bot aceita
+                    </p>
+                    {etapaAtualResumo.gatilhos && etapaAtualResumo.gatilhos.length > 0 ? (
+                      <ul className="space-y-1">
+                        {etapaAtualResumo.gatilhos.map((g, i) => (
+                          <li key={`gatilho-${i}`} className="flex items-center gap-1.5 text-xs">
+                            <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0">
+                              {g.resposta === '*' ? 'qualquer texto' : g.resposta}
+                            </Badge>
+                            <span className="text-gray-400">→</span>
+                            <span className="font-mono text-gray-700 text-[11px]">
+                              {g.proximoEstado}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        ⚠️ Esta etapa não tem gatilhos — qualquer resposta cai em fallback hardcoded.
+                      </p>
+                    )}
                   </div>
                 )}
 

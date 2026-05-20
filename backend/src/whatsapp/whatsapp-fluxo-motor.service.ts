@@ -12,7 +12,7 @@ interface MensagemRecebida {
   mimeType?: string;
 }
 
-interface Gatilho {
+export interface Gatilho {
   resposta: string;
   proximoEstado: string;
 }
@@ -294,8 +294,14 @@ export class WhatsappFluxoMotorService {
         acaoAutomatica: null,
         etapaAtual: null,
         etapaProxima: null,
+        mensagemEtapaAtual: null,
       };
     }
+
+    // Sub-debito UX simulador: o que o cooperado veria ao ENTRAR nesta etapa.
+    // Renderiza ANTES de avaliar gatilhos pra que o painel sempre mostre, mesmo em fallback.
+    const renderEtapaAtual = await this.renderizarMensagemDeEtapa(etapaAtual, cooperativaId, conversaFake);
+    const mensagemEtapaAtual = renderEtapaAtual?.texto ?? null;
 
     const proximoEstado = this.avaliarGatilhos(corpo, etapaAtual.gatilhos);
     if (!proximoEstado) {
@@ -309,28 +315,21 @@ export class WhatsappFluxoMotorService {
         acaoAutomatica: null,
         etapaAtual: this.resumoEtapa(etapaAtual),
         etapaProxima: null,
+        mensagemEtapaAtual,
       };
     }
 
     const proximaEtapa = await this.buscarEtapa(proximoEstado, cooperativaId);
     const mensagensEnviadas: SimulacaoMensagem[] = [];
 
-    if (proximaEtapa?.modeloMensagemId) {
-      const modelo = await this.prisma.modeloMensagem.findFirst({
-        where: {
-          id: proximaEtapa.modeloMensagemId,
-          ...this.filtroTenantSomenteLeitura(cooperativaId),
-        },
-      });
-      if (modelo) {
-        const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
-        const vars = this.extrairVariaveis(conversaFake, cooperativa);
-        const texto = this.renderizarTemplate(modelo.conteudo, vars);
+    if (proximaEtapa) {
+      const renderProxima = await this.renderizarMensagemDeEtapa(proximaEtapa, cooperativaId, conversaFake);
+      if (renderProxima) {
         mensagensEnviadas.push({
-          modeloId: modelo.id,
-          modeloNome: modelo.nome,
-          texto,
-          variaveisUsadas: vars,
+          modeloId: renderProxima.modeloId,
+          modeloNome: renderProxima.modeloNome,
+          texto: renderProxima.texto,
+          variaveisUsadas: renderProxima.vars,
         });
       }
     }
@@ -345,7 +344,34 @@ export class WhatsappFluxoMotorService {
       acaoAutomatica: proximaEtapa?.acaoAutomatica ?? null,
       etapaAtual: this.resumoEtapa(etapaAtual),
       etapaProxima: proximaEtapa ? this.resumoEtapa(proximaEtapa) : null,
+      mensagemEtapaAtual,
     };
+  }
+
+  /**
+   * Renderiza a mensagem de uma etapa (template do modelo associado) com as variaveis
+   * do tenant. Usado por simular() em dois pontos: (1) etapaAtual = preview do que
+   * o cooperado veria ao entrar na etapa, (2) proximaEtapa = mensagem que sera enviada
+   * apos a transicao. Retorna null se a etapa nao tem modeloMensagemId ou se o modelo
+   * for inacessivel pelo tenant.
+   */
+  private async renderizarMensagemDeEtapa(
+    etapa: FluxoEtapaComModelo,
+    cooperativaId: string | undefined,
+    conversaFake: { dadosTemp?: any },
+  ): Promise<{ texto: string; modeloId: string; modeloNome: string; vars: Record<string, string> } | null> {
+    if (!etapa.modeloMensagemId) return null;
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        id: etapa.modeloMensagemId,
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (!modelo) return null;
+    const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+    const vars = this.extrairVariaveis(conversaFake, cooperativa);
+    const texto = this.renderizarTemplate(modelo.conteudo, vars);
+    return { texto, modeloId: modelo.id, modeloNome: modelo.nome, vars };
   }
 
   /**
@@ -361,6 +387,9 @@ export class WhatsappFluxoMotorService {
       escopo: etapa.cooperativaId === null ? 'GLOBAL' : 'TENANT',
       modeloMensagemId: etapa.modeloMensagemId,
       acaoAutomatica: etapa.acaoAutomatica,
+      // Sub-debito UX simulador: expoe gatilhos pra UI listar as respostas aceitas
+      // + montar botoes de atalho. Wildcard "*" e tratado pelo cliente.
+      gatilhos: etapa.gatilhos ?? [],
     };
   }
 
@@ -436,6 +465,8 @@ export interface SimulacaoEtapaResumo {
   escopo: 'TENANT' | 'GLOBAL';
   modeloMensagemId: string | null;
   acaoAutomatica: string | null;
+  /** Gatilhos da etapa - usados pela UI pra listar "respostas aceitas" + botoes de atalho. */
+  gatilhos: Gatilho[];
 }
 
 export interface SimulacaoOutput {
@@ -450,6 +481,12 @@ export interface SimulacaoOutput {
   etapaAtual: SimulacaoEtapaResumo | null;
   /** Etapa para a qual o motor transicionaria (null = nao transicionou ou nao tem etapa). */
   etapaProxima: SimulacaoEtapaResumo | null;
+  /**
+   * Mensagem renderizada da etapa atual - o que o cooperado veria ao ENTRAR neste
+   * estado. Null quando etapaAtual=null ou quando etapa nao tem modeloMensagemId.
+   * Usado pela UI pra mostrar bolha inicial do bot no simulador.
+   */
+  mensagemEtapaAtual: string | null;
 }
 
 // Fase C - Preview de modelo de mensagem (sem fluxo)

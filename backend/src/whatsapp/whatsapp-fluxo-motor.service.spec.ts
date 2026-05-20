@@ -411,7 +411,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(r.motivoFallback).toContain('Nenhum gatilho');
     });
 
-    it('Fase A: simulacao expoe etapaAtual com nome+escopo no output (TENANT)', async () => {
+    it('Fase A: simulacao expoe etapaAtual com nome+escopo+gatilhos no output (TENANT)', async () => {
       etapaFindFirst.mockResolvedValueOnce({
         id: 'e-tenant', cooperativaId: 'coop-A', nome: 'Entrada Dinamica', estado: 'INICIAL',
         gatilhos: [{ resposta: 'XYZ', proximoEstado: 'P' }],
@@ -423,8 +423,57 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(r.transicionou).toBe(false);
       expect(r.etapaAtual).toMatchObject({
         id: 'e-tenant', nome: 'Entrada Dinamica', estado: 'INICIAL', escopo: 'TENANT',
+        gatilhos: [{ resposta: 'XYZ', proximoEstado: 'P' }],
       });
       expect(r.etapaProxima).toBeNull();
+    });
+
+    it('Sub-debito UX: etapaAtual com modeloMensagemId -> mensagemEtapaAtual renderizada', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'P' }],
+        modeloMensagemId: 'm-entrada', acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-entrada', nome: 'msg-entrada',
+        conteudo: 'Bem-vindo a {{parceiro}}, {{tipo_membro}}!',
+        cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
+      });
+
+      const r = await service.simular({
+        mensagem: 'naotem', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.mensagemEtapaAtual).toBe('Bem-vindo a CoopereBR, cooperado!');
+      expect(r.transicionou).toBe(false); // gatilho 'naotem' nao casa com '1'
+    });
+
+    it('Sub-debito UX: etapaAtual SEM modeloMensagemId -> mensagemEtapaAtual=null', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'P' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'xx', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.mensagemEtapaAtual).toBeNull();
+      expect(modeloFindFirst).not.toHaveBeenCalled(); // sem modelo, sem query
+    });
+
+    it('Sub-debito UX: sem etapaAtual -> mensagemEtapaAtual=null', async () => {
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      const r = await service.simular({
+        mensagem: 'oi', cooperativaId: 'coop-A', estadoInicial: 'INEXISTENTE',
+      });
+      expect(r.etapaAtual).toBeNull();
+      expect(r.mensagemEtapaAtual).toBeNull();
     });
 
     it('Fase A: simulacao expoe etapaAtual com escopo GLOBAL quando nao ha tenant', async () => {
