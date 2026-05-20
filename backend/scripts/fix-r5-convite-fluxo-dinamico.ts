@@ -15,8 +15,11 @@
 import { PrismaClient } from '@prisma/client';
 
 const MODELO_NOME = 'convite_indicacao';
-const MODELO_CONTEUDO =
-  '🎁 Pronto! Te enviei seu link de indicação personalizado por aqui — compartilhe com seus amigos e ganhe benefícios quando eles assinarem!';
+// OBS 2 (20/05): modelo CURTO/complementar — apenas avisa que o link ta vindo.
+// A ação ENVIAR_LINK_INDICACAO no motor envia o link + frase de CTA logo em
+// seguida. Antes, o conteudo do modelo + texto da acao falavam a mesma coisa
+// 2x (redundancia "🎁 Seu link..."). Agora ficam complementares.
+const MODELO_CONTEUDO = '🎁 Beleza! Vou te enviar seu link de indicação 👇';
 
 const ETAPA_ESTADO = 'ENVIAR_CONVITE';
 const ETAPA_NOME = 'Enviar link de indicacao';
@@ -54,8 +57,19 @@ async function main(): Promise<void> {
       });
       console.log(`  CRIADO id=${modelo.id}`);
       console.log(`  conteudo: ${JSON.stringify(modelo.conteudo)}\n`);
+    } else if (modelo.conteudo !== MODELO_CONTEUDO) {
+      // OBS 2: conteudo divergiu (versao antiga era longa e redundante com a
+      // mensagem da acao). Atualiza pra novo formato curto/complementar.
+      const antes = modelo.conteudo;
+      modelo = await prisma.modeloMensagem.update({
+        where: { id: modelo.id },
+        data: { conteudo: MODELO_CONTEUDO },
+      });
+      console.log(`  ATUALIZADO id=${modelo.id} (OBS 2 — eliminar redundancia)`);
+      console.log(`  ANTES:  ${JSON.stringify(antes)}`);
+      console.log(`  DEPOIS: ${JSON.stringify(modelo.conteudo)}\n`);
     } else {
-      console.log(`  JA EXISTE id=${modelo.id} (skip)`);
+      console.log(`  JA OK id=${modelo.id} (skip)`);
       console.log(`  conteudo atual: ${JSON.stringify(modelo.conteudo)}\n`);
     }
 

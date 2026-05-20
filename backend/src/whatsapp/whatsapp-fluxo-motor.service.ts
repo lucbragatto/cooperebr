@@ -101,6 +101,9 @@ export class WhatsappFluxoMotorService {
     }
 
     if (proximaEtapa?.acaoAutomatica) {
+      // Passa a conversa inteira (inclui cooperativaId) pra acao poder fazer
+      // queries multi-tenant. Regra do projeto: toda query Prisma filtra por
+      // cooperativaId quando relacionada a entidade tenant-scoped.
       await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp);
     }
 
@@ -177,7 +180,12 @@ export class WhatsappFluxoMotorService {
 
   private async executarAcao(
     acao: string,
-    conversa: { id: string; telefone: string; cooperadoId?: string | null },
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
     _dados: any,
   ): Promise<void> {
     try {
@@ -207,17 +215,24 @@ export class WhatsappFluxoMotorService {
    * R5 (20/05) — Acao ENVIAR_LINK_INDICACAO.
    * Cabea o fluxo "Convidar amigo" do bot dinamico (estado ENVIAR_CONVITE).
    * - Se a conversa nao tem cooperadoId, manda mensagem amigavel de cadastro.
-   * - Se tem, busca/gera codigoIndicacao de 8 chars (mesmo padrao do
-   *   whatsapp-bot.service.ts:720) e envia o link /entrar?ref=<codigo>.
+   * - Se tem, busca cooperado FILTRANDO por cooperativaId tambem (regra dura
+   *   multi-tenant) e gera codigoIndicacao de 8 chars se ainda nao existir
+   *   (mesmo padrao do whatsapp-bot.service.ts:720).
+   * - Envia 1 unica mensagem com link + chamada — modelo da etapa ENVIAR_CONVITE
+   *   ja avisa "vou te enviar seu link 👇", entao a acao manda so o link + cta
+   *   pra evitar redundancia.
    * - NAO injeta whatsapp-bot.service nem whatsapp-mlm.service — bot ja depende
-   *   do motor, seria dependencia circular. So usa Prisma + Sender que ja estao
-   *   injetados.
+   *   do motor, seria dependencia circular.
    * - simular() NAO chama executarAcao — esta acao roda apenas no bot real
-   *   (processarComFluxoDinamico). No simulador, a acao aparece em
-   *   "Acoes reportadas" sem efetivar nada.
+   *   (processarComFluxoDinamico).
    */
   private async executarEnviarLinkIndicacao(
-    conversa: { id: string; telefone: string; cooperadoId?: string | null },
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
   ): Promise<void> {
     if (!conversa.cooperadoId) {
       await this.sender.enviarMensagem(
@@ -230,13 +245,21 @@ export class WhatsappFluxoMotorService {
       return;
     }
 
-    const cooperado = await this.prisma.cooperado.findUnique({
-      where: { id: conversa.cooperadoId },
-      select: { id: true, codigoIndicacao: true, nomeCompleto: true },
+    // OBS 1 hardening multi-tenant: findFirst com filtro {id, cooperativaId}
+    // quando cooperativaId conhecido. Defesa em profundidade — alem do bot ja
+    // resolver cooperativaId via telefone, garantimos aqui que cooperado de
+    // outro tenant nao seria encontrado mesmo num cenario de dadosTemp poluido.
+    const where: { id: string; cooperativaId?: string } = { id: conversa.cooperadoId };
+    if (conversa.cooperativaId) {
+      where.cooperativaId = conversa.cooperativaId;
+    }
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where,
+      select: { id: true, codigoIndicacao: true, nomeCompleto: true, cooperativaId: true },
     });
     if (!cooperado) {
       this.logger.warn(
-        `ENVIAR_LINK_INDICACAO: cooperadoId ${conversa.cooperadoId} nao encontrado no banco`,
+        `ENVIAR_LINK_INDICACAO: cooperadoId ${conversa.cooperadoId} nao encontrado no banco (ou pertence a outro tenant)`,
       );
       return;
     }
@@ -259,12 +282,14 @@ export class WhatsappFluxoMotorService {
 
     const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
     const link = `${baseUrl}/entrar?ref=${codigo}`;
+    // OBS 2: mensagem unica e sucinta. Modelo da etapa ENVIAR_CONVITE ja avisou
+    // "vou te enviar seu link 👇" — aqui mandamos so o link + 1 frase de CTA.
     await this.sender.enviarMensagem(
       conversa.telefone,
-      `🎁 Seu link de indicacao personalizado:\n\n${link}\n\nCompartilhe com amigos, familiares e colegas! Quando seu indicado pagar a primeira fatura, voce recebe seu beneficio automaticamente.`,
+      `${link}\n\nCompartilhe com amigos, familiares e colegas! Quando seu indicado pagar a primeira fatura, voce recebe seu beneficio automaticamente.`,
     );
     this.logger.log(
-      `ENVIAR_LINK_INDICACAO: link enviado para ${conversa.telefone} (codigo=${codigo})`,
+      `ENVIAR_LINK_INDICACAO: link enviado para ${conversa.telefone} (codigo=${codigo}, tenant=${cooperado.cooperativaId ?? 'null'})`,
     );
   }
 

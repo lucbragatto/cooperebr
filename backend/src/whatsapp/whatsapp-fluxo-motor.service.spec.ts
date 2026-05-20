@@ -832,6 +832,16 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       conversaUpdate.mockResolvedValueOnce({});
     };
 
+    // OBS 1 (hardening): mock substituido — findFirst no lugar de findUnique
+    const mockCooperadoFindFirst = () => cooperadoFindFirstAux;
+    const cooperadoFindFirstAux = jest.fn();
+
+    beforeEach(() => {
+      // re-mockar findFirst do prisma.cooperado a cada teste do describe
+      cooperadoFindFirstAux.mockReset();
+      prismaMock.cooperado.findFirst = cooperadoFindFirstAux;
+    });
+
     it('R5 SEM cooperadoId -> manda mensagem de cadastro, nao busca cooperado, nao gera codigo', async () => {
       setupTransicaoParaEnvioConvite();
       await service.processarComFluxoDinamico(
@@ -843,14 +853,15 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         '+5527981341348',
         expect.stringContaining('precisa ser cooperado'),
       );
-      expect(cooperadoFindUnique).not.toHaveBeenCalled();
+      expect(mockCooperadoFindFirst()).not.toHaveBeenCalled();
       expect(cooperadoUpdate).not.toHaveBeenCalled();
     });
 
-    it('R5 COM cooperadoId + codigoIndicacao existente -> envia link com codigo ja salvo', async () => {
+    it('OBS 1: COM cooperadoId + cooperativaId -> findFirst filtra por AMBOS (multi-tenant)', async () => {
       setupTransicaoParaEnvioConvite();
-      cooperadoFindUnique.mockResolvedValueOnce({
+      cooperadoFindFirstAux.mockResolvedValueOnce({
         id: 'coop-luciano', codigoIndicacao: 'ABCD1234', nomeCompleto: 'Luciano',
+        cooperativaId: 'coop-A',
       });
 
       const envBackup = process.env.FRONTEND_URL;
@@ -865,22 +876,59 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         else process.env.FRONTEND_URL = envBackup;
       }
 
-      expect(cooperadoFindUnique).toHaveBeenCalledWith({
-        where: { id: 'coop-luciano' },
-        select: { id: true, codigoIndicacao: true, nomeCompleto: true },
+      // Hardening confirmado: filtra por id + cooperativaId
+      expect(cooperadoFindFirstAux).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano', cooperativaId: 'coop-A' },
+        select: { id: true, codigoIndicacao: true, nomeCompleto: true, cooperativaId: true },
       });
-      // codigo ja existe -> NAO gera novo, NAO update
       expect(cooperadoUpdate).not.toHaveBeenCalled();
-      expect(enviarMensagem).toHaveBeenCalledWith(
-        '+5527981341348',
-        expect.stringContaining('https://app.cooperebr.com.br/entrar?ref=ABCD1234'),
+      // OBS 2: mensagem unica e sucinta (modelo da etapa ja avisou)
+      expect(enviarMensagem).toHaveBeenCalledTimes(1);
+      const enviado = enviarMensagem.mock.calls[0][1];
+      expect(enviado).toContain('https://app.cooperebr.com.br/entrar?ref=ABCD1234');
+      // Texto NAO repete "Seu link de indicacao personalizado" (modelo da etapa ja diz isso)
+      expect(enviado).not.toMatch(/link de indicacao personalizado/i);
+    });
+
+    it('OBS 1: COM cooperadoId + SEM cooperativaId na conversa -> findFirst so por id (defesa em profundidade nao quebra)', async () => {
+      setupTransicaoParaEnvioConvite();
+      cooperadoFindFirstAux.mockResolvedValueOnce({
+        id: 'coop-luciano', codigoIndicacao: 'WXYZ9999', nomeCompleto: 'Luciano',
+        cooperativaId: 'coop-A',
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+        baseConversa({ cooperadoId: 'coop-luciano', cooperativaId: null }),
       );
+
+      const where = cooperadoFindFirstAux.mock.calls[0][0].where;
+      expect(where).toEqual({ id: 'coop-luciano' });
+      expect(where).not.toHaveProperty('cooperativaId');
+    });
+
+    it('OBS 1 ISOLAMENTO: cooperadoId de outro tenant -> findFirst retorna null, NAO envia link', async () => {
+      setupTransicaoParaEnvioConvite();
+      cooperadoFindFirstAux.mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
+        baseConversa({ cooperadoId: 'cooperado-de-coop-B', cooperativaId: 'coop-A' }),
+      );
+
+      expect(cooperadoFindFirstAux).toHaveBeenCalledWith({
+        where: { id: 'cooperado-de-coop-B', cooperativaId: 'coop-A' },
+        select: { id: true, codigoIndicacao: true, nomeCompleto: true, cooperativaId: true },
+      });
+      expect(enviarMensagem).not.toHaveBeenCalled();
+      expect(cooperadoUpdate).not.toHaveBeenCalled();
     });
 
     it('R5 COM cooperadoId + codigoIndicacao null -> gera 8 chars A-Z0-9, persiste, envia link', async () => {
       setupTransicaoParaEnvioConvite();
-      cooperadoFindUnique.mockResolvedValueOnce({
+      cooperadoFindFirstAux.mockResolvedValueOnce({
         id: 'coop-luciano', codigoIndicacao: null, nomeCompleto: 'Luciano',
+        cooperativaId: 'coop-A',
       });
 
       await service.processarComFluxoDinamico(
@@ -904,7 +952,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
     it('R5 cooperadoId aponta pra cooperado inexistente -> NAO envia, loga warn', async () => {
       setupTransicaoParaEnvioConvite();
-      cooperadoFindUnique.mockResolvedValueOnce(null);
+      cooperadoFindFirstAux.mockResolvedValueOnce(null);
 
       await service.processarComFluxoDinamico(
         { telefone: '+5527981341348', tipo: 'texto', corpo: '4' },
