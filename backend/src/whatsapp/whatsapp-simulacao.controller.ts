@@ -27,6 +27,13 @@ interface SimularBody {
   estadoInicial?: string;
   dadosTemp?: Record<string, unknown>;
   cooperativaId?: string | null; // apenas SUPER_ADMIN pode definir; demais sao ignorados
+  /**
+   * R3 — Forca uma etapa especifica (por id) como ponto de partida. Resolve o
+   * caso de 2+ etapas no mesmo estado: sem isso, o motor pega sempre a primeira
+   * via buscarEtapa(estado). Multi-tenant: motor valida que a etapa pertence ao
+   * tenant ou e GLOBAL antes de aceitar.
+   */
+  etapaIdForcado?: string | null;
 }
 
 interface PreviewModeloBody {
@@ -72,6 +79,13 @@ export class WhatsappSimulacaoController {
     if (body.estadoInicial !== undefined && typeof body.estadoInicial !== 'string') {
       throw new BadRequestException('Campo "estadoInicial" deve ser string');
     }
+    if (
+      body.etapaIdForcado !== undefined &&
+      body.etapaIdForcado !== null &&
+      typeof body.etapaIdForcado !== 'string'
+    ) {
+      throw new BadRequestException('Campo "etapaIdForcado" deve ser string ou null');
+    }
 
     const cooperativaId = this.resolverEscopo(body.cooperativaId, user);
 
@@ -80,6 +94,7 @@ export class WhatsappSimulacaoController {
       cooperativaId,
       estadoInicial: body.estadoInicial,
       dadosTemp: body.dadosTemp,
+      etapaIdForcado: body.etapaIdForcado ?? null,
     };
 
     return this.motor.simular(input);

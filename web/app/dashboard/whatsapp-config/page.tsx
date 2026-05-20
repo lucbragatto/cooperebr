@@ -544,6 +544,10 @@ function AbaFluxo() {
   const [simuladorAberto, setSimuladorAberto] = useState(false);
   // Fase B: estado inicial do simulador. null = abertura geral (INICIAL); string = a partir de etapa especifica
   const [estadoInicialSim, setEstadoInicialSim] = useState<string | null>(null);
+  // R3 (20/05): id da etapa exata que o admin clicou ▶ na lista. Quando preenchido,
+  // o backend forca essa etapa em vez de deixar buscarEtapa(estado) escolher — resolve
+  // o caso de 2+ etapas no mesmo estado abrirem identicas no simulador.
+  const [etapaIdForcadoSim, setEtapaIdForcadoSim] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -659,6 +663,7 @@ function AbaFluxo() {
             variant="outline"
             onClick={() => {
               setEstadoInicialSim(null);
+              setEtapaIdForcadoSim(null);
               setSimuladorAberto(true);
             }}
             title="Simula o fluxo começando do estado INICIAL"
@@ -748,6 +753,8 @@ function AbaFluxo() {
                         size="icon-sm"
                         onClick={() => {
                           setEstadoInicialSim(etapa.estado);
+                          // R3: força ESTA etapa específica (não a primeira encontrada pelo estado)
+                          setEtapaIdForcadoSim(etapa.id);
                           setSimuladorAberto(true);
                         }}
                         title={`Testar a partir desta etapa (${etapa.estado})`}
@@ -889,9 +896,11 @@ function AbaFluxo() {
         <SimuladorCelular
           cooperativaId={(getUsuario() as { cooperativaId?: string | null } | null)?.cooperativaId ?? null}
           etapaInicial={estadoInicialSim ?? 'INICIAL'}
+          etapaIdForcado={etapaIdForcadoSim}
           onFechar={() => {
             setSimuladorAberto(false);
             setEstadoInicialSim(null);
+            setEtapaIdForcadoSim(null);
           }}
         />
       )}

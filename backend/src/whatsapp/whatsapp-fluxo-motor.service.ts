@@ -275,26 +275,41 @@ export class WhatsappFluxoMotorService {
 
   async simular(input: SimulacaoInput): Promise<SimulacaoOutput> {
     const cooperativaId = input.cooperativaId ?? undefined;
-    const estadoInicial = input.estadoInicial ?? 'INICIAL';
+    const estadoInicialDeclarado = input.estadoInicial ?? 'INICIAL';
     const corpo = (input.mensagem ?? '').trim();
 
     const conversaFake = {
       dadosTemp: input.dadosTemp ?? {},
     };
 
-    const etapaAtual = await this.buscarEtapa(estadoInicial, cooperativaId);
+    // R3 — etapaIdForcado: quando o admin clica no botão ▶ de uma etapa especifica
+    // (e nao no "Testar fluxo" geral), o frontend manda o id pra forcar essa etapa
+    // exata como ponto de partida. Antes (e ainda no fallback), buscarEtapa() resolvia
+    // por estado — o que fazia 2 etapas no mesmo estado abrirem identicas.
+    // Seguranca: findFirst com OR [tenant|null] garante que ADMIN nao force etapa
+    // de outro tenant.
+    const etapaAtual = input.etapaIdForcado
+      ? await this.buscarEtapaPorIdForcado(input.etapaIdForcado, cooperativaId)
+      : await this.buscarEtapa(estadoInicialDeclarado, cooperativaId);
+
+    // Estado inicial real apos resolucao: se forcou etapa, usa o estado dela; senao o declarado.
+    const estadoInicial = etapaAtual?.estado ?? estadoInicialDeclarado;
+
     if (!etapaAtual) {
       return {
         estadoInicial,
         estadoFinal: estadoInicial,
         transicionou: false,
         gatilhoAvaliado: null,
-        motivoFallback: 'Nenhuma etapa dinamica para o estado inicial - cairia no fallback hardcoded',
+        motivoFallback: input.etapaIdForcado
+          ? 'Etapa forcada nao encontrada (id inexistente, inativa ou de outro tenant)'
+          : 'Nenhuma etapa dinamica para o estado inicial - cairia no fallback hardcoded',
         mensagensEnviadas: [],
         acaoAutomatica: null,
         etapaAtual: null,
         etapaProxima: null,
         mensagemEtapaAtual: null,
+        avisoTransicao: null,
       };
     }
 
@@ -316,9 +331,13 @@ export class WhatsappFluxoMotorService {
         etapaAtual: this.resumoEtapa(etapaAtual),
         etapaProxima: null,
         mensagemEtapaAtual,
+        avisoTransicao: null,
       };
     }
 
+    // R3: transicoes SEGUINTES continuam por estado (buscarEtapa normal) — etapaIdForcado
+    // so vale pra etapa inicial pra resolver duplicacao de estado. A partir daqui
+    // o motor anda normalmente.
     const proximaEtapa = await this.buscarEtapa(proximoEstado, cooperativaId);
     const mensagensEnviadas: SimulacaoMensagem[] = [];
 
@@ -334,6 +353,14 @@ export class WhatsappFluxoMotorService {
       }
     }
 
+    // R4 — avisoTransicao: o motor transicionou mas o estado destino nao tem etapa
+    // dinamica ativa. No WhatsApp real, isso cai no fluxo hardcoded (whatsapp-bot.service).
+    // No simulador, sem essa flag o usuario ve o estado mudar mas nenhuma bolha nova —
+    // parecendo "bot mudo". Avisa explicitamente.
+    const avisoTransicao = proximaEtapa
+      ? null
+      : `Transicionou para ${proximoEstado} mas nao ha etapa dinamica ativa nesse estado — no WhatsApp real cairia no fluxo hardcoded.`;
+
     return {
       estadoInicial,
       estadoFinal: proximoEstado,
@@ -345,7 +372,35 @@ export class WhatsappFluxoMotorService {
       etapaAtual: this.resumoEtapa(etapaAtual),
       etapaProxima: proximaEtapa ? this.resumoEtapa(proximaEtapa) : null,
       mensagemEtapaAtual,
+      avisoTransicao,
     };
+  }
+
+  /**
+   * R3 — Resolve uma FluxoEtapa pelo id explicito, respeitando escopo tenant.
+   * Usado quando o admin clica em "Testar a partir desta etapa" pra forcar uma
+   * etapa especifica em vez de deixar buscarEtapa(estado) selecionar a primeira
+   * encontrada. Retorna null se a etapa nao existe, nao esta ativa ou pertence
+   * a outro tenant (defesa em profundidade — o controller ja resolve escopo).
+   */
+  private async buscarEtapaPorIdForcado(
+    etapaId: string,
+    cooperativaId: string | undefined,
+  ): Promise<FluxoEtapaComModelo | null> {
+    const etapa = await this.prisma.fluxoEtapa.findFirst({
+      where: {
+        id: etapaId,
+        ativo: true,
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (!etapa) return null;
+    return {
+      ...etapa,
+      gatilhos: Array.isArray(etapa.gatilhos)
+        ? (etapa.gatilhos as unknown as Gatilho[])
+        : [],
+    } as FluxoEtapaComModelo;
   }
 
   /**
@@ -449,6 +504,15 @@ export interface SimulacaoInput {
   cooperativaId?: string | null;
   estadoInicial?: string;
   dadosTemp?: Record<string, unknown>;
+  /**
+   * R3 — Forca uma etapa especifica como ponto de partida em vez de deixar
+   * buscarEtapa(estado) escolher. Usado pelo botao ▶ de uma etapa especifica
+   * na lista — resolve o caso de 2+ etapas no mesmo estado abrindo identicas.
+   * Seguranca: motor faz findFirst com OR [tenant|null], outro tenant nao
+   * consegue forcar. Aplica APENAS a 1a resolucao; transicoes seguintes
+   * continuam por estado.
+   */
+  etapaIdForcado?: string | null;
 }
 
 export interface SimulacaoMensagem {
@@ -487,6 +551,13 @@ export interface SimulacaoOutput {
    * Usado pela UI pra mostrar bolha inicial do bot no simulador.
    */
   mensagemEtapaAtual: string | null;
+  /**
+   * R4 — Aviso quando transicionou: true MAS proximaEtapa: null (estado destino
+   * existe nos gatilhos mas nao tem etapa dinamica ativa). No WhatsApp real isso
+   * cairia no fluxo hardcoded — no simulador, sem aviso, o usuario ve "estado mudou
+   * mas bot nao respondeu" e fica confuso. UI mostra como bolha sistema.
+   */
+  avisoTransicao: string | null;
 }
 
 // Fase C - Preview de modelo de mensagem (sem fluxo)

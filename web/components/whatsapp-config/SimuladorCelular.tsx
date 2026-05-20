@@ -44,6 +44,7 @@ interface RespostaSimular {
   etapaAtual: EtapaResumo | null;
   etapaProxima: EtapaResumo | null;
   mensagemEtapaAtual: string | null;
+  avisoTransicao: string | null;
 }
 
 interface BolhaHistorico {
@@ -55,6 +56,13 @@ interface BolhaHistorico {
 interface SimuladorCelularProps {
   cooperativaId?: string | null;
   etapaInicial?: string;
+  /**
+   * R3 — Quando o admin clica no botao ▶ de uma etapa especifica na lista,
+   * passamos o id pra forcar essa etapa como ponto de partida. Resolve o caso
+   * de 2+ etapas no mesmo estado abrindo identicas. Aplica APENAS na 1a chamada
+   * (mount/ping); depois zera e segue por estado.
+   */
+  etapaIdForcado?: string | null;
   onFechar: () => void;
 }
 
@@ -69,6 +77,7 @@ function formatarHora(d: Date): string {
 export function SimuladorCelular({
   cooperativaId = null,
   etapaInicial = 'INICIAL',
+  etapaIdForcado = null,
   onFechar,
 }: SimuladorCelularProps) {
   const [historico, setHistorico] = useState<BolhaHistorico[]>([]);
@@ -79,6 +88,9 @@ export function SimuladorCelular({
   const [loading, setLoading] = useState(false);
   const [encerrado, setEncerrado] = useState(false);
   const [acoesAutomaticas, setAcoesAutomaticas] = useState<string[]>([]);
+  // R3: id forçado vive em ref pra que o callback `simular` enxergue a última
+  // versão sem precisar entrar em deps. Limpamos após a 1ª chamada (mount/ping).
+  const idForcadoRef = useRef<string | null>(etapaIdForcado);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const iniciadoRef = useRef(false);
@@ -86,11 +98,15 @@ export function SimuladorCelular({
   const simular = useCallback(
     async (mensagem: string) => {
       setLoading(true);
+      const idForcadoNestaChamada = idForcadoRef.current;
+      // R3: id forçado aplica APENAS na 1ª chamada; depois disso o motor anda por estado normal.
+      idForcadoRef.current = null;
       try {
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem,
           cooperativaId: cooperativaId ?? null,
           estadoInicial: estadoAtual,
+          etapaIdForcado: idForcadoNestaChamada,
         });
 
         // backend retorna campo "texto" (Fase A: type alinhado com o motor)
@@ -106,6 +122,15 @@ export function SimuladorCelular({
           novasBolhas.push({
             role: 'sistema',
             conteudo: `[sistema] ${data.motivoFallback}`,
+            timestamp: new Date(),
+          });
+        }
+
+        // R4: aviso explícito quando transicionou pra estado sem etapa ativa
+        if (data.avisoTransicao) {
+          novasBolhas.push({
+            role: 'sistema',
+            conteudo: `[sistema] ${data.avisoTransicao}`,
             timestamp: new Date(),
           });
         }
@@ -153,10 +178,15 @@ export function SimuladorCelular({
     // Carrega resumo da etapa inicial via ping (motor retorna etapaAtual mesmo sem gatilho casar).
     (async () => {
       try {
+        // R3: o ping consome o idForcadoRef e ja zera, garantindo que so a 1a resolucao
+        // use forcado. Proximas chamadas via callback `simular` veem null.
+        const idForcadoNestePing = idForcadoRef.current;
+        idForcadoRef.current = null;
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem: '__simulador_ping__',
           cooperativaId: cooperativaId ?? null,
           estadoInicial: etapaInicial,
+          etapaIdForcado: idForcadoNestePing,
         });
         setEtapaAtualResumo(data.etapaAtual ?? null);
         if (!data.etapaAtual) {
@@ -225,13 +255,19 @@ export function SimuladorCelular({
     setEncerrado(false);
     setAcoesAutomaticas([]);
     setEtapaProximaResumo(null);
+    // R3: ao reiniciar, restaurar a forca da etapa original passada como prop
+    // (a sessao reseta — admin clicou no mesmo botao ▶ esperando o mesmo ponto de partida).
+    idForcadoRef.current = etapaIdForcado;
     // Recarrega resumo da etapa inicial via ping (mesmo padrao do mount)
     (async () => {
       try {
+        const idForcadoNestePing = idForcadoRef.current;
+        idForcadoRef.current = null;
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem: '__simulador_ping__',
           cooperativaId: cooperativaId ?? null,
           estadoInicial: etapaInicial,
+          etapaIdForcado: idForcadoNestePing,
         });
         setEtapaAtualResumo(data.etapaAtual ?? null);
         if (data.etapaAtual && data.mensagemEtapaAtual) {

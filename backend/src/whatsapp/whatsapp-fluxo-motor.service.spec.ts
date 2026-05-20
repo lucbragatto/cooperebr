@@ -604,6 +604,153 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(where).toMatchObject({ cooperativaId: null });
     });
 
+    // ============================================================
+    // R4 (20/05) — avisoTransicao para estado destino sem etapa ativa
+    // ============================================================
+    it('R4: transicionou para estado SEM etapa ativa -> avisoTransicao preenchido', async () => {
+      // etapaAtual TEM gatilho "1" -> ESTADO_ORFAO
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'ESTADO_ORFAO' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      // buscarEtapa(ESTADO_ORFAO, coop-A): tenant null + global null = sem etapa
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+      const r = await service.simular({
+        mensagem: '1', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.transicionou).toBe(true);
+      expect(r.estadoFinal).toBe('ESTADO_ORFAO');
+      expect(r.etapaProxima).toBeNull();
+      expect(r.mensagensEnviadas).toEqual([]);
+      expect(r.avisoTransicao).toContain('ESTADO_ORFAO');
+      expect(r.avisoTransicao).toContain('fluxo hardcoded');
+    });
+
+    it('R4: transicionou para estado COM etapa ativa -> avisoTransicao=null', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2', cooperativaId: 'coop-A', nome: 'Menu', estado: 'MENU',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: '1', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.transicionou).toBe(true);
+      expect(r.etapaProxima?.nome).toBe('Menu');
+      expect(r.avisoTransicao).toBeNull();
+    });
+
+    it('R4: nao-transicao (gatilho nao casa) -> avisoTransicao=null', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      const r = await service.simular({
+        mensagem: 'xyz', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+      expect(r.transicionou).toBe(false);
+      expect(r.avisoTransicao).toBeNull();
+    });
+
+    // ============================================================
+    // R3 (20/05) — etapaIdForcado resolve etapa exata por id
+    // ============================================================
+    it('R3: etapaIdForcado resolve etapa exata por id (bypassa buscarEtapa por estado)', async () => {
+      // findFirst com id+ativo+OR retorna a etapa especifica
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'etapa-forcada-id', cooperativaId: 'coop-A',
+        nome: 'Etapa Especifica', estado: 'INICIAL', ordem: 28,
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      // proxima etapa (estado=MENU): tenant null + global null
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+      const r = await service.simular({
+        mensagem: '1', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+        etapaIdForcado: 'etapa-forcada-id',
+      });
+
+      // 1a query foi por ID (com OR tenant+null), nao por estado
+      const whereForcado = etapaFindFirst.mock.calls[0][0].where;
+      expect(whereForcado).toMatchObject({
+        id: 'etapa-forcada-id',
+        ativo: true,
+        OR: [{ cooperativaId: 'coop-A' }, { cooperativaId: null }],
+      });
+      expect(r.etapaAtual?.nome).toBe('Etapa Especifica');
+      expect(r.transicionou).toBe(true);
+    });
+
+    it('R3 ISOLAMENTO: etapaIdForcado de outro tenant retorna null + motivoFallback', async () => {
+      // findFirst com OR vai bloquear: id existe mas coop-B != coop-A nem null
+      etapaFindFirst.mockResolvedValueOnce(null);
+
+      const r = await service.simular({
+        mensagem: 'oi', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+        etapaIdForcado: 'id-de-coop-B',
+      });
+
+      expect(r.etapaAtual).toBeNull();
+      expect(r.motivoFallback).toContain('Etapa forcada');
+      expect(r.transicionou).toBe(false);
+    });
+
+    it('R3: transicoes SEGUINTES nao usam etapaIdForcado (so a 1a resolucao)', async () => {
+      // 1a chamada (id forcado): retorna etapa com gatilho 1
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'forcada', cooperativaId: 'coop-A',
+        nome: 'Forcada', estado: 'INICIAL', ordem: 28,
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      // 2a chamada (proximaEtapa=MENU): buscarEtapa tenant
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu', cooperativaId: 'coop-A', nome: 'Menu', estado: 'MENU',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      await service.simular({
+        mensagem: '1', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+        etapaIdForcado: 'forcada',
+      });
+
+      // 2a query NAO usa id forcado — usa estado+cooperativaId
+      const whereProxima = etapaFindFirst.mock.calls[1][0].where;
+      expect(whereProxima).toMatchObject({
+        estado: 'MENU', ativo: true, cooperativaId: 'coop-A',
+      });
+      expect(whereProxima).not.toHaveProperty('id');
+    });
+
+    it('R3: etapaIdForcado=null (omitido) -> comportamento atual via buscarEtapa(estado)', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-normal', cooperativaId: 'coop-A', nome: 'Normal', estado: 'INICIAL',
+        gatilhos: [{ resposta: 'X', proximoEstado: 'Y' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      await service.simular({
+        mensagem: 'xx', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+        etapaIdForcado: null,
+      });
+
+      // 1a query foi por estado (sem id, sem OR — eh o filtro tenant exato do buscarEtapa)
+      const where = etapaFindFirst.mock.calls[0][0].where;
+      expect(where).toMatchObject({ estado: 'INICIAL', ativo: true, cooperativaId: 'coop-A' });
+      expect(where).not.toHaveProperty('id');
+    });
+
     it('ISOLAMENTO: simular como tenant A NAO renderiza variaveis de tenant B', async () => {
       // Tenant A simula primeiro
       etapaFindFirst.mockResolvedValueOnce({
