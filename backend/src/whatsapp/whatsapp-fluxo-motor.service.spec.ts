@@ -60,29 +60,99 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   // Fase 1 - Isolamento via cooperativaId no buscarEtapa
   // ============================================================
   describe('processarComFluxoDinamico() - propaga cooperativaId', () => {
-    it('Conversa COM cooperativaId -> buscarEtapa usa OR [tenant + null]', async () => {
-      etapaFindFirst.mockResolvedValueOnce(null);
+    it('Conversa COM cooperativaId -> buscarEtapa busca tenant primeiro com filtro exato', async () => {
+      // 2 queries: 1a tenant (retorna null), 2a global (tambem null)
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
       await service.processarComFluxoDinamico(
         { telefone: '5527981341348', tipo: 'texto', corpo: 'oi' },
         { id: 'c1', telefone: '5527981341348', estado: 'MENU', cooperativaId: 'coop-A' },
       );
-      const where = etapaFindFirst.mock.calls[0][0].where;
-      expect(where).toMatchObject({
+      // 1a chamada: filtra cooperativaId exato do tenant (sem OR)
+      const whereTenant = etapaFindFirst.mock.calls[0][0].where;
+      expect(whereTenant).toMatchObject({
         estado: 'MENU',
         ativo: true,
-        OR: [{ cooperativaId: 'coop-A' }, { cooperativaId: null }],
+        cooperativaId: 'coop-A',
+      });
+      expect(whereTenant).not.toHaveProperty('OR');
+      // 2a chamada (fallback): filtra cooperativaId null
+      const whereGlobal = etapaFindFirst.mock.calls[1][0].where;
+      expect(whereGlobal).toMatchObject({
+        estado: 'MENU',
+        ativo: true,
+        cooperativaId: null,
       });
     });
 
-    it('Conversa SEM cooperativaId -> buscarEtapa filtra cooperativaId: null', async () => {
+    it('Conversa SEM cooperativaId -> buscarEtapa filtra cooperativaId: null direto (1 query)', async () => {
       etapaFindFirst.mockResolvedValueOnce(null);
       await service.processarComFluxoDinamico(
         { telefone: '5527981341348', tipo: 'texto', corpo: 'oi' },
         { id: 'c1', telefone: '5527981341348', estado: 'MENU', cooperativaId: null },
       );
+      expect(etapaFindFirst).toHaveBeenCalledTimes(1);
       const where = etapaFindFirst.mock.calls[0][0].where;
       expect(where).toMatchObject({ estado: 'MENU', ativo: true, cooperativaId: null });
       expect(where).not.toHaveProperty('OR');
+    });
+
+    it('REGRESSION D-novo-Q: tenant com ordem alta vence global com ordem baixa', async () => {
+      // Cenario do bug em producao (19/05): "Receber fatura" global ordem=1 ativa 0 gatilhos
+      // venceria "Entrada Dinamica" tenant ordem=28 ativa 3 gatilhos no OR antigo + orderBy asc.
+      // Com 2 queries explicitas, tenant SEMPRE vence se existir.
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'entrada-dinamica',
+        cooperativaId: 'coop-A',
+        nome: 'Entrada Dinamica',
+        ordem: 28,
+        estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU_COOPERADO' }],
+        modeloMensagemId: null,
+        ativo: true,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'INICIAL', cooperativaId: 'coop-A' },
+      );
+
+      // Etapa atual: 1 query tenant (achou). Proxima etapa MENU_COOPERADO: 2 queries (tenant vazio + global vazio).
+      // Total = 3 chamadas. O ponto chave do teste e a 1a query: deve ser tenant, sem OR.
+      expect(etapaFindFirst).toHaveBeenCalled();
+      const whereTenant = etapaFindFirst.mock.calls[0][0].where;
+      expect(whereTenant.cooperativaId).toBe('coop-A');
+      expect(whereTenant).not.toHaveProperty('OR');
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Quando tenant NAO tem etapa para o estado, fallback global ativa', async () => {
+      // 1a query (tenant): vazio
+      etapaFindFirst.mockResolvedValueOnce(null);
+      // 2a query (global): etapa template padrao
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'global-1',
+        cooperativaId: null,
+        nome: 'Template Padrao',
+        ordem: 1,
+        estado: 'MENU',
+        gatilhos: [{ resposta: 'OK', proximoEstado: 'X' }],
+        modeloMensagemId: null,
+        ativo: true,
+      });
+      // 3a/4a queries da proxima etapa
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'OK' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU', cooperativaId: 'coop-A' },
+      );
+
+      expect(etapaFindFirst.mock.calls[0][0].where.cooperativaId).toBe('coop-A');
+      expect(etapaFindFirst.mock.calls[1][0].where.cooperativaId).toBe(null);
+      expect(conversaUpdate).toHaveBeenCalled();
     });
 
     it('Modelo do proximo estado tambem respeita escopo tenant', async () => {

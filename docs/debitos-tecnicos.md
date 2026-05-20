@@ -2341,6 +2341,41 @@ Se alguém rodar `seed-mensagens.ts` depois do refator, **sobrescreve o trabalho
 
 ---
 
+### D-novo-Q — `buscarEtapa()` priorizava etapa global sobre tenant em runtime (P1 produção — RESOLVIDO 2026-05-19 noite)
+
+**Severidade:** P1 PRODUÇÃO (bug silencioso afetou TODO o motor dinâmico desde a implementação)
+**Detectado em:** 2026-05-19 noite (investigação simulador celular — Luciano reportou que "Entrada Dinâmica" do CoopereBR nunca respondia)
+
+**Sintoma:** quando havia uma etapa do tenant E uma etapa global ativas para o mesmo `estado`, o motor escolhia a global se ela tivesse `ordem` menor. Em produção:
+- "Receber fatura" (global, `cooperativaId=null`, ordem baixa, **0 gatilhos**, ativa)
+- "Entrada Dinâmica" (CoopereBR, `cooperativaId=cmn0ho8bx...`, ordem 28, **3 gatilhos**, ativa)
+
+A query `findFirst { OR: [{ cooperativaId: tenant }, { cooperativaId: null }] } orderBy: { ordem: asc }` pegava a global (ordem menor) → 0 gatilhos → fallback hardcoded sempre. **Cooperado nunca usou nenhuma personalização criada pela UI do parceiro desde a implementação do motor dinâmico.**
+
+**Impacto em produção:** todo cooperado do CoopereBR que mandou mensagem ao Assis depois que "Entrada Dinâmica" foi criada via UI caiu no fluxo hardcoded — nunca experimentou a customização do tenant. Bug silencioso (sem erro), só visível observando que personalizações não funcionavam.
+
+**Causa raiz:** `buscarEtapa()` em `backend/src/whatsapp/whatsapp-fluxo-motor.service.ts` usava `OR + orderBy ordem asc` — assumia que `ordem` numérica seria suficiente pra resolver prioridade. Não era: ordem é controlada pela UI por usuário e não tem garantia de tenant < global.
+
+**Fix aplicado:** refator pra 2 queries explícitas:
+1. Primeiro busca tenant exato (`cooperativaId: tenant`). Se achar, retorna.
+2. Fallback: busca global (`cooperativaId: null`).
+
+Tenant SEMPRE vence se existir, independente de ordem. Comportamento explícito na semântica.
+
+**Cobertura:**
+- 1 spec novo de regressão: `REGRESSION D-novo-Q: tenant com ordem alta vence global com ordem baixa`
+- 1 spec novo: `Quando tenant NAO tem etapa para o estado, fallback global ativa`
+- 2 specs antigos refeitos pra refletir nova semântica (2 queries)
+- Total: 30/30 specs verdes em `whatsapp-fluxo-motor.service.spec.ts`
+
+**Estimativa real:** 45min Code (investigação + fix + 4 specs + commit)
+
+**Status:** ✅ RESOLVIDO em 2026-05-19 noite. Commit cobrindo fix do motor + ajustes de specs + catalogação aqui.
+
+**Lição:** quando duas linhas de defesa (tenant + global) precisam de prioridade explícita, NÃO confiar em ordem numérica controlada por usuário. Usar queries separadas com semântica clara.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

@@ -109,24 +109,37 @@ export class WhatsappFluxoMotorService {
   }
 
   private async buscarEtapa(estado: string, cooperativaId?: string): Promise<FluxoEtapaComModelo | null> {
-    const where: Record<string, unknown> = { estado, ativo: true };
-
+    // Tenant prevalece sobre global: customizacao do parceiro sempre vence o template padrao.
+    // Antes (bug D-novo-Q): findFirst com OR { tenant OR global } + orderBy ordem asc fazia o template
+    // global vencer quando tinha ordem menor que a etapa do tenant. Em producao isso significou que
+    // "Entrada Dinamica" do CoopereBR (ordem 28) nunca venceu "Receber fatura" global (ordem baixa).
     if (cooperativaId) {
-      where.OR = [{ cooperativaId }, { cooperativaId: null }];
-    } else {
-      where.cooperativaId = null;
+      const etapaTenant = await this.prisma.fluxoEtapa.findFirst({
+        where: { estado, ativo: true, cooperativaId },
+        orderBy: { ordem: 'asc' },
+      });
+      if (etapaTenant) {
+        return {
+          ...etapaTenant,
+          gatilhos: Array.isArray(etapaTenant.gatilhos)
+            ? (etapaTenant.gatilhos as unknown as Gatilho[])
+            : [],
+        } as FluxoEtapaComModelo;
+      }
     }
 
-    const etapa = await this.prisma.fluxoEtapa.findFirst({
-      where,
+    const etapaGlobal = await this.prisma.fluxoEtapa.findFirst({
+      where: { estado, ativo: true, cooperativaId: null },
       orderBy: { ordem: 'asc' },
     });
 
-    if (!etapa) return null;
+    if (!etapaGlobal) return null;
 
     return {
-      ...etapa,
-      gatilhos: Array.isArray(etapa.gatilhos) ? (etapa.gatilhos as unknown as Gatilho[]) : [],
+      ...etapaGlobal,
+      gatilhos: Array.isArray(etapaGlobal.gatilhos)
+        ? (etapaGlobal.gatilhos as unknown as Gatilho[])
+        : [],
     } as FluxoEtapaComModelo;
   }
 
