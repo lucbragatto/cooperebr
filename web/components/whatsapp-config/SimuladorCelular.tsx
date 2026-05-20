@@ -88,8 +88,11 @@ export function SimuladorCelular({
   const [loading, setLoading] = useState(false);
   const [encerrado, setEncerrado] = useState(false);
   const [acoesAutomaticas, setAcoesAutomaticas] = useState<string[]>([]);
-  // R3: id forçado vive em ref pra que o callback `simular` enxergue a última
-  // versão sem precisar entrar em deps. Limpamos após a 1ª chamada (mount/ping).
+  // R3 (residuo 20/05): id forçado vive em ref e vale até a 1ª TRANSIÇÃO bem-sucedida.
+  // Antes (bug): consumia no ping e zerava. A 1a mensagem real do admin ja ia sem ele
+  // — motor voltava a resolver por estado, anulando o "abrir etapa especifica". Agora
+  // o id persiste enquanto o admin estiver explorando a etapa forcada; so se solta
+  // quando o motor transiciona pra outra (af1 onwards o motor anda por estado normal).
   const idForcadoRef = useRef<string | null>(etapaIdForcado);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -98,9 +101,10 @@ export function SimuladorCelular({
   const simular = useCallback(
     async (mensagem: string) => {
       setLoading(true);
+      // R3 (residuo): manda o forcado e SO solta apos transicao bem-sucedida.
+      // Enquanto o admin testa gatilhos da etapa forcada sem transicionar (ex:
+      // digita texto invalido), id continua valendo.
       const idForcadoNestaChamada = idForcadoRef.current;
-      // R3: id forçado aplica APENAS na 1ª chamada; depois disso o motor anda por estado normal.
-      idForcadoRef.current = null;
       try {
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem,
@@ -138,6 +142,9 @@ export function SimuladorCelular({
         setHistorico((prev) => [...prev, ...novasBolhas]);
         if (data.transicionou) {
           setEstadoAtual(data.estadoFinal);
+          // R3 (residuo): solta o forcado SO depois de uma transicao real.
+          // A partir daqui o motor decide a etapa do novo estado normalmente.
+          idForcadoRef.current = null;
         }
         if (data.acaoAutomatica) {
           setAcoesAutomaticas((prev) => [...prev, data.acaoAutomatica as string]);
@@ -178,15 +185,13 @@ export function SimuladorCelular({
     // Carrega resumo da etapa inicial via ping (motor retorna etapaAtual mesmo sem gatilho casar).
     (async () => {
       try {
-        // R3: o ping consome o idForcadoRef e ja zera, garantindo que so a 1a resolucao
-        // use forcado. Proximas chamadas via callback `simular` veem null.
-        const idForcadoNestePing = idForcadoRef.current;
-        idForcadoRef.current = null;
+        // R3 (residuo): ping LE o forcado mas NAO zera. So o callback simular() zera,
+        // e somente apos transicao real. Assim a 1a mensagem do admin ainda usa o forcado.
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem: '__simulador_ping__',
           cooperativaId: cooperativaId ?? null,
           estadoInicial: etapaInicial,
-          etapaIdForcado: idForcadoNestePing,
+          etapaIdForcado: idForcadoRef.current,
         });
         setEtapaAtualResumo(data.etapaAtual ?? null);
         if (!data.etapaAtual) {
@@ -255,19 +260,18 @@ export function SimuladorCelular({
     setEncerrado(false);
     setAcoesAutomaticas([]);
     setEtapaProximaResumo(null);
-    // R3: ao reiniciar, restaurar a forca da etapa original passada como prop
-    // (a sessao reseta — admin clicou no mesmo botao ▶ esperando o mesmo ponto de partida).
+    // R3 (residuo): ao reiniciar, restaurar a forca da etapa original (admin clicou no
+    // mesmo botao ▶ esperando o mesmo ponto de partida). Nao consumir aqui — vale ate
+    // a 1a transicao tambem pos-reiniciar.
     idForcadoRef.current = etapaIdForcado;
     // Recarrega resumo da etapa inicial via ping (mesmo padrao do mount)
     (async () => {
       try {
-        const idForcadoNestePing = idForcadoRef.current;
-        idForcadoRef.current = null;
         const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
           mensagem: '__simulador_ping__',
           cooperativaId: cooperativaId ?? null,
           estadoInicial: etapaInicial,
-          etapaIdForcado: idForcadoNestePing,
+          etapaIdForcado: idForcadoRef.current,
         });
         setEtapaAtualResumo(data.etapaAtual ?? null);
         if (data.etapaAtual && data.mensagemEtapaAtual) {
