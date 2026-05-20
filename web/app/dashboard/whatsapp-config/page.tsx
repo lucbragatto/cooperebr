@@ -521,6 +521,8 @@ function AbaFluxo() {
   const [testando, setTestando] = useState(false);
   const [testeLog, setTesteLog] = useState<string[]>([]);
   const [simuladorAberto, setSimuladorAberto] = useState(false);
+  // Fase B: estado inicial do simulador. null = abertura geral (INICIAL); string = a partir de etapa especifica
+  const [estadoInicialSim, setEstadoInicialSim] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -632,7 +634,14 @@ function AbaFluxo() {
           <Button variant="outline" onClick={handlePreview}>
             <Eye className="w-4 h-4 mr-1" /> Visualizar fluxo
           </Button>
-          <Button variant="outline" onClick={() => setSimuladorAberto(true)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEstadoInicialSim(null);
+              setSimuladorAberto(true);
+            }}
+            title="Simula o fluxo começando do estado INICIAL"
+          >
             <Play className="w-4 h-4 mr-1" /> Testar fluxo
           </Button>
         </div>
@@ -707,16 +716,29 @@ function AbaFluxo() {
                     </div>
 
                     <div className="flex flex-col gap-1 ml-2">
-                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'up')} disabled={idx === 0}>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'up')} disabled={idx === 0} title="Mover para cima">
                         <ChevronUp className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'down')} disabled={idx === etapas.length - 1}>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleMover(etapa, 'down')} disabled={idx === etapas.length - 1} title="Mover para baixo">
                         <ChevronDown className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => { setEditando(etapa); setModalAberto(true); }}>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEstadoInicialSim(etapa.estado);
+                          setSimuladorAberto(true);
+                        }}
+                        title={`Testar a partir desta etapa (${etapa.estado})`}
+                        className="text-green-700 hover:text-green-800 hover:bg-green-50"
+                        disabled={!etapa.ativo}
+                      >
+                        <Play className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => { setEditando(etapa); setModalAberto(true); }} title="Editar">
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(etapa.id)} className="text-red-600">
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(etapa.id)} className="text-red-600" title="Excluir">
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -839,12 +861,17 @@ function AbaFluxo() {
         </DialogContent>
       </Dialog>
 
-      {/* Simulador in-memory (Fase 5 — POST /whatsapp/simular, zero side effects) */}
+      {/* Simulador in-memory (Fase 5 — POST /whatsapp/simular, zero side effects)
+          Fase B (19/05 noite): estadoInicialSim permite testar a partir de uma etapa
+          específica clicando no botão ▶ da linha da etapa. null = INICIAL (botão geral). */}
       {simuladorAberto && (
         <SimuladorCelular
           cooperativaId={(getUsuario() as { cooperativaId?: string | null } | null)?.cooperativaId ?? null}
-          etapaInicial="INICIAL"
-          onFechar={() => setSimuladorAberto(false)}
+          etapaInicial={estadoInicialSim ?? 'INICIAL'}
+          onFechar={() => {
+            setSimuladorAberto(false);
+            setEstadoInicialSim(null);
+          }}
         />
       )}
     </>

@@ -292,6 +292,8 @@ export class WhatsappFluxoMotorService {
         motivoFallback: 'Nenhuma etapa dinamica para o estado inicial - cairia no fallback hardcoded',
         mensagensEnviadas: [],
         acaoAutomatica: null,
+        etapaAtual: null,
+        etapaProxima: null,
       };
     }
 
@@ -305,6 +307,8 @@ export class WhatsappFluxoMotorService {
         motivoFallback: 'Nenhum gatilho da etapa atual bateu - cairia no fallback hardcoded',
         mensagensEnviadas: [],
         acaoAutomatica: null,
+        etapaAtual: this.resumoEtapa(etapaAtual),
+        etapaProxima: null,
       };
     }
 
@@ -339,6 +343,24 @@ export class WhatsappFluxoMotorService {
       motivoFallback: null,
       mensagensEnviadas,
       acaoAutomatica: proximaEtapa?.acaoAutomatica ?? null,
+      etapaAtual: this.resumoEtapa(etapaAtual),
+      etapaProxima: proximaEtapa ? this.resumoEtapa(proximaEtapa) : null,
+    };
+  }
+
+  /**
+   * Reduz uma FluxoEtapaComModelo ao payload publico que a UI consome no painel
+   * do simulador. Expoe escopo derivado (TENANT/GLOBAL) sem vazar o cooperativaId
+   * para clientes que nao precisam dele.
+   */
+  private resumoEtapa(etapa: FluxoEtapaComModelo): SimulacaoEtapaResumo {
+    return {
+      id: etapa.id,
+      nome: etapa.nome,
+      estado: etapa.estado,
+      escopo: etapa.cooperativaId === null ? 'GLOBAL' : 'TENANT',
+      modeloMensagemId: etapa.modeloMensagemId,
+      acaoAutomatica: etapa.acaoAutomatica,
     };
   }
 }
@@ -357,6 +379,15 @@ export interface SimulacaoMensagem {
   variaveisUsadas: Record<string, string>;
 }
 
+export interface SimulacaoEtapaResumo {
+  id: string;
+  nome: string;
+  estado: string;
+  escopo: 'TENANT' | 'GLOBAL';
+  modeloMensagemId: string | null;
+  acaoAutomatica: string | null;
+}
+
 export interface SimulacaoOutput {
   estadoInicial: string;
   estadoFinal: string;
@@ -365,4 +396,8 @@ export interface SimulacaoOutput {
   motivoFallback: string | null;
   mensagensEnviadas: SimulacaoMensagem[];
   acaoAutomatica: string | null;
+  /** Etapa que o motor selecionou para o estado inicial (null = nenhuma encontrada). */
+  etapaAtual: SimulacaoEtapaResumo | null;
+  /** Etapa para a qual o motor transicionaria (null = nao transicionou ou nao tem etapa). */
+  etapaProxima: SimulacaoEtapaResumo | null;
 }

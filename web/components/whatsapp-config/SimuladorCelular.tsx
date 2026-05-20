@@ -11,10 +11,20 @@ import { CheckCheck, RotateCcw, Send } from 'lucide-react';
 import { PhoneFrame } from './PhoneFrame';
 
 interface MensagemSimulacao {
-  tipo?: 'TEXTO' | 'IMAGEM' | 'AUDIO' | string;
-  conteudo: string;
   modeloId?: string | null;
   modeloNome?: string | null;
+  // backend retorna o texto renderizado em "texto" (motor.SimulacaoMensagem.texto)
+  texto: string;
+  variaveisUsadas?: Record<string, string>;
+}
+
+interface EtapaResumo {
+  id: string;
+  nome: string;
+  estado: string;
+  escopo: 'TENANT' | 'GLOBAL';
+  modeloMensagemId: string | null;
+  acaoAutomatica: string | null;
 }
 
 interface RespostaSimular {
@@ -25,6 +35,8 @@ interface RespostaSimular {
   motivoFallback?: string | null;
   mensagensEnviadas?: MensagemSimulacao[];
   acaoAutomatica?: string | null;
+  etapaAtual: EtapaResumo | null;
+  etapaProxima: EtapaResumo | null;
 }
 
 interface BolhaHistorico {
@@ -54,6 +66,8 @@ export function SimuladorCelular({
 }: SimuladorCelularProps) {
   const [historico, setHistorico] = useState<BolhaHistorico[]>([]);
   const [estadoAtual, setEstadoAtual] = useState<string>(etapaInicial);
+  const [etapaAtualResumo, setEtapaAtualResumo] = useState<EtapaResumo | null>(null);
+  const [etapaProximaResumo, setEtapaProximaResumo] = useState<EtapaResumo | null>(null);
   const [inputUsuario, setInputUsuario] = useState('');
   const [loading, setLoading] = useState(false);
   const [encerrado, setEncerrado] = useState(false);
@@ -72,10 +86,11 @@ export function SimuladorCelular({
           estadoInicial: estadoAtual,
         });
 
+        // backend retorna campo "texto" (Fase A: type alinhado com o motor)
         const novasBolhas: BolhaHistorico[] = (data.mensagensEnviadas ?? []).map(
           (m) => ({
             role: 'bot',
-            conteudo: m.conteudo,
+            conteudo: m.texto,
             timestamp: new Date(),
           }),
         );
@@ -95,6 +110,9 @@ export function SimuladorCelular({
         if (data.acaoAutomatica) {
           setAcoesAutomaticas((prev) => [...prev, data.acaoAutomatica as string]);
         }
+        // Fase A: atualizar painel de estado com etapa que o motor de fato selecionou
+        setEtapaAtualResumo(data.etapaAtual ?? null);
+        setEtapaProximaResumo(data.etapaProxima ?? null);
       } catch (err) {
         setHistorico((prev) => [
           ...prev,
@@ -111,12 +129,45 @@ export function SimuladorCelular({
     [cooperativaId, estadoAtual],
   );
 
-  // Boas-vindas ao montar
+  // Bolha inicial de orientacao + carrega resumo da etapa atual (sem simular gatilho fake).
+  // Antes (bug latente): chamava simular('inicio') -> motor avaliava gatilho INICIO,
+  // nunca casava, sempre caia em fallback "Nenhum gatilho bateu" -> bolha amarela confusa.
   useEffect(() => {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
-    simular('início');
-  }, [simular]);
+    setHistorico([
+      {
+        role: 'sistema',
+        conteudo:
+          '[sistema] Simulador pronto. Digite o que o cooperado responderia ao bot e veja como o fluxo reage. Zero side effects.',
+        timestamp: new Date(),
+      },
+    ]);
+    // Carrega resumo da etapa inicial via ping (motor retorna etapaAtual mesmo sem gatilho casar).
+    (async () => {
+      try {
+        const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
+          mensagem: '__simulador_ping__',
+          cooperativaId: cooperativaId ?? null,
+          estadoInicial: etapaInicial,
+        });
+        setEtapaAtualResumo(data.etapaAtual ?? null);
+        if (!data.etapaAtual) {
+          setHistorico((prev) => [
+            ...prev,
+            {
+              role: 'sistema',
+              conteudo: `[sistema] Nenhuma etapa dinâmica ativa para o estado "${etapaInicial}". Cooperado cairia no fallback hardcoded.`,
+              timestamp: new Date(),
+            },
+          ]);
+        }
+      } catch {
+        // usuario ainda pode interagir — apenas sem o resumo
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll
   useEffect(() => {
@@ -144,18 +195,31 @@ export function SimuladorCelular({
   };
 
   const handleReiniciar = () => {
-    setHistorico([]);
+    setHistorico([
+      {
+        role: 'sistema',
+        conteudo:
+          '[sistema] Simulador reiniciado. Digite o que o cooperado responderia ao bot.',
+        timestamp: new Date(),
+      },
+    ]);
     setEstadoAtual(etapaInicial);
     setEncerrado(false);
     setAcoesAutomaticas([]);
-    iniciadoRef.current = false;
-    // Reinicia via efeito (useEffect detecta iniciadoRef = false → chama simular)
-    setTimeout(() => {
-      if (!iniciadoRef.current) {
-        iniciadoRef.current = true;
-        simular('início');
+    setEtapaProximaResumo(null);
+    // Recarrega resumo da etapa inicial via ping (mesmo padrao do mount)
+    (async () => {
+      try {
+        const { data } = await api.post<RespostaSimular>('/whatsapp/simular', {
+          mensagem: '__simulador_ping__',
+          cooperativaId: cooperativaId ?? null,
+          estadoInicial: etapaInicial,
+        });
+        setEtapaAtualResumo(data.etapaAtual ?? null);
+      } catch {
+        // ignora
       }
-    }, 0);
+    })();
   };
 
   return (
@@ -164,7 +228,10 @@ export function SimuladorCelular({
         <div className="flex gap-6 items-start">
           {/* Lado esquerdo: PhoneFrame + Input */}
           <div className="w-[280px] flex flex-col gap-2">
-            <PhoneFrame nomeContato="Assis" subtitulo={estadoAtual}>
+            <PhoneFrame
+              nomeContato="Assis"
+              subtitulo={etapaAtualResumo ? `${etapaAtualResumo.nome} · ${estadoAtual}` : estadoAtual}
+            >
               <div ref={scrollRef} className="flex flex-col gap-2 h-full">
                 {historico.map((b, i) => {
                   if (b.role === 'sistema') {
@@ -236,17 +303,60 @@ export function SimuladorCelular({
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Estado atual</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Para o simulador responder, ative pelo menos uma etapa com estado
-                  <strong> INICIAL</strong> em &quot;Fluxo do Bot&quot;.
-                </p>
-                <Badge variant="outline" className="font-mono text-xs">
-                  {estadoAtual}
-                </Badge>
-                <p className="text-xs text-muted-foreground mt-3 border-t pt-2">
-                  Simulação in-memory — zero side effects. Não envia WhatsApp real,
-                  não cria conversa, não conta usos.
+              <CardContent className="space-y-2">
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Estado</p>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {estadoAtual}
+                  </Badge>
+                </div>
+
+                {etapaAtualResumo ? (
+                  <div className="pt-1 border-t">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">
+                      Etapa em uso
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium text-gray-800">
+                        {etapaAtualResumo.nome}
+                      </span>
+                      <Badge
+                        variant={etapaAtualResumo.escopo === 'TENANT' ? 'default' : 'secondary'}
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        {etapaAtualResumo.escopo === 'TENANT' ? 'do parceiro' : 'global'}
+                      </Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-1 border-t">
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      ⚠️ Nenhuma etapa ativa para este estado. Crie/ative uma etapa em
+                      &quot;Fluxo do Bot&quot;.
+                    </p>
+                  </div>
+                )}
+
+                {etapaProximaResumo && (
+                  <div className="pt-1 border-t">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">
+                      Transicionou para
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm text-gray-700">{etapaProximaResumo.nome}</span>
+                      <Badge
+                        variant={etapaProximaResumo.escopo === 'TENANT' ? 'default' : 'secondary'}
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        {etapaProximaResumo.escopo === 'TENANT' ? 'do parceiro' : 'global'}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-muted-foreground border-t pt-2 italic">
+                  Simulação in-memory — não envia WhatsApp real, não cria conversa,
+                  não conta usos.
                 </p>
               </CardContent>
             </Card>

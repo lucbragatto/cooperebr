@@ -411,6 +411,63 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(r.motivoFallback).toContain('Nenhum gatilho');
     });
 
+    it('Fase A: simulacao expoe etapaAtual com nome+escopo no output (TENANT)', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-tenant', cooperativaId: 'coop-A', nome: 'Entrada Dinamica', estado: 'INICIAL',
+        gatilhos: [{ resposta: 'XYZ', proximoEstado: 'P' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      const r = await service.simular({
+        mensagem: 'naotem', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+      expect(r.transicionou).toBe(false);
+      expect(r.etapaAtual).toMatchObject({
+        id: 'e-tenant', nome: 'Entrada Dinamica', estado: 'INICIAL', escopo: 'TENANT',
+      });
+      expect(r.etapaProxima).toBeNull();
+    });
+
+    it('Fase A: simulacao expoe etapaAtual com escopo GLOBAL quando nao ha tenant', async () => {
+      // sem cooperativaId -> motor busca cooperativaId=null direto
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-global', cooperativaId: null, nome: 'Receber Fatura', estado: 'INICIAL',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+      const r = await service.simular({ mensagem: 'oi', estadoInicial: 'INICIAL' });
+      expect(r.etapaAtual).toMatchObject({
+        nome: 'Receber Fatura', escopo: 'GLOBAL',
+      });
+    });
+
+    it('Fase A: simulacao com transicao expoe etapaAtual E etapaProxima', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'MENU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2', cooperativaId: 'coop-A', nome: 'Menu Principal', estado: 'MENU',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+      const r = await service.simular({
+        mensagem: '1', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+      expect(r.transicionou).toBe(true);
+      expect(r.etapaAtual?.nome).toBe('Entrada');
+      expect(r.etapaProxima?.nome).toBe('Menu Principal');
+      expect(r.etapaAtual?.escopo).toBe('TENANT');
+      expect(r.etapaProxima?.escopo).toBe('TENANT');
+    });
+
+    it('Fase A: sem etapa para estado inicial -> etapaAtual=null E etapaProxima=null', async () => {
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      const r = await service.simular({
+        mensagem: 'oi', cooperativaId: 'coop-A', estadoInicial: 'INEXISTENTE',
+      });
+      expect(r.etapaAtual).toBeNull();
+      expect(r.etapaProxima).toBeNull();
+    });
+
     it('Simulacao bem-sucedida -> sequencia com texto renderizado + variaveis tenant Fase 2', async () => {
       etapaFindFirst.mockResolvedValueOnce({
         id: 'e1', cooperativaId: 'coop-A',
