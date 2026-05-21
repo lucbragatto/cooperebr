@@ -1,7 +1,43 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-20 — M16 Bloco UX Simulador WhatsApp + Saneamento Fluxo do Bot**. 9 commits empacotados (de91302..0a94aac) + commit fechamento. Sub-débito UX + 6 fixes (R2/R3/R4/R5/R1/R6) + 2 OBS revisão + relatório completo do banco de mensagens/fluxo. 56/56 specs verdes whatsapp-fluxo-motor (era 27 ontem). Estado pós-saneamento: zero estados-destino órfãos, zero hardcodes "CoopereBR", zero modelos duplicados. **Próximo marco mantido: M15 — Sprint 5a Neutro Fio B (3-5 dias Code).** Detalhe: `docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md`.
+> Última atualização: **2026-05-21 — M17 Sprint Bot Autoatendimento: blocos preparatórios completos**. 8 commits empacotados (3ebf41c..a41495d) + commit fechamento. Sprint Bot Autoatendimento ABERTO e repriorizado pra ANTES do M15 Fio B. Entregues: Bloco 1.a Navegação Universal, correção rodapé universal, Bloco 0 quick wins, Bloco 0 v2 (3 órfãs reais), Bloco 2 (11 modelos novos). 2 relatórios criados (revisão etapa-por-etapa + revisão das 19 mensagens). 89/89 specs verdes (era 56 ontem). **Próximo marco: Bloco 3 do Sprint Bot Autoatendimento — Ver saldo + Ver fatura como ações reais (~12-18h).** Detalhe: `docs/sessoes/2026-05-21-sprint-bot-autoatendimento-blocos-preparatorios.md`.
+
+---
+
+## ONDE PARAMOS — 21/05/2026 (Code — M17 Sprint Bot Autoatendimento: blocos preparatórios)
+
+### Marcos entregues nesta sessão (8 commits)
+
+**Sprint Bot Autoatendimento WhatsApp** repriorizado em 21/05 — agora vem ANTES do M15 Fio B (justificativa: bot oco em produção corrói confiança hoje; Fio B tem cobertura de fallback hardcoded por curto prazo).
+
+- **Catalogação Sprint + Iniciativa Fluxos** (`3ebf41c`) — D-novo-S + D-novo-T em débitos; Sprint Bot Autoatendimento + Iniciativa Fluxos Customizáveis na Seção 3b do PLANO. Pendência das memórias `sprint_bot_autoatendimento_20_05.md` + `iniciativa_fluxos_customizaveis_20_05.md` zerada.
+- **Repriorização registrada** (`480809b`) — Sprint Bot Autoatendimento marcado pra antes do M15 nas 2 fontes (PLANO + débitos).
+- **Bloco 1.a Navegação Universal** (`9205f0d`) — comandos INÍCIO/SAIR/MENU no motor antes de `avaliarGatilhos`, em ambos os caminhos (`processarComFluxoDinamico` + `simular`). Palavra exata case-insensitive. `SimulacaoOutput` ganha `comandoUniversalAplicado`. Helpers: `detectarComandoUniversal`, `resolverEstadoComandoUniversal`, `executarComandoUniversalReal`, `executarComandoUniversalSimulado`, `anexarRodape`.
+- **Correção retroativa rodapé** (`3717b51`) — `anexarRodapeSeMenu` → `anexarRodape`. Anexa em TODA etapa (terminal inclusive), não só menu. Justo onde o cooperado fica preso (AGUARDANDO_ATENDENTE).
+- **Bloco 0 quick wins** (`5d85d17`) — Gatilho "5 Indicar amigo" no MENU_COOPERADO cabeado pra ENVIAR_CONVITE (era loop). Modelo `ajuda` sem `{{site}}` (Cooperativa não tem campo `site` no schema — trocado por `{{parceiro}}` + `{{telefone_suporte}}`).
+- **Bloco 0 v2 — 3 órfãs reais** (`95346fc`) — `{{historico}}` populado em `extrairVariaveis()` via `formatarHistoricoConsumo()` lendo `dadosTemp.historicoConsumo`. `{{valorFatura}}` → `{{valorFaturaMedia}}` em `lead_fora_area` (naming divergente). `{{mesesGratis}}` removido de `simulacao_resultado` (variável fantasma, zero matches no backend).
+- **Bloco 2 — 11 modelos novos** (`1097f72`) — proxy_pedindo_nome/telefone/fatura/confirmar, aguardando_novo_nome/email/telefone/cep, menu_inadimplente, menu_fatura, nps_recebido. Categoria BOT, GLOBAIS, ativo=true. `{{telefone}}` adicionado preventivamente ao `extrairVariaveis()` (era órfã do `proxy_confirmar`).
+- **Roadmap organizado** (`a41495d`) — Seção 3b do PLANO com status detalhado dos 8 blocos (4 ✅ + 4 🔴). Nova Seção 3d "Fila operacional próxima" com 4 itens: Sprint Bot Autoatendimento → M15 Fio B → cooperebr2 → Sinergia. Dependência crítica: módulo Fio B (M15) destrava cooperebr2 + Sinergia.
+
+### Validação
+- **89/89 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 56 ontem, 81 no início desta sessão). 25 specs novos Bloco 1.a + 1 spec rodapé universal + 5 specs Bloco 0 v2 + 2 specs Bloco 2.
+- `nest build` limpo em todas as rodadas, `tsc --noEmit` limpo
+- PM2 restartado 5x sem erros
+- 6 scripts de dados rodaram com ANTES/DEPOIS visível e idempotentes
+- Banco: gatilho 5 confirmado, modelo `ajuda` sem `{{site}}`, 11 modelos novos confirmados, órfãs erradicadas
+
+### Pendências carry-over (decisões produto pro Luciano)
+- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
+- Atualizar Contrato (Bloco 5): ação automática vs solicitação + atendente humano
+- Menu Fatura / Menu Inadimplente (Bloco 8): dinâmico vs hardcoded
+- `{{distribuidora}}` vazia em AGUARDANDO_DISPOSITIVO_EMAIL (caminho ou modelo)
+- Horário hardcoded em `aguardando_atendente` (parametrizar pré-Sinergia)
+- Variáveis-fantasma na UI ModalMensagem (~30min UX admin)
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 21/05 fechamento M17).
 
 ---
 
@@ -113,6 +149,23 @@
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 21/05/2026 (Code — M17 Sprint Bot Autoatendimento: blocos preparatórios)
+- **Tipo:** Code (abertura do Sprint Bot Autoatendimento repriorizado + 4 blocos preparatórios entregues + correção rodapé + 2 relatórios)
+- **Resultado:**
+  - Sprint Bot Autoatendimento ABERTO + repriorizado pra ANTES do M15 Fio B (justificativa: bot oco corrói confiança hoje; Fio B tem fallback hardcoded por curto prazo)
+  - **Bloco 1.a Navegação Universal** — comandos INÍCIO/SAIR/MENU no motor antes de `avaliarGatilhos`, com precedência sobre gatilhos. Aplicado em ambos os caminhos (real + simulador). Rodapé universal em TODA etapa (correção 21/05 — antes era só menu).
+  - **Bloco 0 quick wins** — gatilho 5 cabeado pra ENVIAR_CONVITE, modelo `ajuda` sem `{{site}}`.
+  - **Bloco 0 v2 (3 órfãs reais)** — `{{historico}}` populado via `formatarHistoricoConsumo()` lendo `dadosTemp.historicoConsumo`; `{{valorFatura}}` → `{{valorFaturaMedia}}`; `{{mesesGratis}}` removido (variável fantasma).
+  - **Bloco 2** — 11 modelos novos inseridos (proxy_*, aguardando_novo_*, menu_inadimplente, menu_fatura, nps_recebido) + `{{telefone}}` adicionado preventivamente ao `extrairVariaveis()`.
+  - **2 relatórios criados** — revisão etapa-por-etapa (16 etapas) + revisão das 19 mensagens (PARTE 4 anexada) com tabela completa de órfãs, promessas quebradas, decisões pendentes.
+  - **Roadmap organizado** (Seção 3d nova) — fila operacional próxima: Sprint Bot Autoatendimento → M15 Fio B → cooperebr2 → Sinergia, com dependência crítica do módulo Fio B explicitada.
+  - **89/89 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 56 ontem)
+- **Commits da sessão (8):** `3ebf41c` cataloga sprint + `480809b` repriorização + `9205f0d` Bloco 1.a + `3717b51` fix rodapé + `5d85d17` Bloco 0 + `95346fc` Bloco 0 v2 + `1097f72` Bloco 2 + `a41495d` organização roadmap + commit deste fechamento.
+- **Próximo:** **Bloco 3 do Sprint Bot Autoatendimento** — Ver saldo de créditos + Ver próxima fatura como ações reais no motor (`cooper-token` + `cobrancas`), ~12-18h.
+- **Detalhe:** `docs/sessoes/2026-05-21-sprint-bot-autoatendimento-blocos-preparatorios.md`
+
+### Sessão anterior
 
 - **Quando:** 20/05/2026 (Code — M16 UX Simulador + Saneamento Fluxo do Bot)
 - **Tipo:** Code (sub-débito UX simulador + investigação ampla 4 problemas relatados + 6 fixes R1-R6 + 2 OBS revisão + relatório completo banco mensagens/fluxo)
@@ -511,60 +564,72 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M16 da sessão 20/05
-   (mensagem começa com "docs(sessao): fechamento M16").
+   Esperado: working tree limpo, último commit é o de fechamento M17 da sessão 21/05
+   (mensagem começa com "docs(sessao): fechamento M17").
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Iniciando M15 Sprint 5a Neutro Fio B (3-5 dias Code dedicado).
+PASSO 1 — Iniciando Bloco 3 do Sprint Bot Autoatendimento (Ver saldo + Ver fatura, ~12-18h).
 
-OBJETIVO: cobrar Fio B real do cooperado em vez do custo proxy do Engine de Otimização
-(Sprint 8). Esquema: Cobranca.fioB novo + RegrasFioB 2024-2029 alimentadas via seed +
-UI input classeGdAplicada no formulário de Contrato + cron de progressão anual +
-substituir o proxy do AlocacaoEngineService por R$ real na avaliação de economia.
+OBJETIVO: completar as 2 opções do Menu do Cooperado que hoje viram loop —
+"1 Ver saldo de créditos" e "2 Ver próxima fatura". Hoje os gatilhos têm campo
+`acao` (`VER_CREDITOS`, `VER_FATURA`) mas o motor NÃO processa `Gatilho.acao` —
+só usa `proximoEstado` da etapa-destino e `acaoAutomatica` dela. Decisão arquitetural
+(memória sprint_bot_autoatendimento_20_05.md): cada opção vira transição pra um
+estado novo com `acaoAutomatica` própria. NÃO passar a processar `Gatilho.acao`.
+
+DESENHO PROPOSTO (sujeito a revisão na Fase 1):
+- 2 estados novos: VER_SALDO_CREDITOS + VER_PROXIMA_FATURA (etapas globais novas)
+- Gatilho "1" do MENU_COOPERADO -> VER_SALDO_CREDITOS (atualizar — hoje vai pra MENU_COOPERADO)
+- Gatilho "2" do MENU_COOPERADO -> VER_PROXIMA_FATURA (atualizar — hoje vai pra MENU_COOPERADO)
+- 2 modelos novos com placeholders (saldo_creditos_resultado / proxima_fatura_resultado)
+- 2 ações novas no motor `executarAcao()`:
+  - `CONSULTAR_SALDO_CREDITOS` -> le cooper-token + envia mensagem com {{saldoTokens}}, {{valorCreditos}}
+  - `CONSULTAR_PROXIMA_FATURA` -> le cobrancas.findFirst({ cooperadoId, status: A_VENCER OU AGUARDANDO }) + envia
+- Variáveis novas a popular: {{saldoTokens}}, {{valorCreditos}}, {{valorFaturaProxima}}, {{vencimento}}
 
 ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23).
-- Ler docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md inteiro
-- Ler docs/sessoes/2026-05-18-m13-m14-sub-fase-1-mais-sprint-8.md (Sprint 8 / M14.A+B
-  Engine de Otimização — Cobranca.classeGdAplicada já existe no schema)
-- Ler docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md (sessão 20/05)
-- Ler docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md (estado fluxo bot pós-saneamento)
-- Ler memória decisao_caminho_b_fio_b_neutro_18_05.md
-- Mapear: estado atual do schema (Cobranca, Contrato.classeGdAplicada do Sprint 8),
-  AlocacaoEngineService.validarClasseGd (já existe), Caminho B Fio B Neutro decidido,
-  tabelas ANEEL de tarifa Fio B vigentes por ano/classe GD
+- Ler módulo cooper-token (service + ledger) — entender estrutura de saldo
+- Ler cobrancas.service.ts — entender findFirst por cooperado + statuses
+- Ler whatsapp-fluxo-motor.service.ts:executarAcao() — onde adicionar os 2 cases
+- Ler docs/sessoes/2026-05-21-sprint-bot-autoatendimento-blocos-preparatorios.md
+- Ler docs/relatorios/2026-05-21-revisao-etapa-por-etapa-bot.md
+- Confirmar que cooperado tem cooperadoId resolvido na conversa (sim — bot resolve via telefone)
+- Mapear se ja existe ação similar (VER_SALDO em outro módulo?)
 
 DEPOIS reportar a Fase 1 ao Luciano e aguardar OK antes de Fase 2 (escrita).
 
-DECISOES PENDENTES PRO LUCIANO (do M16 fechado hoje — sub-débitos do bot dinâmico):
-Não bloqueiam M15. Catalogadas em docs/sessoes/2026-05-20-bloco-ux-simulador-saneamento-fluxo-wa.md
-seção "Catalogados pra próxima sprint":
-- Menu Cooperado opções 1/2/5 viram loop
-- Atualizar Contrato — 4 opções voltam ao menu sem ação real
-- Atualizar Cadastro — 4 estados-destino não existem
-- Cadastro por Proxy — 4 etapas inativas sem modelo
-- NPS, MENU_FATURA, MENU_INADIMPLENTE — decisão produto
-- {{site}} retorna vazio
-- 2 etapas ATIVAS duplicadas em INICIAL (decisão se desativar uma)
+DECISOES PENDENTES PRO LUCIANO (do M17 fechado hoje — não bloqueiam Bloco 3):
+- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
+- Atualizar Contrato (Bloco 5 futuro): ação automática vs solicitação + humano
+- Menu Fatura / Menu Inadimplente (Bloco 8 futuro): dinâmico vs hardcoded
+- {{distribuidora}} vazia em AGUARDANDO_DISPOSITIVO_EMAIL
+- Horário hardcoded em aguardando_atendente
+- Variáveis-fantasma na UI ModalMensagem
 
-CARRY-OVERS (catalogados, escolher slot):
-- D-novo-Q Contatos Teste persistentes (6-8h Code)
-- Sprint Housekeeping ~3-5h (stash reformat Prettier + .gitattributes CRLF + scripts órfãos)
+CARRY-OVERS catalogados:
+- Blocos 1.b, 4, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~25h restantes pos-Bloco 3)
+- M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do Sprint Bot Autoatendimento)
+- Cadastrar usina cooperebr2 (depende M15)
+- Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q Contatos Teste)
+- D-novo-Q Contatos Teste persistentes (6-8h)
+- Sprint Housekeeping (~3-5h)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
-- Sub-débitos R6+ do bot dinâmico (lista acima)
+- Iniciativa Fluxos Customizáveis (futuro, ~100-200h+)
 
 DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
 - 3 camadas defense in depth obrigatórias em listener/service de comunicação real
 - Convenção MENSAL oficial pra capacidade usina / consumo médio / kwhContrato
-- Padrão UX dual Tipo A (inline)/B (página própria)/C (dialog) — não misturar
-- NÃO trabalhar paralelo com claude.ai (memória regra_nao_trabalhar_paralelo_com_code_17_05.md)
-- git status --short ANTES de qualquer commit (diretriz 18/05)
+- Padrão UX dual Tipo A (inline) / B (página própria) / C (dialog) — não misturar
+- NÃO trabalhar paralelo com claude.ai
+- git status --short ANTES de qualquer commit
 - Decisão 14: grep amplo ANTES de catalogar débito novo
-- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita em código de produção
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita
 - Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId (multi-tenant)
+- NÃO inserir modelo com variável órfã (lição Bloco 0 v2 — popular variável ANTES de inserir modelo)
 - Smoke programático com dados reais > teste visual sozinho
 ```
 
