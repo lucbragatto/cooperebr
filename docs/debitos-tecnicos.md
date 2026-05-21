@@ -2497,6 +2497,53 @@ Bot WhatsApp hoje tem 1 fluxo fixo (conjunto único de `FluxoEtapa` por tenant).
 
 **Posicionamento:** NÃO é sprint imediato. Começa pela Fase 1 (entidade Fluxo) depois que D-novo-S estiver fechado.
 
+---
+
+### D-novo-U — Handler hardcoded "Ver próxima fatura" usa status `PENDENTE` (que nunca existe) — bot mente sobre faturas (P2)
+
+**Severidade:** P2 (UX produção — cooperado pergunta "ver fatura" e recebe "Você não tem faturas pendentes" mesmo quando tem fatura `A_VENCER`)
+**Detectado em:** 2026-05-21 (Fase 1 Bloco 3 Sprint Bot Autoatendimento — auditoria do handler hardcoded vs distribuição real de status no banco)
+**Arquivo afetado:** `backend/src/whatsapp/whatsapp-bot.service.ts:791-794`
+
+**Problema:**
+O handler hardcoded da opção "2 Ver próxima fatura" do MENU_COOPERADO usa:
+
+```typescript
+const cobranca = await this.prisma.cobranca.findFirst({
+  where: { contrato: { cooperadoId }, status: { in: ['PENDENTE', 'VENCIDO'] as any[] } },
+  orderBy: { dataVencimento: 'asc' },
+});
+```
+
+Mas o enum `StatusCobranca` tem `PENDENTE | A_VENCER | PAGO | VENCIDO | CANCELADO`, e **a distribuição real no banco DEV é:** A_VENCER=7, VENCIDO=3, PAGO=35, PENDENTE=0. Cobranças do sistema vão pra `A_VENCER` (não `PENDENTE`).
+
+**Resultado:** o handler responde "✅ Você não tem faturas pendentes no momento!" mesmo quando o cooperado tem cobrança `A_VENCER` (ou várias). Bot mente sobre faturas. Considerando que `A_VENCER` é o status canônico das cobranças que vencerão (≥ 99% do volume), o handler hardcoded está quebrado pra quase TODOS os cooperados.
+
+**Por que latente até agora:**
+1. Handler só roda quando o motor dinâmico NÃO tem etapa pra MENU_COOPERADO (estado caía no fallback hardcoded) OU quando o gatilho não bate. Com o motor dinâmico cobrindo MENU_COOPERADO em produção, o handler ficou no caminho hardcoded de fallback.
+2. Bloco 3 (21/05) substituiu o caminho hardcoded da opção "2" por `CONSULTAR_PROXIMA_FATURA` no motor (que usa `['A_VENCER', 'VENCIDO']` corretamente) — então o bug hoje só dispara se a etapa dinâmica `VER_PROXIMA_FATURA` deixar de existir (fallback).
+
+**Severidade real:** P2 (não P1) porque o caminho do Bloco 3 já corrige no motor dinâmico — o handler hardcoded só roda em fallback raro. Mas é dívida latente: se em algum momento alguém desativar a etapa dinâmica VER_PROXIMA_FATURA ou um tenant novo subir sem ela, volta a quebrar.
+
+**Fix proposto (1-2h Code):**
+Trocar em `whatsapp-bot.service.ts:792`:
+
+```typescript
+// ANTES
+status: { in: ['PENDENTE', 'VENCIDO'] as any[] },
+// DEPOIS
+status: { in: ['A_VENCER', 'VENCIDO'] as any[] },
+```
+
+Aproveitar pra:
+- Auditar outros usos de `status: 'PENDENTE'` em queries Cobranca (provavelmente latentes)
+- Considerar incluir `PENDENTE` também por defesa (caso algum fluxo gere com esse status), mas confirmar que enum não está sendo aposentado
+- Spec novo em `whatsapp-bot.service.spec.ts` (se existir) cobrindo handler com cobrança A_VENCER
+
+**Posicionamento:** Sprint Housekeeping (junto com D-novo-Q e outros itens de polimento). Não bloqueia nada hoje porque caminho dinâmico do Bloco 3 já corrige.
+
+**Status:** 📋 Catalogado em 2026-05-21 noite. Bug confirmado read-only (distribuição de status auditada no banco DEV). Fix pendente.
+
 **Status:** 📋 Catalogado em 2026-05-21. Visão aprovada por Luciano 20/05. Aguarda fechamento de M15 + D-novo-S antes da Fase 1.
 
 ---
