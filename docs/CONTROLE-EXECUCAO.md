@@ -1,7 +1,45 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-21 — M17 Sprint Bot Autoatendimento: blocos preparatórios completos**. 8 commits empacotados (3ebf41c..a41495d) + commit fechamento. Sprint Bot Autoatendimento ABERTO e repriorizado pra ANTES do M15 Fio B. Entregues: Bloco 1.a Navegação Universal, correção rodapé universal, Bloco 0 quick wins, Bloco 0 v2 (3 órfãs reais), Bloco 2 (11 modelos novos). 2 relatórios criados (revisão etapa-por-etapa + revisão das 19 mensagens). 89/89 specs verdes (era 56 ontem). **Próximo marco: Bloco 3 do Sprint Bot Autoatendimento — Ver saldo + Ver fatura como ações reais (~12-18h).** Detalhe: `docs/sessoes/2026-05-21-sprint-bot-autoatendimento-blocos-preparatorios.md`.
+> Última atualização: **2026-05-21 noite — M18 Sprint Bot Autoatendimento Bloco 3: Ver saldo + Ver fatura**. 5 commits empacotados (3d3e8c4 + 6fb2571 + 7f1f885 + 8fd1dd1) + commit fechamento. Bloco 3 ENTREGUE — 2 ações novas no motor (CONSULTAR_SALDO_CREDITOS + CONSULTAR_PROXIMA_FATURA), 2 estados/etapas globais, 2 modelos globais, gatilhos 1/2 do MENU_COOPERADO repointados. **Opção C aprovada por Luciano** (plano + saldo distribuidora com rótulos separados). 2 débitos novos catalogados (D-novo-U bug status hardcoded P2 + D-novo-V engine de template P3). 109/109 specs verdes (era 89). Premissa corrigida na abertura: "saldo de créditos" = créditos de ENERGIA (kWh) da distribuidora via OCR, NÃO tokens CooperToken. **Próximo marco: Bloco 4 do Sprint Bot Autoatendimento — Atualizar Cadastro (4 etapas AGUARDANDO_NOVO_* + ações persistentes, ~6-8h).** Detalhe: `docs/sessoes/2026-05-21-bloco3-ver-saldo-ver-fatura.md`.
+
+---
+
+## ONDE PARAMOS — 21/05/2026 noite (Code — M18 Sprint Bot Autoatendimento: Bloco 3 Ver saldo + Ver fatura)
+
+### Marcos entregues nesta sessão (5 commits)
+
+Bloco 3 do Sprint Bot Autoatendimento completou as 2 opções do MENU_COOPERADO que ainda viravam loop ("1 Ver saldo de créditos" e "2 Ver próxima fatura"). Premissa corrigida na abertura: "saldo de créditos" = créditos de ENERGIA (kWh) da distribuidora extraídos via OCR, NÃO tokens CooperToken.
+
+- **Bloco 3 — Ações no motor dinâmico** (`3d3e8c4`) — `executarAcao()` ganhou 2 cases novos. `executarConsultarSaldoCreditos()`: guard cooperadoId + Contrato.findMany ATIVO (soma kwhContratoMensal) + FaturaProcessada.findFirst APROVADA (saldoKwhAtual + validadeCreditos + mesReferencia) + busca modelo `saldo_creditos_resultado` + monta linhas com fallback (linha some quando dado null) + render + rodapé + envia. `executarConsultarProximaFatura()`: guard cooperadoId + Cobranca.findFirst com `where.contrato.{cooperadoId,cooperativaId}` + status `['A_VENCER','VENCIDO']` (NÃO PENDENTE — corrige D-novo-U) + AsaasCobranca pra link só quando existe + bloco_fatura + link_pagamento condicional. 5 helpers de formatação privados. Multi-tenant defense in depth em todas as 3 queries. 109/109 specs (era 89, +20 novos).
+- **Bloco 3 — Script idempotente + seed** (`6fb2571`) — `fix-bloco-3-menu-cooperado-saldo-fatura.ts`: INSERT 2 etapas globais (VER_SALDO_CREDITOS ordem 50 + VER_PROXIMA_FATURA ordem 51) + INSERT 2 modelos globais (saldo_creditos_resultado + proxima_fatura_resultado, categoria BOT) + REPOINT gatilhos "1" e "2" do MENU_COOPERADO (campo `acao` órfão removido). ANTES/DEPOIS visível, 2ª execução skip. Seed `seed-fluxos-bot.mjs` alinhado (gatilho "5" tb corrigido — estava com loop+acao órfã GERAR_LINK_INDICACAO, banco já cabeia ENVIAR_CONVITE desde Bloco 0 v2 R5).
+- **D-novo-U catalogado** (`7f1f885`) — bug latente P2 do handler hardcoded `whatsapp-bot.service.ts:791-794`: usa `status: 'PENDENTE'` mas distribuição real é A_VENCER=7, VENCIDO=3, PAGO=35, PENDENTE=0. Bot mente sobre faturas em fallback. Fix 1-2h pra Sprint Housekeeping. Caminho dinâmico do Bloco 3 já corrige.
+- **D-novo-V catalogado** (`8fd1dd1`) — melhoria P3 pós-Bloco 3: modelos `saldo_creditos_resultado` e `proxima_fatura_resultado` são esqueleto com placeholders ({{linha_saldo}}, {{bloco_fatura}}) e os textos das linhas condicionais + bloco de fatura + frase do link + mensagem "sem cobrança" + CTA estão HARDCODED nas ações do motor. Admin não consegue editar pelo painel. Solução futura (~8-12h): mini-engine de template com `{{#if}}/{{#unless}}/{{#case}}`. Vinculado a D-novo-T (Iniciativa Fluxos Customizáveis).
+
+### Decisões de produto Luciano (21/05 noite)
+- **Opção C aprovada** para "Ver saldo de créditos": plano + saldo distribuidora com rótulos separados
+- Link Asaas quando existe `AsaasCobranca.linkPagamento` (não inventa)
+- `validadeCreditos=null` → linha some
+- Cooperado sem cooperadoId → mensagem amigável de cadastro (mesma linha ENVIAR_LINK_INDICACAO)
+
+### Validação
+- **109/109 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 89 no início da sessão). 20 specs novos (10 + 10 para as 2 ações). 1 falha de timezone (`new Date('2026-06-05')` → 04/06 em BRT) corrigida usando `new Date(2026, 5, 5)` mês 0-indexed.
+- `nest build` limpo, PM2 restartado limpo (pid 29516)
+- Script idempotente confirmado em 2 execuções (skip total na 2ª)
+- Banco DEV: 2 etapas + 2 modelos + 2 gatilhos confirmados via SELECT pós-update
+
+### Pendências carry-over (decisões produto pro Luciano)
+- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL (carry-over M17)
+- Atualizar Contrato (Bloco 5): ação automática vs solicitação + atendente humano
+- Menu Fatura / Menu Inadimplente (Bloco 8): dinâmico vs hardcoded
+- `{{distribuidora}}` vazia em AGUARDANDO_DISPOSITIVO_EMAIL
+- Horário hardcoded em `aguardando_atendente`
+- Variáveis-fantasma na UI ModalMensagem (~30min UX admin)
+- Bloco 4: como tratar email conflitando com OUTRO cooperado (unique constraint)? Como tratar CEP inválido / ViaCEP fora?
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 21/05 noite fechamento M18 Bloco 3).
 
 ---
 
@@ -564,43 +602,54 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M17 da sessão 21/05
-   (mensagem começa com "docs(sessao): fechamento M17").
+   Esperado: working tree limpo, último commit é o de fechamento M18 da sessão 21/05 noite
+   (mensagem começa com "docs(sessao): fechamento M18 — Bloco 3").
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Iniciando Bloco 3 do Sprint Bot Autoatendimento (Ver saldo + Ver fatura, ~12-18h).
+PASSO 1 — Iniciando Bloco 4 do Sprint Bot Autoatendimento (Atualizar Cadastro, ~6-8h).
 
-OBJETIVO: completar as 2 opções do Menu do Cooperado que hoje viram loop —
-"1 Ver saldo de créditos" e "2 Ver próxima fatura". Hoje os gatilhos têm campo
-`acao` (`VER_CREDITOS`, `VER_FATURA`) mas o motor NÃO processa `Gatilho.acao` —
-só usa `proximoEstado` da etapa-destino e `acaoAutomatica` dela. Decisão arquitetural
-(memória sprint_bot_autoatendimento_20_05.md): cada opção vira transição pra um
-estado novo com `acaoAutomatica` própria. NÃO passar a processar `Gatilho.acao`.
+OBJETIVO: completar a opção "3 Atualizar meu cadastro" do MENU_COOPERADO.
+Hoje o gatilho transiciona pra ATUALIZACAO_CADASTRO, mas as 4 sub-opções
+(1 Nome / 2 Email / 3 Telefone / 4 CEP) caem em estados que NÃO TÊM etapa
+dinâmica ativa — bot fica preso. Bloco 4 cria as 4 etapas + 4 ações
+persistentes que atualizam o Cooperado no banco com validação.
 
 DESENHO PROPOSTO (sujeito a revisão na Fase 1):
-- 2 estados novos: VER_SALDO_CREDITOS + VER_PROXIMA_FATURA (etapas globais novas)
-- Gatilho "1" do MENU_COOPERADO -> VER_SALDO_CREDITOS (atualizar — hoje vai pra MENU_COOPERADO)
-- Gatilho "2" do MENU_COOPERADO -> VER_PROXIMA_FATURA (atualizar — hoje vai pra MENU_COOPERADO)
-- 2 modelos novos com placeholders (saldo_creditos_resultado / proxima_fatura_resultado)
-- 2 ações novas no motor `executarAcao()`:
-  - `CONSULTAR_SALDO_CREDITOS` -> le cooper-token + envia mensagem com {{saldoTokens}}, {{valorCreditos}}
-  - `CONSULTAR_PROXIMA_FATURA` -> le cobrancas.findFirst({ cooperadoId, status: A_VENCER OU AGUARDANDO }) + envia
-- Variáveis novas a popular: {{saldoTokens}}, {{valorCreditos}}, {{valorFaturaProxima}}, {{vencimento}}
+- 4 estados novos GLOBAIS: AGUARDANDO_NOVO_NOME / AGUARDANDO_NOVO_EMAIL /
+  AGUARDANDO_NOVO_TELEFONE / AGUARDANDO_NOVO_CEP
+- 4 modelos JÁ EXISTEM no banco (Bloco 2, commit 1097f72):
+  aguardando_novo_nome / aguardando_novo_email / aguardando_novo_telefone /
+  aguardando_novo_cep — só associar via modeloMensagemId
+- Wildcard "*" como gatilho em cada um (cooperado responde texto livre)
+- 4 ações novas em executarAcao(): ATUALIZAR_NOME_COOPERADO,
+  ATUALIZAR_EMAIL_COOPERADO, ATUALIZAR_TELEFONE_COOPERADO, ATUALIZAR_CEP_COOPERADO
+- Cada ação: guard cooperadoId + multi-tenant findFirst + validar input +
+  prisma.cooperado.update + enviar confirmação + voltar pra MENU_COOPERADO (ou
+  cooperado usa MENU/INICIO comando universal)
+- Validações: email com regex padrão; CEP normalizado pra 00000-000 +
+  opcionalmente ViaCEP pra preencher logradouro/bairro/cidade/estado (se
+  online); telefone só dígitos com 10-11 chars
+- ATUALIZACAO_CADASTRO já existe no seed e cabeia 4 gatilhos pros estados
+  AGUARDANDO_NOVO_* — confirmar na Fase 1 se gatilhos estão certos
 
 ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23).
-- Ler módulo cooper-token (service + ledger) — entender estrutura de saldo
-- Ler cobrancas.service.ts — entender findFirst por cooperado + statuses
-- Ler whatsapp-fluxo-motor.service.ts:executarAcao() — onde adicionar os 2 cases
-- Ler docs/sessoes/2026-05-21-sprint-bot-autoatendimento-blocos-preparatorios.md
-- Ler docs/relatorios/2026-05-21-revisao-etapa-por-etapa-bot.md
-- Confirmar que cooperado tem cooperadoId resolvido na conversa (sim — bot resolve via telefone)
-- Mapear se ja existe ação similar (VER_SALDO em outro módulo?)
+- Ler whatsapp-fluxo-motor.service.ts:executarAcao() — padrão Bloco 3 do
+  CONSULTAR_SALDO_CREDITOS / CONSULTAR_PROXIMA_FATURA é referência direta
+- Ler cooperados.service.ts — verificar se há método update() exposto pra
+  atualização parcial, ou se precisa criar
+- Confirmar gatilhos atuais ATUALIZACAO_CADASTRO no banco (3=AGUARDANDO_NOVO_TELEFONE
+  ou outra ordem? bater com seed-fluxos-bot.mjs)
+- Validar onde estão os 4 modelos aguardando_novo_* no banco (Bloco 2 confirmou
+  inseridos — só checar se cooperativaId=null + ativo=true)
+- Decidir: ViaCEP é dependência aceita ou só persiste CEP digitado?
+- Decidir: como tratar email conflitando com OUTRO cooperado (unique constraint)?
+  Erro amigável + cancela? Sugerir +suffix?
 
 DEPOIS reportar a Fase 1 ao Luciano e aguardar OK antes de Fase 2 (escrita).
 
-DECISOES PENDENTES PRO LUCIANO (do M17 fechado hoje — não bloqueiam Bloco 3):
+DECISOES PENDENTES PRO LUCIANO (carry-over M17/M18 — não bloqueiam Bloco 4):
 - Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
 - Atualizar Contrato (Bloco 5 futuro): ação automática vs solicitação + humano
 - Menu Fatura / Menu Inadimplente (Bloco 8 futuro): dinâmico vs hardcoded
@@ -609,15 +658,17 @@ DECISOES PENDENTES PRO LUCIANO (do M17 fechado hoje — não bloqueiam Bloco 3):
 - Variáveis-fantasma na UI ModalMensagem
 
 CARRY-OVERS catalogados:
-- Blocos 1.b, 4, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~25h restantes pos-Bloco 3)
+- Blocos 1.b, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~17-25h restantes pos-Bloco 4)
 - M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do Sprint Bot Autoatendimento)
 - Cadastrar usina cooperebr2 (depende M15)
 - Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q Contatos Teste)
 - D-novo-Q Contatos Teste persistentes (6-8h)
+- D-novo-U fix handler hardcoded ver fatura (1-2h, Sprint Housekeeping)
+- D-novo-V engine de template {{#if}}/{{#unless}} (~8-12h, sub-tarefa D-novo-T)
 - Sprint Housekeeping (~3-5h)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
-- Iniciativa Fluxos Customizáveis (futuro, ~100-200h+)
+- Iniciativa Fluxos Customizáveis D-novo-T (futuro, ~100-200h+)
 
 DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
@@ -631,6 +682,9 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId (multi-tenant)
 - NÃO inserir modelo com variável órfã (lição Bloco 0 v2 — popular variável ANTES de inserir modelo)
 - Smoke programático com dados reais > teste visual sozinho
+- Padrão Bloco 3 (CONSULTAR_*): cada ação é método privado defensivo, guard cooperadoId
+  + filtroTenantSomenteLeitura, modelo do banco renderizado COM vars dinâmicas,
+  rodapé universal anexado pós-render, increment uso do modelo após enviar
 ```
 
 ---
