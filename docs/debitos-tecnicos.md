@@ -2453,9 +2453,9 @@ Motor `executarAcao()` hoje tem placeholders + `ENVIAR_LINK_INDICACAO` (R5, 20/0
 2. Bloco 8 Menu Fatura / Menu Inadimplente: dinâmico OU mantém hardcoded?
 3. Bloco 7 NPS: existe tabela de registro pra conectar?
 
-**Posicionamento:** DEPOIS do M15 Sprint 5a Fio B. Pode ser fatiado (Bloco 0+1 quick — ~10h / Blocos 2-7 médio — ~25-35h / Bloco 8 opcional).
+**Posicionamento:** 🔁 **REPRIORIZADO 2026-05-21 — VEM ANTES DO M15 Fio B.** Originalmente "depois do M15"; Luciano repriorizou em 21/05. Justificativa: bot oco em produção corrói confiança hoje; Fio B regulatório tem cobertura de fallback hardcoded por curto prazo. Sprint começa pelo Bloco 1.a (Navegação Universal fundacional). Pode ser fatiado (Bloco 0+1 quick — ~10h / Blocos 2-7 médio — ~25-35h / Bloco 8 opcional).
 
-**Status:** 📋 Catalogado em 2026-05-21. Aprovado por Luciano 20/05, escopo completo na memória, 11 mensagens redigidas. Aguarda fechamento de M15 + janela do Luciano.
+**Status:** 📋 Catalogado em 2026-05-21. Aprovado por Luciano 20/05, repriorizado 21/05, escopo completo na memória, 11 mensagens redigidas. Em curso — Bloco 1.a Navegação Universal sendo implementado nesta sessão (21/05).
 
 ---
 

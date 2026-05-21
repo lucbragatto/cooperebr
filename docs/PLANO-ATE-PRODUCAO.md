@@ -508,7 +508,7 @@ desses pais e já têm spec/análise pronta.
   2. Menu Fatura / Menu Inadimplente: dinâmico ou mantém no hardcoded?
   3. NPS: existe tabela de registro de NPS pra conectar?
 - **Origem:** sessão Code 2026-05-20 (M16) — relatório `docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md` revelou os 5 buracos do Menu Cooperado. Luciano aprovou o sprint logo após o fechamento de M16. Memória persistente: `~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md` (com 11 mensagens já redigidas).
-- **Posicionamento:** depois do M15 Fio B. Pode ser fatiado (Bloco 0+1 quick / Blocos 2-7 médio / Bloco 8 opcional).
+- **Posicionamento:** 🔁 **REPRIORIZADO 2026-05-21 — VEM ANTES DO M15 Fio B.** Originalmente posicionado depois do M15; Luciano repriorizou em 21/05 ao reabrir a sessão. Justificativa: bot em produção com Menu Cooperado oco corrói confiança hoje; M15 Fio B é regulatório mas cobertura de fallback hardcoded ainda cobre o gap fiscal por curto prazo. Sprint começa pelo Bloco 1.a (Navegação Universal — fundacional pra todos os demais). Pode ser fatiado (Bloco 0+1 quick / Blocos 2-7 médio / Bloco 8 opcional).
 
 ---
 
