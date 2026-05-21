@@ -484,6 +484,11 @@ export class WhatsappFluxoMotorService {
       valorFaturaMedia: dados.valorFaturaMedia ? fmt(dados.valorFaturaMedia) : '',
       valorComDesconto: dados.valorComDesconto ? fmt(dados.valorComDesconto) : '',
       mes: dados.mesReferencia ?? '',
+      // Bloco 0 v2 (21/05): {{historico}} formatado igual ao bot hardcoded
+      // (whatsapp-bot.service.ts:1543-1550). Fonte: dadosTemp.historicoConsumo
+      // (array salvo pelo OCR em whatsapp-fatura.service.ts e propagado em
+      // dadosTemp via spread no bot). Vazio em simulacao sem OCR.
+      historico: this.formatarHistoricoConsumo(dados.historicoConsumo),
       link: '',
       link_pagamento: '',
       percentual: '',
@@ -500,6 +505,30 @@ export class WhatsappFluxoMotorService {
       tipo_membro_plural: labelMembro.plural.toLowerCase(),
       site: '',
     };
+  }
+
+  /**
+   * Bloco 0 v2 (21/05) — Formata `dadosTemp.historicoConsumo` (array do OCR) em
+   * string multilinha igual ao bot hardcoded (whatsapp-bot.service.ts:1543-1550).
+   * Formato por linha: "MM/AA: NNN kWh - R$ X,XX". Retorna '' quando array
+   * ausente ou vazio (caso comum no simulador sem OCR).
+   */
+  private formatarHistoricoConsumo(
+    raw: unknown,
+  ): string {
+    if (!Array.isArray(raw) || raw.length === 0) return '';
+    const linhas: string[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const h = item as { mesAno?: unknown; consumoKwh?: unknown; valorRS?: unknown };
+      const mesAno = String(h.mesAno ?? '');
+      const consumoKwh = Number(h.consumoKwh ?? 0);
+      const valorRS = Number(h.valorRS ?? 0);
+      if (!mesAno || consumoKwh <= 0) continue;
+      const valorStr = valorRS > 0 ? ` - R$ ${valorRS.toFixed(2).replace('.', ',')}` : '';
+      linhas.push(`${mesAno}: ${consumoKwh} kWh${valorStr}`);
+    }
+    return linhas.join('\n');
   }
 
   // ==========================================================================

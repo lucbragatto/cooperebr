@@ -260,6 +260,60 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(vars.tipo_membro_plural).toBe(plural);
     });
 
+    // ===========================================================
+    // Bloco 0 v2 (21/05) — {{historico}} populado de dadosTemp.historicoConsumo
+    // ===========================================================
+    it('Bloco 0 v2: {{historico}} vazio quando dadosTemp.historicoConsumo ausente (simulador sem OCR)', () => {
+      const vars = service.extrairVariaveis({ dadosTemp: {} });
+      expect(vars.historico).toBe('');
+    });
+
+    it('Bloco 0 v2: {{historico}} formatado quando historicoConsumo presente (mesAno: NNN kWh - R$ X,XX)', () => {
+      const vars = service.extrairVariaveis({
+        dadosTemp: {
+          historicoConsumo: [
+            { mesAno: '01/26', consumoKwh: 320, valorRS: 287.50 },
+            { mesAno: '02/26', consumoKwh: 350, valorRS: 295.10 },
+            { mesAno: '03/26', consumoKwh: 280, valorRS: 240.00 },
+          ],
+        },
+      });
+      expect(vars.historico).toBe(
+        '01/26: 320 kWh - R$ 287,50\n02/26: 350 kWh - R$ 295,10\n03/26: 280 kWh - R$ 240,00',
+      );
+    });
+
+    it('Bloco 0 v2: {{historico}} sem valorRS (=0) omite hifen-valor', () => {
+      const vars = service.extrairVariaveis({
+        dadosTemp: {
+          historicoConsumo: [
+            { mesAno: '01/26', consumoKwh: 320, valorRS: 0 },
+          ],
+        },
+      });
+      expect(vars.historico).toBe('01/26: 320 kWh');
+    });
+
+    it('Bloco 0 v2: {{historico}} ignora itens invalidos (sem mesAno ou consumoKwh<=0)', () => {
+      const vars = service.extrairVariaveis({
+        dadosTemp: {
+          historicoConsumo: [
+            { mesAno: '01/26', consumoKwh: 320, valorRS: 100 },
+            { mesAno: '', consumoKwh: 350, valorRS: 200 }, // sem mesAno
+            { mesAno: '03/26', consumoKwh: 0, valorRS: 0 }, // kWh zero
+            null, // item nulo
+          ],
+        },
+      });
+      expect(vars.historico).toBe('01/26: 320 kWh - R$ 100,00');
+    });
+
+    it('Bloco 0 v2: historicoConsumo nao-array -> {{historico}} vazio (defensivo)', () => {
+      expect(service.extrairVariaveis({ dadosTemp: { historicoConsumo: 'string-errada' } }).historico).toBe('');
+      expect(service.extrairVariaveis({ dadosTemp: { historicoConsumo: null } }).historico).toBe('');
+      expect(service.extrairVariaveis({ dadosTemp: { historicoConsumo: undefined } }).historico).toBe('');
+    });
+
     it('Campos opcionais null da Cooperativa viram string vazia (nao literal "null")', () => {
       const vars = service.extrairVariaveis(
         { dadosTemp: {} },

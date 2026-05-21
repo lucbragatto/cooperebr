@@ -31,7 +31,7 @@ const mensagens = [
     //Resultado da simulação de economia',
     categoria: 'BOT',
     conteudo:
-      '🌱 *Sua simulação {{parceiro}}:*\n\n📊 Fatura média atual: R$ {{valorFaturaMedia}}\n💚 Com a {{parceiro}}: R$ {{valorComDesconto}} (-{{desconto}}%)\n💵 Economia mensal: R$ {{economiaMensal}}\n📅 Economia anual: R$ {{economiaAnual}}\n{{mesesGratis}}\nQuer receber a proposta completa em PDF?\nResponda *SIM*',
+      '🌱 *Sua simulação {{parceiro}}:*\n\n📊 Fatura média atual: R$ {{valorFaturaMedia}}\n💚 Com a {{parceiro}}: R$ {{valorComDesconto}} (-{{desconto}}%)\n💵 Economia mensal: R$ {{economiaMensal}}\n📅 Economia anual: R$ {{economiaAnual}}\n\nQuer receber a proposta completa em PDF?\nResponda *SIM*',
   },
   {
     id: 'msg-proposta-pdf',
