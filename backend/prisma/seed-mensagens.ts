@@ -63,7 +63,7 @@ const mensagens = [
     //Resposta para ajuda/help/dúvida',
     categoria: 'BOT',
     conteudo:
-      'Estou aqui para ajudar! Para falar com nossa equipe da {{parceiro}}, é só responder por aqui.\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
+      'Estou aqui para ajudar! Para falar com nossa equipe da {{parceiro}}, é só responder por aqui — ou ligue para {{telefone_suporte}}.\n\nOu envie a foto da sua conta de luz para gerar uma simulação gratuita! 📸',
   },
   {
     id: 'msg-cancelar',
