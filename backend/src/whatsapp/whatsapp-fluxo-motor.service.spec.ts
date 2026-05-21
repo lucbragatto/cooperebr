@@ -431,7 +431,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(r.etapaProxima).toBeNull();
     });
 
-    it('Sub-debito UX: etapaAtual com modeloMensagemId -> mensagemEtapaAtual renderizada', async () => {
+    it('Sub-debito UX: etapaAtual com modeloMensagemId -> mensagemEtapaAtual renderizada (com rodape Bloco 1.a porque eh menu)', async () => {
       etapaFindFirst.mockResolvedValueOnce({
         id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
         gatilhos: [{ resposta: '1', proximoEstado: 'P' }],
@@ -451,7 +451,10 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         mensagem: 'naotem', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
       });
 
-      expect(r.mensagemEtapaAtual).toBe('Bem-vindo a CoopereBR, cooperado!');
+      // Etapa tem gatilho (menu) -> rodape anexado pelo Bloco 1.a
+      expect(r.mensagemEtapaAtual).toBe(
+        'Bem-vindo a CoopereBR, cooperado!\n\n_A qualquer momento: digite MENU, INÍCIO ou SAIR._',
+      );
       expect(r.transicionou).toBe(false); // gatilho 'naotem' nao casa com '1'
     });
 
@@ -799,6 +802,341 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       });
       expect(rB.mensagensEnviadas[0].texto).toBe('Parceiro: Hangar Academia');
       expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
+    });
+  });
+
+  // ============================================================
+  // Bloco 1.a (21/05) — Comandos Universais de Navegacao (INICIO/SAIR/MENU)
+  // ============================================================
+  describe('detectarComandoUniversal() - funcao pura', () => {
+    it('INICIO + sinonimos (case-insensitive)', () => {
+      expect(service.detectarComandoUniversal('INICIO')).toBe('INICIO');
+      expect(service.detectarComandoUniversal('inicio')).toBe('INICIO');
+      expect(service.detectarComandoUniversal('Início')).toBe('INICIO');
+      expect(service.detectarComandoUniversal('começar')).toBe('INICIO');
+      expect(service.detectarComandoUniversal('comecar')).toBe('INICIO');
+      expect(service.detectarComandoUniversal('Menu Inicial')).toBe('INICIO');
+    });
+
+    it('SAIR + sinonimos', () => {
+      expect(service.detectarComandoUniversal('sair')).toBe('SAIR');
+      expect(service.detectarComandoUniversal('SAIR')).toBe('SAIR');
+      expect(service.detectarComandoUniversal('parar')).toBe('SAIR');
+      expect(service.detectarComandoUniversal('encerrar')).toBe('SAIR');
+    });
+
+    it('MENU + sinonimos', () => {
+      expect(service.detectarComandoUniversal('menu')).toBe('MENU');
+      expect(service.detectarComandoUniversal('MENU')).toBe('MENU');
+      expect(service.detectarComandoUniversal('voltar')).toBe('MENU');
+    });
+
+    it('Palavra exata e isolada — texto com mais palavras NAO aciona', () => {
+      expect(service.detectarComandoUniversal('quero sair daqui')).toBeNull();
+      expect(service.detectarComandoUniversal('menu principal por favor')).toBeNull();
+      expect(service.detectarComandoUniversal('voltar pra casa')).toBeNull();
+    });
+
+    it('Trim aplicado — espacos extras nao bloqueiam', () => {
+      expect(service.detectarComandoUniversal('  SAIR  ')).toBe('SAIR');
+      expect(service.detectarComandoUniversal('\nmenu\n')).toBe('MENU');
+    });
+
+    it('Texto livre comum NAO aciona comando universal (importante pra wildcard *)', () => {
+      expect(service.detectarComandoUniversal('joão')).toBeNull();
+      expect(service.detectarComandoUniversal('27999999999')).toBeNull();
+      expect(service.detectarComandoUniversal('lucbragatto@gmail.com')).toBeNull();
+      expect(service.detectarComandoUniversal('')).toBeNull();
+    });
+  });
+
+  describe('resolverEstadoComandoUniversal() - funcao pura', () => {
+    it('INICIO sempre vai pro estado INICIAL', () => {
+      expect(service.resolverEstadoComandoUniversal('INICIO', { cooperadoId: null })).toBe('INICIAL');
+      expect(service.resolverEstadoComandoUniversal('INICIO', { cooperadoId: 'coop-1' })).toBe('INICIAL');
+    });
+
+    it('SAIR retorna null (sinal de encerramento)', () => {
+      expect(service.resolverEstadoComandoUniversal('SAIR', { cooperadoId: null })).toBeNull();
+      expect(service.resolverEstadoComandoUniversal('SAIR', { cooperadoId: 'coop-1' })).toBeNull();
+    });
+
+    it('MENU com cooperadoId -> MENU_COOPERADO', () => {
+      expect(service.resolverEstadoComandoUniversal('MENU', { cooperadoId: 'coop-1' })).toBe('MENU_COOPERADO');
+    });
+
+    it('MENU sem cooperadoId -> INICIAL (aquisicao)', () => {
+      expect(service.resolverEstadoComandoUniversal('MENU', { cooperadoId: null })).toBe('INICIAL');
+      expect(service.resolverEstadoComandoUniversal('MENU', {})).toBe('INICIAL');
+    });
+  });
+
+  describe('anexarRodapeSeMenu() - funcao pura', () => {
+    const RODAPE = '\n\n_A qualquer momento: digite MENU, INÍCIO ou SAIR._';
+
+    it('Etapa COM gatilhos (menu) -> rodape anexado', () => {
+      const etapa: any = {
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+      };
+      expect(service.anexarRodapeSeMenu('Olá!', etapa)).toBe('Olá!' + RODAPE);
+    });
+
+    it('Etapa SEM gatilhos (terminal/coleta) -> sem rodape', () => {
+      const etapa: any = { gatilhos: [] };
+      expect(service.anexarRodapeSeMenu('Sua mensagem foi recebida.', etapa)).toBe('Sua mensagem foi recebida.');
+    });
+
+    it('Etapa com gatilhos null/undefined -> sem rodape (defensivo)', () => {
+      expect(service.anexarRodapeSeMenu('Texto', { gatilhos: null } as any)).toBe('Texto');
+      expect(service.anexarRodapeSeMenu('Texto', { gatilhos: undefined } as any)).toBe('Texto');
+    });
+  });
+
+  describe('processarComFluxoDinamico() — Bloco 1.a comandos universais (bot real)', () => {
+    it('SAIR persiste estado=ENCERRADO + envia despedida + NAO avalia gatilhos', async () => {
+      // Etapa atual tem gatilho "1" — comando SAIR deve ter PRECEDENCIA, motor nao deve nem buscar etapa
+      const ok = await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'SAIR' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU_COOPERADO', cooperativaId: 'coop-A', cooperadoId: 'coop-luciano' },
+      );
+
+      expect(ok).toBe(true);
+      // Update da conversa pra ENCERRADO
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'ENCERRADO' },
+      });
+      // Mensagem de despedida enviada
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringMatching(/Tchau/),
+      );
+      // Motor NAO buscou etapa (curto-circuito antes)
+      expect(etapaFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('INICIO transiciona pra INICIAL + renderiza modelo da etapa-destino + rodape', async () => {
+      // Etapa INICIAL existe ATIVA com modelo
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-inicial', cooperativaId: 'coop-A', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+        modeloMensagemId: 'm-inicial', acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-inicial', nome: 'menu_inicial', conteudo: 'Bem-vindo!', cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'inicio' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'AGUARDANDO_FOTO_FATURA', cooperativaId: 'coop-A', cooperadoId: null },
+      );
+
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'INICIAL' },
+      });
+      // Texto enviado tem o conteudo do modelo + rodape (etapa eh menu)
+      const textoEnviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(textoEnviado).toContain('Bem-vindo!');
+      expect(textoEnviado).toContain('digite MENU, INÍCIO ou SAIR');
+    });
+
+    it('MENU com cooperadoId -> MENU_COOPERADO', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-menu', cooperativaId: 'coop-A', estado: 'MENU_COOPERADO',
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'menu' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'ATUALIZACAO_CONTRATO', cooperativaId: 'coop-A', cooperadoId: 'coop-luciano' },
+      );
+
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('MENU sem cooperadoId -> INICIAL', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-inicial', cooperativaId: 'coop-A', estado: 'INICIAL',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'voltar' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'AGUARDANDO_FOTO_FATURA', cooperativaId: 'coop-A', cooperadoId: null },
+      );
+
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'INICIAL' },
+      });
+    });
+
+    it('PRECEDENCIA: SAIR vence gatilho "1" da etapa atual', async () => {
+      // Mesmo que a etapa tenha gatilho "1" -> X, "SAIR" tem precedencia
+      // (motor curto-circuita ANTES de buscar etapa)
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'SAIR' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU_PRINCIPAL', cooperativaId: 'coop-A', cooperadoId: null },
+      );
+
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'ENCERRADO' },
+      });
+      expect(etapaFindFirst).not.toHaveBeenCalled(); // confirmacao do curto-circuito
+    });
+
+    it('Texto NAO-comando ("joão") segue fluxo normal — comando NAO captura wildcard', async () => {
+      // Etapa com gatilho "*" (espera texto livre tipo nome)
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-nome', cooperativaId: 'coop-A', estado: 'AGUARDANDO_NOME',
+        gatilhos: [{ resposta: '*', proximoEstado: 'PROX' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'joão' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'AGUARDANDO_NOME', cooperativaId: 'coop-A', cooperadoId: null },
+      );
+
+      // "joão" NAO acionou comando universal; gatilho "*" capturou; transicionou pra PROX
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'PROX' },
+      });
+    });
+  });
+
+  describe('simular() — Bloco 1.a comandos universais no simulador', () => {
+    it('Ping sintetico __simulador_ping__ NAO aciona comando universal', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Entrada', estado: 'INICIAL',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: '__simulador_ping__', cooperativaId: 'coop-A', estadoInicial: 'INICIAL',
+      });
+
+      expect(r.comandoUniversalAplicado).toBeNull();
+      expect(r.transicionou).toBe(false); // gatilho nao casou, fallback normal
+    });
+
+    it('SAIR no simulador -> transicionou: true + estadoFinal=ENCERRADO_VIA_SAIR + aviso + comandoUniversalAplicado=SAIR', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'Menu', estado: 'MENU_COOPERADO',
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'SAIR', cooperativaId: 'coop-A', estadoInicial: 'MENU_COOPERADO',
+      });
+
+      expect(r.transicionou).toBe(true);
+      expect(r.estadoFinal).toBe('ENCERRADO_VIA_SAIR');
+      expect(r.comandoUniversalAplicado).toBe('SAIR');
+      expect(r.avisoTransicao).toContain('SAIR');
+      expect(r.mensagensEnviadas).toEqual([]);
+    });
+
+    it('INICIO no simulador -> resolve etapa-destino + renderiza com rodape (se menu) + comandoUniversalAplicado=INICIO', async () => {
+      // etapaAtual (estado declarado pelo cliente)
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-atual', cooperativaId: 'coop-A', nome: 'Atual', estado: 'AGUARDANDO_FOTO_FATURA',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+      // etapa-destino INICIAL (buscar apos comando)
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-inicial', cooperativaId: 'coop-A', nome: 'Menu Inicial', estado: 'INICIAL',
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+        modeloMensagemId: 'm-inicial', acaoAutomatica: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-inicial', nome: 'menu_inicial', conteudo: 'Bem-vindo!', cooperativaId: null,
+      });
+      cooperativaFindUnique.mockResolvedValueOnce({
+        nome: 'CoopereBR', email: null, telefone: null,
+        cidade: null, estado: null, tipoParceiro: 'COOPERATIVA',
+      });
+
+      const r = await service.simular({
+        mensagem: 'inicio', cooperativaId: 'coop-A', estadoInicial: 'AGUARDANDO_FOTO_FATURA',
+      });
+
+      expect(r.comandoUniversalAplicado).toBe('INICIO');
+      expect(r.transicionou).toBe(true);
+      expect(r.estadoFinal).toBe('INICIAL');
+      expect(r.etapaProxima?.nome).toBe('Menu Inicial');
+      expect(r.mensagensEnviadas).toHaveLength(1);
+      expect(r.mensagensEnviadas[0].texto).toContain('Bem-vindo!');
+      expect(r.mensagensEnviadas[0].texto).toContain('digite MENU, INÍCIO ou SAIR'); // rodape
+    });
+
+    it('MENU no simulador resolve contexto via cooperadoId em dadosTemp', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-atual', cooperativaId: 'coop-A', estado: 'AGUARDANDO_FOTO_FATURA',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-menu-coop', cooperativaId: 'coop-A', nome: 'Menu Coop', estado: 'MENU_COOPERADO',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'MENU', cooperativaId: 'coop-A', estadoInicial: 'AGUARDANDO_FOTO_FATURA',
+        dadosTemp: { cooperadoId: 'coop-luciano' },
+      });
+
+      expect(r.comandoUniversalAplicado).toBe('MENU');
+      expect(r.estadoFinal).toBe('MENU_COOPERADO');
+    });
+
+    it('PRECEDENCIA: SAIR no simulador vence gatilho da etapa atual', async () => {
+      // Etapa atual tem gatilho "SAIR" inutil (NAO eh comum, mas garante precedencia)
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1', cooperativaId: 'coop-A', nome: 'X', estado: 'MENU_COOPERADO',
+        gatilhos: [{ resposta: 'SAIR', proximoEstado: 'GATILHO_BATEU' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'sair', cooperativaId: 'coop-A', estadoInicial: 'MENU_COOPERADO',
+      });
+
+      // Comando universal venceu — estado destino eh sintetico, NAO eh GATILHO_BATEU
+      expect(r.estadoFinal).toBe('ENCERRADO_VIA_SAIR');
+      expect(r.comandoUniversalAplicado).toBe('SAIR');
+    });
+
+    it('Texto livre ("joão") NAO aciona comando universal — gatilho "*" captura normal', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-nome', cooperativaId: 'coop-A', estado: 'AGUARDANDO_NOME',
+        gatilhos: [{ resposta: '*', proximoEstado: 'PROX' }],
+        modeloMensagemId: null, acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-prox', cooperativaId: 'coop-A', estado: 'PROX',
+        gatilhos: [], modeloMensagemId: null, acaoAutomatica: null,
+      });
+
+      const r = await service.simular({
+        mensagem: 'joão', cooperativaId: 'coop-A', estadoInicial: 'AGUARDANDO_NOME',
+      });
+
+      expect(r.comandoUniversalAplicado).toBeNull();
+      expect(r.transicionou).toBe(true);
+      expect(r.estadoFinal).toBe('PROX');
     });
   });
 

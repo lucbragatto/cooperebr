@@ -63,6 +63,17 @@ export class WhatsappFluxoMotorService {
     },
   ): Promise<boolean> {
     const cooperativaId = conversa.cooperativaId ?? undefined;
+    const corpo = (msg.corpo ?? '').trim();
+
+    // Bloco 1.a — Comandos Universais de Navegacao (Sprint Bot Autoatendimento).
+    // Camada que precede a avaliacao de gatilhos da etapa. Funciona em TODA
+    // etapa ativa, inclusive futuras. Palavra exata e isolada (case-insensitive)
+    // tem precedencia sobre gatilho normal. Wildcard "*" da etapa NAO captura
+    // o comando porque a checagem acontece ANTES de avaliarGatilhos.
+    const comandoUniversal = this.detectarComandoUniversal(corpo);
+    if (comandoUniversal) {
+      return this.executarComandoUniversalReal(comandoUniversal, msg, conversa);
+    }
 
     const etapa = await this.buscarEtapa(conversa.estado, cooperativaId);
     if (!etapa) {
@@ -70,7 +81,6 @@ export class WhatsappFluxoMotorService {
       return false;
     }
 
-    const corpo = (msg.corpo ?? '').trim();
     const proximoEstado = this.avaliarGatilhos(corpo, etapa.gatilhos);
 
     if (!proximoEstado) {
@@ -94,7 +104,10 @@ export class WhatsappFluxoMotorService {
       if (modelo) {
         const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
         const vars = this.extrairVariaveis(conversa, cooperativa);
-        const texto = this.renderizarTemplate(modelo.conteudo, vars);
+        const texto = this.anexarRodapeSeMenu(
+          this.renderizarTemplate(modelo.conteudo, vars),
+          proximaEtapa,
+        );
         await this.sender.enviarMensagem(msg.telefone, texto);
         await this.modeloMensagem.incrementarUso(modelo.id);
       }
@@ -109,6 +122,136 @@ export class WhatsappFluxoMotorService {
 
     this.logger.log(`Motor dinamico: ${conversa.estado} -> ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
     return true;
+  }
+
+  /**
+   * Bloco 1.a — Detecta se o corpo da mensagem e um comando universal de
+   * navegacao (INICIO/SAIR/MENU). Comparacao por palavra exata e isolada,
+   * case-insensitive. Retorna null se nao for comando universal — fluxo
+   * normal continua e gatilhos da etapa sao avaliados.
+   *
+   * Sinonimos cobrem variacoes naturais que cooperados usam no WhatsApp.
+   * Wildcard "*" da etapa NAO captura comando universal porque a checagem
+   * acontece ANTES de avaliarGatilhos no fluxo principal.
+   */
+  detectarComandoUniversal(corpo: string): 'INICIO' | 'SAIR' | 'MENU' | null {
+    if (!corpo) return null;
+    const normalizado = corpo.trim().toUpperCase();
+
+    const SINONIMOS_INICIO = ['INICIO', 'INÍCIO', 'COMECAR', 'COMEÇAR', 'MENU INICIAL'];
+    const SINONIMOS_SAIR = ['SAIR', 'PARAR', 'ENCERRAR'];
+    const SINONIMOS_MENU = ['MENU', 'VOLTAR'];
+
+    if (SINONIMOS_INICIO.includes(normalizado)) return 'INICIO';
+    if (SINONIMOS_SAIR.includes(normalizado)) return 'SAIR';
+    if (SINONIMOS_MENU.includes(normalizado)) return 'MENU';
+    return null;
+  }
+
+  /**
+   * Bloco 1.a — Resolve qual estado-destino corresponde ao comando universal.
+   * - INICIO -> 'INICIAL'
+   * - MENU   -> 'MENU_COOPERADO' se conversa tem cooperadoId; senao 'INICIAL'
+   * - SAIR   -> null (sinal especial de encerramento — caminho diferente)
+   */
+  resolverEstadoComandoUniversal(
+    comando: 'INICIO' | 'SAIR' | 'MENU',
+    conversa: { cooperadoId?: string | null },
+  ): string | null {
+    if (comando === 'INICIO') return 'INICIAL';
+    if (comando === 'SAIR') return null;
+    // MENU: contexto cooperado vs aquisicao
+    return conversa.cooperadoId ? 'MENU_COOPERADO' : 'INICIAL';
+  }
+
+  /**
+   * Bloco 1.a — Executa comando universal no bot REAL (processarComFluxoDinamico).
+   * SAIR persiste estado=ENCERRADO + envia despedida. INICIO/MENU transicionam
+   * pro estado destino, renderizam o modelo da etapa-destino (com rodape se for
+   * menu) e disparam acaoAutomatica se houver.
+   */
+  private async executarComandoUniversalReal(
+    comando: 'INICIO' | 'SAIR' | 'MENU',
+    msg: MensagemRecebida,
+    conversa: {
+      id: string;
+      telefone: string;
+      estado: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+  ): Promise<boolean> {
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    if (comando === 'SAIR') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'ENCERRADO' },
+      });
+      await this.sender.enviarMensagem(
+        msg.telefone,
+        'Tchau! Quando quiser, e so me chamar de novo. 👋',
+      );
+      this.logger.log(`Comando universal SAIR: conversa ${conversa.id} encerrada (tenant: ${cooperativaId ?? 'global'})`);
+      return true;
+    }
+
+    const proximoEstado = this.resolverEstadoComandoUniversal(comando, conversa);
+    if (!proximoEstado) {
+      this.logger.warn(`Comando ${comando} resolveu null fora de SAIR — nao deveria acontecer`);
+      return false;
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: proximoEstado },
+    });
+
+    const etapaDestino = await this.buscarEtapa(proximoEstado, cooperativaId);
+    if (etapaDestino?.modeloMensagemId) {
+      const modelo = await this.prisma.modeloMensagem.findFirst({
+        where: {
+          id: etapaDestino.modeloMensagemId,
+          ...this.filtroTenantSomenteLeitura(cooperativaId),
+        },
+      });
+      if (modelo) {
+        const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+        const vars = this.extrairVariaveis(conversa, cooperativa);
+        const texto = this.anexarRodapeSeMenu(
+          this.renderizarTemplate(modelo.conteudo, vars),
+          etapaDestino,
+        );
+        await this.sender.enviarMensagem(msg.telefone, texto);
+        await this.modeloMensagem.incrementarUso(modelo.id);
+      }
+    }
+
+    if (etapaDestino?.acaoAutomatica) {
+      await this.executarAcao(etapaDestino.acaoAutomatica, conversa, conversa.dadosTemp);
+    }
+
+    this.logger.log(`Comando universal ${comando}: ${conversa.estado} -> ${proximoEstado} (conversa ${conversa.id})`);
+    return true;
+  }
+
+  /**
+   * Bloco 1.a — Anexa rodape "_A qualquer momento: digite MENU, INICIO ou SAIR._"
+   * APENAS quando a etapa-destino e um menu de escolha (tem gatilhos
+   * configurados). Etapas informativas/coleta/terminal (sem gatilhos) NAO
+   * recebem rodape — evita poluir UX em mensagens curtas ou finais.
+   *
+   * Heuristica: etapa.gatilhos.length > 0 = menu. Funciona pra os estados
+   * ativos hoje: Menu Principal/Cooperado/Sem Fatura, Atualizar Contrato,
+   * Distribuidora, Dispositivo Email recebem rodape; Confirmar dados/proposta
+   * /cadastro tambem; etapas terminais (Fluxo concluido, Enviar link,
+   * Aguardando Atendente) e de coleta (Aguardando Foto/PDF) nao recebem.
+   */
+  anexarRodapeSeMenu(texto: string, etapa: FluxoEtapaComModelo): string {
+    const ehMenu = Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0;
+    if (!ehMenu) return texto;
+    return `${texto}\n\n_A qualquer momento: digite MENU, INÍCIO ou SAIR._`;
   }
 
   private async buscarEtapa(estado: string, cooperativaId?: string): Promise<FluxoEtapaComModelo | null> {
@@ -371,8 +514,12 @@ export class WhatsappFluxoMotorService {
     const estadoInicialDeclarado = input.estadoInicial ?? 'INICIAL';
     const corpo = (input.mensagem ?? '').trim();
 
+    // Bloco 1.a: cooperadoId opcional via dadosTemp pra que comando MENU resolva
+    // contexto cooperado vs aquisicao no simulador (cooperativaId vem separado).
     const conversaFake = {
       dadosTemp: input.dadosTemp ?? {},
+      cooperadoId:
+        (input.dadosTemp as { cooperadoId?: string | null } | undefined)?.cooperadoId ?? null,
     };
 
     // R3 — etapaIdForcado: quando o admin clica no botão ▶ de uma etapa especifica
@@ -403,13 +550,32 @@ export class WhatsappFluxoMotorService {
         etapaProxima: null,
         mensagemEtapaAtual: null,
         avisoTransicao: null,
+        comandoUniversalAplicado: null,
       };
     }
 
     // Sub-debito UX simulador: o que o cooperado veria ao ENTRAR nesta etapa.
     // Renderiza ANTES de avaliar gatilhos pra que o painel sempre mostre, mesmo em fallback.
     const renderEtapaAtual = await this.renderizarMensagemDeEtapa(etapaAtual, cooperativaId, conversaFake);
-    const mensagemEtapaAtual = renderEtapaAtual?.texto ?? null;
+    const mensagemEtapaAtual = renderEtapaAtual
+      ? this.anexarRodapeSeMenu(renderEtapaAtual.texto, etapaAtual)
+      : null;
+
+    // Bloco 1.a — Comando universal de navegacao tem PRECEDENCIA sobre gatilho.
+    // Ignora pings sinteticos do front (__simulador_ping__) — apenas o corpo
+    // real do admin.
+    const comandoUniversal =
+      corpo === '__simulador_ping__' ? null : this.detectarComandoUniversal(corpo);
+    if (comandoUniversal) {
+      return this.executarComandoUniversalSimulado(
+        comandoUniversal,
+        etapaAtual,
+        cooperativaId,
+        conversaFake,
+        estadoInicial,
+        mensagemEtapaAtual,
+      );
+    }
 
     const proximoEstado = this.avaliarGatilhos(corpo, etapaAtual.gatilhos);
     if (!proximoEstado) {
@@ -425,6 +591,7 @@ export class WhatsappFluxoMotorService {
         etapaProxima: null,
         mensagemEtapaAtual,
         avisoTransicao: null,
+        comandoUniversalAplicado: null,
       };
     }
 
@@ -440,7 +607,7 @@ export class WhatsappFluxoMotorService {
         mensagensEnviadas.push({
           modeloId: renderProxima.modeloId,
           modeloNome: renderProxima.modeloNome,
-          texto: renderProxima.texto,
+          texto: this.anexarRodapeSeMenu(renderProxima.texto, proximaEtapa),
           variaveisUsadas: renderProxima.vars,
         });
       }
@@ -466,6 +633,101 @@ export class WhatsappFluxoMotorService {
       etapaProxima: proximaEtapa ? this.resumoEtapa(proximaEtapa) : null,
       mensagemEtapaAtual,
       avisoTransicao,
+      comandoUniversalAplicado: null,
+    };
+  }
+
+  /**
+   * Bloco 1.a — Executa comando universal no SIMULADOR (simular()). Zero
+   * side-effect (nao persiste, nao envia WA). Retorna SimulacaoOutput preenchido
+   * pra UI exibir o efeito do comando como se tivesse rodado no bot real.
+   *
+   * SAIR: retorna transicionou: true + estadoFinal sintetico 'ENCERRADO_VIA_SAIR'
+   * + avisoTransicao explicativo. UI pode mostrar bolha sistema.
+   *
+   * INICIO/MENU: resolve etapa-destino, renderiza modelo com rodape (se for
+   * menu), retorna como se tivesse transicionado. Se etapa-destino nao existe
+   * (estado orfao), avisoTransicao explica.
+   */
+  private async executarComandoUniversalSimulado(
+    comando: 'INICIO' | 'SAIR' | 'MENU',
+    etapaAtual: FluxoEtapaComModelo,
+    cooperativaId: string | undefined,
+    conversaFake: { dadosTemp?: any; cooperadoId?: string | null },
+    estadoInicial: string,
+    mensagemEtapaAtual: string | null,
+  ): Promise<SimulacaoOutput> {
+    const etapaAtualResumo = this.resumoEtapa(etapaAtual);
+
+    if (comando === 'SAIR') {
+      return {
+        estadoInicial,
+        estadoFinal: 'ENCERRADO_VIA_SAIR',
+        transicionou: true,
+        gatilhoAvaliado: null,
+        motivoFallback: null,
+        mensagensEnviadas: [],
+        acaoAutomatica: null,
+        etapaAtual: etapaAtualResumo,
+        etapaProxima: null,
+        mensagemEtapaAtual,
+        avisoTransicao:
+          'Conversa encerrada via comando SAIR. No WhatsApp real, a sessao termina e o cooperado teria que mandar nova mensagem pra retomar.',
+        comandoUniversalAplicado: 'SAIR',
+      };
+    }
+
+    const proximoEstado = this.resolverEstadoComandoUniversal(comando, conversaFake);
+    if (!proximoEstado) {
+      // Defensivo — SAIR ja saiu acima; nao deveria cair aqui pra INICIO/MENU.
+      return {
+        estadoInicial,
+        estadoFinal: estadoInicial,
+        transicionou: false,
+        gatilhoAvaliado: null,
+        motivoFallback: null,
+        mensagensEnviadas: [],
+        acaoAutomatica: null,
+        etapaAtual: etapaAtualResumo,
+        etapaProxima: null,
+        mensagemEtapaAtual,
+        avisoTransicao: null,
+        comandoUniversalAplicado: comando,
+      };
+    }
+
+    const etapaDestino = await this.buscarEtapa(proximoEstado, cooperativaId);
+    const mensagensEnviadas: SimulacaoMensagem[] = [];
+
+    if (etapaDestino) {
+      const renderDestino = await this.renderizarMensagemDeEtapa(etapaDestino, cooperativaId, conversaFake);
+      if (renderDestino) {
+        mensagensEnviadas.push({
+          modeloId: renderDestino.modeloId,
+          modeloNome: renderDestino.modeloNome,
+          texto: this.anexarRodapeSeMenu(renderDestino.texto, etapaDestino),
+          variaveisUsadas: renderDestino.vars,
+        });
+      }
+    }
+
+    const avisoTransicao = etapaDestino
+      ? null
+      : `Comando ${comando} apontou para ${proximoEstado} mas nao ha etapa dinamica ativa nesse estado — no WhatsApp real cairia no fluxo hardcoded.`;
+
+    return {
+      estadoInicial,
+      estadoFinal: proximoEstado,
+      transicionou: true,
+      gatilhoAvaliado: null,
+      motivoFallback: null,
+      mensagensEnviadas,
+      acaoAutomatica: etapaDestino?.acaoAutomatica ?? null,
+      etapaAtual: etapaAtualResumo,
+      etapaProxima: etapaDestino ? this.resumoEtapa(etapaDestino) : null,
+      mensagemEtapaAtual,
+      avisoTransicao,
+      comandoUniversalAplicado: comando,
     };
   }
 
@@ -651,6 +913,13 @@ export interface SimulacaoOutput {
    * mas bot nao respondeu" e fica confuso. UI mostra como bolha sistema.
    */
   avisoTransicao: string | null;
+  /**
+   * Bloco 1.a — Indica se a transicao foi disparada por comando universal
+   * (INICIO/SAIR/MENU) em vez de gatilho da etapa. UI pode usar pra exibir
+   * bolha sistema explicativa (ex: "Voce digitou SAIR — conversa encerrada").
+   * null = transicao normal por gatilho ou nao-transicao.
+   */
+  comandoUniversalAplicado: 'INICIO' | 'SAIR' | 'MENU' | null;
 }
 
 // Fase C - Preview de modelo de mensagem (sem fluxo)
