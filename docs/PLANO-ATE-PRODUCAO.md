@@ -485,19 +485,21 @@ desses pais e já têm spec/análise pronta.
 
 - **Tema:** Completar a metade autoatendimento do bot WhatsApp. Hoje o Menu do Cooperado tem 7 opções e só 2 funcionam ("enviar fatura" e "falar com atendente"). As outras 5 prometem no texto e devolvem o menu — risco de quebra de confiança em produção.
 - **Persona/caso de uso:** cooperado já cadastrado da CoopereBR (ou Sinergia futura) que abre conversa no WhatsApp esperando ver saldo de créditos, ver próxima fatura, indicar amigo, atualizar cadastro, atualizar contrato, abrir cadastro de amigo via proxy, receber NPS pós-cadastro.
-- **Critério de pronto:**
-  - Bloco 0 — Quick wins: gatilho "5 Indicar amigo" cabeado pra ENVIAR_CONVITE; `{{site}}` populado ou substituído; 1 das 2 etapas duplicadas no INICIAL desativada
-  - Bloco 1 — Navegação Universal: comandos INÍCIO/SAIR/MENU/ME CHAME DEPOIS funcionando em TODA etapa do motor (camada universal antes de `avaliarGatilhos`), com rodapé automático em etapas-menu
-  - Bloco 2 — 11 modelos novos inseridos no banco + alinhar seed
-  - Bloco 3 — Consultas Menu Cooperado: "Ver saldo de créditos" e "Ver próxima fatura" implementadas como ações reais lendo cooper-token + cobrancas
-  - Bloco 4 — Atualizar Cadastro: 4 etapas novas + 4 modelos + ações persistentes (Nome/Email/Telefone/CEP) com validação
-  - Bloco 5 — Atualizar Contrato: registra solicitação + notifica equipe (decisão produto pendente — Aumentar/Diminuir/Suspender/Encerrar kWh)
-  - Bloco 6 — Cadastro por Proxy: portar lógica do bot hardcoded para o fluxo dinâmico (4 etapas + 4 modelos + ação CADASTRAR_AMIGO_POR_PROXY)
-  - Bloco 7 — NPS no fluxo: etapa NPS_AGUARDANDO_NOTA com gatilhos 0-10 + etapa NPS_RECEBIDO nova + registro
-  - Bloco 8 — Menu Fatura / Menu Inadimplente (OPCIONAL): decisão produto pendente entre dinâmico vs hardcoded
-  - Specs Jest cobrindo cada novo case (precedência comandos universais, ações reais, validação)
-  - Validação manual no simulador: cada opção do Menu Cooperado entrega o que promete
-- **Estimativa:** ~37-55h Code distribuídas em 8 blocos (Bloco 1 fundacional ~7-10h; demais blocos podem ser fatiados).
+- **Critério de pronto / status dos blocos** (atualizado pós-sessão 21/05):
+  - ✅ **Bloco 0 — Quick wins** (FEITO 21/05, commit `5d85d17`): gatilho "5 Indicar amigo" cabeado pra ENVIAR_CONVITE; `{{site}}` substituído por `{{parceiro}}` + `{{telefone_suporte}}` (campo `site` não existe no schema). Carry-over: desativar 1 das 2 etapas duplicadas INICIAL — **decisão produto Luciano**.
+  - ✅ **Bloco 0 v2 — 3 variáveis órfãs reais** (FEITO 21/05, commit `95346fc`): `{{historico}}` populado em `extrairVariaveis()` lendo `dadosTemp.historicoConsumo`; `{{valorFatura}}` → `{{valorFaturaMedia}}` em `lead_fora_area`; `{{mesesGratis}}` removido de `simulacao_resultado` (variável fantasma).
+  - ✅ **Bloco 1.a — Navegação Universal** (FEITO 21/05, commits `9205f0d` + `3717b51` correção rodapé): comandos INÍCIO/SAIR/MENU funcionando em TODA etapa do motor (camada antes de `avaliarGatilhos`), rodapé universal anexado em toda etapa renderizada (`anexarRodape`).
+  - 🔴 **Bloco 1.b — ME CHAME DEPOIS** (~3-5h, pendente): exige job de reagendamento + reuso de `timeoutHoras`/`modeloFollowup`.
+  - ✅ **Bloco 2 — 11 modelos novos inseridos** (FEITO 21/05, commit `1097f72`): proxy_pedindo_nome/telefone/fatura/confirmar, aguardando_novo_nome/email/telefone/cep, menu_inadimplente, menu_fatura, nps_recebido. `{{telefone}}` adicionado ao `extrairVariaveis()` (era órfã do `proxy_confirmar`). Seed alinhado.
+  - 🔴 **Bloco 3 — Consultas Menu Cooperado** (~12-18h, pendente — PRÓXIMO): "Ver saldo de créditos" e "Ver próxima fatura" implementadas como ações reais lendo `cooper-token` + `cobrancas`.
+  - 🔴 **Bloco 4 — Atualizar Cadastro** (~6-8h, pendente): 4 etapas novas (AGUARDANDO_NOVO_NOME/EMAIL/TELEFONE/CEP) + ações persistentes com validação. Modelos já criados no Bloco 2.
+  - 🔴 **Bloco 5 — Atualizar Contrato** (~4-6h, pendente): **decisão produto Luciano** — ação automática ou solicitação + atendente humano? (recomendação: solicitação + humano).
+  - 🔴 **Bloco 6 — Cadastro por Proxy** (~6-8h, pendente): portar lógica do bot hardcoded para fluxo dinâmico (4 etapas + ação `CADASTRAR_AMIGO_POR_PROXY`). Modelos já criados no Bloco 2.
+  - 🔴 **Bloco 7 — NPS no fluxo** (~2-3h, pendente): ativar etapa `NPS_AGUARDANDO_NOTA` com gatilhos 0-10 + etapa nova `NPS_RECEBIDO`. Modelo `nps_recebido` já criado no Bloco 2.
+  - 🔴 **Bloco 8 — Menu Fatura / Menu Inadimplente** (~4-6h, OPCIONAL): **decisão produto Luciano** — dinâmico vs hardcoded? Modelos já criados no Bloco 2.
+  - Specs Jest cobrindo cada novo case ✅ andamento (89/89 verdes hoje)
+  - Validação manual no simulador: cada opção do Menu Cooperado entrega o que promete (pós-Bloco 3-7)
+- **Estimativa total revisada:** ~37-55h. **Já entregue:** ~12h (Blocos 0, 0v2, 1.a, 2). **Restante:** ~25-43h em Blocos 1.b, 3, 4, 5, 6, 7, 8.
 - **Dependências:**
   - M15 Sprint 5a Neutro Fio B (prioridade superior — entra DEPOIS)
   - Saneamento do fluxo do bot (R1-R6 do M16) — JÁ APLICADO em 2026-05-20
@@ -509,6 +511,56 @@ desses pais e já têm spec/análise pronta.
   3. NPS: existe tabela de registro de NPS pra conectar?
 - **Origem:** sessão Code 2026-05-20 (M16) — relatório `docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md` revelou os 5 buracos do Menu Cooperado. Luciano aprovou o sprint logo após o fechamento de M16. Memória persistente: `~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md` (com 11 mensagens já redigidas).
 - **Posicionamento:** 🔁 **REPRIORIZADO 2026-05-21 — VEM ANTES DO M15 Fio B.** Originalmente posicionado depois do M15; Luciano repriorizou em 21/05 ao reabrir a sessão. Justificativa: bot em produção com Menu Cooperado oco corrói confiança hoje; M15 Fio B é regulatório mas cobertura de fallback hardcoded ainda cobre o gap fiscal por curto prazo. Sprint começa pelo Bloco 1.a (Navegação Universal — fundacional pra todos os demais). Pode ser fatiado (Bloco 0+1 quick / Blocos 2-7 médio / Bloco 8 opcional).
+
+---
+
+## Seção 3d — Fila operacional próxima (visível até fim de sprint M15, atualizada 21/05)
+
+Sequência consolidada das próximas entregas, com dependências explícitas. Cumpre pedido do Luciano em 21/05 — visibilidade da fila até o fim.
+
+```
+┌─ 1. Sprint Bot Autoatendimento WhatsApp ─────────────────────────────┐
+│   Status: EM CURSO (~12h feitos / ~25-43h restantes)                 │
+│   ✅ Bloco 0, 0v2, 1.a, 2 entregues                                  │
+│   🔴 Bloco 3 (PRÓXIMO) → 4 → 5 → 6 → 7 → 8 → 1.b                    │
+└──────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─ 2. M15 — Sprint 5a Neutro Fio B ────────────────────────────────────┐
+│   Status: PENDENTE (3-5 dias Code dedicado)                          │
+│   Schema Cobranca.fioB + RegrasFioB 2024-2029 + UI input             │
+│   classeGdAplicada + cron progressão + AlocacaoEngineService com     │
+│   R$ real (substitui custo proxy do Sprint 8 Engine Otimização).     │
+│   Spec base: docs/specs/PROPOSTA-GD1-GD2-FIOB-2026-03-26.md          │
+│   🔑 Cria o MÓDULO Fio B no sistema — destrava 3 e 4                 │
+└──────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─ 3. Cadastrar usina cooperebr2 (operacional) ────────────────────────┐
+│   Status: DEPENDENTE do M15                                          │
+│   Usina cmp8fkxvt0001valkj8utb8vr (Linhares 2, 1.000 kWp, EDP-ES) já │
+│   cadastrada estruturalmente no Bloco H' 16/05. Falta:               │
+│   - Definir classeGdAplicada por contrato (campo Fio B do M15)       │
+│   - Migrar/criar cooperados da cooperebr2 (lista de Luciano)         │
+│   - Ativar engine de cobrança com Fio B correto                      │
+│   Estimativa: ~6-10h Code + dados                                    │
+└──────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─ 4. Onboarding Consórcio Sinergia (2º tenant em produção) ───────────┐
+│   Status: DEPENDENTE do M15 + saneamento prévio                      │
+│   - tenant=CONSORCIO, GD normal (não MMGD especial)                  │
+│   - Criar Cooperativa Sinergia + planoSaas + AsaasConfig próprio     │
+│   - Importar membros + faturas + modelos do sistema antigo deles     │
+│   - Validação IDOR multi-tenant entre CoopereBR↔Sinergia             │
+│   - Caso de uso: confirmar tipo_membro "consorciado" no bot          │
+│   Pré-requisitos: M15 Fio B (cálculo correto) + Sprint 6 IDOR        │
+│     (auditoria geral antes de 2º tenant) + D-novo-Q Contatos Teste   │
+│     (Sinergia precisa de contatos próprios)                          │
+│   Estimativa: ~20-30h Code + dados + validação                       │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Dependência crítica visível:** o módulo Fio B (M15) destrava simultaneamente a **cadastrar cooperebr2** (cálculo correto de cobrança) e **Onboarding Sinergia** (parceiro novo precisa de cobrança regulatória correta desde o dia 1).
+
+**Outras pendências do PLANO** (Sprints 0-9, Cadastros+Financeiro Consolidado, Iniciativas Longo Prazo) continuam nas seções 3, 3b, 3c — esta seção 3d é só a **fila operacional próxima** que Luciano pediu visibilidade.
 
 ---
 
