@@ -331,7 +331,12 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
           cidade: true, estado: true, tipoParceiro: true,
         }),
       });
-      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Luciano, bem-vindo a CoopereBR!');
+      // Bloco 1.a (21/05): rodape anexado em toda etapa renderizada.
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('Oi Luciano, bem-vindo a CoopereBR!'),
+      );
+      expect(enviarMensagem.mock.calls[0][1]).toContain('digite MENU, INÍCIO ou SAIR');
     });
 
     it('Conversa SEM cooperativaId -> nao carrega cooperativa; {{parceiro}} vazio', async () => {
@@ -355,7 +360,10 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
 
       expect(cooperativaFindUnique).not.toHaveBeenCalled();
-      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Anonimo, fale com ');
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('Oi Anonimo, fale com '),
+      );
     });
 
     it('Cooperativa referenciada nao existe -> fallback vazio, motor nao crasha', async () => {
@@ -381,7 +389,10 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         ),
       ).resolves.toBe(true);
 
-      expect(enviarMensagem).toHaveBeenCalledWith('+5527981341348', 'Oi Teste, parceiro: ');
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('Oi Teste, parceiro: '),
+      );
     });
   });
 
@@ -552,7 +563,8 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(r.estadoFinal).toBe('PROX');
       expect(r.gatilhoAvaliado).toBe('OK');
       expect(r.mensagensEnviadas).toHaveLength(1);
-      expect(r.mensagensEnviadas[0].texto).toBe('Oi Luciano, bem-vindo a CoopereBR de Vitoria!');
+      expect(r.mensagensEnviadas[0].texto).toContain('Oi Luciano, bem-vindo a CoopereBR de Vitoria!');
+      expect(r.mensagensEnviadas[0].texto).toContain('digite MENU, INÍCIO ou SAIR');
       expect(r.mensagensEnviadas[0].modeloId).toBe('m1');
       expect(r.mensagensEnviadas[0].modeloNome).toBe('boas_vindas');
       expect(r.acaoAutomatica).toBe('CRIAR_LEAD');
@@ -605,7 +617,8 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       });
 
       expect(cooperativaFindUnique).not.toHaveBeenCalled();
-      expect(r.mensagensEnviadas[0].texto).toBe('Oi Anonimo, parceiro: []');
+      expect(r.mensagensEnviadas[0].texto).toContain('Oi Anonimo, parceiro: []');
+      expect(r.mensagensEnviadas[0].texto).toContain('digite MENU, INÍCIO ou SAIR');
       const where = etapaFindFirst.mock.calls[0][0].where;
       expect(where).toMatchObject({ cooperativaId: null });
     });
@@ -778,7 +791,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       const rA = await service.simular({
         mensagem: 'OK', cooperativaId: 'coop-A', estadoInicial: 'MENU',
       });
-      expect(rA.mensagensEnviadas[0].texto).toBe('Parceiro: CoopereBR');
+      expect(rA.mensagensEnviadas[0].texto).toContain('Parceiro: CoopereBR');
 
       // Tenant B simula em seguida - vars devem ser de B, nunca de A
       etapaFindFirst.mockResolvedValueOnce({
@@ -800,7 +813,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       const rB = await service.simular({
         mensagem: 'OK', cooperativaId: 'coop-B', estadoInicial: 'MENU',
       });
-      expect(rB.mensagensEnviadas[0].texto).toBe('Parceiro: Hangar Academia');
+      expect(rB.mensagensEnviadas[0].texto).toContain('Parceiro: Hangar Academia');
       expect(rB.mensagensEnviadas[0].texto).not.toContain('CoopereBR');
     });
   });
@@ -871,24 +884,32 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     });
   });
 
-  describe('anexarRodapeSeMenu() - funcao pura', () => {
+  describe('anexarRodape() - funcao pura (rodape em TODA etapa apos correcao 21/05)', () => {
     const RODAPE = '\n\n_A qualquer momento: digite MENU, INÍCIO ou SAIR._';
 
     it('Etapa COM gatilhos (menu) -> rodape anexado', () => {
       const etapa: any = {
         gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
       };
-      expect(service.anexarRodapeSeMenu('Olá!', etapa)).toBe('Olá!' + RODAPE);
+      expect(service.anexarRodape('Olá!', etapa)).toBe('Olá!' + RODAPE);
     });
 
-    it('Etapa SEM gatilhos (terminal/coleta) -> sem rodape', () => {
+    it('Etapa SEM gatilhos (terminal/coleta) -> RODAPE TAMBEM ANEXADO (era bug pre-21/05)', () => {
+      // Correcao 21/05: rodape em TODA etapa ativa. Antes deixava etapa terminal
+      // (AGUARDANDO_ATENDENTE) sem rodape — justo onde cooperado fica preso.
       const etapa: any = { gatilhos: [] };
-      expect(service.anexarRodapeSeMenu('Sua mensagem foi recebida.', etapa)).toBe('Sua mensagem foi recebida.');
+      expect(service.anexarRodape('Sua mensagem foi recebida.', etapa)).toBe(
+        'Sua mensagem foi recebida.' + RODAPE,
+      );
     });
 
-    it('Etapa com gatilhos null/undefined -> sem rodape (defensivo)', () => {
-      expect(service.anexarRodapeSeMenu('Texto', { gatilhos: null } as any)).toBe('Texto');
-      expect(service.anexarRodapeSeMenu('Texto', { gatilhos: undefined } as any)).toBe('Texto');
+    it('Etapa com gatilhos null/undefined -> rodape anexado (defensivo, sem crash)', () => {
+      expect(service.anexarRodape('Texto', { gatilhos: null } as any)).toBe('Texto' + RODAPE);
+      expect(service.anexarRodape('Texto', { gatilhos: undefined } as any)).toBe('Texto' + RODAPE);
+    });
+
+    it('Sem parametro etapa tambem funciona (rodape sempre presente)', () => {
+      expect(service.anexarRodape('Texto')).toBe('Texto' + RODAPE);
     });
   });
 

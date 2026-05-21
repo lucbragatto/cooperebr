@@ -104,7 +104,7 @@ export class WhatsappFluxoMotorService {
       if (modelo) {
         const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
         const vars = this.extrairVariaveis(conversa, cooperativa);
-        const texto = this.anexarRodapeSeMenu(
+        const texto = this.anexarRodape(
           this.renderizarTemplate(modelo.conteudo, vars),
           proximaEtapa,
         );
@@ -219,7 +219,7 @@ export class WhatsappFluxoMotorService {
       if (modelo) {
         const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
         const vars = this.extrairVariaveis(conversa, cooperativa);
-        const texto = this.anexarRodapeSeMenu(
+        const texto = this.anexarRodape(
           this.renderizarTemplate(modelo.conteudo, vars),
           etapaDestino,
         );
@@ -238,19 +238,16 @@ export class WhatsappFluxoMotorService {
 
   /**
    * Bloco 1.a — Anexa rodape "_A qualquer momento: digite MENU, INICIO ou SAIR._"
-   * APENAS quando a etapa-destino e um menu de escolha (tem gatilhos
-   * configurados). Etapas informativas/coleta/terminal (sem gatilhos) NAO
-   * recebem rodape — evita poluir UX em mensagens curtas ou finais.
+   * em TODA etapa renderizada (menu, terminal, coleta).
    *
-   * Heuristica: etapa.gatilhos.length > 0 = menu. Funciona pra os estados
-   * ativos hoje: Menu Principal/Cooperado/Sem Fatura, Atualizar Contrato,
-   * Distribuidora, Dispositivo Email recebem rodape; Confirmar dados/proposta
-   * /cadastro tambem; etapas terminais (Fluxo concluido, Enviar link,
-   * Aguardando Atendente) e de coleta (Aguardando Foto/PDF) nao recebem.
+   * Correcao 21/05: antes a heuristica "so em menu" deixava etapas terminais
+   * (AGUARDANDO_ATENDENTE, AGUARDANDO_FOTO_FATURA) SEM rodape — justo onde o
+   * cooperado fica preso e o escape mais importa. Agora sempre anexa.
+   *
+   * Parametro `etapa` mantido na assinatura por compatibilidade interna;
+   * decisao futura pode reintroduzir filtragem por tipo de etapa.
    */
-  anexarRodapeSeMenu(texto: string, etapa: FluxoEtapaComModelo): string {
-    const ehMenu = Array.isArray(etapa.gatilhos) && etapa.gatilhos.length > 0;
-    if (!ehMenu) return texto;
+  anexarRodape(texto: string, _etapa?: FluxoEtapaComModelo): string {
     return `${texto}\n\n_A qualquer momento: digite MENU, INÍCIO ou SAIR._`;
   }
 
@@ -558,7 +555,7 @@ export class WhatsappFluxoMotorService {
     // Renderiza ANTES de avaliar gatilhos pra que o painel sempre mostre, mesmo em fallback.
     const renderEtapaAtual = await this.renderizarMensagemDeEtapa(etapaAtual, cooperativaId, conversaFake);
     const mensagemEtapaAtual = renderEtapaAtual
-      ? this.anexarRodapeSeMenu(renderEtapaAtual.texto, etapaAtual)
+      ? this.anexarRodape(renderEtapaAtual.texto, etapaAtual)
       : null;
 
     // Bloco 1.a — Comando universal de navegacao tem PRECEDENCIA sobre gatilho.
@@ -607,7 +604,7 @@ export class WhatsappFluxoMotorService {
         mensagensEnviadas.push({
           modeloId: renderProxima.modeloId,
           modeloNome: renderProxima.modeloNome,
-          texto: this.anexarRodapeSeMenu(renderProxima.texto, proximaEtapa),
+          texto: this.anexarRodape(renderProxima.texto, proximaEtapa),
           variaveisUsadas: renderProxima.vars,
         });
       }
@@ -705,7 +702,7 @@ export class WhatsappFluxoMotorService {
         mensagensEnviadas.push({
           modeloId: renderDestino.modeloId,
           modeloNome: renderDestino.modeloNome,
-          texto: this.anexarRodapeSeMenu(renderDestino.texto, etapaDestino),
+          texto: this.anexarRodape(renderDestino.texto, etapaDestino),
           variaveisUsadas: renderDestino.vars,
         });
       }
