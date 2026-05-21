@@ -14,16 +14,26 @@ const fluxos = [
     { resposta: '4', proximoEstado: 'MENU_CONVITE_INDICACAO', acao: 'GERAR_LINK_INDICACAO' },
   ]},
 
-  // Menu do cooperado
+  // Menu do cooperado (gatilhos "1" e "2" cabeados no Bloco 3 do Sprint Bot
+  // Autoatendimento — 21/05: viraram transicao real pras etapas VER_SALDO_CREDITOS
+  // e VER_PROXIMA_FATURA com acaoAutomatica propria. NAO usar campo `acao` em
+  // gatilho — motor nao processa, fica orfao).
   { id: 'f-menu-cooperado', nome: 'Menu do Cooperado', ordem: 3, estado: 'MENU_COOPERADO', gatilhos: [
-    { resposta: '1', proximoEstado: 'MENU_COOPERADO', acao: 'VER_CREDITOS' },
-    { resposta: '2', proximoEstado: 'MENU_COOPERADO', acao: 'VER_FATURA' },
+    { resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' },
+    { resposta: '2', proximoEstado: 'VER_PROXIMA_FATURA' },
     { resposta: '3', proximoEstado: 'AGUARDANDO_FOTO_FATURA' },
     { resposta: '4', proximoEstado: 'ATUALIZACAO_CONTRATO' },
-    { resposta: '5', proximoEstado: 'MENU_COOPERADO', acao: 'GERAR_LINK_INDICACAO' },
+    { resposta: '5', proximoEstado: 'ENVIAR_CONVITE' },
     { resposta: '6', proximoEstado: 'AGUARDANDO_ATENDENTE' },
     { resposta: '7', proximoEstado: 'AGUARDANDO_ATENDENTE' },
   ]},
+
+  // Bloco 3 (21/05) — Etapas terminais que consultam dados reais via acao.
+  // Sem modeloMensagemId proprio: a acao busca o modelo do banco
+  // (saldo_creditos_resultado / proxima_fatura_resultado) e renderiza com
+  // os dados consultados (plano + saldo da distribuidora / cobranca + link Asaas).
+  { id: 'f-ver-saldo-creditos', nome: 'Ver Saldo de Creditos', ordem: 50, estado: 'VER_SALDO_CREDITOS', gatilhos: [], acaoAutomatica: 'CONSULTAR_SALDO_CREDITOS' },
+  { id: 'f-ver-proxima-fatura', nome: 'Ver Proxima Fatura', ordem: 51, estado: 'VER_PROXIMA_FATURA', gatilhos: [], acaoAutomatica: 'CONSULTAR_PROXIMA_FATURA' },
 
   // Fluxo sem fatura
   { id: 'f-sem-fatura', nome: 'Sem Fatura — Opções', ordem: 4, estado: 'MENU_SEM_FATURA', gatilhos: [
