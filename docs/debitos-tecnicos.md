@@ -2548,6 +2548,79 @@ Aproveitar pra:
 
 ---
 
+### D-novo-V — Modelos `saldo_creditos_resultado` e `proxima_fatura_resultado` com lógica condicional NO CÓDIGO (não no template) — admin não consegue editar partes (P3 melhoria)
+
+**Severidade:** P3 (melhoria — não bloqueia nada; produto funciona corretamente hoje, mas o admin do Banco de Mensagens não consegue editar TODAS as partes do texto pelo painel)
+**Detectado em:** 2026-05-21 noite (revisão pós-implementação do Bloco 3)
+**Arquivos afetados:**
+- `backend/src/whatsapp/whatsapp-fluxo-motor.service.ts:executarConsultarSaldoCreditos()` (~linhas 460-540)
+- `backend/src/whatsapp/whatsapp-fluxo-motor.service.ts:executarConsultarProximaFatura()` (~linhas 555-630)
+- Modelos `saldo_creditos_resultado` + `proxima_fatura_resultado` no banco (categoria BOT, GLOBAL)
+
+**Problema:**
+O Bloco 3 (21/05) introduziu 2 modelos no Banco de Mensagens — `saldo_creditos_resultado` e `proxima_fatura_resultado` — mas o conteúdo deles é só ESQUELETO com placeholders:
+
+```
+saldo_creditos_resultado:
+  ⚡ *Seu plano e créditos:*
+  📋 Plano contratado: {{kwhContratoMensal}} kWh/mês
+  {{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}
+  _Pra atualizar seu saldo, envie sua fatura mais recente..._
+
+proxima_fatura_resultado:
+  📄 *Sua próxima fatura:*
+  {{bloco_fatura}}{{link_pagamento}}
+```
+
+Os trechos que importam (texto das linhas condicionais, formato do bloco de fatura, frase do link de pagamento, mensagem quando não tem cobrança, CTA quando não tem fatura processada) estão **HARDCODED nos métodos do motor** (`executarConsultarSaldoCreditos` / `executarConsultarProximaFatura`):
+
+- `'💡 Saldo na distribuidora: ${saldo} kWh\n'`
+- `'📅 Validade dos créditos: ${data}\n'`
+- `'📊 Última fatura registrada: ${mesRef}'`
+- `'📊 Nenhuma fatura registrada ainda — envie a sua pelo bot pra calcular seu saldo.'`
+- `'💰 Valor: R$ ${valor}\n📅 Vencimento: ${data}\n📊 Status: ${label}'`
+- `'\n🔗 Pague aqui: ${link}'`
+- `'✅ Voce nao tem faturas em aberto no momento!'`
+
+**Consequência:** o admin do Banco de Mensagens não consegue editar essas frases pelo painel. Pra mudar "💡 Saldo na distribuidora" pra "🔋 Créditos disponíveis", precisa de release de código. Sob a regra de produto **"admin monta a CONVERSA; dev fornece os BLOCOS de ação"** (memória `iniciativa_fluxos_customizaveis_20_05.md`), isso fere o princípio — admin atualmente não tem controle total.
+
+**Por que aceito agora:**
+- Implementar engine de template com lógica condicional (`{{#if saldoKwhAtual}}...{{/if}}`) é refator não-trivial (~8-12h)
+- Bloco 3 priorizou cabeamento funcional (cooperado vê saldo / fatura) sobre flexibilidade admin
+- Padrão usado é mesmo do `executarEnviarLinkIndicacao` (texto inline na ação)
+
+**Solução futura proposta (~8-12h Code):**
+Implementar mini-engine de template com:
+- `{{#if var}}...{{/if}}` (linha some quando var é falsy/empty)
+- `{{#unless var}}...{{/unless}}` (linha some quando var é truthy)
+- `{{#case status}}A_VENCER => "A vencer", VENCIDO => "Vencida"{{/case}}` (substitui o `formatarStatusCobranca` hardcoded)
+
+Modelo `saldo_creditos_resultado` viraria:
+
+```
+⚡ *Seu plano e créditos:*
+
+📋 Plano contratado: {{kwhContratoMensal}} kWh/mês
+{{#if saldoKwhAtual}}💡 Saldo na distribuidora: {{saldoKwhAtual}} kWh{{/if}}
+{{#if validadeCreditos}}📅 Validade dos créditos: {{validadeCreditos}}{{/if}}
+{{#if mesUltimaFatura}}📊 Última fatura registrada: {{mesUltimaFatura}}{{/if}}
+{{#unless mesUltimaFatura}}📊 Nenhuma fatura registrada ainda — envie a sua pelo bot pra calcular seu saldo.{{/unless}}
+
+_Pra atualizar seu saldo, envie sua fatura mais recente (opção 3 do menu)._
+```
+
+Aí o admin edita tudo no Banco de Mensagens. Substituiria também o `extrairVariaveis()` por algo mais flexível pra ações injetarem suas vars sem hardcode.
+
+**Vínculo estratégico:** este débito é parte da **Iniciativa Fluxos Customizáveis (D-novo-T)** — sub-componente "Biblioteca de Ações + Template Engine flexível". Não precisa virar sprint próprio; pode ser fatia da Fase 1 da iniciativa quando começar.
+
+**Posicionamento:** NÃO é prioridade. Slots possíveis:
+- (a) Junto com Iniciativa Fluxos Customizáveis Fase 1 (D-novo-T) — natural
+- (b) Sprint Housekeeping se virar bloqueio operacional (admin pedir muita mudança nesses 2 modelos antes de Sinergia)
+
+**Status:** 📋 Catalogado em 2026-05-21 noite. Aceito como dívida consciente durante o Bloco 3. Decisão 14 aplicada: D-novo-V escolhido após grep amplo (D-novo-U foi o último usado nesta sessão; D-novo-V até Z livres).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
