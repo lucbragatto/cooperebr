@@ -2418,6 +2418,89 @@ Hardcoded em `backend/src/common/safety/whitelist-teste.ts` desde fix D-novo-N (
 
 ---
 
+### D-novo-S — Sprint Bot Autoatendimento WhatsApp (P2 estratégico — aprovado 20/05, aguarda janela pós-M15)
+
+**Severidade:** P2 estratégico (não bloqueia produção real — fallback hardcoded ainda cobre, mas Menu do Cooperado tem 5 buracos de 7 opções que corroem confiança)
+**Detectado em:** 2026-05-20 — relatório completo do bot revelou que metade autoatendimento está oca
+**Memória detalhada:** `~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md` (escopo dos 8 blocos + 11 mensagens redigidas)
+**Catalogado em PLANO:** `docs/PLANO-ATE-PRODUCAO.md` Seção 3b — "Sprint Bot Autoatendimento WhatsApp — APROVADO 20/05/2026"
+
+**Problema atual:**
+O Menu do Cooperado lista 7 opções (1 Ver créditos / 2 Ver fatura / 3 Enviar fatura / 4 Atualizar contrato / 5 Indicar amigo / 6 Suporte / 7 Atendente). **Só funcionam 2 (3 e 7).** Outras 5 prometem no texto e devolvem o menu via gatilho-loop ou caem em estados sem etapa. Adicionalmente:
+- Cadastro por Proxy (4 etapas inativas sem modelo)
+- Atualizar Cadastro (4 estados-destino inexistentes)
+- NPS sem gatilhos 0-10
+- MENU_FATURA / MENU_INADIMPLENTE sem modelo
+- Variável `{{site}}` vazia
+- 2 etapas duplicadas no INICIAL
+
+**Escopo aprovado (8 blocos, ~37-55h Code):**
+- Bloco 0 (~2h) — Quick wins (gatilho 5 cabeado, `{{site}}`, desativar 1 etapa duplicada)
+- Bloco 1 (~7-10h) — Navegação Universal FUNDACIONAL (INÍCIO/SAIR/MENU/ME CHAME DEPOIS no motor antes de `avaliarGatilhos`)
+- Bloco 2 (~1-1.5h) — Inserir 11 modelos novos + alinhar seed
+- Bloco 3 (~6-9h) — Ver saldo de créditos + Ver próxima fatura (ações reais)
+- Bloco 4 (~6-8h) — Atualizar Cadastro (4 etapas novas + ações persistentes + validação)
+- Bloco 5 (~4-6h) — Atualizar Contrato (decisão produto: ação automática vs solicitação + humano)
+- Bloco 6 (~6-8h) — Cadastro por Proxy (portar lógica do hardcoded)
+- Bloco 7 (~2-3h) — NPS no fluxo (gatilhos 0-10 + etapa NPS_RECEBIDO)
+- Bloco 8 (~4-6h OPCIONAL) — Menu Fatura / Menu Inadimplente (decisão produto)
+
+**Decisão de arquitetura central:**
+Motor `executarAcao()` hoje tem placeholders + `ENVIAR_LINK_INDICACAO` (R5, 20/05). Sprint expande pra ações de CONSULTA + ESCRITA reais. O campo `Gatilho.acao` existe no dado mas o motor IGNORA — decisão: NÃO passar a processar `Gatilho.acao`; cada opção vira transição pra estado com `acaoAutomatica` (padrão atual do motor).
+
+**Decisões de produto pendentes:**
+1. Bloco 5 Atualizar Contrato: ação automática OU solicitação + humano?
+2. Bloco 8 Menu Fatura / Menu Inadimplente: dinâmico OU mantém hardcoded?
+3. Bloco 7 NPS: existe tabela de registro pra conectar?
+
+**Posicionamento:** DEPOIS do M15 Sprint 5a Fio B. Pode ser fatiado (Bloco 0+1 quick — ~10h / Blocos 2-7 médio — ~25-35h / Bloco 8 opcional).
+
+**Status:** 📋 Catalogado em 2026-05-21. Aprovado por Luciano 20/05, escopo completo na memória, 11 mensagens redigidas. Aguarda fechamento de M15 + janela do Luciano.
+
+---
+
+### D-novo-T — Iniciativa Fluxos Customizáveis do Bot WhatsApp (P3 estratégico — visão longo prazo, 100-200h+ em 3 fases)
+
+**Severidade:** P3 estratégico (não bloqueia nada hoje; impacto futuro se ficar postergado indefinidamente e Sinergia/futuros parceiros pedirem personalização)
+**Detectado em:** 2026-05-20 — sessão claude.ai pós-fechamento M16 (Luciano mapeou visão após o relatório do bot)
+**Memória detalhada:** `~/.claude/projects/C--Users-Luciano-cooperebr/memory/iniciativa_fluxos_customizaveis_20_05.md`
+**Catalogado em PLANO:** `docs/PLANO-ATE-PRODUCAO.md` Seção 3b — "Iniciativa Fluxos Customizáveis do Bot WhatsApp — VISÃO 20/05/2026 (LONGO PRAZO)"
+
+**Visão:**
+Bot WhatsApp hoje tem 1 fluxo fixo (conjunto único de `FluxoEtapa` por tenant). Transformar em **plataforma de fluxos configuráveis** — admin/superadmin monta jornadas sob demanda. Exemplos: fluxo de Ocorrências, fluxo replicando Wizard de cadastro, fluxo do Portal do Proprietário (desempenho usina, saldo, fluxo de caixa) no WhatsApp.
+
+**3 padrões de fluxo:**
+- **COLETA** (bot pergunta → cria registro): Ocorrências, Wizard cadastro
+- **CONSULTA** (usuário pergunta → bot responde): Saldo, desempenho usina, fluxo de caixa
+- **NOTIFICAÇÃO PROATIVA** (bot avisa sozinho): notícia de queda de geração — NÃO é fluxo conversacional, vive em `notificacoes-proativas`
+
+**Arquitetura — 6 peças:**
+1. Entidade `Fluxo` (agrupador) — `FluxoEtapa` ganha `fluxoId`
+2. Roteador de entrada (palavra-chave / perfil / menu)
+3. Biblioteca de Ações (paleta de blocos pré-programados pelo dev)
+4. Construtor visual UI (flow builder)
+5. Elegibilidade/perfil
+6. Multi-tenant (fluxo do parceiro vs global)
+
+**Insight central:** admin monta a CONVERSA; dev fornece os BLOCOS de ação. Admin é montador, não programador.
+
+**Faseamento:**
+- **Fase 1** (~1 sprint) — entidade Fluxo + roteador; fluxos criados pelo DEV via script
+- **Fase 2** (contínuo) — biblioteca de ações expandida sob demanda
+- **Fase 3** (grande — produto dentro do produto) — construtor visual UI, admin monta sozinho
+
+**Estimativa total:** ~100-200h+ distribuídas. Fase 3 é a mais cara.
+
+**Dependências:**
+- D-novo-S Sprint Bot Autoatendimento — completa o fluxo único atual ANTES de virar plataforma
+- Decisão de produto: priorizar fluxos novos (Ocorrências, Portal Proprietário) vs polir existente
+
+**Posicionamento:** NÃO é sprint imediato. Começa pela Fase 1 (entidade Fluxo) depois que D-novo-S estiver fechado.
+
+**Status:** 📋 Catalogado em 2026-05-21. Visão aprovada por Luciano 20/05. Aguarda fechamento de M15 + D-novo-S antes da Fase 1.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

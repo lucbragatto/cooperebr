@@ -479,6 +479,72 @@ desses pais e já têm spec/análise pronta.
 
 ---
 
+### Sprint Bot Autoatendimento WhatsApp — 🆕 APROVADO 20/05/2026
+
+**Pai:** independente (não tem sprint pai — completa a metade autoatendimento do bot WA, hoje "oca").
+
+- **Tema:** Completar a metade autoatendimento do bot WhatsApp. Hoje o Menu do Cooperado tem 7 opções e só 2 funcionam ("enviar fatura" e "falar com atendente"). As outras 5 prometem no texto e devolvem o menu — risco de quebra de confiança em produção.
+- **Persona/caso de uso:** cooperado já cadastrado da CoopereBR (ou Sinergia futura) que abre conversa no WhatsApp esperando ver saldo de créditos, ver próxima fatura, indicar amigo, atualizar cadastro, atualizar contrato, abrir cadastro de amigo via proxy, receber NPS pós-cadastro.
+- **Critério de pronto:**
+  - Bloco 0 — Quick wins: gatilho "5 Indicar amigo" cabeado pra ENVIAR_CONVITE; `{{site}}` populado ou substituído; 1 das 2 etapas duplicadas no INICIAL desativada
+  - Bloco 1 — Navegação Universal: comandos INÍCIO/SAIR/MENU/ME CHAME DEPOIS funcionando em TODA etapa do motor (camada universal antes de `avaliarGatilhos`), com rodapé automático em etapas-menu
+  - Bloco 2 — 11 modelos novos inseridos no banco + alinhar seed
+  - Bloco 3 — Consultas Menu Cooperado: "Ver saldo de créditos" e "Ver próxima fatura" implementadas como ações reais lendo cooper-token + cobrancas
+  - Bloco 4 — Atualizar Cadastro: 4 etapas novas + 4 modelos + ações persistentes (Nome/Email/Telefone/CEP) com validação
+  - Bloco 5 — Atualizar Contrato: registra solicitação + notifica equipe (decisão produto pendente — Aumentar/Diminuir/Suspender/Encerrar kWh)
+  - Bloco 6 — Cadastro por Proxy: portar lógica do bot hardcoded para o fluxo dinâmico (4 etapas + 4 modelos + ação CADASTRAR_AMIGO_POR_PROXY)
+  - Bloco 7 — NPS no fluxo: etapa NPS_AGUARDANDO_NOTA com gatilhos 0-10 + etapa NPS_RECEBIDO nova + registro
+  - Bloco 8 — Menu Fatura / Menu Inadimplente (OPCIONAL): decisão produto pendente entre dinâmico vs hardcoded
+  - Specs Jest cobrindo cada novo case (precedência comandos universais, ações reais, validação)
+  - Validação manual no simulador: cada opção do Menu Cooperado entrega o que promete
+- **Estimativa:** ~37-55h Code distribuídas em 8 blocos (Bloco 1 fundacional ~7-10h; demais blocos podem ser fatiados).
+- **Dependências:**
+  - M15 Sprint 5a Neutro Fio B (prioridade superior — entra DEPOIS)
+  - Saneamento do fluxo do bot (R1-R6 do M16) — JÁ APLICADO em 2026-05-20
+  - Cooperado tem `cooperadoId` resolvido na conversa (já funciona via telefone)
+- **Risco:** médio. Bot em produção com menu oco corrói confiança; mas não bloqueia produção real (fallback hardcoded ainda cobre os 5 buracos atuais).
+- **Decisões de produto pendentes (Luciano resolve na abertura):**
+  1. Atualizar Contrato: ação automática ou solicitação + atendente humano? (Recomendação: solicitação + humano — regra de negócio sensível)
+  2. Menu Fatura / Menu Inadimplente: dinâmico ou mantém no hardcoded?
+  3. NPS: existe tabela de registro de NPS pra conectar?
+- **Origem:** sessão Code 2026-05-20 (M16) — relatório `docs/relatorios/2026-05-20-banco-mensagens-fluxo-bot.md` revelou os 5 buracos do Menu Cooperado. Luciano aprovou o sprint logo após o fechamento de M16. Memória persistente: `~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md` (com 11 mensagens já redigidas).
+- **Posicionamento:** depois do M15 Fio B. Pode ser fatiado (Bloco 0+1 quick / Blocos 2-7 médio / Bloco 8 opcional).
+
+---
+
+### Iniciativa Fluxos Customizáveis do Bot WhatsApp — 🆕 VISÃO 20/05/2026 (LONGO PRAZO)
+
+**Pai:** independente (iniciativa estratégica, não sprint convencional).
+
+- **Tema:** Transformar o bot WhatsApp de "1 fluxo fixo" (hoje: conjunto único de `FluxoEtapa` por tenant) em **plataforma de fluxos configuráveis** — admin/superadmin monta jornadas conversacionais sob demanda (Ocorrências, Portal Proprietário no WA, Wizard de cadastro, etc).
+- **Persona/caso de uso:** administrador de parceiro (CoopereBR, Sinergia futura) que quer disponibilizar fluxos novos no WhatsApp sem dependência de dev. Ex: oferecer "Abrir ocorrência" via bot, replicar o desempenho da usina do Portal Proprietário no WhatsApp, criar fluxo de notícia proativa de queda de geração.
+- **Os 3 padrões de fluxo:**
+  - **COLETA:** bot pergunta → cria registro (Ocorrências, Wizard cadastro)
+  - **CONSULTA:** usuário pergunta → bot responde com dado (Saldo a receber, desempenho usina, fluxo de caixa)
+  - **NOTIFICAÇÃO PROATIVA:** bot avisa sozinho (notícia de queda de geração) — **NÃO é fluxo conversacional**; vive no módulo `notificacoes-proativas` (crons Bloco D)
+- **Arquitetura — 6 peças necessárias:**
+  1. Entidade `Fluxo` (agrupador) — `FluxoEtapa` ganha `fluxoId`
+  2. Roteador de entrada (palavra-chave / perfil de quem manda / menu)
+  3. Biblioteca de Ações (paleta de blocos pré-programados pelo dev)
+  4. Construtor visual UI (flow builder onde admin monta jornadas)
+  5. Elegibilidade/perfil (quem aciona cada fluxo)
+  6. Multi-tenant (fluxo do parceiro vs fluxo global SISGD)
+- **Insight central:** admin monta a CONVERSA; dev fornece os BLOCOS de ação. Admin é montador, não programador.
+- **Boa notícia:** muito já existe — bot vira 2º canal pro que módulos atuais já fazem (ocorrencias, usinas+geracao-mensal, financeiro, notificacoes-proativas, /proprietario).
+- **Faseamento (do barato ao caro):**
+  - **Fase 1** — Múltiplos fluxos no banco (entidade Fluxo + roteador). Fluxos criados pelo DEV via script. Esforço: ~1 sprint
+  - **Fase 2** — Biblioteca de Ações expandida (dev programa novos blocos sob demanda). Esforço: contínuo
+  - **Fase 3** — Construtor visual UI (admin monta sozinho, sem dev). Esforço: grande — produto dentro do produto
+- **Estimativa total:** ~100-200h+ distribuídas em 3 fases. A Fase 3 (construtor visual) é a mais cara.
+- **Dependências:**
+  - Sprint Bot Autoatendimento (acima) — completa o fluxo único atual antes de virar plataforma
+  - Decisão de produto: priorizar fluxos novos (Ocorrências, Portal Proprietário) vs polir o existente
+- **Risco:** baixo no curto prazo (não é prioridade). Alto se postergado indefinidamente — admin de parceiro novo (Sinergia) pode pedir personalização e sistema não suportar.
+- **Origem:** sessão claude.ai 2026-05-20 (planejamento pós-fechamento M16). Luciano mapeou a visão após examinar o relatório do banco de mensagens. Memória persistente: `~/.claude/projects/C--Users-Luciano-cooperebr/memory/iniciativa_fluxos_customizaveis_20_05.md`.
+- **Posicionamento:** longo prazo. Começa pela Fase 1 (entidade Fluxo) depois que o Sprint Bot Autoatendimento estiver fechado. NÃO é sprint imediato.
+
+---
+
 ## Seção 3c — Sprint Cadastros+Financeiro Consolidado (decidido 12/05 noite)
 
 **Origem:** investigação ampla read-only de 12/05 (commit `89ee5ea` + appendix `07a8c20`) varreu 3 caminhos de Cadastros + 12 componentes Financeiros e identificou 11 fatias entregáveis. Decisão tomada em 12/05 noite — **Plano Mestre Opção 4**.
