@@ -314,6 +314,17 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(service.extrairVariaveis({ dadosTemp: { historicoConsumo: undefined } }).historico).toBe('');
     });
 
+    it('Bloco 2 (21/05): {{telefone}} populado a partir de dadosTemp.telefone', () => {
+      expect(
+        service.extrairVariaveis({ dadosTemp: { telefone: '27999999999' } }).telefone,
+      ).toBe('27999999999');
+    });
+
+    it('Bloco 2: {{telefone}} vazio quando dadosTemp.telefone ausente', () => {
+      expect(service.extrairVariaveis({ dadosTemp: {} }).telefone).toBe('');
+      expect(service.extrairVariaveis({ dadosTemp: { telefone: null } }).telefone).toBe('');
+    });
+
     it('Campos opcionais null da Cooperativa viram string vazia (nao literal "null")', () => {
       const vars = service.extrairVariaveis(
         { dadosTemp: {} },

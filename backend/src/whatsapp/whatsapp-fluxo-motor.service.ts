@@ -484,6 +484,10 @@ export class WhatsappFluxoMotorService {
       valorFaturaMedia: dados.valorFaturaMedia ? fmt(dados.valorFaturaMedia) : '',
       valorComDesconto: dados.valorComDesconto ? fmt(dados.valorComDesconto) : '',
       mes: dados.mesReferencia ?? '',
+      // Bloco 2 (21/05): {{telefone}} usado em proxy_confirmar (telefone do
+      // indicado/amigo). Bot Bloco 6 (Cadastro Proxy) salvara dadosTemp.telefone
+      // ao chegar no estado CONFIRMAR_PROXY. Vazio quando ausente.
+      telefone: String(dados.telefone ?? ''),
       // Bloco 0 v2 (21/05): {{historico}} formatado igual ao bot hardcoded
       // (whatsapp-bot.service.ts:1543-1550). Fonte: dadosTemp.historicoConsumo
       // (array salvo pelo OCR em whatsapp-fatura.service.ts e propagado em

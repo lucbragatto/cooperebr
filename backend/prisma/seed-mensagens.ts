@@ -72,6 +72,79 @@ const mensagens = [
     categoria: 'BOT',
     conteudo: 'Tudo bem! Se quiser começar novamente, é só mandar a foto da sua conta de luz. 😊',
   },
+  // ── Bloco 2 Sprint Bot Autoatendimento (21/05) — 11 modelos pros Blocos 4/6/7/8 ──
+  {
+    id: 'msg-proxy-pedindo-nome',
+    nome: 'proxy_pedindo_nome',
+    categoria: 'BOT',
+    conteudo:
+      'Que bom que você quer trazer um amigo pra perto! 🤝\nQual o *nome completo* dele(a)?',
+  },
+  {
+    id: 'msg-proxy-pedindo-telefone',
+    nome: 'proxy_pedindo_telefone',
+    categoria: 'BOT',
+    conteudo: 'Anotado! E qual o *WhatsApp* do seu amigo? (com DDD — ex: 27 99999-9999)',
+  },
+  {
+    id: 'msg-proxy-pedindo-fatura',
+    nome: 'proxy_pedindo_fatura',
+    categoria: 'BOT',
+    conteudo:
+      'Perfeito! 📸 Agora me envie uma *foto* ou *PDF* da conta de luz dele(a) — assim já calculo quanto vai economizar.',
+  },
+  {
+    id: 'msg-proxy-confirmar',
+    nome: 'proxy_confirmar',
+    categoria: 'BOT',
+    conteudo:
+      'Confere os dados do seu indicado:\n👤 {{titular}}\n📱 {{telefone}}\n\n1️⃣ Tudo certo, pode cadastrar\n2️⃣ Corrigir',
+  },
+  {
+    id: 'msg-aguardando-novo-nome',
+    nome: 'aguardando_novo_nome',
+    categoria: 'BOT',
+    conteudo: 'Qual o seu *nome completo* atualizado?',
+  },
+  {
+    id: 'msg-aguardando-novo-email',
+    nome: 'aguardando_novo_email',
+    categoria: 'BOT',
+    conteudo: 'Qual o seu *e-mail* atualizado?',
+  },
+  {
+    id: 'msg-aguardando-novo-telefone',
+    nome: 'aguardando_novo_telefone',
+    categoria: 'BOT',
+    conteudo: 'Qual o seu *telefone* atualizado? (com DDD)',
+  },
+  {
+    id: 'msg-aguardando-novo-cep',
+    nome: 'aguardando_novo_cep',
+    categoria: 'BOT',
+    conteudo: 'Qual o seu *CEP* atualizado? (formato 00000-000)',
+  },
+  {
+    id: 'msg-menu-inadimplente',
+    nome: 'menu_inadimplente',
+    categoria: 'BOT',
+    conteudo:
+      'Oi {{nome}}! Vi que sua fatura de {{mes}} está em aberto. 💛\nPosso te ajudar:\n\n1️⃣ Quero pagar agora (te envio o Pix)\n2️⃣ Já paguei\n3️⃣ Preciso negociar / mais prazo\n\n_Responda com o número._',
+  },
+  {
+    id: 'msg-menu-fatura',
+    nome: 'menu_fatura',
+    categoria: 'BOT',
+    conteudo:
+      '📄 *Suas faturas, {{nome}}:*\n\n1️⃣ Ver fatura atual\n2️⃣ Pegar o Pix copia-e-cola\n3️⃣ Histórico de pagamentos\n4️⃣ Já paguei — quero avisar\n\n_Responda com o número._',
+  },
+  {
+    id: 'msg-nps-recebido',
+    nome: 'nps_recebido',
+    categoria: 'BOT',
+    conteudo:
+      'Muito obrigado pela sua avaliação! 🙏\nSua opinião ajuda a {{parceiro}} a melhorar cada vez mais.\nQualquer coisa, é só chamar aqui. 💚',
+  },
 ];
 
 async function main() {
