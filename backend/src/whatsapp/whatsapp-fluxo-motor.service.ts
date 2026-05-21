@@ -342,6 +342,12 @@ export class WhatsappFluxoMotorService {
         case 'ENVIAR_LINK_INDICACAO':
           await this.executarEnviarLinkIndicacao(conversa);
           break;
+        case 'CONSULTAR_SALDO_CREDITOS':
+          await this.executarConsultarSaldoCreditos(conversa);
+          break;
+        case 'CONSULTAR_PROXIMA_FATURA':
+          await this.executarConsultarProximaFatura(conversa);
+          break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
       }
@@ -431,6 +437,273 @@ export class WhatsappFluxoMotorService {
     this.logger.log(
       `ENVIAR_LINK_INDICACAO: link enviado para ${conversa.telefone} (codigo=${codigo}, tenant=${cooperado.cooperativaId ?? 'null'})`,
     );
+  }
+
+  /**
+   * Bloco 3 (21/05) — Acao CONSULTAR_SALDO_CREDITOS.
+   * Responde "1 Ver saldo de creditos" do MENU_COOPERADO (Opcao C aprovada
+   * 21/05): mostra PLANO contratado (Contrato.kwhContratoMensal somado dos
+   * contratos ATIVOS) + SALDO da distribuidora (FaturaProcessada.saldoKwhAtual
+   * da mais recente APROVADA) com rotulos separados e claros pra nao confundir
+   * os 2 conceitos.
+   *
+   * Fallback (regra Luciano 21/05): linha do saldo some se null/zero, linha da
+   * validade some se null. Sem dado nenhum -> CTA pra enviar fatura.
+   *
+   * Multi-tenant: queries Contrato + FaturaProcessada filtradas por
+   * cooperativaId tambem quando conhecida (defesa em profundidade, igual
+   * executarEnviarLinkIndicacao).
+   *
+   * NAO chamada por simular() — executarAcao() roda so no bot real.
+   */
+  private async executarConsultarSaldoCreditos(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar seu saldo voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui pra ver suas informacoes!',
+      );
+      this.logger.log(
+        `CONSULTAR_SALDO_CREDITOS: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    // Plano contratado: soma kwhContratoMensal dos contratos ATIVOS do cooperado.
+    // Multi-tenant: filtra por cooperativaId tambem quando conhecida.
+    const whereContrato: { cooperadoId: string; status: 'ATIVO'; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+      status: 'ATIVO',
+    };
+    if (cooperativaId) whereContrato.cooperativaId = cooperativaId;
+    const contratos = await this.prisma.contrato.findMany({
+      where: whereContrato as never,
+      select: { kwhContratoMensal: true },
+    });
+    const kwhContratoTotal = contratos.reduce(
+      (acc, c) => acc + Number(c.kwhContratoMensal ?? 0),
+      0,
+    );
+
+    // Saldo da distribuidora: fatura processada mais recente APROVADA.
+    const whereFatura: {
+      cooperadoId: string;
+      status: 'APROVADA';
+      cooperativaId?: string;
+    } = { cooperadoId: conversa.cooperadoId, status: 'APROVADA' };
+    if (cooperativaId) whereFatura.cooperativaId = cooperativaId;
+    const ultimaFatura = await this.prisma.faturaProcessada.findFirst({
+      where: whereFatura as never,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        saldoKwhAtual: true,
+        validadeCreditos: true,
+        mesReferencia: true,
+        createdAt: true,
+      },
+    });
+
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'saldo_creditos_resultado',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (!modelo) {
+      this.logger.warn(
+        `CONSULTAR_SALDO_CREDITOS: modelo "saldo_creditos_resultado" nao encontrado (tenant=${cooperativaId ?? 'global'}) - acao abortada`,
+      );
+      return;
+    }
+
+    // Monta variaveis com fallback: linhas que somem quando dado ausente.
+    const saldoKwhNum = Number(ultimaFatura?.saldoKwhAtual ?? 0);
+    const linhaSaldo =
+      saldoKwhNum > 0
+        ? `💡 Saldo na distribuidora: ${this.formatarKwh(saldoKwhNum)} kWh\n`
+        : '';
+    const linhaValidade = ultimaFatura?.validadeCreditos
+      ? `📅 Validade dos créditos: ${this.formatarMesAno(ultimaFatura.validadeCreditos)}\n`
+      : '';
+    const linhaUltimaFatura = ultimaFatura
+      ? `📊 Última fatura registrada: ${ultimaFatura.mesReferencia ?? this.formatarMesAno(ultimaFatura.createdAt)}`
+      : '📊 Nenhuma fatura registrada ainda — envie a sua pelo bot pra calcular seu saldo.';
+
+    const vars: Record<string, string> = {
+      kwhContratoMensal: this.formatarKwh(kwhContratoTotal),
+      linha_saldo: linhaSaldo,
+      linha_validade: linhaValidade,
+      linha_ultima_fatura: linhaUltimaFatura,
+    };
+    const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+    await this.sender.enviarMensagem(conversa.telefone, texto);
+    await this.modeloMensagem.incrementarUso(modelo.id);
+    this.logger.log(
+      `CONSULTAR_SALDO_CREDITOS: enviado para ${conversa.telefone} (cooperado=${conversa.cooperadoId}, kwhContrato=${kwhContratoTotal}, saldoKwh=${saldoKwhNum}, tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  /**
+   * Bloco 3 (21/05) — Acao CONSULTAR_PROXIMA_FATURA.
+   * Responde "2 Ver proxima fatura" do MENU_COOPERADO: mostra valor + vencimento
+   * + status da cobranca pendente mais antiga + link de pagamento Asaas
+   * (PIX/boleto) quando AsaasCobranca tem linkPagamento.
+   *
+   * STATUS CORRETOS (Decisao 14, descoberta Fase 1 21/05): cobrancas vao pra
+   * 'A_VENCER' (NAO 'PENDENTE' — enum tem PENDENTE mas nada usa). Handler
+   * hardcoded whatsapp-bot.service.ts:791-794 usa ['PENDENTE','VENCIDO'] e
+   * responde "sem faturas" mesmo quando ha A_VENCER — D-novo-U cataloga.
+   *
+   * Multi-tenant: query Cobranca filtrada por contrato.cooperadoId AND
+   * contrato.cooperativaId (defesa em profundidade).
+   *
+   * Link Asaas: so exibe se AsaasCobranca tem linkPagamento (NAO inventa link).
+   */
+  private async executarConsultarProximaFatura(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar sua fatura voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui pra ver suas informacoes!',
+      );
+      this.logger.log(
+        `CONSULTAR_PROXIMA_FATURA: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    const contratoFilter: { cooperadoId: string; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+    };
+    if (cooperativaId) contratoFilter.cooperativaId = cooperativaId;
+
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: {
+        contrato: contratoFilter,
+        status: { in: ['A_VENCER', 'VENCIDO'] },
+      } as never,
+      orderBy: { dataVencimento: 'asc' },
+      select: {
+        id: true,
+        status: true,
+        valorLiquido: true,
+        valorBruto: true,
+        dataVencimento: true,
+        mesReferencia: true,
+        anoReferencia: true,
+      },
+    });
+
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'proxima_fatura_resultado',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (!modelo) {
+      this.logger.warn(
+        `CONSULTAR_PROXIMA_FATURA: modelo "proxima_fatura_resultado" nao encontrado (tenant=${cooperativaId ?? 'global'}) - acao abortada`,
+      );
+      return;
+    }
+
+    if (!cobranca) {
+      // Caso "tudo em dia": modelo renderizado com bloco vazio + linha de boas
+      // novas. Mantemos 1 unico modelo no banco com placeholders consistentes.
+      const vars: Record<string, string> = {
+        bloco_fatura: '✅ Voce nao tem faturas em aberto no momento!',
+        link_pagamento: '',
+      };
+      const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      await this.modeloMensagem.incrementarUso(modelo.id);
+      this.logger.log(
+        `CONSULTAR_PROXIMA_FATURA: nenhuma fatura A_VENCER/VENCIDO para cooperado ${conversa.cooperadoId} (tenant=${cooperativaId ?? 'global'})`,
+      );
+      return;
+    }
+
+    // Link Asaas: so se AsaasCobranca tem linkPagamento. Nao inventa.
+    const asaasCob = await this.prisma.asaasCobranca.findFirst({
+      where: { cobrancaId: cobranca.id },
+      orderBy: { createdAt: 'desc' },
+      select: { linkPagamento: true, pixCopiaECola: true },
+    });
+    const linkPagamento = asaasCob?.linkPagamento
+      ? `\n🔗 Pague aqui: ${asaasCob.linkPagamento}`
+      : '';
+
+    const valor = Number(cobranca.valorLiquido ?? cobranca.valorBruto ?? 0);
+    const statusLabel = this.formatarStatusCobranca(cobranca.status);
+    const blocoFatura =
+      `💰 Valor: R$ ${this.formatarMoeda(valor)}\n` +
+      `📅 Vencimento: ${this.formatarData(cobranca.dataVencimento)}\n` +
+      `📊 Status: ${statusLabel}`;
+
+    const vars: Record<string, string> = {
+      bloco_fatura: blocoFatura,
+      link_pagamento: linkPagamento,
+    };
+    const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+    await this.sender.enviarMensagem(conversa.telefone, texto);
+    await this.modeloMensagem.incrementarUso(modelo.id);
+    this.logger.log(
+      `CONSULTAR_PROXIMA_FATURA: enviado para ${conversa.telefone} (cobranca=${cobranca.id}, status=${cobranca.status}, valor=${valor}, comLink=${!!asaasCob?.linkPagamento}, tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  // ── Helpers de formatacao usados pelas acoes do Bloco 3 ──
+
+  private formatarKwh(v: number): string {
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  private formatarMoeda(v: number): string {
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  private formatarData(d: Date): string {
+    return new Date(d).toLocaleDateString('pt-BR');
+  }
+
+  private formatarMesAno(d: Date): string {
+    const date = new Date(d);
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${mm}/${yyyy}`;
+  }
+
+  private formatarStatusCobranca(status: string): string {
+    switch (status) {
+      case 'A_VENCER':
+        return 'A vencer';
+      case 'VENCIDO':
+        return 'Vencida';
+      case 'PENDENTE':
+        return 'Pendente';
+      case 'PAGO':
+        return 'Paga';
+      case 'CANCELADO':
+        return 'Cancelada';
+      default:
+        return status;
+    }
   }
 
   private async carregarContextoCooperativa(

@@ -11,12 +11,23 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const enviarMensagem = jest.fn();
   const incrementarUso = jest.fn();
 
+  // Bloco 3 (21/05): mocks adicionais pras 2 acoes novas (saldo creditos +
+  // proxima fatura). Sao redeclarados pra ficar disponiveis ao describe inteiro.
+  const contratoFindMany = jest.fn();
+  const faturaProcessadaFindFirst = jest.fn();
+  const cobrancaFindFirst = jest.fn();
+  const asaasCobrancaFindFirst = jest.fn();
+
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
     conversaWhatsapp: { update: conversaUpdate },
     cooperativa: { findUnique: cooperativaFindUnique },
     cooperado: { findUnique: cooperadoFindUnique, update: cooperadoUpdate },
+    contrato: { findMany: contratoFindMany },
+    faturaProcessada: { findFirst: faturaProcessadaFindFirst },
+    cobranca: { findFirst: cobrancaFindFirst },
+    asaasCobranca: { findFirst: asaasCobrancaFindFirst },
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
@@ -1409,6 +1420,587 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(cooperadoFindUnique).not.toHaveBeenCalled();
       expect(cooperadoUpdate).not.toHaveBeenCalled();
       expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Bloco 3 (21/05) — CONSULTAR_SALDO_CREDITOS via processarComFluxoDinamico
+  // ============================================================
+  describe('executarAcao(CONSULTAR_SALDO_CREDITOS) — via processarComFluxoDinamico', () => {
+    const baseConversa = (over: Record<string, unknown> = {}) => ({
+      id: 'conv-1',
+      telefone: '+5527981341348',
+      estado: 'MENU_COOPERADO',
+      cooperativaId: 'coop-A',
+      cooperadoId: 'coop-luciano',
+      ...over,
+    });
+
+    const setupTransicaoParaSaldo = () => {
+      // etapa MENU_COOPERADO com gatilho "1" -> VER_SALDO_CREDITOS
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-menu',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' }],
+        modeloMensagemId: null,
+      });
+      // etapa VER_SALDO_CREDITOS (sem modelo, com acaoAutomatica)
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-saldo',
+        cooperativaId: null,
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: 'CONSULTAR_SALDO_CREDITOS',
+      });
+      conversaUpdate.mockResolvedValueOnce({});
+    };
+
+    beforeEach(() => {
+      contratoFindMany.mockReset();
+      faturaProcessadaFindFirst.mockReset();
+      modeloFindFirst.mockReset();
+    });
+
+    it('SEM cooperadoId -> manda mensagem de cadastro, NAO consulta plano/saldo, NAO renderiza modelo', async () => {
+      setupTransicaoParaSaldo();
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa({ cooperadoId: null }),
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('precisa ser cooperado'),
+      );
+      expect(contratoFindMany).not.toHaveBeenCalled();
+      expect(faturaProcessadaFindFirst).not.toHaveBeenCalled();
+      expect(modeloFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('MULTI-TENANT: contratos + faturas filtrados por cooperativaId quando conhecida', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([
+        { kwhContratoMensal: 20 },
+        { kwhContratoMensal: 10 },
+      ]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce({
+        saldoKwhAtual: 320,
+        validadeCreditos: new Date('2030-12-15'),
+        mesReferencia: '04/2026',
+        createdAt: new Date('2026-04-15'),
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo: '⚡ Plano: {{kwhContratoMensal}} kWh/mês\n{{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      // Contrato: filtra cooperadoId + status ATIVO + cooperativaId (defesa)
+      expect(contratoFindMany).toHaveBeenCalledWith({
+        where: {
+          cooperadoId: 'coop-luciano',
+          status: 'ATIVO',
+          cooperativaId: 'coop-A',
+        },
+        select: { kwhContratoMensal: true },
+      });
+      // FaturaProcessada: filtra cooperadoId + status APROVADA + cooperativaId
+      expect(faturaProcessadaFindFirst).toHaveBeenCalledWith({
+        where: {
+          cooperadoId: 'coop-luciano',
+          status: 'APROVADA',
+          cooperativaId: 'coop-A',
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          saldoKwhAtual: true,
+          validadeCreditos: true,
+          mesReferencia: true,
+          createdAt: true,
+        },
+      });
+    });
+
+    it('MULTI-TENANT: SEM cooperativaId na conversa -> queries sem cooperativaId (nao quebra)', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo: 'Plano: {{kwhContratoMensal}} kWh\n{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa({ cooperativaId: null }),
+      );
+
+      const whereContrato = contratoFindMany.mock.calls[0][0].where;
+      expect(whereContrato).toEqual({ cooperadoId: 'coop-luciano', status: 'ATIVO' });
+      expect(whereContrato).not.toHaveProperty('cooperativaId');
+
+      const whereFatura = faturaProcessadaFindFirst.mock.calls[0][0].where;
+      expect(whereFatura).toEqual({ cooperadoId: 'coop-luciano', status: 'APROVADA' });
+      expect(whereFatura).not.toHaveProperty('cooperativaId');
+    });
+
+    it('CASO COMPLETO: plano + saldo + validade -> renderiza todas as linhas', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([{ kwhContratoMensal: 25 }]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce({
+        saldoKwhAtual: 320,
+        validadeCreditos: new Date('2030-12-15'),
+        mesReferencia: '04/2026',
+        createdAt: new Date('2026-04-15'),
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo:
+          '⚡ Plano: {{kwhContratoMensal}} kWh\n' +
+          '{{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('Plano: 25 kWh');
+      expect(enviado).toContain('Saldo na distribuidora: 320 kWh');
+      expect(enviado).toContain('Validade dos créditos: 12/2030');
+      expect(enviado).toContain('Última fatura registrada: 04/2026');
+      // Rodape universal sempre anexado
+      expect(enviado).toContain('digite MENU');
+    });
+
+    it('FALLBACK: saldoKwhAtual=null -> linha do saldo SOME', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([{ kwhContratoMensal: 20 }]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce({
+        saldoKwhAtual: null,
+        validadeCreditos: new Date('2030-12-15'),
+        mesReferencia: '04/2026',
+        createdAt: new Date('2026-04-15'),
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo:
+          'Plano: {{kwhContratoMensal}} kWh\n' +
+          '{{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).not.toContain('Saldo na distribuidora');
+      expect(enviado).toContain('Validade dos créditos: 12/2030');
+      expect(enviado).toContain('Última fatura registrada: 04/2026');
+    });
+
+    it('FALLBACK: validadeCreditos=null -> linha da validade SOME', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([{ kwhContratoMensal: 20 }]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce({
+        saldoKwhAtual: 100,
+        validadeCreditos: null,
+        mesReferencia: '04/2026',
+        createdAt: new Date('2026-04-15'),
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo: '{{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('Saldo na distribuidora: 100 kWh');
+      expect(enviado).not.toContain('Validade');
+    });
+
+    it('FALLBACK: nenhuma FaturaProcessada -> CTA pra enviar fatura', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([{ kwhContratoMensal: 20 }]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo: 'Plano: {{kwhContratoMensal}}\n{{linha_saldo}}{{linha_validade}}{{linha_ultima_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).not.toContain('Saldo na distribuidora');
+      expect(enviado).not.toContain('Validade');
+      expect(enviado).toContain('Nenhuma fatura registrada');
+      expect(enviado).toContain('envie a sua pelo bot');
+    });
+
+    it('Modelo saldo_creditos_resultado nao encontrado -> NAO envia mensagem, loga warn', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([{ kwhContratoMensal: 20 }]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      expect(enviarMensagem).not.toHaveBeenCalled();
+      expect(incrementarUso).not.toHaveBeenCalled();
+    });
+
+    it('Soma kwhContratoMensal de MULTIPLOS contratos ATIVOS', async () => {
+      setupTransicaoParaSaldo();
+      contratoFindMany.mockResolvedValueOnce([
+        { kwhContratoMensal: 20 },
+        { kwhContratoMensal: 15.5 },
+        { kwhContratoMensal: 10 },
+      ]);
+      faturaProcessadaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-saldo',
+        nome: 'saldo_creditos_resultado',
+        conteudo: '{{kwhContratoMensal}} kWh',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      // 20 + 15.5 + 10 = 45.5
+      expect(enviado).toContain('45,5 kWh');
+    });
+
+    it('ZERO SIDE EFFECT em simular(): retorna acaoAutomatica mas NAO consulta dados', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e1',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' }],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e2',
+        cooperativaId: null,
+        nome: 'Ver Saldo',
+        estado: 'VER_SALDO_CREDITOS',
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: 'CONSULTAR_SALDO_CREDITOS',
+      });
+
+      const r = await service.simular({
+        mensagem: '1',
+        cooperativaId: 'coop-A',
+        estadoInicial: 'MENU_COOPERADO',
+        dadosTemp: { cooperadoId: 'coop-luciano' },
+      });
+
+      expect(r.acaoAutomatica).toBe('CONSULTAR_SALDO_CREDITOS');
+      expect(contratoFindMany).not.toHaveBeenCalled();
+      expect(faturaProcessadaFindFirst).not.toHaveBeenCalled();
+      expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Bloco 3 (21/05) — CONSULTAR_PROXIMA_FATURA via processarComFluxoDinamico
+  // ============================================================
+  describe('executarAcao(CONSULTAR_PROXIMA_FATURA) — via processarComFluxoDinamico', () => {
+    const baseConversa = (over: Record<string, unknown> = {}) => ({
+      id: 'conv-1',
+      telefone: '+5527981341348',
+      estado: 'MENU_COOPERADO',
+      cooperativaId: 'coop-A',
+      cooperadoId: 'coop-luciano',
+      ...over,
+    });
+
+    const setupTransicaoParaFatura = () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-menu',
+        cooperativaId: 'coop-A',
+        gatilhos: [{ resposta: '2', proximoEstado: 'VER_PROXIMA_FATURA' }],
+        modeloMensagemId: null,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'e-fatura',
+        cooperativaId: null,
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: 'CONSULTAR_PROXIMA_FATURA',
+      });
+      conversaUpdate.mockResolvedValueOnce({});
+    };
+
+    beforeEach(() => {
+      cobrancaFindFirst.mockReset();
+      asaasCobrancaFindFirst.mockReset();
+      modeloFindFirst.mockReset();
+    });
+
+    it('SEM cooperadoId -> manda mensagem de cadastro, NAO consulta cobranca', async () => {
+      setupTransicaoParaFatura();
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa({ cooperadoId: null }),
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringContaining('precisa ser cooperado'),
+      );
+      expect(cobrancaFindFirst).not.toHaveBeenCalled();
+      expect(asaasCobrancaFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('BUG D-novo-U: query usa status [A_VENCER, VENCIDO] (NAO PENDENTE)', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}{{link_pagamento}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const where = cobrancaFindFirst.mock.calls[0][0].where;
+      expect(where.status).toEqual({ in: ['A_VENCER', 'VENCIDO'] });
+      // Defensivo: NAO usa PENDENTE (bug do hardcoded D-novo-U)
+      expect(where.status.in).not.toContain('PENDENTE');
+    });
+
+    it('MULTI-TENANT: where.contrato filtra cooperadoId + cooperativaId', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const where = cobrancaFindFirst.mock.calls[0][0].where;
+      expect(where.contrato).toEqual({
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+    });
+
+    it('MULTI-TENANT: SEM cooperativaId na conversa -> where.contrato so com cooperadoId', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa({ cooperativaId: null }),
+      );
+
+      const where = cobrancaFindFirst.mock.calls[0][0].where;
+      expect(where.contrato).toEqual({ cooperadoId: 'coop-luciano' });
+      expect(where.contrato).not.toHaveProperty('cooperativaId');
+    });
+
+    it('NENHUMA cobranca pendente -> mensagem "voce nao tem faturas em aberto"', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '📄 *Sua próxima fatura:*\n\n{{bloco_fatura}}{{link_pagamento}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('nao tem faturas em aberto');
+      // Quando nao tem cobranca, NAO busca AsaasCobranca
+      expect(asaasCobrancaFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('Cobranca A_VENCER COM AsaasCobranca + linkPagamento -> inclui link no texto', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'A_VENCER',
+        valorLiquido: 350,
+        valorBruto: 400,
+        // Date local (mes 0-indexed) — evita shift UTC->BRT que daria 04/06 ao inves de 05/06.
+        dataVencimento: new Date(2026, 5, 5),
+        mesReferencia: 5,
+        anoReferencia: 2026,
+      });
+      asaasCobrancaFindFirst.mockResolvedValueOnce({
+        linkPagamento: 'https://asaas.com/i/abc123',
+        pixCopiaECola: null,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}{{link_pagamento}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('Valor: R$ 350,00');
+      expect(enviado).toContain('Vencimento: 05/06/2026');
+      expect(enviado).toContain('Status: A vencer');
+      expect(enviado).toContain('https://asaas.com/i/abc123');
+    });
+
+    it('Cobranca SEM AsaasCobranca -> NAO inventa link', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'VENCIDO',
+        valorLiquido: 280,
+        valorBruto: 320,
+        dataVencimento: new Date('2026-05-10'),
+        mesReferencia: 4,
+        anoReferencia: 2026,
+      });
+      asaasCobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}{{link_pagamento}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('Status: Vencida');
+      expect(enviado).not.toContain('Pague aqui');
+      expect(enviado).not.toContain('http');
+    });
+
+    it('Cobranca com valorLiquido null -> usa valorBruto como fallback', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'A_VENCER',
+        valorLiquido: null,
+        valorBruto: 500,
+        dataVencimento: new Date('2026-06-01'),
+        mesReferencia: 5,
+        anoReferencia: 2026,
+      });
+      asaasCobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('Valor: R$ 500,00');
+    });
+
+    it('Modelo proxima_fatura_resultado nao encontrado -> NAO envia mensagem', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'A_VENCER',
+        valorLiquido: 100,
+        valorBruto: 100,
+        dataVencimento: new Date('2026-06-01'),
+        mesReferencia: 5,
+        anoReferencia: 2026,
+      });
+      modeloFindFirst.mockResolvedValueOnce(null);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      expect(enviarMensagem).not.toHaveBeenCalled();
+      expect(incrementarUso).not.toHaveBeenCalled();
+    });
+
+    it('Rodape universal sempre anexado na resposta', async () => {
+      setupTransicaoParaFatura();
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-fat',
+        nome: 'proxima_fatura_resultado',
+        conteudo: '{{bloco_fatura}}',
+        cooperativaId: null,
+      });
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '2' },
+        baseConversa(),
+      );
+
+      const enviado = enviarMensagem.mock.calls[0][1] as string;
+      expect(enviado).toContain('digite MENU, INÍCIO ou SAIR');
     });
   });
 

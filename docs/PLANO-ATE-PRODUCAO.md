@@ -491,15 +491,15 @@ desses pais e já têm spec/análise pronta.
   - ✅ **Bloco 1.a — Navegação Universal** (FEITO 21/05, commits `9205f0d` + `3717b51` correção rodapé): comandos INÍCIO/SAIR/MENU funcionando em TODA etapa do motor (camada antes de `avaliarGatilhos`), rodapé universal anexado em toda etapa renderizada (`anexarRodape`).
   - 🔴 **Bloco 1.b — ME CHAME DEPOIS** (~3-5h, pendente): exige job de reagendamento + reuso de `timeoutHoras`/`modeloFollowup`.
   - ✅ **Bloco 2 — 11 modelos novos inseridos** (FEITO 21/05, commit `1097f72`): proxy_pedindo_nome/telefone/fatura/confirmar, aguardando_novo_nome/email/telefone/cep, menu_inadimplente, menu_fatura, nps_recebido. `{{telefone}}` adicionado ao `extrairVariaveis()` (era órfã do `proxy_confirmar`). Seed alinhado.
-  - 🔴 **Bloco 3 — Consultas Menu Cooperado** (~12-18h, pendente — PRÓXIMO): "Ver saldo de créditos" e "Ver próxima fatura" implementadas como ações reais lendo `cooper-token` + `cobrancas`.
+  - ✅ **Bloco 3 — Consultas Menu Cooperado** (FEITO 21/05 noite): "Ver saldo de créditos" (Opção C — plano contratado + saldo da distribuidora via OCR `FaturaProcessada.saldoKwhAtual`, com fallback de linhas que somem quando dado ausente) e "Ver próxima fatura" (valor + vencimento + status + link Asaas quando há `AsaasCobranca`). 2 etapas globais novas (`VER_SALDO_CREDITOS` + `VER_PROXIMA_FATURA`) com `acaoAutomatica`. 2 modelos globais novos (`saldo_creditos_resultado` + `proxima_fatura_resultado`). 2 ações em `executarAcao()` (`CONSULTAR_SALDO_CREDITOS` + `CONSULTAR_PROXIMA_FATURA`) com guard `cooperadoId` + multi-tenant defense in depth. Gatilhos "1" e "2" do MENU_COOPERADO repointados (campo `acao` órfão removido). Bug latente **D-novo-U catalogado**: handler hardcoded usa `status: 'PENDENTE'` mas cobranças vão pra `A_VENCER` — ação nova usa `['A_VENCER', 'VENCIDO']` corretamente. 109/109 specs verdes (era 89). **Premissa corrigida (21/05):** "saldo de créditos" = créditos de ENERGIA (kWh) da distribuidora, NÃO tokens do CooperToken.
   - 🔴 **Bloco 4 — Atualizar Cadastro** (~6-8h, pendente): 4 etapas novas (AGUARDANDO_NOVO_NOME/EMAIL/TELEFONE/CEP) + ações persistentes com validação. Modelos já criados no Bloco 2.
   - 🔴 **Bloco 5 — Atualizar Contrato** (~4-6h, pendente): **decisão produto Luciano** — ação automática ou solicitação + atendente humano? (recomendação: solicitação + humano).
   - 🔴 **Bloco 6 — Cadastro por Proxy** (~6-8h, pendente): portar lógica do bot hardcoded para fluxo dinâmico (4 etapas + ação `CADASTRAR_AMIGO_POR_PROXY`). Modelos já criados no Bloco 2.
   - 🔴 **Bloco 7 — NPS no fluxo** (~2-3h, pendente): ativar etapa `NPS_AGUARDANDO_NOTA` com gatilhos 0-10 + etapa nova `NPS_RECEBIDO`. Modelo `nps_recebido` já criado no Bloco 2.
   - 🔴 **Bloco 8 — Menu Fatura / Menu Inadimplente** (~4-6h, OPCIONAL): **decisão produto Luciano** — dinâmico vs hardcoded? Modelos já criados no Bloco 2.
-  - Specs Jest cobrindo cada novo case ✅ andamento (89/89 verdes hoje)
+  - Specs Jest cobrindo cada novo case ✅ andamento (109/109 verdes pós-Bloco 3)
   - Validação manual no simulador: cada opção do Menu Cooperado entrega o que promete (pós-Bloco 3-7)
-- **Estimativa total revisada:** ~37-55h. **Já entregue:** ~12h (Blocos 0, 0v2, 1.a, 2). **Restante:** ~25-43h em Blocos 1.b, 3, 4, 5, 6, 7, 8.
+- **Estimativa total revisada:** ~37-55h. **Já entregue:** ~24h (Blocos 0, 0v2, 1.a, 2, 3). **Restante:** ~13-25h em Blocos 1.b, 4, 5, 6, 7, 8.
 - **Dependências:**
   - M15 Sprint 5a Neutro Fio B (prioridade superior — entra DEPOIS)
   - Saneamento do fluxo do bot (R1-R6 do M16) — JÁ APLICADO em 2026-05-20
