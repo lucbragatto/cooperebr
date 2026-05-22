@@ -375,7 +375,9 @@ export class WhatsappBotService {
       'AGUARDANDO_COMPROVANTE_PAGAMENTO', 'AGUARDANDO_DISPOSITIVO_EMAIL',
       'AGUARDANDO_DISTRIBUIDORA', 'AGUARDANDO_VALOR_FATURA',
       'AGUARDANDO_NOVO_NOME', 'AGUARDANDO_NOVO_EMAIL',
-      'AGUARDANDO_NOVO_TELEFONE', 'AGUARDANDO_NOVO_CEP', 'AGUARDANDO_NOVO_KWH',
+      // Bloco 4 (22/05): AGUARDANDO_NOVO_TELEFONE removido — decisao Luciano
+      // ver comentario no menu de Atualizar Cadastro.
+      'AGUARDANDO_NOVO_CEP', 'AGUARDANDO_NOVO_KWH',
       'AGUARDANDO_FATURA_PROXY', 'AGUARDANDO_ATENDENTE',
       'CADASTRO_EXPRESS_NOME', 'CADASTRO_EXPRESS_CPF', 'CADASTRO_EXPRESS_EMAIL',
       'CADASTRO_EXPRESS_VALOR_FATURA', 'CADASTRO_PROXY_NOME', 'CADASTRO_PROXY_TELEFONE',
@@ -567,9 +569,8 @@ export class WhatsappBotService {
         case 'AGUARDANDO_NOVO_EMAIL':
           await this.handleAguardandoNovoEmail(msg, conversa);
           break;
-        case 'AGUARDANDO_NOVO_TELEFONE':
-          await this.handleAguardandoNovoTelefone(msg, conversa);
-          break;
+        // Bloco 4 (22/05): case AGUARDANDO_NOVO_TELEFONE removido — handler
+        // tambem foi removido (decisao Luciano).
         case 'AGUARDANDO_NOVO_CEP':
           await this.handleAguardandoNovoCep(msg, conversa);
           break;
@@ -813,14 +814,15 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'ATUALIZACAO_CADASTRO', contadorFallback: 0 },
       });
+      // Bloco 4 (22/05): telefone removido do menu (decisao Luciano).
+      // Cooperado vai pelo portal web ou fala com a equipe pra trocar telefone.
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Atualizar Cadastro',
-        corpo: `${E.editar} *O que deseja atualizar?*`,
+        corpo: `${E.editar} *O que deseja atualizar?*\n\n_Para trocar telefone, fale com nossa equipe._`,
         opcoes: [
           { id: '1', texto: `${E.nota} Nome` },
           { id: '2', texto: `${E.email} Email` },
-          { id: '3', texto: `${E.celular} Telefone` },
-          { id: '4', texto: `${E.mapPin} Endereço (CEP)` },
+          { id: '3', texto: `${E.mapPin} Endereço (CEP)` },
         ],
       });
       return;
@@ -3770,15 +3772,16 @@ Essa conta de energia e:
       await this.sender.enviarMensagem(telefone, `${E.email} Digite seu *novo email*:`);
       return;
     }
-    if (corpo === '3' || corpo.toLowerCase().includes('telefone')) {
-      await this.prisma.conversaWhatsapp.update({
-        where: { id: conversa.id },
-        data: { estado: 'AGUARDANDO_NOVO_TELEFONE', contadorFallback: 0 },
-      });
-      await this.sender.enviarMensagem(telefone, `${E.celular} Digite seu *novo número de telefone* (com DDD):`);
+    // Bloco 4 (22/05): opcao telefone removida (decisao Luciano). Quem digitar
+    // "telefone" recebe orientacao pra falar com a equipe e fica no menu.
+    if (corpo.toLowerCase().includes('telefone')) {
+      await this.sender.enviarMensagem(
+        telefone,
+        `${E.aviso} Para trocar seu telefone, fale com nossa equipe — não dá pra mudar pelo bot.`,
+      );
       return;
     }
-    if (corpo === '4' || corpo.toLowerCase().includes('endereço') || corpo.toLowerCase().includes('cep')) {
+    if (corpo === '3' || corpo.toLowerCase().includes('endereço') || corpo.toLowerCase().includes('cep')) {
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
         data: { estado: 'AGUARDANDO_NOVO_CEP', contadorFallback: 0 },
@@ -3821,20 +3824,9 @@ Essa conta de energia e:
     await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
   }
 
-  private async handleAguardandoNovoTelefone(msg: MensagemRecebida, conversa: any): Promise<void> {
-    const { telefone } = msg;
-    const novoTelefone = this.respostaEfetiva(msg).replace(/\D/g, '');
-    if (novoTelefone.length < 10 || novoTelefone.length > 13) {
-      await this.sender.enviarMensagem(telefone, `${E.aviso} Telefone inválido. Digite com DDD (ex: 11999998888):`);
-      return;
-    }
-    await this.prisma.cooperado.update({
-      where: { id: conversa.cooperadoId },
-      data: { telefone: novoTelefone },
-    });
-    await this.sender.enviarMensagem(telefone, `${E.ok} *Telefone* atualizado com sucesso para *${novoTelefone}*!`);
-    await this.prisma.conversaWhatsapp.update({ where: { id: conversa.id }, data: { estado: 'MENU_COOPERADO' } });
-  }
+  // Bloco 4 (22/05): handleAguardandoNovoTelefone removido — decisao Luciano.
+  // Cooperado nao troca telefone pelo bot (risco operacional: quebra a proxima
+  // sessao do bot e desvia notificacoes pra um numero diferente do WhatsApp).
 
   private async handleAguardandoNovoCep(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;

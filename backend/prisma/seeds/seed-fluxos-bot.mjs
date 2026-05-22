@@ -88,11 +88,14 @@ const fluxos = [
   { id: 'f-menu-fatura', nome: 'Menu de Cobranças/Faturas', ordem: 17, estado: 'MENU_FATURA', gatilhos: [] },
 
   // Atualização de dados
+  // Bloco 4 (22/05) — Telefone REMOVIDO do menu (decisão Luciano: trocar
+  // telefone pelo proprio WhatsApp quebra a proxima sessao do bot —
+  // notificacoes vao pro numero novo enquanto o cooperado continua usando o
+  // antigo. Operacao consciente fica no portal web / equipe).
   { id: 'f-atualizar-cadastro', nome: 'Atualizar Cadastro', ordem: 18, estado: 'ATUALIZACAO_CADASTRO', gatilhos: [
     { resposta: '1', proximoEstado: 'AGUARDANDO_NOVO_NOME' },
     { resposta: '2', proximoEstado: 'AGUARDANDO_NOVO_EMAIL' },
-    { resposta: '3', proximoEstado: 'AGUARDANDO_NOVO_TELEFONE' },
-    { resposta: '4', proximoEstado: 'AGUARDANDO_NOVO_CEP' },
+    { resposta: '3', proximoEstado: 'AGUARDANDO_NOVO_CEP' },
   ]},
   { id: 'f-atualizar-contrato', nome: 'Atualizar Contrato', ordem: 19, estado: 'ATUALIZACAO_CONTRATO', gatilhos: [
     { resposta: '1', proximoEstado: 'MENU_COOPERADO', acao: 'SOLICITAR_AUMENTO_KWH' },
