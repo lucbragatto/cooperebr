@@ -2090,4 +2090,229 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(enviarMensagem).not.toHaveBeenCalled();
     });
   });
+
+  // ============================================================
+  // Etapa A do Bloco 4 (Sprint Bot Autoatendimento, 22/05): mudanca arquitetural
+  // FUNDACIONAL pra Blocos 4 a 8 (todos fluxos de 2 turnos).
+  //
+  // - Gatilho.acao passa a ser PROCESSADO pelo motor (era ignorado desde 20/05).
+  // - executarAcao() ganha 4o parametro `corpo` (texto digitado pelo cooperado).
+  // - Quando gatilho.acao existe, motor DELEGA controle TOTAL pra acao:
+  //   nao transiciona estado, nao renderiza modelo de destino, nao dispara
+  //   acaoAutomatica. Acao cuida de validar/atualizar/responder/transicionar.
+  // - Quando gatilho.acao NAO existe, comportamento atual preservado
+  //   (transicao automatica + render modelo + dispara acaoAutomatica).
+  // ============================================================
+  describe('Etapa A Bloco 4 - avaliarGatilhoMatch() retorna gatilho completo', () => {
+    it('Match exato sem acao retorna gatilho com acao: null', () => {
+      const r = service.avaliarGatilhoMatch('ok', [
+        { resposta: 'OK', proximoEstado: 'X' },
+      ]);
+      expect(r).toMatchObject({ proximoEstado: 'X', acao: null });
+    });
+
+    it('Match exato com acao retorna gatilho com acao preservada', () => {
+      const r = service.avaliarGatilhoMatch('Joao Silva', [
+        { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'ATUALIZAR_NOME_COOPERADO' },
+      ]);
+      expect(r).toMatchObject({
+        proximoEstado: 'MENU_COOPERADO',
+        acao: 'ATUALIZAR_NOME_COOPERADO',
+      });
+    });
+
+    it('Sem match retorna null', () => {
+      const r = service.avaliarGatilhoMatch('xyz', [
+        { resposta: 'OK', proximoEstado: 'X' },
+      ]);
+      expect(r).toBeNull();
+    });
+
+    it('Wildcard NAO casa texto vazio (mesmo com acao definida)', () => {
+      const r = service.avaliarGatilhoMatch('', [
+        { resposta: '*', proximoEstado: 'X', acao: 'ACAO_QUALQUER' },
+      ]);
+      expect(r).toBeNull();
+    });
+
+    it('Lista vazia ou nula retorna null', () => {
+      expect(service.avaliarGatilhoMatch('ok', [])).toBeNull();
+      expect(service.avaliarGatilhoMatch('ok', null as any)).toBeNull();
+    });
+  });
+
+  describe('Etapa A Bloco 4 - processarComFluxoDinamico() processa Gatilho.acao', () => {
+    it('Gatilho COM acao: motor chama executarAcao(acao, conversa, dadosTemp, corpo)', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'aguardando-novo-nome',
+        cooperativaId: 'coop-A',
+        nome: 'Aguardando novo nome',
+        ordem: 52,
+        estado: 'AGUARDANDO_NOVO_NOME',
+        gatilhos: [
+          {
+            resposta: '*',
+            proximoEstado: 'MENU_COOPERADO',
+            acao: 'ATUALIZAR_NOME_COOPERADO',
+          },
+        ],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'Joao Silva Da Cunha' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'AGUARDANDO_NOVO_NOME',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+          dadosTemp: { foo: 'bar' },
+        } as any,
+      );
+
+      expect(executarAcaoSpy).toHaveBeenCalledTimes(1);
+      expect(executarAcaoSpy).toHaveBeenCalledWith(
+        'ATUALIZAR_NOME_COOPERADO',
+        expect.objectContaining({
+          id: 'c1',
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+        }),
+        { foo: 'bar' },
+        'Joao Silva Da Cunha',
+      );
+
+      // Motor NAO transicionou estado (acao cuida disso)
+      expect(conversaUpdate).not.toHaveBeenCalled();
+
+      executarAcaoSpy.mockRestore();
+    });
+
+    it('Gatilho COM acao: motor NAO renderiza modelo nem busca etapa-destino', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'aguardando-novo-nome',
+        cooperativaId: 'coop-A',
+        nome: 'Aguardando novo nome',
+        ordem: 52,
+        estado: 'AGUARDANDO_NOVO_NOME',
+        gatilhos: [
+          {
+            resposta: '*',
+            proximoEstado: 'MENU_COOPERADO',
+            acao: 'ATUALIZAR_NOME_COOPERADO',
+          },
+        ],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'Joao' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'AGUARDANDO_NOVO_NOME',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+        } as any,
+      );
+
+      // Motor nao chamou modelo (acao envia mensagem propria)
+      expect(modeloFindFirst).not.toHaveBeenCalled();
+      // Motor so buscou a etapa atual (1 query), nao a destino
+      expect(etapaFindFirst).toHaveBeenCalledTimes(1);
+
+      executarAcaoSpy.mockRestore();
+    });
+
+    it('Gatilho SEM acao: comportamento ATUAL preservado (transicao + modelo + acaoAutomatica)', async () => {
+      // Etapa atual
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu-cooperado',
+        cooperativaId: 'coop-A',
+        nome: 'Menu Cooperado',
+        ordem: 1,
+        estado: 'MENU_COOPERADO',
+        gatilhos: [
+          // SEM acao - comportamento atual
+          { resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' },
+        ],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+      // Etapa destino com modelo + acaoAutomatica
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'ver-saldo',
+        cooperativaId: 'coop-A',
+        nome: 'Ver saldo',
+        ordem: 50,
+        estado: 'VER_SALDO_CREDITOS',
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: 'CONSULTAR_SALDO_CREDITOS',
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'MENU_COOPERADO',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+        } as any,
+      );
+
+      // Motor transiciona estado via prisma (comportamento atual)
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'VER_SALDO_CREDITOS' },
+      });
+      // Motor dispara acaoAutomatica da etapa-destino, agora com 4o param corpo
+      expect(executarAcaoSpy).toHaveBeenCalledWith(
+        'CONSULTAR_SALDO_CREDITOS',
+        expect.objectContaining({ id: 'c1' }),
+        undefined,
+        '1',
+      );
+
+      executarAcaoSpy.mockRestore();
+    });
+  });
+
+  describe('Etapa A Bloco 4 - executarAcao() aceita 4o parametro corpo', () => {
+    it('Acao desconhecida cai no default (logger.warn) - assinatura aceita corpo string', async () => {
+      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+      await (service as any).executarAcao(
+        'ACAO_QUE_NAO_EXISTE',
+        { id: 'c1', telefone: '+5527981341348', cooperadoId: null, cooperativaId: null },
+        {},
+        'texto digitado pelo cooperado',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Acao desconhecida'),
+      );
+      warnSpy.mockRestore();
+    });
+  });
 });

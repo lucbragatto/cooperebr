@@ -15,6 +15,14 @@ interface MensagemRecebida {
 export interface Gatilho {
   resposta: string;
   proximoEstado: string;
+  /**
+   * Etapa A Bloco 4 (22/05): acao opcional disparada quando o gatilho casa.
+   * Quando presente, motor DELEGA controle total pra acao em executarAcao()
+   * (nao transiciona automatico, nao renderiza modelo destino, nao dispara
+   * acaoAutomatica). Acao cuida de validar/atualizar/responder/transicionar.
+   * Fundacional pros Blocos 4 a 8 (fluxos de 2 turnos).
+   */
+  acao?: string | null;
 }
 
 interface FluxoEtapaComModelo {
@@ -81,12 +89,31 @@ export class WhatsappFluxoMotorService {
       return false;
     }
 
-    const proximoEstado = this.avaliarGatilhos(corpo, etapa.gatilhos);
+    const gatilhoMatch = this.avaliarGatilhoMatch(corpo, etapa.gatilhos);
 
-    if (!proximoEstado) {
+    if (!gatilhoMatch) {
       this.logger.debug(`Nenhum gatilho bateu para estado "${conversa.estado}" com corpo "${corpo}" - fallback`);
       return false;
     }
+
+    // Etapa A Bloco 4 (22/05): se o gatilho tem `acao`, motor delega CONTROLE
+    // TOTAL pra acao em executarAcao(). NAO transiciona estado, NAO renderiza
+    // modelo destino, NAO dispara acaoAutomatica. A acao cuida de:
+    //   - validar input (corpo digitado pelo cooperado)
+    //   - atualizar entidade no banco (multi-tenant com cooperativaId)
+    //   - enviar mensagem de confirmacao ou erro
+    //   - transicionar conversa.estado pro estado final (ou manter pra retry)
+    // Fundacional pros Blocos 4 a 8 (fluxos de 2 turnos onde a acao precisa do
+    // texto livre do cooperado).
+    if (gatilhoMatch.acao) {
+      await this.executarAcao(gatilhoMatch.acao, conversa, conversa.dadosTemp, corpo);
+      this.logger.log(
+        `Motor dinamico: gatilho.acao "${gatilhoMatch.acao}" disparado em estado "${conversa.estado}" (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`,
+      );
+      return true;
+    }
+
+    const proximoEstado = gatilhoMatch.proximoEstado;
 
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
@@ -117,7 +144,9 @@ export class WhatsappFluxoMotorService {
       // Passa a conversa inteira (inclui cooperativaId) pra acao poder fazer
       // queries multi-tenant. Regra do projeto: toda query Prisma filtra por
       // cooperativaId quando relacionada a entidade tenant-scoped.
-      await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp);
+      // Etapa A Bloco 4: passa tambem o corpo (texto digitado pelo cooperado)
+      // como 4o parametro. Acoes de Bloco 3 ignoram (assinatura compativel).
+      await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp, corpo);
     }
 
     this.logger.log(`Motor dinamico: ${conversa.estado} -> ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
@@ -229,7 +258,9 @@ export class WhatsappFluxoMotorService {
     }
 
     if (etapaDestino?.acaoAutomatica) {
-      await this.executarAcao(etapaDestino.acaoAutomatica, conversa, conversa.dadosTemp);
+      // Etapa A Bloco 4: passa corpo vazio - comando universal nao tem texto
+      // livre relevante (eh palavra reservada INICIO/MENU/SAIR).
+      await this.executarAcao(etapaDestino.acaoAutomatica, conversa, conversa.dadosTemp, '');
     }
 
     this.logger.log(`Comando universal ${comando}: ${conversa.estado} -> ${proximoEstado} (conversa ${conversa.id})`);
@@ -294,16 +325,31 @@ export class WhatsappFluxoMotorService {
   }
 
   avaliarGatilhos(corpo: string, gatilhos: Gatilho[]): string | null {
+    return this.avaliarGatilhoMatch(corpo, gatilhos)?.proximoEstado ?? null;
+  }
+
+  /**
+   * Etapa A Bloco 4 (22/05): retorna o Gatilho completo (com `acao` resolvida)
+   * que casou, ou null. Substitui `avaliarGatilhos` no fluxo principal
+   * (`processarComFluxoDinamico` + `simular`) pra que o motor possa processar
+   * `gatilho.acao` quando definida.
+   *
+   * `avaliarGatilhos` continua disponivel devolvendo so `proximoEstado` pra
+   * preservar API publica (testes legacy + UI).
+   */
+  avaliarGatilhoMatch(corpo: string, gatilhos: Gatilho[]): Gatilho | null {
     if (!gatilhos || gatilhos.length === 0) return null;
 
     const corpoUpper = corpo.toUpperCase().trim();
 
     for (const gatilho of gatilhos) {
       const resposta = (gatilho.resposta ?? '').toUpperCase().trim();
-      if (resposta === '*') {
-        if (corpoUpper.length > 0) return gatilho.proximoEstado;
-      } else if (corpoUpper === resposta) {
-        return gatilho.proximoEstado;
+      const matched =
+        resposta === '*' ? corpoUpper.length > 0 : corpoUpper === resposta;
+      if (matched) {
+        // Normaliza `acao` pra null quando nao definida (ou undefined). Assim
+        // chamadores podem comparar com `if (gatilho.acao)` sem dor.
+        return { ...gatilho, acao: gatilho.acao ?? null };
       }
     }
 
@@ -327,6 +373,7 @@ export class WhatsappFluxoMotorService {
       cooperativaId?: string | null;
     },
     _dados: any,
+    _corpo: string,
   ): Promise<void> {
     try {
       switch (acao) {
