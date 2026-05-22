@@ -1,7 +1,54 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-22 — sessão curta de catalogação (sem código)**. Pivot estratégico iniciado (preparação de branch `feature/monitoramento-protecao` pra integrar relé) e CANCELADO pelo Luciano na mesma sessão. Decisão: documentar arquitetura da integração primeiro + aguardar vistoria de campo do relé antes de mexer em schema. Catalogado como **feature futura Opção A** (alimentar SISGD com tabelas novas de proteção) — memória `feature_futura_monitoramento_protecao_22_05.md` + Sugestão #9 em `sugestoes_pendentes.md`. Decisão 14 aplicada (grep amplo confirmou tema livre). NÃO houve commit de código, NÃO houve branch criada, NÃO houve mudança de schema. **Próximo passo permanece: Bloco 4 do Sprint Bot Autoatendimento — Atualizar Cadastro (FRASE DE RETOMADA do M18 intacta).** Detalhe: `docs/sessoes/2026-05-22-pivot-cancelado-rele-catalogado.md`.
+> Última atualização: **2026-05-22 noite — M19 Sprint Bot Autoatendimento Bloco 4: Atualizar Cadastro (Nome / Email / CEP)**. 5 commits Bloco 4 (`9a32424` Etapa A + `76232e4` Etapa B + `c1dcc8c` Etapa C + `4ef82b7` Etapa D + `780082d` Etapa E) + commit fechamento. **Mudança arquitetural fundacional:** motor passou a processar `Gatilho.acao` e `executarAcao()` ganhou 4º parâmetro `corpo` — destrava Blocos 5-8 (também 2 turnos). **Novo módulo** `backend/src/common/cep/` (CepService com ViaCEP + degradação graciosa, 13/13 specs). **3 ações novas** (`ATUALIZAR_NOME/EMAIL/CEP_COOPERADO`) com defense in depth multi-tenant via `updateMany` + retry no email (P2002 com sugestão `+CoopereBR@gmail.com`). **Telefone REMOVIDO** do bot (decisão Luciano por risco operacional). 39 specs novos verdes (era 109, agora 148 totais). Script idempotente aplicado no banco DEV (3 etapas globais novas + gatilhos ATUALIZACAO_CADASTRO realinhados). PM2 restart limpo (pid 37104, 0 restarts). **Próximo: a definir entre Bloco 5 / Bloco 1.b / Bloco 7 do Sprint Bot Autoatendimento (~13-25h restantes).** Detalhe: `docs/sessoes/2026-05-22-bloco4-atualizar-cadastro.md`.
+
+---
+
+## ONDE PARAMOS — 22/05/2026 noite (Code — M19 Sprint Bot Autoatendimento: Bloco 4 Atualizar Cadastro)
+
+### Marcos entregues nesta sessão (5 commits + fechamento)
+
+Bloco 4 do Sprint Bot Autoatendimento ENTREGUE em 5 etapas sequenciais. A opção "3 Atualizar meu cadastro" do MENU_COOPERADO agora funciona pelo motor dinâmico para 3 campos: **Nome, Email, Endereço (CEP)**. Telefone REMOVIDO do bot (risco operacional confirmado).
+
+- **Etapa A — Mudança arquitetural fundacional** (`9a32424`) — Motor passa a processar `Gatilho.acao` (era ignorado desde 20/05) + `executarAcao()` ganha 4º parâmetro `corpo` (texto digitado). Novo método `avaliarGatilhoMatch` retorna gatilho completo. Quando gatilho.acao definido, motor DELEGA controle TOTAL pra ação (não transiciona, não renderiza modelo destino, não dispara acaoAutomatica). 9 specs novos.
+- **Etapa B — CepService backend** (`76232e4`) — Novo módulo `backend/src/common/cep/` com `consultar(cep)` retornando tagged union: `ENCONTRADO` / `CEP_INVALIDO` / `NAO_ENCONTRADO` / `FORA_DO_AR`. Timeout 3s via AbortController, degradação graciosa. 13 specs.
+- **Etapa C — 3 ações ATUALIZAR_*_COOPERADO** (`c1dcc8c`) — Switch executarAcao ganha 3 cases. Padrão Bloco 3 com adaptações: guard cooperadoId + validação espelhando hardcoded + `updateMany` defense in depth multi-tenant + transição pra MENU_COOPERADO ou retry no fluxo. P2002 do email capturado com mensagem `+CoopereBR@gmail.com`. CEP delega pra CepService. 17 specs novos.
+- **Etapa D — Telefone removido** (`4ef82b7`) — Seed sem gatilho '3 telefone' (renumerado pra CEP). Hardcoded: lista ESTADOS sem AGUARDANDO_NOVO_TELEFONE, switch sem case, menu com 3 opções + linha "Para trocar telefone, fale com nossa equipe.", handleAguardandoNovoTelefone deletado.
+- **Etapa E — Script idempotente + PM2** (`780082d`) — `fix-bloco-4-atualizar-cadastro.ts` criou 3 etapas globais (AGUARDANDO_NOVO_NOME/EMAIL/CEP, ordens 52-54) com gatilho wildcard + acao + realinhou gatilhos do ATUALIZACAO_CADASTRO (sem telefone). 1ª execução 3 criadas + 1 atualizado; 2ª execução skip total (idempotência confirmada). Ritual PM2: stop → build → script → restart. Backend online pid 37104.
+
+### Decisões de produto Luciano (22/05 — todas no prompt da Fase 2)
+
+1. **SIM** mudança arquitetural Gatilho.acao + corpo (fundacional Blocos 4-8)
+2. **a1 (RETRY)** — Email duplicado: erro+sugestão `+CoopereBR@gmail.com` + mantém em AGUARDANDO_NOVO_EMAIL
+3. **b2** — CEP/ViaCEP backend com degradação graciosa (FORA_DO_AR salva só o CEP digitado)
+4. **c1** — Telefone REMOVIDO do bot
+5. **d1** — Mensagens de confirmação hardcoded na ação
+6. **Placeholders Bloco 5** — deixar (warn default cobre)
+
+### Validação
+
+- **135/135 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 109)
+- **13/13 specs verdes** em `cep.service.spec.ts` (módulo novo)
+- **148 specs totais** nos arquivos tocados
+- `nest build` limpo em todas as rodadas
+- Script idempotente confirmado em 2 execuções
+- PM2 restart limpo (0 restarts, pid 37104)
+- Backend logs: `Nest application successfully started + Backend rodando na porta 3000`
+- 4 falhas pré-existentes em cooperados/usinas controllers — NÃO causadas por esta sessão (confirmado via `git stash`)
+
+### Pendências carry-over (decisões produto pro Luciano)
+
+- Escolher próximo bloco do sprint: Bloco 5 (Atualizar Contrato, 4-6h, decisão produto) / Bloco 1.b (ME CHAME DEPOIS, 3-5h) / Bloco 7 (NPS, 2-3h) / Bloco 6 (Cadastro Proxy, 6-8h) / Bloco 8 (Menu Fatura, 4-6h, decisão produto)
+- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL (carry-over M16/M17)
+- `{{distribuidora}}` vazia em AGUARDANDO_DISPOSITIVO_EMAIL
+- Horário hardcoded em `aguardando_atendente`
+- Variáveis-fantasma na UI ModalMensagem (~30min UX admin)
+- 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers) — investigar em sprint separado (provavelmente fixtures TestingModule)
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 22/05 noite fechamento M19 Bloco 4).
 
 ---
 
@@ -217,18 +264,37 @@ Bloco 3 do Sprint Bot Autoatendimento completou as 2 opções do MENU_COOPERADO 
 
 ### Última sessão
 
-- **Quando:** 22/05/2026 (Code — sessão curta de catalogação, sem código)
-- **Tipo:** Code (abertura via `/abertura` + pivot iniciado pra relé + pivot CANCELADO pelo Luciano + catalogação como feature futura + fechamento canônico)
+- **Quando:** 22/05/2026 noite (Code — M19 Sprint Bot Autoatendimento: Bloco 4 Atualizar Cadastro)
+- **Tipo:** Code (Fase 1 read-only fechada → Fase 2 execução em 5 etapas TDD + mudança arquitetural fundacional + módulo novo CepService + 3 ações no motor + telefone removido + script idempotente no banco DEV + PM2 restart)
 - **Resultado:**
-  - **Sessão SEM código, SEM schema, SEM branch nova, SEM commit de trabalho.** Apenas catalogação documental.
-  - Luciano abriu pedindo preparação de branch `feature/monitoramento-protecao` pra trabalho novo de monitoramento de proteção (relé). Code mapeou estado (main limpo, 27 untracked de carry-over) e alertou sobre pivot fora do roadmap atual.
-  - Luciano PAUSOU o pivot — vai documentar arquitetura da integração primeiro + aguardar vistoria de campo do relé antes de mexer em schema.
-  - **Decisão Luciano:** Opção A (alimentar SISGD com tabelas novas dedicadas, schema delta aditivo) como modelo arquitetural quando retomar. Feature futura fora do roadmap atual.
-  - **Catalogação:** memória persistente `feature_futura_monitoramento_protecao_22_05.md` + Sugestão #9 em `sugestoes_pendentes.md` + MEMORY.md atualizado + doc-sessão.
-  - **Decisão 14 aplicada** — grep amplo confirmou tema "monitoramento de proteção (relé)" livre no projeto (3 matches foram falsos positivos).
-  - **Bloco 4 do Sprint Bot Autoatendimento permanece como próximo passo** — pivot cancelado não alterou rumo. FRASE DE RETOMADA do M18 intacta (Decisão 24).
-- **Commits da sessão (1):** commit deste fechamento (catalogação + doc-sessão + CONTROLE-EXECUCAO atualizado).
-- **Próximo:** **Bloco 4 do Sprint Bot Autoatendimento** — Atualizar Cadastro (~6-8h Code). Inalterado.
+  - **Bloco 4 ENTREGUE** — opção "3 Atualizar meu cadastro" do MENU_COOPERADO funciona pelo motor dinâmico para 3 campos (Nome, Email, CEP). Telefone REMOVIDO do bot (decisão Luciano por risco operacional confirmado na Fase 1).
+  - **Mudança arquitetural fundacional (Etapa A):** motor passa a processar `Gatilho.acao` (era ignorado desde 20/05) e `executarAcao()` ganha 4º parâmetro `corpo`. Quando gatilho.acao definido, motor DELEGA controle TOTAL pra ação. Destrava Blocos 5-8 do sprint (também 2 turnos).
+  - **CepService backend novo (Etapa B):** `backend/src/common/cep/` com `consultar()` retornando tagged union ENCONTRADO / CEP_INVALIDO / NAO_ENCONTRADO / FORA_DO_AR. Timeout 3s, degradação graciosa. 13 specs verdes.
+  - **3 ações ATUALIZAR_*_COOPERADO (Etapa C):** padrão Bloco 3 com adaptações — guard cooperadoId + validação espelhando hardcoded + `updateMany` defense in depth multi-tenant + transição pra MENU_COOPERADO ou retry no fluxo. P2002 do email capturado com mensagem `+CoopereBR@gmail.com`. CEP delega pra CepService com 4 caminhos (ENCONTRADO autopopula endereço; FORA_DO_AR salva só o CEP).
+  - **Telefone removido (Etapa D):** seed sem gatilho '3 telefone' (CEP renumerado pra '3'), hardcoded com 3 opções + linha "Para trocar telefone, fale com nossa equipe.", handler deletado.
+  - **Script idempotente + PM2 (Etapa E):** `fix-bloco-4-atualizar-cadastro.ts` criou 3 etapas globais (ordens 52-54) + realinhou gatilhos do ATUALIZACAO_CADASTRO. 2 execuções confirmam idempotência. Backend online pid 37104, 0 restarts.
+  - **148 specs verdes** (era 109): 135 motor (+26 novos: 9 Etapa A + 17 Etapa C) + 13 CepService.
+  - 4 falhas pré-existentes em cooperados/usinas controllers — NÃO causadas pelo Bloco 4 (confirmado via `git stash`).
+- **Commits da sessão (5 + fechamento):**
+  - `9a32424` Etapa A — mudança arquitetural Gatilho.acao + corpo
+  - `76232e4` Etapa B — CepService backend ViaCEP
+  - `c1dcc8c` Etapa C — 3 ações ATUALIZAR_*_COOPERADO no motor
+  - `4ef82b7` Etapa D — telefone removido (seed + hardcoded)
+  - `780082d` Etapa E — script idempotente + PM2 restart
+  - (a seguir) commit fechamento
+- **Próximo:** A definir entre Bloco 5 (Atualizar Contrato, 4-6h, decisão produto) / Bloco 1.b (ME CHAME DEPOIS, 3-5h) / Bloco 7 (NPS, 2-3h, mais leve) / Bloco 6 (Cadastro Proxy, 6-8h) / Bloco 8 (Menu Fatura, 4-6h, decisão produto). Restantes do Sprint Bot Autoatendimento ~13-25h.
+- **Detalhe:** `docs/sessoes/2026-05-22-bloco4-atualizar-cadastro.md`
+
+### Sessão anterior
+
+- **Quando:** 22/05/2026 (Code — sessão curta de catalogação, sem código)
+- **Tipo:** Code (abertura via `/abertura` + pivot iniciado pra relé + pivot CANCELADO pelo Luciano + catalogação como feature futura)
+- **Resultado:**
+  - Sessão SEM código. Luciano abriu pedindo branch `feature/monitoramento-protecao` pra trabalho novo de monitoramento de proteção (relé). Code mapeou estado e alertou sobre pivot fora do roadmap.
+  - Luciano PAUSOU o pivot — vai documentar arquitetura primeiro + aguardar vistoria de campo do relé.
+  - **Decisão Luciano:** Opção A (alimentar SISGD com tabelas novas dedicadas) como modelo arquitetural quando retomar. Feature futura fora do roadmap.
+  - Catalogação: memória `feature_futura_monitoramento_protecao_22_05.md` + Sugestão #9 + MEMORY.md atualizado + doc-sessão.
+- **Commits da sessão (1):** `2a312ca` fechamento da catalogação.
 - **Detalhe:** `docs/sessoes/2026-05-22-pivot-cancelado-rele-catalogado.md`
 
 ### Sessão anterior
@@ -662,73 +728,79 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M18 da sessão 21/05 noite
-   (mensagem começa com "docs(sessao): fechamento M18 — Bloco 3").
+   Esperado: working tree limpo, último commit é o de fechamento M19 da sessão 22/05 noite
+   (mensagem começa com "docs(sessao): fechamento M19 — Bloco 4 Sprint Bot Autoatendimento").
+   Penúltimo commit é `780082d` (Etapa E — script idempotente Bloco 4).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Iniciando Bloco 4 do Sprint Bot Autoatendimento (Atualizar Cadastro, ~6-8h).
+PASSO 1 — Sessão 22/05 entregou M19 (Bloco 4 do Sprint Bot Autoatendimento:
+Atualizar Cadastro Nome/Email/CEP + mudança arquitetural Gatilho.acao + CepService).
+5 commits empacotados (9a32424 + 76232e4 + c1dcc8c + 4ef82b7 + 780082d) +
+commit fechamento. 148 specs verdes (135 motor + 13 CepService). Telefone
+REMOVIDO do bot (decisão Luciano por risco operacional). PM2 restart limpo
+(pid 37104, 0 restarts). Suíte completa tem 4 falhas pré-existentes em
+cooperados/usinas controllers (NÃO causadas por esta sessão — confirmado via
+git stash).
 
-OBJETIVO: completar a opção "3 Atualizar meu cadastro" do MENU_COOPERADO.
-Hoje o gatilho transiciona pra ATUALIZACAO_CADASTRO, mas as 4 sub-opções
-(1 Nome / 2 Email / 3 Telefone / 4 CEP) caem em estados que NÃO TÊM etapa
-dinâmica ativa — bot fica preso. Bloco 4 cria as 4 etapas + 4 ações
-persistentes que atualizam o Cooperado no banco com validação.
+PRÓXIMO PASSO — A DEFINIR COM O LUCIANO. Opções do Sprint Bot Autoatendimento
+restante (~13-25h):
 
-DESENHO PROPOSTO (sujeito a revisão na Fase 1):
-- 4 estados novos GLOBAIS: AGUARDANDO_NOVO_NOME / AGUARDANDO_NOVO_EMAIL /
-  AGUARDANDO_NOVO_TELEFONE / AGUARDANDO_NOVO_CEP
-- 4 modelos JÁ EXISTEM no banco (Bloco 2, commit 1097f72):
-  aguardando_novo_nome / aguardando_novo_email / aguardando_novo_telefone /
-  aguardando_novo_cep — só associar via modeloMensagemId
-- Wildcard "*" como gatilho em cada um (cooperado responde texto livre)
-- 4 ações novas em executarAcao(): ATUALIZAR_NOME_COOPERADO,
-  ATUALIZAR_EMAIL_COOPERADO, ATUALIZAR_TELEFONE_COOPERADO, ATUALIZAR_CEP_COOPERADO
-- Cada ação: guard cooperadoId + multi-tenant findFirst + validar input +
-  prisma.cooperado.update + enviar confirmação + voltar pra MENU_COOPERADO (ou
-  cooperado usa MENU/INICIO comando universal)
-- Validações: email com regex padrão; CEP normalizado pra 00000-000 +
-  opcionalmente ViaCEP pra preencher logradouro/bairro/cidade/estado (se
-  online); telefone só dígitos com 10-11 chars
-- ATUALIZACAO_CADASTRO já existe no seed e cabeia 4 gatilhos pros estados
-  AGUARDANDO_NOVO_* — confirmar na Fase 1 se gatilhos estão certos
+- Bloco 1.b — ME CHAME DEPOIS (~3-5h, exige job de reagendamento)
+- Bloco 5 — Atualizar Contrato (~4-6h) — REQUER decisão produto antes:
+  ação automática (motor altera contrato direto) vs solicitação humana
+  (motor cria ticket, equipe valida e aplica)
+- Bloco 6 — Cadastro Proxy (~6-8h, 4 modelos prontos no Bloco 2)
+- Bloco 7 — NPS no fluxo (~2-3h, modelo `nps_recebido` pronto)
+- Bloco 8 — Menu Fatura / Menu Inadimplente (~4-6h) — REQUER decisão
+  produto antes: dinâmico no motor vs manter hardcoded
 
-ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23).
-- Ler whatsapp-fluxo-motor.service.ts:executarAcao() — padrão Bloco 3 do
-  CONSULTAR_SALDO_CREDITOS / CONSULTAR_PROXIMA_FATURA é referência direta
-- Ler cooperados.service.ts — verificar se há método update() exposto pra
-  atualização parcial, ou se precisa criar
-- Confirmar gatilhos atuais ATUALIZACAO_CADASTRO no banco (3=AGUARDANDO_NOVO_TELEFONE
-  ou outra ordem? bater com seed-fluxos-bot.mjs)
-- Validar onde estão os 4 modelos aguardando_novo_* no banco (Bloco 2 confirmou
-  inseridos — só checar se cooperativaId=null + ativo=true)
-- Decidir: ViaCEP é dependência aceita ou só persiste CEP digitado?
-- Decidir: como tratar email conflitando com OUTRO cooperado (unique constraint)?
-  Erro amigável + cancela? Sugerir +suffix?
+RECOMENDAÇÃO de leveza pra cadência: Bloco 7 (NPS, 2-3h) ou Bloco 1.b
+(ME CHAME DEPOIS, 3-5h) — entregam valor sem decisão produto bloqueante.
+Bloco 5 e 8 ficam pra quando você tiver decidido o modelo (ação automática
+vs solicitação / dinâmico vs hardcoded).
 
-DEPOIS reportar a Fase 1 ao Luciano e aguardar OK antes de Fase 2 (escrita).
+PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido em M19):
+- Fluxo de 2 turnos = etapa AGUARDANDO_* com gatilho wildcard '*' +
+  acao no gatilho (NÃO acaoAutomatica na etapa) → motor delega controle
+  pra ação via Gatilho.acao (Etapa A do Bloco 4)
+- Ação privada padrão: guard cooperadoId + validar corpo + updateMany
+  defense in depth multi-tenant + mensagens hardcoded + transição pra
+  MENU_COOPERADO ou retry no estado atual (validação falhou)
+- Specs TDD: 1 cenário sem cooperadoId + 1 validação inválida (retry) +
+  1 sucesso + 1 multi-tenant + 1 erro específico do domínio
+- Veja `whatsapp-fluxo-motor.service.ts` cases ATUALIZAR_NOME/EMAIL/
+  CEP_COOPERADO (~linhas 760-1000) como referência viva
 
-DECISOES PENDENTES PRO LUCIANO (carry-over M17/M18 — não bloqueiam Bloco 4):
+ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23) se o
+próximo bloco mexer em estado novo do sistema. Para blocos com escopo já
+conhecido (NPS modelo pronto, ME CHAME DEPOIS reusa job), confirme o
+escopo com o Luciano antes de Fase 2.
+
+DECISOES PENDENTES PRO LUCIANO (carry-over M17/M18/M19 — não bloqueiam
+escolha do próximo bloco):
 - Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
-- Atualizar Contrato (Bloco 5 futuro): ação automática vs solicitação + humano
-- Menu Fatura / Menu Inadimplente (Bloco 8 futuro): dinâmico vs hardcoded
 - {{distribuidora}} vazia em AGUARDANDO_DISPOSITIVO_EMAIL
 - Horário hardcoded em aguardando_atendente
 - Variáveis-fantasma na UI ModalMensagem
+- 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers) —
+  investigar em sprint separado (provavelmente fixtures TestingModule)
 
 CARRY-OVERS catalogados:
-- Blocos 1.b, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~17-25h restantes pos-Bloco 4)
-- M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do Sprint Bot Autoatendimento)
+- Blocos 1.b, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~13-25h restantes)
+- M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do sprint atual)
 - Cadastrar usina cooperebr2 (depende M15)
-- Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q Contatos Teste)
+- Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q)
 - D-novo-Q Contatos Teste persistentes (6-8h)
 - D-novo-U fix handler hardcoded ver fatura (1-2h, Sprint Housekeeping)
-- D-novo-V engine de template {{#if}}/{{#unless}} (~8-12h, sub-tarefa D-novo-T)
-- Sprint Housekeeping (~3-5h)
+- D-novo-V engine de template {{#if}}/{{#unless}} (~8-12h)
+- Sprint Housekeeping (~3-5h — inclui stash reformat 18/05 + scripts órfãos)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
 - Iniciativa Fluxos Customizáveis D-novo-T (futuro, ~100-200h+)
+- Sugestão #9 Monitoramento de Proteção (Relé) Opção A — feature futura,
+  aguarda vistoria de campo + arquitetura documentada
 
 DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
@@ -739,12 +811,17 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - git status --short ANTES de qualquer commit
 - Decisão 14: grep amplo ANTES de catalogar débito novo
 - Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita
-- Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId (multi-tenant)
-- NÃO inserir modelo com variável órfã (lição Bloco 0 v2 — popular variável ANTES de inserir modelo)
+- Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId
+- NÃO inserir modelo com variável órfã
 - Smoke programático com dados reais > teste visual sozinho
-- Padrão Bloco 3 (CONSULTAR_*): cada ação é método privado defensivo, guard cooperadoId
-  + filtroTenantSomenteLeitura, modelo do banco renderizado COM vars dinâmicas,
-  rodapé universal anexado pós-render, increment uso do modelo após enviar
+- Padrão Bloco 4 (2 turnos): gatilho '*' com acao + ação privada com guard
+  cooperadoId + updateMany defense in depth + retry no estado pra validação
+  falha + transição pra MENU_COOPERADO no sucesso
+- Padrão Bloco 3 (1 turno): acaoAutomatica na etapa-destino + modelo do
+  banco renderizado COM vars dinâmicas + rodapé universal anexado +
+  increment uso do modelo
+- Ritual PM2 obrigatório pra rebuild/seed/scripts no banco:
+  pm2 stop → npm run build → script → pm2 restart → pm2 list (confirmar)
 ```
 
 ---
