@@ -2659,4 +2659,276 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(where).not.toHaveProperty('cooperativaId');
     });
   });
+
+  // ============================================================
+  // Etapa A Bloco 1.b (22/05) — 4o comando universal CHAMAR_DEPOIS
+  // Completa a familia INICIO/SAIR/MENU/CHAMAR_DEPOIS. Persiste
+  // dadosTemp.retornarEm (+24h, postergado pra 08:00 se cair fora
+  // de 08-18h) e transiciona conversa pra estado AGENDADO_RETORNO.
+  // O retorno em si fica a cargo do WhatsappConversaJob (Etapa B).
+  //
+  // Decisoes Luciano 22/05 (travadas no prompt da Fase 2):
+  //  1. +24h FIXO (sem sub-menu de prazos)
+  //  2. Ao retornar volta pro MENU_COOPERADO — NAO precisa persistir
+  //     estadoAnterior
+  //  3. Respeitar horario comercial 08-18h
+  //
+  // CUIDADO sinonimos: "DEPOIS" sozinho NAO entra (falso positivo).
+  // ============================================================
+  describe('Etapa A Bloco 1.b - detectarComandoUniversal() reconhece CHAMAR_DEPOIS', () => {
+    it('"ME CHAME DEPOIS" retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('ME CHAME DEPOIS')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"me chame depois" (lowercase) retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('me chame depois')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"CHAME DEPOIS" retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('CHAME DEPOIS')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"OUTRA HORA" retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('OUTRA HORA')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"MAIS TARDE" retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('MAIS TARDE')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"ME LIGA DEPOIS" retorna CHAMAR_DEPOIS', () => {
+      expect(service.detectarComandoUniversal('ME LIGA DEPOIS')).toBe('CHAMAR_DEPOIS');
+    });
+
+    it('"DEPOIS" sozinho NAO casa — evita falso positivo dentro de fluxos', () => {
+      expect(service.detectarComandoUniversal('depois')).toBeNull();
+      expect(service.detectarComandoUniversal('DEPOIS')).toBeNull();
+    });
+
+    it('Frase com palavras a mais NAO casa — match eh por igualdade exata', () => {
+      expect(service.detectarComandoUniversal('vou pensar mais tarde')).toBeNull();
+      expect(service.detectarComandoUniversal('me chame depois por favor')).toBeNull();
+    });
+  });
+
+  describe('Etapa A Bloco 1.b - resolverEstadoComandoUniversal() trata CHAMAR_DEPOIS', () => {
+    it('CHAMAR_DEPOIS retorna null (caminho proprio, igual SAIR)', () => {
+      const r = service.resolverEstadoComandoUniversal(
+        'CHAMAR_DEPOIS' as any,
+        { cooperadoId: 'coop-luciano' },
+      );
+      expect(r).toBeNull();
+    });
+
+    it('CHAMAR_DEPOIS retorna null inclusive sem cooperadoId', () => {
+      const r = service.resolverEstadoComandoUniversal(
+        'CHAMAR_DEPOIS' as any,
+        { cooperadoId: null },
+      );
+      expect(r).toBeNull();
+    });
+  });
+
+  describe('Etapa A Bloco 1.b - calcularRetornarEm() postergacao horario comercial', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('Dentro do horario comercial (14:00): +24h cai em 14:00 amanha, mantem', () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 14, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDate()).toBe(23);
+      expect(r.getMonth()).toBe(4);
+      expect(r.getFullYear()).toBe(2026);
+      expect(r.getHours()).toBe(14);
+      expect(r.getMinutes()).toBe(0);
+    });
+
+    it('Madrugada (02:00): +24h cai em 02:00 amanha, posterga pra 08:00 amanha', () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 2, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDate()).toBe(23);
+      expect(r.getHours()).toBe(8);
+      expect(r.getMinutes()).toBe(0);
+    });
+
+    it('Noite (19:00): +24h cai em 19:00 amanha (>=18), posterga pra 08:00 do dia seguinte (D+2)', () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 19, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDate()).toBe(24);
+      expect(r.getHours()).toBe(8);
+    });
+
+    it('Limite 18:00 — fora do horario comercial (>=18) -> posterga', () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 18, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDate()).toBe(24);
+      expect(r.getHours()).toBe(8);
+    });
+
+    it('Limite 08:00 — dentro do horario (>=8 e <18) -> mantem', () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 8, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDate()).toBe(23);
+      expect(r.getHours()).toBe(8);
+      expect(r.getMinutes()).toBe(0);
+    });
+
+    it('Comportamento aceito: +24h pode cair em sabado/domingo (sem logica de fim de semana)', () => {
+      // Sexta 22/05/2026, 14:00 -> sabado 23/05/2026 14:00.
+      // Nao posterga (decisao Luciano: filtro horario do dia, nao do dia da semana).
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 14, 0, 0));
+      const r: Date = (service as any).calcularRetornarEm();
+      expect(r.getDay()).toBe(6); // sabado
+      expect(r.getHours()).toBe(14);
+    });
+  });
+
+  describe('Etapa A Bloco 1.b - executarComandoUniversalReal(CHAMAR_DEPOIS)', () => {
+    const TELEFONE = '+5527981341348';
+
+    beforeEach(() => {
+      // Trava data pra que retornarEm seja determinístico nos asserts.
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 14, 0, 0));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const invocar = (conversa: any) =>
+      (service as any).executarComandoUniversalReal(
+        'CHAMAR_DEPOIS',
+        { telefone: TELEFONE, tipo: 'texto', corpo: 'me chame depois' },
+        conversa,
+      );
+
+    it('Atualiza estado pra AGENDADO_RETORNO e persiste dadosTemp.retornarEm', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: { algumOutroCampo: 'preservado' },
+      });
+
+      expect(conversaUpdate).toHaveBeenCalledTimes(1);
+      const args = conversaUpdate.mock.calls[0][0];
+      expect(args.where).toEqual({ id: 'c1' });
+      expect(args.data.estado).toBe('AGENDADO_RETORNO');
+      // Preserva dadosTemp existente + adiciona retornarEm (ISO string).
+      expect(args.data.dadosTemp.algumOutroCampo).toBe('preservado');
+      expect(typeof args.data.dadosTemp.retornarEm).toBe('string');
+      const retornoEm = new Date(args.data.dadosTemp.retornarEm);
+      expect(retornoEm.getDate()).toBe(23);
+      expect(retornoEm.getHours()).toBe(14);
+    });
+
+    it('Envia mensagem de confirmacao hardcoded', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/amanh/i),
+      );
+    });
+
+    it('NAO persiste estadoAnterior — decisao Luciano: volta pro menu, contexto perdido', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        estado: 'AGUARDANDO_NOVO_EMAIL',
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      const dadosTempPersistido = conversaUpdate.mock.calls[0][0].data.dadosTemp;
+      expect(dadosTempPersistido).not.toHaveProperty('estadoAnterior');
+    });
+
+    it('dadosTemp ausente (null) na conversa: persiste apenas retornarEm', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        // sem dadosTemp
+      });
+      const dadosTempPersistido = conversaUpdate.mock.calls[0][0].data.dadosTemp;
+      expect(Object.keys(dadosTempPersistido)).toEqual(['retornarEm']);
+    });
+
+    it('Retorna true (sinal de que motor tratou — fluxo dinamico encerra)', async () => {
+      const ok = await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(ok).toBe(true);
+    });
+  });
+
+  describe('Etapa A Bloco 1.b - executarComandoUniversalSimulado(CHAMAR_DEPOIS)', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('Retorna estadoFinal AGENDADO_RETORNO + comandoUniversalAplicado + avisoTransicao', async () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 14, 0, 0));
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu',
+        cooperativaId: 'coop-A',
+        nome: 'Menu',
+        ordem: 1,
+        estado: 'MENU_COOPERADO',
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const r = await service.simular({
+        estadoInicial: 'MENU_COOPERADO',
+        cooperativaId: 'coop-A',
+        mensagem: 'me chame depois',
+      });
+
+      expect(r.estadoFinal).toBe('AGENDADO_RETORNO');
+      expect(r.comandoUniversalAplicado).toBe('CHAMAR_DEPOIS');
+      expect(r.transicionou).toBe(true);
+      expect(r.avisoTransicao).toMatch(/24h|amanh/i);
+    });
+
+    it('ZERO SIDE EFFECT — nao persiste conversaUpdate nem chama enviarMensagem', async () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 4, 22, 14, 0, 0));
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu',
+        cooperativaId: 'coop-A',
+        nome: 'Menu',
+        ordem: 1,
+        estado: 'MENU_COOPERADO',
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      await service.simular({
+        estadoInicial: 'MENU_COOPERADO',
+        cooperativaId: 'coop-A',
+        mensagem: 'ME CHAME DEPOIS',
+      });
+
+      expect(conversaUpdate).not.toHaveBeenCalled();
+      expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
 });

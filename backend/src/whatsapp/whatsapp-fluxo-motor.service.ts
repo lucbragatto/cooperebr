@@ -165,17 +165,31 @@ export class WhatsappFluxoMotorService {
    * Wildcard "*" da etapa NAO captura comando universal porque a checagem
    * acontece ANTES de avaliarGatilhos no fluxo principal.
    */
-  detectarComandoUniversal(corpo: string): 'INICIO' | 'SAIR' | 'MENU' | null {
+  detectarComandoUniversal(
+    corpo: string,
+  ): 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | null {
     if (!corpo) return null;
     const normalizado = corpo.trim().toUpperCase();
 
     const SINONIMOS_INICIO = ['INICIO', 'INÍCIO', 'COMECAR', 'COMEÇAR', 'MENU INICIAL'];
     const SINONIMOS_SAIR = ['SAIR', 'PARAR', 'ENCERRAR'];
     const SINONIMOS_MENU = ['MENU', 'VOLTAR'];
+    // Bloco 1.b (22/05): 4o comando "me chame depois". NAO inclui "DEPOIS"
+    // sozinho — evita falso positivo dentro de fluxos onde cooperado digita
+    // "depois" como resposta a outra pergunta.
+    const SINONIMOS_CHAMAR_DEPOIS = [
+      'ME CHAME DEPOIS',
+      'CHAME DEPOIS',
+      'ME LIGA DEPOIS',
+      'VOLTAR DEPOIS',
+      'OUTRA HORA',
+      'MAIS TARDE',
+    ];
 
     if (SINONIMOS_INICIO.includes(normalizado)) return 'INICIO';
     if (SINONIMOS_SAIR.includes(normalizado)) return 'SAIR';
     if (SINONIMOS_MENU.includes(normalizado)) return 'MENU';
+    if (SINONIMOS_CHAMAR_DEPOIS.includes(normalizado)) return 'CHAMAR_DEPOIS';
     return null;
   }
 
@@ -186,13 +200,43 @@ export class WhatsappFluxoMotorService {
    * - SAIR   -> null (sinal especial de encerramento — caminho diferente)
    */
   resolverEstadoComandoUniversal(
-    comando: 'INICIO' | 'SAIR' | 'MENU',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
     conversa: { cooperadoId?: string | null },
   ): string | null {
     if (comando === 'INICIO') return 'INICIAL';
     if (comando === 'SAIR') return null;
+    // Bloco 1.b: CHAMAR_DEPOIS tem caminho proprio em executarComandoUniversal*
+    // (similar ao SAIR — estado quase-terminal AGENDADO_RETORNO). Retorna null
+    // pra sinalizar "nao siga o fluxo padrao de transicao".
+    if (comando === 'CHAMAR_DEPOIS') return null;
     // MENU: contexto cooperado vs aquisicao
     return conversa.cooperadoId ? 'MENU_COOPERADO' : 'INICIAL';
+  }
+
+  /**
+   * Bloco 1.b (22/05) — Calcula timestamp de retorno pra "ME CHAME DEPOIS".
+   *
+   * Decisao Luciano 22/05:
+   *  1. +24h fixo a partir de agora (sem sub-menu de prazos).
+   *  2. Postergacao pra horario comercial 08-18h: se +24h cair fora desse
+   *     intervalo, posterga pra 08:00 do dia coerente.
+   *     - hora < 8 (ex: 02:00): posterga pra 08:00 do mesmo dia.
+   *     - hora >= 18 (ex: 19:00): posterga pra 08:00 do dia seguinte.
+   *
+   * Nao trata fim de semana — decisao Luciano: sabado/domingo aceitos
+   * (filtro 08-18h cobre hora do dia, nao dia da semana).
+   */
+  private calcularRetornarEm(): Date {
+    const agora = new Date();
+    const retornarEm = new Date(agora.getTime() + 24 * 60 * 60 * 1000);
+    const hora = retornarEm.getHours();
+    if (hora < 8) {
+      retornarEm.setHours(8, 0, 0, 0);
+    } else if (hora >= 18) {
+      retornarEm.setDate(retornarEm.getDate() + 1);
+      retornarEm.setHours(8, 0, 0, 0);
+    }
+    return retornarEm;
   }
 
   /**
@@ -202,7 +246,7 @@ export class WhatsappFluxoMotorService {
    * menu) e disparam acaoAutomatica se houver.
    */
   private async executarComandoUniversalReal(
-    comando: 'INICIO' | 'SAIR' | 'MENU',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
     msg: MensagemRecebida,
     conversa: {
       id: string;
@@ -225,6 +269,34 @@ export class WhatsappFluxoMotorService {
         'Tchau! Quando quiser, e so me chamar de novo. 👋',
       );
       this.logger.log(`Comando universal SAIR: conversa ${conversa.id} encerrada (tenant: ${cooperativaId ?? 'global'})`);
+      return true;
+    }
+
+    // Bloco 1.b (22/05) — CHAMAR_DEPOIS: estado quase-terminal AGENDADO_RETORNO.
+    // Persiste dadosTemp.retornarEm (ISO) + envia confirmacao curta. O retorno
+    // em si fica a cargo do WhatsappConversaJob.processarRetornosAgendados()
+    // (Etapa B) que roda @Cron EVERY_HOUR.
+    //
+    // Decisao Luciano: NAO persiste estadoAnterior (retorno volta pro
+    // MENU_COOPERADO, contexto de 24h+ ja esfriou).
+    if (comando === 'CHAMAR_DEPOIS') {
+      const retornarEm = this.calcularRetornarEm();
+      const dadosAtuais = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+      const dadosTempNovo = { ...dadosAtuais, retornarEm: retornarEm.toISOString() };
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          estado: 'AGENDADO_RETORNO',
+          dadosTemp: dadosTempNovo as any,
+        },
+      });
+      await this.sender.enviarMensagem(
+        msg.telefone,
+        'Beleza! Volto a te chamar amanhã neste horário. 👋',
+      );
+      this.logger.log(
+        `Comando universal CHAMAR_DEPOIS: conversa ${conversa.id} agendada pra ${retornarEm.toISOString()} (tenant: ${cooperativaId ?? 'global'})`,
+      );
       return true;
     }
 
@@ -1324,7 +1396,7 @@ export class WhatsappFluxoMotorService {
    * (estado orfao), avisoTransicao explica.
    */
   private async executarComandoUniversalSimulado(
-    comando: 'INICIO' | 'SAIR' | 'MENU',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
     etapaAtual: FluxoEtapaComModelo,
     cooperativaId: string | undefined,
     conversaFake: { dadosTemp?: any; cooperadoId?: string | null },
@@ -1348,6 +1420,27 @@ export class WhatsappFluxoMotorService {
         avisoTransicao:
           'Conversa encerrada via comando SAIR. No WhatsApp real, a sessao termina e o cooperado teria que mandar nova mensagem pra retomar.',
         comandoUniversalAplicado: 'SAIR',
+      };
+    }
+
+    // Bloco 1.b (22/05) — CHAMAR_DEPOIS no simulador: zero side-effect. Mostra
+    // que a conversa iria pra AGENDADO_RETORNO e o bot voltaria a chamar em
+    // ~24h (postergado pra 08:00 se cair fora de 08-18h).
+    if (comando === 'CHAMAR_DEPOIS') {
+      return {
+        estadoInicial,
+        estadoFinal: 'AGENDADO_RETORNO',
+        transicionou: true,
+        gatilhoAvaliado: null,
+        motivoFallback: null,
+        mensagensEnviadas: [],
+        acaoAutomatica: null,
+        etapaAtual: etapaAtualResumo,
+        etapaProxima: null,
+        mensagemEtapaAtual,
+        avisoTransicao:
+          'Conversa pausada via "ME CHAME DEPOIS". No WhatsApp real, o bot voltaria a chamar em ~24h (postergado pra 08:00 se cair fora do horario comercial 08-18h).',
+        comandoUniversalAplicado: 'CHAMAR_DEPOIS',
       };
     }
 
@@ -1593,7 +1686,7 @@ export interface SimulacaoOutput {
    * bolha sistema explicativa (ex: "Voce digitou SAIR — conversa encerrada").
    * null = transicao normal por gatilho ou nao-transicao.
    */
-  comandoUniversalAplicado: 'INICIO' | 'SAIR' | 'MENU' | null;
+  comandoUniversalAplicado: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | null;
 }
 
 // Fase C - Preview de modelo de mensagem (sem fluxo)
