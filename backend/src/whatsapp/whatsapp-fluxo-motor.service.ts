@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { CepService } from '../common/cep/cep.service';
 import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
 
 interface MensagemRecebida {
@@ -57,6 +58,7 @@ export class WhatsappFluxoMotorService {
     private prisma: PrismaService,
     private modeloMensagem: ModeloMensagemService,
     private sender: WhatsappSenderService,
+    private cepService: CepService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -373,7 +375,7 @@ export class WhatsappFluxoMotorService {
       cooperativaId?: string | null;
     },
     _dados: any,
-    _corpo: string,
+    corpo: string,
   ): Promise<void> {
     try {
       switch (acao) {
@@ -394,6 +396,19 @@ export class WhatsappFluxoMotorService {
           break;
         case 'CONSULTAR_PROXIMA_FATURA':
           await this.executarConsultarProximaFatura(conversa);
+          break;
+        // Etapa C Bloco 4 (22/05): 3 acoes ATUALIZAR_*_COOPERADO disparadas via
+        // gatilho.acao (wildcard nas etapas AGUARDANDO_NOVO_*). Recebem o
+        // `corpo` digitado pelo cooperado e cuidam de validar/atualizar/responder/
+        // transicionar. Telefone NAO entra (decisao Luciano: risco operacional).
+        case 'ATUALIZAR_NOME_COOPERADO':
+          await this.executarAtualizarNomeCooperado(conversa, corpo);
+          break;
+        case 'ATUALIZAR_EMAIL_COOPERADO':
+          await this.executarAtualizarEmailCooperado(conversa, corpo);
+          break;
+        case 'ATUALIZAR_CEP_COOPERADO':
+          await this.executarAtualizarCepCooperado(conversa, corpo);
           break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
@@ -751,6 +766,315 @@ export class WhatsappFluxoMotorService {
       default:
         return status;
     }
+  }
+
+  // ============================================================
+  // Etapa C Bloco 4 (22/05): acoes ATUALIZAR_*_COOPERADO
+  // Disparadas via gatilho.acao nas etapas AGUARDANDO_NOVO_*.
+  // Padrao: guard cooperadoId -> validar input -> updateMany defense in depth
+  // multi-tenant -> mensagem hardcoded -> transiciona ou mantem (retry).
+  // Reusa validacoes do bot hardcoded (whatsapp-bot.service.ts:3793-3852).
+  // Mensagem de cadastro reaproveitada pra falta de cooperadoId.
+  // ============================================================
+  private readonly MSG_PRECISA_CADASTRO =
+    'Para atualizar seu cadastro voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui!';
+
+  private async executarAtualizarNomeCooperado(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(conversa.telefone, this.MSG_PRECISA_CADASTRO);
+      this.logger.log(
+        `ATUALIZAR_NOME_COOPERADO: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    const novoNome = (corpo ?? '').trim();
+    if (novoNome.length < 3) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nome muito curto. Digite seu *nome completo* (mínimo 3 caracteres):',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const where: { id: string; cooperativaId?: string } = { id: conversa.cooperadoId };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+
+    try {
+      const { count } = await this.prisma.cooperado.updateMany({
+        where,
+        data: { nomeCompleto: novoNome },
+      });
+      if (count === 0) {
+        this.logger.warn(
+          `ATUALIZAR_NOME_COOPERADO: cooperado ${conversa.cooperadoId} nao encontrado no tenant ${cooperativaId ?? 'global'} (defense in depth bloqueou)`,
+        );
+        await this.sender.enviarMensagem(
+          conversa.telefone,
+          '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+        );
+        return;
+      }
+    } catch (err) {
+      this.logger.error(
+        `ATUALIZAR_NOME_COOPERADO falhou: ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `✅ Nome atualizado para *${novoNome}*!`,
+    );
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `ATUALIZAR_NOME_COOPERADO: cooperado ${conversa.cooperadoId} -> "${novoNome}" (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarAtualizarEmailCooperado(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(conversa.telefone, this.MSG_PRECISA_CADASTRO);
+      this.logger.log(
+        `ATUALIZAR_EMAIL_COOPERADO: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    const novoEmail = (corpo ?? '').trim().toLowerCase();
+    // Mesma regex do hardcoded (whatsapp-bot.service.ts:3811).
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(novoEmail)) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Email inválido. Digite um email no formato *nome@dominio.com*:',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const where: { id: string; cooperativaId?: string } = { id: conversa.cooperadoId };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+
+    try {
+      const { count } = await this.prisma.cooperado.updateMany({
+        where,
+        data: { email: novoEmail },
+      });
+      if (count === 0) {
+        this.logger.warn(
+          `ATUALIZAR_EMAIL_COOPERADO: cooperado ${conversa.cooperadoId} nao encontrado no tenant ${cooperativaId ?? 'global'}`,
+        );
+        await this.sender.enviarMensagem(
+          conversa.telefone,
+          '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+        );
+        return;
+      }
+    } catch (err) {
+      // P2002 = unique constraint violation (email ja em uso por outro cadastro).
+      // Decisao Luciano 22/05: sugerir padrao +suffix do Gmail e PEDIR DE NOVO
+      // (mantem estado AGUARDANDO_NOVO_EMAIL, cooperado tenta outro).
+      if ((err as { code?: string })?.code === 'P2002') {
+        await this.sender.enviarMensagem(
+          conversa.telefone,
+          '⚠️ Esse email já está em uso por outro cadastro. Tente outro endereço, ou use o padrão *seunome+CoopereBR@gmail.com* (o Gmail entrega na mesma caixa). Digite outro email:',
+        );
+        this.logger.warn(
+          `ATUALIZAR_EMAIL_COOPERADO: P2002 unique violation para "${novoEmail}" (cooperado=${conversa.cooperadoId}, tenant=${cooperativaId ?? 'global'})`,
+        );
+        return;
+      }
+      this.logger.error(
+        `ATUALIZAR_EMAIL_COOPERADO falhou: ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `✅ Email atualizado para *${novoEmail}*!`,
+    );
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `ATUALIZAR_EMAIL_COOPERADO: cooperado ${conversa.cooperadoId} -> "${novoEmail}" (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarAtualizarCepCooperado(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(conversa.telefone, this.MSG_PRECISA_CADASTRO);
+      this.logger.log(
+        `ATUALIZAR_CEP_COOPERADO: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    // CepService valida formato + chama ViaCEP + classifica resultado.
+    const resultado = await this.cepService.consultar(corpo);
+
+    if (resultado.status === 'CEP_INVALIDO') {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ CEP inválido. Digite 8 dígitos (ex: *01310-100*):',
+      );
+      return;
+    }
+
+    if (resultado.status === 'NAO_ENCONTRADO') {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ CEP não encontrado. Verifique e digite de novo:',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const where: { id: string; cooperativaId?: string } = { id: conversa.cooperadoId };
+    if (cooperativaId) where.cooperativaId = cooperativaId;
+
+    // FORA_DO_AR: degradacao graciosa — salva so o CEP digitado normalizado,
+    // NAO mexe em logradouro/bairro/cidade/estado (preserva o que ja existia).
+    // Decisao Luciano 22/05: nao trava o cooperado.
+    if (resultado.status === 'FORA_DO_AR') {
+      const cepLimpo = (corpo ?? '').replace(/\D/g, '');
+      const cepFormatado = `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5)}`;
+      try {
+        const { count } = await this.prisma.cooperado.updateMany({
+          where,
+          data: { cep: cepFormatado },
+        });
+        if (count === 0) {
+          this.logger.warn(
+            `ATUALIZAR_CEP_COOPERADO (FORA_DO_AR): cooperado ${conversa.cooperadoId} nao encontrado no tenant ${cooperativaId ?? 'global'}`,
+          );
+          await this.sender.enviarMensagem(
+            conversa.telefone,
+            '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+          );
+          return;
+        }
+      } catch (err) {
+        this.logger.error(
+          `ATUALIZAR_CEP_COOPERADO (FORA_DO_AR) falhou: ${(err as Error)?.message ?? 'erro desconhecido'}`,
+        );
+        await this.sender.enviarMensagem(
+          conversa.telefone,
+          '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+        );
+        return;
+      }
+
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ CEP atualizado para *${cepFormatado}*.\n_Não consegui consultar o endereço completo agora — só o CEP foi gravado._`,
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      this.logger.log(
+        `ATUALIZAR_CEP_COOPERADO (FORA_DO_AR): cooperado ${conversa.cooperadoId} -> cep="${cepFormatado}" (tenant=${cooperativaId ?? 'global'})`,
+      );
+      return;
+    }
+
+    // ENCONTRADO: autopopula cep + logradouro + bairro + cidade + estado.
+    // Numero/complemento NAO mexem (cooperado preenche via portal/admin).
+    const { endereco } = resultado;
+    try {
+      const { count } = await this.prisma.cooperado.updateMany({
+        where,
+        data: {
+          cep: endereco.cep,
+          logradouro: endereco.logradouro,
+          bairro: endereco.bairro,
+          cidade: endereco.cidade,
+          estado: endereco.estado,
+        },
+      });
+      if (count === 0) {
+        this.logger.warn(
+          `ATUALIZAR_CEP_COOPERADO (ENCONTRADO): cooperado ${conversa.cooperadoId} nao encontrado no tenant ${cooperativaId ?? 'global'}`,
+        );
+        await this.sender.enviarMensagem(
+          conversa.telefone,
+          '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+        );
+        return;
+      }
+    } catch (err) {
+      this.logger.error(
+        `ATUALIZAR_CEP_COOPERADO (ENCONTRADO) falhou: ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui atualizar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    // Mensagem com partes que existem (logradouro/bairro podem ser vazios pra
+    // CEPs de cidade).
+    const partesPrincipal = [endereco.logradouro, endereco.bairro]
+      .filter((s) => s && s.trim().length > 0)
+      .join(', ');
+    const enderecoFmt = partesPrincipal
+      ? `${partesPrincipal} — ${endereco.cidade}-${endereco.estado}`
+      : `${endereco.cidade}-${endereco.estado}`;
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `✅ Endereço atualizado: *${enderecoFmt}* (CEP ${endereco.cep})!`,
+    );
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+    this.logger.log(
+      `ATUALIZAR_CEP_COOPERADO (ENCONTRADO): cooperado ${conversa.cooperadoId} -> cep="${endereco.cep}" cidade="${endereco.cidade}-${endereco.estado}" (tenant=${cooperativaId ?? 'global'})`,
+    );
   }
 
   private async carregarContextoCooperativa(

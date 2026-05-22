@@ -8,6 +8,9 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const cooperativaFindUnique = jest.fn();
   const cooperadoFindUnique = jest.fn();
   const cooperadoUpdate = jest.fn();
+  // Etapa C Bloco 4 (22/05): updateMany aceita filtros nao-unique (cooperativaId)
+  // no where -> defense in depth multi-tenant em 1 query.
+  const cooperadoUpdateMany = jest.fn();
   const enviarMensagem = jest.fn();
   const incrementarUso = jest.fn();
 
@@ -23,7 +26,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
     conversaWhatsapp: { update: conversaUpdate },
     cooperativa: { findUnique: cooperativaFindUnique },
-    cooperado: { findUnique: cooperadoFindUnique, update: cooperadoUpdate },
+    cooperado: {
+      findUnique: cooperadoFindUnique,
+      update: cooperadoUpdate,
+      updateMany: cooperadoUpdateMany,
+    },
     contrato: { findMany: contratoFindMany },
     faturaProcessada: { findFirst: faturaProcessadaFindFirst },
     cobranca: { findFirst: cobrancaFindFirst },
@@ -31,10 +38,19 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
+  // Etapa C Bloco 4 (22/05): CepService injetado pra acao ATUALIZAR_CEP_COOPERADO.
+  // Cada teste que usa CEP mocka cepConsultar.mockResolvedValueOnce(...).
+  const cepConsultar = jest.fn();
+  const cepServiceMock: any = { consultar: cepConsultar };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new WhatsappFluxoMotorService(prismaMock, modeloMensagemMock, senderMock);
+    service = new WhatsappFluxoMotorService(
+      prismaMock,
+      modeloMensagemMock,
+      senderMock,
+      cepServiceMock,
+    );
   });
 
   // ============================================================
@@ -2313,6 +2329,334 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         expect.stringContaining('Acao desconhecida'),
       );
       warnSpy.mockRestore();
+    });
+  });
+
+  // ============================================================
+  // Etapa C Bloco 4 (22/05): 3 acoes ATUALIZAR_*_COOPERADO ligadas no motor.
+  // Reusa as validacoes do bot hardcoded (whatsapp-bot.service.ts:3752-3852)
+  // mas com defense in depth multi-tenant via cooperativaId no updateMany.
+  //
+  // - ATUALIZAR_NOME_COOPERADO: trim, length >= 3, updateMany defense, retry no fluxo
+  // - ATUALIZAR_EMAIL_COOPERADO: regex, toLowerCase, P2002 -> sugere +suffix, retry
+  // - ATUALIZAR_CEP_COOPERADO: delega CepService.consultar; ENCONTRADO autopopula
+  //   endereco; NAO_ENCONTRADO ou CEP_INVALIDO -> retry; FORA_DO_AR -> degradacao
+  //   graciosa salva so o CEP digitado e transiciona.
+  //
+  // TELEFONE NAO entra (decisao Luciano 22/05: risco operacional de quebrar
+  // proxima sessao do bot).
+  // ============================================================
+  describe('Etapa C Bloco 4 - executarAcao(ATUALIZAR_NOME_COOPERADO)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('ATUALIZAR_NOME_COOPERADO', conversa, {}, corpo);
+
+    it('SEM cooperadoId: envia mensagem de cadastro e NAO atualiza nada', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: null, cooperativaId: null },
+        'Joao Silva',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('cooperado'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Nome com menos de 3 chars: pede de novo + NAO transiciona (retry)', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'Jo',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('muito curto'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Nome valido: updateMany defense in depth + confirma + transiciona pra MENU_COOPERADO', async () => {
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '  Joao Silva Da Cunha  ',
+      );
+      expect(cooperadoUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano', cooperativaId: 'coop-A' },
+        data: { nomeCompleto: 'Joao Silva Da Cunha' },
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('Joao Silva Da Cunha'),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Sem cooperativaId conhecida: where soh com id (global)', async () => {
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: null },
+        'Maria Silva',
+      );
+      const where = cooperadoUpdateMany.mock.calls[0][0].where;
+      expect(where).toEqual({ id: 'coop-luciano' });
+      expect(where).not.toHaveProperty('cooperativaId');
+    });
+
+    it('updateMany retorna count=0 (cross-tenant bloqueado): erro generico + NAO transiciona', async () => {
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 0 });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'Joao Silva',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('atualizar'),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Etapa C Bloco 4 - executarAcao(ATUALIZAR_EMAIL_COOPERADO)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('ATUALIZAR_EMAIL_COOPERADO', conversa, {}, corpo);
+
+    it('SEM cooperadoId: mensagem de cadastro + nao atualiza', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: null, cooperativaId: null },
+        'novo@email.com',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('cooperado'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('Email com regex invalido: pede de novo + NAO transiciona (retry)', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'sem-arroba.com',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('inv'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Email valido: normaliza (lowercase + trim) + atualiza + confirma + transiciona', async () => {
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '  NOVO@Email.COM  ',
+      );
+      expect(cooperadoUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano', cooperativaId: 'coop-A' },
+        data: { email: 'novo@email.com' },
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('P2002 unique violation: mensagem com sugestao +suffix + NAO transiciona (retry)', async () => {
+      // Prisma erro P2002
+      const p2002 = Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+      });
+      cooperadoUpdateMany.mockRejectedValueOnce(p2002);
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'duplicado@email.com',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('+CoopereBR'),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Outro erro Prisma: mensagem generica + NAO transiciona', async () => {
+      cooperadoUpdateMany.mockRejectedValueOnce(new Error('Connection lost'));
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'novo@email.com',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('atualizar'),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Etapa C Bloco 4 - executarAcao(ATUALIZAR_CEP_COOPERADO)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('ATUALIZAR_CEP_COOPERADO', conversa, {}, corpo);
+
+    it('SEM cooperadoId: mensagem de cadastro + nao consulta ViaCEP', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: null, cooperativaId: null },
+        '01310100',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('cooperado'),
+      );
+      expect(cepConsultar).not.toHaveBeenCalled();
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('CEP_INVALIDO: pede de novo + NAO transiciona (retry)', async () => {
+      cepConsultar.mockResolvedValueOnce({ status: 'CEP_INVALIDO' });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '123',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('inv'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('CEP ENCONTRADO: autopopula endereco completo + transiciona', async () => {
+      cepConsultar.mockResolvedValueOnce({
+        status: 'ENCONTRADO',
+        endereco: {
+          cep: '01310-100',
+          logradouro: 'Avenida Paulista',
+          bairro: 'Bela Vista',
+          cidade: 'Sao Paulo',
+          estado: 'SP',
+        },
+      });
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '01310-100',
+      );
+
+      expect(cooperadoUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano', cooperativaId: 'coop-A' },
+        data: {
+          cep: '01310-100',
+          logradouro: 'Avenida Paulista',
+          bairro: 'Bela Vista',
+          cidade: 'Sao Paulo',
+          estado: 'SP',
+        },
+      });
+      // Mensagem deve mencionar partes do endereco
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('Avenida Paulista'),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('CEP NAO_ENCONTRADO: pede de novo + NAO transiciona (retry)', async () => {
+      cepConsultar.mockResolvedValueOnce({ status: 'NAO_ENCONTRADO' });
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '00000000',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('encontrado'),
+      );
+      expect(cooperadoUpdateMany).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('ViaCEP FORA_DO_AR: salva so o CEP digitado + mensagem de degradacao + transiciona', async () => {
+      cepConsultar.mockResolvedValueOnce({ status: 'FORA_DO_AR' });
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '01310-100',
+      );
+
+      // Salva so o CEP normalizado, NAO mexe em logradouro/bairro/cidade/estado
+      expect(cooperadoUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'coop-luciano', cooperativaId: 'coop-A' },
+        data: { cep: '01310-100' },
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('01310-100'),
+      );
+      // Transicao acontece mesmo com ViaCEP fora — nao trava o cooperado
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('CEP de cidade sem logradouro/bairro: monta mensagem so com cidade-UF', async () => {
+      cepConsultar.mockResolvedValueOnce({
+        status: 'ENCONTRADO',
+        endereco: {
+          cep: '29900-000',
+          logradouro: '',
+          bairro: '',
+          cidade: 'Linhares',
+          estado: 'ES',
+        },
+      });
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '29900000',
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('Linhares'),
+      );
+    });
+
+    it('Sem cooperativaId conhecida: where soh com id', async () => {
+      cepConsultar.mockResolvedValueOnce({
+        status: 'ENCONTRADO',
+        endereco: {
+          cep: '01310-100',
+          logradouro: 'Av Paulista',
+          bairro: 'Bela Vista',
+          cidade: 'Sao Paulo',
+          estado: 'SP',
+        },
+      });
+      cooperadoUpdateMany.mockResolvedValueOnce({ count: 1 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: null },
+        '01310100',
+      );
+
+      const where = cooperadoUpdateMany.mock.calls[0][0].where;
+      expect(where).toEqual({ id: 'coop-luciano' });
+      expect(where).not.toHaveProperty('cooperativaId');
     });
   });
 });
