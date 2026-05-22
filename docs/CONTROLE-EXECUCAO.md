@@ -1,7 +1,86 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-22 noite — M20 Sprint Bot Autoatendimento Bloco 1.b: ME CHAME DEPOIS**. 2 commits (`99d4d3b` Etapa A motor + `d14876c` Etapa B job) + commit fechamento. Completa família de comandos universais (INÍCIO/SAIR/MENU/**CHAMAR_DEPOIS**) iniciada no M17. Cooperado diz "ME CHAME DEPOIS" → bot calcula `+24h FIXO` (postergado pra 08:00 se fora de 08-18h) + persiste `dadosTemp.retornarEm` + transiciona pra `AGENDADO_RETORNO` + envia confirmação curta. Retorno processado por método novo `processarRetornosAgendados()` no `WhatsappConversaJob` existente (reuso, sem arquivo de cron novo) — filtra 08-18h, transiciona pra `MENU_COOPERADO` ou `INICIAL`. 36 specs novos (23 motor + 13 job NOVO), 184 totais verdes nos arquivos meus. PM2 restart limpo (pid 28984, 0 restarts). Suíte completa 646/657 (11 falhas pré-existentes em cooperados/usinas, idênticas ao M19 — confirmadas via git stash, 0 minhas). **Próximo: Bloco 7 (NPS no fluxo, ~2-3h).** Detalhe: `docs/sessoes/2026-05-22-bloco1b-me-chame-depois.md`.
+> Última atualização: **2026-05-22 noite — M20.1 adendo: Fase 1 read-only Bloco 7 (NPS)**. Sessão curta de investigação pós-M20. Relatório completo em `docs/relatorios/2026-05-22-fase1-bloco7-nps.md` aguardando **5 decisões produto** do Luciano antes da Fase 2. **Achado central:** mais peças prontas do que esperávamos — model `NpsResposta` existe no schema (sem cooperativaId), modelos `nps_recebido`+`nps_aguardando_nota` no banco, handler hardcoded `handleNpsNota` funcional. Mas **nada cabea pra NPS_AGUARDANDO_NOTA hoje** — etapa órfã (gatilhos:[]) e `agendarNps()` é dead code. Recomendação: gatilho wildcard + ação REGISTRAR_NPS + delta aditivo cooperativaId no schema. Estimativa 2-3h (até 3.5h com cooperativaId). **Aproveito o fechamento pra commitar os 3 relatórios de Fase 1 do dia (Bloco 4, Bloco 1.b, Bloco 7) que estavam untracked.** Sem commits de código. **Próximo: Fase 2 Bloco 7 após Luciano bater martelo nas 5 decisões.** Detalhe: `docs/sessoes/2026-05-22-noite-fase1-bloco7-nps.md`.
+
+---
+
+## ONDE PARAMOS — 22/05/2026 noite (Code — M20.1 adendo: Fase 1 read-only Bloco 7 NPS)
+
+### Resumo
+
+Sessão curta de investigação após o fechamento M20. Executei Fase 1
+read-only do Bloco 7 (NPS) — sem código, só relatório. Bloco 7 tem mais
+peças prontas do que esperávamos:
+
+- ✅ Model `NpsResposta` existe (`schema.prisma:1951-1960`) — falta
+  `cooperativaId` + `comentario` (delta aditivo proposto).
+- ✅ Modelos `nps_recebido` (Bloco 2) + `nps_aguardando_nota` (banco) ok.
+- ⚠️ Etapa `NPS_AGUARDANDO_NOTA` existe no seed (ordem 21) mas **órfã**
+  (`gatilhos: []`).
+- ⚠️ `agendarNps()` em `whatsapp-bot.service.ts:3990` é **dead code**
+  (definido nunca chamado).
+- ✅ Handler hardcoded `handleNpsNota` (linhas 4013-4034) funcional.
+- ❌ Estado `NPS_RECEBIDO` não existe — recomendo NÃO criar (ir direto
+  pra MENU_COOPERADO).
+- ❌ Nenhum gatilho cabea pra NPS_AGUARDANDO_NOTA hoje.
+
+### 5 decisões produto pendentes pro Luciano
+
+1. **Disparo NPS no Bloco 7:** (a) só infra (recomendado) / (b) reativar
+   `agendarNps` / (c) listener event / (d) cron trimestral / (e) comando
+   manual.
+2. **`NpsResposta.cooperativaId`** delta aditivo: SIM (recomendado) / NÃO.
+3. **`NpsResposta.comentario` opcional** delta aditivo: SIM agora
+   (recomendado) / NÃO.
+4. **Estado pós-NPS:** (X) MENU_COOPERADO (recomendado) / (Y) CONCLUIDO.
+5. **Gatilho:** wildcard `*` (recomendado por unanimidade) / 11 gatilhos
+   0..10.
+
+### Proposta de desenho (assumindo recomendações)
+
+- Schema delta aditivo: `cooperativaId String?` + `comentario String?`.
+- Motor: ação `REGISTRAR_NPS` padrão Bloco 4 (guard + valida 0-10 +
+  persiste com cooperativaId + renderiza modelo `nps_recebido` do banco +
+  transiciona MENU_COOPERADO; retry inline se inválido).
+- Script idempotente: UPDATE etapa NPS_AGUARDANDO_NOTA com
+  `modeloMensagemId: nps_aguardando_nota` + gatilho wildcard + acao.
+- Hardcoded preservado como fallback (debt latente catalogado).
+- Specs TDD ~10 cenários.
+
+### Estimativa
+
+- 2-2.5h se NÃO adicionar cooperativaId/comentario
+- 3-3.5h se aceitar todas as recomendações
+- Disparo opcional adiciona conforme escolha: (a) +0h / (e) +0.5h / (b)
+  +1-1.5h / (c) ou (d) +2-3h
+
+### Catalogações novas (não-bloqueantes, no relatório)
+
+- `agendarNps()` dead code com texto não multi-tenant + setTimeout
+  frágil — sugerir remover quando decidir disparo
+- Modelo `nps_trimestral` órfão em `seed-fluxo-padrao.ts:138-144` — sem
+  caller; reaproveita (opção d) ou remove em Sprint Housekeeping
+- Divergência comportamento hardcoded (CONCLUIDO) vs dinâmico proposto
+  (MENU_COOPERADO) — debt latente Sprint Housekeeping
+
+### Validação
+
+- Decisão 23 ATIVA — zero edits, zero builds, zero schema/banco. Apenas
+  leitura + relatório. Pré-validações OK.
+- Decisão 14 — grep amplo confirmou estado real do NPS no projeto.
+- 184 specs verdes nos meus arquivos mantidos do M20 (sem regressão).
+
+### Aproveitamento do fechamento M20.1
+
+Commitando junto os 3 relatórios de Fase 1 do dia que estavam untracked:
+- `docs/relatorios/2026-05-22-fase1-bloco4-atualizar-cadastro.md`
+- `docs/relatorios/2026-05-22-fase1-bloco1b-me-chame-depois.md`
+- `docs/relatorios/2026-05-22-fase1-bloco7-nps.md` (atual)
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 22/05 noite no fechamento M20.1).
 
 ---
 
@@ -774,68 +853,70 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M20 da sessão 22/05 noite
-   (mensagem começa com "docs(sessao): fechamento M20 — Bloco 1.b Sprint Bot Autoatendimento").
-   Penúltimo commit é `d14876c` (Etapa B — processarRetornosAgendados no job).
+   Esperado: working tree limpo, último commit é o de fechamento M20.1 da sessão 22/05 noite
+   (mensagem começa com "docs(sessao): fechamento M20.1 — Fase 1 Bloco 7 NPS").
+   Penúltimo commit é `6467077` (fechamento M20 — Bloco 1.b ME CHAME DEPOIS).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 22/05 noite entregou M20 (Bloco 1.b do Sprint Bot
-Autoatendimento: ME CHAME DEPOIS). 2 commits (99d4d3b motor + d14876c job)
-+ commit fechamento. Família universal de navegação completa
-(INÍCIO/SAIR/MENU/CHAMAR_DEPOIS). 184 specs verdes (158 motor + 13 job NOVO
-+ 13 CEP). PM2 restart limpo (pid 28984, 0 restarts). Suíte completa
-646/657 (11 falhas pré-existentes em cooperados/usinas, idênticas ao M19 —
-confirmadas via git stash; 0 causadas por esta sessão).
+PASSO 1 — Sessão 22/05 noite teve 2 marcos: M20 (Bloco 1.b ME CHAME DEPOIS,
+implementado) + M20.1 adendo (Fase 1 read-only Bloco 7 NPS, só investigação).
+FASE 1 DO BLOCO 7 JÁ FOI FEITA — relatório completo em
+`docs/relatorios/2026-05-22-fase1-bloco7-nps.md` com desenho proposto e 5
+decisões produto pendentes. NÃO repita a Fase 1 — releia o relatório e
+prossiga direto pra empacotar Fase 2 após o Luciano bater martelo nas 5
+decisões.
 
-PRÓXIMO PASSO — BLOCO 7 (NPS no fluxo, ~2-3h). Ordem definida pelo Luciano:
-1.b ✅ → 7 → 6.
+PRÓXIMO PASSO — BLOCO 7 (NPS no fluxo, estimativa 3-3.5h se aceitar todas
+as recomendações). Ordem definida pelo Luciano: 1.b ✅ → 7 (próximo) → 6.
 
-OBJETIVO: ativar a etapa NPS_AGUARDANDO_NOTA com gatilhos "0"..."10" → estado
-NPS_RECEBIDO (etapa nova, modelo `nps_recebido` já existe no Bloco 2 commit
-1097f72). Persistir a nota num model NPS (a verificar se existe ou criar
-estrutura mínima).
+5 DECISÕES PRODUTO PENDENTES (detalhe em
+`docs/relatorios/2026-05-22-fase1-bloco7-nps.md` §8):
 
-INVESTIGAR ANTES DE FASE 2 (Fase 1 read-only obrigatória se algum item
-faltar):
-- Existe model `Nps` (ou similar) no `schema.prisma`? Se SIM, qual a
-  estrutura (campos esperados: id, cooperadoId, nota Int 0-10, cooperativaId,
-  comentario String?, createdAt). Se NÃO, decidir entre criar model dedicado
-  (delta aditivo) ou reusar `Notificacao` genérica (não recomendado — nota
-  numérica precisa de int separado, não cabe bem em titulo/mensagem).
-- Estado NPS_AGUARDANDO_NOTA já está ativo no banco como FluxoEtapa?
-  (Bloco 2 inseriu o modelo de mensagem `nps_recebido` em 21/05 commit
-  1097f72 mas a etapa-pai NPS_AGUARDANDO_NOTA pode ainda estar inativa
-  ou nem existir.)
-- Em que ponto do fluxo NPS é solicitado? Após cobrança paga? Após
-  encerramento de atendimento? Cron? Investigar se já existe gatilho que
-  cabea pra NPS_AGUARDANDO_NOTA.
+1. Disparo NPS: (a) só infra recomendado / (b) reativar agendarNps /
+   (c) listener event-based / (d) cron trimestral / (e) comando manual.
+2. NpsResposta ganha cooperativaId? SIM recomendado / NÃO.
+3. NpsResposta ganha comentario opcional? SIM agora recomendado / NÃO.
+4. Estado pós-NPS: (X) MENU_COOPERADO recomendado / (Y) CONCLUIDO.
+5. Wildcard `*` (recomendado por unanimidade) ou 11 gatilhos 0..10.
+
+ACHADOS FASE 1 (resumo — detalhe no relatório):
+- Model NpsResposta JÁ EXISTE (schema.prisma:1951) — falta cooperativaId
+- Etapa NPS_AGUARDANDO_NOTA existe no seed mas órfã (gatilhos:[])
+- Modelos nps_recebido + nps_aguardando_nota no banco
+- Handler hardcoded handleNpsNota funcional
+- agendarNps é dead code (sem caller, texto não multi-tenant, setTimeout
+  frágil) — NÃO reativar; preferir caminho próprio se decidir (c)/(d)
+- Modelo nps_trimestral órfão em seed-fluxo-padrao.ts (sem caller)
+- Estado NPS_RECEBIDO NÃO existe — recomendo NÃO criar (mensagem de
+  agradecimento é parte da ação, transiciona direto pra MENU_COOPERADO)
+
+PROPOSTA DE DESENHO BLOCO 7 (assumindo recomendações):
+- Schema delta aditivo via prisma db push: cooperativaId + comentario
+  opcionais.
+- Motor: nova ação REGISTRAR_NPS no executarAcao() padrão Bloco 4
+  (valida parseInt 0-10, persiste com cooperativaId, renderiza modelo
+  nps_recebido do banco com vars, transiciona MENU_COOPERADO, retry
+  inline se nota inválida).
+- Script idempotente fix-bloco-7-nps-no-fluxo.ts: UPDATE etapa
+  NPS_AGUARDANDO_NOTA com modeloMensagemId nps_aguardando_nota +
+  gatilho wildcard com acao REGISTRAR_NPS. NÃO cria NPS_RECEBIDO.
+- Hardcoded handleNpsNota preservado como fallback (debt latente
+  catalogado: divergência CONCLUIDO vs MENU_COOPERADO).
+- Specs TDD ~10 cenários (nota válida 0/10/inválida + retry + sem
+  cooperadoId + multi-tenant + modelo ausente + erro Prisma).
 
 PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (de M19 Bloco 4 + M20 Bloco 1.b):
 - Fluxo de 2 turnos (cooperado responde → ação processa): etapa
   AGUARDANDO_* com gatilho `*` + acao no gatilho → motor delega pra ação
   via Gatilho.acao (Etapa A Bloco 4 M19).
-- Bloco 7 NPS é 2 turnos: cooperado digita "8" → gatilho casa "8" →
-  ação REGISTRAR_NPS dispara com `corpo` "8". Pode ter 11 gatilhos
-  (0..10) cada um proximoEstado MENU_COOPERADO + acao REGISTRAR_NPS, OU
-  1 gatilho wildcard `*` com acao REGISTRAR_NPS que valida internamente
-  se corpo está em 0..10 (mais limpo).
-- Ação REGISTRAR_NPS: guard cooperadoId + valida corpo numerico 0-10 +
-  prisma.nps.create defensivo + envia confirmação (modelo
-  `nps_recebido` do banco renderizado COM vars) + transiciona pra
-  MENU_COOPERADO.
-- Specs TDD: regex válido / nota fora de 0-10 (retry) / sucesso /
-  multi-tenant / cooperadoId ausente.
-- Veja whatsapp-fluxo-motor.service.ts:
-  - cases ATUALIZAR_NOME/EMAIL/CEP_COOPERADO (~linhas 760-1000) — padrão
-    ação 2 turnos.
-  - case CHAMAR_DEPOIS no executarComandoUniversalReal — padrão estado
-    quase-terminal.
+- Padrão Bloco 4 (ATUALIZAR_NOME/EMAIL/CEP_COOPERADO ~linhas 760-1000)
+  é referência direta pra REGISTRAR_NPS.
 
-ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23) pra
-mapear estado atual de NPS no schema + fluxo + decidir se cria model novo
-ou estende. Reporte com decisão produto pendente (se houver).
+ANTES de Fase 2: Luciano bate martelo nas 5 decisões → eu empacoto prompt
+Fase 2 → executo TDD em 3 etapas (schema + ação + script banco + commit
+a cada etapa) + ritual PM2 ao final. Sem Fase 1 nova (já feita).
 
 DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 7):
 - Bloco 5 (Atualizar Contrato): ação automática vs solicitação humana
