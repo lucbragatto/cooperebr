@@ -1,7 +1,53 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-22 noite — M19 Sprint Bot Autoatendimento Bloco 4: Atualizar Cadastro (Nome / Email / CEP)**. 5 commits Bloco 4 (`9a32424` Etapa A + `76232e4` Etapa B + `c1dcc8c` Etapa C + `4ef82b7` Etapa D + `780082d` Etapa E) + commit fechamento. **Mudança arquitetural fundacional:** motor passou a processar `Gatilho.acao` e `executarAcao()` ganhou 4º parâmetro `corpo` — destrava Blocos 5-8 (também 2 turnos). **Novo módulo** `backend/src/common/cep/` (CepService com ViaCEP + degradação graciosa, 13/13 specs). **3 ações novas** (`ATUALIZAR_NOME/EMAIL/CEP_COOPERADO`) com defense in depth multi-tenant via `updateMany` + retry no email (P2002 com sugestão `+CoopereBR@gmail.com`). **Telefone REMOVIDO** do bot (decisão Luciano por risco operacional). 39 specs novos verdes (era 109, agora 148 totais). Script idempotente aplicado no banco DEV (3 etapas globais novas + gatilhos ATUALIZACAO_CADASTRO realinhados). PM2 restart limpo (pid 37104, 0 restarts). **Próximo: a definir entre Bloco 5 / Bloco 1.b / Bloco 7 do Sprint Bot Autoatendimento (~13-25h restantes).** Detalhe: `docs/sessoes/2026-05-22-bloco4-atualizar-cadastro.md`.
+> Última atualização: **2026-05-22 noite — M20 Sprint Bot Autoatendimento Bloco 1.b: ME CHAME DEPOIS**. 2 commits (`99d4d3b` Etapa A motor + `d14876c` Etapa B job) + commit fechamento. Completa família de comandos universais (INÍCIO/SAIR/MENU/**CHAMAR_DEPOIS**) iniciada no M17. Cooperado diz "ME CHAME DEPOIS" → bot calcula `+24h FIXO` (postergado pra 08:00 se fora de 08-18h) + persiste `dadosTemp.retornarEm` + transiciona pra `AGENDADO_RETORNO` + envia confirmação curta. Retorno processado por método novo `processarRetornosAgendados()` no `WhatsappConversaJob` existente (reuso, sem arquivo de cron novo) — filtra 08-18h, transiciona pra `MENU_COOPERADO` ou `INICIAL`. 36 specs novos (23 motor + 13 job NOVO), 184 totais verdes nos arquivos meus. PM2 restart limpo (pid 28984, 0 restarts). Suíte completa 646/657 (11 falhas pré-existentes em cooperados/usinas, idênticas ao M19 — confirmadas via git stash, 0 minhas). **Próximo: Bloco 7 (NPS no fluxo, ~2-3h).** Detalhe: `docs/sessoes/2026-05-22-bloco1b-me-chame-depois.md`.
+
+---
+
+## ONDE PARAMOS — 22/05/2026 noite (Code — M20 Sprint Bot Autoatendimento: Bloco 1.b ME CHAME DEPOIS)
+
+### Marcos entregues nesta sessão (2 commits + fechamento)
+
+Bloco 1.b do Sprint Bot Autoatendimento ENTREGUE. Completa a família de comandos universais de navegação iniciada no M17 (Bloco 1.a: INÍCIO/SAIR/MENU). O cooperado agora pode pausar a conversa em qualquer etapa dizendo "ME CHAME DEPOIS" — o bot agenda retorno em +24h dentro do horário comercial 08-18h.
+
+- **Etapa A — Motor** (`99d4d3b`) — `detectarComandoUniversal` ganha 4º retorno `'CHAMAR_DEPOIS'` com 6 sinônimos (`ME CHAME DEPOIS`, `CHAME DEPOIS`, `ME LIGA DEPOIS`, `VOLTAR DEPOIS`, `OUTRA HORA`, `MAIS TARDE`). `DEPOIS` sozinho NÃO casa (evita falso positivo). `executarComandoUniversalReal` ganha case análogo ao SAIR: persiste `dadosTemp.retornarEm` + transiciona pra `AGENDADO_RETORNO` + envia "Beleza! Volto a te chamar amanhã neste horário. 👋". Helper privado `calcularRetornarEm()`: +24h, posterga pra 08:00 se cair fora de 08-18h, sábado/domingo aceitos. Simulador ganha case CHAMAR_DEPOIS com `avisoTransicao` explicativo. 23 specs novos.
+- **Etapa B — Job** (`d14876c`) — `WhatsappConversaJob` ganha `WhatsappSenderService` no constructor + novo `@Cron(EVERY_HOUR) processarRetornosAgendados()`: filtra horário comercial 08-18h (early return se fora), varre conversas `AGENDADO_RETORNO`, pula se `retornarEm` ausente/inválido/futuro, processa se passado — transiciona pra `MENU_COOPERADO` (cooperado) ou `INICIAL` (lead) + envia "Voltei como combinado. 👋 Em que posso ajudar?". Try/catch por conversa (erro em uma não interrompe loop). `resetarConversasInativas` ganha guard defensivo `AND: [{ startsWith: 'AGUARDANDO_' }, { notIn: ['AGENDADO_RETORNO', 'ENCERRADO'] }]`. Spec NOVO `whatsapp-conversa.job.spec.ts` com 13 cenários.
+
+### Decisões de produto Luciano (22/05 noite — todas no prompt da Fase 2)
+
+1. **+24h FIXO** (sem sub-menu de prazos)
+2. **Volta pro MENU_COOPERADO** ou INICIAL ao retornar — NÃO persiste `estadoAnterior` (contexto de 24h+ esfriou)
+3. **Respeitar horário comercial 08-18h** (motor posterga + cron filtra)
+4. **Sábado/domingo aceitos** (filtro 08-18h cobre hora do dia, não dia da semana)
+5. **NÃO incluir "DEPOIS" sozinho** nos sinônimos (evita falso positivo)
+6. **Reuso do `WhatsappConversaJob`** existente (sem arquivo de cron novo, sem tabela)
+
+### Validação
+
+- **158/158 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 135, +23)
+- **13/13 specs verdes** em `whatsapp-conversa.job.spec.ts` (arquivo NOVO)
+- **13/13 specs verdes** em `cep.service.spec.ts` (sem mudança)
+- **184 specs totais** nos arquivos tocados
+- `nest build` limpo
+- PM2 restart limpo (pid 28984, 0 restarts)
+- Backend logs: `Nest application successfully started + Backend rodando na porta 3000`
+- Suíte Jest completa: **646/657** (11 falhas pré-existentes em cooperados/usinas — idênticas às do M19, confirmadas via `git stash`. 0 falhas causadas por esta sessão)
+
+### Pendências carry-over (decisões produto pro Luciano)
+
+- Próximo bloco: **Bloco 7 NPS** (ordem definida pelo Luciano: 1.b → 7 → 6)
+- Bloco 5 Atualizar Contrato: ação automática vs solicitação humana (decisão pendente)
+- Bloco 8 Menu Fatura / Menu Inadimplente: dinâmico vs hardcoded (decisão pendente)
+- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL (carry-over M16/M17)
+- `{{distribuidora}}` vazia em `AGUARDANDO_DISPOSITIVO_EMAIL`
+- Horário hardcoded em `aguardando_atendente`
+- Variáveis-fantasma na UI ModalMensagem
+- 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers) — investigar em sprint separado
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 22/05 noite fechamento M20 Bloco 1.b).
 
 ---
 
@@ -728,67 +774,81 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M19 da sessão 22/05 noite
-   (mensagem começa com "docs(sessao): fechamento M19 — Bloco 4 Sprint Bot Autoatendimento").
-   Penúltimo commit é `780082d` (Etapa E — script idempotente Bloco 4).
+   Esperado: working tree limpo, último commit é o de fechamento M20 da sessão 22/05 noite
+   (mensagem começa com "docs(sessao): fechamento M20 — Bloco 1.b Sprint Bot Autoatendimento").
+   Penúltimo commit é `d14876c` (Etapa B — processarRetornosAgendados no job).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 22/05 entregou M19 (Bloco 4 do Sprint Bot Autoatendimento:
-Atualizar Cadastro Nome/Email/CEP + mudança arquitetural Gatilho.acao + CepService).
-5 commits empacotados (9a32424 + 76232e4 + c1dcc8c + 4ef82b7 + 780082d) +
-commit fechamento. 148 specs verdes (135 motor + 13 CepService). Telefone
-REMOVIDO do bot (decisão Luciano por risco operacional). PM2 restart limpo
-(pid 37104, 0 restarts). Suíte completa tem 4 falhas pré-existentes em
-cooperados/usinas controllers (NÃO causadas por esta sessão — confirmado via
-git stash).
+PASSO 1 — Sessão 22/05 noite entregou M20 (Bloco 1.b do Sprint Bot
+Autoatendimento: ME CHAME DEPOIS). 2 commits (99d4d3b motor + d14876c job)
++ commit fechamento. Família universal de navegação completa
+(INÍCIO/SAIR/MENU/CHAMAR_DEPOIS). 184 specs verdes (158 motor + 13 job NOVO
++ 13 CEP). PM2 restart limpo (pid 28984, 0 restarts). Suíte completa
+646/657 (11 falhas pré-existentes em cooperados/usinas, idênticas ao M19 —
+confirmadas via git stash; 0 causadas por esta sessão).
 
-PRÓXIMO PASSO — A DEFINIR COM O LUCIANO. Opções do Sprint Bot Autoatendimento
-restante (~13-25h):
+PRÓXIMO PASSO — BLOCO 7 (NPS no fluxo, ~2-3h). Ordem definida pelo Luciano:
+1.b ✅ → 7 → 6.
 
-- Bloco 1.b — ME CHAME DEPOIS (~3-5h, exige job de reagendamento)
-- Bloco 5 — Atualizar Contrato (~4-6h) — REQUER decisão produto antes:
-  ação automática (motor altera contrato direto) vs solicitação humana
-  (motor cria ticket, equipe valida e aplica)
-- Bloco 6 — Cadastro Proxy (~6-8h, 4 modelos prontos no Bloco 2)
-- Bloco 7 — NPS no fluxo (~2-3h, modelo `nps_recebido` pronto)
-- Bloco 8 — Menu Fatura / Menu Inadimplente (~4-6h) — REQUER decisão
-  produto antes: dinâmico no motor vs manter hardcoded
+OBJETIVO: ativar a etapa NPS_AGUARDANDO_NOTA com gatilhos "0"..."10" → estado
+NPS_RECEBIDO (etapa nova, modelo `nps_recebido` já existe no Bloco 2 commit
+1097f72). Persistir a nota num model NPS (a verificar se existe ou criar
+estrutura mínima).
 
-RECOMENDAÇÃO de leveza pra cadência: Bloco 7 (NPS, 2-3h) ou Bloco 1.b
-(ME CHAME DEPOIS, 3-5h) — entregam valor sem decisão produto bloqueante.
-Bloco 5 e 8 ficam pra quando você tiver decidido o modelo (ação automática
-vs solicitação / dinâmico vs hardcoded).
+INVESTIGAR ANTES DE FASE 2 (Fase 1 read-only obrigatória se algum item
+faltar):
+- Existe model `Nps` (ou similar) no `schema.prisma`? Se SIM, qual a
+  estrutura (campos esperados: id, cooperadoId, nota Int 0-10, cooperativaId,
+  comentario String?, createdAt). Se NÃO, decidir entre criar model dedicado
+  (delta aditivo) ou reusar `Notificacao` genérica (não recomendado — nota
+  numérica precisa de int separado, não cabe bem em titulo/mensagem).
+- Estado NPS_AGUARDANDO_NOTA já está ativo no banco como FluxoEtapa?
+  (Bloco 2 inseriu o modelo de mensagem `nps_recebido` em 21/05 commit
+  1097f72 mas a etapa-pai NPS_AGUARDANDO_NOTA pode ainda estar inativa
+  ou nem existir.)
+- Em que ponto do fluxo NPS é solicitado? Após cobrança paga? Após
+  encerramento de atendimento? Cron? Investigar se já existe gatilho que
+  cabea pra NPS_AGUARDANDO_NOTA.
 
-PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido em M19):
-- Fluxo de 2 turnos = etapa AGUARDANDO_* com gatilho wildcard '*' +
-  acao no gatilho (NÃO acaoAutomatica na etapa) → motor delega controle
-  pra ação via Gatilho.acao (Etapa A do Bloco 4)
-- Ação privada padrão: guard cooperadoId + validar corpo + updateMany
-  defense in depth multi-tenant + mensagens hardcoded + transição pra
-  MENU_COOPERADO ou retry no estado atual (validação falhou)
-- Specs TDD: 1 cenário sem cooperadoId + 1 validação inválida (retry) +
-  1 sucesso + 1 multi-tenant + 1 erro específico do domínio
-- Veja `whatsapp-fluxo-motor.service.ts` cases ATUALIZAR_NOME/EMAIL/
-  CEP_COOPERADO (~linhas 760-1000) como referência viva
+PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (de M19 Bloco 4 + M20 Bloco 1.b):
+- Fluxo de 2 turnos (cooperado responde → ação processa): etapa
+  AGUARDANDO_* com gatilho `*` + acao no gatilho → motor delega pra ação
+  via Gatilho.acao (Etapa A Bloco 4 M19).
+- Bloco 7 NPS é 2 turnos: cooperado digita "8" → gatilho casa "8" →
+  ação REGISTRAR_NPS dispara com `corpo` "8". Pode ter 11 gatilhos
+  (0..10) cada um proximoEstado MENU_COOPERADO + acao REGISTRAR_NPS, OU
+  1 gatilho wildcard `*` com acao REGISTRAR_NPS que valida internamente
+  se corpo está em 0..10 (mais limpo).
+- Ação REGISTRAR_NPS: guard cooperadoId + valida corpo numerico 0-10 +
+  prisma.nps.create defensivo + envia confirmação (modelo
+  `nps_recebido` do banco renderizado COM vars) + transiciona pra
+  MENU_COOPERADO.
+- Specs TDD: regex válido / nota fora de 0-10 (retry) / sucesso /
+  multi-tenant / cooperadoId ausente.
+- Veja whatsapp-fluxo-motor.service.ts:
+  - cases ATUALIZAR_NOME/EMAIL/CEP_COOPERADO (~linhas 760-1000) — padrão
+    ação 2 turnos.
+  - case CHAMAR_DEPOIS no executarComandoUniversalReal — padrão estado
+    quase-terminal.
 
-ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23) se o
-próximo bloco mexer em estado novo do sistema. Para blocos com escopo já
-conhecido (NPS modelo pronto, ME CHAME DEPOIS reusa job), confirme o
-escopo com o Luciano antes de Fase 2.
+ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23) pra
+mapear estado atual de NPS no schema + fluxo + decidir se cria model novo
+ou estende. Reporte com decisão produto pendente (se houver).
 
-DECISOES PENDENTES PRO LUCIANO (carry-over M17/M18/M19 — não bloqueiam
-escolha do próximo bloco):
+DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 7):
+- Bloco 5 (Atualizar Contrato): ação automática vs solicitação humana
+- Bloco 8 (Menu Fatura): dinâmico vs hardcoded
 - Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
 - {{distribuidora}} vazia em AGUARDANDO_DISPOSITIVO_EMAIL
 - Horário hardcoded em aguardando_atendente
 - Variáveis-fantasma na UI ModalMensagem
-- 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers) —
-  investigar em sprint separado (provavelmente fixtures TestingModule)
+- 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers)
 
 CARRY-OVERS catalogados:
-- Blocos 1.b, 5, 6, 7, 8 do Sprint Bot Autoatendimento (~13-25h restantes)
+- Sprint Bot Autoatendimento restante: Bloco 7 (próximo) → Bloco 6 → 5 → 8
+  (~10-19h estimados)
 - M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do sprint atual)
 - Cadastrar usina cooperebr2 (depende M15)
 - Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q)
@@ -820,6 +880,9 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
 - Padrão Bloco 3 (1 turno): acaoAutomatica na etapa-destino + modelo do
   banco renderizado COM vars dinâmicas + rodapé universal anexado +
   increment uso do modelo
+- Padrão Bloco 1.b (M20 — estado quase-terminal): comando universal +
+  branch dedicado em executarComandoUniversalReal/Simulado + cron
+  reusando WhatsappConversaJob @EVERY_HOUR com filtro horario comercial
 - Ritual PM2 obrigatório pra rebuild/seed/scripts no banco:
   pm2 stop → npm run build → script → pm2 restart → pm2 list (confirmar)
 ```
