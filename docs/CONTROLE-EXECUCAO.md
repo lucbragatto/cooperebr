@@ -1,7 +1,36 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-21 noite — M18 Sprint Bot Autoatendimento Bloco 3: Ver saldo + Ver fatura**. 5 commits empacotados (3d3e8c4 + 6fb2571 + 7f1f885 + 8fd1dd1) + commit fechamento. Bloco 3 ENTREGUE — 2 ações novas no motor (CONSULTAR_SALDO_CREDITOS + CONSULTAR_PROXIMA_FATURA), 2 estados/etapas globais, 2 modelos globais, gatilhos 1/2 do MENU_COOPERADO repointados. **Opção C aprovada por Luciano** (plano + saldo distribuidora com rótulos separados). 2 débitos novos catalogados (D-novo-U bug status hardcoded P2 + D-novo-V engine de template P3). 109/109 specs verdes (era 89). Premissa corrigida na abertura: "saldo de créditos" = créditos de ENERGIA (kWh) da distribuidora via OCR, NÃO tokens CooperToken. **Próximo marco: Bloco 4 do Sprint Bot Autoatendimento — Atualizar Cadastro (4 etapas AGUARDANDO_NOVO_* + ações persistentes, ~6-8h).** Detalhe: `docs/sessoes/2026-05-21-bloco3-ver-saldo-ver-fatura.md`.
+> Última atualização: **2026-05-22 — sessão curta de catalogação (sem código)**. Pivot estratégico iniciado (preparação de branch `feature/monitoramento-protecao` pra integrar relé) e CANCELADO pelo Luciano na mesma sessão. Decisão: documentar arquitetura da integração primeiro + aguardar vistoria de campo do relé antes de mexer em schema. Catalogado como **feature futura Opção A** (alimentar SISGD com tabelas novas de proteção) — memória `feature_futura_monitoramento_protecao_22_05.md` + Sugestão #9 em `sugestoes_pendentes.md`. Decisão 14 aplicada (grep amplo confirmou tema livre). NÃO houve commit de código, NÃO houve branch criada, NÃO houve mudança de schema. **Próximo passo permanece: Bloco 4 do Sprint Bot Autoatendimento — Atualizar Cadastro (FRASE DE RETOMADA do M18 intacta).** Detalhe: `docs/sessoes/2026-05-22-pivot-cancelado-rele-catalogado.md`.
+
+---
+
+## ONDE PARAMOS — 22/05/2026 (Code — sessão curta de catalogação)
+
+### Resumo
+
+Sessão de decisão + catalogação, sem código. Abertura via `/abertura` (ritual de retomada canônica completo). Luciano pediu preparação de branch `feature/monitoramento-protecao` pra trabalho novo de monitoramento de proteção (relé). Code mapeou estado (main limpo, 27 untracked esperados carry-over) e alertou sobre pivot fora do roadmap. Luciano pausou o pivot — vai documentar arquitetura primeiro + aguardar vistoria de campo do relé. Tema catalogado como feature futura, **Bloco 4 do Sprint Bot Autoatendimento permanece como próximo passo**.
+
+### Catalogamentos
+
+- Memória persistente nova: `feature_futura_monitoramento_protecao_22_05.md`
+- Sugestão #9 em `sugestoes_pendentes.md` (Monitoramento de Proteção Relé — Opção A)
+- MEMORY.md atualizado
+- Doc-sessão: `docs/sessoes/2026-05-22-pivot-cancelado-rele-catalogado.md`
+
+### Decisão Luciano 22/05
+
+1. NÃO criar branch `feature/monitoramento-protecao`
+2. Documentar arquitetura da integração primeiro (sessão futura)
+3. Aguardar vistoria de campo do relé antes de mexer em schema
+4. Modelo arquitetural (quando retomar): Opção A — tabelas novas dedicadas, schema delta aditivo
+5. Feature futura fora do roadmap atual
+
+### Frase comandante (próxima sessão)
+
+**FRASE DE RETOMADA do M18 permanece intacta** (Decisão 24 — local único, pivot cancelado não alterou rumo).
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo.
 
 ---
 
@@ -187,6 +216,37 @@ Bloco 3 do Sprint Bot Autoatendimento completou as 2 opções do MENU_COOPERADO 
 > Toda sessão Code abre lendo isto. Toda sessão Code fecha atualizando isto.
 
 ### Última sessão
+
+- **Quando:** 22/05/2026 (Code — sessão curta de catalogação, sem código)
+- **Tipo:** Code (abertura via `/abertura` + pivot iniciado pra relé + pivot CANCELADO pelo Luciano + catalogação como feature futura + fechamento canônico)
+- **Resultado:**
+  - **Sessão SEM código, SEM schema, SEM branch nova, SEM commit de trabalho.** Apenas catalogação documental.
+  - Luciano abriu pedindo preparação de branch `feature/monitoramento-protecao` pra trabalho novo de monitoramento de proteção (relé). Code mapeou estado (main limpo, 27 untracked de carry-over) e alertou sobre pivot fora do roadmap atual.
+  - Luciano PAUSOU o pivot — vai documentar arquitetura da integração primeiro + aguardar vistoria de campo do relé antes de mexer em schema.
+  - **Decisão Luciano:** Opção A (alimentar SISGD com tabelas novas dedicadas, schema delta aditivo) como modelo arquitetural quando retomar. Feature futura fora do roadmap atual.
+  - **Catalogação:** memória persistente `feature_futura_monitoramento_protecao_22_05.md` + Sugestão #9 em `sugestoes_pendentes.md` + MEMORY.md atualizado + doc-sessão.
+  - **Decisão 14 aplicada** — grep amplo confirmou tema "monitoramento de proteção (relé)" livre no projeto (3 matches foram falsos positivos).
+  - **Bloco 4 do Sprint Bot Autoatendimento permanece como próximo passo** — pivot cancelado não alterou rumo. FRASE DE RETOMADA do M18 intacta (Decisão 24).
+- **Commits da sessão (1):** commit deste fechamento (catalogação + doc-sessão + CONTROLE-EXECUCAO atualizado).
+- **Próximo:** **Bloco 4 do Sprint Bot Autoatendimento** — Atualizar Cadastro (~6-8h Code). Inalterado.
+- **Detalhe:** `docs/sessoes/2026-05-22-pivot-cancelado-rele-catalogado.md`
+
+### Sessão anterior
+
+- **Quando:** 21/05/2026 noite (Code — M18 Sprint Bot Autoatendimento: Bloco 3 Ver saldo + Ver fatura)
+- **Tipo:** Code (Fase 1 read-only + decisões produto + Fase 2 implementação 2 ações no motor + script idempotente + seed alinhado + 2 débitos catalogados)
+- **Resultado:**
+  - Bloco 3 ENTREGUE — 2 ações novas no motor (`CONSULTAR_SALDO_CREDITOS` + `CONSULTAR_PROXIMA_FATURA`), 2 estados/etapas globais (`VER_SALDO_CREDITOS` ordem 50 + `VER_PROXIMA_FATURA` ordem 51), 2 modelos globais (`saldo_creditos_resultado` + `proxima_fatura_resultado`), gatilhos "1" e "2" do `MENU_COOPERADO` repointados (campo `acao` órfão removido).
+  - **Premissa corrigida na abertura:** "saldo de créditos" = créditos de ENERGIA (kWh) da distribuidora via OCR, NÃO tokens CooperToken. Vivem em `FaturaProcessada.saldoKwhAtual`.
+  - **Opção C aprovada por Luciano:** plano contratado + saldo distribuidora com rótulos separados. Link Asaas só quando `AsaasCobranca.linkPagamento` existir. `validadeCreditos=null` → linha some. Cooperado sem `cooperadoId` → mensagem amigável.
+  - **D-novo-U catalogado** (P2) — handler hardcoded `whatsapp-bot.service.ts:791-794` usa `status: 'PENDENTE'` mas distribuição real é A_VENCER/VENCIDO/PAGO (PENDENTE=0). Caminho dinâmico do Bloco 3 já corrige.
+  - **D-novo-V catalogado** (P3) — modelos do Bloco 3 com lógica condicional hardcoded nas ações. Solução futura: mini-engine de template `{{#if}}/{{#unless}}` (vinculado a D-novo-T).
+  - **109/109 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 89; +20 novos)
+- **Commits da sessão (5):** `3d3e8c4` motor + `6fb2571` script+seed + `7f1f885` D-novo-U + `8fd1dd1` D-novo-V + `c2dba28` fechamento M18.
+- **Próximo:** **Bloco 4 do Sprint Bot Autoatendimento** — Atualizar Cadastro (~6-8h).
+- **Detalhe:** `docs/sessoes/2026-05-21-bloco3-ver-saldo-ver-fatura.md`
+
+### Sessão anterior 2
 
 - **Quando:** 21/05/2026 (Code — M17 Sprint Bot Autoatendimento: blocos preparatórios)
 - **Tipo:** Code (abertura do Sprint Bot Autoatendimento repriorizado + 4 blocos preparatórios entregues + correção rodapé + 2 relatórios)
