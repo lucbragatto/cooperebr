@@ -2621,6 +2621,83 @@ Aí o admin edita tudo no Banco de Mensagens. Substituiria também o `extrairVar
 
 ---
 
+### D-novo-W — Divergência de comportamento NPS: hardcoded transiciona pra CONCLUIDO, motor dinâmico pra MENU_COOPERADO (P3 polimento)
+
+**Origem:** Bloco 7 do Sprint Bot Autoatendimento, Fase 2 (23/05/2026).
+
+**Contexto:** Antes do Bloco 7, o NPS era atendido APENAS pelo handler hardcoded `handleNpsNota` em `whatsapp-bot.service.ts:4013-4034`, que ao registrar a nota chama `finalizarConversa(conversa.id)` → transiciona estado pra `CONCLUIDO`. Bloco 7 ligou o motor dinâmico via gatilho wildcard + ação `REGISTRAR_NPS` que, ao final, transiciona pra `MENU_COOPERADO` (decisão Luciano 23/05 #4 X — consistente com Blocos 4 e 1.b). Hardcoded preservado como fallback.
+
+**Resultado prático:**
+- Cooperado que cair em `NPS_AGUARDANDO_NOTA` pelo caminho dinâmico (gatilho `AVALIAR` no MENU_COOPERADO ou cron futuro) → após responder nota, volta pro MENU_COOPERADO (continua disponível pra interagir).
+- Cooperado que cair em `NPS_AGUARDANDO_NOTA` por algum gatilho legado/dead code que ainda escape ao motor → cai no hardcoded → vai pro CONCLUIDO (encerra sessão).
+
+**Impacto:** baixo hoje. O motor dinâmico já cobre o caminho oficial (gatilho `AVALIAR` cabeado em MENU_COOPERADO). O hardcoded fica como fallback raro. Mas é divergência semântica — duas pessoas mesmo NPS em momentos diferentes podem ter UX diferente.
+
+**Fix proposto (Sprint Housekeeping):**
+- Trocar `finalizarConversa` por `prisma.conversaWhatsapp.update({estado: 'MENU_COOPERADO'})` no `handleNpsNota` hardcoded. Cooperado fica disponível pra continuar conversa. Consistente com decisão 23/05.
+
+**Custo estimado:** 5 min (1 linha) + smoke.
+
+**Posicionamento:** Sprint Housekeeping (com demais débitos P3 acumulados). Não bloqueia nada hoje.
+
+**Status:** 📋 Catalogado em 2026-05-23. Decisão 14 aplicada: D-novo-W escolhido após grep confirmar próximas letras livres.
+
+---
+
+### D-novo-X — `agendarNps()` em whatsapp-bot.service.ts é dead code (P3 limpeza)
+
+**Origem:** Fase 1 Bloco 7 do Sprint Bot Autoatendimento (22/05/2026), confirmado na Fase 2 (23/05/2026).
+
+**Contexto:** `whatsapp-bot.service.ts:3990-4011` define `private agendarNps(telefone, conversaId)` — `setTimeout` de 1 hora que muda estado pra `NPS_AGUARDANDO_NOTA` e envia pergunta hardcoded. **Grep amplo do backend confirmou ZERO callers.** Função existe mas nunca foi invocada.
+
+**Problemas adicionais (além de ser dead code):**
+1. Texto da pergunta hardcoded `"CoopereBR"` (não usa `{{parceiro}}`) — NÃO multi-tenant.
+2. `setTimeout` no processo Node é FRÁGIL: se backend reiniciar dentro da hora, o NPS agendado é perdido. PM2 restart sumi com o timer.
+3. Acopla "adesão recebida" (texto da pergunta sugere fluxo de cadastro) com NPS genérico.
+
+**Fix proposto (Sprint Housekeeping):**
+- Remover a função `agendarNps` inteira. Quando Luciano decidir disparo automático do NPS (Bloco 7 escolheu opção (a)+(e) — só infra + comando manual), o caminho será listener event-based ou cron persistente (decisões (c)/(d) da Fase 1), NÃO reativar `agendarNps`.
+
+**Custo estimado:** 5 min (delete + ajustar imports se houver).
+
+**Posicionamento:** Sprint Housekeeping.
+
+**Status:** 📋 Catalogado em 2026-05-23.
+
+---
+
+### D-novo-Y — Modelo `nps_trimestral` órfão em seed-fluxo-padrao.ts (P3 limpeza OU reuso futuro)
+
+**Origem:** Fase 1 Bloco 7 do Sprint Bot Autoatendimento (22/05/2026).
+
+**Contexto:** `backend/prisma/seed-fluxo-padrao.ts:138-144` define modelo de mensagem `nps_trimestral` (pergunta NPS após 3 meses de adesão):
+
+```javascript
+{
+  id: 'msg-nps-trimestral',
+  nome: 'nps_trimestral',
+  categoria: 'BOT',
+  conteudo:
+    '📊 Oi {{nome}}!\n\nFaz 3 meses que você é {{tipo_membro}} da {{parceiro}}. ' +
+    'De *0 a 10*, qual a chance de você nos indicar pra um amigo?\n\n' +
+    'Responda apenas com o número. Sua opinião nos ajuda muito! 🙏',
+}
+```
+
+Modelo seedado mas SEM caller no código. Sugere intenção pretérita de cron trimestral pra disparar NPS, nunca implementado.
+
+**Fix proposto (2 opções):**
+- **(a) Reusar pro cron trimestral** — se Luciano decidir opção (d) do disparo do NPS no Bloco 7 (cron trimestral pós-cadastro), o modelo está pronto. **NÃO é débito a remover, é reuso futuro.**
+- **(b) Remover** — se a opção (d) nunca for escolhida, remover do seed em Sprint Housekeeping.
+
+**Custo estimado:** 5 min (delete ou comentário "reservado pra cron trimestral").
+
+**Posicionamento:** Sprint Housekeeping OU Sprint dedicado de disparo automático NPS (depende decisão Luciano).
+
+**Status:** 📋 Catalogado em 2026-05-23.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
