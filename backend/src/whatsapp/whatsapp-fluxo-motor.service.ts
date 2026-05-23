@@ -1238,8 +1238,13 @@ export class WhatsappFluxoMotorService {
       },
     });
     if (modelo) {
+      // Vars manuais (padrao Bloco 3/4 — extrairVariaveis exige dadosTemp na
+      // assinatura, que esta acao nao precisa). Modelo nps_recebido usa
+      // apenas {{parceiro}} hoje.
       const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
-      const vars = this.extrairVariaveis(conversa, cooperativa);
+      const vars: Record<string, string> = {
+        parceiro: cooperativa?.nome ?? 'CoopereBR',
+      };
       const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
       await this.sender.enviarMensagem(conversa.telefone, texto);
       await this.modeloMensagem.incrementarUso(modelo.id);
