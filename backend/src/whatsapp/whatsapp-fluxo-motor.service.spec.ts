@@ -22,6 +22,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const asaasCobrancaFindFirst = jest.fn();
   // Bloco 7 Etapa B (23/05): mock pra acao REGISTRAR_NPS persistir nota.
   const npsRespostaCreate = jest.fn();
+  // Bloco 6 Etapa B/C (23/05): mocks pra fluxo Cadastro Proxy.
+  const cooperadoCreate = jest.fn();
+  const indicacaoCreate = jest.fn();
+  const extrairOcrMock = jest.fn();
+  const motorPropostaCalcularMock = jest.fn();
 
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
@@ -32,7 +37,9 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       findUnique: cooperadoFindUnique,
       update: cooperadoUpdate,
       updateMany: cooperadoUpdateMany,
+      create: cooperadoCreate,
     },
+    indicacao: { create: indicacaoCreate },
     contrato: { findMany: contratoFindMany },
     faturaProcessada: { findFirst: faturaProcessadaFindFirst },
     cobranca: { findFirst: cobrancaFindFirst },
@@ -2206,6 +2213,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         }),
         { foo: 'bar' },
         'Joao Silva Da Cunha',
+        undefined, // Bloco 6 Etapa B: 5o param media (undefined sem midia)
       );
 
       // Motor NAO transicionou estado (acao cuida disso)
@@ -2306,11 +2314,13 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         data: { estado: 'VER_SALDO_CREDITOS' },
       });
       // Motor dispara acaoAutomatica da etapa-destino, agora com 4o param corpo
+      // e 5o param media (undefined nesse caso, sem midia)
       expect(executarAcaoSpy).toHaveBeenCalledWith(
         'CONSULTAR_SALDO_CREDITOS',
         expect.objectContaining({ id: 'c1' }),
         undefined,
         '1',
+        undefined,
       );
 
       executarAcaoSpy.mockRestore();
@@ -2894,6 +2904,299 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   //  - estado pos-NPS = MENU_COOPERADO (consistente Blocos 4/1.b)
   //  - hardcoded handleNpsNota preservado como fallback (debt catalogado)
   // ============================================================
+  // ============================================================
+  // Bloco 6 Etapa B (23/05) — Extensao do motor pra receber MIDIA.
+  //
+  // CAVEAT da Fase 1 resolvido: o motor era text-only. executarAcao
+  // recebia (acao, conversa, dados, corpo) — sem mediaBase64/mimeType.
+  // Etapa AGUARDANDO_FATURA_PROXY exige receber foto/PDF e disparar OCR.
+  //
+  // Mudancas:
+  // 1. avaliarGatilhoMatch ganha 3o parametro opcional `temMidia`.
+  //    Wildcard '*' casa se (corpo nao-vazio) OU (temMidia=true).
+  //    Mantem comportamento texto: corpo vazio sem midia ainda nao casa.
+  // 2. executarAcao ganha 5o parametro opcional `media?: { base64, mimeType,
+  //    nomeArquivo? }`. Acoes que NAO usam midia ignoram (compatibilidade).
+  //    Acoes tipo PROCESSAR_OCR_* usam.
+  // 3. processarComFluxoDinamico detecta mensagem com tipo='imagem'|'documento'
+  //    + mediaBase64 e propaga pra executarAcao via 5o param. Wildcard com
+  //    midia casa mesmo sem corpo de texto.
+  //
+  // Decisao Luciano 23/05 #1 = (A) estender motor (vs deixar OCR no hardcoded).
+  // Pre-paga qualquer fluxo futuro com imagem/PDF (cadastro inicial, comprovante
+  // de pagamento, etc).
+  //
+  // Decisao TECNICA orquestrador: aceitaMidia POR HEURISTICA (corpo do wildcard
+  // ou ação) — SEM campo novo no schema FluxoEtapa. Justificativa: menos
+  // invasivo, melhor reuso. Etapa que precisa de midia simplesmente tem gatilho
+  // wildcard + acao apropriada.
+  // ============================================================
+  describe('Bloco 6 Etapa B - avaliarGatilhoMatch() aceita midia', () => {
+    it('Wildcard com corpo vazio + temMidia=true: casa', () => {
+      const r = service.avaliarGatilhoMatch(
+        '',
+        [{ resposta: '*', proximoEstado: 'X', acao: 'PROCESSAR_OCR_PROXY' }],
+        true,
+      );
+      expect(r).toMatchObject({ proximoEstado: 'X', acao: 'PROCESSAR_OCR_PROXY' });
+    });
+
+    it('Wildcard com corpo vazio + temMidia=false: NAO casa (compat texto)', () => {
+      const r = service.avaliarGatilhoMatch(
+        '',
+        [{ resposta: '*', proximoEstado: 'X' }],
+        false,
+      );
+      expect(r).toBeNull();
+    });
+
+    it('Wildcard com corpo vazio sem 3o param: NAO casa (default false — compat)', () => {
+      const r = service.avaliarGatilhoMatch(
+        '',
+        [{ resposta: '*', proximoEstado: 'X' }],
+      );
+      expect(r).toBeNull();
+    });
+
+    it('Wildcard com corpo nao-vazio + temMidia=false: casa (compat texto)', () => {
+      const r = service.avaliarGatilhoMatch(
+        'qualquer texto',
+        [{ resposta: '*', proximoEstado: 'X' }],
+        false,
+      );
+      expect(r).toMatchObject({ proximoEstado: 'X' });
+    });
+
+    it('Gatilho exato com temMidia=true: NAO confunde com midia (match exato vence)', () => {
+      const r = service.avaliarGatilhoMatch(
+        '1',
+        [{ resposta: '1', proximoEstado: 'X' }],
+        true,
+      );
+      expect(r).toMatchObject({ proximoEstado: 'X' });
+    });
+  });
+
+  describe('Bloco 6 Etapa B - processarComFluxoDinamico() propaga midia pra executarAcao', () => {
+    it('Mensagem com tipo=imagem + mediaBase64: passa media pra executarAcao', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'f-proxy-fatura',
+        cooperativaId: null,
+        nome: 'Aguardando Fatura Proxy',
+        ordem: 15,
+        estado: 'AGUARDANDO_FATURA_PROXY',
+        gatilhos: [
+          {
+            resposta: '*',
+            proximoEstado: 'CONFIRMAR_PROXY',
+            acao: 'PROCESSAR_OCR_PROXY',
+          },
+        ],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        {
+          telefone: '+5527981341348',
+          tipo: 'imagem',
+          mediaBase64: 'BASE64FAKE',
+          mimeType: 'image/jpeg',
+          corpo: '',
+        },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'AGUARDANDO_FATURA_PROXY',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+          dadosTemp: { proxyNome: 'Joao' },
+        } as any,
+      );
+
+      expect(executarAcaoSpy).toHaveBeenCalledWith(
+        'PROCESSAR_OCR_PROXY',
+        expect.objectContaining({ id: 'c1' }),
+        { proxyNome: 'Joao' },
+        '',
+        expect.objectContaining({
+          base64: 'BASE64FAKE',
+          mimeType: 'image/jpeg',
+        }),
+      );
+
+      executarAcaoSpy.mockRestore();
+    });
+
+    it('Mensagem com tipo=documento (PDF): passa media com mimeType correto', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'f-proxy-fatura',
+        cooperativaId: null,
+        nome: 'Aguardando Fatura Proxy',
+        ordem: 15,
+        estado: 'AGUARDANDO_FATURA_PROXY',
+        gatilhos: [
+          {
+            resposta: '*',
+            proximoEstado: 'CONFIRMAR_PROXY',
+            acao: 'PROCESSAR_OCR_PROXY',
+          },
+        ],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        {
+          telefone: '+5527981341348',
+          tipo: 'documento',
+          mediaBase64: 'PDFBASE64',
+          mimeType: 'application/pdf',
+          corpo: '',
+        },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'AGUARDANDO_FATURA_PROXY',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+        } as any,
+      );
+
+      const call = executarAcaoSpy.mock.calls[0];
+      expect(call[4]).toMatchObject({
+        base64: 'PDFBASE64',
+        mimeType: 'application/pdf',
+      });
+
+      executarAcaoSpy.mockRestore();
+    });
+
+    it('Mensagem texto puro (sem midia): media param eh undefined', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu',
+        cooperativaId: null,
+        nome: 'Menu',
+        ordem: 1,
+        estado: 'MENU_COOPERADO',
+        gatilhos: [{ resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' }],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'ver-saldo',
+        cooperativaId: null,
+        nome: 'Ver saldo',
+        ordem: 50,
+        estado: 'VER_SALDO_CREDITOS',
+        gatilhos: [],
+        modeloMensagemId: null,
+        acaoAutomatica: 'CONSULTAR_SALDO_CREDITOS',
+        ativo: true,
+      });
+
+      const executarAcaoSpy = jest
+        .spyOn(service as any, 'executarAcao')
+        .mockResolvedValue(undefined);
+
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: '1' },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'MENU_COOPERADO',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+        } as any,
+      );
+
+      // executarAcao chamado, 5o param eh undefined (sem midia)
+      const call = executarAcaoSpy.mock.calls[0];
+      expect(call[4]).toBeUndefined();
+
+      executarAcaoSpy.mockRestore();
+    });
+
+    it('Mensagem com midia em etapa SEM gatilho wildcard: motor nao trata (retorna false)', async () => {
+      etapaFindFirst.mockResolvedValueOnce({
+        id: 'menu',
+        cooperativaId: null,
+        nome: 'Menu',
+        ordem: 1,
+        estado: 'MENU_COOPERADO',
+        gatilhos: [{ resposta: '1', proximoEstado: 'X' }],
+        modeloMensagemId: null,
+        acaoAutomatica: null,
+        ativo: true,
+      });
+
+      const r = await service.processarComFluxoDinamico(
+        {
+          telefone: '+5527981341348',
+          tipo: 'imagem',
+          mediaBase64: 'X',
+          mimeType: 'image/jpeg',
+          corpo: '',
+        },
+        {
+          id: 'c1',
+          telefone: '+5527981341348',
+          estado: 'MENU_COOPERADO',
+          cooperativaId: 'coop-A',
+          cooperadoId: 'coop-luciano',
+        } as any,
+      );
+
+      // Nenhum gatilho casou (corpo vazio + sem wildcard) → motor retorna false
+      expect(r).toBe(false);
+    });
+  });
+
+  describe('Bloco 6 Etapa B - executarAcao() aceita 5o parametro media', () => {
+    it('Acao desconhecida com media: cai no default sem crash (assinatura compativel)', async () => {
+      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+      await (service as any).executarAcao(
+        'ACAO_INEXISTENTE',
+        { id: 'c1', telefone: '+5527981341348', cooperadoId: null, cooperativaId: null },
+        {},
+        '',
+        { base64: 'X', mimeType: 'image/jpeg' },
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Acao desconhecida'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('Acao chamada SEM 5o param (compat): nao crasha', async () => {
+      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+      // Chamada estilo antigo (4 params) deve continuar funcionando
+      await (service as any).executarAcao(
+        'ACAO_INEXISTENTE',
+        { id: 'c1', telefone: '+5527981341348', cooperadoId: null, cooperativaId: null },
+        {},
+        'algum corpo',
+      );
+
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('Bloco 7 Etapa B - executarAcao(REGISTRAR_NPS)', () => {
     const TELEFONE = '+5527981341348';
 

@@ -91,7 +91,18 @@ export class WhatsappFluxoMotorService {
       return false;
     }
 
-    const gatilhoMatch = this.avaliarGatilhoMatch(corpo, etapa.gatilhos);
+    // Bloco 6 Etapa B (23/05): detecta midia na mensagem pra propagar pro
+    // motor + executarAcao. avaliarGatilhoMatch usa temMidia pra wildcard
+    // casar mesmo com corpo vazio (caso AGUARDANDO_FATURA_PROXY).
+    const temMidia =
+      (msg.tipo === 'imagem' || msg.tipo === 'documento') &&
+      !!msg.mediaBase64 &&
+      !!msg.mimeType;
+    const media = temMidia
+      ? { base64: msg.mediaBase64 as string, mimeType: msg.mimeType as string }
+      : undefined;
+
+    const gatilhoMatch = this.avaliarGatilhoMatch(corpo, etapa.gatilhos, temMidia);
 
     if (!gatilhoMatch) {
       this.logger.debug(`Nenhum gatilho bateu para estado "${conversa.estado}" com corpo "${corpo}" - fallback`);
@@ -107,10 +118,13 @@ export class WhatsappFluxoMotorService {
     //   - transicionar conversa.estado pro estado final (ou manter pra retry)
     // Fundacional pros Blocos 4 a 8 (fluxos de 2 turnos onde a acao precisa do
     // texto livre do cooperado).
+    //
+    // Bloco 6 Etapa B (23/05): acoes que aceitam midia recebem 5o param
+    // `media` quando a mensagem trouxe arquivo (imagem/PDF).
     if (gatilhoMatch.acao) {
-      await this.executarAcao(gatilhoMatch.acao, conversa, conversa.dadosTemp, corpo);
+      await this.executarAcao(gatilhoMatch.acao, conversa, conversa.dadosTemp, corpo, media);
       this.logger.log(
-        `Motor dinamico: gatilho.acao "${gatilhoMatch.acao}" disparado em estado "${conversa.estado}" (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`,
+        `Motor dinamico: gatilho.acao "${gatilhoMatch.acao}" disparado em estado "${conversa.estado}" (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'}${temMidia ? ', com midia ' + msg.mimeType : ''})`,
       );
       return true;
     }
@@ -148,7 +162,8 @@ export class WhatsappFluxoMotorService {
       // cooperativaId quando relacionada a entidade tenant-scoped.
       // Etapa A Bloco 4: passa tambem o corpo (texto digitado pelo cooperado)
       // como 4o parametro. Acoes de Bloco 3 ignoram (assinatura compativel).
-      await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp, corpo);
+      // Bloco 6 Etapa B: passa media tambem (5o param) — undefined se sem midia.
+      await this.executarAcao(proximaEtapa.acaoAutomatica, conversa, conversa.dadosTemp, corpo, media);
     }
 
     this.logger.log(`Motor dinamico: ${conversa.estado} -> ${proximoEstado} (telefone: ${msg.telefone}, tenant: ${cooperativaId ?? 'global'})`);
@@ -334,7 +349,8 @@ export class WhatsappFluxoMotorService {
     if (etapaDestino?.acaoAutomatica) {
       // Etapa A Bloco 4: passa corpo vazio - comando universal nao tem texto
       // livre relevante (eh palavra reservada INICIO/MENU/SAIR).
-      await this.executarAcao(etapaDestino.acaoAutomatica, conversa, conversa.dadosTemp, '');
+      // Bloco 6 Etapa B: passa media undefined - comando universal nao trafega midia.
+      await this.executarAcao(etapaDestino.acaoAutomatica, conversa, conversa.dadosTemp, '', undefined);
     }
 
     this.logger.log(`Comando universal ${comando}: ${conversa.estado} -> ${proximoEstado} (conversa ${conversa.id})`);
@@ -408,18 +424,31 @@ export class WhatsappFluxoMotorService {
    * (`processarComFluxoDinamico` + `simular`) pra que o motor possa processar
    * `gatilho.acao` quando definida.
    *
+   * Bloco 6 Etapa B (23/05): 3o parametro opcional `temMidia` permite que
+   * wildcard '*' case mesmo com corpo vazio se a mensagem trouxe imagem/PDF.
+   * Sem `temMidia` (ou false), wildcard mantem semantica antiga (exige texto
+   * nao-vazio). Permite que etapas tipo AGUARDANDO_FATURA_PROXY recebam mídia
+   * via gatilho wildcard + acao PROCESSAR_OCR_*.
+   *
    * `avaliarGatilhos` continua disponivel devolvendo so `proximoEstado` pra
    * preservar API publica (testes legacy + UI).
    */
-  avaliarGatilhoMatch(corpo: string, gatilhos: Gatilho[]): Gatilho | null {
+  avaliarGatilhoMatch(
+    corpo: string,
+    gatilhos: Gatilho[],
+    temMidia?: boolean,
+  ): Gatilho | null {
     if (!gatilhos || gatilhos.length === 0) return null;
 
     const corpoUpper = corpo.toUpperCase().trim();
 
     for (const gatilho of gatilhos) {
       const resposta = (gatilho.resposta ?? '').toUpperCase().trim();
+      // Wildcard casa se corpo nao-vazio OU midia presente (Bloco 6 Etapa B).
       const matched =
-        resposta === '*' ? corpoUpper.length > 0 : corpoUpper === resposta;
+        resposta === '*'
+          ? corpoUpper.length > 0 || temMidia === true
+          : corpoUpper === resposta;
       if (matched) {
         // Normaliza `acao` pra null quando nao definida (ou undefined). Assim
         // chamadores podem comparar com `if (gatilho.acao)` sem dor.
@@ -448,6 +477,10 @@ export class WhatsappFluxoMotorService {
     },
     _dados: any,
     corpo: string,
+    // Bloco 6 Etapa B (23/05): 5o parametro pra acoes que recebem midia
+    // (imagem/PDF). undefined quando mensagem nao traz midia. Acoes que
+    // ignoram midia (Blocos 3/4/7) sao compativeis — parametro opcional.
+    _media?: { base64: string; mimeType: string; nomeArquivo?: string },
   ): Promise<void> {
     try {
       switch (acao) {
