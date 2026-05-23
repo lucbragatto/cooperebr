@@ -52,6 +52,9 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   // Cada teste que usa CEP mocka cepConsultar.mockResolvedValueOnce(...).
   const cepConsultar = jest.fn();
   const cepServiceMock: any = { consultar: cepConsultar };
+  // Bloco 6 Etapa C (23/05): FaturasService injetado pra acao
+  // PROCESSAR_OCR_PROXY. extrairOcrMock retorna DadosExtraidos.
+  const faturasServiceMock: any = { extrairOcr: extrairOcrMock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -60,6 +63,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       modeloMensagemMock,
       senderMock,
       cepServiceMock,
+      faturasServiceMock,
     );
   });
 
@@ -3160,6 +3164,469 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
       // Nenhum gatilho casou (corpo vazio + sem wildcard) → motor retorna false
       expect(r).toBe(false);
+    });
+  });
+
+  // ============================================================
+  // Bloco 6 Etapa C (23/05) — 4 acoes do fluxo Cadastro Proxy.
+  //
+  // Padrao Bloco 4/7 (acao de turno): guard cooperadoId/dadosTemp + validar
+  // input + persistir + transicionar OU retry inline se invalido.
+  //
+  // Fluxo:
+  //  - SALVAR_PROXY_NOME: valida length 3+, dadosTemp.proxyNome, transiciona
+  //    pra CADASTRO_PROXY_TELEFONE.
+  //  - SALVAR_PROXY_TELEFONE: valida 10-13 digitos, prefixa 55, persiste,
+  //    transiciona pra AGUARDANDO_FATURA_PROXY.
+  //  - PROCESSAR_OCR_PROXY: recebe media (Bloco 6 Etapa B), envia
+  //    "Analisando...", chama extrairOcr sincrono, valida consumoAtualKwh>0,
+  //    renderiza modelo proxy_confirmar (vars {{titular}}, {{telefone}}),
+  //    transiciona pra CONFIRMAR_PROXY.
+  //  - CRIAR_COOPERADO_PROXY: cria Cooperado PENDENTE_ASSINATURA +
+  //    cooperadoIndicadorId + cooperativaId + Indicacao formal status
+  //    PENDENTE + JWT 7d + envia WA pro amigo + notifica indicador +
+  //    transiciona MENU_COOPERADO.
+  //
+  // Decisoes Luciano 23/05:
+  //  - cooperativaId herda do indicador (dadosTemp.cooperativaId)
+  //  - Indicacao formal criada AGORA (vs so listener futuro) — defense in
+  //    depth + queries simples
+  //  - Modelo proxy_confirmar mapeia {{titular}}<-proxyNome, {{telefone}}<-
+  //    proxyTelefone (decisao tecnica)
+  // ============================================================
+  describe('Bloco 6 Etapa C - executarAcao(SALVAR_PROXY_NOME)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('SALVAR_PROXY_NOME', conversa, conversa.dadosTemp ?? {}, corpo);
+
+    it('Nome valido: persiste proxyNome em dadosTemp + transiciona CADASTRO_PROXY_TELEFONE', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { indicadorId: 'coop-luciano', cooperativaId: 'coop-A' },
+        },
+        'Joao Silva',
+      );
+
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: {
+          estado: 'CADASTRO_PROXY_TELEFONE',
+          dadosTemp: expect.objectContaining({
+            indicadorId: 'coop-luciano',
+            cooperativaId: 'coop-A',
+            proxyNome: 'Joao Silva',
+          }),
+        },
+      });
+      // Envia confirmacao breve com proximo passo
+      expect(enviarMensagem).toHaveBeenCalled();
+    });
+
+    it('Nome com espaco em volta: trim + persiste', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: {},
+        },
+        '  Maria  ',
+      );
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.dadosTemp.proxyNome).toBe('Maria');
+    });
+
+    it('Nome com menos de 3 chars: erro + NAO transiciona (retry)', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: {},
+        },
+        'Jo',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/nome.*completo/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('dadosTemp ausente: cria novo com proxyNome', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+        },
+        'Pedro',
+      );
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.dadosTemp).toEqual({ proxyNome: 'Pedro' });
+    });
+  });
+
+  describe('Bloco 6 Etapa C - executarAcao(SALVAR_PROXY_TELEFONE)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('SALVAR_PROXY_TELEFONE', conversa, conversa.dadosTemp ?? {}, corpo);
+
+    it('11 digitos sem prefixo 55: prefixa + persiste + transiciona AGUARDANDO_FATURA_PROXY', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao' },
+        },
+        '27999991234',
+      );
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.estado).toBe('AGUARDANDO_FATURA_PROXY');
+      expect(data.dadosTemp.proxyTelefone).toBe('5527999991234');
+    });
+
+    it('13 digitos ja com 55: mantem prefixo', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao' },
+        },
+        '5527999991234',
+      );
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.dadosTemp.proxyTelefone).toBe('5527999991234');
+    });
+
+    it('Texto com simbolos: replace /\\D/g + valida', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao' },
+        },
+        '(27) 99999-1234',
+      );
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.dadosTemp.proxyTelefone).toBe('5527999991234');
+    });
+
+    it('Menos de 10 digitos: erro + NAO transiciona', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao' },
+        },
+        '999',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/inv|DDD/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Mais de 13 digitos: erro + NAO transiciona', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao' },
+        },
+        '12345678901234',
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Bloco 6 Etapa C - executarAcao(PROCESSAR_OCR_PROXY)', () => {
+    const TELEFONE = '+5527981341348';
+    const MIDIA_OK = { base64: 'BASE64FAKE', mimeType: 'image/jpeg' };
+
+    const invocar = (conversa: any, midia?: any) =>
+      (service as any).executarAcao('PROCESSAR_OCR_PROXY', conversa, conversa.dadosTemp ?? {}, '', midia);
+
+    const modeloProxyConfirmar = {
+      id: 'm-proxy-confirmar',
+      nome: 'proxy_confirmar',
+      categoria: 'BOT',
+      conteudo: 'Confere:\n👤 {{titular}}\n📱 {{telefone}}\n\n1️⃣ Cadastrar\n2️⃣ Corrigir',
+      cooperativaId: null,
+    };
+
+    it('Sem midia (param undefined): erro + NAO transiciona (pede foto de novo)', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: { proxyNome: 'Joao', proxyTelefone: '5527999991234' },
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/foto|PDF/i),
+      );
+      expect(extrairOcrMock).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('OCR sucesso + consumoAtualKwh>0: persiste dados + renderiza modelo proxy_confirmar com vars + transiciona CONFIRMAR_PROXY', async () => {
+      extrairOcrMock.mockResolvedValueOnce({
+        consumoAtualKwh: 280,
+        totalAPagar: 350,
+        distribuidora: 'EDP-ES',
+        numeroUC: '12345',
+        mesReferencia: '01/2026',
+      });
+      modeloFindFirst.mockResolvedValueOnce(modeloProxyConfirmar);
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao Silva', proxyTelefone: '5527999991234' },
+        },
+        MIDIA_OK,
+      );
+
+      expect(extrairOcrMock).toHaveBeenCalledWith('BASE64FAKE', 'imagem');
+      // Renderizou modelo com vars {{titular}}/{{telefone}}
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('Joao Silva'),
+      );
+      const callsTexto = enviarMensagem.mock.calls.map((c: any[]) => c[1]).join('\n');
+      expect(callsTexto).toContain('5527999991234');
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ estado: 'CONFIRMAR_PROXY' }),
+      });
+    });
+
+    it('OCR retorna consumoAtualKwh=0: erro "nao parece fatura" + NAO transiciona', async () => {
+      extrairOcrMock.mockResolvedValueOnce({
+        consumoAtualKwh: 0,
+        totalAPagar: 0,
+      });
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao', proxyTelefone: '5527999991234' },
+        },
+        MIDIA_OK,
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/fatura|energia/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('OCR throw: erro generico + NAO transiciona (retry)', async () => {
+      extrairOcrMock.mockRejectedValueOnce(new Error('Claude AI timeout'));
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao', proxyTelefone: '5527999991234' },
+        },
+        MIDIA_OK,
+      );
+
+      expect(enviarMensagem).toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Mimetype invalido (video): erro + NAO chama OCR', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { proxyNome: 'Joao', proxyTelefone: '5527999991234' },
+        },
+        { base64: 'VIDEO', mimeType: 'video/mp4' },
+      );
+
+      expect(extrairOcrMock).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Bloco 6 Etapa C - executarAcao(CRIAR_COOPERADO_PROXY)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('CRIAR_COOPERADO_PROXY', conversa, conversa.dadosTemp ?? {}, '1');
+
+    const dadosTempBase = {
+      proxyNome: 'Joao Silva',
+      proxyTelefone: '5527999991234',
+      indicadorId: 'coop-luciano',
+      indicadorNome: 'Luciano Teste',
+      cooperativaId: 'coop-A',
+    };
+
+    beforeEach(() => {
+      // Garante JWT_SECRET pra testes (jsonwebtoken precisa)
+      process.env.JWT_SECRET = 'test-secret';
+    });
+
+    it('Caminho feliz: cria Cooperado + Indicacao + JWT + envia WA amigo + notifica indicador + transiciona MENU_COOPERADO', async () => {
+      cooperadoCreate.mockResolvedValueOnce({
+        id: 'novo-proxy-1',
+        nomeCompleto: 'Joao Silva',
+      });
+      cooperadoUpdate.mockResolvedValueOnce({ id: 'novo-proxy-1' });
+      indicacaoCreate.mockResolvedValueOnce({ id: 'ind-1' });
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: dadosTempBase,
+      });
+
+      // Cooperado novo PENDENTE_ASSINATURA + cooperadoIndicadorId + cooperativaId
+      expect(cooperadoCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          nomeCompleto: 'Joao Silva',
+          telefone: '5527999991234',
+          status: 'PENDENTE_ASSINATURA',
+          cooperadoIndicadorId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+        }),
+      });
+
+      // Indicacao formal criada com status PENDENTE
+      expect(indicacaoCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          cooperativaId: 'coop-A',
+          cooperadoIndicadorId: 'coop-luciano',
+          cooperadoIndicadoId: 'novo-proxy-1',
+          status: 'PENDENTE',
+        }),
+      });
+
+      // JWT update no Cooperado novo
+      expect(cooperadoUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'novo-proxy-1' },
+          data: expect.objectContaining({
+            tokenAssinatura: expect.any(String),
+          }),
+        }),
+      );
+
+      // WA pro amigo (proxyTelefone) + notificacao pro indicador (TELEFONE)
+      const destinos = enviarMensagem.mock.calls.map((c: any[]) => c[0]);
+      expect(destinos).toContain('5527999991234'); // proxy
+      expect(destinos).toContain(TELEFONE); // indicador
+
+      // Transicao
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Sem dadosTemp.indicadorId: erro generico + NAO cria nada', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: { proxyNome: 'Joao', proxyTelefone: '5527999991234' }, // sem indicadorId
+      });
+      expect(cooperadoCreate).not.toHaveBeenCalled();
+      expect(indicacaoCreate).not.toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/erro|tente/i),
+      );
+    });
+
+    it('Sem dadosTemp.proxyNome ou proxyTelefone: erro generico', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: { indicadorId: 'coop-luciano', cooperativaId: 'coop-A' },
+      });
+      expect(cooperadoCreate).not.toHaveBeenCalled();
+    });
+
+    it('Erro Prisma na criacao do Cooperado: mensagem generica + NAO transiciona', async () => {
+      cooperadoCreate.mockRejectedValueOnce(new Error('Connection lost'));
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: dadosTempBase,
+      });
+      expect(indicacaoCreate).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Erro ao enviar WA pro amigo: log warn mas continua (notifica indicador + transiciona mesmo assim)', async () => {
+      cooperadoCreate.mockResolvedValueOnce({ id: 'novo-proxy-1', nomeCompleto: 'Joao' });
+      cooperadoUpdate.mockResolvedValueOnce({ id: 'novo-proxy-1' });
+      indicacaoCreate.mockResolvedValueOnce({ id: 'ind-1' });
+      // Primeira chamada (pro amigo) falha; segunda (indicador) OK
+      enviarMensagem
+        .mockRejectedValueOnce(new Error('Numero invalido'))
+        .mockResolvedValueOnce(undefined);
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+        dadosTemp: dadosTempBase,
+      });
+
+      // Cooperado e Indicacao criados, transicao acontece mesmo com erro de WA
+      expect(cooperadoCreate).toHaveBeenCalled();
+      expect(indicacaoCreate).toHaveBeenCalled();
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
     });
   });
 

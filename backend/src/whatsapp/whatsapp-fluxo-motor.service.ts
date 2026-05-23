@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { CepService } from '../common/cep/cep.service';
+import { FaturasService } from '../faturas/faturas.service';
 import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
 
 interface MensagemRecebida {
@@ -59,6 +61,7 @@ export class WhatsappFluxoMotorService {
     private modeloMensagem: ModeloMensagemService,
     private sender: WhatsappSenderService,
     private cepService: CepService,
+    private faturasService: FaturasService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -480,7 +483,7 @@ export class WhatsappFluxoMotorService {
     // Bloco 6 Etapa B (23/05): 5o parametro pra acoes que recebem midia
     // (imagem/PDF). undefined quando mensagem nao traz midia. Acoes que
     // ignoram midia (Blocos 3/4/7) sao compativeis — parametro opcional.
-    _media?: { base64: string; mimeType: string; nomeArquivo?: string },
+    media?: { base64: string; mimeType: string; nomeArquivo?: string },
   ): Promise<void> {
     try {
       switch (acao) {
@@ -520,6 +523,19 @@ export class WhatsappFluxoMotorService {
         // NpsResposta com cooperativaId, transiciona pra MENU_COOPERADO.
         case 'REGISTRAR_NPS':
           await this.executarRegistrarNps(conversa, corpo);
+          break;
+        // Bloco 6 Etapa C (23/05): 4 acoes do fluxo Cadastro Proxy.
+        case 'SALVAR_PROXY_NOME':
+          await this.executarSalvarProxyNome(conversa, corpo);
+          break;
+        case 'SALVAR_PROXY_TELEFONE':
+          await this.executarSalvarProxyTelefone(conversa, corpo);
+          break;
+        case 'PROCESSAR_OCR_PROXY':
+          await this.executarProcessarOcrProxy(conversa, media);
+          break;
+        case 'CRIAR_COOPERADO_PROXY':
+          await this.executarCriarCooperadoProxy(conversa);
           break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
@@ -1299,6 +1315,348 @@ export class WhatsappFluxoMotorService {
 
     this.logger.log(
       `REGISTRAR_NPS: cooperado ${conversa.cooperadoId} -> nota=${nota} (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  // ============================================================
+  // Bloco 6 Etapa C (23/05) — 4 acoes do fluxo Cadastro Proxy
+  // (cooperado cadastra um amigo via WhatsApp).
+  //
+  // Padrao Bloco 4/7: cada acao recebe (conversa, corpo[, media]) e:
+  //  - valida input
+  //  - persiste em dadosTemp ou cria entidade
+  //  - transiciona estado ou retry inline
+  //
+  // Decisoes Luciano 23/05:
+  //  - cooperativaId herda do indicador (sempre via dadosTemp.cooperativaId,
+  //    populado quando cooperado entra via "4 convidar" no MENU_PRINCIPAL)
+  //  - Indicacao formal criada no momento do cadastro (NAO so listener)
+  //  - Modelo proxy_confirmar mapeia {{titular}}/{{telefone}} na renderizacao
+  //  - Replica hardcoded handleConfirmarProxy + adiciona Indicacao formal
+  //
+  // Hardcoded handleCadastroProxy* preservado como fallback.
+  // ============================================================
+  private async executarSalvarProxyNome(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const nome = (corpo ?? '').trim();
+    if (nome.length < 3) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Por favor, informe o *nome completo* do seu amigo (mínimo 3 caracteres):',
+      );
+      return;
+    }
+
+    const dadosAtuais = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    const dadosNovo = { ...dadosAtuais, proxyNome: nome };
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'CADASTRO_PROXY_TELEFONE',
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `Anotado! E qual o *WhatsApp* de *${nome}*? (com DDD — ex: 27 99999-9999)`,
+    );
+
+    this.logger.log(
+      `SALVAR_PROXY_NOME: dadosTemp.proxyNome="${nome}" (conversa=${conversa.id})`,
+    );
+  }
+
+  private async executarSalvarProxyTelefone(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const digitos = (corpo ?? '').replace(/\D/g, '');
+    if (digitos.length < 10 || digitos.length > 13) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Número inválido. Informe com DDD (ex: 27 99999-9999):',
+      );
+      return;
+    }
+
+    const proxyTelefone = digitos.startsWith('55') ? digitos : `55${digitos}`;
+    const dadosAtuais = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    const dadosNovo = { ...dadosAtuais, proxyTelefone };
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_FATURA_PROXY',
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    const nome = (dadosAtuais.proxyNome as string | undefined) ?? 'seu amigo';
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `Perfeito! 📸 Agora me envie uma *foto* ou *PDF* da conta de luz de *${nome}* — assim já calculo quanto vai economizar.`,
+    );
+
+    this.logger.log(
+      `SALVAR_PROXY_TELEFONE: dadosTemp.proxyTelefone="${proxyTelefone}" (conversa=${conversa.id})`,
+    );
+  }
+
+  private async executarProcessarOcrProxy(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    media?: { base64: string; mimeType: string; nomeArquivo?: string },
+  ): Promise<void> {
+    // Valida que mensagem trouxe midia
+    if (!media || !media.base64 || !media.mimeType) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Por favor, envie uma *foto* ou *PDF* da conta de energia do seu amigo. 📸',
+      );
+      return;
+    }
+
+    // Valida mimeType permitido pelo pipeline OCR (espelha hardcoded)
+    const mimesValidos = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!mimesValidos.includes(media.mimeType)) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Formato não suportado. Envie uma *foto* (JPG/PNG) ou *PDF* da fatura.',
+      );
+      return;
+    }
+
+    // UX: cooperado vai esperar 5-30s, sinalizar
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '📄 Recebi! Analisando os dados... ⏳',
+    );
+
+    const tipoArquivo: 'pdf' | 'imagem' =
+      media.mimeType === 'application/pdf' ? 'pdf' : 'imagem';
+
+    let dadosExtraidos: Record<string, unknown>;
+    try {
+      dadosExtraidos = (await this.faturasService.extrairOcr(
+        media.base64,
+        tipoArquivo,
+      )) as unknown as Record<string, unknown>;
+    } catch (err) {
+      this.logger.warn(
+        `PROCESSAR_OCR_PROXY: extrairOcr falhou — ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Não consegui identificar os dados. Envie uma foto mais nítida ou o PDF da fatura. 📸',
+      );
+      return;
+    }
+
+    const consumoAtualKwh = Number(dadosExtraidos.consumoAtualKwh ?? 0);
+    if (consumoAtualKwh <= 0) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'O arquivo não parece ser uma fatura de energia. Tente novamente. 📄',
+      );
+      return;
+    }
+
+    // Persiste dados extraidos em dadosTemp (pra possivel uso futuro / debug)
+    const dadosAtuais = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    const proxyNome = (dadosAtuais.proxyNome as string | undefined) ?? 'seu amigo';
+    const proxyTelefone =
+      (dadosAtuais.proxyTelefone as string | undefined) ?? '';
+
+    const dadosNovo = {
+      ...dadosAtuais,
+      ...dadosExtraidos,
+    };
+
+    // Renderiza modelo proxy_confirmar do banco com vars {{titular}}/{{telefone}}
+    // (decisao tecnica orquestrador: mapear na acao, nao renomear modelo).
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'proxy_confirmar',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'CONFIRMAR_PROXY',
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    if (modelo) {
+      const vars: Record<string, string> = {
+        titular: proxyNome,
+        telefone: proxyTelefone,
+      };
+      const texto = this.anexarRodape(
+        this.renderizarTemplate(modelo.conteudo, vars),
+      );
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      await this.modeloMensagem.incrementarUso(modelo.id);
+    } else {
+      this.logger.warn(
+        `PROCESSAR_OCR_PROXY: modelo "proxy_confirmar" nao encontrado (tenant=${cooperativaId ?? 'global'}) - usando fallback hardcoded`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `Confere os dados:\n👤 ${proxyNome}\n📱 ${proxyTelefone}\n\n1️⃣ Cadastrar\n2️⃣ Corrigir`,
+      );
+    }
+
+    this.logger.log(
+      `PROCESSAR_OCR_PROXY: cooperadoId=${conversa.cooperadoId} proxyNome="${proxyNome}" consumoKwh=${consumoAtualKwh} -> CONFIRMAR_PROXY`,
+    );
+  }
+
+  private async executarCriarCooperadoProxy(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+  ): Promise<void> {
+    const dados = (conversa.dadosTemp ?? {}) as Record<string, unknown>;
+    const proxyNome = dados.proxyNome as string | undefined;
+    const proxyTelefone = dados.proxyTelefone as string | undefined;
+    const indicadorId = dados.indicadorId as string | undefined;
+    const indicadorNome = (dados.indicadorNome as string | undefined) ?? 'Seu amigo';
+    const cooperativaId = dados.cooperativaId as string | undefined;
+
+    if (!indicadorId || !proxyNome || !proxyTelefone || !cooperativaId) {
+      this.logger.error(
+        `CRIAR_COOPERADO_PROXY: dadosTemp incompleto (indicadorId=${!!indicadorId}, proxyNome=${!!proxyNome}, proxyTelefone=${!!proxyTelefone}, cooperativaId=${!!cooperativaId})`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Ocorreu um erro ao cadastrar. Tente novamente mais tarde.',
+      );
+      return;
+    }
+
+    // 1. Cria Cooperado novo PENDENTE_ASSINATURA
+    let novoCooperado: { id: string; nomeCompleto: string };
+    try {
+      const ts = Date.now();
+      novoCooperado = await this.prisma.cooperado.create({
+        data: {
+          nomeCompleto: proxyNome,
+          cpf: `PROXY_${ts}`,
+          email: `proxy_${ts}@pendente.cooperebr`,
+          telefone: proxyTelefone,
+          status: 'PENDENTE_ASSINATURA' as any,
+          cooperadoIndicadorId: indicadorId,
+          cooperativaId,
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `CRIAR_COOPERADO_PROXY: cooperado.create falhou — ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Ocorreu um erro ao cadastrar. Tente novamente mais tarde.',
+      );
+      return;
+    }
+
+    // 2. Cria Indicacao formal (status PENDENTE) — decisao Luciano #2 = (b)
+    try {
+      await this.prisma.indicacao.create({
+        data: {
+          cooperativaId,
+          cooperadoIndicadorId: indicadorId,
+          cooperadoIndicadoId: novoCooperado.id,
+          status: 'PENDENTE',
+        },
+      });
+    } catch (err) {
+      // Indicacao formal falhou mas Cooperado ja criado — log e segue (defense
+      // in depth: cooperadoIndicadorId no Cooperado ainda registra o vinculo).
+      this.logger.error(
+        `CRIAR_COOPERADO_PROXY: indicacao.create falhou — ${(err as Error)?.message ?? 'erro desconhecido'} (cooperado novo ja criado, vinculo via cooperadoIndicadorId)`,
+      );
+    }
+
+    // 3. Gera JWT 7 dias + persiste no Cooperado
+    const secret = process.env.JWT_SECRET ?? 'fallback-dev-secret';
+    const token = jwt.sign(
+      { cooperadoId: novoCooperado.id, tipo: 'assinatura' },
+      secret,
+      { expiresIn: '7d' },
+    );
+    const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.prisma.cooperado.update({
+      where: { id: novoCooperado.id },
+      data: { tokenAssinatura: token, tokenAssinaturaExp: expiraEm },
+    });
+
+    // 4. Envia mensagem pro AMIGO com link de assinatura
+    const baseUrl = process.env.FRONTEND_URL ?? 'https://cooperebr.com.br';
+    const link = `${baseUrl}/portal/assinar/${token}`;
+    const msgAmigo =
+      `${indicadorNome} te cadastrou na *CoopereBR*! 🌞\n\n` +
+      `Para confirmar, acesse:\n${link}\n\n` +
+      `O link é válido por 7 dias.`;
+    try {
+      await this.sender.enviarMensagem(proxyTelefone, msgAmigo);
+    } catch (err) {
+      // WhatsappSenderService ja tem camadas de protecao (isAmbienteReal).
+      // Falha aqui pode ser numero invalido ou bloqueio — log warn e segue.
+      this.logger.warn(
+        `CRIAR_COOPERADO_PROXY: erro ao enviar WA pro amigo (${proxyTelefone}) — ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+    }
+
+    // 5. Notifica cooperado-indicador (sempre, mesmo se WA pro amigo falhou)
+    try {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ Pronto! Enviei o link pra *${proxyNome}* confirmar.\nQuando ele assinar, você recebe seu benefício!`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `CRIAR_COOPERADO_PROXY: erro ao notificar indicador — ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+    }
+
+    // 6. Transiciona pra MENU_COOPERADO
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `CRIAR_COOPERADO_PROXY: cooperado novo ${novoCooperado.id} (indicador ${indicadorId}, tenant ${cooperativaId}) -> Indicacao PENDENTE + JWT 7d + WA amigo + notificacao indicador`,
     );
   }
 
