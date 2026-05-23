@@ -2698,6 +2698,64 @@ Modelo seedado mas SEM caller no código. Sugere intenção pretérita de cron t
 
 ---
 
+### D-novo-Z — Divergência funcional Cadastro Proxy: hardcoded chama resetarConversa, motor transiciona pra MENU_COOPERADO; hardcoded calcula proposta com economiaMensal, motor não (P3 polimento)
+
+**Origem:** Bloco 6 Etapa C do Sprint Bot Autoatendimento (23/05/2026).
+
+**Contexto:** O Bloco 6 portou o fluxo Cadastro Proxy pro motor dinâmico, preservando o hardcoded `handleCadastroProxy*` como fallback. 2 divergências de comportamento aparecem entre os 2 caminhos:
+
+**Divergência 1 — Estado final pós-confirmação:**
+- Hardcoded `handleConfirmarProxy:3440` chama `await this.resetarConversa(telefone)` — provavelmente reseta estado pra `INICIAL` (ou apaga dadosTemp).
+- Motor `executarCriarCooperadoProxy` transiciona pra `MENU_COOPERADO` (decisão consistente com Blocos 4/1.b/7).
+
+**Divergência 2 — Cálculo de proposta na fatura OCR:**
+- Hardcoded `handleAguardandoFaturaProxy:3320-3367` calcula proposta via `motorProposta.calcular(...)` e mostra "*{nome}* economizaria *R$ X/mês* 🌞" na confirmação.
+- Motor `executarProcessarOcrProxy` simplificou: NÃO chama motorProposta, apenas valida `consumoAtualKwh > 0` e renderiza modelo `proxy_confirmar` do banco com vars `{{titular}}/{{telefone}}` (sem economia).
+
+**Impacto:** baixo hoje — caminhos paralelos. Motor é o oficial pós-Bloco 6. Hardcoded fica como fallback raro. Cooperado pode ter UX ligeiramente diferente dependendo do caminho.
+
+**Fix proposto (Sprint Housekeeping ou pós-validação smoke):**
+- **(a) Alinhar hardcoded ao motor:** trocar `resetarConversa` por `update({estado: 'MENU_COOPERADO'})` no `handleConfirmarProxy`. Remover cálculo de proposta do `handleAguardandoFaturaProxy` (consistência) OU manter no hardcoded como degradação aceitável.
+- **(b) Adicionar proposta no motor:** injetar `MotorPropostaService` no construtor + chamar `calcular(...)` em `executarProcessarOcrProxy` + estender modelo `proxy_confirmar` com `{{economiaMensal}}`. Mais trabalho, melhor UX.
+- **(c) Remover hardcoded inteiro:** após smoke real validar motor end-to-end. Reduz superfície de manutenção.
+
+**Custo estimado:** (a) 15 min / (b) 1-1.5h + modelo + spec / (c) 30 min após validação.
+
+**Posicionamento:** Sprint Housekeeping ou sprint Iniciativa Fluxos Customizáveis (D-novo-T).
+
+**Status:** 📋 Catalogado em 2026-05-23. Decisão 14 aplicada — D-novo-Z confirmado livre (mencionado hipoteticamente no relatório Fase 1 do Bloco 6 mas NÃO catalogado lá; este é o uso real).
+
+---
+
+### D-novo-AA — Cooperado proxy nunca confirma assinatura: placeholders eternos `cpf=PROXY_${ts}` + `email=proxy_${ts}@pendente.cooperebr` (P3 limpeza)
+
+**Origem:** Bloco 6 Etapa C do Sprint Bot Autoatendimento (23/05/2026) — débito preexistente do hardcoded `handleConfirmarProxy:3389-3390`, replicado fielmente no motor `executarCriarCooperadoProxy` (decisão de produto: preservar comportamento).
+
+**Contexto:** Quando cooperado-indicador cadastra um amigo proxy via WhatsApp, o sistema cria `Cooperado` novo com placeholders únicos:
+```typescript
+cpf: `PROXY_${Date.now()}`,            // ex: PROXY_1716470000000
+email: `proxy_${Date.now()}@pendente.cooperebr`,  // ex: proxy_1716470000000@pendente.cooperebr
+```
+
+Esses placeholders são únicos (timestamp evita colisão no `@unique`), permitindo criar Cooperado sem CPF/email reais. Quando o amigo recebe o link `/portal/assinar/{token}` e confirma adesão, o portal **deveria** pedir CPF/email reais e atualizar via `cooperado.update`.
+
+**Problema:** se o amigo NUNCA confirma (link expira, ignora, etc), o Cooperado fica eterno com placeholders. Após N tentativas de cadastros proxy não confirmados, tabela enche de registros lixo. Multi-tenant em escala (Sinergia + outros) pode acumular centenas.
+
+**Adicional:** registros placeholders aparecem em queries genéricas de Cooperado (relatórios, busca, etc) — UX ruim pro admin que vê "PROXY_1716470000000" como CPF.
+
+**Fix proposto (Sprint Housekeeping):**
+1. **Cron de cleanup** diário/semanal: deleta Cooperado com `cpf LIKE 'PROXY_%' AND createdAt < now() - 30 days AND status = 'PENDENTE_ASSINATURA' AND tokenAssinaturaExp < now()`. Junto deleta `Indicacao` relacionada (cascade ou explícito).
+2. **Filtro nas queries de UI**: lista de cooperados oculta registros com `cpf LIKE 'PROXY_%' AND status = 'PENDENTE_ASSINATURA'` por padrão (admin pode opt-in pra ver).
+3. **OU** repensar a estrutura: criar tabela separada `CadastroProxyPendente` em vez de criar Cooperado prematuramente.
+
+**Custo estimado:** opção 1+2 ~2-3h (cron job + ajuste UI), opção 3 ~6-8h (refator + migração).
+
+**Posicionamento:** Sprint Housekeeping ou bloco dedicado pós-onboarding Sinergia (quando volume de cadastros proxy aumentar).
+
+**Status:** 📋 Catalogado em 2026-05-23. Decisão 14: D-novo-AA confirmado livre.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
