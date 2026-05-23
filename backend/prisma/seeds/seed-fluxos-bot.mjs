@@ -26,6 +26,11 @@ const fluxos = [
     { resposta: '5', proximoEstado: 'ENVIAR_CONVITE' },
     { resposta: '6', proximoEstado: 'AGUARDANDO_ATENDENTE' },
     { resposta: '7', proximoEstado: 'AGUARDANDO_ATENDENTE' },
+    // Bloco 7 (23/05) — comando manual de teste pra disparar NPS sem
+    // esperar trigger automatico. Decisao Luciano: aberto pra qualquer
+    // cooperado (worst case = auto-NPS, sem dano). Palavra distintiva
+    // que cooperado normal nao digita casualmente.
+    { resposta: 'AVALIAR', proximoEstado: 'NPS_AGUARDANDO_NOTA' },
   ]},
 
   // Bloco 3 (21/05) — Etapas terminais que consultam dados reais via acao.

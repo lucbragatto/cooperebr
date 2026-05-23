@@ -147,6 +147,48 @@ async function main(): Promise<void> {
       console.log('   ✓ Etapa atualizada.');
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // PARTE 3 — Comando manual de teste no MENU_COOPERADO
+    // Decisao Luciano 23/05: gatilho 'AVALIAR' no MENU_COOPERADO leva
+    // direto pra NPS_AGUARDANDO_NOTA. Aberto a qualquer cooperado.
+    // Worst case = auto-NPS, sem dano. Distintivo (cooperado normal nao
+    // digita "AVALIAR" casualmente) e nao conflita com comandos
+    // universais (INICIO/SAIR/MENU/CHAMAR_DEPOIS).
+    // ─────────────────────────────────────────────────────────────
+    console.log('\n── Parte 3: gatilho AVALIAR no MENU_COOPERADO (comando manual de teste) ──');
+    const menuCoop = await prisma.fluxoEtapa.findFirst({
+      where: { estado: 'MENU_COOPERADO', cooperativaId: null },
+    });
+    if (!menuCoop) {
+      console.log(
+        '   ⚠️  Etapa MENU_COOPERADO (global) nao encontrada — pulando. ' +
+          'Rodar seed-fluxos-bot.mjs primeiro.',
+      );
+    } else {
+      const gatilhosMenu = Array.isArray(menuCoop.gatilhos)
+        ? (menuCoop.gatilhos as unknown as GatilhoComAcao[])
+        : [];
+      const jaTemAvaliar = gatilhosMenu.some(
+        (g) => g.resposta === 'AVALIAR' && g.proximoEstado === 'NPS_AGUARDANDO_NOTA',
+      );
+      if (jaTemAvaliar) {
+        console.log('   = SKIP MENU_COOPERADO (ja tem gatilho AVALIAR)');
+      } else {
+        const gatilhosNovos: GatilhoComAcao[] = [
+          ...gatilhosMenu,
+          { resposta: 'AVALIAR', proximoEstado: 'NPS_AGUARDANDO_NOTA' },
+        ];
+        console.log(`   ~ ATUALIZAR MENU_COOPERADO (id=${menuCoop.id})`);
+        console.log(`     ANTES gatilhos (${gatilhosMenu.length}): ${JSON.stringify(gatilhosMenu)}`);
+        console.log(`     DEPOIS gatilhos (${gatilhosNovos.length}): ${JSON.stringify(gatilhosNovos)}`);
+        await prisma.fluxoEtapa.update({
+          where: { id: menuCoop.id },
+          data: { gatilhos: gatilhosNovos as unknown as Prisma.InputJsonValue },
+        });
+        console.log('   ✓ Etapa atualizada (+ gatilho AVALIAR)');
+      }
+    }
+
     console.log('\n═══ Bloco 7 aplicado com sucesso ═══');
   } catch (err) {
     console.error('\n❌ ERRO:', err instanceof Error ? err.message : err);
