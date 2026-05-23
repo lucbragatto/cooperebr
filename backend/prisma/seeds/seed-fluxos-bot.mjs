@@ -108,7 +108,11 @@ const fluxos = [
   { id: 'f-atendente', nome: 'Aguardando Atendente Humano', ordem: 20, estado: 'AGUARDANDO_ATENDENTE', gatilhos: [] },
 
   // NPS
-  { id: 'f-nps', nome: 'NPS — Aguardando Nota', ordem: 21, estado: 'NPS_AGUARDANDO_NOTA', gatilhos: [] },
+  // Bloco 7 (23/05): gatilho wildcard liga ao motor dinamico via Gatilho.acao.
+  // Acao REGISTRAR_NPS valida 0-10, persiste NpsResposta + transiciona MENU_COOPERADO.
+  { id: 'f-nps', nome: 'NPS — Aguardando Nota', ordem: 21, estado: 'NPS_AGUARDANDO_NOTA', gatilhos: [
+    { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'REGISTRAR_NPS' },
+  ]},
 
   // Inadimplente
   { id: 'f-inadimplente', nome: 'Menu Inadimplente', ordem: 22, estado: 'MENU_INADIMPLENTE', gatilhos: [] },
