@@ -80,13 +80,22 @@ const fluxos = [
     { resposta: '2', proximoEstado: 'CONCLUIDO' },
   ]},
 
-  // Proxy
-  { id: 'f-proxy-nome', nome: 'Cadastro por Proxy — Nome do Amigo', ordem: 13, estado: 'CADASTRO_PROXY_NOME', gatilhos: [] },
-  { id: 'f-proxy-tel', nome: 'Cadastro por Proxy — Telefone do Amigo', ordem: 14, estado: 'CADASTRO_PROXY_TELEFONE', gatilhos: [] },
-  { id: 'f-proxy-fatura', nome: 'Cadastro por Proxy — Fatura do Amigo', ordem: 15, estado: 'AGUARDANDO_FATURA_PROXY', gatilhos: [], acaoAutomatica: 'PROCESSAR_OCR_PROXY' },
+  // Proxy — Bloco 6 (23/05): 4 etapas no motor dinamico via gatilho wildcard
+  // + acao. Etapa AGUARDANDO_FATURA_PROXY aceita midia (Bloco 6 Etapa B
+  // estendeu motor pra propagar mediaBase64 + mimeType). Estado pos-confirma:
+  // MENU_COOPERADO (consistente Blocos 4/1.b/7 — NAO CONCLUIDO).
+  { id: 'f-proxy-nome', nome: 'Cadastro por Proxy — Nome do Amigo', ordem: 13, estado: 'CADASTRO_PROXY_NOME', gatilhos: [
+    { resposta: '*', proximoEstado: 'CADASTRO_PROXY_TELEFONE', acao: 'SALVAR_PROXY_NOME' },
+  ]},
+  { id: 'f-proxy-tel', nome: 'Cadastro por Proxy — Telefone do Amigo', ordem: 14, estado: 'CADASTRO_PROXY_TELEFONE', gatilhos: [
+    { resposta: '*', proximoEstado: 'AGUARDANDO_FATURA_PROXY', acao: 'SALVAR_PROXY_TELEFONE' },
+  ]},
+  { id: 'f-proxy-fatura', nome: 'Cadastro por Proxy — Fatura do Amigo', ordem: 15, estado: 'AGUARDANDO_FATURA_PROXY', gatilhos: [
+    { resposta: '*', proximoEstado: 'CONFIRMAR_PROXY', acao: 'PROCESSAR_OCR_PROXY' },
+  ]},
   { id: 'f-proxy-confirmar', nome: 'Cadastro por Proxy — Confirmar', ordem: 16, estado: 'CONFIRMAR_PROXY', gatilhos: [
-    { resposta: '1', proximoEstado: 'CONCLUIDO', acao: 'CRIAR_COOPERADO_PROXY' },
-    { resposta: '2', proximoEstado: 'CONCLUIDO' },
+    { resposta: '1', proximoEstado: 'MENU_COOPERADO', acao: 'CRIAR_COOPERADO_PROXY' },
+    { resposta: '2', proximoEstado: 'MENU_COOPERADO' },
   ]},
 
   // Menu de cobranças
