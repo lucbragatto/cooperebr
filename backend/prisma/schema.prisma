@@ -1949,12 +1949,20 @@ model LeadWhatsapp {
 }
 
 model NpsResposta {
-  id          String   @id @default(cuid())
-  cooperadoId String?
-  telefone    String
-  nota        Int
-  canal       String   @default("WHATSAPP") // WHATSAPP | PORTAL | EMAIL
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  cooperadoId   String?
+  // Bloco 7 (23/05): multi-tenant — preenchido pela acao REGISTRAR_NPS via
+  // conversa.cooperativaId. Aditivo opcional pra preservar registros legados
+  // sem backfill obrigatorio. Toda nova insercao do motor passa o valor.
+  cooperativaId String?
+  telefone      String
+  nota          Int
+  // Bloco 7 (23/05): texto qualitativo opcional. NAO usado neste bloco
+  // (ação REGISTRAR_NPS persiste null). Pre-paga sprint futuro de NPS
+  // qualitativo sem custo extra.
+  comentario    String?
+  canal         String   @default("WHATSAPP") // WHATSAPP | PORTAL | EMAIL
+  createdAt     DateTime @default(now())
 
   @@map("nps_respostas")
 }
