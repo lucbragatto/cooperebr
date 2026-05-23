@@ -20,6 +20,8 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const faturaProcessadaFindFirst = jest.fn();
   const cobrancaFindFirst = jest.fn();
   const asaasCobrancaFindFirst = jest.fn();
+  // Bloco 7 Etapa B (23/05): mock pra acao REGISTRAR_NPS persistir nota.
+  const npsRespostaCreate = jest.fn();
 
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
@@ -35,6 +37,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     faturaProcessada: { findFirst: faturaProcessadaFindFirst },
     cobranca: { findFirst: cobrancaFindFirst },
     asaasCobranca: { findFirst: asaasCobrancaFindFirst },
+    npsResposta: { create: npsRespostaCreate },
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
@@ -2873,6 +2876,210 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         cooperativaId: 'coop-A',
       });
       expect(ok).toBe(true);
+    });
+  });
+
+  // ============================================================
+  // Bloco 7 Etapa B (23/05) — acao REGISTRAR_NPS no motor.
+  //
+  // Reusa o padrao Bloco 4 (gatilho wildcard '*' com acao -> motor delega
+  // controle pra acao via Gatilho.acao). A acao valida parseInt 0-10,
+  // persiste em NpsResposta com cooperativaId, renderiza modelo nps_recebido
+  // do banco com vars e transiciona pra MENU_COOPERADO. Retry inline se
+  // nota invalida (mantem em NPS_AGUARDANDO_NOTA).
+  //
+  // Decisoes Luciano 23/05 (Fase 2 Bloco 7):
+  //  - cooperativaId vem da sessao (multi-tenant)
+  //  - comentario sempre null neste bloco (pre-pago no schema)
+  //  - estado pos-NPS = MENU_COOPERADO (consistente Blocos 4/1.b)
+  //  - hardcoded handleNpsNota preservado como fallback (debt catalogado)
+  // ============================================================
+  describe('Bloco 7 Etapa B - executarAcao(REGISTRAR_NPS)', () => {
+    const TELEFONE = '+5527981341348';
+
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('REGISTRAR_NPS', conversa, {}, corpo);
+
+    const modeloNpsRecebido = {
+      id: 'm-nps',
+      nome: 'nps_recebido',
+      categoria: 'BOT',
+      conteudo:
+        'Muito obrigado pela sua avaliação! 🙏\nSua opinião ajuda a {{parceiro}} a melhorar.',
+      cooperativaId: null,
+    };
+
+    const cooperativaCtx = {
+      nome: 'CoopereBR',
+      email: null,
+      telefone: null,
+      cidade: null,
+      estado: null,
+      tipoParceiro: 'COOPERATIVA',
+    };
+
+    it('SEM cooperadoId: envia mensagem amigavel e NAO persiste NPS', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: null, cooperativaId: null },
+        '8',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('cooperado'),
+      );
+      expect(npsRespostaCreate).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Nota INVALIDA (texto): erro + NAO transiciona (retry no fluxo)', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        'oito',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/0.*10/),
+      );
+      expect(npsRespostaCreate).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Nota INVALIDA (negativa): erro + NAO transiciona', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '-1',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/0.*10/),
+      );
+      expect(npsRespostaCreate).not.toHaveBeenCalled();
+    });
+
+    it('Nota INVALIDA (acima de 10): erro + NAO transiciona', async () => {
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '11',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/0.*10/),
+      );
+      expect(npsRespostaCreate).not.toHaveBeenCalled();
+    });
+
+    it('Nota 0 (limite inferior): persiste + envia modelo + transiciona MENU_COOPERADO', async () => {
+      modeloFindFirst.mockResolvedValueOnce(modeloNpsRecebido);
+      cooperativaFindUnique.mockResolvedValueOnce(cooperativaCtx);
+      npsRespostaCreate.mockResolvedValueOnce({ id: 'nps-1', nota: 0 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '0',
+      );
+
+      expect(npsRespostaCreate).toHaveBeenCalledWith({
+        data: {
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          telefone: TELEFONE,
+          nota: 0,
+          comentario: null,
+          canal: 'WHATSAPP',
+        },
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Nota 10 (limite superior): persiste + transiciona', async () => {
+      modeloFindFirst.mockResolvedValueOnce(modeloNpsRecebido);
+      cooperativaFindUnique.mockResolvedValueOnce(cooperativaCtx);
+      npsRespostaCreate.mockResolvedValueOnce({ id: 'nps-2', nota: 10 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '10',
+      );
+
+      const dadosCriados = npsRespostaCreate.mock.calls[0][0].data;
+      expect(dadosCriados.nota).toBe(10);
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Nota intermediaria (8) com trim + multi-tenant: persiste + renderiza modelo com vars', async () => {
+      modeloFindFirst.mockResolvedValueOnce(modeloNpsRecebido);
+      cooperativaFindUnique.mockResolvedValueOnce(cooperativaCtx);
+      npsRespostaCreate.mockResolvedValueOnce({ id: 'nps-3', nota: 8 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '  8  ',
+      );
+
+      expect(npsRespostaCreate).toHaveBeenCalled();
+      // Modelo renderizado e enviado
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('CoopereBR'),
+      );
+      expect(incrementarUso).toHaveBeenCalledWith('m-nps');
+    });
+
+    it('Sem cooperativaId (lead conhecido como cooperado mas sem tenant): persiste cooperativaId null', async () => {
+      modeloFindFirst.mockResolvedValueOnce(modeloNpsRecebido);
+      cooperativaFindUnique.mockResolvedValueOnce(null);
+      npsRespostaCreate.mockResolvedValueOnce({ id: 'nps-4', nota: 7 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: null },
+        '7',
+      );
+
+      const dadosCriados = npsRespostaCreate.mock.calls[0][0].data;
+      expect(dadosCriados.cooperativaId).toBeNull();
+      expect(dadosCriados.cooperadoId).toBe('coop-luciano');
+    });
+
+    it('Modelo nps_recebido NAO encontrado: fallback hardcoded curto + transiciona mesmo assim', async () => {
+      modeloFindFirst.mockResolvedValueOnce(null);
+      cooperativaFindUnique.mockResolvedValueOnce(cooperativaCtx);
+      npsRespostaCreate.mockResolvedValueOnce({ id: 'nps-5', nota: 9 });
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '9',
+      );
+
+      // Persiste mesmo sem modelo (registro do NPS eh prioritario)
+      expect(npsRespostaCreate).toHaveBeenCalled();
+      // Mensagem foi enviada (fallback hardcoded)
+      expect(enviarMensagem).toHaveBeenCalled();
+      // Transiciona mesmo assim
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Erro Prisma (banco off): envia mensagem generica e NAO transiciona (retry)', async () => {
+      npsRespostaCreate.mockRejectedValueOnce(new Error('Connection refused'));
+
+      await invocar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: 'coop-luciano', cooperativaId: 'coop-A' },
+        '8',
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/registrar|tente/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
     });
   });
 

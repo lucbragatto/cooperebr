@@ -482,6 +482,12 @@ export class WhatsappFluxoMotorService {
         case 'ATUALIZAR_CEP_COOPERADO':
           await this.executarAtualizarCepCooperado(conversa, corpo);
           break;
+        // Bloco 7 Etapa B (23/05): acao REGISTRAR_NPS via gatilho wildcard
+        // na etapa NPS_AGUARDANDO_NOTA. Valida parseInt 0-10, persiste em
+        // NpsResposta com cooperativaId, transiciona pra MENU_COOPERADO.
+        case 'REGISTRAR_NPS':
+          await this.executarRegistrarNps(conversa, corpo);
+          break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
       }
@@ -1146,6 +1152,115 @@ export class WhatsappFluxoMotorService {
     });
     this.logger.log(
       `ATUALIZAR_CEP_COOPERADO (ENCONTRADO): cooperado ${conversa.cooperadoId} -> cep="${endereco.cep}" cidade="${endereco.cidade}-${endereco.estado}" (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  // ============================================================
+  // Bloco 7 Etapa B (23/05) — acao REGISTRAR_NPS
+  // Disparada via gatilho wildcard '*' na etapa NPS_AGUARDANDO_NOTA.
+  // Padrao Bloco 4: guard cooperadoId + validar parseInt 0-10 + persistir
+  // em NpsResposta com cooperativaId + renderizar modelo nps_recebido +
+  // transicionar pra MENU_COOPERADO. Retry inline se nota invalida (mantem
+  // em NPS_AGUARDANDO_NOTA).
+  //
+  // Decisoes Luciano 23/05:
+  //  - cooperativaId vem da sessao (multi-tenant defensivo)
+  //  - comentario sempre null neste bloco (campo aditivo no schema, sprint
+  //    futuro popula)
+  //  - estado pos-NPS = MENU_COOPERADO (consistente Blocos 4/1.b)
+  //  - hardcoded handleNpsNota preservado como fallback (debt catalogado:
+  //    hardcoded transiciona pra CONCLUIDO, motor pra MENU_COOPERADO)
+  // ============================================================
+  private async executarRegistrarNps(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para avaliar voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui!',
+      );
+      this.logger.log(
+        `REGISTRAR_NPS: telefone ${conversa.telefone} nao e cooperado - mensagem de cadastro enviada`,
+      );
+      return;
+    }
+
+    // Valida parseInt 0-10 (espelha hardcoded handleNpsNota:4018)
+    const nota = parseInt((corpo ?? '').trim(), 10);
+    if (Number.isNaN(nota) || nota < 0 || nota > 10) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nota inválida. Digite um número de 0 a 10:',
+      );
+      // NAO transiciona — cooperado tenta de novo no estado NPS_AGUARDANDO_NOTA
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    // Persiste NPS — defensive try/catch (cooperativaId pode ser null pra lead
+    // sem tenant ainda). comentario sempre null neste bloco.
+    try {
+      await this.prisma.npsResposta.create({
+        data: {
+          cooperadoId: conversa.cooperadoId,
+          cooperativaId: conversa.cooperativaId ?? null,
+          telefone: conversa.telefone,
+          nota,
+          comentario: null,
+          canal: 'WHATSAPP',
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `REGISTRAR_NPS falhou: ${(err as Error)?.message ?? 'erro desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui registrar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    // Renderiza modelo nps_recebido do banco (multi-tenant via
+    // filtroTenantSomenteLeitura). Se modelo nao existe no tenant, fallback
+    // hardcoded curto — mas o NPS ja foi registrado (prioridade).
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'nps_recebido',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (modelo) {
+      const cooperativa = await this.carregarContextoCooperativa(cooperativaId);
+      const vars = this.extrairVariaveis(conversa, cooperativa);
+      const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      await this.modeloMensagem.incrementarUso(modelo.id);
+    } else {
+      this.logger.warn(
+        `REGISTRAR_NPS: modelo "nps_recebido" nao encontrado (tenant=${cooperativaId ?? 'global'}) - usando fallback hardcoded`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Obrigado pelo feedback! 💚',
+      );
+    }
+
+    // Transiciona pra MENU_COOPERADO (decisao 4 X — consistente Blocos 4/1.b)
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `REGISTRAR_NPS: cooperado ${conversa.cooperadoId} -> nota=${nota} (tenant=${cooperativaId ?? 'global'})`,
     );
   }
 
