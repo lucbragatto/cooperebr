@@ -1,7 +1,52 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-23 — M21 Sprint Bot Autoatendimento Bloco 7: NPS no fluxo**. 6 commits Bloco 7 (`2cd5663` schema + `2b207e4` motor + `088c9c9` fix build + `a8fa1db` script + `51c40fa` comando manual + `f2fd0d1` débitos) + commit fechamento. NPS sai do estado "infra dormente" — agora ligado ao motor via ação `REGISTRAR_NPS` (gatilho wildcard + acao) com defense in depth multi-tenant. Schema delta aditivo `cooperativaId String?` + `comentario String?` em `NpsResposta`. Comando manual de teste `AVALIAR` cabeado no MENU_COOPERADO (opção mais leve — só dado). 10 specs novos verdes (194 totais nos meus arquivos). 3 débitos catalogados D-novo-W/X/Y (divergência CONCLUIDO×MENU_COOPERADO, agendarNps dead code, nps_trimestral órfão). PM2 restart limpo (pid 33368). Suíte 656/667 (11 falhas pré-existentes em cooperados/usinas — idênticas M19/M20, 0 minhas). **Próximo: Bloco 6 (Cadastro Proxy, ~6-8h).** Ordem Luciano: 1.b ✅ → 7 ✅ → **6**. Detalhe: `docs/sessoes/2026-05-23-bloco7-nps-no-fluxo.md`.
+> Última atualização: **2026-05-23 noite — M22 Sprint Bot Autoatendimento Bloco 6: Cadastro Proxy**. 4 commits Bloco 6 (`4e91c80` motor estendido pra mídia + `7f7d3e7` 4 ações + `278e44d` script idempotente + `5093d75` débitos) + commit fechamento. **CAVEAT arquitetural da Fase 1 resolvido:** motor estendido pra receber mídia (foto/PDF) via 5º param `media` em `executarAcao` + `temMidia` em `avaliarGatilhoMatch`. Pré-paga fluxos futuros com imagem. **4 ações novas:** `SALVAR_PROXY_NOME`, `SALVAR_PROXY_TELEFONE`, `PROCESSAR_OCR_PROXY` (OCR Claude AI síncrono via FaturasService), `CRIAR_COOPERADO_PROXY` (cria Cooperado PENDENTE_ASSINATURA + Indicacao formal + JWT 7d + WA pro amigo + notifica indicador). 30 specs novos verdes (era 168 motor → 198; total nos meus arquivos: 224). 2 débitos catalogados D-novo-Z (divergência hardcoded×motor) + D-novo-AA (placeholders proxy eternos). PM2 restart limpo (pid 27616). Suíte 686/697 (11 falhas pré-existentes idênticas M19/M20/M21, 0 minhas). **Próximo: Blocos 5 e 8 — decisões produto pendentes; orquestrador apresenta na próxima abertura.** Detalhe: `docs/sessoes/2026-05-23-bloco6-cadastro-proxy.md`.
+
+---
+
+## ONDE PARAMOS — 23/05/2026 noite (Code — M22 Sprint Bot Autoatendimento: Bloco 6 Cadastro Proxy)
+
+### Marcos entregues nesta sessão (4 commits + fechamento)
+
+Bloco 6 do Sprint Bot Autoatendimento ENTREGUE. O fluxo "cooperado existente cadastra um amigo via WhatsApp" sai de hardcoded-only pra totalmente integrado no motor dinâmico. CAVEAT arquitetural da Fase 1 (motor era text-only) resolvido — motor agora aceita mídia.
+
+- **Etapa A — Schema** (sem commit) — `Indicacao` model + `StatusCooperado.PENDENTE_ASSINATURA` já existiam. Decisão técnica orquestrador: aceitaMidia por heurística (sem campo novo em FluxoEtapa).
+- **Etapa B — Motor estendido pra mídia** (`4e91c80`) — `avaliarGatilhoMatch` ganha 3º param `temMidia` (wildcard casa com mídia + corpo vazio). `executarAcao` ganha 5º param `media: { base64, mimeType, nomeArquivo? }`. `processarComFluxoDinamico` detecta `tipo in [imagem, documento]` + propaga. Backward compatible (5º param opcional). 11 specs novos.
+- **Etapa C — 4 ações novas** (`7f7d3e7`) — `FaturasService` injetado + `jsonwebtoken` importado. 4 cases novos no switch + 4 métodos privados padrão Bloco 4/7: `SALVAR_PROXY_NOME` (trim + length 3+), `SALVAR_PROXY_TELEFONE` (10-13 dígitos + prefixa 55), `PROCESSAR_OCR_PROXY` (valida mimeType + UX "Analisando..." + `extrairOcr` síncrono + valida consumoAtualKwh + renderiza modelo `proxy_confirmar` mapeando `{{titular}}/{{telefone}}` na ação), `CRIAR_COOPERADO_PROXY` (Cooperado PENDENTE_ASSINATURA + Indicacao formal status PENDENTE + JWT 7d + WA pro amigo + notifica indicador + transiciona MENU_COOPERADO). 19 specs novos.
+- **Etapa D — Script idempotente** (`278e44d`) — `fix-bloco-6-cadastro-proxy-no-fluxo.ts` cabea 4 etapas com gatilhos wildcard + ações + seed alinhado. CONFIRMAR_PROXY antes apontava `CONCLUIDO`; agora `MENU_COOPERADO` (consistência sprint). 4 atualizadas; 2ª execução skip. Ritual PM2 (pid 27616).
+- **Etapa E — Débitos** (`5093d75`) — D-novo-Z (divergência hardcoded resetarConversa×motor MENU_COOPERADO + falta proposta calculada no motor) + D-novo-AA (Cooperado proxy fica com placeholders eternos cpf/email se amigo nunca assina).
+
+### Decisões produto Luciano + decisão técnica orquestrador (23/05)
+
+1. **(1A)** Estender motor pra receber mídia (vs deixar OCR hardcoded)
+2. **(2b)** Criar Indicacao formal status PENDENTE (defense in depth com cooperadoIndicadorId)
+3. **(3i)** Mapear vars `{{titular}}/{{telefone}}` na ação (sem renomear modelo)
+4. **Orquestrador (técnica):** aceitaMidia por heurística (sem campo novo em FluxoEtapa)
+
+### Validação
+
+- **198/198 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 168, +30)
+- **13/13 specs verdes** em `whatsapp-conversa.job.spec.ts` (sem mudança)
+- **13/13 specs verdes** em `cep.service.spec.ts` (sem mudança)
+- **224 specs totais** nos meus arquivos (era 194)
+- `nest build` limpo
+- Ritual PM2 sem incidentes
+- Backend online pid 27616, 0 restarts
+- Suíte Jest completa: **686/697** (11 falhas pré-existentes em cooperados/usinas, idênticas M19/M20/M21, 0 minhas)
+
+### Pendências carry-over
+
+- **Próximos blocos do sprint (decisões pendentes):**
+  - Bloco 5 (Atualizar Contrato): ação automática vs solicitação humana
+  - Bloco 8 (Menu Fatura/Inadimplente): dinâmico vs hardcoded
+- Orquestrador apresenta as 2 decisões na próxima abertura
+- 2 débitos novos D-novo-Z e D-novo-AA — Sprint Housekeeping
+- Demais carry-overs M17-M21 preservados
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 23/05 noite fechamento M22 Bloco 6).
 
 ---
 
@@ -899,73 +944,90 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M21 da sessão 23/05
-   (mensagem começa com "docs(sessao): fechamento M21 — Bloco 7 Sprint Bot Autoatendimento").
-   Penúltimo commit é `f2fd0d1` (Etapa E — débitos D-novo-W/X/Y catalogados).
+   Esperado: working tree limpo, último commit é o de fechamento M22 da sessão 23/05 noite
+   (mensagem começa com "docs(sessao): fechamento M22 — Bloco 6 Sprint Bot Autoatendimento").
+   Penúltimo commit é `5093d75` (Etapa E — débitos D-novo-Z + D-novo-AA catalogados).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 23/05 entregou M21 (Bloco 7 do Sprint Bot Autoatendimento:
-NPS no fluxo). 6 commits empacotados (2cd5663 schema + 2b207e4 motor +
-088c9c9 fix build + a8fa1db script + 51c40fa comando manual + f2fd0d1
-débitos) + commit fechamento. NPS sai de "infra dormente" pra ativo no
-motor dinâmico. Multi-tenant ativado via cooperativaId. Comando manual
-AVALIAR cabeado no MENU_COOPERADO. 194 specs verdes nos meus arquivos
-(era 184 no M20). PM2 restart limpo (pid 33368). Suíte completa 656/667
-(11 falhas pré-existentes idênticas a M19/M20, 0 minhas). 3 débitos
-catalogados D-novo-W/X/Y pra Sprint Housekeeping.
+PASSO 1 — Sessão 23/05 noite entregou M22 (Bloco 6 do Sprint Bot
+Autoatendimento: Cadastro Proxy). 4 commits empacotados (4e91c80 motor
+estendido pra mídia + 7f7d3e7 4 ações + 278e44d script idempotente +
+5093d75 débitos) + commit fechamento. CAVEAT arquitetural da Fase 1
+RESOLVIDO: motor estendido pra receber mídia (foto/PDF) — pré-paga
+fluxos futuros com imagem. Fluxo "cooperado cadastra amigo" agora 100%
+no motor dinâmico, com Indicacao formal criada no ato + JWT 7 dias + WA
+pro amigo com link de assinatura. 224 specs verdes nos meus arquivos
+(era 194 no M21). PM2 restart limpo (pid 27616). Suíte 686/697 (11
+falhas pré-existentes idênticas M19/M20/M21, 0 minhas). 2 débitos
+catalogados D-novo-Z (divergência hardcoded×motor) + D-novo-AA
+(placeholders proxy eternos).
 
-PRÓXIMO PASSO — BLOCO 6 (Cadastro Proxy, ~6-8h). Ordem definida pelo
-Luciano: 1.b ✅ → 7 ✅ → 6 (próximo) → restam 5 e 8 com decisões produto
-pendentes.
+PRÓXIMO PASSO — APRESENTAR DUAS DECISÕES PRODUTO PRA LUCIANO. Restam
+apenas Blocos 5 e 8 do Sprint Bot Autoatendimento, AMBOS dependentes de
+decisão antes da Fase 1. Orquestrador (este Code) deve apresentar logo na
+abertura, com prós/contras + recomendação:
 
-OBJETIVO BLOCO 6: ativar 4 etapas inativas que permitem que um cooperado
-cadastre um amigo (proxy) via WhatsApp.
-- 4 estados: CADASTRO_PROXY_NOME, CADASTRO_PROXY_TELEFONE,
-  AGUARDANDO_FATURA_PROXY, CONFIRMAR_PROXY
-- 4 modelos JÁ EXISTEM no banco (Bloco 2 commit 1097f72):
-  proxy_pedindo_nome, proxy_pedindo_telefone, proxy_pedindo_fatura,
-  proxy_confirmar
-- Ação nova CADASTRAR_AMIGO_POR_PROXY no motor — portar lógica do bot
-  hardcoded existente (já implementa, só precisa migrar pro motor
-  dinâmico padrão Bloco 4)
+BLOCO 5 — Atualizar Contrato (~4-6h):
+- Cooperado pede alteração no contrato via WhatsApp (4 sub-opções:
+  aumentar/diminuir/suspender/encerrar kWh).
+- DECISÃO PRODUTO PENDENTE:
+  (A) AÇÃO AUTOMÁTICA: motor altera contrato direto no banco.
+      Riscos: regra de negócio sensível (contrato vinculado a UC,
+      cobrança, etc); erro pode causar inconsistência financeira.
+  (B) SOLICITAÇÃO + HUMANO: motor cria registro (ex:
+      SolicitacaoAlteracaoContrato) com status PENDENTE; equipe valida
+      e aplica. Mais lento mas seguro.
+- Recomendação inicial: (B) — contrato tem peso financeiro/legal,
+  validação humana protege.
 
-INVESTIGAR ANTES DE FASE 2 (Fase 1 read-only obrigatória):
-- Existe handler hardcoded handleCadastroProxy* em whatsapp-bot.service.ts?
-  Quais validações faz (telefone, nome, etc)?
-- As 4 etapas CADASTRO_PROXY_* estão como FluxoEtapa no banco? Cabeadas
-  ou órfãs?
-- Estrutura de dados — provavelmente cria LeadWhatsapp ou Cooperado
-  com algum status PENDENTE_VINCULO. Mapear pra ação.
-- Multi-tenant: cooperativaId herdada do cooperado-indicador (proxy é
-  amigo de cooperado existente). Decisão produto: cooperado-indicador
-  fica registrado como referrer? Reusa MLM/indicacoes existente?
-- Fluxo OCR fatura: proxy_pedindo_fatura sugere que amigo manda foto da
-  conta de luz — reusa pipeline OCR Claude AI existente.
+BLOCO 8 — Menu Fatura / Menu Inadimplente (~4-6h):
+- Sub-menu pra cooperado: ver fatura atual / pegar PIX copia-e-cola /
+  histórico / "já paguei" — e se inadimplente, opção de negociar.
+- DECISÃO PRODUTO PENDENTE:
+  (A) PORTAR PRO MOTOR DINÂMICO: 2 etapas novas (MENU_FATURA,
+      MENU_INADIMPLENTE) + N ações pra cada sub-opção. Modelos
+      menu_fatura + menu_inadimplente já existem (Bloco 2 commit
+      1097f72).
+  (B) MANTER HARDCODED: handlers handleMenuFatura/handleMenuInadimplente
+      já existem (a confirmar Fase 1). Menos trabalho, mas fica fora
+      do padrão dinâmico.
+- Recomendação inicial: depende de quão complexo é o hardcoded. Se for
+  simples (lista cobranças + link Asaas), porta. Se acopla regra de
+  cobrança/parcelamento, mantém hardcoded.
 
-PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido M19 Bloco 4 + M20 + M21):
-- Fluxo de múltiplos turnos: cada etapa AGUARDANDO_/CADASTRO_PROXY_* com
-  gatilho wildcard '*' + acao no gatilho → motor delega pra ação via
-  Gatilho.acao.
-- Ação privada por etapa OU uma ação central com switch/state machine
-  interno (decisão arquitetural Fase 1).
-- Validações inline (espelhar hardcoded), retry no estado se inválido,
-  transição pra próximo CADASTRO_PROXY_* ou MENU_COOPERADO no fim.
+ANTES de empacotar Fase 1 e Fase 2: orquestrador apresenta as DUAS
+decisões pro Luciano bater martelo. Pode ser nessa ordem:
+1. Bloco 5 — decisão produto (A) ação automática OU (B) solicitação humana
+2. Bloco 8 — decisão produto (A) portar dinâmico OU (B) manter hardcoded
+
+Apresentação curta (5-10 min) com recomendação. Luciano escolhe. Aí
+prossegue com Fase 1 read-only do bloco escolhido.
+
+QUAL BLOCO PRIMEIRO? Sugestão: Bloco 8 antes do 5 (menor risco; menos
+regra de negócio crítica; reuso de fluxo de cobrança já existente).
+Bloco 5 fecha o sprint depois.
+
+PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido M19/M20/M21/M22):
+- Fluxo multi-turno com gatilho wildcard '*' + acao no gatilho → motor
+  delega pra ação via Gatilho.acao (Bloco 4 M19).
+- Ação privada padrão: guard cooperadoId + valida input + persiste
+  multi-tenant + transiciona MENU_COOPERADO + retry inline se inválido.
+- Motor AGORA aceita mídia (Bloco 6 M22 — 5º param `media`). Etapas
+  que precisam de foto/PDF têm gatilho wildcard + ação que valida
+  mimeType internamente.
 - Veja whatsapp-fluxo-motor.service.ts:
-  - cases REGISTRAR_NPS (~linha após executarAtualizar*Cooperado) —
-    padrão recém-estabelecido pra ação com persistência.
-  - cases ATUALIZAR_NOME/EMAIL/CEP_COOPERADO (~linhas 760-1000) — padrão
-    ação de 2 turnos consolidado.
+  - cases ATUALIZAR_NOME/EMAIL/CEP_COOPERADO — padrão ação 2 turnos
+  - case REGISTRAR_NPS — padrão ação com persistência multi-tenant
+  - cases SALVAR_PROXY_NOME/TELEFONE — padrão ação só persiste dadosTemp
+  - case PROCESSAR_OCR_PROXY — padrão ação com mídia + OCR síncrono
+  - case CRIAR_COOPERADO_PROXY — padrão ação que cria entidade nova +
+    relacionamento + JWT + envia WA externos
+  - case CHAMAR_DEPOIS — padrão estado quase-terminal
 
-ANTES de qualquer código: Fase 1 read-only OBRIGATÓRIA (Decisão 23).
-Mapear:
-1. Handler hardcoded (handleCadastroProxy*) — existe? funcional?
-2. Estado das 4 etapas FluxoEtapa no banco
-3. Schema de persistência (LeadWhatsapp? Cooperado PENDENTE_VINCULO?)
-4. Fluxo OCR pra fatura (reusa pipeline existente?)
-5. Vínculo proxy → cooperado-indicador (MLM/Indicacao?)
-Reporte com decisões produto pendentes (se houver).
+ANTES de Fase 2 do bloco escolhido: Fase 1 read-only OBRIGATÓRIA
+(Decisão 23) pra mapear estado + propor desenho.
 
 DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 6):
 - Bloco 5 (Atualizar Contrato): ação automática vs solicitação humana
@@ -987,8 +1049,8 @@ DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 7):
 - 4 falhas pré-existentes na suíte Jest (cooperados/usinas controllers)
 
 CARRY-OVERS catalogados:
-- Sprint Bot Autoatendimento restante: Bloco 6 (próximo) → 5 → 8
-  (~10-20h estimados, depende decisões produto 5/8)
+- Sprint Bot Autoatendimento restante: Blocos 5 e 8 (~8-12h, ambos com
+  decisões produto pendentes)
 - M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do sprint atual)
 - Cadastrar usina cooperebr2 (depende M15)
 - Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q)
@@ -998,8 +1060,10 @@ CARRY-OVERS catalogados:
 - D-novo-W divergência NPS CONCLUIDO×MENU_COOPERADO (5 min, Housekeeping)
 - D-novo-X agendarNps dead code (5 min, Housekeeping)
 - D-novo-Y modelo nps_trimestral órfão (5 min OU reuso futuro)
-- Sprint Housekeeping (~3-5h — inclui stash reformat 18/05 + scripts órfãos
-  + D-novo-W/X/Y NPS)
+- D-novo-Z divergência Cadastro Proxy hardcoded×motor (15min-1.5h)
+- D-novo-AA placeholders proxy eternos cpf/email (2-3h cron+UI)
+- Sprint Housekeeping (~5-8h — inclui stash reformat 18/05 + scripts órfãos
+  + D-novo-W/X/Y/Z/AA)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
 - Iniciativa Fluxos Customizáveis D-novo-T (futuro, ~100-200h+)
@@ -1033,6 +1097,15 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
   fallback hardcoded) + transiciona MENU_COOPERADO + retry inline se
   validação falhar. Hardcoded preservado como fallback (debt latente
   catalogado).
+- Padrão Bloco 6 (M22 — fluxo multi-turno com mídia + criação de entidade):
+  motor aceita 5º param `media` em executarAcao + `temMidia` em
+  avaliarGatilhoMatch (wildcard casa com mídia mesmo corpo vazio). Ações
+  que recebem foto/PDF validam mimeType + chamam FaturasService.extrairOcr
+  síncrono + persistem dados + renderizam modelo do banco. Ações que criam
+  entidade nova (Cooperado, Indicacao, etc) usam multi-tenant (cooperativaId
+  do dadosTemp da sessão), JWT pra token de assinatura, envio WA pra
+  destinos externos com try/catch isolado (falha de envio não impede
+  transição).
 - Ritual PM2 obrigatório pra rebuild/seed/scripts no banco:
   pm2 stop → npm run build → script → pm2 restart → pm2 list (confirmar)
 ```
