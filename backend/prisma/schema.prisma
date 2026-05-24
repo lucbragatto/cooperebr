@@ -50,6 +50,8 @@ model Cooperativa {
   cooperados                Cooperado[]
   configuracoesNotificacao  ConfiguracaoNotificacaoCobranca[]
   contratos                 Contrato[]                        @relation("ContratoCooperativa")
+  // Bloco 5 (24/05) — Solicitacoes via WhatsApp aguardando admin aprovar
+  solicitacoesAlteracaoContrato SolicitacaoAlteracaoContrato[]
   administradoras           Administradora[]
   condominios               Condominio[]
   configClubeVantagens      ConfigClubeVantagens?
@@ -173,6 +175,8 @@ model Cooperado {
   indicacoesFeitas        Indicacao[]                @relation("IndicacoesFeitas")
   indicacoesRecebidas     Indicacao[]                @relation("IndicacoesRecebidas")
   beneficiosIndicacao     BeneficioIndicacao[]
+  // Bloco 5 (24/05) — Solicitacoes de alteracao de contrato via WhatsApp
+  solicitacoesAlteracaoContrato SolicitacaoAlteracaoContrato[]
   progressaoClube         ProgressaoClube?
   unidadesCondominio      UnidadeCondominio[]
   transferencias          TransferenciaPix[]
@@ -473,6 +477,8 @@ model Contrato {
   listaEspera              ListaEspera?
   historicoReajusteTarifa  HistoricoReajusteTarifa[]
   enviosLista              EnvioListaCooperado[]
+  // Bloco 5 (24/05) — Solicitacoes de alteracao via WhatsApp aguardando admin
+  solicitacoesAlteracao    SolicitacaoAlteracaoContrato[]
 
   @@map("contratos")
 }
@@ -1540,6 +1546,57 @@ model Indicacao {
   membroConvenio       ConvenioCooperado?
 
   @@map("indicacoes")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Bloco 5 Sprint Bot Autoatendimento (24/05/2026)
+//
+// Cooperado pede via WhatsApp alteracao no contrato (aumentar/diminuir
+// kWh, suspender, encerrar). Decisao Luciano: bot NAO altera contrato
+// direto — cria SolicitacaoAlteracaoContrato PENDENTE; equipe valida
+// pela tela /dashboard/super-admin/solicitacoes e aprova/recusa.
+// Aprovar = aplicar imediato (contratosService.update + status APLICADA).
+// Multi-tenant via cooperativaId em todas as queries.
+// ─────────────────────────────────────────────────────────────────────
+
+enum TipoAlteracaoContrato {
+  AUMENTAR_KWH
+  DIMINUIR_KWH
+  SUSPENDER
+  ENCERRAR
+}
+
+enum StatusSolicitacaoContrato {
+  PENDENTE
+  APROVADA  // reservado pra fluxo 2-fases futuro; hoje pula direto pra APLICADA
+  APLICADA  // contrato foi atualizado de fato (aprovar=aplicar imediato)
+  RECUSADA
+  CANCELADA // cooperado cancelou via bot (futuro)
+}
+
+model SolicitacaoAlteracaoContrato {
+  id                String                    @id @default(cuid())
+  cooperadoId       String
+  cooperado         Cooperado                 @relation(fields: [cooperadoId], references: [id])
+  cooperativaId     String
+  cooperativa       Cooperativa               @relation(fields: [cooperativaId], references: [id])
+  contratoId        String
+  contrato          Contrato                  @relation(fields: [contratoId], references: [id])
+  tipoAlteracao     TipoAlteracaoContrato
+  // Campos por tipo (todos opcionais — so relevantes pro tipo)
+  valorPropostoKwh  Int?     // AUMENTAR_KWH | DIMINUIR_KWH
+  motivo            String?  // opcional pra todos (sugerido SUSPENDER/ENCERRAR)
+  // Workflow
+  status            StatusSolicitacaoContrato @default(PENDENTE)
+  createdAt         DateTime                  @default(now())
+  processadaEm      DateTime?
+  processadaPorId   String?  // FK logico pra Usuario admin (string solta, padrao do projeto)
+  observacoesEquipe String?
+  aplicadaEm        DateTime? // quando contratosService.update rodou de fato
+
+  @@map("solicitacoes_alteracao_contrato")
+  @@index([cooperativaId, status]) // pra listar pendentes por tenant
+  @@index([cooperadoId])            // pra historico do cooperado
 }
 
 model BeneficioIndicacao {
