@@ -27,6 +27,13 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const indicacaoCreate = jest.fn();
   const extrairOcrMock = jest.fn();
   const motorPropostaCalcularMock = jest.fn();
+  // Bloco 5 Etapa B (24/05): mocks pra fluxo Atualizar Contrato.
+  const contratoFindFirst = jest.fn();
+  const solicitacaoContratoCreate = jest.fn();
+  const cobrancaCount = jest.fn();
+  const usinaFindUnique = jest.fn();
+  const contratoAggregateUsina = jest.fn();
+  const notificacaoCriarMock = jest.fn();
 
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
@@ -40,11 +47,17 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       create: cooperadoCreate,
     },
     indicacao: { create: indicacaoCreate },
-    contrato: { findMany: contratoFindMany },
+    contrato: {
+      findMany: contratoFindMany,
+      findFirst: contratoFindFirst,
+      aggregate: contratoAggregateUsina,
+    },
     faturaProcessada: { findFirst: faturaProcessadaFindFirst },
-    cobranca: { findFirst: cobrancaFindFirst },
+    cobranca: { findFirst: cobrancaFindFirst, count: cobrancaCount },
     asaasCobranca: { findFirst: asaasCobrancaFindFirst },
     npsResposta: { create: npsRespostaCreate },
+    solicitacaoAlteracaoContrato: { create: solicitacaoContratoCreate },
+    usina: { findUnique: usinaFindUnique },
   };
   const modeloMensagemMock: any = { incrementarUso };
   const senderMock: any = { enviarMensagem };
@@ -55,6 +68,9 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   // Bloco 6 Etapa C (23/05): FaturasService injetado pra acao
   // PROCESSAR_OCR_PROXY. extrairOcrMock retorna DadosExtraidos.
   const faturasServiceMock: any = { extrairOcr: extrairOcrMock };
+  // Bloco 5 Etapa B (24/05): NotificacoesService injetado pras acoes
+  // SALVAR_SOLICITACAO_* notificarem equipe via Notificacao persistente.
+  const notificacoesServiceMock: any = { criar: notificacaoCriarMock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -64,6 +80,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       senderMock,
       cepServiceMock,
       faturasServiceMock,
+      notificacoesServiceMock,
     );
   });
 
@@ -3906,6 +3923,325 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
       expect(conversaUpdate).not.toHaveBeenCalled();
       expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // Bloco 5 Etapa B1 (24/05) — Acoes do fluxo Atualizar Contrato (KWH).
+  //
+  // Decisao Luciano modelo (B): bot NUNCA altera contrato direto; cria
+  // SolicitacaoAlteracaoContrato PENDENTE; equipe aprova pela tela admin.
+  //
+  // Acoes desta parte (3 das 7 totais do Bloco 5):
+  //  - INICIAR_SOLICITACAO_AUMENTAR_KWH: gatilho '1' do ATUALIZACAO_CONTRATO.
+  //  - INICIAR_SOLICITACAO_DIMINUIR_KWH: gatilho '2'. Analogo, mensagem diz "menor que X".
+  //  - SALVAR_SOLICITACAO_KWH: wildcard em AGUARDANDO_NOVO_KWH. Valida +
+  //    pre-valida capacidade da usina (decisao 4) + cria solicitacao +
+  //    notifica equipe + envia WA `criada` ao cooperado + transiciona MENU.
+  // ============================================================
+  describe('Bloco 5 Etapa B1 - executarAcao(INICIAR_SOLICITACAO_AUMENTAR_KWH)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('INICIAR_SOLICITACAO_AUMENTAR_KWH', conversa, conversa.dadosTemp ?? {}, '');
+
+    it('SEM cooperadoId: erro amigavel + NAO transiciona', async () => {
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: null,
+        cooperativaId: null,
+      });
+      expect(enviarMensagem).toHaveBeenCalled();
+      expect(contratoFindFirst).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('Sem contrato ATIVO: erro + volta pra MENU_COOPERADO', async () => {
+      contratoFindFirst.mockResolvedValueOnce(null);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/contrato/i),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Contrato ATIVO: persiste dadosTemp + transiciona AGUARDANDO_NOVO_KWH', async () => {
+      contratoFindFirst.mockResolvedValueOnce({
+        id: 'contrato-1',
+        kwhContratoMensal: 200,
+        usinaId: 'usina-1',
+      });
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: {
+          estado: 'AGUARDANDO_NOVO_KWH',
+          dadosTemp: expect.objectContaining({
+            contratoId: 'contrato-1',
+            tipoAlteracao: 'AUMENTAR_KWH',
+            kwhAtual: 200,
+            usinaId: 'usina-1',
+          }),
+        },
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('200'),
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/maior/i),
+      );
+    });
+
+    it('Multi-tenant: contratoFindFirst filtra por cooperadoId + cooperativaId + status ATIVO', async () => {
+      contratoFindFirst.mockResolvedValueOnce(null);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      const where = contratoFindFirst.mock.calls[0][0].where;
+      expect(where.cooperadoId).toBe('coop-luciano');
+      expect(where.cooperativaId).toBe('coop-A');
+      expect(where.status).toBe('ATIVO');
+    });
+  });
+
+  describe('Bloco 5 Etapa B1 - executarAcao(INICIAR_SOLICITACAO_DIMINUIR_KWH)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('INICIAR_SOLICITACAO_DIMINUIR_KWH', conversa, conversa.dadosTemp ?? {}, '');
+
+    it('Contrato ATIVO: persiste tipoAlteracao=DIMINUIR_KWH + mensagem diz "menor que"', async () => {
+      contratoFindFirst.mockResolvedValueOnce({
+        id: 'contrato-1',
+        kwhContratoMensal: 300,
+        usinaId: 'usina-1',
+      });
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      const data = conversaUpdate.mock.calls[0][0].data;
+      expect(data.estado).toBe('AGUARDANDO_NOVO_KWH');
+      expect(data.dadosTemp.tipoAlteracao).toBe('DIMINUIR_KWH');
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/menor/i),
+      );
+    });
+  });
+
+  describe('Bloco 5 Etapa B1 - executarAcao(SALVAR_SOLICITACAO_KWH)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('SALVAR_SOLICITACAO_KWH', conversa, conversa.dadosTemp ?? {}, corpo);
+
+    const dadosTempBase = {
+      contratoId: 'contrato-1',
+      tipoAlteracao: 'AUMENTAR_KWH',
+      kwhAtual: 200,
+      usinaId: 'usina-1',
+    };
+
+    it('Valor invalido (texto): erro + NAO transiciona (retry)', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'abc',
+      );
+      expect(enviarMensagem).toHaveBeenCalled();
+      expect(solicitacaoContratoCreate).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
+    });
+
+    it('AUMENTAR com valor MENOR que kwhAtual: erro "deve ser maior"', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'AUMENTAR_KWH', kwhAtual: 200 },
+        },
+        '150',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/maior/i),
+      );
+      expect(solicitacaoContratoCreate).not.toHaveBeenCalled();
+    });
+
+    it('DIMINUIR com valor MAIOR que kwhAtual: erro "deve ser menor"', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'DIMINUIR_KWH', kwhAtual: 200 },
+        },
+        '250',
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/menor/i),
+      );
+      expect(solicitacaoContratoCreate).not.toHaveBeenCalled();
+    });
+
+    it('AUMENTAR ACIMA da capacidade da usina: recusa amigavel + NAO cria solicitacao', async () => {
+      // Pre-validacao decisao 4: bot recusa antes de criar.
+      // Usina capacidade 10000; ja somam 9800 ativos (outros cooperados);
+      // cooperado pede 500 (era 200) -> total seria 10000+(500-200)=10100 > 10000.
+      usinaFindUnique.mockResolvedValueOnce({
+        id: 'usina-1',
+        capacidadeKwh: 10000,
+      });
+      contratoAggregateUsina.mockResolvedValueOnce({
+        _sum: { kwhContratoMensal: 10000 }, // soma TODOS contratos ativos da usina (inclui o do cooperado)
+      });
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'AUMENTAR_KWH', kwhAtual: 200 },
+        },
+        '500',
+      );
+
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/capacidade|disponive|excede/i),
+      );
+      expect(solicitacaoContratoCreate).not.toHaveBeenCalled();
+      expect(notificacaoCriarMock).not.toHaveBeenCalled();
+    });
+
+    it('SUCESSO AUMENTAR: cria solicitacao PENDENTE + notifica equipe + WA criada + transiciona MENU', async () => {
+      usinaFindUnique.mockResolvedValueOnce({
+        id: 'usina-1',
+        capacidadeKwh: 10000,
+      });
+      contratoAggregateUsina.mockResolvedValueOnce({
+        _sum: { kwhContratoMensal: 5000 },
+      });
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-1' });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-criada',
+        nome: 'solicitacao_contrato_criada',
+        categoria: 'BOT',
+        conteudo: 'Recebemos sua solicitação de {{tipo}}.',
+        cooperativaId: null,
+      });
+      notificacaoCriarMock.mockResolvedValueOnce({ id: 'notif-1' });
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'AUMENTAR_KWH', kwhAtual: 200 },
+        },
+        '350',
+      );
+
+      expect(solicitacaoContratoCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          contratoId: 'contrato-1',
+          tipoAlteracao: 'AUMENTAR_KWH',
+          valorPropostoKwh: 350,
+          status: 'PENDENTE',
+        }),
+      });
+      expect(notificacaoCriarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'SOLICITACAO_ALTERACAO_CONTRATO',
+          cooperativaId: 'coop-A',
+        }),
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('Recebemos'),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('SUCESSO DIMINUIR: cria solicitacao sem pre-validar capacidade (nao se aplica)', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-2' });
+      modeloFindFirst.mockResolvedValueOnce(null); // fallback hardcoded
+      notificacaoCriarMock.mockResolvedValueOnce({ id: 'notif-2' });
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'DIMINUIR_KWH', kwhAtual: 200 },
+        },
+        '100',
+      );
+
+      expect(usinaFindUnique).not.toHaveBeenCalled();
+      expect(contratoAggregateUsina).not.toHaveBeenCalled();
+      expect(solicitacaoContratoCreate).toHaveBeenCalled();
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Erro Prisma na criacao da solicitacao: mensagem generica + NAO transiciona', async () => {
+      usinaFindUnique.mockResolvedValueOnce({ capacidadeKwh: 10000 });
+      contratoAggregateUsina.mockResolvedValueOnce({ _sum: { kwhContratoMensal: 1000 } });
+      solicitacaoContratoCreate.mockRejectedValueOnce(new Error('Connection lost'));
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: { ...dadosTempBase, tipoAlteracao: 'AUMENTAR_KWH', kwhAtual: 200 },
+        },
+        '300',
+      );
+      expect(notificacaoCriarMock).not.toHaveBeenCalled();
+      expect(conversaUpdate).not.toHaveBeenCalled();
     });
   });
 });

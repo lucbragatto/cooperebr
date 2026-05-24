@@ -22,9 +22,10 @@ import { WhatsappConversaJob } from './whatsapp-conversa.job';
 import { CoopereAiService } from './coopere-ai.service';
 import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
 import { CepModule } from '../common/cep/cep.module';
+import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, forwardRef(() => ConviteIndicacaoModule)],
+  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule)],
   controllers: [WhatsappFaturaController, WhatsappSimulacaoController],
   providers: [
     WhatsappFaturaService,

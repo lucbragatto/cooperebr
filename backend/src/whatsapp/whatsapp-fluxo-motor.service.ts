@@ -5,6 +5,7 @@ import { ModeloMensagemService } from './modelo-mensagem.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { CepService } from '../common/cep/cep.service';
 import { FaturasService } from '../faturas/faturas.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
 
 interface MensagemRecebida {
@@ -62,6 +63,7 @@ export class WhatsappFluxoMotorService {
     private sender: WhatsappSenderService,
     private cepService: CepService,
     private faturasService: FaturasService,
+    private notificacoes: NotificacoesService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -536,6 +538,18 @@ export class WhatsappFluxoMotorService {
           break;
         case 'CRIAR_COOPERADO_PROXY':
           await this.executarCriarCooperadoProxy(conversa);
+          break;
+        // Bloco 5 Etapa B1 (24/05): 3 acoes do fluxo Atualizar Contrato (KWH).
+        // Decisao Luciano modelo (B): bot NAO altera contrato direto, cria
+        // SolicitacaoAlteracaoContrato PENDENTE pra equipe aprovar.
+        case 'INICIAR_SOLICITACAO_AUMENTAR_KWH':
+          await this.executarIniciarSolicitacaoKwh(conversa, 'AUMENTAR_KWH');
+          break;
+        case 'INICIAR_SOLICITACAO_DIMINUIR_KWH':
+          await this.executarIniciarSolicitacaoKwh(conversa, 'DIMINUIR_KWH');
+          break;
+        case 'SALVAR_SOLICITACAO_KWH':
+          await this.executarSalvarSolicitacaoKwh(conversa, corpo);
           break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
@@ -1657,6 +1671,268 @@ export class WhatsappFluxoMotorService {
 
     this.logger.log(
       `CRIAR_COOPERADO_PROXY: cooperado novo ${novoCooperado.id} (indicador ${indicadorId}, tenant ${cooperativaId}) -> Indicacao PENDENTE + JWT 7d + WA amigo + notificacao indicador`,
+    );
+  }
+
+  // ============================================================
+  // Bloco 5 Etapa B1 (24/05) — Acoes do fluxo Atualizar Contrato (KWH).
+  //
+  // Decisao Luciano modelo (B): bot NUNCA altera contrato direto; cria
+  // SolicitacaoAlteracaoContrato status PENDENTE; equipe aprova pela tela
+  // /dashboard/super-admin/solicitacoes (Etapa E) que dispara
+  // contratosService.update.
+  //
+  // 3 acoes desta parte:
+  //  - INICIAR_SOLICITACAO_AUMENTAR_KWH (gatilho '1' do ATUALIZACAO_CONTRATO)
+  //  - INICIAR_SOLICITACAO_DIMINUIR_KWH (gatilho '2')
+  //  - SALVAR_SOLICITACAO_KWH (wildcard em AGUARDANDO_NOVO_KWH)
+  //
+  // Pre-validacao decisao 4: AUMENTAR consulta Usina.capacidadeKwh + soma
+  // Contrato.kwhContratoMensal ATIVOS da mesma usina; recusa antes de
+  // criar se delta excederia capacidade.
+  // ============================================================
+  private async executarIniciarSolicitacaoKwh(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    tipoAlteracao: 'AUMENTAR_KWH' | 'DIMINUIR_KWH',
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para alterar seu contrato voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz.',
+      );
+      this.logger.log(
+        `${tipoAlteracao}: telefone ${conversa.telefone} nao e cooperado - mensagem enviada`,
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const whereContrato: { cooperadoId: string; status: 'ATIVO'; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+      status: 'ATIVO',
+    };
+    if (cooperativaId) whereContrato.cooperativaId = cooperativaId;
+
+    const contrato = await this.prisma.contrato.findFirst({
+      where: whereContrato as never,
+      select: {
+        id: true,
+        kwhContratoMensal: true,
+        usinaId: true,
+      },
+    });
+
+    if (!contrato) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nenhum contrato ativo encontrado. Fale com nossa equipe.',
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      return;
+    }
+
+    const kwhAtual = Number(contrato.kwhContratoMensal ?? 0);
+    const dadosAtuais = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const dadosNovo = {
+      ...dadosAtuais,
+      contratoId: contrato.id,
+      tipoAlteracao,
+      kwhAtual,
+      usinaId: contrato.usinaId,
+    };
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_NOVO_KWH',
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    const direcao = tipoAlteracao === 'AUMENTAR_KWH' ? 'maior' : 'menor';
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `📊 Seu contrato atual: *${kwhAtual} kWh/mês*\n\nDigite o *novo valor em kWh* (${direcao} que ${kwhAtual}):`,
+    );
+
+    this.logger.log(
+      `${tipoAlteracao}: cooperado ${conversa.cooperadoId} contrato ${contrato.id} kwhAtual=${kwhAtual} (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarSalvarSolicitacaoKwh(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const dados = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const contratoId = dados.contratoId as string | undefined;
+    const tipoAlteracao = dados.tipoAlteracao as 'AUMENTAR_KWH' | 'DIMINUIR_KWH' | undefined;
+    const kwhAtual = Number(dados.kwhAtual ?? 0);
+    const usinaId = dados.usinaId as string | null | undefined;
+
+    if (!contratoId || !tipoAlteracao || kwhAtual <= 0) {
+      this.logger.error(
+        `SALVAR_SOLICITACAO_KWH: dadosTemp incompleto (contratoId=${!!contratoId}, tipoAlteracao=${tipoAlteracao}, kwhAtual=${kwhAtual})`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Sessao incompleta. Volte ao menu e tente de novo.',
+      );
+      return;
+    }
+
+    // Validacao do valor
+    const valor = parseInt((corpo ?? '').replace(/\D/g, ''), 10);
+    if (!valor || valor <= 0) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Valor invalido. Digite apenas numeros (kWh/mes):',
+      );
+      return;
+    }
+
+    if (tipoAlteracao === 'AUMENTAR_KWH' && valor <= kwhAtual) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `⚠️ Valor deve ser *maior* que ${kwhAtual} kWh. Digite outro:`,
+      );
+      return;
+    }
+    if (tipoAlteracao === 'DIMINUIR_KWH' && valor >= kwhAtual) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `⚠️ Valor deve ser *menor* que ${kwhAtual} kWh. Digite outro:`,
+      );
+      return;
+    }
+
+    // Pre-validacao decisao 4: capacidade da usina (so pra AUMENTAR)
+    if (tipoAlteracao === 'AUMENTAR_KWH' && usinaId) {
+      try {
+        const usina = await this.prisma.usina.findUnique({
+          where: { id: usinaId },
+          select: { capacidadeKwh: true },
+        });
+        if (usina?.capacidadeKwh) {
+          const capacidade = Number(usina.capacidadeKwh);
+          const ocupado = await this.prisma.contrato.aggregate({
+            where: { usinaId, status: 'ATIVO' as any },
+            _sum: { kwhContratoMensal: true },
+          });
+          const totalOcupado = Number(ocupado._sum?.kwhContratoMensal ?? 0);
+          const delta = valor - kwhAtual; // diferenca que o cooperado ta pedindo
+          const totalSeAprovado = totalOcupado + delta;
+          if (totalSeAprovado > capacidade) {
+            const disponivel = Math.max(0, capacidade - totalOcupado);
+            await this.sender.enviarMensagem(
+              conversa.telefone,
+              `⚠️ Sua usina tem ${capacidade} kWh/mês de capacidade, ja ocupada em ${totalOcupado} kWh. O aumento de ${delta} kWh excederia o disponivel (${disponivel} kWh). Procure a equipe pra avaliar outras opcoes.`,
+            );
+            this.logger.log(
+              `SALVAR_SOLICITACAO_KWH AUMENTAR recusado: capacidade ${capacidade}, ocupado ${totalOcupado}, delta ${delta}, total ${totalSeAprovado}`,
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        this.logger.warn(
+          `SALVAR_SOLICITACAO_KWH: erro consultando capacidade usina ${usinaId} — ${(err as Error)?.message ?? 'desconhecido'} (segue sem pre-validar)`,
+        );
+      }
+    }
+
+    // Cria solicitacao + notifica + WA cooperado
+    const cooperativaId = conversa.cooperativaId;
+    if (!conversa.cooperadoId || !cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Sessao incompleta. Volte ao menu e tente de novo.',
+      );
+      return;
+    }
+
+    let solicitacaoId: string;
+    try {
+      const sol = await this.prisma.solicitacaoAlteracaoContrato.create({
+        data: {
+          cooperadoId: conversa.cooperadoId,
+          cooperativaId,
+          contratoId,
+          tipoAlteracao: tipoAlteracao as any,
+          valorPropostoKwh: valor,
+          status: 'PENDENTE' as any,
+        },
+      });
+      solicitacaoId = sol.id;
+    } catch (err) {
+      this.logger.error(
+        `SALVAR_SOLICITACAO_KWH: solicitacao.create falhou — ${(err as Error)?.message ?? 'desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nao consegui registrar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    // Notifica equipe (NotificacoesService — persiste pra painel admin)
+    try {
+      const direcaoTxt = tipoAlteracao === 'AUMENTAR_KWH' ? 'aumentar' : 'diminuir';
+      await this.notificacoes.criar({
+        tipo: 'SOLICITACAO_ALTERACAO_CONTRATO',
+        titulo: `Solicitacao: ${direcaoTxt} kWh`,
+        mensagem: `Cooperado pediu ${direcaoTxt} kWh: ${kwhAtual} -> ${valor} kWh/mes.`,
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId,
+        link: `/dashboard/super-admin/solicitacoes/${solicitacaoId}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `SALVAR_SOLICITACAO_KWH: notificacoes.criar falhou — ${(err as Error)?.message ?? 'desconhecido'} (segue)`,
+      );
+    }
+
+    // Envia WA `solicitacao_contrato_criada` ao cooperado
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'solicitacao_contrato_criada',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    const tipoTxt = tipoAlteracao === 'AUMENTAR_KWH' ? 'aumentar kWh' : 'diminuir kWh';
+    if (modelo) {
+      const vars: Record<string, string> = { tipo: tipoTxt };
+      const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      await this.modeloMensagem.incrementarUso(modelo.id);
+    } else {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ Recebemos sua solicitacao de *${tipoTxt}*. Nossa equipe vai analisar e te avisa em ate 2 dias uteis.`,
+      );
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `SALVAR_SOLICITACAO_KWH: solicitacao ${solicitacaoId} criada (cooperado=${conversa.cooperadoId}, contrato=${contratoId}, ${tipoAlteracao} ${kwhAtual}->${valor}, tenant=${cooperativaId})`,
     );
   }
 
