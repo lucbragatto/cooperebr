@@ -18,12 +18,15 @@ const fluxos = [
   // Autoatendimento — 21/05: viraram transicao real pras etapas VER_SALDO_CREDITOS
   // e VER_PROXIMA_FATURA com acaoAutomatica propria. NAO usar campo `acao` em
   // gatilho — motor nao processa, fica orfao).
+  // Bloco 8 (24/05): gatilho '2' agora vai pra MENU_FATURA (menu completo com
+  // PIX/boleto/historico/ja paguei) em vez de VER_PROXIMA_FATURA (que so mostra
+  // a proxima fatura simples). VER_PROXIMA_FATURA fica orfa — D-novo-AF Housekeeping.
   { id: 'f-menu-cooperado', nome: 'Menu do Cooperado', ordem: 3, estado: 'MENU_COOPERADO', gatilhos: [
     { resposta: '1', proximoEstado: 'VER_SALDO_CREDITOS' },
-    { resposta: '2', proximoEstado: 'VER_PROXIMA_FATURA' },
+    { resposta: '2', proximoEstado: 'MENU_FATURA' },
     { resposta: '3', proximoEstado: 'AGUARDANDO_FOTO_FATURA' },
     { resposta: '4', proximoEstado: 'ATUALIZACAO_CONTRATO' },
-    { resposta: '5', proximoEstado: 'ENVIAR_CONVITE' },
+    { resposta: '5', proximoEstado: 'ENVIAR_CONVITE', acao: 'GERAR_LINK_INDICACAO' },
     { resposta: '6', proximoEstado: 'AGUARDANDO_ATENDENTE' },
     { resposta: '7', proximoEstado: 'AGUARDANDO_ATENDENTE' },
     // Bloco 7 (23/05) — comando manual de teste pra disparar NPS sem
@@ -99,7 +102,17 @@ const fluxos = [
   ]},
 
   // Menu de cobranças
-  { id: 'f-menu-fatura', nome: 'Menu de Cobranças/Faturas', ordem: 17, estado: 'MENU_FATURA', gatilhos: [] },
+  // Bloco 8 (24/05): MENU_FATURA cabeado ao motor dinamico — 4 sub-opcoes.
+  // modeloMensagemId aponta pra modelo `menu_fatura` (Bloco 2). Ativo=true.
+  { id: 'f-menu-fatura', nome: 'Menu de Cobranças/Faturas', ordem: 17, estado: 'MENU_FATURA', gatilhos: [
+    { resposta: '1', proximoEstado: 'MENU_FATURA', acao: 'VER_FATURA_ATUAL' },
+    { resposta: '2', proximoEstado: 'MENU_FATURA', acao: 'VER_HISTORICO_PAGAMENTOS' },
+    { resposta: '3', proximoEstado: 'AGUARDANDO_FORMA_PAGAMENTO', acao: 'SOLICITAR_CONFIRMACAO_PAGAMENTO' },
+    { resposta: '4', proximoEstado: 'MENU_COOPERADO', acao: 'SOLICITAR_NEGOCIACAO_HUMANA' },
+  ]},
+  { id: 'f-aguardando-forma-pagamento', nome: 'Aguardando Forma de Pagamento (ja paguei)', ordem: 58, estado: 'AGUARDANDO_FORMA_PAGAMENTO', gatilhos: [
+    { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'SALVAR_CONFIRMACAO_PAGAMENTO' },
+  ]},
 
   // Atualização de dados
   // Bloco 4 (22/05) — Telefone REMOVIDO do menu (decisão Luciano: trocar
