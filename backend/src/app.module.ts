@@ -56,6 +56,7 @@ import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
 import { AuditModule } from './audit/audit.module';
 import { NotificacoesProativasModule } from './notificacoes-proativas/notificacoes-proativas.module';
+import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes-contrato.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { NotificacoesProativasModule } from './notificacoes-proativas/notificaco
     BandeiraTarifariaModule,
     AuditModule,
     NotificacoesProativasModule,
+    SolicitacoesContratoModule,
   ],
   controllers: [AppController],
   providers: [
