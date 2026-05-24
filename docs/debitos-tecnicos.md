@@ -2756,6 +2756,39 @@ Esses placeholders são únicos (timestamp evita colisão no `@unique`), permiti
 
 ---
 
+### D-novo-AB — Handler hardcoded `handleAtualizacaoContrato` viola decisão (B) do Bloco 5 — altera Contrato direto sem passar por SolicitacaoAlteracaoContrato (P2 limpeza pós-validação produção)
+
+**Origem:** Bloco 5 Etapas A→E do Sprint Bot Autoatendimento (2026-05-24).
+
+**Contexto:** A decisão arquitetural do Bloco 5 (modelo B, locked 24/05) é que o bot **NUNCA** altera contrato direto. Toda alteração via WhatsApp passa por `SolicitacaoAlteracaoContrato` PENDENTE; equipe aprova via painel admin `/dashboard/super-admin/solicitacoes`; só então a aplicação acontece.
+
+O motor dinâmico já foi convertido (Etapas A+B+C+D+E desta sessão M23) — `ATUALIZACAO_CONTRATO` no banco agora aponta pras novas ações `INICIAR_SOLICITACAO_*` + `SALVAR_SOLICITACAO_*` que criam solicitação PENDENTE em vez de aplicar.
+
+**Mas** `whatsapp-bot.service.ts` ainda tem o handler hardcoded antigo (`handleAtualizacaoContrato` ou nome equivalente) que processa o menu '1/2/3/4' do estado `ATUALIZACAO_CONTRATO` chamando `contratosService.update` direto. Esse caminho hardcoded:
+
+- **Não cria** `SolicitacaoAlteracaoContrato` — pula a aprovação humana
+- **Não passa por painel admin** — equipe não vê a mudança até consultar o contrato
+- **Não dispara notificação interna** pra equipe via `NotificacoesService`
+- **Não pré-valida cobrança em aberto** (decisão 4) — fluxo dinâmico bloqueia, hardcoded não
+- **Não pré-valida capacidade da usina** (decisão 4) — idem
+
+Hardcoded **só dispara** se a etapa global `ATUALIZACAO_CONTRATO` for desativada (`ativo=false`) ou removida do banco. Hoje a etapa está ATIVA + GLOBAL (`cooperativaId=null`), então motor dinâmico vence o fallback (`handleAtualizacaoContrato` fica inalcançável). Mas o código continua lá — vetor de regressão futura.
+
+**Risco:** se alguém desativa a etapa por engano (admin, migração, refator), o fallback hardcoded volta a executar e burla a decisão (B) silenciosamente.
+
+**Fix:**
+1. Após validação em produção do fluxo dinâmico Bloco 5 estabilizado (1-2 sprints), **remover** o método `handleAtualizacaoContrato` de `whatsapp-bot.service.ts`.
+2. Trocar `case 'ATUALIZACAO_CONTRATO'` no switch de estados por uma mensagem genérica de erro (ex: "Funcionalidade indisponível, fale com a equipe") — o motor dinâmico nunca chega no hardcoded se a etapa estiver ATIVA, então essa branch só executa em fallback de emergência.
+3. Catalogar a remoção em sessão futura `docs/sessoes/YYYY-MM-DD-bloco-5-cleanup-hardcoded.md`.
+
+**Custo estimado:** ~30min (remoção mecânica + smoke test).
+
+**Posicionamento:** Sprint Housekeeping pós-onboarding Sinergia OU 2 semanas após Bloco 5 entrar em produção com Luciano usando o WhatsApp real e a tela admin funcionando.
+
+**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AB confirmado livre após D-novo-AA. Não bloqueia M23 — motor dinâmico tem precedência via gatilho `acao` + etapa ATIVA + GLOBAL.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
