@@ -4244,4 +4244,308 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       expect(conversaUpdate).not.toHaveBeenCalled();
     });
   });
+
+  // ============================================================
+  // Bloco 5 Etapa B2 (24/05) — Acoes SUSPENDER + ENCERRAR.
+  //
+  // Continuacao da Etapa B1 (KWH). 4 acoes restantes:
+  //  - INICIAR_SOLICITACAO_SUSPENDER: gatilho '3'. Pre-valida cobrança em
+  //    aberto (decisao 4); persiste dadosTemp; transiciona pra
+  //    AGUARDANDO_MOTIVO_SUSPENSAO; motor renderiza modelo da etapa.
+  //  - SALVAR_SOLICITACAO_SUSPENDER: wildcard em AGUARDANDO_MOTIVO_SUSPENSAO.
+  //    Cria solicitacao + notifica + WA cooperado + transiciona MENU.
+  //  - INICIAR_SOLICITACAO_ENCERRAR: gatilho '4'. Pre-valida cobrança;
+  //    transiciona pra CONFIRMAR_ENCERRAMENTO ("tem certeza?").
+  //  - SALVAR_SOLICITACAO_ENCERRAR: wildcard em AGUARDANDO_MOTIVO_ENCERRAMENTO.
+  //    Motivo opcional (decisao 5 B — "PULAR" -> null). Cria solicitacao.
+  // ============================================================
+  describe('Bloco 5 Etapa B2 - executarAcao(INICIAR_SOLICITACAO_SUSPENDER)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('INICIAR_SOLICITACAO_SUSPENDER', conversa, conversa.dadosTemp ?? {}, '');
+
+    it('Sem contrato ATIVO: erro + volta MENU', async () => {
+      contratoFindFirst.mockResolvedValueOnce(null);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Cobranca em aberto bloqueia: recusa + NAO transiciona pra fluxo de motivo', async () => {
+      contratoFindFirst.mockResolvedValueOnce({ id: 'contrato-1', kwhContratoMensal: 200 });
+      cobrancaCount.mockResolvedValueOnce(2); // 2 cobranças em aberto
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/aberto|quitar|fatura/i),
+      );
+      // NAO transiciona pra AGUARDANDO_MOTIVO_SUSPENSAO
+      expect(conversaUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ estado: 'AGUARDANDO_MOTIVO_SUSPENSAO' }),
+        }),
+      );
+    });
+
+    it('Sem cobrança aberta: persiste dadosTemp + transiciona AGUARDANDO_MOTIVO_SUSPENSAO', async () => {
+      contratoFindFirst.mockResolvedValueOnce({ id: 'contrato-1', kwhContratoMensal: 200 });
+      cobrancaCount.mockResolvedValueOnce(0);
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: {
+          estado: 'AGUARDANDO_MOTIVO_SUSPENSAO',
+          dadosTemp: expect.objectContaining({
+            contratoId: 'contrato-1',
+            tipoAlteracao: 'SUSPENDER',
+          }),
+        },
+      });
+      // Pede motivo
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/motivo/i),
+      );
+    });
+  });
+
+  describe('Bloco 5 Etapa B2 - executarAcao(SALVAR_SOLICITACAO_SUSPENDER)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('SALVAR_SOLICITACAO_SUSPENDER', conversa, conversa.dadosTemp ?? {}, corpo);
+
+    const dadosTempBase = {
+      contratoId: 'contrato-1',
+      tipoAlteracao: 'SUSPENDER',
+    };
+
+    it('Sucesso: cria solicitacao SUSPENDER com motivo + notifica + WA + transiciona MENU', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-sus-1' });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'm-criada',
+        nome: 'solicitacao_contrato_criada',
+        conteudo: 'Recebemos sua solicitação de {{tipo}}.',
+        cooperativaId: null,
+      });
+      notificacaoCriarMock.mockResolvedValueOnce({ id: 'notif-sus-1' });
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'Viagem prolongada de 3 meses',
+      );
+
+      expect(solicitacaoContratoCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          contratoId: 'contrato-1',
+          tipoAlteracao: 'SUSPENDER',
+          motivo: 'Viagem prolongada de 3 meses',
+          status: 'PENDENTE',
+        }),
+      });
+      expect(notificacaoCriarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'SOLICITACAO_ALTERACAO_CONTRATO',
+          cooperativaId: 'coop-A',
+        }),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Motivo vazio (so espaços): aceita como motivo null', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-sus-2' });
+      modeloFindFirst.mockResolvedValueOnce(null);
+      notificacaoCriarMock.mockResolvedValueOnce({});
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        '   ',
+      );
+
+      const data = solicitacaoContratoCreate.mock.calls[0][0].data;
+      expect(data.motivo).toBeNull();
+    });
+  });
+
+  describe('Bloco 5 Etapa B2 - executarAcao(INICIAR_SOLICITACAO_ENCERRAR)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('INICIAR_SOLICITACAO_ENCERRAR', conversa, conversa.dadosTemp ?? {}, '');
+
+    it('Cobrança em aberto bloqueia: recusa + NAO transiciona', async () => {
+      contratoFindFirst.mockResolvedValueOnce({ id: 'contrato-1' });
+      cobrancaCount.mockResolvedValueOnce(1);
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/aberto|quitar|fatura/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ estado: 'CONFIRMAR_ENCERRAMENTO' }),
+        }),
+      );
+    });
+
+    it('Sem cobrança aberta: persiste dadosTemp + transiciona CONFIRMAR_ENCERRAMENTO', async () => {
+      contratoFindFirst.mockResolvedValueOnce({ id: 'contrato-1' });
+      cobrancaCount.mockResolvedValueOnce(0);
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: {
+          estado: 'CONFIRMAR_ENCERRAMENTO',
+          dadosTemp: expect.objectContaining({
+            contratoId: 'contrato-1',
+            tipoAlteracao: 'ENCERRAR',
+          }),
+        },
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/certeza|nao pode ser desfeit/i),
+      );
+    });
+  });
+
+  describe('Bloco 5 Etapa B2 - executarAcao(SALVAR_SOLICITACAO_ENCERRAR)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao('SALVAR_SOLICITACAO_ENCERRAR', conversa, conversa.dadosTemp ?? {}, corpo);
+
+    const dadosTempBase = {
+      contratoId: 'contrato-1',
+      tipoAlteracao: 'ENCERRAR',
+    };
+
+    it('Motivo "PULAR": cria solicitacao com motivo null (decisao 5 B opcional)', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-enc-1' });
+      modeloFindFirst.mockResolvedValueOnce(null);
+      notificacaoCriarMock.mockResolvedValueOnce({});
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'PULAR',
+      );
+
+      const data = solicitacaoContratoCreate.mock.calls[0][0].data;
+      expect(data.tipoAlteracao).toBe('ENCERRAR');
+      expect(data.motivo).toBeNull();
+    });
+
+    it('Motivo "pular" (lowercase): tambem aceita', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-enc-2' });
+      modeloFindFirst.mockResolvedValueOnce(null);
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'pular',
+      );
+
+      const data = solicitacaoContratoCreate.mock.calls[0][0].data;
+      expect(data.motivo).toBeNull();
+    });
+
+    it('Motivo válido: persiste como dado', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-enc-3' });
+      modeloFindFirst.mockResolvedValueOnce(null);
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'Mudei pra outro estado',
+      );
+
+      const data = solicitacaoContratoCreate.mock.calls[0][0].data;
+      expect(data.motivo).toBe('Mudei pra outro estado');
+    });
+
+    it('Notifica equipe + transiciona MENU mesmo sem modelo do banco (fallback hardcoded)', async () => {
+      solicitacaoContratoCreate.mockResolvedValueOnce({ id: 'sol-enc-4' });
+      modeloFindFirst.mockResolvedValueOnce(null);
+      notificacaoCriarMock.mockResolvedValueOnce({});
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'PULAR',
+      );
+
+      expect(notificacaoCriarMock).toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalled();
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+  });
 });

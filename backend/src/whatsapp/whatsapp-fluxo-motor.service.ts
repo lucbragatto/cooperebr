@@ -551,6 +551,22 @@ export class WhatsappFluxoMotorService {
         case 'SALVAR_SOLICITACAO_KWH':
           await this.executarSalvarSolicitacaoKwh(conversa, corpo);
           break;
+        // Bloco 5 Etapa B2 (24/05): 4 acoes do fluxo Atualizar Contrato (SUSPENDER + ENCERRAR).
+        // Decisao Luciano 2: Suspender = pausa INDEFINIDA + motivo obrigatorio.
+        // Decisao Luciano 5: Encerrar = motivo opcional ("PULAR" → null).
+        // Decisao Luciano 4: Pre-valida cobranca em aberto antes de criar solicitacao.
+        case 'INICIAR_SOLICITACAO_SUSPENDER':
+          await this.executarIniciarSolicitacaoSuspender(conversa);
+          break;
+        case 'SALVAR_SOLICITACAO_SUSPENDER':
+          await this.executarSalvarSolicitacaoSuspender(conversa, corpo);
+          break;
+        case 'INICIAR_SOLICITACAO_ENCERRAR':
+          await this.executarIniciarSolicitacaoEncerrar(conversa);
+          break;
+        case 'SALVAR_SOLICITACAO_ENCERRAR':
+          await this.executarSalvarSolicitacaoEncerrar(conversa, corpo);
+          break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
       }
@@ -1933,6 +1949,270 @@ export class WhatsappFluxoMotorService {
 
     this.logger.log(
       `SALVAR_SOLICITACAO_KWH: solicitacao ${solicitacaoId} criada (cooperado=${conversa.cooperadoId}, contrato=${contratoId}, ${tipoAlteracao} ${kwhAtual}->${valor}, tenant=${cooperativaId})`,
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Bloco 5 Etapa B2 (24/05): SUSPENDER + ENCERRAR.
+  // Padrao: pre-valida cobranca em aberto (decisao 4) → persiste dadosTemp →
+  // transiciona pra etapa intermediaria (motivo). SALVAR cria solicitacao
+  // PENDENTE + NotificacoesService + WA cooperado + MENU.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  private async executarIniciarSolicitacaoSuspender(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    await this.executarIniciarSolicitacaoBloqueante(conversa, 'SUSPENDER');
+  }
+
+  private async executarIniciarSolicitacaoEncerrar(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    await this.executarIniciarSolicitacaoBloqueante(conversa, 'ENCERRAR');
+  }
+
+  private async executarIniciarSolicitacaoBloqueante(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    tipoAlteracao: 'SUSPENDER' | 'ENCERRAR',
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para alterar seu contrato voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz.',
+      );
+      this.logger.log(
+        `${tipoAlteracao}: telefone ${conversa.telefone} nao e cooperado - mensagem enviada`,
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const whereContrato: { cooperadoId: string; status: 'ATIVO'; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+      status: 'ATIVO',
+    };
+    if (cooperativaId) whereContrato.cooperativaId = cooperativaId;
+
+    const contrato = await this.prisma.contrato.findFirst({
+      where: whereContrato as never,
+      select: { id: true, kwhContratoMensal: true },
+    });
+
+    if (!contrato) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nenhum contrato ativo encontrado. Fale com nossa equipe.',
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      return;
+    }
+
+    // Decisao 4: pre-valida cobranca em aberto antes de permitir SUSPENDER/ENCERRAR
+    let abertas = 0;
+    try {
+      abertas = await this.prisma.cobranca.count({
+        where: {
+          contrato: { cooperadoId: conversa.cooperadoId },
+          status: { in: ['A_VENCER', 'VENCIDO'] as any },
+          ...(cooperativaId ? { cooperativaId } : {}),
+        } as never,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `${tipoAlteracao}: erro consultando cobranca em aberto — ${(err as Error)?.message ?? 'desconhecido'} (segue assumindo zero)`,
+      );
+    }
+
+    if (abertas > 0) {
+      const verbo = tipoAlteracao === 'SUSPENDER' ? 'suspender' : 'encerrar';
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `⚠️ Voce tem ${abertas} fatura(s) em aberto. Quitar antes de pedir pra ${verbo} o contrato. Volte ao menu pra ver suas faturas.`,
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      this.logger.log(
+        `${tipoAlteracao} recusado: ${abertas} cobrancas em aberto (cooperado=${conversa.cooperadoId}, tenant=${cooperativaId ?? 'global'})`,
+      );
+      return;
+    }
+
+    const dadosAtuais = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const dadosNovo = {
+      ...dadosAtuais,
+      contratoId: contrato.id,
+      tipoAlteracao,
+    };
+
+    const estadoNovo =
+      tipoAlteracao === 'SUSPENDER' ? 'AGUARDANDO_MOTIVO_SUSPENSAO' : 'CONFIRMAR_ENCERRAMENTO';
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: estadoNovo,
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    const mensagem =
+      tipoAlteracao === 'SUSPENDER'
+        ? '📝 Conte o *motivo* da suspensao (ex: "viagem 3 meses", "obra em casa"):'
+        : '⚠️ Encerrar o contrato *nao pode ser desfeito*. Tem certeza? Digite o motivo (ou "PULAR" pra nao informar):';
+
+    await this.sender.enviarMensagem(conversa.telefone, mensagem);
+
+    this.logger.log(
+      `${tipoAlteracao}: cooperado ${conversa.cooperadoId} contrato ${contrato.id} (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarSalvarSolicitacaoSuspender(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const motivo = (corpo ?? '').trim() || null;
+    await this.executarSalvarSolicitacaoBloqueante(conversa, 'SUSPENDER', motivo);
+  }
+
+  private async executarSalvarSolicitacaoEncerrar(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    // Decisao 5: "PULAR" (case insensitive) → motivo null
+    const limpo = (corpo ?? '').trim();
+    const motivo = !limpo || limpo.toUpperCase() === 'PULAR' ? null : limpo;
+    await this.executarSalvarSolicitacaoBloqueante(conversa, 'ENCERRAR', motivo);
+  }
+
+  private async executarSalvarSolicitacaoBloqueante(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    tipoAlteracao: 'SUSPENDER' | 'ENCERRAR',
+    motivo: string | null,
+  ): Promise<void> {
+    const dados = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const contratoId = dados.contratoId as string | undefined;
+    const cooperativaId = conversa.cooperativaId;
+
+    if (!contratoId || !conversa.cooperadoId || !cooperativaId) {
+      this.logger.error(
+        `SALVAR_SOLICITACAO_${tipoAlteracao}: sessao incompleta (contratoId=${!!contratoId}, cooperadoId=${!!conversa.cooperadoId}, cooperativaId=${!!cooperativaId})`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Sessao incompleta. Volte ao menu e tente de novo.',
+      );
+      return;
+    }
+
+    let solicitacaoId: string;
+    try {
+      const sol = await this.prisma.solicitacaoAlteracaoContrato.create({
+        data: {
+          cooperadoId: conversa.cooperadoId,
+          cooperativaId,
+          contratoId,
+          tipoAlteracao: tipoAlteracao as any,
+          motivo,
+          status: 'PENDENTE' as any,
+        },
+      });
+      solicitacaoId = sol.id;
+    } catch (err) {
+      this.logger.error(
+        `SALVAR_SOLICITACAO_${tipoAlteracao}: solicitacao.create falhou — ${(err as Error)?.message ?? 'desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nao consegui registrar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    // Notifica equipe
+    try {
+      const acaoTxt = tipoAlteracao === 'SUSPENDER' ? 'suspender' : 'encerrar';
+      await this.notificacoes.criar({
+        tipo: 'SOLICITACAO_ALTERACAO_CONTRATO',
+        titulo: `Solicitacao: ${acaoTxt} contrato`,
+        mensagem: motivo
+          ? `Cooperado pediu pra ${acaoTxt} contrato. Motivo: ${motivo}`
+          : `Cooperado pediu pra ${acaoTxt} contrato (sem motivo informado).`,
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId,
+        link: `/dashboard/super-admin/solicitacoes/${solicitacaoId}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `SALVAR_SOLICITACAO_${tipoAlteracao}: notificacoes.criar falhou — ${(err as Error)?.message ?? 'desconhecido'} (segue)`,
+      );
+    }
+
+    // Envia WA cooperado
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'solicitacao_contrato_criada',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    const tipoTxt = tipoAlteracao === 'SUSPENDER' ? 'suspender contrato' : 'encerrar contrato';
+    if (modelo) {
+      const vars: Record<string, string> = { tipo: tipoTxt };
+      const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      await this.modeloMensagem.incrementarUso(modelo.id);
+    } else {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ Recebemos sua solicitacao de *${tipoTxt}*. Nossa equipe vai analisar e te avisa em ate 2 dias uteis.`,
+      );
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `SALVAR_SOLICITACAO_${tipoAlteracao}: solicitacao ${solicitacaoId} criada (cooperado=${conversa.cooperadoId}, contrato=${contratoId}, motivo=${motivo ? 'sim' : 'nao'}, tenant=${cooperativaId})`,
     );
   }
 
