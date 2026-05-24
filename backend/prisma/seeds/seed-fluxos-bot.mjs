@@ -111,11 +111,25 @@ const fluxos = [
     { resposta: '2', proximoEstado: 'AGUARDANDO_NOVO_EMAIL' },
     { resposta: '3', proximoEstado: 'AGUARDANDO_NOVO_CEP' },
   ]},
+  // Bloco 5 (24/05): liga ao motor dinamico via Gatilho.acao. As acoes
+  // INICIAR_SOLICITACAO_* criam SolicitacaoAlteracaoContrato PENDENTE
+  // (bot NAO altera contrato direto — equipe aprova via painel admin).
   { id: 'f-atualizar-contrato', nome: 'Atualizar Contrato', ordem: 19, estado: 'ATUALIZACAO_CONTRATO', gatilhos: [
-    { resposta: '1', proximoEstado: 'MENU_COOPERADO', acao: 'SOLICITAR_AUMENTO_KWH' },
-    { resposta: '2', proximoEstado: 'MENU_COOPERADO', acao: 'SOLICITAR_REDUCAO_KWH' },
-    { resposta: '3', proximoEstado: 'MENU_COOPERADO', acao: 'SUSPENDER_CONTRATO' },
-    { resposta: '4', proximoEstado: 'MENU_COOPERADO', acao: 'ENCERRAR_CONTRATO' },
+    { resposta: '1', proximoEstado: 'AGUARDANDO_NOVO_KWH', acao: 'INICIAR_SOLICITACAO_AUMENTAR_KWH' },
+    { resposta: '2', proximoEstado: 'AGUARDANDO_NOVO_KWH', acao: 'INICIAR_SOLICITACAO_DIMINUIR_KWH' },
+    { resposta: '3', proximoEstado: 'AGUARDANDO_MOTIVO_SUSPENSAO', acao: 'INICIAR_SOLICITACAO_SUSPENDER' },
+    { resposta: '4', proximoEstado: 'CONFIRMAR_ENCERRAMENTO', acao: 'INICIAR_SOLICITACAO_ENCERRAR' },
+  ]},
+  // Bloco 5 etapas intermediarias (24/05): wildcard SALVAR_SOLICITACAO_*
+  // valida input + cria solicitacao + notifica equipe + WA cooperado + MENU.
+  { id: 'f-aguardando-novo-kwh', nome: 'Aguardando Novo kWh do Contrato', ordem: 55, estado: 'AGUARDANDO_NOVO_KWH', gatilhos: [
+    { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'SALVAR_SOLICITACAO_KWH' },
+  ]},
+  { id: 'f-aguardando-motivo-suspensao', nome: 'Aguardando Motivo da Suspensao', ordem: 56, estado: 'AGUARDANDO_MOTIVO_SUSPENSAO', gatilhos: [
+    { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'SALVAR_SOLICITACAO_SUSPENDER' },
+  ]},
+  { id: 'f-confirmar-encerramento', nome: 'Confirmar Encerramento de Contrato', ordem: 57, estado: 'CONFIRMAR_ENCERRAMENTO', gatilhos: [
+    { resposta: '*', proximoEstado: 'MENU_COOPERADO', acao: 'SALVAR_SOLICITACAO_ENCERRAR' },
   ]},
 
   // Atendente
