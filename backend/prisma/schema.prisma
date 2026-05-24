@@ -52,6 +52,8 @@ model Cooperativa {
   contratos                 Contrato[]                        @relation("ContratoCooperativa")
   // Bloco 5 (24/05) — Solicitacoes via WhatsApp aguardando admin aprovar
   solicitacoesAlteracaoContrato SolicitacaoAlteracaoContrato[]
+  // Bloco 8 (24/05) — Confirmacoes de pagamento via "ja paguei" do menu fatura
+  solicitacoesConfirmacaoPagamento SolicitacaoConfirmacaoPagamento[]
   administradoras           Administradora[]
   condominios               Condominio[]
   configClubeVantagens      ConfigClubeVantagens?
@@ -177,6 +179,8 @@ model Cooperado {
   beneficiosIndicacao     BeneficioIndicacao[]
   // Bloco 5 (24/05) — Solicitacoes de alteracao de contrato via WhatsApp
   solicitacoesAlteracaoContrato SolicitacaoAlteracaoContrato[]
+  // Bloco 8 (24/05) — Confirmacoes de pagamento via "ja paguei"
+  solicitacoesConfirmacaoPagamento SolicitacaoConfirmacaoPagamento[]
   progressaoClube         ProgressaoClube?
   unidadesCondominio      UnidadeCondominio[]
   transferencias          TransferenciaPix[]
@@ -605,6 +609,8 @@ model Cobranca {
   asaasCobrancas           AsaasCobranca[]
   cobrancasGateway         CobrancaGateway[]
   beneficiosIndicacao      BeneficioIndicacao[]
+  // Bloco 8 (24/05) — Confirmacoes de pagamento via "ja paguei" do bot
+  solicitacoesConfirmacaoPagamento SolicitacaoConfirmacaoPagamento[]
   // ── Consumo mínimo + Bandeira tarifária ──
   kwhMinimoFaturavel       Float?               @default(0)
   valorBandeira            Decimal?             @default(0) @db.Decimal(10, 2)
@@ -1597,6 +1603,46 @@ model SolicitacaoAlteracaoContrato {
   @@map("solicitacoes_alteracao_contrato")
   @@index([cooperativaId, status]) // pra listar pendentes por tenant
   @@index([cooperadoId])            // pra historico do cooperado
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Bloco 8 Sprint Bot Autoatendimento (24/05/2026) — "Já paguei" do bot
+// Cooperado avisa via WhatsApp que pagou a fatura (PIX direto fora do
+// gateway, transferencia, deposito etc). Bot NAO da baixa direto na
+// Cobranca — cria SolicitacaoConfirmacaoPagamento PENDENTE; equipe valida
+// no painel admin /dashboard/super-admin/solicitacoes (genericalizado pra
+// listar SolicitacaoAlteracaoContrato + SolicitacaoConfirmacaoPagamento).
+// Aprovar = marca CONFIRMADA + opcionalmente da baixa na Cobranca.
+// Multi-tenant via cooperativaId em todas as queries.
+// ─────────────────────────────────────────────────────────────────────
+
+enum StatusSolicitacaoConfirmacaoPagamento {
+  PENDENTE
+  CONFIRMADA
+  RECUSADA
+}
+
+model SolicitacaoConfirmacaoPagamento {
+  id                       String                                @id @default(cuid())
+  cooperadoId              String
+  cooperado                Cooperado                             @relation(fields: [cooperadoId], references: [id])
+  cooperativaId            String
+  cooperativa              Cooperativa                           @relation(fields: [cooperativaId], references: [id])
+  cobrancaId               String
+  cobranca                 Cobranca                              @relation(fields: [cobrancaId], references: [id])
+  valorReclamado           Decimal?                              @db.Decimal(10, 2)
+  formaPagamentoReclamada  String? // PIX | Transferencia | Deposito | Boleto | Outros
+  // Workflow
+  status                   StatusSolicitacaoConfirmacaoPagamento @default(PENDENTE)
+  createdAt                DateTime                              @default(now())
+  processadaEm             DateTime?
+  processadaPor            String? // FK logico pra Usuario admin (padrao do projeto)
+  observacoesEquipe        String?
+
+  @@map("solicitacoes_confirmacao_pagamento")
+  @@index([cooperativaId, status])
+  @@index([cooperadoId])
+  @@index([cobrancaId])
 }
 
 model BeneficioIndicacao {
