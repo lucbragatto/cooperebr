@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-24 — M24 Sprint Bot Autoatendimento Bloco 8: Menu Fatura + SPRINT FECHADO**. 6 commits Bloco 8 (`1fc34b2` schema → `df6c203` 5 ações motor → `5af7273` script + seed → `56c6146` módulo REST → `e410296` tela admin → `f6ddc82` 4 débitos catalogados) + commit fechamento. **Sprint Bot Autoatendimento INTEIRAMENTE FECHADO** (8 blocos: 1.a, 2, 3, 4, 1.b, 7, 6, 5, 8 — M17 a M24). Decisão (C) MISTO: portou MENU_FATURA (Ver fatura / Histórico / Já paguei / Negociar humano) + `SolicitacaoConfirmacaoPagamento` PENDENTE no padrão Bloco 5. NÃO portou MENU_INADIMPLENTE (D-novo-AC dead code) nem NEGOCIACAO_PARCELAMENTO (D-novo-AD placeholder, sem regra real). 5 ações novas no motor + 1 módulo REST (`/solicitacoes-confirmacao-pagamento` GET/confirmar/recusar) + tela admin separada (`/dashboard/super-admin/confirmacoes-pagamento`) com checkbox `marcarPago` opcional na confirmação. 13 specs novos (era 221 motor → 234). 4 débitos catalogados (D-novo-AC/AD/AE/AF). **Mini-relatório do sprint inteiro** em `docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md` — capacidades novas do motor (Gatilho.acao, parâmetro corpo, parâmetro media), 12 débitos no escopo Housekeeping, evolução de specs 109→234 (+115%). **Próximo: ONBOARDING cooperebr1 (E-Solares / CoopereBR) + Consórcio Sinergia.**
+> Última atualização: **2026-05-25 — Descoberta sistema legado SISGDSOLAR + pivot Sub-Sprint B ETL**. Sessão claude.ai 24-25/05 (sem código no repo) descobriu o sistema legado SISGDSOLAR via análise do `SISGDSOLAR-main.zip`. Tesouros: banco real Azure SQL `sisgdsolar.database.windows.net` com backup OneDrive do dev `hb06a`; schema completo 60+ tabelas mapeado (legado SQL Server → novo Prisma); 72 DAOs / 28+ procedures com lógica madura; **Banestes em produção CONFIRMADO** pra CoopereBR (cert .pfx existe no legado). 🚨 Credencial vazada no `hibernate.cfg.xml` (Luciano vai avisar time legado). Decisões travadas: ✅ Banestes = gateway de produção pro novo sistema; ✅ Extração tudo local (Docker + restore + ETL offline); ✅ Sub-Sprint B PIVOT (ETL legado→novo em vez de saneamento dos sintéticos, ~16-25h Code + 1-7d calendário). Risco #1 classeGd RESOLVIDO (cooperebr1 pré-07/jan/2023, 0% Fio B até 2045). **BLOQUEADOR EXTERNO:** aguardando Luciano conseguir script.sql do hb06a. Próximo passo: Luciano escolhe na abertura entre 4 frentes paralelas (pausa total / Sprint Housekeeping / Sprint Bot Proativo Fase 1 / Análise código Banestes legado). Detalhe: `docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`.
 
 ---
 
@@ -1040,15 +1040,98 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M24 da sessão 24/05 tarde
-   (mensagem começa com "docs(sessao): fechamento M24 — Bloco 8 Sprint Bot Autoatendimento INTEIRAMENTE FECHADO").
-   Penúltimo commit é `f6ddc82` (Etapa H — 4 débitos D-novo-AC/AD/AE/AF catalogados).
+   Esperado: working tree limpo, último commit é o de descoberta do legado SISGDSOLAR
+   da sessão 25/05 (mensagem começa com
+   "docs(sessao): descoberta sistema legado SISGDSOLAR + pivot Sub-Sprint B ETL").
+   Penúltimo commit é `aa355f3` (fechamento M24 Sprint Bot Autoatendimento INTEIRO).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 24/05 entregou M24 (Bloco 8 do Sprint Bot
-Autoatendimento: Menu Fatura) e ENCERROU o Sprint Bot Autoatendimento
+PASSO 1 — Sessão claude.ai 24-25/05 descobriu o sistema legado SISGDSOLAR via
+análise do arquivo `SISGDSOLAR-main.zip`. Tesouros encontrados:
+- Banco real no Azure SQL `sisgdsolar.database.windows.net` com backup completo
+  no OneDrive do dev `hb06a` (caminho documentado em
+  `docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`)
+- Schema completo de 60+ tabelas mapeado (legado SQL Server → novo Prisma):
+  tbl_beneficiario→Cooperado, tbl_benef_conta_energia+tbl_contaEdp→UC,
+  tbl_usina+tbl_tipo_usina→Usina, tbl_contrato→Contrato,
+  tbl_parcela+tbl_pagamentos+tbl_cobranca→Cobranca, etc
+- 72 DAOs / 28+ procedures com lógica de negócio madura (atualizar_quitacoes,
+  gerar_fatura_unica_automatica_email_titular, sp_carga_dados_edp_usina)
+- Banestes em produção CONFIRMADO pra CoopereBR (cert .pfx existe no legado,
+  processo de renovação documentado em `docs/Certificado_Banestes.md`)
+
+🚨 ALERTA DE SEGURANÇA: `SISGDSOLAR/src/main/java/hibernate.cfg.xml` contém
+credencial do banco de produção em texto puro (user `hb_jv_bd_sis`, senha
+vazada). Risco crítico. Luciano vai avisar time legado pra trocar senha +
+mover pra Azure Key Vault.
+
+DECISOES TRAVADAS NA SESSÃO 24-25/05:
+- ✅ Banestes = gateway de produção pro novo sistema (replica o que já
+  funciona no legado). Asaas continua como adapter alternativo (sandbox
+  validado); Sicoob fica opção futura.
+- ✅ Extração tudo localmente no PC do Luciano. Sem tocar produção do legado:
+  backup script.sql → Docker SQL Server local → ETL offline.
+- ✅ Sub-Sprint B PIVOT: muda de "saneamento dos 71 sintéticos" pra
+  "ETL legado→novo + saneamento residual". Estimativa redesenhada:
+  ~16-25h Code + 1-7 dias calendário (dominado por lead time externo
+  do script.sql).
+- ✅ Riscos Fase 1 ampla onboarding revisados:
+  - Risco #1 classeGd: RESOLVIDO (Luciano confirmou cooperebr1
+    pré-07/jan/2023, direito adquirido, 0% Fio B até 2045)
+  - Riscos #2-#5 (sintéticos / Asaas SANDBOX / backfill tarifaContratual /
+    UCs OUTRAS): contemplados no Sub-Sprint B redesenhado.
+
+PRÉ-REQUISITOS VERIFICADOS NO PC DO LUCIANO:
+- Docker Desktop ✅ instalado (v29.4.3, container tb-cooperebr ativo 8080)
+- sqlcmd ❌ falta (instalar via `winget install --id Microsoft.Sqlcmd -e`
+  quando for usar — ~1min)
+- script.sql ❌ não está no PC — AGUARDAR Luciano conseguir do hb06a
+- Porta 1433 ✅ livre
+
+BLOQUEADOR EXTERNO ATIVO: aguardando Luciano conseguir script.sql do hb06a.
+3 opções pro Luciano:
+- Pedir Generate Scripts fresco ao hb06a (~30min, dados atuais)
+- Pedir backup OneDrive 28/02 (mais rápido, dados 3 meses defasados)
+- Pedir compartilhamento da pasta OneDrive (sync contínuo)
+
+PRÓXIMO PASSO — LUCIANO ESCOLHE NA ABERTURA ENTRE 4 FRENTES PARALELAS
+enquanto script.sql não chega:
+
+1. **PAUSA TOTAL** — só retomar quando script.sql chegar.
+2. **Sprint Housekeeping** (Code, ~3-5h) — limpa 12 débitos D-novo-U a AF
+   acumulados no Sprint Bot Autoatendimento.
+3. **Sprint Bot Proativo — Fase 1 read-only ampla** (Code) — mapeia infra
+   de bot proativo (lembrete pré-vencimento, webhook pagamento,
+   escalonação inadimplência).
+4. **Análise profunda código Banestes do legado** (Code) — mapeia o
+   portado pro adapter `src/gateway-pagamento/banestes/`.
+
+FRENTES HUMANAS EM PARALELO (Luciano):
+- Avisar time legado pra trocar senha do Azure SQL + mover pra Key Vault
+- Sub-Sprint A (decisões regulatórias com advogado: Assinafy, segregação
+  tributária)
+- Solicitar script.sql ao hb06a
+
+PLANO OPERACIONAL SUB-SPRINT B REDESENHADO (quando script.sql chegar):
+- Etapa 1 — Instalar sqlcmd + subir container SQL Server local (Code, 30min)
+- Etapa 2 — Restaurar script.sql no container (Code, 30-60min)
+- Etapa 3 — Inspeção dados reais CoopereBR via SELECT (Code, 1-2h)
+- Etapa 4 — Mapear ETL legado→Prisma campo-a-campo em relatório (Code, 3-5h)
+- Etapa 5 — Implementar scripts ETL idempotentes + DRY-RUN (Code, 8-12h)
+- Etapa 6 — DRY-RUN apresentado, Luciano valida amostras (Luciano+Code, 1-2h)
+- Etapa 7 — Execução real (apply) no banco novo (Code, 1-2h)
+- Etapa 8 — Validação cruzada pós-ETL (Code, 1-2h)
+
+Detalhamento completo em
+`docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`.
+
+Memória orquestrador atualizada em
+`~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md`.
+
+CONTEXTO HISTÓRICO IMEDIATO — Sessão 24/05 entregou M24 (Bloco 8 do Sprint
+Bot Autoatendimento: Menu Fatura) e ENCERROU o Sprint Bot Autoatendimento
 INTEIRO. 8 blocos completos (1.a/2/3/4/1.b/7/6/5/8), M17 a M24, 12 dias
 de trabalho. Bloco 8 entregou 6 commits (1fc34b2 schema → df6c203 5 acoes
 motor → 5af7273 script idempotente + seed → 56c6146 modulo REST →
