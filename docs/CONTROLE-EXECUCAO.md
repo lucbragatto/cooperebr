@@ -1,11 +1,60 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-24 — M23 Sprint Bot Autoatendimento Bloco 5: Atualizar Contrato**. 6 commits Bloco 5 (`a26500b` schema → `5cefe03` ações KWH → `c3a764e` ações SUSPENDER+ENCERRAR → `cb2b80a` script + seed → `2bd38fb` módulo REST → `3646d6d` tela admin) + `b8b8025` débito D-novo-AB + commit fechamento. **Decisão arquitetural locked (B):** bot NUNCA altera contrato direto — toda alteração via WhatsApp vira `SolicitacaoAlteracaoContrato` PENDENTE que equipe valida via painel admin novo `/dashboard/super-admin/solicitacoes`. Aprovar=APLICAR imediato (decisão 3). 4 ações novas no motor: `INICIAR/SALVAR_SOLICITACAO_KWH` (com pré-validação capacidade usina) + `INICIAR/SALVAR_SOLICITACAO_SUSPENDER` + `INICIAR/SALVAR_SOLICITACAO_ENCERRAR` (com pré-validação cobrança em aberto, motivo opcional "PULAR"). 23 specs novos (era 198 motor → 221). 3 modelos novos (`solicitacao_contrato_criada/aprovada/recusada`) + 3 etapas intermediárias + módulo REST `SolicitacoesContratoController` (GET/aprovar/recusar) + tela admin frontend. 1 débito D-novo-AB (handler hardcoded antigo viola decisão B — limpeza pós-validação produção). **Próximo: Bloco 8 — único bloco restante do sprint; decisão produto pendente (portar dinâmico vs manter hardcoded).** Detalhe: `docs/sessoes/2026-05-24-m23-bloco5-atualizar-contrato.md`.
+> Última atualização: **2026-05-24 — M24 Sprint Bot Autoatendimento Bloco 8: Menu Fatura + SPRINT FECHADO**. 6 commits Bloco 8 (`1fc34b2` schema → `df6c203` 5 ações motor → `5af7273` script + seed → `56c6146` módulo REST → `e410296` tela admin → `f6ddc82` 4 débitos catalogados) + commit fechamento. **Sprint Bot Autoatendimento INTEIRAMENTE FECHADO** (8 blocos: 1.a, 2, 3, 4, 1.b, 7, 6, 5, 8 — M17 a M24). Decisão (C) MISTO: portou MENU_FATURA (Ver fatura / Histórico / Já paguei / Negociar humano) + `SolicitacaoConfirmacaoPagamento` PENDENTE no padrão Bloco 5. NÃO portou MENU_INADIMPLENTE (D-novo-AC dead code) nem NEGOCIACAO_PARCELAMENTO (D-novo-AD placeholder, sem regra real). 5 ações novas no motor + 1 módulo REST (`/solicitacoes-confirmacao-pagamento` GET/confirmar/recusar) + tela admin separada (`/dashboard/super-admin/confirmacoes-pagamento`) com checkbox `marcarPago` opcional na confirmação. 13 specs novos (era 221 motor → 234). 4 débitos catalogados (D-novo-AC/AD/AE/AF). **Mini-relatório do sprint inteiro** em `docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md` — capacidades novas do motor (Gatilho.acao, parâmetro corpo, parâmetro media), 12 débitos no escopo Housekeeping, evolução de specs 109→234 (+115%). **Próximo: ONBOARDING cooperebr1 (E-Solares / CoopereBR) + Consórcio Sinergia.**
 
 ---
 
-## ONDE PARAMOS — 2026-05-24 (Code — M23 Sprint Bot Autoatendimento: Bloco 5 Atualizar Contrato)
+## ONDE PARAMOS — 2026-05-24 (Code — M24 Sprint Bot Autoatendimento: Bloco 8 Menu Fatura + SPRINT FECHADO)
+
+### Marcos entregues nesta sessão (7 commits + fechamento)
+
+Bloco 8 do Sprint Bot Autoatendimento ENTREGUE. Sprint INTEIRAMENTE FECHADO. Cooperado agora consegue: ver fatura atual (valor + venc + PIX + boleto + link), histórico de pagamentos (últimas 6), avisar "já paguei" (cria `SolicitacaoConfirmacaoPagamento` PENDENTE pra equipe validar com checkbox `marcarPago` opcional), ou pedir negociação humana (link direto via `NotificacoesService`).
+
+- **Etapa A — Schema** (`1fc34b2`) — `SolicitacaoConfirmacaoPagamento` model + enum `StatusSolicitacaoConfirmacaoPagamento` (PENDENTE/CONFIRMADA/RECUSADA). 3 índices. Back-links em Cooperativa/Cooperado/Cobranca. Ritual PM2 completo.
+- **Etapa B+C+D — 5 ações motor** (`df6c203`) — `VER_FATURA_ATUAL` (cache local AsaasCobranca, sem chamar gateway) + `VER_HISTORICO_PAGAMENTOS` (últimas 6) + `SOLICITAR/SALVAR_CONFIRMACAO_PAGAMENTO` (padrão Bloco 5, multi-tenant) + `SOLICITAR_NEGOCIACAO_HUMANA` (link humano via Notificacoes — workaround D-novo-AD). 13 specs novos. **234/234 verdes**.
+- **Etapa E — Script idempotente** (`5af7273`) — `fix-bloco-8-menu-fatura-no-fluxo.ts` em 4 partes: alinha modelo `menu_fatura` BD + troca gatilho '2' do MENU_COOPERADO (VER_PROXIMA_FATURA → MENU_FATURA) + ativa MENU_FATURA com 4 gatilhos + cria etapa AGUARDANDO_FORMA_PAGAMENTO. Idempotência confirmada.
+- **Etapa F — Módulo REST** (`56c6146`) — `backend/src/solicitacoes-confirmacao-pagamento/` com 3 endpoints gated SUPER_ADMIN/ADMIN/OPERADOR + `@AuditLog` + DTO `RecusarConfirmacaoDto` (min 3 chars). Backend restart limpo (3 rotas mapeadas).
+- **Etapa G — Tela admin** (`e410296`) — `web/app/dashboard/super-admin/confirmacoes-pagamento/page.tsx` PÁGINA SEPARADA (justificativa: schemas/status/ações divergentes — generalizar com /solicitacoes viraria render condicional pesado). Checkbox `marcarPago` opcional na confirmação. Sidebar layout ganha 4º link em Gestão Global.
+- **Etapa H — Débitos** (`f6ddc82`) — D-novo-AC (MENU_INADIMPLENTE dead code), D-novo-AD (NEGOCIACAO_PARCELAMENTO placeholder, regra produto), D-novo-AE (handler hardcoded handleMenuFatura viola decisão C), D-novo-AF (VER_PROXIMA_FATURA órfã pós Bloco 8).
+
+### Decisões produto Luciano (24/05 — Bloco 8)
+
+1. **Escopo (C) MISTO** — porta MENU_FATURA + "já paguei", não porta MENU_INADIMPLENTE/NEGOCIACAO_PARCELAMENTO
+2. **Histórico de pagamentos SIM** (`VER_HISTORICO_PAGAMENTOS` mostra últimas 6 — qualquer status)
+3. **"Já paguei" padrão Bloco 5** — `SolicitacaoConfirmacaoPagamento` PENDENTE + painel admin
+4. **MENU_INADIMPLENTE D-novo-AC** — catalogar como dead code, Housekeeping limpa
+5. **NEGOCIACAO_PARCELAMENTO D-novo-AD** — link humano via `NotificacoesService` (já implementado), regra real fica pra sprint futuro
+6. **SUPER_ADMIN_PHONE → NotificacoesService** — consistência arquitetural Blocos 4/5/6
+
+### Validação
+
+- **234/234 specs verdes** em `whatsapp-fluxo-motor.service.spec.ts` (era 221, +13 Bloco 8)
+- `nest build` limpo
+- `tsc --noEmit` frontend limpo
+- Ritual PM2 sem incidentes (Etapa A schema + Etapa F restart pra rotas REST)
+- Backend online, 0 restarts pós-fechamento
+- 3 rotas REST mapeadas: `/solicitacoes-confirmacao-pagamento` GET + `/confirmar` POST + `/recusar` POST
+
+### Pendências carry-over
+
+- **PRÓXIMO: ONBOARDING cooperebr1 (E-Solares / CoopereBR) + Consórcio Sinergia** — primeira cooperativa real do Luciano + segundo parceiro. Bot WhatsApp finalmente vai operar em produção com cooperados reais.
+- Sprint Bot Autoatendimento **INTEIRAMENTE FECHADO** (8 blocos M17→M24)
+- 12 débitos D-novo-U a AF catalogados → Sprint Housekeeping pós-validação produção 1-2 sprints
+- D-novo-AD (NEGOCIACAO_PARCELAMENTO regra real) → sprint dedicado quando Luciano definir política
+- Vocabulário multi-tipo hardcoded (CLAUDE.md P2) — bloqueia Sinergia
+- D-novo-Q (contatos teste persistentes) → bloqueia Sinergia
+- M15 Sprint 5a Neutro Fio B (carry-over antigo, 3-5 dias)
+- Demais carry-overs (HTML jornada, Iniciativa Fluxos Customizáveis, etc)
+- 11 falhas pré-existentes na suíte Jest (cooperados/usinas — não-minhas, idênticas M19..M23)
+
+### Frase comandante (próxima sessão)
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 24/05 fechamento M24 Bloco 8 + SPRINT FECHADO).
+
+---
+
+## ONDE PARAMOS — 2026-05-24 manhã (Code — M23 Sprint Bot Autoatendimento: Bloco 5 Atualizar Contrato)
 
 ### Marcos entregues nesta sessão (7 commits + fechamento)
 
@@ -991,70 +1040,102 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M23 da sessão 24/05
-   (mensagem começa com "docs(sessao): fechamento M23 — Bloco 5 Sprint Bot Autoatendimento").
-   Penúltimo commit é `b8b8025` (Etapa F — débito D-novo-AB catalogado).
+   Esperado: working tree limpo, último commit é o de fechamento M24 da sessão 24/05 tarde
+   (mensagem começa com "docs(sessao): fechamento M24 — Bloco 8 Sprint Bot Autoatendimento INTEIRAMENTE FECHADO").
+   Penúltimo commit é `f6ddc82` (Etapa H — 4 débitos D-novo-AC/AD/AE/AF catalogados).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 24/05 entregou M23 (Bloco 5 do Sprint Bot
-Autoatendimento: Atualizar Contrato). 6 commits Bloco 5 empacotados
-(a26500b schema → 5cefe03 ações KWH → c3a764e ações SUSPENDER+ENCERRAR →
-cb2b80a script idempotente + seed → 2bd38fb módulo REST → 3646d6d tela
-admin) + b8b8025 débito D-novo-AB + commit fechamento. Decisão
-arquitetural locked (modelo B): bot NUNCA altera contrato direto — toda
-alteração via WhatsApp vira SolicitacaoAlteracaoContrato PENDENTE que
-equipe valida via painel admin novo /dashboard/super-admin/solicitacoes.
-Aprovar=APLICAR imediato (decisão 3). 4 ações novas no motor (INICIAR/
-SALVAR_SOLICITACAO_KWH com pré-validação capacidade usina + INICIAR/
-SALVAR_SOLICITACAO_SUSPENDER + INICIAR/SALVAR_SOLICITACAO_ENCERRAR com
-pré-validação cobrança em aberto + motivo opcional "PULAR"). 221 specs
-verdes no motor (era 198 no M22, +23 nesta sessão). 3 modelos novos
-(solicitacao_contrato_criada/aprovada/recusada) + 3 etapas intermediárias
-+ módulo REST SolicitacoesContratoController (GET/aprovar/recusar) +
-tela admin frontend. 1 débito catalogado D-novo-AB (handler hardcoded
-antigo viola decisão B — limpeza pós-validação em produção).
+PASSO 1 — Sessão 24/05 entregou M24 (Bloco 8 do Sprint Bot
+Autoatendimento: Menu Fatura) e ENCERROU o Sprint Bot Autoatendimento
+INTEIRO. 8 blocos completos (1.a/2/3/4/1.b/7/6/5/8), M17 a M24, 12 dias
+de trabalho. Bloco 8 entregou 6 commits (1fc34b2 schema → df6c203 5 acoes
+motor → 5af7273 script idempotente + seed → 56c6146 modulo REST →
+e410296 tela admin → f6ddc82 4 debitos catalogados) + commit fechamento.
+Decisao (C) MISTO Luciano: portou MENU_FATURA (Ver fatura / Historico /
+Ja paguei / Negociar humano) + SolicitacaoConfirmacaoPagamento PENDENTE
+padrao Bloco 5. NAO portou MENU_INADIMPLENTE (D-novo-AC dead code) nem
+NEGOCIACAO_PARCELAMENTO (D-novo-AD placeholder, regra produto a definir).
+234/234 specs verdes no motor (era 221 no M23, +13 nesta sessao). 4
+debitos catalogados (D-novo-AC/AD/AE/AF). Mini-relatorio do sprint
+inteiro em docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md
+— capacidades novas do motor (Gatilho.acao + parametro corpo + parametro
+media), evolucao de specs 109→234 (+115%), 12 debitos no escopo
+Housekeeping.
 
-PRÓXIMO PASSO — BLOCO 8 (Menu Fatura/Inadimplente) — APRESENTAR DECISÃO
-PRODUTO PRA LUCIANO. Único bloco restante do Sprint Bot Autoatendimento.
-Após Bloco 8, sprint INTEIRAMENTE FECHADO (todos 8 blocos).
+PRÓXIMO PASSO — ONBOARDING DE PARCEIROS REAIS. Sprint Bot Autoatendimento
+fechou — agora o sistema entra em producao real com cooperados de verdade.
+2 frentes paralelas/sequenciais:
 
-BLOCO 8 — Menu Fatura / Menu Inadimplente (~4-6h):
-- Sub-menu pra cooperado: ver fatura atual / pegar PIX copia-e-cola /
-  histórico / "já paguei" — e se inadimplente, opção de negociar.
-- DECISÃO PRODUTO PENDENTE:
-  (A) PORTAR PRO MOTOR DINÂMICO: 2 etapas novas (MENU_FATURA,
-      MENU_INADIMPLENTE) + N ações pra cada sub-opção. Modelos
-      menu_fatura + menu_inadimplente já existem (Bloco 2 commit
-      1097f72).
-  (B) MANTER HARDCODED: handlers handleMenuFatura/handleMenuInadimplente
-      já existem (a confirmar Fase 1). Menos trabalho, mas fica fora
-      do padrão dinâmico.
-- Recomendação inicial: depende de quão complexo é o hardcoded. Se for
-  simples (lista cobranças + link Asaas), porta. Se acopla regra de
-  cobrança/parcelamento, mantém hardcoded.
+FRENTE 1 — cooperebr1 (E-Solares / CoopereBR):
+- Primeira cooperativa real do Luciano. Vai testar o bot WhatsApp em
+  producao com cooperados reais.
+- Bot completo: cadastro novo, atualizacao cadastro, atualizacao contrato
+  (com aprovacao humana), NPS, indicacao MLM, ja paguei (com aprovacao
+  humana), historico, negociacao humana.
+- Pre-requisitos: confirmar que .env producao tem WA_INADIMPLENTES_HABILITADO
+  + WA_COBRANCA_HABILITADO + ASAAS_API_KEY do tenant ativos. Validar com
+  o cooperado real Luciano (27981341348) o end-to-end antes de habilitar
+  pro restante.
 
-ANTES de empacotar Fase 1: orquestrador apresenta a decisão pro Luciano
-bater martelo. Apresentação curta (5-10 min) com recomendação. Luciano
-escolhe. Aí prossegue com Fase 1 read-only.
+FRENTE 2 — Consorcio Sinergia (segundo parceiro real):
+- Bloqueio: vocabulario multi-tipo hardcoded em ~50 telas + 73 exceptions
+  backend ainda dizem "Cooperado" (debito P2 no CLAUDE.md). Consorcio
+  precisa de "Consorciado". Sprint Vocabulario antes.
+- Bloqueio: Sprint 6 IDOR (auditoria multi-tenant sistemica) ainda nao
+  iniciado.
+- Bloqueio: D-novo-Q (contatos teste persistentes) — 6-8h.
 
-PADRÃO BLOCO 5 (M23 — referência pra Bloco 8 se for portar pro motor):
-- Fluxo multi-turno + criação de entidade nova com aprovação humana.
-- Gatilho no menu superior tem `acao` INICIAR_* → motor delega.
-- Ação INICIAR busca contrato, pré-valida cobrança/capacidade,
-  persiste dadosTemp + transiciona pra estado intermediário + envia
-  pergunta dinâmica.
-- Estado intermediário tem wildcard '*' com acao SALVAR_*.
-- Ação SALVAR cria entidade pendente + NotificacoesService.criar +
-  WhatsappSenderService.enviar + transiciona MENU_COOPERADO.
-- Módulo REST /<entidade>/:id/aprovar+recusar reusa serviços existentes
-  pra aplicar a mudança real. Tela admin gated SUPER_ADMIN com Dialog
-  pra recusar (Textarea + validação min 3 chars).
-- D-novo-AB cataloga remoção do handler hardcoded antigo pós-validação
-  em produção (1-2 sprints).
+ANTES de qualquer frente: Luciano decide ordem (cooperebr1 primeiro pra
+testar bot real, OU Sinergia primeiro pra desbloquear ecossistema?).
 
-PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido M19/M20/M21/M22):
+Recomendacao inicial: cooperebr1 primeiro (sem bloqueios — sprint
+Vocabulario nao necessario porque CoopereBR eh COOPERATIVA, ja usa
+termo certo). Sinergia entra depois quando Sprint Vocabulario for
+priorizado. Mas Luciano bate o martelo.
+
+DIRETRIZES INEGOCIAVEIS APLICAVEIS PRO PROXIMO BLOCO:
+- Contatos teste: lucbragatto+suffix@gmail.com + 27981341348 (REGRA
+  INEGOCIAVEL 14/05 — aplica em qualquer teste com disparo real)
+- isAmbienteReal() pros envios (NUNCA NODE_ENV — diretriz inegociavel 18/05)
+- Fase 1 read-only obrigatoria antes de tocar codigo (Decisao 23)
+- Multi-tenant: cooperativaId em toda query Prisma
+- Ritual PM2: pm2 stop → build → restart → list
+- Frase de retomada COMANDANTE (nao descritiva)
+- Skill retomada-sessao governa abertura
+
+DEBITOS DO SPRINT (Housekeeping pos-validacao producao 1-2 sprints):
+- D-novo-U: handler hardcoded ver fatura status PENDENTE inexistente
+- D-novo-V: modelos com logica condicional no codigo
+- D-novo-W: divergencia hardcoded × motor NPS
+- D-novo-X: agendarNps dead code
+- D-novo-Y: modelo nps_trimestral orfao
+- D-novo-Z: divergencia Cadastro Proxy
+- D-novo-AA: placeholders proxy eternos cpf/email
+- D-novo-AB: handler hardcoded handleAtualizacaoContrato
+- D-novo-AC: MENU_INADIMPLENTE dead code
+- D-novo-AD: NEGOCIACAO_PARCELAMENTO placeholder (P1 — regra produto)
+- D-novo-AE: handler hardcoded handleMenuFatura
+- D-novo-AF: VER_PROXIMA_FATURA orfa pos-Bloco 8
+
+Sprint Housekeeping estimado em 8-12h depois da validacao em producao.
+
+REGRA ESPECIAL PRO BLOCO ATUAL (M23/M24 Bloco 5 + 8 — padrao "solicitacao
+PENDENTE + aprovacao humana"): bot NUNCA aplica decisao sensivel direto.
+Cria Solicitacao<X> PENDENTE + NotificacoesService.criar + WA + MENU.
+Equipe valida via painel admin gated SUPER_ADMIN com Dialog Shadcn pra
+recusar (DTO observacoesEquipe min 3 chars obrigatorio). Padrao
+estabelecido pra futuras solicitacoes que envolvam baixa financeira,
+alteracao contratual, ou mudanca de estado de cooperado.
+
+PASSO 1.1 — REVALIDACAO ANTES DE PRODUCAO (sugestao):
+Antes de habilitar bot em producao pro cooperebr1, rodar a suite Jest
+completa e confirmar que 234/234 specs continuam verdes + 11 falhas
+pre-existentes em cooperados/usinas controllers (nao-minhas, mesmas
+desde M19). Se houver regressao, investigar antes de subir.
+
+PADRÕES DE IMPLEMENTAÇÃO ESTABELECIDOS (referência rápida M17→M24):
 - Fluxo multi-turno com gatilho wildcard '*' + acao no gatilho → motor
   delega pra ação via Gatilho.acao (Bloco 4 M19).
 - Ação privada padrão: guard cooperadoId + valida input + persiste
@@ -1074,9 +1155,12 @@ PADRÃO DE IMPLEMENTAÇÃO REFERÊNCIA (estabelecido M19/M20/M21/M22):
 ANTES de Fase 2 do bloco escolhido: Fase 1 read-only OBRIGATÓRIA
 (Decisão 23) pra mapear estado + propor desenho.
 
-DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 8):
-- Bloco 8 (Menu Fatura): dinâmico vs hardcoded
-- Disparo automático NPS (sprint futuro): (b)/(c)/(d)
+DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam onboarding):
+- Bloco onboarding primeiro: cooperebr1 OU Sinergia? (recomendacao
+  cooperebr1, mas Luciano bate o martelo)
+- D-novo-AD: NEGOCIACAO_PARCELAMENTO regra real (Asaas parcelable OU
+  geracao manual)
+- Disparo automatico NPS (sprint futuro): (b)/(c)/(d)
 - Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
 - {{distribuidora}} vazia em AGUARDANDO_DISPOSITIVO_EMAIL
 - Horário hardcoded em aguardando_atendente
@@ -1084,7 +1168,9 @@ DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam Bloco 8):
 - 11 falhas pré-existentes na suíte Jest (cooperados/usinas controllers)
 
 CARRY-OVERS catalogados:
-- Sprint Bot Autoatendimento restante: Bloco 8 (~4-6h, decisão produto pendente)
+- Sprint Bot Autoatendimento INTEIRAMENTE FECHADO (M17→M24)
+- Onboarding cooperebr1 (E-Solares / CoopereBR) — primeira cooperativa real
+- Onboarding Sinergia (depende vocabulario multi-tipo + Sprint 6 IDOR + D-novo-Q)
 - M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do sprint atual)
 - Cadastrar usina cooperebr2 (depende M15)
 - Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q)
@@ -1097,8 +1183,12 @@ CARRY-OVERS catalogados:
 - D-novo-Z divergência Cadastro Proxy hardcoded×motor (15min-1.5h)
 - D-novo-AA placeholders proxy eternos cpf/email (2-3h cron+UI)
 - D-novo-AB handler hardcoded handleAtualizacaoContrato (30min, pós-produção)
-- Sprint Housekeeping (~5-8h — inclui stash reformat 18/05 + scripts órfãos
-  + D-novo-W/X/Y/Z/AA/AB)
+- D-novo-AC MENU_INADIMPLENTE dead code (30-45min, Housekeeping)
+- D-novo-AD NEGOCIACAO_PARCELAMENTO placeholder (P1 — depende decisão produto Luciano)
+- D-novo-AE handler hardcoded handleMenuFatura (45-60min, pós-produção)
+- D-novo-AF VER_PROXIMA_FATURA órfã pós-Bloco 8 (20-30min, Housekeeping)
+- Sprint Housekeeping (~8-12h — inclui stash reformat 18/05 + scripts órfãos
+  + D-novo-W/X/Y/Z/AA/AB/AC/AE/AF)
 - HTML jornada Sugestão #6
 - D-novo-H refator técnico ~6-8h
 - Iniciativa Fluxos Customizáveis D-novo-T (futuro, ~100-200h+)
@@ -1150,6 +1240,14 @@ DIRETRIZES INEGOCIÁVEIS ATIVAS:
   recusar (DTO com observacoesEquipe min 3 chars obrigatório). Tela
   admin com Dialog Shadcn pra recusar. Hardcoded antigo fica como
   débito catalogado (D-novo-AB padrão).
+- Padrão Bloco 8 (M24 — confirmação operacional com checkbox marcarPago):
+  Como Bloco 5 (Solicitação PENDENTE + painel admin) mas com nuance:
+  endpoint confirmar() aceita flag opcional `marcarPago: boolean` que
+  permite à equipe escolher se dá baixa direto na Cobranca (PAGO +
+  dataPagamento=now) ou só registra a confirmação (gateway bate
+  depois). Tela admin com checkbox + textinho explicativo. Padrão pra
+  qualquer fluxo onde admin precisa de granularidade de validação
+  (não apenas binário aprovar/recusar).
 - Ritual PM2 obrigatório pra rebuild/seed/scripts no banco:
   pm2 stop → npm run build → script → pm2 restart → pm2 list (confirmar)
 ```
