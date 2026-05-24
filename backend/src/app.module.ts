@@ -57,6 +57,7 @@ import { ModuloGuard } from './auth/modulo.guard';
 import { AuditModule } from './audit/audit.module';
 import { NotificacoesProativasModule } from './notificacoes-proativas/notificacoes-proativas.module';
 import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes-contrato.module';
+import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmacao-pagamento/solicitacoes-confirmacao-pagamento.module';
 
 @Module({
   imports: [
@@ -111,6 +112,7 @@ import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes
     AuditModule,
     NotificacoesProativasModule,
     SolicitacoesContratoModule,
+    SolicitacoesConfirmacaoPagamentoModule,
   ],
   controllers: [AppController],
   providers: [
