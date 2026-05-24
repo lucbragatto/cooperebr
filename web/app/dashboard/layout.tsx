@@ -171,6 +171,7 @@ function getNavSections(perfil: string): NavSection[] {
       items: [
         { href: '/dashboard/super-admin', label: 'Painel SISGD', icon: LayoutDashboard },
         { href: '/dashboard/super-admin/parceiros', label: 'Parceiros', icon: Building2 },
+        { href: '/dashboard/super-admin/solicitacoes', label: 'Solicitações de Contrato', icon: ClipboardList },
         { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
         { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
       ],
