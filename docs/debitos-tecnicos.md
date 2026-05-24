@@ -2789,6 +2789,119 @@ Hardcoded **só dispara** se a etapa global `ATUALIZACAO_CONTRATO` for desativad
 
 ---
 
+### D-novo-AC — `MENU_INADIMPLENTE` + `iniciarFluxoInadimplente` + `handleMenuInadimplente` são dead code (P2 limpeza)
+
+**Origem:** Bloco 8 Fase 1 read-only do Sprint Bot Autoatendimento (2026-05-24). Confirmado pela investigação `docs/relatorios/2026-05-24-fase1-bloco8-menu-fatura.md`.
+
+**Contexto:** O método público `iniciarFluxoInadimplente` em `backend/src/whatsapp/whatsapp-bot.service.ts:2670-2713` foi escrito pra ser chamado por um cron de cobrança vencida. `grep -rn iniciarFluxoInadimplente backend/src/` retorna **zero chamadores** — nunca foi cabeado.
+
+O cron real de inadimplência (`cronAbordarInadimplentes` em `whatsapp-cobranca.service.ts:217-334`) faz outro caminho: envia mensagem direta com PIX/boleto sem transicionar estado de conversa. O `MENU_INADIMPLENTE` (state) e o `handleMenuInadimplente` (handler) nunca executam em produção.
+
+**Por que não foi portado no Bloco 8:** decisão Luciano (C) MISTO 24/05 — bot tem cron de aviso de inadimplência mas não fluxo conversacional ativo. Portar código morto não agrega. Decisão arquitetural: criar `SOLICITAR_NEGOCIACAO_HUMANA` no motor (Bloco 8) como porta de saída universal pra negociar — independente de estar em dia ou inadimplente.
+
+**Fix (Sprint Housekeeping):**
+1. Remover `iniciarFluxoInadimplente` de `whatsapp-bot.service.ts`
+2. Remover `handleMenuInadimplente` + `handleNegociacaoParcelamento` (ver D-novo-AD) + estados `MENU_INADIMPLENTE` + `NEGOCIACAO_PARCELAMENTO` do `ESTADOS_FLUXO_ATIVO` whitelist + do switch principal
+3. Remover etapas `MENU_INADIMPLENTE` + `NEGOCIACAO_PARCELAMENTO` do seed `prisma/seeds/seed-fluxos-bot.mjs` (já estão `ativo: false` no banco)
+4. Quando Luciano definir uma regra real de fluxo conversacional pós-cron de inadimplência, abrir sprint dedicado
+
+**Custo estimado:** ~30-45min (limpeza mecânica + smoke test).
+
+**Posicionamento:** Sprint Housekeeping. Não bloqueia produção.
+
+**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AC confirmado livre após D-novo-AB.
+
+---
+
+### D-novo-AD — `NEGOCIACAO_PARCELAMENTO` é placeholder hackish — regra de negócio real não definida (P1 lacuna produto)
+
+**Origem:** Bloco 8 Fase 1 read-only do Sprint Bot Autoatendimento (2026-05-24). `whatsapp-bot.service.ts:2791-2849`.
+
+**Contexto:** O handler `handleNegociacaoParcelamento` hoje **não gera parcelas reais** — apenas persiste uma string em `Cobranca.observacoesNegociacao` ("Parcelamento 3x negociado via WhatsApp em DD/MM/YYYY") + envia confirmação ao cooperado prometendo "Nossa equipe enviará os boletos das parcelas". A equipe precisa processar manualmente lendo essa string em cada fatura.
+
+Não há:
+- Geração programática de cobranças filhas (parcelas N de M)
+- Integração com Asaas pra gerar parcelas via API (Asaas suporta `installmentCount` no body do POST `/payments`)
+- Regra clara: 2x/3x/Nx? Sem juros? Com juros? Quem aprova?
+- Tracking de inadimplência das parcelas
+
+**Por que P1 (lacuna produto):** se Luciano ou equipe ativar `WA_INADIMPLENTES_HABILITADO=true` em produção, o cooperado vai poder "negociar" com o bot e sair achando que tem um parcelamento garantido. Risco reputacional + atrito quando a parcela não vier no boleto seguinte.
+
+**Fix:** depende de decisão de produto Luciano (regra de negociação). Possíveis caminhos:
+1. **Asaas parcelable** (recomendado): API `POST /payments` com `installmentCount: N` + `installmentValue: V`. Cria N cobranças. Multi-tenant ok via API key da cooperativa.
+2. **Geração manual de N cobranças filhas**: criar registros Cobranca com `mesReferencia/anoReferencia` futuros + link Asaas pra cada uma.
+3. **Link humano** (já implementado no Bloco 8): cooperado clica "Negociar" → mensagem "vou te conectar com a equipe" + `NotificacoesService.criar` tipo NEGOCIACAO_HUMANA. Equipe processa fora do bot.
+
+**Hoje (M24):** o caminho 3 está disponível via ação motor `SOLICITAR_NEGOCIACAO_HUMANA` (gatilho 4 do MENU_FATURA). Cobre a função enquanto Luciano não define regra real.
+
+**Custo estimado da implementação futura:** 12-20h (depende da regra escolhida + integração Asaas).
+
+**Posicionamento:** sprint dedicado pós-onboarding Sinergia, quando Luciano tiver política de negociação clara.
+
+**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AD confirmado livre após D-novo-AC. Workaround disponível via `SOLICITAR_NEGOCIACAO_HUMANA` (link humano).
+
+---
+
+### D-novo-AE — Handler hardcoded `handleMenuFatura` + `handleComprovantePagamento` violam decisão (C) do Bloco 8 — limpeza pós-validação produção (P2)
+
+**Origem:** Bloco 8 Etapa B-E do Sprint Bot Autoatendimento (2026-05-24).
+
+**Contexto:** Após Bloco 8, o motor dinâmico cobre o fluxo MENU_FATURA inteiro (Ver fatura / Histórico / Já paguei / Negociar humano). Mas `whatsapp-bot.service.ts` ainda tem:
+
+- `handleMenuFatura` (linha 3457-3559)
+- `handleRespostaMenuFatura` (linha 3563-3687) — sub-opções PIX/boleto/portal/extrato/comprovante via menu interativo de botões
+- `handleComprovantePagamento` (linha 3691-3738) — recebe mídia + notifica `process.env.SUPER_ADMIN_PHONE` (NÃO usa `NotificacoesService`)
+
+E ainda existe o atalho via palavra-chave em `processarMensagem:390` (`fatura | faturas | boleto | 2a via | segunda via | pix | pagar`) que força `estado = 'MENU_FATURA'` + chama `handleMenuFatura` direto, **bypassando o motor**.
+
+**Hoje (M24):** o motor tem precedência via gatilho `acao` na etapa MENU_FATURA (ativada nesta sessão). Mas:
+- Se cooperado digita palavra-chave de outro estado não-bloqueante → cai no atalho hardcoded (bypassa motor)
+- `AGUARDANDO_COMPROVANTE_PAGAMENTO` (estado hardcoded) ainda existe mas inalcançável via motor (substituído por `AGUARDANDO_FORMA_PAGAMENTO`)
+- `handleComprovantePagamento` usa `SUPER_ADMIN_PHONE` global em vez de `NotificacoesService` multi-tenant
+
+**Riscos:**
+1. Multi-tenant violation latente no atalho hardcoded (Fase 1 confirmou: busca cooperado SEM `cooperativaId`)
+2. Cooperado pode receber UX inconsistente dependendo se entrou pelo menu '2' (motor) ou por palavra-chave (hardcoded)
+3. D-novo-U (status `PENDENTE` inexistente) ainda no atalho
+
+**Fix:**
+1. Remover atalho palavra-chave de `processarMensagem:369-406` (deixar motor lidar via gatilho MENU_FATURA + sinônimos no banco se Luciano quiser)
+2. Remover `handleMenuFatura` + `handleRespostaMenuFatura` + `handleComprovantePagamento` do switch + métodos privados
+3. Remover estado `AGUARDANDO_COMPROVANTE_PAGAMENTO` do `ESTADOS_FLUXO_ATIVO` whitelist (substituído por `AGUARDANDO_FORMA_PAGAMENTO`)
+4. Catalogar remoção em `docs/sessoes/YYYY-MM-DD-bloco-8-cleanup-hardcoded.md`
+
+**Custo estimado:** ~45-60min (remoção mecânica + smoke test do fluxo via motor).
+
+**Posicionamento:** Sprint Housekeeping pós-onboarding Sinergia OU 2 semanas após Bloco 8 entrar em produção. Mesmo padrão dos débitos D-novo-AB (Bloco 5) e Z (Bloco 6) e antecedentes.
+
+**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AE confirmado livre após D-novo-AD. Não bloqueia M24 — motor dinâmico tem precedência via gatilho `2 → MENU_FATURA` + etapa ATIVA + GLOBAL.
+
+---
+
+### D-novo-AF — Etapa `VER_PROXIMA_FATURA` + ação `CONSULTAR_PROXIMA_FATURA` ficam órfãs após Bloco 8 (P3 limpeza)
+
+**Origem:** Bloco 8 Etapa E do Sprint Bot Autoatendimento (2026-05-24).
+
+**Contexto:** Até o Bloco 3 (21/05), a opção '2' do MENU_COOPERADO ia pra etapa `VER_PROXIMA_FATURA` que tinha `acaoAutomatica: CONSULTAR_PROXIMA_FATURA`. Ação simples — mostrava a próxima fatura + link Asaas + retorno ao MENU_COOPERADO automaticamente.
+
+No Bloco 8, o gatilho '2' do MENU_COOPERADO passou a ir pra `MENU_FATURA` (menu completo com 4 sub-opções). A etapa `VER_PROXIMA_FATURA` continua existindo no banco + a ação `CONSULTAR_PROXIMA_FATURA` continua no `switch` do motor — mas nada mais aponta pra esse caminho.
+
+**Por que não foi removida imediatamente:** Decisão 23 — não tocar mais do que o necessário. Se Luciano testar o bot em produção e quiser reverter, é só apontar `2 → VER_PROXIMA_FATURA` de novo no script idempotente. Manter código como rollback de emergência por 1-2 sprints.
+
+**Fix (Sprint Housekeeping):**
+1. Após confirmar que MENU_FATURA está estável em produção (1-2 sprints), remover:
+   - Etapa `VER_PROXIMA_FATURA` do seed + banco (`f-ver-saldo-creditos` já tem padrão similar — `f-ver-proxima-fatura`)
+   - `case 'CONSULTAR_PROXIMA_FATURA'` do switch do motor + método `executarConsultarProximaFatura` (linha 789-906)
+2. Mensagem do modelo `proxima_fatura_resultado` pode ser preservada (talvez reusada num cenário futuro de relatório) ou deletada se confirmar inutilidade
+
+**Custo estimado:** ~20-30min.
+
+**Posicionamento:** Sprint Housekeeping, pode ir junto com D-novo-AE.
+
+**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AF confirmado livre após D-novo-AE. Estado intencional (rollback fácil) por 1-2 sprints.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
