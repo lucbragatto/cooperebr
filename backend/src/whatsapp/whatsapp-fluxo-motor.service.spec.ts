@@ -34,6 +34,9 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const usinaFindUnique = jest.fn();
   const contratoAggregateUsina = jest.fn();
   const notificacaoCriarMock = jest.fn();
+  // Bloco 8 (24/05): mocks pro fluxo Menu Fatura.
+  const cobrancaFindMany = jest.fn();
+  const solicitacaoConfirmacaoPagamentoCreate = jest.fn();
 
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
@@ -53,10 +56,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       aggregate: contratoAggregateUsina,
     },
     faturaProcessada: { findFirst: faturaProcessadaFindFirst },
-    cobranca: { findFirst: cobrancaFindFirst, count: cobrancaCount },
+    cobranca: { findFirst: cobrancaFindFirst, count: cobrancaCount, findMany: cobrancaFindMany },
     asaasCobranca: { findFirst: asaasCobrancaFindFirst },
     npsResposta: { create: npsRespostaCreate },
     solicitacaoAlteracaoContrato: { create: solicitacaoContratoCreate },
+    solicitacaoConfirmacaoPagamento: { create: solicitacaoConfirmacaoPagamentoCreate },
     usina: { findUnique: usinaFindUnique },
   };
   const modeloMensagemMock: any = { incrementarUso };
@@ -4542,6 +4546,320 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
       expect(notificacaoCriarMock).toHaveBeenCalled();
       expect(enviarMensagem).toHaveBeenCalled();
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+  });
+
+  // ============================================================
+  // Bloco 8 (24/05) — Menu Fatura (ultimo bloco do Sprint Bot Autoatendimento)
+  //
+  // 5 acoes do fluxo "Menu Fatura" no motor dinamico:
+  //  - VER_FATURA_ATUAL: lê cobranca A_VENCER/VENCIDO + asaasCobrancas[0]
+  //    cache local, monta resposta com valor + venc + PIX/boleto/portal.
+  //  - VER_HISTORICO_PAGAMENTOS: ultimas N cobrancas (qualquer status),
+  //    formata lista compacta data|valor|status.
+  //  - SOLICITAR_CONFIRMACAO_PAGAMENTO: entry "ja paguei" — pergunta forma
+  //    de pagamento, transiciona AGUARDANDO_FORMA_PAGAMENTO.
+  //  - SALVAR_CONFIRMACAO_PAGAMENTO: cria SolicitacaoConfirmacaoPagamento
+  //    PENDENTE + NotificacoesService.criar + WA + MENU_COOPERADO.
+  //  - SOLICITAR_NEGOCIACAO_HUMANA: fallback negociar — "vou te conectar
+  //    com a equipe" + Notificacoes + MENU_COOPERADO.
+  // ============================================================
+
+  describe('Bloco 8 - executarAcao(VER_FATURA_ATUAL)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao('VER_FATURA_ATUAL', conversa, conversa.dadosTemp ?? {}, '');
+
+    it('Sem cooperadoId: orienta cadastro', async () => {
+      await invocar({ id: 'c1', telefone: TELEFONE });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/cooperado|cadastro/i),
+      );
+    });
+
+    it('Sem fatura em aberto: avisa que esta em dia', async () => {
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/em dia|nenhuma fatura|tudo certo/i),
+      );
+    });
+
+    it('Com fatura: envia valor + vencimento + PIX + boleto', async () => {
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'A_VENCER',
+        valorLiquido: 200,
+        valorBruto: 250,
+        dataVencimento: new Date('2026-06-10'),
+        mesReferencia: 5,
+        anoReferencia: 2026,
+      });
+      asaasCobrancaFindFirst.mockResolvedValueOnce({
+        pixCopiaECola: '00020101021226PIX',
+        linkPagamento: 'https://asaas.com/pay/abc',
+        boletoUrl: 'https://asaas.com/boleto/abc',
+      });
+
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+
+      const where = cobrancaFindFirst.mock.calls[0][0].where;
+      expect(where.contrato.cooperadoId).toBe('coop-luciano');
+      expect(where.contrato.cooperativaId).toBe('coop-A');
+      expect(enviarMensagem).toHaveBeenCalled();
+      const ultima = (enviarMensagem.mock.calls.at(-1) as any[])[1] as string;
+      expect(ultima).toMatch(/200|PIX|asaas\.com/i);
+    });
+  });
+
+  describe('Bloco 8 - executarAcao(VER_HISTORICO_PAGAMENTOS)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao(
+        'VER_HISTORICO_PAGAMENTOS',
+        conversa,
+        conversa.dadosTemp ?? {},
+        '',
+      );
+
+    it('Sem cooperadoId: orienta cadastro', async () => {
+      await invocar({ id: 'c1', telefone: TELEFONE });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/cooperado|cadastro/i),
+      );
+    });
+
+    it('Sem cobrancas: avisa que nao ha historico', async () => {
+      cobrancaFindMany.mockResolvedValueOnce([]);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/sem historico|nenhuma cobran|ainda nao tem/i),
+      );
+    });
+
+    it('Lista formato compacto + multi-tenant', async () => {
+      cobrancaFindMany.mockResolvedValueOnce([
+        { id: 'c1', valorLiquido: 100, status: 'PAGO', dataVencimento: new Date('2026-01-10'), mesReferencia: 1, anoReferencia: 2026 },
+        { id: 'c2', valorLiquido: 150, status: 'A_VENCER', dataVencimento: new Date('2026-06-10'), mesReferencia: 5, anoReferencia: 2026 },
+      ]);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      const where = cobrancaFindMany.mock.calls[0][0].where;
+      expect(where.contrato.cooperadoId).toBe('coop-luciano');
+      expect(where.contrato.cooperativaId).toBe('coop-A');
+      const msg = (enviarMensagem.mock.calls.at(-1) as any[])[1] as string;
+      expect(msg).toMatch(/100|150/);
+      expect(msg).toMatch(/PAGO|A_VENCER|Pago|A vencer/i);
+    });
+  });
+
+  describe('Bloco 8 - executarAcao(SOLICITAR_CONFIRMACAO_PAGAMENTO)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao(
+        'SOLICITAR_CONFIRMACAO_PAGAMENTO',
+        conversa,
+        conversa.dadosTemp ?? {},
+        '',
+      );
+
+    it('Sem cobranca em aberto: avisa', async () => {
+      cobrancaFindFirst.mockResolvedValueOnce(null);
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/nenhuma fatura|em dia|nao encontramos/i),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Com cobranca: pergunta forma de pagamento + transiciona AGUARDANDO_FORMA_PAGAMENTO', async () => {
+      cobrancaFindFirst.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'VENCIDO',
+        valorLiquido: 200,
+      });
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: expect.objectContaining({
+          estado: 'AGUARDANDO_FORMA_PAGAMENTO',
+          dadosTemp: expect.objectContaining({ cobrancaId: 'cob-1' }),
+        }),
+      });
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/forma.*pagamento|pix.*transfer/i),
+      );
+    });
+  });
+
+  describe('Bloco 8 - executarAcao(SALVAR_CONFIRMACAO_PAGAMENTO)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any, corpo: string) =>
+      (service as any).executarAcao(
+        'SALVAR_CONFIRMACAO_PAGAMENTO',
+        conversa,
+        conversa.dadosTemp ?? {},
+        corpo,
+      );
+
+    const dadosTempBase = { cobrancaId: 'cob-1' };
+
+    it('Sessao incompleta: avisa + sem create', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: {},
+        },
+        'PIX',
+      );
+      expect(solicitacaoConfirmacaoPagamentoCreate).not.toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/sessao|volte ao menu/i),
+      );
+    });
+
+    it('Sucesso: cria solicitacao + notifica + WA + MENU', async () => {
+      solicitacaoConfirmacaoPagamentoCreate.mockResolvedValueOnce({ id: 'sol-cp-1' });
+      notificacaoCriarMock.mockResolvedValueOnce({});
+
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'PIX',
+      );
+
+      expect(solicitacaoConfirmacaoPagamentoCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          cobrancaId: 'cob-1',
+          formaPagamentoReclamada: 'PIX',
+          status: 'PENDENTE',
+        }),
+      });
+      expect(notificacaoCriarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'SOLICITACAO_CONFIRMACAO_PAGAMENTO',
+          cooperativaId: 'coop-A',
+        }),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+    });
+
+    it('Aceita texto livre como forma (ex: "transferi do meu banco")', async () => {
+      solicitacaoConfirmacaoPagamentoCreate.mockResolvedValueOnce({ id: 'sol-cp-2' });
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+          dadosTemp: dadosTempBase,
+        },
+        'transferi do meu banco ontem',
+      );
+      const data = solicitacaoConfirmacaoPagamentoCreate.mock.calls[0][0].data;
+      expect(data.formaPagamentoReclamada).toBe('transferi do meu banco ontem');
+    });
+
+    it('Tenant ausente: aborta sem create', async () => {
+      await invocar(
+        {
+          id: 'c1',
+          telefone: TELEFONE,
+          cooperadoId: 'coop-luciano',
+          cooperativaId: null,
+          dadosTemp: dadosTempBase,
+        },
+        'PIX',
+      );
+      expect(solicitacaoConfirmacaoPagamentoCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Bloco 8 - executarAcao(SOLICITAR_NEGOCIACAO_HUMANA)', () => {
+    const TELEFONE = '+5527981341348';
+    const invocar = (conversa: any) =>
+      (service as any).executarAcao(
+        'SOLICITAR_NEGOCIACAO_HUMANA',
+        conversa,
+        conversa.dadosTemp ?? {},
+        '',
+      );
+
+    it('Notifica equipe + responde + MENU', async () => {
+      notificacaoCriarMock.mockResolvedValueOnce({});
+      await invocar({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: 'coop-luciano',
+        cooperativaId: 'coop-A',
+      });
+      expect(notificacaoCriarMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'NEGOCIACAO_HUMANA',
+          cooperadoId: 'coop-luciano',
+          cooperativaId: 'coop-A',
+        }),
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringMatching(/equipe|contat/i),
+      );
       expect(conversaUpdate).toHaveBeenCalledWith({
         where: { id: 'c1' },
         data: { estado: 'MENU_COOPERADO' },

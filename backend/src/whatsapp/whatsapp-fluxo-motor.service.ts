@@ -567,6 +567,28 @@ export class WhatsappFluxoMotorService {
         case 'SALVAR_SOLICITACAO_ENCERRAR':
           await this.executarSalvarSolicitacaoEncerrar(conversa, corpo);
           break;
+        // Bloco 8 (24/05): ultimo bloco do Sprint Bot Autoatendimento.
+        // 5 acoes do fluxo Menu Fatura:
+        //  - VER_FATURA_ATUAL: cache local asaasCobrancas, sem chamar gateway
+        //  - VER_HISTORICO_PAGAMENTOS: ultimas 6 cobrancas
+        //  - SOLICITAR_CONFIRMACAO_PAGAMENTO / SALVAR_CONFIRMACAO_PAGAMENTO:
+        //    "ja paguei" no padrao Bloco 5 — cria solicitacao PENDENTE
+        //  - SOLICITAR_NEGOCIACAO_HUMANA: link humano via Notificacoes
+        case 'VER_FATURA_ATUAL':
+          await this.executarVerFaturaAtual(conversa);
+          break;
+        case 'VER_HISTORICO_PAGAMENTOS':
+          await this.executarVerHistoricoPagamentos(conversa);
+          break;
+        case 'SOLICITAR_CONFIRMACAO_PAGAMENTO':
+          await this.executarSolicitarConfirmacaoPagamento(conversa);
+          break;
+        case 'SALVAR_CONFIRMACAO_PAGAMENTO':
+          await this.executarSalvarConfirmacaoPagamento(conversa, corpo);
+          break;
+        case 'SOLICITAR_NEGOCIACAO_HUMANA':
+          await this.executarSolicitarNegociacaoHumana(conversa);
+          break;
         default:
           this.logger.warn(`Acao desconhecida: ${acao}`);
       }
@@ -2213,6 +2235,371 @@ export class WhatsappFluxoMotorService {
 
     this.logger.log(
       `SALVAR_SOLICITACAO_${tipoAlteracao}: solicitacao ${solicitacaoId} criada (cooperado=${conversa.cooperadoId}, contrato=${contratoId}, motivo=${motivo ? 'sim' : 'nao'}, tenant=${cooperativaId})`,
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Bloco 8 (24/05): Menu Fatura — ultimo bloco do Sprint Bot Autoatendimento.
+  // VER_FATURA_ATUAL + VER_HISTORICO_PAGAMENTOS = leitura simples.
+  // SOLICITAR/SALVAR_CONFIRMACAO_PAGAMENTO = "ja paguei" padrao Bloco 5.
+  // SOLICITAR_NEGOCIACAO_HUMANA = link humano via Notificacoes.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  private async executarVerFaturaAtual(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar sua fatura voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz.',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const contratoFilter: { cooperadoId: string; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+    };
+    if (cooperativaId) contratoFilter.cooperativaId = cooperativaId;
+
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: {
+        contrato: contratoFilter,
+        status: { in: ['A_VENCER', 'VENCIDO'] },
+      } as never,
+      orderBy: { dataVencimento: 'asc' },
+      select: {
+        id: true,
+        status: true,
+        valorLiquido: true,
+        valorBruto: true,
+        dataVencimento: true,
+        mesReferencia: true,
+        anoReferencia: true,
+      },
+    });
+
+    if (!cobranca) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '✅ Voce nao tem nenhuma fatura em aberto no momento. Esta tudo em dia! 💚',
+      );
+      return;
+    }
+
+    const asaas = await this.prisma.asaasCobranca.findFirst({
+      where: { cobrancaId: cobranca.id },
+      orderBy: { createdAt: 'desc' },
+      select: { pixCopiaECola: true, linkPagamento: true, boletoUrl: true },
+    });
+
+    const valor = Number(cobranca.valorLiquido ?? cobranca.valorBruto ?? 0).toFixed(2).replace('.', ',');
+    const venc = new Date(cobranca.dataVencimento).toLocaleDateString('pt-BR');
+    const mesStr = String(cobranca.mesReferencia).padStart(2, '0');
+    const statusTxt = cobranca.status === 'VENCIDO' ? '⚠️ VENCIDA' : '📅 A vencer';
+
+    let texto = `📄 *Fatura ${mesStr}/${cobranca.anoReferencia}*\n`;
+    texto += `${statusTxt}\n`;
+    texto += `💰 Valor: *R$ ${valor}*\n`;
+    texto += `📅 Vencimento: ${venc}`;
+
+    if (asaas?.pixCopiaECola) {
+      texto += `\n\n*PIX copia-e-cola:*\n\`${asaas.pixCopiaECola}\``;
+    }
+    if (asaas?.boletoUrl) {
+      texto += `\n\n🧾 Boleto: ${asaas.boletoUrl}`;
+    }
+    if (asaas?.linkPagamento) {
+      texto += `\n🔗 Link de pagamento: ${asaas.linkPagamento}`;
+    }
+
+    await this.sender.enviarMensagem(conversa.telefone, texto);
+
+    this.logger.log(
+      `VER_FATURA_ATUAL: enviado pra ${conversa.telefone} (cooperado=${conversa.cooperadoId}, cobranca=${cobranca.id}, tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarVerHistoricoPagamentos(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar seu historico voce precisa ser cooperado. Faca seu cadastro pelo bot enviando uma foto da sua conta de luz.',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const contratoFilter: { cooperadoId: string; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+    };
+    if (cooperativaId) contratoFilter.cooperativaId = cooperativaId;
+
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: { contrato: contratoFilter } as never,
+      orderBy: { dataVencimento: 'desc' },
+      take: 6,
+      select: {
+        id: true,
+        valorLiquido: true,
+        status: true,
+        dataVencimento: true,
+        mesReferencia: true,
+        anoReferencia: true,
+      },
+    });
+
+    if (cobrancas.length === 0) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Voce ainda nao tem nenhuma cobranca registrada. 💛',
+      );
+      return;
+    }
+
+    const statusLabel = (s: string): string => {
+      switch (s) {
+        case 'PAGO':
+          return '✅ Pago';
+        case 'A_VENCER':
+          return '📅 A vencer';
+        case 'VENCIDO':
+          return '⚠️ Vencido';
+        case 'CANCELADO':
+          return '❌ Cancelado';
+        case 'PENDENTE':
+          return '⏳ Pendente';
+        default:
+          return s;
+      }
+    };
+
+    let texto = `📜 *Seu historico (ultimas ${cobrancas.length}):*\n\n`;
+    for (const c of cobrancas) {
+      const mes = String(c.mesReferencia).padStart(2, '0');
+      const valor = Number(c.valorLiquido ?? 0).toFixed(2).replace('.', ',');
+      const venc = new Date(c.dataVencimento).toLocaleDateString('pt-BR');
+      texto += `• ${mes}/${c.anoReferencia} — R$ ${valor} — ${statusLabel(c.status)} (venc. ${venc})\n`;
+    }
+    texto += '\n_Para detalhes de cada fatura, acesse o portal._';
+
+    await this.sender.enviarMensagem(conversa.telefone, texto);
+
+    this.logger.log(
+      `VER_HISTORICO_PAGAMENTOS: ${cobrancas.length} cobrancas enviadas pra ${conversa.telefone} (cooperado=${conversa.cooperadoId}, tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarSolicitarConfirmacaoPagamento(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para confirmar pagamento voce precisa ser cooperado. Faca seu cadastro pelo bot.',
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const contratoFilter: { cooperadoId: string; cooperativaId?: string } = {
+      cooperadoId: conversa.cooperadoId,
+    };
+    if (cooperativaId) contratoFilter.cooperativaId = cooperativaId;
+
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: {
+        contrato: contratoFilter,
+        status: { in: ['A_VENCER', 'VENCIDO'] },
+      } as never,
+      orderBy: { dataVencimento: 'asc' },
+      select: { id: true },
+    });
+
+    if (!cobranca) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '✅ Nao encontramos nenhuma fatura em aberto pra confirmar. Voce esta em dia! 💚',
+      );
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
+      return;
+    }
+
+    const dadosAtuais = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const dadosNovo = {
+      ...dadosAtuais,
+      cobrancaId: cobranca.id,
+    };
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'AGUARDANDO_FORMA_PAGAMENTO',
+        dadosTemp: dadosNovo as any,
+      },
+    });
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '💰 Otimo! Como voce *fez o pagamento*? (ex: "PIX direto", "transferencia", "deposito", "boleto"):',
+    );
+
+    this.logger.log(
+      `SOLICITAR_CONFIRMACAO_PAGAMENTO: cooperado ${conversa.cooperadoId} cobranca ${cobranca.id} (tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarSalvarConfirmacaoPagamento(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const dados = (((conversa as any).dadosTemp) ?? {}) as Record<string, unknown>;
+    const cobrancaId = dados.cobrancaId as string | undefined;
+    const cooperativaId = conversa.cooperativaId;
+    const formaPagamento = (corpo ?? '').trim();
+
+    if (!cobrancaId || !conversa.cooperadoId || !cooperativaId) {
+      this.logger.error(
+        `SALVAR_CONFIRMACAO_PAGAMENTO: sessao incompleta (cobrancaId=${!!cobrancaId}, cooperadoId=${!!conversa.cooperadoId}, cooperativaId=${!!cooperativaId})`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Sessao incompleta. Volte ao menu e tente de novo.',
+      );
+      return;
+    }
+
+    if (!formaPagamento) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Digite como voce fez o pagamento (ex: "PIX", "transferencia", "deposito"):',
+      );
+      return;
+    }
+
+    let solicitacaoId: string;
+    try {
+      const sol = await this.prisma.solicitacaoConfirmacaoPagamento.create({
+        data: {
+          cooperadoId: conversa.cooperadoId,
+          cooperativaId,
+          cobrancaId,
+          formaPagamentoReclamada: formaPagamento,
+          status: 'PENDENTE' as any,
+        },
+      });
+      solicitacaoId = sol.id;
+    } catch (err) {
+      this.logger.error(
+        `SALVAR_CONFIRMACAO_PAGAMENTO: create falhou — ${(err as Error)?.message ?? 'desconhecido'}`,
+      );
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Nao conseguimos registrar agora. Tente de novo em alguns minutos ou fale com a equipe.',
+      );
+      return;
+    }
+
+    try {
+      await this.notificacoes.criar({
+        tipo: 'SOLICITACAO_CONFIRMACAO_PAGAMENTO',
+        titulo: 'Cooperado avisou pagamento',
+        mensagem: `Cooperado avisou que pagou. Forma: ${formaPagamento}.`,
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId,
+        link: `/dashboard/super-admin/solicitacoes/${solicitacaoId}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `SALVAR_CONFIRMACAO_PAGAMENTO: notificacoes.criar falhou — ${(err as Error)?.message ?? 'desconhecido'} (segue)`,
+      );
+    }
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '✅ Recebemos sua *confirmacao de pagamento*. Nossa equipe vai conferir com o banco/gateway e te avisa em ate 2 dias uteis. Obrigado! 💚',
+    );
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `SALVAR_CONFIRMACAO_PAGAMENTO: solicitacao ${solicitacaoId} criada (cooperado=${conversa.cooperadoId}, cobranca=${cobrancaId}, forma=${formaPagamento}, tenant=${cooperativaId})`,
+    );
+  }
+
+  private async executarSolicitarNegociacaoHumana(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+  ): Promise<void> {
+    const cooperativaId = conversa.cooperativaId;
+
+    if (conversa.cooperadoId && cooperativaId) {
+      try {
+        await this.notificacoes.criar({
+          tipo: 'NEGOCIACAO_HUMANA',
+          titulo: 'Cooperado quer negociar',
+          mensagem:
+            'Cooperado pediu pra negociar / pedir mais prazo na fatura. Entre em contato em ate 1 dia util.',
+          cooperadoId: conversa.cooperadoId,
+          cooperativaId,
+          link: `/dashboard/cooperados/${conversa.cooperadoId}`,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `SOLICITAR_NEGOCIACAO_HUMANA: notificacoes.criar falhou — ${(err as Error)?.message ?? 'desconhecido'} (segue)`,
+        );
+      }
+    }
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '💛 Entendi! Vou *te conectar com a equipe*. Em ate 1 dia util alguem entra em contato pra negociar prazo/parcelamento. Obrigado pela confianca!',
+    );
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
+
+    this.logger.log(
+      `SOLICITAR_NEGOCIACAO_HUMANA: cooperado ${conversa.cooperadoId ?? 'sem-cooperado'} (tenant=${cooperativaId ?? 'global'})`,
     );
   }
 
