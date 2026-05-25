@@ -1,7 +1,13 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-26 noite — M28 Sub-Sprint Gateways de Pagamento Fatia F3 (BanestesConfigService Multi-Tenant)**. 4 commits + fechamento (`dc325af` Etapas A+B config service multi-tenant + adapter callsites → `9c1b5bc` Etapa C controller sem fallback plataforma → `a71cbb1` Etapa D deprecation BANESTES_* no .env.example → commit fechamento). `BanestesConfigService` agora le **ConfigGateway BANESTES por tenant** (em vez de `process.env.BANESTES_*` globais). Decryption via `CredentialsEncryptor` (M27). **Cache segregado por tenant** (`Map<cooperativaId, ...>`): https.Agent + OAuth token cada um isolado por tenant. **EncryptionModule novo** (`backend/src/gateways-pagamento-config/encryption.module.ts`) extraido pra quebrar ciclo de dependencia entre GatewaysPagamentoConfigModule, GatewayPagamentoModule e BanestesModule. **`POST /gateway-pagamento/banestes/testar-conexao`** refatorado: remove fallback `'plataforma'`, exige cooperativaId real (JWT pra ADMIN ou query pra SUPER_ADMIN). **6 variaveis BANESTES_* marcadas @deprecated** no `.env.example` (PFX_PATH, PFX_SENHA, CLIENT_ID, CLIENT_SECRET, AMBIENTE, BASE_URL). Mantidas globais nao-secretas: BANESTES_TIMEOUT_MS + BANESTES_TEMPO_COBRANCA_EXPIRA_SEGUNDOS. **48/48 specs verdes no modulo Banestes** (18 config service novo + 23 adapter mantidos + 7 controller refatorado). Suite completa: **853/864** (11 falhas PRE-EXISTENTES em cooperados/usinas). nest build + tsc limpos. **F2 PERMANECE BLOQUEADA por Luciano operacional** (gerar GATEWAY_ENCRYPT_KEY real + 2 backups OFFLINE — R2 mitigacao). Detalhe: `docs/sessoes/2026-05-26-m28-sub-sprint-gateways-pagamento-f3-banestes-multitenant.md`.
+> Última atualização: **2026-05-26 noite — M29 Sub-Sprint Gateways de Pagamento Fatia F2 EXPANDIDA (Schema Migration + Dual-Write Asaas + Rotação ASAAS_ENCRYPT_KEY)**. 3 commits codigo + fechamento (`0db2673` Etapa B schema migration aditiva + colunas credenciaisCriptografadas/metadados → `f1aa803` Etapa C dual-write Asaas + 7 specs → `ff64c5c` Etapa D script idempotente migracao + apply pos-OK Luciano → commit fechamento). Etapas E (rotacao ASAAS_ENCRYPT_KEY) e F (smoke E2E) executadas sem commit (banco + .env apenas; scripts temp `__rotate-*` + `__smoke-*` removidos pos-uso). **Backup pg_dump** completo via Docker postgres:17-alpine pre-execucao (`~/backups/sisgd-pre-f2-20260525-163223.sql.gz`, 220KB, 347 objetos). **Migration aditiva** ConfigGateway: 2 colunas novas `credenciaisCriptografadas Json` + `metadados Json`; coluna legada `credenciais` mantida com `@deprecated F2` (drop pra sprint proprio futuro pos-30 dias coexistencia). **Dual-write Asaas** atomico via `prisma.$transaction`: AsaasService.salvarConfig grava em AsaasConfig (legado) + ConfigGateway (novo, encrypted via CredentialsEncryptor + GATEWAY_ENCRYPT_KEY chave forte). **Migration de dados** aplicada apos DRY-RUN + OK explicito Luciano: 1 UPDATE (CoopereBR ASAAS sandbox, cipher 266 chars base64 forte + apiKeyMasked=****MzY5). **D-novo-AJ.1 RESOLVIDO** — ASAAS_ENCRYPT_KEY rotacionada: chave anterior 31 chars textuais `_key` (entropia senha curta) substituida por chave nova 44 chars base64 real. 1 registro AsaasConfig re-encrypted via script atomico (decrypt antiga -> encrypt nova -> UPDATE transacao -> .env substituido). 2 papeis offline pelo Luciano em locais DIFERENTES dos papeis da GATEWAY_ENCRYPT_KEY (defesa em profundidade). PM2 restartado pid 40264 sem erro decryption. **Smoke E2E pos-rotacao OK**: AsaasService.decrypt produz apiKey real ****MzY5 (consistente); ConfigGateway ASAAS espelho com cipher 266 chars + decrypt CredentialsEncryptor mesmo valor. **Suite completa: 860/871** (mesmas 11 falhas pre-existentes cooperados/usinas; +7 dual-write specs verdes vs M28). Inventario de secrets atualizado: ASAAS_ENCRYPT_KEY 🟡->🟢. **2 pontos de pausa respeitados** (OK Luciano explicito antes do apply Etapa D + antes do restart Etapa E). Detalhe: `docs/sessoes/2026-05-26-m29-sub-sprint-gateways-pagamento-f2-expandida.md`. (`dc325af` Etapas A+B config service multi-tenant + adapter callsites → `9c1b5bc` Etapa C controller sem fallback plataforma → `a71cbb1` Etapa D deprecation BANESTES_* no .env.example → commit fechamento). `BanestesConfigService` agora le **ConfigGateway BANESTES por tenant** (em vez de `process.env.BANESTES_*` globais). Decryption via `CredentialsEncryptor` (M27). **Cache segregado por tenant** (`Map<cooperativaId, ...>`): https.Agent + OAuth token cada um isolado por tenant. **EncryptionModule novo** (`backend/src/gateways-pagamento-config/encryption.module.ts`) extraido pra quebrar ciclo de dependencia entre GatewaysPagamentoConfigModule, GatewayPagamentoModule e BanestesModule. **`POST /gateway-pagamento/banestes/testar-conexao`** refatorado: remove fallback `'plataforma'`, exige cooperativaId real (JWT pra ADMIN ou query pra SUPER_ADMIN). **6 variaveis BANESTES_* marcadas @deprecated** no `.env.example` (PFX_PATH, PFX_SENHA, CLIENT_ID, CLIENT_SECRET, AMBIENTE, BASE_URL). Mantidas globais nao-secretas: BANESTES_TIMEOUT_MS + BANESTES_TEMPO_COBRANCA_EXPIRA_SEGUNDOS. **48/48 specs verdes no modulo Banestes** (18 config service novo + 23 adapter mantidos + 7 controller refatorado). Suite completa: **853/864** (11 falhas PRE-EXISTENTES em cooperados/usinas). nest build + tsc limpos. **F2 PERMANECE BLOQUEADA por Luciano operacional** (gerar GATEWAY_ENCRYPT_KEY real + 2 backups OFFLINE — R2 mitigacao). Detalhe: `docs/sessoes/2026-05-26-m28-sub-sprint-gateways-pagamento-f3-banestes-multitenant.md`.
+
+---
+
+## ONDE PARAMOS — 2026-05-26 noite (Code — M28 Sub-Sprint Gateways de Pagamento Fatia F3 BanestesConfigService Multi-Tenant)
+
+4 commits + fechamento (`dc325af` Etapas A+B config service multi-tenant + adapter callsites → `9c1b5bc` Etapa C controller sem fallback plataforma → `a71cbb1` Etapa D deprecation BANESTES_* no .env.example → commit fechamento `acd2828`). `BanestesConfigService` agora le **ConfigGateway BANESTES por tenant** (em vez de `process.env.BANESTES_*` globais). Decryption via `CredentialsEncryptor` (M27). **Cache segregado por tenant** (`Map<cooperativaId, ...>`): https.Agent + OAuth token cada um isolado. **EncryptionModule novo** extraido pra quebrar ciclo de dependencia. `POST /gateway-pagamento/banestes/testar-conexao` refatorado: remove fallback `'plataforma'`. 6 variaveis BANESTES_* `@deprecated`. **48/48 specs verdes no modulo Banestes**. Detalhe: `docs/sessoes/2026-05-26-m28-sub-sprint-gateways-pagamento-f3-banestes-multitenant.md`.
 
 ---
 
@@ -1053,141 +1059,158 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
    Esperado: working tree limpo (só untracked carry-overs catalogados).
-   Último commit é o de fechamento M28 Sub-Sprint Gateways de Pagamento
-   Fatia F3. Penúltimo é `a71cbb1` (Etapa D deprecation BANESTES_*).
-   Antepenúltimo é `9c1b5bc` (Etapa C controller).
+   Último commit é o de fechamento M29 Sub-Sprint Gateways de Pagamento
+   Fatia F2 EXPANDIDA. Penúltimo é `ff64c5c` (Etapa D script migracao).
+   Antepenúltimo é `f1aa803` (Etapa C dual-write Asaas).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR
    + Decisão 23.
 
-3. Rodar `pm2 list`. Esperado: cooperebr-backend online.
+3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado).
 
 PASSO 1 — Onde paramos:
 
-Sessão 26/05 noite (continuacao) entregou M28 — Sub-Sprint Gateways de
-Pagamento Fatia F3 BanestesConfigService Multi-Tenant em 4 commits
-incrementais (Etapas A+B → C → D) + commit fechamento.
+Sessão 26/05 noite (continuacao) entregou M29 — Sub-Sprint Gateways de
+Pagamento Fatia F2 EXPANDIDA (Schema Migration + Dual-Write Asaas +
+Rotacao ASAAS_ENCRYPT_KEY) em 3 commits codigo + fechamento.
 
-ENTREGAS M28:
+ENTREGAS M29:
 
-REFATOR BanestesConfigService:
-- Le ConfigGateway BANESTES por tenant (em vez de process.env.BANESTES_*)
-- carregarConfig(cooperativaId): busca + decripta secrets + monta config
-  carregada. Throws GatewayError CREDENCIAIS_INVALIDAS claro se ausente
-  / inativa / decrypt falha / campos faltando
-- Cache segregado por tenant (Map<cooperativaId, Agent> + Map<cooperativaId,
-  {token, expiresAt}>). .pfx lido do disco apenas 1x por tenant
-- Metodos: invalidarTokenCache(cooperativaId) + invalidarCacheTenant
-  (cooperativaId) + resetCache()
+Etapa A — Backup pg_dump completo (sem commit, local):
+  /c/Users/Luciano/backups/sisgd-pre-f2-20260525-163223.sql.gz
+  (220KB gzipped, 347 objetos, via Docker postgres:17-alpine —
+  Supabase atualizou pra PG17.6)
 
-REFATOR BanestesAdapter:
-- 3 callsites internos atualizados: getAccessToken(cooperativaId),
-  getHttpClient(cooperativaId), invalidarTokenCache(cooperativaId)
-- Interface GatewayPagamentoAdapter NAO mudou (M26 ja entregou correta)
+Etapa B — Schema migration aditiva (commit 0db2673):
+  ConfigGateway ganhou 2 colunas JSONB:
+  - credenciaisCriptografadas Json @default(\"{}\")  — somente __enc{} cipher
+  - metadados Json @default(\"{}\")                  — campos texto puro
+  Coluna legada `credenciais` mantida com @deprecated F2.
+  Migration MANUAL (sem prisma migrate dev por causa de BOM no baseline)
+  aplicada via prisma migrate deploy. SQL ADD COLUMN IF NOT EXISTS
+  NOT NULL DEFAULT '{}'::jsonb — non-blocking PG17.
 
-REFATOR BanestesController:
-- Remove fallback 'plataforma'
-- Exige cooperativaId real (JWT pra ADMIN ou query pra SUPER_ADMIN)
-- resolverTenant() helper privado alinhado com
-  GatewaysPagamentoConfigController.resolverTenantQuery
+Etapa C — Dual-write Asaas (commit f1aa803):
+  AsaasService.salvarConfig agora grava nos DOIS caminhos em
+  prisma.\$transaction atomico:
+  1. AsaasConfig (LEGADO, intacto) — getApiClient continua lendo daqui
+  2. ConfigGateway (NOVO, espelho) — credenciaisCriptografadas via
+     CredentialsEncryptor com GATEWAY_ENCRYPT_KEY chave forte
+  Encryption com CHAVES DIFERENTES: legado SHA-256(ASAAS_ENCRYPT_KEY)
+  vs novo GATEWAY_ENCRYPT_KEY direto base64.
+  AsaasModule importa EncryptionModule.
+  7/7 specs novos verdes (transacao + chaves diferentes + mascaramento
+  + webhookTokenDefinido + rollback + multi-tenant).
 
-ARQUITETURAL — EncryptionModule:
-- Novo modulo em backend/src/gateways-pagamento-config/encryption.module.ts
-- Extraido pra quebrar ciclo de dependencia:
-    GatewaysPagamentoConfigModule -> GatewayPagamentoModule ->
-    BanestesModule -> (ciclo)
-  EncryptionModule fica fora desse caminho; importado por ambos.
+Etapa D — Script idempotente migracao (commit ff64c5c):
+  backend/scripts/migrate-asaas-to-config-gateway.ts preenche o gap
+  dos registros pre-existentes em AsaasConfig.
+  DRY-RUN apresentado pro Luciano: 1 registro CoopereBR ASAAS sandbox.
+  OK explicito recebido (PRIMEIRO PONTO DE PAUSA RESPEITADO).
+  APPLY: 1 UPDATE (cipher 266 chars formato iv:cipher:tag base64,
+  metadados.apiKeyMasked=****MzY5, webhookTokenDefinido=true).
+  AsaasConfig legado INTACTO.
 
-DEPRECATION BANESTES_*:
-- 6 variaveis marcadas @deprecated F3 no .env.example:
-  PFX_PATH, PFX_SENHA, CLIENT_ID, CLIENT_SECRET, AMBIENTE, BASE_URL
-- Substituidas por ConfigGateway BANESTES por tenant
-- Mantidas globais nao-secretas: BANESTES_TIMEOUT_MS +
-  BANESTES_TEMPO_COBRANCA_EXPIRA_SEGUNDOS
+Etapa E — Rotacao ASAAS_ENCRYPT_KEY (sem commit, banco + .env apenas):
+  Script temporario __rotate-asaas-encrypt-key.ts (removido pos-uso)
+  executou sequencia atomica:
+  - Chave ANTIGA: 31 chars textuais terminando em _key (entropia
+    placeholder fraca — D-novo-AJ.1 achado)
+  - Chave NOVA: openssl rand -base64 32 (44 chars base64 real)
+  - 1 AsaasConfig.apiKey re-encrypted (transacao Prisma atomica)
+  - .env substituido (linha ASAAS_ENCRYPT_KEY=)
+  - apiKey REAL preservada: ****MzY5 (valor Asaas inalterado)
+  - 2 PAPEIS OFFLINE pelo Luciano em locais DIFERENTES dos papeis
+    da GATEWAY_ENCRYPT_KEY (defesa em profundidade)
+  - PM2 restart pid 40264 (SEGUNDO PONTO DE PAUSA RESPEITADO)
 
-48/48 SPECS VERDES NO MODULO BANESTES:
-- 18 BanestesConfigService.spec (multi-tenant carregarConfig +
-  cache segregado + invalidacao + cenarios erro)
-- 23 BanestesAdapter.spec (mantidos verdes — mocks aceitam cooperativaId)
-- 7 BanestesController.spec (ADMIN/SUPER_ADMIN com/sem query)
+Etapa F — Smoke E2E pos-rotacao (sem commit, scripts temp removidos):
+  - AsaasService.decrypt produz apiKey real ****MzY5 (consistente)
+  - ConfigGateway ASAAS espelho com cipher 266 chars base64 +
+    decrypt CredentialsEncryptor mesmo ****MzY5
+  - ConfigGateway BANESTES vazio (esperado — Luciano configura quando
+    obtiver .pfx sandbox)
+  - npm test: 860/871 passing (mesmas 11 pre-existentes em cooperados/usinas;
+    +7 dual-write specs verdes vs M28)
 
-SUITE COMPLETA: 853/864. 11 falhas PRE-EXISTENTES em cooperados/usinas
-(fora do escopo Sub-Sprint Gateways).
-
-nest build + tsc --noEmit limpos.
+Etapa G — Docs + fechamento:
+  - docs/seguranca/inventario-secrets.md: ASAAS_ENCRYPT_KEY 🟡 -> 🟢
+    (2 papeis confirmados, proxima revisao 2027-05-26)
+  - docs/debitos-tecnicos.md: D-novo-AJ.1 ✅ RESOLVIDO com timeline
+  - Doc-sessao M29 + CONTROLE-EXECUCAO atualizados
 
 CONSTRAINTS RESPEITADAS:
-- AsaasAdapter NAO tocado (F2 fara dual-write Asaas)
-- Schema Prisma NAO alterado
-- Multi-tenant: cooperativaId em 100% das chamadas Banestes
-- GATEWAY_ENCRYPT_KEY placeholder do M27 cobre os specs (chave real
-  fica pra Luciano gerar antes de F2)
+- TDD: specs antes da implementacao (dual-write spec antes de salvarConfig)
+- Multi-tenant: cooperativaId em 100% das queries Prisma
+- Dry-run OBRIGATORIO antes de UPDATE em dados reais (Etapa D)
+- AGUARDAR OK Luciano explicito antes de apply Etapa D + restart Etapa E
+- Backup banco ANTES de qualquer mexida (Etapa A)
+- Sem commit de .env, .sql.gz, scripts com secrets
+- Valores reais NUNCA em docs/commits/logs visiveis
+- Politica regra-secrets-nao-memorizar.md respeitada
+- Sem force push, commits incrementais em portugues
 
-PROXIMO PASSO — F2 BLOQUEADA POR LUCIANO OPERACIONAL:
+PROXIMO PASSO — F5 EM SESSAO FUTURA (apos 30 dias coexistencia):
 
-Antes de F2 rodar, OBRIGATORIO:
-1. Gerar chave master real: openssl rand -base64 32
-2. Configurar GATEWAY_ENCRYPT_KEY no .env de producao
-3. BACKUP OFFLINE em 2 copias (papel num cofre + gerenciador senhas)
-4. Confirmar ao orquestrador
-5. Ai F2 arranca (schema migration aditiva + dual-write Asaas, ~3-4h)
+F5 = drop coluna `credenciais` legado + leitura de ConfigGateway:
+1. Validar 30 dias de coexistencia AsaasConfig <-> ConfigGateway sem
+   regressao (logs estaveis, sem erro decryption)
+2. Confirmar com Luciano que pode dropar
+3. npx prisma migrate dev --name drop_credenciais_legado
+4. Atualizar AsaasService.getApiClient pra ler de
+   ConfigGateway.credenciaisCriptografadas via CredentialsEncryptor
+5. Smoke E2E final em sandbox
 
-Justificativa: risco critico R2 catalogado na Fase 1. Sem backup
-offline, F2 e irresponsavel.
+Estimativa F5: ~2-3h Code, sprint proprio futuro (sem urgencia).
 
-FLUXO COMPLETO BACKEND apos F2 rodar:
-- F5 (3h) — migration dados existentes (AsaasConfig → ConfigGateway
-  ASAAS via dual-write) + smoke E2E sandbox
-- F4 (6-9h) — frontend tela /dashboard/configuracoes/gateways-pagamento
-  (sub-sprint proprio futuro)
+F4 frontend (tela /dashboard/configuracoes/gateways-pagamento generica):
+~6-9h, sub-sprint proprio quando Luciano quiser desbloquear UI nova.
 
-FRENTES PARALELAS DISPONIVEIS enquanto F2 bloqueado:
-- Sprint Bot Proativo Fase 1 read-only ampla — lembrete pre-vencimento
-  + webhook pagamento + escalacao inadimplencia
-- Cenario Completo Banestes (~6-8h) — depois Carolina pagar canario:
-  cancelarCobranca + processarWebhook + GatewayWebhookLog + cron
-  alerta .pfx D-30
-- PAUSA TOTAL — esperar Luciano com backup chave
+FRENTES PARALELAS DISPONIVEIS:
+- Sprint Bot Proativo Fase 1 read-only ampla
+- Cenario Completo Banestes (~6-8h) apos Carolina pagar canario
+- D-novo-AK (instalar gerenciador de senhas Luciano, 1-2h)
+- PAUSA TOTAL
 
 BLOQUEADORES EXTERNOS PERSISTEM:
 - Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
 - Adapter Banestes M26 aguarda .pfx sandbox
 
 FRENTES OPERACIONAIS LUCIANO (acumulado):
-⚠️ PRIORITARIO: Gerar GATEWAY_ENCRYPT_KEY + backup offline 2 copias
-  (bloqueia F2)
-- Avisar time legado: senha Azure SQL + 5 .pfx vazados + senha .pfx em
-  comentario + senha .pfx em coluna texto puro + webhook sem validacao
-- Obter script.sql do hb06a (Sub-Sprint B)
-- Obter .pfx sandbox Banestes do portal desenvolvedor
-- Decisoes regulatorias Sub-Sprint A (Assinafy, segregacao tributaria)
-- Definir regra parcelamento D-novo-AD
-- Configurar SMTP/IMAP noreply@sisgdsolar.com.br
+✅ GATEWAY_ENCRYPT_KEY (M28) — 2 papeis offline confirmados
+✅ ASAAS_ENCRYPT_KEY (M29) — 2 papeis offline em locais DIFERENTES
+⏳ Instalar gerenciador de senhas (D-novo-AK) — 1-2 semanas
+⏳ Avisar time legado: senha Azure SQL + 5 .pfx vazados + senha .pfx em
+   comentario + senha .pfx em coluna texto puro + webhook sem validacao
+⏳ Obter script.sql do hb06a (Sub-Sprint B)
+⏳ Obter .pfx sandbox Banestes do portal desenvolvedor
+⏳ Decisoes regulatorias Sub-Sprint A (Assinafy, segregacao tributaria)
+⏳ Definir regra parcelamento D-novo-AD
+⏳ Configurar SMTP/IMAP noreply@sisgdsolar.com.br
 
-CONTEXTO HISTORICO IMEDIATO ANTERIOR (M27, 26/05 noite) — Sub-Sprint
-Gateways de Pagamento Fatia F1 Backend completo em 6 commits
-(42119f6..commit fechamento). Modulo novo backend/src/gateways-pagamento-config/
-com 8 endpoints REST + GatewayRegistry Zod + CredentialsEncryptor +
-CRUD multi-tenant. 83/83 specs novos verdes. Detalhe:
-docs/sessoes/2026-05-26-m27-sub-sprint-gateways-pagamento-f1-backend.md.
+CONTEXTO HISTORICO IMEDIATO ANTERIOR (M28, 26/05 noite) — Sub-Sprint
+Gateways de Pagamento Fatia F3 (BanestesConfigService Multi-Tenant)
+em 4 commits + fechamento (dc325af..acd2828). BanestesConfigService
+le ConfigGateway por tenant. Cache segregado por tenant. EncryptionModule
+extraido pra quebrar ciclo. Controller remove fallback 'plataforma'.
+48/48 specs Banestes verdes. Detalhe:
+docs/sessoes/2026-05-26-m28-sub-sprint-gateways-pagamento-f3-banestes-multitenant.md.
+
+CONTEXTO HISTORICO ANTERIOR (M27, 26/05 noite) — Fatia F1 Backend
+completo em 6 commits (42119f6..cb8bc5f). Modulo novo
+backend/src/gateways-pagamento-config/ com 8 endpoints REST +
+GatewayRegistry Zod + CredentialsEncryptor + CRUD multi-tenant.
+83 specs novos verdes.
 
 CONTEXTO HISTORICO ANTERIOR (M26, 26/05 noite) — Adapter Banestes
 Cenario Minimo entregue em 5 commits (e4e0f77..6e95ebc). PIX-only.
-46/46 specs novos verdes. mTLS via https.Agent nativo + OAuth Client
-Credentials. 2 debitos catalogados (D-novo-AG .pfx disco → Key Vault +
-D-novo-AH webhook pendente baixa manual Bloco 8).
-
-CONTEXTO HISTORICO ANTERIOR (Fase 1 Sub-Sprint Gateways, 26/05 noite
-sub-sessao) — relatorio 616 linhas em
-docs/relatorios/2026-05-26-fase1-sub-sprint-gateways-pagamento.md.
-Achado central: divergencia ativa AsaasConfig (legado encrypted) vs
-ConfigGateway (plain text) — 2 fontes de verdade incoerentes. F2 fara
-dual-write coexistencia 30 dias antes de descontinuar AsaasConfig.
 
 🚨 ALERTA DE SEGURANCA LEGADO (descoberta 24-25/05):
 SISGDSOLAR/src/main/java/hibernate.cfg.xml contem credencial do banco
 de producao em texto puro (user hb_jv_bd_sis, senha vazada).
 Luciano vai avisar time legado.
 ```
+
+---
 
 ---
 

@@ -28,7 +28,7 @@ owner, status, plano de rotação). Política de secrets em
 | Nome | Tipo | Onde mora | Criado em | Owner | Backups offline | Cadência rotação | Próxima revisão | Status | Notas |
 |---|---|---|---|---|---|---|---|---|---|
 | `GATEWAY_ENCRYPT_KEY` | Chave master AES-256-GCM (32 bytes base64) | `.env` backend | 2026-05-26 | Luciano | ✅ 2 cópias em PAPEL (locais físicos distintos) | 12 meses | 2027-05-26 | 🟢 ativo | Criada pra Sub-Sprint Gateways de Pagamento Fatia F2. Encripta credenciais de gateways no `ConfigGateway.credenciais.__enc`. Perda = **R2 catastrófico** (todos gateways ilegíveis). Gerada com `openssl rand -base64 32`. Backup em gerenciador de senhas pendente — **D-novo-AK** catalogado pra instalar Bitwarden (ou similar) e migrar entrada. |
-| `ASAAS_ENCRYPT_KEY` | Chave master AES-256-GCM (uso legado) | `.env` backend | desconhecido (anterior a 26/05/2026) | a confirmar | ❌ a auditar | a definir | **PRIORITÁRIO** — sessão dedicada D-novo-AJ.1 | 🟡 auditar | Usada por `AsaasService.encrypt/decrypt`. **Achado 26/05:** valor atual no `.env` tem 31 chars + sufixo `_key` — formato sugere placeholder textual, NÃO chave de 32 bytes. Pode ter sido configurada como string genérica e nunca rotacionada formalmente. Encripta `AsaasConfig.apiKey` de tenants reais. |
+| `ASAAS_ENCRYPT_KEY` | Chave master AES-256-GCM | `.env` backend | 2026-05-26 (rotacionada) | Luciano | ✅ 2 papeis em locais físicos distintos (DIFERENTES dos papeis da `GATEWAY_ENCRYPT_KEY`) | 12 meses | 2027-05-26 | 🟢 ativo | Rotacionada em 2026-05-26 via D-novo-AJ.1 (sessão F2 expandida). Chave anterior era placeholder textual (31 chars terminando em `_key`, entropia equivalente a senha curta) — substituída por chave base64 de 32 bytes real (sufixo `****S9s=`). 1 registro AsaasConfig re-encrypted via script idempotente (`scripts/migrate-asaas-to-config-gateway.ts` aplicado + `__rotate-asaas-encrypt-key.ts` removido pós-uso). Cipher novo no `AsaasConfig.apiKey`: 390 chars formato `iv:cipher:tag` hex (mantido o formato legado pra compat com `AsaasService.decrypt`). |
 | `ASAAS_API_KEY` CoopereBR sandbox | API Key de gateway externo | `AsaasConfig.apiKey` (encrypted via `ASAAS_ENCRYPT_KEY`) | 2026-03-23 | Luciano | N/A (regenerável no portal Asaas) | conforme política Asaas | a revisar | 🟢 ativo | Sufixo `****dfe8` pra confirmação visual sem expor valor. Validada via webhook sandbox em 27/04/2026 (Sprint 12). Há divergência catalogada: `ConfigGateway.credenciais.apiKey` tem sufixo `****2776` em texto puro — Fatia F2 vai resolver com dual-write. |
 | `ASAAS_WEBHOOK_TOKEN` | Token HMAC de webhook | `.env` backend | desconhecido | a confirmar | ❌ a auditar | a definir | 🟡 auditar | Configurar no painel Asaas e gravar em `AsaasConfig.webhookToken` por tenant (atualmente também aceita do `.env`). |
 | `JWT_SECRET` | Secret de assinatura JWT | `.env` backend | desconhecido | a confirmar | ❌ a auditar | 6 meses (recomendação) | **PRIORITÁRIO** — auditar com `ASAAS_ENCRYPT_KEY` | 🟡 auditar | Assina tokens de sessão do app inteiro. Rotacionar invalida todos os tokens ativos (logout forçado de todos). |
@@ -67,18 +67,19 @@ owner, status, plano de rotação). Política de secrets em
 
 ## Status do inventário
 
-**Última auditoria completa:** 2026-05-26 (criação inicial). Achados:
+**Última auditoria completa:** 2026-05-26 (atualizada pós-rotação F2 expandida).
 
-- 1 secret com backup offline confirmado (`GATEWAY_ENCRYPT_KEY`)
-- 10+ secrets em estado 🟡 "auditar" — sem confirmação formal de backup
-  offline. Maioria pre-existente, configurada antes desta política
-  existir.
-- `ASAAS_ENCRYPT_KEY` em estado suspeito: 31 chars com sufixo `_key` no
-  `.env` sugere placeholder textual, não chave AES-256 (que seria 32
-  bytes hex/base64 = 44 ou 64 chars). **Risco: dados criptografados em
-  `AsaasConfig.apiKey` (sufixo `****dfe8`, 390 chars no DB) podem estar
-  encrypted com uma chave que não respeita o tamanho ideal.** Catalogado
-  como D-novo-AJ.1 — sessão dedicada pra rotacionar com backup adequado.
+**Achados consolidados:**
+
+- 2 secrets com backup offline confirmado (`GATEWAY_ENCRYPT_KEY` + `ASAAS_ENCRYPT_KEY` rotacionada hoje)
+- 9 secrets em estado 🟡 "auditar" — sem confirmação formal de backup
+  offline. Maioria pré-existente, configurada antes desta política
+  existir. Pendentes pra próxima revisão trimestral (D-novo-AJ).
+- `ASAAS_ENCRYPT_KEY` ROTACIONADA em 2026-05-26 (D-novo-AJ.1 ✅
+  RESOLVIDO): chave anterior placeholder textual (31 chars) substituída
+  por base64 32 bytes real. 1 registro `AsaasConfig.apiKey`
+  re-encrypted com sucesso. PM2 restartado + smoke E2E confirmou
+  consistência (apiKey real `****MzY5` decrypta OK com chave nova).
 
 ## Lições aprendidas
 

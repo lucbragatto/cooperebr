@@ -2991,27 +2991,33 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
-### D-novo-AJ.1 — Auditar `ASAAS_ENCRYPT_KEY` legado (P2 segurança)
+### D-novo-AJ.1 — Auditar `ASAAS_ENCRYPT_KEY` legado ✅ RESOLVIDO (2026-05-26)
 
-**Origem:** Auditoria inicial do inventário de secrets (2026-05-26).
+**Origem:** Auditoria inicial do inventário de secrets (2026-05-26 manhã).
 
-**Achado:** valor atual de `ASAAS_ENCRYPT_KEY` no `.env` tem **31 chars com sufixo `_key`** — formato sugere placeholder textual (string genérica tipo `"minha-chave-asaas_key"`), NÃO chave AES-256 de 32 bytes (que seria 64 chars em hex ou 44 em base64). A chave passa pelo `crypto.createHash('sha256').update(key).digest()` em `AsaasService.getEncryptKey` (linha 24-30), então funcionalmente "funciona" (SHA-256 sempre produz 32 bytes), mas **a entropia real é a do texto curto**, não 256 bits.
+**Achado original:** valor antigo de `ASAAS_ENCRYPT_KEY` no `.env` tinha **31 chars com sufixo `_key`** — placeholder textual, NÃO chave AES-256 de 32 bytes. Passava por `crypto.createHash('sha256').update(key).digest()` em `AsaasService.getEncryptKey` (linha 24-30), então funcionalmente rodava, mas **a entropia real era a do texto curto**, não 256 bits.
 
-**Risco:**
-- Dados criptografados em `AsaasConfig.apiKey` (sufixo `****dfe8`, 390 chars no DB) podem estar encrypted com uma chave de entropia reduzida
-- Sem backup offline formal — se o `.env` se perder, `AsaasConfig.apiKey` fica ilegível
-- Owner formal não está documentado
+**Resolução (mesma sessão 2026-05-26 — F2 expandida Etapa E):**
 
-**Fix proposto (sessão dedicada, ~2-3h Code + 30min operacional Luciano):**
-1. Gerar chave nova com `openssl rand -base64 32` (alinhado com `GATEWAY_ENCRYPT_KEY` em 26/05)
-2. Re-encriptar `AsaasConfig.apiKey` de todos os tenants com a chave nova (script de migração com dry-run)
-3. Backup completo do banco antes
-4. 2 backups offline da chave nova pelo Luciano (papel + gerenciador de senhas)
-5. Atualizar inventário `docs/seguranca/inventario-secrets.md` movendo `ASAAS_ENCRYPT_KEY` de 🟡 pra 🟢
+1. ✅ Backup completo do banco antes (`~/backups/sisgd-pre-f2-20260525-163223.sql.gz`, 220KB gzipped, 347 objetos SQL)
+2. ✅ Script `__rotate-asaas-encrypt-key.ts` (temporário, removido pós-uso):
+   - Leu chave antiga do `.env` em variável temp
+   - Gerou chave nova via `openssl rand -base64 32` (44 chars base64 validados)
+   - Decrypt + encrypt de 1 registro `AsaasConfig.apiKey` (CoopereBR)
+   - UPDATE em transação Prisma atômica
+   - Atualizou `.env` substituindo a linha `ASAAS_ENCRYPT_KEY=`
+3. ✅ Cipher novo no banco: 390 chars formato `iv:cipher:tag` hex
+4. ✅ apiKey REAL preservada: sufixo `****MzY5` (valor Asaas não muda)
+5. ✅ 2 papeis offline pelo Luciano (locais DIFERENTES dos papeis da `GATEWAY_ENCRYPT_KEY` — defesa em profundidade)
+6. ✅ PM2 restartado pid 40264 (sem erro de decryption no startup)
+7. ✅ Smoke E2E pós-rotação: `AsaasService.decrypt` → apiKey real `****MzY5` (consistente)
+8. ✅ Inventário atualizado: `ASAAS_ENCRYPT_KEY` movida de 🟡 pra 🟢
 
-**Janela operacional sugerida:** durante ou após Fatia F2 do Sub-Sprint Gateways de Pagamento — F2 já vai fazer dual-write `AsaasConfig` ↔ `ConfigGateway`, então re-encriptar a chave da `AsaasConfig` antiga vira parte natural da coexistência 30 dias.
+**Refs:**
+- Doc-sessão: `docs/sessoes/2026-05-26-m29-sub-sprint-gateways-pagamento-f2-expandida.md`
+- Inventário: `docs/seguranca/inventario-secrets.md`
 
-**Status:** 📋 Catalogado em 2026-05-26. Aguardando F2 destravar.
+**Status:** ✅ RESOLVIDO 2026-05-26. Próxima rotação: 2027-05-26 (12 meses).
 
 ---
 
