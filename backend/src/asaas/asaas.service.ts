@@ -5,10 +5,12 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
+import { CredentialsEncryptor } from '../gateways-pagamento-config/credentials-encryptor.service';
 
 @Injectable()
 export class AsaasService {
@@ -17,6 +19,7 @@ export class AsaasService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private credentialsEncryptor: CredentialsEncryptor,
   ) {}
 
   // ─── Criptografia ──────────────────────────────────────────
@@ -77,20 +80,74 @@ export class AsaasService {
   }
 
   async salvarConfig(cooperativaId: string, data: { apiKey: string; ambiente: string; webhookToken?: string }) {
-    const encryptedKey = this.encrypt(data.apiKey);
-    return this.prisma.asaasConfig.upsert({
-      where: { cooperativaId },
-      update: {
-        apiKey: encryptedKey,
-        ambiente: data.ambiente,
-        webhookToken: data.webhookToken,
-      },
-      create: {
-        cooperativaId,
-        apiKey: encryptedKey,
-        ambiente: data.ambiente,
-        webhookToken: data.webhookToken,
-      },
+    // ── F2 Dual-Write (M29, 2026-05-26) ─────────────────────────
+    // Mantem caminho legado (AsaasConfig) intacto + grava espelho em
+    // ConfigGateway encryptado com GATEWAY_ENCRYPT_KEY (chave forte).
+    // Coexistencia 30 dias antes de descontinuar AsaasConfig.
+    //
+    // Transacao atomica: se um lado falhar, o outro tambem rollback.
+    const encryptedKeyLegado = this.encrypt(data.apiKey);
+    const apiKeyEncForte = this.credentialsEncryptor.encrypt(data.apiKey);
+    const apiKeyMasked = this.maskApiKey(data.apiKey);
+
+    return this.prisma.$transaction(async (tx) => {
+      // Caminho legado — AsaasConfig (consumido pelo AsaasService.getApiClient
+      // hoje). Fica intacto durante coexistencia.
+      const asaasConfig = await tx.asaasConfig.upsert({
+        where: { cooperativaId },
+        update: {
+          apiKey: encryptedKeyLegado,
+          ambiente: data.ambiente,
+          webhookToken: data.webhookToken,
+        },
+        create: {
+          cooperativaId,
+          apiKey: encryptedKeyLegado,
+          ambiente: data.ambiente,
+          webhookToken: data.webhookToken,
+        },
+      });
+
+      // Caminho novo — ConfigGateway (consumido por GatewayPagamentoService
+      // factory + uso futuro F4 frontend genérico).
+      const credenciaisCriptografadas: Prisma.InputJsonValue = {
+        apiKey: apiKeyEncForte,
+      };
+      const metadados: Prisma.InputJsonValue = {
+        apiKeyMasked,
+        webhookTokenDefinido: !!data.webhookToken,
+        atualizadoEm: new Date().toISOString(),
+        origem: 'dual-write-asaas-salvarConfig',
+      };
+
+      await tx.configGateway.upsert({
+        where: {
+          cooperativaId_gateway: { cooperativaId, gateway: 'ASAAS' },
+        },
+        update: {
+          ambiente: data.ambiente,
+          credenciaisCriptografadas,
+          metadados,
+          webhookToken: data.webhookToken ?? null,
+          ativo: true,
+        },
+        create: {
+          cooperativaId,
+          gateway: 'ASAAS',
+          ambiente: data.ambiente,
+          credenciaisCriptografadas,
+          metadados,
+          webhookToken: data.webhookToken ?? null,
+          ativo: true,
+        },
+      });
+
+      this.logger.log(
+        `Dual-write Asaas OK (cooperativa=${cooperativaId}, ambiente=${data.ambiente}, ` +
+          `apiKey=${apiKeyMasked}). AsaasConfig legado + ConfigGateway ASAAS gravados.`,
+      );
+
+      return asaasConfig;
     });
   }
 
