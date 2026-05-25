@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-25 — Descoberta sistema legado SISGDSOLAR + pivot Sub-Sprint B ETL**. Sessão claude.ai 24-25/05 (sem código no repo) descobriu o sistema legado SISGDSOLAR via análise do `SISGDSOLAR-main.zip`. Tesouros: banco real Azure SQL `sisgdsolar.database.windows.net` com backup OneDrive do dev `hb06a`; schema completo 60+ tabelas mapeado (legado SQL Server → novo Prisma); 72 DAOs / 28+ procedures com lógica madura; **Banestes em produção CONFIRMADO** pra CoopereBR (cert .pfx existe no legado). 🚨 Credencial vazada no `hibernate.cfg.xml` (Luciano vai avisar time legado). Decisões travadas: ✅ Banestes = gateway de produção pro novo sistema; ✅ Extração tudo local (Docker + restore + ETL offline); ✅ Sub-Sprint B PIVOT (ETL legado→novo em vez de saneamento dos sintéticos, ~16-25h Code + 1-7d calendário). Risco #1 classeGd RESOLVIDO (cooperebr1 pré-07/jan/2023, 0% Fio B até 2045). **BLOQUEADOR EXTERNO:** aguardando Luciano conseguir script.sql do hb06a. Próximo passo: Luciano escolhe na abertura entre 4 frentes paralelas (pausa total / Sprint Housekeeping / Sprint Bot Proativo Fase 1 / Análise código Banestes legado). Detalhe: `docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`.
+> Última atualização: **2026-05-26 — M25 Sprint Housekeeping (5 débitos limpos + 1 recategorizado)**. 6 commits (`2aeb4ed` D-novo-U+W → `6945813` D-novo-X → `a6c6e5c` D-novo-Z → `2ec0364` D-novo-AC parcial → `b2808f0` docs débitos → commit fechamento). **5 débitos resolvidos** (U: bug PENDENTE→A_VENCER no handler hardcoded; W: NPS finalizarConversa→MENU_COOPERADO; X: delete agendarNps dead code; Z: alinha Cadastro Proxy hardcoded; AC parcial: remove MENU_INADIMPLENTE dead code preservando handleNegociacaoParcelamento por decisão Luciano 26/05). **1 recategorização** (D-novo-Y modelo nps_trimestral → reservado pra Sprint NPS Trimestral futuro ~2-4h). **Síntese:** `whatsapp-bot.service.ts` 4051→3943 linhas (-108 líquido). 234/234 specs motor verdes. **6 débitos restantes** D-novo-V/AA/AB/AD/AE/AF (sprints próprios ou pós-validação prod). 2 sprints futuros catalogados: **Sprint NPS Trimestral** + **Sprint Regra Parcelamento** (D-novo-AD). **BLOQUEADOR EXTERNO ATIVO:** Sub-Sprint B (ETL legado→novo) aguardando script.sql do hb06a. Próximo passo: Luciano escolhe entre 3 frentes paralelas restantes (pausa total / Sprint Bot Proativo Fase 1 / Análise código Banestes legado). Detalhe: `docs/sessoes/2026-05-26-m25-sprint-housekeeping-debitos-bot.md`.
 
 ---
 
@@ -1040,16 +1040,95 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de descoberta do legado SISGDSOLAR
-   da sessão 25/05 (mensagem começa com
-   "docs(sessao): descoberta sistema legado SISGDSOLAR + pivot Sub-Sprint B ETL").
-   Penúltimo commit é `aa355f3` (fechamento M24 Sprint Bot Autoatendimento INTEIRO).
+   Esperado: working tree limpo, último commit é o de fechamento M25 Sprint
+   Housekeeping da sessão 26/05 (mensagem começa com
+   "docs(sessao): fechamento M25 Sprint Housekeeping").
+   Penúltimo commit é `b2808f0` (docs débitos — fecha U/W/X/Z/AC + recategoriza Y).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão claude.ai 24-25/05 descobriu o sistema legado SISGDSOLAR via
-análise do arquivo `SISGDSOLAR-main.zip`. Tesouros encontrados:
+PASSO 1 — Sessão 26/05 entregou M25 Sprint Housekeeping. 6 commits
+(2aeb4ed D-novo-U+W -> 6945813 D-novo-X -> a6c6e5c D-novo-Z -> 2ec0364
+D-novo-AC parcial -> b2808f0 docs debitos -> commit fechamento). 5 debitos
+resolvidos + 1 recategorizado dos 12 acumulados no Sprint Bot Autoatendimento
+(M17-M24):
+
+✅ RESOLVIDOS COMPLETO (3):
+- D-novo-U (P2): bug PENDENTE -> A_VENCER em whatsapp-bot.service.ts:793,
+  defense in depth alinhada com cobrancas.job.ts:45/130/216
+- D-novo-W (P3): handleNpsNota hardcoded finalizarConversa -> MENU_COOPERADO
+  (alinhado com motor Bloco 7 M21)
+- D-novo-X (P3): metodo agendarNps dead code (22 linhas) removido, zero
+  callers confirmados
+
+✅ PARCIAL RESOLVIDOS (2):
+- D-novo-Z (P3): Divergencia 1 (estado final pos-Cadastro Proxy) fechada
+  — handleConfirmarProxy 2 ocorrencias resetarConversa -> MENU_COOPERADO.
+  Divergencia 2 (calculo proposta) preservada como degradacao consciente.
+- D-novo-AC (P2): MENU_INADIMPLENTE dead code removido (128 linhas:
+  iniciarFluxoInadimplente 53 + handleMenuInadimplente 75). PRESERVADO
+  handleNegociacaoParcelamento por DECISAO LUCIANO 26/05 — aguarda Sprint
+  Regra Parcelamento (D-novo-AD) definir regra de negocio real.
+
+✅ RECATEGORIZADO (1):
+- D-novo-Y: modelo nps_trimestral nao e mais "orfao a apagar". RESERVADO
+  pra Sprint NPS Trimestral futuro (~2-4h, pos-onboarding cooperebr1).
+  Pattern Bloco 1.b (cron @nestjs/schedule + reuso WhatsappSenderService).
+
+SINTESE: whatsapp-bot.service.ts 4051 -> 3943 linhas (-108 liquido).
+234/234 specs do motor verdes. nest build limpo apos cada etapa.
+
+DEBITOS RESTANTES (6 dos 12 originais):
+- D-novo-V (P3): engine template {{#if}}/{{#unless}} — Iniciativa Fluxos
+  Customizaveis Fase 1, ~8-12h
+- D-novo-AA (P3): cron cleanup proxy + filtro UI — sprint proprio pos-Sinergia,
+  ~2-3h
+- D-novo-AB (P2): handler handleAtualizacaoContrato — pos-validacao prod
+  1-2 sprints
+- D-novo-AD (P1): Sprint Regra Parcelamento — ~12-20h, aguarda decisao
+  produto Luciano (regra Asaas parcelable / manual N cobrancas / link humano)
+- D-novo-AE (P2): handlers handleMenuFatura + handleComprovantePagamento
+  — pos-validacao prod 1-2 sprints
+- D-novo-AF (P3): etapa VER_PROXIMA_FATURA orfa + 4 specs motor — pos-validacao
+  prod 1-2 sprints
+
+2 SPRINTS FUTUROS CATALOGADOS NESTA SESSAO:
+- Sprint NPS Trimestral (~2-4h) — reusa modelo nps_trimestral, padrao Bloco 1.b
+- Sprint Regra Parcelamento (~12-20h) — D-novo-AD P1, aguarda decisao produto
+
+BLOQUEADOR EXTERNO PERSISTE: Sub-Sprint B (ETL legado->novo) aguarda script.sql
+do hb06a. Sub-Sprint B preparado (Docker OK, sqlcmd a instalar, porta 1433
+livre, plano operacional 8 etapas em
+docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md).
+
+PRÓXIMO PASSO — LUCIANO ESCOLHE NA ABERTURA ENTRE 3 FRENTES PARALELAS
+restantes (Sprint Housekeeping concluido nesta sessao, sai do menu):
+
+1. PAUSA TOTAL — so retomar quando script.sql chegar.
+2. Sprint Bot Proativo — Fase 1 read-only ampla (Code) — mapeia infra de
+   bot proativo (lembrete pre-vencimento, webhook pagamento, escalonacao
+   inadimplencia).
+3. Analise profunda codigo Banestes do legado (Code) — mapeia o portado
+   pro adapter src/gateway-pagamento/banestes/.
+
+FRENTES HUMANAS EM PARALELO (Luciano):
+- Avisar time legado pra trocar senha do Azure SQL + mover pra Key Vault
+- Sub-Sprint A (decisoes regulatorias com advogado: Assinafy, segregacao
+  tributaria)
+- Solicitar script.sql ao hb06a
+- Definir regra de parcelamento (D-novo-AD: Asaas parcelable / manual /
+  link humano)
+- Configurar SMTP/IMAP da conta noreply@sisgdsolar.com.br via
+  /dashboard/configuracoes/email logado como SUPER_ADMIN
+
+CONTEXTO HISTORICO IMEDIATO ANTERIOR (M24) — Sessao 24/05 entregou Bloco 8
+do Sprint Bot Autoatendimento: Menu Fatura, ENCERROU o Sprint Bot
+Autoatendimento INTEIRO (8 blocos M17-M24). 234/234 specs motor verdes.
+Detalhe: docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md.
+
+CONTEXTO HISTORICO ANTERIOR (sessao claude.ai 24-25/05) — descobriu o
+sistema legado SISGDSOLAR via analise do SISGDSOLAR-main.zip. Tesouros encontrados:
 - Banco real no Azure SQL `sisgdsolar.database.windows.net` com backup completo
   no OneDrive do dev `hb06a` (caminho documentado em
   `docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`)
@@ -1099,14 +1178,13 @@ BLOQUEADOR EXTERNO ATIVO: aguardando Luciano conseguir script.sql do hb06a.
 PRÓXIMO PASSO — LUCIANO ESCOLHE NA ABERTURA ENTRE 4 FRENTES PARALELAS
 enquanto script.sql não chega:
 
-1. **PAUSA TOTAL** — só retomar quando script.sql chegar.
-2. **Sprint Housekeeping** (Code, ~3-5h) — limpa 12 débitos D-novo-U a AF
-   acumulados no Sprint Bot Autoatendimento.
-3. **Sprint Bot Proativo — Fase 1 read-only ampla** (Code) — mapeia infra
-   de bot proativo (lembrete pré-vencimento, webhook pagamento,
-   escalonação inadimplência).
-4. **Análise profunda código Banestes do legado** (Code) — mapeia o
-   portado pro adapter `src/gateway-pagamento/banestes/`.
+(Bloco historico — 4 frentes da sessao 25/05. Sprint Housekeeping foi
+concluido em 26/05 M25 e sai do menu. Frentes ativas no PASSO 1 acima.)
+
+1. ~~PAUSA TOTAL~~ — opcao ainda valida.
+2. ~~Sprint Housekeeping~~ — ✅ CONCLUIDO M25 (26/05).
+3. Sprint Bot Proativo — Fase 1 read-only ampla — ATIVA.
+4. Analise profunda codigo Banestes do legado — ATIVA.
 
 FRENTES HUMANAS EM PARALELO (Luciano):
 - Avisar time legado pra trocar senha do Azure SQL + mover pra Key Vault
@@ -1188,21 +1266,30 @@ DIRETRIZES INEGOCIAVEIS APLICAVEIS PRO PROXIMO BLOCO:
 - Frase de retomada COMANDANTE (nao descritiva)
 - Skill retomada-sessao governa abertura
 
-DEBITOS DO SPRINT (Housekeeping pos-validacao producao 1-2 sprints):
-- D-novo-U: handler hardcoded ver fatura status PENDENTE inexistente
-- D-novo-V: modelos com logica condicional no codigo
-- D-novo-W: divergencia hardcoded × motor NPS
-- D-novo-X: agendarNps dead code
-- D-novo-Y: modelo nps_trimestral orfao
-- D-novo-Z: divergencia Cadastro Proxy
-- D-novo-AA: placeholders proxy eternos cpf/email
-- D-novo-AB: handler hardcoded handleAtualizacaoContrato
-- D-novo-AC: MENU_INADIMPLENTE dead code
-- D-novo-AD: NEGOCIACAO_PARCELAMENTO placeholder (P1 — regra produto)
-- D-novo-AE: handler hardcoded handleMenuFatura
-- D-novo-AF: VER_PROXIMA_FATURA orfa pos-Bloco 8
+DEBITOS DO SPRINT BOT (estado pos-M25 Sprint Housekeeping):
 
-Sprint Housekeeping estimado em 8-12h depois da validacao em producao.
+✅ RESOLVIDOS M25 (5 + 1 recategorizado):
+- D-novo-U: bug PENDENTE -> A_VENCER no bot.service:793 (commit 2aeb4ed)
+- D-novo-W: NPS finalizarConversa -> MENU_COOPERADO (commit 2aeb4ed)
+- D-novo-X: dead code agendarNps removido (commit 6945813)
+- D-novo-Z parcial: Cadastro Proxy alinhado MENU_COOPERADO (commit a6c6e5c)
+- D-novo-AC parcial: MENU_INADIMPLENTE dead code removido 128 linhas
+  (commit 2ec0364, handleNegociacaoParcelamento preservado por decisao Luciano)
+- D-novo-Y RECATEGORIZADO: modelo nps_trimestral reservado pra Sprint
+  NPS Trimestral futuro (~2-4h, pos-onboarding)
+
+🔶 ABERTOS (6, fora do Housekeeping):
+- D-novo-V: engine template {{#if}}/{{#unless}} (~8-12h, Iniciativa Fluxos)
+- D-novo-AA: placeholders proxy eternos cpf/email (~2-3h pos-Sinergia)
+- D-novo-AB: handler handleAtualizacaoContrato (~30min pos-validacao prod)
+- D-novo-AD: Sprint Regra Parcelamento (P1, ~12-20h, decisao produto pendente)
+- D-novo-AE: handler handleMenuFatura + handleComprovantePagamento
+  (~45-60min pos-validacao prod)
+- D-novo-AF: VER_PROXIMA_FATURA orfa + ajuste 4 specs motor
+  (~20-30min pos-validacao prod)
+
+Sprint Housekeeping #2 estimado em ~2-3h apos validacao em producao
+(AB + AE + AF).
 
 REGRA ESPECIAL PRO BLOCO ATUAL (M23/M24 Bloco 5 + 8 — padrao "solicitacao
 PENDENTE + aprovacao humana"): bot NUNCA aplica decisao sensivel direto.
