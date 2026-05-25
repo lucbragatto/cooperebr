@@ -2902,6 +2902,69 @@ No Bloco 8, o gatilho '2' do MENU_COOPERADO passou a ir pra `MENU_FATURA` (menu 
 
 ---
 
+### D-novo-AG — `.pfx` Banestes em disco do servidor (migrar pra Azure Key Vault quando Sinergia entrar) (P2)
+
+**Origem:** Adapter Banestes Etapa A do Cenário Mínimo (M26, 2026-05-26).
+
+**Contexto:** O `BanestesConfigService` (`backend/src/gateway-pagamento/banestes/banestes-config.service.ts`) carrega o certificado `.pfx` Banestes do path em disco (`BANESTES_PFX_PATH` env var). Senha em texto puro em outra env (`BANESTES_PFX_SENHA`).
+
+Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em PRODUÇÃO no início. **Quando Sinergia entrar como 2º tenant em produção, cada parceiro precisa do próprio `.pfx`** — gerenciamento em disco escala mal (rotações, permissões por instância, backup).
+
+**Problemas atuais:**
+- `.pfx` em disco precisa de backup separado (não vai no `git`)
+- Rotação manual (ops Luciano + redeploy)
+- Senha em env file (`.env` no servidor) — pessoas com acesso SSH leem
+- Multi-tenant: cada tenant precisa de `.pfx` + senha próprios — env vars começam a explodir (BANESTES_<TENANT>_PFX_PATH)
+
+**Fix proposto (sprint dedicado pós-Sinergia, ~6-10h Code):**
+1. Migrar `.pfx` pra Azure Key Vault (binary secret) — Azure SDK Node native
+2. Senha do `.pfx` no Key Vault também
+3. `BanestesConfigService` carrega `.pfx` em runtime via `@azure/keyvault-secrets`
+4. Cache em memória continua igual (Agent singleton por tenant)
+5. Migração transparente: env var `BANESTES_VAULT_URL` define vault; quando ausente, fallback pra disco (compat)
+6. Rotação fica via Azure Portal ou az-cli — sem redeploy
+
+**Custo estimado:** ~6-10h Code + 2-3h operacional Luciano (criar vault Azure, configurar identidade do App Service / VM, migrar `.pfx` + senha do disco pro vault).
+
+**Posicionamento:** Sprint próprio quando Sinergia entrar em produção. Catálogo aceito como dívida consciente do M26.
+
+**Status:** 📋 Catalogado em 2026-05-26. Decisão 14: D-novo-AG confirmado livre após D-novo-AF. Decisão M26 #4 (Luciano): aceitar disco no Cenário Mínimo.
+
+---
+
+### D-novo-AH — Webhook Banestes pendente — baixa de pagamento manual via painel admin Bloco 8 (P2)
+
+**Origem:** Adapter Banestes Etapa B do Cenário Mínimo (M26, 2026-05-26).
+
+**Contexto:** O `BanestesAdapter.processarWebhook` no Cenário Mínimo lança `NotImplementedException` deliberadamente. **Não há controller HTTP recebendo callback PIX do Banestes** no novo sistema (apesar do legado Java ter `Webhook_Cooperado_Banestes` em `/webhook/cooperativa`).
+
+**Por que aceito agora:**
+- Volume baixo no Cenário Mínimo (canário Carolina + alguns testes)
+- Equipe consegue marcar pagamento manualmente via painel admin Bloco 8 (`POST /solicitacoes-confirmacao-pagamento/:id/confirmar` com `marcarPago: true`) ou direto na Cobranca via Prisma
+- Webhook Banestes do legado tinha **gap de segurança** (sem validação de origem, `@CrossOrigin("*")`) — precisamos desenhar do zero com segurança
+
+**Fluxo workaround manual:**
+1. Cooperado paga PIX → cai na conta Banestes
+2. Equipe consulta extrato Banestes (`POST /gateway-pagamento/banestes/testar-conexao` mostra listagem)
+3. Equipe abre tela Bloco 8 `/dashboard/super-admin/confirmacoes-pagamento` ou similar
+4. Marca cobrança como PAGA manualmente
+
+**Fix proposto (Cenário Completo Banestes, ~6-8h Code):**
+1. `BanestesWebhookController` em rota nova (NÃO `/webhook/cooperativa` do legado, que é endpoint público sem auth)
+2. Validação: token compartilhado (env `BANESTES_WEBHOOK_TOKEN_SHARED`) + opcionalmente IP whitelist se Banestes publicar faixa
+3. Re-consulta no `GET /cob/{txid}` pra confirmar status CONCLUIDA (legado fazia isso — boa prática)
+4. Emit evento `pagamento.confirmado` (já existe — `financeiro-token.listener.ts` + cascata MLM cuidam)
+5. Persiste em `GatewayWebhookLog` genérico (tabela nova, multi-gateway)
+6. Cadastrar URL `https://app.cooperebr.com.br/gateway-pagamento/banestes/webhook` no painel Banestes
+
+**Custo estimado:** ~6-8h Code (controller + validação + log + spec) + 1h operacional Luciano (cadastrar URL no painel Banestes).
+
+**Posicionamento:** Cenário Completo Banestes pós-Carolina pagar canário. Não bloqueia produção real do canário.
+
+**Status:** 📋 Catalogado em 2026-05-26. Decisão 14: D-novo-AH confirmado livre após D-novo-AG. Decisão M26 (Luciano): adiar pra Cenário Completo, baixa manual cobre.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
