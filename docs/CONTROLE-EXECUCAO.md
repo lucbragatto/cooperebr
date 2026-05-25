@@ -1,7 +1,7 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-26 — M25 Sprint Housekeeping (5 débitos limpos + 1 recategorizado)**. 6 commits (`2aeb4ed` D-novo-U+W → `6945813` D-novo-X → `a6c6e5c` D-novo-Z → `2ec0364` D-novo-AC parcial → `b2808f0` docs débitos → commit fechamento). **5 débitos resolvidos** (U: bug PENDENTE→A_VENCER no handler hardcoded; W: NPS finalizarConversa→MENU_COOPERADO; X: delete agendarNps dead code; Z: alinha Cadastro Proxy hardcoded; AC parcial: remove MENU_INADIMPLENTE dead code preservando handleNegociacaoParcelamento por decisão Luciano 26/05). **1 recategorização** (D-novo-Y modelo nps_trimestral → reservado pra Sprint NPS Trimestral futuro ~2-4h). **Síntese:** `whatsapp-bot.service.ts` 4051→3943 linhas (-108 líquido). 234/234 specs motor verdes. **6 débitos restantes** D-novo-V/AA/AB/AD/AE/AF (sprints próprios ou pós-validação prod). 2 sprints futuros catalogados: **Sprint NPS Trimestral** + **Sprint Regra Parcelamento** (D-novo-AD). **BLOQUEADOR EXTERNO ATIVO:** Sub-Sprint B (ETL legado→novo) aguardando script.sql do hb06a. Próximo passo: Luciano escolhe entre 3 frentes paralelas restantes (pausa total / Sprint Bot Proativo Fase 1 / Análise código Banestes legado). Detalhe: `docs/sessoes/2026-05-26-m25-sprint-housekeeping-debitos-bot.md`.
+> Última atualização: **2026-05-26 noite — M26 Adapter Banestes Cenário Mínimo**. 5 commits (`e4e0f77` Etapa A BanestesConfigService → `903fce9` Etapa B BanestesAdapter PIX + factory → `692406e` Etapa C endpoint admin testar-conexao → `0041da6` Etapa D docs+débitos+.env.example → commit fechamento). Adapter PIX-only (igual legado), 4 arquivos novos em `backend/src/gateway-pagamento/banestes/`. Encaixa direto na interface `GatewayPagamentoAdapter` (Asaas pattern). **Operações vivas:** emitirCobranca PIX (POST /cob com devedor inline + validação CPF/CNPJ + chave PIX do tenant) + criarCustomer no-op + testarConexao + `POST /gateway-pagamento/banestes/testar-conexao` (JWT SUPER_ADMIN/ADMIN). **Stubs deliberados:** cancelarCobranca + processarWebhook (Cenário Completo — D-novo-AH catalogado, baixa manual via painel admin Bloco 8). **46 specs novos verdes** no módulo Banestes. Suite tocada: 288/288. mTLS via `https.Agent({ pfx, passphrase })` nativo Node — sem lib terceiro. OAuth Client Credentials + cache memory respeitando expires_in (margem 5min). 2 débitos catalogados: **D-novo-AG** (`.pfx` em disco → migrar pra Azure Key Vault quando Sinergia entrar) + **D-novo-AH** (webhook Banestes pendente, baixa manual via Bloco 8). 7 env vars BANESTES_* documentadas no `.env.example` com alertas operacionais. **Próximo passo Luciano:** obter `.pfx` sandbox Banestes + configurar `.env BANESTES_*` + smoke `testar-conexao`. **BLOQUEADOR EXTERNO PERSISTE:** Sub-Sprint B (ETL legado→novo) aguarda `script.sql` do hb06a. Detalhe: `docs/sessoes/2026-05-26-m26-adapter-banestes-cenario-minimo.md`.
 
 ---
 
@@ -1040,19 +1040,90 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M25 Sprint
-   Housekeeping da sessão 26/05 (mensagem começa com
-   "docs(sessao): fechamento M25 Sprint Housekeeping").
-   Penúltimo commit é `b2808f0` (docs débitos — fecha U/W/X/Z/AC + recategoriza Y).
+   Esperado: working tree limpo, último commit é o de fechamento M26
+   Adapter Banestes Cenário Mínimo da sessão 26/05 noite (mensagem começa
+   com "docs(sessao): fechamento M26 Adapter Banestes Cenário Mínimo").
+   Penúltimo commit é `0041da6` (docs banestes — gateways.md + débitos + .env).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
 
-PASSO 1 — Sessão 26/05 entregou M25 Sprint Housekeeping. 6 commits
-(2aeb4ed D-novo-U+W -> 6945813 D-novo-X -> a6c6e5c D-novo-Z -> 2ec0364
-D-novo-AC parcial -> b2808f0 docs debitos -> commit fechamento). 5 debitos
-resolvidos + 1 recategorizado dos 12 acumulados no Sprint Bot Autoatendimento
-(M17-M24):
+PASSO 1 — Sessão 26/05 NOITE entregou M26 Adapter Banestes Cenario Minimo.
+4 commits codigo+docs (e4e0f77 Etapa A BanestesConfigService -> 903fce9
+Etapa B BanestesAdapter PIX + factory -> 692406e Etapa C endpoint admin
+testar-conexao -> 0041da6 Etapa D docs/debitos/env) + commit fechamento.
+
+ENTREGAS:
+- Modulo Banestes em backend/src/gateway-pagamento/banestes/ (4 arquivos:
+  config, adapter, controller, module)
+- Encaixe direto na interface GatewayPagamentoAdapter (Asaas pattern)
+- emitirCobranca PIX (POST /pix-qrcode-cobranca/v1/cob)
+- criarCustomer no-op (Banestes nao tem customer model)
+- testarConexao smoke (token OAuth + GET cobrancas leve)
+- Endpoint admin POST /gateway-pagamento/banestes/testar-conexao
+  (JWT SUPER_ADMIN/ADMIN + @AuditLog)
+- Stubs cancelarCobranca + processarWebhook (NotImplementedException)
+- Factory GatewayPagamentoService suporta gateway=BANESTES
+
+mTLS via https.Agent({ pfx, passphrase }) NATIVO Node — sem lib terceiro.
+OAuth Client Credentials + cache memory com TTL = expires_in - 5min.
+
+46/46 specs novos verdes no modulo Banestes. Suite tocada: 288/288 verdes
+(234 motor + 51 gateway + 3 controller). Backend restartou — curl POST
+testar-conexao sem JWT retorna 401 (auth ativa).
+
+2 DEBITOS NOVOS:
+- D-novo-AG (P2): .pfx em disco; migrar pra Azure Key Vault quando
+  Sinergia entrar em producao
+- D-novo-AH (P2): webhook Banestes pendente (Cenario Completo); baixa
+  manual via painel admin Bloco 8 enquanto isso
+
+PROXIMO PASSO — OPERACIONAL LUCIANO antes da proxima sessao Code:
+
+1. Obter .pfx SANDBOX Banestes do portal desenvolvedor
+   (https://desenvolvedores.banestes.com.br/api-portal/pt-br/user).
+   NAO usar o .pfx producao CoopereBR do legado (vazado no Git legado).
+
+2. Configurar .env BANESTES_* com valores sandbox:
+   BANESTES_PFX_PATH=/opt/certs/banestes_sandbox.pfx
+   BANESTES_PFX_SENHA=<senha sandbox>
+   BANESTES_CLIENT_ID=<client_id sandbox>
+   BANESTES_CLIENT_SECRET=<client_secret sandbox>
+   BANESTES_AMBIENTE=sandbox
+
+3. Reiniciar PM2 backend apos .env.
+
+4. Smoke: curl POST /gateway-pagamento/banestes/testar-conexao
+   autenticado JWT - esperado { ok: true }.
+
+APOS SANDBOX VALIDAR (proxima janela operacional):
+- ROTACIONAR senha do .pfx producao (gerar novo via openssl, NAO reusar
+  do legado SISGDSOLAR que ta vazado)
+- Configurar ConfigGateway Banestes tenant CoopereBR com chavePix
+- Habilitar gateway=BANESTES no ConfigGateway pra cooperados reais
+- Carolina (canario) paga PIX REAL via Banestes — primeira cobranca
+  via novo adapter em PRODUCAO
+- Equipe marca pago manualmente via painel Bloco 8 (D-novo-AH)
+
+CENARIO COMPLETO BANESTES (futuro Sprint dedicado, ~6-8h Code):
+- cancelarCobranca (PATCH status REMOVIDA)
+- BanestesWebhookController com validacao token compartilhado
+- Re-consulta GET /cob/{txid} pra confirmar CONCLUIDA
+- Emit pagamento.confirmado (financeiro-token listener ja existe)
+- GatewayWebhookLog generico (tabela nova multi-gateway)
+- Cron alerta D-30 antes .pfx expirar
+
+BLOQUEADOR EXTERNO PERSISTE: Sub-Sprint B (ETL legado->novo) aguarda
+script.sql do hb06a.
+
+FRENTES PARALELAS AINDA NO MENU (Luciano escolhe):
+1. PAUSA TOTAL — esperar script.sql
+2. Cenario Completo Banestes (~6-8h Code) — apos Carolina pagar canario
+3. Sprint Bot Proativo Fase 1 read-only ampla (Code)
+
+CONTEXTO HISTORICO IMEDIATO ANTERIOR (M25, 26/05 manha) — Sprint
+Housekeeping: 5 debitos limpos + 1 recategorizado dos 12 acumulados
+no Sprint Bot Autoatendimento (M17-M24):
 
 ✅ RESOLVIDOS COMPLETO (3):
 - D-novo-U (P2): bug PENDENTE -> A_VENCER em whatsapp-bot.service.ts:793,
