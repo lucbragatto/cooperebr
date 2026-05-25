@@ -2965,6 +2965,56 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-AJ — Revisão periódica do inventário de secrets (P3 manutenção preventiva)
+
+**Origem:** 2026-05-26, criação da `GATEWAY_ENCRYPT_KEY` + inventário inicial (`docs/seguranca/inventario-secrets.md`).
+
+**Cadência:** trimestral — a cada 3 meses, revisitar `docs/seguranca/inventario-secrets.md`.
+
+**Próxima revisão:** 2026-08-26.
+
+**Escopo da revisão trimestral:**
+- Confirmar que cada secret listado ainda existe / está em uso
+- Confirmar que owner ainda mantém **2 backups offline** (perguntar explicitamente — não inferir)
+- Identificar secrets novos que apareceram e não foram catalogados
+- Identificar secrets aposentados (gateways removidos, contas desativadas, etc) que devem sair do inventário
+- Marcar próximas rotações que vencem nos próximos 3 meses
+- Atualizar "Última auditoria completa" no inventário
+
+**Triggers ad-hoc (fora da cadência trimestral):**
+- Suspeita de exposição → rotação imediata + auditoria
+- Saída de membro do time → revisar quais secrets ele conhecia
+- Onboarding de novo parceiro real (Sinergia etc) → revisar policy de backup com ele
+- Vazamento detectado em repo público / chat / log → rotação imediata
+
+**Status:** 📋 Catalogado em 2026-05-26. Sem trabalho ativo até 2026-08-26.
+
+---
+
+### D-novo-AJ.1 — Auditar `ASAAS_ENCRYPT_KEY` legado (P2 segurança)
+
+**Origem:** Auditoria inicial do inventário de secrets (2026-05-26).
+
+**Achado:** valor atual de `ASAAS_ENCRYPT_KEY` no `.env` tem **31 chars com sufixo `_key`** — formato sugere placeholder textual (string genérica tipo `"minha-chave-asaas_key"`), NÃO chave AES-256 de 32 bytes (que seria 64 chars em hex ou 44 em base64). A chave passa pelo `crypto.createHash('sha256').update(key).digest()` em `AsaasService.getEncryptKey` (linha 24-30), então funcionalmente "funciona" (SHA-256 sempre produz 32 bytes), mas **a entropia real é a do texto curto**, não 256 bits.
+
+**Risco:**
+- Dados criptografados em `AsaasConfig.apiKey` (sufixo `****dfe8`, 390 chars no DB) podem estar encrypted com uma chave de entropia reduzida
+- Sem backup offline formal — se o `.env` se perder, `AsaasConfig.apiKey` fica ilegível
+- Owner formal não está documentado
+
+**Fix proposto (sessão dedicada, ~2-3h Code + 30min operacional Luciano):**
+1. Gerar chave nova com `openssl rand -base64 32` (alinhado com `GATEWAY_ENCRYPT_KEY` em 26/05)
+2. Re-encriptar `AsaasConfig.apiKey` de todos os tenants com a chave nova (script de migração com dry-run)
+3. Backup completo do banco antes
+4. 2 backups offline da chave nova pelo Luciano (papel + gerenciador de senhas)
+5. Atualizar inventário `docs/seguranca/inventario-secrets.md` movendo `ASAAS_ENCRYPT_KEY` de 🟡 pra 🟢
+
+**Janela operacional sugerida:** durante ou após Fatia F2 do Sub-Sprint Gateways de Pagamento — F2 já vai fazer dual-write `AsaasConfig` ↔ `ConfigGateway`, então re-encriptar a chave da `AsaasConfig` antiga vira parte natural da coexistência 30 dias.
+
+**Status:** 📋 Catalogado em 2026-05-26. Aguardando F2 destravar.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
