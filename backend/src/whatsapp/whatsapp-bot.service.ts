@@ -3989,30 +3989,13 @@ Essa conta de energia e:
     await this.incrementarFallback(conversa, telefone, 'Responda *1* para confirmar encerramento ou *2* para voltar.');
   }
 
-  // â”€â”€â”€ NPS automático pós-cadastro â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  private agendarNps(telefone: string, conversaId: string): void {
-    setTimeout(async () => {
-      try {
-        const conversa = await this.prisma.conversaWhatsapp.findUnique({ where: { id: conversaId } });
-        if (!conversa || conversa.estado !== 'CONCLUIDO') return;
-
-        await this.prisma.conversaWhatsapp.update({
-          where: { id: conversaId },
-          data: { estado: 'NPS_AGUARDANDO_NOTA' },
-        });
-
-        await this.sender.enviarMensagem(
-          telefone,
-          `${E.sorriso} Olá! Sua solicitação de adesão à CoopereBR foi recebida!\n\n` +
-          'De 0 a 10, quanto você indicaria a CoopereBR para um amigo?\n' +
-          '(Digite apenas o número)',
-        );
-      } catch (err) {
-        this.logger.warn(`Erro ao enviar NPS para ${telefone}: ${err.message}`);
-      }
-    }, 60 * 60 * 1000); // 1 hora
-  }
+  // D-novo-X resolvido (2026-05-25): metodo `agendarNps` removido. Era dead code
+  // (zero callers confirmados via grep). Tinha problemas: setTimeout fragil
+  // (PM2 restart perdia timer), texto hardcoded "CoopereBR" nao multi-tenant.
+  // Quando Luciano definir disparo automatico de NPS (decisoes (b)/(c)/(d) da
+  // Fase 1 Bloco 7 NPS), o caminho sera listener event-based OU cron persistente,
+  // NAO reativar setTimeout. Sprint NPS Trimestral futuro reaproveitara o
+  // modelo `nps_trimestral` ja seedado (ver D-novo-Y recategorizado).
 
   private async handleNpsNota(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
