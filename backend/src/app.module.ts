@@ -58,6 +58,7 @@ import { AuditModule } from './audit/audit.module';
 import { NotificacoesProativasModule } from './notificacoes-proativas/notificacoes-proativas.module';
 import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes-contrato.module';
 import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmacao-pagamento/solicitacoes-confirmacao-pagamento.module';
+import { GatewaysPagamentoConfigModule } from './gateways-pagamento-config/gateways-pagamento-config.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmac
     NotificacoesProativasModule,
     SolicitacoesContratoModule,
     SolicitacoesConfirmacaoPagamentoModule,
+    GatewaysPagamentoConfigModule,
   ],
   controllers: [AppController],
   providers: [
