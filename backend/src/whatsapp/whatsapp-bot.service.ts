@@ -790,7 +790,11 @@ export class WhatsappBotService {
 
     if (corpo === '2' || corpo.toLowerCase().includes('fatura') || corpo.toLowerCase().includes('cobrança')) {
       const cobranca = await this.prisma.cobranca.findFirst({
-        where: { contrato: { cooperadoId }, status: { in: ['PENDENTE', 'VENCIDO'] as any[] } },
+        // D-novo-U fix (2026-05-25): canonico A_VENCER + PENDENTE (defensivo) + VENCIDO.
+        // Antes usava apenas ['PENDENTE','VENCIDO'] e bot mentia "sem faturas" pra cooperado
+        // com cobranca A_VENCER (>= 99% dos casos reais). Defense in depth alinhada com
+        // cobrancas.job.ts:45/130/216 (mesmo padrao aceitando ambos).
+        where: { contrato: { cooperadoId }, status: { in: ['A_VENCER', 'PENDENTE', 'VENCIDO'] as any[] } },
         orderBy: { dataVencimento: 'asc' },
       });
       if (!cobranca) {
@@ -4030,7 +4034,13 @@ Essa conta de energia e:
     });
 
     await this.sender.enviarMensagem(telefone, `Obrigado pelo feedback! ${E.coracao} Isso nos ajuda a melhorar.`);
-    await this.finalizarConversa(conversa.id);
+    // D-novo-W fix (2026-05-25): transiciona pra MENU_COOPERADO em vez de finalizarConversa
+    // (CONCLUIDO). Alinha hardcoded com motor dinamico Bloco 7 (M21) — cooperado fica
+    // disponivel pra continuar interagindo apos responder NPS.
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERADO' },
+    });
   }
 
   private async finalizarConversa(id: string): Promise<void> {
