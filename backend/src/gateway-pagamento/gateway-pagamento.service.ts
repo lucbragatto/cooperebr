@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AsaasAdapter } from './adapters/asaas.adapter';
+import { BanestesAdapter } from './banestes/banestes.adapter';
 import {
   GatewayPagamentoAdapter,
   EmitirCobrancaDto,
@@ -25,6 +26,7 @@ export class GatewayPagamentoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly asaasAdapter: AsaasAdapter,
+    private readonly banestesAdapter: BanestesAdapter,
   ) {}
 
   /**
@@ -47,7 +49,13 @@ export class GatewayPagamentoService {
       case 'ASAAS':
         return this.asaasAdapter;
 
-      // Sprint 9: descomentar quando implementar
+      case 'BANESTES':
+        // Adapter Banestes Cenario Minimo (M26, 2026-05-26). PIX-only.
+        // cancelarCobranca + processarWebhook sao stubs do Cenario Completo
+        // (D-novo-AH: baixa manual via painel admin Bloco 8 enquanto isso).
+        return this.banestesAdapter;
+
+      // Sprint futuro: descomentar quando implementar
       // case 'SICOOB':
       //   return this.sicoobAdapter;
       // case 'BB':
@@ -55,7 +63,7 @@ export class GatewayPagamentoService {
 
       default:
         throw new BadRequestException(
-          `Gateway "${config.gateway}" não suportado. Gateways disponíveis: ASAAS.`,
+          `Gateway "${config.gateway}" não suportado. Gateways disponíveis: ASAAS, BANESTES.`,
         );
     }
   }
@@ -137,6 +145,10 @@ export class GatewayPagamentoService {
     switch (gateway) {
       case 'ASAAS':
         return this.asaasAdapter.processarWebhook(payload, token);
+      case 'BANESTES':
+        // Cenario Minimo M26: BanestesAdapter.processarWebhook lanca
+        // NotImplementedException (D-novo-AH catalogado).
+        return this.banestesAdapter.processarWebhook(payload, token);
       default:
         throw new BadRequestException(`Webhook pra gateway "${gateway}" não suportado.`);
     }
