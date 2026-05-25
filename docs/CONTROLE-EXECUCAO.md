@@ -1040,228 +1040,141 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo, último commit é o de fechamento M26
-   Adapter Banestes Cenário Mínimo da sessão 26/05 noite (mensagem começa
-   com "docs(sessao): fechamento M26 Adapter Banestes Cenário Mínimo").
-   Penúltimo commit é `0041da6` (docs banestes — gateways.md + débitos + .env).
+   Esperado: working tree limpo, último commit é o de fechamento da sub-sessão
+   26/05 noite "docs(sessao): Fase 1 Sub-Sprint Gateways de Pagamento + pausa total".
+   Penúltimo commit é `62ce291` (docs relatório Fase 1 — 616 linhas).
+   Antepenúltimo é `6e95ebc` (fechamento M26 Adapter Banestes).
    Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23.
 
-3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado, é OK).
+3. Rodar `pm2 list`. Esperado: cooperebr-backend online (pid pode ter mudado).
 
-PASSO 1 — Sessão 26/05 NOITE entregou M26 Adapter Banestes Cenario Minimo.
-4 commits codigo+docs (e4e0f77 Etapa A BanestesConfigService -> 903fce9
-Etapa B BanestesAdapter PIX + factory -> 692406e Etapa C endpoint admin
-testar-conexao -> 0041da6 Etapa D docs/debitos/env) + commit fechamento.
+PASSO 1 — Onde paramos:
 
-ENTREGAS:
-- Modulo Banestes em backend/src/gateway-pagamento/banestes/ (4 arquivos:
-  config, adapter, controller, module)
-- Encaixe direto na interface GatewayPagamentoAdapter (Asaas pattern)
-- emitirCobranca PIX (POST /pix-qrcode-cobranca/v1/cob)
-- criarCustomer no-op (Banestes nao tem customer model)
-- testarConexao smoke (token OAuth + GET cobrancas leve)
-- Endpoint admin POST /gateway-pagamento/banestes/testar-conexao
-  (JWT SUPER_ADMIN/ADMIN + @AuditLog)
-- Stubs cancelarCobranca + processarWebhook (NotImplementedException)
-- Factory GatewayPagamentoService suporta gateway=BANESTES
+Sessão 26/05 NOITE entregou M26 (Adapter Banestes Cenário Mínimo), depois
+disparou Fase 1 read-only ampla do Sub-Sprint Gateways de Pagamento.
 
-mTLS via https.Agent({ pfx, passphrase }) NATIVO Node — sem lib terceiro.
-OAuth Client Credentials + cache memory com TTL = expires_in - 5min.
+Fase 1 Sub-Sprint Gateways de Pagamento — ACHADOS CENTRAIS:
 
-46/46 specs novos verdes no modulo Banestes. Suite tocada: 288/288 verdes
-(234 motor + 51 gateway + 3 controller). Backend restartou — curl POST
-testar-conexao sem JWT retorna 401 (auth ativa).
+- ConfigGateway existe no schema (schema.prisma:1352) mas subutilizado:
+  apenas 3 consumidores leem (gateway-pagamento.service factory +
+  banestes.adapter chavePix + cobrancas.service gate condicional).
 
-2 DEBITOS NOVOS:
-- D-novo-AG (P2): .pfx em disco; migrar pra Azure Key Vault quando
-  Sinergia entrar em producao
-- D-novo-AH (P2): webhook Banestes pendente (Cenario Completo); baixa
-  manual via painel admin Bloco 8 enquanto isso
+- 🚨 DIVERGÊNCIA ATIVA de dados: AsaasConfig.apiKey (legado, sufixo dfe8,
+  AES-256-GCM encrypted) ≠ ConfigGateway.credenciais.apiKey (sufixo 2776,
+  plain text). 2 fontes de verdade incoerentes. AsaasAdapter lê do legado;
+  ConfigGateway só serve pra factory decidir adapter.
 
-PROXIMO PASSO — OPERACIONAL LUCIANO antes da proxima sessao Code:
+- Encryption já existe em AsaasService.encrypt/decrypt (AES-256-GCM com
+  ASAAS_ENCRYPT_KEY). Padrão a extrair pra CredentialsEncryptor reutilizável
+  + nova GATEWAY_ENCRYPT_KEY.
 
-1. Obter .pfx SANDBOX Banestes do portal desenvolvedor
-   (https://desenvolvedores.banestes.com.br/api-portal/pt-br/user).
-   NAO usar o .pfx producao CoopereBR do legado (vazado no Git legado).
+- .pfx Banestes: manter em DISCO (`/opt/certs/{tenantId}-{ambiente}.pfx`
+  permissão 0600), path em metadados.pfxPath, senha encrypted em
+  credenciaisCriptografadas.pfxSenha. Upload via UI valida senha antes de
+  gravar.
 
-2. Configurar .env BANESTES_* com valores sandbox:
-   BANESTES_PFX_PATH=/opt/certs/banestes_sandbox.pfx
-   BANESTES_PFX_SENHA=<senha sandbox>
-   BANESTES_CLIENT_ID=<client_id sandbox>
-   BANESTES_CLIENT_SECRET=<client_secret sandbox>
-   BANESTES_AMBIENTE=sandbox
+- Refator schema é ADITIVO: rename `credenciais` → `credenciaisCriptografadas`
+  + add `metadados Json`. Migração com dry-run obrigatório (CLAUDE.md regra 6).
 
-3. Reiniciar PM2 backend apos .env.
+ESTIMATIVA ATUALIZADA: 24-34h Code em 5 fases (era 8-12h):
+- F1 backend (módulo gateways-pagamento-config/ + 8 endpoints + registry +
+  encryptor + specs) — 8-12h
+- F2 schema + dual-write Asaas — 3-4h
+- F3 refator BanestesConfigService multi-tenant — 4-6h
+- F4 frontend tela nova + redirect rota antiga + sidebar/wizard rename — 6-9h
+- F5 migration dados + smoke E2E — 3h
 
-4. Smoke: curl POST /gateway-pagamento/banestes/testar-conexao
-   autenticado JWT - esperado { ok: true }.
+Crescimento aconteceu porque relatório descobriu divergência AsaasConfig vs
+ConfigGateway (não conhecida antes) e exige dual-write durante coexistência
+30 dias pra não quebrar produção.
 
-APOS SANDBOX VALIDAR (proxima janela operacional):
-- ROTACIONAR senha do .pfx producao (gerar novo via openssl, NAO reusar
-  do legado SISGDSOLAR que ta vazado)
-- Configurar ConfigGateway Banestes tenant CoopereBR com chavePix
-- Habilitar gateway=BANESTES no ConfigGateway pra cooperados reais
-- Carolina (canario) paga PIX REAL via Banestes — primeira cobranca
-  via novo adapter em PRODUCAO
-- Equipe marca pago manualmente via painel Bloco 8 (D-novo-AH)
+RISCO CRÍTICO R2: perda da GATEWAY_ENCRYPT_KEY = TODOS gateways ilegíveis.
+Recovery exige 2 backups offline da chave master (papel + gerenciador de
+senhas). RESPONSABILIDADE OPERACIONAL DO LUCIANO fora do sistema.
 
-CENARIO COMPLETO BANESTES (futuro Sprint dedicado, ~6-8h Code):
-- cancelarCobranca (PATCH status REMOVIDA)
-- BanestesWebhookController com validacao token compartilhado
-- Re-consulta GET /cob/{txid} pra confirmar CONCLUIDA
-- Emit pagamento.confirmado (financeiro-token listener ja existe)
-- GatewayWebhookLog generico (tabela nova multi-gateway)
-- Cron alerta D-30 antes .pfx expirar
+DECISÕES TRAVADAS (5 técnicas pelo orquestrador + 1 produto pelo Luciano):
 
-BLOQUEADOR EXTERNO PERSISTE: Sub-Sprint B (ETL legado->novo) aguarda
+1. Encryption opção (a): CredentialsEncryptor reutilizável + GATEWAY_ENCRYPT_KEY
+   (AES-256-GCM mesmo padrão Asaas). Opções (b) pgcrypto e (c) Azure Key
+   Vault adiadas como D-novo-AI futuro.
+2. .pfx em DISCO (não bytes no DB): /opt/certs/{tenantId}-{ambiente}.pfx
+   permissão 0600, path + senha encrypted no DB.
+3. Coexistência AsaasConfig (legado) + ConfigGateway (novo) por 30 dias
+   com dual-write. Migração faseada segura.
+4. ConfigGatewayPlataforma ADIADA (gateway FaturaSaas é outro escopo —
+   sprint próprio futuro).
+5. Sicoob/BB FORA do registry até adapter real existir.
+6. @@unique([cooperativaId, gateway]) MANTIDO — 1 ambiente por gateway
+   por tenant (escolher sandbox OU produção pra cada gateway).
+
+DECISÕES PENDENTES (Luciano decide ao voltar do fórum):
+
+❓ ABORDAGEM:
+- (a) Fatiar — F1+F2+F3+F5 backend ~18-25h em 2-3 sessões; F4 frontend
+  depois; Carolina paga via Postman antes do UI. RECOMENDAÇÃO ORQUESTRADOR
+  (velocidade pra Carolina pagar antes do polish UI).
+- (b) Completo 24-34h sequencial — UI desde início, mais sessões, entrega
+  coerente.
+- (c) Cortar pra mínimo extensível tabs estáticas (~8-12h) — perde
+  extensibilidade que Luciano explicitamente pediu.
+
+❓ TIMING:
+- (i) Próxima sessão Code já (F1 backend NÃO depende do .pfx sandbox).
+- (ii) Esperar Luciano conseguir .pfx sandbox primeiro.
+- (iii) Pausa total mais longa.
+
+PROXIMA SESSÃO Code abre apresentando as 3 opções de abordagem + 3 opções
+de timing pra Luciano bater. Se ele escolher "fatiar próxima sessão já",
+Code arranca F1 backend imediato. Se "completo", Code arranca F1+F2+F3
+numa sequência sólida. Se "cortar", Code volta pra um plano menor (sem
+registry dinâmico). Pausa total se Luciano ainda quiser respirar.
+
+BLOQUEADOR EXTERNO PERSISTE: Sub-Sprint B (ETL legado→novo) aguarda
 script.sql do hb06a.
 
-FRENTES PARALELAS AINDA NO MENU (Luciano escolhe):
-1. PAUSA TOTAL — esperar script.sql
-2. Cenario Completo Banestes (~6-8h Code) — apos Carolina pagar canario
-3. Sprint Bot Proativo Fase 1 read-only ampla (Code)
+FRENTES OPERACIONAIS LUCIANO em paralelo (independentes do Code):
+- Avisar time legado: senha banco Azure SQL + 5 .pfx vazados + senha .pfx
+  em comentário + senha .pfx em coluna texto puro + webhook sem validação
+- Obter script.sql do hb06a (3 opções: Generate Scripts fresco / backup
+  OneDrive 28/02 / sync pasta OneDrive)
+- Obter .pfx sandbox Banestes do portal desenvolvedor
+- Decisões regulatórias Sub-Sprint A (Assinafy, segregação tributária)
+- Definir regra parcelamento D-novo-AD (Asaas parcelable / manual N
+  cobranças / link humano)
+- Configurar SMTP/IMAP noreply@sisgdsolar.com.br via
+  /dashboard/configuracoes/email logado SUPER_ADMIN
+- BACKUP OFFLINE da GATEWAY_ENCRYPT_KEY quando F1 rodar (R2 — papel +
+  gerenciador senhas)
 
-CONTEXTO HISTORICO IMEDIATO ANTERIOR (M25, 26/05 manha) — Sprint
-Housekeeping: 5 debitos limpos + 1 recategorizado dos 12 acumulados
-no Sprint Bot Autoatendimento (M17-M24):
+ARQUIVOS DESTA SUB-SESSÃO:
+- Relatório completo Fase 1:
+  docs/relatorios/2026-05-26-fase1-sub-sprint-gateways-pagamento.md (616 linhas)
+- Doc-sessão sub-sessão:
+  docs/sessoes/2026-05-26-noite-fase1-sub-sprint-gateways-pagamento.md
+- Memória orquestrador atualizada (fora do repo) em
+  ~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md
 
-✅ RESOLVIDOS COMPLETO (3):
-- D-novo-U (P2): bug PENDENTE -> A_VENCER em whatsapp-bot.service.ts:793,
-  defense in depth alinhada com cobrancas.job.ts:45/130/216
-- D-novo-W (P3): handleNpsNota hardcoded finalizarConversa -> MENU_COOPERADO
-  (alinhado com motor Bloco 7 M21)
-- D-novo-X (P3): metodo agendarNps dead code (22 linhas) removido, zero
-  callers confirmados
+CONTEXTO HISTÓRICO IMEDIATO ANTERIOR (M26, 26/05 noite) — Adapter Banestes
+Cenário Mínimo entregue em 5 commits (e4e0f77 Etapa A BanestesConfigService
+→ 903fce9 Etapa B BanestesAdapter PIX + factory → 692406e Etapa C endpoint
+admin testar-conexao → 0041da6 Etapa D docs/débitos/env → 6e95ebc fechamento).
+46/46 specs novos verdes no módulo Banestes. Suite tocada: 288/288. mTLS via
+https.Agent({ pfx, passphrase }) nativo Node. OAuth Client Credentials +
+cache memory respeitando expires_in - 5min. 2 débitos catalogados:
+D-novo-AG (.pfx em disco → Azure Key Vault quando Sinergia entrar) +
+D-novo-AH (webhook Banestes pendente, baixa manual via Bloco 8 enquanto isso).
+Detalhe: docs/sessoes/2026-05-26-m26-adapter-banestes-cenario-minimo.md.
 
-✅ PARCIAL RESOLVIDOS (2):
-- D-novo-Z (P3): Divergencia 1 (estado final pos-Cadastro Proxy) fechada
-  — handleConfirmarProxy 2 ocorrencias resetarConversa -> MENU_COOPERADO.
-  Divergencia 2 (calculo proposta) preservada como degradacao consciente.
-- D-novo-AC (P2): MENU_INADIMPLENTE dead code removido (128 linhas:
-  iniciarFluxoInadimplente 53 + handleMenuInadimplente 75). PRESERVADO
-  handleNegociacaoParcelamento por DECISAO LUCIANO 26/05 — aguarda Sprint
-  Regra Parcelamento (D-novo-AD) definir regra de negocio real.
+CONTEXTO HISTÓRICO ANTERIOR (M25, 26/05 manhã) — Sprint Housekeeping:
+5 débitos limpos + 1 recategorizado dos 12 acumulados no Sprint Bot
+Autoatendimento (M17-M24). whatsapp-bot.service.ts 4051 → 3943 linhas
+(-108 líquido). Detalhe: docs/sessoes/2026-05-26-m25-sprint-housekeeping.md.
 
-✅ RECATEGORIZADO (1):
-- D-novo-Y: modelo nps_trimestral nao e mais "orfao a apagar". RESERVADO
-  pra Sprint NPS Trimestral futuro (~2-4h, pos-onboarding cooperebr1).
-  Pattern Bloco 1.b (cron @nestjs/schedule + reuso WhatsappSenderService).
-
-SINTESE: whatsapp-bot.service.ts 4051 -> 3943 linhas (-108 liquido).
-234/234 specs do motor verdes. nest build limpo apos cada etapa.
-
-DEBITOS RESTANTES (6 dos 12 originais):
-- D-novo-V (P3): engine template {{#if}}/{{#unless}} — Iniciativa Fluxos
-  Customizaveis Fase 1, ~8-12h
-- D-novo-AA (P3): cron cleanup proxy + filtro UI — sprint proprio pos-Sinergia,
-  ~2-3h
-- D-novo-AB (P2): handler handleAtualizacaoContrato — pos-validacao prod
-  1-2 sprints
-- D-novo-AD (P1): Sprint Regra Parcelamento — ~12-20h, aguarda decisao
-  produto Luciano (regra Asaas parcelable / manual N cobrancas / link humano)
-- D-novo-AE (P2): handlers handleMenuFatura + handleComprovantePagamento
-  — pos-validacao prod 1-2 sprints
-- D-novo-AF (P3): etapa VER_PROXIMA_FATURA orfa + 4 specs motor — pos-validacao
-  prod 1-2 sprints
-
-2 SPRINTS FUTUROS CATALOGADOS NESTA SESSAO:
-- Sprint NPS Trimestral (~2-4h) — reusa modelo nps_trimestral, padrao Bloco 1.b
-- Sprint Regra Parcelamento (~12-20h) — D-novo-AD P1, aguarda decisao produto
-
-BLOQUEADOR EXTERNO PERSISTE: Sub-Sprint B (ETL legado->novo) aguarda script.sql
-do hb06a. Sub-Sprint B preparado (Docker OK, sqlcmd a instalar, porta 1433
-livre, plano operacional 8 etapas em
-docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md).
-
-PRÓXIMO PASSO — LUCIANO ESCOLHE NA ABERTURA ENTRE 3 FRENTES PARALELAS
-restantes (Sprint Housekeeping concluido nesta sessao, sai do menu):
-
-1. PAUSA TOTAL — so retomar quando script.sql chegar.
-2. Sprint Bot Proativo — Fase 1 read-only ampla (Code) — mapeia infra de
-   bot proativo (lembrete pre-vencimento, webhook pagamento, escalonacao
-   inadimplencia).
-3. Analise profunda codigo Banestes do legado (Code) — mapeia o portado
-   pro adapter src/gateway-pagamento/banestes/.
-
-FRENTES HUMANAS EM PARALELO (Luciano):
-- Avisar time legado pra trocar senha do Azure SQL + mover pra Key Vault
-- Sub-Sprint A (decisoes regulatorias com advogado: Assinafy, segregacao
-  tributaria)
-- Solicitar script.sql ao hb06a
-- Definir regra de parcelamento (D-novo-AD: Asaas parcelable / manual /
-  link humano)
-- Configurar SMTP/IMAP da conta noreply@sisgdsolar.com.br via
-  /dashboard/configuracoes/email logado como SUPER_ADMIN
-
-CONTEXTO HISTORICO IMEDIATO ANTERIOR (M24) — Sessao 24/05 entregou Bloco 8
-do Sprint Bot Autoatendimento: Menu Fatura, ENCERROU o Sprint Bot
-Autoatendimento INTEIRO (8 blocos M17-M24). 234/234 specs motor verdes.
-Detalhe: docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md.
-
-CONTEXTO HISTORICO ANTERIOR (sessao claude.ai 24-25/05) — descobriu o
-sistema legado SISGDSOLAR via analise do SISGDSOLAR-main.zip. Tesouros encontrados:
-- Banco real no Azure SQL `sisgdsolar.database.windows.net` com backup completo
-  no OneDrive do dev `hb06a` (caminho documentado em
-  `docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`)
-- Schema completo de 60+ tabelas mapeado (legado SQL Server → novo Prisma):
-  tbl_beneficiario→Cooperado, tbl_benef_conta_energia+tbl_contaEdp→UC,
-  tbl_usina+tbl_tipo_usina→Usina, tbl_contrato→Contrato,
-  tbl_parcela+tbl_pagamentos+tbl_cobranca→Cobranca, etc
-- 72 DAOs / 28+ procedures com lógica de negócio madura (atualizar_quitacoes,
-  gerar_fatura_unica_automatica_email_titular, sp_carga_dados_edp_usina)
-- Banestes em produção CONFIRMADO pra CoopereBR (cert .pfx existe no legado,
-  processo de renovação documentado em `docs/Certificado_Banestes.md`)
-
-🚨 ALERTA DE SEGURANÇA: `SISGDSOLAR/src/main/java/hibernate.cfg.xml` contém
-credencial do banco de produção em texto puro (user `hb_jv_bd_sis`, senha
-vazada). Risco crítico. Luciano vai avisar time legado pra trocar senha +
-mover pra Azure Key Vault.
-
-DECISOES TRAVADAS NA SESSÃO 24-25/05:
-- ✅ Banestes = gateway de produção pro novo sistema (replica o que já
-  funciona no legado). Asaas continua como adapter alternativo (sandbox
-  validado); Sicoob fica opção futura.
-- ✅ Extração tudo localmente no PC do Luciano. Sem tocar produção do legado:
-  backup script.sql → Docker SQL Server local → ETL offline.
-- ✅ Sub-Sprint B PIVOT: muda de "saneamento dos 71 sintéticos" pra
-  "ETL legado→novo + saneamento residual". Estimativa redesenhada:
-  ~16-25h Code + 1-7 dias calendário (dominado por lead time externo
-  do script.sql).
-- ✅ Riscos Fase 1 ampla onboarding revisados:
-  - Risco #1 classeGd: RESOLVIDO (Luciano confirmou cooperebr1
-    pré-07/jan/2023, direito adquirido, 0% Fio B até 2045)
-  - Riscos #2-#5 (sintéticos / Asaas SANDBOX / backfill tarifaContratual /
-    UCs OUTRAS): contemplados no Sub-Sprint B redesenhado.
-
-PRÉ-REQUISITOS VERIFICADOS NO PC DO LUCIANO:
+PRÉ-REQUISITOS VERIFICADOS NO PC DO LUCIANO (Sub-Sprint B):
 - Docker Desktop ✅ instalado (v29.4.3, container tb-cooperebr ativo 8080)
-- sqlcmd ❌ falta (instalar via `winget install --id Microsoft.Sqlcmd -e`
-  quando for usar — ~1min)
+- sqlcmd ❌ falta (instalar via winget quando for usar — ~1min)
 - script.sql ❌ não está no PC — AGUARDAR Luciano conseguir do hb06a
 - Porta 1433 ✅ livre
-
-BLOQUEADOR EXTERNO ATIVO: aguardando Luciano conseguir script.sql do hb06a.
-3 opções pro Luciano:
-- Pedir Generate Scripts fresco ao hb06a (~30min, dados atuais)
-- Pedir backup OneDrive 28/02 (mais rápido, dados 3 meses defasados)
-- Pedir compartilhamento da pasta OneDrive (sync contínuo)
-
-PRÓXIMO PASSO — LUCIANO ESCOLHE NA ABERTURA ENTRE 4 FRENTES PARALELAS
-enquanto script.sql não chega:
-
-(Bloco historico — 4 frentes da sessao 25/05. Sprint Housekeeping foi
-concluido em 26/05 M25 e sai do menu. Frentes ativas no PASSO 1 acima.)
-
-1. ~~PAUSA TOTAL~~ — opcao ainda valida.
-2. ~~Sprint Housekeeping~~ — ✅ CONCLUIDO M25 (26/05).
-3. Sprint Bot Proativo — Fase 1 read-only ampla — ATIVA.
-4. Analise profunda codigo Banestes do legado — ATIVA.
-
-FRENTES HUMANAS EM PARALELO (Luciano):
-- Avisar time legado pra trocar senha do Azure SQL + mover pra Key Vault
-- Sub-Sprint A (decisões regulatórias com advogado: Assinafy, segregação
-  tributária)
-- Solicitar script.sql ao hb06a
 
 PLANO OPERACIONAL SUB-SPRINT B REDESENHADO (quando script.sql chegar):
 - Etapa 1 — Instalar sqlcmd + subir container SQL Server local (Code, 30min)
@@ -1273,224 +1186,13 @@ PLANO OPERACIONAL SUB-SPRINT B REDESENHADO (quando script.sql chegar):
 - Etapa 7 — Execução real (apply) no banco novo (Code, 1-2h)
 - Etapa 8 — Validação cruzada pós-ETL (Code, 1-2h)
 
-Detalhamento completo em
-`docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md`.
+Detalhamento completo Sub-Sprint B em
+docs/sessoes/2026-05-25-descoberta-legado-sisgdsolar-pivot-onboarding.md.
 
-Memória orquestrador atualizada em
-`~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_bot_autoatendimento_20_05.md`.
-
-CONTEXTO HISTÓRICO IMEDIATO — Sessão 24/05 entregou M24 (Bloco 8 do Sprint
-Bot Autoatendimento: Menu Fatura) e ENCERROU o Sprint Bot Autoatendimento
-INTEIRO. 8 blocos completos (1.a/2/3/4/1.b/7/6/5/8), M17 a M24, 12 dias
-de trabalho. Bloco 8 entregou 6 commits (1fc34b2 schema → df6c203 5 acoes
-motor → 5af7273 script idempotente + seed → 56c6146 modulo REST →
-e410296 tela admin → f6ddc82 4 debitos catalogados) + commit fechamento.
-Decisao (C) MISTO Luciano: portou MENU_FATURA (Ver fatura / Historico /
-Ja paguei / Negociar humano) + SolicitacaoConfirmacaoPagamento PENDENTE
-padrao Bloco 5. NAO portou MENU_INADIMPLENTE (D-novo-AC dead code) nem
-NEGOCIACAO_PARCELAMENTO (D-novo-AD placeholder, regra produto a definir).
-234/234 specs verdes no motor (era 221 no M23, +13 nesta sessao). 4
-debitos catalogados (D-novo-AC/AD/AE/AF). Mini-relatorio do sprint
-inteiro em docs/sessoes/2026-05-24-m24-bloco8-menu-fatura-sprint-fechado.md
-— capacidades novas do motor (Gatilho.acao + parametro corpo + parametro
-media), evolucao de specs 109→234 (+115%), 12 debitos no escopo
-Housekeeping.
-
-PRÓXIMO PASSO — ONBOARDING DE PARCEIROS REAIS. Sprint Bot Autoatendimento
-fechou — agora o sistema entra em producao real com cooperados de verdade.
-2 frentes paralelas/sequenciais:
-
-FRENTE 1 — cooperebr1 (E-Solares / CoopereBR):
-- Primeira cooperativa real do Luciano. Vai testar o bot WhatsApp em
-  producao com cooperados reais.
-- Bot completo: cadastro novo, atualizacao cadastro, atualizacao contrato
-  (com aprovacao humana), NPS, indicacao MLM, ja paguei (com aprovacao
-  humana), historico, negociacao humana.
-- Pre-requisitos: confirmar que .env producao tem WA_INADIMPLENTES_HABILITADO
-  + WA_COBRANCA_HABILITADO + ASAAS_API_KEY do tenant ativos. Validar com
-  o cooperado real Luciano (27981341348) o end-to-end antes de habilitar
-  pro restante.
-
-FRENTE 2 — Consorcio Sinergia (segundo parceiro real):
-- Bloqueio: vocabulario multi-tipo hardcoded em ~50 telas + 73 exceptions
-  backend ainda dizem "Cooperado" (debito P2 no CLAUDE.md). Consorcio
-  precisa de "Consorciado". Sprint Vocabulario antes.
-- Bloqueio: Sprint 6 IDOR (auditoria multi-tenant sistemica) ainda nao
-  iniciado.
-- Bloqueio: D-novo-Q (contatos teste persistentes) — 6-8h.
-
-ANTES de qualquer frente: Luciano decide ordem (cooperebr1 primeiro pra
-testar bot real, OU Sinergia primeiro pra desbloquear ecossistema?).
-
-Recomendacao inicial: cooperebr1 primeiro (sem bloqueios — sprint
-Vocabulario nao necessario porque CoopereBR eh COOPERATIVA, ja usa
-termo certo). Sinergia entra depois quando Sprint Vocabulario for
-priorizado. Mas Luciano bate o martelo.
-
-DIRETRIZES INEGOCIAVEIS APLICAVEIS PRO PROXIMO BLOCO:
-- Contatos teste: lucbragatto+suffix@gmail.com + 27981341348 (REGRA
-  INEGOCIAVEL 14/05 — aplica em qualquer teste com disparo real)
-- isAmbienteReal() pros envios (NUNCA NODE_ENV — diretriz inegociavel 18/05)
-- Fase 1 read-only obrigatoria antes de tocar codigo (Decisao 23)
-- Multi-tenant: cooperativaId em toda query Prisma
-- Ritual PM2: pm2 stop → build → restart → list
-- Frase de retomada COMANDANTE (nao descritiva)
-- Skill retomada-sessao governa abertura
-
-DEBITOS DO SPRINT BOT (estado pos-M25 Sprint Housekeeping):
-
-✅ RESOLVIDOS M25 (5 + 1 recategorizado):
-- D-novo-U: bug PENDENTE -> A_VENCER no bot.service:793 (commit 2aeb4ed)
-- D-novo-W: NPS finalizarConversa -> MENU_COOPERADO (commit 2aeb4ed)
-- D-novo-X: dead code agendarNps removido (commit 6945813)
-- D-novo-Z parcial: Cadastro Proxy alinhado MENU_COOPERADO (commit a6c6e5c)
-- D-novo-AC parcial: MENU_INADIMPLENTE dead code removido 128 linhas
-  (commit 2ec0364, handleNegociacaoParcelamento preservado por decisao Luciano)
-- D-novo-Y RECATEGORIZADO: modelo nps_trimestral reservado pra Sprint
-  NPS Trimestral futuro (~2-4h, pos-onboarding)
-
-🔶 ABERTOS (6, fora do Housekeeping):
-- D-novo-V: engine template {{#if}}/{{#unless}} (~8-12h, Iniciativa Fluxos)
-- D-novo-AA: placeholders proxy eternos cpf/email (~2-3h pos-Sinergia)
-- D-novo-AB: handler handleAtualizacaoContrato (~30min pos-validacao prod)
-- D-novo-AD: Sprint Regra Parcelamento (P1, ~12-20h, decisao produto pendente)
-- D-novo-AE: handler handleMenuFatura + handleComprovantePagamento
-  (~45-60min pos-validacao prod)
-- D-novo-AF: VER_PROXIMA_FATURA orfa + ajuste 4 specs motor
-  (~20-30min pos-validacao prod)
-
-Sprint Housekeeping #2 estimado em ~2-3h apos validacao em producao
-(AB + AE + AF).
-
-REGRA ESPECIAL PRO BLOCO ATUAL (M23/M24 Bloco 5 + 8 — padrao "solicitacao
-PENDENTE + aprovacao humana"): bot NUNCA aplica decisao sensivel direto.
-Cria Solicitacao<X> PENDENTE + NotificacoesService.criar + WA + MENU.
-Equipe valida via painel admin gated SUPER_ADMIN com Dialog Shadcn pra
-recusar (DTO observacoesEquipe min 3 chars obrigatorio). Padrao
-estabelecido pra futuras solicitacoes que envolvam baixa financeira,
-alteracao contratual, ou mudanca de estado de cooperado.
-
-PASSO 1.1 — REVALIDACAO ANTES DE PRODUCAO (sugestao):
-Antes de habilitar bot em producao pro cooperebr1, rodar a suite Jest
-completa e confirmar que 234/234 specs continuam verdes + 11 falhas
-pre-existentes em cooperados/usinas controllers (nao-minhas, mesmas
-desde M19). Se houver regressao, investigar antes de subir.
-
-PADRÕES DE IMPLEMENTAÇÃO ESTABELECIDOS (referência rápida M17→M24):
-- Fluxo multi-turno com gatilho wildcard '*' + acao no gatilho → motor
-  delega pra ação via Gatilho.acao (Bloco 4 M19).
-- Ação privada padrão: guard cooperadoId + valida input + persiste
-  multi-tenant + transiciona MENU_COOPERADO + retry inline se inválido.
-- Motor AGORA aceita mídia (Bloco 6 M22 — 5º param `media`). Etapas
-  que precisam de foto/PDF têm gatilho wildcard + ação que valida
-  mimeType internamente.
-- Veja whatsapp-fluxo-motor.service.ts:
-  - cases ATUALIZAR_NOME/EMAIL/CEP_COOPERADO — padrão ação 2 turnos
-  - case REGISTRAR_NPS — padrão ação com persistência multi-tenant
-  - cases SALVAR_PROXY_NOME/TELEFONE — padrão ação só persiste dadosTemp
-  - case PROCESSAR_OCR_PROXY — padrão ação com mídia + OCR síncrono
-  - case CRIAR_COOPERADO_PROXY — padrão ação que cria entidade nova +
-    relacionamento + JWT + envia WA externos
-  - case CHAMAR_DEPOIS — padrão estado quase-terminal
-
-ANTES de Fase 2 do bloco escolhido: Fase 1 read-only OBRIGATÓRIA
-(Decisão 23) pra mapear estado + propor desenho.
-
-DECISOES PENDENTES PRO LUCIANO (carry-over — não bloqueiam onboarding):
-- Bloco onboarding primeiro: cooperebr1 OU Sinergia? (recomendacao
-  cooperebr1, mas Luciano bate o martelo)
-- D-novo-AD: NEGOCIACAO_PARCELAMENTO regra real (Asaas parcelable OU
-  geracao manual)
-- Disparo automatico NPS (sprint futuro): (b)/(c)/(d)
-- Desativar 1 das 2 etapas globais ATIVAS duplicadas no INICIAL
-- {{distribuidora}} vazia em AGUARDANDO_DISPOSITIVO_EMAIL
-- Horário hardcoded em aguardando_atendente
-- Variáveis-fantasma na UI ModalMensagem
-- 11 falhas pré-existentes na suíte Jest (cooperados/usinas controllers)
-
-CARRY-OVERS catalogados:
-- Sprint Bot Autoatendimento INTEIRAMENTE FECHADO (M17→M24)
-- Onboarding cooperebr1 (E-Solares / CoopereBR) — primeira cooperativa real
-- Onboarding Sinergia (depende vocabulario multi-tipo + Sprint 6 IDOR + D-novo-Q)
-- M15 Sprint 5a Neutro Fio B (3-5 dias, vem DEPOIS do sprint atual)
-- Cadastrar usina cooperebr2 (depende M15)
-- Onboarding Sinergia (depende M15 + Sprint 6 IDOR + D-novo-Q)
-- D-novo-Q Contatos Teste persistentes (6-8h)
-- D-novo-U fix handler hardcoded ver fatura (1-2h, Sprint Housekeeping)
-- D-novo-V engine de template {{#if}}/{{#unless}} (~8-12h)
-- D-novo-W divergência NPS CONCLUIDO×MENU_COOPERADO (5 min, Housekeeping)
-- D-novo-X agendarNps dead code (5 min, Housekeeping)
-- D-novo-Y modelo nps_trimestral órfão (5 min OU reuso futuro)
-- D-novo-Z divergência Cadastro Proxy hardcoded×motor (15min-1.5h)
-- D-novo-AA placeholders proxy eternos cpf/email (2-3h cron+UI)
-- D-novo-AB handler hardcoded handleAtualizacaoContrato (30min, pós-produção)
-- D-novo-AC MENU_INADIMPLENTE dead code (30-45min, Housekeeping)
-- D-novo-AD NEGOCIACAO_PARCELAMENTO placeholder (P1 — depende decisão produto Luciano)
-- D-novo-AE handler hardcoded handleMenuFatura (45-60min, pós-produção)
-- D-novo-AF VER_PROXIMA_FATURA órfã pós-Bloco 8 (20-30min, Housekeeping)
-- Sprint Housekeeping (~8-12h — inclui stash reformat 18/05 + scripts órfãos
-  + D-novo-W/X/Y/Z/AA/AB/AC/AE/AF)
-- HTML jornada Sugestão #6
-- D-novo-H refator técnico ~6-8h
-- Iniciativa Fluxos Customizáveis D-novo-T (futuro, ~100-200h+)
-- Sugestão #9 Monitoramento de Proteção (Relé) Opção A — feature futura,
-  aguarda vistoria de campo + arquitetura documentada
-
-DIRETRIZES INEGOCIÁVEIS ATIVAS:
-- NUNCA usar NODE_ENV pra discriminar dev/prod — sempre isAmbienteReal()
-- 3 camadas defense in depth obrigatórias em listener/service de comunicação real
-- Convenção MENSAL oficial pra capacidade usina / consumo médio / kwhContrato
-- Padrão UX dual Tipo A (inline) / B (página própria) / C (dialog) — não misturar
-- NÃO trabalhar paralelo com claude.ai
-- git status --short ANTES de qualquer commit
-- Decisão 14: grep amplo ANTES de catalogar débito novo
-- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de Fase 2 escrita
-- Toda query Prisma de cooperado/contrato/cobrança filtra por cooperativaId
-- NÃO inserir modelo com variável órfã
-- Smoke programático com dados reais > teste visual sozinho
-- Padrão Bloco 4 (2 turnos): gatilho '*' com acao + ação privada com guard
-  cooperadoId + updateMany defense in depth + retry no estado pra validação
-  falha + transição pra MENU_COOPERADO no sucesso
-- Padrão Bloco 3 (1 turno): acaoAutomatica na etapa-destino + modelo do
-  banco renderizado COM vars dinâmicas + rodapé universal anexado +
-  increment uso do modelo
-- Padrão Bloco 1.b (M20 — estado quase-terminal): comando universal +
-  branch dedicado em executarComandoUniversalReal/Simulado + cron
-  reusando WhatsappConversaJob @EVERY_HOUR com filtro horario comercial
-- Padrão Bloco 7 (M21 — ação de 2 turnos com persistência multi-tenant):
-  guard cooperadoId + parseInt/validação + prisma.X.create com
-  cooperativaId da conversa + renderiza modelo do banco com vars (ou
-  fallback hardcoded) + transiciona MENU_COOPERADO + retry inline se
-  validação falhar. Hardcoded preservado como fallback (debt latente
-  catalogado).
-- Padrão Bloco 6 (M22 — fluxo multi-turno com mídia + criação de entidade):
-  motor aceita 5º param `media` em executarAcao + `temMidia` em
-  avaliarGatilhoMatch (wildcard casa com mídia mesmo corpo vazio). Ações
-  que recebem foto/PDF validam mimeType + chamam FaturasService.extrairOcr
-  síncrono + persistem dados + renderizam modelo do banco. Ações que criam
-  entidade nova (Cooperado, Indicacao, etc) usam multi-tenant (cooperativaId
-  do dadosTemp da sessão), JWT pra token de assinatura, envio WA pra
-  destinos externos com try/catch isolado (falha de envio não impede
-  transição).
-- Padrão Bloco 5 (M23 — solicitação com aprovação humana):
-  Bot NUNCA aplica a mudança direto. INICIAR_* pré-valida (capacidade
-  usina, cobrança em aberto) + transiciona pra estado intermediário +
-  envia pergunta dinâmica. SALVAR_* persiste Solicitação<X> PENDENTE +
-  NotificacoesService.criar + WA cooperado + MENU. Módulo REST gated
-  SUPER_ADMIN com aprovar (reusa service que aplica a mudança real) +
-  recusar (DTO com observacoesEquipe min 3 chars obrigatório). Tela
-  admin com Dialog Shadcn pra recusar. Hardcoded antigo fica como
-  débito catalogado (D-novo-AB padrão).
-- Padrão Bloco 8 (M24 — confirmação operacional com checkbox marcarPago):
-  Como Bloco 5 (Solicitação PENDENTE + painel admin) mas com nuance:
-  endpoint confirmar() aceita flag opcional `marcarPago: boolean` que
-  permite à equipe escolher se dá baixa direto na Cobranca (PAGO +
-  dataPagamento=now) ou só registra a confirmação (gateway bate
-  depois). Tela admin com checkbox + textinho explicativo. Padrão pra
-  qualquer fluxo onde admin precisa de granularidade de validação
-  (não apenas binário aprovar/recusar).
-- Ritual PM2 obrigatório pra rebuild/seed/scripts no banco:
-  pm2 stop → npm run build → script → pm2 restart → pm2 list (confirmar)
+🚨 ALERTA DE SEGURANÇA LEGADO (descoberta sessão claude.ai 24-25/05):
+SISGDSOLAR/src/main/java/hibernate.cfg.xml contém credencial do banco de
+produção em texto puro (user hb_jv_bd_sis, senha vazada). Risco crítico.
+Luciano vai avisar time legado pra trocar senha + mover pra Azure Key Vault.
 ```
 
 ---
