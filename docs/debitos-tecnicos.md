@@ -2542,9 +2542,7 @@ Aproveitar pra:
 
 **Posicionamento:** Sprint Housekeeping (junto com D-novo-Q e outros itens de polimento). Não bloqueia nada hoje porque caminho dinâmico do Bloco 3 já corrige.
 
-**Status:** 📋 Catalogado em 2026-05-21 noite. Bug confirmado read-only (distribuição de status auditada no banco DEV). Fix pendente.
-
-**Status:** 📋 Catalogado em 2026-05-21. Visão aprovada por Luciano 20/05. Aguarda fechamento de M15 + D-novo-S antes da Fase 1.
+**Status:** ✅ **RESOLVIDO em 2026-05-25** (Sprint Housekeeping M25, commit `2aeb4ed`). Fix aplicado em `whatsapp-bot.service.ts:793` — query passou pra `status: { in: ['A_VENCER', 'PENDENTE', 'VENCIDO'] }` (defense in depth alinhada com `cobrancas.job.ts:45/130/216`). Auditoria adicional: 3 queries em `cobrancas.job.ts` usam `PENDENTE` mas são DEFENSIVAS (aceitam ambos), não-bugs. Comentário inline preservado referenciando o débito resolvido.
 
 ---
 
@@ -2640,7 +2638,7 @@ Aí o admin edita tudo no Banco de Mensagens. Substituiria também o `extrairVar
 
 **Posicionamento:** Sprint Housekeeping (com demais débitos P3 acumulados). Não bloqueia nada hoje.
 
-**Status:** 📋 Catalogado em 2026-05-23. Decisão 14 aplicada: D-novo-W escolhido após grep confirmar próximas letras livres.
+**Status:** ✅ **RESOLVIDO em 2026-05-25** (Sprint Housekeeping M25, commit `2aeb4ed`). Fix aplicado em `whatsapp-bot.service.ts:4037` — `handleNpsNota` agora transiciona pra `MENU_COOPERADO` via `prisma.conversaWhatsapp.update` em vez de `finalizarConversa` (CONCLUIDO). Hardcoded alinhado com motor dinâmico Bloco 7 (M21). Comentário inline preservado referenciando o débito resolvido.
 
 ---
 
@@ -2662,13 +2660,13 @@ Aí o admin edita tudo no Banco de Mensagens. Substituiria também o `extrairVar
 
 **Posicionamento:** Sprint Housekeeping.
 
-**Status:** 📋 Catalogado em 2026-05-23.
+**Status:** ✅ **RESOLVIDO em 2026-05-25** (Sprint Housekeeping M25, commit `6945813`). Método `agendarNps` (22 linhas) removido de `whatsapp-bot.service.ts:3994-4015`. Zero callers confirmados via grep amplo. Comentário inline (~7 linhas) preservado referenciando o débito resolvido + redirecionando pra Sprint NPS Trimestral futuro (event-based ou cron persistente, NÃO reativar setTimeout).
 
 ---
 
-### D-novo-Y — Modelo `nps_trimestral` órfão em seed-fluxo-padrao.ts (P3 limpeza OU reuso futuro)
+### D-novo-Y — Modelo `nps_trimestral` reservado pra Sprint NPS Trimestral futuro (RECATEGORIZADO)
 
-**Origem:** Fase 1 Bloco 7 do Sprint Bot Autoatendimento (22/05/2026).
+**Origem:** Fase 1 Bloco 7 do Sprint Bot Autoatendimento (22/05/2026). **Recategorizado em 26/05/2026 (Sprint Housekeeping M25).**
 
 **Contexto:** `backend/prisma/seed-fluxo-padrao.ts:138-144` define modelo de mensagem `nps_trimestral` (pergunta NPS após 3 meses de adesão):
 
@@ -2684,17 +2682,19 @@ Aí o admin edita tudo no Banco de Mensagens. Substituiria também o `extrairVar
 }
 ```
 
-Modelo seedado mas SEM caller no código. Sugere intenção pretérita de cron trimestral pra disparar NPS, nunca implementado.
+Modelo seedado mas SEM caller no código. Era catalogado como "órfão a apagar OU reusar".
 
-**Fix proposto (2 opções):**
-- **(a) Reusar pro cron trimestral** — se Luciano decidir opção (d) do disparo do NPS no Bloco 7 (cron trimestral pós-cadastro), o modelo está pronto. **NÃO é débito a remover, é reuso futuro.**
-- **(b) Remover** — se a opção (d) nunca for escolhida, remover do seed em Sprint Housekeeping.
+**Recategorização (decisão Luciano 2026-05-26):** modelo PERMANECE no seed como **reservado pra Sprint NPS Trimestral futuro**. Luciano confirmou intenção de implementar cron trimestral pós-cadastro num sprint dedicado (~2-4h estimado), reaproveitando este modelo. Sprint catalogado em memória do orquestrador (claude.ai) e usará pattern do Bloco 1.b (cron `@nestjs/schedule` + filtro de elegibilidade + reuso de WhatsappSenderService + decoração com `cooperativaId` do cooperado).
 
-**Custo estimado:** 5 min (delete ou comentário "reservado pra cron trimestral").
+**Reframe do escopo:**
+- ANTES: "órfão sem caller — limpeza pendente"
+- AGORA: "modelo de mensagem ATIVO, reservado pra cron trimestral futuro"
 
-**Posicionamento:** Sprint Housekeeping OU Sprint dedicado de disparo automático NPS (depende decisão Luciano).
+**Não é débito de limpeza.** É reuso futuro. Mantido aqui como pointer pro Sprint NPS Trimestral quando entrar.
 
-**Status:** 📋 Catalogado em 2026-05-23.
+**Sprint dependente:** Sprint NPS Trimestral (futuro, ~2-4h Code, pós-onboarding cooperebr1).
+
+**Status:** ✅ **RECATEGORIZADO em 2026-05-26** (Sprint Housekeeping M25). Modelo preservado no seed. Sprint NPS Trimestral catalogado pra futura execução.
 
 ---
 
@@ -2723,7 +2723,7 @@ Modelo seedado mas SEM caller no código. Sugere intenção pretérita de cron t
 
 **Posicionamento:** Sprint Housekeeping ou sprint Iniciativa Fluxos Customizáveis (D-novo-T).
 
-**Status:** 📋 Catalogado em 2026-05-23. Decisão 14 aplicada — D-novo-Z confirmado livre (mencionado hipoteticamente no relatório Fase 1 do Bloco 6 mas NÃO catalogado lá; este é o uso real).
+**Status:** ✅ **PARCIAL RESOLVIDO em 2026-05-25** (Sprint Housekeeping M25, commit `a6c6e5c`). **Divergência 1 (estado final pós-confirmação) RESOLVIDA** — `handleConfirmarProxy` agora transiciona pra `MENU_COOPERADO` via `prisma.conversaWhatsapp.update` em vez de `resetarConversa` (em ambos os caminhos: sucesso e recusa). Alinha hardcoded com motor dinâmico Bloco 6 (M22). **Divergência 2 (cálculo de proposta) PRESERVADA como degradação consciente** — hardcoded ainda calcula `economiaMensal`, motor não. Motor é o caminho oficial; hardcoded é fallback raro. Catalogar como sub-débito menor se virar bloqueio operacional. Comentários inline preservados referenciando o débito resolvido.
 
 ---
 
@@ -2809,7 +2809,7 @@ O cron real de inadimplência (`cronAbordarInadimplentes` em `whatsapp-cobranca.
 
 **Posicionamento:** Sprint Housekeeping. Não bloqueia produção.
 
-**Status:** 📋 Catalogado em 2026-05-24. Decisão 14: D-novo-AC confirmado livre após D-novo-AB.
+**Status:** ✅ **PARCIAL RESOLVIDO em 2026-05-25** (Sprint Housekeeping M25, commit `2ec0364`). **Removidos:** `iniciarFluxoInadimplente` (53 linhas) + `handleMenuInadimplente` (75 linhas) + `case 'MENU_INADIMPLENTE'` do switch principal. Total: 128 linhas dead code removidas, 20 linhas comentário adicionadas (~108 linhas líquido, bot.service.ts 4051→3943). **PRESERVADO (decisão Luciano 26/05):** `handleNegociacaoParcelamento` + `case 'NEGOCIACAO_PARCELAMENTO'` + `'NEGOCIACAO_PARCELAMENTO'` no `ESTADOS_FLUXO_ATIVO`. Aguarda Sprint Regra Parcelamento (D-novo-AD) quando regra de negócio for definida. Workaround atual: motor `SOLICITAR_NEGOCIACAO_HUMANA` (Bloco 8 M24). Comentários inline preservados.
 
 ---
 
