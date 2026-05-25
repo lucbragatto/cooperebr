@@ -116,7 +116,10 @@ export class GatewaysPagamentoConfigService {
       });
     }
 
-    const credenciaisPersistencia = this.encriptarSecrets(credenciaisValidadas.data, descritor.camposSecret);
+    const credenciaisPersistencia = this.encriptarSecrets(
+      credenciaisValidadas.data as Record<string, unknown>,
+      descritor.camposSecret,
+    );
 
     try {
       const row = await this.prisma.configGateway.create({
@@ -170,7 +173,7 @@ export class GatewaysPagamentoConfigService {
         });
       }
       data.credenciais = this.encriptarSecrets(
-        credenciaisValidadas.data,
+        credenciaisValidadas.data as Record<string, unknown>,
         descritor.camposSecret,
       ) as Prisma.InputJsonValue;
     }
