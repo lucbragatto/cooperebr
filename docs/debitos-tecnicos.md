@@ -3015,6 +3015,42 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-AK — Instalar gerenciador de senhas pessoal do owner (P3 boa prática operacional)
+
+**Severidade:** P3 (boa prática operacional, não bloqueia produção)
+**Owner:** Luciano
+**Estimativa:** 15-30 min do Luciano (instalação + criar conta) + 10 min por entrada migrada
+
+**Contexto:** 26/05/2026 — ao gerar `GATEWAY_ENCRYPT_KEY`, descobrimos que o Luciano não tem nenhum gerenciador de senhas instalado (Bitwarden, 1Password, KeePassXC, etc). Recorreu a **2 cópias em PAPEL em locais físicos distintos** como mitigação imediata pra desbloquear Sub-Sprint Gateways Fatia F2.
+
+**Escopo:**
+
+1. Instalar gerenciador de senhas:
+   - **Recomendado:** Bitwarden Desktop (gratuito, multiplataforma, sincronização nativa, opção self-hosted no futuro)
+   - **Alternativa:** KeePassXC (100% offline, sem conta na nuvem — escolher se prefere zero dependência externa)
+2. Criar conta + senha master forte (4+ palavras aleatórias) + 2FA se disponível
+3. Migrar entradas atuais (todas hoje em papel):
+   - `GATEWAY_ENCRYPT_KEY` (criada 26/05/2026, vive em `backend/.env`)
+   - [futuras] `ASAAS_ENCRYPT_KEY` após rotação prevista no D-novo-AJ.1
+   - [futuras] `BANESTES_PFX_SENHA` quando configurar sandbox
+   - [futuras] outros secrets que aparecerem no inventário
+4. Manter pelo menos 1 cópia em PAPEL como redundância adicional (defesa em profundidade — papel não falha por bug de software)
+5. Atualizar `docs/seguranca/inventario-secrets.md` coluna "Backups offline" pra refletir "papel + gerenciador" após a migração
+
+**Por que P3 e não maior:** as 2 cópias em PAPEL já cobrem o cenário R2 (perda do `.env`). O gerenciador adiciona conveniência (busca, copiar/colar sem digitar, sincronização entre máquinas) mas não muda a robustez do backup.
+
+**Por que vale fazer logo:** o número de secrets vai crescer rápido (`ASAAS_ENCRYPT_KEY` quando rotacionar, `BANESTES_PFX_SENHA` sandbox + produção, Sicoob futuro, etc). Gerenciar 10+ entradas em papel não escala — risco de inconsistência entre as 2 cópias quando atualizar entries.
+
+**Recomendação:** fazer dentro de 1-2 semanas. Não bloqueia nada agora.
+
+**Refs:**
+- `docs/seguranca/regra-secrets-nao-memorizar.md`
+- `docs/seguranca/inventario-secrets.md`
+
+**Status:** 📋 Catalogado em 2026-05-26. Aguardando Luciano agendar.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

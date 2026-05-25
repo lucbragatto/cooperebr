@@ -9,9 +9,11 @@ owner, status, plano de rotação). Política de secrets em
 
 - **Cadência de rotação:** recomendação geral é rotacionar chaves master
   a cada **12 meses** ou imediatamente após qualquer suspeita de exposição.
-- **Backups offline:** owner mantém **2 cópias** (papel num cofre +
-  gerenciador de senhas local). Mais nenhuma cópia além do `.env` do
-  servidor.
+- **Backups offline:** owner mantém **2 cópias offline** em mídias
+  distintas (recomendação: papel num cofre + gerenciador de senhas
+  local). Quando não houver gerenciador instalado ainda, 2 cópias em
+  PAPEL em locais físicos distintos é mitigação aceita — ver D-novo-AK
+  pra instalar gerenciador. Mais nenhuma cópia além do `.env` do servidor.
 - **Rotação de chave de encryption** (ex: `GATEWAY_ENCRYPT_KEY`): exige
   re-encriptar TODOS os dados encrypted com a chave nova antes de
   descartar a antiga. Procedimento delicado — fazer com janela de
@@ -25,7 +27,7 @@ owner, status, plano de rotação). Política de secrets em
 
 | Nome | Tipo | Onde mora | Criado em | Owner | Backups offline | Cadência rotação | Próxima revisão | Status | Notas |
 |---|---|---|---|---|---|---|---|---|---|
-| `GATEWAY_ENCRYPT_KEY` | Chave master AES-256-GCM (32 bytes base64) | `.env` backend | 2026-05-26 | Luciano | ✅ 2 cópias (papel + gerenciador senhas local) | 12 meses | 2027-05-26 | 🟢 ativo | Criada pra Sub-Sprint Gateways de Pagamento Fatia F2. Encripta credenciais de gateways no `ConfigGateway.credenciais.__enc`. Perda = **R2 catastrófico** (todos gateways ilegíveis). Gerada com `openssl rand -base64 32`. |
+| `GATEWAY_ENCRYPT_KEY` | Chave master AES-256-GCM (32 bytes base64) | `.env` backend | 2026-05-26 | Luciano | ✅ 2 cópias em PAPEL (locais físicos distintos) | 12 meses | 2027-05-26 | 🟢 ativo | Criada pra Sub-Sprint Gateways de Pagamento Fatia F2. Encripta credenciais de gateways no `ConfigGateway.credenciais.__enc`. Perda = **R2 catastrófico** (todos gateways ilegíveis). Gerada com `openssl rand -base64 32`. Backup em gerenciador de senhas pendente — **D-novo-AK** catalogado pra instalar Bitwarden (ou similar) e migrar entrada. |
 | `ASAAS_ENCRYPT_KEY` | Chave master AES-256-GCM (uso legado) | `.env` backend | desconhecido (anterior a 26/05/2026) | a confirmar | ❌ a auditar | a definir | **PRIORITÁRIO** — sessão dedicada D-novo-AJ.1 | 🟡 auditar | Usada por `AsaasService.encrypt/decrypt`. **Achado 26/05:** valor atual no `.env` tem 31 chars + sufixo `_key` — formato sugere placeholder textual, NÃO chave de 32 bytes. Pode ter sido configurada como string genérica e nunca rotacionada formalmente. Encripta `AsaasConfig.apiKey` de tenants reais. |
 | `ASAAS_API_KEY` CoopereBR sandbox | API Key de gateway externo | `AsaasConfig.apiKey` (encrypted via `ASAAS_ENCRYPT_KEY`) | 2026-03-23 | Luciano | N/A (regenerável no portal Asaas) | conforme política Asaas | a revisar | 🟢 ativo | Sufixo `****dfe8` pra confirmação visual sem expor valor. Validada via webhook sandbox em 27/04/2026 (Sprint 12). Há divergência catalogada: `ConfigGateway.credenciais.apiKey` tem sufixo `****2776` em texto puro — Fatia F2 vai resolver com dual-write. |
 | `ASAAS_WEBHOOK_TOKEN` | Token HMAC de webhook | `.env` backend | desconhecido | a confirmar | ❌ a auditar | a definir | 🟡 auditar | Configurar no painel Asaas e gravar em `AsaasConfig.webhookToken` por tenant (atualmente também aceita do `.env`). |
@@ -87,6 +89,8 @@ owner, status, plano de rotação). Política de secrets em
 
 - **GATEWAY_ENCRYPT_KEY (26/05/2026):** primeira chave master criada SOB
   a política `regra-secrets-nao-memorizar.md`. Modelo de referência pra
-  rotações futuras (gerar com `openssl rand -base64 32`, anotar em
-  papel + gerenciador local imediatamente, único registro permanente
-  é o `.env` do servidor).
+  rotações futuras (gerar com `openssl rand -base64 32`, anotar
+  imediatamente em backup offline, único registro permanente é o `.env`
+  do servidor). Mitigação real do dia: 2 cópias em PAPEL em locais
+  físicos distintos enquanto Luciano não instala gerenciador de senhas
+  (D-novo-AK).
