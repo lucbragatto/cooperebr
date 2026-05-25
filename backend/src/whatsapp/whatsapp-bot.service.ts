@@ -3441,13 +3441,24 @@ Essa conta de energia e:
         await this.sender.enviarMensagem(telefone, `${E.x} Ocorreu um erro ao cadastrar. Tente novamente mais tarde.`);
       }
 
-      await this.resetarConversa(telefone);
+      // D-novo-Z fix (2026-05-25): transiciona pra MENU_COOPERADO em vez de
+      // resetarConversa (INICIAL). Alinha hardcoded com motor Bloco 6 (M22) —
+      // cooperado-indicador fica disponivel pra continuar interagindo apos
+      // cadastrar amigo (pode indicar mais, ver saldo, etc).
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
       return;
     }
 
     if (corpo === '2' || corpo.toLowerCase().includes('não') || corpo.toLowerCase().includes('nao')) {
       await this.sender.enviarMensagem(telefone, 'Tudo bem! Se quiser tentar depois, é só me avisar.');
-      await this.resetarConversa(telefone);
+      // D-novo-Z fix (2026-05-25): idem caminho sucesso — MENU_COOPERADO.
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERADO' },
+      });
       return;
     }
 
