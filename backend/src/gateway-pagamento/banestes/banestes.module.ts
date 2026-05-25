@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BanestesConfigService } from './banestes-config.service';
 import { BanestesAdapter } from './banestes.adapter';
+import { BanestesController } from './banestes.controller';
 import { PrismaService } from '../../prisma.service';
 
 /**
@@ -15,6 +16,7 @@ import { PrismaService } from '../../prisma.service';
  * futuro (D-novo-AH catalogado: baixa manual via painel admin Bloco 8).
  */
 @Module({
+  controllers: [BanestesController],
   providers: [BanestesConfigService, BanestesAdapter, PrismaService],
   exports: [BanestesConfigService, BanestesAdapter],
 })
