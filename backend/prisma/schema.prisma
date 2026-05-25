@@ -1355,7 +1355,16 @@ model ConfigGateway {
   cooperativa     Cooperativa @relation(fields: [cooperativaId], references: [id])
   gateway         String      // ASAAS | SICOOB | BB | ITAU | MANUAL
   ambiente        String      @default("SANDBOX") // SANDBOX | PRODUCAO
-  credenciais     Json        @default("{}") // { apiKey, clientId, clientSecret, etc } — criptografado pelo adapter
+  // ── F1 (M27 — legado de transicao) ─────────────────────────────
+  // `credenciais` shape unificado: { __enc: {...secrets}, ...metadados }
+  // F2 (M29) introduz colunas separadas — esta sera DROPPADA depois da
+  // coexistencia 30 dias validar (sprint proprio futuro).
+  credenciais     Json        @default("{}") // @deprecated F2: substituida por credenciaisCriptografadas + metadados
+  // ── F2 (M29, 2026-05-26) — colunas separadas pra clareza ───────
+  // credenciaisCriptografadas: somente o sub-objeto __enc{} (cipher iv:cipher:tag em base64 por campo)
+  credenciaisCriptografadas Json @default("{}")
+  // metadados: campos NAO-secretos em texto puro (pfxPath, apiKeyMasked, ultimoTesteOk, etc)
+  metadados                 Json @default("{}")
   ativo           Boolean     @default(true)
   webhookToken    String?
   createdAt       DateTime    @default(now())
