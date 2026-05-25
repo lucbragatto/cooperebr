@@ -533,10 +533,13 @@ export class WhatsappBotService {
         case 'RESULTADO_SIMULACAO_RAPIDA':
           await this.handleResultadoSimulacaoRapida(msg, conversa);
           break;
-        // â”€â”€â”€ Rotina 2: Inadimplente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        case 'MENU_INADIMPLENTE':
-          await this.handleMenuInadimplente(msg, conversa);
-          break;
+        // D-novo-AC PARCIAL resolvido (2026-05-25): case MENU_INADIMPLENTE removido
+        // (dead code — iniciarFluxoInadimplente sem callers). handleNegociacaoParcelamento
+        // PRESERVADO como placeholder por decisao Luciano 26/05 — aguarda Sprint Regra
+        // Parcelamento (D-novo-AD P1) quando regra de negocio for definida.
+        // ATENCAO: handleNegociacaoParcelamento ainda referencia internamente o estado
+        // MENU_INADIMPLENTE (linha ~2832) mas a transicao e sobrescrita imediatamente
+        // por finalizarConversa — efeito final = CONCLUIDO. Sem bug em producao.
         case 'NEGOCIACAO_PARCELAMENTO':
           await this.handleNegociacaoParcelamento(msg, conversa);
           break;
@@ -2663,134 +2666,26 @@ Essa conta de energia e:
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // ROTINA 2: Cooperado inadimplente abordado pelo sistema
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // D-novo-AC PARCIAL resolvido (2026-05-25): metodos iniciarFluxoInadimplente
+  // (53 linhas) + handleMenuInadimplente (75 linhas) removidos.
+  //
+  // Motivacao: dead code confirmado.
+  // - iniciarFluxoInadimplente: zero callers em backend/src/ (grep amplo).
+  //   Foi escrito pra cron de cobranca vencida que nunca foi cabeado. O cron
+  //   real cronAbordarInadimplentes em whatsapp-cobranca.service.ts:217-334
+  //   manda mensagem direta SEM transicionar estado de conversa.
+  // - handleMenuInadimplente: so executava se iniciarFluxoInadimplente
+  //   transicionasse o estado pra MENU_INADIMPLENTE. Sem caller, era inalcancavel.
+  //
+  // PRESERVADO (decisao Luciano 26/05): handleNegociacaoParcelamento abaixo
+  // continua existindo como placeholder. Aguarda Sprint Regra Parcelamento
+  // (D-novo-AD P1) quando regra de negocio for definida (Asaas parcelable /
+  // geracao manual N cobrancas / link humano permanente).
+  //
+  // Workaround disponivel: motor dinamico Bloco 8 (M24) tem acao
+  // SOLICITAR_NEGOCIACAO_HUMANA (link humano via NotificacoesService) cobrindo
+  // o fluxo conversacional enquanto regra real nao vier.
 
-  /**
-   * Inicia abordagem proativa para cooperado com cobrança vencida.
-   * Chamado pelo cron de cobrança vencida.
-   */
-  async iniciarFluxoInadimplente(
-    telefone: string,
-    cobrancaId: string,
-    nomeCooperado: string,
-    valor: number,
-    dataVencimento: Date,
-    pixCopiaECola?: string,
-    linkPagamento?: string,
-  ): Promise<void> {
-    const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dataFmt = dataVencimento.toLocaleDateString('pt-BR');
-    const nome = nomeCooperado.split(' ')[0];
-
-    await this.prisma.conversaWhatsapp.upsert({
-      where: { telefone },
-      update: {
-        estado: 'MENU_INADIMPLENTE',
-        dadosTemp: { cobrancaId, valor, dataVencimento: dataFmt, pixCopiaECola, linkPagamento, nomeCooperado } as any,
-        contadorFallback: 0,
-      },
-      create: {
-        telefone,
-        estado: 'MENU_INADIMPLENTE',
-        dadosTemp: { cobrancaId, valor, dataVencimento: dataFmt, pixCopiaECola, linkPagamento, nomeCooperado } as any,
-      },
-    });
-
-    await this.sender.enviarMensagem(
-      telefone,
-      `Olá, ${nome}! ${E.coracao}\n\n` +
-      `Notamos que sua fatura no valor de *R$ ${fmt(valor)}* com vencimento em *${dataFmt}* está em aberto.\n\n` +
-      `Sabemos que imprevistos acontecem - estamos aqui para ajudar! ${E.handshake}`,
-    );
-
-    await this.sender.enviarMenuComBotoes(telefone, {
-      titulo: 'Fatura em aberto',
-      corpo: 'Como posso ajudar?',
-      opcoes: [
-        { id: '1', texto: `${E.prancheta} Ver detalhes da fatura` },
-        { id: '2', texto: `${E.cartao} Negociar parcelamento` },
-        { id: '3', texto: `${E.ok} Já paguei` },
-      ],
-    });
-  }
-
-  private async handleMenuInadimplente(msg: MensagemRecebida, conversa: any): Promise<void> {
-    const { telefone } = msg;
-    const corpo = this.respostaEfetiva(msg);
-    const dadosTemp = (conversa.dadosTemp ?? {}) as Record<string, any>;
-
-    if (corpo === '1' || corpo.toLowerCase().includes('detalhe')) {
-      const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      let detalhes = `${E.prancheta} *Detalhes da fatura:*\n\n`;
-      detalhes += `${E.dinheiro} Valor: R$ ${fmt(dadosTemp.valor)}\n`;
-      detalhes += `${E.calendario} Vencimento: ${dadosTemp.dataVencimento}\n`;
-
-      if (dadosTemp.pixCopiaECola) {
-        detalhes += `\n*Pague via PIX - Copia e Cola:*\n${dadosTemp.pixCopiaECola}\n`;
-      }
-      if (dadosTemp.linkPagamento) {
-        detalhes += `\n${E.link} Link de pagamento: ${dadosTemp.linkPagamento}\n`;
-      }
-
-      detalhes += `\n_Dúvidas? Responda esta mensagem._`;
-      await this.sender.enviarMensagem(telefone, detalhes);
-
-      await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'O que deseja?',
-        corpo: 'Posso ajudar com mais alguma coisa?',
-        opcoes: [
-          { id: '2', texto: `${E.cartao} Negociar parcelamento` },
-          { id: '3', texto: `${E.ok} Já paguei` },
-        ],
-      });
-      return;
-    }
-
-    if (corpo === '2' || corpo.toLowerCase().includes('negoci') || corpo.toLowerCase().includes('parcel')) {
-      await this.prisma.conversaWhatsapp.update({
-        where: { id: conversa.id },
-        data: { estado: 'NEGOCIACAO_PARCELAMENTO', contadorFallback: 0 },
-      });
-
-      const fmt = (v: number) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const valorParcela2x = dadosTemp.valor / 2;
-      const valorParcela3x = dadosTemp.valor / 3;
-
-      await this.sender.enviarMensagem(
-        telefone,
-        `${E.cartao} *Opções de parcelamento:*\n\n` +
-        `Podemos parcelar seu débito de R$ ${fmt(dadosTemp.valor)} sem juros:\n\n` +
-        `• 2x de R$ ${fmt(valorParcela2x)}\n` +
-        `• 3x de R$ ${fmt(valorParcela3x)}\n`,
-      );
-
-      await this.sender.enviarMenuComBotoes(telefone, {
-        titulo: 'Parcelamento',
-        corpo: 'Deseja prosseguir com o parcelamento?',
-        opcoes: [
-          { id: '1', texto: `${E.ok} Sim, quero parcelar` },
-          { id: '2', texto: `${E.dinheiro} Prefiro pagar à vista` },
-        ],
-      });
-      return;
-    }
-
-    if (corpo === '3' || corpo.toLowerCase().includes('paguei') || corpo.toLowerCase().includes('já paguei')) {
-      await this.finalizarConversa(conversa.id);
-      await this.sender.enviarMensagem(
-        telefone,
-        `${E.ok} Ã“timo! Verificaremos o pagamento em até 24h.\n\n` +
-        `Caso precise de algo, entre em contato. Obrigado! ${E.coracao}`,
-      );
-      return;
-    }
-
-    await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (ver detalhes), *2* (negociar parcelamento) ou *3* (já paguei).',
-    );
-  }
 
   private async handleNegociacaoParcelamento(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
