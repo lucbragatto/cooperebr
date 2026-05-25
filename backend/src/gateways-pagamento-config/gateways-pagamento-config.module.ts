@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CredentialsEncryptor } from './credentials-encryptor.service';
+import { EncryptionModule } from './encryption.module';
 import { GatewaysPagamentoConfigService } from './gateways-pagamento-config.service';
 import { GatewaysPagamentoConfigController } from './gateways-pagamento-config.controller';
 import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
@@ -23,13 +23,9 @@ import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.m
  * 6. @@unique([cooperativaId, gateway]) mantido
  */
 @Module({
-  imports: [GatewayPagamentoModule],
+  imports: [EncryptionModule, GatewayPagamentoModule],
   controllers: [GatewaysPagamentoConfigController],
-  providers: [
-    GatewaysPagamentoConfigService,
-    CredentialsEncryptor,
-    PrismaService,
-  ],
-  exports: [GatewaysPagamentoConfigService, CredentialsEncryptor],
+  providers: [GatewaysPagamentoConfigService, PrismaService],
+  exports: [GatewaysPagamentoConfigService, EncryptionModule],
 })
 export class GatewaysPagamentoConfigModule {}

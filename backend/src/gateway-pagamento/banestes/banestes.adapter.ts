@@ -154,8 +154,8 @@ export class BanestesAdapter implements GatewayPagamentoAdapter {
         : {}),
     };
 
-    const token = await this.config.getAccessToken();
-    const client = this.config.getHttpClient();
+    const token = await this.config.getAccessToken(cooperativaId);
+    const client = await this.config.getHttpClient(cooperativaId);
 
     try {
       const response = await client.post('/pix-qrcode-cobranca/v1/cob/', payload, {
@@ -195,7 +195,7 @@ export class BanestesAdapter implements GatewayPagamentoAdapter {
       }
 
       // Erros 4xx/5xx — mapear pra GatewayError tipado
-      throw this.traduzirHttpError(response.status, response.data);
+      throw this.traduzirHttpError(response.status, response.data, cooperativaId);
     } catch (err) {
       if (err instanceof GatewayError) throw err;
       throw this.traduzirNetworkError(err);
@@ -230,8 +230,8 @@ export class BanestesAdapter implements GatewayPagamentoAdapter {
    */
   async testarConexao(cooperativaId: string): Promise<TesteConexaoResult> {
     try {
-      const token = await this.config.getAccessToken();
-      const client = this.config.getHttpClient();
+      const token = await this.config.getAccessToken(cooperativaId);
+      const client = await this.config.getHttpClient(cooperativaId);
 
       // GET leve — lista cobrancas (paginacao 1 item) so pra exercitar mTLS + token.
       // Banestes aceita range de data mesmo curto.
@@ -272,7 +272,7 @@ export class BanestesAdapter implements GatewayPagamentoAdapter {
   /**
    * Mapeia HTTP status + body do Banestes pra GatewayError tipado.
    */
-  private traduzirHttpError(status: number, data: any): GatewayError {
+  private traduzirHttpError(status: number, data: any, cooperativaId: string): GatewayError {
     const msg =
       data?.detail ??
       data?.title ??
@@ -281,8 +281,8 @@ export class BanestesAdapter implements GatewayPagamentoAdapter {
 
     if (status === 401 || status === 403) {
       // Token expirou OU credenciais invalidas. Invalida cache pra forcar
-      // refresh na proxima chamada.
-      this.config.invalidarTokenCache();
+      // refresh na proxima chamada (no tenant especifico).
+      this.config.invalidarTokenCache(cooperativaId);
       return new GatewayError({
         code: 'CREDENCIAIS_INVALIDAS',
         message: `Banestes rejeitou autenticacao (HTTP ${status}): ${msg}`,

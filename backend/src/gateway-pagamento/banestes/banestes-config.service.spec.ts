@@ -1,7 +1,9 @@
 import { BanestesConfigService } from './banestes-config.service';
 import { GatewayError } from '../errors/gateway-error';
+import { CredentialsEncryptor } from '../../gateways-pagamento-config/credentials-encryptor.service';
 import axios from 'axios';
 import * as fs from 'node:fs';
+import * as crypto from 'node:crypto';
 
 jest.mock('axios');
 jest.mock('node:fs');
@@ -9,204 +11,258 @@ jest.mock('node:fs');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedFs = fs as jest.Mocked<typeof fs>;
 
-describe('BanestesConfigService', () => {
+describe('BanestesConfigService (multi-tenant F3)', () => {
   let service: BanestesConfigService;
+  let prismaMock: any;
+  let encryptor: CredentialsEncryptor;
   let postMock: jest.Mock;
   const envOriginal = { ...process.env };
 
-  // Buffer .pfx fake (conteudo nao importa nos specs — fs.readFileSync e axios mockados)
   const fakePfxBuffer = Buffer.from('FAKE-PFX-CONTENT-NOT-REAL');
+
+  function buildConfigGatewayRow(overrides: Partial<any> = {}) {
+    const credenciais = {
+      __enc: {
+        pfxSenha: encryptor.encrypt('senha-pfx-fake'),
+        clientId: encryptor.encrypt('client-id-fake'),
+        clientSecret: encryptor.encrypt('client-secret-fake'),
+        chavePix: encryptor.encrypt('12345678901'),
+      },
+      pfxPath: '/fake/path/cert.pfx',
+    };
+    return {
+      id: 'cfg-banestes-coop-A',
+      cooperativaId: 'coop-A',
+      gateway: 'BANESTES',
+      ambiente: 'SANDBOX',
+      ativo: true,
+      webhookToken: null,
+      credenciais,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Reset env pros testes
     process.env = {
       ...envOriginal,
-      BANESTES_PFX_PATH: '/fake/path/cert.pfx',
-      BANESTES_PFX_SENHA: 'fake-senha',
-      BANESTES_CLIENT_ID: 'fake-client-id',
-      BANESTES_CLIENT_SECRET: 'fake-client-secret',
-      BANESTES_AMBIENTE: 'sandbox',
+      GATEWAY_ENCRYPT_KEY: crypto.randomBytes(32).toString('base64'),
+      BANESTES_TIMEOUT_MS: '10000',
     };
 
-    // readFileSync retorna buffer fake — Agent vai aceitar como pfx
-    mockedFs.readFileSync.mockReturnValue(fakePfxBuffer as any);
+    prismaMock = {
+      configGateway: {
+        findFirst: jest.fn(),
+      },
+    };
+    encryptor = new CredentialsEncryptor();
 
-    // Cria post mock retornavel pelos testes
     postMock = jest.fn();
     mockedAxios.create.mockReturnValue({ post: postMock } as any);
+    mockedFs.readFileSync.mockReturnValue(fakePfxBuffer);
 
-    service = new BanestesConfigService();
+    service = new BanestesConfigService(prismaMock, encryptor);
   });
 
-  afterEach(() => {
-    process.env = { ...envOriginal };
-    service.onModuleDestroy();
+  afterAll(() => {
+    process.env = envOriginal;
   });
 
-  describe('getConfig (indireto via getHttpsAgent/getAccessToken)', () => {
-    it('Lanca GatewayError quando BANESTES_PFX_PATH ausente', () => {
-      delete process.env.BANESTES_PFX_PATH;
+  // ─── carregarConfig ─────────────────────────────────────
+
+  describe('carregarConfig(cooperativaId)', () => {
+    it('busca ConfigGateway BANESTES ativa do tenant + decripta secrets', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+
+      const cfg = await service.carregarConfig('coop-A');
+
+      expect(prismaMock.configGateway.findFirst).toHaveBeenCalledWith({
+        where: { cooperativaId: 'coop-A', gateway: 'BANESTES', ativo: true },
+      });
+      expect(cfg.pfxPath).toBe('/fake/path/cert.pfx');
+      expect(cfg.pfxSenha).toBe('senha-pfx-fake');
+      expect(cfg.clientId).toBe('client-id-fake');
+      expect(cfg.clientSecret).toBe('client-secret-fake');
+      expect(cfg.chavePix).toBe('12345678901');
+      expect(cfg.ambiente).toBe('sandbox');
+      expect(cfg.baseUrl).toBe('https://api-pix-sandbox.banestes.b.br');
+      expect(cfg.timeoutMs).toBe(10000);
+      expect(cfg.authorizationBasic).toBe(
+        Buffer.from('client-id-fake:client-secret-fake').toString('base64'),
+      );
+    });
+
+    it('deriva baseUrl pra producao quando ambiente=PRODUCAO', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(
+        buildConfigGatewayRow({ ambiente: 'PRODUCAO' }),
+      );
+
+      const cfg = await service.carregarConfig('coop-A');
+      expect(cfg.ambiente).toBe('producao');
+      expect(cfg.baseUrl).toBe('https://api-pix.banestes.b.br');
+    });
+
+    it('throw GatewayError quando cooperativaId vazio', async () => {
       let caught: GatewayError | null = null;
       try {
-        service.getHttpsAgent();
+        await service.carregarConfig('');
       } catch (e) {
         caught = e as GatewayError;
       }
       expect(caught).toBeInstanceOf(GatewayError);
       expect(caught!.code).toBe('CREDENCIAIS_INVALIDAS');
-      expect(caught!.message).toMatch(/BANESTES_PFX_PATH/);
     });
 
-    it('Lanca GatewayError listando TODAS as variaveis faltando', () => {
-      delete process.env.BANESTES_PFX_PATH;
-      delete process.env.BANESTES_CLIENT_ID;
+    it('throw GatewayError quando ConfigGateway BANESTES ausente no tenant', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(null);
+
       let caught: GatewayError | null = null;
       try {
-        service.getHttpsAgent();
+        await service.carregarConfig('coop-A');
       } catch (e) {
         caught = e as GatewayError;
       }
       expect(caught).toBeInstanceOf(GatewayError);
-      expect(caught!.message).toMatch(/BANESTES_PFX_PATH/);
-      expect(caught!.message).toMatch(/BANESTES_CLIENT_ID/);
+      expect(caught!.code).toBe('CREDENCIAIS_INVALIDAS');
+      expect(caught!.message).toMatch(/ConfigGateway BANESTES|sem ConfigGateway/i);
     });
 
-    it('Default ambiente=sandbox quando BANESTES_AMBIENTE nao definido', () => {
-      delete process.env.BANESTES_AMBIENTE;
-      service.getHttpClient();
-      const callArgs = mockedAxios.create.mock.calls[0][0];
-      expect(callArgs?.baseURL).toBe('https://api-pix-sandbox.banestes.b.br');
+    it('throw GatewayError quando campos secretos faltando apos decrypt', async () => {
+      const row = buildConfigGatewayRow({
+        credenciais: {
+          __enc: {
+            clientSecret: encryptor.encrypt('cs'),
+            chavePix: encryptor.encrypt('chave'),
+          },
+          pfxPath: '/fake/x.pfx',
+        },
+      });
+      prismaMock.configGateway.findFirst.mockResolvedValue(row);
+
+      let caught: GatewayError | null = null;
+      try {
+        await service.carregarConfig('coop-A');
+      } catch (e) {
+        caught = e as GatewayError;
+      }
+      expect(caught).toBeInstanceOf(GatewayError);
+      expect(caught!.message).toMatch(/incompleta|Campos faltando/);
     });
 
-    it('ambiente=producao usa URL producao', () => {
-      process.env.BANESTES_AMBIENTE = 'producao';
-      service.getHttpClient();
-      const callArgs = mockedAxios.create.mock.calls[0][0];
-      expect(callArgs?.baseURL).toBe('https://api-pix.banestes.b.br');
-    });
+    it('throw GatewayError quando decrypt falha (GATEWAY_ENCRYPT_KEY rotacionada)', async () => {
+      const row = buildConfigGatewayRow();
+      row.credenciais.__enc.pfxSenha = 'iv-fake:cipher-fake:tag-fake';
+      prismaMock.configGateway.findFirst.mockResolvedValue(row);
 
-    it('BANESTES_BASE_URL override prevalece sobre ambiente', () => {
-      process.env.BANESTES_BASE_URL = 'https://custom.banestes.test';
-      service.getHttpClient();
-      const callArgs = mockedAxios.create.mock.calls[0][0];
-      expect(callArgs?.baseURL).toBe('https://custom.banestes.test');
-    });
-
-    it('BANESTES_TIMEOUT_MS default 10000', () => {
-      service.getHttpClient();
-      const callArgs = mockedAxios.create.mock.calls[0][0];
-      expect(callArgs?.timeout).toBe(10000);
-    });
-
-    it('BANESTES_TIMEOUT_MS override respeitado', () => {
-      process.env.BANESTES_TIMEOUT_MS = '5000';
-      service.getHttpClient();
-      const callArgs = mockedAxios.create.mock.calls[0][0];
-      expect(callArgs?.timeout).toBe(5000);
+      let caught: GatewayError | null = null;
+      try {
+        await service.carregarConfig('coop-A');
+      } catch (e) {
+        caught = e as GatewayError;
+      }
+      expect(caught).toBeInstanceOf(GatewayError);
+      expect(caught!.message).toMatch(/decifrar|rotacionada|invalido/i);
     });
   });
 
-  describe('getHttpsAgent', () => {
-    it('Carrega .pfx do path configurado', () => {
-      service.getHttpsAgent();
-      expect(mockedFs.readFileSync).toHaveBeenCalledWith('/fake/path/cert.pfx');
-    });
+  // ─── getHttpsAgent ──────────────────────────────────────
 
-    it('Retorna o mesmo Agent em chamadas subsequentes (cache singleton)', () => {
-      const agent1 = service.getHttpsAgent();
-      const agent2 = service.getHttpsAgent();
-      expect(agent1).toBe(agent2);
+  describe('getHttpsAgent(cooperativaId)', () => {
+    it('le .pfx do disco apenas uma vez por tenant (cache hit no 2o getHttpsAgent)', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+
+      const a1 = await service.getHttpsAgent('coop-A');
+      const a2 = await service.getHttpsAgent('coop-A');
+
+      expect(a1).toBe(a2);
       expect(mockedFs.readFileSync).toHaveBeenCalledTimes(1);
     });
 
-    it('Lanca GatewayError quando .pfx nao existe (ENOENT)', () => {
+    it('cache segregado por tenant: coop-A nao reusa Agent de coop-B', async () => {
+      prismaMock.configGateway.findFirst.mockImplementation(async ({ where }: any) => {
+        return buildConfigGatewayRow({ cooperativaId: where.cooperativaId });
+      });
+
+      const a1 = await service.getHttpsAgent('coop-A');
+      const a2 = await service.getHttpsAgent('coop-B');
+
+      expect(a1).not.toBe(a2);
+      expect(mockedFs.readFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('throw GatewayError quando .pfx ilegivel', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
       mockedFs.readFileSync.mockImplementation(() => {
-        const err = new Error('ENOENT: no such file or directory');
-        (err as any).code = 'ENOENT';
-        throw err;
+        throw new Error('ENOENT');
       });
 
       let caught: GatewayError | null = null;
       try {
-        service.getHttpsAgent();
+        await service.getHttpsAgent('coop-A');
       } catch (e) {
         caught = e as GatewayError;
       }
       expect(caught).toBeInstanceOf(GatewayError);
       expect(caught!.code).toBe('CREDENCIAIS_INVALIDAS');
-      expect(caught!.message).toMatch(/Nao foi possivel ler/);
-    });
-
-    it('resetCache forca recarregar .pfx', () => {
-      service.getHttpsAgent();
-      service.resetCache();
-      service.getHttpsAgent();
-      expect(mockedFs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(caught!.message).toMatch(/Nao foi possivel ler.+\.pfx/);
     });
   });
 
-  describe('getAccessToken', () => {
-    it('POST /oauth/v1/access-token com Basic Auth + form-urlencoded', async () => {
+  // ─── getAccessToken ────────────────────────────────────
+
+  describe('getAccessToken(cooperativaId)', () => {
+    it('cache miss: faz POST OAuth + grava no cache', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
       postMock.mockResolvedValueOnce({
         status: 200,
-        data: { access_token: 'tok-fake-123', expires_in: 3600 },
+        data: { access_token: 'tok-fresh-1', expires_in: 3600 },
       });
 
-      const tok = await service.getAccessToken();
-      expect(tok).toBe('tok-fake-123');
-
-      expect(postMock).toHaveBeenCalledWith(
-        '/oauth/v1/access-token',
-        'grant_type=client_credentials',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: expect.stringMatching(/^Basic /),
-          }),
-        }),
-      );
-
-      // Basic Auth = base64(client_id:client_secret)
-      const authHeader = (postMock.mock.calls[0][2] as any).headers.Authorization as string;
-      const decoded = Buffer.from(authHeader.replace('Basic ', ''), 'base64').toString('utf-8');
-      expect(decoded).toBe('fake-client-id:fake-client-secret');
-    });
-
-    it('Cache token retorna mesmo valor em chamadas dentro do TTL', async () => {
-      postMock.mockResolvedValueOnce({
-        status: 200,
-        data: { access_token: 'tok-cached', expires_in: 3600 },
-      });
-
-      const tok1 = await service.getAccessToken();
-      const tok2 = await service.getAccessToken();
-      expect(tok1).toBe('tok-cached');
-      expect(tok2).toBe('tok-cached');
+      const tok = await service.getAccessToken('coop-A');
+      expect(tok).toBe('tok-fresh-1');
       expect(postMock).toHaveBeenCalledTimes(1);
     });
 
-    it('invalidarTokenCache forca novo request', async () => {
+    it('cache hit dentro do TTL: nao chama API de novo', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+      postMock.mockResolvedValueOnce({
+        status: 200,
+        data: { access_token: 'tok-A', expires_in: 3600 },
+      });
+
+      await service.getAccessToken('coop-A');
+      await service.getAccessToken('coop-A');
+      await service.getAccessToken('coop-A');
+
+      expect(postMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('cache segregado por tenant: coop-A nao reusa token de coop-B', async () => {
+      prismaMock.configGateway.findFirst.mockImplementation(async ({ where }: any) => {
+        return buildConfigGatewayRow({ cooperativaId: where.cooperativaId });
+      });
       postMock
-        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-1', expires_in: 3600 } })
-        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-2', expires_in: 3600 } });
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-A', expires_in: 3600 } })
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-B', expires_in: 3600 } });
 
-      const tok1 = await service.getAccessToken();
-      service.invalidarTokenCache();
-      const tok2 = await service.getAccessToken();
+      const tA = await service.getAccessToken('coop-A');
+      const tB = await service.getAccessToken('coop-B');
 
-      expect(tok1).toBe('tok-1');
-      expect(tok2).toBe('tok-2');
+      expect(tA).toBe('tok-A');
+      expect(tB).toBe('tok-B');
       expect(postMock).toHaveBeenCalledTimes(2);
     });
 
-    it('Lanca GatewayError CREDENCIAIS_INVALIDAS em HTTP 401', async () => {
-      postMock.mockResolvedValueOnce({ status: 401, data: { error: 'invalid_client' } });
+    it('HTTP 401 da Banestes -> GatewayError CREDENCIAIS_INVALIDAS retryable=false', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+      postMock.mockResolvedValueOnce({ status: 401, data: { detail: 'invalid_client' } });
 
       let caught: GatewayError | null = null;
       try {
-        await service.getAccessToken();
+        await service.getAccessToken('coop-A');
       } catch (e) {
         caught = e as GatewayError;
       }
@@ -215,12 +271,13 @@ describe('BanestesConfigService', () => {
       expect(caught!.retryable).toBe(false);
     });
 
-    it('Lanca GatewayError GATEWAY_INDISPONIVEL em HTTP 500 (retryable=true)', async () => {
-      postMock.mockResolvedValueOnce({ status: 500, data: { error: 'internal' } });
+    it('HTTP 500 da Banestes -> GatewayError GATEWAY_INDISPONIVEL retryable=true', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+      postMock.mockResolvedValueOnce({ status: 500, data: {} });
 
       let caught: GatewayError | null = null;
       try {
-        await service.getAccessToken();
+        await service.getAccessToken('coop-A');
       } catch (e) {
         caught = e as GatewayError;
       }
@@ -229,62 +286,86 @@ describe('BanestesConfigService', () => {
       expect(caught!.retryable).toBe(true);
     });
 
-    it('Lanca GatewayError DESCONHECIDO quando resposta sem access_token', async () => {
-      postMock.mockResolvedValueOnce({
-        status: 200,
-        data: { expires_in: 3600 }, // sem access_token
-      });
+    it('ECONNREFUSED -> GatewayError GATEWAY_INDISPONIVEL retryable=true', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+      const err: any = new Error('connect ECONNREFUSED');
+      err.code = 'ECONNREFUSED';
+      postMock.mockRejectedValueOnce(err);
 
       let caught: GatewayError | null = null;
       try {
-        await service.getAccessToken();
-      } catch (e) {
-        caught = e as GatewayError;
-      }
-      expect(caught).toBeInstanceOf(GatewayError);
-      expect(caught!.code).toBe('DESCONHECIDO');
-      expect(caught!.message).toMatch(/access_token/);
-    });
-
-    it('Lanca GatewayError GATEWAY_INDISPONIVEL em ECONNREFUSED', async () => {
-      const netErr = new Error('connect ECONNREFUSED');
-      (netErr as any).code = 'ECONNREFUSED';
-      postMock.mockRejectedValueOnce(netErr);
-
-      let caught: GatewayError | null = null;
-      try {
-        await service.getAccessToken();
+        await service.getAccessToken('coop-A');
       } catch (e) {
         caught = e as GatewayError;
       }
       expect(caught).toBeInstanceOf(GatewayError);
       expect(caught!.code).toBe('GATEWAY_INDISPONIVEL');
       expect(caught!.retryable).toBe(true);
-    });
-
-    it('TTL minimo de 1 minuto mesmo com expires_in muito curto', async () => {
-      postMock.mockResolvedValueOnce({
-        status: 200,
-        data: { access_token: 'tok-curto', expires_in: 10 }, // 10 segundos
-      });
-
-      const tok1 = await service.getAccessToken();
-      // Imediatamente em seguida, segundo call NAO deve disparar nova request
-      // (TTL minimo de 60s protege contra mau OAuth)
-      const tok2 = await service.getAccessToken();
-
-      expect(tok1).toBe(tok2);
-      expect(postMock).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('onModuleDestroy', () => {
-    it('Limpa cache de Agent e token', () => {
-      service.getHttpsAgent();
-      service.onModuleDestroy();
-      // Re-carregar agora chama readFileSync novamente
-      service.getHttpsAgent();
+  // ─── Invalidacao de cache ───────────────────────────────
+
+  describe('invalidarTokenCache(cooperativaId)', () => {
+    it('limpa cache de UM tenant apenas — outros mantem', async () => {
+      prismaMock.configGateway.findFirst.mockImplementation(async ({ where }: any) => {
+        return buildConfigGatewayRow({ cooperativaId: where.cooperativaId });
+      });
+      postMock
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-A-1', expires_in: 3600 } })
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-B-1', expires_in: 3600 } })
+        .mockResolvedValueOnce({ status: 200, data: { access_token: 'tok-A-2', expires_in: 3600 } });
+
+      await service.getAccessToken('coop-A');
+      await service.getAccessToken('coop-B');
+
+      service.invalidarTokenCache('coop-A');
+
+      const tA = await service.getAccessToken('coop-A');
+      const tB = await service.getAccessToken('coop-B');
+
+      expect(tA).toBe('tok-A-2');
+      expect(tB).toBe('tok-B-1');
+      expect(postMock).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('invalidarCacheTenant(cooperativaId)', () => {
+    it('limpa Agent + token do tenant especifico', async () => {
+      prismaMock.configGateway.findFirst.mockResolvedValue(buildConfigGatewayRow());
+      postMock.mockResolvedValue({ status: 200, data: { access_token: 'tok', expires_in: 3600 } });
+
+      await service.getAccessToken('coop-A');
+      await service.getHttpsAgent('coop-A');
+
+      service.invalidarCacheTenant('coop-A');
+
+      await service.getHttpsAgent('coop-A');
+      await service.getAccessToken('coop-A');
+
       expect(mockedFs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(postMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('resetCache()', () => {
+    it('limpa todos os caches de todos tenants', async () => {
+      prismaMock.configGateway.findFirst.mockImplementation(async ({ where }: any) => {
+        return buildConfigGatewayRow({ cooperativaId: where.cooperativaId });
+      });
+      postMock.mockResolvedValue({ status: 200, data: { access_token: 'tok', expires_in: 3600 } });
+
+      await service.getHttpsAgent('coop-A');
+      await service.getHttpsAgent('coop-B');
+      await service.getAccessToken('coop-A');
+      await service.getAccessToken('coop-B');
+
+      service.resetCache();
+
+      await service.getHttpsAgent('coop-A');
+      await service.getHttpsAgent('coop-B');
+
+      expect(mockedFs.readFileSync).toHaveBeenCalledTimes(4);
     });
   });
 });

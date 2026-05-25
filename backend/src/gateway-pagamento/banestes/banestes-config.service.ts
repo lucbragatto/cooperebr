@@ -3,86 +3,154 @@ import { readFileSync } from 'node:fs';
 import { Agent } from 'node:https';
 import axios, { AxiosInstance } from 'axios';
 import { GatewayError } from '../errors/gateway-error';
+import { PrismaService } from '../../prisma.service';
+import { CredentialsEncryptor } from '../../gateways-pagamento-config/credentials-encryptor.service';
 
 /**
- * Sprint 9 / Adapter Banestes — Cenario Minimo (M26, 2026-05-26).
+ * Sub-Sprint Gateways de Pagamento — Fatia F3 (M28, 2026-05-26).
  *
- * Centraliza:
- * - Carregamento do .pfx do disco + montagem do https.Agent reusavel (mTLS)
- * - Cache em memoria do OAuth access_token com TTL respeitando expires_in
- * - Cliente HTTP axios configurado com mTLS + timeout
+ * REFATOR multi-tenant: ConfigGateway BANESTES por tenant em vez de
+ * `process.env.BANESTES_*` globais.
  *
- * Variaveis de ambiente esperadas (.env):
- *   BANESTES_PFX_PATH         caminho absoluto do .pfx
- *   BANESTES_PFX_SENHA        senha do .pfx (rotacionar antes de prod — D-novo-AG)
- *   BANESTES_CLIENT_ID        OAuth client_id
- *   BANESTES_CLIENT_SECRET    OAuth client_secret
- *   BANESTES_AMBIENTE         "sandbox" | "producao" (default: sandbox)
- *   BANESTES_BASE_URL         override opcional (default deriva do ambiente)
- *   BANESTES_TIMEOUT_MS       default 10000 (igual ao legado Java HttpClient)
+ * Centraliza por `cooperativaId`:
+ *  - Carrega ConfigGateway Banestes ativa do tenant + decripta secrets
+ *    (CredentialsEncryptor com GATEWAY_ENCRYPT_KEY)
+ *  - Cache em memoria do https.Agent reusavel por tenant (Map)
+ *  - Cache do OAuth token por tenant (Map) com TTL = expires_in - 5min
+ *  - Cliente HTTP axios configurado com mTLS + timeout
+ *
+ * Valores globais permanecem em env (nao-secretos, nao-especificos por
+ * tenant):
+ *  - BANESTES_TIMEOUT_MS (default 10000)
+ *  - BANESTES_TEMPO_COBRANCA_EXPIRA_SEGUNDOS (default 3600)
+ *
+ * Variaveis BANESTES_* especificas (PFX_PATH, PFX_SENHA, CLIENT_ID,
+ * CLIENT_SECRET, AMBIENTE, BASE_URL) ficaram OBSOLETAS — substituidas
+ * por ConfigGateway gateway=BANESTES com:
+ *   credenciais (Json):
+ *     __enc: { pfxSenha, clientId, clientSecret, chavePix }  ← encrypted
+ *     pfxPath: "/opt/certs/{tenant}-{ambiente}.pfx"          ← texto puro
+ *   ambiente: "SANDBOX" | "PRODUCAO"                          ← coluna propria
  *
  * D-novo-AG (catalogado): .pfx em disco hoje. Migrar pra Azure Key Vault
  * quando Sinergia entrar em producao.
  */
+export interface BanestesConfigCarregada {
+  pfxPath: string;
+  pfxSenha: string;
+  clientId: string;
+  clientSecret: string;
+  chavePix: string;
+  ambiente: 'sandbox' | 'producao';
+  baseUrl: string;
+  timeoutMs: number;
+  authorizationBasic: string;
+}
+
 @Injectable()
 export class BanestesConfigService implements OnModuleDestroy {
   private readonly logger = new Logger(BanestesConfigService.name);
 
-  // Cache singleton — instancia unica de Agent reusavel (evita reconstruir SSL a cada chamada)
-  private httpsAgentCache: Agent | null = null;
-  // Cache do token OAuth — atualizado conforme expires_in
-  private tokenCache: { accessToken: string; expiresAt: number } | null = null;
+  // Cache por tenant — chave: cooperativaId
+  private httpsAgentCache = new Map<string, Agent>();
+  private tokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
+
   // Margem de seguranca pra renovar antes do vencimento (5 min)
   private static readonly TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
-  /**
-   * Carrega configuracao de ambiente em runtime. Lanca erro se incompleta.
-   */
-  private getConfig(): {
-    pfxPath: string;
-    pfxSenha: string;
-    clientId: string;
-    clientSecret: string;
-    ambiente: 'sandbox' | 'producao';
-    baseUrl: string;
-    timeoutMs: number;
-    authorizationBasic: string;
-  } {
-    const pfxPath = process.env.BANESTES_PFX_PATH;
-    const pfxSenha = process.env.BANESTES_PFX_SENHA;
-    const clientId = process.env.BANESTES_CLIENT_ID;
-    const clientSecret = process.env.BANESTES_CLIENT_SECRET;
-    const ambienteRaw = (process.env.BANESTES_AMBIENTE ?? 'sandbox').toLowerCase();
-    const ambiente: 'sandbox' | 'producao' = ambienteRaw === 'producao' ? 'producao' : 'sandbox';
-    const baseUrlDefault =
-      ambiente === 'producao'
-        ? 'https://api-pix.banestes.b.br'
-        : 'https://api-pix-sandbox.banestes.b.br';
-    const baseUrl = process.env.BANESTES_BASE_URL ?? baseUrlDefault;
-    const timeoutMs = Number(process.env.BANESTES_TIMEOUT_MS ?? '10000');
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly encryptor: CredentialsEncryptor,
+  ) {}
 
-    const faltando: string[] = [];
-    if (!pfxPath) faltando.push('BANESTES_PFX_PATH');
-    if (!pfxSenha) faltando.push('BANESTES_PFX_SENHA');
-    if (!clientId) faltando.push('BANESTES_CLIENT_ID');
-    if (!clientSecret) faltando.push('BANESTES_CLIENT_SECRET');
-    if (faltando.length > 0) {
+  /**
+   * Busca ConfigGateway Banestes ativa do tenant + decripta secrets +
+   * monta config carregada pronta pra consumo. Throws GatewayError
+   * explicativo se ausente, inativa ou com credenciais incompletas.
+   */
+  async carregarConfig(cooperativaId: string): Promise<BanestesConfigCarregada> {
+    if (!cooperativaId) {
       throw new GatewayError({
         code: 'CREDENCIAIS_INVALIDAS',
-        message:
-          `Configuracao Banestes incompleta. Variaveis de ambiente ausentes: ${faltando.join(', ')}. ` +
-          `Configure no .env e reinicie o backend.`,
+        message: 'cooperativaId obrigatorio pra carregar config Banestes.',
         retryable: false,
       });
     }
 
+    const row = await this.prisma.configGateway.findFirst({
+      where: { cooperativaId, gateway: 'BANESTES', ativo: true },
+    });
+
+    if (!row) {
+      throw new GatewayError({
+        code: 'CREDENCIAIS_INVALIDAS',
+        message:
+          `Cooperativa ${cooperativaId} sem ConfigGateway BANESTES ativa. ` +
+          `Configure em /dashboard/configuracoes/gateways-pagamento ` +
+          `(POST /gateways-pagamento) antes de emitir cobranca PIX Banestes.`,
+        retryable: false,
+      });
+    }
+
+    const ambienteRaw = (row.ambiente ?? 'SANDBOX').toUpperCase();
+    const ambiente: 'sandbox' | 'producao' = ambienteRaw === 'PRODUCAO' ? 'producao' : 'sandbox';
+
+    // Decripta secrets + extrai metadados em texto puro do shape unificado
+    // F1: { __enc: {...secrets}, pfxPath: "..." }
+    let decifradas: Record<string, string>;
+    try {
+      decifradas = this.decifrarCredenciais(row.credenciais);
+    } catch (err) {
+      throw new GatewayError({
+        code: 'CREDENCIAIS_INVALIDAS',
+        message:
+          `Falha ao decifrar credenciais Banestes da cooperativa ${cooperativaId}. ` +
+          `Possivel causa: GATEWAY_ENCRYPT_KEY foi rotacionada sem migrar dados. ` +
+          `Detalhe: ${(err as Error).message}`,
+        retryable: false,
+        originalError: err,
+      });
+    }
+
+    const faltando: string[] = [];
+    const pfxPath = decifradas['pfxPath'];
+    const pfxSenha = decifradas['pfxSenha'];
+    const clientId = decifradas['clientId'];
+    const clientSecret = decifradas['clientSecret'];
+    const chavePix = decifradas['chavePix'];
+
+    if (!pfxPath) faltando.push('pfxPath');
+    if (!pfxSenha) faltando.push('pfxSenha');
+    if (!clientId) faltando.push('clientId');
+    if (!clientSecret) faltando.push('clientSecret');
+    if (!chavePix) faltando.push('chavePix');
+
+    if (faltando.length > 0) {
+      throw new GatewayError({
+        code: 'CREDENCIAIS_INVALIDAS',
+        message:
+          `ConfigGateway BANESTES da cooperativa ${cooperativaId} esta incompleta. ` +
+          `Campos faltando: ${faltando.join(', ')}. ` +
+          `Edite em PATCH /gateways-pagamento/${row.id} antes de usar.`,
+        retryable: false,
+      });
+    }
+
+    const baseUrlDefault =
+      ambiente === 'producao'
+        ? 'https://api-pix.banestes.b.br'
+        : 'https://api-pix-sandbox.banestes.b.br';
+    const baseUrl = (decifradas['baseUrl'] && decifradas['baseUrl'].trim() !== '') ? decifradas['baseUrl'] : baseUrlDefault;
+
+    const timeoutMs = Number(process.env.BANESTES_TIMEOUT_MS ?? '10000');
     const authorizationBasic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
     return {
-      pfxPath: pfxPath!,
-      pfxSenha: pfxSenha!,
-      clientId: clientId!,
-      clientSecret: clientSecret!,
+      pfxPath,
+      pfxSenha,
+      clientId,
+      clientSecret,
+      chavePix,
       ambiente,
       baseUrl,
       timeoutMs,
@@ -91,15 +159,37 @@ export class BanestesConfigService implements OnModuleDestroy {
   }
 
   /**
-   * Retorna https.Agent mTLS reusavel. Carrega o .pfx do disco apenas
-   * uma vez por instancia (cache singleton).
+   * Decripta o shape { __enc: { campo: "iv:cipher:tag" }, ...metadados }
+   * gravado por GatewaysPagamentoConfigService.encriptarSecrets.
+   */
+  private decifrarCredenciais(rowCredenciais: unknown): Record<string, string> {
+    const shape = (rowCredenciais as Record<string, unknown>) ?? {};
+    const enc = (shape.__enc as Record<string, string> | undefined) ?? {};
+    const resultado: Record<string, string> = {};
+
+    for (const [campo, valor] of Object.entries(shape)) {
+      if (campo === '__enc') continue;
+      if (typeof valor === 'string') resultado[campo] = valor;
+    }
+
+    for (const [campo, cipher] of Object.entries(enc)) {
+      resultado[campo] = this.encryptor.decrypt(cipher);
+    }
+
+    return resultado;
+  }
+
+  /**
+   * Retorna https.Agent mTLS reusavel pro tenant. Carrega o .pfx do disco
+   * apenas uma vez por (cooperativaId + path) — cache singleton por tenant.
    *
    * Throws GatewayError se .pfx nao for legivel ou senha incorreta.
    */
-  getHttpsAgent(): Agent {
-    if (this.httpsAgentCache) return this.httpsAgentCache;
+  async getHttpsAgent(cooperativaId: string): Promise<Agent> {
+    const cached = this.httpsAgentCache.get(cooperativaId);
+    if (cached) return cached;
 
-    const config = this.getConfig();
+    const config = await this.carregarConfig(cooperativaId);
 
     let pfxBuffer: Buffer;
     try {
@@ -108,15 +198,17 @@ export class BanestesConfigService implements OnModuleDestroy {
       throw new GatewayError({
         code: 'CREDENCIAIS_INVALIDAS',
         message:
-          `Nao foi possivel ler o certificado Banestes em ${config.pfxPath}. ` +
-          `Confirme que BANESTES_PFX_PATH aponta pra um arquivo .pfx legivel.`,
+          `Nao foi possivel ler o certificado Banestes da cooperativa ${cooperativaId} em ` +
+          `${config.pfxPath}. Confirme que o caminho aponta pra um arquivo .pfx ` +
+          `legivel pelo processo (permissao 0600 + dono correto).`,
         retryable: false,
         originalError: err,
       });
     }
 
+    let agent: Agent;
     try {
-      this.httpsAgentCache = new Agent({
+      agent = new Agent({
         pfx: pfxBuffer,
         passphrase: config.pfxSenha,
         minVersion: 'TLSv1.2',
@@ -126,50 +218,48 @@ export class BanestesConfigService implements OnModuleDestroy {
       throw new GatewayError({
         code: 'CREDENCIAIS_INVALIDAS',
         message:
-          `Falha ao carregar certificado Banestes (.pfx). Confirme senha (BANESTES_PFX_SENHA) ` +
-          `e validade do certificado.`,
+          `Falha ao carregar certificado Banestes (.pfx) da cooperativa ${cooperativaId}. ` +
+          `Confirme senha (credenciais.pfxSenha) + validade do certificado.`,
         retryable: false,
         originalError: err,
       });
     }
 
-    this.logger.log(`Banestes httpsAgent inicializado (ambiente=${config.ambiente})`);
-    return this.httpsAgentCache;
+    this.httpsAgentCache.set(cooperativaId, agent);
+    this.logger.log(
+      `Banestes httpsAgent inicializado (cooperativa=${cooperativaId}, ambiente=${config.ambiente})`,
+    );
+    return agent;
   }
 
   /**
-   * Cria axios instance com mTLS pre-configurado. Cada chamada e independente
-   * mas reusa o mesmo Agent (keep-alive).
+   * Cria axios instance com mTLS pre-configurado pro tenant. Cada chamada
+   * e independente mas reusa o mesmo Agent (keep-alive).
    */
-  getHttpClient(): AxiosInstance {
-    const config = this.getConfig();
+  async getHttpClient(cooperativaId: string): Promise<AxiosInstance> {
+    const config = await this.carregarConfig(cooperativaId);
+    const agent = await this.getHttpsAgent(cooperativaId);
     return axios.create({
       baseURL: config.baseUrl,
       timeout: config.timeoutMs,
-      httpsAgent: this.getHttpsAgent(),
+      httpsAgent: agent,
       headers: { 'User-Agent': 'cooperebr-sisgd/banestes-adapter' },
-      // Importante: nao lancar exception em status 4xx — adapter mapeia manualmente
-      validateStatus: () => true,
+      validateStatus: () => true, // nao lancar exception em 4xx — adapter mapeia manualmente
     });
   }
 
   /**
-   * Retorna access_token OAuth valido. Usa cache em memoria — chama API
-   * Banestes apenas se token expirou (ou esta perto de expirar).
-   *
-   * Banestes OAuth2 Client Credentials:
-   *   POST /oauth/v1/access-token
-   *   Body: grant_type=client_credentials (form-urlencoded)
-   *   Headers: Authorization: Basic <base64(client_id:secret)>
-   *   Response: { access_token, expires_in, token_type, scope }
+   * Retorna access_token OAuth valido pro tenant. Usa cache em memoria —
+   * chama API Banestes apenas se token expirou (ou esta perto de expirar).
    */
-  async getAccessToken(): Promise<string> {
-    if (this.tokenCache && this.tokenCache.expiresAt > Date.now()) {
-      return this.tokenCache.accessToken;
+  async getAccessToken(cooperativaId: string): Promise<string> {
+    const cached = this.tokenCache.get(cooperativaId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.accessToken;
     }
 
-    const config = this.getConfig();
-    const client = this.getHttpClient();
+    const config = await this.carregarConfig(cooperativaId);
+    const client = await this.getHttpClient(cooperativaId);
 
     try {
       const response = await client.post(
@@ -188,7 +278,7 @@ export class BanestesConfigService implements OnModuleDestroy {
           code: response.status === 401 ? 'CREDENCIAIS_INVALIDAS' : 'GATEWAY_INDISPONIVEL',
           message:
             `Falha ao obter token OAuth Banestes (HTTP ${response.status}). ` +
-            `Verifique BANESTES_CLIENT_ID + BANESTES_CLIENT_SECRET.`,
+            `Cooperativa ${cooperativaId}. Verifique clientId + clientSecret no ConfigGateway.`,
           retryable: response.status >= 500,
         });
       }
@@ -199,29 +289,32 @@ export class BanestesConfigService implements OnModuleDestroy {
       if (!accessToken) {
         throw new GatewayError({
           code: 'DESCONHECIDO',
-          message: 'Resposta OAuth Banestes sem access_token.',
+          message: `Resposta OAuth Banestes sem access_token (cooperativa ${cooperativaId}).`,
           retryable: true,
         });
       }
 
       const ttlMs = expiresIn * 1000 - BanestesConfigService.TOKEN_REFRESH_MARGIN_MS;
-      this.tokenCache = {
+      this.tokenCache.set(cooperativaId, {
         accessToken,
-        expiresAt: Date.now() + Math.max(ttlMs, 60_000), // pelo menos 1 min
-      };
+        expiresAt: Date.now() + Math.max(ttlMs, 60_000),
+      });
 
       this.logger.log(
-        `Banestes OAuth token renovado (expira em ~${Math.round(ttlMs / 1000)}s, ambiente=${config.ambiente})`,
+        `Banestes OAuth token renovado (cooperativa=${cooperativaId}, expira em ~${Math.round(
+          ttlMs / 1000,
+        )}s, ambiente=${config.ambiente})`,
       );
 
       return accessToken;
     } catch (err) {
       if (err instanceof GatewayError) throw err;
 
-      if ((err as any)?.code === 'ECONNREFUSED' || (err as any)?.code === 'ENOTFOUND' || (err as any)?.code === 'ETIMEDOUT') {
+      const code = (err as { code?: string })?.code;
+      if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ETIMEDOUT') {
         throw new GatewayError({
           code: 'GATEWAY_INDISPONIVEL',
-          message: `Banestes indisponivel: ${(err as Error).message}`,
+          message: `Banestes indisponivel (cooperativa ${cooperativaId}): ${(err as Error).message}`,
           retryable: true,
           originalError: err,
         });
@@ -229,7 +322,7 @@ export class BanestesConfigService implements OnModuleDestroy {
 
       throw new GatewayError({
         code: 'DESCONHECIDO',
-        message: `Erro ao obter token OAuth Banestes: ${(err as Error).message}`,
+        message: `Erro ao obter token OAuth Banestes (cooperativa ${cooperativaId}): ${(err as Error).message}`,
         retryable: false,
         originalError: err,
       });
@@ -237,26 +330,39 @@ export class BanestesConfigService implements OnModuleDestroy {
   }
 
   /**
-   * Invalida o cache de token (forca refresh na proxima chamada). Util
-   * pra testes ou quando recebemos 401 Bearer expirado.
+   * Invalida o cache de token do tenant (forca refresh na proxima chamada).
+   * Util pra testes ou quando recebemos 401 Bearer expirado.
    */
-  invalidarTokenCache(): void {
-    this.tokenCache = null;
+  invalidarTokenCache(cooperativaId: string): void {
+    this.tokenCache.delete(cooperativaId);
   }
 
   /**
-   * Limpa Agent + token. Util pra testes que precisam recarregar config.
+   * Limpa Agent + token de um tenant especifico. Util quando admin edita
+   * credenciais via PATCH /gateways-pagamento/:id e precisamos invalidar
+   * cache pra refletir mudancas imediatamente.
+   */
+  invalidarCacheTenant(cooperativaId: string): void {
+    const agent = this.httpsAgentCache.get(cooperativaId);
+    if (agent) {
+      agent.destroy();
+      this.httpsAgentCache.delete(cooperativaId);
+    }
+    this.tokenCache.delete(cooperativaId);
+  }
+
+  /**
+   * Limpa todos os caches. Util pra testes que precisam recarregar config.
    */
   resetCache(): void {
-    this.httpsAgentCache = null;
-    this.tokenCache = null;
+    for (const agent of this.httpsAgentCache.values()) {
+      agent.destroy();
+    }
+    this.httpsAgentCache.clear();
+    this.tokenCache.clear();
   }
 
   onModuleDestroy(): void {
-    if (this.httpsAgentCache) {
-      this.httpsAgentCache.destroy();
-      this.httpsAgentCache = null;
-    }
-    this.tokenCache = null;
+    this.resetCache();
   }
 }
