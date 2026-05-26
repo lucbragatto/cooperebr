@@ -48,7 +48,7 @@ export default function ProprietarioLayout({ children }: { children: React.React
           <h1 className="text-xl font-bold text-amber-700">SISGD</h1>
           <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
             <Sun className="w-3 h-3" />
-            Proprietário de Usina
+            {usuario?.nome ?? 'Proprietário'}
           </p>
         </div>
 
