@@ -1,7 +1,13 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-26 noite — M30 Sub-Sprint F MVP+ Caminho B Sessão 1 (Portal Proprietário E-Solares)**. 9 commits incrementais (`fc2f048` Etapa A schema + seed cooperebr1 idempotente → `730c3c4` Etapas B+C schema migration aditiva + helper calcularRepasse híbrido + 15 specs → `1dab2c8` Etapa I fix classeGdAnotada GD_II→GD_I → `85d1554` Etapa D módulo proprietário dedicado + 5 endpoints + 11 specs + LGPD Opção A → `9346e11` Etapa E Sungrow cron reativado + encryption sungrowSenha + placeholder cooperebr1 → `6668166` Etapa F RelatorioMensalService cron mensal + endpoint PDF sob demanda Puppeteer → `f3de5cd` Etapa G frontend portal completo 6 páginas + Recharts → `28ab789` Etapa H UI admin tela proprietário + DTO/service expandidos → commit fechamento). **Backend 100% funcional + frontend portal + frontend UI admin entregues.** TarifaConcessionaria JÁ EXISTIA — reuso TUSD+TE. Helper calcularRepasse SUBSTITUI R$ 0,50/kWh hardcoded. Multi-tenant via `proprietarioCooperadoId OR proprietarioEmail`. LGPD: cooperados como `Cooperado #001, #002`. **Suite completa: 886/897 passing** (mesmos 11 pré-existentes em cooperados/usinas; +26 specs novos verdes vs M29). Backup pg_dump pré-Etapa B em `~/backups/sisgd-pre-subsprintf-etapaB-20260526-103214.sql.gz`. **Próximo passo (Sessão 2 F.3+F.4):** onboarding magic link `ConviteProprietario` (schema criado Etapa A, falta service+UI ~2-3h) + smoke E2E real Luciano simulando E-Solares (~1-2h). **Pré-requisito Luciano:** preencher cooperebr1 via UI admin (`proprietarioEmail` GATILHO + `formaPagamentoDono` + valores). Detalhe: `docs/sessoes/2026-05-26-m30-sub-sprint-f-portal-proprietario-mvp-plus.md`.
+> Última atualização: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-05-26 noite (Code — M30 Sub-Sprint F MVP+ Sessão 1 Portal Proprietário)
+
+9 commits incrementais (fc2f048..084db48). Backend 100% funcional + frontend portal 6 páginas (Dashboard + Lista + Drill-down Recharts + Repasses + Despesas + Contratos) + frontend UI admin (statusOperacional + valorKwhPadrao + matriz responsabilidade). Helper calcularRepasse SUBSTITUI R$ 0,50/kWh hardcoded. Multi-tenant + LGPD anonimização. Suite 886/897. Detalhe: `docs/sessoes/2026-05-26-m30-sub-sprint-f-portal-proprietario-mvp-plus.md`.
 
 ---
 
@@ -1063,163 +1069,124 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
-   Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short` (diretriz inegociável 18/05).
-   Esperado: working tree limpo (só untracked carry-overs catalogados).
-   Último commit é o de fechamento M30 Sub-Sprint F MVP+ Sessão 1.
-   Penúltimo é `28ab789` (Etapa H UI admin).
-   Antepenúltimo é `f3de5cd` (Etapa G frontend portal).
-   Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR
-   + Decisão 23.
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh fechamento M31 Sub-Sprint F
+   Sessao 2. Penultimo `3ba6655` (Etapa F frontend publico aceitar-convite).
+   Antepenultimo `2eb822b` (Etapa E frontend admin onboarding).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online.
 
 PASSO 1 — Onde paramos:
 
-Sessão 26-27/05 entregou M30 — Sub-Sprint F MVP+ Caminho B Sessão 1
-(Portal Proprietário E-Solares) em 9 commits incrementais (Etapas A→I).
+Sessoes 26/05 entregaram **Sub-Sprint F MVP+ Caminho B COMPLETO** em 2
+marcos (M30 + M31):
 
-ENTREGAS M30 (SESSÃO 1 DE 2):
+M30 (Sessao 1, 9 commits fc2f048..084db48):
+- Schema migration: PROPRIETARIO enum + ConviteProprietario + StatusOperacional
+  + ResponsavelPagamento + CategoriaContaAPagar 4->16 + Usina (+3 colunas)
+  + ContaAPagar (+1 coluna)
+- Helper calcularRepasse FIXO/PERCENTUAL/HIBRIDO substituindo R$ 0,50/kWh
+- ProprietarioModule + 5 endpoints + 11 specs
+- Sungrow cron reativado + encryption sungrowSenha via CredentialsEncryptor
+- RelatorioMensalService cron mensal + endpoint PDF sob demanda
+- Frontend portal 6 paginas (Dashboard 5 KPIs + Lista + Drill-down Recharts
+  + Repasses + Despesas + Contratos)
+- Frontend UI admin tela /dashboard/usinas/[id]/proprietario
+- Fix classeGdAnotada cooperebr1 GD_II->GD_I
 
-Etapa A — Schema + seed cooperebr1 (fc2f048):
-- ALTER TYPE PerfilUsuario ADD VALUE 'PROPRIETARIO'
-- CREATE TABLE convites_proprietario (magic link pra F.3 Sessão 2)
-- Script seed-cooperebr1-usina.ts idempotente (usina ja existia
-  id=usina-linhares, reportou status sem duplicar)
+M31 (Sessao 2, 5 commits 34719bd..3ba6655):
+- ConviteProprietarioService completo (7 metodos) + 31 specs
+- 5 endpoints admin (+1 cadastro-manual): POST /convite, GET /convites/:usinaId,
+  POST /convite/:id/reenviar, DELETE /convite/:id, POST /cadastro-manual
+- 2 endpoints publicos: GET + POST /aceitar-convite/:token
+- ConviteEmailService template HTML inline amber theme reusa EmailService
+- Frontend admin: Card "Acesso do Proprietario" com 2 dialogs Shadcn
+  (CadastroManualDialog senha auto-gerada + ConvidarEmailDialog magic link)
+- Frontend publico /proprietario/aceitar-convite/[token] com 4 estados
+  (loading / token invalido / form senha + indicador forca / sucesso)
 
-Etapas B+C — Schema + helper calcularRepasse (730c3c4):
-- 2 enums novos: StatusOperacional (5 valores) + ResponsavelPagamento
-- CategoriaContaAPagar 4 -> 16 valores (CUSD, MANUTENCAO_*, ROCADA,
-  VIGILANCIA, SEGURO, IPTU_ITR, etc)
-- Usina: +3 colunas (valorKwhPadrao, responsabilidadeDespesas Json,
-  statusOperacional)
-- ContaAPagar: +1 coluna (responsavelPagamento)
-- Helper calcularRepasse(usina, geracao, tarifaResolver):
-  FIXO retorna valorAluguelFixo; PERCENTUAL kwh*tarifa*pct/100
-  (tarifaKwh = valorKwhPadrao OU TarifaConcessionaria.tusdNova+teNova);
-  HIBRIDO valorAluguelFixo + componente PERCENTUAL
-- 15 specs verdes (FIXO + PERCENTUAL + HIBRIDO + erros + arredondamento)
-- SUBSTITUI R$ 0,50/kWh hardcoded em UsinasService.proprietarioDashboard
+ENTREGA FINAL SUB-SPRINT F MVP+:
+- Suite completa: 917/928 (mesmos 11 pre-existentes; +57 specs novos vs M29)
+- nest build + tsc limpos
+- Multi-tenant em 100% queries
+- LGPD Opcao A: cooperados anonimizados #001/#002 + token nunca retornado integral
+- Encryption sungrowSenha sem nova chave master (reusa GATEWAY_ENCRYPT_KEY)
+- Politica regra-secrets-nao-memorizar.md respeitada (senhaTemp UMA VEZ na UI)
 
-Etapa I — Fix classeGd cooperebr1 (1dab2c8):
-- UPDATE Usina cooperebr1 SET classeGdAnotada='GD_I' (era GD_II errado)
-- Decisão Luciano 25/05 confirmou pre-2023 = direito adquirido = 0% Fio B
+PROXIMO PASSO — F.4 SMOKE PRODUCAO (~1-2h):
 
-Etapa D — Backend endpoints proprietário (85d1554):
-- backend/src/proprietario/ modulo dedicado
-- ProprietarioService com 5 metodos publicos
-- 5 endpoints REST @Controller('proprietario'):
-    GET /dashboard, /usinas/:id, /repasses, /contratos, /despesas
-- Multi-tenant guard: WHERE proprietarioCooperadoId=user.cooperadoId
-  OR proprietarioEmail=user.email
-- LGPD Opcao A: Cooperado #001, #002, ... (specs validam IDs reais nao
-  aparecem no JSON)
-- 11 specs verdes
+BLOQUEADO POR LUCIANO OPERACIONAL — pre-requisitos:
 
-Etapa E — Sungrow cron + encryption sungrowSenha (9346e11):
-- @Cron('*/30 * * * *') REATIVADO (Sprint 6 Ticket 11 desativou)
-- Guard 0 configs habilitadas -> return cedo
-- Encryption sungrowSenha via CredentialsEncryptor (GATEWAY_ENCRYPT_KEY)
-- createConfig/updateConfig encriptam; getConfig retorna '(senha definida)'
-- verificarUsina decifrar com fallback gracioso pra texto puro legado
-- Script seed-monitoramento-cooperebr1.ts placeholder (habilitado=false,
-  credenciais null — Luciano preenche depois)
+1. Preencher cooperebr1 via UI admin (gatilho proprietarioEmail e o
+   ANCHOR pro magic link funcionar):
+   - /dashboard/usinas/usina-linhares (form principal):
+     * proprietarioEmail (E-Solares — OBRIGATORIO)
+     * formaPagamentoDono (FIXO / PERCENTUAL / HIBRIDO)
+     * valorAluguelFixo E/OU percentualGeracaoDono
+     * dataInicioProducao, capacidadeKwh, cnpjUsina
+   - /dashboard/usinas/usina-linhares/proprietario (tela nova M30):
+     * statusOperacional (default OPERANDO ja)
+     * valorKwhPadrao OU cadastrar TarifaConcessionaria EDP_ES
+     * matriz responsabilidadeDespesas (15 categorias × 4 opcoes)
 
-Etapa F — Cron PDF + endpoint sob demanda (6668166):
-- RelatorioMensalService dedicado
-- gerarSobDemanda(user, usinaId, mesAno) com multi-tenant guard
-- @Cron('0 7 5 * *') dia 5 7am — gera PDF mes anterior (envio email
-  pendente F.4 Sessao 2 — Luciano confirmar politica anti-spam)
-- Template HTML inline com 4 KPIs, dados usina, calculo repasse, despesas
-- PdfGeneratorService (motor-proposta) reusado como provider direto
-- Endpoint GET /proprietario/relatorios/:usinaId/:mesAno (stream PDF inline)
+2. Cadastrar Usuario E-Solares — DUAS OPCOES:
+   - (a) Cadastro manual via UI admin → bloco "Acesso do Proprietario"
+         → Dialog CadastroManual → admin define senhaTemp e copia
+         credenciais pra mandar pra E-Solares por chat
+   - (b) Magic link via UI admin → bloco "Acesso do Proprietario"
+         → Dialog ConvidarEmail → sistema envia link, E-Solares clica
+         e define propria senha
 
-Etapa G — Frontend Portal completo (f3de5cd):
-- /proprietario Dashboard: 5 KPIs grandes + cards usinas clicaveis com
-  borda colorida (verde/amarelo/vermelho)
-- NOVA /proprietario/usinas/[id]: Recharts BarChart 12 meses + ReferenceLine
-  capacidade + tabela repasses + cooperados anonimizados + matriz
-  responsabilidade + contratos + alertas + botoes Baixar PDF
-- /proprietario/usinas lista refator
-- /proprietario/repasses: totalYTD destaque + tabela cronologica
-- /proprietario/contratos refator (anonimizado)
-- NOVA /proprietario/despesas: so PROPRIETARIO/COMPARTILHADO + 3 KPIs
-- Layout sidebar +Despesas
-- Help inline azul TODAS telas + loading + empty + mobile-responsive
+3. Logar como E-Solares (sessao Code roda simulacao):
+   - Navegar /proprietario (Dashboard 5 KPIs)
+   - Drill-down /proprietario/usinas/[id] (Recharts + repasses + despesas)
+   - Baixar relatorio PDF mes anterior
+   - Validar dados consistentes (proprietarioEmail filtrado, cooperados
+     anonimizados, calculo repasse respeitando formaPagamentoDono)
 
-Etapa H — UI admin (28ab789):
-- NOVA /dashboard/usinas/[id]/proprietario: 3 blocos (statusOperacional
-  select 5 valores / valorKwhPadrao numerico / matriz 15 categorias x
-  4 opcoes em grid)
-- UpdateUsinaDto +3 campos novos + classeGdAnotada
-- UsinasService.update aceita os 4 campos
+4. Conectar cron PDF a EmailService (D-novo-AO pendente):
+   - Luciano confirmar politica anti-spam (envia automatico todo dia 5
+     OU apenas sob demanda OU ambos)
+   - Code conecta RelatorioMensalService.cron com EmailService.enviarEmail
 
-SUITE COMPLETA: 886/897 (mesmos 11 pre-existentes cooperados/usinas;
-+26 specs novos verdes vs M29). nest build + tsc limpos.
-
-BACKUP pg_dump pre-Etapa B em
-~/backups/sisgd-pre-subsprintf-etapaB-20260526-103214.sql.gz (221KB).
-
-CONSTRAINTS RESPEITADAS:
-- TDD: specs primeiro pros endpoints novos
-- Multi-tenant: cooperativaId + proprietarioCooperadoId|Email em 100%
-- LGPD Opcao A: cooperados anonimizados em todo display proprietario
-- Encryption sungrowSenha via CredentialsEncryptor (sem nova chave)
-- Help inline em todas telas (regra 19/05)
-- R$ 0,50/kWh hardcoded REMOVIDO
-- Sem commit de secrets / valores reais
-
-PROXIMO PASSO — SESSAO 2 (F.3 + F.4):
-
-F.3 — Onboarding magic link (~2-3h):
-- Service ConviteProprietario + 2 endpoints (admin envia / publico aceita)
-- Email template + tela /proprietario/aceitar-convite/[token]
-- Tela admin /dashboard/usinas/[id]/convidar-proprietario
-- Specs
-
-F.4 — Smoke producao (~1-2h):
-- Pre-requisito Luciano: preencher cooperebr1 via UI admin (proprietarioEmail
-  GATILHO PRINCIPAL + formaPagamentoDono + valor)
-- Logar como E-Solares, navegar Dashboard, drill-down, baixar PDF
-- Conectar cron PDF a EmailService (politica anti-spam decisao)
-
-FRENTES OPERACIONAIS LUCIANO (acumulado):
-⏳ Preencher cooperebr1: proprietarioEmail (E-Solares), proprietarioCpfCnpj,
-  formaPagamentoDono, valorAluguelFixo OU percentualGeracaoDono,
-  dataInicioProducao, capacidadeKwh, cnpjUsina via UI admin
-  /dashboard/usinas/usina-linhares/proprietario (tela nova M30)
-⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
-⏳ Definir matriz responsabilidadeDespesas via UI admin (15 categorias)
-⏳ Definir valorKwhPadrao OU cadastrar TarifaConcessionaria EDP_ES
-✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29 — 2 papeis offline cada)
-⏳ Instalar gerenciador de senhas (D-novo-AK)
-⏳ Avisar time legado (5 .pfx vazados + senha Azure SQL + webhook sem validacao)
-⏳ Obter script.sql do hb06a (Sub-Sprint B)
-⏳ Obter .pfx sandbox Banestes
-⏳ Decisoes regulatorias Sub-Sprint A
+FRENTES PARALELAS DISPONIVEIS enquanto F.4 bloqueado:
+- Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
+- Sungrow integracao real (cron ja reativado, falta credenciais Sungrow
+  reais da E-Solares)
+- D-novo-AK instalar gerenciador senhas (Luciano)
+- Decisoes regulatorias Sub-Sprint A (advogado)
+- Cenario Completo Banestes (~6-8h Code) depois canario PIX real
 
 CARRY-OVERS (nao-bloqueantes):
-- F.3 onboarding magic link (~2-3h) — schema pronto Etapa A
-- F.4 smoke producao (~1-2h) — depende pre-requisito Luciano
-- D-novo-AL: integracao iSolar Cloud end-to-end (SungrowService pronto)
+- D-novo-AL: integracao iSolar Cloud E2E real
 - D-novo-AM: Empresa entidade separada (YAGNI ate 2a usina E-Solares)
-- D-novo-AN: RepasseProprietario tabela pra pagamento REAL (nao so previsto)
+- D-novo-AN: RepasseProprietario tabela pra pagamento REAL (vs previsto)
 - D-novo-AO: cron PDF conectar EmailService
 
-CONTEXTO HISTORICO IMEDIATO ANTERIOR (M29, 26/05) — Sub-Sprint Gateways
-de Pagamento F2 EXPANDIDA: schema migration aditiva + dual-write Asaas
-+ rotacao ASAAS_ENCRYPT_KEY (D-novo-AJ.1 RESOLVIDO). 2 papeis offline.
-860/871 specs.
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Preencher cooperebr1 (proprietarioEmail GATILHO pra F.4)
+⏳ Cadastrar Usuario E-Solares (manual OU magic link)
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Decidir politica anti-spam cron PDF (D-novo-AO)
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29)
+⏳ Instalar gerenciador de senhas (D-novo-AK)
+⏳ Avisar time legado / script.sql / .pfx sandbox Banestes / Sub-Sprint A
 
-CONTEXTO HISTORICO ANTERIOR (M28, 26/05) — F3 BanestesConfigService
-multi-tenant. 48/48 specs Banestes.
+CONTEXTO HISTORICO IMEDIATO ANTERIOR (M30, 26/05) — Sub-Sprint F MVP+
+Sessao 1: backend + frontend portal + frontend UI admin completos.
+Helper calcularRepasse substituiu R$ 0,50/kWh hardcoded. Multi-tenant +
+LGPD anonimizacao. 886/897 specs. Detalhe: docs/sessoes/2026-05-26-m30-
+sub-sprint-f-portal-proprietario-mvp-plus.md.
 
-CONTEXTO HISTORICO ANTERIOR (M27, 26/05) — F1 Backend Gateways. 83 specs.
-
-CONTEXTO HISTORICO ANTERIOR (M26, 26/05) — Adapter Banestes Cenario
-Minimo PIX-only. 46 specs.
+CONTEXTO HISTORICO ANTERIOR (M29, 26/05) — Sub-Sprint Gateways de Pagamento
+F2 EXPANDIDA: schema migration aditiva + dual-write Asaas + rotacao
+ASAAS_ENCRYPT_KEY (D-novo-AJ.1 RESOLVIDO).
 ```
+
+---
 
 ---
 
