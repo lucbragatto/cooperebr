@@ -111,6 +111,7 @@ enum PerfilUsuario {
   OPERADOR
   COOPERADO
   AGREGADOR
+  PROPRIETARIO // Sub-Sprint F (M30, 2026-05-26): proprietario de usina (E-Solares, etc) que arrenda usina pra cooperativa. Acessa /proprietario (root) — leitura pura.
 }
 
 model Cooperado {
@@ -391,8 +392,28 @@ model Usina {
   // Sprint Usinas+Listas Sub-Fase 1 (17/05/2026 noite) — campo informativo opcional,
   // sem guard, registra a classificação GD I/II/III enquanto litígio CoopereBR×EDP corre.
   classeGdAnotada         String?
+  convitesProprietario    ConviteProprietario[]
 
   @@map("usinas")
+}
+
+// Sub-Sprint F (M30, 2026-05-26) — magic link de uso unico pra onboarding
+// de proprietario de usina nao-cooperado (ex: E-Solares). Admin envia
+// convite por email; proprietario clica, define senha, ativa Usuario.
+model ConviteProprietario {
+  id          String    @id @default(cuid())
+  usinaId     String
+  usina       Usina     @relation(fields: [usinaId], references: [id])
+  token       String    @unique
+  email       String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdBy   String    // userId do admin que enviou
+  createdAt   DateTime  @default(now())
+
+  @@index([token])
+  @@index([email])
+  @@map("convites_proprietario")
 }
 
 // Bloco H' (16/05/2026) — modalidade de aquisição da usina pela cooperativa.
