@@ -34,6 +34,12 @@ export default function ProprietarioLayout({ children }: { children: React.React
     setUsuario(getUsuario());
   }, []);
 
+  // F.3 Etapa F (M31): rotas /proprietario/aceitar-convite/* sao PUBLICAS
+  // e nao precisam de sidebar/contexto autenticado.
+  if (pathname?.startsWith('/proprietario/aceitar-convite/')) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
