@@ -1071,9 +1071,126 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh fechamento M33 Sub-Sprint F.5.
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos:
+
+Sessao 27/05 entregou **M32 fixes pós-demo + M33 Sub-Sprint F.5 COMPLETO**:
+
+M32 (D-novo-AQ + AR + AS, 27/05 tarde):
+- Demo Portal Proprietario exposed 2 bugs visuais
+- D-novo-AQ (P2): sidebar "Proprietario de Usina" hardcoded → usuario.nome
+- D-novo-AR (P1): KPIs zerados — causa raiz REAL = build estatico stale
+  (frontend roda `next start` em prod, build era antes do M30)
+  Rebuild bloqueado por 3 erros TS pre-existentes que tsc --noEmit deixou
+  passar mas next build (Turbopack) pegou. Fix: 2× DialogTrigger asChild→
+  render Base UI, 1× Tooltip Recharts formatter. Rebuild 140 paginas, PM2
+  restart, KPIs corretos.
+- D-novo-AS (P2): catalogada diretiva "rodar `cd web && npm run build`
+  antes de fechar marco que toca web/" — tsc --noEmit eh insuficiente.
+
+M33 Sub-Sprint F.5 (27/05 noite, 5 commits c21fc1c..este):
+- F.5a Backend (c21fc1c): module novo backend/src/admin/proprietarios/
+  com 2 endpoints novos
+  • GET /admin/proprietarios/cooperativas (@Roles SUPER_ADMIN) — grid 7
+    campos novos: usinasComProprietario/proprietariosUnicos/totalYtd/
+    capacidadeKwp/statusOK-atencao-critico/convitesPendentes/
+    contratosVencendo30d
+  • GET /admin/proprietarios/cooperativas/:id/usinas (@Roles SA+ADMIN,
+    ADMIN só sua propria via multi-tenant guard)
+  Bypass impersonate em /proprietario/usinas/:id?impersonate=true
+  (SUPER_ADMIN apenas, audit log estruturado). 19 specs novos.
+- F.5b Frontend (bc62ccd): refactor /dashboard/proprietario em grid
+  responsivo de cards + nova rota /dashboard/proprietario/[cooperativaId]
+  com tabela 7 colunas + banner azul Shield no /proprietario/usinas/[id]
+  quando ?impersonate=true. Sidebar conditional. Help inline azul. Loading
+  Skeleton + empty + error.
+- D-novo-BD (P2): tabela estourando horizontal — fix overflow-x-auto +
+  min-w-[900px].
+- M33 Etapa B: REVERSAO decisao #4 F.5. ADMIN PARCEIRO tambem tem Portal
+  Proprietario (versao adaptada — pula grid, vai direto pra tabela da
+  sua cooperativa, breadcrumb hierarquico oculto). Multi-tenant guard
+  backend ForbiddenException + frontend redirect.
+
+VALIDACAO:
+- Suite completa: 935 passing / 11 falhas pre-existentes (D-novo-J + K)
+- nest build + npm run build web OK (140 paginas, 22.8s Turbopack)
+- Smoke 8/8: F.5a 5/5 (SA grid + tabela + impersonate; ADMIN 403 nos
+  grid endpoints) + M33 Etapa B 3/3 (ADMIN sua coop=200, alheia=403,
+  grid=403).
+
+PROXIMO PASSO — 2 OPCOES:
+
+(A) **F.4 SMOKE PRODUCAO** (~1-2h) — BLOQUEADO LUCIANO OPERACIONAL:
+    Preencher cooperebr1 real (proprietarioEmail+formaPagamentoDono+
+    valorAluguelFixo+responsabilidadeDespesas+valorKwhPadrao) + cadastrar
+    Usuario E-Solares real (manual OU magic link) + simular drill-down +
+    decidir politica anti-spam cron PDF (D-novo-AO).
+
+(B) **SUB-SPRINT REFINAMENTO TELAS USINAS** (~4-7h) — 4 debitos catalogados
+    27/05 noite:
+    - D-novo-AZ (P1): campo Classe GD na tela /dashboard/usinas/nova
+      (input + persistencia APENAS — ZERO logica Fio B; ela vira no
+      Sub-Sprint Fio B futuro)
+    - D-novo-BA (P2): script auditar usinas existentes pra preencher
+      classeGdAnotada (depende AZ)
+    - D-novo-BB (P1): tela edicao usina como drawer → pagina propria
+      /dashboard/usinas/[id]/editar (viola Padrao UX Dual 17/05)
+    - D-novo-BC (P2): paridade campos edicao vs cadastro (depende BB)
+
+FRENTES PARALELAS DISPONIVEIS:
+- Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
+- Sungrow integracao real (cron pronto, falta credenciais E-Solares)
+- D-novo-AK instalar gerenciador senhas (Luciano)
+- Decisoes regulatorias Sub-Sprint A (advogado)
+- Cenario Completo Banestes (~6-8h) depois canario PIX real
+
+CARRY-OVERS (nao-bloqueantes):
+- D-novo-AL: integracao iSolar Cloud E2E real
+- D-novo-AM: Empresa entidade separada (YAGNI ate 2a usina)
+- D-novo-AN: RepasseProprietario tabela pra pagamento REAL
+- D-novo-AO: cron PDF conectar EmailService
+- D-novo-AS.1/.2: hook PostToolUse npm run build automatico
+
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Preencher cooperebr1 (proprietarioEmail GATILHO pra F.4)
+⏳ Cadastrar Usuario E-Solares (manual OU magic link)
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Auditar classeGdAnotada por usina (D-novo-BA, depende AZ)
+⏳ Decidir politica anti-spam cron PDF (D-novo-AO)
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29)
+⏳ Instalar gerenciador de senhas (D-novo-AK)
+⏳ Avisar time legado / script.sql / .pfx sandbox Banestes / Sub-Sprint A
+
+DOC-SESSAO M33: docs/sessoes/2026-05-27-m33-sub-sprint-f5-dashboard-
+hierarquico-superadmin.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase anterior (M30+M31) — não usar
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh fechamento M31 Sub-Sprint F
-   Sessao 2. Penultimo `3ba6655` (Etapa F frontend publico aceitar-convite).
-   Antepenultimo `2eb822b` (Etapa E frontend admin onboarding).
+   Sessao 2.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend online.
 
