@@ -4,4 +4,5 @@ export enum PerfilUsuario {
   OPERADOR = 'OPERADOR',
   COOPERADO = 'COOPERADO',
   AGREGADOR = 'AGREGADOR',
+  PROPRIETARIO = 'PROPRIETARIO', // Sub-Sprint F (M30, 2026-05-26) — dono de usina (E-Solares)
 }

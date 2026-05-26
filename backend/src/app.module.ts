@@ -59,6 +59,7 @@ import { NotificacoesProativasModule } from './notificacoes-proativas/notificaco
 import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes-contrato.module';
 import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmacao-pagamento/solicitacoes-confirmacao-pagamento.module';
 import { GatewaysPagamentoConfigModule } from './gateways-pagamento-config/gateways-pagamento-config.module';
+import { ProprietarioModule } from './proprietario/proprietario.module';
 
 @Module({
   imports: [
@@ -115,6 +116,7 @@ import { GatewaysPagamentoConfigModule } from './gateways-pagamento-config/gatew
     SolicitacoesContratoModule,
     SolicitacoesConfirmacaoPagamentoModule,
     GatewaysPagamentoConfigModule,
+    ProprietarioModule,
   ],
   controllers: [AppController],
   providers: [
