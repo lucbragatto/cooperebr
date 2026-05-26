@@ -121,6 +121,69 @@ describe('ProprietarioService', () => {
     });
   });
 
+  // ─── F.5a (M33) — Bypass impersonate SUPER_ADMIN ─────────────────
+
+  describe('impersonate SUPER_ADMIN (F.5a)', () => {
+    it('bypassa guard quando user.perfil=SUPER_ADMIN + opts.impersonate=true', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u-qualquer',
+        cooperativaId: 'coop-x',
+        proprietarioEmail: 'dono@x.com',
+      });
+      // chamada interna do detalheUsina: segundo findUnique pega dados completos
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u-qualquer', nome: 'Solar X', apelidoInterno: null, cidade: 'A', estado: 'ES',
+        distribuidora: null, statusHomologacao: 'EM_PRODUCAO', statusOperacional: 'OPERANDO',
+        classeGdAnotada: null, formaAquisicao: null, formaPagamentoDono: null,
+        capacidadeKwh: 0, potenciaKwp: 0,
+        valorAluguelFixo: null, percentualGeracaoDono: null, valorKwhPadrao: null,
+        responsabilidadeDespesas: {},
+        contratos: [], geracoesMensais: [], alertas: [],
+      });
+
+      const r = await service.detalheUsina(
+        { id: 'super-admin-1', email: 'sa@coopere.com', perfil: 'SUPER_ADMIN' },
+        'u-qualquer',
+        { impersonate: true },
+      );
+      expect(r).toBeDefined();
+      // NUNCA chamou findMany pra resolver proprietario — bypass total
+      expect(prismaMock.usina.findMany).not.toHaveBeenCalled();
+    });
+
+    it('NAO bypassa quando opts.impersonate=true mas perfil != SUPER_ADMIN', async () => {
+      prismaMock.usina.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.detalheUsina(
+          { id: 'a1', email: 'admin@x.com', perfil: 'ADMIN' },
+          'u-qualquer',
+          { impersonate: true },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('NAO bypassa quando SUPER_ADMIN sem opts.impersonate (fluxo normal)', async () => {
+      prismaMock.usina.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.detalheUsina(
+          { id: 'sa', email: 'sa@coopere.com', perfil: 'SUPER_ADMIN' },
+          'u-qualquer',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('NotFoundException quando impersonateUsinaId aponta pra usina inexistente', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.detalheUsina(
+          { id: 'sa', email: 'sa@coopere.com', perfil: 'SUPER_ADMIN' },
+          'u-fantasma',
+          { impersonate: true },
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   // ─── detalheUsina ────────────────────────────────────────────────
 
   describe('detalheUsina()', () => {

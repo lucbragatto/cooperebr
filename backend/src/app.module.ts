@@ -60,6 +60,7 @@ import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes
 import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmacao-pagamento/solicitacoes-confirmacao-pagamento.module';
 import { GatewaysPagamentoConfigModule } from './gateways-pagamento-config/gateways-pagamento-config.module';
 import { ProprietarioModule } from './proprietario/proprietario.module';
+import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietarios.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { ProprietarioModule } from './proprietario/proprietario.module';
     SolicitacoesConfirmacaoPagamentoModule,
     GatewaysPagamentoConfigModule,
     ProprietarioModule,
+    AdminProprietariosModule,
   ],
   controllers: [AppController],
   providers: [

@@ -40,8 +40,16 @@ export class ProprietarioController {
 
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
   @Get('usinas/:id')
-  detalheUsina(@Param('id') id: string, @Req() req: any) {
-    return this.service.detalheUsina(req.user, id);
+  detalheUsina(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('impersonate') impersonate?: string,
+  ) {
+    // F.5a (M33, 27/05): Super Admin pode impersonar com ?impersonate=true.
+    // Bypass do guard "usuario é proprietário desta usina" é feito no
+    // resolverUsinasDoProprietario apenas se user.perfil === SUPER_ADMIN.
+    const isImpersonate = impersonate === 'true';
+    return this.service.detalheUsina(req.user, id, { impersonate: isImpersonate });
   }
 
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)

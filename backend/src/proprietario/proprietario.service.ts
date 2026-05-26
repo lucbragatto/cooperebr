@@ -33,9 +33,42 @@ export class ProprietarioService {
    * Caminho B: proprietarioEmail === user.email (proprietario nao-cooperado)
    *
    * Sem usinas? Lanca ForbiddenException — usuario nao tem papel proprietario.
+   *
+   * Sub-Sprint F.5a (M33, 27/05): aceita opts.impersonateUsinaId — quando
+   * SUPER_ADMIN passa esse param, bypassa o guard normal e retorna [usinaId]
+   * sem checar match proprietario. Audit log estruturado registrado.
+   * Demais perfis ignoram o param (continua fluxo normal).
    */
-  private async resolverUsinasDoProprietario(user: any): Promise<string[]> {
+  private async resolverUsinasDoProprietario(
+    user: any,
+    opts?: { impersonateUsinaId?: string },
+  ): Promise<string[]> {
     if (!user) throw new ForbiddenException('Usuario nao autenticado.');
+
+    // F.5a: bypass impersonate Super Admin
+    if (
+      user.perfil === 'SUPER_ADMIN' &&
+      opts?.impersonateUsinaId
+    ) {
+      const usina = await this.prisma.usina.findUnique({
+        where: { id: opts.impersonateUsinaId },
+        select: { id: true, cooperativaId: true, proprietarioEmail: true },
+      });
+      if (!usina) {
+        throw new NotFoundException('Usina nao encontrada (impersonate).');
+      }
+      // Audit log estruturado (D-30N AuditLog inativo — quando reativar, é wireup)
+      console.log('[IMPERSONATE_PROPRIETARIO]', JSON.stringify({
+        event: 'super_admin_impersonate',
+        superAdminId: user.id ?? user.userId,
+        superAdminEmail: user.email,
+        usinaId: usina.id,
+        cooperativaId: usina.cooperativaId,
+        proprietarioEmail: usina.proprietarioEmail,
+        timestamp: new Date().toISOString(),
+      }));
+      return [usina.id];
+    }
 
     const where: any[] = [];
     if (user.cooperadoId) {
@@ -234,8 +267,11 @@ export class ProprietarioService {
 
   // ─── GET /proprietario/usinas/:id ─────────────────────────────────
 
-  async detalheUsina(user: any, usinaId: string) {
-    const usinaIds = await this.resolverUsinasDoProprietario(user);
+  async detalheUsina(user: any, usinaId: string, opts?: { impersonate?: boolean }) {
+    const usinaIds = await this.resolverUsinasDoProprietario(
+      user,
+      opts?.impersonate ? { impersonateUsinaId: usinaId } : undefined,
+    );
     if (!usinaIds.includes(usinaId)) {
       throw new NotFoundException('Usina nao encontrada no seu portfolio.');
     }
