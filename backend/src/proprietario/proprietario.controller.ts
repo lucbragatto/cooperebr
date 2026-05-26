@@ -1,5 +1,8 @@
-import { Controller, Get, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import * as fs from 'node:fs';
 import { ProprietarioService } from './proprietario.service';
+import { RelatorioMensalService } from './relatorio-mensal.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
@@ -19,7 +22,10 @@ const { SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO } = PerfilUsuario;
  */
 @Controller('proprietario')
 export class ProprietarioController {
-  constructor(private readonly service: ProprietarioService) {}
+  constructor(
+    private readonly service: ProprietarioService,
+    private readonly relatorioService: RelatorioMensalService,
+  ) {}
 
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
   @Get('dashboard')
@@ -58,5 +64,27 @@ export class ProprietarioController {
   @Get('despesas')
   listarDespesas(@Req() req: any, @Query('usinaId') usinaId?: string) {
     return this.service.listarDespesas(req.user, { usinaId });
+  }
+
+  /**
+   * Sub-Sprint F Etapa F (M30): gera relatorio PDF sob demanda.
+   * Retorna o PDF inline (stream) — frontend pode oferecer download.
+   * Multi-tenant guard delegado pro RelatorioMensalService (que usa o
+   * ProprietarioService.detalheUsina internamente).
+   */
+  @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
+  @Get('relatorios/:usinaId/:mesAno')
+  async baixarRelatorio(
+    @Param('usinaId') usinaId: string,
+    @Param('mesAno') mesAno: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    const pdfPath = await this.relatorioService.gerarSobDemanda(req.user, usinaId, mesAno);
+    const filename = `relatorio-proprietario-${usinaId}-${mesAno}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    const stream = fs.createReadStream(pdfPath);
+    stream.pipe(res);
   }
 }
