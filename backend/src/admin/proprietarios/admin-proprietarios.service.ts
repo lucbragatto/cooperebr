@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import {
   calcularRepasse,
@@ -233,7 +233,19 @@ export class AdminProprietariosService {
 
   // ─── ENDPOINT 2 — Tabela usinas+proprietarios POR cooperativa ────────
 
-  async listarUsinasPorCooperativa(cooperativaId: string) {
+  async listarUsinasPorCooperativa(cooperativaId: string, user?: any) {
+    // F.5 Etapa B (M33, 27/05 noite): multi-tenant guard.
+    // SUPER_ADMIN: acesso global. ADMIN: só cooperativaId === user.cooperativaId.
+    if (
+      user &&
+      user.perfil !== 'SUPER_ADMIN' &&
+      user.cooperativaId !== cooperativaId
+    ) {
+      throw new ForbiddenException(
+        'Voce so pode acessar dados da sua propria cooperativa.',
+      );
+    }
+
     const coop = await this.prisma.cooperativa.findUnique({
       where: { id: cooperativaId },
       select: { id: true, nome: true, tipoParceiro: true },

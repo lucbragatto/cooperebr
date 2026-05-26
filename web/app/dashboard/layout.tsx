@@ -149,8 +149,10 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/relatorios/inadimplencia', label: 'Inadimplência', icon: BarChart3 },
         { href: '/dashboard/relatorios/projecao-receita', label: 'Projeção Receita', icon: TrendingUp },
         { href: '/dashboard/relatorios/expansao', label: 'Expansão / Investidores', icon: Globe },
-        // F.5b (M33, 27/05/2026): Portal Proprietário hierárquico — só pra SUPER_ADMIN
-        ...(perfil === 'SUPER_ADMIN'
+        // F.5 M33 Etapa B (reversão decisão #4 27/05): Admin Parceiro TAMBÉM
+        // tem Portal Proprietário no menu — versão adaptada (vai direto pra
+        // tabela da sua cooperativa, não passa pelo grid hierárquico).
+        ...(['SUPER_ADMIN', 'ADMIN'].includes(perfil)
           ? [{ href: '/dashboard/proprietario', label: 'Portal Proprietário', icon: Sun }]
           : []),
       ],

@@ -87,9 +87,20 @@ export default function DashboardProprietarioGridPage() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    // Guard SUPER_ADMIN
     const u = getUsuario();
-    if (u && u.perfil !== 'SUPER_ADMIN') {
+    if (!u) {
+      router.replace('/login');
+      return;
+    }
+
+    // F.5 M33 Etapa B (reversão decisão #4 27/05): ADMIN pula o grid e vai
+    // direto pra tabela da sua cooperativa. SUPER_ADMIN vê grid completo.
+    if (u.perfil === 'ADMIN' && (u as any).cooperativaId) {
+      router.replace(`/dashboard/proprietario/${(u as any).cooperativaId}`);
+      return;
+    }
+
+    if (u.perfil !== 'SUPER_ADMIN') {
       router.replace('/dashboard');
       return;
     }

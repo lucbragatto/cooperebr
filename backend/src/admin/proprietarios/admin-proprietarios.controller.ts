@@ -1,39 +1,44 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Req } from '@nestjs/common';
 import { AdminProprietariosService } from './admin-proprietarios.service';
 import { Roles } from '../../auth/roles.decorator';
 import { PerfilUsuario } from '../../auth/perfil.enum';
 
-const { SUPER_ADMIN } = PerfilUsuario;
+const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
 /**
  * Sub-Sprint F.5a (M33, 2026-05-27 noite).
  *
- * Dashboard Hierárquico do Super Admin pro Portal Proprietário.
+ * Dashboard Hierárquico Super Admin + Admin Parceiro pro Portal Proprietário.
  *
  * Rotas:
  *   GET /admin/proprietarios/cooperativas
- *     → Grid de cards-resumo: 1 entry por cooperativa com indicadores agregados
- *       (usinas com proprietário, proprietários únicos, YTD, capacidade kWp,
- *       status OK/atenção/crítico, convites pendentes, contratos vencendo 30d).
+ *     → SUPER_ADMIN apenas. Grid de cards-resumo com indicadores agregados
+ *       de TODAS cooperativas ativas.
  *
  *   GET /admin/proprietarios/cooperativas/:cooperativaId/usinas
- *     → Tabela detalhada das usinas+proprietários da cooperativa selecionada.
+ *     → SUPER_ADMIN: qualquer cooperativaId.
+ *       ADMIN: somente cooperativaId === req.user.cooperativaId (multi-tenant
+ *       enforcement no service via assertion). ADMIN tentando ver outra → 403.
  *
- * Acesso: SUPER_ADMIN apenas (RolesGuard global aplica 403 pra demais perfis).
- * Multi-tenant: Super Admin tem acesso global por design.
+ * Reversão decisão #4 F.5 (M33, Etapa B): ADMIN também tem acesso ao Portal
+ * Proprietário, indo direto pra tabela da sua cooperativa (pula grid).
  */
-@Roles(SUPER_ADMIN)
 @Controller('admin/proprietarios')
 export class AdminProprietariosController {
   constructor(private readonly service: AdminProprietariosService) {}
 
+  @Roles(SUPER_ADMIN)
   @Get('cooperativas')
   listarCooperativasComProprietarios() {
     return this.service.listarCooperativasComProprietarios();
   }
 
+  @Roles(SUPER_ADMIN, ADMIN)
   @Get('cooperativas/:cooperativaId/usinas')
-  listarUsinasPorCooperativa(@Param('cooperativaId') cooperativaId: string) {
-    return this.service.listarUsinasPorCooperativa(cooperativaId);
+  listarUsinasPorCooperativa(
+    @Param('cooperativaId') cooperativaId: string,
+    @Req() req: any,
+  ) {
+    return this.service.listarUsinasPorCooperativa(cooperativaId, req.user);
   }
 }

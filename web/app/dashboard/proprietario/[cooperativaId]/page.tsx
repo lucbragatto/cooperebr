@@ -92,14 +92,28 @@ export default function DashboardProprietarioCooperativaPage() {
   const [data, setData] = useState<Response | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [perfil, setPerfil] = useState<string | null>(null);
 
   useEffect(() => {
-    // Guard SUPER_ADMIN
     const u = getUsuario();
-    if (u && u.perfil !== 'SUPER_ADMIN') {
+    if (!u) {
+      router.replace('/login');
+      return;
+    }
+
+    // F.5 M33 Etapa B (reversão decisão #4): ADMIN só pode ver sua propria.
+    // SUPER_ADMIN: acesso global.
+    if (u.perfil === 'ADMIN' && (u as any).cooperativaId !== cooperativaId) {
+      router.replace(`/dashboard/proprietario/${(u as any).cooperativaId}`);
+      return;
+    }
+
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(u.perfil)) {
       router.replace('/dashboard');
       return;
     }
+
+    setPerfil(u.perfil);
 
     if (!cooperativaId) return;
 
@@ -110,6 +124,8 @@ export default function DashboardProprietarioCooperativaPage() {
       .finally(() => setCarregando(false));
   }, [cooperativaId, router]);
 
+  const isSuperAdmin = perfil === 'SUPER_ADMIN';
+
   const usinasComProprietario =
     data?.usinas.filter((u) => u.temProprietario).length ?? 0;
   const totalYtd =
@@ -117,27 +133,31 @@ export default function DashboardProprietarioCooperativaPage() {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Link
-        href="/dashboard/proprietario"
-        className="text-sm text-amber-600 hover:underline inline-flex items-center gap-1"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Voltar pra Visão Hierárquica
-      </Link>
+      {/* Breadcrumb — só pra SUPER_ADMIN (ADMIN não tem pra onde voltar) */}
+      {isSuperAdmin && (
+        <Link
+          href="/dashboard/proprietario"
+          className="text-sm text-amber-600 hover:underline inline-flex items-center gap-1"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar pra Visão Hierárquica
+        </Link>
+      )}
 
       <div className="flex items-center gap-3">
         <Building2 className="h-6 w-6 text-amber-600" />
         <h1 className="text-2xl font-bold text-gray-800">
-          {data?.cooperativa.nome ?? 'Carregando...'}
+          {isSuperAdmin
+            ? data?.cooperativa.nome ?? 'Carregando...'
+            : `Portal Proprietário — ${data?.cooperativa.nome ?? '...'}`}
         </h1>
       </div>
 
-      {/* Help inline */}
+      {/* Help inline (adapta texto por perfil) */}
       <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex gap-2">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800">
-          <strong>Lista de usinas desta cooperativa com proprietários cadastrados.</strong>{' '}
+          <strong>Lista de usinas com proprietários cadastrados.</strong>{' '}
           Clique numa linha pra ver o portal como o proprietário veria — você entra em modo
           impersonate e fica logado um banner azul durante a sessão.
         </div>
@@ -216,7 +236,8 @@ export default function DashboardProprietarioCooperativaPage() {
                   Nenhuma usina cadastrada nesta cooperativa.
                 </div>
               ) : (
-                <Table>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[900px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Usina</TableHead>
@@ -309,6 +330,7 @@ export default function DashboardProprietarioCooperativaPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>

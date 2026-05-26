@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AdminProprietariosService } from './admin-proprietarios.service';
 
 describe('AdminProprietariosService (F.5a)', () => {
@@ -143,6 +143,36 @@ describe('AdminProprietariosService (F.5a)', () => {
       await expect(
         service.listarUsinasPorCooperativa('fantasma'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // F.5 Etapa B M33 — multi-tenant guard ADMIN
+    it('SUPER_ADMIN pode acessar qualquer cooperativaId', async () => {
+      prismaMock.cooperativa.findUnique.mockResolvedValueOnce({ id: 'c-outra', nome: 'C', tipoParceiro: 'COOPERATIVA' });
+      prismaMock.usina.findMany.mockResolvedValueOnce([]);
+      const r = await service.listarUsinasPorCooperativa('c-outra', {
+        perfil: 'SUPER_ADMIN',
+        cooperativaId: 'c-minha',
+      });
+      expect(r.cooperativa.id).toBe('c-outra');
+    });
+
+    it('ADMIN pode acessar sua propria cooperativaId', async () => {
+      prismaMock.cooperativa.findUnique.mockResolvedValueOnce({ id: 'c-minha', nome: 'C', tipoParceiro: 'COOPERATIVA' });
+      prismaMock.usina.findMany.mockResolvedValueOnce([]);
+      const r = await service.listarUsinasPorCooperativa('c-minha', {
+        perfil: 'ADMIN',
+        cooperativaId: 'c-minha',
+      });
+      expect(r.cooperativa.id).toBe('c-minha');
+    });
+
+    it('ADMIN tentando acessar OUTRA cooperativaId → 403 ForbiddenException', async () => {
+      await expect(
+        service.listarUsinasPorCooperativa('c-alheia', {
+          perfil: 'ADMIN',
+          cooperativaId: 'c-minha',
+        }),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('mascara email do proprietario (LGPD)', async () => {
