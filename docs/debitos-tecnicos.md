@@ -3057,6 +3057,69 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-AR — Dashboard Portal Proprietário com KPIs zerados (P1)
+
+**Severidade:** P1 (bloqueador funcional do portal — Sub-Sprint F MVP+ inutilizável até resolver)
+**Origem:** demo 27/05/2026 noite — Luciano testou `/proprietario` logado como `demo-esolares@example.com` (Usuario PROPRIETARIO criado pra demo Sub-Sprint F)
+
+**Sintoma:** todos KPIs do Dashboard `/proprietario` mostram zero (Usinas: 0, Produção: 0, Capacidade: 0, Repasse: R$ 0,00) mesmo com:
+- `Usina.usina-linhares` cadastrada com `proprietarioEmail=demo-esolares@example.com`
+- `formaPagamentoDono=FIXO` + `valorAluguelFixo=1000`
+- 4 `GeracaoMensal` placeholder Fev-Mai/2026 (45.800 / 51.200 / 48.500 / 42.000 kWh)
+- `proprietarioCooperadoId=null` (Caminho A inaplicável — Usuario E-Solares não tem `Cooperado` real, é só Usuario PROPRIETARIO)
+
+**Hipóteses a investigar (Fase 1 read-only obrigatória):**
+
+1. `AuthService.obterContextosUsuario` não retorna contexto `proprietario_usina` pra Usuario PROPRIETARIO sem `cooperadoId` (Caminho B `proprietarioEmail` falhou)
+2. Endpoint `/usinas/proprietario/dashboard` não casa `Usina.proprietarioEmail` com `Usuario.email` (case-sensitivity, trim, `mode: 'insensitive'` ausente)
+3. Multi-tenant guard filtra `cooperativaId` errado — Usuario PROPRIETARIO criado via Supabase admin não tem `cooperativaId` claro
+4. Frontend não envia header `X-Contexto-Ativo` ou similar — request chega ao backend sem contexto resolvido
+5. Query agregada SUM/AVG GeracaoMensal retorna 0 erroneamente (JOIN errado, filtro de ano/mes)
+6. `calcularRepasse` retorna 0 mesmo com `formaPagamentoDono=FIXO` definido
+
+**Plano:** Fase 1 read-only de:
+- `backend/src/auth/auth.service.ts` (método `obterContextosUsuario`)
+- `backend/src/usinas/usinas.service.ts` (método `proprietarioDashboard` ou equivalente)
+- `backend/src/usinas/usinas.controller.ts` (rota `/proprietario/dashboard`)
+- Frontend `web/app/proprietario/page.tsx` + `useContexto` hook
+- Banco: SELECT `Usuario` demo + SELECT `Usina` usina-linhares (confirmar match exato proprietarioEmail × email)
+- `pm2 logs cooperebr-backend --lines 100` durante request `/proprietario`
+
+**Estimativa:** 1-2h investigação + fix (depende da causa raiz)
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Próxima sessão Code arranca Fase 1 read-only.
+
+---
+
+### D-novo-AQ — Sidebar Portal Proprietário mostra label genérico (P2)
+
+**Severidade:** P2 (UX — não bloqueia funcionalidade)
+**Origem:** demo 27/05/2026 noite
+
+**Sintoma:** sidebar do `/proprietario` mostra label estático "Proprietário de Usina" embaixo de "SISGD" em vez do nome cadastrado em `Usina.proprietarioNome` ou `Usuario.nome` ("E-Solares Demo" esperado).
+
+**Localização suspeita:** `web/app/proprietario/layout.tsx` linhas 47-52 — header sidebar com texto hardcoded:
+
+```tsx
+<p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+  <Sun className="w-3 h-3" />
+  Proprietário de Usina
+</p>
+```
+
+**Fix sugerido:** puxar nome do contexto auth via `useContexto()` ou `usuario.nome` direto. Pattern já existe no `/parceiro/layout.tsx` (mostra nome da cooperativa) — replicar.
+
+**Plano:** Fase 1 read-only de:
+- `web/app/proprietario/layout.tsx` (header sidebar)
+- `web/app/parceiro/layout.tsx` (referência pattern)
+- `web/hooks/useContexto.ts` (verificar shape do `contextoAtivo`)
+
+**Estimativa:** 15-30 min (fix curtíssimo se hook já expõe nome)
+
+**Status:** 📋 Catalogado em 2026-05-27 noite.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
