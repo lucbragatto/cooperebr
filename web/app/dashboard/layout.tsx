@@ -149,7 +149,10 @@ function getNavSections(perfil: string): NavSection[] {
         { href: '/dashboard/relatorios/inadimplencia', label: 'Inadimplência', icon: BarChart3 },
         { href: '/dashboard/relatorios/projecao-receita', label: 'Projeção Receita', icon: TrendingUp },
         { href: '/dashboard/relatorios/expansao', label: 'Expansão / Investidores', icon: Globe },
-        { href: '/dashboard/proprietario', label: 'Portal Proprietário', icon: Sun },
+        // F.5b (M33, 27/05/2026): Portal Proprietário hierárquico — só pra SUPER_ADMIN
+        ...(perfil === 'SUPER_ADMIN'
+          ? [{ href: '/dashboard/proprietario', label: 'Portal Proprietário', icon: Sun }]
+          : []),
       ],
     },
     {
