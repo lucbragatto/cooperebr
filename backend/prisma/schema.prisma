@@ -394,7 +394,33 @@ model Usina {
   classeGdAnotada         String?
   convitesProprietario    ConviteProprietario[]
 
+  // ── Sub-Sprint F (M30, 2026-05-26) — Portal Proprietario ─────────
+  // Override por usina da tarifa de referencia pro calculo PERCENTUAL/HIBRIDO
+  // do repasse ao dono. Se null, helper calcularRepasse usa
+  // TarifaConcessionaria.tusdNova + teNova como fallback.
+  valorKwhPadrao          Decimal?                  @db.Decimal(10, 5)
+
+  // Matriz de responsabilidade por categoria de despesa (PARCEIRO/PROPRIETARIO/COMPARTILHADO).
+  // Shape: { "CUSD": "PARCEIRO", "MANUTENCAO_CORRETIVA": "PROPRIETARIO", ... }
+  // Default vazio — Luciano preenche via UI admin por usina.
+  responsabilidadeDespesas Json                     @default("{}")
+
+  // Status operacional real-time (separado do statusHomologacao que e ciclo de vida).
+  // Atualizado automaticamente via UsinaLeitura.statusOnline quando cron Sungrow ativo;
+  // override manual sempre disponivel pro admin via UI.
+  statusOperacional       StatusOperacional         @default(OPERANDO)
+
   @@map("usinas")
+}
+
+// Sub-Sprint F (M30, 2026-05-26) — status operacional real-time da usina.
+// Espelha tbl_usina.status_usina Boolean do legado SISGDSOLAR mas com mais granularidade.
+enum StatusOperacional {
+  OPERANDO                // Usina gerando normalmente
+  MANUTENCAO_PLANEJADA    // Admin marcou manutencao programada — nao alertar
+  MANUTENCAO_EMERGENCIAL  // Falha detectada exigindo intervencao urgente
+  DESLIGADA               // Desligada permanentemente (ex: contratual)
+  OFFLINE                 // Sem comunicacao com inversor (alerta automatico)
 }
 
 // Sub-Sprint F (M30, 2026-05-26) — magic link de uso unico pra onboarding
@@ -2347,6 +2373,18 @@ enum CategoriaContaAPagar {
   MANUTENCAO
   SALARIO
   OUTRO
+  // Sub-Sprint F (M30, 2026-05-26) — categorias granulares por usina
+  CUSD                      // Custo de uso do sistema de distribuicao
+  MANUTENCAO_PREVENTIVA
+  MANUTENCAO_CORRETIVA
+  ROCADA
+  VIGILANCIA
+  SEGURO
+  IPTU_ITR                  // IPTU urbano ou ITR rural
+  CONSUMO_AUXILIAR          // Energia auxiliar da usina (escritorio, monitoramento)
+  INTERNET
+  ACOMPANHAMENTO_TECNICO
+  EQUIPAMENTOS              // Reposicao/upgrade de inversor, modulos, etc
 }
 
 enum StatusContaAPagar {
@@ -2354,6 +2392,15 @@ enum StatusContaAPagar {
   PAGO
   ATRASADO
   CANCELADO
+}
+
+// Sub-Sprint F (M30, 2026-05-26) — responsavel por pagar a despesa.
+// COMPARTILHADO indica rateio entre parceiro e proprietario (regra acordada
+// contratualmente, fora do escopo do MVP+).
+enum ResponsavelPagamento {
+  PARCEIRO
+  PROPRIETARIO
+  COMPARTILHADO
 }
 
 model ContaAPagar {
@@ -2369,6 +2416,9 @@ model ContaAPagar {
   usinaId        String?
   usina          Usina?               @relation(fields: [usinaId], references: [id])
   comprovante    String?
+  // Sub-Sprint F: quem efetivamente paga (deduzido da Usina.responsabilidadeDespesas
+  // ou sobrescrito manualmente na criacao da conta).
+  responsavelPagamento ResponsavelPagamento?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
