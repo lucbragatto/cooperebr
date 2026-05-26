@@ -11,6 +11,7 @@ import {
   DollarSign,
   FileText,
   LogOut,
+  Receipt,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContexto } from '@/hooks/useContexto';
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/proprietario', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proprietario/usinas', label: 'Minhas Usinas', icon: Sun },
   { href: '/proprietario/repasses', label: 'Repasses', icon: DollarSign },
+  { href: '/proprietario/despesas', label: 'Despesas', icon: Receipt },
   { href: '/proprietario/contratos', label: 'Contratos', icon: FileText },
 ];
 

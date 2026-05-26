@@ -1,46 +1,54 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, FileText, Calendar, Building2 } from 'lucide-react';
+import { Loader2, FileText, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import api from '@/lib/api';
-import type { MeResponse } from '@/types';
 
-const statusCores: Record<string, string> = {
+interface Contrato {
+  id: string;
+  numero: string;
+  status: string;
+  dataInicio: string;
+  dataFim: string | null;
+  kwhContrato: number;
+  percentualUsina: number;
+  percentualDesconto: number;
+  cooperado: string; // anonimizado
+  usina: { id: string; nome: string; apelidoInterno: string | null };
+}
+
+const STATUS_COR: Record<string, string> = {
   ATIVO: 'bg-green-100 text-green-700',
   PENDENTE_ATIVACAO: 'bg-yellow-100 text-yellow-700',
-  EM_APROVACAO: 'bg-blue-100 text-blue-700',
+  APROVADO: 'bg-blue-100 text-blue-700',
   ENCERRADO: 'bg-gray-100 text-gray-500',
   SUSPENSO: 'bg-red-100 text-red-700',
 };
 
+function fmtKwh(v: number): string {
+  return `${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} kWh`;
+}
+
 export default function ProprietarioContratosPage() {
-  const [contratos, setContratos] = useState<any[]>([]);
+  const [contratos, setContratos] = useState<Contrato[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    async function carregar() {
-      try {
-        const { data: me } = await api.get<MeResponse>('/auth/me');
-        if (me.usinasProprietario.length > 0) {
-          // Buscar contratos de uso das usinas do proprietário
-          const usinaIds = me.usinasProprietario.map((u) => u.id);
-          try {
-            const { data } = await api.get('/contratos');
-            const arr = Array.isArray(data) ? data : data?.data ?? [];
-            setContratos(arr.filter((c: any) => usinaIds.includes(c.usinaId)));
-          } catch {
-            // ignore
-          }
-        }
-      } catch {
-        // ignore
-      } finally {
-        setCarregando(false);
-      }
-    }
-    carregar();
+    api
+      .get<Contrato[]>('/proprietario/contratos')
+      .then((r) => setContratos(r.data ?? []))
+      .catch(() => setContratos([]))
+      .finally(() => setCarregando(false));
   }, []);
 
   if (carregando) {
@@ -54,65 +62,63 @@ export default function ProprietarioContratosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-        <p className="text-sm text-gray-500 mt-1">Contratos de uso das suas usinas</p>
+        <h1 className="text-2xl font-bold text-gray-900">Contratos de Uso</h1>
+        <p className="text-sm text-gray-500 mt-1">Contratos vinculados às suas usinas (cooperados anonimizados)</p>
       </div>
 
-      {contratos.length === 0 ? (
-        <Card>
-          <CardContent className="text-center py-12">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhum contrato encontrado.</p>
-            <p className="text-gray-400 text-xs mt-1">
-              Contratos de uso das usinas aparecerão aqui.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {contratos.map((c: any) => (
-            <Card key={c.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <span className="font-medium text-sm">
-                        Contrato {c.numero ?? c.id.slice(0, 8)}
-                      </span>
-                      <Badge className={statusCores[c.status] ?? 'bg-gray-100 text-gray-500'}>
-                        {c.status?.replace(/_/g, ' ')}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <p className="text-gray-500 text-xs">Cooperado</p>
-                        <p className="font-medium">{c.cooperado?.nomeCompleto ?? '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 text-xs">Usina</p>
-                        <p className="font-medium">{c.usina?.nome ?? '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 text-xs flex items-center gap-1">
-                          <Calendar className="w-3 h-3" /> Início
-                        </p>
-                        <p className="font-medium">
-                          {c.dataInicio ? new Date(c.dataInicio).toLocaleDateString('pt-BR') : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 text-xs">Desconto</p>
-                        <p className="font-medium">{c.percentualDesconto}%</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex gap-2">
+        <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <strong>LGPD:</strong> cooperados são exibidos com apelido sequencial (Cooperado #001, #002...) —
+          nomes reais não aparecem.
         </div>
-      )}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="w-4 h-4 text-purple-500" />
+            Contratos ({contratos.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {contratos.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">Nenhum contrato vinculado.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número</TableHead>
+                  <TableHead>Cooperado</TableHead>
+                  <TableHead>Usina</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Início</TableHead>
+                  <TableHead className="text-right">kWh/mês</TableHead>
+                  <TableHead className="text-right">% Usina</TableHead>
+                  <TableHead className="text-right">% Desconto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contratos.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium">{c.numero}</TableCell>
+                    <TableCell>{c.cooperado}</TableCell>
+                    <TableCell className="text-xs">{c.usina.nome}</TableCell>
+                    <TableCell><Badge className={STATUS_COR[c.status] ?? 'bg-gray-100'}>{c.status.replace(/_/g, ' ')}</Badge></TableCell>
+                    <TableCell className="text-xs">{new Date(c.dataInicio).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell className="text-right">{fmtKwh(c.kwhContrato)}</TableCell>
+                    <TableCell className="text-right">{c.percentualUsina}%</TableCell>
+                    <TableCell className="text-right">{c.percentualDesconto}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
