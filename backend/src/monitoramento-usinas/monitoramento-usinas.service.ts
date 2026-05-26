@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { SungrowService } from './sungrow.service';
 import { OcorrenciasService } from '../ocorrencias/ocorrencias.service';
+import { CredentialsEncryptor } from '../gateways-pagamento-config/credentials-encryptor.service';
 
 @Injectable()
 export class MonitoramentoUsinasService {
@@ -13,17 +14,52 @@ export class MonitoramentoUsinasService {
     private prisma: PrismaService,
     private sungrow: SungrowService,
     private ocorrencias: OcorrenciasService,
+    private encryptor: CredentialsEncryptor,
   ) {}
 
-  // Sprint 6 Ticket 11: desativado — 0 configs habilitadas, cron rodava
-  // a cada minuto sem fazer nada. Reativar quando integração Sungrow for
-  // implementada de verdade (Sprint 9+).
-  // @Cron('* * * * *')
+  /**
+   * Detecta se string esta no formato encrypted iv:cipher:tag (base64).
+   * Fallback gracioso pra senhas legadas em texto puro (0 configs habilitadas
+   * em 27/05/2026, mas defesa em profundidade).
+   */
+  private estaEncrypted(valor: string | null | undefined): boolean {
+    if (!valor) return false;
+    const parts = valor.split(':');
+    if (parts.length !== 3) return false;
+    // IV base64 ~16 chars, tag ~24 chars
+    return parts[0].length >= 12 && parts[2].length >= 20;
+  }
+
+  private decifrarSenha(valor: string | null | undefined): string | null {
+    if (!valor) return null;
+    if (!this.estaEncrypted(valor)) {
+      // Legado texto puro — usar direto, logar warning pra migracao
+      this.logger.warn('sungrowSenha em texto puro detectada — migrar via UI admin pra encrypted');
+      return valor;
+    }
+    try {
+      return this.encryptor.decrypt(valor);
+    } catch (err) {
+      this.logger.error(`Falha decifrar sungrowSenha: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  // Sub-Sprint F Etapa E (M30, 2026-05-26): REATIVADO a cada 30 minutos.
+  // Sprint 6 Ticket 11 desativou — agora reativa, com guard "0 configs
+  // habilitadas pula cedo" pra nao poluir logs em ambientes sem credenciais.
+  @Cron('*/30 * * * *')
   async handleCron() {
     const configs = await this.prisma.usinaMonitoramentoConfig.findMany({
       where: { habilitado: true },
       include: { usina: true },
     });
+
+    if (configs.length === 0) {
+      // Silencioso — nada habilitado ainda
+      return;
+    }
+    this.logger.log(`Cron monitoramento: ${configs.length} usina(s) habilitada(s)`);
 
     for (const config of configs) {
       const ultima = this.ultimaVerificacao.get(config.usinaId);
@@ -51,9 +87,17 @@ export class MonitoramentoUsinasService {
       return;
     }
 
+    // Sub-Sprint F Etapa E: decifrar sungrowSenha encrypted (CredentialsEncryptor)
+    // com fallback gracioso pra senhas legadas em texto puro.
+    const senhaPlain = this.decifrarSenha(config.sungrowSenha);
+    if (!senhaPlain) {
+      this.logger.warn(`Usina ${config.usina.nome}: falha decifrar sungrowSenha, pulando`);
+      return;
+    }
+
     const status = await this.sungrow.getUsinaStatus({
       sungrowUsuario: config.sungrowUsuario,
-      sungrowSenha: config.sungrowSenha,
+      sungrowSenha: senhaPlain,
       sungrowAppKey: config.sungrowAppKey,
       sungrowPlantId: config.sungrowPlantId,
     });
@@ -238,22 +282,52 @@ export class MonitoramentoUsinasService {
     });
   }
 
+  /**
+   * Mascara sungrowSenha pra exibicao admin (NAO retorna valor decryptado).
+   * Sub-Sprint F Etapa E (M30, 2026-05-26).
+   */
   async getConfig(usinaId: string) {
-    return this.prisma.usinaMonitoramentoConfig.findUnique({
+    const config = await this.prisma.usinaMonitoramentoConfig.findUnique({
       where: { usinaId },
     });
+    if (!config) return null;
+    // Nunca expor senha — UI mostra "(senha definida)" ou vazio
+    return {
+      ...config,
+      sungrowSenha: config.sungrowSenha ? '(senha definida)' : null,
+    };
   }
 
+  /**
+   * Encripta sungrowSenha antes de persistir (CredentialsEncryptor +
+   * GATEWAY_ENCRYPT_KEY). Sub-Sprint F Etapa E.
+   */
   async createConfig(usinaId: string, data: any) {
+    const dataPreparada = { ...data };
+    if (data.sungrowSenha && typeof data.sungrowSenha === 'string') {
+      dataPreparada.sungrowSenha = this.encryptor.encrypt(data.sungrowSenha);
+    }
     return this.prisma.usinaMonitoramentoConfig.create({
-      data: { usinaId, ...data },
+      data: { usinaId, ...dataPreparada },
     });
   }
 
+  /**
+   * Idem update: encripta sungrowSenha se vier. Ignora se for placeholder
+   * "(senha definida)" (caso usuario edite outros campos sem trocar senha).
+   */
   async updateConfig(usinaId: string, data: any) {
+    const dataPreparada = { ...data };
+    if (data.sungrowSenha !== undefined) {
+      if (data.sungrowSenha === '(senha definida)' || data.sungrowSenha === '') {
+        delete dataPreparada.sungrowSenha;
+      } else if (typeof data.sungrowSenha === 'string') {
+        dataPreparada.sungrowSenha = this.encryptor.encrypt(data.sungrowSenha);
+      }
+    }
     return this.prisma.usinaMonitoramentoConfig.update({
       where: { usinaId },
-      data,
+      data: dataPreparada,
     });
   }
 
