@@ -3154,6 +3154,104 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-BD — Tabela /dashboard/proprietario/[cooperativaId] estourando horizontal (P2)
+
+**Severidade:** P2 (UX, frustração de leitura em viewport médio)
+**Origem:** 27/05/2026 noite — smoke visual do F.5b. Luciano relatou que a tabela com 7 colunas (Usina/Status/Proprietário/Contrato/YTD/Convite/Ação) estourava lateralmente em viewport ~1280-1366px (largura comum desktop), forçando scroll horizontal no browser inteiro.
+
+**Fix aplicado:** envolver `<Table>` com `<div className="overflow-x-auto">` + `<Table className="min-w-[900px]">` em `web/app/dashboard/proprietario/[cooperativaId]/page.tsx`. Scroll horizontal fica isolado ao container da tabela, não afeta layout da página.
+
+**Status:** ✅ **RESOLVIDO em 2026-05-27 noite (M33 Etapa A).**
+
+---
+
+### D-novo-AZ — Campo Classe GD (GD_I/GD_II/GD_III) na tela /dashboard/usinas/nova (P1)
+
+**Severidade:** P1 (lacuna de cadastro — campo necessário pro Sub-Sprint Fio B real)
+**Origem:** 27/05/2026 noite — exploração das telas de usinas pela equipe orquestradora pré-fechamento M33.
+
+**Sintoma:** schema Prisma tem `Usina.classeGdAnotada` (campo opcional já existente), MAS tela `/dashboard/usinas/nova` não tem input pra preencher. Sem o campo, sistema não consegue diferenciar GD_I (≤ 75kW, isento Fio B) vs GD_II/GD_III (> 75kW, sujeitos a Fio B progressivo).
+
+**Fix sugerido (escopo):**
+
+1. Adicionar `<Select>` ou `<RadioGroup>` na tela `/dashboard/usinas/nova` com 3 opções: GD_I, GD_II, GD_III + opção "Não classificado"
+2. Tooltip/help inline explicando cada tipo (referência REN 1.000/2021 + REN 1.059/2023)
+3. Salvar em `Usina.classeGdAnotada` (campo já existe no schema)
+4. Adicionar mesma opção na tela `/dashboard/usinas/[id]/editar` (depende de D-novo-BB+BC primeiro)
+
+**⚠️ IMPORTANTE — SÓ REGISTRO, ZERO LÓGICA FIO B AGORA.** Este débito catalogou APENAS o input/persistência do campo. Quando Sub-Sprint Fio B real (futuro, não agendado) for executado, ELE consome `classeGdAnotada` pra aplicar regras Fio B progressivas nas usinas marcadas GD_II/GD_III. Hoje sistema permanece neutro (decisão estratégica enquanto litígio CoopereBR×EDP corre — vide nota schema.prisma:378-380).
+
+**Estimativa:** 30-45min (formulário simples + label/help + persistência).
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Vai pro Sub-Sprint Refinamento Telas Usinas.
+
+---
+
+### D-novo-BA — Auditar usinas existentes pra preencher classeGdAnotada (P2)
+
+**Severidade:** P2 (correção de dado faltante após D-novo-AZ implementar)
+**Origem:** mesma exploração 27/05/2026 noite.
+
+**Sintoma:** após D-novo-AZ adicionar o campo, todas as ~10 usinas existentes (4 Linhares + outras) ficam com `classeGdAnotada=null`. Precisa auditar uma a uma e preencher (depende de informação real da homologação ANEEL/EDP).
+
+**Fix sugerido:**
+
+1. Script `backend/scripts/auditoria-classe-gd.ts` listando todas usinas com `classeGdAnotada=null` + `potenciaKwp` + dados de homologação
+2. Luciano (ou empresa adjacente) preenche planilha manual com a classe correta de cada usina
+3. Script update bulk em produção (com Decisão 23 — review SQL gerado primeiro)
+
+**Estimativa:** 30min Code (script) + ~1h Luciano operacional (preencher planilha).
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Depende D-novo-AZ. Vai pro Sub-Sprint Refinamento Telas Usinas.
+
+---
+
+### D-novo-BB — Tela edição usina abre como drawer — VIOLA Padrão UX Dual 17/05 (P1)
+
+**Severidade:** P1 (arquitetural — padrão diretivo violado)
+**Origem:** exploração 27/05/2026 noite.
+
+**Sintoma:** click em editar usina abre Sheet/drawer lateral. Padrão UX Dual aprovado 17/05/2026 (memória `padrao_ux_edicao_inline_vs_pagina_propria_17_05.md`) determinou: edição de **entidade completa** (Tipo B) = página própria `/dashboard/X/[id]/editar` (não Sheet/drawer). URL distinta evita confusão tipo Cooperebr2 duplicada.
+
+**Fix sugerido:**
+
+1. Criar `web/app/dashboard/usinas/[id]/editar/page.tsx` (rota dedicada)
+2. Migrar formulário do drawer atual pro componente full-page
+3. Substituir trigger "Editar" da listagem por `<Link href="/dashboard/usinas/[id]/editar">`
+4. Remover Sheet/drawer
+
+**Pre-requisito:** decisão D-novo-BC (paridade de campos) — refator faz sentido de fazer junto, OR D-novo-BB resolvido primeiro mantendo campos atuais.
+
+**Estimativa:** 1.5-2h (refator UX + reaproveitar form fields existentes).
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Vai pro Sub-Sprint Refinamento Telas Usinas.
+
+---
+
+### D-novo-BC — Tela edição usina sem paridade de campos com /nova (P2)
+
+**Severidade:** P2 (lacuna funcional)
+**Origem:** exploração 27/05/2026 noite.
+
+**Sintoma:** form de edição (drawer atual OU futura página) NÃO tem paridade com o de cadastro `/nova`. Campos ausentes no edit que existem no schema + cadastro:
+
+- Contrato distribuidora (`numeroContratoEdp`, `dataContratoEdp`)
+- Forma de aquisição (`formaAquisicao`: CESSAO/ALUGUEL/PROPRIA)
+- Forma pagamento dono (`formaPagamentoDono`: FIXO/PERCENTUAL/HIBRIDO)
+- Proprietário completo (`proprietarioNome`, `proprietarioCpfCnpj`, `proprietarioTelefone`, `proprietarioEmail`, `proprietarioTipo`)
+- Bloco H' endereço completo (`enderecoLogradouro/Numero/Bairro/Cep`)
+- Apelido interno (`apelidoInterno`)
+- Distribuidora (`distribuidora`)
+- Modelo cobrança override + política bandeira
+
+**Fix sugerido:** após D-novo-BB ter a página dedicada `/editar` criada, replicar TODOS os campos do schema (com `optional: true` quando aplicável). Bloquear apenas campos imutáveis (id, createdAt).
+
+**Estimativa:** 1.5-2h (formulário ampliado + validações + DTOs backend já cobrem maioria dos campos).
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Vai pro Sub-Sprint Refinamento Telas Usinas (após D-novo-BB).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
