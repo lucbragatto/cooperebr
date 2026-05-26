@@ -9,6 +9,7 @@ import {
   IsBoolean,
   IsEnum,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -16,7 +17,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { FormaAquisicao, FormaPagamentoDono } from '@prisma/client';
+import { FormaAquisicao, FormaPagamentoDono, StatusOperacional } from '@prisma/client';
 
 export class UpdateUsinaDto {
   @IsOptional() @IsString() nome?: string;
@@ -88,4 +89,20 @@ export class UpdateUsinaDto {
   /// Sprint 8 (M14.B) — anotação de classe GD por usina (string, sem enum hard
   /// até dossiê regulatório fechar). Valores aceitos: 'GD_I', 'GD_II', 'GD_III'.
   @IsOptional() @IsString() classeGdAnotada?: string | null;
+
+  // Sub-Sprint F (M30, 2026-05-26) — Portal Proprietario
+  @IsOptional()
+  @IsEnum(StatusOperacional, {
+    message: 'statusOperacional deve ser OPERANDO | MANUTENCAO_PLANEJADA | MANUTENCAO_EMERGENCIAL | DESLIGADA | OFFLINE',
+  })
+  statusOperacional?: StatusOperacional;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 5 }, { message: 'valorKwhPadrao deve ser numero com ate 5 casas' })
+  @Min(0.00001, { message: 'valorKwhPadrao deve ser > 0' })
+  valorKwhPadrao?: number | null;
+
+  @IsOptional()
+  @IsObject({ message: 'responsabilidadeDespesas deve ser objeto { categoria: responsavel }' })
+  responsabilidadeDespesas?: Record<string, string>;
 }

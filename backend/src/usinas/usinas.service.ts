@@ -195,6 +195,11 @@ export class UsinasService {
     percentualGeracaoDono: number | null;
     numeroContratoEdp: string | null;
     dataContratoEdp: string | null;
+    // Sub-Sprint F (M30, 2026-05-26)
+    statusOperacional: 'OPERANDO' | 'MANUTENCAO_PLANEJADA' | 'MANUTENCAO_EMERGENCIAL' | 'DESLIGADA' | 'OFFLINE';
+    valorKwhPadrao: number | null;
+    responsabilidadeDespesas: Record<string, string>;
+    classeGdAnotada: string | null;
   }>) {
     const usina = await this.prisma.usina.findUnique({ where: { id } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
@@ -285,6 +290,17 @@ export class UsinasService {
       updateData.dataContratoEdp = data.dataContratoEdp
         ? new Date(data.dataContratoEdp + 'T00:00:00.000Z')
         : null;
+    }
+
+    // Sub-Sprint F (M30, 2026-05-26) — Portal Proprietario
+    const subSprintFFields = [
+      'statusOperacional',
+      'valorKwhPadrao',
+      'responsabilidadeDespesas',
+      'classeGdAnotada',
+    ] as const;
+    for (const f of subSprintFFields) {
+      if ((data as any)[f] !== undefined) updateData[f] = (data as any)[f];
     }
 
     return this.prisma.usina.update({ where: { id }, data: updateData });
