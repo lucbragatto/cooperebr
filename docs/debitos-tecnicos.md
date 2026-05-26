@@ -3087,7 +3087,11 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 **Estimativa:** 1-2h investigação + fix (depende da causa raiz)
 
-**Status:** 📋 Catalogado em 2026-05-27 noite. Próxima sessão Code arranca Fase 1 read-only.
+**Status:** ✅ **RESOLVIDO em 2026-05-27 noite (sessão Code).** Causa raiz NÃO foi nenhuma das 6 hipóteses iniciais — foi **build estático stale**: `cooperebr-frontend` no PM2 roda `next start -p 3001` (modo produção, não dev), e a build em `web/.next` era anterior ao M30. As mudanças de label/KPIs do Sub-Sprint F MVP+ nunca chegaram ao browser. Rebuild falhou inicialmente por **3 erros TS que `tsc --noEmit` deixou passar mas `next build` (Turbopack) pegou** — catalogados como D-novo-AS abaixo. Fix aplicado:
+- 2× `<DialogTrigger asChild>` → `<DialogTrigger render={<Button .../>} />` em `web/app/dashboard/usinas/[id]/proprietario/page.tsx:317-339` (Base UI não tem `asChild` igual Radix — usa `render` prop)
+- 1× Tooltip Recharts `formatter={(v: number) => ...}` → `formatter={(v) => Number(v ?? 0)...}` em `web/app/proprietario/usinas/[id]/page.tsx:188` (Formatter aceita `ValueType | undefined`)
+- `npm run build` OK (140 páginas, 6.4s compile)
+- PM2 frontend online novo PID, porta 3001 LISTENING, HTTP 200 raiz + 307 redirect /proprietario (auth gate normal)
 
 ---
 
@@ -3116,7 +3120,37 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 **Estimativa:** 15-30 min (fix curtíssimo se hook já expõe nome)
 
-**Status:** 📋 Catalogado em 2026-05-27 noite.
+**Status:** ✅ **RESOLVIDO em 2026-05-27 noite.** Fix em `web/app/proprietario/layout.tsx:51` — `usuario?.nome ?? 'Proprietário'` com fallback. Aplicado ao bundle em rebuild do D-novo-AR.
+
+---
+
+### D-novo-AS — Gap entre `tsc --noEmit` e `next build` no pipeline de validação Code (P2)
+
+**Severidade:** P2 (qualidade de pipeline, gera incidentes pós-deploy se ignorado)
+**Origem:** 27/05/2026 noite — investigação D-novo-AR revelou que 3 erros TS estavam latentes em arquivos do M30/M31 (`web/app/dashboard/usinas/[id]/proprietario/page.tsx` × 2 + `web/app/proprietario/usinas/[id]/page.tsx`). Passavam `tsc --noEmit` (que Code usava como gate de validação dos sub-sprints F.3 Etapa E/F) mas falhavam `next build` (Turbopack faz type-check mais agressivo).
+
+**Sintoma:** Sub-Sprint F MVP+ (M30 + M31) foi entregue com `tsc --noEmit ✅` reportado nas doc-sessões, MAS o frontend em produção local jamais rebuildou desde antes do M30 — bundle servido ao browser ficou velho por 3 dias, escondendo a falha. Bug só apareceu na demo (27/05) como "KPIs zerados" enganando Luciano e Code por horas até descobrir a real causa raiz.
+
+**Lacuna:** Code não roda `next build` antes de fechar marcos que tocam `web/`. Erros que Turbopack pega (mas tsc deixa passar) viram débito invisível até alguém rebuildar.
+
+**Erros TS típicos no gap:**
+- Componentes `@base-ui/react` (sem `asChild`) confundidos com Radix
+- Tipos de libs externas (Recharts `Formatter` com union `| undefined`)
+- Props que tsc valida com `--strict false` mas Turbopack com strict
+
+**Fix sugerido (proposta):**
+
+1. **Curto prazo:** quando marco fecha tocando `web/`, Code OBRIGATORIAMENTE roda `cd web && npm run build` (~6-10s) antes de declarar "✅ build validado". `tsc --noEmit` deixa de ser suficiente.
+2. **Médio prazo (D-novo-AS.1):** PostToolUse hook que dispara `next build` em background quando arquivo `web/app/**` é editado. Reporta erro se falhar.
+3. **Longo prazo (D-novo-AS.2):** CI mínimo local (lint + tsc + next build) rodando no fechamento de cada marco — pode ser script `npm run validate-marco` no root.
+
+**Estimativa:** decisão diretiva curtíssima (regra Code: roda `next build`). Hook PostToolUse 30-60min implementar.
+
+**Refs:**
+- `docs/sessoes/2026-05-27-noite-*` (sessão demo + bugs)
+- D-novo-AR (incidente que gerou esse aprendizado)
+
+**Status:** 📋 Catalogado em 2026-05-27 noite. Aplicar regra Code IMEDIATAMENTE; hook PostToolUse fica como melhoria futura.
 
 ---
 

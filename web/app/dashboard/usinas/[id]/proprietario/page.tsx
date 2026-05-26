@@ -315,11 +315,13 @@ function AcessoProprietarioBloco({ usinaId, proprietarioEmail }: { usinaId: stri
 
         <div className="flex flex-wrap gap-3">
           <Dialog open={dialogManualAberto} onOpenChange={setDialogManualAberto}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-amber-500 text-amber-700">
-                <UserPlus className="w-4 h-4 mr-2" /> Cadastrar manualmente
-              </Button>
-            </DialogTrigger>
+            <DialogTrigger
+              render={
+                <Button variant="outline" className="border-amber-500 text-amber-700">
+                  <UserPlus className="w-4 h-4 mr-2" /> Cadastrar manualmente
+                </Button>
+              }
+            />
             <CadastroManualDialog
               usinaId={usinaId}
               emailDefault={proprietarioEmail}
@@ -328,11 +330,13 @@ function AcessoProprietarioBloco({ usinaId, proprietarioEmail }: { usinaId: stri
           </Dialog>
 
           <Dialog open={dialogConviteAberto} onOpenChange={setDialogConviteAberto}>
-            <DialogTrigger asChild>
-              <Button className="bg-amber-600 hover:bg-amber-700">
-                <Mail className="w-4 h-4 mr-2" /> Convidar por email (magic link)
-              </Button>
-            </DialogTrigger>
+            <DialogTrigger
+              render={
+                <Button className="bg-amber-600 hover:bg-amber-700">
+                  <Mail className="w-4 h-4 mr-2" /> Convidar por email (magic link)
+                </Button>
+              }
+            />
             <ConvidarEmailDialog
               usinaId={usinaId}
               emailDefault={proprietarioEmail}

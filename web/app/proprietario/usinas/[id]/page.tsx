@@ -185,7 +185,7 @@ export default function DetalheUsinaPage() {
                   <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip
-                    formatter={(v: number) => v.toLocaleString('pt-BR') + ' kWh'}
+                    formatter={(v) => `${Number(v ?? 0).toLocaleString('pt-BR')} kWh`}
                     labelStyle={{ color: '#92400e', fontWeight: 600 }}
                   />
                   <Legend />
