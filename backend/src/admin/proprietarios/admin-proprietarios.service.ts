@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import {
   calcularRepasse,
@@ -231,33 +231,55 @@ export class AdminProprietariosService {
     return resumos;
   }
 
-  // ─── ENDPOINT 2 — Tabela usinas+proprietarios POR cooperativa ────────
+  // ─── Helpers compartilhados N2 + N3 (F.6a) ──────────────────────────
 
-  async listarUsinasPorCooperativa(cooperativaId: string, user?: any) {
-    // F.5 Etapa B (M33, 27/05 noite): multi-tenant guard.
-    // SUPER_ADMIN: acesso global. ADMIN: só cooperativaId === user.cooperativaId.
-    if (
-      user &&
-      user.perfil !== 'SUPER_ADMIN' &&
-      user.cooperativaId !== cooperativaId
-    ) {
-      throw new ForbiddenException(
-        'Voce so pode acessar dados da sua propria cooperativa.',
-      );
+  /**
+   * Chave de dedupe por proprietário:
+   *   Caminho A (proprietarioCooperadoId set): `c-<cooperadoId>`
+   *   Caminho B (proprietarioEmail set): `e-<email.toLowerCase()>`
+   *   Órfã (ambos null): 'SEM_PROPRIETARIO'
+   */
+  private chaveProprietario(u: {
+    proprietarioCooperadoId: string | null;
+    proprietarioEmail: string | null;
+  }): string {
+    if (u.proprietarioCooperadoId) return `c-${u.proprietarioCooperadoId}`;
+    if (u.proprietarioEmail) return `e-${u.proprietarioEmail.toLowerCase()}`;
+    return 'SEM_PROPRIETARIO';
+  }
+
+  /**
+   * Parse propId vindo da URL.
+   * Aceita: c-<cooperadoId> | e-<email URL-encoded> | SEM_PROPRIETARIO
+   * Retorna info estruturada pra filtrar usinas.
+   */
+  private parsePropId(propId: string): {
+    caminho: 'COOPERADO' | 'EMAIL' | 'ORFAO';
+    cooperadoId?: string;
+    email?: string;
+  } {
+    if (propId === 'SEM_PROPRIETARIO') return { caminho: 'ORFAO' };
+    if (propId.startsWith('c-')) {
+      const cooperadoId = propId.slice(2);
+      if (!cooperadoId) throw new BadRequestException('propId inválido: cooperadoId vazio.');
+      return { caminho: 'COOPERADO', cooperadoId };
     }
-
-    const coop = await this.prisma.cooperativa.findUnique({
-      where: { id: cooperativaId },
-      select: { id: true, nome: true, tipoParceiro: true },
-    });
-    if (!coop) {
-      throw new NotFoundException('Cooperativa nao encontrada.');
+    if (propId.startsWith('e-')) {
+      // Next.js + Express decodam URL automaticamente; passamos pra lowercase pra match dedup.
+      const email = propId.slice(2).toLowerCase();
+      if (!email) throw new BadRequestException('propId inválido: email vazio.');
+      return { caminho: 'EMAIL', email };
     }
+    throw new BadRequestException(`propId inválido: '${propId}'. Use 'c-<id>', 'e-<email>', ou 'SEM_PROPRIETARIO'.`);
+  }
 
+  /**
+   * Tipo intermediário das usinas com geração do ano (usado por N2 + N3).
+   */
+  private async buscarUsinasComGeracoesAno(cooperativaId: string) {
     const now = new Date();
     const inicioAno = new Date(now.getFullYear(), 0, 1);
-
-    const usinas = await this.prisma.usina.findMany({
+    return this.prisma.usina.findMany({
       where: { cooperativaId },
       select: {
         id: true,
@@ -275,75 +297,365 @@ export class AdminProprietariosService {
         percentualGeracaoDono: true,
         valorKwhPadrao: true,
         distribuidora: true,
+        updatedAt: true,
         geracoesMensais: {
           where: { competencia: { gte: inicioAno, lte: now } },
           select: { competencia: true, kwhGerado: true },
         },
+        alertas: {
+          where: { resolvidoEm: null },
+          select: { id: true },
+        },
       },
       orderBy: { nome: 'asc' },
     });
+  }
 
-    const conviteByUsina = await this.prisma.conviteProprietario.findMany({
+  /**
+   * Calcula YTD repasse de uma usina via helper calcularRepasse.
+   */
+  private async calcularYtdUsina(
+    u: Awaited<ReturnType<typeof this.buscarUsinasComGeracoesAno>>[number],
+    tarifaResolver: TarifaResolver,
+  ): Promise<number> {
+    const usinaCalc: UsinaParaCalculo = {
+      formaPagamentoDono: u.formaPagamentoDono,
+      valorAluguelFixo: u.valorAluguelFixo !== null ? Number(u.valorAluguelFixo) : null,
+      percentualGeracaoDono:
+        u.percentualGeracaoDono !== null ? Number(u.percentualGeracaoDono) : null,
+      valorKwhPadrao: u.valorKwhPadrao !== null ? Number(u.valorKwhPadrao) : null,
+      distribuidora: u.distribuidora,
+    };
+    let ytd = 0;
+    for (const g of u.geracoesMensais) {
+      const r = await calcularRepasse(
+        usinaCalc,
+        { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+        tarifaResolver,
+      );
+      if (r.valor !== null) ytd += r.valor;
+    }
+    return Math.round(ytd * 100) / 100;
+  }
+
+  /**
+   * Formata contratoArrendamento descritivo conforme formaPagamentoDono.
+   */
+  private formatarContratoArrendamento(u: {
+    formaPagamentoDono: string | null;
+    valorAluguelFixo: any;
+    percentualGeracaoDono: any;
+  }): string {
+    if (!u.formaPagamentoDono) return 'NAO_CONFIGURADO';
+    const fixo = Number(u.valorAluguelFixo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const pct = Number(u.percentualGeracaoDono ?? 0);
+    if (u.formaPagamentoDono === 'FIXO') return `FIXO (R$ ${fixo})`;
+    if (u.formaPagamentoDono === 'PERCENTUAL') return `PERCENTUAL (${pct}%)`;
+    return `HIBRIDO (R$ ${fixo} + ${pct}%)`;
+  }
+
+  /**
+   * Status operacional → categoria do semáforo agregado.
+   */
+  private classificarStatus(statusOperacional: string): 'OK' | 'ATENCAO' | 'CRITICO' {
+    if (statusOperacional === 'OPERANDO') return 'OK';
+    if (statusOperacional === 'MANUTENCAO_PLANEJADA') return 'ATENCAO';
+    return 'CRITICO';
+  }
+
+  /**
+   * Guard multi-tenant compartilhado: SUPER_ADMIN global, ADMIN só sua coop.
+   */
+  private assertAcessoCooperativa(cooperativaId: string, user?: any) {
+    if (
+      user &&
+      user.perfil !== 'SUPER_ADMIN' &&
+      user.cooperativaId !== cooperativaId
+    ) {
+      throw new ForbiddenException(
+        'Voce so pode acessar dados da sua propria cooperativa.',
+      );
+    }
+  }
+
+  // ─── ENDPOINT 2 (REFATORADO F.6a) — Cards de proprietários por cooperativa ──
+
+  /**
+   * GET /admin/proprietarios/cooperativas/:coopId/usinas
+   *
+   * Retorna `{cooperativa, proprietarios[]}` agregado por chave de dedupe
+   * (Caminho A cooperadoId / Caminho B email lowercase / SEM_PROPRIETARIO).
+   *
+   * Sort: alfabético por nome; SEM_PROPRIETARIO sempre último.
+   */
+  async listarProprietariosPorCooperativa(cooperativaId: string, user?: any) {
+    this.assertAcessoCooperativa(cooperativaId, user);
+
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: { id: true, nome: true, tipoParceiro: true },
+    });
+    if (!coop) throw new NotFoundException('Cooperativa nao encontrada.');
+
+    const usinas = await this.buscarUsinasComGeracoesAno(cooperativaId);
+    const tarifaResolver = this.criarTarifaResolver();
+
+    // Calcula YTD de cada usina uma única vez
+    const ytdPorUsina = new Map<string, number>();
+    for (const u of usinas) {
+      ytdPorUsina.set(u.id, await this.calcularYtdUsina(u, tarifaResolver));
+    }
+
+    // Convites pra Caminho B (agregado por chave de proprietário)
+    const convitesPorUsina = await this.prisma.conviteProprietario.findMany({
       where: { usinaId: { in: usinas.map((u) => u.id) } },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, usinaId: true, usedAt: true, expiresAt: true },
+      select: { usinaId: true, usedAt: true, expiresAt: true },
+    });
+    const idxConviteMaisRecente = new Map<string, { usedAt: Date | null; expiresAt: Date }>();
+    for (const c of convitesPorUsina) {
+      if (!idxConviteMaisRecente.has(c.usinaId)) {
+        idxConviteMaisRecente.set(c.usinaId, { usedAt: c.usedAt, expiresAt: c.expiresAt });
+      }
+    }
+
+    // Caminho A: precisamos do nome do Cooperado (single source of truth)
+    const cooperadoIds = Array.from(
+      new Set(
+        usinas
+          .map((u) => u.proprietarioCooperadoId)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const cooperados = cooperadoIds.length
+      ? await this.prisma.cooperado.findMany({
+          where: { id: { in: cooperadoIds } },
+          select: { id: true, nomeCompleto: true },
+        })
+      : [];
+    const idxCooperadoNome = new Map(cooperados.map((c) => [c.id, c.nomeCompleto]));
+
+    // Agrega por chave de proprietário
+    const grupos = new Map<
+      string,
+      {
+        proprietarioId: string;
+        usinas: typeof usinas;
+        nomesObservados: { nome: string | null; updatedAt: Date }[];
+        emailRaw: string | null;
+        cooperadoId: string | null;
+      }
+    >();
+
+    for (const u of usinas) {
+      const chave = this.chaveProprietario(u);
+      let g = grupos.get(chave);
+      if (!g) {
+        g = {
+          proprietarioId: chave,
+          usinas: [] as typeof usinas,
+          nomesObservados: [],
+          emailRaw: u.proprietarioEmail,
+          cooperadoId: u.proprietarioCooperadoId,
+        };
+        grupos.set(chave, g);
+      }
+      g.usinas.push(u);
+      g.nomesObservados.push({ nome: u.proprietarioNome, updatedAt: u.updatedAt });
+    }
+
+    const now = new Date();
+    const proprietarios = Array.from(grupos.values()).map((g) => {
+      // Nome: Caminho A => Cooperado.nomeCompleto. Caminho B => nome da usina mais recente.
+      let nome: string;
+      if (g.proprietarioId === 'SEM_PROPRIETARIO') {
+        nome = 'Sem proprietário cadastrado';
+      } else if (g.cooperadoId && idxCooperadoNome.has(g.cooperadoId)) {
+        nome = idxCooperadoNome.get(g.cooperadoId) ?? '—';
+      } else {
+        // Caminho B: pega da usina updatedAt mais recente (D-novo-BE catalogado)
+        const recente = [...g.nomesObservados].sort(
+          (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+        )[0];
+        nome = recente?.nome ?? '—';
+      }
+
+      // Tipo: derivado de proprietarioTipo da primeira usina (sem dedupe sofisticado)
+      const tipo: 'PF' | 'PJ' | 'INDEFINIDO' =
+        g.proprietarioId === 'SEM_PROPRIETARIO' ? 'INDEFINIDO' : 'PF'; // schema default PF
+
+      const emailMascarado =
+        g.proprietarioId === 'SEM_PROPRIETARIO'
+          ? null
+          : this.mascararEmail(g.emailRaw);
+
+      const numeroUsinas = g.usinas.length;
+      const capacidadeTotalKwp = g.usinas.reduce(
+        (s, u) => s + Number(u.potenciaKwp ?? 0),
+        0,
+      );
+      const totalYtdAgregado = g.usinas.reduce(
+        (s, u) => s + (ytdPorUsina.get(u.id) ?? 0),
+        0,
+      );
+
+      let statusOk = 0;
+      let statusAtencao = 0;
+      let statusCritico = 0;
+      for (const u of g.usinas) {
+        const cat = this.classificarStatus(u.statusOperacional);
+        if (cat === 'OK') statusOk++;
+        else if (cat === 'ATENCAO') statusAtencao++;
+        else statusCritico++;
+      }
+
+      // Convite agregado:
+      //   Caminho A / órfã => NA (Caminho A não usa convite; órfã também não)
+      //   Caminho B => derivado dos convites das usinas do grupo
+      let conviteStatusAgregado:
+        | 'USADO'
+        | 'PENDENTE'
+        | 'EXPIRADO'
+        | 'NAO_CONVIDADO'
+        | 'MIXED'
+        | 'NA' = 'NA';
+      if (g.proprietarioId.startsWith('e-')) {
+        const statusList = g.usinas.map((u) => {
+          const c = idxConviteMaisRecente.get(u.id);
+          if (!c) return 'NAO_CONVIDADO';
+          if (c.usedAt) return 'USADO';
+          if (c.expiresAt > now) return 'PENDENTE';
+          return 'EXPIRADO';
+        });
+        const unique = Array.from(new Set(statusList));
+        if (unique.length === 1) conviteStatusAgregado = unique[0] as any;
+        else conviteStatusAgregado = 'MIXED';
+      }
+
+      return {
+        proprietarioId: g.proprietarioId,
+        nome,
+        tipo,
+        emailMascarado,
+        numeroUsinas,
+        capacidadeTotalKwp: Math.round(capacidadeTotalKwp * 100) / 100,
+        totalYtdAgregado: Math.round(totalYtdAgregado * 100) / 100,
+        statusOk,
+        statusAtencao,
+        statusCritico,
+        conviteStatusAgregado,
+      };
     });
 
-    const idxConvite = new Map<
-      string,
-      { usedAt: Date | null; expiresAt: Date }
-    >();
-    for (const c of conviteByUsina) {
-      if (!idxConvite.has(c.usinaId)) {
-        idxConvite.set(c.usinaId, { usedAt: c.usedAt, expiresAt: c.expiresAt });
+    // Sort: alfabético; SEM_PROPRIETARIO sempre último
+    proprietarios.sort((a, b) => {
+      if (a.proprietarioId === 'SEM_PROPRIETARIO') return 1;
+      if (b.proprietarioId === 'SEM_PROPRIETARIO') return -1;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
+    });
+
+    return {
+      cooperativa: { id: coop.id, nome: coop.nome, tipoParceiro: coop.tipoParceiro },
+      proprietarios,
+    };
+  }
+
+  // ─── ENDPOINT 3 (NOVO F.6a) — Usinas de UM proprietário ─────────────
+
+  /**
+   * GET /admin/proprietarios/cooperativas/:coopId/proprietarios/:propId/usinas
+   *
+   * Retorna `{cooperativa, proprietario, usinas[]}` filtrado pela chave de
+   * dedupe parseada de propId.
+   */
+  async listarUsinasDoProprietario(
+    cooperativaId: string,
+    propId: string,
+    user?: any,
+  ) {
+    this.assertAcessoCooperativa(cooperativaId, user);
+
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: { id: true, nome: true, tipoParceiro: true },
+    });
+    if (!coop) throw new NotFoundException('Cooperativa nao encontrada.');
+
+    const parsed = this.parsePropId(propId);
+
+    // Filtra usinas conforme caminho
+    const todas = await this.buscarUsinasComGeracoesAno(cooperativaId);
+    const usinasFiltradas = todas.filter((u) => {
+      if (parsed.caminho === 'ORFAO') {
+        return u.proprietarioCooperadoId === null && u.proprietarioEmail === null;
       }
+      if (parsed.caminho === 'COOPERADO') {
+        return u.proprietarioCooperadoId === parsed.cooperadoId;
+      }
+      // EMAIL (case-insensitive)
+      return (
+        u.proprietarioEmail !== null &&
+        u.proprietarioEmail.toLowerCase() === parsed.email
+      );
+    });
+
+    // Header info do proprietário
+    let nomeProprietario: string;
+    let emailMascarado: string | null = null;
+    if (parsed.caminho === 'ORFAO') {
+      nomeProprietario = 'Sem proprietário cadastrado';
+    } else if (parsed.caminho === 'COOPERADO') {
+      const c = await this.prisma.cooperado.findUnique({
+        where: { id: parsed.cooperadoId },
+        select: { nomeCompleto: true },
+      });
+      nomeProprietario = c?.nomeCompleto ?? '—';
+    } else {
+      // EMAIL: pega da usina updatedAt mais recente
+      const recente = [...usinasFiltradas].sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+      )[0];
+      nomeProprietario = recente?.proprietarioNome ?? '—';
+      emailMascarado = this.mascararEmail(parsed.email ?? null);
     }
 
     const tarifaResolver = this.criarTarifaResolver();
 
-    const linhas = await Promise.all(
-      usinas.map(async (u) => {
-        const usinaCalc: UsinaParaCalculo = {
-          formaPagamentoDono: u.formaPagamentoDono,
-          valorAluguelFixo:
-            u.valorAluguelFixo !== null ? Number(u.valorAluguelFixo) : null,
-          percentualGeracaoDono:
-            u.percentualGeracaoDono !== null ? Number(u.percentualGeracaoDono) : null,
-          valorKwhPadrao:
-            u.valorKwhPadrao !== null ? Number(u.valorKwhPadrao) : null,
-          distribuidora: u.distribuidora,
-        };
-
-        let ytdRepasse = 0;
-        for (const g of u.geracoesMensais) {
-          const r = await calcularRepasse(
-            usinaCalc,
-            { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
-            tarifaResolver,
-          );
-          if (r.valor !== null) ytdRepasse += r.valor;
+    // Convites pra Caminho B
+    const conviteByUsina = new Map<
+      string,
+      { usedAt: Date | null; expiresAt: Date }
+    >();
+    if (parsed.caminho === 'EMAIL' && usinasFiltradas.length > 0) {
+      const convs = await this.prisma.conviteProprietario.findMany({
+        where: { usinaId: { in: usinasFiltradas.map((u) => u.id) } },
+        orderBy: { createdAt: 'desc' },
+        select: { usinaId: true, usedAt: true, expiresAt: true },
+      });
+      for (const c of convs) {
+        if (!conviteByUsina.has(c.usinaId)) {
+          conviteByUsina.set(c.usinaId, { usedAt: c.usedAt, expiresAt: c.expiresAt });
         }
+      }
+    }
 
-        // conviteStatus: NAO_CONVIDADO | ATIVO | PENDENTE | EXPIRADO | USADO
-        let conviteStatus: 'NAO_CONVIDADO' | 'PENDENTE' | 'EXPIRADO' | 'USADO' =
-          'NAO_CONVIDADO';
-        const c = idxConvite.get(u.id);
-        if (c) {
-          if (c.usedAt) conviteStatus = 'USADO';
+    const now = new Date();
+    const usinasResposta = await Promise.all(
+      usinasFiltradas.map(async (u) => {
+        const ytdRepasse = await this.calcularYtdUsina(u, tarifaResolver);
+
+        let conviteStatus:
+          | 'USADO'
+          | 'PENDENTE'
+          | 'EXPIRADO'
+          | 'NAO_CONVIDADO'
+          | 'NA' = 'NA';
+        if (parsed.caminho === 'EMAIL') {
+          const c = conviteByUsina.get(u.id);
+          if (!c) conviteStatus = 'NAO_CONVIDADO';
+          else if (c.usedAt) conviteStatus = 'USADO';
           else if (c.expiresAt > now) conviteStatus = 'PENDENTE';
           else conviteStatus = 'EXPIRADO';
-        }
-
-        // contratoArrendamentoStatus: derivado de formaPagamentoDono
-        let contratoArrendamento: string;
-        if (!u.formaPagamentoDono) {
-          contratoArrendamento = 'NAO_CONFIGURADO';
-        } else if (u.formaPagamentoDono === 'FIXO') {
-          contratoArrendamento = `FIXO (R$ ${Number(u.valorAluguelFixo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`;
-        } else if (u.formaPagamentoDono === 'PERCENTUAL') {
-          contratoArrendamento = `PERCENTUAL (${Number(u.percentualGeracaoDono ?? 0)}%)`;
-        } else {
-          contratoArrendamento = `HIBRIDO (R$ ${Number(u.valorAluguelFixo ?? 0)} + ${Number(u.percentualGeracaoDono ?? 0)}%)`;
         }
 
         return {
@@ -354,21 +666,27 @@ export class AdminProprietariosService {
           statusHomologacao: u.statusHomologacao,
           potenciaKwp: Number(u.potenciaKwp ?? 0),
           capacidadeKwh: Number(u.capacidadeKwh ?? 0),
-          proprietarioNome: u.proprietarioNome,
-          proprietarioEmail: this.mascararEmail(u.proprietarioEmail),
-          proprietarioEmailRaw: u.proprietarioEmail, // pra impersonate identificar
-          temProprietario:
-            u.proprietarioEmail !== null || u.proprietarioCooperadoId !== null,
-          contratoArrendamento,
-          ytdRepasse: Math.round(ytdRepasse * 100) / 100,
+          contratoArrendamento: this.formatarContratoArrendamento(u),
+          ytdRepasse,
           conviteStatus,
+          alertas: u.alertas.length,
         };
       }),
     );
 
     return {
       cooperativa: { id: coop.id, nome: coop.nome, tipoParceiro: coop.tipoParceiro },
-      usinas: linhas,
+      proprietario: {
+        proprietarioId: propId,
+        caminho: parsed.caminho,
+        nome: nomeProprietario,
+        tipo:
+          parsed.caminho === 'ORFAO'
+            ? ('INDEFINIDO' as const)
+            : ('PF' as const),
+        emailMascarado,
+      },
+      usinas: usinasResposta,
     };
   }
 }

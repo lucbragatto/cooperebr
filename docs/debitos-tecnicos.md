@@ -3228,6 +3228,24 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-BE — Validação cadastro proprietário: nome divergente em mesmo email (P3)
+
+**Severidade:** P3 (qualidade de dado, não-bloqueante — solução já existe pra cards F.6a)
+**Origem:** 28/05/2026 — execução F.6a backend. Hierarquia de cards N2 agrupa usinas por chave de dedupe (email lowercase em Caminho B). Surge edge case: mesma chave (mesmo email) pode ter `proprietarioNome` divergente em usinas distintas (cadastro inconsistente — copy/paste, erro de digitação, ou uma usina criada antes do nome ser padronizado).
+
+**Solução atual F.6a:** pegar o nome da usina mais recente (`updatedAt desc`) — funciona, mas é workaround.
+
+**Solução ideal futura:**
+
+1. **Curto prazo:** validar no form de cadastro/edição da usina — se `proprietarioEmail` já existe em outra usina da mesma cooperativa, sugerir auto-preencher `proprietarioNome` igual (com aviso "este email já está vinculado a `<nome>` em N usinas").
+2. **Médio prazo:** extrair entidade `Proprietario` separada (mencionado em D-novo-AM YAGNI). Quando 2ª usina E-Solares aparecer (ou o pattern se repetir), criar `Proprietario` como tabela própria com FK em `Usina`. Resolve o single source of truth.
+
+**Estimativa:** 30-60min validação form (curto prazo) ou 4-6h migração entidade Proprietario (médio prazo, parte do D-novo-AM).
+
+**Status:** 📋 Catalogado em 2026-05-28. Não bloqueia — F.6a já resolve com workaround `updatedAt desc`.
+
+---
+
 ### D-novo-BC — Tela edição usina sem paridade de campos com /nova (P2)
 
 **Severidade:** P2 (lacuna funcional)

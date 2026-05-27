@@ -35,10 +35,20 @@ export class AdminProprietariosController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('cooperativas/:cooperativaId/usinas')
-  listarUsinasPorCooperativa(
+  listarProprietariosPorCooperativa(
     @Param('cooperativaId') cooperativaId: string,
     @Req() req: any,
   ) {
-    return this.service.listarUsinasPorCooperativa(cooperativaId, req.user);
+    return this.service.listarProprietariosPorCooperativa(cooperativaId, req.user);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Get('cooperativas/:cooperativaId/proprietarios/:propId/usinas')
+  listarUsinasDoProprietario(
+    @Param('cooperativaId') cooperativaId: string,
+    @Param('propId') propId: string,
+    @Req() req: any,
+  ) {
+    return this.service.listarUsinasDoProprietario(cooperativaId, propId, req.user);
   }
 }

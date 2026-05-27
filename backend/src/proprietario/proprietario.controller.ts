@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res } from '@nestjs/common'; // Query mantido por outros endpoints abaixo
 import type { Response } from 'express';
 import * as fs from 'node:fs';
 import { ProprietarioService } from './proprietario.service';
@@ -21,7 +21,9 @@ const { SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO } = PerfilUsuario;
  * Roles aceitas:
  *   - PROPRIETARIO: papel novo (M30) — usuario nao-cooperado dono de usina
  *   - COOPERADO: caminho A (cooperado que tambem e proprietario, ex: Luciano)
- *   - ADMIN/SUPER_ADMIN: impersonate via troca de contexto (auth.service.trocarContexto)
+ *   - ADMIN/SUPER_ADMIN: acesso operacional via troca de contexto (auth.service.trocarContexto)
+ *     F.6a (M34, 28/05): bypass impersonate via query param ?impersonate=true REMOVIDO —
+ *     substituído pela hierarquia de cards N1→N2→N3 em /dashboard/proprietario.
  */
 @Controller('proprietario')
 export class ProprietarioController {
@@ -40,16 +42,8 @@ export class ProprietarioController {
 
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
   @Get('usinas/:id')
-  detalheUsina(
-    @Param('id') id: string,
-    @Req() req: any,
-    @Query('impersonate') impersonate?: string,
-  ) {
-    // F.5a (M33, 27/05): Super Admin pode impersonar com ?impersonate=true.
-    // Bypass do guard "usuario é proprietário desta usina" é feito no
-    // resolverUsinasDoProprietario apenas se user.perfil === SUPER_ADMIN.
-    const isImpersonate = impersonate === 'true';
-    return this.service.detalheUsina(req.user, id, { impersonate: isImpersonate });
+  detalheUsina(@Param('id') id: string, @Req() req: any) {
+    return this.service.detalheUsina(req.user, id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
