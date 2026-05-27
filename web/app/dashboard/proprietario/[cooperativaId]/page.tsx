@@ -1,13 +1,17 @@
 'use client';
 
 /**
- * Sub-Sprint F.5b Etapa B (M33, 27/05/2026 noite).
+ * Sub-Sprint F.6b Etapa B (M34, 28/05/2026).
  *
- * Tabela detalhada das usinas+proprietários de UMA cooperativa.
- * Consome GET /admin/proprietarios/cooperativas/:cooperativaId/usinas.
+ * N2 — Cards de proprietários agrupados de uma cooperativa.
+ * Consome shape novo de GET /admin/proprietarios/cooperativas/:id/usinas
+ * (agora { cooperativa, proprietarios[] } por chave de dedupe).
  *
- * Linha clicável → /proprietario/usinas/[usinaId]?impersonate=true (Etapa C
- * banner). Acesso: SUPER_ADMIN apenas.
+ * Card especial SEM_PROPRIETARIO destacado visualmente (border laranja
+ * tracejado). Click no card → /dashboard/proprietario/[coopId]/[propId].
+ *
+ * Acesso: SUPER_ADMIN + ADMIN (sua propria coop). Bypass impersonate
+ * removido em F.6a.
  */
 
 import { useEffect, useState } from 'react';
@@ -17,56 +21,48 @@ import {
   ArrowLeft,
   Info,
   Building2,
-  Sun,
-  Mail,
   AlertCircle,
+  Sun,
   Users,
+  Mail,
+  Zap,
   DollarSign,
-  Eye,
+  AlertTriangle,
+  CheckCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { getUsuario } from '@/lib/auth';
 import api from '@/lib/api';
 
-interface UsinaRow {
-  usinaId: string;
+interface ProprietarioCard {
+  proprietarioId: string;
   nome: string;
-  apelidoInterno: string | null;
-  statusOperacional: string;
-  statusHomologacao: string;
-  potenciaKwp: number;
-  capacidadeKwh: number;
-  proprietarioNome: string | null;
-  proprietarioEmail: string | null; // já mascarado no backend
-  proprietarioEmailRaw: string | null; // não-mascarado, só usar em handlers
-  temProprietario: boolean;
-  contratoArrendamento: string;
-  ytdRepasse: number;
-  conviteStatus: 'NAO_CONVIDADO' | 'PENDENTE' | 'EXPIRADO' | 'USADO';
+  tipo: 'PF' | 'PJ' | 'INDEFINIDO';
+  emailMascarado: string | null;
+  numeroUsinas: number;
+  capacidadeTotalKwp: number;
+  totalYtdAgregado: number;
+  statusOk: number;
+  statusAtencao: number;
+  statusCritico: number;
+  conviteStatusAgregado: 'USADO' | 'PENDENTE' | 'EXPIRADO' | 'NAO_CONVIDADO' | 'MIXED' | 'NA';
 }
 
 interface Response {
   cooperativa: { id: string; nome: string; tipoParceiro: string };
-  usinas: UsinaRow[];
+  proprietarios: ProprietarioCard[];
 }
 
-const STATUS_OP_COR: Record<string, string> = {
-  OPERANDO: 'bg-green-100 text-green-700',
-  MANUTENCAO_PLANEJADA: 'bg-yellow-100 text-yellow-700',
-  MANUTENCAO_EMERGENCIAL: 'bg-orange-100 text-orange-700',
-  DESLIGADA: 'bg-gray-200 text-gray-700',
-  OFFLINE: 'bg-red-100 text-red-700',
+const CONVITE_LABEL: Record<string, string> = {
+  USADO: 'Acesso ativo',
+  PENDENTE: 'Convite pendente',
+  EXPIRADO: 'Convite expirado',
+  NAO_CONVIDADO: 'Não convidado',
+  MIXED: 'Status misto',
+  NA: '—',
 };
 
 const CONVITE_COR: Record<string, string> = {
@@ -74,6 +70,14 @@ const CONVITE_COR: Record<string, string> = {
   PENDENTE: 'bg-yellow-100 text-yellow-700',
   EXPIRADO: 'bg-red-100 text-red-700',
   NAO_CONVIDADO: 'bg-gray-100 text-gray-500',
+  MIXED: 'bg-blue-100 text-blue-700',
+  NA: 'bg-gray-50 text-gray-400',
+};
+
+const TIPO_COR: Record<string, string> = {
+  PF: 'bg-blue-100 text-blue-700',
+  PJ: 'bg-purple-100 text-purple-700',
+  INDEFINIDO: 'bg-gray-100 text-gray-500',
 };
 
 function fmtMoney(v: number): string {
@@ -84,7 +88,7 @@ function fmtKwp(v: number): string {
   return `${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kWp`;
 }
 
-export default function DashboardProprietarioCooperativaPage() {
+export default function DashboardProprietariosPorCooperativaPage() {
   const params = useParams();
   const router = useRouter();
   const cooperativaId = params?.cooperativaId as string;
@@ -101,8 +105,7 @@ export default function DashboardProprietarioCooperativaPage() {
       return;
     }
 
-    // F.5 M33 Etapa B (reversão decisão #4): ADMIN só pode ver sua propria.
-    // SUPER_ADMIN: acesso global.
+    // ADMIN só sua propria cooperativaId
     if (u.perfil === 'ADMIN' && (u as any).cooperativaId !== cooperativaId) {
       router.replace(`/dashboard/proprietario/${(u as any).cooperativaId}`);
       return;
@@ -120,20 +123,14 @@ export default function DashboardProprietarioCooperativaPage() {
     api
       .get<Response>(`/admin/proprietarios/cooperativas/${cooperativaId}/usinas`)
       .then((r) => setData(r.data))
-      .catch((e: any) => setErro(e?.response?.data?.message ?? 'Falha ao carregar tabela.'))
+      .catch((e: any) => setErro(e?.response?.data?.message ?? 'Falha ao carregar proprietários.'))
       .finally(() => setCarregando(false));
   }, [cooperativaId, router]);
 
   const isSuperAdmin = perfil === 'SUPER_ADMIN';
 
-  const usinasComProprietario =
-    data?.usinas.filter((u) => u.temProprietario).length ?? 0;
-  const totalYtd =
-    data?.usinas.reduce((s, u) => s + u.ytdRepasse, 0) ?? 0;
-
   return (
     <div className="space-y-6">
-      {/* Breadcrumb — só pra SUPER_ADMIN (ADMIN não tem pra onde voltar) */}
       {isSuperAdmin && (
         <Link
           href="/dashboard/proprietario"
@@ -153,24 +150,31 @@ export default function DashboardProprietarioCooperativaPage() {
         </h1>
       </div>
 
-      {/* Help inline (adapta texto por perfil) */}
+      {/* Help inline */}
       <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex gap-2">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800">
-          <strong>Lista de usinas com proprietários cadastrados.</strong>{' '}
-          Clique numa linha pra ver o portal como o proprietário veria — você entra em modo
-          impersonate e fica logado um banner azul durante a sessão.
+          <strong>Cards por proprietário desta cooperativa.</strong> Clique pra ver as
+          usinas de cada proprietário. Usinas sem proprietário cadastrado aparecem destacadas
+          num card laranja — útil pra ver onboarding pendente.
         </div>
       </div>
 
       {carregando && (
-        <Card>
-          <CardContent className="py-6 space-y-3">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-4 w-1/4" />
-            <Skeleton className="h-32 w-full" />
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-5 w-2/3" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-8 w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
       {!carregando && erro && (
@@ -182,159 +186,115 @@ export default function DashboardProprietarioCooperativaPage() {
         </Card>
       )}
 
-      {!carregando && data && (
-        <>
-          {/* Resumo agregado */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-gray-500 flex items-center gap-1">
-                  <Sun className="w-3 h-3" /> Usinas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {usinasComProprietario}
-                  <span className="text-lg text-gray-400"> / {data.usinas.length}</span>
-                </p>
-                <p className="text-xs text-gray-500 mt-1">com proprietário / total</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-gray-500 flex items-center gap-1">
-                  <Users className="w-3 h-3" /> Tipo
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Badge variant="outline">{data.cooperativa.tipoParceiro}</Badge>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-gray-500 flex items-center gap-1">
-                  <DollarSign className="w-3 h-3 text-green-600" /> Total YTD
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold text-green-700">{fmtMoney(totalYtd)}</p>
-              </CardContent>
-            </Card>
-          </div>
+      {!carregando && !erro && data && data.proprietarios.length === 0 && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">
+              Nenhum proprietário ou usina cadastrada nesta cooperativa ainda.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Tabela */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sun className="w-4 h-4 text-amber-500" />
-                Usinas e Proprietários ({data.usinas.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {data.usinas.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 text-sm">
-                  Nenhuma usina cadastrada nesta cooperativa.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table className="min-w-[900px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Usina</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Proprietário</TableHead>
-                      <TableHead>Contrato Arrendamento</TableHead>
-                      <TableHead className="text-right">YTD Repasse</TableHead>
-                      <TableHead>Convite</TableHead>
-                      <TableHead className="text-right">Ação</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.usinas.map((u) => (
-                      <TableRow
-                        key={u.usinaId}
-                        className={
-                          u.temProprietario
-                            ? 'hover:bg-amber-50 cursor-pointer'
-                            : 'opacity-60'
-                        }
-                        onClick={() => {
-                          if (u.temProprietario) {
-                            router.push(
-                              `/proprietario/usinas/${u.usinaId}?impersonate=true&cooperativaId=${cooperativaId}`,
-                            );
-                          }
-                        }}
+      {!carregando && !erro && data && data.proprietarios.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data.proprietarios.map((p) => {
+            const isOrfa = p.proprietarioId === 'SEM_PROPRIETARIO';
+            // propId é URL-encoded ao navegar — encodeURIComponent garante '@' → '%40'
+            const propIdEncoded = encodeURIComponent(p.proprietarioId);
+            return (
+              <Card
+                key={p.proprietarioId}
+                className={
+                  isOrfa
+                    ? 'border-2 border-dashed border-orange-300 bg-orange-50/30 hover:shadow-lg hover:border-orange-500 transition-all cursor-pointer'
+                    : 'hover:shadow-lg hover:border-amber-300 transition-all cursor-pointer'
+                }
+                onClick={() =>
+                  router.push(`/dashboard/proprietario/${cooperativaId}/${propIdEncoded}`)
+                }
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {isOrfa ? (
+                        <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />
+                      ) : (
+                        <Users className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                      <span className="truncate">{p.nome}</span>
+                    </CardTitle>
+                  </div>
+                  {!isOrfa && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <Badge variant="outline" className={`text-[10px] ${TIPO_COR[p.tipo]}`}>
+                        {p.tipo}
+                      </Badge>
+                      {p.emailMascarado && (
+                        <Badge variant="outline" className="text-[10px] text-gray-600 flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {p.emailMascarado}
+                        </Badge>
+                      )}
+                      <Badge
+                        className={`text-[10px] ${CONVITE_COR[p.conviteStatusAgregado]}`}
                       >
-                        <TableCell className="font-medium">
-                          <div>{u.nome}</div>
-                          {u.apelidoInterno && (
-                            <div className="text-[10px] text-gray-400">
-                              {u.apelidoInterno}
-                            </div>
-                          )}
-                          <div className="text-[10px] text-gray-400">
-                            {fmtKwp(u.potenciaKwp)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={STATUS_OP_COR[u.statusOperacional] ?? 'bg-gray-100'}
-                          >
-                            {u.statusOperacional.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {u.temProprietario ? (
-                            <div>
-                              <div className="text-sm">{u.proprietarioNome ?? '—'}</div>
-                              <div className="text-xs text-gray-500 flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {u.proprietarioEmail ?? '—'}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400 italic">
-                              sem proprietário
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">{u.contratoArrendamento}</TableCell>
-                        <TableCell className="text-right font-semibold text-green-700">
-                          {fmtMoney(u.ytdRepasse)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={CONVITE_COR[u.conviteStatus] ?? 'bg-gray-100'}>
-                            {u.conviteStatus.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {u.temProprietario && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-amber-700 border-amber-300"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(
-                                  `/proprietario/usinas/${u.usinaId}?impersonate=true&cooperativaId=${cooperativaId}`,
-                                );
-                              }}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Impersonar
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
+                        {CONVITE_LABEL[p.conviteStatusAgregado]}
+                      </Badge>
+                    </div>
+                  )}
+                  {isOrfa && (
+                    <p className="text-xs text-orange-700 mt-1">
+                      Sem dono cadastrado — onboarding pendente
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* KPIs */}
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                        <Sun className="w-3 h-3" /> Usinas
+                      </p>
+                      <p className="font-semibold">{p.numeroUsinas}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> Capacidade
+                      </p>
+                      <p className="font-semibold">{fmtKwp(p.capacidadeTotalKwp)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 flex items-center gap-1">
+                        <DollarSign className="w-3 h-3 text-green-600" /> YTD
+                      </p>
+                      <p className="font-semibold text-green-700 text-xs">
+                        {fmtMoney(p.totalYtdAgregado)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Semáforo saúde */}
+                  <div className="flex gap-3 text-xs pt-2 border-t">
+                    <span className="flex items-center gap-1 text-green-700">
+                      <CheckCircle className="w-3 h-3" />
+                      <strong>{p.statusOk}</strong> OK
+                    </span>
+                    <span className="flex items-center gap-1 text-yellow-600">
+                      <HelpCircle className="w-3 h-3" />
+                      <strong>{p.statusAtencao}</strong> atenção
+                    </span>
+                    <span className="flex items-center gap-1 text-red-600">
+                      <AlertCircle className="w-3 h-3" />
+                      <strong>{p.statusCritico}</strong> crítico
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
     </div>
   );

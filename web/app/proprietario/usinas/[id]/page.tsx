@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Loader2,
@@ -13,7 +13,6 @@ import {
   Users,
   FileText,
   BarChart3,
-  Shield,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -82,27 +81,19 @@ function fmtKwh(v: number): string {
 
 export default function DetalheUsinaPage() {
   const params = useParams();
-  const searchParams = useSearchParams();
-  const router = useRouter();
   const usinaId = params?.id as string;
-  // F.5b Etapa C: detecta modo impersonate Super Admin
-  const isImpersonate = searchParams?.get('impersonate') === 'true';
-  const cooperativaIdParam = searchParams?.get('cooperativaId');
   const [data, setData] = useState<DetalheUsinaResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!usinaId) return;
-    const url = isImpersonate
-      ? `/proprietario/usinas/${usinaId}?impersonate=true`
-      : `/proprietario/usinas/${usinaId}`;
     api
-      .get<DetalheUsinaResponse>(url)
+      .get<DetalheUsinaResponse>(`/proprietario/usinas/${usinaId}`)
       .then((r) => setData(r.data))
       .catch((e: any) => setErro(e?.response?.data?.message ?? 'Falha ao carregar detalhe.'))
       .finally(() => setCarregando(false));
-  }, [usinaId, isImpersonate]);
+  }, [usinaId]);
 
   function baixarRelatorioPdf(mesAno: string) {
     const url = `/api/proprietario/relatorios/${usinaId}/${mesAno}`;
@@ -139,28 +130,6 @@ export default function DetalheUsinaPage() {
 
   return (
     <div className="space-y-6">
-      {/* F.5b Etapa C: Banner impersonate Super Admin */}
-      {isImpersonate && (
-        <div className="bg-blue-50 border-2 border-blue-300 rounded-md p-3 flex items-start gap-3">
-          <Shield className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="flex-1 text-sm text-blue-900">
-            <strong>🔍 Modo Super Admin (impersonate)</strong>
-            <p className="text-xs mt-0.5 text-blue-800">
-              Você está visualizando como o proprietário desta usina veria.
-              Sessão registrada em audit log.
-            </p>
-          </div>
-          {cooperativaIdParam && (
-            <button
-              onClick={() => router.push(`/dashboard/proprietario/${cooperativaIdParam}`)}
-              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded inline-flex items-center gap-1 shrink-0"
-            >
-              <ArrowLeft className="w-3 h-3" /> Voltar pra tabela
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Header com botão voltar */}
       <div className="flex items-center justify-between">
         <div>
