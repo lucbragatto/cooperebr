@@ -3228,6 +3228,27 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-BF — Bug N3 frontend: header vazio + tab Usinas vazia (P1)
+
+**Severidade:** P1 (UX bloqueador — fluxo principal F.6 hierárquico quebrado pós-F.6b)
+**Origem:** 28/05/2026 — smoke visual F.6b Luciano. Click no card de proprietário (N2) navega pra N3 mas vem quebrada: header com nome vazio, email truncado em "***m", help inline com placeholder `${proprietario.nome}` não substituído ("Usinas que — administra"), tab Usinas dizendo "Este proprietário não tem usinas registradas".
+
+**Sintoma reproduzível:** acontece tanto com SUPER_ADMIN como ADMIN_PARCEIRO. Portal proprietário logado direto (M30 `/proprietario/usinas/[id]`) NÃO afetado.
+
+**Smoke F.6a backend passou via curl 6/6** (incluindo N3 E-Solares com propId `e-demo-esolares%40example.com` → 200 com 1 usina FIXO R$ 1.000). Backend OK no curl direto.
+
+**Causa raiz (confirmada via diag 3 cenários):** Next.js 16 `useParams` retorna params **RAW encoded** (mantém `%40`, `%2F` etc — NÃO decoda automaticamente como assumi inicialmente). Frontend N3 fazia `encodeURIComponent(proprietarioId)` re-aplicado → duplo encode → URL backend recebia `%2540` → Express decoda 1x → `propId='e-demo-esolares%40example.com'` → `parsePropId` extraía email com `%40` literal → não casava com email real `'demo-esolares@example.com'` → response vazia.
+
+**Fix aplicado (1 linha):** `web/app/dashboard/proprietario/[cooperativaId]/[proprietarioId]/page.tsx:141` — removido `encodeURIComponent` do propIdParaUrl. Comentários `:107` e `:137` atualizados pra refletir comportamento real do Next.js 16 (RAW encoded, não decoded). axios envia URL no estado original → Express decoda 1x → backend recebe `@` correto.
+
+**Validação pós-fix:**
+- Smoke 2/2 com JWT real: Caminho B EMAIL `e-contato%40energiaverde.com.br` → 200 "Energia Verde Ltda" 1 usina ✅; SEM_PROPRIETARIO → 200 4 órfãs ✅
+- npm run build OK (140 páginas, 7.5s)
+
+**Status:** ✅ **RESOLVIDO em 2026-05-28 (M34 fix).** Aguardando smoke visual Luciano antes do fechamento canônico M34.
+
+---
+
 ### D-novo-BE — Validação cadastro proprietário: nome divergente em mesmo email (P3)
 
 **Severidade:** P3 (qualidade de dado, não-bloqueante — solução já existe pra cards F.6a)

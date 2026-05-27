@@ -104,7 +104,8 @@ export default function DashboardUsinasDoProprietarioPage() {
   const params = useParams();
   const router = useRouter();
   const cooperativaId = params?.cooperativaId as string;
-  // Next.js já decoda params automaticamente — proprietarioId vem como 'e-demo@example.com'
+  // Next.js 16 useParams retorna RAW encoded (mantém %40, %2F etc) — NÃO decoda.
+  // Passar direto pro axios sem re-encodar (vide D-novo-BF M34).
   const proprietarioId = params?.proprietarioId as string;
 
   const [data, setData] = useState<Response | null>(null);
@@ -134,9 +135,11 @@ export default function DashboardUsinasDoProprietarioPage() {
 
     if (!cooperativaId || !proprietarioId) return;
 
-    // Frontend precisa re-encodar email pra URL — axios geralmente já encoda mas
-    // garantimos aqui pois proprietarioId pode vir já decodado do params
-    const propIdParaUrl = encodeURIComponent(proprietarioId);
+    // D-novo-BF (M34, 28/05/2026): Next.js 16 useParams retorna RAW encoded
+    // (mantém %40, %2F etc). Repassar direto pro axios — axios envia URL no
+    // estado original e Express decoda 1x no backend, recebendo @ correto.
+    // Re-encodar aqui causa duplo encode (%2540) e quebra match.
+    const propIdParaUrl = proprietarioId;
 
     api
       .get<Response>(
