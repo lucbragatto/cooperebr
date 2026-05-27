@@ -1071,6 +1071,137 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh fechamento M33+M34 Sub-Sprint
+   F.5+F.6 Dashboard Hierárquico Cards.
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos:
+
+Sessao 27-28/05 entregou **M33 + M34 Sub-Sprint F.5+F.6 COMPLETO** (8
+commits c21fc1c..e316a5b):
+
+M33 (27/05 noite — F.5 Dashboard Hierárquico Super Admin):
+- F.5a backend (c21fc1c): module admin/proprietarios + grid cooperativas
+  + tabela usinas + bypass impersonate + 19 specs
+- F.5b frontend (bc62ccd): grid responsivo + tabela 7 colunas + banner
+  azul Shield
+- D-novo-BD fix overflow + reversão decisão #4 ADMIN Parceiro (b25c945)
+- Catálogo D-novo-AZ+BA+BB+BC (c76542e)
+
+M34 (28/05 — F.6 Reformulação Hierárquica Cards):
+Luciano testou M33 e levantou 5 críticas → reformulação total:
+- F.6a backend (d1b8228): refactor N2 endpoint pra agregação por chave de
+  dedupe (c-cooperadoId | e-email.toLowerCase() | SEM_PROPRIETARIO), novo
+  endpoint N3 /proprietarios/:propId/usinas, remoção COMPLETA impersonate
+  backend (3 arquivos + 4 specs deletados), 14 specs novos
+- F.6b frontend (6610da4): Tabs custom (sem Shadcn — decisão pós-M32 conflito
+  Base UI/Radix), refactor N2 cards proprietários com SEM_PROPRIETARIO
+  destacado laranja, nova rota N3 cards usinas + tabs Usinas/Carregadores
+  Em breve, cleanup impersonate frontend (zero código vivo, único hit é
+  comentário documental)
+- D-novo-BF fix (e316a5b): bug duplo encode propId — Next.js 16 useParams
+  retorna RAW encoded (não decoda automaticamente). Fix 1 linha removendo
+  encodeURIComponent redundante. Lição arquitetural valiosa.
+
+HIERARQUIA FINAL FUNCIONAL:
+- N1 /dashboard/proprietario (SA): grid cards COOPERATIVAS
+- N2 /[cooperativaId]: grid cards PROPRIETÁRIOS + SEM_PROPRIETARIO laranja
+- N3 /[cooperativaId]/[proprietarioId]: tabs Usinas + Carregadores (em breve)
+- N4 /dashboard/usinas/[id]: admin existente M30/M31
+
+5 CRÍTICAS LUCIANO RESPONDIDAS:
+1. Tabela ruim → cards por proprietário ✅
+2. "NAO CONVIDADO" pra órfã confuso → SEM_PROPRIETARIO destacado ✅
+3. Impersonate não gostei → removido completamente ✅
+4. Admin Parceiro também precisa → cards + redirect direto pra sua coop ✅
+5. BUG admin parceiro click → resolvido naturalmente (sem impersonate) ✅
+
+VALIDAÇÃO LUCIANO SMOKE 10/10 OK:
+- SA percorreu N1→N2→N3→N4 completo
+- ADMIN CoopereBR entra direto em N2 (pula N1)
+- SEM_PROPRIETARIO botão "Cadastrar proprietário" funciona
+- Tabs Carregadores disabled com badge "Em breve"
+- N3 mostra nome/email mascarado/usinas corretos (pós-fix D-novo-BF)
+
+PROXIMO PASSO — SUB-SPRINT REFINAMENTO TELAS USINAS (~4-7h, 4 débitos
+catalogados em c76542e):
+
+- D-novo-AZ (P1): campo Classe GD (GD_I/GD_II/GD_III) na
+  /dashboard/usinas/nova + tela edição. **SÓ REGISTRO, ZERO logica Fio B**
+  (essa vem no Sub-Sprint Fio B futuro — sistema neutro enquanto litígio
+  CoopereBR×EDP corre)
+- D-novo-BA (P2): script auditar usinas existentes pra preencher
+  classeGdAnotada (depende AZ + planilha Luciano)
+- D-novo-BB (P1): tela edição usina como drawer/Sheet → página própria
+  /dashboard/usinas/[id]/editar (viola Padrão UX Dual 17/05)
+- D-novo-BC (P2): paridade campos edição vs cadastro novo (Contrato
+  distribuidora, Forma aquisição/pagamento dono, Proprietário completo,
+  endereço Bloco H', apelidoInterno, etc — depende BB)
+
+Possível fatiar em 2 sessões: F.7a (AZ + BA cadastro Classe GD + auditoria)
++ F.7b (BB + BC refator tela edição).
+
+ALTERNATIVA — F.4 SMOKE PRODUCAO (~1-2h, BLOQUEADO LUCIANO OPERACIONAL):
+Preencher cooperebr1 real (proprietarioEmail + formaPagamentoDono +
+valorAluguelFixo + matriz responsabilidadeDespesas + valorKwhPadrao OU
+TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares real (manual
+OU magic link). Quando OK Luciano: Code arranca smoke (~1-2h navegar
+portal real + baixar PDF + validar consistência).
+
+FRENTES PARALELAS DISPONIVEIS:
+- Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
+- Sungrow integração real (cron pronto, falta credenciais E-Solares)
+- D-novo-AK instalar gerenciador senhas (Luciano)
+- Decisoes regulatorias Sub-Sprint A (advogado)
+- Cenario Completo Banestes (~6-8h) depois canario PIX real
+
+CARRY-OVERS (nao-bloqueantes):
+- D-novo-AL: integração iSolar Cloud E2E real
+- D-novo-AM: Empresa entidade separada (YAGNI até 2ª usina)
+- D-novo-AN: RepasseProprietario tabela pra pagamento REAL
+- D-novo-AO: cron PDF conectar EmailService
+- D-novo-AS.1/.2: hook PostToolUse npm run build automatico
+- D-novo-BE: nome divergente mesmo email (workaround updatedAt desc
+  aplicado, solução ideal entidade Empresa futura)
+- D-novo-J + K: 11 falhas pré-existentes Jest cooperados/usinas controllers
+
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITÁRIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real (manual OU magic link)
+⏳ Auditar classeGdAnotada por usina (D-novo-BA, depende AZ)
+⏳ Decidir politica anti-spam cron PDF (D-novo-AO)
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Avisar time legado: 5 .pfx vazados + senha Azure SQL + webhook sem validação
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes (libera Carolina pagar PIX real)
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+⏳ Instalar Bitwarden/KeePassXC (D-novo-AK, 1-2 sem)
+✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29)
+
+DOC-SESSAO M33+M34: docs/sessoes/2026-05-28-m33-m34-sub-sprint-f5-f6-
+dashboard-hierarquico-cards.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase anterior (M33) — não usar
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh fechamento M33 Sub-Sprint F.5.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
