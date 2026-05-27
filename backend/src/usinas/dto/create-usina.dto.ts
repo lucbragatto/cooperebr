@@ -11,6 +11,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -60,7 +61,25 @@ export class CreateUsinaDto {
   @IsOptional() @IsString() enderecoBairro?: string;
   @IsOptional() @IsString() enderecoCep?: string;
 
-  @IsOptional() @IsString() statusHomologacao?: string;
+  // F.7a (M35, 28/05/2026) — statusHomologacao agora valida contra enum StatusUsina.
+  // Default schema CADASTRADA; tela /nova oferece dropdown opcional pra usinas legadas.
+  @IsOptional()
+  @IsIn(['CADASTRADA', 'AGUARDANDO_HOMOLOGACAO', 'HOMOLOGADA', 'EM_PRODUCAO', 'SUSPENSA'], {
+    message: 'statusHomologacao deve ser CADASTRADA | AGUARDANDO_HOMOLOGACAO | HOMOLOGADA | EM_PRODUCAO | SUSPENSA',
+  })
+  statusHomologacao?: string;
+
+  // F.7a (M35, 28/05/2026) — Classe GD anotada (SÓ REGISTRO, ZERO lógica Fio B).
+  // String? no schema (linha 394); valores aceitos GD_I | GD_II | GD_III.
+  // Quando módulo Fio B futuro entrar, consumirá este campo pra aplicar regras
+  // progressivas em usinas GD_II/GD_III. Sistema permanece neutro hoje (litígio
+  // CoopereBR×EDP em curso — nota schema.prisma:378-380).
+  @IsOptional()
+  @IsIn(['GD_I', 'GD_II', 'GD_III'], {
+    message: 'classeGdAnotada deve ser GD_I (≤75kW) | GD_II (75kW-1MW) | GD_III (1MW-5MW)',
+  })
+  classeGdAnotada?: string;
+
   @IsOptional() @IsString() observacoes?: string;
   @IsOptional() @IsString() modeloCobrancaOverride?: string | null;
   @IsOptional() @IsString() distribuidora?: string;

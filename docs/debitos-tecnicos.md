@@ -3228,6 +3228,59 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### D-novo-BG — Anomalia classificação GD Linhares cooperebr1 (P3)
+
+**Severidade:** P3 (não bloqueia operação, mas precisa decisão antes do módulo Fio B)
+**Origem:** Fase 1 read-only Sub-Sprint Refinamento Telas Usinas F.7a (28/05/2026)
+
+Usina "COOPERE BR - Usina Linhares" (apelido `cooperebr1`) está marcada como `classeGdAnotada='GD_I'` no banco, populada via seed `backend/scripts/seed-classegd-usinas-coopereBR.ts`. Porém potência declarada é **1.250 kWp** — pela REN ANEEL 1.000/2021 isso seria GD_II (75 kW – 1 MW) ou GD_III (1 MW – 5 MW).
+
+**Confirmação Luciano (28/05):** "se está marcada assim foi intencional para tratamento no futuro". Não tocar agora. Revisar com advogado/contador antes de qualquer correção. Pode ter classificação tributária diferenciada que justifique manter `GD_I` ou ser legacy fix do seed inicial.
+
+**Bloqueia:** módulo Fio B futuro (lógica precisa decidir como tratar essa divergência: assumir REN strict, respeitar classeGdAnotada manual, ou pedir override por usina). Documentar decisão antes de implementar.
+
+**Refs:**
+- Relatório `docs/relatorios/<data>-auditoria-classe-gd.md` gerado por `scripts/auditoria-classe-gd.ts`
+- Seed inicial `backend/scripts/seed-classegd-usinas-coopereBR.ts`
+
+**Status:** 📋 Catalogado em 2026-05-28 noite. Decisão produto pendente — aguardar Fio B.
+
+---
+
+### D-novo-BH — Módulo Despesas Operacionais da Usina (Camada 2) (P1)
+
+**Severidade:** P1 (sprint dedicado, ~10-15h)
+**Origem:** decisão Luciano 28/05/2026 durante refinamento telas usinas (F.7a Fase 1)
+
+Hoje a matriz de responsabilidades de despesas (M30, tela `/dashboard/usinas/[id]/proprietario`) é **estática** — define "quem é responsável contratual por cada categoria" (15 categorias × 4 opções: PARCEIRO/PROPRIETARIO/COMPARTILHADO/...).
+
+Falta camada operacional: **eventos reais de despesa** durante execução do contrato. Cada despesa que acontece de verdade precisa ser lançada com:
+- Data, categoria (15 categorias M30), valor, descrição
+- Quem pagou de fato (proprietário/cooperativa/terceiro)
+- Responsável contratual (vem da Camada 1 automaticamente)
+- Tratamento: REEMBOLSO | DESCONTO_NO_REPASSE | ASSUMIDO
+- Status: PENDENTE | RESOLVIDO | DESCONTADO
+
+**Implicações:**
+- Nova tabela `DespesaOperacionalUsina` (Prisma model novo + migração)
+- Tela lançamento + listagem por usina
+- Integração com cálculo de repasse mensal (DESCONTO abate do próximo repasse)
+- Integração com Sprint Contabilidade Tributária (#8 roadmap) — lançamentos viram despesas registradas
+
+**Caminho proposto:** sprint próprio "Despesas Operacionais Usina" depois do refinamento atual (após F.7b), antes do Sprint Contabilidade Tributária.
+
+**No Sub-Sprint atual (F.7a/F.7b):** apenas link na futura tela `/dashboard/usinas/[id]/editar` apontando pra `/proprietario` (Camada 1 mantida como está). Camada 2 NÃO escopo agora.
+
+**Estimativa preliminar:** ~10-15h (model + tela + integração repasse + specs).
+
+**Refs:**
+- Tela atual Camada 1: `web/app/dashboard/usinas/[id]/proprietario/page.tsx` (M30)
+- Helper repasse: `backend/src/usinas/helpers/calcular-repasse.ts`
+
+**Status:** 📋 Catalogado em 2026-05-28 noite. Vai pra sprint próprio futuro.
+
+---
+
 ### D-novo-BF — Bug N3 frontend: header vazio + tab Usinas vazia (P1)
 
 **Severidade:** P1 (UX bloqueador — fluxo principal F.6 hierárquico quebrado pós-F.6b)

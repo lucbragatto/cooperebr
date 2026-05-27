@@ -1071,6 +1071,121 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh F.7a Classe GD cadastro.
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos:
+
+Sessao 27-28/05 entregou **M33+M34 Sub-Sprint F.5+F.6 + M35 F.7a** (10
+commits c21fc1c..este):
+
+M33 (27/05 noite) — F.5 Dashboard Hierárquico Super Admin: F.5a backend +
+F.5b frontend grid+tabela+impersonate + reversão decisão #4 Admin Parceiro.
+
+M34 (28/05) — F.6 Reformulação Hierárquica Cards: F.6a refactor agregação
+por chave dedupe + N3 cards usinas + remove impersonate completo + F.6b
+Tabs custom + cards proprietários + fix D-novo-BF Next.js 16 useParams
+RAW encoded.
+
+M35 (28/05 noite) — F.7a Cadastro Classe GD:
+- CreateUsinaDto: @IsIn(['GD_I', 'GD_II', 'GD_III']) classeGdAnotada
+  + @IsIn(5 valores) statusHomologacao
+- UsinasService.create(): tipo declara classeGdAnotada (persistência via
+  spread ja cobria)
+- /dashboard/usinas/nova: 2 selects nativos novos com help inline didatico
+- Script auditoria backend/scripts/auditoria-classe-gd.ts READ-ONLY puro
+  + grava relatorio docs/relatorios/<data>-auditoria-classe-gd.md
+- 4 specs verdes usinas.service.spec.ts
+- 2 débitos catalogados:
+  • D-novo-BG (P3): Linhares cooperebr1 GD_I com 1.250 kWp (intencional
+    Luciano, decidir antes do Fio B)
+  • D-novo-BH (P1): Modulo Despesas Operacionais Camada 2 (~10-15h sprint
+    próprio futuro)
+
+Smoke 3/3 verde com JWT real: POST cadastra GD_II + EM_PRODUCAO,
+validação rejeita GD_XYZ (400), banco confirma persistencia.
+Auditoria 10 usinas: 7 PENDENTE, 3 DIVERGÊNCIA (cooperebr1/2 + Solar Norte).
+
+CONSTRAINT FUNDAMENTAL (Luciano verbatim 28/05):
+"nao iremos tratar o fio b agora, quero apenas que coloquemos essa
+informacao nos cadastros porque assim, quando tratarmos o modulo do fio b,
+vamos mandar aplicar na usinas que marcarmos como gd ii e iii"
+→ Classe GD em F.7a = SO REGISTRO, ZERO logica Fio B. Vale tambem pra F.7b.
+
+PROXIMO PASSO — F.7b REFATOR TELA EDICAO (~3-4.5h):
+
+- D-novo-BB (P1): Sheet em web/app/dashboard/usinas/[id]/page.tsx:1122-1211
+  (15 campos) → pagina dedicada /dashboard/usinas/[id]/editar/page.tsx
+  (Padrao UX Dual 17/05 Tipo B). Extrair componente compartilhado
+  `UsinaForm` reusavel entre /nova e /editar.
+- D-novo-BC (P2): paridade completa campos edicao vs cadastro novo. Adicionar
+  no edit: apelidoInterno, endereco Bloco H' (4), cnpjUsina, formaAquisicao,
+  formaPagamentoDono+valorAluguelFixo+percentualGeracaoDono, numeroContratoEdp,
+  dataContratoEdp, classeGdAnotada (de F.7a), statusHomologacao (de F.7a),
+  + so-edicao: dataHomologacao, dataInicioProducao, observacoes,
+  statusOperacional, modeloCobrancaOverride, politicaBandeira, valorKwhPadrao.
+  responsabilidadeDespesas FICA em /proprietario (M30, nao duplicar).
+
+ALTERNATIVA — F.4 SMOKE PRODUCAO (~1-2h, BLOQUEADO LUCIANO):
+preencher cooperebr1 real (proprietarioEmail + formaPagamentoDono +
+valorAluguelFixo + matriz responsabilidadeDespesas + valorKwhPadrao OU
+TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares real.
+
+FRENTES PARALELAS DISPONIVEIS:
+- Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
+- Sungrow integração real (cron pronto, falta credenciais E-Solares)
+- D-novo-AK instalar gerenciador senhas (Luciano)
+- Decisoes regulatorias Sub-Sprint A (advogado)
+
+CARRY-OVERS (nao-bloqueantes):
+- D-novo-BA correção planilha definitiva (depois Luciano fornecer)
+- D-novo-BG decisão Fio B (futuro)
+- D-novo-BH módulo Despesas Camada 2 (sprint próprio futuro)
+- D-novo-AL/AM/AN/AO: iSolar E2E, Empresa separada, RepasseProprietario,
+  cron PDF email
+- D-novo-AS.1/.2: hook PostToolUse npm run build automatico
+- D-novo-BE: nome divergente mesmo email
+- D-novo-J + K: 11 falhas pré-existentes Jest cooperados/usinas controllers
+
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatorio auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Decidir politica anti-spam cron PDF (D-novo-AO)
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Avisar time legado: 5 .pfx vazados + senha Azure SQL + webhook sem validação
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes (libera Carolina pagar PIX real)
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+⏳ Instalar Bitwarden/KeePassXC (D-novo-AK, 1-2 sem)
+✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29)
+
+DOC-SESSAO M35: docs/sessoes/2026-05-28-m35-f7a-classe-gd-cadastro.md
+RELATORIO AUDITORIA: docs/relatorios/2026-05-27-auditoria-classe-gd.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase M33+M34 (deprecada)
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh fechamento M33+M34 Sub-Sprint
    F.5+F.6 Dashboard Hierárquico Cards.
 

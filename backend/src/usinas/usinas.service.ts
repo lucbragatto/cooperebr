@@ -136,6 +136,8 @@ export class UsinasService {
     percentualGeracaoDono?: number;
     numeroContratoEdp?: string;
     dataContratoEdp?: string | Date;
+    // F.7a (M35, 28/05/2026) — Classe GD anotada (SÓ REGISTRO, ZERO lógica Fio B).
+    classeGdAnotada?: string;
   }) {
     const prismaData: any = { ...data };
     if (prismaData.dataContratoEdp && typeof prismaData.dataContratoEdp === 'string') {

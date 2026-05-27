@@ -18,6 +18,8 @@ export default function NovaUsinaPage() {
     apelidoInterno: '',
     potenciaKwp: '',
     capacidadeKwh: '',
+    // F.7a (M35, 28/05/2026): Classe GD anotada (SÓ REGISTRO, ZERO lógica Fio B)
+    classeGdAnotada: '',
     cidade: '',
     estado: '',
     enderecoLogradouro: '',
@@ -26,6 +28,8 @@ export default function NovaUsinaPage() {
     enderecoCep: '',
     distribuidora: '',
     cnpjUsina: '',
+    // F.7a: statusHomologacao opcional (default backend CADASTRADA)
+    statusHomologacao: '',
     formaAquisicao: '',
     formaPagamentoDono: '',
     valorAluguelFixo: '',
@@ -106,6 +110,8 @@ export default function NovaUsinaPage() {
       }
       if (form.numeroContratoEdp) payload.numeroContratoEdp = form.numeroContratoEdp;
       if (form.dataContratoEdp) payload.dataContratoEdp = form.dataContratoEdp;
+      if (form.classeGdAnotada) payload.classeGdAnotada = form.classeGdAnotada;
+      if (form.statusHomologacao) payload.statusHomologacao = form.statusHomologacao;
       if (form.proprietarioNome) payload.proprietarioNome = form.proprietarioNome;
       if (form.proprietarioCpfCnpj) payload.proprietarioCpfCnpj = form.proprietarioCpfCnpj;
       if (form.proprietarioTelefone) payload.proprietarioTelefone = form.proprietarioTelefone;
@@ -193,6 +199,29 @@ export default function NovaUsinaPage() {
               </div>
             </div>
 
+            {/* F.7a (M35, 28/05/2026): Classe GD anotada — SÓ REGISTRO, ZERO lógica Fio B */}
+            <div className="space-y-1">
+              <Label htmlFor="classeGdAnotada">Classe GD (regulatório)</Label>
+              <select
+                id="classeGdAnotada"
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                value={form.classeGdAnotada}
+                onChange={(e) => set('classeGdAnotada', e.target.value)}
+              >
+                <option value="">— Não classificado —</option>
+                <option value="GD_I">GD_I — microgeração ≤ 75 kW</option>
+                <option value="GD_II">GD_II — minigeração I, 75 kW – 1 MW</option>
+                <option value="GD_III">GD_III — minigeração II, 1 MW – 5 MW</option>
+              </select>
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mt-1 text-xs text-blue-800 space-y-0.5">
+                <p><strong>Como ler:</strong></p>
+                <p>• <strong>GD_I:</strong> microgeração ≤ 75 kW (isento Fio B histórico)</p>
+                <p>• <strong>GD_II:</strong> minigeração I, 75 kW – 1 MW (Fio B progressivo)</p>
+                <p>• <strong>GD_III:</strong> minigeração II, 1 MW – 5 MW (Fio B progressivo)</p>
+                <p className="italic mt-1">Campo informativo — não impacta cálculo atual. Define como o Fio B será aplicado quando módulo entrar.</p>
+              </div>
+            </div>
+
             <hr className="my-2" />
             <p className="text-sm font-medium text-gray-600">Localização</p>
 
@@ -272,6 +301,27 @@ export default function NovaUsinaPage() {
                 <Label>Data contrato EDP</Label>
                 <Input type="date" value={form.dataContratoEdp} onChange={(e) => set('dataContratoEdp', e.target.value)} />
               </div>
+            </div>
+
+            {/* F.7a (M35, 28/05/2026): statusHomologacao opcional pra cadastrar usinas legadas */}
+            <div className="space-y-1">
+              <Label htmlFor="statusHomologacao">Status de homologação</Label>
+              <select
+                id="statusHomologacao"
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                value={form.statusHomologacao}
+                onChange={(e) => set('statusHomologacao', e.target.value)}
+              >
+                <option value="">— Padrão CADASTRADA —</option>
+                <option value="CADASTRADA">Cadastrada</option>
+                <option value="AGUARDANDO_HOMOLOGACAO">Aguardando homologação</option>
+                <option value="HOMOLOGADA">Homologada</option>
+                <option value="EM_PRODUCAO">Em produção</option>
+                <option value="SUSPENSA">Suspensa</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Padrão CADASTRADA. Marque outro só se for usina legada já em operação.
+              </p>
             </div>
 
             <hr className="my-2" />
