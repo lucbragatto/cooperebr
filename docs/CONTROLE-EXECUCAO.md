@@ -1071,6 +1071,131 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh fechamento M35+M36 Sub-Sprint
+   Refinamento Telas Usinas (F.7a + F.7b).
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos:
+
+Sessao 27-28/05 entregou **M33+M34 Sub-Sprint F.5+F.6 + M35+M36 Sub-Sprint
+Refinamento Telas Usinas** (12 commits c21fc1c..este):
+
+M33 (27/05 noite) — F.5 Dashboard Hierárquico Super Admin: grid+tabela+
+impersonate (depois revisado em M34).
+
+M34 (28/05) — F.6 Reformulação Hierárquica Cards: refactor agregação por
+chave dedupe + N3 cards usinas + remoção COMPLETA impersonate + Tabs custom
++ cleanup. Fix D-novo-BF (Next.js 16 useParams RAW encoded).
+
+M35 (28/05 noite) — F.7a Cadastro Classe GD: @IsIn no CreateUsinaDto
+(classeGdAnotada + statusHomologacao) + 2 selects nativos com help inline
+azul didatico em /dashboard/usinas/nova + script auditoria READ-ONLY
+(10 usinas, 7 PENDENTE + 3 DIVERGÊNCIA) + D-novo-BG/BH catalogados.
+
+M36 (28/05 noite) — F.7b Refator Tela Edição:
+- Componente compartilhado web/components/usinas/UsinaForm.tsx (~600 linhas,
+  28 campos em 6 seções + helper montarPayloadUsina)
+- /dashboard/usinas/nova refatorado pra consumir UsinaForm (reduzido 440→78
+  linhas)
+- NOVA rota /dashboard/usinas/[id]/editar/page.tsx (Padrão UX Dual 17/05
+  Tipo B) — useParams RAW (lição D-novo-BF) + GET /usinas/:id popula form
+  + PUT /usinas/:id submit
+- REMOVIDO Sheet de [id]/page.tsx: imports Sheet/useForm/zodResolver/z +
+  schema usinaSchema + state sheetAberto/salvando + funções abrirSheet+
+  onSubmit + bloco <Sheet> 90 linhas. Botão "Editar" agora navega pra
+  /editar. Dialogs Tipo C (Migrar/Ajustar kWh) PRESERVADOS.
+- UpdateUsinaDto: @IsIn tightened classeGdAnotada+statusHomologacao +
+  NOVO @IsEnum politicaBandeira (faltava paridade).
+- UsinasService.update(): tipo + cópia pro updateData de distribuidora +
+  politicaBandeira (faltavam silenciosamente).
+- 5 specs novos update() verde: classeGdAnotada/distribuidora/
+  politicaBandeira/endereço Bloco H/valorKwhPadrao.
+- Smoke 10/10 com JWT real: PUT 14 campos → 200, banco confirma todos,
+  validação rejeita classeGdAnotada=GD_XYZ → 400.
+
+VALIDACAO:
+- 9/9 specs verdes (usinas.service.spec.ts: 3 base + 3 F.7a + 5 F.7b)
+- nest build + npm run build web OK (140 paginas, 6.7s — D-novo-AS aplicada
+  4x na sessão entre M35+M36)
+- PM2 backend + frontend online
+- /dashboard/usinas/[id]/editar aparece no build como ƒ (dynamic)
+
+CONSTRAINT FUNDAMENTAL (Luciano verbatim 28/05): Fio B NÃO tratado agora.
+Classe GD = SÓ REGISTRO (cadastro + edição). Quando módulo Fio B futuro
+entrar, ELE consome classeGdAnotada pra aplicar regras. Sistema neutro
+hoje (litígio CoopereBR×EDP). Zero código de cálculo nestas fatias.
+
+PROXIMO PASSO — 3 OPCOES (Luciano decide):
+
+(A) **F.4 SMOKE PRODUCAO** (~1-2h, BLOQUEADO LUCIANO OPERACIONAL):
+preencher cooperebr1 real (proprietarioEmail + formaPagamentoDono +
+valorAluguelFixo + matriz responsabilidadeDespesas + valorKwhPadrao OU
+TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares real.
+
+(B) **D-novo-BA CORREÇÃO PLANILHA CLASSE GD** (~30min-1h Code, depende
+Luciano fornecer planilha definitiva). Cria script corrigir-classe-gd.ts
+aplicando UPDATEs com dry-run primeiro.
+
+(C) **D-novo-BH MÓDULO DESPESAS OPERACIONAIS CAMADA 2** (~10-15h sprint
+próprio). Nova tabela DespesaOperacionalUsina + tela lançamento +
+integração cálculo repasse + integração Contabilidade Tributária futura.
+
+FRENTES PARALELAS DISPONIVEIS:
+- Sub-Sprint B (ETL legado→novo) aguarda script.sql do hb06a
+- Sungrow integração real (cron pronto, falta credenciais E-Solares)
+- D-novo-AK instalar gerenciador senhas (Luciano)
+- Decisoes regulatorias Sub-Sprint A (advogado)
+
+CARRY-OVERS (nao-bloqueantes):
+- D-novo-BA correção planilha (depois Luciano fornecer)
+- D-novo-BG decisão Fio B (futuro)
+- D-novo-BH módulo Despesas Camada 2 (sprint próprio futuro)
+- D-novo-AL/AM/AN/AO: iSolar E2E, Empresa separada, RepasseProprietario,
+  cron PDF email
+- D-novo-AS.1/.2: hook PostToolUse npm run build automatico
+- D-novo-BE: nome divergente mesmo email
+- D-novo-J + K: 11 falhas pré-existentes Jest cooperados/usinas controllers
+
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Decidir politica anti-spam cron PDF (D-novo-AO)
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Avisar time legado: 5 .pfx vazados + senha Azure SQL + webhook sem validação
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes (libera Carolina pagar PIX real)
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+⏳ Instalar Bitwarden/KeePassXC (D-novo-AK, 1-2 sem)
+✅ GATEWAY_ENCRYPT_KEY + ASAAS_ENCRYPT_KEY (M28/M29)
+
+DOC-SESSAO M35+M36: docs/sessoes/2026-05-28-m35-m36-sub-sprint-refinamento-
+telas-usinas.md
+RELATORIO AUDITORIA: docs/relatorios/2026-05-27-auditoria-classe-gd.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase M35 F.7a isolada (deprecada — sub-sprint completo M35+M36)
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh F.7a Classe GD cadastro.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.

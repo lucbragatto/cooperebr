@@ -202,6 +202,9 @@ export class UsinasService {
     valorKwhPadrao: number | null;
     responsabilidadeDespesas: Record<string, string>;
     classeGdAnotada: string | null;
+    // F.7b (M36, 28/05/2026) — campos restantes pra paridade UsinaForm
+    distribuidora: string | null;
+    politicaBandeira: 'APLICAR' | 'NAO_APLICAR' | 'DECIDIR_MENSAL' | null;
   }>) {
     const usina = await this.prisma.usina.findUnique({ where: { id } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
@@ -304,6 +307,10 @@ export class UsinasService {
     for (const f of subSprintFFields) {
       if ((data as any)[f] !== undefined) updateData[f] = (data as any)[f];
     }
+
+    // F.7b (M36, 28/05/2026) — distribuidora + politicaBandeira (faltavam paridade)
+    if (data.distribuidora !== undefined) updateData.distribuidora = data.distribuidora;
+    if (data.politicaBandeira !== undefined) updateData.politicaBandeira = data.politicaBandeira;
 
     return this.prisma.usina.update({ where: { id }, data: updateData });
   }

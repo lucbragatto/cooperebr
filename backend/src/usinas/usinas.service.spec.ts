@@ -70,4 +70,67 @@ describe('UsinasService', () => {
       expect(args.data.statusHomologacao).toBe('EM_PRODUCAO');
     });
   });
+
+  // ─── F.7b (M36, 28/05/2026) — update() paridade campos ─────────────
+
+  describe('update() — F.7b paridade campos', () => {
+    function makeUpdateMock(usinaAtual: any = { id: 'u1', dataHomologacao: null, dataInicioProducao: null }) {
+      return {
+        usina: {
+          findUnique: jest.fn().mockResolvedValue(usinaAtual),
+          update: jest.fn().mockImplementation(({ data }: any) =>
+            Promise.resolve({ id: 'u1', ...data }),
+          ),
+        },
+      };
+    }
+
+    it('persiste classeGdAnotada via update', async () => {
+      const prismaMock = makeUpdateMock();
+      const svc = new UsinasService(prismaMock as any);
+      await svc.update('u1', { classeGdAnotada: 'GD_III' });
+      const args = prismaMock.usina.update.mock.calls[0][0];
+      expect(args.data.classeGdAnotada).toBe('GD_III');
+    });
+
+    it('persiste distribuidora via update (F.7b — paridade)', async () => {
+      const prismaMock = makeUpdateMock();
+      const svc = new UsinasService(prismaMock as any);
+      await svc.update('u1', { distribuidora: 'EDP_ES' });
+      const args = prismaMock.usina.update.mock.calls[0][0];
+      expect(args.data.distribuidora).toBe('EDP_ES');
+    });
+
+    it('persiste politicaBandeira via update (F.7b — paridade)', async () => {
+      const prismaMock = makeUpdateMock();
+      const svc = new UsinasService(prismaMock as any);
+      await svc.update('u1', { politicaBandeira: 'NAO_APLICAR' });
+      const args = prismaMock.usina.update.mock.calls[0][0];
+      expect(args.data.politicaBandeira).toBe('NAO_APLICAR');
+    });
+
+    it('persiste apelidoInterno + endereço Bloco H via update', async () => {
+      const prismaMock = makeUpdateMock();
+      const svc = new UsinasService(prismaMock as any);
+      await svc.update('u1', {
+        apelidoInterno: 'cooperebr3',
+        enderecoLogradouro: 'Rua X',
+        enderecoNumero: '123',
+        enderecoCep: '29900-000',
+      });
+      const args = prismaMock.usina.update.mock.calls[0][0];
+      expect(args.data.apelidoInterno).toBe('cooperebr3');
+      expect(args.data.enderecoLogradouro).toBe('Rua X');
+      expect(args.data.enderecoNumero).toBe('123');
+      expect(args.data.enderecoCep).toBe('29900-000');
+    });
+
+    it('persiste valorKwhPadrao via update', async () => {
+      const prismaMock = makeUpdateMock();
+      const svc = new UsinasService(prismaMock as any);
+      await svc.update('u1', { valorKwhPadrao: 0.46863 });
+      const args = prismaMock.usina.update.mock.calls[0][0];
+      expect(args.data.valorKwhPadrao).toBe(0.46863);
+    });
+  });
 });

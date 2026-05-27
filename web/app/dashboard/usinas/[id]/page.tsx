@@ -2,9 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import api from '@/lib/api';
 import Link from 'next/link';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -13,9 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, ArrowLeft, Download, Loader2, Pencil, TrendingUp, ArrowRightLeft, Zap, Users, DollarSign, Activity, BarChart3, FileSpreadsheet } from 'lucide-react';
 import DualListaConcessionaria from '@/components/DualListaConcessionaria';
-import {
-  Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -52,24 +46,9 @@ const statusColors: Record<StatusUsina, string> = {
   SUSPENSA: 'bg-red-100 text-red-700',
 };
 
-const usinaSchema = z.object({
-  nome: z.string().min(1, 'Nome obrigatório'),
-  potenciaKwp: z.coerce.number().positive('Deve ser maior que 0'),
-  capacidadeKwh: z.coerce.number().positive('Deve ser maior que 0').nullable(),
-  producaoMensalKwh: z.coerce.number().positive('Deve ser maior que 0').nullable(),
-  cidade: z.string().min(1, 'Cidade obrigatória'),
-  estado: z.string().min(2, 'Estado obrigatório'),
-  statusHomologacao: z.enum(['CADASTRADA', 'AGUARDANDO_HOMOLOGACAO', 'HOMOLOGADA', 'EM_PRODUCAO', 'SUSPENSA']),
-  distribuidora: z.string().nullable(),
-  observacoes: z.string().nullable(),
-  proprietarioNome: z.string().nullable(),
-  proprietarioCpfCnpj: z.string().nullable(),
-  proprietarioTelefone: z.string().nullable(),
-  proprietarioEmail: z.string().nullable(),
-  proprietarioTipo: z.enum(['PF', 'PJ']),
-});
-
-type UsinaFormData = z.infer<typeof usinaSchema>;
+// F.7b (M36, 28/05): edição saiu daqui pra /editar (página própria, Padrão UX Dual
+// Tipo B). Schema zod + useForm + Sheet removidos. Esta tela é só leitura +
+// ações Tipo C (Migrar, Ajustar kWh, etc — Dialogs preservados).
 
 export default function UsinaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -78,8 +57,8 @@ export default function UsinaDetailPage() {
   const [usina, setUsina] = useState<Usina | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
-  const [sheetAberto, setSheetAberto] = useState(false);
-  const [salvando, setSalvando] = useState(false);
+  // F.7b: edição agora em /editar (Padrão UX Dual Tipo B).
+  // mensagem ainda usado por outras ações (gerar lista, migrar etc).
   const [mensagem, setMensagem] = useState('');
   const [lista, setLista] = useState<any>(null);
   const [gerandoLista, setGerandoLista] = useState(false);
@@ -131,10 +110,6 @@ export default function UsinaDetailPage() {
   const [inlineAjustarKwh, setInlineAjustarKwh] = useState('');
   const [inlineAjustarProcessando, setInlineAjustarProcessando] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<UsinaFormData>({
-    resolver: zodResolver(usinaSchema) as any,
-  });
-
   useEffect(() => {
     api.get<Usina & { distribuidora?: string | null }>(`/usinas/${id}`)
       .then((r) => setUsina(r.data))
@@ -184,55 +159,6 @@ export default function UsinaDetailPage() {
       .then((r) => setHistoricoMigracoes(r.data || []))
       .catch(() => {});
   }, [usina, id]);
-
-  function abrirSheet() {
-    if (!usina) return;
-    reset({
-      nome: usina.nome,
-      potenciaKwp: Number(usina.potenciaKwp),
-      capacidadeKwh: usina.capacidadeKwh ? Number(usina.capacidadeKwh) : null,
-      producaoMensalKwh: usina.producaoMensalKwh ? Number(usina.producaoMensalKwh) : null,
-      cidade: usina.cidade,
-      estado: usina.estado,
-      statusHomologacao: usina.statusHomologacao || 'CADASTRADA',
-      distribuidora: (usina as any).distribuidora ?? null,
-      observacoes: usina.observacoes || null,
-      proprietarioNome: (usina as any).proprietarioNome ?? null,
-      proprietarioCpfCnpj: (usina as any).proprietarioCpfCnpj ?? null,
-      proprietarioTelefone: (usina as any).proprietarioTelefone ?? null,
-      proprietarioEmail: (usina as any).proprietarioEmail ?? null,
-      proprietarioTipo: (usina as any).proprietarioTipo ?? 'PF',
-    });
-    setMensagem('');
-    setSheetAberto(true);
-  }
-
-  async function onSubmit(data: UsinaFormData) {
-    setSalvando(true);
-    setMensagem('');
-    try {
-      const { data: res } = await api.put<Usina>(`/usinas/${id}`, {
-        ...data,
-        capacidadeKwh: data.capacidadeKwh || null,
-        producaoMensalKwh: data.producaoMensalKwh || null,
-        observacoes: data.observacoes || null,
-        distribuidora: data.distribuidora || null,
-        proprietarioNome: data.proprietarioNome || null,
-        proprietarioCpfCnpj: data.proprietarioCpfCnpj || null,
-        proprietarioTelefone: data.proprietarioTelefone || null,
-        proprietarioEmail: data.proprietarioEmail || null,
-        proprietarioTipo: data.proprietarioTipo,
-      });
-      setUsina(res);
-      setSheetAberto(false);
-      setMensagem('Salvo com sucesso!');
-    } catch (e: any) {
-      const msg = e?.response?.data?.message || 'Erro ao salvar.';
-      setMensagem(typeof msg === 'string' ? `Erro: ${msg}` : `Erro: ${JSON.stringify(msg)}`);
-    } finally {
-      setSalvando(false);
-    }
-  }
 
   async function buscarContratosAtivos(cooperadoId: string) {
     if (!cooperadoId) { setContratosDoMembro([]); setContratosSelecionados([]); return; }
@@ -366,7 +292,12 @@ export default function UsinaDetailPage() {
         </Button>
         <h2 className="text-2xl font-bold text-gray-800">Detalhe da Usina</h2>
         {usina && (
-          <Button size="sm" variant="outline" onClick={abrirSheet} className="ml-auto">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => router.push(`/dashboard/usinas/${id}/editar`)}
+            className="ml-auto"
+          >
             <Pencil className="h-4 w-4 mr-2" />
             Editar
           </Button>
@@ -1119,96 +1050,7 @@ export default function UsinaDetailPage() {
         />
       )}
 
-      {/* Sheet — Editar Usina */}
-      <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader><SheetTitle>Editar Usina</SheetTitle></SheetHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
-            <div>
-              <label className={lbl}>Nome *</label>
-              <input className={cls} {...register('nome')} />
-              {errors.nome && <p className="text-xs text-red-500 mt-1">{errors.nome.message}</p>}
-            </div>
-            <div>
-              <label className={lbl}>Potencia (kWp) *</label>
-              <input className={cls} type="number" step="0.01" {...register('potenciaKwp')} />
-              {errors.potenciaKwp && <p className="text-xs text-red-500 mt-1">{errors.potenciaKwp.message}</p>}
-            </div>
-            <div>
-              <label className={lbl}>Capacidade (kWh/mes)</label>
-              <input className={cls} type="number" step="0.01" {...register('capacidadeKwh')} />
-              {errors.capacidadeKwh && <p className="text-xs text-red-500 mt-1">{errors.capacidadeKwh.message}</p>}
-            </div>
-            <div>
-              <label className={lbl}>Producao Mensal (kWh)</label>
-              <input className={cls} type="number" step="0.01" {...register('producaoMensalKwh')} />
-            </div>
-            <div>
-              <label className={lbl}>Distribuidora</label>
-              <input className={cls} {...register('distribuidora')} placeholder="Ex: CEMIG, CPFL, Enel" />
-            </div>
-            <div>
-              <label className={lbl}>Status Homologacao *</label>
-              <select className={selCls} {...register('statusHomologacao')}>
-                <option value="CADASTRADA">Cadastrada</option>
-                <option value="AGUARDANDO_HOMOLOGACAO">Aguardando Homologacao</option>
-                <option value="HOMOLOGADA">Homologada pela Concessionaria</option>
-                <option value="EM_PRODUCAO">Em Producao</option>
-                <option value="SUSPENSA">Suspensa</option>
-              </select>
-            </div>
-            <div>
-              <label className={lbl}>Cidade *</label>
-              <input className={cls} {...register('cidade')} />
-              {errors.cidade && <p className="text-xs text-red-500 mt-1">{errors.cidade.message}</p>}
-            </div>
-            <div>
-              <label className={lbl}>Estado *</label>
-              <input className={cls} {...register('estado')} />
-              {errors.estado && <p className="text-xs text-red-500 mt-1">{errors.estado.message}</p>}
-            </div>
-            <div>
-              <label className={lbl}>Observacoes</label>
-              <textarea className={cls} rows={3} {...register('observacoes')} placeholder="Notas sobre a usina" />
-            </div>
-            <hr className="my-2" />
-            <p className="text-xs font-semibold text-gray-600">Proprietário</p>
-            <div>
-              <label className={lbl}>Tipo</label>
-              <select className={selCls} {...register('proprietarioTipo')}>
-                <option value="PF">Pessoa Física</option>
-                <option value="PJ">Pessoa Jurídica</option>
-              </select>
-            </div>
-            <div>
-              <label className={lbl}>Nome</label>
-              <input className={cls} {...register('proprietarioNome')} />
-            </div>
-            <div>
-              <label className={lbl}>CPF/CNPJ</label>
-              <input className={cls} {...register('proprietarioCpfCnpj')} />
-            </div>
-            <div>
-              <label className={lbl}>Telefone</label>
-              <input className={cls} {...register('proprietarioTelefone')} />
-            </div>
-            <div>
-              <label className={lbl}>Email</label>
-              <input className={cls} {...register('proprietarioEmail')} />
-            </div>
-            {mensagem && mensagem.startsWith('Erro') && (
-              <p className="text-sm text-red-500">{mensagem}</p>
-            )}
-            <SheetFooter className="flex gap-2">
-              <Button type="submit" disabled={salvando} className="flex-1">
-                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Salvar
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setSheetAberto(false)}>Cancelar</Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      {/* F.7b: Sheet de edição removido — edição agora em /editar (Padrão UX Dual Tipo B) */}
     </div>
   );
 }

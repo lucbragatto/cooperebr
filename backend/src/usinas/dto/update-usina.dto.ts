@@ -8,6 +8,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
@@ -17,7 +18,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { FormaAquisicao, FormaPagamentoDono, StatusOperacional } from '@prisma/client';
+import { FormaAquisicao, FormaPagamentoDono, PoliticaBandeira, StatusOperacional } from '@prisma/client';
 
 export class UpdateUsinaDto {
   @IsOptional() @IsString() nome?: string;
@@ -42,7 +43,19 @@ export class UpdateUsinaDto {
   @IsOptional() @IsString() enderecoBairro?: string | null;
   @IsOptional() @IsString() enderecoCep?: string | null;
 
-  @IsOptional() @IsString() statusHomologacao?: string;
+  // F.7b (M36, 28/05/2026) — paridade com CreateUsinaDto: validação enum StatusUsina.
+  @IsOptional()
+  @IsIn(['CADASTRADA', 'AGUARDANDO_HOMOLOGACAO', 'HOMOLOGADA', 'EM_PRODUCAO', 'SUSPENSA'], {
+    message: 'statusHomologacao deve ser CADASTRADA | AGUARDANDO_HOMOLOGACAO | HOMOLOGADA | EM_PRODUCAO | SUSPENSA',
+  })
+  statusHomologacao?: string;
+
+  // F.7b (M36, 28/05/2026) — politicaBandeira (faltava no DTO update; existe schema).
+  @IsOptional()
+  @IsEnum(PoliticaBandeira, {
+    message: 'politicaBandeira deve ser REPASSAR | ABSORVER',
+  })
+  politicaBandeira?: PoliticaBandeira | null;
   @IsOptional() @IsString() dataHomologacao?: string;
   @IsOptional() @IsString() dataInicioProducao?: string;
   @IsOptional() @IsString() observacoes?: string;
@@ -88,7 +101,12 @@ export class UpdateUsinaDto {
 
   /// Sprint 8 (M14.B) — anotação de classe GD por usina (string, sem enum hard
   /// até dossiê regulatório fechar). Valores aceitos: 'GD_I', 'GD_II', 'GD_III'.
-  @IsOptional() @IsString() classeGdAnotada?: string | null;
+  /// F.7b (M36): tightened pra @IsIn — paridade com CreateUsinaDto.
+  @IsOptional()
+  @IsIn(['GD_I', 'GD_II', 'GD_III'], {
+    message: 'classeGdAnotada deve ser GD_I (≤75kW) | GD_II (75kW-1MW) | GD_III (1MW-5MW)',
+  })
+  classeGdAnotada?: string | null;
 
   // Sub-Sprint F (M30, 2026-05-26) — Portal Proprietario
   @IsOptional()
