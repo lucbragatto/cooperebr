@@ -118,7 +118,13 @@ export class ContasPagarController {
   proporDespesa(@Body() dto: ProporDespesaDto, @Req() req: any) {
     const usuarioId = req.user.id ?? req.user.userId;
     const perfil = req.user.perfil ?? req.user.role;
-    return this.contasPagarService.proporDespesa(dto, usuarioId, perfil, req.user.cooperativaId);
+    return this.contasPagarService.proporDespesa(
+      dto,
+      usuarioId,
+      perfil,
+      req.user.cooperativaId,
+      { email: req.user.email, cooperadoId: req.user.cooperadoId },
+    );
   }
 
   /**
@@ -129,7 +135,7 @@ export class ContasPagarController {
   @Put(':id/aprovar')
   aprovarDespesa(@Param('id') id: string, @Body() _dto: AprovarDespesaDto, @Req() req: any) {
     const usuarioId = req.user.id ?? req.user.userId;
-    return this.contasPagarService.aprovarDespesa(id, usuarioId, req.user.cooperativaId);
+    return this.contasPagarService.aprovarDespesa(id, usuarioId, req.user.cooperativaId, req.user.perfil);
   }
 
   /**
@@ -140,7 +146,7 @@ export class ContasPagarController {
   @Put(':id/rejeitar')
   rejeitarDespesa(@Param('id') id: string, @Body() dto: RejeitarDespesaDto, @Req() req: any) {
     const usuarioId = req.user.id ?? req.user.userId;
-    return this.contasPagarService.rejeitarDespesa(id, dto, usuarioId, req.user.cooperativaId);
+    return this.contasPagarService.rejeitarDespesa(id, dto, usuarioId, req.user.cooperativaId, req.user.perfil);
   }
 
   /**
@@ -150,7 +156,7 @@ export class ContasPagarController {
   @AuditLog({ acao: 'despesa.resolver', recurso: 'ContaAPagar', recursoIdParam: 'id' })
   @Put(':id/resolver')
   resolverDespesa(@Param('id') id: string, @Body() dto: ResolverDespesaDto, @Req() req: any) {
-    return this.contasPagarService.resolverDespesa(id, dto, req.user.cooperativaId);
+    return this.contasPagarService.resolverDespesa(id, dto, req.user.cooperativaId, req.user.perfil);
   }
 
   /**

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { logout, getUsuario } from '@/lib/auth';
 import type { Usuario } from '@/types';
@@ -16,23 +16,66 @@ import {
 import { Button } from '@/components/ui/button';
 import { useContexto } from '@/hooks/useContexto';
 import ContextoSwitcher from '@/components/ContextoSwitcher';
+import api from '@/lib/api';
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+}
+
+const NAV_ITEMS_BASE: NavItem[] = [
   { href: '/proprietario', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proprietario/usinas', label: 'Minhas Usinas', icon: Sun },
   { href: '/proprietario/repasses', label: 'Repasses', icon: DollarSign },
-  { href: '/proprietario/despesas', label: 'Despesas', icon: Receipt },
   { href: '/proprietario/contratos', label: 'Contratos', icon: FileText },
 ];
+
+const NAV_ITEM_DESPESAS: NavItem = {
+  href: '/proprietario/despesas',
+  label: 'Despesas',
+  icon: Receipt,
+};
 
 export default function ProprietarioLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const { contextos, contextoAtivo, trocarContexto } = useContexto();
+  const [despesasVisivel, setDespesasVisivel] = useState<boolean | null>(null);
 
   useEffect(() => {
     setUsuario(getUsuario());
   }, []);
+
+  // BH.4 (M37, 29/05/2026): flag proprietarioVeDespesas controla visibilidade
+  // do menu Despesas. Default false até resposta do backend pra evitar flash.
+  useEffect(() => {
+    let ativo = true;
+    api
+      .get<{ proprietarioVeDespesas?: boolean }>('/proprietario/meu-parceiro')
+      .then((r) => {
+        if (ativo) setDespesasVisivel(Boolean(r.data.proprietarioVeDespesas));
+      })
+      .catch(() => {
+        if (ativo) setDespesasVisivel(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const navItems = useMemo<NavItem[]>(() => {
+    if (despesasVisivel) {
+      return [
+        NAV_ITEMS_BASE[0],
+        NAV_ITEMS_BASE[1],
+        NAV_ITEMS_BASE[2],
+        NAV_ITEM_DESPESAS,
+        NAV_ITEMS_BASE[3],
+      ];
+    }
+    return NAV_ITEMS_BASE;
+  }, [despesasVisivel]);
 
   // F.3 Etapa F (M31): rotas /proprietario/aceitar-convite/* sao PUBLICAS
   // e nao precisam de sidebar/contexto autenticado.

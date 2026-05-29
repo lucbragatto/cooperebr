@@ -40,6 +40,16 @@ export class ProprietarioController {
     return this.service.dashboard(req.user);
   }
 
+  /**
+   * D-novo-BH BH.4 (M37, 29/05/2026) — Config do parceiro do proprietário.
+   * Frontend usa pra esconder/exibir aba "Despesas" no menu condicionalmente.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, PROPRIETARIO)
+  @Get('meu-parceiro')
+  meuParceiro(@Req() req: any) {
+    return this.service.meuParceiro(req.user);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN, COOPERADO, PROPRIETARIO)
   @Get('usinas/:id')
   detalheUsina(@Param('id') id: string, @Req() req: any) {

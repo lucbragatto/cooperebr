@@ -52,16 +52,46 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
         id: 'u1',
         cooperativaId: 'coop1',
         responsabilidadeDespesas: {},
+        proprietarioCooperadoId: 'coopdo-1',
+        proprietarioEmail: null,
       });
       prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1' });
 
-      await service.proporDespesa(dtoBase as any, 'usr-prop', 'PROPRIETARIO', 'coop1');
+      await service.proporDespesa(
+        dtoBase as any,
+        'usr-prop',
+        'PROPRIETARIO',
+        null,
+        { cooperadoId: 'coopdo-1', email: null },
+      );
 
       const args = prismaMock.contaAPagar.create.mock.calls[0][0];
       expect(args.data.statusAprovacao).toBe('PROPOSTA');
       expect(args.data.aprovadoPorUsuarioId).toBeUndefined();
       expect(args.data.aprovadoEm).toBeUndefined();
       expect(args.data.propostoPorUsuarioId).toBe('usr-prop');
+    });
+
+    // BH.4 (M37, 29/05/2026) — IDOR guard: PROPRIETARIO sem vínculo a usina é bloqueado
+    it('PROPRIETARIO sem vínculo à usina lança ForbiddenException', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'coop1',
+        responsabilidadeDespesas: {},
+        proprietarioCooperadoId: 'dono-X',
+        proprietarioEmail: 'dono@x.com',
+      });
+
+      await expect(
+        service.proporDespesa(
+          dtoBase as any,
+          'usr-attacker',
+          'PROPRIETARIO',
+          null,
+          { email: 'outro@y.com', cooperadoId: 'outro-cooperado' },
+        ),
+      ).rejects.toThrow('proprietário');
+      expect(prismaMock.contaAPagar.create).not.toHaveBeenCalled();
     });
 
     // BH.3.2: workflow double-check universal — ADMIN também cria PROPOSTA
@@ -364,10 +394,17 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
     it('proporDespesa PROPRIETARIO dispara notificarDespesaProposta', async () => {
       prismaMock.usina.findUnique.mockResolvedValueOnce({
         id: 'u1', cooperativaId: 'coop1', responsabilidadeDespesas: {},
+        proprietarioCooperadoId: null, proprietarioEmail: 'p@x.com',
       });
       prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'PROPOSTA' });
 
-      await service.proporDespesa(dtoBase as any, 'usr-prop', 'PROPRIETARIO', 'coop1');
+      await service.proporDespesa(
+        dtoBase as any,
+        'usr-prop',
+        'PROPRIETARIO',
+        null,
+        { email: 'p@x.com', cooperadoId: null },
+      );
 
       expect(notificacoesMock.notificarDespesaProposta).toHaveBeenCalledWith('d1');
     });

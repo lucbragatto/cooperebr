@@ -74,6 +74,22 @@ export class CooperativasController {
     return this.cooperativasService.gerarQrCode(id);
   }
 
+  /**
+   * D-novo-BH BH.4 (M37, 29/05/2026) — Toggle flag proprietarioVeDespesas.
+   * Admin parceiro auto-gestiona; SUPER_ADMIN global.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'cooperativa.toggle-proprietario-ve-despesas', recurso: 'Cooperativa', recursoIdParam: 'id' })
+  @Put(':id/proprietario-ve-despesas')
+  async toggleProprietarioVeDespesas(
+    @Param('id') id: string,
+    @Body() dto: { ativo: boolean },
+    @Request() req: any,
+  ) {
+    assertSameTenantOrSuperAdmin(req.user, id);
+    return this.cooperativasService.toggleProprietarioVeDespesas(id, dto.ativo);
+  }
+
   @Roles(SUPER_ADMIN, ADMIN)
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req: any) {

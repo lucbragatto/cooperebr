@@ -94,6 +94,38 @@ export class ProprietarioService {
     return `Cooperado #${String(index + 1).padStart(3, '0')}`;
   }
 
+  // ─── D-novo-BH BH.4 (M37, 29/05/2026) — config parceiro pro portal ──
+
+  /**
+   * Retorna config da cooperativa do proprietário logado (resolvendo via
+   * Caminho A/B). Usado pelo frontend pra esconder menu Despesas quando flag
+   * proprietarioVeDespesas=false.
+   */
+  async meuParceiro(user: any) {
+    if (!user) throw new ForbiddenException('Usuario nao autenticado.');
+
+    const usinaIds = await this.resolverUsinasDoProprietario(user);
+    if (usinaIds.length === 0) {
+      return { nome: null, proprietarioVeDespesas: false };
+    }
+
+    const usina = await this.prisma.usina.findFirst({
+      where: { id: { in: usinaIds } },
+      select: {
+        cooperativaId: true,
+        cooperativa: { select: { id: true, nome: true, proprietarioVeDespesas: true } },
+      },
+    });
+    if (!usina?.cooperativa) {
+      return { nome: null, proprietarioVeDespesas: false };
+    }
+    return {
+      id: usina.cooperativa.id,
+      nome: usina.cooperativa.nome,
+      proprietarioVeDespesas: usina.cooperativa.proprietarioVeDespesas,
+    };
+  }
+
   // ─── GET /proprietario/dashboard ───────────────────────────────────
 
   async dashboard(user: any) {

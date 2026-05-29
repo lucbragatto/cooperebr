@@ -1,10 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Loader2, Receipt, Info, Download } from 'lucide-react';
+/**
+ * D-novo-BH BH.4 (M37, 29/05/2026) — Portal proprietário, lista despesas.
+ *
+ * Consome GET /contas-pagar/proprietario (BH.2, respeita flag visibilidade).
+ * Workflow: proprietário propõe (PROPOSTA) → admin aprova/rejeita → admin resolve.
+ *
+ * Sem ações (read-only proprietário). Botão "+ Propor despesa" → /nova.
+ */
+
+import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, Plus, Receipt, Info, Clock, CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -13,172 +24,299 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { TabsCustom, TabContent } from '@/components/ui/tabs-custom';
 import api from '@/lib/api';
 
 interface Despesa {
   id: string;
   descricao: string;
   categoria: string;
-  valor: number;
+  valor: number | string;
+  dataOcorrencia: string | null;
   dataVencimento: string;
-  dataPagamento: string | null;
-  status: string;
-  responsavelPagamento: string | null;
-  usina: { id: string; nome: string; apelidoInterno: string | null };
+  tratamento: string | null;
+  quemPagouTipo: string | null;
+  quemPagouNome: string | null;
+  statusAprovacao: 'PROPOSTA' | 'APROVADA' | 'REJEITADA';
+  statusResolucao: 'PENDENTE' | 'RESOLVIDA';
+  aprovadoEm: string | null;
+  resolvidoEm: string | null;
+  rejeitadoMotivo: string | null;
   comprovante: string | null;
+  propostoPor?: { id: string; nome: string };
+  aprovadoPor?: { id: string; nome: string };
+  usina?: { id: string; nome: string; apelidoInterno: string | null };
 }
 
-function fmtMoney(v: number): string {
-  return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const TRATAMENTO_COR: Record<string, string> = {
+  REEMBOLSO: 'bg-yellow-100 text-yellow-800',
+  DESCONTO_NO_REPASSE: 'bg-blue-100 text-blue-800',
+  ASSUMIDO: 'bg-gray-100 text-gray-700',
+};
+
+function fmtMoney(v: number | string): string {
+  const n = typeof v === 'number' ? v : Number(v);
+  return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const STATUS_COR: Record<string, string> = {
-  PENDENTE: 'bg-yellow-100 text-yellow-700',
-  PAGO: 'bg-green-100 text-green-700',
-  ATRASADO: 'bg-red-100 text-red-700',
-  CANCELADO: 'bg-gray-200 text-gray-600',
-};
-
-const RESP_COR: Record<string, string> = {
-  PROPRIETARIO: 'bg-amber-100 text-amber-700',
-  COMPARTILHADO: 'bg-purple-100 text-purple-700',
-  PARCEIRO: 'bg-blue-100 text-blue-700',
-};
+function fmtDate(s: string | null): string {
+  if (!s) return '—';
+  try {
+    return new Date(s).toLocaleDateString('pt-BR');
+  } catch {
+    return '—';
+  }
+}
 
 export default function ProprietarioDespesasPage() {
+  const router = useRouter();
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [flagAtiva, setFlagAtiva] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<'propostas' | 'aprovadas' | 'rejeitadas'>('aprovadas');
 
   useEffect(() => {
-    api
-      .get<Despesa[]>('/proprietario/despesas')
-      .then((r) => setDespesas(r.data ?? []))
+    Promise.all([
+      api.get<Despesa[]>('/contas-pagar/proprietario'),
+      api.get<{ proprietarioVeDespesas: boolean }>('/proprietario/meu-parceiro').catch(() => null),
+    ])
+      .then(([r, conf]) => {
+        setDespesas(r.data ?? []);
+        if (conf) setFlagAtiva(conf.data.proprietarioVeDespesas);
+      })
       .catch(() => setDespesas([]))
       .finally(() => setCarregando(false));
   }, []);
 
-  if (carregando) {
+  const propostas = useMemo(() => despesas.filter((d) => d.statusAprovacao === 'PROPOSTA'), [despesas]);
+  const aprovadas = useMemo(() => despesas.filter((d) => d.statusAprovacao === 'APROVADA'), [despesas]);
+  const rejeitadas = useMemo(() => despesas.filter((d) => d.statusAprovacao === 'REJEITADA'), [despesas]);
+
+  function sumValor(list: Despesa[]): number {
+    return list.reduce((s, d) => s + Number(d.valor), 0);
+  }
+
+  const resolvidasMes = useMemo(() => {
+    const now = new Date();
+    return aprovadas.filter((d) => {
+      if (!d.resolvidoEm) return false;
+      const r = new Date(d.resolvidoEm);
+      return r.getMonth() === now.getMonth() && r.getFullYear() === now.getFullYear();
+    });
+  }, [aprovadas]);
+
+  // Empty state quando flag=false
+  if (!carregando && flagAtiva === false) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Despesas operacionais</h1>
+        </div>
+        <Card>
+          <CardContent className="text-center py-12">
+            <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-700 font-medium">Visualização de despesas não habilitada pelo parceiro.</p>
+            <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
+              Entre em contato com o admin da cooperativa pra ativar esta funcionalidade.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const totalGeral = despesas.reduce((s, d) => s + d.valor, 0);
-  const totalPago = despesas.filter((d) => d.status === 'PAGO').reduce((s, d) => s + d.valor, 0);
-  const totalPendente = despesas.filter((d) => d.status === 'PENDENTE' || d.status === 'ATRASADO').reduce((s, d) => s + d.valor, 0);
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Despesas</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Despesas operacionais das suas usinas que você é responsável por pagar
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Minhas despesas operacionais</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Acompanhamento + propostas pra aprovação do admin do parceiro
+          </p>
+        </div>
+        <Button onClick={() => router.push('/proprietario/despesas/nova')} className="bg-amber-600 hover:bg-amber-700">
+          <Plus className="w-4 h-4 mr-1" />
+          Propor despesa
+        </Button>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex gap-2">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800">
-          <strong>Só visualização:</strong> esta tela mostra apenas despesas onde a matriz de responsabilidade
-          aponta você (PROPRIETARIO ou COMPARTILHADO). A cooperativa cadastra as despesas; você acompanha aqui.
+          <strong>Workflow:</strong> você propõe → admin do parceiro aprova ou rejeita → admin marca como
+          resolvida quando o tratamento contratual (reembolso, desconto, etc) for concluído. Despesas com
+          tratamento <strong>DESCONTO_NO_REPASSE</strong> serão abatidas no seu próximo repasse mensal.
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Total despesas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{fmtMoney(totalGeral)}</div>
-            <p className="text-xs text-gray-500 mt-1">{despesas.length} despesa(s)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Já pagas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-700">{fmtMoney(totalPago)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-500">Pendentes/Atrasadas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-700">{fmtMoney(totalPendente)}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard
+          ativo={tab === 'propostas'}
+          onClick={() => setTab('propostas')}
+          icon={<Clock className="w-4 h-4 text-yellow-600" />}
+          label="Minhas propostas pendentes"
+          quantidade={propostas.length}
+          total={fmtMoney(sumValor(propostas))}
+        />
+        <KpiCard
+          ativo={tab === 'aprovadas'}
+          onClick={() => setTab('aprovadas')}
+          icon={<CheckCircle className="w-4 h-4 text-green-600" />}
+          label="Aprovadas"
+          quantidade={aprovadas.length}
+          total={fmtMoney(sumValor(aprovadas))}
+        />
+        <KpiCard
+          ativo={tab === 'rejeitadas'}
+          onClick={() => setTab('rejeitadas')}
+          icon={<XCircle className="w-4 h-4 text-red-600" />}
+          label="Rejeitadas"
+          quantidade={rejeitadas.length}
+          total={fmtMoney(sumValor(rejeitadas))}
+        />
       </div>
+      <p className="text-xs text-gray-500">
+        Resolvidas no mês atual: <strong>{resolvidasMes.length}</strong> ({fmtMoney(sumValor(resolvidasMes))})
+      </p>
 
+      <TabsCustom
+        tabs={[
+          { value: 'propostas', label: 'Minhas propostas', badge: propostas.length > 0 ? String(propostas.length) : undefined },
+          { value: 'aprovadas', label: 'Aprovadas', badge: aprovadas.length > 0 ? String(aprovadas.length) : undefined },
+          { value: 'rejeitadas', label: 'Rejeitadas' },
+        ]}
+        activeValue={tab}
+        onChange={(v) => setTab(v as typeof tab)}
+      >
+        <TabContent value="propostas">
+          <Lista carregando={carregando} lista={propostas} emptyText="Nenhuma proposta aguardando aprovação." />
+        </TabContent>
+        <TabContent value="aprovadas">
+          <Lista carregando={carregando} lista={aprovadas} emptyText="Nenhuma despesa aprovada ainda." />
+        </TabContent>
+        <TabContent value="rejeitadas">
+          <Lista carregando={carregando} lista={rejeitadas} emptyText="Nenhuma proposta rejeitada." mostrarMotivo />
+        </TabContent>
+      </TabsCustom>
+    </div>
+  );
+}
+
+function KpiCard({
+  ativo, onClick, icon, label, quantidade, total,
+}: {
+  ativo: boolean; onClick: () => void; icon: React.ReactNode; label: string; quantidade: number; total: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-left rounded-md border p-3 transition-all ${
+        ativo ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-gray-200 bg-white hover:border-amber-300 hover:bg-amber-50/30'
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        {icon}
+        <p className="text-xs text-gray-500">{label}</p>
+      </div>
+      <p className="text-xl font-bold text-gray-800">{quantidade}</p>
+      <p className="text-xs text-gray-500">{total}</p>
+    </button>
+  );
+}
+
+function Lista({
+  carregando, lista, emptyText, mostrarMotivo,
+}: { carregando: boolean; lista: Despesa[]; emptyText: string; mostrarMotivo?: boolean }) {
+  if (carregando) {
+    return (
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-amber-500" />
-            Despesas
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {despesas.length === 0 ? (
-            <div className="text-center py-12">
-              <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Nenhuma despesa registrada com sua responsabilidade.</p>
-              <p className="text-gray-400 text-xs mt-1">A cooperativa cadastra despesas no painel admin.</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Usina</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Responsável</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Comprovante</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {despesas.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell className="font-medium">{d.descricao}</TableCell>
-                    <TableCell className="text-xs">{d.categoria.replace(/_/g, ' ')}</TableCell>
-                    <TableCell className="text-xs">{d.usina.nome}</TableCell>
-                    <TableCell className="text-xs">
-                      {new Date(d.dataVencimento).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={STATUS_COR[d.status] ?? 'bg-gray-100'}>{d.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {d.responsavelPagamento && (
-                        <Badge className={RESP_COR[d.responsavelPagamento] ?? 'bg-gray-100'}>
-                          {d.responsavelPagamento}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">{fmtMoney(d.valor)}</TableCell>
-                    <TableCell>
-                      {d.comprovante && (
-                        <a href={d.comprovante} target="_blank" rel="noopener noreferrer">
-                          <Button size="sm" variant="ghost">
-                            <Download className="w-3 h-3" />
-                          </Button>
-                        </a>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+        <CardContent className="py-6 space-y-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-6 w-full" />)}
         </CardContent>
       </Card>
-    </div>
+    );
+  }
+  if (lista.length === 0) {
+    return (
+      <Card>
+        <CardContent className="text-center py-12 text-gray-500 text-sm">{emptyText}</CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[750px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data ocorrência</TableHead>
+                <TableHead>Usina</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Tratamento</TableHead>
+                <TableHead>Comprovante</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {lista.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="text-xs">{fmtDate(d.dataOcorrencia)}</TableCell>
+                  <TableCell className="text-xs">{d.usina?.nome ?? '—'}</TableCell>
+                  <TableCell>
+                    <p className="text-sm">{d.categoria.replace(/_/g, ' ')}</p>
+                    <p className="text-[10px] text-gray-500 truncate max-w-[200px]" title={d.descricao}>
+                      {d.descricao}
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{fmtMoney(d.valor)}</TableCell>
+                  <TableCell>
+                    {d.tratamento && (
+                      <Badge className={`text-[10px] ${TRATAMENTO_COR[d.tratamento] ?? 'bg-gray-100'}`}>
+                        {d.tratamento.replace(/_/g, ' ')}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {d.comprovante ? (
+                      <a href={d.comprovante} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs hover:underline">
+                        {d.comprovante.startsWith('/uploads/')
+                          ? <Badge className="bg-green-100 text-green-700 text-[10px]">📎</Badge>
+                          : <Badge className="bg-blue-100 text-blue-700 text-[10px]">🔗</Badge>}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {d.statusAprovacao === 'PROPOSTA' && (
+                      <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">aguardando aprovação</Badge>
+                    )}
+                    {d.statusAprovacao === 'APROVADA' && d.statusResolucao === 'PENDENTE' && (
+                      <Badge className="bg-blue-100 text-blue-700 text-[10px]">aprovada (pendente)</Badge>
+                    )}
+                    {d.statusAprovacao === 'APROVADA' && d.statusResolucao === 'RESOLVIDA' && (
+                      <Badge className="bg-green-100 text-green-700 text-[10px]">resolvida</Badge>
+                    )}
+                    {d.statusAprovacao === 'REJEITADA' && (
+                      <div className="text-right">
+                        <Badge className="bg-red-100 text-red-700 text-[10px]">rejeitada</Badge>
+                        {mostrarMotivo && d.rejeitadoMotivo && (
+                          <p className="text-[10px] text-gray-500 mt-1 max-w-[150px]" title={d.rejeitadoMotivo}>
+                            {d.rejeitadoMotivo}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

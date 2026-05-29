@@ -127,6 +127,17 @@ export class CooperativasService {
     });
   }
 
+  // D-novo-BH BH.4 (M37, 29/05/2026) — toggle flag visibilidade portal proprietário.
+  async toggleProprietarioVeDespesas(id: string, ativo: boolean) {
+    const coop = await this.prisma.cooperativa.findUnique({ where: { id } });
+    if (!coop) throw new NotFoundException(`Cooperativa com id ${id} não encontrada`);
+    return this.prisma.cooperativa.update({
+      where: { id },
+      data: { proprietarioVeDespesas: ativo },
+      select: { id: true, nome: true, proprietarioVeDespesas: true },
+    });
+  }
+
   async painelParceiro(id: string) {
     const cooperativa = await this.prisma.cooperativa.findUnique({
       where: { id },

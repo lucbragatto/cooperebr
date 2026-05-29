@@ -15,10 +15,12 @@ describe('CooperativasController — multi-tenant guard (IDOR)', () => {
   const updateMock = jest.fn();
   const updateFinanceiroMock = jest.fn();
 
+  const toggleVeDespesasMock = jest.fn();
   const serviceMock = {
     findOne: findOneMock,
     update: updateMock,
     updateFinanceiro: updateFinanceiroMock,
+    toggleProprietarioVeDespesas: toggleVeDespesasMock,
   } as any;
 
   let controller: CooperativasController;
@@ -98,6 +100,29 @@ describe('CooperativasController — multi-tenant guard (IDOR)', () => {
 
       expect(() => controller.update('coop-A', { nome: 'X' }, req)).toThrow(ForbiddenException);
       expect(updateMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // BH.4 (M37, 29/05/2026) — D-novo-BH flag visibilidade portal proprietário
+  describe('PUT /cooperativas/:id/proprietario-ve-despesas (BH.4)', () => {
+    it('ADMIN toggla a própria cooperativa', async () => {
+      const req = { user: { perfil: PerfilUsuario.ADMIN, cooperativaId: 'coop-A' } };
+      await controller.toggleProprietarioVeDespesas('coop-A', { ativo: false }, req);
+      expect(toggleVeDespesasMock).toHaveBeenCalledWith('coop-A', false);
+    });
+
+    it('ADMIN tentando alterar OUTRA cooperativa → ForbiddenException', async () => {
+      const req = { user: { perfil: PerfilUsuario.ADMIN, cooperativaId: 'coop-A' } };
+      await expect(
+        controller.toggleProprietarioVeDespesas('coop-B', { ativo: true }, req),
+      ).rejects.toThrow(ForbiddenException);
+      expect(toggleVeDespesasMock).not.toHaveBeenCalled();
+    });
+
+    it('SUPER_ADMIN toggla qualquer cooperativa', async () => {
+      const req = { user: { perfil: PerfilUsuario.SUPER_ADMIN } };
+      await controller.toggleProprietarioVeDespesas('coop-X', { ativo: true }, req);
+      expect(toggleVeDespesasMock).toHaveBeenCalledWith('coop-X', true);
     });
   });
 });

@@ -134,28 +134,55 @@ export class ContasPagarService {
   async proporDespesa(
     dto: ProporDespesaDto,
     usuarioId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     usuarioPerfil: string,
     cooperativaId: string | null,
+    userOwnership?: { email?: string | null; cooperadoId?: string | null },
   ) {
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório no contexto do usuário.');
-    }
-
     // Multi-tenant + IDOR defense: usina precisa pertencer à cooperativa do usuário.
+    // BH.4 (M37): PROPRIETARIO e SUPER_ADMIN não têm cooperativaId fixa no JWT.
+    // Pra esses perfis, infere a cooperativaId a partir da usina e checa via vínculo
+    // do proprietário (Caminho A/B) em vez de igualdade direta.
     const usina = await this.prisma.usina.findUnique({
       where: { id: dto.usinaId },
       select: {
         id: true,
         cooperativaId: true,
         responsabilidadeDespesas: true,
+        proprietarioCooperadoId: true,
+        proprietarioEmail: true,
       },
     });
     if (!usina) throw new NotFoundException('Usina não encontrada.');
-    if (usina.cooperativaId !== cooperativaId) {
-      throw new ForbiddenException(
-        'Usina pertence a outra cooperativa — você não tem permissão pra lançar despesa nela.',
-      );
+    if (!usina.cooperativaId) {
+      throw new BadRequestException('Usina sem cooperativa vinculada.');
+    }
+
+    const perfilNorm = (usuarioPerfil ?? '').toUpperCase();
+    if (perfilNorm === 'SUPER_ADMIN') {
+      // SUPER_ADMIN: cross-tenant, herda cooperativaId da usina.
+      cooperativaId = usina.cooperativaId;
+    } else if (perfilNorm === 'PROPRIETARIO') {
+      // PROPRIETARIO: precisa ser proprietário desta usina (Caminho A/B).
+      const ownsByCooperado =
+        !!userOwnership?.cooperadoId &&
+        usina.proprietarioCooperadoId === userOwnership.cooperadoId;
+      const ownsByEmail =
+        !!userOwnership?.email && usina.proprietarioEmail === userOwnership.email;
+      if (!ownsByCooperado && !ownsByEmail) {
+        throw new ForbiddenException(
+          'Você não é o proprietário desta usina — não pode propor despesa.',
+        );
+      }
+      cooperativaId = usina.cooperativaId;
+    } else {
+      if (!cooperativaId) {
+        throw new BadRequestException('cooperativaId obrigatório no contexto do usuário.');
+      }
+      if (usina.cooperativaId !== cooperativaId) {
+        throw new ForbiddenException(
+          'Usina pertence a outra cooperativa — você não tem permissão pra lançar despesa nela.',
+        );
+      }
     }
 
     // Pré-preenche responsavelPagamento via Camada 1 (M30 matriz). Se a categoria
@@ -214,17 +241,19 @@ export class ContasPagarService {
    * atual === PROPOSTA antes de atualizar (2 admins clicando simultâneo
    * → 2º recebe ConflictException).
    */
-  async aprovarDespesa(despesaId: string, usuarioId: string, cooperativaId: string | null) {
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório.');
-    }
+  async aprovarDespesa(despesaId: string, usuarioId: string, cooperativaId: string | null, perfilUsuario?: string) {
     const despesa = await this.prisma.contaAPagar.findUnique({
       where: { id: despesaId },
       select: { id: true, cooperativaId: true, statusAprovacao: true, propostoPorUsuarioId: true },
     });
     if (!despesa) throw new NotFoundException('Despesa não encontrada.');
-    if (despesa.cooperativaId !== cooperativaId) {
-      throw new ForbiddenException('Despesa de outra cooperativa.');
+    // BH.4: Super Admin tem acesso global — bypass tenant check.
+    // Outros perfis: cooperativaId obrigatória e precisa bater.
+    if (perfilUsuario !== 'SUPER_ADMIN') {
+      if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatório.');
+      if (despesa.cooperativaId !== cooperativaId) {
+        throw new ForbiddenException('Despesa de outra cooperativa.');
+      }
     }
     if (despesa.statusAprovacao !== 'PROPOSTA') {
       throw new ConflictException(
@@ -270,17 +299,18 @@ export class ContasPagarService {
     dto: RejeitarDespesaDto,
     usuarioId: string,
     cooperativaId: string | null,
+    perfilUsuario?: string,
   ) {
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório.');
-    }
     const despesa = await this.prisma.contaAPagar.findUnique({
       where: { id: despesaId },
       select: { id: true, cooperativaId: true, statusAprovacao: true, propostoPorUsuarioId: true },
     });
     if (!despesa) throw new NotFoundException('Despesa não encontrada.');
-    if (despesa.cooperativaId !== cooperativaId) {
-      throw new ForbiddenException('Despesa de outra cooperativa.');
+    if (perfilUsuario !== 'SUPER_ADMIN') {
+      if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatório.');
+      if (despesa.cooperativaId !== cooperativaId) {
+        throw new ForbiddenException('Despesa de outra cooperativa.');
+      }
     }
     if (despesa.statusAprovacao !== 'PROPOSTA') {
       throw new ConflictException(
@@ -325,10 +355,8 @@ export class ContasPagarService {
     despesaId: string,
     dto: ResolverDespesaDto,
     cooperativaId: string | null,
+    perfilUsuario?: string,
   ) {
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório.');
-    }
     const despesa = await this.prisma.contaAPagar.findUnique({
       where: { id: despesaId },
       select: {
@@ -339,8 +367,11 @@ export class ContasPagarService {
       },
     });
     if (!despesa) throw new NotFoundException('Despesa não encontrada.');
-    if (despesa.cooperativaId !== cooperativaId) {
-      throw new ForbiddenException('Despesa de outra cooperativa.');
+    if (perfilUsuario !== 'SUPER_ADMIN') {
+      if (!cooperativaId) throw new BadRequestException('cooperativaId obrigatório.');
+      if (despesa.cooperativaId !== cooperativaId) {
+        throw new ForbiddenException('Despesa de outra cooperativa.');
+      }
     }
     if (despesa.statusAprovacao !== 'APROVADA') {
       throw new BadRequestException(
@@ -377,10 +408,22 @@ export class ContasPagarService {
       dataOcorrenciaFim?: Date;
     },
   ) {
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório.');
+    // BH.4 (29/05): Super Admin sem cooperativaId fixa. Quando passa usinaId
+    // no filtro, infere cooperativaId via Usina (escopo natural). Sem usinaId,
+    // SA ainda precisa contexto (proteção contra listagem cross-tenant não-intencional).
+    let coopEfetiva = cooperativaId;
+    if (!coopEfetiva && filtros?.usinaId) {
+      const u = await this.prisma.usina.findUnique({
+        where: { id: filtros.usinaId },
+        select: { cooperativaId: true },
+      });
+      if (!u) throw new NotFoundException('Usina não encontrada.');
+      coopEfetiva = u.cooperativaId;
     }
-    const where: any = { cooperativaId };
+    if (!coopEfetiva) {
+      throw new BadRequestException('cooperativaId obrigatório (use ?usinaId=X pra SA inferir).');
+    }
+    const where: any = { cooperativaId: coopEfetiva };
     if (filtros?.usinaId) where.usinaId = filtros.usinaId;
     if (filtros?.statusAprovacao) where.statusAprovacao = filtros.statusAprovacao;
     if (filtros?.statusResolucao) where.statusResolucao = filtros.statusResolucao;
