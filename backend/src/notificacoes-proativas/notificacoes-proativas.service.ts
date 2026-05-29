@@ -344,8 +344,16 @@ export class NotificacoesProativasService {
   // operação principal. Whitelist LGPD em dev já protege contatos reais.
 
   /**
-   * Avisa admins do parceiro que proprietário propôs despesa.
-   * Disparado quando ContasPagarService.proporDespesa cria PROPOSTA.
+   * Avisa quem pode aprovar a despesa proposta.
+   *
+   * BH.3.2 (29/05): com workflow double-check universal, TODO mundo propõe
+   * PROPOSTA. Notifica:
+   *   - Admins do PARCEIRO (cooperativaId scope) EXCETO o propositor
+   *   - Super Admins SISGD (escape valve pro cenário "1 admin só")
+   *
+   * Próprio propositor NUNCA recebe a notificação dele mesmo (mesmo que seja SA).
+   *
+   * Disparado por ContasPagarService.proporDespesa.
    */
   async notificarDespesaProposta(despesaId: string): Promise<void> {
     const d = await this.prisma.contaAPagar.findUnique({
@@ -357,10 +365,28 @@ export class NotificacoesProativasService {
     });
     if (!d) return;
 
-    const admins = await this.prisma.usuario.findMany({
-      where: { cooperativaId: d.cooperativaId, perfil: { in: ['ADMIN', 'SUPER_ADMIN'] } },
-      select: { id: true, email: true, telefone: true, nome: true },
-    });
+    // Admins do parceiro EXCETO propositor + Super Admins globais EXCETO propositor.
+    // Distinct via Map(id) cobre o caso de SA também ser admin do parceiro.
+    const [adminsParceiro, superAdmins] = await Promise.all([
+      this.prisma.usuario.findMany({
+        where: {
+          cooperativaId: d.cooperativaId,
+          perfil: 'ADMIN',
+          id: { not: d.propostoPorUsuarioId ?? undefined },
+        },
+        select: { id: true, email: true, telefone: true, nome: true },
+      }),
+      this.prisma.usuario.findMany({
+        where: {
+          perfil: 'SUPER_ADMIN',
+          id: { not: d.propostoPorUsuarioId ?? undefined },
+        },
+        select: { id: true, email: true, telefone: true, nome: true },
+      }),
+    ]);
+    const dedup = new Map<string, typeof adminsParceiro[number]>();
+    for (const u of [...adminsParceiro, ...superAdmins]) dedup.set(u.id, u);
+    const admins = Array.from(dedup.values());
 
     const subj = `Nova despesa proposta — ${d.usina?.nome ?? 'usina'}`;
     const valorFmt = `R$ ${Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;

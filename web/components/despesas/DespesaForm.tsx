@@ -140,8 +140,13 @@ export function DespesaForm({
     }
   }
 
+  // BH.3.2 (29/05): texto unificado pra ambos modos — todos viram PROPOSTA
   const tituloBotao =
-    modo === 'admin-lancar' ? 'Lançar despesa' : modo === 'proprietario-propor' ? 'Propor despesa' : 'Salvar alterações';
+    modo === 'admin-lancar'
+      ? 'Propor pra aprovação'
+      : modo === 'proprietario-propor'
+        ? 'Propor despesa'
+        : 'Salvar alterações';
 
   return (
     <Card className="max-w-2xl">
@@ -151,14 +156,15 @@ export function DespesaForm({
           <div className="text-sm text-blue-800">
             {modo === 'admin-lancar' && (
               <>
-                <strong>Lançamento direto:</strong> despesas lançadas por admin entram como{' '}
-                <strong>APROVADAS</strong>. Para fluxo de aprovação, peça ao proprietário propor pelo portal dele.
+                ⚠️ <strong>Double-check obrigatório:</strong> sua proposta de despesa precisará ser
+                aprovada por <strong>outro admin</strong> do parceiro ou por um Super Admin SISGD.
+                Você não pode aprovar a própria despesa. Eles recebem notificação por email + WhatsApp.
               </>
             )}
             {modo === 'proprietario-propor' && (
               <>
-                <strong>Proposta de despesa:</strong> sua proposta vai pro admin do parceiro aprovar ou rejeitar.
-                Você recebe a resposta por email e WhatsApp.
+                <strong>Proposta de despesa:</strong> sua proposta será enviada pro admin do parceiro
+                pra aprovação. Você receberá email + WhatsApp quando for aprovada ou rejeitada.
               </>
             )}
             {modo === 'editar' && <strong>Edição de despesa</strong>}

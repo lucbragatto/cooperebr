@@ -64,20 +64,37 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
       expect(args.data.propostoPorUsuarioId).toBe('usr-prop');
     });
 
-    it('ADMIN cria com statusAprovacao=APROVADA + aprovadoPor=admin', async () => {
+    // BH.3.2: workflow double-check universal — ADMIN também cria PROPOSTA
+    it('ADMIN cria com statusAprovacao=PROPOSTA (BH.3.2 universal)', async () => {
       prismaMock.usina.findUnique.mockResolvedValueOnce({
         id: 'u1',
         cooperativaId: 'coop1',
         responsabilidadeDespesas: {},
       });
-      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1' });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'PROPOSTA' });
 
       await service.proporDespesa(dtoBase as any, 'usr-admin', 'ADMIN', 'coop1');
 
       const args = prismaMock.contaAPagar.create.mock.calls[0][0];
-      expect(args.data.statusAprovacao).toBe('APROVADA');
-      expect(args.data.aprovadoPorUsuarioId).toBe('usr-admin');
-      expect(args.data.aprovadoEm).toBeInstanceOf(Date);
+      expect(args.data.statusAprovacao).toBe('PROPOSTA');
+      expect(args.data.aprovadoPorUsuarioId).toBeUndefined();
+      expect(args.data.aprovadoEm).toBeUndefined();
+      expect(args.data.propostoPorUsuarioId).toBe('usr-admin');
+    });
+
+    it('SUPER_ADMIN cria com statusAprovacao=PROPOSTA (BH.3.2 universal)', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'coop1',
+        responsabilidadeDespesas: {},
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'PROPOSTA' });
+
+      await service.proporDespesa(dtoBase as any, 'usr-sa', 'SUPER_ADMIN', 'coop1');
+
+      const args = prismaMock.contaAPagar.create.mock.calls[0][0];
+      expect(args.data.statusAprovacao).toBe('PROPOSTA');
+      expect(args.data.aprovadoPorUsuarioId).toBeUndefined();
     });
 
     it('pré-preenche responsavelPagamento da Camada 1 (M30)', async () => {
@@ -117,11 +134,12 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
   // ─── aprovarDespesa ──────────────────────────────────────────────
 
   describe('aprovarDespesa()', () => {
-    it('PROPOSTA → APROVADA com aprovadoEm', async () => {
+    it('PROPOSTA → APROVADA com aprovadoEm (admin diferente do propositor)', async () => {
       prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
         id: 'd1',
         cooperativaId: 'coop1',
         statusAprovacao: 'PROPOSTA',
+        propostoPorUsuarioId: 'usr-propos',
       });
       prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
 
@@ -138,6 +156,7 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
         id: 'd1',
         cooperativaId: 'coop1',
         statusAprovacao: 'APROVADA',
+        propostoPorUsuarioId: 'usr-propos',
       });
 
       await expect(
@@ -150,22 +169,39 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
         id: 'd1',
         cooperativaId: 'OUTRA',
         statusAprovacao: 'PROPOSTA',
+        propostoPorUsuarioId: 'usr-propos',
       });
 
       await expect(
         service.aprovarDespesa('d1', 'admin-1', 'coop1'),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    // BH.3.2 — Self-approval guard
+    it('SELF-APPROVAL: propositor tenta aprovar a própria → ForbiddenException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'PROPOSTA',
+        propostoPorUsuarioId: 'usr-A',
+      });
+
+      await expect(
+        service.aprovarDespesa('d1', 'usr-A', 'coop1'),
+      ).rejects.toThrow(/você mesmo propôs/i);
+      expect(prismaMock.contaAPagar.update).not.toHaveBeenCalled();
+    });
   });
 
   // ─── rejeitarDespesa ─────────────────────────────────────────────
 
   describe('rejeitarDespesa()', () => {
-    it('PROPOSTA + motivo → REJEITADA + motivo gravado', async () => {
+    it('PROPOSTA + motivo → REJEITADA + motivo gravado (admin diferente)', async () => {
       prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
         id: 'd1',
         cooperativaId: 'coop1',
         statusAprovacao: 'PROPOSTA',
+        propostoPorUsuarioId: 'usr-propos',
       });
       prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
 
@@ -179,6 +215,21 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
       const args = prismaMock.contaAPagar.update.mock.calls[0][0];
       expect(args.data.statusAprovacao).toBe('REJEITADA');
       expect(args.data.rejeitadoMotivo).toBe('Faltou nota fiscal anexada.');
+    });
+
+    // BH.3.2 — Self-rejection guard
+    it('SELF-REJECTION: propositor tenta rejeitar a própria → ForbiddenException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'PROPOSTA',
+        propostoPorUsuarioId: 'usr-A',
+      });
+
+      await expect(
+        service.rejeitarDespesa('d1', { motivo: 'X' } as any, 'usr-A', 'coop1'),
+      ).rejects.toThrow(/você mesmo propôs/i);
+      expect(prismaMock.contaAPagar.update).not.toHaveBeenCalled();
     });
   });
 
@@ -321,20 +372,21 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
       expect(notificacoesMock.notificarDespesaProposta).toHaveBeenCalledWith('d1');
     });
 
-    it('proporDespesa ADMIN NÃO dispara notificarDespesaProposta (já vem APROVADA)', async () => {
+    // BH.3.2: ADMIN agora TAMBÉM dispara notificarDespesaProposta (sempre PROPOSTA)
+    it('proporDespesa ADMIN TAMBÉM dispara notificarDespesaProposta (BH.3.2 universal)', async () => {
       prismaMock.usina.findUnique.mockResolvedValueOnce({
         id: 'u1', cooperativaId: 'coop1', responsabilidadeDespesas: {},
       });
-      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'APROVADA' });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'PROPOSTA' });
 
       await service.proporDespesa(dtoBase as any, 'usr-adm', 'ADMIN', 'coop1');
 
-      expect(notificacoesMock.notificarDespesaProposta).not.toHaveBeenCalled();
+      expect(notificacoesMock.notificarDespesaProposta).toHaveBeenCalledWith('d1');
     });
 
     it('aprovarDespesa dispara notificarDespesaAprovada', async () => {
       prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
-        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA',
+        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA', propostoPorUsuarioId: 'usr-propos',
       });
       prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
 
@@ -345,7 +397,7 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
 
     it('rejeitarDespesa dispara notificarDespesaRejeitada', async () => {
       prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
-        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA',
+        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA', propostoPorUsuarioId: 'usr-propos',
       });
       prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
 

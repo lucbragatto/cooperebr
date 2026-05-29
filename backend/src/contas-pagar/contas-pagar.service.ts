@@ -118,18 +118,23 @@ export class ContasPagarService {
   // Multi-tenant em todas as queries.
 
   /**
-   * Propõe ou lança despesa. Detecta role:
-   *   PROPRIETARIO → cria PROPOSTA (admin precisa aprovar depois)
-   *   ADMIN/SUPER_ADMIN/OPERADOR → cria APROVADA direto + aprovadoPor=self
+   * Propõe despesa. BH.3.2 (M37, 29/05/2026) — Workflow double-check universal:
+   * TODOS perfis (PROPRIETARIO, ADMIN, SUPER_ADMIN, OPERADOR) criam com
+   * statusAprovacao=PROPOSTA. 2º OK obrigatório de outro usuário.
+   *
+   * Auditoria/segurança: ninguém aprova a própria despesa (self-approval guard
+   * em aprovarDespesa/rejeitarDespesa).
    *
    * Pré-preenche responsavelPagamento a partir de Usina.responsabilidadeDespesas
-   * (Camada 1 M30) usando o tipo do quemPagouTipo como hint quando categoria
-   * já tem mapeamento definido. Caso a Camada 1 esteja vazia ou diferente,
-   * cai pra null (admin pode override depois).
+   * (Camada 1 M30). Caso Camada 1 vazia, cai pra null (admin pode override depois).
+   *
+   * Parâmetro `usuarioPerfil` mantido por compatibilidade — não usado mais pra
+   * decidir status (apenas log/audit downstream).
    */
   async proporDespesa(
     dto: ProporDespesaDto,
     usuarioId: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     usuarioPerfil: string,
     cooperativaId: string | null,
   ) {
@@ -164,12 +169,9 @@ export class ContasPagarService {
         ? (responsavelMatriz as 'PARCEIRO' | 'PROPRIETARIO' | 'COMPARTILHADO')
         : null;
 
-    const isAdmin =
-      usuarioPerfil === 'ADMIN' ||
-      usuarioPerfil === 'SUPER_ADMIN' ||
-      usuarioPerfil === 'OPERADOR';
-
-    const now = new Date();
+    // BH.3.2 (29/05): SEMPRE PROPOSTA — workflow double-check universal.
+    // Nenhum perfil aprova a própria despesa. aprovadoPor/aprovadoEm ficam
+    // null até 2º OK explícito de outro usuário em aprovarDespesa().
     const data: any = {
       cooperativaId,
       usinaId: usina.id,
@@ -183,14 +185,10 @@ export class ContasPagarService {
       tratamento: dto.tratamento as TratamentoDespesa,
       comprovante: dto.comprovante ?? null,
       responsavelPagamento,
-      statusAprovacao: isAdmin ? 'APROVADA' : 'PROPOSTA',
+      statusAprovacao: 'PROPOSTA',
       statusResolucao: 'PENDENTE',
       propostoPorUsuarioId: usuarioId,
     };
-    if (isAdmin) {
-      data.aprovadoPorUsuarioId = usuarioId;
-      data.aprovadoEm = now;
-    }
 
     const criada = await this.prisma.contaAPagar.create({
       data,
@@ -201,14 +199,12 @@ export class ContasPagarService {
       },
     });
 
-    // D-novo-BH: dispara notificação async se foi PROPOSTA (admin precisa aprovar)
-    if (criada.statusAprovacao === 'PROPOSTA') {
-      this.notificacoes
-        ?.notificarDespesaProposta(criada.id)
-        .catch((err) =>
-          this.logger.error(`Notificacao despesa-proposta falhou id=${criada.id}: ${err.message}`),
-        );
-    }
+    // BH.3.2: notificação sempre dispara (toda PROPOSTA precisa de 2º OK).
+    this.notificacoes
+      ?.notificarDespesaProposta(criada.id)
+      .catch((err) =>
+        this.logger.error(`Notificacao despesa-proposta falhou id=${criada.id}: ${err.message}`),
+      );
 
     return criada;
   }
@@ -224,7 +220,7 @@ export class ContasPagarService {
     }
     const despesa = await this.prisma.contaAPagar.findUnique({
       where: { id: despesaId },
-      select: { id: true, cooperativaId: true, statusAprovacao: true },
+      select: { id: true, cooperativaId: true, statusAprovacao: true, propostoPorUsuarioId: true },
     });
     if (!despesa) throw new NotFoundException('Despesa não encontrada.');
     if (despesa.cooperativaId !== cooperativaId) {
@@ -233,6 +229,12 @@ export class ContasPagarService {
     if (despesa.statusAprovacao !== 'PROPOSTA') {
       throw new ConflictException(
         `Despesa não está em PROPOSTA (atual: ${despesa.statusAprovacao}). Pode ter sido aprovada/rejeitada por outro admin.`,
+      );
+    }
+    // BH.3.2 (29/05): self-approval guard universal — quem propôs não aprova.
+    if (despesa.propostoPorUsuarioId === usuarioId) {
+      throw new ForbiddenException(
+        'Você não pode aprovar uma despesa que você mesmo propôs. Outro admin ou Super Admin precisa aprovar.',
       );
     }
 
@@ -274,7 +276,7 @@ export class ContasPagarService {
     }
     const despesa = await this.prisma.contaAPagar.findUnique({
       where: { id: despesaId },
-      select: { id: true, cooperativaId: true, statusAprovacao: true },
+      select: { id: true, cooperativaId: true, statusAprovacao: true, propostoPorUsuarioId: true },
     });
     if (!despesa) throw new NotFoundException('Despesa não encontrada.');
     if (despesa.cooperativaId !== cooperativaId) {
@@ -283,6 +285,14 @@ export class ContasPagarService {
     if (despesa.statusAprovacao !== 'PROPOSTA') {
       throw new ConflictException(
         `Despesa não está em PROPOSTA (atual: ${despesa.statusAprovacao}).`,
+      );
+    }
+    // BH.3.2 (29/05): self-rejection guard universal — quem propôs não rejeita
+    // a própria. Pra cancelar despesa indesejada, abrir solicitação de cancelamento
+    // futura OU pedir outro admin pra rejeitar.
+    if (despesa.propostoPorUsuarioId === usuarioId) {
+      throw new ForbiddenException(
+        'Você não pode rejeitar uma despesa que você mesmo propôs. Outro admin ou Super Admin precisa rejeitar.',
       );
     }
 
