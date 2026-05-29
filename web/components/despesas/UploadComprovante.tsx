@@ -25,6 +25,13 @@ interface UploadComprovanteProps {
   valor?: string;
   onChange: (url: string | undefined) => void;
   disabled?: boolean;
+  /**
+   * Endpoint backend. Default: `/contas-pagar/upload-comprovante` (BH.3.1).
+   * AN.3 (M42, 30/05/2026): repasses passam `/repasses/upload-comprovante`
+   * pra storage em `/uploads/repasses/...` sem misturar com comprovantes
+   * de despesas operacionais.
+   */
+  endpoint?: string;
 }
 
 function isImagem(url: string): boolean {
@@ -44,7 +51,8 @@ function nomeArquivoDeUrl(url: string): string {
   }
 }
 
-export function UploadComprovante({ valor, onChange, disabled }: UploadComprovanteProps) {
+export function UploadComprovante({ valor, onChange, disabled, endpoint }: UploadComprovanteProps) {
+  const uploadEndpoint = endpoint ?? '/contas-pagar/upload-comprovante';
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
   const [arrastando, setArrastando] = useState(false);
@@ -74,7 +82,7 @@ export function UploadComprovante({ valor, onChange, disabled }: UploadComprovan
       const fd = new FormData();
       fd.append('arquivo', file);
       const r = await api.post<{ url: string; tamanho: number; mimetype: string }>(
-        '/contas-pagar/upload-comprovante',
+        uploadEndpoint,
         fd,
       );
       onChange(r.data.url);

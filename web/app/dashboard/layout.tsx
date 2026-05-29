@@ -101,6 +101,7 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/cooperados', label: '__MEMBROS__', icon: Users },
         { href: '/dashboard/ucs', label: 'UCs', icon: Zap },
         { href: '/dashboard/usinas', label: 'Usinas', icon: Sun },
+        { href: '/dashboard/repasses', label: 'Repasses', icon: Wallet },
         { href: '/dashboard/usinas/listas', label: 'Listas Concessionária', icon: FileText },
         { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
         { href: '/dashboard/planos', label: 'Planos', icon: Tag },

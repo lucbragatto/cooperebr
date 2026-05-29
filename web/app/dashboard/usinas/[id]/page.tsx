@@ -326,6 +326,28 @@ export default function UsinaDetailPage() {
         </Card>
       )}
 
+      {/* D-novo-AN AN.3: Card entrada repasses ao proprietário */}
+      {usina && (
+        <Card className="mb-4 border-green-200 bg-green-50/30">
+          <CardContent className="py-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">Repasses ao proprietário</h3>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Pagamentos mensais do parceiro pro proprietário da usina. Cron cria PENDENTE no dia 1
+                (com snapshot bruto/abatido/líquido); admin marca como pago com método + comprovante.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => router.push(`/dashboard/usinas/${id}/repasses`)}
+              className="bg-green-600 hover:bg-green-700 shrink-0"
+            >
+              Gerenciar repasses →
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {carregando && <p className="text-gray-500">Carregando...</p>}
       {erro && <p className="text-red-500">{erro}</p>}
       {mensagem && (
