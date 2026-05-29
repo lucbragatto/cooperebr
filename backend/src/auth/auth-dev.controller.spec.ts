@@ -69,13 +69,13 @@ describe('AuthDevController — guards dev-only', () => {
         administradoraId: null,
         ativo: true,
       });
-      assinarTokenImpersonate.mockResolvedValueOnce('jwt-mock-1h');
+      assinarTokenImpersonate.mockResolvedValueOnce('jwt-mock-8h');
 
       const r = await controller.impersonate({ userId: 'u1' }, reqSA);
 
-      expect(r.token).toBe('jwt-mock-1h');
+      expect(r.token).toBe('jwt-mock-8h');
       expect(r.usuario).toMatchObject({ id: 'u1', perfil: PerfilUsuario.ADMIN, cooperativaId: 'coop-A' });
-      expect(r.expiresIn).toBe('1h');
+      expect(r.expiresIn).toBe('8h');
       expect(r.impersonadoPor).toBe('sa@cooperebr.com.br');
       expect(assinarTokenImpersonate).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'u1', email: 'admin@cooperebr.com.br' }),

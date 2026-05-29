@@ -114,7 +114,8 @@ export class AuthDevController {
         perfil: target.perfil,
         cooperativaId: target.cooperativaId,
       },
-      expiresIn: '1h',
+      expiresIn: '8h', // AN.3.1 — bump pra reduzir fricção operacional
+
       impersonadoPor: req.user?.email ?? null,
     };
   }

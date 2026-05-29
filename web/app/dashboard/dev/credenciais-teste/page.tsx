@@ -73,6 +73,8 @@ export default function CredenciaisTestePage() {
   const [erro, setErro] = useState('');
   const [logandoUserId, setLogandoUserId] = useState<string | null>(null);
 
+  const [sessaoExpirada, setSessaoExpirada] = useState(false);
+
   useEffect(() => {
     api
       .get<UsuarioTeste[]>('/auth/dev/usuarios-teste')
@@ -80,6 +82,10 @@ export default function CredenciaisTestePage() {
       .catch((err) => {
         if (err?.response?.status === 403) {
           setAmbienteReal(true);
+        } else if (err?.response?.status === 401) {
+          // AN.3.1: lib/api não redireciona daqui (rota de self-recovery).
+          // Mostramos inline pra Luciano fazer login limpo e voltar.
+          setSessaoExpirada(true);
         } else {
           setErro(
             err?.response?.data?.message ?? 'Erro ao carregar usuários de teste.',
@@ -144,6 +150,38 @@ export default function CredenciaisTestePage() {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (sessaoExpirada) {
+    return (
+      <div className="max-w-2xl mx-auto py-12">
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-6 flex gap-3 items-start">
+          <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-amber-900">Sessão expirada</h2>
+            <p className="text-sm text-amber-800 mt-2">
+              Seu token JWT expirou (TTL 8h para impersonate ou 7d para login normal).
+              Faça login de novo no <strong>/login</strong> com qualquer SUPER_ADMIN ou volte aqui pra
+              re-impersonar.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <a
+                href="/login"
+                className="inline-flex items-center px-4 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700"
+              >
+                Ir pra /login
+              </a>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center px-4 py-2 bg-white border border-amber-300 text-amber-700 rounded-md text-sm hover:bg-amber-50"
+              >
+                Tentar de novo
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

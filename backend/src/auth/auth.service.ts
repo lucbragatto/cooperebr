@@ -659,7 +659,11 @@ export class AuthService {
       cooperativaId: cooperado?.cooperativaId ?? target.cooperativaId ?? undefined,
       administradoraId: target.administradoraId ?? undefined,
     };
-    return this.jwtService.sign(payload, { expiresIn: '1h' });
+    // AN.3.1 (M42, 30/05/2026) — TTL aumentado de 1h pra 8h pra reduzir fricção
+    // operacional do Luciano usando o painel dev de credenciais. Continua dev-only
+    // (endpoint gated por isAmbienteReal()=false). Em produção AMBIENTE_REAL=true
+    // o endpoint nem responde, então o TTL aqui é irrelevante.
+    return this.jwtService.sign(payload, { expiresIn: '8h' });
   }
 
   private formatarUsuario(usuario: {

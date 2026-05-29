@@ -27,7 +27,13 @@ api.interceptors.response.use(
       const path = window.location.pathname;
       // Don't redirect if already on a login page (let the form show the error)
       const isLoginPage = path === '/login' || path === '/portal/login';
-      if (!isLoginPage) {
+      // D-novo-AN AN.3.1 (30/05/2026): rotas de "self-recovery" NÃO devem
+      // expulsar pro /login em 401 — a página trata o erro inline e oferece
+      // re-impersonate / re-login sem perder o contexto da própria tela.
+      // Caso típico: painel dev credenciais quando token impersonate expirou.
+      const isSelfRecovery =
+        path === '/dashboard/dev/credenciais-teste' || path === '/selecionar-contexto';
+      if (!isLoginPage && !isSelfRecovery) {
         Cookies.remove('token');
         Cookies.remove('usuario');
         const isPortal = path.startsWith('/portal');
