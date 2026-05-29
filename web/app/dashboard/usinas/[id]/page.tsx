@@ -304,6 +304,28 @@ export default function UsinaDetailPage() {
         )}
       </div>
 
+      {/* D-novo-BH BH.3: Card entrada despesas operacionais (Camada 2) */}
+      {usina && (
+        <Card className="mb-4 border-amber-200 bg-amber-50/30">
+          <CardContent className="py-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">Despesas operacionais</h3>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Eventos reais de despesa durante operação da usina (Camada 2). Aprovação de propostas,
+                tratamento contratual, integração com repasse.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => router.push(`/dashboard/usinas/${id}/despesas`)}
+              className="bg-amber-600 hover:bg-amber-700 shrink-0"
+            >
+              Gerenciar despesas →
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {carregando && <p className="text-gray-500">Carregando...</p>}
       {erro && <p className="text-red-500">{erro}</p>}
       {mensagem && (

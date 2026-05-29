@@ -211,6 +211,21 @@ export default function UsinaProprietarioConfigPage() {
           <CardTitle className="text-base">Matriz de Responsabilidade de Despesas</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* D-novo-BH BH.3: link cruzado Camada 1 → Camada 2 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800 flex items-start gap-2">
+            <span className="text-base leading-none">📋</span>
+            <div>
+              <strong>Esta é a Camada 1 (contratual)</strong> — define <em>quem é responsável</em> por cada
+              categoria. Para registrar <strong>eventos reais</strong> de despesa que aconteceram na usina
+              (Camada 2), vá pra{' '}
+              <a
+                href={`/dashboard/usinas/${usinaId}/despesas`}
+                className="text-amber-700 underline hover:no-underline"
+              >
+                Despesas operacionais →
+              </a>
+            </div>
+          </div>
           <p className="text-xs text-gray-500 mb-3">
             Defina quem paga cada categoria de despesa desta usina conforme contrato bilateral. Categorias
             sem responsável definido ficam visíveis só pro admin (não aparecem no portal do proprietário).
