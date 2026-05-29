@@ -42,6 +42,7 @@ import {
   ClipboardList,
   LineChart,
   Coins,
+  TestTube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -51,7 +52,7 @@ import ContextoSwitcher from '@/components/ContextoSwitcher';
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 type NavSection = { title?: string; titleIcon?: typeof LayoutDashboard; items: NavItem[] };
 
-function getNavSections(perfil: string): NavSection[] {
+function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): NavSection[] {
   if (perfil === 'COOPERADO') {
     return [{
       items: [
@@ -185,6 +186,20 @@ function getNavSections(perfil: string): NavSection[] {
     });
   }
 
+  // D-novo-BM (29/05/2026) — DEV ONLY, só SUPER_ADMIN, só quando backend
+  // confirmou !isAmbienteReal() (probe ao /auth/dev/usuarios-teste retornou 200).
+  // BLOQUEADOR REMOÇÃO PRÉ-PROD: remover este bloco quando primeiro parceiro real
+  // entrar em produção (catalogado em docs/debitos-tecnicos.md).
+  if (perfil === 'SUPER_ADMIN' && devCredenciaisTeste) {
+    sections.push({
+      title: 'DEV',
+      titleIcon: TestTube,
+      items: [
+        { href: '/dashboard/dev/credenciais-teste', label: 'Credenciais teste', icon: TestTube },
+      ],
+    });
+  }
+
   return sections;
 }
 
@@ -215,10 +230,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [naoLidas, setNaoLidas] = useState(0);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [aberto, setAberto] = useState(false);
+  const [devCredenciaisTeste, setDevCredenciaisTeste] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { contextos, contextoAtivo, trocarContexto, meData } = useContexto();
 
   useEffect(() => { setUsuario(getUsuario()); }, []);
+
+  // D-novo-BM (29/05/2026) — probe ao endpoint dev pra decidir se item sidebar aparece.
+  // Backend retorna 403 quando AMBIENTE_REAL=true (produção). 200 = DEV.
+  // Só roda pra SUPER_ADMIN (RolesGuard bloqueia outros perfis no backend).
+  useEffect(() => {
+    if (usuario?.perfil !== 'SUPER_ADMIN') return;
+    api
+      .get('/auth/dev/usuarios-teste')
+      .then(() => setDevCredenciaisTeste(true))
+      .catch(() => setDevCredenciaisTeste(false));
+  }, [usuario?.perfil]);
 
   const buscarCount = useCallback(async () => {
     try {
@@ -306,7 +333,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {getNavSections(usuario?.perfil ?? '').map((section, si) => (
+          {getNavSections(usuario?.perfil ?? '', devCredenciaisTeste).map((section, si) => (
             <div key={si}>
               {section.title && (
                 <div className="pt-3 pb-1 px-3">

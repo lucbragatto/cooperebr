@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
+import { AuthDevController } from './auth-dev.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma.service';
@@ -19,7 +20,7 @@ import { getJwtSecret } from './jwt-secret';
     FacialModule,
     WhatsappModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AuthDevController],
   providers: [AuthService, JwtStrategy, PrismaService],
   exports: [JwtModule],
 })

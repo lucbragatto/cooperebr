@@ -3457,31 +3457,55 @@ Se isso não resolver, hipótese B é regressão real BH.4 — investigar `web/a
 
 ---
 
-### D-novo-BM — Painel de credenciais de teste na homepage (DEV-ONLY) (P3)
+### D-novo-BM — Painel de credenciais de teste (Opção B login rápido) (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD)
 
-**Severidade:** P3 — qualidade de vida QA/Luciano.
+**Severidade:** P0 BLOQUEADOR REMOÇÃO PRÉ-PROD (foi P3 funcional → eleva-se a P0 segurança no momento em que primeiro parceiro real entra em produção).
 
-**Origem:** 2026-05-29 — Luciano pediu durante a sessão BH.4 que próxima sessão criasse "salvar na homepage do sistema os usuarios e senhas para testes, admin, admin2, financeiro, etec, superadmin, etc, para cada parceiro, e cooperado para teste".
+**Origem:** 2026-05-29 — Luciano pediu durante a sessão BH.4. Decisão Luciano: **Opção B** (login rápido sem expor senha, via endpoint dev impersonate) em vez da Opção A original (lista com senha em texto).
 
-**Decisão:** **Opção B** — botões "Login rápido" na homepage `/` (dev/staging-only). Cada botão dispara login programático usando credenciais embutidas em config dev. Em produção (NODE_ENV!=development OU `isAmbienteReal()=true`) os botões somem.
+**Status:** ✅ **IMPLEMENTADO em 2026-05-30** — feature funcional + multi-camada de defesa contra vazamento em produção.
 
-**Fix sugerido:**
+**Implementação aplicada:**
 
-1. Rota `/` (ou `/login`) ganha bloco condicional `process.env.NODE_ENV === 'development'` ou flag `NEXT_PUBLIC_DEV_QUICK_LOGIN=true`.
-2. Bloco renderiza grid de botões agrupados por perfil/parceiro:
-   - SUPER_ADMIN (luciano@…)
-   - CoopereBR Admin / Admin2 / Financeiro / Operador
-   - TESTE-FASE-B5 Admin / Financeiro
-   - Cooperado teste (login portal)
-   - Proprietário teste
-3. Cada botão chama o helper de login existente passando email + senha fixos.
-4. Banner amarelo "Modo DEV — credenciais de teste expostas".
+Backend (`backend/src/auth/`):
 
-**Anti-pattern:** NÃO commitar senhas em texto puro em arquivo versionado. Usar `.env.development.local` (gitignored) + leitura via `process.env.NEXT_PUBLIC_QUICK_LOGIN_*`.
+- `auth-dev.controller.ts` (NOVO): 2 endpoints `GET /auth/dev/usuarios-teste` e `POST /auth/dev/impersonate`.
+- `auth.service.ts`: novo helper público `assinarTokenImpersonate(target)` — gera JWT com TTL **1h** (não 7d padrão), resolve `cooperadoId` por email/CPF, espelha lógica do `login()` mas sem checar senha.
+- `auth.module.ts`: registra `AuthDevController`.
+- `auth-dev.controller.spec.ts`: **7 specs verdes** (4 do prompt + 3 adicionais: userId inexistente, alvo inativo, body sem userId).
 
-**Estimativa:** 2-3h (homepage refactor + helper login + .env.local exemplo + smoke).
+Frontend (`web/`):
 
-**Status:** 📋 Catalogado em 2026-05-29. Próximo passo após D-novo-BN ser resolvido.
+- `app/dashboard/dev/credenciais-teste/page.tsx` (NOVO): painel com banner vermelho gigante, agrupado por Super Admins / Cooperativa / Outros, cards de usuário com botão "Logar como X" + redireciona pra `/dashboard` (admin), `/portal` (cooperado) ou `/proprietario` (dono usina).
+- `app/dashboard/layout.tsx`: probe ao `/auth/dev/usuarios-teste` no mount (só SUPER_ADMIN) → se 200 mostra item sidebar "Credenciais teste"; se 403 esconde. Item adicionado em seção "DEV" só pra SUPER_ADMIN.
+- `lib/auth.ts`: helper `aplicarSessaoImpersonate(token, usuario)` — seta cookies + limpa `contexto_ativo`.
+
+**Defesa em camadas (4 níveis):**
+
+1. **Runtime guard:** `isAmbienteReal()` em CADA endpoint (helper inegociável 18/05, `backend/src/common/safety/ambiente.ts` usa `AMBIENTE_REAL=true` opt-in produção).
+2. **Auth guard:** `@Roles(SUPER_ADMIN)` — `RolesGuard` global bloqueia outros perfis.
+3. **Audit:** `@AuditLog({ acao: 'auth.dev.impersonate', recurso: 'Usuario', recursoIdParam: 'userId' })` registra TODA tentativa em produção (caso o admin esqueça de setar `AMBIENTE_REAL`, qualquer uso aparece no audit log).
+4. **TTL curto:** JWT impersonado expira em **1h** (não 7d), forçando re-impersonate periódico.
+
+**Smoke programático 8/8 ✅:** GET usuarios-teste SA+DEV → 200 + 10 usuários listados; POST impersonate ADMIN → 200 + JWT válido; decode JWT confirma perfil=ADMIN + cooperativaId; TTL=3600s exato; ADMIN tentando impersonate → 403; sem auth → 401; userId inexistente → 404.
+
+**Smoke HTTP rota frontend:** `/dashboard/dev/credenciais-teste` → 307 (auth gate normal).
+
+**🚨 OBRIGAÇÃO DE REMOÇÃO antes do primeiro parceiro real entrar em produção 🚨**
+
+1. Setar `AMBIENTE_REAL=true` no `.env` de produção (já bloqueia automaticamente endpoint + esconde item sidebar — defesa #1).
+2. **DELETAR** `backend/src/auth/auth-dev.controller.ts`
+3. **DELETAR** `backend/src/auth/auth-dev.controller.spec.ts`
+4. **DELETAR** rota `web/app/dashboard/dev/credenciais-teste/page.tsx` (e remover pasta `web/app/dashboard/dev/` se vazia)
+5. **REMOVER** item sidebar "DEV → Credenciais teste" em `web/app/dashboard/layout.tsx` (bloco marcado `D-novo-BM`) + probe `useEffect` que chama `/auth/dev/usuarios-teste`
+6. **REMOVER** método público `assinarTokenImpersonate` em `auth.service.ts`
+7. **REMOVER** helper `aplicarSessaoImpersonate` em `web/lib/auth.ts`
+8. **REMOVER** registro `AuthDevController` em `auth.module.ts`
+9. Commit: `chore(security): remove D-novo-BM painel credenciais teste pré-produção`
+
+**Como saber que está pronto pra remover:** quando Luciano disser "vamos colocar primeiro parceiro em produção real" / fechar onboarding Sinergia / qualquer evento que mude o `AMBIENTE_REAL` pra `true`.
+
+**Implementação em commit (a definir).**
 
 ---
 

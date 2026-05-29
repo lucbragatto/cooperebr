@@ -12,6 +12,17 @@ export async function login(identificador: string, senha: string): Promise<void>
   Cookies.set(USUARIO_KEY, JSON.stringify(data.usuario), COOKIE_OPTS);
 }
 
+/**
+ * D-novo-BM (29/05/2026) — Aplica sessão de um token + usuario recebidos do
+ * endpoint `/auth/dev/impersonate`. NÃO chamar em código de produção.
+ * O endpoint backend é gated por `isAmbienteReal()` + role SUPER_ADMIN.
+ */
+export function aplicarSessaoImpersonate(token: string, usuario: Usuario): void {
+  Cookies.set(TOKEN_KEY, token, COOKIE_OPTS);
+  Cookies.set(USUARIO_KEY, JSON.stringify(usuario), COOKIE_OPTS);
+  localStorage.removeItem('contexto_ativo');
+}
+
 export function logout(): void {
   Cookies.remove(TOKEN_KEY);
   Cookies.remove(USUARIO_KEY);

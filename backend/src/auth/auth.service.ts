@@ -630,6 +630,38 @@ export class AuthService {
     return this.jwtService.sign({ sub, email, perfil, ...extra });
   }
 
+  /**
+   * D-novo-BM (29/05/2026) — Helper público usado APENAS pelo AuthDevController.
+   * Gera JWT pra impersonate de um usuário-alvo. NÃO usar em código de produção.
+   * O controller protege com guard `isAmbienteReal()` + role SUPER_ADMIN.
+   */
+  async assinarTokenImpersonate(target: {
+    id: string;
+    email: string;
+    perfil: PerfilUsuario;
+    cooperativaId: string | null;
+    administradoraId: string | null;
+    cpf: string | null;
+  }) {
+    // Busca cooperadoId vinculado (match por email/cpf) — espelha lógica do login()
+    const cooperadoWhere: any[] = [{ email: target.email }];
+    if (target.cpf) cooperadoWhere.push({ cpf: target.cpf });
+    const cooperado = await (this.prisma.cooperado as any).findFirst({
+      where: { OR: cooperadoWhere },
+      select: { id: true, cooperativaId: true },
+    });
+
+    const payload = {
+      sub: target.id,
+      email: target.email,
+      perfil: target.perfil,
+      cooperadoId: cooperado?.id ?? undefined,
+      cooperativaId: cooperado?.cooperativaId ?? target.cooperativaId ?? undefined,
+      administradoraId: target.administradoraId ?? undefined,
+    };
+    return this.jwtService.sign(payload, { expiresIn: '1h' });
+  }
+
   private formatarUsuario(usuario: {
     id: string;
     nome: string;
