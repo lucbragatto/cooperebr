@@ -1,11 +1,56 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-30 — Sprint D-novo-BH (Despesas Operacionais Camada 2) COMPLETO** (10 commits bb838ec..77eeb24 em 2 sessões 28-29/05 + 29-30/05, M37→M41 + 3 bugs/débitos bônus). 7 fatias canônicas (BH.1 workflow + BH.2 endpoints + BH.3 tela admin + BH.3.1 refator UX página própria + BH.3.2 double-check universal + BH.4 portal proprietário + flag + BH.5 cálculo líquido + cron aluguel) + **D-novo-BL ✅ RESOLVIDO inline** (Super Admin bypass) + **D-novo-BN ✅ RESOLVIDO** (ChunkLoadError Turbopack `03f49fc`) + **D-novo-BM ✅ IMPLEMENTADO P0 BLOQUEADOR REMOÇÃO PRÉ-PROD** (painel credenciais teste Opção B `1cdb9cb`). **55 specs Jest verdes** + 3 smokes programáticos **24/24 ✅** + build web Turbopack clean 4 ciclos. Substitui o fechamento parcial `c0542fc` de 29/05. Lição arquitetural catalogada (`D-novo-AS` complemento): `npm run build` web SEMPRE seguido de `pm2 restart frontend` IMEDIATO. Próximo bloco aprovado: **D-novo-AN RepasseProprietario tabela** (terreno preparado por BH.5 — campo `ContaAPagar.repasseAbatidoId` nullable pronto). Detalhe: `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
+> Última atualização: **2026-05-30 — Sprint D-novo-AN (RepasseProprietario) COMPLETO** (5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro). 5 fatias canônicas (AN.1 schema + service workflow / AN.2 endpoints REST + cron transação atômica / AN.3 telas admin + portal refator + sidebar + cards cruzados / AN.3.1 fix painel credenciais + trigger + investigação parceiro / AN.4 fix cards parceiro + backfill + notificação + PDF). **36/36 specs verdes** (21 service + 10 controller + 5 notificação) + 3 smokes programáticos. 4 RepasseProprietario PENDENTE no banco (1 trigger + 3 backfill). **D-novo-BM reparo funcional** inline AN.3.1 (TTL 1h→8h + interceptor allowlist). **D-novo-BP catalogado** (convergência `/parceiro` vs `/dashboard`, P3 sprint refator UX futuro). Sprint AN substitui+complementa BH.5 — workflow PENDENTE→PAGO/CANCELADO com transação atômica vinculando despesas DESCONTO_NO_REPASSE. Detalhe: `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
+
+> Histórico: **2026-05-30 — Sprint D-novo-BH (Despesas Operacionais Camada 2) COMPLETO** (10 commits bb838ec..77eeb24 em 2 sessões 28-29/05 + 29-30/05, M37→M41 + 3 bugs/débitos bônus). 7 fatias canônicas (BH.1 workflow + BH.2 endpoints + BH.3 tela admin + BH.3.1 refator UX página própria + BH.3.2 double-check universal + BH.4 portal proprietário + flag + BH.5 cálculo líquido + cron aluguel) + **D-novo-BL ✅ RESOLVIDO inline** (Super Admin bypass) + **D-novo-BN ✅ RESOLVIDO** (ChunkLoadError Turbopack `03f49fc`) + **D-novo-BM ✅ IMPLEMENTADO P0 BLOQUEADOR REMOÇÃO PRÉ-PROD** (painel credenciais teste Opção B `1cdb9cb`). **55 specs Jest verdes** + 3 smokes programáticos **24/24 ✅** + build web Turbopack clean 4 ciclos. Substitui o fechamento parcial `c0542fc` de 29/05. Lição arquitetural catalogada (`D-novo-AS` complemento): `npm run build` web SEMPRE seguido de `pm2 restart frontend` IMEDIATO. Próximo bloco aprovado: **D-novo-AN RepasseProprietario tabela** (terreno preparado por BH.5 — campo `ContaAPagar.repasseAbatidoId` nullable pronto). Detalhe: `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
 
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-05-30 noite (Code — Sprint D-novo-AN RepasseProprietario COMPLETO)
+
+**5 commits** `37f7af0..2f6fb29` em **1 sessão Code dia inteiro** entregaram **Sprint D-novo-AN (RepasseProprietario) 100%** em 5 fatias canônicas:
+
+| Fatia | Commit | Marco |
+|---|---|---|
+| AN.1 | `37f7af0` | Schema delta aditivo (RepasseProprietario + 2 enums + `@@unique` idempotência + back-ref ContaAPagar.repasseAbatido) + service workflow (transação atômica marcarPago vincula despesas DESCONTO_NO_REPASSE) + 4 DTOs + 19 specs + migração via ritual PM2 |
+| AN.2 | `2f36470` | Controller REST 6 endpoints + integração nativa cron BH.5 (`$transaction([createRepasse, createArrendamento])`) + resolução Caminho A/B proprietarioUsuarioId + refator endpoint /proprietario/repasses com fallback PREVISTO_FALLBACK + 13 specs + smoke E2E HTTP 12/12 |
+| AN.3 | `a3b351a` | 2 telas admin (por usina + global cross-usinas) + componentes compartilhados (DialogMarcarPago + DialogCancelar Tipo C) + refator portal proprietário (3 KPIs + tipo REAL/FALLBACK) + sidebar item "Repasses" Operacional + card cruzado em /usinas/[id] + UploadComprovante parametrizado |
+| AN.3.1 | `3a8a90e` | **Fix D-novo-BM** painel credenciais voltava pro /login em uso real (TTL impersonate 1h→8h + interceptor allowlist self-recovery) + trigger manual cron (1 RepasseProprietario PENDENTE 04/2026 R$1k pro smoke visual) + investigação read-only `/parceiro` vs `/dashboard` (30 páginas vivas, recomendação opção b: convergir Usinas) |
+| AN.4 | `2f6fb29` | Fix cards parceiro (sidebar href + redirect página) + backfill idempotente (3 PENDENTE históricos preservando 04/2026) + notificarRepassePago wireup fire-and-forget (email+WA whitelist LGPD Caminho A/B) + PDF mensal status real (remove heurística fake "mês passado = PAGO") |
+
+**Bugs/Débitos bônus resolvidos:**
+- ✅ **D-novo-BM** funcionalmente reparado em AN.3.1 (mantém status P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — reparo só ajustou usabilidade DEV).
+- ✅ **Cards parceiro display-only** resolvido em AN.4 (Usinas redireciona pra /dashboard/usinas).
+
+**Débitos novos catalogados:**
+- 📋 **D-novo-BP** P3 (NOVO) — Convergência portal `/parceiro` vs `/dashboard` (sprint refator UX futuro). 30 páginas `/parceiro` ativas mas sidebar já encaminha entidades complexas pra `/dashboard/*`. Recomendação preliminar: convergência seletiva.
+
+**Validação:**
+- **36/36 specs Jest verdes** (21 service AN.1+AN.4 + 10 controller AN.2 + 5 notificação AN.4).
+- **3 smokes programáticos:** 8/8 service AN.1 + 12/12 endpoints AN.2 + script backfill (3 criados + 2ª execução idempotente).
+- Smoke HTTP AN.3: 4/4 rotas → 307.
+- Build web Turbopack clean em 4 ciclos.
+- PM2 backend + frontend online estáveis.
+
+**Estado banco pós-sprint:**
+- 4 RepasseProprietario PENDENTE (02/03/04/05 2026) — 1 trigger AN.3.1 + 3 backfill AN.4 — todos R$ 1.000 líquido (exceto 05/2026 com R$ 0 devido a despesas DESCONTO_NO_REPASSE acumuladas no banco).
+- `ContaAPagar.repasseAbatidoId` populado em produção quando admin marca PAGO (transação atômica).
+
+**Lições catalogadas:**
+- Fase 1 read-only mini funciona como cobrança de qualidade (8 perguntas decisórias antes de AN.1 → zero retrabalho).
+- Investigação read-only não é "perda de tempo" — virou D-novo-BP catalogado + decisão arquitetural acatada em AN.4.
+- Cache JwtStrategy 60s é feature de performance mas afeta como smokes testam guards (limitação operacional, não bug).
+- Interceptor global 401 redirect precisa de allowlist pra rotas self-recovery (regra catalogada em AN.3.1).
+- **D-novo-AS complemento (lição BN)** aplicado 8× sem regressão neste sprint.
+
+**Próximo bloco — Luciano escolhe** entre 6 opções (ver frase comandante).
+
+**Detalhe:** `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
 
 ---
 
@@ -1124,10 +1169,181 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
-   carry-overs catalogados). Último commit eh o de fechamento COMPLETO
-   Sprint D-novo-BH (substituiu fechamento parcial c0542fc).
+   carry-overs catalogados). Último commit eh o de fechamento Sprint
+   D-novo-AN COMPLETO (substituiu frase BH antiga).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos + Próximo bloco:
+
+Sprint D-novo-AN (RepasseProprietario) entregue 100% em 1 sessão Code
+dia inteiro (30/05), 5 commits 37f7af0..2f6fb29, 5 fatias canônicas +
+1 bug bônus reparado:
+
+AN.1 (37f7af0) — schema delta aditivo (model RepasseProprietario +
+2 enums StatusRepasseProprietario/MetodoPagamentoRepasse + @@unique
+([usinaId, periodoInicio, periodoFim]) idempotência forte + back-ref
+ContaAPagar.repasseAbatido) + service workflow PENDENTE→PAGO/CANCELADO
+(transação atômica marcarPago vincula despesas DESCONTO_NO_REPASSE
+pendentes do período via repasseAbatidoId) + 4 DTOs class-validator +
+19 specs Jest. Migration aplicada via ritual PM2 CLAUDE.md.
+
+AN.2 (2f36470) — Controller REST 6 endpoints (GET /repasses, GET
+/repasses/proprietario, GET /repasses/:id, PUT /:id/marcar-pago, PUT
+/:id/cancelar, POST /upload-comprovante) + integração nativa cron BH.5
+em $transaction([createRepasse PENDENTE, createArrendamento]) com
+resolução Caminho A/B do proprietarioUsuarioId + refator endpoint
+/proprietario/repasses lendo tabela com fallback PREVISTO_FALLBACK +
+13 specs + smoke E2E HTTP 12/12 ✅.
+
+AN.3 (a3b351a) — 2 telas admin (/dashboard/usinas/[id]/repasses Tipo B
+por usina + /dashboard/repasses Tipo B global cross-usinas) +
+componentes compartilhados web/components/repasses/{types,
+DialogMarcarPago, DialogCancelar} (Tipo C) + refator portal
+/proprietario/repasses (3 KPIs novos previsto YTD/recebido YTD/
+pendentes + tipo REAL/FALLBACK + colunas Valor pago/Data pgto/Status
+real + link comprovante) + sidebar item "Repasses" Operacional
+(ícone Wallet) + card cruzado verde em /dashboard/usinas/[id] +
+UploadComprovante parametrizado (prop opcional endpoint).
+
+AN.3.1 (3a8a90e) — FIX D-novo-BM painel credenciais voltava pro /login
+em uso real (causa: token impersonate TTL 1h expirado → useContexto
+GET /auth/me → interceptor global lib/api.ts redirect). Fix duplo
+(A) backend TTL impersonate 1h→8h (dev-only, mantém gating
+isAmbienteReal+SA+AuditLog+TTL) + (B) frontend interceptor allowlist
+self-recovery (/dashboard/dev/credenciais-teste, /selecionar-contexto)
+com UI inline sessaoExpirada + botões "Ir pra /login"/"Tentar de novo".
+Trigger manual cron criou 1 RepasseProprietario PENDENTE 04/2026
+R$1k (cmprfu9z90001vajcefj2xaiz) pro Luciano testar marcar-pago via UI.
+Investigação read-only /parceiro vs /dashboard: 30 páginas vivas em
+/parceiro, sidebar parceiro já encaminha Membros pra /dashboard/cooperados,
+recomendação opção b (convergir Usinas) — acatada em AN.4.
+
+AN.4 (2f6fb29) — FIX cards parceiro (sidebar /parceiro/layout.tsx:54
+href /parceiro/usinas → /dashboard/usinas; /parceiro/usinas/page.tsx
+vira redirect protegendo bookmarks) + backfill histórico idempotente
+(scripts/backfill-repasses-proprietario.ts dry-run default + --apply,
+executado: 3 criados PENDENTE 02/03/05 2026, 04/2026 SKIP preservado,
+2ª execução 0 criados 4 SKIP) + notificarRepassePago em
+NotificacoesProativasService (email + WA whitelist LGPD com fallback
+Caminho A/B + proteção status PAGO + warn sem destinatário) + wireup
+fire-and-forget no marcarPago + PDF mensal seção "Status do Repasse"
+3 estados (PAGO verde / CANCELADO cinza / PENDENTE amarelo / sem
+registro neutro) removendo heurística fake "mês passado = PAGO".
+
+VALIDAÇÃO SPRINT COMPLETO:
+- 36/36 specs Jest verdes (21 service + 10 controller + 5 notificação).
+- 3 smokes programáticos: 8/8 service AN.1 + 12/12 endpoints AN.2 +
+  script backfill 3 criados + 2ª execução 0 idempotência ✅.
+- Smoke HTTP AN.3: 4/4 rotas → 307 (auth-gate normal).
+- Build web Turbopack clean em 4 ciclos.
+- PM2 backend + frontend online estáveis.
+
+ESTADO BANCO PÓS-SPRINT:
+- 4 RepasseProprietario PENDENTE (02/03/04/05 2026) — todos R$1k
+  exceto 05 com R$0 (despesas DESCONTO_NO_REPASSE acumuladas).
+- ContaAPagar.repasseAbatidoId populado em prod quando admin marca PAGO.
+
+DÉBITOS NOVOS CATALOGADOS:
+- D-novo-AN ✅ IMPLEMENTADO 100% (5 commits).
+- D-novo-BP P3 (NOVO) — Convergência portal /parceiro vs /dashboard
+  (30 páginas vivas em /parceiro, sidebar já encaminhando entidades
+  complexas pra /dashboard/*; sprint refator UX futuro, não-bloqueador).
+
+PRÓXIMO BLOCO — LUCIANO ESCOLHE (6 opções):
+
+(A) F.4 smoke produção (~1-2h) — BLOQUEADO Luciano operacional
+   (preencher cooperebr1 real + cadastrar Usuario E-Solares).
+
+(B) Sprint Contabilidade Tributária (#8 roadmap, ~40-60h) — lê
+   despesas BH + repasses AN como base contábil segregada (Lei
+   5.764/71 Art. 79 + STF Tema 536). Pode ser kickoff longo.
+
+(C) Sub-Sprint B ETL legado→novo — BLOQUEADO script.sql hb06a.
+
+(D) Sungrow integração real (~2-3h) — BLOQUEADO credenciais
+   E-Solares.
+
+(E) Convergência /parceiro→/dashboard (D-novo-BP, sprint refator
+   UX futuro 20-30h se opção 1 total ou 2 seletiva).
+
+(F) Remoção D-novo-BM painel credenciais (quando for produção
+   real — checklist 9 passos catalogado em docs/debitos-tecnicos.md
+   item D-novo-BM).
+
+REGRA INEGOCIÁVEL: antes de propor qualquer bloco aprovado, aplicar
+Fase 1 read-only mini (~10-15min) — feedback_fase1_readonly_obrigatoria
+catalogado. Não tocar código antes de OK Luciano explícito.
+
+CONSTRAINTS FUNDAMENTAIS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Padrão UX Dual 17/05: novas telas/CRUD seguem Tipo B (página
+  própria) ou Tipo A (inline). Nunca Dialog pra criar/editar entidade
+  inteira.
+- D-novo-AS complemento (lição BN): npm run build web → pm2 restart
+  frontend IMEDIATO. Sem exceção (aplicado 8× neste sprint).
+- Multi-tenant: TODA query Prisma filtra por cooperativaId.
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV).
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com se houver
+  disparo real.
+- Decisão 24: frase de retomada local único (este arquivo + doc-sessão).
+- Regra Code não-paralelo: claude.ai aguarda Code reportar.
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md
+4. docs/debitos-tecnicos.md (D-novo-AN IMPLEMENTADO + D-novo-BP novo)
+5. docs/MAPA-INTEGRIDADE-SISTEMA.md
+6. docs/PLANO-ATE-PRODUCAO.md
+7. CLAUDE.md + .claude/CLAUDE.md
+8. git log --oneline -15 (último: 2f6fb29 AN.4 + commit fechamento)
+
+CARRY-OVERS (nao-bloqueantes, mantidos):
+- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — reparo funcional AN.3.1
+  não altera status; checklist 9 passos pra remover catalogado)
+- D-novo-BP (P3 NOVO convergência portal — sprint refator UX futuro)
+- D-novo-BJ (P2 LGPD URL assinada comprovantes — agora vale pra repasses)
+- D-novo-BK (P3 storage S3/Supabase)
+- D-novo-BG (P3 anomalia GD Linhares)
+- D-novo-BC (P2 paridade campos edição usina)
+- D-novo-BA/AZ classe GD restantes
+- D-novo-AS.2 (P2 melhoria hook PostToolUse build → pm2 restart)
+- 30+ scripts utilitários untracked em backend/scripts/
+- .agent/memory/.dreams/ + shared markdowns
+
+FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+
+DOC-SESSAO SPRINT AN COMPLETO: docs/sessoes/2026-05-30-sub-sprint-an-
+repasse-proprietario-completo.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase Sprint BH COMPLETO (deprecada — substituída pelo Sprint AN de 30/05 noite)
+
+```
+[Frase do Sprint BH preservada apenas pra rastreabilidade. Sprint
+COMPLETO AN consolidado em 30/05 noite — ver frase ativa acima.]
+
+PASSO 0 (idêntico).
 
 PASSO 1 — Onde paramos + Próximo bloco:
 

@@ -3538,7 +3538,79 @@ Frontend (`web/`):
 
 **Como saber que está pronto pra remover:** quando Luciano disser "vamos colocar primeiro parceiro em produção real" / fechar onboarding Sinergia / qualquer evento que mude o `AMBIENTE_REAL` pra `true`.
 
-**Implementação em commit (a definir).**
+**Implementação em commit `1cdb9cb`** (D-novo-BM Painel Credenciais Teste Opção B).
+
+**Reparo funcional posterior:** `3a8a90e` (AN.3.1, 30/05/2026) — TTL impersonate 1h→8h + interceptor allowlist self-recovery. O status BLOQUEADOR REMOÇÃO PRÉ-PROD permanece — o reparo só ajustou usabilidade DEV.
+
+---
+
+### D-novo-AN — RepasseProprietario (tabela de pagamentos do parceiro pro proprietário) (P1)
+
+**Severidade:** P1 — sprint dedicado.
+
+**Origem:** decisão Luciano 30/05/2026 durante fechamento Sprint D-novo-BH. BH.5 implementou apenas a obrigação (ARRENDAMENTO_USINA via ContaAPagar) sem trackear pagamento real (data, método, comprovante, status).
+
+**Status:** ✅ **IMPLEMENTADO 100% em 2026-05-30** — Sprint D-novo-AN concluído em 5 fatias canônicas + 1 bug bônus reparado.
+
+**Implementação (5 fatias, 5 commits `37f7af0..2f6fb29`):**
+
+| Fatia | Commit | Entrega |
+|---|---|---|
+| AN.1 | `37f7af0` | Schema delta aditivo (model `RepasseProprietario` + 2 enums + `@@unique([usinaId, periodoInicio, periodoFim])` + 4 índices + back-ref `ContaAPagar.repasseAbatido` + back-refs Cooperativa/Usina/Usuario com names explícitos) + service workflow (criarPendente/marcarPago transação atômica/cancelar/listar 3 variantes) + 4 DTOs class-validator + 19 specs verdes. Migration aplicada via ritual PM2 CLAUDE.md (pm2 stop → porta livre → prisma generate → db push → restart). |
+| AN.2 | `2f36470` | Controller REST 6 endpoints (`GET /repasses`, `GET /repasses/proprietario`, `GET /repasses/:id`, `PUT marcar-pago`, `PUT cancelar`, `POST upload-comprovante`) + integração nativa cron BH.5 (`prisma.$transaction([createRepasse PENDENTE, createArrendamento])`) + resolução Caminho A/B do `proprietarioUsuarioId` + refator endpoint `/proprietario/repasses` consumindo tabela com fallback `'PREVISTO_FALLBACK'` + 13 specs (controller + cron AN.2-aware) + smoke E2E HTTP 12/12. |
+| AN.3 | `a3b351a` | 2 telas admin (`/dashboard/usinas/[id]/repasses` Tipo B por usina + `/dashboard/repasses` Tipo B global cross-usinas) + componentes compartilhados `web/components/repasses/{types,DialogMarcarPago,DialogCancelar}` (Tipo C) + refator portal `/proprietario/repasses` (3 KPIs novos + tipo REAL/FALLBACK + colunas pagamento) + sidebar item "Repasses" Operacional (ícone Wallet) + card cruzado em `/dashboard/usinas/[id]/page.tsx` + `UploadComprovante` parametrizado (prop opcional `endpoint`). |
+| AN.3.1 | `3a8a90e` | Fix `D-novo-BM` painel credenciais voltava pro `/login` em uso real (causa: token impersonate TTL 1h expirado → `useContexto.GET /auth/me` → interceptor global redirect). Fix duplo: TTL backend 1h→8h + interceptor frontend allowlist self-recovery (`/dashboard/dev/credenciais-teste`, `/selecionar-contexto`) com UI inline de re-login. Trigger manual cron criou 1 RepasseProprietario PENDENTE pro Luciano testar via UI. Investigação read-only `/parceiro` vs `/dashboard` (30 páginas vivas em `/parceiro` mas sidebar já encaminha entidades complexas pra `/dashboard/*` — recomendação opção b acatada em AN.4). |
+| AN.4 | `2f6fb29` | Fix cards parceiro (sidebar `/parceiro/layout.tsx:54` href Usinas → `/dashboard/usinas`; `/parceiro/usinas/page.tsx` vira redirect protegendo bookmarks) + backfill histórico idempotente (`scripts/backfill-repasses-proprietario.ts` com dry-run default e --apply, executou criando 3 PENDENTE preservando 04/2026 do trigger AN.3.1) + notificarRepassePago em NotificacoesProativasService (email + WA com fallback Caminho A/B + whitelist LGPD dev + proteção status PAGO) + wireup fire-and-forget no marcarPago + PDF relatório mensal com seção "Status do Repasse" (PAGO verde / CANCELADO cinza / PENDENTE amarelo / sem registro neutro) removendo heurística fake "mês passado = PAGO automático". |
+
+**Bugs/débitos bônus resolvidos durante sprint:**
+- **D-novo-BM** ✅ funcionalmente reparado em AN.3.1 (mantém status P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — reparo só ajustou usabilidade DEV).
+
+**Débitos novos catalogados durante sprint:**
+- **D-novo-BP** P3 (NOVO) — Convergência portal `/parceiro` vs `/dashboard` (próxima entrada).
+
+**Validações:**
+- 36 specs Jest verdes (21 service AN.1+AN.4 + 10 controller AN.2 + 5 notificação AN.4).
+- 3 smokes programáticos: 8/8 service AN.1 + 12/12 endpoints AN.2 + script backfill (3 criados + 2ª execução idempotente).
+- Smoke HTTP AN.3: 4/4 rotas → 307.
+- Build web Turbopack clean em 4 ciclos.
+
+**Estado banco pós-sprint:**
+- 4 `RepasseProprietario` PENDENTE (02/03/04/05 2026) — 1 do trigger AN.3.1 + 3 do backfill.
+- `ContaAPagar.repasseAbatidoId` populado quando admin marca PAGO (transação atômica vincula despesas DESCONTO_NO_REPASSE pendentes do período).
+
+**Refs:**
+- Doc-sessão consolidada: `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`
+- Schema: `backend/prisma/schema.prisma model RepasseProprietario` + `ContaAPagar.repasseAbatido`
+- Service novo: `backend/src/repasses-proprietario/repasses-proprietario.service.ts`
+- Cron integrado: `backend/src/contas-pagar/repasse-mensal.cron.ts`
+- Backfill: `backend/scripts/backfill-repasses-proprietario.ts`
+
+---
+
+### D-novo-BP — Convergência portal `/parceiro` vs `/dashboard` (P3)
+
+**Severidade:** P3 — sprint refator UX futuro, não-bloqueador.
+
+**Origem:** investigação read-only AN.3.1 (30/05/2026). Smoke visual de AN.3 e decisões anteriores revelaram inconsistência arquitetural:
+
+- `/parceiro/*` é **ativo** com layout próprio 234 linhas + **30 páginas** funcionais (Cobrança, Faturamento, Financeiro, Relatórios, etc).
+- `useContexto.rotaPorContexto:87` roteia `admin_parceiro → /parceiro` pós-login.
+- **Inconsistência crescente:** sidebar parceiro já encaminha entidades complexas pra `/dashboard/*`:
+  - Item "Membros" (linha 53) → `/dashboard/cooperados` (decisão antiga).
+  - Item "Usinas" (linha 54) → `/dashboard/usinas` (decisão AN.4 30/05).
+- Toda evolução funcional rica das entidades (Usinas: F.5/F.6/F.7 + BH despesas + AN repasses) foi pra `/dashboard/*`. `/parceiro/usinas/page.tsx` era display-only sem detalhe (virou redirect em AN.4).
+
+**Caminhos possíveis** (decisão Luciano):
+
+1. **Convergência total** — deprecar `/parceiro/*` redirecionando todas as 30 páginas pra `/dashboard/*`. Trabalho grande mas resolve a confusão de uma vez.
+2. **Convergência seletiva** — só entidades complexas (Usinas, Membros, Contratos, Planos) viram redirect; manter `/parceiro/financeiro/*`, `/parceiro/relatorios`, `/parceiro/configuracoes` no portal próprio. Pragmatismo: muitas dessas páginas têm UX específica do admin parceiro.
+3. **Status quo + acelerar redirects pontuais** — quando uma entidade ganhar funcionalidade rica em `/dashboard/*`, trocar o item da sidebar parceiro pra apontar pra lá (modelo AN.4). Continua acumulando inconsistência mas sem trabalho concentrado.
+
+**Recomendação preliminar:** (2) convergência seletiva. Entidades complexas vão sendo migradas via redirect quando justificável; `/parceiro/financeiro` e `/parceiro/configuracoes` continuam dedicados.
+
+**Estimativa:** 20-30h sprint refator UX (futuro) se opção (1) total ou (2) seletiva; 0h se opção (3) status quo.
+
+**Status:** 📋 Catalogado em 2026-05-30 (AN.3.1 investigação + AN.4 ação parcial). Não bloqueia roadmap atual.
 
 ---
 

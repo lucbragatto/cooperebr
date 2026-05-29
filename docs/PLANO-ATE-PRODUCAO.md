@@ -1,6 +1,8 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 30/05/2026 — **Sprint D-novo-BH (Despesas Operacionais Camada 2) CONCLUÍDO 100%** (10 commits bb838ec..77eeb24 em 2 sessões Code, 7 fatias BH.1→BH.5 + 3 bugs/débitos bônus). Próximo bloco aprovado: **D-novo-AN (RepasseProprietario tabela)** — terreno preparado por BH.5 (campo `ContaAPagar.repasseAbatidoId` nullable pronto). Ver `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
+**Última atualização:** 30/05/2026 noite — **Sprint D-novo-AN (RepasseProprietario) CONCLUÍDO 100%** (5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro, 5 fatias AN.1→AN.4 + AN.3.1 fix bônus). Próximo bloco: **Luciano escolhe entre 6 opções (A-F)** catalogadas em `docs/CONTROLE-EXECUCAO.md` seção FRASE DE RETOMADA. Ver `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
+
+> Histórico: **30/05/2026 — Sprint D-novo-BH (Despesas Operacionais Camada 2) CONCLUÍDO 100%** (10 commits bb838ec..77eeb24 em 2 sessões Code, 7 fatias BH.1→BH.5 + 3 bugs/débitos bônus). Próximo bloco aprovado: **D-novo-AN (RepasseProprietario tabela)** — terreno preparado por BH.5 (campo `ContaAPagar.repasseAbatidoId` nullable pronto). Ver `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
 
 > Histórico: **17/05/2026 — Sprint Contabilidade Tributária Segregada APROVADO** (61h Code, posição #8, benefício inicial APENAS `ENERGIA_SCEE`). Ver `docs/especificacao-contabilidade-cooperativa-segregada.md`.
 
@@ -53,6 +55,16 @@
   - **Validações:** 55 specs Jest verdes + 3 smokes programáticos **24/24 ✅** (8/8 BH.4 + 8/8 BM + 8/8 BH.5) + build web Turbopack clean em 4 ciclos.
   - **Lições catalogadas:** Padrão UX Dual 17/05 reforçado (BH.3.1 corrigiu violação); **D-novo-AS complemento (lição BN):** `npm run build` web SEMPRE seguido de `pm2 restart cooperebr-frontend` IMEDIATO — aplicado 4× sem regressão; defesa em 4 camadas pra endpoints dev (`isAmbienteReal()` + `@Roles(SA)` + `@AuditLog` + JWT TTL curto).
   - **Detalhe:** `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
+- **Sprint D-novo-AN RepasseProprietario** ✅ **CONCLUÍDO 100% (30/05/2026 noite)** — 5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro, 5 fatias canônicas + 1 bug bônus reparado:
+  - **AN.1** (`37f7af0`) — schema delta aditivo (model `RepasseProprietario` + 2 enums + `@@unique([usinaId, periodoInicio, periodoFim])` idempotência forte + back-ref `ContaAPagar.repasseAbatido` + back-refs Cooperativa/Usina/Usuario) + service workflow PENDENTE→PAGO/CANCELADO (transação atômica `marcarPago` vincula despesas DESCONTO_NO_REPASSE) + 4 DTOs + 19 specs + migração via ritual PM2 CLAUDE.md.
+  - **AN.2** (`2f36470`) — controller REST 6 endpoints (`GET /repasses`, `GET /repasses/proprietario`, `GET /repasses/:id`, `PUT marcar-pago`, `PUT cancelar`, `POST upload-comprovante`) + integração nativa cron BH.5 em `$transaction([createRepasse PENDENTE, createArrendamento])` + resolução Caminho A/B do `proprietarioUsuarioId` + refator endpoint `/proprietario/repasses` lendo tabela com fallback `'PREVISTO_FALLBACK'` + 13 specs + smoke E2E HTTP 12/12.
+  - **AN.3** (`a3b351a`) — 2 telas admin (`/dashboard/usinas/[id]/repasses` Tipo B por usina + `/dashboard/repasses` Tipo B global cross-usinas) + componentes compartilhados (`DialogMarcarPago` + `DialogCancelar` Tipo C) + refator portal `/proprietario/repasses` (3 KPIs + tipo REAL/FALLBACK + colunas Valor pago/Data pgto + link comprovante) + sidebar item "Repasses" Operacional (ícone Wallet) + card cruzado verde em `/dashboard/usinas/[id]` + `UploadComprovante` parametrizado.
+  - **AN.3.1** (`3a8a90e`) — **FIX D-novo-BM** painel credenciais voltava pro `/login` em uso real (TTL impersonate 1h→8h + interceptor allowlist self-recovery) + trigger manual cron criou 1 RepasseProprietario PENDENTE pro smoke visual + investigação read-only `/parceiro` vs `/dashboard` (30 páginas vivas em `/parceiro`, recomendação opção b acatada).
+  - **AN.4** (`2f6fb29`) — fix cards parceiro (sidebar href + redirect página) + backfill histórico idempotente (`scripts/backfill-repasses-proprietario.ts`, executado: 3 criados PENDENTE 02/03/05 2026 preservando 04/2026, 2ª execução 0 idempotência ✅) + `notificarRepassePago` fire-and-forget no `marcarPago` (email + WA whitelist LGPD Caminho A/B) + PDF mensal seção "Status do Repasse" 3 estados removendo heurística fake.
+  - **Bug bônus reparado inline:** D-novo-BM funcionalmente reparado em AN.3.1 (mantém status P0 BLOQUEADOR REMOÇÃO PRÉ-PROD).
+  - **Débito novo catalogado:** D-novo-BP P3 (convergência portal `/parceiro` vs `/dashboard`, sprint refator UX futuro).
+  - **Validações:** 36/36 specs Jest verdes (21 service + 10 controller + 5 notificação) + 3 smokes programáticos + smoke HTTP 4/4 + build web Turbopack clean em 4 ciclos.
+  - **Detalhe:** `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
 
 ### O que falta — ordem prioritária
 
