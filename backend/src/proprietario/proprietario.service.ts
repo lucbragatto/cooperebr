@@ -5,6 +5,7 @@ import {
   UsinaParaCalculo,
   TarifaResolver,
 } from '../usinas/helpers/calcular-repasse';
+import { calcularRepasseLiquido } from '../usinas/helpers/calcular-repasse-liquido';
 
 /**
  * Sub-Sprint F Sessao 1 MVP+ Etapa D (M30, 2026-05-26).
@@ -182,23 +183,30 @@ export class ProprietarioService {
         distribuidora: u.distribuidora,
       };
 
-      const repasseMesAtual = await calcularRepasse(
-        usinaCalc,
-        geracaoMesAtual ? { kwhGerado: kwhGeradoMes, competencia: geracaoMesAtual.competencia } : null,
+      // BH.5: repasse LÍQUIDO (bruto - despesas DESCONTO_NO_REPASSE APROVADAS pendentes do mês)
+      const repasseMesAtual = await calcularRepasseLiquido({
+        usina: usinaCalc,
+        usinaId: u.id,
+        cooperativaId: u.cooperativaId!,
+        geracaoMes: geracaoMesAtual ? { kwhGerado: kwhGeradoMes, competencia: geracaoMesAtual.competencia } : null,
         tarifaResolver,
-      );
+        prisma: this.prisma,
+      });
 
-      // YTD: soma repasses dos meses do ano corrente ja registrados
+      // YTD: soma repasses LÍQUIDOS dos meses do ano corrente ja registrados (cada mês abate as próprias despesas)
       const geracoesAnoCorrente = u.geracoesMensais.filter(
         (g) => g.competencia >= inicioAnoYTD && g.competencia <= now,
       );
       let repasseYTD = 0;
       for (const g of geracoesAnoCorrente) {
-        const r = await calcularRepasse(
-          usinaCalc,
-          { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+        const r = await calcularRepasseLiquido({
+          usina: usinaCalc,
+          usinaId: u.id,
+          cooperativaId: u.cooperativaId!,
+          geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
           tarifaResolver,
-        );
+          prisma: this.prisma,
+        });
         if (r.valor !== null) repasseYTD += r.valor;
       }
       repasseYTD = Math.round(repasseYTD * 100) / 100;
@@ -242,6 +250,9 @@ export class ProprietarioService {
         ocupacao,
         repasseMesAtual: {
           valor: repasseMesAtual.valor,
+          valorBruto: repasseMesAtual.valorBruto,
+          totalDespesasAbatidas: repasseMesAtual.totalDespesasAbatidas,
+          despesasAbatidas: repasseMesAtual.despesasAbatidas,
           formula: repasseMesAtual.formula,
           motivo: repasseMesAtual.motivo,
           fonteTarifa: repasseMesAtual.fonteTarifa,
@@ -325,11 +336,15 @@ export class ProprietarioService {
         kwhProjetado: capacidadeMensal,
       });
 
-      const r = await calcularRepasse(
-        usinaCalc,
-        { kwhGerado, competencia: g.competencia },
+      // BH.5: histórico mostra repasse LÍQUIDO (cada mês abate as próprias despesas)
+      const r = await calcularRepasseLiquido({
+        usina: usinaCalc,
+        usinaId: usina.id,
+        cooperativaId: usina.cooperativaId!,
+        geracaoMes: { kwhGerado, competencia: g.competencia },
         tarifaResolver,
-      );
+        prisma: this.prisma,
+      });
 
       const isMesAtual = g.competencia.getMonth() === now.getMonth() && g.competencia.getFullYear() === now.getFullYear();
       repassesHistoricos.push({
@@ -337,6 +352,9 @@ export class ProprietarioService {
         competencia: g.competencia.toISOString().slice(0, 7),
         kwhGerado,
         valor: r.valor,
+        valorBruto: r.valorBruto,
+        totalDespesasAbatidas: r.totalDespesasAbatidas,
+        despesasAbatidas: r.despesasAbatidas,
         formula: r.formula,
         fonteTarifa: r.fonteTarifa,
         motivo: r.motivo,
@@ -441,11 +459,15 @@ export class ProprietarioService {
         distribuidora: u.distribuidora,
       };
       for (const g of u.geracoesMensais) {
-        const r = await calcularRepasse(
-          usinaCalc,
-          { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+        // BH.5: listarRepasses usa LÍQUIDO + expõe quebra pra UI
+        const r = await calcularRepasseLiquido({
+          usina: usinaCalc,
+          usinaId: u.id,
+          cooperativaId: u.cooperativaId!,
+          geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
           tarifaResolver,
-        );
+          prisma: this.prisma,
+        });
         const isMesAtual = g.competencia.getMonth() === now.getMonth() && g.competencia.getFullYear() === now.getFullYear();
         repasses.push({
           usinaId: u.id,
@@ -454,6 +476,9 @@ export class ProprietarioService {
           competencia: g.competencia.toISOString().slice(0, 7),
           kwhGerado: Number(g.kwhGerado),
           valor: r.valor,
+          valorBruto: r.valorBruto,
+          totalDespesasAbatidas: r.totalDespesasAbatidas,
+          despesasAbatidas: r.despesasAbatidas,
           formula: r.formula,
           fonteTarifa: r.fonteTarifa,
           motivo: r.motivo,

@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -19,6 +20,8 @@ import { extname } from 'path';
 import { mkdirSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { ContasPagarService } from './contas-pagar.service';
+import { RepasseMensalCron } from './repasse-mensal.cron';
+import { isAmbienteReal } from '../common/safety/ambiente';
 import { CreateContaAPagarDto } from './dto/create-conta-a-pagar.dto';
 import { UpdateContaAPagarDto } from './dto/update-conta-a-pagar.dto';
 import { ProporDespesaDto } from './dto/propor-despesa.dto';
@@ -33,7 +36,28 @@ const { SUPER_ADMIN, ADMIN, OPERADOR, PROPRIETARIO } = PerfilUsuario;
 
 @Controller('contas-pagar')
 export class ContasPagarController {
-  constructor(private readonly contasPagarService: ContasPagarService) {}
+  constructor(
+    private readonly contasPagarService: ContasPagarService,
+    private readonly repasseMensalCron: RepasseMensalCron,
+  ) {}
+
+  /**
+   * BH.5 (M41, 30/05/2026) — Trigger manual do cron de aluguel automático.
+   * DEV ONLY (gated por isAmbienteReal()=false). Permite Luciano testar sem
+   * esperar 1 mês de calendário. Em produção use o cron natural (dia 1, 03:00).
+   */
+  @Roles(SUPER_ADMIN)
+  @AuditLog({ acao: 'cron.repasse-mensal.executar-manual', recurso: 'Cron' })
+  @Post('cron/repasse-mensal/executar')
+  async executarRepasseMensalManual() {
+    if (isAmbienteReal()) {
+      throw new ForbiddenException(
+        'Trigger manual desabilitado em produção. Use o cron natural (0 3 1 * *).',
+      );
+    }
+    const r = await this.repasseMensalCron.criarDespesasAluguelMensal();
+    return { ok: true, ...r };
+  }
 
   // ─── Endpoints legacy (mantidos intactos) ────────────────────────
 

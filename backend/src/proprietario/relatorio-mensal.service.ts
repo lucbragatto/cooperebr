@@ -8,6 +8,7 @@ import {
   UsinaParaCalculo,
   TarifaResolver,
 } from '../usinas/helpers/calcular-repasse';
+import { calcularRepasseLiquido } from '../usinas/helpers/calcular-repasse-liquido';
 
 /**
  * Sub-Sprint F Etapa F (M30, 2026-05-26).
@@ -153,11 +154,15 @@ export class RelatorioMensalService {
       valorKwhPadrao: usina.valorKwhPadrao,
       distribuidora: usina.distribuidora,
     };
-    const repasse = await calcularRepasse(
-      usinaCalc,
-      geracao ? { kwhGerado, competencia: geracao.competencia } : null,
+    // BH.5: relatório PDF mostra bruto + abatido + líquido
+    const repasse = await calcularRepasseLiquido({
+      usina: usinaCalc,
+      usinaId: usina.id,
+      cooperativaId: usina.cooperativaId!,
+      geracaoMes: geracao ? { kwhGerado, competencia: geracao.competencia } : null,
       tarifaResolver,
-    );
+      prisma: this.prisma,
+    });
 
     // Despesas do mes (responsabilidade PROPRIETARIO ou COMPARTILHADO)
     const despesas = await this.prisma.contaAPagar.findMany({

@@ -5,6 +5,7 @@ import {
   UsinaParaCalculo,
   TarifaResolver,
 } from '../../usinas/helpers/calcular-repasse';
+import { calcularRepasseLiquido } from '../../usinas/helpers/calcular-repasse-liquido';
 
 /**
  * Sub-Sprint F.5a (M33, 2026-05-27 noite).
@@ -190,12 +191,16 @@ export class AdminProprietariosService {
                 u.valorKwhPadrao !== null ? Number(u.valorKwhPadrao) : null,
               distribuidora: u.distribuidora,
             };
+            // BH.5: admin dashboard usa LÍQUIDO — vê o que efetivamente vai pagar ao proprietário
             for (const g of u.geracoesMensais) {
-              const r = await calcularRepasse(
-                usinaCalc,
-                { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+              const r = await calcularRepasseLiquido({
+                usina: usinaCalc,
+                usinaId: u.id,
+                cooperativaId: coop.id,
+                geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
                 tarifaResolver,
-              );
+                prisma: this.prisma,
+              });
               if (r.valor !== null) ytdTotal += r.valor;
             }
           }
@@ -283,6 +288,7 @@ export class AdminProprietariosService {
       where: { cooperativaId },
       select: {
         id: true,
+        cooperativaId: true,
         nome: true,
         apelidoInterno: true,
         statusOperacional: true,
@@ -326,13 +332,17 @@ export class AdminProprietariosService {
       valorKwhPadrao: u.valorKwhPadrao !== null ? Number(u.valorKwhPadrao) : null,
       distribuidora: u.distribuidora,
     };
+    // BH.5: YTD por usina usa LÍQUIDO (cada mês abate as próprias despesas)
     let ytd = 0;
     for (const g of u.geracoesMensais) {
-      const r = await calcularRepasse(
-        usinaCalc,
-        { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+      const r = await calcularRepasseLiquido({
+        usina: usinaCalc,
+        usinaId: u.id,
+        cooperativaId: u.cooperativaId!,
+        geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
         tarifaResolver,
-      );
+        prisma: this.prisma,
+      });
       if (r.valor !== null) ytd += r.valor;
     }
     return Math.round(ytd * 100) / 100;
