@@ -1,7 +1,21 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+> Última atualização: **2026-05-29 noite — Sub-Sprint BH (D-novo-BH) Despesas Operacionais Camada 2 — FECHAMENTO PARCIAL** (6 commits bb838ec..9858c45, M37→M40). BH.1 workflow aprovação + BH.2 endpoints REST/notificação + BH.3+BH.3.1+BH.3.2 tela admin/refator UX/double-check universal + BH.4 Portal Proprietário + flag visibilidade + Super Admin bypass tenant + IDOR guard PROPRIETARIO. **42/42 specs verdes** (30 contas-pagar + 11 cooperativas + 1 IDOR novo) + smoke BH.4 **11/11 ✅** + build web Turbopack clean. **D-novo-BL ✅ RESOLVIDO** inline em BH.4. **Bug pós-fechamento detectado:** ChunkLoadError em `/dashboard/usinas/[id]/despesas` (chunk Turbopack inexistente, originado em `_global-error/page.js`) — backend sem erro correlato — hipótese cache `.next/` corrupto. Catalogado **D-novo-BN P0 BLOQUEADOR** (triagem read-only, sem fix). **BH.5 (integração cálculo repasse + cron aluguel) PENDENTE** — fechamento canônico COMPLETO na próxima sessão depois de fix D-novo-BN. Detalhe: `docs/sessoes/2026-05-29-m37-m40-sub-sprint-bh-despesas-camada-2.md`.
+
+> Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-05-29 noite (Code — Sub-Sprint BH M37→M40 + Triagem D-novo-BN — FECHAMENTO PARCIAL)
+
+**6 commits** bb838ec..9858c45 entregaram **Despesas Operacionais Camada 2 (D-novo-BH)** em 4 fatias canônicas — BH.1 workflow PROPOSTA→APROVADA→REJEITADA + tratamento (REEMBOLSO/DESCONTO_NO_REPASSE/ASSUMIDO) + visibilidade proprietário via `responsavelPagamento`; BH.2 endpoints REST `/contas-pagar/{operacionais,proprietario,propor,:id/{aprovar,rejeitar,resolver}}` + notificação proativa (email + WA whitelist LGPD); BH.3 tela admin `/dashboard/usinas/[id]/despesas` + BH.3.1 refator UX página própria `/nova` (corrigindo violação Padrão UX Dual Tipo B detectada em BH.3) + componente reusável `DespesaForm` + `UploadComprovante` drag-drop 5MB; BH.3.2 workflow double-check UNIVERSAL (TODOS perfis criam PROPOSTA) + self-approval guard backend; BH.4 Portal Proprietário com `/proprietario/despesas` refatorado + `/proprietario/despesas/nova` + flag `Cooperativa.proprietarioVeDespesas` (default false) + `/proprietario/meu-parceiro` + tela admin `/dashboard/configuracoes/portal-proprietario` com toggle Switch + bypass tenant SUPER_ADMIN em `listarDespesasOperacionais/aprovar/rejeitar/resolver` + IDOR guard PROPRIETARIO em `proporDespesa`. **42/42 specs verdes** + smoke BH.4 **11/11 ✅** + build web Turbopack clean. **D-novo-BL ✅ RESOLVIDO** inline (Super Admin sem cooperativaId).
+
+**Bug bloqueador detectado pós-fechamento BH.4 (12:54:04):** `GET /dashboard/usinas/[id]/despesas` → 500. ChunkLoadError frontend `cooperebr_web_d9a3a872._.js` (chunk inexistente no disco) originado em `_global-error/page.js`. Backend sem erro correlato (subiu OK 12:47:04, mapeou todas rotas BH.4). Frontend rodou ~47min OK após `pm2 restart` antes de falhar — hipótese **cache Turbopack `.next/` corrupto**, NÃO regressão BH.4. Repro Chrome anônimo + Edge confirma não é cache browser. **Triagem aplicada, ZERO fix.** Catalogado **D-novo-BN P0 BLOQUEADOR** em `docs/debitos-tecnicos.md`. **Prioridade #1 próxima sessão Code.**
+
+**Pendente Sub-Sprint BH:** BH.5 (integração cálculo repasse considerando despesas APROVADAS + cron aluguel automático) ~1.5-2h backend — segue PENDENTE até fix D-novo-BN.
+
+**Detalhe:** `docs/sessoes/2026-05-29-m37-m40-sub-sprint-bh-despesas-camada-2.md`.
 
 ---
 
@@ -1063,6 +1077,145 @@ Opcional (se for atacar Fase C.2 direto):
 ## FRASE DE RETOMADA — próxima sessão Code
 
 Cola direto no Claude Code (VS Code) quando voltar:
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado: working tree limpo (untracked
+   carry-overs catalogados). Último commit eh o de fechamento parcial Sprint
+   BH M37-M40 + triagem D-novo-BN.
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+
+PASSO 1 — Onde paramos + Fila prioritária:
+
+Sessao 28-29/05 entregou **Sub-Sprint BH (M37→M40) D-novo-BH Despesas
+Operacionais Camada 2 — FECHAMENTO PARCIAL** (6 commits bb838ec..9858c45):
+
+BH.1 (M37, bb838ec) — workflow PROPOSTA→APROVADA→REJEITADA + tratamento
+(REEMBOLSO/DESCONTO_NO_REPASSE/ASSUMIDO) + responsavelPagamento + race
+condition guard.
+
+BH.2 (M38, 62eddde) — endpoints REST /contas-pagar/{operacionais,
+proprietario,propor,upload-comprovante,:id/{aprovar,rejeitar,resolver}}
++ notificação proativa (email + WhatsApp via whitelist LGPD).
+
+BH.3 (M39, 8d045af) — tela admin /dashboard/usinas/[id]/despesas
+(4 KPIs + 3 TabsCustom + 7 colunas + dialog lançar).
+
+BH.3.1 (M39, 44f5e53) — refator UX página própria /nova corrigindo
+violação Padrão UX Dual Tipo B (17/05) detectada em BH.3 + componente
+reusável DespesaForm + UploadComprovante drag-drop 5MB.
+
+BH.3.2 (M39, 543a835) — workflow double-check UNIVERSAL: TODOS perfis
+criam PROPOSTA (zero auto-aprovação) + self-approval guard backend.
+
+BH.4 (M40, 9858c45) — Portal Proprietário com /proprietario/despesas
+refatorado consumindo /contas-pagar/proprietario + nova rota
+/proprietario/despesas/nova (seletor usina + DespesaForm modo
+proprietario-propor) + flag Cooperativa.proprietarioVeDespesas (default
+false) + GET /proprietario/meu-parceiro + PUT /cooperativas/:id/
+proprietario-ve-despesas + tela admin /dashboard/configuracoes/
+portal-proprietario com toggle Switch. BÔNUS: D-novo-BL RESOLVIDO inline
+(Super Admin bypass tenant em listarDespesasOperacionais/aprovar/
+rejeitar/resolver) + IDOR guard PROPRIETARIO em proporDespesa
+(PROPRIETARIO precisa estar vinculado à usina via Caminho A ou B).
+
+VALIDACAO BH.1→BH.4:
+- 42/42 specs verdes (30 contas-pagar + 11 cooperativas + 1 IDOR
+  PROPRIETARIO novo)
+- Smoke programatico BH.4: 11/11 ✅
+  (backend/scripts/smoke-bh4-portal-proprietario.ts)
+- Build web Turbopack: clean (D-novo-AS aplicada)
+- PM2 backend + frontend online
+
+🔴 BUG BLOQUEADOR DETECTADO POS-BH.4 (12:54:04):
+GET /dashboard/usinas/[id]/despesas → 500. ChunkLoadError frontend
+`cooperebr_web_d9a3a872._.js` (chunk inexistente no disco) originado
+em _global-error/page.js. Backend OK sem 500 correlato. Frontend rodou
+~47min OK após pm2 restart antes de falhar. Hipótese: cache Turbopack
+.next/ corrupto, NÃO regressão BH.4. Repro Chrome anônimo + Edge.
+Triagem aplicada read-only, ZERO fix. Catalogado D-novo-BN P0
+BLOQUEADOR.
+
+FILA PRIORITARIA — NÃO MUDAR ORDEM SEM Luciano:
+
+1. URGENTE — D-novo-BN fix bug 500 /dashboard/usinas/[id]/despesas.
+   Ler triagem completa em docs/sessoes/2026-05-29-m37-m40-sub-sprint-
+   bh-despesas-camada-2.md seção "Triagem D-novo-BN" + débito em
+   docs/debitos-tecnicos.md. Aplicar Fase 1 read-only obrigatória ANTES
+   de tocar código. Fix sugerido (cache Turbopack): pm2 stop frontend +
+   rm -rf web/.next + cd web && npm run build + pm2 start frontend.
+   Se fix custar >1h, considerar rollback 9858c45 (BH.4) — preservar
+   D-novo-BL inline.
+
+2. D-novo-BM Painel Credenciais Teste Opção B (~2-3h) — homepage/login
+   dev-only com botões "Login rápido" agrupados por perfil/parceiro.
+   .env.development.local (gitignored). Banner amarelo modo DEV.
+
+3. BH.5 — integração cálculo repasse considerando despesas APROVADAS
+   + cron aluguel automático (~1.5-2h backend). Último fatia do
+   Sub-Sprint BH.
+
+4. Fechamento canônico COMPLETO Sprint D-novo-BH consolidado — substitui
+   este fechamento parcial. Apresenta frase no terminal (diretriz 18/05).
+
+CONSTRAINTS FUNDAMENTAIS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de fix BN.
+- Padrão UX Dual 17/05: BH.5 manter Tipo B (página própria, não Dialog).
+- D-novo-AS: cd web && npm run build Turbopack antes de commit web.
+- Multi-tenant + regra contatos teste: substituir contatos cooperado por
+  27981341348 + lucbragatto@gmail.com antes de qualquer disparo real.
+- Decisão 24: frase de retomada local único (este arquivo + doc-sessao).
+- Regra Code não-paralelo: claude.ai aguarda Code reportar.
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-05-29-m37-m40-sub-sprint-bh-despesas-camada-2.md
+4. docs/debitos-tecnicos.md (D-novo-BN, D-novo-BM, D-novo-BH BH.5)
+5. docs/MAPA-INTEGRIDADE-SISTEMA.md
+6. CLAUDE.md + .claude/CLAUDE.md
+7. git log --oneline -10 (último: 9858c45 BH.4 + commit fechamento)
+
+CARRY-OVERS (nao-bloqueantes):
+- D-novo-BG (P3) anomalia GD Linhares
+- D-novo-BJ (P2 LGPD) URL assinada comprovantes
+- D-novo-BK (P3) storage S3/Supabase
+- D-novo-BC (P2) paridade campos edição usina
+- D-novo-BA/AZ classe GD restantes
+- 30+ scripts utilitários untracked em backend/scripts/
+- .agent/memory/.dreams/ + shared markdowns
+
+FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+
+DOC-SESSAO SPRINT BH: docs/sessoes/2026-05-29-m37-m40-sub-sprint-bh-
+despesas-camada-2.md
+```
+
+---
+
+---
+
+---
+
+---
+
+---
+
+## ARCHIVE — frase M35+M36 isolada (deprecada — Sprint BH consolidado em 29/05)
 
 ```
 PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:

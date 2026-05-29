@@ -3388,6 +3388,87 @@ Falta camada operacional: **eventos reais de despesa** durante execução do con
 
 ---
 
+### D-novo-BN — Bug 500 rota /dashboard/usinas/[id]/despesas pós-BH.4 (P0 BLOQUEADOR)
+
+**Severidade:** P0 BLOQUEADOR — tela admin de despesas operacionais inacessível.
+
+**Origem:** 2026-05-29 noite — detectado por Luciano em smoke visual após commit BH.4 (`9858c45`). Reprodução em Chrome anônimo + Edge; **não é cache de browser**.
+
+**Sintomas:**
+
+- GET `/dashboard/usinas/usina-linhares/despesas` retorna **500 Internal Server Error**.
+- 3 chunks Turbopack `/next/static/chunks/*.js` → 500 / `ERR_ABORTED`.
+- Console do browser: `"Application error: a client-side exception has occurred while loading localhost"` + `ChunkLoadError`.
+
+**Triagem aplicada (sem fix):**
+
+PM2 logs `cooperebr-frontend` em 12:54:04 mostram a stack:
+
+```
+ChunkLoadError: Failed to load chunk server/chunks/ssr/cooperebr_web_d9a3a872._.js
+  from module 674823
+  digest: '2760986192'
+  [cause]: Error: Cannot find module
+    'C:\Users\Luciano\cooperebr\web\.next\server\chunks\ssr\cooperebr_web_d9a3a872._.js'
+  Require stack:
+    - .next\server\chunks\ssr\[turbopack]_runtime.js
+    - .next\server\app\_global-error\page.js
+```
+
+Backend `cooperebr-backend` subiu OK em 12:47:04 e mapeou **todas** as rotas BH.4 (incluindo `/proprietario/meu-parceiro`, `PUT /cooperativas/:id/proprietario-ve-despesas`). **Não há erro 500 backend correlato** — bug é puramente frontend.
+
+**Hipótese:** NÃO é regressão de código fonte do BH.4. É **cache Turbopack `.next/` corrupto** — referência stale a chunk `cooperebr_web_d9a3a872._.js` que não existe mais no disco. Frontend rodou OK por ~47min depois do `pm2 restart cooperebr-frontend` (12:07:15), começou a falhar em 12:54:04 — comportamento consistente com rebuild incremental Turbopack que limpou um chunk físico mantendo a referência em runtime do `_global-error`.
+
+**Arquivos suspeitos:**
+
+- `web/.next/server/chunks/ssr/cooperebr_web_d9a3a872._.js` — inexistente no disco
+- `web/.next/server/app/_global-error/page.js` — referencia chunk faltante
+- `web/.next/server/chunks/ssr/[turbopack]_runtime.js:683` — linha que lança `ChunkLoadError`
+
+**Fix sugerido (a aplicar na próxima sessão):**
+
+1. `pm2 stop cooperebr-frontend`
+2. `rm -rf web/.next`
+3. `cd web && npm run build`
+4. `pm2 start cooperebr-frontend`
+5. Repro Chrome anônimo + Edge — esperar 200.
+
+Se isso não resolver, hipótese B é regressão real BH.4 — investigar `web/app/proprietario/layout.tsx` (refator do `navItems` condicional com fetch `/proprietario/meu-parceiro`) e qualquer componente compartilhado com `/dashboard/usinas/[id]/despesas`. Se fix custar >1h, **rollback `9858c45`** (BH.4) é alternativa aceitável — BH.4 mexeu em 14 arquivos, mas reverter é cirúrgico (preservando D-novo-BL resolvido inline).
+
+**Estimativa:** 15-30min se for cache Turbopack (hipótese principal). 1-3h se for regressão real.
+
+**Status:** 🔴 ABERTO — triado em 2026-05-29 noite (fechamento parcial Sprint BH). **Prioridade #1 da próxima sessão Code**, antes de Painel Credenciais (D-novo-BM) e BH.5.
+
+---
+
+### D-novo-BM — Painel de credenciais de teste na homepage (DEV-ONLY) (P3)
+
+**Severidade:** P3 — qualidade de vida QA/Luciano.
+
+**Origem:** 2026-05-29 — Luciano pediu durante a sessão BH.4 que próxima sessão criasse "salvar na homepage do sistema os usuarios e senhas para testes, admin, admin2, financeiro, etec, superadmin, etc, para cada parceiro, e cooperado para teste".
+
+**Decisão:** **Opção B** — botões "Login rápido" na homepage `/` (dev/staging-only). Cada botão dispara login programático usando credenciais embutidas em config dev. Em produção (NODE_ENV!=development OU `isAmbienteReal()=true`) os botões somem.
+
+**Fix sugerido:**
+
+1. Rota `/` (ou `/login`) ganha bloco condicional `process.env.NODE_ENV === 'development'` ou flag `NEXT_PUBLIC_DEV_QUICK_LOGIN=true`.
+2. Bloco renderiza grid de botões agrupados por perfil/parceiro:
+   - SUPER_ADMIN (luciano@…)
+   - CoopereBR Admin / Admin2 / Financeiro / Operador
+   - TESTE-FASE-B5 Admin / Financeiro
+   - Cooperado teste (login portal)
+   - Proprietário teste
+3. Cada botão chama o helper de login existente passando email + senha fixos.
+4. Banner amarelo "Modo DEV — credenciais de teste expostas".
+
+**Anti-pattern:** NÃO commitar senhas em texto puro em arquivo versionado. Usar `.env.development.local` (gitignored) + leitura via `process.env.NEXT_PUBLIC_QUICK_LOGIN_*`.
+
+**Estimativa:** 2-3h (homepage refactor + helper login + .env.local exemplo + smoke).
+
+**Status:** 📋 Catalogado em 2026-05-29. Próximo passo após D-novo-BN ser resolvido.
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:
