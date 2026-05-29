@@ -337,4 +337,140 @@ export class NotificacoesProativasService {
       reforco ? 'Esse é o último lembrete automático — qualquer dúvida, responde aqui.' : 'Dúvida? Responde aqui que ajudo.',
     ].join('\n');
   }
+
+  // ─── D-novo-BH (M37, 29/05/2026) — Despesas operacionais ────────
+  //
+  // 3 disparos async (fire-and-forget). Falha de envio NÃO bloqueia
+  // operação principal. Whitelist LGPD em dev já protege contatos reais.
+
+  /**
+   * Avisa admins do parceiro que proprietário propôs despesa.
+   * Disparado quando ContasPagarService.proporDespesa cria PROPOSTA.
+   */
+  async notificarDespesaProposta(despesaId: string): Promise<void> {
+    const d = await this.prisma.contaAPagar.findUnique({
+      where: { id: despesaId },
+      include: {
+        usina: { select: { id: true, nome: true, apelidoInterno: true } },
+        propostoPor: { select: { id: true, nome: true, email: true } },
+      },
+    });
+    if (!d) return;
+
+    const admins = await this.prisma.usuario.findMany({
+      where: { cooperativaId: d.cooperativaId, perfil: { in: ['ADMIN', 'SUPER_ADMIN'] } },
+      select: { id: true, email: true, telefone: true, nome: true },
+    });
+
+    const subj = `Nova despesa proposta — ${d.usina?.nome ?? 'usina'}`;
+    const valorFmt = `R$ ${Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const html = [
+      `<p>Olá,</p>`,
+      `<p><strong>${d.propostoPor?.nome ?? 'Proprietário'}</strong> propôs uma despesa operacional:</p>`,
+      `<ul>`,
+      `<li><strong>Usina:</strong> ${d.usina?.nome} ${d.usina?.apelidoInterno ? `(${d.usina.apelidoInterno})` : ''}</li>`,
+      `<li><strong>Categoria:</strong> ${d.categoria}</li>`,
+      `<li><strong>Valor:</strong> ${valorFmt}</li>`,
+      `<li><strong>Tratamento sugerido:</strong> ${d.tratamento}</li>`,
+      `<li><strong>Descrição:</strong> ${d.descricao}</li>`,
+      `</ul>`,
+      `<p><a href="${process.env.FRONTEND_URL ?? ''}/dashboard/usinas/${d.usinaId}/despesas">Acesse o painel pra aprovar ou rejeitar</a>.</p>`,
+    ].join('\n');
+    const waText = `📋 Nova despesa proposta em *${d.usina?.nome ?? 'usina'}*: ${d.categoria} ${valorFmt}. Acesse o painel pra aprovar/rejeitar.`;
+
+    for (const a of admins) {
+      if (a.email) {
+        await this.emailService.enviarEmail(a.email, subj, html, undefined, d.cooperativaId)
+          .catch((err) => this.logger.error(`Email despesa-proposta falha admin=${a.id}: ${err.message}`));
+      }
+      if (a.telefone) {
+        await this.whatsappSender.enviarMensagem(a.telefone, waText, { tipoDisparo: 'DESPESA_PROPOSTA', disparoId: despesaId, cooperativaId: d.cooperativaId })
+          .catch((err) => this.logger.error(`WA despesa-proposta falha admin=${a.id}: ${err.message}`));
+      }
+    }
+  }
+
+  /**
+   * Avisa proprietário que despesa foi aprovada.
+   * Disparado por ContasPagarService.aprovarDespesa.
+   */
+  async notificarDespesaAprovada(despesaId: string): Promise<void> {
+    const d = await this.prisma.contaAPagar.findUnique({
+      where: { id: despesaId },
+      include: {
+        usina: { select: { id: true, nome: true } },
+        propostoPor: { select: { id: true, nome: true, email: true, telefone: true } },
+      },
+    });
+    if (!d || !d.propostoPor) return;
+
+    const subj = `Despesa aprovada — ${d.usina?.nome ?? 'usina'}`;
+    const valorFmt = `R$ ${Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const impacto = d.tratamento === 'DESCONTO_NO_REPASSE'
+      ? 'O valor será abatido no próximo repasse mensal.'
+      : d.tratamento === 'REEMBOLSO'
+        ? 'O reembolso será processado conforme o acordo.'
+        : 'Tratamento ASSUMIDO confirmado — sem reembolso ou desconto.';
+    const html = [
+      `<p>Olá ${d.propostoPor.nome},</p>`,
+      `<p>A despesa que você propôs foi <strong>aprovada</strong>:</p>`,
+      `<ul>`,
+      `<li><strong>Usina:</strong> ${d.usina?.nome}</li>`,
+      `<li><strong>Categoria:</strong> ${d.categoria}</li>`,
+      `<li><strong>Valor:</strong> ${valorFmt}</li>`,
+      `<li><strong>Tratamento:</strong> ${d.tratamento}</li>`,
+      `</ul>`,
+      `<p>${impacto}</p>`,
+    ].join('\n');
+    const waText = `✅ Despesa aprovada em *${d.usina?.nome ?? 'usina'}*: ${d.categoria} ${valorFmt}. ${impacto}`;
+
+    if (d.propostoPor.email) {
+      await this.emailService.enviarEmail(d.propostoPor.email, subj, html, undefined, d.cooperativaId)
+        .catch((err) => this.logger.error(`Email despesa-aprovada falha prop=${d.propostoPor!.id}: ${err.message}`));
+    }
+    if (d.propostoPor.telefone) {
+      await this.whatsappSender.enviarMensagem(d.propostoPor.telefone, waText, { tipoDisparo: 'DESPESA_APROVADA', disparoId: despesaId, cooperativaId: d.cooperativaId })
+        .catch((err) => this.logger.error(`WA despesa-aprovada falha prop=${d.propostoPor!.id}: ${err.message}`));
+    }
+  }
+
+  /**
+   * Avisa proprietário que despesa foi rejeitada (com motivo).
+   * Disparado por ContasPagarService.rejeitarDespesa.
+   */
+  async notificarDespesaRejeitada(despesaId: string): Promise<void> {
+    const d = await this.prisma.contaAPagar.findUnique({
+      where: { id: despesaId },
+      include: {
+        usina: { select: { id: true, nome: true } },
+        propostoPor: { select: { id: true, nome: true, email: true, telefone: true } },
+      },
+    });
+    if (!d || !d.propostoPor) return;
+
+    const subj = `Despesa rejeitada — ${d.usina?.nome ?? 'usina'}`;
+    const valorFmt = `R$ ${Number(d.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const motivo = d.rejeitadoMotivo ?? 'Motivo não informado.';
+    const html = [
+      `<p>Olá ${d.propostoPor.nome},</p>`,
+      `<p>A despesa que você propôs foi <strong>rejeitada</strong>:</p>`,
+      `<ul>`,
+      `<li><strong>Usina:</strong> ${d.usina?.nome}</li>`,
+      `<li><strong>Categoria:</strong> ${d.categoria}</li>`,
+      `<li><strong>Valor:</strong> ${valorFmt}</li>`,
+      `</ul>`,
+      `<p><strong>Motivo:</strong> ${motivo}</p>`,
+      `<p>Se quiser, ajuste e proponha novamente pelo painel.</p>`,
+    ].join('\n');
+    const waText = `❌ Despesa rejeitada em *${d.usina?.nome ?? 'usina'}*: ${d.categoria} ${valorFmt}.\n\nMotivo: ${motivo}`;
+
+    if (d.propostoPor.email) {
+      await this.emailService.enviarEmail(d.propostoPor.email, subj, html, undefined, d.cooperativaId)
+        .catch((err) => this.logger.error(`Email despesa-rejeitada falha prop=${d.propostoPor!.id}: ${err.message}`));
+    }
+    if (d.propostoPor.telefone) {
+      await this.whatsappSender.enviarMensagem(d.propostoPor.telefone, waText, { tipoDisparo: 'DESPESA_REJEITADA', disparoId: despesaId, cooperativaId: d.cooperativaId })
+        .catch((err) => this.logger.error(`WA despesa-rejeitada falha prop=${d.propostoPor!.id}: ${err.message}`));
+    }
+  }
 }

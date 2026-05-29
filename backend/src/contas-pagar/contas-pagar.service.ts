@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
@@ -15,6 +16,7 @@ import {
 import { ProporDespesaDto } from './dto/propor-despesa.dto';
 import { RejeitarDespesaDto } from './dto/rejeitar-despesa.dto';
 import { ResolverDespesaDto } from './dto/resolver-despesa.dto';
+import { NotificacoesProativasService } from '../notificacoes-proativas/notificacoes-proativas.service';
 
 interface CreateContaAPagarDto {
   descricao: string;
@@ -38,7 +40,13 @@ interface UpdateContaAPagarDto {
 
 @Injectable()
 export class ContasPagarService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ContasPagarService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    // Opcional pra preservar specs unitários sem mock — fire-and-forget guard com ?
+    private readonly notificacoes?: NotificacoesProativasService,
+  ) {}
 
   async findAll(cooperativaId: string, filtros?: { status?: string; categoria?: string }) {
     if (!cooperativaId) throw new BadRequestException('cooperativaId é obrigatório');
@@ -184,7 +192,7 @@ export class ContasPagarService {
       data.aprovadoEm = now;
     }
 
-    return this.prisma.contaAPagar.create({
+    const criada = await this.prisma.contaAPagar.create({
       data,
       include: {
         usina: { select: { id: true, nome: true, apelidoInterno: true } },
@@ -192,6 +200,17 @@ export class ContasPagarService {
         aprovadoPor: { select: { id: true, nome: true, perfil: true } },
       },
     });
+
+    // D-novo-BH: dispara notificação async se foi PROPOSTA (admin precisa aprovar)
+    if (criada.statusAprovacao === 'PROPOSTA') {
+      this.notificacoes
+        ?.notificarDespesaProposta(criada.id)
+        .catch((err) =>
+          this.logger.error(`Notificacao despesa-proposta falhou id=${criada.id}: ${err.message}`),
+        );
+    }
+
+    return criada;
   }
 
   /**
@@ -217,7 +236,7 @@ export class ContasPagarService {
       );
     }
 
-    return this.prisma.contaAPagar.update({
+    const aprovada = await this.prisma.contaAPagar.update({
       where: { id: despesaId },
       data: {
         statusAprovacao: 'APROVADA',
@@ -230,6 +249,15 @@ export class ContasPagarService {
         aprovadoPor: { select: { id: true, nome: true, perfil: true } },
       },
     });
+
+    // D-novo-BH: notifica proprietário que propôs (se houver propostoPor)
+    this.notificacoes
+      ?.notificarDespesaAprovada(aprovada.id)
+      .catch((err) =>
+        this.logger.error(`Notificacao despesa-aprovada falhou id=${aprovada.id}: ${err.message}`),
+      );
+
+    return aprovada;
   }
 
   /**
@@ -258,7 +286,7 @@ export class ContasPagarService {
       );
     }
 
-    return this.prisma.contaAPagar.update({
+    const rejeitada = await this.prisma.contaAPagar.update({
       where: { id: despesaId },
       data: {
         statusAprovacao: 'REJEITADA',
@@ -267,6 +295,15 @@ export class ContasPagarService {
         rejeitadoMotivo: dto.motivo,
       },
     });
+
+    // D-novo-BH: notifica proprietário que propôs (se houver)
+    this.notificacoes
+      ?.notificarDespesaRejeitada(rejeitada.id)
+      .catch((err) =>
+        this.logger.error(`Notificacao despesa-rejeitada falhou id=${rejeitada.id}: ${err.message}`),
+      );
+
+    return rejeitada;
   }
 
   /**
@@ -370,7 +407,18 @@ export class ContasPagarService {
     usuarioId: string,
     usuarioEmail: string | null,
     cooperadoId: string | null,
+    cooperativaId?: string | null,
   ) {
+    // D-novo-BH: respeita flag Cooperativa.proprietarioVeDespesas.
+    // Quando false, módulo restrito ao admin — retornar [] (UX limpa).
+    if (cooperativaId) {
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: { proprietarioVeDespesas: true },
+      });
+      if (coop && coop.proprietarioVeDespesas === false) return [];
+    }
+
     const orWhere: any[] = [];
     if (cooperadoId) orWhere.push({ proprietarioCooperadoId: cooperadoId });
     if (usuarioEmail) orWhere.push({ proprietarioEmail: usuarioEmail });

@@ -13,6 +13,8 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
   let service: ContasPagarService;
   let prismaMock: any;
 
+  let notificacoesMock: any;
+
   beforeEach(() => {
     prismaMock = {
       usina: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -22,8 +24,14 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      cooperativa: { findUnique: jest.fn() },
     };
-    service = new ContasPagarService(prismaMock);
+    notificacoesMock = {
+      notificarDespesaProposta: jest.fn().mockResolvedValue(undefined),
+      notificarDespesaAprovada: jest.fn().mockResolvedValue(undefined),
+      notificarDespesaRejeitada: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new ContasPagarService(prismaMock, notificacoesMock);
   });
 
   // ─── proporDespesa ───────────────────────────────────────────────
@@ -274,6 +282,76 @@ describe('ContasPagarService — D-novo-BH workflow', () => {
       prismaMock.usina.findMany.mockResolvedValueOnce([]);
       const r = await service.listarDespesasProprietario('usr', 'x@y.com', null);
       expect(r).toEqual([]);
+    });
+
+    // BH.2: flag visibilidade configurável
+    it('respeita flag Cooperativa.proprietarioVeDespesas=false → retorna []', async () => {
+      prismaMock.cooperativa.findUnique.mockResolvedValueOnce({ proprietarioVeDespesas: false });
+      const r = await service.listarDespesasProprietario('usr', 'x@y.com', null, 'coop1');
+      expect(r).toEqual([]);
+      expect(prismaMock.usina.findMany).not.toHaveBeenCalled();
+    });
+
+    it('flag visibilidade true → executa fluxo normal', async () => {
+      prismaMock.cooperativa.findUnique.mockResolvedValueOnce({ proprietarioVeDespesas: true });
+      prismaMock.usina.findMany.mockResolvedValueOnce([{ id: 'u1' }]);
+      prismaMock.contaAPagar.findMany.mockResolvedValueOnce([]);
+      await service.listarDespesasProprietario('usr', 'x@y.com', null, 'coop1');
+      expect(prismaMock.contaAPagar.findMany).toHaveBeenCalled();
+    });
+  });
+
+  // ─── BH.2 — Disparos notificação async ───────────────────────────
+
+  describe('Notificação async (BH.2 wireup)', () => {
+    const dtoBase = {
+      usinaId: 'u1', dataOcorrencia: '2026-05-29', categoria: 'CUSD' as any,
+      valor: 100, descricao: 'X', quemPagouTipo: 'PROPRIETARIO' as any,
+      tratamento: 'REEMBOLSO' as any,
+    };
+
+    it('proporDespesa PROPRIETARIO dispara notificarDespesaProposta', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1', cooperativaId: 'coop1', responsabilidadeDespesas: {},
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'PROPOSTA' });
+
+      await service.proporDespesa(dtoBase as any, 'usr-prop', 'PROPRIETARIO', 'coop1');
+
+      expect(notificacoesMock.notificarDespesaProposta).toHaveBeenCalledWith('d1');
+    });
+
+    it('proporDespesa ADMIN NÃO dispara notificarDespesaProposta (já vem APROVADA)', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1', cooperativaId: 'coop1', responsabilidadeDespesas: {},
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1', statusAprovacao: 'APROVADA' });
+
+      await service.proporDespesa(dtoBase as any, 'usr-adm', 'ADMIN', 'coop1');
+
+      expect(notificacoesMock.notificarDespesaProposta).not.toHaveBeenCalled();
+    });
+
+    it('aprovarDespesa dispara notificarDespesaAprovada', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA',
+      });
+      prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.aprovarDespesa('d1', 'admin-1', 'coop1');
+
+      expect(notificacoesMock.notificarDespesaAprovada).toHaveBeenCalledWith('d1');
+    });
+
+    it('rejeitarDespesa dispara notificarDespesaRejeitada', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1', cooperativaId: 'coop1', statusAprovacao: 'PROPOSTA',
+      });
+      prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.rejeitarDespesa('d1', { motivo: 'X' } as any, 'admin-1', 'coop1');
+
+      expect(notificacoesMock.notificarDespesaRejeitada).toHaveBeenCalledWith('d1');
     });
   });
 });
