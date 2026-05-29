@@ -3437,7 +3437,23 @@ Se isso não resolver, hipótese B é regressão real BH.4 — investigar `web/a
 
 **Estimativa:** 15-30min se for cache Turbopack (hipótese principal). 1-3h se for regressão real.
 
-**Status:** 🔴 ABERTO — triado em 2026-05-29 noite (fechamento parcial Sprint BH). **Prioridade #1 da próxima sessão Code**, antes de Painel Credenciais (D-novo-BM) e BH.5.
+**Status:** ✅ **RESOLVIDO em 2026-05-29 noite** (sessão pós-fechamento parcial, ~10min). **Root cause confirmado:** cache Turbopack `.next/` stale após rebuild incremental durante runtime PM2. Cronologia: PM2 carregou frontend em `12:07:15` (chunks pré-BH.4); `npm run build` da sessão BH.4 regenerou `.next/BUILD_ID` em `12:41:43` SOBRESCREVENDO os chunks ANTES do PM2 ser reiniciado; processo Node continuou em memória com referências aos chunks antigos e passou a tentar carregar chunks novos (`cooperebr_web_d9a3a872._.js`) gerados em outras rotas. Resultado: ChunkLoadError reincidente em `_global-error/page.js`.
+
+**Fix aplicado:** sequência conservadora padrão CLAUDE.md PM2:
+
+1. `pm2 stop cooperebr-frontend`
+2. `rm -rf web/.next`
+3. `cd web && npm run build` (Turbopack regenerou bundle limpo)
+4. `pm2 start cooperebr-frontend` (pid 35208, Ready in 615ms)
+
+**Validação:**
+
+- `find -name "*d9a3a872*"` em Fase 1: VAZIO (chunk não existia no disco) — evidência forte da hipótese.
+- BUILD_ID regenerado: `SWghHLsUGBLgOCk_vwFsH` (`16:18:23`, era `XL8nZ91OkDidlczwuwhx5` de `12:41:43`).
+- Smoke HTTP 3 rotas pós-fix: `/dashboard/usinas/usina-linhares/despesas` → **307**, `/proprietario/despesas` → **307**, `/dashboard/configuracoes/portal-proprietario` → **307**. Nenhum 500.
+- PM2 frontend online sem restart loop. Logs limpos (apenas warning benigno pré-existente sobre 2 `package-lock.json`).
+
+**Aprendizado / prevenção:** o `D-novo-AS` (regra de rodar `npm run build` antes de commit web) precisa ser complementado com `pm2 restart cooperebr-frontend` IMEDIATAMENTE após build, em vez de deixar o processo Node rodando com `.next/` antigo em memória. Em qualquer sessão futura: build web → restart frontend, na mesma etapa. **Sugestão futura D-novo-BN.1 (não bloqueador):** hook PostToolUse que após `npm run build` em `web/` dispare `pm2 restart cooperebr-frontend` automaticamente, evitando esse vetor.
 
 ---
 
