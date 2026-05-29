@@ -12,6 +12,7 @@ import {
   MetodoPagamentoRepasse,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { NotificacoesProativasService } from '../notificacoes-proativas/notificacoes-proativas.service';
 import { MarcarRepassePagoDto } from './dto/marcar-repasse-pago.dto';
 import { CancelarRepasseDto } from './dto/cancelar-repasse.dto';
 import { ListarRepassesQueryDto } from './dto/listar-repasses-query.dto';
@@ -37,7 +38,10 @@ import { RepasseProprietarioDto } from './dto/repasse-proprietario.dto';
 export class RepassesProprietarioService {
   private readonly logger = new Logger(RepassesProprietarioService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificacoes?: NotificacoesProativasService,
+  ) {}
 
   // ─── Helper multi-tenant ───────────────────────────────────────────
 
@@ -223,6 +227,14 @@ export class RepassesProprietarioService {
         },
       }),
     ]);
+
+    // AN.4 (M42): notificação proativa fire-and-forget. Falha não bloqueia
+    // o HTTP response — só loga. Whitelist LGPD ativa em DEV (regra 18/05).
+    this.notificacoes
+      ?.notificarRepassePago(repasseId)
+      .catch((err) =>
+        this.logger.error(`Notificacao repasse-pago falhou id=${repasseId}: ${err.message}`),
+      );
 
     return this.toDto(updated);
   }

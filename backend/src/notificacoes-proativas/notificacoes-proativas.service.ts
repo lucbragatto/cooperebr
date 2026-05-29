@@ -499,4 +499,90 @@ export class NotificacoesProativasService {
         .catch((err) => this.logger.error(`WA despesa-rejeitada falha prop=${d.propostoPor!.id}: ${err.message}`));
     }
   }
+
+  /**
+   * D-novo-AN AN.4 (M42, 30/05/2026) — Avisa proprietário que repasse foi pago.
+   *
+   * Disparado pelo RepassesProprietarioService.marcarPago em fire-and-forget
+   * (.catch loga, não bloqueia mutation HTTP).
+   *
+   * Resolve destinatário em duas camadas:
+   *   1. proprietarioUsuarioId direto do RepasseProprietario (Caminho A já
+   *      resolvido no momento da criação pelo cron AN.2 ou backfill AN.4)
+   *   2. Fallback Caminho B: Usina.proprietarioEmail (parceiro sem Usuario
+   *      cadastrado ainda — onboarding magic link pendente)
+   *
+   * Whitelist LGPD automática no EmailService + WhatsappSenderService
+   * (regra D-novo-N 18/05) — em DEV substitui contatos pelo override de
+   * teste. Em PROD (AMBIENTE_REAL=true) dispara real.
+   */
+  async notificarRepassePago(repasseId: string): Promise<void> {
+    const r = await this.prisma.repasseProprietario.findUnique({
+      where: { id: repasseId },
+      include: {
+        usina: { select: { id: true, nome: true, proprietarioEmail: true } },
+        proprietarioUsuario: { select: { id: true, nome: true, email: true, telefone: true } },
+      },
+    });
+    if (!r) return;
+    if (r.status !== 'PAGO') return; // proteção: só notifica PAGO
+
+    // Resolve destinatário
+    const emailDest = r.proprietarioUsuario?.email ?? r.usina?.proprietarioEmail ?? null;
+    const telefone = r.proprietarioUsuario?.telefone ?? null;
+    if (!emailDest && !telefone) {
+      this.logger.warn(`Repasse ${repasseId} pago mas sem destinatário (email+telefone null).`);
+      return;
+    }
+
+    const mm = String(r.periodoFim.getMonth() + 1).padStart(2, '0');
+    const yyyy = r.periodoFim.getFullYear();
+    const periodoFmt = `${mm}/${yyyy}`;
+    const valorFmt = `R$ ${Number(r.valorLiquido).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const dataFmt = r.dataPagamento
+      ? new Date(r.dataPagamento).toLocaleDateString('pt-BR')
+      : '—';
+    const metodoFmt = r.metodoPagamento ?? 'N/A';
+    const linkComprovante = r.comprovante
+      ? `${process.env.FRONTEND_URL ?? ''}${r.comprovante}`
+      : null;
+    const linkPortal = `${process.env.FRONTEND_URL ?? ''}/proprietario/repasses`;
+
+    const subj = `Repasse pago — ${r.usina?.nome ?? 'usina'} (${periodoFmt})`;
+    const htmlLinhas: string[] = [
+      `<p>Olá ${r.proprietarioUsuario?.nome ?? 'proprietário'},</p>`,
+      `<p>O repasse referente a <strong>${periodoFmt}</strong> da usina <strong>${r.usina?.nome ?? ''}</strong> foi <strong>pago</strong>:</p>`,
+      `<ul>`,
+      `<li><strong>Valor líquido:</strong> ${valorFmt}</li>`,
+      `<li><strong>Data do pagamento:</strong> ${dataFmt}</li>`,
+      `<li><strong>Método:</strong> ${metodoFmt}</li>`,
+      `</ul>`,
+    ];
+    if (linkComprovante) {
+      htmlLinhas.push(`<p><a href="${linkComprovante}">Visualizar comprovante</a></p>`);
+    }
+    htmlLinhas.push(`<p><a href="${linkPortal}">Acessar histórico no portal</a></p>`);
+    const html = htmlLinhas.join('\n');
+
+    const waText = `💰 Repasse de ${valorFmt} pago em ${dataFmt} via ${metodoFmt}. Acesse seu portal pra ver detalhes${linkComprovante ? ' + comprovante' : ''}.`;
+
+    if (emailDest) {
+      await this.emailService
+        .enviarEmail(emailDest, subj, html, undefined, r.cooperativaId)
+        .catch((err) =>
+          this.logger.error(`Email repasse-pago falha rep=${repasseId}: ${err.message}`),
+        );
+    }
+    if (telefone) {
+      await this.whatsappSender
+        .enviarMensagem(telefone, waText, {
+          tipoDisparo: 'REPASSE_PAGO',
+          disparoId: repasseId,
+          cooperativaId: r.cooperativaId,
+        })
+        .catch((err) =>
+          this.logger.error(`WA repasse-pago falha rep=${repasseId}: ${err.message}`),
+        );
+    }
+  }
 }

@@ -34,6 +34,9 @@ describe('RepassesProprietarioService', () => {
     $transaction,
   } as any;
 
+  const notificarRepassePago = jest.fn();
+  const notificacoesMock = { notificarRepassePago } as any;
+
   let service: RepassesProprietarioService;
 
   const periodoInicio = new Date('2026-04-01T00:00:00.000Z');
@@ -64,7 +67,8 @@ describe('RepassesProprietarioService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new RepassesProprietarioService(prismaMock);
+    notificarRepassePago.mockResolvedValue(undefined);
+    service = new RepassesProprietarioService(prismaMock, notificacoesMock);
   });
 
   // ─── criarPendente ────────────────────────────────────────────────
@@ -250,6 +254,56 @@ describe('RepassesProprietarioService', () => {
         'ADMIN',
       ),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  // ─── AN.4 — Wireup notificação fire-and-forget ────────────────────
+
+  it('AN.4: marcarPago dispara notificarRepassePago(repasseId) fire-and-forget', async () => {
+    repasseFindUnique.mockResolvedValueOnce({
+      id: 'r1',
+      cooperativaId: 'coop-A',
+      usinaId: 'u1',
+      periodoInicio,
+      periodoFim,
+      status: 'PENDENTE',
+    });
+    $transaction.mockResolvedValueOnce([{ ...repasseBase, status: 'PAGO' }, { count: 0 }]);
+
+    await service.marcarPago(
+      'r1',
+      { metodoPagamento: 'PIX' as any, dataPagamento: '2026-05-01' },
+      'admin-1',
+      'coop-A',
+      'ADMIN',
+    );
+
+    expect(notificarRepassePago).toHaveBeenCalledTimes(1);
+    expect(notificarRepassePago).toHaveBeenCalledWith('r1');
+  });
+
+  it('AN.4: marcarPago retorna OK mesmo se notificarRepassePago rejeita (fire-and-forget)', async () => {
+    repasseFindUnique.mockResolvedValueOnce({
+      id: 'r1',
+      cooperativaId: 'coop-A',
+      usinaId: 'u1',
+      periodoInicio,
+      periodoFim,
+      status: 'PENDENTE',
+    });
+    $transaction.mockResolvedValueOnce([{ ...repasseBase, status: 'PAGO' }, { count: 0 }]);
+    notificarRepassePago.mockRejectedValueOnce(new Error('SMTP down'));
+
+    // Não lança — fire-and-forget com .catch interno
+    const r = await service.marcarPago(
+      'r1',
+      { metodoPagamento: 'PIX' as any, dataPagamento: '2026-05-01' },
+      'admin-1',
+      'coop-A',
+      'ADMIN',
+    );
+
+    expect(r.status).toBe('PAGO');
+    expect(notificarRepassePago).toHaveBeenCalledTimes(1);
   });
 
   // ─── cancelar ─────────────────────────────────────────────────────

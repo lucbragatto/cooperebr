@@ -176,11 +176,38 @@ export class RelatorioMensalService {
       },
     });
 
+    // AN.4 (M42, 30/05/2026): busca RepasseProprietario real do período.
+    // Fallback: período sem registro mostra "Sem registro de repasse".
+    const periodoInicio = new Date(competencia.getFullYear(), competencia.getMonth(), 1);
+    const periodoFim = new Date(competencia.getFullYear(), competencia.getMonth() + 1, 1);
+    const repasseReal = await this.prisma.repasseProprietario.findUnique({
+      where: {
+        usinaId_periodoInicio_periodoFim: {
+          usinaId: usina.id,
+          periodoInicio,
+          periodoFim,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        valorBruto: true,
+        totalDespesasAbatidas: true,
+        valorLiquido: true,
+        metodoPagamento: true,
+        dataPagamento: true,
+        comprovante: true,
+        observacao: true,
+        motivoCancelamento: true,
+      },
+    });
+
     const html = this.montarHtml({
       usina,
       competencia,
       kwhGerado,
       repasse,
+      repasseReal,
       despesas: despesas.map((d) => ({
         descricao: d.descricao,
         categoria: d.categoria,
@@ -200,6 +227,18 @@ export class RelatorioMensalService {
     competencia: Date;
     kwhGerado: number;
     repasse: any;
+    repasseReal: {
+      id: string;
+      status: string;
+      valorBruto: any;
+      totalDespesasAbatidas: any;
+      valorLiquido: any;
+      metodoPagamento: string | null;
+      dataPagamento: Date | null;
+      comprovante: string | null;
+      observacao: string | null;
+      motivoCancelamento: string | null;
+    } | null;
     despesas: Array<{
       descricao: string;
       categoria: string;
@@ -208,7 +247,7 @@ export class RelatorioMensalService {
       responsavelPagamento: string | null;
     }>;
   }): string {
-    const { usina, competencia, kwhGerado, repasse, despesas } = dados;
+    const { usina, competencia, kwhGerado, repasse, repasseReal, despesas } = dados;
     const mesAno = `${String(competencia.getMonth() + 1).padStart(2, '0')}/${competencia.getFullYear()}`;
     const fmtMoney = (v: number | null) =>
       v === null ? '—' : `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -267,6 +306,30 @@ ${repasse.valor === null
     ? `<div class="alert"><strong>Cálculo pendente:</strong> ${escapeHtml(repasse.motivo ?? 'dados incompletos.')}</div>`
     : `<div class="info"><strong>Fórmula aplicada:</strong> ${escapeHtml(repasse.formula)} &nbsp;|&nbsp; <strong>Fonte tarifa:</strong> ${escapeHtml(repasse.fonteTarifa ?? '—')}</div>`}
 
+<h2>Status do Repasse</h2>
+${repasseReal
+    ? (repasseReal.status === 'PAGO'
+        ? `<div class="info" style="background:#dcfce7;border-left-color:#16a34a;color:#166534">
+            <strong>✅ Pago</strong>
+            &nbsp;|&nbsp; <strong>Data:</strong> ${repasseReal.dataPagamento ? new Date(repasseReal.dataPagamento).toLocaleDateString('pt-BR') : '—'}
+            &nbsp;|&nbsp; <strong>Método:</strong> ${escapeHtml(repasseReal.metodoPagamento ?? '—')}
+            &nbsp;|&nbsp; <strong>Valor líquido:</strong> ${fmtMoney(Number(repasseReal.valorLiquido))}
+            ${repasseReal.comprovante ? `<br/><strong>Comprovante:</strong> <a href="${escapeHtml(repasseReal.comprovante)}">visualizar</a>` : ''}
+            ${repasseReal.observacao ? `<br/><strong>Observação:</strong> ${escapeHtml(repasseReal.observacao)}` : ''}
+          </div>`
+        : repasseReal.status === 'CANCELADO'
+          ? `<div class="alert" style="background:#f3f4f6;border-left-color:#6b7280;color:#374151">
+              <strong>⊘ Cancelado</strong>
+              ${repasseReal.motivoCancelamento ? `<br/><strong>Motivo:</strong> ${escapeHtml(repasseReal.motivoCancelamento)}` : ''}
+            </div>`
+          : `<div class="info" style="background:#fef9c3;border-left-color:#ca8a04;color:#854d0e">
+              <strong>⏳ Aguardando pagamento</strong>
+              &nbsp;|&nbsp; <strong>Valor líquido a pagar:</strong> ${fmtMoney(Number(repasseReal.valorLiquido))}
+              ${Number(repasseReal.totalDespesasAbatidas) > 0 ? `&nbsp;|&nbsp; <em>Já abatido despesas: ${fmtMoney(Number(repasseReal.totalDespesasAbatidas))}</em>` : ''}
+            </div>`)
+    : `<div class="info" style="background:#f3f4f6;border-left-color:#6b7280;color:#374151"><em>Sem registro de repasse pra este período (cron mensal ainda não executou ou usina não elegível).</em></div>`
+}
+
 ${repasse.detalhes ? `<table>
   ${repasse.detalhes.kwhGerado !== undefined ? `<tr><th>kWh gerado</th><td>${fmtKwh(repasse.detalhes.kwhGerado)}</td></tr>` : ''}
   ${repasse.detalhes.tarifaKwh !== undefined ? `<tr><th>Tarifa R$/kWh aplicada</th><td>${fmtMoney(repasse.detalhes.tarifaKwh)}</td></tr>` : ''}
@@ -294,7 +357,7 @@ ${despesas.length === 0
       </table>`}
 
 <div class="footer">
-  <p><strong>Valores previstos.</strong> Pagamentos reais conforme contrato bilateral.</p>
+  <p>Status do repasse reflete o que o admin do parceiro registrou no SISGD.</p>
   <p>Gerado automaticamente por SISGD em ${new Date().toLocaleString('pt-BR')}.</p>
 </div>
 
