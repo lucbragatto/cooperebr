@@ -3154,6 +3154,31 @@ Decisão M26 (Luciano): aceitável pra CoopereBR única tenant em SANDBOX e em P
 
 ---
 
+### Complemento D-novo-AS (lição D-novo-BN — 30/05/2026)
+
+**Sintoma novo descoberto na sessão BH.4:** rodar `npm run build` no `web/` **sem reiniciar o PM2 frontend imediatamente** deixa o processo Node em runtime com referências em memória aos chunks antigos do `.next/` (que foram sobrescritos). Frontend "fica de pé" mas começa a lançar `ChunkLoadError` em runtime depois de N minutos, quando alguma rota tenta carregar um chunk SSR que não existe mais no disco (típico em `_global-error/page.js`).
+
+**Cronologia do incidente (D-novo-BN):**
+- `12:07:15` — PM2 carrega frontend com chunks pré-BH.4.
+- `12:41:43` — `npm run build` da sessão BH.4 regenera `.next/BUILD_ID` SEM restart imediato.
+- `12:54:04` — primeiro `ChunkLoadError: Failed to load chunk cooperebr_web_d9a3a872._.js` (chunk inexistente no disco).
+- `13:22:06` — bug persiste em requests novas.
+- Fix conservador (15min): `pm2 stop frontend + rm -rf web/.next + npm run build + pm2 start frontend`. **Resolveu 100%.**
+
+**Regra dura nova (catalogada como D-novo-AS sub-item, vincula a D-novo-AS.2):**
+
+Toda vez que Code rodar `npm run build` em `web/`, **OBRIGATORIAMENTE seguir com `pm2 restart cooperebr-frontend` imediato**. Sem exceção. Sem espera. Não deixar processo Node rodando com `.next/` regenerado mas memória antiga.
+
+**Hook futuro D-novo-AS.2 (proposta refinada):** PostToolUse que após qualquer `npm run build` em `web/` dispara automaticamente `pm2 restart cooperebr-frontend`. Estimativa: 30-60min implementar. Não-bloqueador, mas remove o erro humano.
+
+**Aplicação retroativa nesta sessão:** Sprint D-novo-BH teve 4 ciclos de build web (BH.3, BH.4, BM, BH.5) — a regra foi aplicada em todos os 4 sem regressão. Validado que funciona.
+
+**Refs:**
+- Doc-sessão `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md` seção "Lições".
+- Commit fix `03f49fc` (D-novo-BN RESOLVIDO).
+
+---
+
 ### D-novo-BD — Tabela /dashboard/proprietario/[cooperativaId] estourando horizontal (P2)
 
 **Severidade:** P2 (UX, frustração de leitura em viewport médio)
@@ -3249,35 +3274,43 @@ Usina "COOPERE BR - Usina Linhares" (apelido `cooperebr1`) está marcada como `c
 
 ### D-novo-BH — Módulo Despesas Operacionais da Usina (Camada 2) (P1)
 
-**Severidade:** P1 (sprint dedicado, ~10-15h)
-**Origem:** decisão Luciano 28/05/2026 durante refinamento telas usinas (F.7a Fase 1)
+**Severidade:** P1 — sprint dedicado, ~10-15h estimativa original.
 
-Hoje a matriz de responsabilidades de despesas (M30, tela `/dashboard/usinas/[id]/proprietario`) é **estática** — define "quem é responsável contratual por cada categoria" (15 categorias × 4 opções: PARCEIRO/PROPRIETARIO/COMPARTILHADO/...).
+**Origem:** decisão Luciano 28/05/2026 durante refinamento telas usinas (F.7a Fase 1).
 
-Falta camada operacional: **eventos reais de despesa** durante execução do contrato. Cada despesa que acontece de verdade precisa ser lançada com:
-- Data, categoria (15 categorias M30), valor, descrição
-- Quem pagou de fato (proprietário/cooperativa/terceiro)
-- Responsável contratual (vem da Camada 1 automaticamente)
-- Tratamento: REEMBOLSO | DESCONTO_NO_REPASSE | ASSUMIDO
-- Status: PENDENTE | RESOLVIDO | DESCONTADO
+**Status:** ✅ **IMPLEMENTADO 100% em 2026-05-30** — Sprint D-novo-BH concluído em 7 fatias canônicas + 3 bugs/débitos bônus resolvidos. Substitui em vez de criar `DespesaOperacionalUsina` — reusa tabela `ContaAPagar` existente estendida com workflow (BH.1 schema delta).
 
-**Implicações:**
-- Nova tabela `DespesaOperacionalUsina` (Prisma model novo + migração)
-- Tela lançamento + listagem por usina
-- Integração com cálculo de repasse mensal (DESCONTO abate do próximo repasse)
-- Integração com Sprint Contabilidade Tributária (#8 roadmap) — lançamentos viram despesas registradas
+**Implementação (7 fatias, 10 commits bb838ec..77eeb24):**
 
-**Caminho proposto:** sprint próprio "Despesas Operacionais Usina" depois do refinamento atual (após F.7b), antes do Sprint Contabilidade Tributária.
+| Fatia | Commit | Entrega |
+|---|---|---|
+| BH.1 | `bb838ec` | Schema delta workflow PROPOSTA→APROVADA→REJEITADA + tratamento (REEMBOLSO/DESCONTO_NO_REPASSE/ASSUMIDO) + visibilidade proprietário via `responsavelPagamento` |
+| BH.2 | `62eddde` | Endpoints REST `/contas-pagar/{operacionais,proprietario,propor,upload-comprovante,:id/{aprovar,rejeitar,resolver}}` + notificação proativa (email+WA whitelist LGPD) |
+| BH.3 | `8d045af` | Tela admin `/dashboard/usinas/[id]/despesas` (4 KPIs + 3 TabsCustom + tabela 7 colunas) |
+| BH.3.1 | `44f5e53` | Refator UX página própria `/nova` (Padrão Dual Tipo B 17/05) + `DespesaForm` reusável + `UploadComprovante` drag-drop 5MB |
+| BH.3.2 | `543a835` | Workflow double-check UNIVERSAL (TODOS perfis criam PROPOSTA) + self-approval guard backend |
+| BH.4 | `9858c45` | Portal Proprietário `/proprietario/despesas` + `/proprietario/despesas/nova` + flag `Cooperativa.proprietarioVeDespesas` (default false) + GET `/proprietario/meu-parceiro` + PUT `/cooperativas/:id/proprietario-ve-despesas` + tela admin `/dashboard/configuracoes/portal-proprietario` + Super Admin bypass tenant + IDOR guard PROPRIETARIO |
+| BH.5 | `77eeb24` | Helper `calcularRepasseLiquido` (envelope sobre `calcularRepasse` puro — intacto) + 7 consumidores migrados + cron `@Cron('0 3 1 * *', tz São Paulo)` cria ARRENDAMENTO_USINA APROVADA+RESOLVIDA+ASSUMIDO+PARCEIRO idempotente + endpoint manual trigger DEV-only |
 
-**No Sub-Sprint atual (F.7a/F.7b):** apenas link na futura tela `/dashboard/usinas/[id]/editar` apontando pra `/proprietario` (Camada 1 mantida como está). Camada 2 NÃO escopo agora.
+**Bugs bônus resolvidos inline durante sprint:**
+- **D-novo-BL** ✅ RESOLVIDO em BH.4 — Super Admin sem cooperativaId fixa.
+- **D-novo-BN** ✅ RESOLVIDO em `03f49fc` — ChunkLoadError Turbopack stale.
 
-**Estimativa preliminar:** ~10-15h (model + tela + integração repasse + specs).
+**Débitos catalogados durante sprint:**
+- **D-novo-BM** ✅ IMPLEMENTADO em `1cdb9cb` (Painel Credenciais Teste Opção B) — **BLOQUEADOR REMOÇÃO PRÉ-PROD** com checklist 9 passos.
+
+**Validações:**
+- 55 specs Jest verdes (30 contas-pagar + 11 cooperativas + 7 auth-dev + 13 BH.5 + 1 IDOR PROPRIETARIO).
+- 3 smokes programáticos: 8/8 BH.4 + 8/8 BM + 8/8 BH.5 = **24/24 ✅**.
+- Build web Turbopack clean em 4 ciclos.
 
 **Refs:**
-- Tela atual Camada 1: `web/app/dashboard/usinas/[id]/proprietario/page.tsx` (M30)
-- Helper repasse: `backend/src/usinas/helpers/calcular-repasse.ts`
+- Doc-sessão consolidada: `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`
+- Helper repasse puro mantido: `backend/src/usinas/helpers/calcular-repasse.ts`
+- Helper líquido novo: `backend/src/usinas/helpers/calcular-repasse-liquido.ts`
+- Cron mensal: `backend/src/contas-pagar/repasse-mensal.cron.ts`
 
-**Status:** 📋 Catalogado em 2026-05-28 noite. Vai pra sprint próprio futuro.
+**Próximo bloco vinculado:** D-novo-AN (RepasseProprietario tabela) — campo `ContaAPagar.repasseAbatidoId` ficou nullable pronto pra popular quando AN entregar.
 
 ---
 

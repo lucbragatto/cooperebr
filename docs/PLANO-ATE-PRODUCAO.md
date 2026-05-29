@@ -1,6 +1,8 @@
 # PLANO ATÉ PRODUÇÃO REAL — SISGD
 
-**Última atualização:** 17/05/2026 — Sprint Contabilidade Tributária Segregada APROVADO (61h Code, posição #8, benefício inicial APENAS `ENERGIA_SCEE`). Ver `docs/especificacao-contabilidade-cooperativa-segregada.md`.
+**Última atualização:** 30/05/2026 — **Sprint D-novo-BH (Despesas Operacionais Camada 2) CONCLUÍDO 100%** (10 commits bb838ec..77eeb24 em 2 sessões Code, 7 fatias BH.1→BH.5 + 3 bugs/débitos bônus). Próximo bloco aprovado: **D-novo-AN (RepasseProprietario tabela)** — terreno preparado por BH.5 (campo `ContaAPagar.repasseAbatidoId` nullable pronto). Ver `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
+
+> Histórico: **17/05/2026 — Sprint Contabilidade Tributária Segregada APROVADO** (61h Code, posição #8, benefício inicial APENAS `ENERGIA_SCEE`). Ver `docs/especificacao-contabilidade-cooperativa-segregada.md`.
 
 > **Audiência:** Luciano (não-programador, dono do SISGD).
 > **Pra que serve:** roteiro de execução até produção real plena (CoopereBR + Sinergia migrando do sistema antigo).
@@ -41,6 +43,16 @@
   - **Sprint 0 passos iniciais** (relatório auditoria concentração >25% — 62 contratos analisados, 0 casos detectados; achado meta **D-31** catalogado: `percentualUsina` zerado/irrealista no banco). Commit `851a39e`.
   - **Adendo §11 spec CooperToken** (5 achados validados via Decisão 21 + D-30Z catalogado: migração `opcaoToken` → `modoRemuneracao` incompleta com 85 cooperados). Commit `69902f6`.
   - **Débitos novos:** D-30W (P2 — aprovação admin automatizada pós Sprint 5+8), D-30X (P3 — whitelist LGPD bypass NODE_ENV), D-30Z (P3 — 85 cooperados intermediários), **D-31 (P1 provisório — `percentualUsina` zerado)**. D-30Y resolvido.
+- **Sprint D-novo-BH Despesas Operacionais Camada 2** ✅ **CONCLUÍDO 100% (30/05/2026)** — 10 commits bb838ec..77eeb24, 7 fatias canônicas em 2 sessões Code (28-29/05 + 29-30/05):
+  - **BH.1** (`bb838ec`) — schema delta ContaAPagar: workflow PROPOSTA→APROVADA→REJEITADA + tratamento (REEMBOLSO/DESCONTO_NO_REPASSE/ASSUMIDO) + responsavelPagamento + dataOcorrencia + quemPagouTipo.
+  - **BH.2** (`62eddde`) — 8 endpoints REST `/contas-pagar/{operacionais,proprietario,propor,upload-comprovante,:id/{aprovar,rejeitar,resolver}}` + notificação proativa (email+WA whitelist LGPD).
+  - **BH.3 + BH.3.1 + BH.3.2** (`8d045af` + `44f5e53` + `543a835`) — tela admin `/dashboard/usinas/[id]/despesas` (4 KPIs + 3 TabsCustom) + refator UX página própria `/nova` corrigindo violação Padrão Dual Tipo B + DespesaForm reusável + UploadComprovante drag-drop + double-check UNIVERSAL (TODOS perfis criam PROPOSTA, self-approval guard backend).
+  - **BH.4** (`9858c45`) — Portal Proprietário com `/proprietario/despesas` refatorado + `/proprietario/despesas/nova` (Tipo B, seletor usina + DespesaForm modo proprietario-propor) + flag `Cooperativa.proprietarioVeDespesas` (default false, opt-in admin) + `GET /proprietario/meu-parceiro` + `PUT /cooperativas/:id/proprietario-ve-despesas` + tela admin `/dashboard/configuracoes/portal-proprietario` + **Super Admin bypass tenant em ContasPagar (D-novo-BL RESOLVIDO inline)** + **IDOR guard PROPRIETARIO em proporDespesa** (vínculo Caminho A/B obrigatório).
+  - **BH.5** (`77eeb24`) — helper `calcularRepasseLiquido` (envelope sobre `calcularRepasse` puro intacto, abate despesas DESCONTO_NO_REPASSE APROVADA + PENDENTE do mês, líquido nunca negativo) + 7 consumidores migrados (4 proprietario.service + 1 relatorio-mensal + 2 admin-proprietarios) + cron `@Cron('0 3 1 * *', tz São Paulo)` cria despesa ARRENDAMENTO_USINA APROVADA + RESOLVIDA + ASSUMIDO + PARCEIRO automática idempotente + endpoint manual trigger DEV-only gated `isAmbienteReal()=false`.
+  - **Bugs/débitos bônus resolvidos inline:** D-novo-BL (Super Admin bypass), D-novo-BN (ChunkLoadError Turbopack stale, `03f49fc` 15min). **D-novo-BM IMPLEMENTADO** (Painel Credenciais Teste Opção B, `1cdb9cb`) elevado a **P0 BLOQUEADOR REMOÇÃO PRÉ-PROD** com checklist 9 passos.
+  - **Validações:** 55 specs Jest verdes + 3 smokes programáticos **24/24 ✅** (8/8 BH.4 + 8/8 BM + 8/8 BH.5) + build web Turbopack clean em 4 ciclos.
+  - **Lições catalogadas:** Padrão UX Dual 17/05 reforçado (BH.3.1 corrigiu violação); **D-novo-AS complemento (lição BN):** `npm run build` web SEMPRE seguido de `pm2 restart cooperebr-frontend` IMEDIATO — aplicado 4× sem regressão; defesa em 4 camadas pra endpoints dev (`isAmbienteReal()` + `@Roles(SA)` + `@AuditLog` + JWT TTL curto).
+  - **Detalhe:** `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
 
 ### O que falta — ordem prioritária
 
