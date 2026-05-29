@@ -1,7 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import * as express from 'express';
+import { join } from 'path';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -9,8 +11,15 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   const isProd = process.env.NODE_ENV === 'production';
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
+  });
+
+  // D-novo-BH BH.3.1 (M37, 29/05/2026) — Static assets pra comprovantes de despesa.
+  // Path absoluto via __dirname; backend/uploads vive na raiz do projeto backend.
+  // Catalogados D-novo-BJ (URL assinada LGPD) + D-novo-BK (migração Supabase/S3 futura).
+  app.useStaticAssets(join(__dirname, '..', '..', 'uploads'), {
+    prefix: '/uploads/',
   });
 
   // Graceful shutdown — libera porta antes do PM2 reiniciar

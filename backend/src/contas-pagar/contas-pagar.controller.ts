@@ -1,15 +1,23 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   Put,
-  Patch,
-  Delete,
-  Param,
-  Body,
-  Req,
   Query,
+  Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { mkdirSync } from 'fs';
+import { randomBytes } from 'crypto';
 import { ContasPagarService } from './contas-pagar.service';
 import { CreateContaAPagarDto } from './dto/create-conta-a-pagar.dto';
 import { UpdateContaAPagarDto } from './dto/update-conta-a-pagar.dto';
@@ -36,8 +44,68 @@ export class ContasPagarController {
   }
 
   // ─── D-novo-BH (M37, 29/05/2026) — Workflow despesas operacionais ──
-  // IMPORTANTE: rotas estáticas ('operacionais', 'proprietario', 'propor')
-  // ficam ANTES de :id pra Nest router casar prefixos primeiro.
+  // IMPORTANTE: rotas estáticas ('operacionais', 'proprietario', 'propor',
+  // 'upload-comprovante') ficam ANTES de :id pra Nest router casar prefixos primeiro.
+
+  /**
+   * POST /contas-pagar/upload-comprovante
+   * BH.3.1 (M37, 29/05/2026) — upload nativo JPG/PNG/PDF max 5MB.
+   * Storage local: backend/uploads/comprovantes/<cooperativaId>/<ano>/<mês>/.
+   * Servido via rota estática `/uploads/` configurada em main.ts.
+   *
+   * Catalogados débitos futuros:
+   * - D-novo-BJ: URL assinada com expiração (LGPD)
+   * - D-novo-BK: migração pra Supabase Storage / S3
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR, PROPRIETARIO)
+  @AuditLog({ acao: 'despesa.upload-comprovante', recurso: 'Comprovante' })
+  @Post('upload-comprovante')
+  @UseInterceptors(
+    FileInterceptor('arquivo', {
+      storage: diskStorage({
+        destination: (req, _file, cb) => {
+          const reqAny = req as any;
+          const cooperativaId = reqAny.user?.cooperativaId ?? 'sem-coop';
+          const ano = new Date().getFullYear();
+          const mes = String(new Date().getMonth() + 1).padStart(2, '0');
+          const dir = `./uploads/comprovantes/${cooperativaId}/${ano}/${mes}`;
+          mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          // Nome único: timestamp + 8 chars random hex + ext original
+          const stamp = Date.now();
+          const rand = randomBytes(4).toString('hex');
+          const ext = extname(file.originalname).toLowerCase().slice(0, 5);
+          const safeBase = file.originalname
+            .replace(/\.[^.]+$/, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '_')
+            .substring(0, 40);
+          cb(null, `${stamp}-${rand}-${safeBase}${ext}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+        if (!allowed.includes(file.mimetype)) {
+          cb(
+            new BadRequestException('Tipo inválido. Aceitos: JPG, PNG, PDF.'),
+            false,
+          );
+        } else {
+          cb(null, true);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    }),
+  )
+  uploadComprovante(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+    if (!file) throw new BadRequestException('Arquivo obrigatório.');
+    const cooperativaId = req.user?.cooperativaId ?? 'sem-coop';
+    const ano = new Date().getFullYear();
+    const mes = String(new Date().getMonth() + 1).padStart(2, '0');
+    const url = `/uploads/comprovantes/${cooperativaId}/${ano}/${mes}/${file.filename}`;
+    return { url, tamanho: file.size, mimetype: file.mimetype, nomeOriginal: file.originalname };
+  }
 
   /**
    * POST /contas-pagar/propor

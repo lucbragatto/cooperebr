@@ -51,7 +51,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TabsCustom, TabContent } from '@/components/ui/tabs-custom';
-import { DialogLancarDespesa, CATEGORIAS } from '@/components/despesas/DialogLancarDespesa';
+import { CATEGORIAS } from '@/components/despesas/DespesaForm';
 import api from '@/lib/api';
 
 interface Despesa {
@@ -276,17 +276,13 @@ export default function UsinaDespesasPage() {
             <p className="text-xs text-gray-500 mt-0.5">apelido: {usina.apelidoInterno}</p>
           )}
         </div>
-        <DialogLancarDespesa
-          usinaId={usinaId}
-          modo="admin-lancar"
-          onSuccess={carregar}
-          triggerNode={
-            <Button className="bg-amber-600 hover:bg-amber-700">
-              <Plus className="w-4 h-4 mr-1" />
-              Lançar despesa
-            </Button>
-          }
-        />
+        <Button
+          className="bg-amber-600 hover:bg-amber-700"
+          onClick={() => router.push(`/dashboard/usinas/${usinaId}/despesas/nova`)}
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          Lançar despesa
+        </Button>
       </div>
 
       {/* Banner help dispensável */}
@@ -682,10 +678,13 @@ function ListaDespesas({
                         href={d.comprovante}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline inline-flex items-center gap-1 text-xs"
+                        className="inline-flex items-center gap-1 text-xs hover:underline"
                       >
-                        <ExternalLink className="w-3 h-3" />
-                        Ver
+                        {d.comprovante.startsWith('/uploads/') ? (
+                          <Badge className="bg-green-100 text-green-700 text-[10px]">📎 Anexado</Badge>
+                        ) : (
+                          <Badge className="bg-blue-100 text-blue-700 text-[10px]">🔗 Externo</Badge>
+                        )}
                       </a>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>

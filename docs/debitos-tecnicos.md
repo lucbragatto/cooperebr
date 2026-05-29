@@ -3302,6 +3302,50 @@ Falta camada operacional: **eventos reais de despesa** durante execução do con
 
 ---
 
+### D-novo-BJ — URL assinada com expiração pra comprovantes (P2 LGPD)
+
+**Severidade:** P2 (LGPD, não-bloqueante MVP)
+**Origem:** 29/05/2026 — BH.3.1 ampliada do sprint D-novo-BH. Upload nativo de comprovantes JPG/PNG/PDF foi implementado com storage local em `backend/uploads/comprovantes/<coopId>/<ano>/<mês>/` servido via rota estática pública `/uploads/`. Sem auth gate nem expiração.
+
+**Risco:** URL é previsível (path com timestamp + 8 chars hex random). Se alguém tem o link → acessa sem token. Anexos podem conter NF com CPF/CNPJ de prestador, dados pessoais — vazamento LGPD se URL leakar.
+
+**Mitigação MVP atual:** path com timestamp ms (13 dígitos) + 4 bytes random (8 hex chars) = ~4.3 bilhões de combinações por timestamp. Brute-force inviável mas não impossível.
+
+**Fix sugerido (futuro):**
+- Endpoint `GET /uploads/:cooperativaId/:caminho` com `@UseGuards(JwtAuthGuard)` + check multi-tenant
+- URL pré-assinada tipo Supabase Storage signed URL (expira em 1h)
+- OU servir via stream do controller (auth + audit + LGPD compliance)
+
+**Estimativa:** 2-3h (refator backend + atualiza frontend `UploadComprovante` pra fazer fetch via API ao invés de `<img src="/uploads/...">` direto).
+
+**Status:** 📋 Catalogado em 2026-05-29 BH.3.1. MVP aceita risco LGPD; resolver antes de produção real.
+
+---
+
+### D-novo-BK — Migrar storage de uploads pra Supabase Storage / S3 (P3)
+
+**Severidade:** P3 (escalabilidade/portabilidade, não-bloqueante MVP)
+**Origem:** 29/05/2026 — BH.3.1. Storage hoje é local em `backend/uploads/` (disco do servidor PM2).
+
+**Limitações:**
+- Não escala horizontalmente (cada nó PM2 teria seu próprio disco)
+- Não tem backup automático (PM2 morre → arquivos somem se não houver disk snapshot)
+- Acoplado ao filesystem do container/VM
+- Se Code/Luciano migrarem deployment pra Vercel/serverless, storage local falha
+
+**Fix sugerido:**
+- Adapter pattern: `StorageService` com implementação `LocalDiskStorage` (atual) e `SupabaseStorage` futuro
+- Variável env `STORAGE_PROVIDER=local|supabase|s3`
+- Migration de arquivos existentes (script `migrar-uploads-pra-supabase.ts`)
+
+**Estimativa:** 4-6h (adapter + impl Supabase + script migração + smoke).
+
+**Dependência:** Supabase já é usado pra DB/Auth — bucket de storage é incremento natural.
+
+**Status:** 📋 Catalogado em 2026-05-29 BH.3.1. Resolver quando primeiro parceiro real entrar (ou quando precisar escalar).
+
+---
+
 ### D-novo-BE — Validação cadastro proprietário: nome divergente em mesmo email (P3)
 
 **Severidade:** P3 (qualidade de dado, não-bloqueante — solução já existe pra cards F.6a)

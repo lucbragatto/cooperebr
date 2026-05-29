@@ -14,7 +14,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -61,7 +60,11 @@ export class ProporDespesaDto {
   })
   tratamento!: TratamentoDespesa;
 
+  // BH.3.1 (29/05): aceita URL absoluta (http://...) ou path relativo
+  // (/uploads/comprovantes/...) — o endpoint /upload-comprovante retorna
+  // path relativo que é validado downstream pelo frontend ao servir.
   @IsOptional()
-  @IsUrl({}, { message: 'comprovante deve ser URL válida' })
+  @IsString()
+  @MaxLength(500)
   comprovante?: string;
 }

@@ -69,3 +69,6 @@ fatura-*.txt
 .claude/
 
 tmp-diagnostico/
+
+# D-novo-BH BH.3.1 (29/05/2026) — comprovantes de despesa operacional
+uploads/
