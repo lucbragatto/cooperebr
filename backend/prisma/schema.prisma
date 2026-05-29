@@ -77,6 +77,11 @@ model Cooperativa {
   politicasAlocacao         PoliticaAlocacao[]
   alocacoesOtimas           AlocacaoOtima[]
 
+  // ── D-novo-BH (M37, 2026-05-29) — Despesas Operacionais Camada 2 ──
+  // Quando true, proprietário vê tela /proprietario/despesas + pode propor.
+  // Quando false, módulo de despesas operacionais fica restrito ao admin.
+  proprietarioVeDespesas    Boolean                           @default(true)
+
   @@map("cooperativas")
 }
 
@@ -101,6 +106,10 @@ model Usuario {
   observacoes      ObservacaoAtiva[]
   enviosValidados  EnvioListaConcessionaria[] @relation("EnvioListaValidador")
   enviosEnviados   EnvioListaConcessionaria[] @relation("EnvioListaEnviador")
+
+  // ── D-novo-BH (M37, 2026-05-29) — Workflow despesas operacionais ──
+  despesasPropostas   ContaAPagar[] @relation("DespesaPropostoPor")
+  despesasAprovadas   ContaAPagar[] @relation("DespesaAprovadoPor")
 
   @@map("usuarios")
 }
@@ -2403,6 +2412,32 @@ enum ResponsavelPagamento {
   COMPARTILHADO
 }
 
+// ── D-novo-BH (M37, 2026-05-29) — Workflow Camada 2 Despesas Operacionais ──
+
+enum StatusAprovacaoDespesa {
+  PROPOSTA    // proprietário propôs, admin precisa aprovar
+  APROVADA    // admin aprovou OU lançou direto (default legacy)
+  REJEITADA   // admin rejeitou com motivo
+}
+
+enum TratamentoDespesa {
+  REEMBOLSO              // cooperativa reembolsa proprietário (ou vice-versa)
+  DESCONTO_NO_REPASSE    // abate do próximo repasse mensal (consumido em BH.5)
+  ASSUMIDO               // quem pagou, assumiu — sem reembolso/desconto
+}
+
+enum QuemPagouTipo {
+  PARCEIRO       // cooperativa pagou
+  PROPRIETARIO   // dono da usina pagou
+  COMPARTILHADO  // rateado contratualmente
+  TERCEIRO       // terceira parte (ex: empresa manutenção, seguradora)
+}
+
+enum StatusResolucaoDespesa {
+  PENDENTE   // ainda não resolvida (reembolso não feito / desconto não aplicado / assumido sem confirmação)
+  RESOLVIDA  // tratamento contratual concluído
+}
+
 model ContaAPagar {
   id             String               @id @default(cuid())
   cooperativaId  String
@@ -2422,9 +2457,34 @@ model ContaAPagar {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
+  // ── D-novo-BH (M37, 2026-05-29) — Workflow aprovação ──
+  statusAprovacao       StatusAprovacaoDespesa @default(APROVADA) // legacy default APROVADA
+  propostoPorUsuarioId  String?
+  propostoPor           Usuario? @relation("DespesaPropostoPor", fields: [propostoPorUsuarioId], references: [id])
+  aprovadoPorUsuarioId  String?
+  aprovadoPor           Usuario? @relation("DespesaAprovadoPor", fields: [aprovadoPorUsuarioId], references: [id])
+  aprovadoEm            DateTime?
+  rejeitadoMotivo       String?
+
+  // ── D-novo-BH — Tratamento contratual ──
+  tratamento            TratamentoDespesa?  // null = legacy (sem tratamento definido)
+  quemPagouTipo         QuemPagouTipo?      // null = legacy
+  quemPagouNome         String?             // opcional, nome do TERCEIRO ou descrição livre
+
+  // ── D-novo-BH — Resolução (separada de status financeiro) ──
+  statusResolucao       StatusResolucaoDespesa @default(PENDENTE)
+  resolvidoEm           DateTime?
+
+  // ── D-novo-BH — Dados temporais e vínculos ──
+  dataOcorrencia        DateTime?            // quando despesa OCORREU (vs dataVencimento que é quando VENCE)
+  repasseAbatidoId      String?              // futuro D-novo-AN: id do RepasseProprietario que abateu
+
   @@index([cooperativaId])
   @@index([status])
   @@index([dataVencimento])
+  @@index([statusAprovacao])
+  @@index([statusResolucao])
+  @@index([usinaId, statusAprovacao])
   @@map("contas_a_pagar")
 }
 

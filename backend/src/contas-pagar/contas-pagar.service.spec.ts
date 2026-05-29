@@ -1,0 +1,279 @@
+/**
+ * Specs D-novo-BH (M37, 29/05/2026) — workflow despesas operacionais.
+ */
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { ContasPagarService } from './contas-pagar.service';
+
+describe('ContasPagarService — D-novo-BH workflow', () => {
+  let service: ContasPagarService;
+  let prismaMock: any;
+
+  beforeEach(() => {
+    prismaMock = {
+      usina: { findUnique: jest.fn(), findMany: jest.fn() },
+      contaAPagar: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    };
+    service = new ContasPagarService(prismaMock);
+  });
+
+  // ─── proporDespesa ───────────────────────────────────────────────
+
+  describe('proporDespesa()', () => {
+    const dtoBase = {
+      usinaId: 'u1',
+      dataOcorrencia: '2026-05-29',
+      categoria: 'CUSD' as any,
+      valor: 1500,
+      descricao: 'Conta CUSD maio/2026',
+      quemPagouTipo: 'PARCEIRO' as any,
+      tratamento: 'REEMBOLSO' as any,
+    };
+
+    it('PROPRIETARIO cria com statusAprovacao=PROPOSTA', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'coop1',
+        responsabilidadeDespesas: {},
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.proporDespesa(dtoBase as any, 'usr-prop', 'PROPRIETARIO', 'coop1');
+
+      const args = prismaMock.contaAPagar.create.mock.calls[0][0];
+      expect(args.data.statusAprovacao).toBe('PROPOSTA');
+      expect(args.data.aprovadoPorUsuarioId).toBeUndefined();
+      expect(args.data.aprovadoEm).toBeUndefined();
+      expect(args.data.propostoPorUsuarioId).toBe('usr-prop');
+    });
+
+    it('ADMIN cria com statusAprovacao=APROVADA + aprovadoPor=admin', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'coop1',
+        responsabilidadeDespesas: {},
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.proporDespesa(dtoBase as any, 'usr-admin', 'ADMIN', 'coop1');
+
+      const args = prismaMock.contaAPagar.create.mock.calls[0][0];
+      expect(args.data.statusAprovacao).toBe('APROVADA');
+      expect(args.data.aprovadoPorUsuarioId).toBe('usr-admin');
+      expect(args.data.aprovadoEm).toBeInstanceOf(Date);
+    });
+
+    it('pré-preenche responsavelPagamento da Camada 1 (M30)', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'coop1',
+        responsabilidadeDespesas: { CUSD: 'PARCEIRO', MANUTENCAO: 'PROPRIETARIO' },
+      });
+      prismaMock.contaAPagar.create.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.proporDespesa(dtoBase as any, 'usr', 'ADMIN', 'coop1');
+
+      const args = prismaMock.contaAPagar.create.mock.calls[0][0];
+      expect(args.data.responsavelPagamento).toBe('PARCEIRO');
+    });
+
+    it('rejeita usina de outra cooperativa (multi-tenant + IDOR)', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce({
+        id: 'u1',
+        cooperativaId: 'OUTRA-COOP',
+        responsabilidadeDespesas: {},
+      });
+
+      await expect(
+        service.proporDespesa(dtoBase as any, 'usr', 'ADMIN', 'coop1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('NotFoundException quando usina não existe', async () => {
+      prismaMock.usina.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.proporDespesa(dtoBase as any, 'usr', 'ADMIN', 'coop1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── aprovarDespesa ──────────────────────────────────────────────
+
+  describe('aprovarDespesa()', () => {
+    it('PROPOSTA → APROVADA com aprovadoEm', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'PROPOSTA',
+      });
+      prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.aprovarDespesa('d1', 'admin-1', 'coop1');
+
+      const args = prismaMock.contaAPagar.update.mock.calls[0][0];
+      expect(args.data.statusAprovacao).toBe('APROVADA');
+      expect(args.data.aprovadoPorUsuarioId).toBe('admin-1');
+      expect(args.data.aprovadoEm).toBeInstanceOf(Date);
+    });
+
+    it('APROVADA (race condition) → ConflictException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'APROVADA',
+      });
+
+      await expect(
+        service.aprovarDespesa('d1', 'admin-1', 'coop1'),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('despesa de outra coop → ForbiddenException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'OUTRA',
+        statusAprovacao: 'PROPOSTA',
+      });
+
+      await expect(
+        service.aprovarDespesa('d1', 'admin-1', 'coop1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // ─── rejeitarDespesa ─────────────────────────────────────────────
+
+  describe('rejeitarDespesa()', () => {
+    it('PROPOSTA + motivo → REJEITADA + motivo gravado', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'PROPOSTA',
+      });
+      prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.rejeitarDespesa(
+        'd1',
+        { motivo: 'Faltou nota fiscal anexada.' } as any,
+        'admin-1',
+        'coop1',
+      );
+
+      const args = prismaMock.contaAPagar.update.mock.calls[0][0];
+      expect(args.data.statusAprovacao).toBe('REJEITADA');
+      expect(args.data.rejeitadoMotivo).toBe('Faltou nota fiscal anexada.');
+    });
+  });
+
+  // ─── resolverDespesa ─────────────────────────────────────────────
+
+  describe('resolverDespesa()', () => {
+    it('APROVADA + PENDENTE → RESOLVIDA com resolvidoEm', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'APROVADA',
+        statusResolucao: 'PENDENTE',
+      });
+      prismaMock.contaAPagar.update.mockResolvedValueOnce({ id: 'd1' });
+
+      await service.resolverDespesa('d1', {} as any, 'coop1');
+
+      const args = prismaMock.contaAPagar.update.mock.calls[0][0];
+      expect(args.data.statusResolucao).toBe('RESOLVIDA');
+      expect(args.data.resolvidoEm).toBeInstanceOf(Date);
+    });
+
+    it('PROPOSTA (sem aprovar) → BadRequestException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'PROPOSTA',
+        statusResolucao: 'PENDENTE',
+      });
+
+      await expect(
+        service.resolverDespesa('d1', {} as any, 'coop1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('já RESOLVIDA → ConflictException', async () => {
+      prismaMock.contaAPagar.findUnique.mockResolvedValueOnce({
+        id: 'd1',
+        cooperativaId: 'coop1',
+        statusAprovacao: 'APROVADA',
+        statusResolucao: 'RESOLVIDA',
+      });
+
+      await expect(
+        service.resolverDespesa('d1', {} as any, 'coop1'),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  // ─── listarDespesasOperacionais ──────────────────────────────────
+
+  describe('listarDespesasOperacionais()', () => {
+    it('filtra por cooperativaId (multi-tenant)', async () => {
+      prismaMock.contaAPagar.findMany.mockResolvedValueOnce([]);
+
+      await service.listarDespesasOperacionais('coop1', {});
+
+      const args = prismaMock.contaAPagar.findMany.mock.calls[0][0];
+      expect(args.where.cooperativaId).toBe('coop1');
+    });
+
+    it('aplica filtro statusAprovacao quando passado', async () => {
+      prismaMock.contaAPagar.findMany.mockResolvedValueOnce([]);
+
+      await service.listarDespesasOperacionais('coop1', { statusAprovacao: 'PROPOSTA' });
+
+      const args = prismaMock.contaAPagar.findMany.mock.calls[0][0];
+      expect(args.where.statusAprovacao).toBe('PROPOSTA');
+    });
+
+    it('rejeita sem cooperativaId', async () => {
+      await expect(
+        service.listarDespesasOperacionais(null, {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─── listarDespesasProprietario ──────────────────────────────────
+
+  describe('listarDespesasProprietario()', () => {
+    it('mostra APROVADAS de terceiros + PROPRIAS de qualquer status', async () => {
+      prismaMock.usina.findMany.mockResolvedValueOnce([{ id: 'u1' }, { id: 'u2' }]);
+      prismaMock.contaAPagar.findMany.mockResolvedValueOnce([]);
+
+      await service.listarDespesasProprietario('usr-prop', 'dono@x.com', null);
+
+      const args = prismaMock.contaAPagar.findMany.mock.calls[0][0];
+      expect(args.where.usinaId).toEqual({ in: ['u1', 'u2'] });
+      expect(args.where.OR).toEqual([
+        { statusAprovacao: 'APROVADA' },
+        { propostoPorUsuarioId: 'usr-prop' },
+      ]);
+    });
+
+    it('retorna [] quando sem email nem cooperadoId', async () => {
+      const r = await service.listarDespesasProprietario('usr', null, null);
+      expect(r).toEqual([]);
+    });
+
+    it('retorna [] quando proprietário sem usinas vinculadas', async () => {
+      prismaMock.usina.findMany.mockResolvedValueOnce([]);
+      const r = await service.listarDespesasProprietario('usr', 'x@y.com', null);
+      expect(r).toEqual([]);
+    });
+  });
+});
