@@ -50,6 +50,7 @@ import { ConversaoCreditoModule } from './conversao-credito/conversao-credito.mo
 import { EmailMonitorModule } from './email-monitor/email-monitor.module';
 import { LeadExpansaoModule } from './lead-expansao/lead-expansao.module';
 import { ContasPagarModule } from './contas-pagar/contas-pagar.module';
+import { RepassesProprietarioModule } from './repasses-proprietario/repasses-proprietario.module';
 import { BandeiraTarifariaModule } from './bandeira-tarifaria/bandeira-tarifaria.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -111,6 +112,7 @@ import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietar
     EmailMonitorModule,
     LeadExpansaoModule,
     ContasPagarModule,
+    RepassesProprietarioModule,
     BandeiraTarifariaModule,
     AuditModule,
     NotificacoesProativasModule,

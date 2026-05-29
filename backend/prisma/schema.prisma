@@ -67,6 +67,7 @@ model Cooperativa {
   convitesIndicacao         ConviteIndicacao[]
   ofertasClube              OfertaClube[]
   contasAPagar              ContaAPagar[]
+  repassesProprietario      RepasseProprietario[]
   historicosStatusCooperado HistoricoStatusCooperado[]
   bandeirasTarifarias       BandeiraTarifaria[]
   politicaBandeira          PoliticaBandeira                  @default(DECIDIR_MENSAL)
@@ -110,6 +111,11 @@ model Usuario {
   // ── D-novo-BH (M37, 2026-05-29) — Workflow despesas operacionais ──
   despesasPropostas   ContaAPagar[] @relation("DespesaPropostoPor")
   despesasAprovadas   ContaAPagar[] @relation("DespesaAprovadoPor")
+
+  // ── D-novo-AN (M42, 2026-05-30) — RepasseProprietario ──
+  repassesProprietario     RepasseProprietario[] @relation("RepasseProprietarioUsuario")
+  repassesRegistrados      RepasseProprietario[] @relation("RepasseRegistradoPor")
+  repassesCancelados       RepasseProprietario[] @relation("RepasseCanceladoPor")
 
   @@map("usuarios")
 }
@@ -397,6 +403,7 @@ model Usina {
   alertas                 UsinaAlerta[]
   contratosUso            ContratoUso[]
   contasAPagar            ContaAPagar[]
+  repassesProprietario    RepasseProprietario[]
   enviosLista             EnvioListaConcessionaria[]
   // Sprint Usinas+Listas Sub-Fase 1 (17/05/2026 noite) — campo informativo opcional,
   // sem guard, registra a classificação GD I/II/III enquanto litígio CoopereBR×EDP corre.
@@ -2477,7 +2484,9 @@ model ContaAPagar {
 
   // ── D-novo-BH — Dados temporais e vínculos ──
   dataOcorrencia        DateTime?            // quando despesa OCORREU (vs dataVencimento que é quando VENCE)
-  repasseAbatidoId      String?              // futuro D-novo-AN: id do RepasseProprietario que abateu
+  // D-novo-AN (M42, 2026-05-30) — vínculo bidirecional ao RepasseProprietario que abateu.
+  repasseAbatidoId      String?
+  repasseAbatido        RepasseProprietario? @relation("RepasseAbatido", fields: [repasseAbatidoId], references: [id])
 
   @@index([cooperativaId])
   @@index([status])
@@ -2485,7 +2494,79 @@ model ContaAPagar {
   @@index([statusAprovacao])
   @@index([statusResolucao])
   @@index([usinaId, statusAprovacao])
+  @@index([repasseAbatidoId])
   @@map("contas_a_pagar")
+}
+
+// ── D-novo-AN (M42, 2026-05-30) — RepasseProprietario ──
+// Registra o pagamento real do aluguel/repasse ao proprietário da usina,
+// complementando BH.5 (que só registra a obrigação ARRENDAMENTO_USINA via
+// ContaAPagar). Cron BH.5 cria PENDENTE no mesmo trigger; admin marca PAGO
+// e, em transação atômica, vincula despesas DESCONTO_NO_REPASSE pendentes
+// do período via `ContaAPagar.repasseAbatidoId`.
+
+enum StatusRepasseProprietario {
+  PENDENTE   // criado pelo cron, aguardando pagamento real do admin
+  PAGO       // admin registrou pagamento (data + método + comprovante opcional)
+  CANCELADO  // contrato encerrado / contestação / acerto fora do sistema
+}
+
+enum MetodoPagamentoRepasse {
+  PIX
+  TED
+  MANUAL  // boleto bancário tradicional, depósito
+  OUTRO   // exige `observacao`
+}
+
+model RepasseProprietario {
+  id                       String   @id @default(cuid())
+  cooperativaId            String
+  cooperativa              Cooperativa @relation(fields: [cooperativaId], references: [id])
+  usinaId                  String
+  usina                    Usina    @relation(fields: [usinaId], references: [id])
+
+  // Proprietário pode estar sem Usuario cadastrado (Caminho B sem onboarding completo).
+  proprietarioUsuarioId    String?
+  proprietarioUsuario      Usuario? @relation("RepasseProprietarioUsuario", fields: [proprietarioUsuarioId], references: [id])
+
+  // Período de apuração — fechado [inicio, fim].
+  periodoInicio            DateTime
+  periodoFim               DateTime
+
+  // Valores apurados no momento da criação (snapshot — não recalcula depois).
+  valorBruto               Decimal  @db.Decimal(10, 2)
+  totalDespesasAbatidas    Decimal  @db.Decimal(10, 2) @default(0)
+  valorLiquido             Decimal  @db.Decimal(10, 2)
+
+  status                   StatusRepasseProprietario @default(PENDENTE)
+
+  // Preenchidos quando admin marca PAGO.
+  metodoPagamento          MetodoPagamentoRepasse?
+  dataPagamento            DateTime?
+  comprovante              String?  // URL upload (reusa pattern /uploads/ BH.3.1)
+  observacao               String?
+
+  registradoPorUsuarioId   String?
+  registradoPor            Usuario? @relation("RepasseRegistradoPor", fields: [registradoPorUsuarioId], references: [id])
+
+  // Preenchidos quando admin cancela.
+  canceladoPorUsuarioId    String?
+  canceladoPor             Usuario? @relation("RepasseCanceladoPor", fields: [canceladoPorUsuarioId], references: [id])
+  canceladoEm              DateTime?
+  motivoCancelamento       String?
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  // Despesas DESCONTO_NO_REPASSE abatidas quando este repasse foi marcado PAGO.
+  despesasAbatidas         ContaAPagar[] @relation("RepasseAbatido")
+
+  @@unique([usinaId, periodoInicio, periodoFim]) // idempotência forte (cron BH.5)
+  @@index([cooperativaId])
+  @@index([proprietarioUsuarioId])
+  @@index([status])
+  @@index([usinaId, status])
+  @@map("repasses_proprietario")
 }
 
 // ── Bandeira Tarifária (Sprint 4) ──
