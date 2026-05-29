@@ -450,6 +450,24 @@ export class ProprietarioService {
     let totalYTD = 0;
     const inicioAnoYTD = new Date(now.getFullYear(), 0, 1);
 
+    // AN.2 (M42, 30/05/2026) — Lê RepasseProprietario REAL quando existe,
+    // cai em PREVISTO_FALLBACK on-the-fly só pros meses sem registro.
+    // Tipo 'REAL' reflete dados persistidos (status PENDENTE/PAGO/CANCELADO);
+    // 'PREVISTO_FALLBACK' é cálculo on-the-fly pra meses anteriores ao AN
+    // ou meses sem geração registrada.
+    const usinasIds = usinas.map((u) => u.id);
+    const repassesReais = await this.prisma.repasseProprietario.findMany({
+      where: { usinaId: { in: usinasIds } },
+      orderBy: { periodoFim: 'desc' },
+    });
+
+    // Index por (usinaId, ano-mês de periodoFim) pra dedupe rápido
+    const reaisIndex = new Map<string, (typeof repassesReais)[number]>();
+    for (const r of repassesReais) {
+      const key = `${r.usinaId}-${r.periodoFim.getFullYear()}-${r.periodoFim.getMonth()}`;
+      reaisIndex.set(key, r);
+    }
+
     for (const u of usinas) {
       const usinaCalc: UsinaParaCalculo = {
         formaPagamentoDono: u.formaPagamentoDono,
@@ -458,34 +476,104 @@ export class ProprietarioService {
         valorKwhPadrao: u.valorKwhPadrao !== null ? Number(u.valorKwhPadrao) : null,
         distribuidora: u.distribuidora,
       };
+      const competenciasJaCobertas = new Set<string>();
       for (const g of u.geracoesMensais) {
-        // BH.5: listarRepasses usa LÍQUIDO + expõe quebra pra UI
-        const r = await calcularRepasseLiquido({
-          usina: usinaCalc,
-          usinaId: u.id,
-          cooperativaId: u.cooperativaId!,
-          geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
-          tarifaResolver,
-          prisma: this.prisma,
-        });
-        const isMesAtual = g.competencia.getMonth() === now.getMonth() && g.competencia.getFullYear() === now.getFullYear();
+        const competenciaKey = `${u.id}-${g.competencia.getFullYear()}-${g.competencia.getMonth()}`;
+        competenciasJaCobertas.add(competenciaKey);
+        const reg = reaisIndex.get(competenciaKey);
+
+        if (reg) {
+          // Dado REAL persistido (AN.2+)
+          repasses.push({
+            usinaId: u.id,
+            usinaNome: u.nome,
+            mes: `${String(g.competencia.getMonth() + 1).padStart(2, '0')}/${g.competencia.getFullYear()}`,
+            competencia: g.competencia.toISOString().slice(0, 7),
+            kwhGerado: Number(g.kwhGerado),
+            valor: Number(reg.valorLiquido),
+            valorBruto: Number(reg.valorBruto),
+            totalDespesasAbatidas: Number(reg.totalDespesasAbatidas),
+            despesasAbatidas: [], // o detalhe vem do drill-down (futuro AN.3)
+            formula: null,
+            fonteTarifa: null,
+            motivo: null,
+            status: reg.status, // PENDENTE | PAGO | CANCELADO
+            dataPagamento: reg.dataPagamento,
+            metodoPagamento: reg.metodoPagamento,
+            comprovante: reg.comprovante,
+            repasseId: reg.id,
+            tipo: 'REAL' as const,
+          });
+          if (g.competencia >= inicioAnoYTD) {
+            totalYTD += Number(reg.valorLiquido);
+          }
+        } else {
+          // Fallback PREVISTO_FALLBACK — meses sem RepasseProprietario (pré-AN ou
+          // GeracaoMensal sem cron rodar). Mantém comportamento original BH.5.
+          const r = await calcularRepasseLiquido({
+            usina: usinaCalc,
+            usinaId: u.id,
+            cooperativaId: u.cooperativaId!,
+            geracaoMes: { kwhGerado: Number(g.kwhGerado), competencia: g.competencia },
+            tarifaResolver,
+            prisma: this.prisma,
+          });
+          const isMesAtual =
+            g.competencia.getMonth() === now.getMonth() &&
+            g.competencia.getFullYear() === now.getFullYear();
+          repasses.push({
+            usinaId: u.id,
+            usinaNome: u.nome,
+            mes: `${String(g.competencia.getMonth() + 1).padStart(2, '0')}/${g.competencia.getFullYear()}`,
+            competencia: g.competencia.toISOString().slice(0, 7),
+            kwhGerado: Number(g.kwhGerado),
+            valor: r.valor,
+            valorBruto: r.valorBruto,
+            totalDespesasAbatidas: r.totalDespesasAbatidas,
+            despesasAbatidas: r.despesasAbatidas,
+            formula: r.formula,
+            fonteTarifa: r.fonteTarifa,
+            motivo: r.motivo,
+            status: isMesAtual ? 'PREVISTO' : 'PAGO',
+            dataPagamento: null,
+            metodoPagamento: null,
+            comprovante: null,
+            repasseId: null,
+            tipo: 'PREVISTO_FALLBACK' as const,
+          });
+          if (r.valor !== null && g.competencia >= inicioAnoYTD) {
+            totalYTD += r.valor;
+          }
+        }
+      }
+
+      // Repasses REAIS que não bateram com GeracaoMensal (ex: usinas
+      // FIXO sem geração registrada — repasse existe mesmo sem kWh).
+      for (const reg of repassesReais.filter((r) => r.usinaId === u.id)) {
+        const key = `${reg.usinaId}-${reg.periodoFim.getFullYear()}-${reg.periodoFim.getMonth()}`;
+        if (competenciasJaCobertas.has(key)) continue;
         repasses.push({
           usinaId: u.id,
           usinaNome: u.nome,
-          mes: `${String(g.competencia.getMonth() + 1).padStart(2, '0')}/${g.competencia.getFullYear()}`,
-          competencia: g.competencia.toISOString().slice(0, 7),
-          kwhGerado: Number(g.kwhGerado),
-          valor: r.valor,
-          valorBruto: r.valorBruto,
-          totalDespesasAbatidas: r.totalDespesasAbatidas,
-          despesasAbatidas: r.despesasAbatidas,
-          formula: r.formula,
-          fonteTarifa: r.fonteTarifa,
-          motivo: r.motivo,
-          status: isMesAtual ? 'PREVISTO' : 'PAGO',
+          mes: `${String(reg.periodoFim.getMonth() + 1).padStart(2, '0')}/${reg.periodoFim.getFullYear()}`,
+          competencia: reg.periodoFim.toISOString().slice(0, 7),
+          kwhGerado: 0,
+          valor: Number(reg.valorLiquido),
+          valorBruto: Number(reg.valorBruto),
+          totalDespesasAbatidas: Number(reg.totalDespesasAbatidas),
+          despesasAbatidas: [],
+          formula: null,
+          fonteTarifa: null,
+          motivo: null,
+          status: reg.status,
+          dataPagamento: reg.dataPagamento,
+          metodoPagamento: reg.metodoPagamento,
+          comprovante: reg.comprovante,
+          repasseId: reg.id,
+          tipo: 'REAL' as const,
         });
-        if (r.valor !== null && g.competencia >= inicioAnoYTD) {
-          totalYTD += r.valor;
+        if (reg.periodoFim >= inicioAnoYTD) {
+          totalYTD += Number(reg.valorLiquido);
         }
       }
     }
