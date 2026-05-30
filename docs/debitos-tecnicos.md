@@ -3587,6 +3587,46 @@ Frontend (`web/`):
 
 ---
 
+### D-novo-BQ — Sprint Segurança IDOR (18 vulnerabilidades multi-tenant) (P0)
+
+**Severidade:** P0 — bloqueador absoluto de onboarding Sinergia (2º parceiro). Com 1 tenant real hoje (CoopereBR) o risco não está materializado, mas isolamento multi-tenant é pré-requisito não-negociável pra produção plural.
+
+**Origem:** auditoria Dynamic Workflow 30/05/2026 (Claude Code, Opus 4.8 — 28 subagentes, 1.437.072 tokens, 4 min). Relatório completo: `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`.
+
+**Padrão da falha:** controller não passa `req.user.cooperativaId` ao service, OU service faz `findUnique({ where: { id } })` sem `cooperativaId`. ADMIN/OPERADOR de tenant A modifica/apaga/lê recurso de tenant B passando o UUID.
+
+**Padrão do fix:** verificação prévia de posse (`findFirst({ where: { id, cooperativaId } })` → NotFound se null) + `SUPER_ADMIN` bypass (`cooperativaId = null` ignora o guard). Mecânico e repetível — D-48 contratos `remove()` já tem esse padrão.
+
+**Auditoria cobriu** 5 grupos núcleo (~13 módulos) — restam ~50 services não auditados. Ampliar auditoria antes de declarar IDOR-free.
+
+**Distribuição:** 18 IDORs CONFIRMADOS = 7 CRÍTICOS + 8 ALTOS + 3 MÉDIOS.
+
+**Fatiamento:**
+
+| Fatia | Escopo | Status |
+|---|---|---|
+| BQ.1 | CRÍTICOS entidades núcleo — contratos.update (C1) + usinas.update/remove (C2/A3) + ucs.update/remove (C3/A4) + geracao-mensal.update/remove (C4/A5) | ✅ **IMPLEMENTADO 30/05/2026** |
+| BQ.2 | CRÍTICOS configuracao-cobranca body-injection (C5/C6) + cooper-token financeiro (A6) | 📋 Catalogado |
+| BQ.3 | motor-proposta (C7 + A7 + A8) + faturas (A1) + cooperados (A2 + M1) | 📋 Catalogado |
+| BQ.4 | indicacoes (M2 + M3) | 📋 Catalogado |
+| BQ.5 (futuro) | Ampliar auditoria pra ~50 services restantes (cobertura total) | 📋 Catalogado |
+
+**BQ.1 implementação (commit a definir):**
+- `contratos.service.ts.update()` — verificação posse no início (espelha `remove()` D-48). Callers `solicitacoes-contrato.service.ts` JÁ passavam `cooperativaId ?? null`, sem mudança.
+- `usinas.controller.ts` — `update`/`remove` passam `req.user?.cooperativaId ?? null`. `usinas.service.ts` — `update(id, data, cooperativaId?)` + `remove(id, cooperativaId?)` com posse via `findFirst({where:{id,cooperativaId}})`; null cai em `findUnique` (preserva specs antigos).
+- `ucs.controller.ts` + `ucs.service.ts` — idem (Uc tem `cooperativaId` direto).
+- `geracao-mensal.controller.ts` + `geracao-mensal.service.ts` — helper privado `assertPosseOuFindOne(id, cooperativaId)` faz `findFirst({where:{id, usina:{cooperativaId}}})` (GeracaoMensal não tem `cooperativaId` direto — join via usina).
+
+**Specs:** 4 arquivos novos `*-idor-bq1.spec.ts` (contratos + usinas + ucs + geracao-mensal) com 21 cenários (3 contratos + 6 usinas + 6 ucs + 6 geracao): tenant B → NotFound, tenant A próprio → sucesso, SUPER_ADMIN null → bypass. Todos verdes.
+
+**Smoke programático cross-tenant:** a aplicar (commit AN.4 padrão).
+
+**Refs:**
+- Relatório: `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`
+- Padrão D-48 (referência): `contratos.service.ts.remove()` + `verificarListaEspera()` (`usinas.service.ts`)
+
+---
+
 ### D-novo-BP — Convergência portal `/parceiro` vs `/dashboard` (P3)
 
 **Severidade:** P3 — sprint refator UX futuro, não-bloqueador.
