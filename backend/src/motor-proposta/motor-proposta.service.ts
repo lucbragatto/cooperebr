@@ -1231,11 +1231,23 @@ export class MotorPropostaService {
 
   // ── Aprovação remota ──────────────────────────────────────────────
 
-  async enviarAprovacao(propostaId: string, canal: 'whatsapp' | 'email', destino: string) {
-    const proposta = await this.prisma.propostaCooperado.findUnique({
-      where: { id: propostaId },
-      include: { cooperado: { select: { nomeCompleto: true } } },
-    });
+  async enviarAprovacao(
+    propostaId: string,
+    canal: 'whatsapp' | 'email',
+    destino: string,
+    cooperativaId?: string | null,
+  ) {
+    // D-novo-BQ.3 A7 IDOR fix (30/05/2026) — posse via cooperado.
+    // cooperativaId null = SUPER_ADMIN bypass. Previne sequestro de tokenAprovacao.
+    const proposta = cooperativaId
+      ? await this.prisma.propostaCooperado.findFirst({
+          where: { id: propostaId, cooperado: { cooperativaId } },
+          include: { cooperado: { select: { nomeCompleto: true } } },
+        })
+      : await this.prisma.propostaCooperado.findUnique({
+          where: { id: propostaId },
+          include: { cooperado: { select: { nomeCompleto: true } } },
+        });
     if (!proposta) throw new NotFoundException('Proposta não encontrada');
 
     const token = randomUUID();

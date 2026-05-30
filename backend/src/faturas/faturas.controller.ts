@@ -101,9 +101,10 @@ export class FaturasController {
     @Req() req: any,
   ) {
     if (!body.cooperadoId) throw new BadRequestException('cooperadoId é obrigatório');
+    // D-novo-BQ.3 A1 — SUPER_ADMIN bypass com null; ADMIN/OPERADOR sempre o próprio tenant
     const cooperativaId = req.user?.perfil === PerfilUsuario.SUPER_ADMIN
-      ? req.user?.cooperativaId
-      : req.user?.cooperativaId;
+      ? null
+      : (req.user?.cooperativaId ?? null);
     return this.faturasService.vincularFaturaManual(id, body.cooperadoId, cooperativaId);
   }
 

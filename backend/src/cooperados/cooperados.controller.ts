@@ -423,14 +423,16 @@ export class CooperadosController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post(':id/fatura-mensal')
-  registrarFaturaMensal(@Param('id') id: string, @Body() dto: FaturaMensalDto) {
-    return this.cooperadosService.registrarFaturaMensal(id, dto);
+  registrarFaturaMensal(@Param('id') id: string, @Body() dto: FaturaMensalDto, @Req() req: any) {
+    // D-novo-BQ.3 A2 — cooperativaId do JWT (null = SUPER_ADMIN bypass)
+    return this.cooperadosService.registrarFaturaMensal(id, dto, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post(':id/alocar-usina')
-  alocarUsina(@Param('id') id: string, @Body() body: { usinaId: string }) {
-    return this.cooperadosService.alocarUsina(id, body.usinaId);
+  alocarUsina(@Param('id') id: string, @Body() body: { usinaId: string }, @Req() req: any) {
+    // D-novo-BQ.3 M1 — cooperativaId do JWT (null = SUPER_ADMIN bypass)
+    return this.cooperadosService.alocarUsina(id, body.usinaId, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)

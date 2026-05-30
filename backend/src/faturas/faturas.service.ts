@@ -2207,10 +2207,14 @@ IMPORTANTE:
 
   // ── Vincular manualmente fatura a cooperado (admin) ───────────────────────
 
-  async vincularFaturaManual(faturaId: string, cooperadoId: string, cooperativaId: string) {
-    const fatura = await this.prisma.faturaProcessada.findUnique({
-      where: { id: faturaId },
-    });
+  async vincularFaturaManual(faturaId: string, cooperadoId: string, cooperativaId: string | null) {
+    // D-novo-BQ.3 A1 IDOR fix (30/05/2026) — fatura precisa pertencer ao tenant.
+    // cooperativaId null = SUPER_ADMIN bypass (espelha aprovarFatura D-48-faturas).
+    const fatura = cooperativaId
+      ? await this.prisma.faturaProcessada.findFirst({
+          where: { id: faturaId, cooperativaId },
+        })
+      : await this.prisma.faturaProcessada.findUnique({ where: { id: faturaId } });
     if (!fatura) throw new BadRequestException('Fatura não encontrada');
 
     const cooperado = await this.prisma.cooperado.findFirst({

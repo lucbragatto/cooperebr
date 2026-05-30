@@ -129,16 +129,33 @@ export class IndicacoesService {
 
   // ─── Registrar Indicação ─────────────────────────────────────────────────────
 
-  async registrarIndicacao(cooperadoIndicadoId: string, codigoIndicador: string) {
+  async registrarIndicacao(
+    cooperadoIndicadoId: string,
+    codigoIndicador: string,
+    cooperativaIdJwt?: string | null,
+  ) {
+    // D-novo-BQ.4 M2 IDOR fix (30/05/2026) — quando vem do REST controller
+    // (perfil COOPERADO/ADMIN), cooperativaIdJwt é informado e ambos indicador
+    // e indicado devem pertencer a esse tenant. cooperativaIdJwt null = bypass
+    // (SUPER_ADMIN ou callers internos publico/bot que derivam do contexto).
+
     // Buscar indicador pelo código
-    const indicador = await this.prisma.cooperado.findUnique({
-      where: { codigoIndicacao: codigoIndicador },
-    });
+    const indicador = cooperativaIdJwt
+      ? await this.prisma.cooperado.findFirst({
+          where: { codigoIndicacao: codigoIndicador, cooperativaId: cooperativaIdJwt },
+        })
+      : await this.prisma.cooperado.findUnique({
+          where: { codigoIndicacao: codigoIndicador },
+        });
     if (!indicador) throw new NotFoundException('Código de indicação inválido');
 
-    const indicado = await this.prisma.cooperado.findUnique({
-      where: { id: cooperadoIndicadoId },
-    });
+    const indicado = cooperativaIdJwt
+      ? await this.prisma.cooperado.findFirst({
+          where: { id: cooperadoIndicadoId, cooperativaId: cooperativaIdJwt },
+        })
+      : await this.prisma.cooperado.findUnique({
+          where: { id: cooperadoIndicadoId },
+        });
     if (!indicado) throw new NotFoundException('Cooperado indicado não encontrado');
 
     if (indicador.id === cooperadoIndicadoId) {
@@ -151,7 +168,12 @@ export class IndicacoesService {
     });
     if (existente) throw new BadRequestException('Este membro já possui uma indicação registrada');
 
-    const cooperativaId = indicador.cooperativaId || indicado.cooperativaId;
+    // Defesa em profundidade: mesmo no caminho legacy (sem JWT), indicador e
+    // indicado precisam pertencer ao mesmo tenant.
+    if (indicador.cooperativaId !== indicado.cooperativaId) {
+      throw new BadRequestException('Indicador e indicado devem pertencer à mesma cooperativa');
+    }
+    const cooperativaId = indicador.cooperativaId;
     if (!cooperativaId) throw new BadRequestException('Cooperativa não encontrada');
 
     // Buscar config
@@ -249,15 +271,26 @@ export class IndicacoesService {
 
   // ─── Processar Primeira Fatura Paga ──────────────────────────────────────────
 
-  async processarPrimeiraFaturaPaga(cooperadoId: string, valorFatura: number) {
+  async processarPrimeiraFaturaPaga(
+    cooperadoId: string,
+    valorFatura: number,
+    cooperativaIdJwt?: string | null,
+  ) {
+    // D-novo-BQ.4 M3 IDOR fix (30/05/2026) — quando vem do REST controller,
+    // filtrar indicações pelo cooperativaId do JWT. Caller interno (OnEvent
+    // do payment confirmation) passa null e usa derivação do primeiro item.
     const indicacoes = await this.prisma.indicacao.findMany({
-      where: { cooperadoIndicadoId: cooperadoId, status: 'PENDENTE' },
+      where: {
+        cooperadoIndicadoId: cooperadoId,
+        status: 'PENDENTE',
+        ...(cooperativaIdJwt ? { cooperativaId: cooperativaIdJwt } : {}),
+      },
       include: { cooperadoIndicador: true },
     });
 
     if (indicacoes.length === 0) return [];
 
-    const cooperativaId = indicacoes[0].cooperativaId;
+    const cooperativaId = cooperativaIdJwt ?? indicacoes[0].cooperativaId;
     const config = await this.prisma.configIndicacao.findUnique({
       where: { cooperativaId },
     });

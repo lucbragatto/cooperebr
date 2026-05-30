@@ -1273,19 +1273,34 @@ export class CooperadosService {
   }
 
   /** Aloca cooperado APROVADO a uma usina, validando regra ANEEL (mesma distribuidora) e capacidade */
-  async alocarUsina(cooperadoId: string, usinaId: string) {
-    const cooperado = await this.prisma.cooperado.findUnique({
-      where: { id: cooperadoId },
-      include: {
-        ucs: { select: { id: true, numero: true, distribuidora: true } },
-        contratos: { where: { status: 'ATIVO' }, select: { id: true } },
-        faturasProcessadas: {
-          select: { mediaKwhCalculada: true },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
+  async alocarUsina(cooperadoId: string, usinaId: string, cooperativaId?: string | null) {
+    // D-novo-BQ.3 M1 IDOR fix (30/05/2026) — cooperado precisa pertencer ao tenant
+    // (vazava nome/UC/consumo cross-tenant). null = SUPER_ADMIN bypass.
+    const cooperado = cooperativaId
+      ? await this.prisma.cooperado.findFirst({
+          where: { id: cooperadoId, cooperativaId },
+          include: {
+            ucs: { select: { id: true, numero: true, distribuidora: true } },
+            contratos: { where: { status: 'ATIVO' }, select: { id: true } },
+            faturasProcessadas: {
+              select: { mediaKwhCalculada: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        })
+      : await this.prisma.cooperado.findUnique({
+          where: { id: cooperadoId },
+          include: {
+            ucs: { select: { id: true, numero: true, distribuidora: true } },
+            contratos: { where: { status: 'ATIVO' }, select: { id: true } },
+            faturasProcessadas: {
+              select: { mediaKwhCalculada: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
     if (cooperado.status !== 'APROVADO') {
       throw new BadRequestException('Cooperado precisa estar com status APROVADO para alocação');
@@ -1354,10 +1369,14 @@ export class CooperadosService {
   }
 
   /** Upload mensal de fatura — cooperado já existente */
-  async registrarFaturaMensal(cooperadoId: string, dto: FaturaMensalDto) {
-    const cooperado = await this.prisma.cooperado.findUnique({
-      where: { id: cooperadoId },
-    });
+  async registrarFaturaMensal(cooperadoId: string, dto: FaturaMensalDto, cooperativaId?: string | null) {
+    // D-novo-BQ.3 A2 IDOR fix (30/05/2026) — cooperado precisa pertencer ao tenant.
+    // cooperativaId null = SUPER_ADMIN bypass.
+    const cooperado = cooperativaId
+      ? await this.prisma.cooperado.findFirst({
+          where: { id: cooperadoId, cooperativaId },
+        })
+      : await this.prisma.cooperado.findUnique({ where: { id: cooperadoId } });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     const dados = dto.dadosOcr as any;

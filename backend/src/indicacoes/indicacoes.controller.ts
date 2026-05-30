@@ -101,15 +101,31 @@ export class IndicacoesController {
 
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN)
   @Post('registrar')
-  registrar(@Body() body: { cooperadoIndicadoId: string; codigoIndicador: string }) {
-    return this.service.registrarIndicacao(body.cooperadoIndicadoId, body.codigoIndicador);
+  registrar(
+    @Body() body: { cooperadoIndicadoId: string; codigoIndicador: string },
+    @Req() req: any,
+  ) {
+    // D-novo-BQ.4 M2 — cooperativaId do JWT (null = SUPER_ADMIN bypass)
+    return this.service.registrarIndicacao(
+      body.cooperadoIndicadoId,
+      body.codigoIndicador,
+      req.user?.cooperativaId ?? null,
+    );
   }
 
   // ─── Processar pagamento (chamado internamente) ──────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('processar-pagamento')
-  processarPagamento(@Body() body: { cooperadoId: string; valorFatura: number }) {
-    return this.service.processarPrimeiraFaturaPaga(body.cooperadoId, body.valorFatura);
+  processarPagamento(
+    @Body() body: { cooperadoId: string; valorFatura: number },
+    @Req() req: any,
+  ) {
+    // D-novo-BQ.4 M3 — cooperativaId do JWT (null = SUPER_ADMIN bypass)
+    return this.service.processarPrimeiraFaturaPaga(
+      body.cooperadoId,
+      body.valorFatura,
+      req.user?.cooperativaId ?? null,
+    );
   }
 }

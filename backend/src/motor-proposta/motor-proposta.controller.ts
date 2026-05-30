@@ -207,8 +207,10 @@ export class MotorPropostaController {
   enviarAprovacao(
     @Param('id') id: string,
     @Body() body: { canal: 'whatsapp' | 'email'; destino: string },
+    @Req() req: any,
   ) {
-    return this.service.enviarAprovacao(id, body.canal, body.destino);
+    // D-novo-BQ.3 A7 — cooperativaId do JWT (null = SUPER_ADMIN bypass)
+    return this.service.enviarAprovacao(id, body.canal, body.destino, req.user?.cooperativaId ?? null);
   }
 
   @Public()
@@ -277,9 +279,16 @@ export class MotorPropostaController {
     @UploadedFile() arquivo: Express.Multer.File,
     @Body('tipo') tipo: string,
     @Body('nome') nome: string,
-    @Body('cooperativaId') cooperativaId?: string,
+    @Body('cooperativaId') cooperativaIdBody: string | undefined,
+    @Req() req: any,
   ) {
-    return this.service.uploadModelo(arquivo, tipo, nome, cooperativaId);
+    // D-novo-BQ.3 A8 IDOR fix (30/05/2026) — body-injection (padrão C5/C6).
+    // ADMIN sempre JWT; SUPER_ADMIN pode body (criar modelo cross-tenant intencional).
+    const perfil = req.user?.perfil;
+    const cooperativaId = perfil === 'SUPER_ADMIN'
+      ? (cooperativaIdBody ?? req.user?.cooperativaId ?? null)
+      : (req.user?.cooperativaId ?? null);
+    return this.service.uploadModelo(arquivo, tipo, nome, cooperativaId ?? undefined);
   }
 
   @Roles(ADMIN, OPERADOR)
