@@ -225,8 +225,8 @@ export class MotorPropostaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('proposta/:id/aprovar-presencial')
-  aprovarPresencial(@Param('id') id: string) {
-    return this.service.aprovarPresencial(id);
+  aprovarPresencial(@Param('id') id: string, @Req() req: any) {
+    return this.service.aprovarPresencial(id, req.user?.cooperativaId ?? null);
   }
 
   // ── Análise de documentos (T3 PARTE 2) ───────────────────────────

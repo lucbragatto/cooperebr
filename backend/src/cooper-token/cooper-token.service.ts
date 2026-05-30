@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
@@ -1506,13 +1506,19 @@ export class CooperTokenService {
 
   // ── Confirmar compra de tokens (webhook ou manual) ──
 
-  async confirmarCompraParceiro(compraId: string) {
+  async confirmarCompraParceiro(compraId: string, cooperativaId?: string | null) {
     const compra = await this.prisma.cooperTokenCompra.findUnique({
       where: { id: compraId },
     });
 
     if (!compra) {
       throw new NotFoundException('Compra não encontrada');
+    }
+
+    // D-novo-BQ.2 A6 IDOR fix (30/05/2026) — impacto financeiro.
+    // cooperativaId null = SUPER_ADMIN bypass; ADMIN só confirma compra do próprio tenant.
+    if (cooperativaId && compra.cooperativaId !== cooperativaId) {
+      throw new ForbiddenException('Compra não pertence ao seu tenant');
     }
 
     if (compra.status !== 'AGUARDANDO_PAGAMENTO') {

@@ -427,7 +427,12 @@ export class CooperTokenController {
     if (!body.compraId) {
       throw new BadRequestException('compraId é obrigatório');
     }
-    return this.cooperTokenService.confirmarCompraParceiro(body.compraId);
+    // D-novo-BQ.2 A6 (30/05/2026) — passa cooperativaId do JWT
+    // (null = SUPER_ADMIN bypass; ADMIN só confirma compras do próprio tenant)
+    return this.cooperTokenService.confirmarCompraParceiro(
+      body.compraId,
+      req.user?.cooperativaId ?? null,
+    );
   }
 
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)

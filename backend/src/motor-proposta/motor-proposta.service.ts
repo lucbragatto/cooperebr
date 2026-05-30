@@ -1296,9 +1296,19 @@ export class MotorPropostaService {
     return { sucesso: true, propostaId: proposta.id, cooperadoId: proposta.cooperadoId, status: novoStatus };
   }
 
-  async aprovarPresencial(propostaId: string) {
-    const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
-    if (!proposta) throw new NotFoundException('Proposta não encontrada');
+  async aprovarPresencial(propostaId: string, cooperativaId?: string | null) {
+    // D-novo-BQ.2 C7 IDOR fix (30/05/2026) — verificar posse via cooperado.
+    // cooperativaId null = SUPER_ADMIN bypass (espelha analisarDocumentos).
+    if (cooperativaId) {
+      const owned = await this.prisma.propostaCooperado.findFirst({
+        where: { id: propostaId, cooperado: { cooperativaId } },
+        select: { id: true },
+      });
+      if (!owned) throw new NotFoundException('Proposta não encontrada');
+    } else {
+      const proposta = await this.prisma.propostaCooperado.findUnique({ where: { id: propostaId } });
+      if (!proposta) throw new NotFoundException('Proposta não encontrada');
+    }
 
     await this.prisma.propostaCooperado.update({
       where: { id: propostaId },

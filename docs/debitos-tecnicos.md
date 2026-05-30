@@ -3605,9 +3605,9 @@ Frontend (`web/`):
 
 | Fatia | Escopo | Status |
 |---|---|---|
-| BQ.1 | CRÍTICOS entidades núcleo — contratos.update (C1) + usinas.update/remove (C2/A3) + ucs.update/remove (C3/A4) + geracao-mensal.update/remove (C4/A5) | ✅ **IMPLEMENTADO 30/05/2026** |
-| BQ.2 | CRÍTICOS configuracao-cobranca body-injection (C5/C6) + cooper-token financeiro (A6) | 📋 Catalogado |
-| BQ.3 | motor-proposta (C7 + A7 + A8) + faturas (A1) + cooperados (A2 + M1) | 📋 Catalogado |
+| BQ.1 | CRÍTICOS entidades núcleo — contratos.update (C1) + usinas.update/remove (C2/A3) + ucs.update/remove (C3/A4) + geracao-mensal.update/remove (C4/A5) | ✅ **IMPLEMENTADO 30/05/2026** (commit 9aca267) |
+| BQ.2 | CRÍTICOS config-cobranca body-injection (C5/C6) + motor-proposta aprovar-presencial (C7) + cooper-token financeiro (A6) | ✅ **IMPLEMENTADO 30/05/2026** |
+| BQ.3 | motor-proposta (A7 + A8) + faturas (A1) + cooperados (A2 + M1) | 📋 Catalogado |
 | BQ.4 | indicacoes (M2 + M3) | 📋 Catalogado |
 | BQ.5 (futuro) | Ampliar auditoria pra ~50 services restantes (cobertura total) | 📋 Catalogado |
 
@@ -3617,13 +3617,23 @@ Frontend (`web/`):
 - `ucs.controller.ts` + `ucs.service.ts` — idem (Uc tem `cooperativaId` direto).
 - `geracao-mensal.controller.ts` + `geracao-mensal.service.ts` — helper privado `assertPosseOuFindOne(id, cooperativaId)` faz `findFirst({where:{id, usina:{cooperativaId}}})` (GeracaoMensal não tem `cooperativaId` direto — join via usina).
 
-**Specs:** 4 arquivos novos `*-idor-bq1.spec.ts` (contratos + usinas + ucs + geracao-mensal) com 21 cenários (3 contratos + 6 usinas + 6 ucs + 6 geracao): tenant B → NotFound, tenant A próprio → sucesso, SUPER_ADMIN null → bypass. Todos verdes.
+**Specs BQ.1:** 4 arquivos `*-idor-bq1.spec.ts` (21 cenários — 3 contratos + 6 usinas + 6 ucs + 6 geracao): tenant B → NotFound, tenant A próprio → sucesso, SUPER_ADMIN null → bypass. Verdes.
 
-**Smoke programático cross-tenant:** a aplicar (commit AN.4 padrão).
+**Smoke BQ.1:** `scripts/smoke-bq1-idor.ts` — 12/12 cross-tenant validados em runtime contra Postgres real.
+
+**BQ.2 implementação (30/05/2026):**
+- `configuracao-cobranca.controller.ts` — helper `resolverTenant(req, body)` substitui `body.cooperativaId ?? 'default'`. ADMIN ignora body (sempre JWT); SUPER_ADMIN pode usar body (cross-tenant intencional). `upsertUsina` adicionalmente verifica `usinaId` pertence ao tenant (Forbidden se não).
+- `motor-proposta.controller.ts` — `aprovarPresencial` passa `req.user?.cooperativaId ?? null`. `motor-proposta.service.ts.aprovarPresencial(id, cooperativaId?)` faz `findFirst({ where: { id, cooperado: { cooperativaId } } })` (espelha `analisarDocumentos`).
+- `cooper-token.controller.ts` — `confirmarCompra` passa `req.user?.cooperativaId ?? null`. `cooper-token.service.ts.confirmarCompraParceiro(compraId, cooperativaId?)` valida `compra.cooperativaId === cooperativaId` ANTES do `creditarSaldoParceiro` — ForbiddenException previne credit indevido + emit de evento contábil cross-tenant.
+
+**Specs BQ.2:** 3 arquivos `*-idor-bq2.spec.ts` (17 cenários — 8 config-cobranca + 3 motor-proposta + 6 cooper-token). Spec A6 valida explicitamente que `creditarSaldoParceiro` NÃO é chamado em cross-tenant + `eventEmitter.emit` NÃO dispara. Verdes.
+
+**Smoke BQ.2:** `scripts/smoke-bq2-idor.ts` — 12/12 cross-tenant validados. Asserção financeira: saldo de B 0→0 após ataque A; 0→1000 após SUPER_ADMIN legítimo.
 
 **Refs:**
 - Relatório: `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`
 - Padrão D-48 (referência): `contratos.service.ts.remove()` + `verificarListaEspera()` (`usinas.service.ts`)
+- Padrão BQ.2 C5/C6: `resolverTenant` helper (controller-level) — primeira ocorrência do padrão JWT-vs-body no projeto.
 
 ---
 
