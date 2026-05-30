@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-30 — Sprint D-novo-AN (RepasseProprietario) COMPLETO** (5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro). 5 fatias canônicas (AN.1 schema + service workflow / AN.2 endpoints REST + cron transação atômica / AN.3 telas admin + portal refator + sidebar + cards cruzados / AN.3.1 fix painel credenciais + trigger + investigação parceiro / AN.4 fix cards parceiro + backfill + notificação + PDF). **36/36 specs verdes** (21 service + 10 controller + 5 notificação) + 3 smokes programáticos. 4 RepasseProprietario PENDENTE no banco (1 trigger + 3 backfill). **D-novo-BM reparo funcional** inline AN.3.1 (TTL 1h→8h + interceptor allowlist). **D-novo-BP catalogado** (convergência `/parceiro` vs `/dashboard`, P3 sprint refator UX futuro). Sprint AN substitui+complementa BH.5 — workflow PENDENTE→PAGO/CANCELADO com transação atômica vinculando despesas DESCONTO_NO_REPASSE. Detalhe: `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
+> Última atualização: **2026-05-30 — Sprint Segurança IDOR (D-novo-BQ) COMPLETO** (5 commits `3e23f81..d17ac3f` em 1 sessão Code maratona). **18 IDORs corrigidos** (7 críticos + 8 altos + 3 médios) em 4 fatias atômicas (BQ.1+BQ.2+BQ.3+BQ.4). Padrão de fix mecânico (posse `findFirst` + SUPER_ADMIN bypass). Auditoria gerada por **Audit Dynamic Workflow** — primeiro uso no projeto (28 sub-agentes paralelos Opus 4.8, 4 min, 1.437.072 tokens, relatório `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`). **56 specs isolamento verdes** + **35 cenários runtime cross-tenant validados em 3 smokes programáticos**. Pré-requisito Sinergia (2º parceiro real) destravado nos módulos núcleo. Detalhe: `docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md`.
+
+> Histórico: **2026-05-30 — Sprint D-novo-AN (RepasseProprietario) COMPLETO** (5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro). 5 fatias canônicas (AN.1 schema + service workflow / AN.2 endpoints REST + cron transação atômica / AN.3 telas admin + portal refator + sidebar + cards cruzados / AN.3.1 fix painel credenciais + trigger + investigação parceiro / AN.4 fix cards parceiro + backfill + notificação + PDF). **36/36 specs verdes** (21 service + 10 controller + 5 notificação) + 3 smokes programáticos. 4 RepasseProprietario PENDENTE no banco (1 trigger + 3 backfill). **D-novo-BM reparo funcional** inline AN.3.1 (TTL 1h→8h + interceptor allowlist). **D-novo-BP catalogado** (convergência `/parceiro` vs `/dashboard`, P3 sprint refator UX futuro). Sprint AN substitui+complementa BH.5 — workflow PENDENTE→PAGO/CANCELADO com transação atômica vinculando despesas DESCONTO_NO_REPASSE. Detalhe: `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
 
 > Histórico: **2026-05-30 — Sprint D-novo-BH (Despesas Operacionais Camada 2) COMPLETO** (10 commits bb838ec..77eeb24 em 2 sessões 28-29/05 + 29-30/05, M37→M41 + 3 bugs/débitos bônus). 7 fatias canônicas (BH.1 workflow + BH.2 endpoints + BH.3 tela admin + BH.3.1 refator UX página própria + BH.3.2 double-check universal + BH.4 portal proprietário + flag + BH.5 cálculo líquido + cron aluguel) + **D-novo-BL ✅ RESOLVIDO inline** (Super Admin bypass) + **D-novo-BN ✅ RESOLVIDO** (ChunkLoadError Turbopack `03f49fc`) + **D-novo-BM ✅ IMPLEMENTADO P0 BLOQUEADOR REMOÇÃO PRÉ-PROD** (painel credenciais teste Opção B `1cdb9cb`). **55 specs Jest verdes** + 3 smokes programáticos **24/24 ✅** + build web Turbopack clean 4 ciclos. Substitui o fechamento parcial `c0542fc` de 29/05. Lição arquitetural catalogada (`D-novo-AS` complemento): `npm run build` web SEMPRE seguido de `pm2 restart frontend` IMEDIATO. Próximo bloco aprovado: **D-novo-AN RepasseProprietario tabela** (terreno preparado por BH.5 — campo `ContaAPagar.repasseAbatidoId` nullable pronto). Detalhe: `docs/sessoes/2026-05-30-sub-sprint-bh-despesas-camada-2-completo.md`.
 
@@ -1170,11 +1172,144 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh o de fechamento Sprint
-   D-novo-AN COMPLETO (substituiu frase BH antiga).
+   Segurança IDOR (D-novo-BQ) COMPLETO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
 
 PASSO 1 — Onde paramos + Próximo bloco:
+
+Sprint Segurança IDOR (D-novo-BQ) entregue 100% em 1 sessão Code
+maratona (30/05), 5 commits 3e23f81..[hash fechamento], 4 fatias
+atômicas + auditoria automatizada:
+
+AUDITORIA — Audit Dynamic Workflow (1º uso no projeto): 28 sub-agentes
+paralelos, Opus 4.8, 4 min, 1.437.072 tokens. Varreu 61 endpoints de
+mutação em 5 grupos núcleo. 18 IDORs confirmados (7 críticos + 8 altos
++ 3 médios). Relatório: docs/relatorios/2026-05-30-auditoria-idor-workflow.md.
+
+BQ.1 (9aca267) — 7 críticos entidades núcleo: contratos.update + usinas
+update/remove + ucs update/remove + geracao-mensal update/remove.
+Padrão findFirst({id, cooperativaId}) + SUPER_ADMIN bypass via findUnique.
+21 specs + smoke 12/12 cross-tenant runtime.
+
+BQ.2 (7185db2) — 3 críticos config + 1 financeiro: config-cobranca
+body-injection (helper resolverTenant ADMIN-JWT vs SUPER_ADMIN-body) +
+motor-proposta aprovar-presencial (posse via cooperado) +
+cooper-token confirmar-compra (guard ANTES de creditarSaldoParceiro
++ eventEmitter.emit). 17 specs (A6 valida saldo NÃO creditado +
+evento NÃO disparado) + smoke 12/12 (saldo B 0→0 ataque; 0→1000 SA).
+
+BQ.3 (d17ac3f) — 4 altos + 1 médio: faturas.vincularFaturaManual +
+cooperados.registrarFaturaMensal + cooperados.alocarUsina +
+motor-proposta.enviarAprovacao + motor-proposta.uploadModelo (body→JWT).
+
+BQ.4 (d17ac3f) — 2 médios indicações: registrarIndicacao (posse
+indicador+indicado, defesa em profundidade BadRequest se cross-tenant)
++ processarPrimeiraFaturaPaga (findMany filtra cooperativaIdJwt).
+
+BQ.3+BQ.4: 18 specs + smoke 11/11 (A1: cooperadoId/ucId fatura B
+intactos; A7: tokenAprovacao NÃO sequestrado; M3: indicação B continua
+PENDENTE).
+
+VALIDAÇÃO SPRINT COMPLETO:
+- 56 specs isolamento verdes (21 BQ.1 + 17 BQ.2 + 18 BQ.3+BQ.4).
+- 35 cenários runtime cross-tenant validados em 3 smokes programáticos
+  (12+12+11) com cleanup automático.
+- 13 services + 8 controllers modificados.
+- Backwards-compat 100% preservada (specs antigos verdes via condicional).
+- Build limpo + pm2 backend online estável.
+
+PADRÕES CONSOLIDADOS:
+1. Posse: findFirst({id, cooperativaId}) + SUPER_ADMIN null→findUnique
+2. body→JWT: helper resolverTenant (ADMIN sempre JWT, SA pode body)
+3. Posse financeira: guard ANTES de side-effect (cooperToken A6)
+4. Derivação removida: cooperativaIdJwt authoritative; defesa em
+   profundidade rejeita inconsistências mesmo no caminho legacy
+
+DÉBITOS:
+- D-novo-BQ: BQ.1-BQ.4 ✅ IMPLEMENTADO
+- BQ.5 📋 ABERTO — ampliar auditoria pros ~50 services restantes
+  (Audit Dynamic Workflow reaproveitável; pré-req desejável antes de
+  onboarding Sinergia em escala)
+
+PRÓXIMO BLOCO — LUCIANO ESCOLHE (4 opções):
+
+(1) BQ.5 — Ampliar auditoria IDOR pros ~50 services restantes
+   (Workflow Opus 4.8 reaproveitável; ~1 sessão maratona similar)
+   Resolve isolamento total. Recomendado antes de Sinergia em escala.
+
+(2) F.4 — Smoke E2E pós-IDOR (~1-2h) — rodar 10 fluxos críticos
+   pra garantir caminho feliz após os 21 patches (cobranças,
+   ativações, vincular fatura, alocar usina, aprovar proposta).
+
+(3) Sprint Contabilidade Tributária Segregada (#8 roadmap, ~40-60h)
+   Lê despesas BH + repasses AN como base contábil segregada
+   (Lei 5.764/71 Art. 79 + STF Tema 536).
+
+(4) Convergência portal /parceiro vs /dashboard (D-novo-BP P3,
+   ~20-30h sprint refator UX). 30 páginas em /parceiro vs evolução
+   funcional em /dashboard.
+
+REGRA INEGOCIÁVEL: antes de propor qualquer bloco aprovado, aplicar
+Fase 1 read-only mini (~10-15min) — feedback_fase1_readonly_obrigatoria
+catalogado. Não tocar código antes de OK Luciano explícito.
+
+CONSTRAINTS FUNDAMENTAIS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Padrão fix IDOR (novo padrão de referência): posse via findFirst +
+  SUPER_ADMIN bypass; aplicar em qualquer endpoint novo de mutação.
+- Padrão UX Dual 17/05: novas telas/CRUD seguem Tipo B (página própria).
+- D-novo-AS complemento (lição BN): build web → pm2 restart frontend.
+- Multi-tenant: TODA query Prisma filtra por cooperativaId.
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV).
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com.
+- Decisão 24: frase de retomada local único (este arquivo + doc-sessão).
+- Regra Code não-paralelo: claude.ai aguarda Code reportar.
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md
+4. docs/debitos-tecnicos.md (D-novo-BQ BQ.1-BQ.4 ✅; BQ.5 aberto)
+5. docs/relatorios/2026-05-30-auditoria-idor-workflow.md (se BQ.5)
+6. docs/MAPA-INTEGRIDADE-SISTEMA.md
+7. CLAUDE.md + .claude/CLAUDE.md
+8. git log --oneline -15
+
+CARRY-OVERS (nao-bloqueantes, mantidos):
+- usinas.controller.spec.ts falha pré-existente (TestingModule deps,
+  não relacionada ao IDOR — confirmada via git stash antes do BQ.1)
+- 6 erros TS pré-existentes em scripts/ (excluídos do build)
+- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — reparo AN.3.1 não altera)
+- D-novo-BP (P3 convergência portal — sprint refator UX futuro)
+- D-novo-BJ (P2 LGPD URL assinada comprovantes)
+- D-novo-BK (P3 storage S3/Supabase)
+- D-novo-BG (P3 anomalia GD Linhares)
+- D-novo-BC (P2 paridade campos edição usina)
+- D-novo-BA/AZ classe GD restantes
+- D-novo-AS.2 (P2 hook PostToolUse build → pm2 restart)
+- 30+ scripts utilitários untracked em backend/scripts/
+
+FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+
+DOC-SESSAO SPRINT IDOR COMPLETO: docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md
+```
+
+---
+
+### Frase Sprint AN (anterior, arquivada)
+
+```
+[FRASE DO SPRINT D-novo-AN — substituída acima pelo Sprint Segurança IDOR 30/05]
 
 Sprint D-novo-AN (RepasseProprietario) entregue 100% em 1 sessão Code
 dia inteiro (30/05), 5 commits 37f7af0..2f6fb29, 5 fatias canônicas +

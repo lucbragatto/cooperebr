@@ -3606,10 +3606,10 @@ Frontend (`web/`):
 | Fatia | Escopo | Status |
 |---|---|---|
 | BQ.1 | CRÍTICOS entidades núcleo — contratos.update (C1) + usinas.update/remove (C2/A3) + ucs.update/remove (C3/A4) + geracao-mensal.update/remove (C4/A5) | ✅ **IMPLEMENTADO 30/05/2026** (commit 9aca267) |
-| BQ.2 | CRÍTICOS config-cobranca body-injection (C5/C6) + motor-proposta aprovar-presencial (C7) + cooper-token financeiro (A6) | ✅ **IMPLEMENTADO 30/05/2026** |
-| BQ.3 | motor-proposta (A7 + A8) + faturas (A1) + cooperados (A2 + M1) | 📋 Catalogado |
-| BQ.4 | indicacoes (M2 + M3) | 📋 Catalogado |
-| BQ.5 (futuro) | Ampliar auditoria pra ~50 services restantes (cobertura total) | 📋 Catalogado |
+| BQ.2 | CRÍTICOS config-cobranca body-injection (C5/C6) + motor-proposta aprovar-presencial (C7) + cooper-token financeiro (A6) | ✅ **IMPLEMENTADO 30/05/2026** (commit 7185db2) |
+| BQ.3 | motor-proposta (A7 + A8) + faturas (A1) + cooperados (A2 + M1) | ✅ **IMPLEMENTADO 30/05/2026** (commit d17ac3f) |
+| BQ.4 | indicacoes (M2 + M3) | ✅ **IMPLEMENTADO 30/05/2026** (commit d17ac3f) |
+| BQ.5 (futuro) | Ampliar auditoria pra ~50 services restantes (cobertura total) | 📋 **ABERTO** — pré-req desejável antes de onboarding Sinergia em escala |
 
 **BQ.1 implementação (commit a definir):**
 - `contratos.service.ts.update()` — verificação posse no início (espelha `remove()` D-48). Callers `solicitacoes-contrato.service.ts` JÁ passavam `cooperativaId ?? null`, sem mudança.
@@ -3629,6 +3629,24 @@ Frontend (`web/`):
 **Specs BQ.2:** 3 arquivos `*-idor-bq2.spec.ts` (17 cenários — 8 config-cobranca + 3 motor-proposta + 6 cooper-token). Spec A6 valida explicitamente que `creditarSaldoParceiro` NÃO é chamado em cross-tenant + `eventEmitter.emit` NÃO dispara. Verdes.
 
 **Smoke BQ.2:** `scripts/smoke-bq2-idor.ts` — 12/12 cross-tenant validados. Asserção financeira: saldo de B 0→0 após ataque A; 0→1000 após SUPER_ADMIN legítimo.
+
+**BQ.3 implementação (30/05/2026 — commit d17ac3f):**
+- `faturas.service.ts.vincularFaturaManual(id, coopId, cooperativaId)` — `findFirst({id, cooperativaId})`; controller passa null pra SUPER_ADMIN bypass via findUnique.
+- `cooperados.service.ts.registrarFaturaMensal(id, dto, cooperativaId?)` + controller passa `req.user?.cooperativaId ?? null`.
+- `cooperados.service.ts.alocarUsina(id, usinaId, cooperativaId?)` — posse cooperado (vazava nome/UC/consumo cross-tenant).
+- `motor-proposta.service.ts.enviarAprovacao(id, canal, destino, cooperativaId?)` — `findFirst({ id, cooperado: { cooperativaId } })`; previne sequestro de tokenAprovacao.
+- `motor-proposta.controller.ts.uploadModelo` — body→JWT (padrão C5/C6): ADMIN sempre JWT, SUPER_ADMIN pode body.
+
+**BQ.4 implementação (30/05/2026 — commit d17ac3f):**
+- `indicacoes.service.ts.registrarIndicacao(idado, codigo, cooperativaIdJwt?)` — indicador + indicado filtrados por cooperativaIdJwt quando informado. Callers legacy (publico/bot) passam null. Defesa em profundidade: `BadRequest` se `indicador.cooperativaId !== indicado.cooperativaId` mesmo no path legacy.
+- `indicacoes.service.ts.processarPrimeiraFaturaPaga(coopId, valor, cooperativaIdJwt?)` — `findMany` agora aplica `cooperativaId` quando JWT informado; OnEvent caller interno mantém null (legacy preservado).
+
+**Specs BQ.3+BQ.4:** 5 arquivos (18 cenários) — `faturas-idor-bq3.spec.ts` (3) + `cooperados-idor-bq3.spec.ts` (4) + `motor-proposta-idor-bq3.spec.ts` (3) + `motor-proposta-controller-idor-bq3.spec.ts` (3) + `indicacoes-idor-bq4.spec.ts` (5). Verdes.
+
+**Smoke BQ.3+BQ.4:** `scripts/smoke-bq3-bq4-idor.ts` — 11/11 cross-tenant validados. A1: cooperadoId/ucId da fatura B intactos; A7: tokenAprovacao da proposta B NÃO sequestrado; M3: indicação B continua PENDENTE.
+
+**Total IDOR specs sprint:** 56 verdes (21 BQ.1 + 17 BQ.2 + 18 BQ.3+BQ.4).
+**Total runtime cross-tenant validados:** 35 cenários em 3 smokes programáticos.
 
 **Refs:**
 - Relatório: `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`

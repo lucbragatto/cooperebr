@@ -9,7 +9,7 @@
 
 | Indicador | Antes | Depois | Evidência |
 |---|---|---|---|
-| Segurança multi-tenant | 🔴 | 🟢 | D-48 fechado, 35 endpoints com IDOR fix (Fase 2A-2E + bonus 2I) |
+| Segurança multi-tenant | 🔴 | 🟢 | **Sprint Segurança IDOR (D-novo-BQ) COMPLETO 30/05** — Audit Dynamic Workflow (28 sub-agentes, Opus 4.8, 4min) varreu 61 endpoints núcleo e revelou 18 IDORs (7 críticos + 8 altos + 3 médios). Todos os 18 corrigidos em 4 fatias atômicas (BQ.1+BQ.2+BQ.3+BQ.4, commits `3e23f81..d17ac3f`). 56 specs isolamento verdes + 35 cenários runtime cross-tenant validados em 3 smokes programáticos. Padrão: posse `findFirst({id, cooperativaId})` + SUPER_ADMIN bypass (`null` → `findUnique`). Padrão body→JWT em config-cobranca e motor-proposta upload-modelo. Posse financeira ANTES de side-effect em cooper-token. BQ.5 (ampliar auditoria pros ~50 services restantes) catalogado aberto. Anterior: D-48 + Fase 2A-2E + bonus 2I (35 endpoints). |
 | Auditoria | 🔴 | 🟢 | D-30N fechado, AuditLog interceptor global ativo, 18 endpoints decorados + 7 rotas envio-lista (Bug #4 M11) |
 | Hardening HTTP | 🔴 | 🟢 | D-50 fechado, Helmet + HSTS + CSP ativos (6 headers confirmados) |
 | Pipeline Asaas E2E | 🟡 | 🟢 | Sub-canário CAROLINA validou round-trip webhook→email (5s latência) |
