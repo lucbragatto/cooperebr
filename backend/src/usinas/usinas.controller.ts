@@ -78,13 +78,13 @@ export class UsinasController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: UpdateUsinaDto) {
-    return this.usinasService.update(id, body as any);
+  update(@Param('id') id: string, @Body() body: UpdateUsinaDto, @Req() req: any) {
+    return this.usinasService.update(id, body as any, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usinasService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.usinasService.remove(id, req.user?.cooperativaId ?? null);
   }
 }

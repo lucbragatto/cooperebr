@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { GeracaoMensalService } from './geracao-mensal.service';
 import { CreateGeracaoMensalDto } from './dto/create-geracao-mensal.dto';
 import { UpdateGeracaoMensalDto } from './dto/update-geracao-mensal.dto';
@@ -31,13 +31,13 @@ export class GeracaoMensalController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateGeracaoMensalDto) {
-    return this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateGeracaoMensalDto, @Req() req: any) {
+    return this.service.update(id, dto, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.service.remove(id, req.user?.cooperativaId ?? null);
   }
 }

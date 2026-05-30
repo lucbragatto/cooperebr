@@ -205,8 +205,12 @@ export class UsinasService {
     // F.7b (M36, 28/05/2026) — campos restantes pra paridade UsinaForm
     distribuidora: string | null;
     politicaBandeira: 'APLICAR' | 'NAO_APLICAR' | 'DECIDIR_MENSAL' | null;
-  }>) {
-    const usina = await this.prisma.usina.findUnique({ where: { id } });
+  }>, cooperativaId?: string | null) {
+    // D-novo-BQ.1 C2 IDOR fix (30/05/2026) — verificação posse antes do update.
+    // cooperativaId null = SUPER_ADMIN bypass (igual verificarListaEspera).
+    const usina = cooperativaId
+      ? await this.prisma.usina.findFirst({ where: { id, cooperativaId } })
+      : await this.prisma.usina.findUnique({ where: { id } });
     if (!usina) throw new NotFoundException('Usina não encontrada');
 
     // Sanitizar: aceitar somente campos válidos
@@ -315,7 +319,16 @@ export class UsinasService {
     return this.prisma.usina.update({ where: { id }, data: updateData });
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string | null) {
+    // D-novo-BQ.1 A3 IDOR fix (30/05/2026) — verificação posse antes do delete.
+    if (cooperativaId) {
+      const usina = await this.prisma.usina.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!usina) throw new NotFoundException('Usina não encontrada');
+    }
+
     const contratos = await this.prisma.contrato.count({
       where: { usinaId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO'] } },
     });

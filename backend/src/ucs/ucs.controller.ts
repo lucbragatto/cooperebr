@@ -54,13 +54,13 @@ export class UcsController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.ucsService.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.ucsService.update(id, body, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.ucsService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.ucsService.remove(id, req.user?.cooperativaId ?? null);
   }
 }

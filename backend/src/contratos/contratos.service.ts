@@ -349,6 +349,16 @@ export class ContratosService {
     }>,
     cooperativaId?: string | null,
   ) {
+    // D-novo-BQ.1 C1 IDOR fix (30/05/2026) — verificação posse antes do update.
+    // cooperativaId null = SUPER_ADMIN bypass (igual remove() D-48).
+    if (cooperativaId) {
+      const ct = await this.prisma.contrato.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!ct) throw new NotFoundException(`Contrato com id ${id} não encontrado`);
+    }
+
     if (data.modeloCobrancaOverride !== undefined) {
       const modelos = ['FIXO_MENSAL', 'CREDITOS_COMPENSADOS', 'CREDITOS_DINAMICO'];
       if (data.modeloCobrancaOverride !== null && !modelos.includes(data.modeloCobrancaOverride)) {

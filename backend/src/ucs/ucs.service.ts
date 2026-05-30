@@ -182,7 +182,17 @@ export class UcsService {
     });
   }
 
-  async update(id: string, data: UpdateUcInput) {
+  async update(id: string, data: UpdateUcInput, cooperativaId?: string | null) {
+    // D-novo-BQ.1 C3 IDOR fix (30/05/2026) — verificação posse antes do update.
+    // Uc tem cooperativaId direto (schema linha 332). cooperativaId null = SUPER_ADMIN.
+    if (cooperativaId) {
+      const uc = await this.prisma.uc.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!uc) throw new NotFoundException('UC não encontrada');
+    }
+
     const patch: Record<string, unknown> = {};
     if (data.numero !== undefined) patch.numero = normalizarNumeroCanonico(data.numero);
     if (data.numeroUC !== undefined) {
@@ -203,7 +213,16 @@ export class UcsService {
     return this.prisma.uc.update({ where: { id }, data: patch });
   }
 
-  async remove(id: string) {
+  async remove(id: string, cooperativaId?: string | null) {
+    // D-novo-BQ.1 A4 IDOR fix (30/05/2026) — verificação posse antes do delete.
+    if (cooperativaId) {
+      const uc = await this.prisma.uc.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!uc) throw new NotFoundException('UC não encontrada');
+    }
+
     const contratos = await this.prisma.contrato.count({
       where: { ucId: id, status: { in: ['ATIVO', 'PENDENTE_ATIVACAO', 'LISTA_ESPERA'] } },
     });
