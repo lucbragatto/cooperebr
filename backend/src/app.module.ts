@@ -26,6 +26,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { PrestadoresModule } from './prestadores/prestadores.module';
 import { MonitoramentoUsinasModule } from './monitoramento-usinas/monitoramento-usinas.module';
 import { FinanceiroModule } from './financeiro/financeiro.module';
+import { ContabilidadeTributariaModule } from './contabilidade-tributaria/contabilidade-tributaria.module';
 import { IntegracaoBancariaModule } from './integracao-bancaria/integracao-bancaria.module';
 import { CooperativasModule } from './cooperativas/cooperativas.module';
 import { AsaasModule } from './asaas/asaas.module';
@@ -89,6 +90,7 @@ import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietar
     PrestadoresModule,
     MonitoramentoUsinasModule,
     FinanceiroModule,
+    ContabilidadeTributariaModule,
     IntegracaoBancariaModule,
     CooperativasModule,
     AsaasModule,
