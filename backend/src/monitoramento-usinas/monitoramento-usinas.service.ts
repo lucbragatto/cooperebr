@@ -3,7 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { SungrowService } from './sungrow.service';
 import { OcorrenciasService } from '../ocorrencias/ocorrencias.service';
-import { CredentialsEncryptor } from '../gateways-pagamento-config/credentials-encryptor.service';
+import { CredentialsEncryptor } from '../gateways-pagamento-config/credentials-encryptor.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class MonitoramentoUsinasService {
@@ -49,6 +50,8 @@ export class MonitoramentoUsinasService {
   // Sprint 6 Ticket 11 desativou — agora reativa, com guard "0 configs
   // habilitadas pula cedo" pra nao poluir logs em ambientes sem credenciais.
   @Cron('*/30 * * * *')
+
+  @AsPlatform()
   async handleCron() {
     const configs = await this.prisma.usinaMonitoramentoConfig.findMany({
       where: { habilitado: true },

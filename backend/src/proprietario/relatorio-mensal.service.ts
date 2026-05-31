@@ -9,6 +9,7 @@ import {
   TarifaResolver,
 } from '../usinas/helpers/calcular-repasse';
 import { calcularRepasseLiquido } from '../usinas/helpers/calcular-repasse-liquido';
+import { AsPlatform } from '../common/tenant-context';
 
 /**
  * Sub-Sprint F Etapa F (M30, 2026-05-26).
@@ -61,6 +62,7 @@ export class RelatorioMensalService {
    * politica anti-spam.
    */
   @Cron('0 7 5 * *')
+  @AsPlatform()
   async cronGerarRelatoriosMensais() {
     const usinas = await this.prisma.usina.findMany({
       where: { proprietarioEmail: { not: null } },

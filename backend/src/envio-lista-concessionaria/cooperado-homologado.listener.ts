@@ -7,6 +7,7 @@ import { isAmbienteReal } from '../common/safety/ambiente';
 import { ehEmailFake, ehTelefoneFake } from '../common/safety/whitelist-teste';
 import { ENVIO_LISTA_EVENTS } from './envio-lista-concessionaria.events';
 import type { CooperadoHomologadoEvent } from './envio-lista-concessionaria.events';
+import { AsPlatform } from '../common/tenant-context';
 
 /**
  * Sub-Fase 1 Fase 4 (M12, 18/05/2026) — Listas Concessionária.
@@ -49,6 +50,8 @@ export class CooperadoHomologadoListener {
   ) {}
 
   @OnEvent(ENVIO_LISTA_EVENTS.COOPERADO_HOMOLOGADO)
+
+  @AsPlatform()
   async handleCooperadoHomologado(event: CooperadoHomologadoEvent): Promise<void> {
     // Só notifica quando o trigger efetivamente ativou o contrato.
     // Reenvios em contrato já ATIVO não disparam comunicação duplicada.

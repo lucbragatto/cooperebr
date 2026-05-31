@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { ConviteIndicacaoService } from './convite-indicacao.service';
-import { StatusConvite } from '@prisma/client';
+import { StatusConvite } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class ConviteIndicacaoJob {
@@ -18,6 +19,8 @@ export class ConviteIndicacaoJob {
    * com ultimoEnvioEm < 3 dias atras e tentativasEnvio < 3
    */
   @Cron('0 10 * * *')
+
+  @AsPlatform()
   async cronLembreteConvites() {
     this.logger.log('Iniciando lembretes de convites pendentes...');
 
@@ -61,6 +64,8 @@ export class ConviteIndicacaoJob {
    * e ultimoEnvioEm < 7 dias atras, ou de cooperados inativos
    */
   @Cron('0 3 * * *')
+
+  @AsPlatform()
   async cronExpirarConvites() {
     this.logger.log('Iniciando expiracao de convites...');
 

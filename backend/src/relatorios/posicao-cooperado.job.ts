@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PosicaoCooperadoService } from './posicao-cooperado.service';
+import { PosicaoCooperadoService } from './posicao-cooperado.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class PosicaoCooperadoJob {
@@ -9,6 +10,9 @@ export class PosicaoCooperadoJob {
   constructor(private posicaoCooperadoService: PosicaoCooperadoService) {}
 
   @Cron('0 7 * * *')
+
+
+  @AsPlatform()
   async refreshDiario() {
     try {
       await this.posicaoCooperadoService.refreshView();

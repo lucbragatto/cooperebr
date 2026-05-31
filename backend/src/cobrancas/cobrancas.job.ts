@@ -3,7 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { EmailService } from '../email/email.service';
-import { CalculoMultaJurosService } from './calculo-multa-juros.service';
+import { CalculoMultaJurosService } from './calculo-multa-juros.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class CobrancasJob {
@@ -21,6 +22,8 @@ export class CobrancasJob {
    * Marca lembreteD3EnviadoEm / lembreteD1EnviadoEm para não repetir.
    */
   @Cron('0 8 * * *')
+
+  @AsPlatform()
   async lembretesPreVencimento() {
     if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
 
@@ -121,6 +124,9 @@ export class CobrancasJob {
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
+
+
+  @AsPlatform()
   async marcarVencidas() {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -143,6 +149,8 @@ export class CobrancasJob {
    * a configuração financeira da cooperativa (diasCarencia, multaAtraso, jurosDiarios).
    */
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
+
+  @AsPlatform()
   async calcularMultaJuros() {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
@@ -203,6 +211,8 @@ export class CobrancasJob {
    * Só notifica uma vez por cobrança (flag notificadoVencimento).
    */
   @Cron('15 6 * * *')
+
+  @AsPlatform()
   async notificarCobrancasVencidas() {
     const ontem = new Date();
     ontem.setDate(ontem.getDate() - 1);

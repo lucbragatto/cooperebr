@@ -10,6 +10,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { AlocacaoService } from './alocacao.service';
+import { AsPlatform } from '../common/tenant-context';
 
 const THRESHOLD_ECONOMIA_PROXY = 100; // valor proxy mínimo pra notificar (sprint 5a Neutro vai trocar por R$ real)
 
@@ -24,6 +25,7 @@ export class AlocacaoJob {
 
   /// Dia 5 de cada mês às 03:00 (TZ servidor — em produção BRT). Decisão C.3 aprovada 18/05.
   @Cron('0 3 5 * *')
+  @AsPlatform()
   async cronMensalAlocacao() {
     this.logger.log('[alocacao-cron] Iniciando recálculo mensal de alocação otima.');
     await this.executarCiclo({ origem: 'cron-mensal' });

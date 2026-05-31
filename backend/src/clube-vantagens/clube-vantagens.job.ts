@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
-import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
+import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class ClubeVantagensJob {
@@ -13,6 +14,9 @@ export class ClubeVantagensJob {
   ) {}
 
   @Cron('0 9 1 * *') // Dia 1 de cada mês às 9h
+
+
+  @AsPlatform()
   async enviarResumosMensais() {
     // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano antes de executar
     if (process.env.CLUBE_RESUMO_MENSAL_HABILITADO !== 'true') {

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../prisma.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class SaasService {
@@ -128,6 +129,8 @@ export class SaasService {
    * com plano ativo. Ticket 10 Sprint 6: primeira receita da plataforma.
    */
   @Cron('0 6 1 * *')
+
+  @AsPlatform()
   async cronGerarFaturasMensal() {
     this.logger.log('Cron FaturaSaas: iniciando geração mensal...');
     try {

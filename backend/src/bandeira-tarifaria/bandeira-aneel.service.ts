@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../prisma.service';import { AsPlatform } from '../common/tenant-context';
+
 
 const CSV_ACIONAMENTO =
   'https://dadosabertos.aneel.gov.br/dataset/7f43a020-6dc5-44b8-80b4-d97eaa94436c/resource/0591b8f6-fe54-437b-b72b-1aa2efd46e42/download/bandeira-tarifaria-acionamento.csv';
@@ -124,6 +125,8 @@ export class BandeiraAneelService {
    * Roda no dia 1 de cada mês às 6h.
    */
   @Cron('0 6 1 * *')
+
+  @AsPlatform()
   async sincronizarAutomatico() {
     this.logger.log('Sincronização automática de bandeira ANEEL iniciada');
 

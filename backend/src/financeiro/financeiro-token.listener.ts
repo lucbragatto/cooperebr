@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { TokenContabilService } from './token-contabil.service';
+import { TokenContabilService } from './token-contabil.service';import { AsPlatform } from '../common/tenant-context';
+
 import {
   COOPER_TOKEN_EVENTS,
   CooperTokenEmitidoEvent,
@@ -16,6 +17,9 @@ export class FinanceiroTokenListener {
   constructor(private tokenContabil: TokenContabilService) {}
 
   @OnEvent(COOPER_TOKEN_EVENTS.EMITIDO)
+
+
+  @AsPlatform()
   async handleEmitido(event: CooperTokenEmitidoEvent): Promise<void> {
     try {
       await this.tokenContabil.lancarEmissaoFaturaCheia({
@@ -31,6 +35,9 @@ export class FinanceiroTokenListener {
   }
 
   @OnEvent(COOPER_TOKEN_EVENTS.RESGATADO)
+
+
+  @AsPlatform()
   async handleResgatado(event: CooperTokenResgatadoEvent): Promise<void> {
     try {
       await this.tokenContabil.lancarResgateFatura({
@@ -46,6 +53,9 @@ export class FinanceiroTokenListener {
   }
 
   @OnEvent(COOPER_TOKEN_EVENTS.EXPIRADO)
+
+
+  @AsPlatform()
   async handleExpirado(event: CooperTokenExpiradoEvent): Promise<void> {
     try {
       await this.tokenContabil.lancarExpiracao({
@@ -60,6 +70,9 @@ export class FinanceiroTokenListener {
   }
 
   @OnEvent(COOPER_TOKEN_EVENTS.COMPRA_PARCEIRO_PAGO)
+
+
+  @AsPlatform()
   async handleCompraParceiroPago(event: CooperTokenCompraParceiroPagoEvent): Promise<void> {
     try {
       await this.tokenContabil.lancarCompraParceiroPago({

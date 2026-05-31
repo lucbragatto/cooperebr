@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ImapFlow } from 'imapflow';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../prisma.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class EmailRecebimentoService {
@@ -24,6 +25,9 @@ export class EmailRecebimentoService {
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
+
+
+  @AsPlatform()
   async verificarEmailsRecebidos() {
     if (!process.env.IMAP_USER) {
       return;

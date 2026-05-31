@@ -8,7 +8,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
-import { NotificacoesProativasService } from './notificacoes-proativas.service';
+import { NotificacoesProativasService } from './notificacoes-proativas.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class NotificacoesProativasJob {
@@ -21,6 +22,8 @@ export class NotificacoesProativasJob {
 
   // ─── CRON A: lembrete cooperado (10:00 diário) ───────────────────
   @Cron('0 10 * * *')
+
+  @AsPlatform()
   async cronALembreteCooperado() {
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: { ativo: true },
@@ -48,6 +51,8 @@ export class NotificacoesProativasJob {
 
   // ─── CRON B: alerta admin (08:00 diário) ─────────────────────────
   @Cron('0 8 * * *')
+
+  @AsPlatform()
   async cronBAlertaAdmin() {
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: { ativo: true },
@@ -73,6 +78,8 @@ export class NotificacoesProativasJob {
 
   // ─── CRON C: lembrete email EDP (11:00 diário) ──────────────────
   @Cron('0 11 * * *')
+
+  @AsPlatform()
   async cronCLembreteEmailEdp() {
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: { ativo: true },

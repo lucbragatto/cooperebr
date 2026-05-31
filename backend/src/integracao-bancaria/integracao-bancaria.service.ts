@@ -3,7 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { BbService } from './bb.service';
 import { SicoobService } from './sicoob.service';
-import { CobrancasService } from '../cobrancas/cobrancas.service';
+import { CobrancasService } from '../cobrancas/cobrancas.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class IntegracaoBancariaService {
@@ -351,6 +352,9 @@ export class IntegracaoBancariaService {
   // ── Polling diário ────────────────────────────────────────
 
   @Cron('5 6 * * *')
+
+
+  @AsPlatform()
   async pollingLiquidadas() {
     this.logger.log('Iniciando polling de cobranças liquidadas...');
 

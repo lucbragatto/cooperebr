@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
+import { AsPlatform } from '../common/tenant-context';
 
 @Injectable()
 export class WhatsappConversaJob {
@@ -22,6 +23,7 @@ export class WhatsappConversaJob {
    * previne regressao futura (ex: alguem renomeando estado pra AGUARDANDO_*).
    */
   @Cron(CronExpression.EVERY_HOUR)
+  @AsPlatform()
   async resetarConversasInativas() {
     const limite = new Date();
     limite.setHours(limite.getHours() - 24);
@@ -62,6 +64,7 @@ export class WhatsappConversaJob {
    * carrega as camadas de protecao de ambiente (isAmbienteReal etc).
    */
   @Cron(CronExpression.EVERY_HOUR)
+  @AsPlatform()
   async processarRetornosAgendados() {
     const agora = new Date();
     const hora = agora.getHours();

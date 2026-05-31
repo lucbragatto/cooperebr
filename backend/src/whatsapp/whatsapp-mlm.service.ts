@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
-import { WhatsappBotService } from './whatsapp-bot.service';
+import { WhatsappBotService } from './whatsapp-bot.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class WhatsappMlmService {
@@ -18,6 +19,8 @@ export class WhatsappMlmService {
    * Envia convites de indicação no dia 1 de cada mês às 10h.
    */
   @Cron('0 10 1 * *', { timeZone: 'America/Sao_Paulo' })
+
+  @AsPlatform()
   async cronEnviarConvites() {
     // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
     if (process.env.WA_MLM_CONVITES_HABILITADO !== 'true') {

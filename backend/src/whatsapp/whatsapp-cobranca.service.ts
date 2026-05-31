@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.service';
-import { WhatsappSenderService } from './whatsapp-sender.service';
+import { WhatsappSenderService } from './whatsapp-sender.service';import { AsPlatform } from '../common/tenant-context';
+
 import {
   ConfiguracaoNotificacaoService,
   TipoNotificacaoCobranca,
@@ -25,6 +26,8 @@ export class WhatsappCobrancaService {
    * Cron: dia 5 de cada mês às 8h (America/Sao_Paulo)
    */
   @Cron('0 8 5 * *', { timeZone: 'America/Sao_Paulo' })
+
+  @AsPlatform()
   async cronEnviarCobrancas() {
     // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
     if (process.env.WA_COBRANCA_HABILITADO !== 'true') {
@@ -215,6 +218,8 @@ export class WhatsappCobrancaService {
    * Cron: todo dia às 9h
    */
   @Cron('0 9 * * *', { timeZone: 'America/Sao_Paulo' })
+
+  @AsPlatform()
   async cronAbordarInadimplentes() {
     // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
     if (process.env.WA_INADIMPLENTES_HABILITADO !== 'true') {
@@ -439,6 +444,8 @@ export class WhatsappCobrancaService {
    * Cron: todo dia às 9h30 (America/Sao_Paulo)
    */
   @Cron('30 9 * * *', { timeZone: 'America/Sao_Paulo' })
+
+  @AsPlatform()
   async cronAlertarVencimentoProximo() {
     // 🔴 DISPARO EM MASSA — requer aprovação explícita de Luciano
     if (process.env.WA_ALERTA_VENCIMENTO_HABILITADO !== 'true') {

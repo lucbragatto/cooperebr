@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ConveniosProgressaoService } from './convenios-progressao.service';
+import { ConveniosProgressaoService } from './convenios-progressao.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class ConveniosJob {
@@ -10,6 +11,8 @@ export class ConveniosJob {
 
   // Reconciliação diária às 3h da manhã
   @Cron('0 3 * * *')
+
+  @AsPlatform()
   async reconciliarFaixas() {
     this.logger.log('Iniciando reconciliação diária de faixas de convênios...');
     try {

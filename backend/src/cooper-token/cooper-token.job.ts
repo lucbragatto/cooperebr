@@ -2,7 +2,8 @@
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenService } from './cooper-token.service';
-import { CooperTokenTipo } from '@prisma/client';
+import { CooperTokenTipo } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class CooperTokenJob {
@@ -18,6 +19,8 @@ export class CooperTokenJob {
    * em planos com cooperTokenAtivo=true
    */
   @Cron('0 6 * * *')
+
+  @AsPlatform()
   async apurarExcedentes() {
     this.logger.log('Iniciando apuraÃ§Ã£o de excedentes CooperToken...');
 
@@ -118,6 +121,8 @@ export class CooperTokenJob {
    * Todo dia 1Âº Ã s 2h: expira tokens vencidos
    */
   @Cron('0 2 1 * *')
+
+  @AsPlatform()
   async expirarTokensVencidos() {
     this.logger.log('Iniciando expiraÃ§Ã£o de tokens vencidos...');
 

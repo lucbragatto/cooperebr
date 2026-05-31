@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '../prisma.service';
+import { PrismaService } from '../prisma.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class CooperadosJob {
@@ -9,6 +10,9 @@ export class CooperadosJob {
   constructor(private prisma: PrismaService) {}
 
   @Cron('0 3 * * *')
+
+
+  @AsPlatform()
   async limparCooperadosProxyExpirados() {
     const { count } = await this.prisma.cooperado.deleteMany({
       where: {
@@ -22,6 +26,8 @@ export class CooperadosJob {
 
   // WA-BOT-04: Limpar cooperados PROXY_* zumbi (CPFs temporários com status PENDENTE há mais de 24h)
   @Cron('0 3 * * *')
+
+  @AsPlatform()
   async limparCooperadosProxyZumbi() {
     const limite24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const { count } = await this.prisma.cooperado.deleteMany({

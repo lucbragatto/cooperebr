@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { EmailService } from '../email/email.service';
-import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class MotorPropostaJob {
@@ -19,6 +20,8 @@ export class MotorPropostaJob {
    * há mais de 24h e ainda não assinadas.
    */
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
+
+  @AsPlatform()
   async lembretePropostasPendentes() {
     if (process.env.NOTIFICACOES_ATIVAS !== 'true') return;
 

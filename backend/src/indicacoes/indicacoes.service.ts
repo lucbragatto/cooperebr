@@ -6,7 +6,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
-import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { CooperTokenService } from '../cooper-token/cooper-token.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class IndicacoesService {
@@ -20,6 +21,9 @@ export class IndicacoesService {
   ) {}
 
   @OnEvent('cobranca.primeira.paga')
+
+
+  @AsPlatform()
   async handlePrimeiraFaturaPaga(payload: { cooperadoId: string; valorFatura: number }) {
     try {
       await this.processarPrimeiraFaturaPaga(payload.cooperadoId, payload.valorFatura);

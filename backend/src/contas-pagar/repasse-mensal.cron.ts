@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { calcularRepasseLiquido } from '../usinas/helpers/calcular-repasse-liquido';
 import type { UsinaParaCalculo, TarifaResolver } from '../usinas/helpers/calcular-repasse';
+import { AsPlatform } from '../common/tenant-context';
 
 /**
  * BH.5 (M41, 2026-05-30) — Cron mensal que cria despesa ARRENDAMENTO_USINA
@@ -34,6 +35,8 @@ export class RepasseMensalCron {
   constructor(private prisma: PrismaService) {}
 
   @Cron('0 3 1 * *', { timeZone: 'America/Sao_Paulo' })
+
+  @AsPlatform()
   async criarDespesasAluguelMensal(): Promise<{ criadas: number; puladas: number; erros: number }> {
     const ref = new Date();
     const periodoInicio = new Date(ref.getFullYear(), ref.getMonth() - 1, 1);

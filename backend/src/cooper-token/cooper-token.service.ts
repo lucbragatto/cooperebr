@@ -10,7 +10,8 @@ import {
   CooperTokenExpiradoEvent,
   CooperTokenCompraParceiroPagoEvent,
 } from './cooper-token.events';
-import * as jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
+
 
 interface CreditarParams {
   cooperadoId: string;
@@ -376,6 +377,8 @@ export class CooperTokenService {
    * verificar se já pagou primeira fatura. Se sim, liberar pendentes.
    */
   @OnEvent('cooperado.creditos.liberados')
+
+  @AsPlatform()
   async handleCreditosLiberados(payload: { cooperadoId: string }) {
     try {
       // Verificar se já teve primeira fatura paga
@@ -398,6 +401,8 @@ export class CooperTokenService {
    * tem ATIVO_RECEBENDO_CREDITOS. Se sim, liberar pendentes.
    */
   @OnEvent('cobranca.primeira.paga')
+
+  @AsPlatform()
   async handlePrimeiraFaturaPagaToken(payload: { cooperadoId: string }) {
     try {
       const cooperado = await this.prisma.cooperado.findUnique({
@@ -419,6 +424,8 @@ export class CooperTokenService {
    * Sprint 9B: handler de benefício de convênio em tokens.
    */
   @OnEvent('convenio.beneficio.tokens')
+
+  @AsPlatform()
   async handleConvenioBeneficioTokens(payload: {
     conveniadoId: string;
     cooperativaId: string;

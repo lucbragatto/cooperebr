@@ -4,7 +4,8 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
-import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';import { AsPlatform } from '../common/tenant-context';
+
 
 interface AnexoPdf {
   filename: string;
@@ -79,6 +80,9 @@ export class EmailMonitorService {
   // ── Cron: verifica e-mails a cada 30 min para cada tenant ativo ────
 
   @Cron('0 0 6 * * *') // 1x por dia às 6h (pode ser acionado manualmente via POST /email-monitor/processar)
+
+
+  @AsPlatform()
   async verificarEmailsFaturas() {
     if (this.processando) {
       this.logger.debug('Já processando e-mails de faturas — pulando ciclo');

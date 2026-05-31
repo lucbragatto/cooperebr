@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { ConfigTenantService } from '../config-tenant/config-tenant.service';
-import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
+import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';import { AsPlatform } from '../common/tenant-context';
+
 
 @Injectable()
 export class DocumentosAprovacaoJob {
@@ -15,6 +16,9 @@ export class DocumentosAprovacaoJob {
   ) {}
 
   @Cron('0 */1 * * *')
+
+
+  @AsPlatform()
   async processarAprovacaoAutomatica() {
     const cooperativas = await this.prisma.cooperativa.findMany({
       where: { ativo: true },

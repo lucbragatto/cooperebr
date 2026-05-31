@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma.service';
 import { getJwtSecret } from './jwt-secret';
+import { getTenantContext } from '../common/tenant-context';
 
 interface CacheEntry {
   user: any;
@@ -30,6 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Verificar cache primeiro
     const cached = this.cache.get(payload.sub);
     if (cached && cached.exp > now) {
+      this.atualizarTenantContext(cached.user);
       return cached.user;
     }
 
@@ -49,6 +51,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Salvar no cache
     this.cache.set(payload.sub, { user, exp: now + this.CACHE_TTL_MS });
 
+    this.atualizarTenantContext(user);
+
     // Limpar entradas expiradas a cada 100 novos caches (evitar memory leak)
     if (this.cache.size % 100 === 0) {
       for (const [key, entry] of this.cache.entries()) {
@@ -57,5 +61,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     return user;
+  }
+
+  /**
+   * D-novo-BR F1.3 (31/05/2026) — atualiza contexto ALS aberto pelo
+   * middleware HTTP em main.ts (que rodou ANTES do Passport). A extensão
+   * Prisma usa esse contexto pra distinguir queries autenticadas das
+   * de plataforma.
+   */
+  private atualizarTenantContext(user: any) {
+    const store = getTenantContext();
+    if (store) {
+      store.cooperativaId = user?.cooperativaId ?? null;
+      store.perfil = user?.perfil;
+    }
   }
 }

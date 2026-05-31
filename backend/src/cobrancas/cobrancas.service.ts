@@ -10,7 +10,8 @@ import { EmailService } from '../email/email.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
-import { CooperTokenTipo } from '@prisma/client';
+import { CooperTokenTipo } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
+
 
 // Calcula valorDesconto e valorLiquido respeitando o modo de remuneração.
 // Especificação `docs/especificacao-clube-cooper-token.md` seção 2:
@@ -69,6 +70,9 @@ export class CobrancasService {
   ) {}
 
   @OnEvent('pagamento.confirmado')
+
+
+  @AsPlatform()
   async handlePagamentoConfirmado(payload: {
     cobrancaId: string;
     dataPagamento: string;

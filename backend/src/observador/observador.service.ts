@@ -3,7 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
-import type { WhatsappMensagemEnviadaEvent } from '../whatsapp/whatsapp-sender.service';
+import type { WhatsappMensagemEnviadaEvent } from '../whatsapp/whatsapp-sender.service';import { AsPlatform } from '../common/tenant-context';
+
 
 interface AtivarDto {
   observadorId: string;
@@ -148,6 +149,8 @@ export class ObservadorService {
    * Listener de evento: espelha mensagens WhatsApp recebidas para observadores ativos.
    */
   @OnEvent('whatsapp.mensagem.recebida')
+
+  @AsPlatform()
   async handleMensagemRecebida(payload: { telefone: string; texto: string; direcao: 'RECEBIDA' }) {
     try {
       await this.espelharMensagem(payload.telefone, payload.texto, payload.direcao);
@@ -160,6 +163,8 @@ export class ObservadorService {
    * Listener de evento: espelha mensagens WhatsApp enviadas para observadores ativos.
    */
   @OnEvent('whatsapp.mensagem.enviada')
+
+  @AsPlatform()
   async handleMensagemEnviada(payload: WhatsappMensagemEnviadaEvent) {
     try {
       await this.espelharMensagem(payload.telefone, payload.texto, payload.direcao);
@@ -275,6 +280,8 @@ export class ObservadorService {
    * Cron: encerra observações expiradas a cada 5 minutos.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
+
+  @AsPlatform()
   async expirarAutomaticas() {
     const agora = new Date();
     const expiradas = await this.prisma.observacaoAtiva.findMany({
