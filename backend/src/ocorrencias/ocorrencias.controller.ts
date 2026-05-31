@@ -39,19 +39,21 @@ export class OcorrenciasController {
       descricao: string;
       prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
     },
+    @Req() req: any,
   ) {
-    return this.ocorrenciasService.create(body);
+    // D-novo-BR F0.3 MA2 — cooperativaId do JWT (ignora body)
+    return this.ocorrenciasService.create(body, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.ocorrenciasService.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    return this.ocorrenciasService.update(id, body, req.user?.cooperativaId ?? null);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.ocorrenciasService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.ocorrenciasService.remove(id, req.user?.cooperativaId ?? null);
   }
 }

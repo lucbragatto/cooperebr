@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Req, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CondominiosService } from './condominios.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -18,9 +18,20 @@ export class CondominiosController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Post()
   create(@Body() body: any, @Req() req: any) {
+    // D-novo-BR F0.4 MA4 — body.cooperativaId só vale pra SUPER_ADMIN.
+    const perfil = req.user?.perfil;
+    const jwtCoop = req.user?.cooperativaId;
+    let cooperativaId: string;
+    if (perfil === SUPER_ADMIN) {
+      cooperativaId = body.cooperativaId ?? jwtCoop;
+      if (!cooperativaId) throw new BadRequestException('SUPER_ADMIN deve informar cooperativaId');
+    } else {
+      if (!jwtCoop) throw new ForbiddenException('Usuário sem cooperativaId no token');
+      cooperativaId = jwtCoop;
+    }
     return this.service.create({
       ...body,
-      cooperativaId: body.cooperativaId || req.user?.cooperativaId,
+      cooperativaId,
     });
   }
 
@@ -56,11 +67,12 @@ export class CondominiosController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post(':id/rateio')
-  calcularRateio(@Param('id') id: string, @Body() body: { kWhGerado?: number; energiaTotal?: number }) {
+  calcularRateio(@Param('id') id: string, @Body() body: { kWhGerado?: number; energiaTotal?: number }, @Req() req: any) {
     const kwh = body.kWhGerado ?? body.energiaTotal;
     if (!kwh || kwh <= 0) {
       throw new BadRequestException('kWhGerado deve ser maior que zero');
     }
-    return this.service.calcularRateio(id, kwh);
+    // D-novo-BR F0.4 BA1 — JWT pra prevenir vazamento cross-tenant
+    return this.service.calcularRateio(id, kwh, req.user?.cooperativaId ?? null);
   }
 }

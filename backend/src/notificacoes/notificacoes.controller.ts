@@ -27,7 +27,8 @@ export class NotificacoesController {
   }
 
   @Patch(':id/ler')
-  marcarComoLida(@Param('id') id: string) {
-    return this.notificacoesService.marcarComoLida(id);
+  marcarComoLida(@Param('id') id: string, @CurrentUser() user: Usuario) {
+    // D-novo-BR F0.5 — passa user pro guard de posse no service
+    return this.notificacoesService.marcarComoLida(id, user);
   }
 }

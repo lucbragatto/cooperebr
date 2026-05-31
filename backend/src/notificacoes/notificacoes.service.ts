@@ -41,7 +41,20 @@ export class NotificacoesService {
     return { count };
   }
 
-  async marcarComoLida(id: string) {
+  async marcarComoLida(id: string, user?: Usuario) {
+    // D-novo-BR F0.5 (CRITICO 31/05/2026) — qualquer usuário autenticado podia
+    // marcar notificação de outro tenant como lida. Agora exige posse via buildWhere.
+    if (user) {
+      const where = await this.buildWhere(user);
+      const owned = await this.prisma.notificacao.findFirst({
+        where: { ...(where as any), id },
+        select: { id: true },
+      });
+      if (!owned) {
+        // Não diferenciar "não existe" de "não é seu" — evita leak de existência
+        return { id, lida: true };
+      }
+    }
     return this.prisma.notificacao.update({
       where: { id },
       data: { lida: true },

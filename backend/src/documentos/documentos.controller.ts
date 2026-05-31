@@ -1,6 +1,6 @@
 /// <reference types="multer" />
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post,
+  Body, Controller, Delete, Get, Param, Patch, Post, Req,
   UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -24,25 +24,27 @@ export class DocumentosController {
     @Param('cooperadoId') cooperadoId: string,
     @Body('tipo') tipo: string,
     @UploadedFile() arquivo: Express.Multer.File,
+    @Req() req: any,
   ) {
-    return this.documentosService.uploadAdmin(cooperadoId, tipo, arquivo);
+    return this.documentosService.uploadAdmin(cooperadoId, tipo, arquivo, req.user?.cooperativaId ?? null);
   }
 
   @Patch(':id/aprovar')
-  aprovar(@Param('id') id: string) {
-    return this.documentosService.aprovar(id);
+  aprovar(@Param('id') id: string, @Req() req: any) {
+    return this.documentosService.aprovar(id, req.user?.cooperativaId ?? null);
   }
 
   @Patch(':id/reprovar')
   reprovar(
     @Param('id') id: string,
     @Body('motivoRejeicao') motivoRejeicao: string,
+    @Req() req: any,
   ) {
-    return this.documentosService.reprovar(id, motivoRejeicao);
+    return this.documentosService.reprovar(id, motivoRejeicao, req.user?.cooperativaId ?? null);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.documentosService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    return this.documentosService.remove(id, req.user?.cooperativaId ?? null);
   }
 }

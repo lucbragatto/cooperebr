@@ -66,8 +66,12 @@ export class ObservadorService {
     return obs;
   }
 
-  async encerrar(id: string, usuarioId: string) {
-    const obs = await this.prisma.observacaoAtiva.findUnique({ where: { id } });
+  async encerrar(id: string, usuarioId: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.4 AA12 IDOR fix (31/05/2026) — posse antes do encerramento.
+    // cooperativaId null = SUPER_ADMIN bypass.
+    const obs = cooperativaId
+      ? await this.prisma.observacaoAtiva.findFirst({ where: { id, cooperativaId } })
+      : await this.prisma.observacaoAtiva.findUnique({ where: { id } });
     if (!obs) throw new BadRequestException('Observação não encontrada');
 
     await this.prisma.observacaoAtiva.update({

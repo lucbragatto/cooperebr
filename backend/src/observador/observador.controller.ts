@@ -42,7 +42,10 @@ export class ObservadorController {
   @Delete(':id')
   @Roles(SUPER_ADMIN, ADMIN)
   async encerrar(@Param('id') id: string, @Req() req: any) {
-    return this.service.encerrar(id, req.user.id);
+    // D-novo-BR F0.4 AA12 — passa cooperativaId do JWT pra guard de posse
+    const perfil = req.user?.perfil;
+    const cooperativaId = perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.encerrar(id, req.user.id, cooperativaId);
   }
 
   @Get()

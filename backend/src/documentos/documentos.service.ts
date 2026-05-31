@@ -44,9 +44,24 @@ export class DocumentosService {
     });
   }
 
-  async aprovar(id: string) {
-    const doc = await this.prisma.documentoCooperado.findUnique({ where: { id } });
+  /**
+   * D-novo-BR F0.2 (31/05/2026) — posse via cooperado.cooperativaId.
+   * DocumentoCooperado não tem cooperativaId direto; verificar via join.
+   * cooperativaId null = SUPER_ADMIN bypass.
+   */
+  private async carregarComPosse(id: string, cooperativaId?: string | null) {
+    const doc = cooperativaId
+      ? await this.prisma.documentoCooperado.findFirst({
+          where: { id, cooperado: { cooperativaId } },
+        })
+      : await this.prisma.documentoCooperado.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException('Documento não encontrado.');
+    return doc;
+  }
+
+  async aprovar(id: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.2 AA2 — posse via cooperado antes de aprovar + WhatsApp.
+    const doc = await this.carregarComPosse(id, cooperativaId);
 
     const resultado = await this.prisma.documentoCooperado.update({
       where: { id },
@@ -75,12 +90,12 @@ export class DocumentosService {
     return resultado;
   }
 
-  async reprovar(id: string, motivoRejeicao: string) {
+  async reprovar(id: string, motivoRejeicao: string, cooperativaId?: string | null) {
     if (!motivoRejeicao?.trim()) {
       throw new BadRequestException('Motivo de rejeição é obrigatório.');
     }
-    const doc = await this.prisma.documentoCooperado.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Documento não encontrado.');
+    // D-novo-BR F0.2 AA3 — posse antes de reprovar + WhatsApp.
+    const doc = await this.carregarComPosse(id, cooperativaId);
 
     const resultado = await this.prisma.documentoCooperado.update({
       where: { id },
@@ -107,9 +122,20 @@ export class DocumentosService {
     return resultado;
   }
 
-  async uploadAdmin(cooperadoId: string, tipo: string, arquivo: Express.Multer.File) {
+  async uploadAdmin(
+    cooperadoId: string,
+    tipo: string,
+    arquivo: Express.Multer.File,
+    cooperativaId?: string | null,
+  ) {
     if (!arquivo) throw new BadRequestException('Arquivo obrigatório.');
     if (!tipo) throw new BadRequestException('Tipo de documento obrigatório.');
+
+    // D-novo-BR F0.2 MA1 — cooperado precisa pertencer ao tenant.
+    const cooperado = cooperativaId
+      ? await this.prisma.cooperado.findFirst({ where: { id: cooperadoId, cooperativaId } })
+      : await this.prisma.cooperado.findUnique({ where: { id: cooperadoId } });
+    if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     const ext = arquivo.originalname.split('.').pop() ?? 'bin';
     const storagePath = `${cooperadoId}/${tipo}_admin_${Date.now()}.${ext}`;
@@ -145,9 +171,9 @@ export class DocumentosService {
     return doc;
   }
 
-  async remove(id: string) {
-    const doc = await this.prisma.documentoCooperado.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException('Documento não encontrado.');
+  async remove(id: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.2 AA4 — posse antes de deletar doc + arquivo Supabase.
+    const doc = await this.carregarComPosse(id, cooperativaId);
 
     // Extrair caminho no storage a partir da URL pública
     const supabaseUrl = process.env.SUPABASE_URL!;

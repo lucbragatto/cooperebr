@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, Headers, UnauthorizedException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Headers, UnauthorizedException, Logger, Req, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IntegracaoBancariaService } from './integracao-bancaria.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -62,14 +62,17 @@ export class IntegracaoBancariaController {
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('cobrancas/:id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: any) {
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.findOne(id, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('cobrancas/:id/cancelar')
-  cancelarCobranca(@Param('id') id: string) {
-    return this.service.cancelarCobranca(id);
+  cancelarCobranca(@Param('id') id: string, @Req() req: any) {
+    // D-novo-BR F0.5 CRITICO — boleto irreversível, posse antes
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.cancelarCobranca(id, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -108,8 +111,10 @@ export class IntegracaoBancariaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('config')
-  listarConfigs() {
-    return this.service.listarConfigs();
+  listarConfigs(@Req() req: any) {
+    // SUPER_ADMIN vê tudo; ADMIN vê só do próprio tenant
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.listarConfigs(cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
@@ -130,14 +135,29 @@ export class IntegracaoBancariaController {
       webhookSecret?: string;
       cooperativaId?: string;
     },
+    @Req() req: any,
   ) {
-    return this.service.criarConfig(body);
+    // D-novo-BR F0.5 CRITICO — body-injection bloqueado.
+    // ADMIN sempre JWT; SUPER_ADMIN pode override via body.cooperativaId.
+    const perfil = req.user?.perfil;
+    const jwtCoop = req.user?.cooperativaId;
+    let cooperativaId: string;
+    if (perfil === SUPER_ADMIN) {
+      cooperativaId = body.cooperativaId ?? jwtCoop;
+      if (!cooperativaId) throw new BadRequestException('SUPER_ADMIN deve informar cooperativaId');
+    } else {
+      if (!jwtCoop) throw new ForbiddenException('Usuário sem cooperativaId no token');
+      cooperativaId = jwtCoop;
+    }
+    const { cooperativaId: _ignored, ...rest } = body;
+    return this.service.criarConfig(rest, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Patch('config/:id')
-  atualizarConfig(@Param('id') id: string, @Body() body: any) {
-    return this.service.atualizarConfig(id, body);
+  atualizarConfig(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.atualizarConfig(id, body, cooperativaId);
   }
 
   // ── Polling manual ────────────────────────────────────────

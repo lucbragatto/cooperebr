@@ -342,8 +342,32 @@ export class AsaasService {
     }
   }
 
-  async cancelarCobranca(asaasId: string, cooperativaId: string) {
-    const client = await this.getApiClient(cooperativaId);
+  async cancelarCobranca(asaasId: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.5 CRITICO (31/05/2026) — posse via cooperado.cooperativaId
+    // (AsaasCobranca não tem coluna direta). Bloqueia cancelamento cross-tenant.
+    // cooperativaId null = SUPER_ADMIN bypass.
+    let cooperativaIdEfetiva: string;
+    if (cooperativaId) {
+      const cobranca = await this.prisma.asaasCobranca.findFirst({
+        where: { asaasId, cooperado: { cooperativaId } },
+        select: { id: true, cooperado: { select: { cooperativaId: true } } },
+      });
+      if (!cobranca) {
+        throw new BadRequestException('Cobrança não encontrada');
+      }
+      cooperativaIdEfetiva = cooperativaId;
+    } else {
+      // SUPER_ADMIN bypass — descobrir o tenant da cobrança pra getApiClient
+      const cobranca = await this.prisma.asaasCobranca.findFirst({
+        where: { asaasId },
+        select: { id: true, cooperado: { select: { cooperativaId: true } } },
+      });
+      if (!cobranca?.cooperado?.cooperativaId) {
+        throw new BadRequestException('Cobrança não encontrada ou sem tenant');
+      }
+      cooperativaIdEfetiva = cobranca.cooperado.cooperativaId;
+    }
+    const client = await this.getApiClient(cooperativaIdEfetiva);
     try {
       await client.delete(`/payments/${asaasId}`);
       await this.prisma.asaasCobranca.updateMany({

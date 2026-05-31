@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Param, Body } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, Req } from '@nestjs/common';
 import { ModelosCobrancaService } from './modelos-cobranca.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -17,19 +17,22 @@ export class ModelosCobrancaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: Record<string, unknown>) {
-    return this.service.update(id, body);
+  update(@Param('id') id: string, @Body() body: Record<string, unknown>, @Req() req: any) {
+    const isSA = req.user?.perfil === SUPER_ADMIN;
+    return this.service.update(id, body, req.user?.cooperativaId ?? null, isSA);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post(':id/ativar')
-  ativar(@Param('id') id: string) {
-    return this.service.ativar(id);
+  ativar(@Param('id') id: string, @Req() req: any) {
+    const isSA = req.user?.perfil === SUPER_ADMIN;
+    return this.service.ativar(id, req.user?.cooperativaId ?? null, isSA);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Post(':id/desativar')
-  desativar(@Param('id') id: string) {
-    return this.service.desativar(id);
+  desativar(@Param('id') id: string, @Req() req: any) {
+    const isSA = req.user?.perfil === SUPER_ADMIN;
+    return this.service.desativar(id, req.user?.cooperativaId ?? null, isSA);
   }
 }

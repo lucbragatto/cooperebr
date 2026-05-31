@@ -13,7 +13,7 @@ export class AdministradorasService {
     });
   }
 
-  async findOne(id: string, cooperativaId?: string) {
+  async findOne(id: string, cooperativaId?: string | null) {
     const adm = await this.prisma.administradora.findUnique({
       where: { id },
       include: { condominios: { where: { ativo: true }, orderBy: { nome: 'asc' } } },
@@ -38,14 +38,21 @@ export class AdministradorasService {
     return this.prisma.administradora.create({ data });
   }
 
-  async update(id: string, data: any) {
-    const adm = await this.prisma.administradora.findUnique({ where: { id } });
+  async update(id: string, data: any, cooperativaId?: string | null) {
+    // D-novo-BR F0.1 CA1 IDOR fix (31/05/2026) — posse antes do update.
+    // cooperativaId null = SUPER_ADMIN bypass.
+    const adm = cooperativaId
+      ? await this.prisma.administradora.findFirst({ where: { id, cooperativaId } })
+      : await this.prisma.administradora.findUnique({ where: { id } });
     if (!adm) throw new NotFoundException('Agregador nao encontrado');
     return this.prisma.administradora.update({ where: { id }, data });
   }
 
-  async remove(id: string) {
-    const adm = await this.prisma.administradora.findUnique({ where: { id } });
+  async remove(id: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.1 CA2 IDOR fix (31/05/2026) — posse antes do soft-delete.
+    const adm = cooperativaId
+      ? await this.prisma.administradora.findFirst({ where: { id, cooperativaId } })
+      : await this.prisma.administradora.findUnique({ where: { id } });
     if (!adm) throw new NotFoundException('Agregador nao encontrado');
     return this.prisma.administradora.update({ where: { id }, data: { ativo: false } });
   }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
@@ -400,10 +400,18 @@ export class WhatsappFaturaController {
       limiteEnvios?: number;
     },
   ) {
+    // D-novo-BR F0.5 CRITICO (31/05/2026) — body.parceiroId só pode ser !=
+    // cooperativaId do JWT se caller for SUPER_ADMIN. ADMIN A podia disparar
+    // cobranças WhatsApp pra todos cooperados do tenant B (vazamento financeiro).
     const cooperativaId = req.user?.cooperativaId;
+    const perfil = req.user?.perfil;
+    let parceiroIdEfetivo = body.parceiroId;
+    if (body.parceiroId && body.parceiroId !== cooperativaId && perfil !== SUPER_ADMIN) {
+      throw new ForbiddenException('Apenas SUPER_ADMIN pode disparar cobranças em outro tenant');
+    }
     return this.cobrancaService.enviarCobrancasDoMes(cooperativaId, body.mesReferencia, {
       modo: body.modo,
-      parceiroId: body.parceiroId,
+      parceiroId: parceiroIdEfetivo,
       telefones: body.telefones,
       limiteEnvios: body.limiteEnvios,
     });
@@ -482,8 +490,11 @@ export class WhatsappFaturaController {
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete('modelos/:id')
-  async deletarModelo(@Param('id') id: string) {
-    return this.modeloMensagem.delete(id);
+  async deletarModelo(@Param('id') id: string, @Req() req: any) {
+    // D-novo-BR F0.5 CRITICO — modelo global só SUPER_ADMIN; tenant-scoped só dono
+    const perfil = req.user?.perfil;
+    const cooperativaId = req.user?.cooperativaId ?? null;
+    return this.modeloMensagem.delete(id, cooperativaId, perfil === SUPER_ADMIN);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

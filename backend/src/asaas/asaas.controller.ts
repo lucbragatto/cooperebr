@@ -93,7 +93,12 @@ export class AsaasController {
     @Param('asaasId') asaasId: string,
     @Req() req: any,
   ) {
-    return this.asaasService.cancelarCobranca(asaasId, req.user?.cooperativaId);
+    // D-novo-BR F0.5 — SUPER_ADMIN passa null pra bypass (service descobre tenant)
+    const perfil = req.user?.perfil;
+    const cooperativaId = perfil === PerfilUsuario.SUPER_ADMIN
+      ? null
+      : (req.user?.cooperativaId ?? null);
+    return this.asaasService.cancelarCobranca(asaasId, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

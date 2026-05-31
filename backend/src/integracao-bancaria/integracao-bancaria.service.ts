@@ -18,30 +18,49 @@ export class IntegracaoBancariaService {
 
   // ── Configuração ──────────────────────────────────────────
 
-  async criarConfig(data: {
-    banco: string;
-    ambiente?: string;
-    clientId: string;
-    clientSecret: string;
-    convenio?: string;
-    carteira?: string;
-    agencia?: string;
-    conta?: string;
-    digitoConta?: string;
-    certificadoPfx?: string;
-    certificadoSenha?: string;
-    webhookSecret?: string;
-    cooperativaId?: string;
-  }) {
-    return this.prisma.configuracaoBancaria.create({ data });
+  /**
+   * D-novo-BR F0.5 CRITICOS (31/05/2026) — config bancária controla
+   * clientId/secret/certificado PFX. Body-injection permitia ADMIN A criar
+   * config apontando pra cooperativaId B. Agora cooperativaId vem
+   * sempre do controller (JWT). SUPER_ADMIN pode informar (override).
+   */
+  async criarConfig(
+    data: {
+      banco: string;
+      ambiente?: string;
+      clientId: string;
+      clientSecret: string;
+      convenio?: string;
+      carteira?: string;
+      agencia?: string;
+      conta?: string;
+      digitoConta?: string;
+      certificadoPfx?: string;
+      certificadoSenha?: string;
+      webhookSecret?: string;
+    },
+    cooperativaId: string,
+  ) {
+    return this.prisma.configuracaoBancaria.create({
+      data: { ...data, cooperativaId },
+    });
   }
 
-  async atualizarConfig(id: string, data: any) {
+  async atualizarConfig(id: string, data: any, cooperativaId?: string | null) {
+    // Posse antes do update (config bancária armazena credenciais sensíveis).
+    if (cooperativaId) {
+      const existing = await this.prisma.configuracaoBancaria.findFirst({
+        where: { id, cooperativaId },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundException('Configuração não encontrada');
+    }
     return this.prisma.configuracaoBancaria.update({ where: { id }, data });
   }
 
-  async listarConfigs() {
+  async listarConfigs(cooperativaId?: string | null) {
     return this.prisma.configuracaoBancaria.findMany({
+      where: cooperativaId ? { cooperativaId } : undefined,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -158,19 +177,26 @@ export class IntegracaoBancariaService {
     });
   }
 
-  async findOne(id: string) {
-    const cobranca = await this.prisma.cobrancaBancaria.findUnique({
-      where: { id },
-      include: { cooperado: true, configuracao: true },
-    });
+  async findOne(id: string, cooperativaId?: string | null) {
+    const cobranca = cooperativaId
+      ? await this.prisma.cobrancaBancaria.findFirst({
+          where: { id, cooperativaId },
+          include: { cooperado: true, configuracao: true },
+        })
+      : await this.prisma.cobrancaBancaria.findUnique({
+          where: { id },
+          include: { cooperado: true, configuracao: true },
+        });
     if (!cobranca) throw new NotFoundException('Cobrança bancária não encontrada');
     return cobranca;
   }
 
   // ── Cancelamento ──────────────────────────────────────────
 
-  async cancelarCobranca(id: string) {
-    const cobranca = await this.findOne(id);
+  async cancelarCobranca(id: string, cooperativaId?: string | null) {
+    // D-novo-BR F0.5 CRITICO (31/05/2026) — boleto BB/Sicoob IRREVERSIVEL.
+    // Posse via cooperativaId; SA bypass com null.
+    const cobranca = await this.findOne(id, cooperativaId);
     if (cobranca.status === 'CANCELADO') {
       throw new BadRequestException('Cobrança já está cancelada');
     }

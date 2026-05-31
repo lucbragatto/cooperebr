@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -46,7 +46,18 @@ export class ModeloMensagemService {
     return this.prisma.modeloMensagem.update({ where: { id }, data });
   }
 
-  async delete(id: string) {
+  async delete(id: string, cooperativaId?: string | null, isSuperAdmin = false) {
+    // D-novo-BR F0.5 CRITICO (31/05/2026) — qualquer ADMIN podia deletar modelo
+    // global (cooperativaId=null) ou de outro tenant. Agora:
+    // - modelo global (null): só SUPER_ADMIN
+    // - modelo tenant-scoped: só o dono ou SUPER_ADMIN
+    const modelo = await this.prisma.modeloMensagem.findUnique({ where: { id } });
+    if (!modelo) throw new NotFoundException('Modelo não encontrado');
+    if (modelo.cooperativaId === null) {
+      if (!isSuperAdmin) throw new ForbiddenException('Modelo global só pode ser deletado por SUPER_ADMIN');
+    } else if (cooperativaId && modelo.cooperativaId !== cooperativaId) {
+      throw new NotFoundException('Modelo não encontrado');
+    }
     return this.prisma.modeloMensagem.delete({ where: { id } });
   }
 

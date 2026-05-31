@@ -99,16 +99,28 @@ export class CondominiosService {
     return this.prisma.unidadeCondominio.update({ where: { id: unidadeId }, data: { ativo: false } });
   }
 
-  async calcularRateio(condominioId: string, energiaTotal: number) {
-    const cond = await this.prisma.condominio.findUnique({
-      where: { id: condominioId },
-      include: {
-        unidades: {
-          where: { ativo: true },
-          include: { cooperado: { select: { id: true, nomeCompleto: true, cotaKwhMensal: true } } },
-        },
-      },
-    });
+  async calcularRateio(condominioId: string, energiaTotal: number, cooperativaId?: string | null) {
+    // D-novo-BR F0.4 BA1 IDOR fix (31/05/2026) — bloqueia leitura cross-tenant
+    // de nomes + cotas das unidades. SUPER_ADMIN (null) bypassa.
+    const cond = cooperativaId
+      ? await this.prisma.condominio.findFirst({
+          where: { id: condominioId, cooperativaId },
+          include: {
+            unidades: {
+              where: { ativo: true },
+              include: { cooperado: { select: { id: true, nomeCompleto: true, cotaKwhMensal: true } } },
+            },
+          },
+        })
+      : await this.prisma.condominio.findUnique({
+          where: { id: condominioId },
+          include: {
+            unidades: {
+              where: { ativo: true },
+              include: { cooperado: { select: { id: true, nomeCompleto: true, cotaKwhMensal: true } } },
+            },
+          },
+        });
     if (!cond) throw new NotFoundException('Condominio nao encontrado');
 
     const unidades = cond.unidades;
