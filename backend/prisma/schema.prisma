@@ -95,6 +95,7 @@ model Cooperativa {
 
   convenios                 Convenio[]
   apuracoesMensaisSegregadas ApuracaoMensalSegregada[]
+  configuracaoTributaria    ConfiguracaoTributaria?
 
   @@map("cooperativas")
 }
@@ -2918,10 +2919,80 @@ model ApuracaoMensalSegregada {
   fechadoEm           DateTime?
   fechadoPorUsuarioId String?
   observacoes         String?
+
+  // ── CT.4 Gate Walter — snapshot nasce NÃO-VALIDADO ──
+  // Snapshot pode ser FECHADA (imutável) mas ainda não validada pelo contador.
+  // UI/relatórios mostram "⚠️ PENDENTE VALIDAÇÃO CONTADOR" enquanto false.
+  // Walter só ativa true quando confere os números — gate explícito antes de
+  // virar valor fiscal real (DCTF/SPED).
+  validadoContador      Boolean        @default(false)
+  validadoPorUsuarioId  String?
+  validadoEm            DateTime?
+  observacaoContador    String?
+
+  // ── CT.4 Reabertura excepcional (SUPER_ADMIN apenas) ──
+  reabertoEm            DateTime?
+  reabertoPorUsuarioId  String?
+  motivoReabertura      String?
+
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
   @@unique([cooperativaId, ano, mes])
   @@index([cooperativaId, status])
+  @@index([cooperativaId, validadoContador])
   @@map("apuracoes_mensais_segregadas")
+}
+
+/// D-novo-BR-CT CT.4 (31/05/2026) — Alíquotas/presunção CONFIGURÁVEIS
+/// por cooperativa. NUNCA hardcoded no service — Walter ajusta sem refator.
+///
+/// Defaults = Lucro Presumido genérico. % de presunção IRPJ/CSLL depende
+/// da atividade (energia/serviço/comércio) — CONFIRMAR COM WALTER antes de
+/// virar valor fiscal real. Snapshot da apuração marca validadoContador=false
+/// até Walter validar.
+///
+/// Base regulatória:
+/// - PIS/COFINS Lucro Presumido cumulativo: 0,65% + 3% = 3,65% (Lei 9.718/98)
+/// - IRPJ presumido: alíquota 15% × base presumida (% conforme atividade) + adicional 10% sobre R$ 20.000/mês
+/// - CSLL presumido: alíquota 9% × base presumida
+/// - % presunção: 8% comércio | 32% serviços | varia energia (consultar contador)
+model ConfiguracaoTributaria {
+  id                          String      @id @default(cuid())
+  cooperativaId               String      @unique
+  cooperativa                 Cooperativa @relation(fields: [cooperativaId], references: [id])
+
+  // ── PIS/COFINS Lucro Presumido cumulativo (Lei 9.718/98) ──
+  pisAliquota                 Decimal     @default(0.0065) @db.Decimal(8, 6)
+  cofinsAliquota              Decimal     @default(0.0300) @db.Decimal(8, 6)
+
+  // ── IRPJ presumido (Lei 9.249/95 Art. 15) ──
+  irpjAliquota                Decimal     @default(0.15)   @db.Decimal(8, 6)
+  /// % de presunção sobre receita NÃO-COOP — VALIDAR COM WALTER conforme atividade.
+  /// 8% padrão comércio, 32% serviços; energia varia. Default conservador 32%.
+  irpjPercentualPresuncao     Decimal     @default(0.32)   @db.Decimal(8, 6)
+  /// Adicional 10% sobre parcela > R$ 20.000,00/mês de lucro presumido (Lei 9.249/95 Art. 3 §1).
+  irpjAdicionalLimite         Decimal     @default(20000)  @db.Decimal(15, 2)
+  irpjAdicionalAliquota       Decimal     @default(0.10)   @db.Decimal(8, 6)
+
+  // ── CSLL presumido (Lei 7.689/88 + 9.249/95) ──
+  csllAliquota                Decimal     @default(0.09)   @db.Decimal(8, 6)
+  /// % presunção CSLL: 12% comércio, 32% serviços. Default 32% (mesma lógica IRPJ).
+  csllPercentualPresuncao     Decimal     @default(0.32)   @db.Decimal(8, 6)
+
+  // ── Fundos Lei 5.764/71 Art. 28 (configurável caso estatuto da cooperativa fixe outros %) ──
+  fundoReservaPercentual      Decimal     @default(0.10)   @db.Decimal(8, 6)
+  fatesPercentual             Decimal     @default(0.05)   @db.Decimal(8, 6)
+
+  /// Flag de auditoria — vira true só após Walter conferir os defaults
+  /// (especialmente % de presunção IRPJ/CSLL pra atividade SCEE).
+  validadoContador            Boolean     @default(false)
+  validadoPorUsuarioId        String?
+  validadoEm                  DateTime?
+  observacaoContador          String?
+
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
+
+  @@map("configuracoes_tributarias")
 }

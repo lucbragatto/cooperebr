@@ -1,9 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { NaturezaCooperativa, OrigemLancamento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { runAsPlatform } from '../common/tenant-context';
 import { RegimeContabilFactory } from './regimes/regime.factory';
 import { FonteLancamento } from './regimes/regime-contabil.interface';
+import { ApuracaoService } from './apuracao.service';
 
 /**
  * D-novo-BR-CT CT.2+CT.3 (31/05/2026) — Service nuclear da contabilidade
@@ -22,6 +23,7 @@ export class ContabilidadeTributariaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly factory: RegimeContabilFactory,
+    @Optional() private readonly apuracaoService?: ApuracaoService,
   ) {}
 
   /**
@@ -104,6 +106,11 @@ export class ContabilidadeTributariaService {
     cooperadoId?: string | null;
   }): Promise<{ id: string; criado: boolean; naturezaAto: NaturezaCooperativa }> {
     return runAsPlatform(async () => {
+      // 0. CT.4 — bloqueio retroativo: mês com apuração FECHADA é imutável
+      if (this.apuracaoService) {
+        await this.apuracaoService.garantirMesAberto(opts.cooperativaId, opts.competencia);
+      }
+
       // 1. Classifica antes de gravar
       const natureza = await this.classificarLancamento(opts.cooperativaId, opts.fonte);
 
