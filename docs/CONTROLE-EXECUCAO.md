@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-31 — Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0)** — 3 commits em 1 sessão Code. **26 IDORs corrigidos** em 5 sub-fatias atômicas (F0.1-F0.5) — 19 Onda A + 7 críticos Onda B usando padrão D-novo-BQ. Auditorias expandidas (Dynamic Workflow Ondas A+B = 50 IDORs adicionais) catalogadas. Decisão arquitetural híbrida em 5 fases (F0 ✅ esta / F1 AsyncLocalStorage / F2 Prisma Extension / F3 residuais / F4 testes) em `docs/arquitetura/blindagem-multi-tenant-sistemica.md`. **55 specs F0 verdes + 111 IDOR total verdes** (56 BQ + 55 BR F0). **23 cenários runtime cross-tenant** validados em smoke programático. 4 padrões consolidados (posse direta, via-relação, body→JWT, global-only-SA). Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md`.
+> Última atualização: **2026-05-31 — Sprint Blindagem Multi-Tenant (D-novo-BR) COMPLETO** — 8 commits em 1 sessão Code maratona. **68/68 IDORs do sistema corrigidos** em 6 fatias atômicas (F0 + F1.1+F1.2+F1.3+F1.4+F1.5). **4 camadas de defesa em profundidade** ativas: fix manual + Guard sistêmico opt-in `@TenantResource` + Extension Prisma log-only `tenantLeakDetector` + Lint anti-reincidência baseline+ratchet (`npm run lint:tenant`, 256 legados allowlist). **164 specs IDOR+Guard verdes** + 6 smokes runtime cross-tenant (91 cenários validados). EmailLog ganhou coluna `cooperativaId` via ritual PM2. M8 fallback ENV removido (vazava credencial IMAP entre tenants). F2 (Prisma Extension de INJEÇÃO) fica OPCIONAL — Guard+lint+log já cobrem detecção pre-merge + runtime. Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md`.
+
+> Histórico: **2026-05-31 — Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0)** — 3 commits em 1 sessão Code. **26 IDORs corrigidos** em 5 sub-fatias atômicas (F0.1-F0.5) — 19 Onda A + 7 críticos Onda B usando padrão D-novo-BQ. Auditorias expandidas (Dynamic Workflow Ondas A+B = 50 IDORs adicionais) catalogadas. Decisão arquitetural híbrida em 5 fases (F0 ✅ esta / F1 AsyncLocalStorage / F2 Prisma Extension / F3 residuais / F4 testes) em `docs/arquitetura/blindagem-multi-tenant-sistemica.md`. **55 specs F0 verdes + 111 IDOR total verdes** (56 BQ + 55 BR F0). **23 cenários runtime cross-tenant** validados em smoke programático. 4 padrões consolidados (posse direta, via-relação, body→JWT, global-only-SA). Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md`.
 
 > Histórico: **2026-05-30 — Sprint Segurança IDOR (D-novo-BQ) COMPLETO** (5 commits `3e23f81..d17ac3f` em 1 sessão Code maratona). **18 IDORs corrigidos** (7 críticos + 8 altos + 3 médios) em 4 fatias atômicas (BQ.1+BQ.2+BQ.3+BQ.4). Padrão de fix mecânico (posse `findFirst` + SUPER_ADMIN bypass). Auditoria gerada por **Audit Dynamic Workflow** — primeiro uso no projeto (28 sub-agentes paralelos Opus 4.8, 4 min, 1.437.072 tokens, relatório `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`). **56 specs isolamento verdes** + **35 cenários runtime cross-tenant validados em 3 smokes programáticos**. Pré-requisito Sinergia (2º parceiro real) destravado nos módulos núcleo. Detalhe: `docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md`.
 
@@ -1172,13 +1174,115 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
 
-2. Rodar `git status --short`. Esperado: working tree limpo (untracked
-   carry-overs catalogados). Último commit eh o de fechamento Sprint
-   Blindagem Multi-Tenant Fase 0 (D-novo-BR F0).
+2. Rodar `git status --short`. Esperado pós-fechamento: working tree limpo
+   (untracked carry-overs catalogados), último commit é o de fechamento
+   Sprint Blindagem Multi-Tenant COMPLETO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
 
-PASSO 1 — Onde paramos + Próximo bloco:
+PASSO 1 — Frase de retomada principal:
+
+Sessão 31/05 entregou Sprint Blindagem Multi-Tenant (D-novo-BR)
+COMPLETO em 8 commits (063e01c..[hash fechamento]).
+**68/68 IDORs do sistema corrigidos** em 6 fatias canônicas:
+
+F0 (063e01c..8a40b81): fix manual 26 IDORs (19 Onda A + 7 críticos
+Onda B) padrão BQ.
+F1.1 (4d933c4): infra Guard @TenantResource + TenantOwnershipGuard
++ buildNestedWhere helper + APP_GUARD wiring. 24 specs unit.
+F1.2 (0c81afd): @TenantResource em 15 endpoints (13 cat 1 + 2 cat 2
+com fix service). Smoke 17/17.
+F1.3 (7fa60b3): ALS AsyncLocalStorage + @AsPlatform decorator em
+45 métodos cron/listener + Prisma Extension log-only tenantLeakDetector
++ middleware HTTP. 26 specs novos.
+F1.4 (1b1971f): lint anti-reincidência baseline+ratchet,
+npm run lint:tenant, 256 legados allowlist.
+F1.5 (esta sessão): 9 residuais cat 3 + EmailLog schema cooperativaId
++ M8 fallback ENV removido. 3 specs + smoke 9/9.
+
+4 CAMADAS DE DEFESA EM PROFUNDIDADE ATIVAS:
+1. Fix manual ponto-a-ponto (D-48+Fase2+BQ+F0+F1.2+F1.5)
+2. Guard sistêmico opt-in @TenantResource (F1.1+F1.2)
+3. Extension Prisma log-only tenantLeakDetector (F1.3)
+4. Lint baseline+ratchet pre-merge (F1.4)
+
+TOTAIS:
+- 164 specs IDOR+Guard verdes
+- 6 smokes runtime cross-tenant — 91 cenários validados
+- 256 legados na allowlist do lint (ratchet — só diminui)
+- EmailLog tenant-scoped (M7 schema migration via ritual PM2)
+- M8 fallback ENV removido (vazava credencial IMAP entre tenants)
+
+DÉBITOS:
+- D-novo-BR F0+F1 ✅ COMPLETO
+- F2 (Prisma Extension de INJEÇÃO) → OPCIONAL — Guard+lint+log cobrem
+- F4 (regressão E2E abrangente) → catalogado futuro
+
+PRÓXIMO BLOCO — LUCIANO ESCOLHE (5 opções):
+
+(1) F.4 smoke E2E pós-Blindagem (~1-2h) — 10 fluxos críticos pra
+   garantir caminho feliz após F0+F1.5
+(2) Esvaziar allowlist incremental (tempo livre) — anotar 256 legados
+   removendo da allowlist conforme lint:tenant aponta
+(3) Sprint Contabilidade Tributária Segregada (#8 roadmap, 40-60h)
+(4) Convergência /parceiro vs /dashboard (D-novo-BP P3, 20-30h)
+(5) Avaliar F2 SE volume de novos endpoints justificar (sob demanda)
+
+REGRA INEGOCIÁVEL: antes de propor qualquer bloco aprovado, aplicar
+Fase 1 read-only mini (~10-15min). Não tocar código antes de OK
+Luciano explícito.
+
+CONSTRAINTS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA
+- @TenantResource em todo handler novo de mutação (lint força)
+- @AsPlatform() em todo cron/listener novo (1 linha)
+- Padrão fix IDOR (4 categorias) consolidado em D-novo-BR
+- Multi-tenant: TODA query Prisma filtra por cooperativaId
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV)
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com
+- Decisão 24: frase de retomada local único
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md
+4. docs/debitos-tecnicos.md (D-novo-BR ✅ completo)
+5. (se decisão F2/Extension futura) docs/arquitetura/blindagem-multi-tenant-sistemica.md
+6. docs/MAPA-INTEGRIDADE-SISTEMA.md
+7. CLAUDE.md + .claude/CLAUDE.md
+8. git log --oneline -15
+
+CARRY-OVERS (nao-bloqueantes):
+- 10 erros TS pré-existentes em backend/src/agents/ (untracked)
+- lead-expansao POST @Public requer guard diferente (rate-limit, defer)
+- 256 legados allowlist lint — esvaziar incrementalmente
+- usinas.controller.spec.ts pré-existente
+- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD)
+- D-novo-BP (P3 convergência portal)
+- D-novo-BJ (P2 LGPD URL assinada)
+- D-novo-BK (P3 storage S3/Supabase)
+
+FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+
+DOC-SESSAO SPRINT BLINDAGEM COMPLETO: docs/sessoes/2026-05-31-sprint-
+blindagem-multi-tenant-completo.md
+```
+
+---
+
+### Frase Sprint Blindagem F0 (anterior, arquivada)
+
+```
+[FRASE SPRINT BR F0 — substituída acima pelo Sprint Blindagem COMPLETO 31/05]
 
 Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0) entregue 100%
 em 1 sessão Code (31/05), 3 commits, 5 sub-fatias atômicas.

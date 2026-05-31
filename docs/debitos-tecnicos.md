@@ -3606,10 +3606,13 @@ Frontend (`web/`):
 | Fase | Escopo | Estimativa | Status |
 |---|---|---|---|
 | F0 | Fix manual 26 IDORs críticos (19 Onda A + 7 CRÍTICOS Onda B) — padrão BQ.1-BQ.4 | 2-3h | ✅ **IMPLEMENTADO 31/05/2026** |
-| F1 | Fundação — AsyncLocalStorage + interceptor + `runWithTenant()` + `runAsPlatform()` escape hatch | 3-4 dias | 📋 Catalogado |
-| F2 | Prisma Client Extension injeta `cooperativaId` automático nos ~52 models com campo direto (read+write) | 2-3 dias | 📋 Catalogado |
-| F3 | Fixes residuais — ~18 models tenant-via-relação (join) + ~8 body-injection que Extension não cobre + EmailLog schema add `cooperativaId` | 1-2 dias | 📋 Catalogado |
-| F4 | Teste de regressão multi-tenant + spec cross-tenant abrangente | 1-2 dias | 📋 Catalogado |
+| F1.1 | Infra Guard sistêmico — `@TenantResource` decorator + `TenantOwnershipGuard` + `buildNestedWhere` helper + APP_GUARD wiring | 4-6h | ✅ **IMPLEMENTADO 31/05/2026** (commit `4d933c4`) |
+| F1.2 | Anotar 15 endpoints cobríveis (13 cat 1 + 2 cat 2 com fix service) | 3-5h | ✅ **IMPLEMENTADO 31/05/2026** (commit `0c81afd`) |
+| F1.3 | Camada 3 defensiva — AsyncLocalStorage + `@AsPlatform()` decorator + Prisma Extension log-only `tenantLeakDetector` + wirar em 45 métodos de cron/listener | 4-5h | ✅ **IMPLEMENTADO 31/05/2026** (commit `7fa60b3`) |
+| F1.4 | Lint anti-reincidência baseline+ratchet — `npm run lint:tenant` + allowlist 256 legados | 1-2h | ✅ **IMPLEMENTADO 31/05/2026** (commit `1b1971f`) |
+| F1.5 | 9 residuais cat 3 + EmailLog schema cooperativaId + M8 fallback ENV removido | 3-4h | ✅ **IMPLEMENTADO 31/05/2026** (esta sessão) |
+| F2 (futuro) | Prisma Client Extension de INJEÇÃO automática nos ~52 models | 2-3 dias | 📋 **OPCIONAL** — Guard+lint+log já cobrem detecção pre-merge + runtime. Reavaliar SE volume de novos endpoints justificar |
+| F4 (futuro) | Teste de regressão multi-tenant cross-tenant abrangente E2E | 1-2 dias | 📋 Catalogado |
 
 **Armadilhas catalogadas (doc arquitetura §D):**
 1. Crons + webhooks rodam SEM request HTTP — Extension cega quebraria silenciosamente. `runAsPlatform()` é pré-requisito, não opcional.
@@ -3639,10 +3642,39 @@ Frontend (`web/`):
 
 **Total IDOR specs sistema após F0:** 111 verdes (56 D-novo-BQ + 55 D-novo-BR F0).
 
-**Carry-over F0:**
-- lead-expansao POST `@Public` (cadastro pelo bot WA sem JWT) — não é IDOR no sentido clássico, requer guard diferente (rate-limit + validação body.cooperativaId existe). Anotado pra Fase 3.
-- EmailLog schema sem `cooperativaId` — adicionar campo + migration na Fase 3 (audit log de email cross-tenant).
-- Refator monitoramento-usinas (5 endpoints alto/médio) + asaas listarCobrancas + email reenviar + email-monitor processar + whatsapp listas/fluxos/cooperados-para-disparo/historico/disparar-convites-indicacao (16 ALTO + 8 MÉDIO Onda B) — Fase 3 ou após F2 Extension cobrir parcialmente.
+**Carry-over F0 (TODOS RESOLVIDOS EM F1.2 + F1.5):**
+- lead-expansao POST `@Public` — requer guard diferente (rate-limit), defer
+- EmailLog schema sem `cooperativaId` — ✅ **RESOLVIDO F1.5** (schema add + populate + filtro)
+- 24 IDORs ALTO+MÉDIO Onda B — ✅ **TODOS RESOLVIDOS EM F1.2 (15) + F1.5 (9)**
+
+**F1.5 implementação (31/05/2026) — 9 residuais cat 3 + EmailLog + M8:**
+
+| ID | Fix |
+|---|---|
+| A10 | `integracao-bancaria.listarConfigs(cooperativaId?)` — filtro por tenant (já F0.5, re-validado) |
+| A11 | `integracao-bancaria.emitirCobranca({...cooperativaId})` — config + cooperado por tenant |
+| A12 | `/whatsapp/historico` — `where.cooperativaId` quando perfil ≠ SA |
+| A13 | `/whatsapp/historico/:telefone` — valida telefone pertence a cooperado do tenant |
+| A14 | `/whatsapp/disparar-convites-indicacao` — body.parceiroId ≠ JWT exige SA |
+| A15 | `/whatsapp/cooperados-para-disparo` — query.parceiroId só vale pra SA |
+| A16 | `monitoramento-usinas.getStatusAtual(cooperativaId?)` — filtra via `usina:{cooperativaId}` |
+| M7 | `EmailLog` schema add `cooperativaId String?` + `@@index([cooperativaId,criadoEm])`. Migration aplicada via ritual PM2. `registrarLog` popula. `buscarLogs` filtra. Removido da whitelist `MODELS_GLOBAIS`. |
+| M8 | `email-monitor` — fallback ENV REMOVIDO; throw se credenciais do tenant ausentes. Controller bloqueia cooperativaId undefined. |
+
+**Specs F1.5:** `email-idor-f15.spec.ts` (3 verdes): ADMIN A filtra coop-A; ADMIN B não vê A; SA vê tudo.
+
+**Smoke F1.5:** `scripts/smoke-f15-residuais.ts` — 9/9 cross-tenant validados em runtime.
+
+**PLACAR FINAL D-novo-BR (31/05/2026):**
+- **68/68 IDORs corrigidos** (18 BQ + 26 F0 + 15 F1.2 + 9 F1.5)
+- **Defesa em profundidade ativa:**
+  - **Camada 1** — fix manual ponto-a-ponto (D-48 + Fase2A-E + BQ + F0 + F1.2 + F1.5)
+  - **Camada 2** — `TenantOwnershipGuard` opt-in via `@TenantResource` (F1.1)
+  - **Camada 3** — `tenantLeakExtension` log-only Prisma Extension (F1.3)
+  - **Camada 4** — Lint baseline+ratchet `npm run lint:tenant` (F1.4) — bloqueia 69º vulnerável em pre-merge
+
+**Total specs IDOR+Guard sistema:** 164 verdes (135 D-novo-BQ+BR F0 + 24 Guard F1.1 + 7 ALS F1.3 + 19 LeakDetector F1.3 + 3 EmailLog F1.5)
+**Total smokes cross-tenant runtime:** 6 programáticos — 91 cenários validados
 
 **Recomendação arquitetural (doc arquitetura §C):** Não esperar F1+F2+F3 (~7 dias) com críticos sangrando. F0 resolveu o sangramento em 1 sessão. Próximas fases previnem reincidência via Extension (~52 models cobertos automaticamente; endpoint novo nasce protegido) + escape hatch pra crons/webhooks.
 

@@ -33,15 +33,19 @@ Por isso o Sprint Blindagem (D-novo-BR) é **prioridade de produto**, não débi
 
 ## C. Recomendação: HÍBRIDO FASEADO, críticos PRIMEIRO
 
+> **STATUS 31/05/2026: F0+F1 COMPLETOS em 1 sessão Code maratona. 68/68 IDORs corrigidos.**
+
 Não esperar a fundação (7-11 dias) com críticos sangrando. Sequência:
 
-- **FASE 0 (~2-3h):** fix manual em lote dos 7 críticos Onda B + 19 Onda A (mesmo padrão dos 18 já feitos). Resolve o sangramento.
-- **FASE 1 (~3-4 dias):** fundação — AsyncLocalStorage + interceptor que abre contexto de tenant por request + helper `runWithTenant()` + **escape hatch `runAsPlatform()`** pra crons/webhooks/SUPER_ADMIN.
-- **FASE 2 (~2-3 dias):** Prisma Client Extension injeta `cooperativaId` automático nos ~52 models com campo direto (read+write). Previne reincidência — endpoint novo já nasce protegido.
-- **FASE 3 (~1-2 dias):** fixes residuais — ~18 models tenant-via-relação (join) + ~8 body-injection (controller/DTO) que a Extension não cobre.
-- **FASE 4:** teste de regressão multi-tenant + spec cross-tenant abrangente.
+- **FASE 0 (~2-3h):** ✅ COMPLETO — fix manual 26 IDORs (commits 063e01c..8a40b81).
+- **FASE 1.1+1.2:** ✅ COMPLETO — Guard sistêmico `@TenantResource` + 15 endpoints anotados (commits 4d933c4, 0c81afd).
+- **FASE 1.3:** ✅ COMPLETO — AsyncLocalStorage nativo + `runWithTenant`/`runAsPlatform`/`@AsPlatform()` em 45 métodos cron/listener + Extension Prisma LOG-ONLY `tenantLeakDetector` (commit 7fa60b3).
+- **FASE 1.4:** ✅ COMPLETO — Lint anti-reincidência baseline+ratchet (commit 1b1971f).
+- **FASE 1.5:** ✅ COMPLETO — 9 residuais cat 3 + EmailLog schema `cooperativaId` (migration via ritual PM2) + M8 fallback ENV removido.
+- **FASE 2 (~2-3 dias):** 📋 **OPCIONAL** — Prisma Client Extension de INJEÇÃO automática. Com Guard+lint+log ativos, F2 vira *opcional*: reavaliar SE volume de novos endpoints em sprints futuros justificar overhead (Extension de injeção tem armadilhas: crons, upsert, raw queries, performance, mock em testes).
+- **FASE 4 (~1-2 dias):** 📋 Catalogado futuro — regressão E2E abrangente.
 
-**Cobertura final:** Extension ~52 models + manual o resto. Total ~7-11 dias, **críticos resolvidos no dia 1**.
+**Cobertura final REAL:** 68/68 corrigidos por F0+F1, com 4 camadas defensivas (manual + Guard + log + lint).
 
 ## D. Armadilhas específicas do SISGD
 
