@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AsaasService } from './asaas.service';
 import { Roles } from '../auth/roles.decorator';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { AuditLog } from '../audit/audit-log.decorator';
@@ -80,6 +81,10 @@ export class AsaasController {
     );
   }
 
+  // D-novo-BR F1.2 A9 — Guard valida :cooperadoId pertence ao tenant.
+  // findMany resultante já fica restrito ao cooperado validado (não há cobranças
+  // do cooperado A no tenant B). Defesa em profundidade: service inalterado.
+  @TenantResource({ model: 'cooperado', idParam: 'cooperadoId' })
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('cobrancas/:cooperadoId')
   listarCobrancas(@Param('cooperadoId') cooperadoId: string) {

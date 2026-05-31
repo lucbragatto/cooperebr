@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Param, Body, Query, Headers, UnauthorizedException, Logger, Req, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IntegracaoBancariaService } from './integracao-bancaria.service';
 import { Roles } from '../auth/roles.decorator';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
@@ -75,6 +76,9 @@ export class IntegracaoBancariaController {
     return this.service.cancelarCobranca(id, cooperativaId);
   }
 
+  // D-novo-BR F1.2 A5 — Guard valida posse antes do reemitir (sequência ataque
+  // bloqueada: ADMIN A→reemitir cobrança B chamava API banco do B + alterava registros)
+  @TenantResource({ model: 'cobrancaBancaria' })
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('cobrancas/:id/reemitir')
   reemitirCobranca(@Param('id') id: string) {

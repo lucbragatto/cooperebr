@@ -7,6 +7,7 @@ import { WhatsappMlmService } from './whatsapp-mlm.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { ModeloMensagemService } from './modelo-mensagem.service';
 import { Roles } from '../auth/roles.decorator';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { PrismaService } from '../prisma.service';
@@ -306,6 +307,8 @@ export class WhatsappFaturaController {
     });
   }
 
+  // D-novo-BR F1.2 A1 — Guard valida posse + globalOnlySA bloqueia ADMIN tocar lista global
+  @TenantResource({ model: 'listaContatos', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Put('listas/:id')
   async atualizarLista(
@@ -320,12 +323,16 @@ export class WhatsappFaturaController {
     return this.prisma.listaContatos.update({ where: { id }, data });
   }
 
+  // D-novo-BR F1.2 A2 — Guard valida posse + globalOnlySA
+  @TenantResource({ model: 'listaContatos', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete('listas/:id')
   async deletarLista(@Param('id') id: string) {
     return this.prisma.listaContatos.delete({ where: { id } });
   }
 
+  // D-novo-BR F1.2 M1 — Guard valida posse + globalOnlySA
+  @TenantResource({ model: 'listaContatos', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('listas/:id/usar')
   async usarLista(@Param('id') id: string) {
@@ -479,6 +486,8 @@ export class WhatsappFaturaController {
     return this.modeloMensagem.create({ ...body, cooperativaId });
   }
 
+  // D-novo-BR F1.2 A3 — Guard valida posse + globalOnlySA (modelo global só SA)
+  @TenantResource({ model: 'modeloMensagem', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Put('modelos/:id')
   async atualizarModelo(
@@ -497,6 +506,8 @@ export class WhatsappFaturaController {
     return this.modeloMensagem.delete(id, cooperativaId, perfil === SUPER_ADMIN);
   }
 
+  // D-novo-BR F1.2 M2 — Guard valida posse + globalOnlySA (não vaza conteúdo cross-tenant)
+  @TenantResource({ model: 'modeloMensagem', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('modelos/:id/testar')
   async testarModelo(
@@ -538,6 +549,8 @@ export class WhatsappFaturaController {
     return this.modeloMensagem.createFluxo({ ...body, cooperativaId });
   }
 
+  // D-novo-BR F1.2 A4 — Guard valida posse + globalOnlySA (fluxo global plataforma só SA)
+  @TenantResource({ model: 'fluxoEtapa', globalOnlySuperAdmin: true })
   @Roles(SUPER_ADMIN, ADMIN)
   @Put('fluxos/:id')
   async atualizarFluxo(
