@@ -55,6 +55,7 @@ import { BandeiraTarifariaModule } from './bandeira-tarifaria/bandeira-tarifaria
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ModuloGuard } from './auth/modulo.guard';
+import { TenantOwnershipGuard } from './auth/tenant-ownership.guard';
 import { AuditModule } from './audit/audit.module';
 import { NotificacoesProativasModule } from './notificacoes-proativas/notificacoes-proativas.module';
 import { SolicitacoesContratoModule } from './solicitacoes-contrato/solicitacoes-contrato.module';
@@ -129,6 +130,9 @@ import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietar
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ModuloGuard },
+    // D-novo-BR F1.1 (31/05/2026) — Guard sistêmico de posse multi-tenant.
+    // Opt-in via @TenantResource; sem decorator → passa direto (não-quebrante).
+    { provide: APP_GUARD, useClass: TenantOwnershipGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
