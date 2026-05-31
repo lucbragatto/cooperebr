@@ -238,9 +238,13 @@ export class MonitoramentoUsinasService {
     this.logger.log(`Ocorrência ${ocorrencia.id} criada para alerta ${alerta.id}`);
   }
 
-  async getStatusAtual() {
+  // D-novo-BR F1.5 A16 (31/05/2026) — filtra por tenant via relação usina.
+  // cooperativaId null = SUPER_ADMIN vê tudo.
+  async getStatusAtual(cooperativaId?: string | null) {
+    const where: any = { habilitado: true };
+    if (cooperativaId) where.usina = { cooperativaId };
     const configs = await this.prisma.usinaMonitoramentoConfig.findMany({
-      where: { habilitado: true },
+      where,
       include: { usina: true },
     });
 

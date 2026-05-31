@@ -30,7 +30,8 @@ export const MODELS_GLOBAIS = new Set<string>([
   'ConfigGatewayPlataforma', // config plataforma
   'PlanoSaas',              // planos plataforma
   'LeadWhatsapp',           // público pré-tenant
-  'EmailLog',               // M7 cat-3 — schema add em F1.5
+  // F1.5 M7 (31/05/2026): EmailLog removido — agora é tenant-scoped (coluna
+  // cooperativaId adicionada via schema). Guard log detecta queries sem filtro.
   // Outros models sem cooperativaId direto (tenant-via-relação) NÃO
   // estão aqui — devemos LOGAR queries sem filtro relacional pra detectar.
 ]);

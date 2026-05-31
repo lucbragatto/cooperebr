@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query, Req } from '@nestjs/common';
 import { MonitoramentoUsinasService } from './monitoramento-usinas.service';
 import { Roles } from '../auth/roles.decorator';
 import { TenantResource } from '../auth/tenant-resource.decorator';
@@ -17,11 +17,12 @@ const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 export class MonitoramentoUsinasController {
   constructor(private readonly service: MonitoramentoUsinasService) {}
 
-  // A16 cat-3 (defer F1.5): listagem global sem id — fix manual no service.
+  // D-novo-BR F1.5 A16 — filtra status por tenant. SA → null → vê tudo.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get()
-  getStatusAtual() {
-    return this.service.getStatusAtual();
+  getStatusAtual(@Req() req: any) {
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
+    return this.service.getStatusAtual(cooperativaId);
   }
 
   // F1.2 M4 — Guard valida posse da Usina antes de retornar histórico

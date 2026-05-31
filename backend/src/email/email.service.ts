@@ -70,11 +70,12 @@ export class EmailService {
     try {
       await tenant.transporter.sendMail({ from: tenant.from, to, subject, html, text });
       this.logger.log(`E-mail enviado para ${to}: ${subject} [fonte=${tenant.fonte}]`);
-      await this.registrarLog(to, subject, 'ENVIADO').catch(() => {});
+      // D-novo-BR F1.5 M7 — popular cooperativaId no log pra filtro tenant-aware
+      await this.registrarLog(to, subject, 'ENVIADO', undefined, cooperativaId).catch(() => {});
       return true;
     } catch (err: any) {
       this.logger.error(`Falha ao enviar e-mail para ${to}: ${err.message}`);
-      await this.registrarLog(to, subject, 'ERRO', err.message).catch(() => {});
+      await this.registrarLog(to, subject, 'ERRO', err.message, cooperativaId).catch(() => {});
       return false;
     }
   }
@@ -264,22 +265,34 @@ export class EmailService {
     );
   }
 
-  async buscarLogs(page = 1, limit = 20) {
+  // D-novo-BR F1.5 M7 — listagem filtrada por tenant.
+  // cooperativaId null = SUPER_ADMIN vê tudo (incluindo legados sem cooperativaId);
+  // ADMIN tenant-scoped vê só logs do próprio tenant (logs pré-F1.5 com cooperativaId
+  // null ficam invisíveis pra ADMIN — intencional, evita vazamento legado).
+  async buscarLogs(page = 1, limit = 20, cooperativaId?: string | null) {
     const skip = (page - 1) * limit;
+    const where: any = cooperativaId ? { cooperativaId } : {};
     const [logs, total] = await Promise.all([
       this.prisma.emailLog.findMany({
+        where,
         orderBy: { criadoEm: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.emailLog.count(),
+      this.prisma.emailLog.count({ where }),
     ]);
     return { logs, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
-  private async registrarLog(destinatario: string, assunto: string, status: string, erro?: string) {
+  private async registrarLog(
+    destinatario: string,
+    assunto: string,
+    status: string,
+    erro?: string,
+    cooperativaId?: string | null,
+  ) {
     await this.prisma.emailLog.create({
-      data: { destinatario, assunto, status, erro },
+      data: { destinatario, assunto, status, erro, cooperativaId: cooperativaId ?? null },
     });
   }
 }

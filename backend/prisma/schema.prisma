@@ -2080,8 +2080,13 @@ model EmailLog {
   valorExtraido Float?
   nomeRemetente String?
   dataEmail     DateTime?
+  // D-novo-BR F1.5 M7 (31/05/2026) — tenant-scope explícito.
+  // Nullable: logs antigos (pré-F1.5) ficam null e só SUPER_ADMIN vê.
+  // Populado em enviarEmail → registrarLog quando cooperativaId conhecido.
+  cooperativaId String?
   criadoEm      DateTime  @default(now())
 
+  @@index([cooperativaId, criadoEm])
   @@map("email_logs")
 }
 

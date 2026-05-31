@@ -54,25 +54,32 @@ export class EmailMonitorService {
   }
 
   private async criarClientePorCooperativa(cooperativaId: string): Promise<ImapFlow> {
-    const hostDb = await this.getConfigFromDb('email.monitor.host', cooperativaId);
-    const portDb = await this.getConfigFromDb('email.monitor.port', cooperativaId);
+    // D-novo-BR F1.5 M8 (31/05/2026) — credenciais DEVEM vir do banco do tenant.
+    // Fallback pra ENV global removido — vazava credencial entre tenants quando
+    // a config do tenant estava ausente (SUPER_ADMIN sem cooperativaId chamando
+    // processarManual usaria credencial "default" do ENV).
     const userDb = await this.getConfigFromDb('email.monitor.user', cooperativaId);
     const passDb = await this.getConfigFromDb('email.monitor.pass', cooperativaId);
 
-    const host = hostDb || process.env.EMAIL_IMAP_HOST || 'imap.gmail.com';
-    const port = Number(portDb || process.env.EMAIL_IMAP_PORT || '993');
-    const user = userDb || process.env.EMAIL_IMAP_USER || '';
-
-    let pass = process.env.EMAIL_IMAP_PASS || '';
-    if (passDb) {
-      pass = Buffer.from(passDb, 'base64').toString('utf-8');
+    if (!userDb || !passDb) {
+      throw new Error(
+        `Credenciais IMAP do tenant ${cooperativaId} não configuradas. ` +
+          'Cadastre email.monitor.user e email.monitor.pass em ConfigTenant ' +
+          '(fallback ENV removido por segurança multi-tenant).',
+      );
     }
+
+    const hostDb = await this.getConfigFromDb('email.monitor.host', cooperativaId);
+    const portDb = await this.getConfigFromDb('email.monitor.port', cooperativaId);
+    const host = hostDb || 'imap.gmail.com';
+    const port = Number(portDb || '993');
+    const pass = Buffer.from(passDb, 'base64').toString('utf-8');
 
     return new ImapFlow({
       host,
       port,
       secure: true,
-      auth: { user, pass },
+      auth: { user: userDb, pass },
       logger: false,
     });
   }

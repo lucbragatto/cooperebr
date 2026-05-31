@@ -60,11 +60,15 @@ export class EmailController {
     return { sucesso: ok, tipo: 'boas-vindas', cooperadoId };
   }
 
-  // M7 cat-3 (defer F1.5): EmailLog sem cooperativaId → schema add + filtro
+  // D-novo-BR F1.5 M7 — listagem filtrada por tenant do JWT.
+  // SUPER_ADMIN → cooperativaId=null → vê tudo (incl. legados sem cooperativaId).
   @Get('logs')
   @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN)
-  async logs(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.emailService.buscarLogs(Number(page) || 1, Number(limit) || 20);
+  async logs(@Query('page') page?: string, @Query('limit') limit?: string, @Req() req?: any) {
+    const cooperativaId = req?.user?.perfil === PerfilUsuario.SUPER_ADMIN
+      ? null
+      : (req?.user?.cooperativaId ?? null);
+    return this.emailService.buscarLogs(Number(page) || 1, Number(limit) || 20, cooperativaId);
   }
 
   @Post('testar')

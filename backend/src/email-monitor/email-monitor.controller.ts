@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Req } from '@nestjs/common';
+import { Controller, Post, Get, Req, BadRequestException } from '@nestjs/common';
 import { EmailMonitorService } from './email-monitor.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -11,10 +11,20 @@ export class EmailMonitorController {
   /**
    * POST /email-monitor/processar
    * Disparo manual da verificação de e-mails com faturas concessionária.
+   *
+   * D-novo-BR F1.5 M8 (31/05/2026) — cooperativaId obrigatório. Sem isso,
+   * SUPER_ADMIN sem cooperativaId vinculado fazia fallback pra ENV global,
+   * vazando credencial IMAP "padrão" entre tenants.
    */
   @Post('processar')
   processar(@Req() req: any) {
     const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório pra disparar monitor de e-mail manualmente. ' +
+          'SUPER_ADMIN sem tenant vinculado: use impersonate ou cadastre vínculo.',
+      );
+    }
     return this.emailMonitorService.processarManual(cooperativaId);
   }
 

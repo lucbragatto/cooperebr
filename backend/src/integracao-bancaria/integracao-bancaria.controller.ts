@@ -26,6 +26,7 @@ export class IntegracaoBancariaController {
 
   // ── Cobranças ─────────────────────────────────────────────
 
+  // D-novo-BR F1.5 A11 — cooperativaId do JWT (não do body). SUPER_ADMIN null = legacy.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('cobrancas')
   emitirCobranca(
@@ -38,10 +39,13 @@ export class IntegracaoBancariaController {
       cobrancaId?: string;
       banco?: string;
     },
+    @Req() req: any,
   ) {
+    const cooperativaId = req.user?.perfil === SUPER_ADMIN ? null : (req.user?.cooperativaId ?? null);
     return this.service.emitirCobranca({
       ...body,
       vencimento: new Date(body.vencimento),
+      cooperativaId,
     });
   }
 

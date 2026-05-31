@@ -237,9 +237,11 @@ export class WhatsappFaturaController {
 
   // ─── Histórico de mensagens ────────────────────────────────────────────────
 
+  // D-novo-BR F1.5 A12 — filtra histórico por tenant do JWT. SA vê tudo.
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('historico')
   async getHistorico(
+    @Req() req: any,
     @Query('telefone') telefone?: string,
     @Query('direcao') direcao?: string,
     @Query('limit') limit?: string,
@@ -247,10 +249,13 @@ export class WhatsappFaturaController {
   ) {
     const take = Math.min(Number(limit) || 50, 200);
     const skip = Number(offset) || 0;
+    const perfil = req.user?.perfil;
+    const cooperativaId = req.user?.cooperativaId;
 
     const where: any = {};
     if (telefone) where.telefone = { contains: telefone.replace(/\D/g, '') };
     if (direcao && ['ENTRADA', 'SAIDA'].includes(direcao)) where.direcao = direcao;
+    if (perfil !== SUPER_ADMIN && cooperativaId) where.cooperativaId = cooperativaId;
 
     const [mensagens, total] = await Promise.all([
       this.prisma.mensagemWhatsapp.findMany({
@@ -265,12 +270,31 @@ export class WhatsappFaturaController {
     return { mensagens, total, limit: take, offset: skip };
   }
 
+  // D-novo-BR F1.5 A13 — validar que telefone pertence a cooperado do tenant
+  // (não é o id do recurso direto, então não usa @TenantResource). Sem isso,
+  // ADMIN A enumera mensagens de qualquer telefone do mundo.
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('historico/:telefone')
-  async getHistoricoContato(@Param('telefone') telefone: string) {
+  async getHistoricoContato(@Param('telefone') telefone: string, @Req() req: any) {
     const telefoneNorm = telefone.replace(/\D/g, '');
+    const perfil = req.user?.perfil;
+    const cooperativaId = req.user?.cooperativaId;
+
+    if (perfil !== SUPER_ADMIN && cooperativaId) {
+      // Validar que existe cooperado com este telefone no tenant.
+      // Sufixo -8 igual o resto do código (telefones podem ter formato variado).
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: { telefone: { contains: telefoneNorm.slice(-8) }, cooperativaId },
+        select: { id: true },
+      });
+      if (!cooperado) return []; // não vaza histórico de telefone alheio
+    }
+
+    const where: any = { telefone: { contains: telefoneNorm } };
+    if (perfil !== SUPER_ADMIN && cooperativaId) where.cooperativaId = cooperativaId;
+
     return this.prisma.mensagemWhatsapp.findMany({
-      where: { telefone: { contains: telefoneNorm } },
+      where,
       orderBy: { enviadaEm: 'asc' },
     });
   }
@@ -343,6 +367,7 @@ export class WhatsappFaturaController {
 
   // ─── Cooperados para disparo seletivo ─────────────────────────────────────
 
+  // D-novo-BR F1.5 A15 — query.parceiroId só vale pra SA; ADMIN sempre JWT
   @Roles(ADMIN, SUPER_ADMIN)
   @Get('cooperados-para-disparo')
   async getCooperadosParaDisparo(
@@ -351,10 +376,11 @@ export class WhatsappFaturaController {
     @Query('parceiroId') parceiroId?: string,
   ) {
     const cooperativaId = req.user?.cooperativaId;
+    const perfil = req.user?.perfil;
     const where: any = {
       telefone: { not: null },
     };
-    if (parceiroId) {
+    if (parceiroId && perfil === SUPER_ADMIN) {
       where.cooperativaId = parceiroId;
     } else if (cooperativaId) {
       where.cooperativaId = cooperativaId;
@@ -436,6 +462,7 @@ export class WhatsappFaturaController {
 
   // ─── Fluxo 3: MLM viral via WhatsApp ─────────────────────────────────────
 
+  // D-novo-BR F1.5 A14 — body.parceiroId só pode ≠ JWT se caller for SA
   @Roles(SUPER_ADMIN, ADMIN)
   @Post('disparar-convites-indicacao')
   async dispararConvitesIndicacao(
@@ -448,8 +475,12 @@ export class WhatsappFaturaController {
     },
   ) {
     const cooperativaId = req.user?.cooperativaId;
+    const perfil = req.user?.perfil;
     if (!cooperativaId) {
       return { error: 'Cooperativa não identificada' };
+    }
+    if (body.parceiroId && body.parceiroId !== cooperativaId && perfil !== SUPER_ADMIN) {
+      throw new ForbiddenException('Apenas SUPER_ADMIN pode disparar convites em outro tenant');
     }
     return this.mlmService.enviarConvitesIndicacao(cooperativaId, {
       modo: body.modo,

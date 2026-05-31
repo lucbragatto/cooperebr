@@ -66,9 +66,12 @@ export class IntegracaoBancariaService {
     });
   }
 
-  async getConfigAtiva(banco?: string): Promise<any> {
+  async getConfigAtiva(banco?: string, cooperativaId?: string | null): Promise<any> {
+    // D-novo-BR F1.5 A11 (31/05/2026) — filtrar config por tenant.
+    // Sem cooperativaId (SA não-tenant) busca qualquer config ativa (legacy).
     const where: any = { ativo: true };
     if (banco) where.banco = banco;
+    if (cooperativaId) where.cooperativaId = cooperativaId;
     const config = await this.prisma.configuracaoBancaria.findFirst({ where });
     if (!config) throw new NotFoundException('Nenhuma configuração bancária ativa encontrada');
     return config;
@@ -84,11 +87,15 @@ export class IntegracaoBancariaService {
     tipo: 'BOLETO' | 'PIX';
     cobrancaId?: string;
     banco?: string;
+    cooperativaId?: string | null;
   }) {
-    const config = await this.getConfigAtiva(data.banco);
-    const cooperado = await this.prisma.cooperado.findUnique({
-      where: { id: data.cooperadoId },
-    });
+    // D-novo-BR F1.5 A11 (31/05/2026) — config do tenant + posse cooperado.
+    const config = await this.getConfigAtiva(data.banco, data.cooperativaId ?? null);
+    const cooperado = data.cooperativaId
+      ? await this.prisma.cooperado.findFirst({
+          where: { id: data.cooperadoId, cooperativaId: data.cooperativaId },
+        })
+      : await this.prisma.cooperado.findUnique({ where: { id: data.cooperadoId } });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     // Criar registro local
