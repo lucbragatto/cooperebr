@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Optional } from '@nestjs/common';
+import { ContabilidadeTributariaService } from '../contabilidade-tributaria/contabilidade-tributaria.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
@@ -67,6 +68,8 @@ export class CobrancasService {
     private cooperTokenService: CooperTokenService,
     private tokenContabil: TokenContabilService,
     private calculoMultaJuros: CalculoMultaJurosService,
+    // CT.3 — hook contábil opcional (módulo registra; tests podem omitir)
+    @Optional() private contabilidadeTributaria?: ContabilidadeTributariaService,
   ) {}
 
   @OnEvent('pagamento.confirmado')
@@ -524,6 +527,34 @@ export class CobrancasService {
       );
     } catch (err) {
       this.logger.warn(`Falha ao atualizar LancamentoCaixa na baixa: ${err.message}`);
+    }
+
+    // CT.3 — Hook contábil classificado (fire-and-forget, NUNCA reverte pagamento).
+    // Idempotente via @@unique([origemTipo, origemId]). cooperativaId da fonte.
+    if (this.contabilidadeTributaria) {
+      const coopIdHook = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
+      const tipoCoopHook = cobranca.contrato?.cooperado?.tipoCooperado ?? null;
+      if (coopIdHook) {
+        const mesRefHook = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
+        this.contabilidadeTributaria
+          .criarLancamentoAutomatico({
+            cooperativaId: coopIdHook,
+            origemTipo: 'COBRANCA',
+            origemId: cobranca.id,
+            fonte: { tipo: 'COBRANCA', cooperadoTipoCooperado: tipoCoopHook },
+            tipo: 'RECEITA',
+            descricao: `[CT] Cobrança paga — ${cobranca.id.slice(0, 8)}`,
+            valor: valorFinal,
+            competencia: mesRefHook,
+            dataPagamento: dtPagamento,
+            cooperadoId: cobranca.contrato?.cooperadoId ?? null,
+          })
+          .catch((err) =>
+            this.logger.error(
+              `[CT.3 hook] cobranca ${cobranca.id} classificação falhou: ${err.message}`,
+            ),
+          );
+      }
     }
 
     // Notificar pagamento confirmado via WhatsApp e E-mail

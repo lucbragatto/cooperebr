@@ -1179,16 +1179,34 @@ model PlanoContas {
   @@map("plano_contas")
 }
 
+/// D-novo-BR-CT CT.3 (31/05/2026) — Origem do lançamento automático.
+/// Garante idempotência via @@unique([origemTipo, origemId]) — hook
+/// NUNCA cria 2x pro mesmo pagamento.
+enum OrigemLancamento {
+  COBRANCA     // hook Cobranca PAGA (webhook Asaas OU baixa manual via darBaixa)
+  CONTA_PAGAR  // hook ContaAPagar status=PAGO
+  REPASSE      // hook RepasseProprietario marcarPago
+  MANUAL       // lançamento manual via UI (sem idempotência cruzada)
+}
+
 model LancamentoCaixa {
-  id             String            @id @default(cuid())
+  id             String              @id @default(cuid())
   tipo           String
   descricao      String
-  valor          Decimal           @db.Decimal(15, 2)
+  valor          Decimal             @db.Decimal(15, 2)
   competencia    String
   dataVencimento DateTime?
   dataPagamento  DateTime?
-  status         String            @default("PREVISTO")
-  naturezaAto    String            @default("COOPERADO_PROPRIO")
+  status         String              @default("PREVISTO")
+  // CT.1: valores normalizados pelo script Passo 1 ('COOPERADO_PROPRIO' →
+  // 'PROPRIO'). Coluna mantida String pra preservar 58 linhas sem
+  // --accept-data-loss; enum NaturezaCooperativa usado no TypeScript via
+  // RegimeContabil.classificarLancamento(). Promoção formal pra ALTER TYPE
+  // deferida pra migration via SQL manual com USING cast (não-bloqueante).
+  naturezaAto    String              @default("PROPRIO")
+  // CT.3: rastreabilidade + idempotência. Nullable pra preservar 58 legados.
+  origemTipo     OrigemLancamento?
+  origemId       String?
   planoContasId  String?
   planoContas    PlanoContas?      @relation(fields: [planoContasId], references: [id])
   cooperadoId    String?
@@ -1208,6 +1226,9 @@ model LancamentoCaixa {
 
   @@index([competencia])
   @@index([cooperativaId, competencia])
+  // CT.3 idempotência: 1 lançamento por evento upstream. Hook usa upsert
+  // e captura P2002 em fire-and-forget pra log.
+  @@unique([origemTipo, origemId])
   @@map("lancamentos_caixa")
 }
 

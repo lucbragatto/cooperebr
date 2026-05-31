@@ -5,8 +5,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { ContabilidadeTributariaService } from '../contabilidade-tributaria/contabilidade-tributaria.service';
 import {
   CategoriaContaAPagar,
   QuemPagouTipo,
@@ -46,6 +48,7 @@ export class ContasPagarService {
     private prisma: PrismaService,
     // Opcional pra preservar specs unitários sem mock — fire-and-forget guard com ?
     private readonly notificacoes?: NotificacoesProativasService,
+    @Optional() private readonly contabilidadeTributaria?: ContabilidadeTributariaService,
   ) {}
 
   async findAll(cooperativaId: string, filtros?: { status?: string; categoria?: string }) {
@@ -99,10 +102,35 @@ export class ContasPagarService {
     if (dto.usinaId !== undefined) data.usinaId = dto.usinaId;
     if (dto.comprovante !== undefined) data.comprovante = dto.comprovante;
 
-    return this.prisma.contaAPagar.update({
+    const atualizada = await this.prisma.contaAPagar.update({
       where: { id },
       data,
     });
+
+    // CT.3 — Hook contábil fire-and-forget quando ContaAPagar vira PAGO.
+    // Idempotente via @@unique([origemTipo, origemId]) em LancamentoCaixa.
+    // cooperativaId vem da fonte (atualizada.cooperativaId), runAsPlatform interno.
+    if (dto.status === 'PAGO' && this.contabilidadeTributaria) {
+      const dataPag = atualizada.dataPagamento ?? new Date();
+      const competencia = `${dataPag.getFullYear()}-${String(dataPag.getMonth() + 1).padStart(2, '0')}`;
+      this.contabilidadeTributaria
+        .criarLancamentoAutomatico({
+          cooperativaId: atualizada.cooperativaId,
+          origemTipo: 'CONTA_PAGAR',
+          origemId: atualizada.id,
+          fonte: { tipo: 'CONTA_A_PAGAR' },
+          tipo: 'DESPESA',
+          descricao: `[CT] Despesa paga — ${atualizada.descricao.slice(0, 60)}`,
+          valor: atualizada.valor,
+          competencia,
+          dataPagamento: dataPag,
+        })
+        .catch((err) =>
+          this.logger.error(`[CT.3 hook] contaAPagar ${id} falhou: ${err.message}`),
+        );
+    }
+
+    return atualizada;
   }
 
   async remove(id: string, cooperativaId: string) {

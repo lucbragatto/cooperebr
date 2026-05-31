@@ -5,7 +5,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ContabilidadeTributariaService } from '../contabilidade-tributaria/contabilidade-tributaria.service';
 import {
   Prisma,
   StatusRepasseProprietario,
@@ -41,6 +43,7 @@ export class RepassesProprietarioService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificacoes?: NotificacoesProativasService,
+    @Optional() private readonly contabilidadeTributaria?: ContabilidadeTributariaService,
   ) {}
 
   // ─── Helper multi-tenant ───────────────────────────────────────────
@@ -235,6 +238,16 @@ export class RepassesProprietarioService {
       .catch((err) =>
         this.logger.error(`Notificacao repasse-pago falhou id=${repasseId}: ${err.message}`),
       );
+
+    // CT.3 — Hook contábil classificado: ALUGUEL→NAO_COOPERATIVO, CESSAO/PROPRIA→PROPRIO.
+    // Fire-and-forget, NUNCA reverte pagamento.
+    if (this.contabilidadeTributaria) {
+      this.contabilidadeTributaria
+        .criarLancamentoRepasse(updated.id, atual.cooperativaId, atual.usinaId, updated.valorLiquido, dataPagamento)
+        .catch((err) =>
+          this.logger.error(`[CT.3 hook] repasse ${repasseId} classificação falhou: ${err.message}`),
+        );
+    }
 
     return this.toDto(updated);
   }
