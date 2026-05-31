@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-31 — Sprint Blindagem Multi-Tenant (D-novo-BR) COMPLETO** — 8 commits em 1 sessão Code maratona. **68/68 IDORs do sistema corrigidos** em 6 fatias atômicas (F0 + F1.1+F1.2+F1.3+F1.4+F1.5). **4 camadas de defesa em profundidade** ativas: fix manual + Guard sistêmico opt-in `@TenantResource` + Extension Prisma log-only `tenantLeakDetector` + Lint anti-reincidência baseline+ratchet (`npm run lint:tenant`, 256 legados allowlist). **164 specs IDOR+Guard verdes** + 6 smokes runtime cross-tenant (91 cenários validados). EmailLog ganhou coluna `cooperativaId` via ritual PM2. M8 fallback ENV removido (vazava credencial IMAP entre tenants). F2 (Prisma Extension de INJEÇÃO) fica OPCIONAL — Guard+lint+log já cobrem detecção pre-merge + runtime. Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md`.
+> Última atualização: **2026-05-31 noite — Sprint Contabilidade Tributária ESTRUTURA COMPLETA (CT.1-CT.6) + Sprint Polimento UX catalogado**. **7 commits** (`5ada766` CT.1 → `f95bbef` CT.2 → `b3cba3c` CT.3 → `27df9e5` CT.4 → `95eb755` CT.5 → `6a2324e` CT.6 → `93f38da` Estorno repasse) em **1 sessão Code maratona**. Estrutura técnica 100% pronta: schema multi-regime cooperativo (Arts. 79/86/88 Lei 5.764/71) + classificação determinística por fonte upstream (ALUGUEL=NAO_COOP / CESSAO/PROPRIA=PROPRIO / COBRANCA por tipoCooperado / CONVENIO=AUXILIAR) + 3 hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) idempotentes via `@@unique` + motor apuração mensal com snapshot imutável `ApuracaoMensalSegregada` + gate Walter (`validadoContador=false` em todo snapshot) + `ConfiguracaoTributaria` por cooperativa (zero hardcoded — alíquotas/presunção ajustáveis sem refator) + 4 DREs (Geral/Próprio/Auxiliar/Não-Coop, terminologia NBC ITG 2004) + 3 PDFs defensáveis com watermark "PENDENTE VALIDAÇÃO" + 4 telas Next.js. **284 specs verdes** (89 novos, 195 anteriores preservados). Fatia extra `93f38da` resolveu gap real do smoke Luciano (repasse PAGO sem estorno + sem visibilidade do ciclo) — backend pronto, frontend Dialog vira refator PUX.4. **Decisão UX vigente 31/05 (nova):** Dialog modal e drawer **proibidos**; criar/editar = página própria; ações = inline expansível. **Sprint Polimento UX catalogado** (PUX.1→PUX.6, ~25-37h, próximo Code). **Gate Walter (contabilidade) bloqueia produção fiscal real** — D-novo-CT-GATE-WALTER P0. Detalhe: `docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md`.
+
+> Histórico: **2026-05-31 — Sprint Blindagem Multi-Tenant (D-novo-BR) COMPLETO** — 8 commits em 1 sessão Code maratona. **68/68 IDORs do sistema corrigidos** em 6 fatias atômicas (F0 + F1.1+F1.2+F1.3+F1.4+F1.5). **4 camadas de defesa em profundidade** ativas: fix manual + Guard sistêmico opt-in `@TenantResource` + Extension Prisma log-only `tenantLeakDetector` + Lint anti-reincidência baseline+ratchet (`npm run lint:tenant`, 256 legados allowlist). **164 specs IDOR+Guard verdes** + 6 smokes runtime cross-tenant (91 cenários validados). EmailLog ganhou coluna `cooperativaId` via ritual PM2. M8 fallback ENV removido (vazava credencial IMAP entre tenants). F2 (Prisma Extension de INJEÇÃO) fica OPCIONAL — Guard+lint+log já cobrem detecção pre-merge + runtime. Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md`.
 
 > Histórico: **2026-05-31 — Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0)** — 3 commits em 1 sessão Code. **26 IDORs corrigidos** em 5 sub-fatias atômicas (F0.1-F0.5) — 19 Onda A + 7 críticos Onda B usando padrão D-novo-BQ. Auditorias expandidas (Dynamic Workflow Ondas A+B = 50 IDORs adicionais) catalogadas. Decisão arquitetural híbrida em 5 fases (F0 ✅ esta / F1 AsyncLocalStorage / F2 Prisma Extension / F3 residuais / F4 testes) em `docs/arquitetura/blindagem-multi-tenant-sistemica.md`. **55 specs F0 verdes + 111 IDOR total verdes** (56 BQ + 55 BR F0). **23 cenários runtime cross-tenant** validados em smoke programático. 4 padrões consolidados (posse direta, via-relação, body→JWT, global-only-SA). Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md`.
 
@@ -14,6 +16,84 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-05-31 noite (Code — Sprint Contabilidade Tributária ESTRUTURA COMPLETA + Sprint Polimento UX catalogado)
+
+**7 commits** `5ada766..93f38da` em **1 sessão Code maratona** entregaram:
+
+| Fatia | Commit | Marco |
+|---|---|---|
+| CT.1 | `5ada766` | Schema base multi-regime + 6 enums + 2 models (Convenio + ApuracaoMensalSegregada) + migração + seed |
+| CT.2 | `f95bbef` | `RegimeContabil` interface + 4 impl (1 ativa + 3 stubs P0-1) + Convenio CRUD multi-tenant |
+| CT.3 | `b3cba3c` | Hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) → LancamentoCaixa classificado + idempotência `@@unique` + migration SQL manual preservou 58 lançamentos |
+| CT.4 | `27df9e5` | Motor `apurarMes` (preview) + `fecharApuracao` (snapshot imutável) + `validarApuracao` (Walter) + `reabrirApuracao` (SA) + bloqueio retroativo CT.3 + `ConfiguracaoTributaria` (zero hardcoded) |
+| CT.5 | `95eb755` | 4 DREs (Geral/Próprio/Auxiliar/Não-Coop) com terminologia NBC ITG 2004 (ingressos/dispêndios) + badge GATE WALTER |
+| CT.6 | `6a2324e` | 3 PDFs defensáveis (Não-Lucratividade + Memorial Fiscal + Repasses) com watermark + 4 telas Next.js + sidebar Contabilidade Tributária + banner help |
+| Estorno (fora escopo CT) | `93f38da` | Backend estorno repasse + visibilidade ciclo + gate apuração FECHADA. **Frontend Dialog vira refator PUX.4** |
+
+**Validação:**
+- **284 specs verdes** (89 novos: 30 apuração + 26 DRE + 17 relatórios + 16 estorno + 10 regime + 6 convenios + 4 factory) + 195 anteriores preservados
+- `smoke-ct3.ts` 10/10 OK pré-CT.4 e pós-CT.6 (zero regressão hooks)
+- `npm run lint:tenant` 0 handlers novos sem decorator nos 7 commits
+- 8 alterações de schema aditivas via ritual PM2, zero `--accept-data-loss` (migration SQL manual CT.3 preservou 58 lançamentos)
+- Build backend + web OK + restart PM2 (backend + frontend BN)
+
+**Integração ponta a ponta verificada:**
+```
+RepasseProprietario (PAGO)
+  ├── hook CT.3 → LancamentoCaixa.create (origemTipo=REPASSE, naturezaAto classificada)
+  └── transação marcarPago → ContaAPagar (repasseAbatidoId + statusResolucao=RESOLVIDA)
+
+ESTORNO (93f38da):
+  ├── deleteMany LancamentoCaixa (libera @@unique)
+  ├── updateMany ContaAPagar (desvincula despesas)
+  └── Repasse → PENDENTE (idempotente: repagar recria)
+        ↓
+   Gate ApuracaoMensalSegregada (mes FECHADA) → bloqueia
+        ↓
+   DRE/Apuração leem LancamentoCaixa agregado (snapshot ou preview)
+```
+
+**Decisão UX vigente 31/05 (nova — banimento de telinhas):**
+
+| Cenário | Padrão CORRETO | BANIDO |
+|---|---|---|
+| Criar/editar entidade | **Página própria** | Dialog/Sheet/Drawer |
+| Ação contextual (fechar, estornar, aprovar) | **Inline expansível** | Dialog Tipo C |
+| Visualização auxiliar (ciclo, histórico) | **Inline expansível** | Dialog |
+| Edição célula (Membro×Usina) | **Inline célula** | (manter) |
+
+Razão: Luciano não programa, perde fluxo em telinhas, precisa comparar dados lado-a-lado. Doc completa em `docs/arquitetura/padrao-ux-vigente.md`.
+
+**Próximo bloco — Sprint Polimento UX (PUX.1→PUX.6 catalogado em `docs/debitos-tecnicos.md` D-novo-PUX P1):**
+
+1. **PUX.1** — Componentes `<HelpBox>` + `<AcaoInlineExpansivel>` (4-6h)
+2. **PUX.2** — Banir telinhas: refator Convenio CT.6 (Dialog→página própria) + Apuração (Dialog→inline) + DialogEstornar/DialogCiclo (→inline)
+3. **PUX.3** — Help inline em TODAS as telas (regra 19/05 violada em plano-contas + convenios + repasses)
+4. **PUX.4** — Refator frontend estorno (DialogEstornar+DialogCiclo → AcaoInlineExpansivel). Backend pronto.
+5. **PUX.5** — Refator telas legadas (DialogMarcarPago + DialogCancelar repasses + despesas aprovar/rejeitar/resolver)
+6. **PUX.6** — Lint UX (`npm run lint:ux` análogo ao `lint:tenant` — força help + proíbe Dialog em código novo)
+
+**Estimativa total Polimento UX:** ~25-37h Code (3-5 sessões).
+
+**Gates externos (não-Code):**
+
+- **D-novo-CT-GATE-WALTER P0** — Walter (contador) precisa validar alíquotas/presunção + classificação repasse + 10 contas seed + 10 lançamentos amostrais + flag `isencaoPisCofinsAtiva` antes de uso fiscal real (DCTF/SPED). Estimativa: sessão dedicada 2-4h dele + 1-2h Code (já após PUX).
+- **Advogado** — acompanhar STF Tema 536 (mai/jun 2026) que pode reverter isenção PIS/COFINS sobre ato próprio.
+
+**Decisões aplicadas (todas pré-existentes):**
+
+- Decisão 23 (validação prévia + Fase 1 read-only obrigatória) — 7 fatias
+- Ritual PM2 (stop → port livre → generate → push → restart) — 7 alterações de schema
+- Regra fechamento bilateral 13/05 — esta sessão fechada
+- Regra não-paralelo claude.ai 17/05 — Code exclusivo
+- Lint tenant baseline+ratchet — 7 commits sem novos sem decorator
+- Build incremental BN (`cd web && npm run build` + `pm2 restart cooperebr-frontend`) — pós-CT.6 e pós-Estorno
+- Zero `--accept-data-loss` — migration SQL manual CT.3
+
+**Detalhe:** `docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md`.
 
 ---
 
@@ -1173,97 +1253,123 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+   Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento: working tree limpo
-   (untracked carry-overs catalogados), último commit é o de fechamento
-   Sprint Blindagem Multi-Tenant COMPLETO.
+2. Rodar `git status --short`. Esperado pós-fechamento: working tree
+   limpo (untracked carry-overs catalogados), último commit é o de
+   fechamento Sprint Contabilidade Tributária + Sprint Polimento UX
+   catalogado.
 
-3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
+   online.
 
 PASSO 1 — Frase de retomada principal:
 
-Sessão 31/05 entregou Sprint Blindagem Multi-Tenant (D-novo-BR)
-COMPLETO em 8 commits (063e01c..[hash fechamento]).
-**68/68 IDORs do sistema corrigidos** em 6 fatias canônicas:
+Sessão 31/05 noite entregou Sprint Contabilidade Tributária ESTRUTURA
+COMPLETA (CT.1-CT.6) em 6 commits + fatia extra Estorno repasse em 1
+commit (5ada766..93f38da). 284 specs verdes (89 novos, 195 anteriores
+preservados). Zero regressão. Zero --accept-data-loss.
 
-F0 (063e01c..8a40b81): fix manual 26 IDORs (19 Onda A + 7 críticos
-Onda B) padrão BQ.
-F1.1 (4d933c4): infra Guard @TenantResource + TenantOwnershipGuard
-+ buildNestedWhere helper + APP_GUARD wiring. 24 specs unit.
-F1.2 (0c81afd): @TenantResource em 15 endpoints (13 cat 1 + 2 cat 2
-com fix service). Smoke 17/17.
-F1.3 (7fa60b3): ALS AsyncLocalStorage + @AsPlatform decorator em
-45 métodos cron/listener + Prisma Extension log-only tenantLeakDetector
-+ middleware HTTP. 26 specs novos.
-F1.4 (1b1971f): lint anti-reincidência baseline+ratchet,
-npm run lint:tenant, 256 legados allowlist.
-F1.5 (esta sessão): 9 residuais cat 3 + EmailLog schema cooperativaId
-+ M8 fallback ENV removido. 3 specs + smoke 9/9.
+ENTREGUE:
+- CT.1 schema multi-regime (Lei 5.764/71 Arts. 79/86/88) + 6 enums + 2
+  models (Convenio + ApuracaoMensalSegregada)
+- CT.2 RegimeContabil + classificação determinística + Convenio CRUD
+- CT.3 hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) idempotentes
+  via @@unique([origemTipo, origemId])
+- CT.4 motor apuracao mensal com snapshot imutavel + ConfiguracaoTributaria
+  (zero hardcoded) + gate Walter (validadoContador=false em todo snapshot)
+- CT.5 DREs 4 visões (Geral/Próprio/Auxiliar/Não-Coop, terminologia NBC
+  ITG 2004)
+- CT.6 3 PDFs defensáveis + 4 telas Next.js + sidebar Contabilidade
+  Tributária
+- 93f38da backend estorno repasse + visibilidade ciclo (gate apuração
+  FECHADA + transação atômica)
 
-4 CAMADAS DE DEFESA EM PROFUNDIDADE ATIVAS:
-1. Fix manual ponto-a-ponto (D-48+Fase2+BQ+F0+F1.2+F1.5)
-2. Guard sistêmico opt-in @TenantResource (F1.1+F1.2)
-3. Extension Prisma log-only tenantLeakDetector (F1.3)
-4. Lint baseline+ratchet pre-merge (F1.4)
+DECISÃO UX VIGENTE 31/05 (NOVA — banimento de telinhas):
+- Criar/editar entidade → PÁGINA PRÓPRIA (/dashboard/X/[id]/editar)
+- Ação contextual (fechar/estornar/aprovar) → INLINE EXPANSÍVEL
+- Visualização auxiliar (ciclo/histórico) → INLINE EXPANSÍVEL
+- Edição célula relação (Membro×Usina) → INLINE CÉLULA (mantém)
+- BANIDOS: Dialog modal + Sheet/drawer
 
-TOTAIS:
-- 164 specs IDOR+Guard verdes
-- 6 smokes runtime cross-tenant — 91 cenários validados
-- 256 legados na allowlist do lint (ratchet — só diminui)
-- EmailLog tenant-scoped (M7 schema migration via ritual PM2)
-- M8 fallback ENV removido (vazava credencial IMAP entre tenants)
+Razão: Luciano não programa, perde fluxo em telinhas, precisa comparar
+dados lado-a-lado. Doc: docs/arquitetura/padrao-ux-vigente.md.
 
-DÉBITOS:
-- D-novo-BR F0+F1 ✅ COMPLETO
-- F2 (Prisma Extension de INJEÇÃO) → OPCIONAL — Guard+lint+log cobrem
-- F4 (regressão E2E abrangente) → catalogado futuro
+PRÓXIMO BLOCO — Sprint Polimento UX (D-novo-PUX P1, ~25-37h Code,
+3-5 sessões). Ordem das fatias:
 
-PRÓXIMO BLOCO — LUCIANO ESCOLHE (5 opções):
+1. PUX.1 (4-6h) — Componentes <HelpBox> + <AcaoInlineExpansivel>
+   reutilizáveis em web/components/ui/
+2. PUX.2 (6-8h) — Banir telinhas CT.6: refator Convenio (Dialog→página
+   própria) + Apuração Fechar (Dialog→inline) + DialogEstornar +
+   DialogCiclo (→inline)
+3. PUX.3 (3-5h) — Help inline em TODAS as telas (regra 19/05): plano-
+   contas, convenios, /dashboard/repasses sem help → aplicar HelpBox
+4. PUX.4 (3-4h) — Refator frontend estorno repasse (DialogEstornar +
+   DialogCiclo → AcaoInlineExpansivel). Backend já pronto em 93f38da.
+5. PUX.5 (6-10h) — Refator telas legadas Dialog/drawer (DialogMarcarPago
+   + DialogCancelar repasses; despesas aprovar/rejeitar/resolver)
+6. PUX.6 (3-4h) — Lint UX (npm run lint:ux análogo lint:tenant — força
+   help + proíbe Dialog em código novo)
 
-(1) F.4 smoke E2E pós-Blindagem (~1-2h) — 10 fluxos críticos pra
-   garantir caminho feliz após F0+F1.5
-(2) Esvaziar allowlist incremental (tempo livre) — anotar 256 legados
-   removendo da allowlist conforme lint:tenant aponta
-(3) Sprint Contabilidade Tributária Segregada (#8 roadmap, 40-60h)
-(4) Convergência /parceiro vs /dashboard (D-novo-BP P3, 20-30h)
-(5) Avaliar F2 SE volume de novos endpoints justificar (sob demanda)
+COMEÇAR POR PUX.1 (componentes base — todos os outros dependem).
 
-REGRA INEGOCIÁVEL: antes de propor qualquer bloco aprovado, aplicar
-Fase 1 read-only mini (~10-15min). Não tocar código antes de OK
-Luciano explícito.
+GATES EXTERNOS (não-Code, não-bloqueantes pra continuar Polimento UX):
+- D-novo-CT-GATE-WALTER P0 — Walter (contador) precisa validar alíquotas
+  Lucro Presumido + classificação repasse + 10 contas seed + 10
+  lançamentos amostrais + flag isencaoPisCofinsAtiva antes de uso fiscal
+  real (DCTF/SPED). Sessão dedicada 2-4h Walter + 1-2h Code.
+- Advogado — acompanhar STF Tema 536 (mai/jun 2026) que pode reverter
+  isenção PIS/COFINS sobre ato próprio.
+
+DÉBITOS NOVOS CATALOGADOS:
+- D-novo-PUX P1 (Sprint Polimento UX — próximo)
+- D-novo-CT-GATE-WALTER P0 (validação contábil pra produção fiscal)
+- D-novo-BR-CT-ESTORNO P2 (estorno Cobranca/ContaAPagar mesmo padrão
+  de RepasseProprietario, ~4-6h fatia futura)
+
+REGRA INEGOCIÁVEL: antes de propor qualquer fatia PUX, aplicar Fase 1
+read-only mini (~10-15min). Não tocar código antes de OK Luciano
+explícito.
 
 CONSTRAINTS APLICÁVEIS:
 - Decisão 23: Fase 1 read-only OBRIGATÓRIA
 - @TenantResource em todo handler novo de mutação (lint força)
 - @AsPlatform() em todo cron/listener novo (1 linha)
-- Padrão fix IDOR (4 categorias) consolidado em D-novo-BR
 - Multi-tenant: TODA query Prisma filtra por cooperativaId
 - isAmbienteReal() em endpoints dev (NUNCA NODE_ENV)
 - Regra contatos teste: 27981341348 + lucbragatto@gmail.com
 - Decisão 24: frase de retomada local único
+- PADRÃO UX VIGENTE 31/05 (NOVO): Dialog/drawer proibidos em código
+  novo. PUX.6 vai criar lint:ux pra forçar.
 
 PRE-REQUISITOS LEITURA (ordem fixa):
 1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
 2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
-3. docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md
-4. docs/debitos-tecnicos.md (D-novo-BR ✅ completo)
-5. (se decisão F2/Extension futura) docs/arquitetura/blindagem-multi-tenant-sistemica.md
-6. docs/MAPA-INTEGRIDADE-SISTEMA.md
-7. CLAUDE.md + .claude/CLAUDE.md
-8. git log --oneline -15
+3. docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md
+4. docs/debitos-tecnicos.md (D-novo-PUX P1 + D-novo-CT-GATE-WALTER P0
+   + D-novo-BR-CT-ESTORNO P2)
+5. docs/arquitetura/padrao-ux-vigente.md (NOVO — Dialog/drawer proibidos)
+6. docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md
+   (parecer multi-regime base Sprint CT — só ler se mexer em CT.x)
+7. docs/MAPA-INTEGRIDADE-SISTEMA.md
+8. CLAUDE.md + .claude/CLAUDE.md
+9. git log --oneline -15
 
 CARRY-OVERS (nao-bloqueantes):
 - 10 erros TS pré-existentes em backend/src/agents/ (untracked)
-- lead-expansao POST @Public requer guard diferente (rate-limit, defer)
-- 256 legados allowlist lint — esvaziar incrementalmente
-- usinas.controller.spec.ts pré-existente
+- 43 untracked scripts/relatorios — Sprint Housekeeping futuro
+- Frontend estorno usando Dialog (DialogEstornar + DialogCiclo) — refator
+  PUX.4 vai migrar pra inline; backend (93f38da) está OK
+- 256 legados allowlist lint:tenant — esvaziar incrementalmente
 - D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD)
-- D-novo-BP (P3 convergência portal)
+- D-novo-BP (P3 convergência /parceiro vs /dashboard)
 - D-novo-BJ (P2 LGPD URL assinada)
 - D-novo-BK (P3 storage S3/Supabase)
 
 FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
-⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ PRIORITARIO: Agendar reunião Walter (gate produção contábil)
+⏳ Preencher cooperebr1 (gatilho F.4 smoke produção)
 ⏳ Cadastrar Usuario E-Solares real
 ⏳ Revisar relatório auditoria classe GD
 ⏳ Definir matriz responsabilidadeDespesas
@@ -1271,10 +1377,10 @@ FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
 ⏳ Obter credenciais Sungrow/iSolar Cloud
 ⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
 ⏳ Obter .pfx sandbox Banestes
-⏳ Decisões regulatórias Sub-Sprint A (advogado)
+⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536 (advogado)
 
-DOC-SESSAO SPRINT BLINDAGEM COMPLETO: docs/sessoes/2026-05-31-sprint-
-blindagem-multi-tenant-completo.md
+DOC-SESSAO SPRINT CT + POLIMENTO UX CATALOGADO:
+docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md
 ```
 
 ---

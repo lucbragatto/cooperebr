@@ -10,6 +10,42 @@
 
 ## P0 — Bloqueia produção real (descoberto sessão claude.ai 30/04)
 
+### D-novo-CT-GATE-WALTER — Gate Walter (contabilidade) bloqueia uso fiscal real da estrutura CT (P0 bloqueador produção contábil)
+
+**Severidade:** P0 — bloqueia produção fiscal real (DCTF / SPED / declaração)
+**Detectado em:** 2026-05-31 — Sprint CT.4 (concepção do gate) + CT.6 (estrutura completa entregue 31/05)
+**Impacto:** estrutura técnica do Sprint Contabilidade Tributária (CT.1→CT.6) está 100% pronta, **mas os números calculados pelo motor NÃO podem virar valor fiscal real** até o contador (Walter) validar.
+
+**O que Walter precisa validar antes de produção contábil:**
+
+1. **Alíquotas/presunção em `ConfiguracaoTributaria`** (defaults Lucro Presumido — `irpjPercentualPresuncao=0.32` + `csllPercentualPresuncao=0.32` são chute conservador genérico; SCEE/energia pode ter % diferente). Walter ajusta via UI `/dashboard/contabilidade` (futuro com Polimento UX) ou direto via endpoint.
+2. **Classificação dos repasses por `formaAquisicao`** — regra "ALUGUEL=NAO_COOPERATIVO / CESSAO=PROPRIO / PROPRIA=PROPRIO" está hardcoded em `regimes/cooperativo.regime.ts`. Confirmar coerência com parecer contábil real.
+3. **10 contas seed do plano de contas segregado** — `naturezaContabil` + `naturezaCooperativa` + `fundamentoLegal` em cada conta. Walter confirma se classificação está correta pra atividade real da CoopereBR.
+4. **10 lançamentos amostrais com flag `validadoContador=false`** — Walter passa em cima dos primeiros lançamentos reais que vão entrar em produção, confirma classificação e marca como validados via endpoint `PUT /apuracao/:id/validar`.
+5. **Flag `Cooperativa.isencaoPisCofinsAtiva`** — STF Tema 536 em julgamento mai/jun 2026. Walter decide se mantém `true` (PIS/COFINS sobre próprio = isento, posição STF atual) ou `false` (calcula PIS/COFINS sobre próprio caso STF reverta). **Advogado também acompanha o tema.**
+
+**Onde está catalogado tecnicamente:**
+
+- Todos os snapshots `ApuracaoMensalSegregada` nascem com `validadoContador=false`
+- Todos os PDFs (Demonstrativo Não-Lucratividade + Memorial Cálculo Fiscal + Demonstrativo Repasses) saem com watermark "PENDENTE VALIDAÇÃO CONTADOR" + banner em destaque
+- DREs (4 visões) retornam `avisoValidacao` destacado enquanto não validados
+- `ConfiguracaoTributaria` tem flag própria `validadoContador` (Walter valida defaults antes de virar valor fiscal real)
+
+**Como destravar:**
+
+1. Walter (contador) faz reunião dedicada de revisão dos pontos 1-5 acima
+2. Walter valida via endpoint `PUT /contabilidade-tributaria/apuracao/:id/validar` (ADMIN+SA + AuditLog)
+3. Snapshot vira oficial — DREs/PDFs trocam badge "PENDENTE" → "VALIDADO PELO CONTADOR <data>"
+4. Aí pode usar pra DCTF / SPED / declaração fiscal real
+
+**Estimativa Code (uma vez Walter validar):** 0h — código já pronto, é só clicar.
+
+**Estimativa Walter:** sessão dedicada 2-4h dele + 1-2h Code com ele pra UX (Polimento UX já vai cobrir).
+
+**Status:** 📋 Catalogado em 2026-05-31. Aguarda agendamento Walter.
+
+---
+
 ### D-30A — Sistema permite alocação > 25% por cooperado-usina (concentração violando regulação)
 
 **Severidade:** P0
@@ -3782,6 +3818,92 @@ Frontend (`web/`):
 **Estimativa:** 20-30h sprint refator UX (futuro) se opção (1) total ou (2) seletiva; 0h se opção (3) status quo.
 
 **Status:** 📋 Catalogado em 2026-05-30 (AN.3.1 investigação + AN.4 ação parcial). Não bloqueia roadmap atual.
+
+---
+
+### D-novo-PUX — Sprint Polimento UX (P1 — bloqueia onboarding parceiro real porque Luciano não programa e perde fluxo em telinhas)
+
+**Origem:** QA Luciano 31/05/2026 pós-CT.6. Detectou que (a) Dialog modal quebra o fluxo natural — Luciano não consegue fluir comparando dados lado-a-lado, perde contexto sempre que abre janelinha; (b) várias telas estão SEM help inline (viola regra 19/05 — `regra_help_automatico_paginas_19_05.md`); (c) padrão UX vigente até hoje permitia Dialog Tipo C pra ações — a partir de 31/05 está **banido**.
+
+**Padrão UX vigente (decisão 31/05):**
+
+| Cenário | Padrão CORRETO | Padrão BANIDO |
+|---|---|---|
+| Criar/editar entidade | **Página própria** `/dashboard/X/[id]/editar` | Dialog / Sheet / Drawer |
+| Ação contextual (fechar, estornar, aprovar, marcar pago, cancelar) | **Inline expansível** (linha expande revelando confirmação) | Dialog / Sheet / Drawer |
+| Visualização auxiliar (ciclo, histórico, detalhes do item) | **Inline expansível** OU seção da página própria | Dialog |
+| Edição célula relação (Membro×Usina) | **Inline célula** (hover lápis, Enter/blur salva) | OK manter |
+
+Documentação completa: `docs/arquitetura/padrao-ux-vigente.md`.
+
+**6 fatias do Sprint Polimento UX:**
+
+#### PUX.1 — Componentes reutilizáveis (`<HelpBox>` + `<AcaoInlineExpansivel>`)
+
+Criar 2 componentes em `web/components/ui/`:
+
+- **`<HelpBox>`** — banner help padronizado (azul claro com ícone + título + lista de bullets + dica). Substitui as N implementações ad-hoc espalhadas pelas telas. Props: `titulo`, `passos: string[]`, `dicaOpcional?: string`, `variante?: 'info'|'warning'`. Compõe TUDO que a regra 19/05 pede.
+- **`<AcaoInlineExpansivel>`** — botão que, ao clicar, expande a linha (ou cell) revelando o conteúdo do form/confirmação INLINE. Sem overlay. Click fora colapsa. Loading state interno. Substitui Dialog Tipo C. Props: `titulo`, `textoBotao`, `cor` (variant), `children`, `onConfirm`, `onCancel`.
+
+**Estimativa:** 4-6h Code (TDD com Playwright + specs unit).
+
+#### PUX.2 — Banir telinhas (refator CT.6 Convenios + DialogEstornar)
+
+Refatorar imediatamente as 4 telas CT.6 que usam Dialog Tipo C:
+
+- `dashboard/contabilidade/convenios/page.tsx`: Dialog "Novo convênio" + "Remover" → página própria `/convenios/novo` + `/convenios/[id]/editar` + AcaoInlineExpansivel "Remover"
+- `dashboard/contabilidade/apuracao/page.tsx`: Dialog "Fechar Apuração" → AcaoInlineExpansivel
+- `components/repasses/DialogEstornar.tsx` → AcaoInlineExpansivel (fica como `web/components/repasses/EstornoInline.tsx`)
+- `components/repasses/DialogCiclo.tsx` → expansão inline da linha do repasse PAGO (mostra ciclo abaixo)
+
+**Estimativa:** 6-8h Code.
+
+#### PUX.3 — Help inline em TODAS as telas (premissa 19/05 violada)
+
+Auditoria + aplicação de `<HelpBox>` em:
+
+- `dashboard/contabilidade/plano-contas` (sem help)
+- `dashboard/contabilidade/convenios` (tem mas não-padronizado)
+- `dashboard/repasses` + `dashboard/usinas/[id]/repasses` (sem help)
+- `dashboard/financeiro/contas-pagar` (verificar)
+- `dashboard/financeiro/despesas` (verificar)
+- Demais telas catalogadas em PUX.6
+
+**Estimativa:** 3-5h Code.
+
+#### PUX.4 — Estorno do ciclo de repasse + visibilidade (refator frontend pra inline)
+
+**Backend já pronto** (commit `93f38da`) — `PUT /repasses/:id/estornar` + `GET /repasses/:id/ciclo` + gate apuração FECHADA + transação atômica + specs verdes.
+
+**Pendente:** refator frontend `DialogEstornar` + `DialogCiclo` → `AcaoInlineExpansivel` (PUX.1) + expansão da linha mostrando o ciclo. Quando dispara estorno, mostra resultado inline em vez de fechar modal.
+
+**Estimativa:** 3-4h Code (usa PUX.1 já pronto).
+
+#### PUX.5 — Refator telas existentes (Dialog/drawer legados)
+
+Inventário inicial das telas com Dialog/drawer que precisam virar inline (auditoria PUX.6 vai catalogar resto):
+
+- `components/repasses/DialogMarcarPago.tsx` → AcaoInlineExpansivel
+- `components/repasses/DialogCancelar.tsx` → AcaoInlineExpansivel
+- Telas de despesas (aprovar/rejeitar/resolver) — atualmente Dialog Tipo C
+- Demais telas com Dialog catalogadas via PUX.6 lint
+
+**Estimativa:** 6-10h Code (depende do inventário PUX.6).
+
+#### PUX.6 — Lint UX (análogo ao `lint:tenant`)
+
+Criar `scripts/lint-ux.ts`:
+
+- Auditoria de cobertura: quais telas têm `<HelpBox>` (ou padrão equivalente), quais usam `Dialog`/`Sheet`/`Drawer`
+- Baseline+ratchet: telas legadas vão pra allowlist; código novo é proibido de usar Dialog (falha CI)
+- Helper: `npm run lint:ux` (mesmo modelo do `lint:tenant`)
+- Relatório: gerar `docs/relatorios/ux-coverage-DATA.md` com %
+
+**Estimativa:** 3-4h Code.
+
+**Total Sprint Polimento UX:** ~25-37h Code (~3-5 sessões).
+
+**Status:** 📋 Catalogado em 2026-05-31 noite. **Próximo Code arranca por PUX.1.**
 
 ---
 
