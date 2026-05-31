@@ -94,6 +94,9 @@ export class RepassesProprietarioService {
       canceladoPorUsuarioId: r.canceladoPorUsuarioId,
       canceladoEm: r.canceladoEm,
       motivoCancelamento: r.motivoCancelamento,
+      estornadoEm: r.estornadoEm ?? null,
+      estornadoPorUsuarioId: r.estornadoPorUsuarioId ?? null,
+      motivoEstorno: r.motivoEstorno ?? null,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       atrasado: this.derivarAtrasado(r.status, r.periodoFim),
@@ -292,6 +295,201 @@ export class RepassesProprietarioService {
       },
     });
     return this.toDto(updated);
+  }
+
+  /**
+   * D-novo-BR-CT estorno (31/05/2026 noite) — reverte repasse PAGO pra PENDENTE.
+   *
+   * Transação atômica:
+   *  1. Repasse status → PENDENTE + limpa dataPagamento/metodoPagamento/comprovante
+   *     + grava estornadoEm/Por/motivoEstorno
+   *  2. Deleta LancamentoCaixa origemTipo=REPASSE origemId=repasseId
+   *     (idempotência libera origemId; repagar recria lançamento)
+   *  3. Desvincula despesas: repasseAbatidoId → null + statusResolucao → PENDENTE
+   *     + resolvidoEm → null
+   *
+   * Bloqueio: se apuração do período (mês de dataPagamento) está FECHADA,
+   * lança ConflictException — snapshot imutável. SA reabre via endpoint
+   * /contabilidade-tributaria/apuracao/:id/reabrir antes.
+   */
+  async estornarRepasse(
+    repasseId: string,
+    motivo: string,
+    usuarioId: string,
+    userCoopId: string | null | undefined,
+    perfil: string | null | undefined,
+  ): Promise<RepasseProprietarioDto> {
+    if (!motivo || motivo.trim().length < 10) {
+      throw new BadRequestException(
+        'Motivo obrigatório (mínimo 10 caracteres) — auditoria contábil exige rastreabilidade.',
+      );
+    }
+
+    const atual = await this.prisma.repasseProprietario.findUnique({
+      where: { id: repasseId },
+      select: {
+        id: true,
+        cooperativaId: true,
+        usinaId: true,
+        status: true,
+        dataPagamento: true,
+      },
+    });
+    if (!atual) throw new NotFoundException('Repasse não encontrado.');
+    this.assertSameTenantOrSuperAdmin(atual.cooperativaId, userCoopId, perfil);
+
+    if (atual.status !== StatusRepasseProprietario.PAGO) {
+      throw new ConflictException(
+        `Estorno só permitido em status PAGO (atual: ${atual.status}).`,
+      );
+    }
+    if (!atual.dataPagamento) {
+      // Defesa em profundidade — status=PAGO sem dataPagamento é estado inválido.
+      throw new ConflictException('Repasse PAGO sem dataPagamento — estado inconsistente.');
+    }
+
+    // Gate contábil: apuração do mês de dataPagamento não pode estar FECHADA.
+    const ano = atual.dataPagamento.getFullYear();
+    const mes = atual.dataPagamento.getMonth() + 1;
+    const apur = await this.prisma.apuracaoMensalSegregada.findUnique({
+      where: { cooperativaId_ano_mes: { cooperativaId: atual.cooperativaId, ano, mes } },
+      select: { id: true, status: true },
+    });
+    if (apur && apur.status === 'FECHADA') {
+      throw new ConflictException(
+        `Apuração de ${String(mes).padStart(2, '0')}/${ano} fechada (id=${apur.id}). ` +
+          `Reabra primeiro (Super Admin via /contabilidade-tributaria/apuracao/:id/reabrir) para estornar.`,
+      );
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      // 1. Reverte repasse
+      this.prisma.repasseProprietario.update({
+        where: { id: repasseId },
+        data: {
+          status: StatusRepasseProprietario.PENDENTE,
+          dataPagamento: null,
+          metodoPagamento: null,
+          comprovante: null,
+          observacao: null,
+          estornadoEm: new Date(),
+          estornadoPorUsuarioId: usuarioId,
+          motivoEstorno: motivo,
+        },
+        include: {
+          usina: { select: { nome: true } },
+          proprietarioUsuario: { select: { nome: true } },
+          registradoPor: { select: { nome: true } },
+        },
+      }),
+      // 2. Deleta lançamento contábil (libera origemId pra recriar se repagar)
+      this.prisma.lancamentoCaixa.deleteMany({
+        where: { origemTipo: 'REPASSE', origemId: repasseId },
+      }),
+      // 3. Desvincula despesas — voltam pra PENDENTE
+      this.prisma.contaAPagar.updateMany({
+        where: { repasseAbatidoId: repasseId },
+        data: {
+          repasseAbatidoId: null,
+          statusResolucao: 'PENDENTE',
+          resolvidoEm: null,
+        },
+      }),
+    ]);
+
+    this.logger.log(
+      `[estorno] repasse ${repasseId} revertido por usuario=${usuarioId}. Motivo: ${motivo}`,
+    );
+    return this.toDto(updated);
+  }
+
+  /**
+   * D-novo-BR-CT estorno (31/05/2026 noite) — visibilidade contábil do ciclo
+   * do repasse: lançamento gerado + despesas abatidas.
+   */
+  async obterCicloRepasse(
+    repasseId: string,
+    userCoopId: string | null | undefined,
+    perfil: string | null | undefined,
+  ): Promise<{
+    repasse: RepasseProprietarioDto;
+    lancamentoGerado: {
+      id: string;
+      tipo: string;
+      descricao: string;
+      valor: number;
+      naturezaAto: string;
+      status: string;
+      competencia: string;
+      dataPagamento: Date | null;
+    } | null;
+    despesasAbatidas: Array<{
+      id: string;
+      descricao: string;
+      categoria: string | null;
+      valor: number;
+      dataOcorrencia: Date | null;
+    }>;
+  }> {
+    const r = await this.prisma.repasseProprietario.findUnique({
+      where: { id: repasseId },
+      include: {
+        usina: { select: { nome: true } },
+        proprietarioUsuario: { select: { nome: true } },
+        registradoPor: { select: { nome: true } },
+      },
+    });
+    if (!r) throw new NotFoundException('Repasse não encontrado.');
+    this.assertSameTenantOrSuperAdmin(r.cooperativaId, userCoopId, perfil);
+
+    const lanc = await this.prisma.lancamentoCaixa.findFirst({
+      where: { origemTipo: 'REPASSE', origemId: repasseId },
+      select: {
+        id: true,
+        tipo: true,
+        descricao: true,
+        valor: true,
+        naturezaAto: true,
+        status: true,
+        competencia: true,
+        dataPagamento: true,
+      },
+    });
+
+    const despesasRaw = await this.prisma.contaAPagar.findMany({
+      where: { repasseAbatidoId: repasseId },
+      select: {
+        id: true,
+        descricao: true,
+        categoria: true,
+        valor: true,
+        dataOcorrencia: true,
+      },
+      orderBy: { dataOcorrencia: 'asc' },
+    });
+
+    return {
+      repasse: this.toDto(r),
+      lancamentoGerado: lanc
+        ? {
+            id: lanc.id,
+            tipo: lanc.tipo,
+            descricao: lanc.descricao,
+            valor: Number(lanc.valor),
+            naturezaAto: lanc.naturezaAto,
+            status: lanc.status,
+            competencia: lanc.competencia,
+            dataPagamento: lanc.dataPagamento,
+          }
+        : null,
+      despesasAbatidas: despesasRaw.map((d) => ({
+        id: d.id,
+        descricao: d.descricao,
+        categoria: d.categoria ? String(d.categoria) : null,
+        valor: Number(d.valor),
+        dataOcorrencia: d.dataOcorrencia,
+      })),
+    };
   }
 
   // ─── Queries ───────────────────────────────────────────────────────

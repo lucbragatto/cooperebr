@@ -35,6 +35,10 @@ export interface RepasseProprietarioDto {
   canceladoPorUsuarioId: string | null;
   canceladoEm: Date | null;
   motivoCancelamento: string | null;
+  /** Sprint Estorno (31/05/2026 noite) — admin reverte PAGO se apuração ABERTA. */
+  estornadoEm: Date | null;
+  estornadoPorUsuarioId: string | null;
+  motivoEstorno: string | null;
   createdAt: Date;
   updatedAt: Date;
   /** Derivado em runtime: PENDENTE + periodoFim > 30d atrás. */

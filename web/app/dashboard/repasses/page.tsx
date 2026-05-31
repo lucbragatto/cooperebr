@@ -31,6 +31,9 @@ import {
 import api from '@/lib/api';
 import { DialogMarcarPago } from '@/components/repasses/DialogMarcarPago';
 import { DialogCancelar } from '@/components/repasses/DialogCancelar';
+import { DialogEstornar } from '@/components/repasses/DialogEstornar';
+import { DialogCiclo } from '@/components/repasses/DialogCiclo';
+import { RotateCcw, FileText } from 'lucide-react';
 import {
   fmtDate,
   fmtMoney,
@@ -55,7 +58,7 @@ export default function RepassesGlobalPage() {
   const [statusFiltro, setStatusFiltro] = useState<StatusRepasse | ''>('');
 
   const [repasseSelecionado, setRepasseSelecionado] = useState<Repasse | null>(null);
-  const [dialogTipo, setDialogTipo] = useState<'marcar-pago' | 'cancelar' | null>(null);
+  const [dialogTipo, setDialogTipo] = useState<'marcar-pago' | 'cancelar' | 'estornar' | 'ciclo' | null>(null);
 
   async function carregar() {
     setErro('');
@@ -293,6 +296,36 @@ export default function RepassesGlobalPage() {
                             </Button>
                           </div>
                         )}
+                        {r.status === 'PAGO' && (
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-cyan-300 text-cyan-700 hover:bg-cyan-50 h-7 text-xs px-2"
+                              onClick={() => {
+                                setRepasseSelecionado(r);
+                                setDialogTipo('ciclo');
+                              }}
+                              title="Ver lançamento contábil + despesas abatidas"
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Ciclo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-amber-400 text-amber-800 hover:bg-amber-50 h-7 text-xs px-2"
+                              onClick={() => {
+                                setRepasseSelecionado(r);
+                                setDialogTipo('estornar');
+                              }}
+                              title="Reverter PAGO → PENDENTE (apuração ABERTA)"
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Estornar
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -317,6 +350,21 @@ export default function RepassesGlobalPage() {
           open
           onOpenChange={(v) => !v && setDialogTipo(null)}
           onSuccess={sucesso}
+        />
+      )}
+      {repasseSelecionado && dialogTipo === 'estornar' && (
+        <DialogEstornar
+          repasse={repasseSelecionado}
+          open
+          onOpenChange={(v) => !v && setDialogTipo(null)}
+          onSuccess={sucesso}
+        />
+      )}
+      {repasseSelecionado && dialogTipo === 'ciclo' && (
+        <DialogCiclo
+          repasseId={repasseSelecionado.id}
+          open
+          onOpenChange={(v) => !v && setDialogTipo(null)}
         />
       )}
     </div>

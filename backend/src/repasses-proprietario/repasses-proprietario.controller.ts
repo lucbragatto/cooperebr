@@ -23,7 +23,9 @@ import { AuditLog } from '../audit/audit-log.decorator';
 import { RepassesProprietarioService } from './repasses-proprietario.service';
 import { MarcarRepassePagoDto } from './dto/marcar-repasse-pago.dto';
 import { CancelarRepasseDto } from './dto/cancelar-repasse.dto';
+import { EstornarRepasseDto } from './dto/estornar-repasse.dto';
 import { ListarRepassesQueryDto } from './dto/listar-repasses-query.dto';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, PROPRIETARIO, COOPERADO } = PerfilUsuario;
 
@@ -141,6 +143,42 @@ export class RepassesProprietarioController {
   cancelar(@Param('id') id: string, @Body() dto: CancelarRepasseDto, @Req() req: any) {
     const usuarioId = req.user?.id ?? req.user?.userId;
     return this.service.cancelar(id, dto, usuarioId, req.user?.cooperativaId, req.user?.perfil);
+  }
+
+  /**
+   * D-novo-BR-CT estorno (31/05/2026 noite) — admin reverte PAGO → PENDENTE.
+   * Gate contábil: apuração do mês de dataPagamento NÃO pode estar FECHADA.
+   * Reverte LancamentoCaixa + desvincula despesas (transação atômica).
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'repasseProprietario' })
+  @AuditLog({ acao: 'repasse.estornar', recurso: 'RepasseProprietario', recursoIdParam: 'id' })
+  @HttpCode(200)
+  @Put(':id/estornar')
+  estornar(@Param('id') id: string, @Body() dto: EstornarRepasseDto, @Req() req: any) {
+    const usuarioId = req.user?.id ?? req.user?.userId;
+    return this.service.estornarRepasse(
+      id,
+      dto.motivo,
+      usuarioId,
+      req.user?.cooperativaId,
+      req.user?.perfil,
+    );
+  }
+
+  /**
+   * D-novo-BR-CT estorno (31/05/2026 noite) — visibilidade contábil do ciclo:
+   * { repasse, lancamentoGerado, despesasAbatidas[] }.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'repasseProprietario' })
+  @Get(':id/ciclo')
+  ciclo(@Param('id') id: string, @Req() req: any) {
+    return this.service.obterCicloRepasse(
+      id,
+      req.user?.cooperativaId,
+      req.user?.perfil,
+    );
   }
 }
 

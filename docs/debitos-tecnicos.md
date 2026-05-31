@@ -3785,6 +3785,33 @@ Frontend (`web/`):
 
 ---
 
+### D-novo-BR-CT-ESTORNO — Estorno de Cobrança/ContaAPagar (mesmo padrão de RepasseProprietario, fatia futura, P2)
+
+**Origem:** Sprint Estorno RepasseProprietario (31/05/2026 noite). Luciano identificou no smoke pós-CT.6 que repasse PAGO não tinha como ser revertido. Fatia resolveu pra repasse — Cobranca e ContaAPagar têm o **mesmo gap**.
+
+**Estado atual:**
+- ✅ `RepasseProprietario` tem `PUT /repasses/:id/estornar` (status PAGO→PENDENTE + deleta `LancamentoCaixa` + desvincula despesas + gate apuração FECHADA + AuditLog)
+- ✅ `RepasseProprietario` tem `GET /repasses/:id/ciclo` (visibilidade do lançamento + despesas abatidas)
+- ❌ `Cobranca` (status PAGA): sem endpoint de estorno. Hook CT.3 criou `LancamentoCaixa origemTipo=COBRANCA` mas não há como deletar atomicamente revertendo Asaas/baixa manual.
+- ❌ `ContaAPagar` (status=PAGO): sem endpoint de estorno. Hook CT.3 criou `LancamentoCaixa origemTipo=CONTA_PAGAR` mas não há como reverter.
+
+**Mesmo padrão a aplicar:**
+- Schema: `+estornadoEm +estornadoPorUsuarioId +motivoEstorno` em `Cobranca` e `ContaAPagar`
+- Service: `estornar(id, motivo, usuarioId, coopId, perfil)` + transação atômica revertendo status + deletando `LancamentoCaixa` por `origemTipo/origemId` + gate apuração FECHADA (`ApuracaoMensalSegregada.status === 'FECHADA'` no mês de pagamento → bloqueia)
+- Endpoint: `PUT /cobrancas/:id/estornar` + `PUT /contas-pagar/:id/estornar` (ADMIN/SA + @TenantResource + @AuditLog + body motivo ≥10 chars)
+- UI: botão "Estornar" + DialogTipo C em /dashboard/cobrancas + /dashboard/financeiro/contas-pagar
+- Visibilidade ciclo: `GET /cobrancas/:id/ciclo` + `GET /contas-pagar/:id/ciclo` retornando `{ recurso, lancamentoGerado, despesasAbatidas[] }` (no caso de ContaAPagar não há despesas abatidas; só lançamento)
+
+**Estimativa:** 4-6h Code (mesma estrutura do estorno repasse — copy-paste com adaptação). Specs alinhados.
+
+**Bloqueia:** não bloqueia produção (cancelamento Asaas já existe); só fecha o gap operacional de "errou na baixa".
+
+**Prioridade:** **P2** — não bloqueia, mas necessário pra Walter validar contabilidade (poder corrigir erros operacionais sem ter que mexer no banco direto).
+
+**Status:** 📋 Catalogado em 2026-05-31 noite (smoke pós-CT.6 Luciano).
+
+---
+
 ## Como adicionar item
 
 Quando aparecer débito novo durante sessão:

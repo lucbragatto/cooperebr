@@ -2607,6 +2607,13 @@ model RepasseProprietario {
   canceladoEm              DateTime?
   motivoCancelamento       String?
 
+  // D-novo-BR-CT estorno (31/05/2026 noite) — admin estorna PAGO → PENDENTE
+  // se a apuração do período ainda está ABERTA (snapshot imutável bloqueia).
+  // Reverte LancamentoCaixa (delete) + desvincula despesas (PENDENTE).
+  estornadoEm              DateTime?
+  estornadoPorUsuarioId    String?
+  motivoEstorno            String?
+
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
