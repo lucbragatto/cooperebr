@@ -6,6 +6,8 @@ import { ConveniosCtService } from './convenios-ct.service';
 import { RegimeContabilFactory } from './regimes/regime.factory';
 import { ApuracaoController } from './apuracao.controller';
 import { ApuracaoService } from './apuracao.service';
+import { DreController } from './dre.controller';
+import { DreService } from './dre.service';
 
 /**
  * D-novo-BR-CT CT.2 (31/05/2026) — Módulo de contabilidade tributária.
@@ -19,18 +21,20 @@ import { ApuracaoService } from './apuracao.service';
  *     classificarLancamento() (CT.3 vai wirar hooks automáticos).
  */
 @Module({
-  controllers: [ConveniosCtController, ApuracaoController],
+  controllers: [ConveniosCtController, ApuracaoController, DreController],
   providers: [
     PrismaService,
     RegimeContabilFactory,
     ContabilidadeTributariaService,
     ConveniosCtService,
     ApuracaoService,
+    DreService,
   ],
   exports: [
     ContabilidadeTributariaService,
     RegimeContabilFactory,
     ApuracaoService,
+    DreService,
   ],
 })
 export class ContabilidadeTributariaModule {}
