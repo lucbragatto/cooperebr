@@ -83,6 +83,19 @@ model Cooperativa {
   // Quando false, módulo de despesas operacionais fica restrito ao admin.
   proprietarioVeDespesas    Boolean                           @default(true)
 
+  // ── Sprint CT.1 (31/05/2026) — Contabilidade Tributária Segregada ──
+  // regimeContabil derivado de tipoParceiro no momento do cadastro;
+  // editável por SUPER_ADMIN pra casos de borda. Vide
+  // docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md secao 7.
+  regimeContabil            TipoRegimeContabil                @default(COOPERATIVO)
+  // P0-4: STF Tema 536 em julgamento mai/jun 2026. Isenção PIS/COFINS sobre
+  // ato cooperativo próprio = flag configurável (NÃO hardcoded). Default true
+  // pra COOPERATIVA (jurisprudência atual STF); false pros demais regimes.
+  isencaoPisCofinsAtiva     Boolean                           @default(true)
+
+  convenios                 Convenio[]
+  apuracoesMensaisSegregadas ApuracaoMensalSegregada[]
+
   @@map("cooperativas")
 }
 
@@ -1150,6 +1163,18 @@ model PlanoContas {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   lancamentos   LancamentoCaixa[]
+
+  // ── Sprint CT.1 (31/05/2026) — segregação cooperativa ──
+  /// Natureza contábil estruturada (substitui o `tipo` String livre legado).
+  /// Nullable pra preservar 24 contas seed legadas (migration aditiva).
+  /// Seed novo CT.1 popula explicitamente.
+  naturezaContabil    NaturezaContabil?
+  /// Natureza do ato cooperativo (só relevante pra parceiros COOPERATIVO).
+  /// Nullable pra contas neutras (ATIVO/PASSIVO/PL gerais).
+  naturezaCooperativa NaturezaCooperativa?
+  /// Fundamento legal citado pra defensabilidade fiscal.
+  /// Ex: "Art. 28 I Lei 5.764/71" (Fundo Reserva), "Art. 79 + STF Tema 536".
+  fundamentoLegal     String?
 
   @@map("plano_contas")
 }
@@ -2735,4 +2760,147 @@ model AlocacaoOtima {
 
   @@index([cooperativaId, status, calculadaEm])
   @@map("alocacoes_otimas")
+}
+
+// =================================================================
+// Sprint CT.1 (31/05/2026) — Contabilidade Tributária Segregada
+// Especificação: docs/especificacao-contabilidade-cooperativa-segregada.md
+// Conformidade multi-regime: docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md
+// Auditoria 58 legados: docs/relatorios/2026-05-31-auditoria-53-lancamentos-legados.md
+// =================================================================
+
+/// Regime contábil-tributário do parceiro. Derivado de tipoParceiro no
+/// cadastro. CT.1 implementa só COOPERATIVO em produção; outros = stub
+/// (esquema preparado pra ativar quando onboarding real desses tipos exigir).
+enum TipoRegimeContabil {
+  COOPERATIVO                    // Lei 5.764/71 — ato cooperativo, fundos, sobras
+  CONSORCIO_PROPORCIONAL         // Lei 6.404/76 + Lei 14.300/2022 — proporcional por consorciada
+  ASSOCIACAO_SEM_FINS_LUCRATIVOS // CC Arts. 53-61 + Lei 9.532/97
+  CONDOMINIO_EDILICIO            // CC Arts. 1.314-1.358-A + Lei 14.300/2022
+}
+
+/// Natureza do ato cooperativo (Lei 5.764/71 Arts. 79, 86, 88).
+/// Migration String → enum em LancamentoCaixa (CT.1 Passo 1+2).
+enum NaturezaCooperativa {
+  PROPRIO         // Art. 79 — cooperativa × cooperado pra consecução objeto social
+  AUXILIAR        // Art. 88 — terceiro necessário (convênio custeio)
+  NAO_COOPERATIVO // Art. 86 — terceiro sem vínculo cooperativo
+}
+
+/// Natureza contábil da conta no plano segregado.
+/// Sobras separada de Resultado Não-Coop (risco 3 do parecer subagent).
+enum NaturezaContabil {
+  ATIVO
+  PASSIVO
+  PATRIMONIO_LIQUIDO
+  RECEITA_ATO_PROPRIO
+  RECEITA_ATO_AUXILIAR
+  RECEITA_NAO_COOPERATIVO
+  DESPESA_ATO_PROPRIO
+  DESPESA_ATO_AUXILIAR
+  DESPESA_NAO_COOPERATIVO
+  FUNDOS_OBRIGATORIOS         // FATES + Fundo de Reserva (Art. 28)
+  SOBRAS_DISTRIBUIVEIS        // separado de RESULTADO_NAO_COOPERATIVO
+  RESULTADO_NAO_COOPERATIVO   // tributável; vai pro FATES (Art. 87)
+}
+
+/// Status da apuração mensal. Após FECHADA, snapshot é imutável (defensabilidade
+/// fiscal — conformidade item #3 do parecer subagent).
+enum StatusApuracao {
+  ABERTA
+  FECHADA
+}
+
+/// Tipo de benefício do Convenio. CT.1 libera só ENERGIA_SCEE em produção
+/// (Decisão Luciano 17/05). Outros tipos = schema-only + flag de feature.
+enum TipoBeneficioConvenio {
+  ENERGIA_SCEE
+  // Stubs pra ativar por demanda real:
+  // SAUDE
+  // ALIMENTACAO
+  // REFEICAO
+  // CONSIGNADO
+  // MOBILIDADE_ELETRICA
+  // OUTROS
+}
+
+/// Fluxo financeiro do Convenio — define a natureza contábil do lançamento.
+enum FluxoConvenio {
+  INGRESSO_CUSTEIO_AUXILIAR     // aporte recebido = receita auxiliar
+  REPASSE_PROVEDOR_EXTERNO      // saída pra provedor = despesa auxiliar
+  CUSTO_OPERACIONAL_INTERNO     // custo operacional do convênio = despesa auxiliar
+}
+
+/// Convenio formal entre cooperativa e provedor/cooperados (Art. 88 Lei 5.764/71).
+/// Diferente de ContratoConvenio (que é foco MLM/desconto). Este model é
+/// exclusivo da contabilidade tributária — fluxo entrada=saída sem retenção
+/// pra que seja Auxiliar não-tributado.
+model Convenio {
+  id                  String                @id @default(cuid())
+  cooperativaId       String
+  cooperativa         Cooperativa           @relation(fields: [cooperativaId], references: [id])
+  nome                String
+  descricao           String?
+  tipoBeneficio       TipoBeneficioConvenio @default(ENERGIA_SCEE)
+  fluxoFinanceiro     FluxoConvenio
+  /// Texto livre citando fundamento legal e classificação fiscal
+  /// (ex: "Ato Auxiliar Art. 88 Lei 5.764/71 + STF Tema 536").
+  classificacaoFiscal String
+  vigenciaInicio      DateTime
+  vigenciaFim         DateTime?
+  ativo               Boolean               @default(true)
+  observacoes         String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([cooperativaId, ativo])
+  @@index([cooperativaId, tipoBeneficio])
+  @@map("convenios_contabilidade")
+}
+
+/// Snapshot mensal da apuração contábil-tributária segregada por tenant.
+/// IMUTÁVEL após FECHADA (defensabilidade fiscal — conformidade item #3
+/// do parecer subagent). Valores em snapshot — não recalcular após fechar.
+///
+/// CT.1 cria o modelo; CT.4 implementa o motor de cálculo real (gate Walter).
+model ApuracaoMensalSegregada {
+  id                  String         @id @default(cuid())
+  cooperativaId       String
+  cooperativa         Cooperativa    @relation(fields: [cooperativaId], references: [id])
+  ano                 Int
+  mes                 Int
+
+  // ── Receitas/Despesas por natureza (snapshot Decimal pra precisão fiscal) ──
+  receitaPropria      Decimal        @default(0) @db.Decimal(15, 2)
+  receitaAuxiliar     Decimal        @default(0) @db.Decimal(15, 2)
+  receitaNaoCoop      Decimal        @default(0) @db.Decimal(15, 2)
+  despesaPropria      Decimal        @default(0) @db.Decimal(15, 2)
+  despesaAuxiliar     Decimal        @default(0) @db.Decimal(15, 2)
+  despesaNaoCoop      Decimal        @default(0) @db.Decimal(15, 2)
+
+  // ── Fundos obrigatórios Lei 5.764/71 Art. 28 (10% Reserva + 5% FATES) ──
+  fundoReserva        Decimal        @default(0) @db.Decimal(15, 2)
+  fates               Decimal        @default(0) @db.Decimal(15, 2)
+  sobrasDistribuiveis Decimal        @default(0) @db.Decimal(15, 2)
+
+  // ── Tributos devidos sobre ato Não-Coop (Próprio = 0 explícito com fundamento) ──
+  pisDevido           Decimal        @default(0) @db.Decimal(15, 2)
+  cofinsDevido        Decimal        @default(0) @db.Decimal(15, 2)
+  irpjDevido          Decimal        @default(0) @db.Decimal(15, 2)
+  csllDevido          Decimal        @default(0) @db.Decimal(15, 2)
+
+  /// Fundamento legal da isenção (citação de norma + jurisprudência).
+  /// Ex: "STF Tema 536 + STJ Tema 986 + Art. 79 Lei 5.764/71".
+  fundamentoIsencao   String?
+
+  status              StatusApuracao @default(ABERTA)
+  fechadoEm           DateTime?
+  fechadoPorUsuarioId String?
+  observacoes         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@unique([cooperativaId, ano, mes])
+  @@index([cooperativaId, status])
+  @@map("apuracoes_mensais_segregadas")
 }
