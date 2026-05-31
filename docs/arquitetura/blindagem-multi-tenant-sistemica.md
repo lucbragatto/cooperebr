@@ -53,3 +53,28 @@ Não esperar a fundação (7-11 dias) com críticos sangrando. Sequência:
 ## Veredito
 
 Camada sistêmica VALE A PENA (previne reincidência), mas NÃO é bala de prata — cobre ~52 de 68. Híbrido é o caminho, com fix manual dos críticos PRIMEIRO. Catalogar como **Sprint Blindagem Multi-Tenant** (D-novo-BR), com Fase 0 destacável pra execução imediata.
+
+## Anti-reincidência — Lint (F1.4, 31/05/2026)
+
+**O 69º endpoint vulnerável** é o problema real: sem disciplina de anotação, todo PR novo pode reintroduzir IDOR. Solução implementada:
+
+- **Script:** `backend/scripts/lint-tenant-decorators.ts` (TS AST nativo, sem dep nova).
+- **Comando:** `npm run lint:tenant` (cwd: `backend/`).
+- **Regra:** todo handler HTTP de mutação (`@Post/@Put/@Patch/@Delete`) DEVE declarar UM destes:
+  - `@TenantResource({...})` — protegido pelo Guard sistêmico (cobertura padrão)
+  - `@TenantExempt()` — endpoint sabidamente sem recurso por id (dev/health)
+  - `@Public()` — endpoint público (webhook, cadastro, login)
+- **Baseline (`scripts/tenant-lint-allowlist.json`):** snapshot dos 256 handlers legados de mutação que NÃO declaram decorator no fechamento da F1.3. Eles ficam como WARNING (não falham); novos handlers sem decorator são erro hard (exit 1).
+- **Esvaziamento incremental:** quando um handler legado for anotado, removê-lo da allowlist (o lint avisa: `⚠ entradas que já receberam decorator — pode REMOVER`).
+- **Ratchet:** dívida só diminui, nunca cresce. Re-gerar baseline (`gen-tenant-lint-allowlist.ts`) só em casos extremos — esconde regressões.
+
+### Integração
+
+- Sem CI/husky hoje no projeto. **Rodar manual antes de cada PR** (recomendado).
+- **Futura integração:** quando GitHub Actions for ligado, adicionar step `cd backend && npm run lint:tenant` ao workflow de CI; quando husky for adotado, adicionar ao `pre-push` hook.
+
+### Por que essa peça importa
+
+- F1.1 deu o Guard. F1.2 anotou 15. F1.3 deu o smoke detector log-only. Sem o lint da F1.4, o próximo PR pode introduzir um handler sem decorator e ninguém percebe até virar incidente.
+- O Guard só roda em rotas anotadas (opt-in). Esquecer de anotar = vulnerabilidade silenciosa.
+- O log-only F1.3 detecta em runtime, mas é defesa em profundidade — o lint pega na pre-merge.
