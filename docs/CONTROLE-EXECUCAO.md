@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-30 — Sprint Segurança IDOR (D-novo-BQ) COMPLETO** (5 commits `3e23f81..d17ac3f` em 1 sessão Code maratona). **18 IDORs corrigidos** (7 críticos + 8 altos + 3 médios) em 4 fatias atômicas (BQ.1+BQ.2+BQ.3+BQ.4). Padrão de fix mecânico (posse `findFirst` + SUPER_ADMIN bypass). Auditoria gerada por **Audit Dynamic Workflow** — primeiro uso no projeto (28 sub-agentes paralelos Opus 4.8, 4 min, 1.437.072 tokens, relatório `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`). **56 specs isolamento verdes** + **35 cenários runtime cross-tenant validados em 3 smokes programáticos**. Pré-requisito Sinergia (2º parceiro real) destravado nos módulos núcleo. Detalhe: `docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md`.
+> Última atualização: **2026-05-31 — Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0)** — 3 commits em 1 sessão Code. **26 IDORs corrigidos** em 5 sub-fatias atômicas (F0.1-F0.5) — 19 Onda A + 7 críticos Onda B usando padrão D-novo-BQ. Auditorias expandidas (Dynamic Workflow Ondas A+B = 50 IDORs adicionais) catalogadas. Decisão arquitetural híbrida em 5 fases (F0 ✅ esta / F1 AsyncLocalStorage / F2 Prisma Extension / F3 residuais / F4 testes) em `docs/arquitetura/blindagem-multi-tenant-sistemica.md`. **55 specs F0 verdes + 111 IDOR total verdes** (56 BQ + 55 BR F0). **23 cenários runtime cross-tenant** validados em smoke programático. 4 padrões consolidados (posse direta, via-relação, body→JWT, global-only-SA). Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md`.
+
+> Histórico: **2026-05-30 — Sprint Segurança IDOR (D-novo-BQ) COMPLETO** (5 commits `3e23f81..d17ac3f` em 1 sessão Code maratona). **18 IDORs corrigidos** (7 críticos + 8 altos + 3 médios) em 4 fatias atômicas (BQ.1+BQ.2+BQ.3+BQ.4). Padrão de fix mecânico (posse `findFirst` + SUPER_ADMIN bypass). Auditoria gerada por **Audit Dynamic Workflow** — primeiro uso no projeto (28 sub-agentes paralelos Opus 4.8, 4 min, 1.437.072 tokens, relatório `docs/relatorios/2026-05-30-auditoria-idor-workflow.md`). **56 specs isolamento verdes** + **35 cenários runtime cross-tenant validados em 3 smokes programáticos**. Pré-requisito Sinergia (2º parceiro real) destravado nos módulos núcleo. Detalhe: `docs/sessoes/2026-05-30-sprint-seguranca-idor-completo.md`.
 
 > Histórico: **2026-05-30 — Sprint D-novo-AN (RepasseProprietario) COMPLETO** (5 commits `37f7af0..2f6fb29` em 1 sessão Code dia inteiro). 5 fatias canônicas (AN.1 schema + service workflow / AN.2 endpoints REST + cron transação atômica / AN.3 telas admin + portal refator + sidebar + cards cruzados / AN.3.1 fix painel credenciais + trigger + investigação parceiro / AN.4 fix cards parceiro + backfill + notificação + PDF). **36/36 specs verdes** (21 service + 10 controller + 5 notificação) + 3 smokes programáticos. 4 RepasseProprietario PENDENTE no banco (1 trigger + 3 backfill). **D-novo-BM reparo funcional** inline AN.3.1 (TTL 1h→8h + interceptor allowlist). **D-novo-BP catalogado** (convergência `/parceiro` vs `/dashboard`, P3 sprint refator UX futuro). Sprint AN substitui+complementa BH.5 — workflow PENDENTE→PAGO/CANCELADO com transação atômica vinculando despesas DESCONTO_NO_REPASSE. Detalhe: `docs/sessoes/2026-05-30-sub-sprint-an-repasse-proprietario-completo.md`.
 
@@ -1172,15 +1174,149 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado: working tree limpo (untracked
    carry-overs catalogados). Último commit eh o de fechamento Sprint
-   Segurança IDOR (D-novo-BQ) COMPLETO.
+   Blindagem Multi-Tenant Fase 0 (D-novo-BR F0).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend online.
 
 PASSO 1 — Onde paramos + Próximo bloco:
 
+Sprint Blindagem Multi-Tenant Fase 0 (D-novo-BR F0) entregue 100%
+em 1 sessão Code (31/05), 3 commits, 5 sub-fatias atômicas.
+**26 IDORs corrigidos** (19 Onda A + 7 críticos Onda B) usando
+padrão consolidado em D-novo-BQ:
+
+F0.1 — administradoras (CA1+CA2+AA1) + modelos-cobranca (AA9+AA10+
+AA11). Modelos GLOBAL (cooperativaId=null) agora SOMENTE SUPER_ADMIN
+pode alterar (impacto sistêmico — modelo usado por todos tenants).
+
+F0.2 — documentos (AA2+AA3+AA4+MA1). Posse via cooperado.cooperativaId
+(helper carregarComPosse). Não dispara WhatsApp cross-tenant.
+
+F0.3 — ocorrencias (AA5+AA6+MA2) + prestadores (AA7+AA8+MA3). DTOs
+sanitizados (cooperativaId REMOVIDO de CreatePrestadorDto/Update).
+MA2 ocorrencias.create valida cooperadoId pertence ao tenant.
+
+F0.4 — condominios (MA4+BA1) + observador (AA12). body-injection
+bloqueado em condominios.create. calcularRateio filtrado por tenant.
+lead-expansao @Public OUT-OF-SCOPE (sem JWT, requer guard diferente).
+
+F0.5 — 7 CRÍTICOS Onda B: notificacoes.marcarComoLida (buildWhere
+existente, no-op silencioso); asaas.cancelarCobranca (posse via
+cooperado, SA descobre tenant pro getApiClient); integracao-bancaria
+3 (cancelarCobranca posse ANTES da API banco BB/Sicoob IRREVERSIVEL,
+criarConfig body→JWT, atualizarConfig posse); whatsapp 2 (DELETE
+modelos global-only-SA + tenant-scoped dono-only, POST disparar-
+cobrancas bloqueia parceiroId≠JWT pra ADMIN).
+
+VALIDAÇÃO SPRINT COMPLETO:
+- 55/55 specs F0 verdes (11 arquivos *-idor-br.spec.ts).
+- 111/111 specs IDOR total verdes (56 D-novo-BQ + 55 D-novo-BR F0).
+- 23/23 cenários runtime cross-tenant validados em smoke programático
+  (scripts/smoke-br-f0-idor.ts) contra Postgres real.
+- Asserções runtime: cobrança bancária B PENDENTE; modelo whatsapp B
+  + global NÃO deletados; notificação B NÃO marcada como lida; config
+  bancária clientId NÃO substituído; criarConfig usa cooperativaId
+  injetado (não body); ocorrência + prestador + observação B intactos.
+
+PADRÕES CONSOLIDADOS (4 categorias):
+1. Posse direta: findFirst({id, cooperativaId}) + null bypass
+2. Posse via relação: findFirst({id, <rel>: {cooperativaId}})
+3. Body→JWT: helper resolverTenant (ADMIN sempre JWT, SA pode body)
+4. Global-only-SA: cooperativaId=null = recurso compartilhado, só SA
+
+DÉBITOS:
+- D-novo-BR F0 ✅ IMPLEMENTADO (26 IDORs)
+- D-novo-BR F1-F4 📋 ABERTOS (AsyncLocalStorage + Prisma Extension
+  + residuais + testes)
+- BQ.6/BQ.7 ✅ inclusos em F0; BQ.8 (24 altos+médios Onda B) defer F3
+
+PRÓXIMO BLOCO — LUCIANO ESCOLHE (5 opções):
+
+(1) D-novo-BR F1 — Fundação AsyncLocalStorage + interceptor +
+   runWithTenant + escape hatch runAsPlatform (~3-4 dias). BASE
+   obrigatória pra F2 Extension. Crons/webhooks pré-requisito.
+
+(2) D-novo-BR F2 — Prisma Client Extension auto-inject cooperativaId
+   nos ~52 models (~2-3 dias). REQUER F1. Previne reincidência
+   (endpoint novo já nasce protegido).
+
+(3) F.4 — Smoke E2E pós-BR F0 (~1-2h). 10 fluxos críticos pra
+   garantir caminho feliz após 26 patches (cobranças, ativações,
+   vincular fatura, alocar usina, aprovar proposta, cancelar boleto).
+
+(4) Sprint Contabilidade Tributária Segregada (#8 roadmap, ~40-60h).
+
+(5) Convergência portal /parceiro vs /dashboard (D-novo-BP P3, ~20-30h).
+
+REGRA INEGOCIÁVEL: antes de propor qualquer bloco aprovado, aplicar
+Fase 1 read-only mini (~10-15min) — feedback_fase1_readonly_obrigatoria
+catalogado. Não tocar código antes de OK Luciano explícito.
+
+CONSTRAINTS FUNDAMENTAIS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Padrão fix IDOR (4 categorias) catalogado em D-novo-BR — aplicar
+  em qualquer endpoint novo de mutação.
+- Escape hatch runAsPlatform() PRÉ-REQUISITO pra F2 (crons/webhooks
+  rodam sem request — Extension cega quebra silenciosamente).
+- Multi-tenant: TODA query Prisma filtra por cooperativaId.
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV).
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com.
+- Decisão 24: frase de retomada local único.
+- Regra Code não-paralelo: claude.ai aguarda Code reportar.
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md
+4. docs/debitos-tecnicos.md (D-novo-BR F0 ✅; F1-F4 abertos)
+5. (se F1/F2) docs/arquitetura/blindagem-multi-tenant-sistemica.md
+6. docs/MAPA-INTEGRIDADE-SISTEMA.md
+7. CLAUDE.md + .claude/CLAUDE.md
+8. git log --oneline -15
+
+CARRY-OVERS (nao-bloqueantes, mantidos):
+- 10 erros TS pré-existentes em backend/src/agents/ (untracked, módulo
+  experimental local, sequer está no git — backend roda OK porta 3000)
+- lead-expansao POST @Public requer guard diferente (rate-limit) → F3
+- EmailLog schema sem cooperativaId → F3
+- 24 IDORs altos+médios Onda B (monitoramento-usinas, email, asaas
+  listar, whatsapp listas/fluxos/etc) → defer F3 ou após F2
+- usinas.controller.spec.ts pré-existente (TestingModule deps)
+- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD)
+- D-novo-BP (P3 convergência portal — sprint refator UX futuro)
+- D-novo-BJ (P2 LGPD URL assinada comprovantes)
+- D-novo-BK (P3 storage S3/Supabase)
+- D-novo-BG (P3 anomalia GD Linhares)
+- D-novo-BC (P2 paridade campos edição usina)
+- D-novo-BA/AZ classe GD restantes
+- D-novo-AS.2 (P2 hook PostToolUse build → pm2 restart)
+- 30+ scripts utilitários untracked em backend/scripts/
+
+FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
+⏳ PRIORITARIO: Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD + decidir corrigir DIVERGÊNCIAS
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud com E-Solares
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado)
+
+DOC-SESSAO SPRINT BR F0 COMPLETO: docs/sessoes/2026-05-31-sprint-
+blindagem-multi-tenant-fase0.md
+```
+
+---
+
+### Frase Sprint IDOR D-novo-BQ (anterior, arquivada)
+
+```
+[FRASE DO SPRINT D-novo-BQ — substituída acima pelo Sprint Blindagem F0 31/05]
+
 Sprint Segurança IDOR (D-novo-BQ) entregue 100% em 1 sessão Code
-maratona (30/05), 5 commits 3e23f81..[hash fechamento], 4 fatias
-atômicas + auditoria automatizada:
+maratona (30/05), 5 commits 3e23f81..5470280, 4 fatias atômicas +
+auditoria automatizada:
 
 AUDITORIA — Audit Dynamic Workflow (1º uso no projeto): 28 sub-agentes
 paralelos, Opus 4.8, 4 min, 1.437.072 tokens. Varreu 61 endpoints de

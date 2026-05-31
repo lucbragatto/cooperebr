@@ -3587,6 +3587,74 @@ Frontend (`web/`):
 
 ---
 
+### D-novo-BR — Sprint Blindagem Multi-Tenant Sistêmica (P0)
+
+**Severidade:** P0 — terceira fase do tratamento IDOR, complementa D-novo-BQ. Auditoria expandida (Onda A + Onda B) revelou 50 IDORs adicionais (19 + 31), totalizando 68 IDORs sistêmicos. Decisão arquitetural: solução **híbrida faseada** em vez de só fix manual endpoint-por-endpoint.
+
+**Origem:** auditorias Onda A (Dynamic Workflow, 25 sub-agentes, 31/05/2026) + Onda B (45 sub-agentes) + análise architect read-only. Relatórios:
+- `docs/relatorios/2026-05-30-auditoria-idor-onda-a.md` (19 IDORs em 20 módulos secundários)
+- `docs/relatorios/2026-05-30-auditoria-idor-onda-b.md` (31 IDORs em whatsapp/notificacoes/asaas/bancário/infra)
+- `docs/arquitetura/blindagem-multi-tenant-sistemica.md` (decisão híbrida 5 fases)
+
+**Mapa do terreno:**
+- Prisma 6.16.2 (suporta Client Extensions `$extends`); zero extensions hoje.
+- Schema ~95 models: ~52 com `cooperativaId` direto · ~18 tenant-via-relação · ~25 globais.
+- Auth: 4 guards globais — nenhum faz isolamento de tenant. SUPER_ADMIN = `cooperativaId null` (bypass intencional).
+
+**Fatiamento:**
+
+| Fase | Escopo | Estimativa | Status |
+|---|---|---|---|
+| F0 | Fix manual 26 IDORs críticos (19 Onda A + 7 CRÍTICOS Onda B) — padrão BQ.1-BQ.4 | 2-3h | ✅ **IMPLEMENTADO 31/05/2026** |
+| F1 | Fundação — AsyncLocalStorage + interceptor + `runWithTenant()` + `runAsPlatform()` escape hatch | 3-4 dias | 📋 Catalogado |
+| F2 | Prisma Client Extension injeta `cooperativaId` automático nos ~52 models com campo direto (read+write) | 2-3 dias | 📋 Catalogado |
+| F3 | Fixes residuais — ~18 models tenant-via-relação (join) + ~8 body-injection que Extension não cobre + EmailLog schema add `cooperativaId` | 1-2 dias | 📋 Catalogado |
+| F4 | Teste de regressão multi-tenant + spec cross-tenant abrangente | 1-2 dias | 📋 Catalogado |
+
+**Armadilhas catalogadas (doc arquitetura §D):**
+1. Crons + webhooks rodam SEM request HTTP — Extension cega quebraria silenciosamente. `runAsPlatform()` é pré-requisito, não opcional.
+2. Não migrar os 18+26 já corrigidos manualmente pra confiar na Extension — defesa em profundidade.
+3. Body-injection (~8 casos) nenhuma camada de query resolve — fix no controller/DTO obrigatório.
+4. Performance — Extension roda em TODA query; bug aqui afeta o sistema inteiro.
+
+**F0 implementação (31/05/2026):**
+
+5 sub-fatias atômicas, 26 IDORs corrigidos no padrão D-novo-BQ (posse via findFirst + SUPER_ADMIN bypass):
+
+- **F0.1 administradoras (CA1+CA2+AA1) + modelos-cobranca (AA9+AA10+AA11)** — administradoras: posse no update/remove, body-injection no create bloqueado (helper resolverTenant). modelos-cobranca: modelo GLOBAL (cooperativaId=null) só pode ser alterado por SUPER_ADMIN (impacto sistêmico — modelo usado por todos os tenants).
+- **F0.2 documentos (AA2+AA3+AA4+MA1)** — posse via cooperado.cooperativaId (helper carregarComPosse). Aprovar/reprovar/delete não dispara WhatsApp pro cooperado alheio. uploadAdmin verifica cooperado pertence ao tenant antes do upload.
+- **F0.3 ocorrencias (AA5+AA6+MA2) + prestadores (AA7+AA8+MA3)** — posse padrão. DTOs sanitizados (cooperativaId REMOVIDO de CreatePrestadorDto/UpdatePrestadorDto). MA2 ocorrencias.create valida cooperadoId pertence ao tenant.
+- **F0.4 condominios (MA4+BA1) + observador (AA12)** — body-injection bloqueado em condominios.create. calcularRateio filtrado por tenant (não vaza nomes/cotas cross-tenant). observador.encerrar valida posse. lead-expansao @Public OUT-OF-SCOPE (sem JWT — exige guard diferente, anotado pra futuro).
+- **F0.5 críticos Onda B (7)** — notificacoes.marcarComoLida com posse via buildWhere existente (no-op silencioso pra evitar leak de existência). asaas.cancelarCobranca posse via cooperado.cooperativaId + SA descobre tenant da cobrança pra getApiClient. integracao-bancaria 3 fixes: cancelarCobranca posse antes da API banco (boleto BB/Sicoob irreversível), criarConfig body-injection bloqueado, atualizarConfig posse. whatsapp 2 fixes: DELETE modelos com regra global SA-only + tenant-scoped só dono; POST disparar-cobrancas bloqueia parceiroId ≠ JWT pra ADMIN.
+
+**Padrão consolidado expandido (4 categorias):**
+1. **Posse direta** (`findFirst({where: {id, cooperativaId}})` + null bypass): F0.1 admins, F0.3 ocorrencias/prestadores, F0.5 integracao-bancaria.
+2. **Posse via relação** (`findFirst({where: {id, <rel>: {cooperativaId}}})`): F0.2 documentos (cooperado), F0.5 asaas (cooperado).
+3. **Body-injection → JWT** (helper resolverTenant, ADMIN sempre JWT, SA pode body): F0.1 administradoras.create, F0.4 condominios.create, F0.5 integracao-bancaria.criarConfig.
+4. **Global-only-SA** (cooperativaId null = recurso compartilhado, só SUPER_ADMIN pode alterar): F0.1 modelos-cobranca.ativar/desativar, F0.5 whatsapp DELETE modelos.
+
+**Specs F0:** 11 arquivos `*-idor-br.spec.ts` com 55 cenários verdes (14+6+10+6+19 = 55). Backwards-compat 100% preservada.
+
+**Smoke runtime F0:** `scripts/smoke-br-f0-idor.ts` — 23/23 cenários cross-tenant validados contra Postgres real. Asserções: administradora B intacta após ataque; cobrança bancária B continua PENDENTE; modelo whatsapp B/global NÃO deletados por ADMIN; notificação B NÃO marcada como lida cross-tenant; config bancária B clientId NÃO substituído.
+
+**Total IDOR specs sistema após F0:** 111 verdes (56 D-novo-BQ + 55 D-novo-BR F0).
+
+**Carry-over F0:**
+- lead-expansao POST `@Public` (cadastro pelo bot WA sem JWT) — não é IDOR no sentido clássico, requer guard diferente (rate-limit + validação body.cooperativaId existe). Anotado pra Fase 3.
+- EmailLog schema sem `cooperativaId` — adicionar campo + migration na Fase 3 (audit log de email cross-tenant).
+- Refator monitoramento-usinas (5 endpoints alto/médio) + asaas listarCobrancas + email reenviar + email-monitor processar + whatsapp listas/fluxos/cooperados-para-disparo/historico/disparar-convites-indicacao (16 ALTO + 8 MÉDIO Onda B) — Fase 3 ou após F2 Extension cobrir parcialmente.
+
+**Recomendação arquitetural (doc arquitetura §C):** Não esperar F1+F2+F3 (~7 dias) com críticos sangrando. F0 resolveu o sangramento em 1 sessão. Próximas fases previnem reincidência via Extension (~52 models cobertos automaticamente; endpoint novo nasce protegido) + escape hatch pra crons/webhooks.
+
+**Refs:**
+- Decisão arquitetural: `docs/arquitetura/blindagem-multi-tenant-sistemica.md`
+- Relatório Onda A: `docs/relatorios/2026-05-30-auditoria-idor-onda-a.md`
+- Relatório Onda B: `docs/relatorios/2026-05-30-auditoria-idor-onda-b.md`
+- Padrão D-novo-BQ (BQ.1-BQ.4 fix manual): seção D-novo-BQ abaixo
+- Doc-sessão F0: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-fase0.md`
+
+---
+
 ### D-novo-BQ — Sprint Segurança IDOR (18 vulnerabilidades multi-tenant) (P0)
 
 **Severidade:** P0 — bloqueador absoluto de onboarding Sinergia (2º parceiro). Com 1 tenant real hoje (CoopereBR) o risco não está materializado, mas isolamento multi-tenant é pré-requisito não-negociável pra produção plural.
@@ -3609,7 +3677,10 @@ Frontend (`web/`):
 | BQ.2 | CRÍTICOS config-cobranca body-injection (C5/C6) + motor-proposta aprovar-presencial (C7) + cooper-token financeiro (A6) | ✅ **IMPLEMENTADO 30/05/2026** (commit 7185db2) |
 | BQ.3 | motor-proposta (A7 + A8) + faturas (A1) + cooperados (A2 + M1) | ✅ **IMPLEMENTADO 30/05/2026** (commit d17ac3f) |
 | BQ.4 | indicacoes (M2 + M3) | ✅ **IMPLEMENTADO 30/05/2026** (commit d17ac3f) |
-| BQ.5 (futuro) | Ampliar auditoria pra ~50 services restantes (cobertura total) | 📋 **ABERTO** — pré-req desejável antes de onboarding Sinergia em escala |
+| BQ.5 → D-novo-BR | Auditoria ampliada (Onda A + Onda B = 50 IDORs adicionais) + decisão híbrida arquitetural | ✅ **AUDITORIA COMPLETA + F0 IMPLEMENTADO 31/05/2026** — restantes em D-novo-BR Fases F1-F4 |
+| BQ.6 (Onda A 19) | Inclusos em D-novo-BR F0 (31/05/2026) | ✅ **IMPLEMENTADO** |
+| BQ.7 (Onda B críticos 7) | Inclusos em D-novo-BR F0 (31/05/2026) | ✅ **IMPLEMENTADO** |
+| BQ.8 (Onda B altos+médios 24) | Defer pra D-novo-BR F3 ou após F2 Extension | 📋 Catalogado |
 
 **BQ.1 implementação (commit a definir):**
 - `contratos.service.ts.update()` — verificação posse no início (espelha `remove()` D-48). Callers `solicitacoes-contrato.service.ts` JÁ passavam `cooperativaId ?? null`, sem mudança.
