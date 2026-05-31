@@ -43,6 +43,10 @@ import {
   LineChart,
   Coins,
   TestTube,
+  Scale,
+  FileSpreadsheet,
+  CheckCheck,
+  Library,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -143,6 +147,16 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/configuracoes/financeiro', label: 'Plano de Contas', icon: DollarSign },
         { href: '/dashboard/cooper-token-parceiro', label: 'Tokens Recebidos', icon: ArrowDownCircle },
         { href: '/dashboard/cooper-token-financeiro', label: 'Financeiro Tokens', icon: Coins },
+      ],
+    },
+    {
+      title: 'Contabilidade Tributária',
+      titleIcon: Scale,
+      items: [
+        { href: '/dashboard/contabilidade/apuracao', label: 'Apuração Mensal', icon: CheckCheck },
+        { href: '/dashboard/contabilidade/dre', label: 'DREs Segregadas', icon: FileSpreadsheet },
+        { href: '/dashboard/contabilidade/plano-contas', label: 'Plano de Contas Segregado', icon: Library },
+        { href: '/dashboard/contabilidade/convenios', label: 'Convênios (Art. 88)', icon: FileCheck },
       ],
     },
     {
