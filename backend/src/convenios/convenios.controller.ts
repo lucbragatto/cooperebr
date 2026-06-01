@@ -1,13 +1,17 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, ForbiddenException,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, ForbiddenException, HttpCode,
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { ConveniosService } from './convenios.service';
 import { ConveniosMembrosService } from './convenios-membros.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 import { CreateConvenioDto, UpdateConvenioDto, AddMembroDto, UpdateMembroDto } from './convenios.dto';
+import { RegistrarMovimentoConvenioContratoDto } from './dto/registrar-movimento-convenio-contrato.dto';
 import { ConfigBeneficio } from './convenios-progressao.service';
+import { ContabilidadeTributariaService } from '../contabilidade-tributaria/contabilidade-tributaria.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
@@ -17,6 +21,7 @@ export class ConveniosController {
     private readonly conveniosService: ConveniosService,
     private readonly membrosService: ConveniosMembrosService,
     private readonly progressaoService: ConveniosProgressaoService,
+    private readonly contabilidade: ContabilidadeTributariaService,
   ) {}
 
   // ─── CRUD Convênio ──────────────────────────────────────────────────────
@@ -181,6 +186,93 @@ export class ConveniosController {
     }
 
     return relatorio;
+  }
+
+  // ─── D-FISCAL-2.2 — Movimentos contábeis do convênio consolidado ─────
+  // Endpoints novos pra ContratoConvenio + flags fiscais (2.1).
+  // Coexistem com /contabilidade-tributaria/convenios/:id/movimentos (CT.9)
+  // até D-FISCAL-2.5 aposentar o caminho CT antigo.
+
+  /**
+   * D-FISCAL-2.2 — Registra movimento contábil do convênio consolidado.
+   * Síncrono: cria LancamentoCaixa na hora; erros sobem pra UI (4 enforcements:
+   * flag off / natureza null / fluxo null / P0-1 não-coop).
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.movimento.contabil',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(201)
+  @Post(':id/movimentos-contabeis')
+  async registrarMovimentoContabil(
+    @Param('id') id: string,
+    @Body() dto: RegistrarMovimentoConvenioContratoDto,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    // CT.9.1 fix TZ: parse LOCAL + competência da STRING
+    const [ano, mes, dia] = dto.dataMovimento.split('-').map(Number);
+    const dataMovimento = new Date(ano, mes - 1, dia);
+    const competencia = dto.dataMovimento.substring(0, 7); // YYYY-MM
+    return this.contabilidade.criarLancamentoConvenioContrato({
+      contratoConvenioId: id,
+      valor: dto.valor,
+      dataMovimento,
+      competencia,
+      descricao: dto.descricao,
+      cooperativaId,
+    });
+  }
+
+  /**
+   * D-FISCAL-2.2 — Histórico de movimentos contábeis do convênio consolidado.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'contratoConvenio' })
+  @Get(':id/movimentos-contabeis')
+  async listarMovimentosContabeis(@Param('id') id: string, @Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    return this.contabilidade.listarMovimentosContrato(id, cooperativaId);
+  }
+
+  /**
+   * D-FISCAL-2.2 — Estorna movimento contábil do convênio consolidado.
+   * Mesmo padrão CT.9.1 (gate apuração FECHADA + delete atômico + AuditLog).
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.movimento.contabil.estornar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @Delete(':id/movimentos-contabeis/:lancamentoId')
+  async estornarMovimentoContabil(
+    @Param('id') id: string,
+    @Param('lancamentoId') lancamentoId: string,
+    @Body() body: { motivo?: string } | undefined,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    return this.contabilidade.estornarMovimentoConvenioContrato({
+      contratoConvenioId: id,
+      lancamentoId,
+      cooperativaId,
+      motivo: body?.motivo,
+      usuarioId: req.user?.id ?? req.user?.userId,
+    });
   }
 
 }

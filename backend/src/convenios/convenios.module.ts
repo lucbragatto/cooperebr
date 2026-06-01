@@ -6,8 +6,12 @@ import { ConveniosMembrosService } from './convenios-membros.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 import { ConveniosJob } from './convenios.job';
 import { PrismaService } from '../prisma.service';
+import { ContabilidadeTributariaModule } from '../contabilidade-tributaria/contabilidade-tributaria.module';
 
 @Module({
+  // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
+  // ContabilidadeTributariaService injetável no ConveniosController.
+  imports: [ContabilidadeTributariaModule],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [
     ConveniosService,

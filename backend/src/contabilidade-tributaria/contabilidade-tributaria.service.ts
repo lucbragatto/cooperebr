@@ -228,6 +228,287 @@ export class ContabilidadeTributariaService {
   }
 
   /**
+   * D-FISCAL-2.2 (01/06/2026 noite) — Cria LancamentoCaixa a partir de
+   * movimento manual do CONVÊNIO CONSOLIDADO (ContratoConvenio, legado MLM
+   * + flags fiscais da fatia 2.1).
+   *
+   * Diferença vs `criarLancamentoConvenio` (CT.9 — Convenio CT.2):
+   *  - Lê `ContratoConvenio.naturezaAtoCooperativo` (configurável — D-FISCAL-1)
+   *    em vez de derivar via regime cooperativo.
+   *  - Exige `geraLancamentoContabil=true` (flag explícita no convênio).
+   *  - Grava `LancamentoCaixa.convenioId` (FK pra ContratoConvenio — relation
+   *    legada `convenio`) em vez de `convenioContabilId`.
+   *  - Coexiste com o caminho antigo (CT.2) até D-FISCAL-2.5 aposentar.
+   *
+   * 4 ENFORCEMENTS (BadRequest claro em cada):
+   *  1. `geraLancamentoContabil=false` → convênio não está marcado pra gerar
+   *  2. `naturezaAtoCooperativo=null` → admin não escolheu Próprio/Auxiliar
+   *  3. `fluxoFinanceiro=null` → admin não escolheu direção do dinheiro
+   *  4. P0-1: naturezaAtoCooperativo ∈ {PROPRIO,AUXILIAR} mas parceiro não-COOPERATIVA
+   *
+   * PRESERVA fix CT.9.1 (timezone): caller passa `competencia` derivada da
+   * STRING original (não da Date), service usa direto.
+   *
+   * SÍNCRONO + gate apuração FECHADA (reusa CT.4) + idempotência @@unique.
+   */
+  async criarLancamentoConvenioContrato(opts: {
+    contratoConvenioId: string;
+    valor: Prisma.Decimal | number | string;
+    dataMovimento: Date;
+    /** D-FISCAL-2.2: preferir competência da string original (CT.9.1 fix TZ). */
+    competencia?: string;
+    descricao?: string;
+    cooperativaId: string;
+  }): Promise<{
+    id: string;
+    naturezaAto: NaturezaCooperativa;
+    tipo: 'RECEITA' | 'DESPESA';
+    valor: string;
+    competencia: string;
+    dataPagamento: Date;
+    descricao: string;
+  }> {
+    // 1. Carrega convênio consolidado + tipoParceiro da cooperativa dona
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: opts.contratoConvenioId, cooperativaId: opts.cooperativaId },
+      select: {
+        id: true,
+        empresaNome: true,
+        status: true,
+        geraLancamentoContabil: true,
+        naturezaAtoCooperativo: true,
+        fluxoFinanceiro: true,
+        cooperativaId: true,
+      },
+    });
+    if (!convenio) {
+      throw new NotFoundException(
+        `Convênio ${opts.contratoConvenioId} não encontrado neste tenant`,
+      );
+    }
+    if (convenio.status !== 'ATIVO') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" não está ATIVO (status=${convenio.status}) — reative antes de lançar movimento`,
+      );
+    }
+
+    // 2. ENFORCEMENT #1: flag geraLancamentoContabil
+    if (!convenio.geraLancamentoContabil) {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" não está marcado para gerar lançamento contábil. ` +
+          `Ative a flag "Gera lançamento contábil" no cadastro do convênio antes de registrar movimentos.`,
+      );
+    }
+
+    // 3. ENFORCEMENT #2: natureza obrigatória
+    if (!convenio.naturezaAtoCooperativo) {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" precisa de natureza do ato definida ` +
+          `(Próprio/Auxiliar/Não-Cooperativo) antes de lançar movimento. ` +
+          `Edite o convênio e escolha a classificação fiscal (D-FISCAL-1).`,
+      );
+    }
+
+    // 4. ENFORCEMENT #3: fluxo financeiro obrigatório
+    if (!convenio.fluxoFinanceiro) {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" precisa de fluxo financeiro definido ` +
+          `(INGRESSO_CUSTEIO_AUXILIAR / REPASSE_PROVEDOR_EXTERNO / CUSTO_OPERACIONAL_INTERNO) antes de lançar movimento.`,
+      );
+    }
+
+    // 5. ENFORCEMENT #4: P0-1 multi-regime (Próprio/Auxiliar só pra COOPERATIVA)
+    const coopFull = await this.prisma.cooperativa.findUnique({
+      where: { id: opts.cooperativaId },
+      select: { tipoParceiro: true, regimeContabil: true, nome: true },
+    });
+    if (!coopFull) throw new NotFoundException('Cooperativa não encontrada');
+    const naturezaEhCooperativa =
+      convenio.naturezaAtoCooperativo === 'PROPRIO' ||
+      convenio.naturezaAtoCooperativo === 'AUXILIAR';
+    if (
+      naturezaEhCooperativa &&
+      (coopFull.tipoParceiro !== 'COOPERATIVA' ||
+        coopFull.regimeContabil !== TipoRegimeContabil.COOPERATIVO)
+    ) {
+      throw new BadRequestException(
+        `Classificação cooperativa (Art. 79/86/88) é exclusiva de COOPERATIVA. ` +
+          `${coopFull.nome} é ${coopFull.tipoParceiro} e recolhe por regime próprio — ` +
+          `registrar movimentos como ${convenio.naturezaAtoCooperativo} não se aplica. ` +
+          `Vide D-novo-CT-MULTI-REGIME-CLASSIFICACAO (P1).`,
+      );
+    }
+
+    // 6. Sentido do lançamento derivado do fluxoFinanceiro
+    const tipo: 'RECEITA' | 'DESPESA' =
+      convenio.fluxoFinanceiro === 'INGRESSO_CUSTEIO_AUXILIAR' ? 'RECEITA' : 'DESPESA';
+
+    // 7. Competência — preferir string do caller (CT.9.1 fix TZ)
+    let competencia: string;
+    if (opts.competencia && /^\d{4}-\d{2}$/.test(opts.competencia)) {
+      competencia = opts.competencia;
+    } else {
+      const ano = opts.dataMovimento.getFullYear();
+      const mes = String(opts.dataMovimento.getMonth() + 1).padStart(2, '0');
+      competencia = `${ano}-${mes}`;
+    }
+
+    // 8. Valor arredondado (CLAUDE.md: Math.round(x*100)/100)
+    const valorNum =
+      typeof opts.valor === 'string'
+        ? Number(opts.valor)
+        : typeof opts.valor === 'number'
+        ? opts.valor
+        : Number(opts.valor.toString());
+    const valorArredondado = Math.round(valorNum * 100) / 100;
+    if (!isFinite(valorArredondado) || valorArredondado <= 0) {
+      throw new BadRequestException('Valor deve ser positivo');
+    }
+
+    const descricaoFinal = (
+      opts.descricao?.trim() || `Movimento convênio ${convenio.empresaNome}`
+    ).slice(0, 300);
+
+    // 9. origemId único por movimento
+    const origemId = `convmov2-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // 10. Delega ao motor central com naturezaOverride (não roda regime)
+    const resultado = await this.criarLancamentoAutomatico({
+      cooperativaId: opts.cooperativaId,
+      origemTipo: OrigemLancamento.CONVENIO,
+      origemId,
+      fonte: { tipo: 'CONVENIO' }, // formato exigido por FonteLancamento, mas natureza vem do override
+      tipo,
+      descricao: descricaoFinal,
+      valor: new Prisma.Decimal(valorArredondado.toString()),
+      competencia,
+      dataPagamento: opts.dataMovimento,
+      convenioContratoId: convenio.id,
+      naturezaOverride: convenio.naturezaAtoCooperativo,
+    });
+
+    this.logger.log(
+      `[D-FISCAL-2.2] Movimento convênio (consolidado) criado: contratoConvenio=${convenio.id} ` +
+        `${tipo} R$ ${valorArredondado} → ${resultado.naturezaAto} (lanc=${resultado.id})`,
+    );
+
+    return {
+      id: resultado.id,
+      naturezaAto: resultado.naturezaAto,
+      tipo,
+      valor: valorArredondado.toFixed(2),
+      competencia,
+      dataPagamento: opts.dataMovimento,
+      descricao: descricaoFinal,
+    };
+  }
+
+  /**
+   * D-FISCAL-2.2 — Histórico de movimentos de um ContratoConvenio.
+   * Filtra LancamentoCaixa where convenioId (FK ContratoConvenio) + tenant.
+   * Ordenado por dataPagamento desc.
+   */
+  async listarMovimentosContrato(
+    contratoConvenioId: string,
+    cooperativaId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      tipo: 'RECEITA' | 'DESPESA';
+      descricao: string;
+      valor: number;
+      competencia: string;
+      dataPagamento: Date | null;
+      status: string;
+      naturezaAto: string;
+      createdAt: Date;
+    }>
+  > {
+    // Defesa em profundidade — confirma posse
+    const exists = await this.prisma.contratoConvenio.findFirst({
+      where: { id: contratoConvenioId, cooperativaId },
+      select: { id: true },
+    });
+    if (!exists) {
+      throw new NotFoundException(`Convênio ${contratoConvenioId} não encontrado neste tenant`);
+    }
+    const movimentos = await this.prisma.lancamentoCaixa.findMany({
+      where: {
+        convenioId: contratoConvenioId,
+        cooperativaId,
+        origemTipo: OrigemLancamento.CONVENIO,
+      },
+      select: {
+        id: true,
+        tipo: true,
+        descricao: true,
+        valor: true,
+        competencia: true,
+        dataPagamento: true,
+        status: true,
+        naturezaAto: true,
+        createdAt: true,
+      },
+      orderBy: { dataPagamento: 'desc' },
+    });
+    return movimentos.map((m) => ({
+      id: m.id,
+      tipo: m.tipo as 'RECEITA' | 'DESPESA',
+      descricao: m.descricao,
+      valor: Number(m.valor),
+      competencia: m.competencia,
+      dataPagamento: m.dataPagamento,
+      status: m.status,
+      naturezaAto: m.naturezaAto,
+      createdAt: m.createdAt,
+    }));
+  }
+
+  /**
+   * D-FISCAL-2.2 — Estorna movimento de ContratoConvenio. Mesmo padrão
+   * de estornarMovimentoConvenio (CT.9.1) mas filtra por convenioId (FK
+   * ContratoConvenio) em vez de convenioContabilId.
+   */
+  async estornarMovimentoConvenioContrato(opts: {
+    contratoConvenioId: string;
+    lancamentoId: string;
+    cooperativaId: string;
+    motivo?: string;
+    usuarioId?: string;
+  }): Promise<{ id: string; estornado: true }> {
+    const lanc = await this.prisma.lancamentoCaixa.findFirst({
+      where: {
+        id: opts.lancamentoId,
+        cooperativaId: opts.cooperativaId,
+        origemTipo: OrigemLancamento.CONVENIO,
+        convenioId: opts.contratoConvenioId,
+      },
+      select: { id: true, competencia: true },
+    });
+    if (!lanc) {
+      throw new NotFoundException(
+        `Movimento ${opts.lancamentoId} não encontrado no convênio ${opts.contratoConvenioId} deste tenant`,
+      );
+    }
+
+    if (this.apuracaoService) {
+      await this.apuracaoService.garantirMesAberto(
+        opts.cooperativaId,
+        lanc.competencia,
+      );
+    }
+
+    await this.prisma.lancamentoCaixa.delete({ where: { id: opts.lancamentoId } });
+
+    this.logger.log(
+      `[D-FISCAL-2.2] Movimento convênio (consolidado) ESTORNADO: lanc=${opts.lancamentoId} ` +
+        `contratoConvenio=${opts.contratoConvenioId} usuario=${opts.usuarioId ?? '?'} motivo="${opts.motivo ?? ''}"`,
+    );
+
+    return { id: opts.lancamentoId, estornado: true };
+  }
+
+  /**
    * D-novo-CT-CT.9.1 (01/06/2026 noite) — Estorna movimento de convênio.
    *
    * Padrão igual ao estorno RepasseProprietario: valida posse, gate
@@ -303,6 +584,12 @@ export class ContabilidadeTributariaService {
     cooperadoId?: string | null;
     /** CT.9: FK pra Convenio (Art. 88) quando origemTipo=CONVENIO. */
     convenioContabilId?: string | null;
+    /** D-FISCAL-2.2: FK pra ContratoConvenio (convênio consolidado). */
+    convenioContratoId?: string | null;
+    /** D-FISCAL-2.2: natureza fiscal explícita (sobrescreve o regime).
+     * Usado quando a fonte é o convênio consolidado e o admin já escolheu
+     * a natureza no cadastro do convênio (naturezaAtoCooperativo). */
+    naturezaOverride?: NaturezaCooperativa | null;
   }): Promise<{ id: string; criado: boolean; naturezaAto: NaturezaCooperativa }> {
     return runAsPlatform(async () => {
       // 0. CT.4 — bloqueio retroativo: mês com apuração FECHADA é imutável
@@ -311,7 +598,10 @@ export class ContabilidadeTributariaService {
       }
 
       // 1. Classifica antes de gravar
-      const natureza = await this.classificarLancamento(opts.cooperativaId, opts.fonte);
+      // D-FISCAL-2.2: se caller passou naturezaOverride, usa ela (caso convênio
+      // consolidado com naturezaAtoCooperativo escolhida). Senão, delega ao regime.
+      const natureza = opts.naturezaOverride
+        ?? (await this.classificarLancamento(opts.cooperativaId, opts.fonte));
 
       // 2. Tenta criar — captura P2002 (já criado) como sucesso idempotente
       try {
@@ -331,6 +621,9 @@ export class ContabilidadeTributariaService {
             cooperativaId: opts.cooperativaId,
             cooperadoId: opts.cooperadoId ?? null,
             convenioContabilId: opts.convenioContabilId ?? null,
+            // D-FISCAL-2.2: FK pro convênio consolidado (ContratoConvenio).
+            // Reaproveita a relation já existente `convenio` (linha 1217 schema).
+            convenioId: opts.convenioContratoId ?? null,
           },
           select: { id: true, naturezaAto: true },
         });
