@@ -314,6 +314,17 @@ enum StatusMembroConvenio {
   MEMBRO_DESLIGADO
 }
 
+/// D-FISCAL-2.1 (01/06/2026 noite) — Discriminador de quem paga o convênio:
+///  - EMPRESA      → empresa/conveniado paga o total da cobrança (Caso 1 — caso médico,
+///                   custeio coletivo). Billing especial entra na fatia 2.4.
+///  - CADA_MEMBRO  → cada cooperado membro paga sua própria cobrança (Caso 2 — modelo legado:
+///                   Hangar, Moradas, todo MLM histórico).
+/// Default CADA_MEMBRO garante backward-compat dos 2 convênios vivos hoje (215 membros ativos).
+enum PagadorConvenio {
+  EMPRESA
+  CADA_MEMBRO
+}
+
 enum EfeitoMudancaFaixa {
   SOMENTE_PROXIMAS
   INCLUIR_PENDENTES
@@ -1320,6 +1331,22 @@ model ContratoConvenio {
   taxaAprovacaoSisgd Decimal? @db.Decimal(10, 2)
   taxaAprovacaoPaga  Boolean  @default(false)
 
+  // ── D-FISCAL-2.1 (01/06/2026 noite) — Bloco fiscal (consolidação convênio único) ──
+  // Aditivo. Não muda os 2 convênios vivos (Hangar/Moradas). Service/UI só na fatia 2.2+.
+  //
+  // geraLancamentoContabil=true exige naturezaAtoCooperativo definida (enforcement no service).
+  // fluxoFinanceiro + classificacaoFiscal absorvidos do Convenio CT (CT.2/CT.9) — texto livre
+  // opcional; o enum naturezaAtoCooperativo é a verdade fiscal.
+  // pagador (default CADA_MEMBRO) discrimina Caso 1 (empresa paga total) vs Caso 2 (legado MLM).
+  // Vigência opcional pra coerência com Convenio CT — não obrigatória pros 2 convênios atuais.
+  naturezaAtoCooperativo NaturezaCooperativa?
+  fluxoFinanceiro        FluxoConvenio?
+  classificacaoFiscal    String?
+  geraLancamentoContabil Boolean             @default(false)
+  vigenciaInicio         DateTime?
+  vigenciaFim            DateTime?
+  pagador                PagadorConvenio     @default(CADA_MEMBRO)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1335,6 +1362,7 @@ model ContratoConvenio {
   @@index([conveniadoId])
   @@index([condominioId])
   @@index([status])
+  @@index([geraLancamentoContabil])
   @@map("contratos_convenio")
 }
 
