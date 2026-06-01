@@ -45,6 +45,13 @@ interface MovimentosConvenioSectionProps {
   convenioId: string;
   fluxoFinanceiro: string;
   nomeConvenio: string;
+  /**
+   * D-FISCAL-2.3: caminho base dos endpoints (sem /:id no fim).
+   * Default = caminho CT antigo (CT.9). Convênio legado passa
+   * '/convenios/{id}/movimentos-contabeis' (caminho consolidado D-FISCAL-2.2).
+   * O service substitui {id} pelo convenioId em runtime.
+   */
+  endpointBase?: string;
 }
 
 const FLUXO_LABEL: Record<string, { label: string; sentido: 'Entrada' | 'Saída'; cor: string }> = {
@@ -69,7 +76,10 @@ export function MovimentosConvenioSection({
   convenioId,
   fluxoFinanceiro,
   nomeConvenio,
+  endpointBase,
 }: MovimentosConvenioSectionProps) {
+  // D-FISCAL-2.3: caminho base parametrizado. Default = caminho CT antigo (CT.9).
+  const baseUrl = endpointBase ?? `/contabilidade-tributaria/convenios/${convenioId}/movimentos`;
   const [movimentos, setMovimentos] = useState<Movimento[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -100,9 +110,7 @@ export function MovimentosConvenioSection({
     setLoading(true);
     setErro('');
     try {
-      const { data } = await api.get<Movimento[]>(
-        `/contabilidade-tributaria/convenios/${convenioId}/movimentos`,
-      );
+      const { data } = await api.get<Movimento[]>(baseUrl);
       setMovimentos(data);
     } catch (e: any) {
       setErro(e?.response?.data?.message ?? 'Falha ao carregar movimentos');
@@ -129,10 +137,9 @@ export function MovimentosConvenioSection({
     setEstornando(true);
     setErroEstorno('');
     try {
-      await api.delete(
-        `/contabilidade-tributaria/convenios/${convenioId}/movimentos/${estornarId}`,
-        { data: { motivo: motivoEstorno.trim() || undefined } },
-      );
+      await api.delete(`${baseUrl}/${estornarId}`, {
+        data: { motivo: motivoEstorno.trim() || undefined },
+      });
       setEstornarId(null);
       setMotivoEstorno('');
       await carregar();
@@ -158,14 +165,11 @@ export function MovimentosConvenioSection({
 
     setSalvando(true);
     try {
-      await api.post(
-        `/contabilidade-tributaria/convenios/${convenioId}/movimentos`,
-        {
-          valor: valorNum,
-          dataMovimento,
-          descricao: descricao.trim() || undefined,
-        },
-      );
+      await api.post(baseUrl, {
+        valor: valorNum,
+        dataMovimento,
+        descricao: descricao.trim() || undefined,
+      });
       setDialogOpen(false);
       await carregar();
     } catch (e: any) {

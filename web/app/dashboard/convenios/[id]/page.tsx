@@ -8,8 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, UserPlus, Trash2, RefreshCw, TrendingUp, Users, Percent } from 'lucide-react';
+import { ArrowLeft, UserPlus, Trash2, RefreshCw, TrendingUp, Users, Percent, Pencil, FileCheck } from 'lucide-react';
 import Link from 'next/link';
+
+const NATUREZA_LABEL: Record<string, string> = {
+  PROPRIO: 'PRÓPRIO (Art. 79 — isento)',
+  AUXILIAR: 'AUXILIAR (Art. 88 — neutro)',
+  NAO_COOPERATIVO: 'NÃO-COOPERATIVO (Art. 86 — tributado)',
+};
+const FLUXO_LABEL: Record<string, string> = {
+  INGRESSO_CUSTEIO_AUXILIAR: 'Ingresso (custeio recebido)',
+  REPASSE_PROVEDOR_EXTERNO: 'Repasse (saída pra provedor)',
+  CUSTO_OPERACIONAL_INTERNO: 'Custo operacional interno',
+};
 
 const tipoLabels: Record<string, string> = {
   CONDOMINIO: 'Condomínio', ADMINISTRADORA: 'Administradora', ASSOCIACAO: 'Associação',
@@ -90,10 +101,69 @@ export default function ConvenioDetalhePage() {
             <p className="text-muted-foreground">{convenio.numero} - {tipoLabels[convenio.tipo] ?? convenio.tipo}</p>
           </div>
         </div>
-        <Badge className={convenio.status === 'ATIVO' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-          {convenio.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge className={convenio.status === 'ATIVO' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+            {convenio.status}
+          </Badge>
+          <Link href={`/dashboard/convenios/${id}/editar`}>
+            <Button variant="outline" size="sm" className="border-cyan-300 text-cyan-700 hover:bg-cyan-50">
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              Editar
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* D-FISCAL-2.3 — Card read-only de classificação fiscal */}
+      <Card className={convenio.geraLancamentoContabil ? 'border-cyan-300' : ''}>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-cyan-700" />
+            Classificação fiscal
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {convenio.geraLancamentoContabil ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-xs text-gray-500">Natureza do ato cooperativo</div>
+                <Badge variant="outline" className="mt-1 bg-cyan-50 text-cyan-800 border-cyan-300">
+                  {NATUREZA_LABEL[convenio.naturezaAtoCooperativo] ?? convenio.naturezaAtoCooperativo ?? '—'}
+                </Badge>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Fluxo financeiro</div>
+                <div className="font-medium">
+                  {FLUXO_LABEL[convenio.fluxoFinanceiro] ?? convenio.fluxoFinanceiro ?? '—'}
+                </div>
+              </div>
+              {convenio.classificacaoFiscal && (
+                <div className="md:col-span-2">
+                  <div className="text-xs text-gray-500">Fundamento legal</div>
+                  <p className="text-sm text-gray-700 mt-0.5 italic">"{convenio.classificacaoFiscal}"</p>
+                </div>
+              )}
+              {(convenio.vigenciaInicio || convenio.vigenciaFim) && (
+                <div className="md:col-span-2 text-xs text-gray-600">
+                  <strong>Vigência:</strong>{' '}
+                  {convenio.vigenciaInicio ? convenio.vigenciaInicio.substring(0, 10).split('-').reverse().join('/') : '—'}
+                  {' → '}
+                  {convenio.vigenciaFim ? convenio.vigenciaFim.substring(0, 10).split('-').reverse().join('/') : 'sem fim definido'}
+                </div>
+              )}
+              <div className="md:col-span-2 text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded p-2 mt-2">
+                ⚠️ Classificação <strong>SUGERIDA</strong> — confira antes de uso fiscal real (DCTF/SPED).
+                Os movimentos contábeis aparecem na aba <strong>Editar</strong>.
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 italic">
+              Convênio sem registro contábil. Clique em <strong>Editar</strong> e ative
+              "Gerar registro contábil" para classificar e registrar movimentos.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

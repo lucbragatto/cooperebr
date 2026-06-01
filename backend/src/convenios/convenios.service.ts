@@ -16,6 +16,13 @@ export class ConveniosService {
     private progressaoService: ConveniosProgressaoService,
   ) {}
 
+  /** D-FISCAL-2.3 (CT.9.1 TZ fix): parseia 'YYYY-MM-DD' como LOCAL midnight
+   *  (não UTC — em GMT-3 UTC vira dia anterior). */
+  private parseLocalDate(iso: string): Date {
+    const [ano, mes, dia] = iso.substring(0, 10).split('-').map(Number);
+    return new Date(ano, mes - 1, dia);
+  }
+
   private async gerarNumero(tentativa = 0): Promise<string> {
     if (tentativa > 5) throw new BadRequestException('Falha ao gerar número do convênio após 5 tentativas');
     const ano = new Date().getFullYear();
@@ -106,6 +113,13 @@ export class ConveniosService {
             modalidade,
             statusAprovacao: modalidade === 'GLOBAL' ? 'PENDENTE' : 'APROVADO',
             taxaAprovacaoSisgd: dto.taxaAprovacaoSisgd ?? null,
+            // D-FISCAL-2.3 — bloco fiscal opcional na criação
+            geraLancamentoContabil: dto.geraLancamentoContabil ?? false,
+            naturezaAtoCooperativo: dto.naturezaAtoCooperativo ?? null,
+            fluxoFinanceiro: dto.fluxoFinanceiro ?? null,
+            classificacaoFiscal: dto.classificacaoFiscal ?? null,
+            vigenciaInicio: dto.vigenciaInicio ? this.parseLocalDate(dto.vigenciaInicio) : null,
+            vigenciaFim: dto.vigenciaFim ? this.parseLocalDate(dto.vigenciaFim) : null,
           },
         });
       } catch (err: any) {
@@ -204,6 +218,18 @@ export class ConveniosService {
     if (dto.tierMinimoClube !== undefined) data.tierMinimoClube = dto.tierMinimoClube;
     if (dto.modalidade !== undefined) data.modalidade = dto.modalidade;
     if (dto.taxaAprovacaoSisgd !== undefined) data.taxaAprovacaoSisgd = dto.taxaAprovacaoSisgd;
+
+    // D-FISCAL-2.3 — bloco fiscal (campos da fatia 2.1)
+    if (dto.geraLancamentoContabil !== undefined) data.geraLancamentoContabil = dto.geraLancamentoContabil;
+    if (dto.naturezaAtoCooperativo !== undefined) data.naturezaAtoCooperativo = dto.naturezaAtoCooperativo;
+    if (dto.fluxoFinanceiro !== undefined) data.fluxoFinanceiro = dto.fluxoFinanceiro;
+    if (dto.classificacaoFiscal !== undefined) data.classificacaoFiscal = dto.classificacaoFiscal;
+    if (dto.vigenciaInicio !== undefined) {
+      data.vigenciaInicio = dto.vigenciaInicio ? this.parseLocalDate(dto.vigenciaInicio) : null;
+    }
+    if (dto.vigenciaFim !== undefined) {
+      data.vigenciaFim = dto.vigenciaFim ? this.parseLocalDate(dto.vigenciaFim) : null;
+    }
 
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },

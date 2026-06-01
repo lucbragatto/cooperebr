@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, IsEnum, IsArray, ValidateNested, Min, Max, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, IsEnum, IsArray, ValidateNested, Min, Max, MinLength, MaxLength, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum TipoConvenioDto {
@@ -9,6 +9,19 @@ export enum TipoConvenioDto {
   EMPRESA = 'EMPRESA',
   CLUBE = 'CLUBE',
   OUTRO = 'OUTRO',
+}
+
+/** D-FISCAL-2.3 — enums fiscais reutilizados do Prisma (mirror) */
+export enum NaturezaAtoCooperativoDto {
+  PROPRIO = 'PROPRIO',
+  AUXILIAR = 'AUXILIAR',
+  NAO_COOPERATIVO = 'NAO_COOPERATIVO',
+}
+
+export enum FluxoFinanceiroDto {
+  INGRESSO_CUSTEIO_AUXILIAR = 'INGRESSO_CUSTEIO_AUXILIAR',
+  REPASSE_PROVEDOR_EXTERNO = 'REPASSE_PROVEDOR_EXTERNO',
+  CUSTO_OPERACIONAL_INTERNO = 'CUSTO_OPERACIONAL_INTERNO',
 }
 
 export class FaixaDto {
@@ -131,6 +144,32 @@ export class CreateConvenioDto {
   @IsOptional()
   @IsNumber()
   taxaAprovacaoSisgd?: number;
+
+  // D-FISCAL-2.3 — bloco fiscal opcional na criação (admin pode marcar já no /novo)
+  @IsOptional()
+  @IsBoolean()
+  geraLancamentoContabil?: boolean;
+
+  @IsOptional()
+  @IsEnum(NaturezaAtoCooperativoDto)
+  naturezaAtoCooperativo?: NaturezaAtoCooperativoDto;
+
+  @IsOptional()
+  @IsEnum(FluxoFinanceiroDto)
+  fluxoFinanceiro?: FluxoFinanceiroDto;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  classificacaoFiscal?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'vigenciaInicio deve ser ISO date (YYYY-MM-DD)' })
+  vigenciaInicio?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'vigenciaFim deve ser ISO date (YYYY-MM-DD)' })
+  vigenciaFim?: string;
 }
 
 export enum StatusConvenioDto {
@@ -220,6 +259,27 @@ export class UpdateConvenioDto {
   @IsOptional()
   @IsNumber()
   taxaAprovacaoSisgd?: number | null;
+
+  // D-FISCAL-2.3 — bloco fiscal editável
+  @IsOptional()
+  @IsBoolean()
+  geraLancamentoContabil?: boolean;
+
+  @IsOptional()
+  naturezaAtoCooperativo?: NaturezaAtoCooperativoDto | null;
+
+  @IsOptional()
+  fluxoFinanceiro?: FluxoFinanceiroDto | null;
+
+  @IsOptional()
+  @MaxLength(300)
+  classificacaoFiscal?: string | null;
+
+  @IsOptional()
+  vigenciaInicio?: string | null;
+
+  @IsOptional()
+  vigenciaFim?: string | null;
 }
 
 export class AddMembroDto {

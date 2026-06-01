@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { ConvenioFiscalBloco, type ConvenioFiscalState } from '@/components/convenios/ConvenioFiscalBloco';
 
 const tipoOpcoes = [
   { value: 'CONDOMINIO', label: 'Condomínio' },
@@ -48,6 +49,16 @@ export default function NovoConvenioPage() {
     tierMinimoClube: '',
     modalidade: 'STANDALONE',
     taxaAprovacaoSisgd: '',
+  });
+
+  // D-FISCAL-2.3 — bloco fiscal opcional na criação
+  const [fiscal, setFiscal] = useState<ConvenioFiscalState>({
+    geraLancamentoContabil: false,
+    naturezaAtoCooperativo: '',
+    fluxoFinanceiro: '',
+    classificacaoFiscal: '',
+    vigenciaInicio: '',
+    vigenciaFim: '',
   });
 
   const [faixas, setFaixas] = useState<Faixa[]>([
@@ -107,6 +118,28 @@ export default function NovoConvenioPage() {
           faixas,
         },
       };
+
+      // D-FISCAL-2.3 — bloco fiscal opcional. Se ligado, valida + envia.
+      if (fiscal.geraLancamentoContabil) {
+        if (!fiscal.naturezaAtoCooperativo) {
+          setErro('Bloco fiscal: escolha a natureza do ato cooperativo.');
+          setSalvando(false);
+          return;
+        }
+        if (!fiscal.fluxoFinanceiro) {
+          setErro('Bloco fiscal: escolha o fluxo financeiro.');
+          setSalvando(false);
+          return;
+        }
+        payload.geraLancamentoContabil = true;
+        payload.naturezaAtoCooperativo = fiscal.naturezaAtoCooperativo;
+        payload.fluxoFinanceiro = fiscal.fluxoFinanceiro;
+        if (fiscal.classificacaoFiscal.trim()) {
+          payload.classificacaoFiscal = fiscal.classificacaoFiscal.trim();
+        }
+        if (fiscal.vigenciaInicio) payload.vigenciaInicio = fiscal.vigenciaInicio;
+        if (fiscal.vigenciaFim) payload.vigenciaFim = fiscal.vigenciaFim;
+      }
 
       const res = await api.post('/convenios', payload);
       router.push(`/dashboard/convenios/${res.data.id}`);
@@ -263,6 +296,17 @@ export default function NovoConvenioPage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* D-FISCAL-2.3 — bloco fiscal opcional */}
+        <Card>
+          <CardContent className="pt-4">
+            <ConvenioFiscalBloco
+              state={fiscal}
+              onChange={(patch) => setFiscal((prev) => ({ ...prev, ...patch }))}
+              helpId="convenio-novo-fiscal"
+            />
           </CardContent>
         </Card>
 
