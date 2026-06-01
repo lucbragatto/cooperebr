@@ -3907,6 +3907,37 @@ Criar `scripts/lint-ux.ts`:
 
 ---
 
+### D-novo-CT-CONVENIO-HOOK — Convênio só cadastra; falta hook de movimento → LancamentoCaixa auxiliar (P2)
+
+**Origem:** PUX-A (01/06/2026 manhã). Ao criar páginas próprias `/convenios/novo` e `/[id]/editar` + HelpBox, ficou explícito (na documentação) que o **Convênio hoje é apenas registro/documentação** — não dispara `LancamentoCaixa` automático quando há movimento financeiro real do convênio.
+
+**Estado atual:**
+- ✅ Schema `Convenio` (CT.2) com `tipoBeneficio` + `fluxoFinanceiro` + `classificacaoFiscal` + vigência
+- ✅ CRUD multi-tenant `/contabilidade-tributaria/convenios`
+- ✅ UI completa (lista + página própria criar/editar + HelpBox)
+- ❌ **Sem hook** análogo ao CT.3 que dispare `LancamentoCaixa{origemTipo='CONVENIO', origemId=<convenioId>, naturezaAto='AUXILIAR'}` quando há ingresso/repasse/custo real do convênio.
+
+**Mesmo padrão CT.3 a aplicar:**
+- `enum OrigemLancamento { COBRANCA CONTA_PAGAR REPASSE MANUAL CONVENIO }` — adicionar `CONVENIO`
+- Service `ContabilidadeTributariaService.criarLancamentoConvenio(convenioId, valor, tipoMovimento, dataPagamento)` — análogo a `criarLancamentoRepasse`
+- Idempotência via `@@unique([origemTipo, origemId])` + sub-key se múltiplos movimentos por convênio (ex: `origemId = '${convenioId}:${competencia}'`)
+- Hook fire-and-forget — qualquer evento upstream (a definir: endpoint dedicado de "registrar movimento de convênio"? listener em Cobranca tagged como convênio?)
+
+**Decisão de design pendente (perguntar Luciano antes de implementar):**
+- (A) Endpoint dedicado `POST /convenios/:id/movimento` (admin lança manualmente)
+- (B) Hook em Cobranca/ContaAPagar com `convenioId` opcional (auto-dispara quando vinculado)
+- (C) Cron mensal lê convênios ativos + gera lançamento baseado em valores configurados
+
+**Estimativa:** 3-4h Code (mesma estrutura do CT.3 com adaptação ao fluxo).
+
+**Bloqueia:** não bloqueia produção (Walter pode lançar manualmente como Auxiliar). Bloqueia automação completa de classificação Auxiliar nas DREs/Apuração quando houver movimento real de convênio.
+
+**Prioridade:** **P2** — só ativa quando primeiro convênio real entrar em produção (hoje 0 convênios cadastrados).
+
+**Status:** 📋 Catalogado em 2026-06-01 (PUX-A). Decidir A/B/C com Luciano antes de orçar fatia.
+
+---
+
 ### D-novo-BR-CT-ESTORNO — Estorno de Cobrança/ContaAPagar (mesmo padrão de RepasseProprietario, fatia futura, P2)
 
 **Origem:** Sprint Estorno RepasseProprietario (31/05/2026 noite). Luciano identificou no smoke pós-CT.6 que repasse PAGO não tinha como ser revertido. Fatia resolveu pra repasse — Cobranca e ContaAPagar têm o **mesmo gap**.
