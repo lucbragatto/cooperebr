@@ -13,9 +13,9 @@ import { runAsPlatform } from '../common/tenant-context';
 /**
  * D-novo-BR-CT CT.4 (31/05/2026) — Motor de apuração mensal segregada.
  *
- * ⚠️ GATE WALTER: Todos os snapshots nascem com validadoContador=false.
+ * ⚠️ GATE VALIDAÇÃO FISCAL: Todos os snapshots nascem com validadoContador=false.
  * Os números são CALCULADOS mas marcados como NÃO-VALIDADOS até o contador
- * conferir. UI/relatórios futuros mostram "⚠️ PENDENTE VALIDAÇÃO CONTADOR"
+ * conferir. UI/relatórios futuros mostram "⚠️ PENDENTE VALIDAÇÃO FISCAL"
  * enquanto false.
  *
  * Regime suportado: COOPERATIVO (Lei 5.764/71). Demais regimes lançam
@@ -23,7 +23,7 @@ import { runAsPlatform } from '../common/tenant-context';
  * fiscal por extensão silenciosa).
  *
  * Alíquotas/presunção CONFIGURÁVEIS via ConfiguracaoTributaria (NUNCA
- * hardcoded) — Walter ajusta sem refator.
+ * hardcoded) — Luciano + orquestrador ajustam sem refator.
  *
  * Base regulatória:
  *  - Lei 5.764/71 Art. 28 (Fundo Reserva 10% + FATES 5%)
@@ -209,7 +209,7 @@ export class ApuracaoService {
         csllPercentualPresuncao: config.csllPercentualPresuncao.toString(),
         isencaoPisCofinsAtiva: coop.isencaoPisCofinsAtiva,
         avisoPresuncao:
-          'IRPJ/CSLL: presunção configurada. CONFIRMAR COM WALTER conforme atividade real (SCEE/serviço/comércio).',
+          'IRPJ/CSLL: presunção configurada. CONFIRMAR INTERNAMENTE conforme atividade real (SCEE/serviço/comércio).',
       },
       avisoValidacao:
         '⚠️ PREVIEW — números calculados mas NÃO-VALIDADOS. Snapshot só conta após fecharApuracao + validarApuracao(contador).',
@@ -262,7 +262,7 @@ export class ApuracaoService {
         status: StatusApuracao.FECHADA,
         fechadoEm: new Date(),
         fechadoPorUsuarioId: usuarioId,
-        validadoContador: false, // GATE WALTER — nunca true no fechamento
+        validadoContador: false, // GATE VALIDAÇÃO FISCAL — nunca true no fechamento
       };
 
       try {
@@ -278,7 +278,7 @@ export class ApuracaoService {
             });
 
         this.logger.log(
-          `[CT.4] Apuração FECHADA: coop=${cooperativaId} ${ano}-${mes} → ${snap.id} (validadoContador=false GATE WALTER)`,
+          `[CT.4] Apuração FECHADA: coop=${cooperativaId} ${ano}-${mes} → ${snap.id} (validadoContador=false GATE VALIDAÇÃO FISCAL)`,
         );
         return snap;
       } catch (err: any) {
@@ -294,7 +294,7 @@ export class ApuracaoService {
   }
 
   // ============================================================
-  // VALIDAR (Walter/contador) — marca validadoContador=true
+  // VALIDAR (Luciano + orquestrador) — marca validadoContador=true
   // ============================================================
 
   async validarApuracao(
@@ -336,7 +336,7 @@ export class ApuracaoService {
     });
 
     this.logger.log(
-      `[CT.4] Apuração VALIDADA (Walter/contador): ${id} por usuario=${usuarioId}`,
+      `[CT.4] Apuração VALIDADA (Luciano + orquestrador): ${id} por usuario=${usuarioId}`,
     );
     return atualizada as { id: string; validadoContador: boolean; validadoEm: Date };
   }
@@ -458,7 +458,7 @@ export class ApuracaoService {
           else result.despesaNaoCoop = result.despesaNaoCoop.plus(l.valor);
           break;
         default:
-          // Lançamento sem classificação — Walter revisa via flag observacaoContabil
+          // Lançamento sem classificação — Luciano + orquestrador revisam via flag observacaoContabil
           if (isReceita) result.receitaPropria = result.receitaPropria.plus(l.valor);
           else result.despesaPropria = result.despesaPropria.plus(l.valor);
       }
@@ -484,7 +484,7 @@ export class ApuracaoService {
       where: { cooperativaId },
     });
     if (cfg) return cfg as any;
-    // Defaults Lucro Presumido — Walter ajusta via upsert depois
+    // Defaults Lucro Presumido — Luciano + orquestrador ajustam via upsert depois
     return {
       pisAliquota: new Prisma.Decimal('0.0065'),
       cofinsAliquota: new Prisma.Decimal('0.0300'),

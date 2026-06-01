@@ -20,7 +20,7 @@ import { ApuracaoService } from './apuracao.service';
  *  - DEMONSTRATIVO_REPASSES: aos proprietários por formaAquisicao
  *    (ALUGUEL=NAO_COOP × CESSAO/PROPRIA=PROPRIO).
  *
- * ⚠️ GATE WALTER: Watermark + cabeçalho destacado se validadoContador=false.
+ * ⚠️ GATE VALIDAÇÃO FISCAL: Watermark + cabeçalho destacado se validadoContador=false.
  * Lê SNAPSHOT se FECHADA; preview on-the-fly via ApuracaoService caso contrário.
  */
 @Injectable()
@@ -220,7 +220,7 @@ export class RelatoriosCtService {
       <p>Cálculo: ${fmtR(d.receitaNaoCoop)} × 3,00% = <strong>${fmtR(d.cofinsDevido)}</strong></p>
 
       <h2>IRPJ — Lei 9.249/95 Art. 15 + Lei 9.430/96 Art. 2</h2>
-      <p>Base presumida: 32% (default — VALIDAR COM WALTER conforme atividade real).</p>
+      <p>Base presumida: 32% (default — VALIDAR INTERNAMENTE conforme atividade real).</p>
       <p>Cálculo: ${fmtR(resNaoCoop)} (resultado não-coop) × 32% × 15% = <strong>${fmtR(d.irpjDevido)}</strong></p>
       <p><em>Adicional 10%:</em> aplicado sobre parcela da base presumida que ultrapassa R$ 20.000,00/mês (Lei 9.249/95 Art. 3 §1).</p>
 
@@ -404,10 +404,10 @@ function previewToDados(p: any): DadosRelatorio {
 function baseHtml(title: string, meta: MetaRel, body: string): string {
   const watermark = meta.validadoContador
     ? ''
-    : `<div class="watermark">PENDENTE VALIDAÇÃO CONTADOR</div>`;
+    : `<div class="watermark">PENDENTE VALIDAÇÃO FISCAL</div>`;
   const headerBanner = meta.validadoContador
-    ? `<div class="validated">✅ VALIDADO PELO CONTADOR ${meta.validadoEm ? `em ${meta.validadoEm.toLocaleString('pt-BR')}` : ''}</div>`
-    : `<div class="pending">⚠️ DOCUMENTO NÃO-VALIDADO PELO CONTADOR — não usar pra DCTF/SPED/declaração fiscal real até validação por profissional habilitado.</div>`;
+    ? `<div class="validated">✅ VALIDADO INTERNAMENTE ${meta.validadoEm ? `em ${meta.validadoEm.toLocaleString('pt-BR')}` : ''}</div>`
+    : `<div class="pending">⚠️ DOCUMENTO NÃO-VALIDADO INTERNAMENTE — não usar pra DCTF/SPED/declaração fiscal real até validação por profissional habilitado.</div>`;
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>

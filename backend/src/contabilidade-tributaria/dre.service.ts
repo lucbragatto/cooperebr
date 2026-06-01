@@ -23,7 +23,7 @@ import { ApuracaoService, PreviewApuracao } from './apuracao.service';
  * Regime: COOPERATIVO; demais → NotImplementedException (P0-1 — risco
  * aproveitamento indevido por extensão silenciosa).
  *
- * GATE WALTER: enquanto validadoContador=false, toda DRE retorna
+ * GATE VALIDAÇÃO FISCAL: enquanto validadoContador=false, toda DRE retorna
  * `avisoValidacao` preenchido. UI deve mostrar badge "⚠️ PENDENTE
  * VALIDAÇÃO CONTADOR" em destaque.
  */
@@ -86,7 +86,7 @@ export class DreService {
       validadoEm: meta.validadoEm,
       avisoValidacao: meta.validadoContador
         ? null
-        : '⚠️ PENDENTE VALIDAÇÃO CONTADOR — números calculados pelo motor, mas ainda não conferidos por Walter. NÃO usar pra DCTF/SPED/declaração fiscal real até validar.',
+        : '⚠️ PENDENTE VALIDAÇÃO FISCAL — números calculados pelo motor, mas ainda não conferidos por Luciano + orquestrador. NÃO usar pra DCTF/SPED/declaração fiscal real até validar.',
       fundamentoIsencao: dados.fundamentoIsencao,
     };
   }
@@ -260,7 +260,7 @@ export class DreService {
         'info',
         transito.isZero()
           ? '✅ Trânsito zero — classificação ato auxiliar preservada (sem tributação)'
-          : '⚠️ Trânsito ≠ 0 — risco de reclassificação como ato não-cooperativo (Walter revisa)',
+          : '⚠️ Trânsito ≠ 0 — risco de reclassificação como ato não-cooperativo (Luciano + orquestrador revisam)',
       ),
     ];
   }

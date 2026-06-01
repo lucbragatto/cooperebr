@@ -99,7 +99,7 @@ describe('RelatoriosCtService — CT.6', () => {
     });
   });
 
-  describe('GATE WALTER — watermark + header', () => {
+  describe('GATE VALIDAÇÃO FISCAL — watermark + header', () => {
     beforeEach(() => {
       findCoop.mockResolvedValue(coopCooperativo);
     });
@@ -108,7 +108,7 @@ describe('RelatoriosCtService — CT.6', () => {
       findApur.mockResolvedValueOnce(snapshotPadrao);
       await service.gerar('coop-A', 2026, 5, 'demonstrativo-nao-lucratividade');
       expect(htmlGerado).toMatch(/watermark/);
-      expect(htmlGerado).toMatch(/PENDENTE VALIDAÇÃO CONTADOR/);
+      expect(htmlGerado).toMatch(/PENDENTE VALIDAÇÃO FISCAL/);
       expect(htmlGerado).toMatch(/NÃO-VALIDADO/);
     });
 
@@ -119,7 +119,7 @@ describe('RelatoriosCtService — CT.6', () => {
         validadoEm: new Date('2026-06-05T10:00:00'),
       });
       await service.gerar('coop-A', 2026, 5, 'demonstrativo-nao-lucratividade');
-      expect(htmlGerado).toMatch(/VALIDADO PELO CONTADOR/);
+      expect(htmlGerado).toMatch(/VALIDADO INTERNAMENTE/);
       expect(htmlGerado).not.toMatch(/class="watermark"/);
     });
   });
@@ -200,7 +200,7 @@ describe('RelatoriosCtService — CT.6', () => {
       expect(htmlGerado).toMatch(/COFINS/);
       expect(htmlGerado).toMatch(/IRPJ/);
       expect(htmlGerado).toMatch(/CSLL/);
-      expect(htmlGerado).toMatch(/VALIDAR COM WALTER/);
+      expect(htmlGerado).toMatch(/VALIDAR INTERNAMENTE/);
     });
   });
 

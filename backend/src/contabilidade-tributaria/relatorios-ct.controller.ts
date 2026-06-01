@@ -24,7 +24,7 @@ const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
  * cooperativaId vem do JWT (anti body-injection). @TenantExempt declarado
  * (sem :id de recurso — opera sobre apuração/usinas do tenant logado).
  *
- * ⚠️ GATE WALTER: PDF traz watermark + cabeçalho destacado quando
+ * ⚠️ GATE VALIDAÇÃO FISCAL: PDF traz watermark + cabeçalho destacado quando
  * validadoContador=false.
  */
 @Controller('contabilidade-tributaria/relatorios')

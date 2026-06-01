@@ -187,8 +187,8 @@ export default function PlanoContasSegregadoPage() {
             <span className="text-rose-700 font-semibold">NÃO-COOP</span> tributada (Art. 86).
           </p>
           <p className="mt-2 bg-amber-50 border border-amber-300 rounded p-2 text-amber-800">
-            ⚠️ Classificação <strong>SUGERIDA</strong> — valide com seu contador antes de uso fiscal real
-            (DCTF/SPED). Gate Walter: enquanto não validado, números são pré-validação.
+            ⚠️ Classificação <strong>SUGERIDA</strong> — confira antes de uso fiscal real antes de uso fiscal real
+            (DCTF/SPED). Gate de validação fiscal: enquanto não validado, números são pré-validação.
           </p>
         </div>
       ) : (

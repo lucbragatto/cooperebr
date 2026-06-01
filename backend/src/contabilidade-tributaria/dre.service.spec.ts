@@ -112,10 +112,10 @@ describe('DreService — CT.5', () => {
       expect(apurarMes).not.toHaveBeenCalled();
     });
 
-    it('validadoContador=false → avisoValidacao destacado (GATE WALTER)', async () => {
+    it('validadoContador=false → avisoValidacao destacado (GATE VALIDAÇÃO FISCAL)', async () => {
       const r = await service.montarDre('coop-A', 2026, 5, 'geral');
       expect(r.validadoContador).toBe(false);
-      expect(r.avisoValidacao).toMatch(/PENDENTE VALIDAÇÃO CONTADOR/);
+      expect(r.avisoValidacao).toMatch(/PENDENTE VALIDAÇÃO FISCAL/);
       expect(r.avisoValidacao).toMatch(/NÃO usar pra DCTF\/SPED/);
     });
 
@@ -167,7 +167,7 @@ describe('DreService — CT.5', () => {
     it('preview SEMPRE vem com validadoContador=false', async () => {
       const r = await service.montarDre('coop-A', 2026, 5, 'geral');
       expect(r.validadoContador).toBe(false);
-      expect(r.avisoValidacao).toMatch(/PENDENTE VALIDAÇÃO CONTADOR/);
+      expect(r.avisoValidacao).toMatch(/PENDENTE VALIDAÇÃO FISCAL/);
     });
 
     it('apuração ABERTA pré-existente também usa preview (status != FECHADA)', async () => {

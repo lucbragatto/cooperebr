@@ -22,7 +22,7 @@ const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
  * @TenantExempt declarado — não há :id de recurso, só lê apuração/preview
  * do tenant logado.
  *
- * ⚠️ GATE WALTER: DREs com validadoContador=false vêm com aviso destacado.
+ * ⚠️ GATE VALIDAÇÃO FISCAL: DREs com validadoContador=false vêm com aviso destacado.
  * UI deve renderizar badge "⚠️ PENDENTE VALIDAÇÃO CONTADOR".
  */
 @Controller('contabilidade-tributaria/dre')

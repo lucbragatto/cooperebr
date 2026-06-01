@@ -3966,6 +3966,35 @@ Criar `scripts/lint-ux.ts`:
 
 ---
 
+### D-novo-CT-PDF-AUXILIAR — 3 PDFs de defesa fiscal ignoram o Ato Auxiliar (Art. 88) (P2 — decidir na Sessão de Validação Fiscal Interna)
+
+**Origem:** CT.9.1 (01/06/2026 noite) — varredura read-only de `relatorios-ct.service.ts` após CT.9 entregar registro de movimentos de convênio. Convênio aparece na DRE em tela mas **some** nos PDFs.
+
+**Estado atual:**
+- `htmlDemonstrativoNaoLucratividade` — só usa `receitaPropria/despesaPropria` + `fundoReserva`/`sobrasDistribuiveis`. Não menciona Ato Auxiliar.
+- `htmlMemorialCalculoFiscal` — só `receitaNaoCoop/despesaNaoCoop` + tributos. Não menciona Ato Auxiliar.
+- `htmlDemonstrativoRepasses` — só repasses a proprietários (`Usina.formaAquisicao`). Convênios ficam fora.
+- **Resultado:** se um cooperado/fiscal abrir os PDFs, vai ver Próprio + Não-Coop **mas não enxerga os convênios Art. 88** registrados como movimentos Auxiliar (CT.9).
+
+**Decisão fiscal pendente (a tomar na Sessão de Validação Fiscal Interna):**
+1. **Estrutura visual:** adicionar seção "Ato Cooperativo Auxiliar (Art. 88)" no Demonstrativo de Não-Lucratividade + linha no Memorial de Cálculo Fiscal? Bloco separado ou agregado às sobras?
+2. **Impacto contábil:** o Auxiliar impacta FATES/Fundo Reserva? Hoje o motor CT.4 trata Auxiliar como trânsito neutro (entrada=saída, soma zero), mas se houver retenção/sobra residual de convênio, vira FATES (Art. 87)?
+3. **Demonstrativo de Repasses:** deve ter aba/seção pra repasses de convênio (mesmo padrão do repasse a proprietário, mas regido por Art. 88)?
+4. **PDF defensável:** o que a auditoria fiscal espera ver de "Ato Auxiliar"? Texto livre tipo "Trânsito de Convênios Art. 88 — entrada=saída, classificação fiscal AUXILIAR"?
+
+**Implementação técnica (~6-10h Code) depende das decisões acima:**
+- Estender `DadosRelatorio` com `receitaAuxiliar/despesaAuxiliar` + lista de convênios ativos
+- Templates HTML: nova seção "Ato Cooperativo Auxiliar" com tabela + texto fundamentando classificação
+- Atualizar fundo defensabilidade citando Art. 88
+
+**Bloqueia:** uso fiscal real dos PDFs **se** auditoria perguntar sobre convênios (Walter / fiscal externo). Não bloqueia operação técnica — DRE em tela mostra Auxiliar corretamente.
+
+**Prioridade:** **P2** — aguarda decisão fiscal interna (Sessão de Validação Fiscal Interna). Implementação trivial uma vez tomada a decisão.
+
+**Status:** 📋 Catalogado 2026-06-01 noite (CT.9.1 GAP 4). Resolver junto com D-novo-CT-VALIDACAO-FISCAL P0 + D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 + D-novo-CT-PLANO-GLOBAL-VS-TENANT P2.
+
+---
+
 ### D-novo-CT-CONVENIO-HOOK — ✅ RESOLVIDO (Design A — CT.9, 01/06/2026 noite)
 
 **Resolução:** Sprint CT.9 — endpoint manual `POST /contabilidade-tributaria/convenios/:id/movimentos` (botão "Registrar movimento" no Dialog Tipo C da página de edição do convênio). Admin lança valor + data + descrição; backend deriva sentido (RECEITA/DESPESA) do `Convenio.fluxoFinanceiro`, classifica como AUXILIAR via regime cooperativo CT.2 (com ENFORCEMENT P0-1 — só COOPERATIVA, citando D-novo-CT-MULTI-REGIME-CLASSIFICACAO se outro regime), grava `LancamentoCaixa{origemTipo=CONVENIO, convenioContabilId, naturezaAto=AUXILIAR}`. Gate apuração FECHADA bloqueia retroativo (CT.4 reusado). Síncrono — erro sobe pra UI (não fire-and-forget).

@@ -54,7 +54,7 @@ export class RegimeCooperativo implements RegimeContabil {
           return NaturezaCooperativa.PROPRIO;
         }
         // tipo null/desconhecido: assume PROPRIO (cooperado deletado ou tipo
-        // ainda não classificado — Walter revisa via flag observacaoContabil)
+        // ainda não classificado — Luciano + orquestrador revisam via flag observacaoContabil)
         return NaturezaCooperativa.PROPRIO;
       }
 

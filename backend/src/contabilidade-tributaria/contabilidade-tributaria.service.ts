@@ -14,7 +14,7 @@ import { ApuracaoService } from './apuracao.service';
  * CT.3: hook automático que cria LancamentoCaixa classificado a partir
  *       de eventos upstream (Cobranca/ContaAPagar/RepasseProprietario
  *       PAGOS). Idempotente via @@unique([origemTipo, origemId]).
- * CT.4 (gate Walter): motor de apuração tributária real.
+ * CT.4 (gate de validação fiscal): motor de apuração tributária real.
  */
 @Injectable()
 export class ContabilidadeTributariaService {
@@ -114,6 +114,9 @@ export class ContabilidadeTributariaService {
     convenioId: string;
     valor: Prisma.Decimal | number | string;
     dataMovimento: Date;
+    /** CT.9.1: competência YYYY-MM já calculada (preferir esta — caller derivou da string original).
+     *  Se omitida, deriva de dataMovimento (sujeito a TZ shift). */
+    competencia?: string;
     descricao?: string;
     cooperativaId: string;
   }): Promise<{
@@ -168,10 +171,16 @@ export class ContabilidadeTributariaService {
     const tipo: 'RECEITA' | 'DESPESA' =
       convenio.fluxoFinanceiro === 'INGRESSO_CUSTEIO_AUXILIAR' ? 'RECEITA' : 'DESPESA';
 
-    // Competência YYYY-MM
-    const ano = opts.dataMovimento.getFullYear();
-    const mes = String(opts.dataMovimento.getMonth() + 1).padStart(2, '0');
-    const competencia = `${ano}-${mes}`;
+    // CT.9.1: prefere competencia explícita do caller (string original — sem TZ shift)
+    let competencia: string;
+    if (opts.competencia && /^\d{4}-\d{2}$/.test(opts.competencia)) {
+      competencia = opts.competencia;
+    } else {
+      // Fallback: deriva da Date (sujeito a TZ shift se dataMovimento veio de UTC parse)
+      const ano = opts.dataMovimento.getFullYear();
+      const mes = String(opts.dataMovimento.getMonth() + 1).padStart(2, '0');
+      competencia = `${ano}-${mes}`;
+    }
 
     // Valor arredondado (CLAUDE.md: Math.round(x*100)/100)
     const valorNum =
@@ -216,6 +225,69 @@ export class ContabilidadeTributariaService {
       dataPagamento: opts.dataMovimento,
       descricao: descricaoFinal,
     };
+  }
+
+  /**
+   * D-novo-CT-CT.9.1 (01/06/2026 noite) — Estorna movimento de convênio.
+   *
+   * Padrão igual ao estorno RepasseProprietario: valida posse, gate
+   * apuração FECHADA, deleta `LancamentoCaixa` atomicamente. Movimento
+   * de convênio não tem despesas vinculadas, então só o lançamento sai.
+   *
+   * Razão: contábil não se edita, se estorna. Mesma classificação fiscal
+   * idempotente — se o admin re-registrar o movimento corrigido, vira
+   * lançamento novo com origemId novo.
+   */
+  async estornarMovimentoConvenio(opts: {
+    convenioId: string;
+    lancamentoId: string;
+    cooperativaId: string;
+    motivo?: string;
+    usuarioId?: string;
+  }): Promise<{ id: string; estornado: true }> {
+    // 1. Carrega lançamento + valida posse (tenant + vinculação ao convênio)
+    const lanc = await this.prisma.lancamentoCaixa.findFirst({
+      where: {
+        id: opts.lancamentoId,
+        cooperativaId: opts.cooperativaId,
+        origemTipo: OrigemLancamento.CONVENIO,
+        convenioContabilId: opts.convenioId,
+      },
+      select: {
+        id: true,
+        competencia: true,
+        dataPagamento: true,
+        valor: true,
+        tipo: true,
+      },
+    });
+    if (!lanc) {
+      throw new NotFoundException(
+        `Movimento ${opts.lancamentoId} não encontrado no convênio ${opts.convenioId} deste tenant`,
+      );
+    }
+
+    // 2. Gate apuração FECHADA — mesmo mecanismo do estorno de Repasse
+    if (this.apuracaoService) {
+      try {
+        await this.apuracaoService.garantirMesAberto(
+          opts.cooperativaId,
+          lanc.competencia,
+        );
+      } catch (err: any) {
+        // Repropaga ConflictException com mensagem clara
+        throw err;
+      }
+    }
+
+    // 3. Deleta atomicamente (sem cascade — movimento de convênio é solo)
+    await this.prisma.lancamentoCaixa.delete({ where: { id: opts.lancamentoId } });
+
+    this.logger.log(
+      `[CT.9.1] Movimento convênio ESTORNADO: lanc=${opts.lancamentoId} convenio=${opts.convenioId} usuario=${opts.usuarioId ?? '?'} motivo="${opts.motivo ?? ''}"`,
+    );
+
+    return { id: opts.lancamentoId, estornado: true };
   }
 
   async criarLancamentoAutomatico(opts: {

@@ -16,7 +16,7 @@ import { ApuracaoService } from './apuracao.service';
  *  - Flag isencaoPisCofinsAtiva controla PIS/COFINS próprio (P0-4)
  *  - Alíquotas configuráveis (preview usa defaults se não há config)
  *  - Snapshot imutável (fechar 2x → 409)
- *  - validadoContador nasce false (GATE WALTER)
+ *  - validadoContador nasce false (GATE VALIDAÇÃO FISCAL)
  *  - Bloqueio retroativo (lançamento em mês FECHADA bloqueado)
  *  - validarApuracao + reabrir
  *  - Regimes não-coop → NotImplementedException
@@ -191,12 +191,12 @@ describe('ApuracaoService — CT.4', () => {
       expect(r.fates.toString()).toBe('886.7');
     });
 
-    it('aviso GATE WALTER presente no preview', async () => {
+    it('aviso GATE VALIDAÇÃO FISCAL presente no preview', async () => {
       findCoop.mockResolvedValueOnce(coopCooperativo);
       findLanc.mockResolvedValueOnce([]);
       const r = await service.apurarMes('coop-A', 2026, 5);
       expect(r.avisoValidacao).toMatch(/NÃO-VALIDADOS/);
-      expect(r.configuracao.avisoPresuncao).toMatch(/CONFIRMAR COM WALTER/);
+      expect(r.configuracao.avisoPresuncao).toMatch(/CONFIRMAR INTERNAMENTE/);
     });
   });
 
@@ -212,7 +212,7 @@ describe('ApuracaoService — CT.4', () => {
       ]);
     });
 
-    it('cria snapshot com validadoContador=false (GATE WALTER)', async () => {
+    it('cria snapshot com validadoContador=false (GATE VALIDAÇÃO FISCAL)', async () => {
       findApur.mockResolvedValueOnce(null); // não existia ainda
       createApur.mockResolvedValueOnce({
         id: 'apur1',
@@ -263,7 +263,7 @@ describe('ApuracaoService — CT.4', () => {
   });
 
   // ============================================================
-  // validarApuracao — Walter/contador
+  // validarApuracao — Luciano + orquestrador
   // ============================================================
 
   describe('validarApuracao', () => {

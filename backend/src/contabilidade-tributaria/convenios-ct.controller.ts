@@ -126,10 +126,19 @@ export class ConveniosCtController {
     if (!cooperativaId) {
       throw new Error('cooperativaId não resolvido');
     }
+    // CT.9.1 BUG 1: parsear YYYY-MM-DD como LOCAL (não UTC).
+    // `new Date('2026-08-01')` é UTC midnight → vira 31/07 em GMT-3.
+    // `new Date(2026, 7, 1)` é local midnight → 01/08 correto.
+    const [ano, mes, dia] = dto.dataMovimento.split('-').map(Number);
+    const dataMovimento = new Date(ano, mes - 1, dia);
+    // Competência derivada da STRING (não da Date) — garante consistência
+    // com o que o usuário digitou independente de timezone.
+    const competencia = dto.dataMovimento.substring(0, 7); // YYYY-MM
     return this.contabilidade.criarLancamentoConvenio({
       convenioId: id,
       valor: dto.valor,
-      dataMovimento: new Date(dto.dataMovimento),
+      dataMovimento,
+      competencia,
       descricao: dto.descricao,
       cooperativaId,
     });
@@ -145,5 +154,40 @@ export class ConveniosCtController {
     const cooperativaId =
       req.user?.perfil === SUPER_ADMIN ? null : req.user?.cooperativaId ?? null;
     return this.service.listarMovimentos(id, cooperativaId);
+  }
+
+  /**
+   * D-novo-CT-CT.9.1 (01/06/2026 noite) — Estorna movimento de convênio.
+   * Mesmo padrão do estorno RepasseProprietario: deleta LancamentoCaixa
+   * atomicamente, com gate apuração FECHADA.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'convenio' })
+  @AuditLog({
+    acao: 'contabilidade.convenio.movimento.estornar',
+    recurso: 'Convenio',
+    recursoIdParam: 'id',
+  })
+  @Delete(':id/movimentos/:lancamentoId')
+  async estornarMovimento(
+    @Param('id') id: string,
+    @Param('lancamentoId') lancamentoId: string,
+    @Body() body: { motivo?: string } | undefined,
+    @Req() req: any,
+  ) {
+    const cooperativaId =
+      req.user?.perfil === SUPER_ADMIN
+        ? (await this.service.findOne(id, null)).cooperativaId
+        : req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new Error('cooperativaId não resolvido');
+    }
+    return this.contabilidade.estornarMovimentoConvenio({
+      convenioId: id,
+      lancamentoId,
+      cooperativaId,
+      motivo: body?.motivo,
+      usuarioId: req.user?.id ?? req.user?.userId,
+    });
   }
 }

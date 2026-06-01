@@ -19,7 +19,7 @@ const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 /**
  * D-novo-BR-CT CT.4 (31/05/2026) — Endpoints do motor de apuração mensal segregada.
  *
- * ⚠️ GATE WALTER: snapshots nascem validadoContador=false. Walter (contador)
+ * ⚠️ GATE VALIDAÇÃO FISCAL: snapshots nascem validadoContador=false. validação fiscal interna (Luciano + orquestrador)
  * valida via PUT /:id/validar quando confere os números.
  *
  * Multi-tenant:
@@ -75,7 +75,7 @@ export class ApuracaoController {
   }
 
   /**
-   * Walter/contador valida o snapshot fechado. Gate explícito antes de virar
+   * Luciano + orquestrador valida o snapshot fechado. Gate explícito antes de virar
    * valor fiscal real (DCTF/SPED).
    */
   @Roles(SUPER_ADMIN, ADMIN)
@@ -99,7 +99,7 @@ export class ApuracaoController {
 
   /**
    * SUPER_ADMIN apenas — reabre snapshot fechado (auditoria fiscal exige motivo).
-   * Limpa validação (precisa Walter validar de novo após re-fechar).
+   * Limpa validação (precisa Luciano + orquestrador validar de novo após re-fechar).
    */
   @Roles(SUPER_ADMIN)
   @TenantResource({ model: 'apuracaoMensalSegregada' })

@@ -4,7 +4,7 @@
  * D-novo-BR-CT CT.6 (31/05/2026) — DREs Segregadas (4 visões).
  *
  * TabsCustom M34 — 4 abas: Geral / Próprio / Auxiliar / Não-Coop.
- * Badge GATE WALTER quando validadoContador=false.
+ * Badge GATE VALIDAÇÃO FISCAL quando validadoContador=false.
  */
 
 import { useEffect, useState } from 'react';
@@ -177,11 +177,11 @@ export default function DresPage() {
 
       {!loading && dreAtual && (
         <>
-          {/* Badge GATE WALTER */}
+          {/* Badge GATE VALIDAÇÃO FISCAL */}
           {!dreAtual.validadoContador && (
             <div className="bg-amber-100 border-2 border-amber-500 p-3 rounded text-center">
               <Badge variant="outline" className="bg-amber-200 border-amber-700 text-amber-900">
-                ⚠️ PENDENTE VALIDAÇÃO CONTADOR
+                ⚠️ PENDENTE VALIDAÇÃO FISCAL
               </Badge>
               <p className="text-xs text-amber-800 mt-1">{dreAtual.avisoValidacao}</p>
             </div>
@@ -189,7 +189,7 @@ export default function DresPage() {
           {dreAtual.validadoContador && (
             <div className="bg-emerald-50 border-2 border-emerald-500 p-3 rounded text-center">
               <Badge variant="outline" className="bg-emerald-100 border-emerald-700 text-emerald-900">
-                ✅ VALIDADO PELO CONTADOR
+                ✅ VALIDADO INTERNAMENTE
                 {dreAtual.validadoEm && ` em ${new Date(dreAtual.validadoEm).toLocaleString('pt-BR')}`}
               </Badge>
             </div>

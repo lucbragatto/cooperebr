@@ -3,10 +3,10 @@
 /**
  * D-novo-BR-CT CT.6 (31/05/2026) — Apuração Mensal Segregada.
  *
- * Preview + fechar + status validação. Badge GATE WALTER quando
+ * Preview + fechar + status validação. Badge GATE VALIDAÇÃO FISCAL quando
  * validadoContador=false. Ações em Dialog Tipo C (padrão UX 17/05).
  *
- * ⚠️ Números são preview do motor. Walter (contador) valida antes de virar
+ * ⚠️ Números são preview do motor. validação fiscal interna (Luciano + orquestrador) valida antes de virar
  * valor fiscal real (DCTF/SPED).
  */
 
@@ -215,7 +215,7 @@ export default function ApuracaoMensalPage() {
           <li><strong>Fundos (Art. 28):</strong> Fundo de Reserva 10% + FATES 5% sobre sobras (mais resultado não-coop)</li>
         </ul>
         <p className="text-xs text-amber-800 mt-3 bg-amber-50 border border-amber-300 rounded p-2">
-          ⚠️ <strong>Gate Walter:</strong> os números abaixo são calculados pelo motor SISGD mas NÃO devem ser usados pra DCTF/SPED até o contador validar. O snapshot só vira oficial após "Fechar Apuração" + "Validar" pelo Walter.
+          ⚠️ <strong>Gate de validação fiscal:</strong> os números abaixo são calculados pelo motor SISGD mas NÃO devem ser usados pra DCTF/SPED até a validação fiscal interna. O snapshot só vira oficial após "Fechar Apuração" + "Validar" pelo Luciano + orquestrador.
         </p>
       </div>
 
@@ -308,7 +308,7 @@ export default function ApuracaoMensalPage() {
           {!fechada && (
             <div className="bg-amber-100 border-2 border-amber-500 p-3 rounded text-center">
               <Badge variant="outline" className="bg-amber-200 border-amber-700 text-amber-900">
-                ⚠️ PENDENTE VALIDAÇÃO CONTADOR (preview — não fechada)
+                ⚠️ PENDENTE VALIDAÇÃO FISCAL (preview — não fechada)
               </Badge>
               <p className="text-xs text-amber-800 mt-1">{data.avisoValidacao}</p>
             </div>
@@ -442,7 +442,7 @@ export default function ApuracaoMensalPage() {
         </>
       )}
 
-      {/* Dialog VALIDAR (Walter/contador) — CT.7 */}
+      {/* Dialog VALIDAR (Luciano + orquestrador) — CT.7 */}
       <Dialog open={confirmarValidar} onOpenChange={setConfirmarValidar}>
         <DialogContent>
           <DialogHeader>
@@ -450,11 +450,11 @@ export default function ApuracaoMensalPage() {
             <DialogDescription>
               <p className="mb-2">
                 Ao confirmar, o snapshot será marcado como{' '}
-                <strong>VALIDADO PELO CONTADOR</strong>. A partir daí, os números podem
+                <strong>VALIDADO INTERNAMENTE</strong>. A partir daí, os números podem
                 ser usados pra DCTF / SPED / declaração fiscal real.
               </p>
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded p-2">
-                ⚠️ Use só se você é o contador responsável (Walter) E conferiu alíquotas,
+                ⚠️ Use só se você é o responsável pela validação fiscal interna E conferiu alíquotas,
                 presunção, classificações de repasse e lançamentos amostrais.
               </p>
               <div className="mt-3">
@@ -544,7 +544,7 @@ export default function ApuracaoMensalPage() {
               Esta ação cria um <strong>snapshot IMUTÁVEL</strong> do mês. Após fechar:
               <ul className="list-disc list-inside mt-2 text-xs space-y-1">
                 <li>Lançamentos retroativos são bloqueados (somente SUPER_ADMIN reabre)</li>
-                <li>Snapshot fica marcado <strong>"PENDENTE VALIDAÇÃO CONTADOR"</strong> até Walter validar</li>
+                <li>Snapshot fica marcado <strong>"PENDENTE VALIDAÇÃO FISCAL"</strong> até Luciano + orquestrador validar</li>
                 <li>Os números podem ser auditados via Memorial PDF + DREs</li>
               </ul>
             </DialogDescription>
