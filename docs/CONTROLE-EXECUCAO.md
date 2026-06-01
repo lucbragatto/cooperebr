@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-05-31 noite — Sprint Contabilidade Tributária ESTRUTURA COMPLETA (CT.1-CT.6) + Sprint Polimento UX catalogado**. **7 commits** (`5ada766` CT.1 → `f95bbef` CT.2 → `b3cba3c` CT.3 → `27df9e5` CT.4 → `95eb755` CT.5 → `6a2324e` CT.6 → `93f38da` Estorno repasse) em **1 sessão Code maratona**. Estrutura técnica 100% pronta: schema multi-regime cooperativo (Arts. 79/86/88 Lei 5.764/71) + classificação determinística por fonte upstream (ALUGUEL=NAO_COOP / CESSAO/PROPRIA=PROPRIO / COBRANCA por tipoCooperado / CONVENIO=AUXILIAR) + 3 hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) idempotentes via `@@unique` + motor apuração mensal com snapshot imutável `ApuracaoMensalSegregada` + gate de validação fiscal (`validadoContador=false` em todo snapshot) + `ConfiguracaoTributaria` por cooperativa (zero hardcoded — alíquotas/presunção ajustáveis sem refator) + 4 DREs (Geral/Próprio/Auxiliar/Não-Coop, terminologia NBC ITG 2004) + 3 PDFs defensáveis com watermark "PENDENTE VALIDAÇÃO" + 4 telas Next.js. **284 specs verdes** (89 novos, 195 anteriores preservados). Fatia extra `93f38da` resolveu gap real do smoke Luciano (repasse PAGO sem estorno + sem visibilidade do ciclo) — backend pronto, frontend Dialog vira refator PUX.4. **Decisão UX vigente 31/05 (nova):** Dialog modal e drawer **proibidos**; criar/editar = página própria; ações = inline expansível. **Sprint Polimento UX catalogado** (PUX.1→PUX.6, ~25-37h, próximo Code). **Gate de validação fiscal (contabilidade) bloqueia produção fiscal real** — D-novo-CT-VALIDACAO-FISCAL P0. Detalhe: `docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md`.
+> Última atualização: **2026-06-01 noite — Arco Contabilidade + Convênios (CT.7→CT.9.1) + Decisões fiscais estruturais (D-FISCAL-1/2/MLM)**. 5 commits trabalho (`12ca409` CT.7 → `4cf71d2` PUX-A → `d086550` CT.8 → `61bbc7e` CT.9 → `d953381` CT.9.1) + 1 commit fechamento em 1 sessão Code. Entregue: **CT.7** PDFs autenticados via blob + apuração estado consciente · **PUX-A** Convênio página própria + `<HelpBox>` reusável · **CT.8** classificação inline Tipo A do Plano de Contas Segregado, multi-tipo (enforcement P0-1) · **CT.9** botão "Registrar movimento" no convênio → `LancamentoCaixa` Auxiliar Art. 88 síncrono · **CT.9.1** bugfix timezone competência + estorno do movimento + sweep "Walter" 8 arquivos código. 284 specs verdes mantidos · zero regressão · zero `--accept-data-loss`. **Decisão UX esclarecida 01/06** (refina 31/05): Dialog OK pra ações simples (confirmar/estornar/aprovar/remover); página própria SÓ pra cadastro/edição de entidade; HelpBox obrigatório. **3 decisões fiscais estruturais** catalogadas como débitos (D-FISCAL-1 classificação configurável do convênio CT / D-FISCAL-2 consolidação convênio único / D-FISCAL-MLM Hangar≠Art.88) + correção relatório 2026-05-31. **Próximo Code:** D-FISCAL-2 (consolidação convênio único — ContratoConvenio absorve Convenio CT.2) começando por **Fase 1 read-only**. Detalhe: `docs/sessoes/2026-06-01-contabilidade-convenios.md`.
+
+> Histórico: **2026-05-31 noite — Sprint Contabilidade Tributária ESTRUTURA COMPLETA (CT.1-CT.6) + Sprint Polimento UX catalogado**. **7 commits** (`5ada766` CT.1 → `f95bbef` CT.2 → `b3cba3c` CT.3 → `27df9e5` CT.4 → `95eb755` CT.5 → `6a2324e` CT.6 → `93f38da` Estorno repasse) em **1 sessão Code maratona**. Estrutura técnica 100% pronta: schema multi-regime cooperativo (Arts. 79/86/88 Lei 5.764/71) + classificação determinística por fonte upstream (ALUGUEL=NAO_COOP / CESSAO/PROPRIA=PROPRIO / COBRANCA por tipoCooperado / CONVENIO=AUXILIAR) + 3 hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) idempotentes via `@@unique` + motor apuração mensal com snapshot imutável `ApuracaoMensalSegregada` + gate de validação fiscal (`validadoContador=false` em todo snapshot) + `ConfiguracaoTributaria` por cooperativa (zero hardcoded — alíquotas/presunção ajustáveis sem refator) + 4 DREs (Geral/Próprio/Auxiliar/Não-Coop, terminologia NBC ITG 2004) + 3 PDFs defensáveis com watermark "PENDENTE VALIDAÇÃO" + 4 telas Next.js. **284 specs verdes** (89 novos, 195 anteriores preservados). Fatia extra `93f38da` resolveu gap real do smoke Luciano (repasse PAGO sem estorno + sem visibilidade do ciclo) — backend pronto, frontend Dialog vira refator PUX.4. **Decisão UX vigente 31/05 (revisada 01/06):** Dialog OK pra ação simples; página própria pra cadastro/edição. **Sprint Polimento UX catalogado** (PUX.1→PUX.6, ~25-37h, próximo Code). **Gate de validação fiscal (contabilidade) bloqueia produção fiscal real** — D-novo-CT-VALIDACAO-FISCAL P0. Detalhe: `docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md`.
 
 > Histórico: **2026-05-31 — Sprint Blindagem Multi-Tenant (D-novo-BR) COMPLETO** — 8 commits em 1 sessão Code maratona. **68/68 IDORs do sistema corrigidos** em 6 fatias atômicas (F0 + F1.1+F1.2+F1.3+F1.4+F1.5). **4 camadas de defesa em profundidade** ativas: fix manual + Guard sistêmico opt-in `@TenantResource` + Extension Prisma log-only `tenantLeakDetector` + Lint anti-reincidência baseline+ratchet (`npm run lint:tenant`, 256 legados allowlist). **164 specs IDOR+Guard verdes** + 6 smokes runtime cross-tenant (91 cenários validados). EmailLog ganhou coluna `cooperativaId` via ritual PM2. M8 fallback ENV removido (vazava credencial IMAP entre tenants). F2 (Prisma Extension de INJEÇÃO) fica OPCIONAL — Guard+lint+log já cobrem detecção pre-merge + runtime. Detalhe: `docs/sessoes/2026-05-31-sprint-blindagem-multi-tenant-completo.md`.
 
@@ -16,6 +18,68 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-01 noite (Code — Arco Contabilidade + Convênios CT.7→CT.9.1 + Decisões fiscais estruturais)
+
+**5 commits trabalho** `12ca409..d953381` + 1 commit fechamento em 1 sessão Code (arco "Contabilidade + Convênios fechados").
+
+| Fatia | Commit | Marco |
+|---|---|---|
+| CT.7 | `12ca409` | PDFs autenticados via blob (404→200) + apuração estado consciente (FECHADA esconde Fechar; mostra Validar/Reabrir condicional) + 3º botão "Repasses PDF" |
+| PUX-A | `4cf71d2` | Padrão UX esclarecido 01/06 (Dialog OK pra ações; página própria SÓ pra cadastro/edição); `<HelpBox>` componente reusável; Convênio criar/editar virou `/convenios/novo` + `/[id]/editar`; ConvenioForm + ConvenioHelp; lista refatorada (Pencil = navegação) |
+| CT.8 | `d086550` | Classificação INLINE Tipo A do Plano de Contas Segregado (22 pendentes destravadas); multi-tipo via `useTipoParceiro` (CONSORCIO/ASSOC/CONDOMINIO bloqueiam `naturezaCooperativa` — enforcement P0-1); aviso enganoso `/configuracoes/financeiro` removido |
+| CT.9 | `61bbc7e` | Movimento de convênio: `POST /convenios/:id/movimentos` síncrono → `LancamentoCaixa` Auxiliar (Art. 88) com gate FECHADA reusado; histórico GET; UI `MovimentosConvenioSection` + Dialog Tipo C + HelpBox neutro; **Tarefa 0a sweep "Walter" 11 docs**; D-FISCAL-2 antecipado (decisão B PLANO-GLOBAL-VS-TENANT) |
+| CT.9.1 | `d953381` | Bugfix smoke: timezone competência (01/08 não vira mais 31/07) + estorno do movimento (DELETE endpoint + Dialog Tipo C) + sweep "Walter" 8 arquivos código + grep final ZERO |
+
+**Validação:** 284 specs verdes ✅ · build backend+web OK · lint:tenant 45/300 com decorator (0 novos sem) · `grep -rn "Walter"` em `web/app web/components backend/src` exceto `.spec.` = **0 ocorrências**.
+
+**Decisão UX esclarecida 01/06 (refina 31/05):**
+
+| Cenário | Padrão CORRETO | Status |
+|---|---|---|
+| Cadastro/edição de entidade | **Página própria** `/dashboard/X/[id]/editar` | Mantém (Tipo B 17/05) |
+| Ação contextual (validar/fechar/estornar/aprovar/marcar pago/remover) | **Dialog Tipo C** | ✅ Reabilitado |
+| Visualização auxiliar | Inline expansível OU seção da página própria | Mantém |
+| Edição célula relação | Inline célula | Mantém |
+| Help inline em toda página/funcionalidade | **`<HelpBox>`** | ✅ Obrigatório (regra 19/05) |
+
+Razão da revisão: "banir Dialog modal completamente" (31/05) foi exagero. Dialog **continua válido** pra ações simples — banimento permanece **apenas** pra cadastro/edição de entidade (que vão pra página própria).
+
+**Decisões fiscais estruturais (Sessão de Validação Fiscal Interna 01/06):**
+
+1. **D-FISCAL-1 — Classificação do convênio CT é CONFIGURÁVEL** (P1) — naturezaAto depende do **critério econômico**: "cooperativa fica com sobra/resultado (mesmo se repassada ao dono)?" SIM=Próprio, NÃO=Auxiliar. 4 travas pra Art. 88.
+
+2. **D-FISCAL-2 — Consolidação do convênio único** (P1 SPRINT) — `ContratoConvenio` legado absorve `Convenio` CT.2 + flag fiscal `naturezaAtoCooperativo` + `geraLancamentoContabil` + reaproveita motor `criarLancamentoConvenio` + aposenta `/contabilidade/convenios` + migra 1 convênio CT existente. **Próximo Code arranca por Fase 1 read-only.**
+
+3. **D-FISCAL-MLM — Hangar Academia ≠ Art. 88** (P2) — relatório 2026-05-31 cita Hangar como exemplo de auxiliar; ERRADO (Hangar é captação+MLM). Provavelmente Art. 86. Thread separada.
+
+4. **Caso médico** (validado 01/06): empresa médica cooperada custeia energia dos médicos cooperados em usina cessão → estrutura **PRÓPRIO** (cooperativa retém resíduo) com fluxo via Contas a Receber + Contas a Pagar (Design B do D-novo-CT-CONVENIO-HOOK já resolvido).
+
+**Correção operacional "Walter":** era referência de memória perdida — NÃO existe contador externo. Quem valida é **Luciano + orquestrador**. Sweep aplicado em 11 docs (CT.9) + 8 arquivos de código (CT.9.1) + 3 specs ajustados. `D-novo-CT-GATE-WALTER` renomeado `D-novo-CT-VALIDACAO-FISCAL`. Histórico (`docs/historico/`) preservado.
+
+**Próximo bloco — Sprint D-FISCAL-2 (Consolidação do convênio único)**
+
+Estimativa **~12-20h Code** (sprint substancial). Ordem das fatias propostas (a refinar na Fase 1):
+1. **Fase 1 read-only profunda** (~1-2h) — mapear ContratoConvenio + diff com Convenio CT + plano migração
+2. Schema delta aditivo: campos novos no ContratoConvenio (flags fiscal)
+3. Estender service criarLancamentoConvenio pra ler flag do ContratoConvenio
+4. UI: incorporar campos fiscais no formulário existente + HelpBox com critério das 4 travas
+5. Hook em Cobranca/ContaAPagar com convenioId opcional (Design B)
+6. Migração do 1 convênio CT existente
+7. Deprecar `/dashboard/contabilidade/convenios` → redirect
+
+**Detalhe:** `docs/sessoes/2026-06-01-contabilidade-convenios.md`.
+
+**Decisões aplicadas (todas pré-existentes):**
+- Decisão 23 (Fase 1 read-only antes de tocar código) — todas as 5 fatias
+- Ritual PM2 (stop → port livre → generate → push → restart) — CT.9 schema (idempotente)
+- Regra fechamento bilateral 13/05 — esta sessão fechada
+- Regra não-paralelo claude.ai 17/05
+- Select nativo dentro de Dialog (regra 19/05)
+- Build incremental BN (`cd web && npm run build` + restart frontend)
+- Lint tenant baseline+ratchet — 5 commits sem novos sem decorator
 
 ---
 
@@ -1257,118 +1321,128 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento Sprint Contabilidade Tributária + Sprint Polimento UX
-   catalogado.
+   fechamento da sessão 01/06 (arco Contabilidade + Convênios CT.7→CT.9.1).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online.
 
-PASSO 1 — Frase de retomada principal:
+PASSO 1 — Frase comandante (próximo Code arranca aqui):
 
-Sessão 31/05 noite entregou Sprint Contabilidade Tributária ESTRUTURA
-COMPLETA (CT.1-CT.6) em 6 commits + fatia extra Estorno repasse em 1
-commit (5ada766..93f38da). 284 specs verdes (89 novos, 195 anteriores
-preservados). Zero regressão. Zero --accept-data-loss.
+Iniciar Fase 1 read-only da CONSOLIDAÇÃO do convênio único (D-FISCAL-2):
+mapear ContratoConvenio completo (faixas/membros/indicações/desconto/
+conveniado) + Convenio CT (CT.2/CT.9) + plano de migração + como aposentar
+/contabilidade/convenios reaproveitando o motor contábil + onde encaixar
+o flag Art. 88/89 (naturezaAtoCooperativo) e a geração contábil universal.
 
-ENTREGUE:
-- CT.1 schema multi-regime (Lei 5.764/71 Arts. 79/86/88) + 6 enums + 2
-  models (Convenio + ApuracaoMensalSegregada)
-- CT.2 RegimeContabil + classificação determinística + Convenio CRUD
-- CT.3 hooks fire-and-forget (Cobranca/ContaAPagar/Repasse) idempotentes
-  via @@unique([origemTipo, origemId])
-- CT.4 motor apuracao mensal com snapshot imutavel + ConfiguracaoTributaria
-  (zero hardcoded) + gate de validação fiscal (validadoContador=false em todo snapshot)
-- CT.5 DREs 4 visões (Geral/Próprio/Auxiliar/Não-Coop, terminologia NBC
-  ITG 2004)
-- CT.6 3 PDFs defensáveis + 4 telas Next.js + sidebar Contabilidade
-  Tributária
-- 93f38da backend estorno repasse + visibilidade ciclo (gate apuração
-  FECHADA + transação atômica)
+REPORTAR Fase 1 e fatiar ANTES de tocar código. NÃO TOCAR CÓDIGO antes
+do OK Luciano explícito.
 
-DECISÃO UX VIGENTE 31/05 (NOVA — banimento de telinhas):
-- Criar/editar entidade → PÁGINA PRÓPRIA (/dashboard/X/[id]/editar)
-- Ação contextual (fechar/estornar/aprovar) → INLINE EXPANSÍVEL
-- Visualização auxiliar (ciclo/histórico) → INLINE EXPANSÍVEL
-- Edição célula relação (Membro×Usina) → INLINE CÉLULA (mantém)
-- BANIDOS: Dialog modal + Sheet/drawer
+CONTEXTO DA SESSÃO ANTERIOR (01/06):
+Arco CT.7 → CT.9.1 (5 commits trabalho) entregou:
+- CT.7 (12ca409) PDFs autenticados blob + apuração estado consciente
+- PUX-A (4cf71d2) Convênio página própria + <HelpBox> reusável
+- CT.8 (d086550) Plano de Contas classificação inline + enforcement P0-1
+- CT.9 (61bbc7e) Movimento convênio Auxiliar + sweep "Walter" docs
+- CT.9.1 (d953381) Timezone + estorno movimento + sweep "Walter" código
 
-Razão: Luciano não programa, perde fluxo em telinhas, precisa comparar
-dados lado-a-lado. Doc: docs/arquitetura/padrao-ux-vigente.md.
+284 specs ✅ · zero regressão · zero --accept-data-loss.
 
-PRÓXIMO BLOCO — Sprint Polimento UX (D-novo-PUX P1, ~25-37h Code,
-3-5 sessões). Ordem das fatias:
+DECISÕES FISCAIS ESTRUTURAIS catalogadas (D-FISCAL-1/2/MLM):
+- D-FISCAL-1: classificação do convênio CT é CONFIGURÁVEL — depende do
+  critério econômico ("cooperativa fica com sobra/resultado?" SIM=Próprio,
+  NÃO=Auxiliar). 4 travas pra Art. 88: todos cooperados + soma zero +
+  documentado + escrituração segregada.
+- D-FISCAL-2 (SPRINT — esta retomada): consolidação do convênio único.
+  ContratoConvenio legado absorve Convenio CT.2 + flag naturezaAtoCooperativo
+  + flag geraLancamentoContabil + reaproveita motor criarLancamentoConvenio
+  + aposenta /dashboard/contabilidade/convenios + migra 1 convênio CT.
+- D-FISCAL-MLM: Hangar Academia ≠ Art. 88 — relatório 2026-05-31 errou.
+  Provavelmente Art. 86 (captação remunerada). Thread separada.
 
-1. PUX.1 (4-6h) — Componentes <HelpBox> + <AcaoInlineExpansivel>
-   reutilizáveis em web/components/ui/
-2. PUX.2 (6-8h) — Banir telinhas CT.6: refator Convenio (Dialog→página
-   própria) + Apuração Fechar (Dialog→inline) + DialogEstornar +
-   DialogCiclo (→inline)
-3. PUX.3 (3-5h) — Help inline em TODAS as telas (regra 19/05): plano-
-   contas, convenios, /dashboard/repasses sem help → aplicar HelpBox
-4. PUX.4 (3-4h) — Refator frontend estorno repasse (DialogEstornar +
-   DialogCiclo → AcaoInlineExpansivel). Backend já pronto em 93f38da.
-5. PUX.5 (6-10h) — Refator telas legadas Dialog/drawer (DialogMarcarPago
-   + DialogCancelar repasses; despesas aprovar/rejeitar/resolver)
-6. PUX.6 (3-4h) — Lint UX (npm run lint:ux análogo lint:tenant — força
-   help + proíbe Dialog em código novo)
+CASO MÉDICO VALIDADO 01/06 (motivador estrutural):
+Empresa médica cooperada custeia energia dos médicos cooperados em usina
+CESSÃO (próprio). Estrutura DEVE passar por Contas a Receber (cobrança
+da empresa médica) + Contas a Pagar (repasse ao dono + despesas) = Design
+B do D-novo-CT-CONVENIO-HOOK. Cooperativa retém resíduo → PRÓPRIO,
+não Auxiliar.
 
-COMEÇAR POR PUX.1 (componentes base — todos os outros dependem).
+DECISÃO UX VIGENTE (revisada 01/06):
+- Cadastro/edição de entidade → PÁGINA PRÓPRIA (mantém)
+- Ação contextual (validar/fechar/estornar/aprovar/remover) → Dialog OK
+- Help inline (<HelpBox>) → obrigatório toda tela
+- Dialog NÃO está banido pra ações simples (revisão da decisão 31/05)
 
-GATES EXTERNOS (não-Code, não-bloqueantes pra continuar Polimento UX):
-- D-novo-CT-VALIDACAO-FISCAL P0 — validação interna (Luciano + orquestrador) precisa validar alíquotas
-  Lucro Presumido + classificação repasse + 10 contas seed + 10
-  lançamentos amostrais + flag isencaoPisCofinsAtiva antes de uso fiscal
-  real (DCTF/SPED). Sessão dedicada 2-4h Luciano + orquestrador + 1-2h Code.
-- Advogado — acompanhar STF Tema 536 (mai/jun 2026) que pode reverter
-  isenção PIS/COFINS sobre ato próprio.
+CORREÇÃO OPERACIONAL "WALTER" (concluída):
+"Walter" era referência de memória perdida — NÃO existe contador externo.
+Quem valida = Luciano + orquestrador. Sweep aplicado em 11 docs + 8
+arquivos código + 3 specs. D-novo-CT-GATE-WALTER → D-novo-CT-VALIDACAO-FISCAL.
+Grep final: ZERO "Walter" fora .spec.
 
-DÉBITOS NOVOS CATALOGADOS:
-- D-novo-PUX P1 (Sprint Polimento UX — próximo)
-- D-novo-CT-VALIDACAO-FISCAL P0 (validação contábil pra produção fiscal)
-- D-novo-BR-CT-ESTORNO P2 (estorno Cobranca/ContaAPagar mesmo padrão
-  de RepasseProprietario, ~4-6h fatia futura)
-
-REGRA INEGOCIÁVEL: antes de propor qualquer fatia PUX, aplicar Fase 1
-read-only mini (~10-15min). Não tocar código antes de OK Luciano
-explícito.
+ESCOPO SPRINT D-FISCAL-2 (a fatiar pós Fase 1, estimativa 12-20h Code):
+1. Fase 1 read-only profunda (~1-2h) — mapear ContratoConvenio + diff
+   com Convenio CT + plano migração + onde encaixar flag fiscal
+2. Schema delta aditivo (campos novos no ContratoConvenio: naturezaAto
+   Cooperativo, fluxoFinanceiro, geraLancamentoContabil, lancamentos[])
+3. Estender service criarLancamentoConvenio pra ler flag do ContratoConvenio
+4. UI: incorporar campos fiscais no formulário existente do ContratoConvenio
+   + HelpBox com critério das 4 travas + critério econômico
+5. Hook em Cobranca/ContaAPagar com convenioId opcional (Design B)
+6. Migração do 1 convênio CT existente → ContratoConvenio com flags
+7. Deprecar /dashboard/contabilidade/convenios → redirect ou remoção
+8. Atualizar relatório 2026-05-31 removendo exemplo Hangar errado
 
 CONSTRAINTS APLICÁVEIS:
-- Decisão 23: Fase 1 read-only OBRIGATÓRIA
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código
 - @TenantResource em todo handler novo de mutação (lint força)
-- @AsPlatform() em todo cron/listener novo (1 linha)
+- @AsPlatform() em todo cron/listener novo
 - Multi-tenant: TODA query Prisma filtra por cooperativaId
 - isAmbienteReal() em endpoints dev (NUNCA NODE_ENV)
 - Regra contatos teste: 27981341348 + lucbragatto@gmail.com
 - Decisão 24: frase de retomada local único
-- PADRÃO UX VIGENTE 31/05 (NOVO): Dialog/drawer proibidos em código
-  novo. PUX.6 vai criar lint:ux pra forçar.
+- Padrão UX vigente 01/06: Dialog OK pra ação simples; página própria
+  SÓ pra cadastro/edição
+- Schema aditivo sem --accept-data-loss; ritual PM2 nas migrations
 
 PRE-REQUISITOS LEITURA (ordem fixa):
-1. docs/CONTROLE-EXECUCAO.md (este arquivo, seção ## ONDE PARAMOS topo)
+1. docs/CONTROLE-EXECUCAO.md (este arquivo, ## ONDE PARAMOS topo)
 2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
-3. docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md
-4. docs/debitos-tecnicos.md (D-novo-PUX P1 + D-novo-CT-VALIDACAO-FISCAL P0
-   + D-novo-BR-CT-ESTORNO P2)
-5. docs/arquitetura/padrao-ux-vigente.md (NOVO — Dialog/drawer proibidos)
-6. docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md
-   (parecer multi-regime base Sprint CT — só ler se mexer em CT.x)
-7. docs/MAPA-INTEGRIDADE-SISTEMA.md
-8. CLAUDE.md + .claude/CLAUDE.md
-9. git log --oneline -15
+3. docs/sessoes/2026-06-01-contabilidade-convenios.md (contexto pleno
+   do arco CT.7→CT.9.1 + decisões fiscais)
+4. docs/debitos-tecnicos.md — D-FISCAL-1, D-FISCAL-2 (SPRINT atual),
+   D-FISCAL-MLM, D-novo-CT-CONVENIO-HOOK (resolvido), D-novo-CT-PDF-AUXILIAR
+5. docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md
+   (atenção: exemplo Hangar errado, corrigir nesta sprint)
+6. backend/prisma/schema.prisma — modelos Convenio (CT.2) +
+   ContratoConvenio (legado MLM) + relations
+7. backend/src/contabilidade-tributaria/contabilidade-tributaria.service.ts
+   (criarLancamentoConvenio CT.9)
+8. backend/src/contabilidade-tributaria/convenios-ct.service.ts +
+   controller (CRUD CT que vai ser aposentado)
+9. /dashboard/contabilidade/convenios/* (front CT) +
+   /dashboard/convenios/* (front MLM legado)
+10. CLAUDE.md + .claude/CLAUDE.md (regras)
+11. git log --oneline -20
 
 CARRY-OVERS (nao-bloqueantes):
-- 10 erros TS pré-existentes em backend/src/agents/ (untracked)
-- 43 untracked scripts/relatorios — Sprint Housekeeping futuro
-- Frontend estorno usando Dialog (DialogEstornar + DialogCiclo) — refator
-  PUX.4 vai migrar pra inline; backend (93f38da) está OK
+- 15 erros TS pré-existentes em backend/src/agents/* (untracked WIP)
+- 43+ untracked scripts/relatorios — Sprint Housekeeping futuro
 - 256 legados allowlist lint:tenant — esvaziar incrementalmente
-- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD)
+- D-novo-PUX (Polimento UX) parcialmente coberto em PUX-A; restante
+  inclui AcaoInlineExpansivel (talvez nem precise — Dialog OK pra ação),
+  audit help inline em telas legadas, lint:ux
+- D-novo-CT-PDF-AUXILIAR P2 — PDFs ignoram Auxiliar
+- D-novo-CT-VALIDACAO-FISCAL P0 — pendente validação interna alíquotas
+  + classificação + flag isencao PIS/COFINS antes de DCTF/SPED real
+- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 — naturezas próprias pra
+  CONSORCIO/ASSOC/CONDOMINIO (bloqueia Sinergia)
+- D-novo-BR-CT-ESTORNO P2 — estorno Cobranca/ContaAPagar
+- D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — painel credenciais teste)
 - D-novo-BP (P3 convergência /parceiro vs /dashboard)
-- D-novo-BJ (P2 LGPD URL assinada)
-- D-novo-BK (P3 storage S3/Supabase)
 
-FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
-⏳ PRIORITARIO: Agendar reunião Validação fiscal interna (gate produção contábil)
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção
+   contábil) — alíquotas + presunção + flag isencao PIS/COFINS + classif
+   repasse + 10 contas seed + 10 lançamentos amostrais
 ⏳ Preencher cooperebr1 (gatilho F.4 smoke produção)
 ⏳ Cadastrar Usuario E-Solares real
 ⏳ Revisar relatório auditoria classe GD
@@ -1379,8 +1453,8 @@ FRENTES OPERACIONAIS LUCIANO (acumulado, inalterado):
 ⏳ Obter .pfx sandbox Banestes
 ⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536 (advogado)
 
-DOC-SESSAO SPRINT CT + POLIMENTO UX CATALOGADO:
-docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md
+DOC-SESSAO 01/06:
+docs/sessoes/2026-06-01-contabilidade-convenios.md
 ```
 
 ---

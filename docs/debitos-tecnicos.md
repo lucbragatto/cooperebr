@@ -3966,6 +3966,109 @@ Criar `scripts/lint-ux.ts`:
 
 ---
 
+### D-FISCAL-1 — Classificação do convênio CT deve ser CONFIGURÁVEL (P1)
+
+**Origem:** Sessão de Validação Fiscal Interna 01/06/2026 noite — caso médico real (empresa médica cooperada custeando energia dos médicos cooperados em usina CESSÃO).
+
+**Estado atual (hoje em produção pós CT.9):**
+- `criarLancamentoConvenio` em `contabilidade-tributaria.service.ts` **hardcoda** classificação AUXILIAR via regime cooperativo (`FonteConvenio → NaturezaCooperativa.AUXILIAR`)
+- `Convenio.classificacaoFiscal` é apenas texto livre (descritivo, não enforcement)
+- 1 convênio teste criado em produção com lançamento Auxiliar
+
+**Decisão fiscal:** classificação **depende do critério econômico** — não do tipo de convênio:
+
+> **"A cooperativa fica com sobra/resultado (mesmo se repassada ao dono da estrutura)?"**
+
+| Critério | Resposta | Natureza | Quando aplica |
+|---|---|---|---|
+| Cooperativa retém resíduo (mesmo repassando ao dono) | **SIM** | **PRÓPRIO** (Art. 79) | Caso médico: empresa médica paga energia, cooperativa repassa sobra ao dono da usina cedente |
+| Fluxo é trânsito puro entrada=saída soma zero | **NÃO** | **AUXILIAR** (Art. 88) | Convênio de custeio com 4 travas (abaixo) |
+
+**4 travas pra qualificar como AUXILIAR (Art. 88) — TODAS obrigatórias:**
+1. Todos os participantes são cooperados (ou cooperativa é única operadora financeira)
+2. Fluxo entra = sai (soma zero — sem retenção/margem residual)
+3. Convênio documentado formalmente (objeto + prazo + valores + partes)
+4. Escrituração contábil segregada (lançamentos visíveis na DRE Auxiliar)
+
+**Implementação proposta (fatia futura — pode entrar dentro de D-FISCAL-2 se consolidação acontecer):**
+- Schema: `Convenio.naturezaAtoCooperativo: NaturezaCooperativa?` (ou no `ContratoConvenio` consolidado pós D-FISCAL-2)
+- UI: select obrigatório com helper text explicando as 4 travas + critério econômico
+- Backend: `criarLancamentoConvenio` passa a ler `convenio.naturezaAtoCooperativo` em vez de hardcodar AUXILIAR
+- Migração: setar manualmente os convênios existentes (caso médico = PRÓPRIO; convênios de custeio futuro = AUXILIAR; admin escolhe)
+- Validação cruzada: se admin marca AUXILIAR, verificar/avisar sobre as 4 travas
+
+**Estimativa:** ~4-6h Code (schema delta + service + UI + UX do critério).
+
+**Bloqueia:** caso médico em produção fiscal real — hoje gera lançamento Auxiliar quando deveria ser Próprio (com fluxo passando por Contas a Receber + Contas a Pagar).
+
+**Status:** 📋 Catalogado 2026-06-01 noite. Implementar **dentro da fatia D-FISCAL-2** (consolidação do convênio único) se decisão fiscal interna confirmar abordagem unificada.
+
+---
+
+### D-FISCAL-2 — Consolidação do convênio único (ContratoConvenio + flag fiscal + geração contábil universal) (P1 — SPRINT — próxima sessão)
+
+**Origem:** Sessão de Validação Fiscal Interna 01/06/2026 noite. Conclusão: ter 2 modelos paralelos de convênio é desnecessário e confunde.
+
+**Estado atual:**
+- **`ContratoConvenio`** (legado MLM) — `/dashboard/convenios`. Campos: faixas, membros, indicações em cascata, desconto, conveniado, cooperado, status. Foco em **captação+MLM** (Hangar Academia, AESMP, ASSEJUFES).
+- **`Convenio`** (CT.2 — contabilidade tributária) — `/dashboard/contabilidade/convenios`. Campos: fluxoFinanceiro (enum), classificacaoFiscal (texto), tipoBeneficio (enum), vigência. Foco em **Art. 88** com motor `criarLancamentoConvenio` (CT.9).
+- **Caso médico real** força a estrutura B (Design B do D-novo-CT-CONVENIO-HOOK já catalogado): hook em Cobranca/ContaAPagar com `convenioId` opcional → motor universal de lançamento contábil.
+
+**Decisão (Luciano 01/06):** **consolidar num modelo único** mantendo o nome `ContratoConvenio` por compatibilidade. Aposentar `Convenio` CT.2 + UI `/dashboard/contabilidade/convenios`.
+
+**Escopo da sprint (a refinar em Fase 1 read-only da próxima sessão):**
+
+1. **Mapear `ContratoConvenio` completo** (todos os campos + relações: faixas, membros, indicações, desconto, conveniado, status)
+2. **Diff com `Convenio` CT.2/CT.9** — o que falta no legado:
+   - `fluxoFinanceiro` (enum FluxoConvenio)
+   - `classificacaoFiscal` (texto livre — talvez deprecar em favor de `naturezaAtoCooperativo`)
+   - `naturezaAtoCooperativo` (D-FISCAL-1)
+   - `geraLancamentoContabil: Boolean` (todo convênio com essa flag aciona motor universal)
+   - `lancamentos` back-relation
+3. **Schema delta aditivo** — adicionar campos novos no `ContratoConvenio`, **manter** `Convenio` CT.2 temporariamente pra migração faseada
+4. **Estender service** que cria `LancamentoCaixa` pra olhar a flag + classificação do `ContratoConvenio` (em vez do `Convenio` CT)
+5. **UI:** incorporar campos fiscais (naturezaAtoCooperativo + fluxoFinanceiro + geraLancamentoContabil) ao formulário existente do `ContratoConvenio` + HelpBox explicando critério das 4 travas
+6. **Migração:** 1 convênio CT existente → criar `ContratoConvenio` equivalente com flags
+7. **Deprecar `/dashboard/contabilidade/convenios`** → redirect pra `/dashboard/convenios` (ou remoção total)
+8. **Hook em Cobranca/ContaAPagar** com `convenioId` opcional disparando lançamento (Design B já catalogado em D-novo-CT-CONVENIO-HOOK resolvido)
+9. **Atualizar `criarLancamentoConvenio`** pra ler flag + naturezaAtoCooperativo do ContratoConvenio consolidado
+10. **Caso médico** funciona naturalmente: convênio com `naturezaAtoCooperativo=PROPRIO` + `geraLancamentoContabil=true` + hook na cobrança da empresa médica + hook no repasse ao dono → Contas a Receber + Contas a Pagar lançam corretamente
+
+**Estimativa:** ~12-20h Code (sprint substancial — schema delta + service + UI + migração + deprecação + hook B).
+
+**Bloqueia:** uso fiscal real do caso médico + estrutura defensável pra qualquer novo convênio que tenha critério "cooperativa retém sobra".
+
+**Prioridade:** **P1** — próxima sessão Code arranca por **Fase 1 read-only**.
+
+**Status:** 📋 Catalogado 2026-06-01 noite. Próximo Code arranca pela Fase 1.
+
+---
+
+### D-FISCAL-MLM — Classificação fiscal da comissão de captação MLM (Hangar Academia) (P2)
+
+**Origem:** Sessão de Validação Fiscal Interna 01/06/2026 noite — correção ao relatório `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md`.
+
+**Erro no relatório de conformidade 2026-05-31:** o documento cita Hangar Academia como exemplo de Art. 88 (ato cooperativo auxiliar). **Está errado** — Hangar é cooperado PJ que opera programa de **captação+MLM** (indicações em cascata + comissões), não convênio de custeio com soma zero.
+
+**Análise fiscal preliminar:**
+- **NÃO é Art. 79** (próprio) — não cumpre objeto social cooperativo direto da cooperativa
+- **NÃO é Art. 88** (auxiliar) — não é convênio de custeio, não é trânsito entra=sai
+- **Provavelmente Art. 86** (não-cooperativo, tributado Lucro Presumido) — captação remunerada externa
+- Mas há argumento contrário: "captação de cooperados é objeto social da cooperativa" → pode levantar Art. 79
+
+**Correções pendentes:**
+1. Atualizar `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md` removendo Hangar do exemplo Art. 88 + adicionando nota "[corrigido 01/06]"
+2. Decidir definitivamente na Sessão de Validação Fiscal Interna: Art. 86 ou Art. 79?
+3. Implementação no `ContratoConvenio` pós-D-FISCAL-2: programas de captação/MLM (Hangar, AESMP) ganham `naturezaAtoCooperativo` específica (provavelmente NAO_COOPERATIVO)
+
+**Estimativa:** correção do relatório = 30min; decisão fiscal = sessão dedicada; implementação contábil = vem grátis depois de D-FISCAL-2.
+
+**Prioridade:** **P2** — não bloqueia operação atual (Hangar continua sendo MLM via ContratoConvenio, sem geração contábil específica). Bloqueia precisão fiscal quando D-FISCAL-2 entrar em produção.
+
+**Status:** 📋 Catalogado 2026-06-01 noite. Thread separada do D-FISCAL-2.
+
+---
+
 ### D-novo-CT-PDF-AUXILIAR — 3 PDFs de defesa fiscal ignoram o Ato Auxiliar (Art. 88) (P2 — decidir na Sessão de Validação Fiscal Interna)
 
 **Origem:** CT.9.1 (01/06/2026 noite) — varredura read-only de `relatorios-ct.service.ts` após CT.9 entregar registro de movimentos de convênio. Convênio aparece na DRE em tela mas **some** nos PDFs.
