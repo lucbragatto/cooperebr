@@ -3907,6 +3907,54 @@ Criar `scripts/lint-ux.ts`:
 
 ---
 
+### D-novo-CT-MULTI-REGIME-CLASSIFICACAO — Plano de Contas + naturezas próprias pra CONSORCIO/ASSOCIACAO/CONDOMINIO (P1, parte multi-regime)
+
+**Origem:** CT.8 (01/06/2026). Ao construir classificação inline do Plano de Contas Segregado, ficou claro que a estrutura atual (`naturezaCooperativa` enum + `Convenio` Art. 88) é **exclusiva de COOPERATIVA**. Os outros 3 tipos de parceiro (CONSORCIO/ASSOCIACAO/CONDOMINIO) têm regime próprio e precisam de classificação própria — não basta deixar a coluna "não se aplica".
+
+**Estado atual:**
+- ✅ CT.8 enforça P0-1 no backend: parceiro não-cooperativa não consegue atribuir `naturezaCooperativa` → BadRequest com mensagem clara
+- ✅ Frontend adapta visualmente via `useTipoParceiro()`: coluna "Natureza Cooperativa" desaparece pra não-coop + aviso amber explicando
+- ❌ Não existem enums/colunas pra natureza própria de CONSÓRCIO (proporcional por consorciada — Lei 6.404/76 + Lei 14.300/2022)
+- ❌ Não existem pra ASSOCIAÇÃO (sem fins lucrativos — CC Arts. 53-61 + Lei 9.532/97)
+- ❌ Não existem pra CONDOMÍNIO (CC Arts. 1.314-1.358-A + Lei 14.300/2022)
+
+**Escopo da fatia futura:**
+- Schema: adicionar enums por regime (`NaturezaConsorcio`, `NaturezaAssociacao`, `NaturezaCondominio`) OU unificar em `NaturezaPorRegime { campo: string; valor: string }`
+- Service `classificar`: validar combinação tipoParceiro × natureza permitida
+- Frontend `useTipoParceiro` decide quais colunas renderizar
+- Regime stub `CONSORCIO/ASSOCIACAO/CONDOMINIO.regime.stub.ts` (CT.2) ganha implementação real
+- Apuração/DRE adaptadas (motor por regime — Walter valida cada um)
+
+**Base regulatória:** `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md` (53 KB, 4 regimes parecer subagent cooperebr-analista-conformidade).
+
+**Estimativa:** 30-50h Code dividido por regime (fatias separadas — só ativa quando 1º parceiro de cada tipo entrar). Walter precisa validar separadamente.
+
+**Bloqueia:** onboarding produção de Sinergia (consórcio anunciado) + qualquer outro parceiro não-COOPERATIVA.
+
+**Status:** 📋 Catalogado em 2026-06-01 (CT.8). Não bloqueia CoopereBR (é COOPERATIVA). Aciona quando 2º parceiro real for não-coop.
+
+---
+
+### D-novo-CT-PLANO-GLOBAL-VS-TENANT — Plano de Contas tem 28 globais (plataforma) vs 4 tenant — definir clonar/separar (P3 governança)
+
+**Origem:** CT.8 Fase 1 read-only (01/06/2026). SQL revelou 32 contas: 28 com `cooperativaId=null` (globais — seed CT.1 da plataforma) e 4 tenant-scoped (3 da CoopereBR + 1 da Teste, criadas pelo onModuleInit do `plano-contas.service`).
+
+**Comportamento atual:**
+- ADMIN da CoopereBR só classifica as 3 contas próprias (Guard sistêmico bloqueia globais)
+- SUPER_ADMIN classifica TODAS — mas isso significa que a classificação global se propaga pra todas as cooperativas
+- 22 contas estão pendentes de classificação (sem `naturezaContabil`)
+
+**Pergunta de governança (não-técnica):**
+- (A) Manter globais — SUPER_ADMIN classifica e vale pra todos os tenants. Vantagem: consistência fiscal. Desvantagem: se um parceiro discordar, não dá pra customizar.
+- (B) Clonar pra cada tenant na criação — cada cooperativa tem cópia editável. Vantagem: customização por parceiro. Desvantagem: duplicação + possível drift entre planos.
+- (C) Híbrido — globais como template + override por tenant quando necessário. Complexo de implementar.
+
+**Estimativa Code (depende da decisão):** (A) zero · (B) 4-6h migration + clone no onboarding · (C) 12-18h.
+
+**Status:** 📋 Catalogado em 2026-06-01 (CT.8). Não bloqueia — Walter pode classificar as globais como SUPER_ADMIN agora. Decisão A/B/C com Luciano + Walter quando entrar 2º parceiro real.
+
+---
+
 ### D-novo-CT-CONVENIO-HOOK — Convênio só cadastra; falta hook de movimento → LancamentoCaixa auxiliar (P2)
 
 **Origem:** PUX-A (01/06/2026 manhã). Ao criar páginas próprias `/convenios/novo` e `/[id]/editar` + HelpBox, ficou explícito (na documentação) que o **Convênio hoje é apenas registro/documentação** — não dispara `LancamentoCaixa` automático quando há movimento financeiro real do convênio.

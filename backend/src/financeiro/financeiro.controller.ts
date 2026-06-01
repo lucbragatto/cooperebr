@@ -3,7 +3,10 @@ import {
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { PlanoContasService } from './plano-contas.service';
+import { ClassificarContaDto } from './dto/classificar-conta.dto';
 import { LancamentosService } from './lancamentos.service';
 import { ContratosUsoService } from './contratos-uso.service';
 import { ConveniosService } from './convenios.service';
@@ -54,6 +57,34 @@ export class FinanceiroController {
   @Delete('plano-contas/:id')
   removePlanoContas(@Param('id') id: string, @Req() req: any) {
     return this.planoContasService.remove(id, req.user?.cooperativaId);
+  }
+
+  /**
+   * D-novo-CT-CT.8 (01/06/2026) — Classifica conta no plano segregado
+   * (naturezaContabil + naturezaCooperativa + fundamentoLegal).
+   *
+   * @TenantResource: Guard sistêmico bloqueia ADMIN antes de chegar ao service:
+   *  - Conta tenant-scoped: ADMIN só classifica se cooperativaId bater
+   *  - Conta global (cooperativaId=null): só SUPER_ADMIN (ADMIN -> 403)
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'planoContas', globalOnlySuperAdmin: true })
+  @AuditLog({
+    acao: 'financeiro.plano-contas.classificar',
+    recurso: 'PlanoContas',
+    recursoIdParam: 'id',
+  })
+  @Patch('plano-contas/:id/classificacao')
+  classificarPlanoContas(
+    @Param('id') id: string,
+    @Body() dto: ClassificarContaDto,
+    @Req() req: any,
+  ) {
+    // SUPER_ADMIN passa cooperativaId=undefined → service usa findOne (sem
+    // filtro de posse). ADMIN passa o próprio → service exige posse explícita.
+    const coopId =
+      req.user?.perfil === SUPER_ADMIN ? undefined : req.user?.cooperativaId;
+    return this.planoContasService.classificar(id, dto, coopId);
   }
 
   // ─── Lançamentos ───────────────────────────────────────────
