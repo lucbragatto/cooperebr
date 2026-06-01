@@ -161,12 +161,29 @@ export class ApuracaoService {
       sobrasLiquidas.minus(fundoReserva).minus(fatesDeSobras),
     );
 
+    // CT.7: enriquece preview com info do snapshot (se houver) pra UI
+    // decidir mostrar "Fechar" vs "Validar"/"Reabrir" sem chamar extra endpoint.
+    const snapshotExistente = await this.prisma.apuracaoMensalSegregada.findUnique({
+      where: { cooperativaId_ano_mes: { cooperativaId, ano, mes } },
+      select: {
+        id: true,
+        status: true,
+        validadoContador: true,
+        validadoEm: true,
+        fechadoEm: true,
+        fechadoPorUsuarioId: true,
+        reabertoEm: true,
+        observacaoContador: true,
+      },
+    });
+
     return {
       cooperativaId,
       cooperativaNome: coop.nome,
       ano,
       mes,
       competencia,
+      snapshot: snapshotExistente,
       receitaPropria: round2(agregados.receitaPropria),
       receitaAuxiliar: round2(agregados.receitaAuxiliar),
       receitaNaoCoop: round2(agregados.receitaNaoCoop),
@@ -487,12 +504,25 @@ export class ApuracaoService {
 // Tipos públicos
 // ============================================================
 
+export interface SnapshotInfo {
+  id: string;
+  status: StatusApuracao;
+  validadoContador: boolean;
+  validadoEm: Date | null;
+  fechadoEm: Date | null;
+  fechadoPorUsuarioId: string | null;
+  reabertoEm: Date | null;
+  observacaoContador: string | null;
+}
+
 export interface PreviewApuracao {
   cooperativaId: string;
   cooperativaNome: string;
   ano: number;
   mes: number;
   competencia: string;
+  /** CT.7: presente se já existe ApuracaoMensalSegregada (mesmo ABERTA). Null se mês intocado. */
+  snapshot: SnapshotInfo | null;
   receitaPropria: Prisma.Decimal;
   receitaAuxiliar: Prisma.Decimal;
   receitaNaoCoop: Prisma.Decimal;

@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { abrirPdf } from '@/lib/pdf-download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,12 +146,16 @@ export default function DresPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              window.open(
-                `/api/contabilidade-tributaria/relatorios/demonstrativo-nao-lucratividade?ano=${ano}&mes=${mes}`,
-                '_blank',
-              )
-            }
+            onClick={async () => {
+              try {
+                await abrirPdf({
+                  endpoint: 'contabilidade-tributaria/relatorios/demonstrativo-nao-lucratividade',
+                  params: { ano, mes },
+                });
+              } catch (e: any) {
+                setErro(e?.response?.data?.message ?? e?.message ?? 'Falha ao gerar PDF');
+              }
+            }}
           >
             <FileText className="h-3.5 w-3.5 mr-1" />
             PDF não-lucratividade
