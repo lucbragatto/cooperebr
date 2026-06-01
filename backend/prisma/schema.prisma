@@ -1188,6 +1188,7 @@ enum OrigemLancamento {
   CONTA_PAGAR  // hook ContaAPagar status=PAGO
   REPASSE      // hook RepasseProprietario marcarPago
   MANUAL       // lançamento manual via UI (sem idempotência cruzada)
+  CONVENIO     // CT.9 (01/06/2026) — movimento manual de Convênio (Art. 88 Auxiliar)
 }
 
 model LancamentoCaixa {
@@ -1216,6 +1217,10 @@ model LancamentoCaixa {
   contratoUso    ContratoUso?      @relation(fields: [contratoUsoId], references: [id])
   convenioId     String?
   convenio       ContratoConvenio? @relation(fields: [convenioId], references: [id])
+  // CT.9 (01/06/2026) — Convenio CT (contabilidade tributária Art. 88) é DISTINTO
+  // do ContratoConvenio legado (MLM). Relation nominada pra evitar colisão.
+  convenioContabilId String?
+  convenioContabil   Convenio?      @relation("LancamentoConvenioContabil", fields: [convenioContabilId], references: [id])
   observacoes          String?
   cooperativaId        String?
   // Sprint 9: contabilidade preparatória do Clube
@@ -2881,6 +2886,10 @@ model Convenio {
   observacoes         String?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+
+  // CT.9 (01/06/2026) — back-relation pra histórico de movimentos (lançamentos
+  // Auxiliar criados via POST /convenios/:id/movimentos).
+  lancamentos         LancamentoCaixa[]     @relation("LancamentoConvenioContabil")
 
   @@index([cooperativaId, ativo])
   @@index([cooperativaId, tipoBeneficio])

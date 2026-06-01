@@ -96,7 +96,7 @@ Empresa que administra vários condomínios. No SISGD vira `Administradora` com 
 
 Pessoa física ou jurídica representante de associação, sindicato, empresa. Faz convênio com CoopereBR pra trazer membros (Hangar é caso real). Recebe descontos progressivos conforme quantidade de membros ativos. Estrutura `ContratoConvenio` existe (53 KB no módulo `convenios`, 18 endpoints) mas **0 registros em produção**. 🟡
 
-#### 12. Walter — Contador (papel ainda não tem perfil próprio)
+#### 12. Luciano + orquestrador — Contador (papel ainda não tem perfil próprio)
 
 Contador externo da CoopereBR. Vai precisar acesso a DRE, conciliação bancária, fechamento de mês, livro caixa. **Nenhum desses existe ainda como tela** — só `LancamentoCaixa` no banco com 53 registros. 🔴
 

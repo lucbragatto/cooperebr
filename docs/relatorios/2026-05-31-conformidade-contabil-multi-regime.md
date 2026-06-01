@@ -23,7 +23,7 @@ Os quatro achados criticos (P0) que exigem decisao antes da implementacao sao:
 
 Alem dos P0, ha 28 achados P1-P3 distribuidos pelos 4 regimes, detalhados nas secoes seguintes.
 
-VALIDACAO EXTERNA RECOMENDADA antes de qualquer implementacao: contador Walter (classificacao de repasse ao proprietario de usina, regimes PIS/COFINS/IRRF por tipo de parceiro) + advogado tributarista (acompanhamento STF Tema 536, ICMS SCEE no ES) + advogado regulatorio ANEEL (sub-modalidades CONDOMINIO, Art. 655-P IV).
+VALIDACAO EXTERNA RECOMENDADA antes de qualquer implementacao: contador Luciano + orquestrador (classificacao de repasse ao proprietario de usina, regimes PIS/COFINS/IRRF por tipo de parceiro) + advogado tributarista (acompanhamento STF Tema 536, ICMS SCEE no ES) + advogado regulatorio ANEEL (sub-modalidades CONDOMINIO, Art. 655-P IV).
 
 ---
 
@@ -95,15 +95,15 @@ O repasse e despesa de ato nao cooperativo, NAO ato proprio. O default atual `CO
 | PROPRIA | N/A | Sem repasse externo | N/A |
 | CESSAO | Preenchido (cooperado) | Ato Proprio — Dispendio | 5.1.X Dispendio Operacional |
 | ALUGUEL | Nulo (terceiro) | Ato Nao Cooperativo — Despesa | 7.1 Despesa Arrendamento |
-| CESSAO | Nulo (terceiro nao-cooperado?) | AMBIGUO — bloquear ate Walter definir | — |
+| CESSAO | Nulo (terceiro nao-cooperado?) | AMBIGUO — bloquear ate Luciano + orquestrador definir | — |
 
-VALIDACAO EXTERNA OBRIGATORIA — Walter deve analisar os contratos reais de arrendamento (E-Solares e demais) antes de qualquer classificacao ser implementada.
+VALIDACAO EXTERNA OBRIGATORIA — Luciano + orquestrador deve analisar os contratos reais de arrendamento (E-Solares e demais) antes de qualquer classificacao ser implementada.
 
 **Cenario B — Cessao (dono e cooperado):**
 
-O repasse ao cooperado-proprietario e dispendio de ato proprio. Porem, mesmo sendo ato cooperativo, o pagamento de renda ao cooperado-pessoa-fisica pode sujeitar-se a IRRF na fonte se caracterizado como aluguel (rendimento de capital). Este ponto e controvertido na doutrina. VALIDACAO EXTERNA RECOMENDADA — Walter confirmar IRRF.
+O repasse ao cooperado-proprietario e dispendio de ato proprio. Porem, mesmo sendo ato cooperativo, o pagamento de renda ao cooperado-pessoa-fisica pode sujeitar-se a IRRF na fonte se caracterizado como aluguel (rendimento de capital). Este ponto e controvertido na doutrina. VALIDACAO EXTERNA RECOMENDADA — Luciano + orquestrador confirmar IRRF.
 
-Nota sobre NBC TG 06 (IFRS 16): contratos de arrendamento de usinas com prazo superior a 12 meses e valores significativos provavelmente exigem reconhecimento de ativo de direito de uso e passivo de arrendamento no balanco. VALIDACAO EXTERNA RECOMENDADA — Walter avalia obrigatoriedade para os contratos atuais da CoopereBR.
+Nota sobre NBC TG 06 (IFRS 16): contratos de arrendamento de usinas com prazo superior a 12 meses e valores significativos provavelmente exigem reconhecimento de ativo de direito de uso e passivo de arrendamento no balanco. VALIDACAO EXTERNA RECOMENDADA — Luciano + orquestrador avalia obrigatoriedade para os contratos atuais da CoopereBR.
 
 ### 2.7 Estado atual no SISGD e achados
 
@@ -111,14 +111,14 @@ Nota sobre NBC TG 06 (IFRS 16): contratos de arrendamento de usinas com prazo su
 |---|---|---|---|---|---|
 | C1 | `naturezaAto` e String livre, nao enum tipado | NAO CONFORME | P0 | NBC ITG 2004 item 6 + Art. 79 Lei 5.764/71 | Migrar para enum `NaturezaCooperativa {PROPRIO, AUXILIAR, NAO_COOPERATIVO}` — migracao em 2 passos com auditoria dos 53 lancamentos |
 | C2 | PIS/COFINS: nenhum motor de apuracao | NAO CONFORME | P0 | STF Tema 536 (julgamento em andamento) | Motor com isenção configuravel para PROPRIO; aliquota para NAO_COOPERATIVO; flag por parceiro |
-| C3 | IRPJ/CSLL: nenhuma apuracao do ato nao cooperativo | NAO CONFORME | P1 | Art. 87 Lei 5.764/71 + RIR/2018 Art. 182 | Implementar apuracao separada; Walter define regime e percentuais |
+| C3 | IRPJ/CSLL: nenhuma apuracao do ato nao cooperativo | NAO CONFORME | P1 | Art. 87 Lei 5.764/71 + RIR/2018 Art. 182 | Implementar apuracao separada; Luciano + orquestrador define regime e percentuais |
 | C4 | ICMS: sem motor de verificacao da ressalva SCEE | PARCIAL | P1 | STJ Tema 986 ressalva + TJMT/TJPR | Parametro configuravel por parceiro + alerta se ICMS incidir sobre compensacao |
 | C5 | FATES + Fundo de Reserva: sem contas no PlanoContas | NAO CONFORME | P0 | Art. 28 Lei 5.764/71 | Contas de PL especificas + motor de destinacao de sobras |
 | C6 | DRE: sem segregacao por natureza de ato | NAO CONFORME | P0 | NBC ITG 2004 item 12 | 3 DREs paralelas (ato proprio / auxiliar / nao cooperativo) + consolidada |
-| C7 | Repasse arrendamento: default `COOPERADO_PROPRIO` | CRITICO — risco simulacao fiscal | P0 | Art. 79 vs. Art. 86 Lei 5.764/71 | Automatizar via `formaAquisicao`; bloquear ate Walter assinar |
+| C7 | Repasse arrendamento: default `COOPERADO_PROPRIO` | CRITICO — risco simulacao fiscal | P0 | Art. 79 vs. Art. 86 Lei 5.764/71 | Automatizar via `formaAquisicao`; bloquear ate Luciano + orquestrador validamr |
 | C8 | Terminologia: "Receita/Despesa" para ato proprio | NAO CONFORME | P1 | NBC ITG 2004 itens 3 e 7 | Mudar para "Ingresso/Dispendio" no plano de contas e DRE |
 | C9 | IRRF sobre arrendamentos pagos | AUSENTE | P1 | RIR/2018 + Lei 15.270/2025 | Estender calculo de IRRF para pagamentos de arrendamento a PF/PJ |
-| C10 | NBC TG 06 (arrendamentos): nao avaliado | AUSENTE | P2 | NBC TG 06 / IFRS 16 | Walter avalia obrigatoriedade para contratos de usina |
+| C10 | NBC TG 06 (arrendamentos): nao avaliado | AUSENTE | P2 | NBC TG 06 / IFRS 16 | Luciano + orquestrador avalia obrigatoriedade para contratos de usina |
 
 ---
 
@@ -281,7 +281,7 @@ A LC 224/2025 (26/12/2025) reduziu beneficios tributarios de entidades sem fins 
 - Receitas de atividade propria: isentas (IN RFB 247/2002 Art. 47 — mensalidades e contribuicoes sem carater contraprestacional direto, recebidas de associados)
 - Receitas atipicas (servicos a nao-membros, rendimentos financeiros): COFINS 3%
 
-Risco para associacao de GD: o rateio mensal de custos de energia pode ser interpretado pela Receita Federal como "carater contraprestacional direto" (cobranca por servico mensuravel, nao mera mensalidade). Se essa interpretacao prevalecer, toda a receita seria tributavel a 3%. VALIDACAO EXTERNA RECOMENDADA — Walter deve verificar se a forma de cobranca esta documentada como "rateio de custos" (natureza de custeio associativo) e nao como "prestacao de servico de energia".
+Risco para associacao de GD: o rateio mensal de custos de energia pode ser interpretado pela Receita Federal como "carater contraprestacional direto" (cobranca por servico mensuravel, nao mera mensalidade). Se essa interpretacao prevalecer, toda a receita seria tributavel a 3%. VALIDACAO EXTERNA RECOMENDADA — Luciano + orquestrador deve verificar se a forma de cobranca esta documentada como "rateio de custos" (natureza de custeio associativo) e nao como "prestacao de servico de energia".
 
 **ISS:** nao incide sobre servicos prestados aos proprios membros; incide sobre servicos prestados a terceiros nao-membros.
 
@@ -373,7 +373,7 @@ Consequencia direta P0 para o SISGD: o modulo parametrizado para tipoParceiro = 
 
 **PIS/COFINS:** o condominio NAO e contribuinte de PIS/COFINS sobre suas "receitas" (nao ha receita — ha rateio de despesas). Porem, o condominio E obrigado a RETER PIS/COFINS/CSLL na fonte (4,65% = PIS 0,65% + COFINS 3% + CSLL 1%) quando pagar servicos a PJ, conforme Lei 10.833/2003 Art. 30 §1 IV (limpeza, conservacao, manutencao, seguranca, vigilancia, locacao de mao de obra, assessoria, gestao, servicos profissionais).
 
-Esta obrigacao e real e ausente do SISGD: o modulo ContaAPagar do parceiro CONDOMINIO precisa de campo de retencao quando o fornecedor for PJ prestadora dos servicos listados. VALIDACAO EXTERNA RECOMENDADA — Walter confirmar quais fornecedores especificos dos parceiros CONDOMINIO estao sujeitos a retencao (ex: empresa de O&M da usina solar e fornecedora sujeita a 4,65% se for PJ no regime nao-simples).
+Esta obrigacao e real e ausente do SISGD: o modulo ContaAPagar do parceiro CONDOMINIO precisa de campo de retencao quando o fornecedor for PJ prestadora dos servicos listados. VALIDACAO EXTERNA RECOMENDADA — Luciano + orquestrador confirmar quais fornecedores especificos dos parceiros CONDOMINIO estao sujeitos a retencao (ex: empresa de O&M da usina solar e fornecedora sujeita a 4,65% se for PJ no regime nao-simples).
 
 **ICMS:** o Convenio CONFAZ 16/2015 autoriza isencao de ICMS sobre energia compensada em autoconsumo local e remoto com fonte solar. Ha controversia sobre aplicacao a geracao compartilhada stricto sensu. O SISGD nao deve assumir isencao automatica para CONDOMINIO — depende de decreto estadual especifico. VALIDACAO EXTERNA RECOMENDADA — verificar decreto ES vigente.
 
@@ -519,7 +519,7 @@ Segundo mais simples conceitualmente (sem DRE cooperativa, sem fundos, sem ato c
 Motor PIS-Folha vs. Faturamento; motor COFINS por natureza de receita; Demonstracao das Atividades; validacao dos requisitos Art. 15 no onboarding.
 
 **Fase 5 — Template CONSORCIO (2 semanas):**
-A implementacao mais complexa estruturalmente (proporcionalidade por consorciada; subregistros proporcionais; empresa lider). Requer decisao de Luciano sobre Sinergia e validacao externa de Walter + advogado regulatorio ANEEL.
+A implementacao mais complexa estruturalmente (proporcionalidade por consorciada; subregistros proporcionais; empresa lider). Requer decisao de Luciano sobre Sinergia e validacao externa de Luciano + orquestrador + advogado regulatorio ANEEL.
 
 ### 7.4 Enums recomendados no schema
 
@@ -563,9 +563,9 @@ O campo `regimeContabil` na entidade Cooperativa/Parceiro deve ser derivado auto
 
 ### 8.1 Validacoes IMEDIATAS (antes de iniciar Sprint 8)
 
-**Walter (contador) — OBRIGATORIO antes da Fase 2 do Sprint 8:**
+**validação interna (Luciano + orquestrador) — OBRIGATORIO antes da Fase 2 do Sprint 8:**
 
-1. Classificacao do repasse ao proprietario de usina por arrendamento (E-Solares e demais): ato auxiliar ou ato nao cooperativo? Esta e a questao mais urgente (P0-3). Sem resposta de Walter, o default do sistema continua incorreto e representa risco de simulacao fiscal.
+1. Classificacao do repasse ao proprietario de usina por arrendamento (E-Solares e demais): ato auxiliar ou ato nao cooperativo? Esta e a questao mais urgente (P0-3). Sem resposta de Luciano + orquestrador, o default do sistema continua incorreto e representa risco de simulacao fiscal.
 
 2. Percentuais dos fundos FATES e Fundo de Reserva no Estatuto CoopereBR v3 (AGE 17/06/2026): iguais ao minimo legal (5% + 10%) ou superiores? O motor de destinacao de sobras precisa dessa informacao.
 
@@ -593,7 +593,7 @@ O campo `regimeContabil` na entidade Cooperativa/Parceiro deve ser derivado auto
 
 10. O Sinergia tem CNPJ proprio do consorcio ou opera pelos CNPJs das consorciadas? Determina modelo de emissao de notas fiscais e obrigacoes acessorias.
 
-**Walter + advogado tributarista:**
+**Luciano + orquestrador + advogado tributarista:**
 
 11. As consorciadas do Sinergia sao Lucro Real ou Lucro Presumido? Define aliquota PIS/COFINS aplicavel (1,65%+7,6% vs. 0,65%+3%).
 
@@ -603,7 +603,7 @@ O campo `regimeContabil` na entidade Cooperativa/Parceiro deve ser derivado auto
 
 ### 8.3 Validacoes antes de onboarding de ASSOCIACAO
 
-**Walter:**
+**Luciano + orquestrador:**
 
 14. Regime PIS-Folha confirmado para associacoes de GD em 2026? Confirmar que o PIS incide sobre a folha (1%), nao sobre o faturamento.
 
@@ -621,7 +621,7 @@ O campo `regimeContabil` na entidade Cooperativa/Parceiro deve ser derivado auto
 
 ### 8.4 Validacoes antes de onboarding de CONDOMINIO
 
-**Walter:**
+**Luciano + orquestrador:**
 
 19. Quais fornecedores especificos dos parceiros CONDOMINIO estao sujeitos a retencao de 4,65% (PIS/COFINS/CSLL na fonte)? Depende de: (a) o fornecedor ser PJ; (b) o fornecedor nao ser optante do Simples Nacional; (c) o servico estar listado no Art. 30 da Lei 10.833/2003.
 

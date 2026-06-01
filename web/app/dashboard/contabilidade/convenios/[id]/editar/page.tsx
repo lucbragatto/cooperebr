@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, FileCheck, Loader2 } from 'lucide-react';
 import { ConvenioForm, type ConvenioFormData } from '@/components/convenios/ConvenioForm';
 import { ConvenioHelp } from '@/components/convenios/ConvenioHelp';
+import { MovimentosConvenioSection } from '@/components/convenios/MovimentosConvenioSection';
 
 type ConvenioApi = {
   id: string;
@@ -90,19 +91,26 @@ export default function EditarConvenioPage() {
       )}
 
       {!loading && convenio && (
-        <ConvenioForm
-          inicial={{
-            nome: convenio.nome,
-            descricao: convenio.descricao ?? '',
-            fluxoFinanceiro: convenio.fluxoFinanceiro,
-            classificacaoFiscal: convenio.classificacaoFiscal,
-            vigenciaInicio: convenio.vigenciaInicio.slice(0, 10),
-            vigenciaFim: convenio.vigenciaFim ? convenio.vigenciaFim.slice(0, 10) : '',
-          }}
-          onSubmit={handleSubmit}
-          onCancel={() => router.push('/dashboard/contabilidade/convenios')}
-          textoSubmit="Salvar alterações"
-        />
+        <>
+          <ConvenioForm
+            inicial={{
+              nome: convenio.nome,
+              descricao: convenio.descricao ?? '',
+              fluxoFinanceiro: convenio.fluxoFinanceiro,
+              classificacaoFiscal: convenio.classificacaoFiscal,
+              vigenciaInicio: convenio.vigenciaInicio.slice(0, 10),
+              vigenciaFim: convenio.vigenciaFim ? convenio.vigenciaFim.slice(0, 10) : '',
+            }}
+            onSubmit={handleSubmit}
+            onCancel={() => router.push('/dashboard/contabilidade/convenios')}
+            textoSubmit="Salvar alterações"
+          />
+          <MovimentosConvenioSection
+            convenioId={convenio.id}
+            fluxoFinanceiro={convenio.fluxoFinanceiro}
+            nomeConvenio={convenio.nome}
+          />
+        </>
       )}
     </div>
   );

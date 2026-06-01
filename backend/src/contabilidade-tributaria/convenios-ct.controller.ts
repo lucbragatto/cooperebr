@@ -3,16 +3,20 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
   Req,
 } from '@nestjs/common';
 import { ConveniosCtService } from './convenios-ct.service';
+import { ContabilidadeTributariaService } from './contabilidade-tributaria.service';
 import { CreateConvenioDto } from './dto/create-convenio.dto';
 import { UpdateConvenioDto } from './dto/update-convenio.dto';
+import { RegistrarMovimentoConvenioDto } from './dto/registrar-movimento-convenio.dto';
 import { Roles } from '../auth/roles.decorator';
 import { TenantExempt, TenantResource } from '../auth/tenant-resource.decorator';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
@@ -32,7 +36,10 @@ const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
  */
 @Controller('contabilidade-tributaria/convenios')
 export class ConveniosCtController {
-  constructor(private readonly service: ConveniosCtService) {}
+  constructor(
+    private readonly service: ConveniosCtService,
+    private readonly contabilidade: ContabilidadeTributariaService,
+  ) {}
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()
@@ -90,5 +97,53 @@ export class ConveniosCtController {
       ? null
       : (req.user?.cooperativaId ?? null);
     return this.service.remove(id, cooperativaId);
+  }
+
+  /**
+   * D-novo-CT-CT.9 (01/06/2026) — Registrar movimento manual (Design A).
+   * Síncrono: cria LancamentoCaixa Auxiliar (Art. 88) na hora; erros sobem
+   * pra UI (mês fechado → ConflictException; não-coop → BadRequest).
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'convenio' })
+  @AuditLog({
+    acao: 'contabilidade.convenio.movimento',
+    recurso: 'Convenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(201)
+  @Post(':id/movimentos')
+  async registrarMovimento(
+    @Param('id') id: string,
+    @Body() dto: RegistrarMovimentoConvenioDto,
+    @Req() req: any,
+  ) {
+    const cooperativaId =
+      req.user?.perfil === SUPER_ADMIN
+        ? // SUPER_ADMIN sem tenant precisa impersonate — carrega o tenant do convênio
+          (await this.service.findOne(id, null)).cooperativaId
+        : req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new Error('cooperativaId não resolvido');
+    }
+    return this.contabilidade.criarLancamentoConvenio({
+      convenioId: id,
+      valor: dto.valor,
+      dataMovimento: new Date(dto.dataMovimento),
+      descricao: dto.descricao,
+      cooperativaId,
+    });
+  }
+
+  /**
+   * D-novo-CT-CT.9 (01/06/2026) — Histórico de movimentos do convênio.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, PerfilUsuario.OPERADOR)
+  @TenantResource({ model: 'convenio' })
+  @Get(':id/movimentos')
+  listarMovimentos(@Param('id') id: string, @Req() req: any) {
+    const cooperativaId =
+      req.user?.perfil === SUPER_ADMIN ? null : req.user?.cooperativaId ?? null;
+    return this.service.listarMovimentos(id, cooperativaId);
   }
 }

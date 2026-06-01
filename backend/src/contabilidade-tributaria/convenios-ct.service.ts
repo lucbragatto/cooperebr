@@ -96,4 +96,48 @@ export class ConveniosCtService {
     // Soft-delete (ativo=false) preserva histórico contábil
     return this.prisma.convenio.update({ where: { id }, data: { ativo: false } });
   }
+
+  /**
+   * D-novo-CT-CT.9 (01/06/2026) — Lista movimentos (LancamentoCaixa) deste
+   * convênio. Retorna ordenado por dataPagamento desc.
+   */
+  async listarMovimentos(convenioId: string, cooperativaId?: string | null) {
+    // Defesa em profundidade — confirma que o convênio é do tenant
+    if (cooperativaId) {
+      const exists = await this.prisma.convenio.findFirst({
+        where: { id: convenioId, cooperativaId },
+        select: { id: true },
+      });
+      if (!exists) throw new NotFoundException('Convenio não encontrado');
+    }
+    const movimentos = await this.prisma.lancamentoCaixa.findMany({
+      where: {
+        convenioContabilId: convenioId,
+        ...(cooperativaId ? { cooperativaId } : {}),
+      },
+      select: {
+        id: true,
+        tipo: true,
+        descricao: true,
+        valor: true,
+        competencia: true,
+        dataPagamento: true,
+        status: true,
+        naturezaAto: true,
+        createdAt: true,
+      },
+      orderBy: { dataPagamento: 'desc' },
+    });
+    return movimentos.map((m) => ({
+      id: m.id,
+      tipo: m.tipo as 'RECEITA' | 'DESPESA',
+      descricao: m.descricao,
+      valor: Number(m.valor),
+      competencia: m.competencia,
+      dataPagamento: m.dataPagamento,
+      status: m.status,
+      naturezaAto: m.naturezaAto,
+      createdAt: m.createdAt,
+    }));
+  }
 }

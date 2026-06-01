@@ -1,7 +1,7 @@
 # Auditoria 53 LancamentoCaixa legados — pré-migration enum NaturezaCooperativa (31/05/2026)
 
 > Gerada pelo script `backend/scripts/audit-lancamentos-legados-ct.ts` (read-only, NÃO alterou nenhum dado).
-> **Destino:** Walter (contador externo) — validação antes de promover `naturezaAto String → enum NaturezaCooperativa` (Sprint Contabilidade Tributária CT.1).
+> **Destino:** Luciano + orquestrador (contador externo) — validação antes de promover `naturezaAto String → enum NaturezaCooperativa` (Sprint Contabilidade Tributária CT.1).
 > **Regra CLAUDE.md:** auditoria obrigatória antes de qualquer migration de mudança de tipo (String → Enum). Item A do checklist de segurança de migrations.
 
 ---
@@ -14,7 +14,7 @@
 | Distribuição **atual** `naturezaAto` (String livre) | COOPERADO_PROPRIO=58 |
 | Distribuição **inferida** (parecer conformidade) | INDETERMINADO=3 / PROPRIO=55 |
 | Confiança da inferência | INSPECIONAR=3 / ALTA=55 |
-| Linhas que **precisam validação Walter** | 3/58 |
+| Linhas que **precisam validação fiscal interna (Luciano + orquestrador)** | 3/58 |
 | **Divergências REAIS** (atual normalizado ≠ inferida, fora de INDETERMINADO) | 0 |
 
 > **Nota sobre divergência:** `COOPERADO_PROPRIO` (String legado) → `PROPRIO` (enum) é renomeação esperada na migration, NÃO divergência. Só conta como divergência real quando a inferência aponta classificação diferente de PROPRIO (ex: AUXILIAR ou NAO_COOPERATIVO).
@@ -25,8 +25,8 @@ Baseados no parecer do subagent `cooperebr-analista-conformidade` (Sprint CT Fas
 
 1. **PROPRIO** — Cooperado-associado ativo (tipo `COM_UC` / `SEM_UC` / `COM_USINA_PROPRIA`) ou despesa operacional de usina (Art. 79 + STF Tema 536). Confiança ALTA.
 2. **NAO_COOPERATIVO** — Cooperado tipo `USUARIO_CARREGADOR` (sem vínculo cooperativo formal). Confiança ALTA.
-3. **AUXILIAR** — Repasse/arrendamento a proprietário externo OU vínculo com ContratoConvenio (Art. 88 Lei 5.764/71). Confiança MEDIA — Walter valida se contrato cumpre requisitos.
-4. **INDETERMINADO** — PIX Excedente, ContratoUso (carregador EV), ou sem fonte rastreável. Confiança INSPECIONAR — Walter analisa caso-a-caso.
+3. **AUXILIAR** — Repasse/arrendamento a proprietário externo OU vínculo com ContratoConvenio (Art. 88 Lei 5.764/71). Confiança MEDIA — Luciano + orquestrador validam se contrato cumpre requisitos.
+4. **INDETERMINADO** — PIX Excedente, ContratoUso (carregador EV), ou sem fonte rastreável. Confiança INSPECIONAR — Luciano + orquestrador analisa caso-a-caso.
 
 **Riscos endereçados pelo parecer:**
 - Risco 1 (CRÍTICO): perda total isenção PIS/COFINS por falta de segregação — esta auditoria estabelece a baseline.
@@ -34,7 +34,7 @@ Baseados no parecer do subagent `cooperebr-analista-conformidade` (Sprint CT Fas
 
 ## 3. Inventário completo (58 linhas)
 
-| # | id | data | tipo | valor | Natureza ATUAL | Natureza INFERIDA | Confiança | Walter? | Fonte da inferência | Descrição |
+| # | id | data | tipo | valor | Natureza ATUAL | Natureza INFERIDA | Confiança | Luciano + orquestrador? | Fonte da inferência | Descrição |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `cmn7rvxai000…` | 2026-03-26 | RECEITA | 1531.8 | COOPERADO_PROPRIO | **INDETERMINADO** | INSPECIONAR | ⚠️ SIM | nenhuma | Recebimento mensalidade - Carlos Eduardo Pereira - 03/2026 |
 | 2 | `cmn7rvxvx000…` | 2026-03-26 | RECEITA | 1021.2 | COOPERADO_PROPRIO | **PROPRIO** | ALTA | não | cooperado.tipoCooperado | Recebimento mensalidade - Beatriz Santos Lima - 03/2026 |
@@ -95,7 +95,7 @@ Baseados no parecer do subagent `cooperebr-analista-conformidade` (Sprint CT Fas
 | 57 | `cmp5i9bnn000…` | 2026-06-12 | RECEITA | 1011.33 | COOPERADO_PROPRIO | **PROPRIO** | ALTA | não | cooperado.tipoCooperado | Mensalidade - THEOMAX COMERCIO DE CALCADOS E ACESSORIOS LTDA… |
 | 58 | `cmp704sk3000…` | 2026-06-14 | RECEITA | 979.2 | COOPERADO_PROPRIO | **PROPRIO** | ALTA | não | cooperado.tipoCooperado | Mensalidade - Associação dos Magistrados do Espírito Santo -… |
 
-## 4. Linhas que PRECISAM validação Walter (3)
+## 4. Linhas que PRECISAM validação fiscal interna (Luciano + orquestrador) (3)
 
 | # | id | data | valor | Inferida | Motivo |
 |---|---|---|---|---|---|
@@ -105,15 +105,15 @@ Baseados no parecer do subagent `cooperebr-analista-conformidade` (Sprint CT Fas
 
 ## 5. Divergências REAIS (atual normalizado ≠ inferida, fora de INDETERMINADO) — 0
 
-_**Nenhuma divergência real.** Todos os lançamentos com inferência ALTA confiança batem com o valor atual (`COOPERADO_PROPRIO` → `PROPRIO` é renomeação enum esperada). Apenas as 3 linhas marcadas Walter precisam validação manual._
+_**Nenhuma divergência real.** Todos os lançamentos com inferência ALTA confiança batem com o valor atual (`COOPERADO_PROPRIO` → `PROPRIO` é renomeação enum esperada). Apenas as 3 linhas marcadas Luciano + orquestrador precisam validação manual._
 
 ## 6. Plano de promoção String → enum (proposto)
 
-**Passo 1 — UPDATE de normalização (após validação Walter):**
+**Passo 1 — UPDATE de normalização (após validação fiscal interna (Luciano + orquestrador)):**
 
 1. Para cada linha de confiança **ALTA**, aplicar a inferência automaticamente.
-2. Para cada linha **MEDIA**, conferir com Walter antes de aplicar.
-3. Para cada linha **INSPECIONAR** (INDETERMINADO), Walter define caso-a-caso.
+2. Para cada linha **MEDIA**, conferir com Luciano + orquestrador antes de aplicar.
+3. Para cada linha **INSPECIONAR** (INDETERMINADO), Luciano + orquestrador define caso-a-caso.
 
 **Passo 2 — ALTER TYPE (após 100% das linhas terem valor válido do enum):**
 

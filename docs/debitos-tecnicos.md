@@ -10,39 +10,39 @@
 
 ## P0 — Bloqueia produção real (descoberto sessão claude.ai 30/04)
 
-### D-novo-CT-GATE-WALTER — Gate Walter (contabilidade) bloqueia uso fiscal real da estrutura CT (P0 bloqueador produção contábil)
+### D-novo-CT-VALIDACAO-FISCAL — Gate de validação fiscal (contabilidade) bloqueia uso fiscal real da estrutura CT (P0 bloqueador produção contábil)
 
 **Severidade:** P0 — bloqueia produção fiscal real (DCTF / SPED / declaração)
 **Detectado em:** 2026-05-31 — Sprint CT.4 (concepção do gate) + CT.6 (estrutura completa entregue 31/05)
-**Impacto:** estrutura técnica do Sprint Contabilidade Tributária (CT.1→CT.6) está 100% pronta, **mas os números calculados pelo motor NÃO podem virar valor fiscal real** até o contador (Walter) validar.
+**Impacto:** estrutura técnica do Sprint Contabilidade Tributária (CT.1→CT.6) está 100% pronta, **mas os números calculados pelo motor NÃO podem virar valor fiscal real** até o validação interna (Luciano + orquestrador) validar.
 
-**O que Walter precisa validar antes de produção contábil:**
+**O que Luciano + orquestrador precisa validar antes de produção contábil:**
 
-1. **Alíquotas/presunção em `ConfiguracaoTributaria`** (defaults Lucro Presumido — `irpjPercentualPresuncao=0.32` + `csllPercentualPresuncao=0.32` são chute conservador genérico; SCEE/energia pode ter % diferente). Walter ajusta via UI `/dashboard/contabilidade` (futuro com Polimento UX) ou direto via endpoint.
+1. **Alíquotas/presunção em `ConfiguracaoTributaria`** (defaults Lucro Presumido — `irpjPercentualPresuncao=0.32` + `csllPercentualPresuncao=0.32` são chute conservador genérico; SCEE/energia pode ter % diferente). Luciano + orquestrador ajustam via UI `/dashboard/contabilidade` (futuro com Polimento UX) ou direto via endpoint.
 2. **Classificação dos repasses por `formaAquisicao`** — regra "ALUGUEL=NAO_COOPERATIVO / CESSAO=PROPRIO / PROPRIA=PROPRIO" está hardcoded em `regimes/cooperativo.regime.ts`. Confirmar coerência com parecer contábil real.
-3. **10 contas seed do plano de contas segregado** — `naturezaContabil` + `naturezaCooperativa` + `fundamentoLegal` em cada conta. Walter confirma se classificação está correta pra atividade real da CoopereBR.
-4. **10 lançamentos amostrais com flag `validadoContador=false`** — Walter passa em cima dos primeiros lançamentos reais que vão entrar em produção, confirma classificação e marca como validados via endpoint `PUT /apuracao/:id/validar`.
-5. **Flag `Cooperativa.isencaoPisCofinsAtiva`** — STF Tema 536 em julgamento mai/jun 2026. Walter decide se mantém `true` (PIS/COFINS sobre próprio = isento, posição STF atual) ou `false` (calcula PIS/COFINS sobre próprio caso STF reverta). **Advogado também acompanha o tema.**
+3. **10 contas seed do plano de contas segregado** — `naturezaContabil` + `naturezaCooperativa` + `fundamentoLegal` em cada conta. Luciano + orquestrador confirma se classificação está correta pra atividade real da CoopereBR.
+4. **10 lançamentos amostrais com flag `validadoContador=false`** — Luciano + orquestrador passa em cima dos primeiros lançamentos reais que vão entrar em produção, confirma classificação e marca como validados via endpoint `PUT /apuracao/:id/validar`.
+5. **Flag `Cooperativa.isencaoPisCofinsAtiva`** — STF Tema 536 em julgamento mai/jun 2026. Luciano + orquestrador decide se mantém `true` (PIS/COFINS sobre próprio = isento, posição STF atual) ou `false` (calcula PIS/COFINS sobre próprio caso STF reverta). **Advogado também acompanha o tema.**
 
 **Onde está catalogado tecnicamente:**
 
 - Todos os snapshots `ApuracaoMensalSegregada` nascem com `validadoContador=false`
-- Todos os PDFs (Demonstrativo Não-Lucratividade + Memorial Cálculo Fiscal + Demonstrativo Repasses) saem com watermark "PENDENTE VALIDAÇÃO CONTADOR" + banner em destaque
+- Todos os PDFs (Demonstrativo Não-Lucratividade + Memorial Cálculo Fiscal + Demonstrativo Repasses) saem com watermark "PENDENTE VALIDAÇÃO FISCAL" + banner em destaque
 - DREs (4 visões) retornam `avisoValidacao` destacado enquanto não validados
-- `ConfiguracaoTributaria` tem flag própria `validadoContador` (Walter valida defaults antes de virar valor fiscal real)
+- `ConfiguracaoTributaria` tem flag própria `validadoContador` (Luciano + orquestrador validam defaults antes de virar valor fiscal real)
 
 **Como destravar:**
 
-1. Walter (contador) faz reunião dedicada de revisão dos pontos 1-5 acima
-2. Walter valida via endpoint `PUT /contabilidade-tributaria/apuracao/:id/validar` (ADMIN+SA + AuditLog)
-3. Snapshot vira oficial — DREs/PDFs trocam badge "PENDENTE" → "VALIDADO PELO CONTADOR <data>"
+1. validação interna (Luciano + orquestrador) faz reunião dedicada de revisão dos pontos 1-5 acima
+2. Luciano + orquestrador validam via endpoint `PUT /contabilidade-tributaria/apuracao/:id/validar` (ADMIN+SA + AuditLog)
+3. Snapshot vira oficial — DREs/PDFs trocam badge "PENDENTE" → "VALIDADO INTERNAMENTE <data>"
 4. Aí pode usar pra DCTF / SPED / declaração fiscal real
 
-**Estimativa Code (uma vez Walter validar):** 0h — código já pronto, é só clicar.
+**Estimativa Code (uma vez Luciano + orquestrador validamr):** 0h — código já pronto, é só clicar.
 
-**Estimativa Walter:** sessão dedicada 2-4h dele + 1-2h Code com ele pra UX (Polimento UX já vai cobrir).
+**Estimativa Luciano + orquestrador:** sessão dedicada 2-4h dele + 1-2h Code com ele pra UX (Polimento UX já vai cobrir).
 
-**Status:** 📋 Catalogado em 2026-05-31. Aguarda agendamento Walter.
+**Status:** 📋 Catalogado em 2026-05-31. Aguarda agendamento Luciano + orquestrador.
 
 ---
 
@@ -1207,7 +1207,7 @@ Idealmente fazer junto com Sprint 13a Dia 2 (lista de parceiros vai exigir ajust
 
 **Origem:** `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md` Seção 5 "Painéis necessários por papel"
 
-**Tema:** extrair especificação operacional de 6 painéis (Luciano, Marcos, Ana, Carlos, Helena+Patrícia, Walter) pra `docs/PAINEIS-POR-PAPEL.md` (novo arquivo) ou Apêndice E em PRODUTO.md.
+**Tema:** extrair especificação operacional de 6 painéis (Luciano, Marcos, Ana, Carlos, Helena+Patrícia, Luciano + orquestrador) pra `docs/PAINEIS-POR-PAPEL.md` (novo arquivo) ou Apêndice E em PRODUTO.md.
 
 **Persona/caso de uso:** catalogar sprints futuros de UX/UI por persona. Cada painel não-implementado = sprint potencial.
 
@@ -2416,13 +2416,13 @@ Tenant SEMPRE vence se existir, independente de ordem. Comportamento explícito 
 
 ### D-novo-Q — Contatos Teste persistentes em banco + tela SUPER_ADMIN (P2 — aprovado, aguarda janela)
 
-**Severidade:** P2 (operacional — hoje funciona pra Luciano via hardcoded, mas não escala pra Sinergia / Walter contador / QA externo)
+**Severidade:** P2 (operacional — hoje funciona pra Luciano via hardcoded, mas não escala pra Sinergia / Luciano + orquestrador contador / QA externo)
 **Detectado em:** 2026-05-19 tarde (Luciano aprovou escopo completo)
 **Memória detalhada:** `~/.claude/projects/C--Users-Luciano-cooperebr/memory/debito_d_novo_q_contatos_teste_persistentes_19_05.md`
 
 **Problema atual:**
 Hardcoded em `backend/src/common/safety/whitelist-teste.ts` desde fix D-novo-N (18/05): telefone `27981341348` + email `lucbragatto+homologado@gmail.com`. Funciona pra Luciano, mas:
-- Não escala (Sinergia futura, Walter contador, QA externo)
+- Não escala (Sinergia futura, Luciano + orquestrador contador, QA externo)
 - Mudança de número exige rebuild + deploy
 - Não auditável (quem usou contato teste quando?)
 - Não permite múltiplos canais de QA simultâneos
@@ -3923,11 +3923,11 @@ Criar `scripts/lint-ux.ts`:
 - Service `classificar`: validar combinação tipoParceiro × natureza permitida
 - Frontend `useTipoParceiro` decide quais colunas renderizar
 - Regime stub `CONSORCIO/ASSOCIACAO/CONDOMINIO.regime.stub.ts` (CT.2) ganha implementação real
-- Apuração/DRE adaptadas (motor por regime — Walter valida cada um)
+- Apuração/DRE adaptadas (motor por regime — Luciano + orquestrador validam cada um)
 
 **Base regulatória:** `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md` (53 KB, 4 regimes parecer subagent cooperebr-analista-conformidade).
 
-**Estimativa:** 30-50h Code dividido por regime (fatias separadas — só ativa quando 1º parceiro de cada tipo entrar). Walter precisa validar separadamente.
+**Estimativa:** 30-50h Code dividido por regime (fatias separadas — só ativa quando 1º parceiro de cada tipo entrar). Luciano + orquestrador precisa validar separadamente.
 
 **Bloqueia:** onboarding produção de Sinergia (consórcio anunciado) + qualquer outro parceiro não-COOPERATIVA.
 
@@ -3935,29 +3935,55 @@ Criar `scripts/lint-ux.ts`:
 
 ---
 
-### D-novo-CT-PLANO-GLOBAL-VS-TENANT — Plano de Contas tem 28 globais (plataforma) vs 4 tenant — definir clonar/separar (P3 governança)
+### D-novo-CT-PLANO-GLOBAL-VS-TENANT — Plano de Contas: clonar globais → tenant no onboarding (P2 — decisão B aprovada 01/06; Sessão Luciano + orquestrador)
 
-**Origem:** CT.8 Fase 1 read-only (01/06/2026). SQL revelou 32 contas: 28 com `cooperativaId=null` (globais — seed CT.1 da plataforma) e 4 tenant-scoped (3 da CoopereBR + 1 da Teste, criadas pelo onModuleInit do `plano-contas.service`).
+**Origem:** CT.8 Fase 1 read-only (01/06/2026). SQL revelou 32 contas: 28 com `cooperativaId=null` (globais — seed CT.1 da plataforma) e 4 tenant-scoped.
 
-**Comportamento atual:**
-- ADMIN da CoopereBR só classifica as 3 contas próprias (Guard sistêmico bloqueia globais)
-- SUPER_ADMIN classifica TODAS — mas isso significa que a classificação global se propaga pra todas as cooperativas
-- 22 contas estão pendentes de classificação (sem `naturezaContabil`)
+**Decisão Luciano 01/06/2026 noite — Opção B aprovada:**
 
-**Pergunta de governança (não-técnica):**
-- (A) Manter globais — SUPER_ADMIN classifica e vale pra todos os tenants. Vantagem: consistência fiscal. Desvantagem: se um parceiro discordar, não dá pra customizar.
-- (B) Clonar pra cada tenant na criação — cada cooperativa tem cópia editável. Vantagem: customização por parceiro. Desvantagem: duplicação + possível drift entre planos.
-- (C) Híbrido — globais como template + override por tenant quando necessário. Complexo de implementar.
+> Cada parceiro tem o próprio plano (clone do template global no momento do onboarding). Admin + contador do parceiro classificam o próprio plano completo. As contas globais permanecem como **template imutável** da plataforma — só usadas no clone inicial.
 
-**Estimativa Code (depende da decisão):** (A) zero · (B) 4-6h migration + clone no onboarding · (C) 12-18h.
+**Por que B venceu (A/C descartadas):**
+- A "manter globais compartilhadas" → se Luciano + orquestrador da CoopereBR classifica conta `2.4.01 Fundo de Reserva` como `FUNDOS_OBRIGATORIOS+PROPRIO`, vale igual pra todas — mas cooperativas com estatutos diferentes podem precisar de fundamentos legais distintos. Inviável de defender fiscalmente caso a caso.
+- C "híbrido com override" → complexidade alta + UI confusa ("essa conta tá vindo do global ou do override?").
+- B "clone por tenant" → cada cooperativa é dona do próprio plano. Customização total. Auditoria limpa (clone na criação registrada). Luciano + orquestrador classifica plano completo, não fica fragmentado entre globais+próprias.
 
-**Status:** 📋 Catalogado em 2026-06-01 (CT.8). Não bloqueia — Walter pode classificar as globais como SUPER_ADMIN agora. Decisão A/B/C com Luciano + Walter quando entrar 2º parceiro real.
+**O que falta implementar:**
+- Migration aditiva: bandeira `Cooperativa.planoClonado: Boolean @default(false)` (rastreia se já foi feito).
+- Service `clonarPlanoContas(cooperativaId)`: copia as 28 globais (`cooperativaId=null`) criando réplicas tenant-scoped (mesma estrutura, sem classificação herdada — fica em branco pra Luciano + orquestrador classificar). Idempotente (skip se `planoClonado=true`).
+- Hook no onboarding (criação de Cooperativa): chama `clonarPlanoContas` automaticamente.
+- Backfill pras 4 cooperativas existentes (CoopereBR, CoopereBR Teste, TESTE-FASE-B5, BR F0 B): script `npx ts-node scripts/clonar-plano-contas-backfill.ts` (idempotente).
+- Frontend `/dashboard/contabilidade/plano-contas`: passa a mostrar **só contas do tenant** (já filtra via `findAll(cooperativaId)` no service — mas SUPER_ADMIN hoje vê tudo; ajustar pra mostrar contas do tenant impersonado OU lista todas + indicador de qual cooperativa).
+- Catalogar globais como "templates" (talvez tela separada `/dashboard/super-admin/templates-plano-contas` só pra SUPER_ADMIN ver/editar templates futuros).
+
+**Amarrar com:** [D-novo-CT-MULTI-REGIME-CLASSIFICACAO](#d-novo-ct-multi-regime-classificacao--plano-de-contas--naturezas-pr%C3%B3prias-pra-consorcioassociacaocondominio-p1-parte-multi-regime) (P1) — **Sessão de Validação Fiscal Interna** vai cobrir os 2 simultaneamente: (a) clone do plano + classificação da CoopereBR (Luciano + orquestrador validam 32 contas reais, não 4) + (b) decisão sobre naturezas próprias pra CONSORCIO/ASSOC/CONDOMINIO quando aparecer 2º parceiro.
+
+**Estimativa Code:** 4-6h (migration + service + hook + backfill + ajuste UI).
+
+**Prioridade:** **P2** — não bloqueia onboarding técnico de 2º parceiro (sistema funciona), mas bloqueia operação fiscal completa (Luciano + orquestrador precisa classificar plano fragmentado hoje).
+
+**Status:** 📋 Catalogado 2026-06-01 (CT.8). Decisão B aprovada 01/06 noite. Implementação na **Sessão Contabilidade Luciano + orquestrador** (junto com CT-MULTI-REGIME-CLASSIFICACAO + validação alíquotas/presunção + flag isencao PIS/COFINS).
 
 ---
 
-### D-novo-CT-CONVENIO-HOOK — Convênio só cadastra; falta hook de movimento → LancamentoCaixa auxiliar (P2)
+### D-novo-CT-CONVENIO-HOOK — ✅ RESOLVIDO (Design A — CT.9, 01/06/2026 noite)
 
-**Origem:** PUX-A (01/06/2026 manhã). Ao criar páginas próprias `/convenios/novo` e `/[id]/editar` + HelpBox, ficou explícito (na documentação) que o **Convênio hoje é apenas registro/documentação** — não dispara `LancamentoCaixa` automático quando há movimento financeiro real do convênio.
+**Resolução:** Sprint CT.9 — endpoint manual `POST /contabilidade-tributaria/convenios/:id/movimentos` (botão "Registrar movimento" no Dialog Tipo C da página de edição do convênio). Admin lança valor + data + descrição; backend deriva sentido (RECEITA/DESPESA) do `Convenio.fluxoFinanceiro`, classifica como AUXILIAR via regime cooperativo CT.2 (com ENFORCEMENT P0-1 — só COOPERATIVA, citando D-novo-CT-MULTI-REGIME-CLASSIFICACAO se outro regime), grava `LancamentoCaixa{origemTipo=CONVENIO, convenioContabilId, naturezaAto=AUXILIAR}`. Gate apuração FECHADA bloqueia retroativo (CT.4 reusado). Síncrono — erro sobe pra UI (não fire-and-forget).
+
+**Schema delta (aditivo, db push idempotente):**
+- `enum OrigemLancamento += CONVENIO`
+- `LancamentoCaixa.convenioContabilId String?` + relation `convenioContabil Convenio? @relation("LancamentoConvenioContabil")` — distinta do legado `convenioId → ContratoConvenio` MLM
+- `Convenio.lancamentos LancamentoCaixa[] @relation("LancamentoConvenioContabil")` back-relation
+
+**Frontend:** seção "Movimentos (lançamentos Auxiliar)" em `/dashboard/contabilidade/convenios/[id]/editar` via `<MovimentosConvenioSection>` reusável + `<HelpBox>` (PUX-A) com texto neutro + tabela histórico + Dialog Tipo C "Registrar movimento" (regra esclarecida 01/06 — ação simples OK em Dialog).
+
+**Designs B/C ficam como evolução futura** (catalogados, não implementados):
+- **(B) Hook auto-dispara em Cobranca/ContaAPagar com `convenioId` opcional** — não prioritário; exigiria UI complexa pra escolher convênio na hora de baixar cobrança/conta. Útil só quando ≥10 convênios ativos por tenant.
+- **(C) Cron mensal lê convênios ativos + gera lançamentos baseado em valores configurados** — útil quando houver convênios recorrentes (ex: aporte EDP mensal fixo). Hoje 0 convênios com esse perfil.
+
+**Original (preservado pra contexto pré-CT.9):**
+
+**Origem:** PUX-A (01/06/2026 manhã). Ao criar páginas próprias `/convenios/novo` e `/[id]/editar` + HelpBox, ficou explícito (na documentação) que o **Convênio era apenas registro/documentação** — não disparava `LancamentoCaixa` automático.
 
 **Estado atual:**
 - ✅ Schema `Convenio` (CT.2) com `tipoBeneficio` + `fluxoFinanceiro` + `classificacaoFiscal` + vigência
@@ -3978,7 +4004,7 @@ Criar `scripts/lint-ux.ts`:
 
 **Estimativa:** 3-4h Code (mesma estrutura do CT.3 com adaptação ao fluxo).
 
-**Bloqueia:** não bloqueia produção (Walter pode lançar manualmente como Auxiliar). Bloqueia automação completa de classificação Auxiliar nas DREs/Apuração quando houver movimento real de convênio.
+**Bloqueia:** não bloqueia produção (Luciano + orquestrador pode lançar manualmente como Auxiliar). Bloqueia automação completa de classificação Auxiliar nas DREs/Apuração quando houver movimento real de convênio.
 
 **Prioridade:** **P2** — só ativa quando primeiro convênio real entrar em produção (hoje 0 convênios cadastrados).
 
@@ -4007,7 +4033,7 @@ Criar `scripts/lint-ux.ts`:
 
 **Bloqueia:** não bloqueia produção (cancelamento Asaas já existe); só fecha o gap operacional de "errou na baixa".
 
-**Prioridade:** **P2** — não bloqueia, mas necessário pra Walter validar contabilidade (poder corrigir erros operacionais sem ter que mexer no banco direto).
+**Prioridade:** **P2** — não bloqueia, mas necessário pra Luciano + orquestrador validamr contabilidade (poder corrigir erros operacionais sem ter que mexer no banco direto).
 
 **Status:** 📋 Catalogado em 2026-05-31 noite (smoke pós-CT.6 Luciano).
 

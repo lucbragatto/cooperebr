@@ -3,7 +3,7 @@
 **Status:** 🟢 APROVADO em 17/05/2026 (Luciano) — aguarda execução na posição #8 do roadmap
 **Estimativa:** 61h Code em 4 fases
 **Origem:** memória persistente `sprint_contabilidade_cooperativa_segregada_16_05.md` (catalogada 16/05/2026 noite)
-**Audiência:** Luciano (não-programador), Code (executor), contador externo (Walter — validação Fase 1)
+**Audiência:** Luciano (não-programador), Code (executor), contador externo (Luciano + orquestrador — validação Fase 1)
 
 ---
 
@@ -293,7 +293,7 @@ throw new BadRequestException(
 | Foco | Qualquer parceiro | COOPERATIVA + ASSOCIAÇÃO sem fins lucrativos |
 | Cobre | DRE consolidada simples + conciliação BB/Sicoob + fechamento mensal | NaturezaContabil + Convênios segregados + 3 DREs paralelas + relatórios fiscais defensáveis |
 | Estimativa | 2-3 semanas | 61h Code (4 fases) |
-| Pré-requisito | Walter (contador externo) precisa fechar abr/2026 | Reforma Estatutária CoopereBR 17/06/2026 (Art. 11 §§ 1º-3º exige segregação) |
+| Pré-requisito | Luciano + orquestrador (contador externo) precisa fechar abr/2026 | Reforma Estatutária CoopereBR 17/06/2026 (Art. 11 §§ 1º-3º exige segregação) |
 | Cobre tributário? | Não diretamente | Sim — isenções STF Tema 536 + ressalva STJ Tema 986 |
 | Cobre SPED/NF3e? | Não | Não — vai pra Sprint Compliance Fiscal separado (futuro) |
 
@@ -340,7 +340,7 @@ throw new BadRequestException(
 
 | # | Decisão | Status | Responsável |
 |---|---|---|---|
-| 1 | Validação plano de contas modelo cooperativo | 🟡 Pendente — ocorre na Fase 1 antes da migration | Walter (contador) + Luciano |
+| 1 | Validação plano de contas modelo cooperativo | 🟡 Pendente — ocorre na Fase 1 antes da migration | validação interna (Luciano + orquestrador) + Luciano |
 | 2 | Tipos de benefício suportados inicialmente | ✅ **APROVADO 17/05/2026: APENAS ENERGIA_SCEE** | Luciano |
 | 3 | Integração com sistemas contábeis externos | ✅ **APROVADO 17/05/2026: separado em Sprint Compliance Fiscal próprio** | Luciano |
 | 4 | Posição no roadmap | ✅ **APROVADO 17/05/2026: #8 mantida** | Luciano |

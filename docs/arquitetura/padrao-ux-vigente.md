@@ -38,7 +38,7 @@ Banner help padronizado (azul claro + ícone + título + lista de bullets + dica
     "Ato não-coop (Art. 86): terceiros, tributado Lucro Presumido",
     "Fundos (Art. 28): FR 10% + FATES 5% sobre sobras",
   ]}
-  dicaOpcional="Gate Walter: números calculados pelo motor não viram fiscal real até o contador validar."
+  dicaOpcional="Gate de validação fiscal: números calculados pelo motor não viram fiscal real até o contador validar."
   variante="info" // 'info' | 'warning'
 />
 ```

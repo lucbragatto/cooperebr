@@ -1,5 +1,5 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { NaturezaCooperativa, OrigemLancamento, Prisma } from '@prisma/client';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { NaturezaCooperativa, OrigemLancamento, Prisma, TipoRegimeContabil } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { runAsPlatform } from '../common/tenant-context';
 import { RegimeContabilFactory } from './regimes/regime.factory';
@@ -93,6 +93,131 @@ export class ContabilidadeTributariaService {
     });
   }
 
+  /**
+   * D-novo-CT-CT.9 (01/06/2026) — Cria LancamentoCaixa AUXILIAR a partir
+   * de um movimento manual de Convênio (Art. 88 Lei 5.764/71).
+   *
+   * SÍNCRONO (NÃO fire-and-forget — é ação direta do usuário). Erros sobem
+   * pro caller propagar à UI (gate apuração FECHADA → ConflictException
+   * com mensagem legível; P0-1 multi-regime → BadRequest).
+   *
+   * Sentido do lançamento derivado de `Convenio.fluxoFinanceiro`:
+   *  - INGRESSO_CUSTEIO_AUXILIAR → tipo=RECEITA (entrada)
+   *  - REPASSE_PROVEDOR_EXTERNO   → tipo=DESPESA (saída pra provedor)
+   *  - CUSTO_OPERACIONAL_INTERNO → tipo=DESPESA (custo interno)
+   *
+   * ENFORCEMENT P0-1: classificação Auxiliar (Art. 88) é exclusiva de
+   * COOPERATIVA. Se a cooperativa dona do convênio for de outro regime,
+   * bloqueia com BadRequest claro citando D-novo-CT-MULTI-REGIME-CLASSIFICACAO.
+   */
+  async criarLancamentoConvenio(opts: {
+    convenioId: string;
+    valor: Prisma.Decimal | number | string;
+    dataMovimento: Date;
+    descricao?: string;
+    cooperativaId: string;
+  }): Promise<{
+    id: string;
+    naturezaAto: NaturezaCooperativa;
+    tipo: 'RECEITA' | 'DESPESA';
+    valor: string;
+    competencia: string;
+    dataPagamento: Date;
+    descricao: string;
+  }> {
+    // Carrega convênio + tipoParceiro da cooperativa dona
+    const convenio = await this.prisma.convenio.findFirst({
+      where: { id: opts.convenioId, cooperativaId: opts.cooperativaId },
+      select: {
+        id: true,
+        nome: true,
+        fluxoFinanceiro: true,
+        cooperativaId: true,
+        ativo: true,
+        cooperativa: {
+          select: { tipoParceiro: true, regimeContabil: true, nome: true },
+        },
+      },
+    });
+    if (!convenio) {
+      throw new NotFoundException(
+        `Convênio ${opts.convenioId} não encontrado neste tenant`,
+      );
+    }
+    if (!convenio.ativo) {
+      throw new BadRequestException(
+        `Convênio "${convenio.nome}" está inativo — reative antes de lançar movimento`,
+      );
+    }
+
+    // ENFORCEMENT P0-1 multi-regime
+    if (
+      convenio.cooperativa.tipoParceiro !== 'COOPERATIVA' ||
+      convenio.cooperativa.regimeContabil !== TipoRegimeContabil.COOPERATIVO
+    ) {
+      throw new BadRequestException(
+        `Classificação Auxiliar (Art. 88) é exclusiva de cooperativa. ` +
+          `${convenio.cooperativa.nome} é ${convenio.cooperativa.tipoParceiro} ` +
+          `e recolhe por regime próprio — registrar movimentos de convênio com ` +
+          `classificação auxiliar não se aplica. ` +
+          `Vide D-novo-CT-MULTI-REGIME-CLASSIFICACAO (P1).`,
+      );
+    }
+
+    // Sentido do lançamento
+    const tipo: 'RECEITA' | 'DESPESA' =
+      convenio.fluxoFinanceiro === 'INGRESSO_CUSTEIO_AUXILIAR' ? 'RECEITA' : 'DESPESA';
+
+    // Competência YYYY-MM
+    const ano = opts.dataMovimento.getFullYear();
+    const mes = String(opts.dataMovimento.getMonth() + 1).padStart(2, '0');
+    const competencia = `${ano}-${mes}`;
+
+    // Valor arredondado (CLAUDE.md: Math.round(x*100)/100)
+    const valorNum =
+      typeof opts.valor === 'string'
+        ? Number(opts.valor)
+        : typeof opts.valor === 'number'
+        ? opts.valor
+        : Number(opts.valor.toString());
+    const valorArredondado = Math.round(valorNum * 100) / 100;
+    if (!isFinite(valorArredondado) || valorArredondado <= 0) {
+      throw new BadRequestException('Valor deve ser positivo');
+    }
+
+    const descricaoFinal = (opts.descricao?.trim() || `Movimento convênio ${convenio.nome}`).slice(0, 300);
+
+    // origemId precisa ser único por movimento. cuid gerado:
+    const origemId = `convmov-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const resultado = await this.criarLancamentoAutomatico({
+      cooperativaId: opts.cooperativaId,
+      origemTipo: OrigemLancamento.CONVENIO,
+      origemId,
+      fonte: { tipo: 'CONVENIO' },
+      tipo,
+      descricao: descricaoFinal,
+      valor: new Prisma.Decimal(valorArredondado.toString()),
+      competencia,
+      dataPagamento: opts.dataMovimento,
+      convenioContabilId: convenio.id,
+    });
+
+    this.logger.log(
+      `[CT.9] Movimento convênio criado: convenio=${convenio.id} ${tipo} R$ ${valorArredondado} → ${resultado.naturezaAto} (lanc=${resultado.id})`,
+    );
+
+    return {
+      id: resultado.id,
+      naturezaAto: resultado.naturezaAto,
+      tipo,
+      valor: valorArredondado.toFixed(2),
+      competencia,
+      dataPagamento: opts.dataMovimento,
+      descricao: descricaoFinal,
+    };
+  }
+
   async criarLancamentoAutomatico(opts: {
     cooperativaId: string;
     origemTipo: OrigemLancamento;
@@ -104,6 +229,8 @@ export class ContabilidadeTributariaService {
     competencia: string; // 'YYYY-MM'
     dataPagamento: Date;
     cooperadoId?: string | null;
+    /** CT.9: FK pra Convenio (Art. 88) quando origemTipo=CONVENIO. */
+    convenioContabilId?: string | null;
   }): Promise<{ id: string; criado: boolean; naturezaAto: NaturezaCooperativa }> {
     return runAsPlatform(async () => {
       // 0. CT.4 — bloqueio retroativo: mês com apuração FECHADA é imutável
@@ -131,6 +258,7 @@ export class ContabilidadeTributariaService {
             origemId: opts.origemId,
             cooperativaId: opts.cooperativaId,
             cooperadoId: opts.cooperadoId ?? null,
+            convenioContabilId: opts.convenioContabilId ?? null,
           },
           select: { id: true, naturezaAto: true },
         });

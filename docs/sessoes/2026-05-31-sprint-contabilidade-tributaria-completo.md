@@ -2,14 +2,14 @@
 
 ## TL;DR
 
-Sessão entregou a **estrutura completa do Sprint Contabilidade Tributária** (CT.1→CT.6 em 6 commits) — schema segregado por natureza cooperativa (Lei 5.764/71 Arts. 79/86/88), regimes pluggáveis (COOPERATIVO impl + 3 stubs NotImplementedException P0-1), classificação determinística por fonte upstream, hooks fire-and-forget que criam `LancamentoCaixa` já classificado, motor de apuração mensal com `ApuracaoMensalSegregada` imutável após fechamento (gate Walter), `ConfiguracaoTributaria` por cooperativa (zero hardcoded — Walter ajusta alíquotas/presunção), DREs em 4 visões com terminologia NBC ITG 2004 (ingressos/dispêndios no ato próprio), 3 PDFs defensáveis com watermark "PENDENTE VALIDAÇÃO CONTADOR" e 4 telas Next.js admin completas. Após smoke do Luciano em `/dashboard/repasses`, 2 gaps reais foram identificados (sem estorno + sem visibilidade do ciclo contábil) e backend foi implementado (commit 93f38da: `PUT /repasses/:id/estornar` atômico + `GET /repasses/:id/ciclo`), porém o frontend usou Dialog Tipo C — **padrão antigo**. Luciano definiu novo padrão UX vigente (Dialog/drawer **proibidos**; criar/editar = página própria; ações = inline expansível) e catalogou **Sprint Polimento UX** com 6 fatias (PUX.1-PUX.6) cobrindo componentes reutilizáveis (HelpBox + AcaoInlineExpansivel), banimento de telinhas, help inline em todas as telas, refator do estorno repasse (PUX.4 — frontend inline em vez de Dialog), refator das telas existentes que usam Dialog/drawer (PUX.5) e lint UX (PUX.6). 7 commits, 8 schemas alterados, ~3.000 LOC, **284 specs verdes** (89 novos, 195 anteriores preservados), zero regressão, zero `--accept-data-loss`.
+Sessão entregou a **estrutura completa do Sprint Contabilidade Tributária** (CT.1→CT.6 em 6 commits) — schema segregado por natureza cooperativa (Lei 5.764/71 Arts. 79/86/88), regimes pluggáveis (COOPERATIVO impl + 3 stubs NotImplementedException P0-1), classificação determinística por fonte upstream, hooks fire-and-forget que criam `LancamentoCaixa` já classificado, motor de apuração mensal com `ApuracaoMensalSegregada` imutável após fechamento (gate de validação fiscal), `ConfiguracaoTributaria` por cooperativa (zero hardcoded — Luciano + orquestrador ajustam alíquotas/presunção), DREs em 4 visões com terminologia NBC ITG 2004 (ingressos/dispêndios no ato próprio), 3 PDFs defensáveis com watermark "PENDENTE VALIDAÇÃO FISCAL" e 4 telas Next.js admin completas. Após smoke do Luciano em `/dashboard/repasses`, 2 gaps reais foram identificados (sem estorno + sem visibilidade do ciclo contábil) e backend foi implementado (commit 93f38da: `PUT /repasses/:id/estornar` atômico + `GET /repasses/:id/ciclo`), porém o frontend usou Dialog Tipo C — **padrão antigo**. Luciano definiu novo padrão UX vigente (Dialog/drawer **proibidos**; criar/editar = página própria; ações = inline expansível) e catalogou **Sprint Polimento UX** com 6 fatias (PUX.1-PUX.6) cobrindo componentes reutilizáveis (HelpBox + AcaoInlineExpansivel), banimento de telinhas, help inline em todas as telas, refator do estorno repasse (PUX.4 — frontend inline em vez de Dialog), refator das telas existentes que usam Dialog/drawer (PUX.5) e lint UX (PUX.6). 7 commits, 8 schemas alterados, ~3.000 LOC, **284 specs verdes** (89 novos, 195 anteriores preservados), zero regressão, zero `--accept-data-loss`.
 
 ## Marco entregue
 
 **Sprint Contabilidade Tributária Segregada 6/6 ESTRUTURA COMPLETA + Sprint Polimento UX catalogado**
 
 Estrutura técnica 100% pronta. Aguarda:
-- **Gate Walter (contador):** validar alíquotas/presunção + classificação repasse + 10 contas seed + 10 lançamentos flag + flag `isencaoPisCofinsAtiva` (STF Tema 536) antes de uso fiscal real.
+- **Gate validação interna (Luciano + orquestrador):** validar alíquotas/presunção + classificação repasse + 10 contas seed + 10 lançamentos flag + flag `isencaoPisCofinsAtiva` (STF Tema 536) antes de uso fiscal real.
 - **Gate advogado:** acompanhar STF Tema 536 (julgamento mai/jun 2026 — pode reverter isenção PIS/COFINS).
 - **Sprint Polimento UX:** próximo Code, 6 fatias PUX.1→PUX.6.
 
@@ -20,7 +20,7 @@ Estrutura técnica 100% pronta. Aguarda:
 | `5ada766` | feat(contabilidade): CT.1 — schema base multi-regime + migracao enum + seed plano contas |
 | `f95bbef` | feat(contabilidade): CT.2 — interface RegimeContabil + classificacao automatica + Convenio CRUD |
 | `b3cba3c` | feat(contabilidade): CT.3 — hooks automaticos de lancamento classificado |
-| `27df9e5` | feat(contabilidade): CT.4 — motor apuracao mensal segregada (numeros pendentes validacao Walter) |
+| `27df9e5` | feat(contabilidade): CT.4 — motor apuracao mensal segregada (numeros pendentes validacao Luciano + orquestrador) |
 | `95eb755` | feat(contabilidade): CT.5 — DREs segregadas 4 visoes |
 | `6a2324e` | feat(contabilidade): CT.6 — relatorios PDF + UI (Sprint CT estrutura completa) |
 | `93f38da` | feat(repasses): estorno do ciclo completo + visibilidade contabil |
@@ -56,7 +56,7 @@ Estrutura técnica 100% pronta. Aguarda:
 - `regimes/{consorcio,associacao,condominio}.regime.stub.ts` (NotImplementedException explícito — P0-1)
 - `contabilidade-tributaria.service.ts` — `classificarLancamento` + `criarLancamentoAutomatico` (P2002 idempotente + runAsPlatform) + `criarLancamentoRepasse`
 - `convenios-ct.service.ts` + `convenios-ct.controller.ts` — CRUD Convenio multi-tenant
-- `apuracao.service.ts` — `apurarMes` (preview) + `fecharApuracao` (snapshot imutável + race guard P2002) + `validarApuracao` (Walter) + `reabrirApuracao` (SA-only motivo ≥10 chars) + `garantirMesAberto` (bloqueio retroativo CT.3)
+- `apuracao.service.ts` — `apurarMes` (preview) + `fecharApuracao` (snapshot imutável + race guard P2002) + `validarApuracao` (Luciano + orquestrador) + `reabrirApuracao` (SA-only motivo ≥10 chars) + `garantirMesAberto` (bloqueio retroativo CT.3)
 - `apuracao.controller.ts` — 4 endpoints (preview, fechar, validar, reabrir)
 - `dre.service.ts` — `montarDre` 4 visões (geral/proprio/auxiliar/nao-coop) com terminologia NBC ITG 2004
 - `dre.controller.ts` — GET `/dre/:visao`
@@ -80,7 +80,7 @@ Estrutura técnica 100% pronta. Aguarda:
 ### Frontend (Next.js — 4 telas novas + 2 dialogs estorno)
 
 **Telas /dashboard/contabilidade/:**
-- `apuracao/page.tsx` — preview + KPIs + tabela receitas-despesas + cards tributos + cards fundos + Dialog Tipo C "Fechar Apuração" + badge GATE WALTER
+- `apuracao/page.tsx` — preview + KPIs + tabela receitas-despesas + cards tributos + cards fundos + Dialog Tipo C "Fechar Apuração" + badge GATE VALIDAÇÃO FISCAL
 - `dre/page.tsx` — TabsCustom M34 (4 abas Promise.all) + DreCard com linhas semânticas (header/subtotal/tributo/fundo/sobra) + botão PDF
 - `plano-contas/page.tsx` — read-only com badges coloridas (PROPRIO/AUXILIAR/NAO_COOPERATIVO) + 3 KPIs (total/segregadas/pendentes)
 - `convenios/page.tsx` — CRUD Convenio CT.2 com Select NATIVO dentro Dialog (regra 19/05) + Dialog Tipo C remover
@@ -123,7 +123,7 @@ RepasseProprietario (PAGO)
 | `regimes/regime.factory.spec.ts` | ~4 | Factory resolve + stubs |
 | `contabilidade-tributaria.service.spec.ts` | ~10 | classificarLancamento + idempotência |
 | `apuracao.service.spec.ts` | **30** | Preview agregação + isenção P0-4 + IRPJ adicional + fundos + snapshot imutável + validar + reabrir + bloqueio retroativo + 3 regimes stub |
-| `dre.service.spec.ts` | **26** | 4 visões + snapshot vs preview + GATE WALTER + terminologia NBC ITG 2004 |
+| `dre.service.spec.ts` | **26** | 4 visões + snapshot vs preview + GATE VALIDAÇÃO FISCAL + terminologia NBC ITG 2004 |
 | `relatorios-ct.service.spec.ts` | **17** | 3 tipos + watermark/header + snapshot vs preview + agrupamento repasses + 4 leis citadas |
 | `repasses-proprietario-estorno.spec.ts` | **16** | Estorno happy path + 5 erros + cross-tenant + gate FECHADA + idempotência + obterCiclo |
 | **TOTAL** | **+89** | **284 totais (195 anteriores ✅ zero regressão)** |
@@ -163,7 +163,7 @@ RepasseProprietario (PAGO)
 
 **Princípios desta sessão (merecem destaque):**
 
-1. **Gate Walter** — todo snapshot nasce `validadoContador=false`. Walter é quem valida antes de virar valor fiscal real. Zero hardcoded — alíquotas/presunção em `ConfiguracaoTributaria` ajustáveis por cooperativa.
+1. **Gate de validação fiscal** — todo snapshot nasce `validadoContador=false`. Luciano + orquestrador é quem valida antes de virar valor fiscal real. Zero hardcoded — alíquotas/presunção em `ConfiguracaoTributaria` ajustáveis por cooperativa.
 2. **P0-1 Não-implementação explícita** — regimes não-coop lançam `NotImplementedException` em vez de cair silenciosamente pro cooperativo (evita aproveitamento indevido).
 3. **P0-4 Flag isenção configurável** — STF Tema 536 está em julgamento mai/jun 2026. `isencaoPisCofinsAtiva` per-cooperativa permite reverter sem migration.
 4. **Idempotência via `@@unique`** — `LancamentoCaixa(origemTipo, origemId)` + try/catch P2002 retornando lançamento existente.
@@ -206,14 +206,14 @@ Estimativa total Polimento UX: 25-40h Code (3-5 sessões).
 - Esvaziar `lint:tenant` allowlist (256 handlers legados)
 - D-novo-BR-CT-ESTORNO (estorno Cobranca/ContaAPagar)
 - Regimes não-coop por demanda real (consórcio/assoc/condomínio)
-- Validação Walter (gate produção contábil — externo Code)
+- Validação Validação fiscal interna (gate produção contábil — externo Code)
 
 ## Pré-requisitos leitura próxima sessão
 
 - `docs/CONTROLE-EXECUCAO.md` (estado atual + frase comandante)
 - `~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md` (índice)
 - `docs/sessoes/2026-05-31-sprint-contabilidade-tributaria-completo.md` (esta sessão)
-- `docs/debitos-tecnicos.md` — seção **Sprint Polimento UX (D-novo-PUX)** P1 + **D-novo-BR-CT-ESTORNO** P2 + **Gate Walter** P0 bloqueador
+- `docs/debitos-tecnicos.md` — seção **Sprint Polimento UX (D-novo-PUX)** P1 + **D-novo-BR-CT-ESTORNO** P2 + **Gate de validação fiscal** P0 bloqueador
 - `docs/arquitetura/padrao-ux-vigente.md` (criado nesta sessão — Dialog/drawer proibidos)
 - `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md` (parecer multi-regime — base Sprint CT)
 - `docs/especificacao-contabilidade-cooperativa-segregada.md`

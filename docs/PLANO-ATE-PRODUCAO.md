@@ -319,7 +319,7 @@ Formato fixo pra cada sprint:
 
 ### Sprint 7 — DRE + Conciliação + Fechamento Mensal (genérico)
 
-- **Severidade:** P2 (governança financeira antes de Walter, contador externo).
+- **Severidade:** P2 (governança financeira antes de Luciano + orquestrador, contador externo).
 - **Estimativa:** 2-3 semanas.
 - **Pode rodar quando:** independente.
 - **Bloqueia:** auditoria contábil oficial.
@@ -336,7 +336,7 @@ Formato fixo pra cada sprint:
   - Reabertura controlada por SUPER_ADMIN com audit log.
 - Tela `/dashboard/financeiro/dre` + `/dashboard/financeiro/conciliacao` + `/dashboard/financeiro/fechamento`.
 
-**Critério "passou":** Walter (contador externo) gera DRE de abr/2026, concilia 100% das transações BB, fecha o mês com 1 clique. Reabertura exige aprovação SUPER_ADMIN.
+**Critério "passou":** Luciano + orquestrador (contador externo) gera DRE de abr/2026, concilia 100% das transações BB, fecha o mês com 1 clique. Reabertura exige aprovação SUPER_ADMIN.
 
 **Dependências:** nenhuma técnica. **Asaas em produção** ajuda mas não bloqueia.
 
@@ -388,7 +388,7 @@ Formato fixo pra cada sprint:
 - CRFB Art. 5º XVIII + 146 III "c" + 174 § 2º (proteção constitucional)
 - Estatuto Reformado v3 CoopereBR Art. 11 §§ 1º-3º (exigência estatutária pós AGE 17/06/2026)
 
-**Critério "passou":** CoopereBR gera Memorial de Cálculo Fiscal Segregado de mai/2026 mostrando: (1) Ato Próprio = R$ 0 tributos com fundamentação STF Tema 536; (2) Auxiliar = trânsito integral pra provedores externos (recomposição de custos); (3) Não Cooperativo = tributação plena. Walter (contador externo) valida documento como defensável em auditoria Receita Federal. Convênio ENERGIA_SCEE operacional. Tentativa de criar convênio com `tipoBeneficio !== ENERGIA_SCEE` retorna 400.
+**Critério "passou":** CoopereBR gera Memorial de Cálculo Fiscal Segregado de mai/2026 mostrando: (1) Ato Próprio = R$ 0 tributos com fundamentação STF Tema 536; (2) Auxiliar = trânsito integral pra provedores externos (recomposição de custos); (3) Não Cooperativo = tributação plena. Luciano + orquestrador (contador externo) valida documento como defensável em auditoria Receita Federal. Convênio ENERGIA_SCEE operacional. Tentativa de criar convênio com `tipoBeneficio !== ENERGIA_SCEE` retorna 400.
 
 **Dependências:** Sprint 6 (IDOR fixes — para audit log seguro) + AuditLog interceptor (D-30N) ativo.
 
@@ -691,7 +691,7 @@ Sequência consolidada das próximas entregas, com dependências explícitas. Cu
 #### Fatia D1 — Conciliação bancária BB/Sicoob
 
 - **Tema:** import de extrato bancário + match automático com `LancamentoCaixa` + UI de conciliação manual pros não-matches.
-- **Persona:** Walter (contador externo) concilia mês 100% em janela curta.
+- **Persona:** Luciano + orquestrador (contador externo) concilia mês 100% em janela curta.
 - **Critério de pronto:** import extrato funcional + match >80% automático + UI manual pros restantes + spec Jest.
 - **Estimativa:** 1 semana Code (1339 linhas existentes em `integracao-bancaria/` + 0 specs).
 - **Dependências:** nenhuma técnica imediata.
@@ -699,7 +699,7 @@ Sequência consolidada das próximas entregas, com dependências explícitas. Cu
 #### Fatia D2 — DRE / fechamento mensal
 
 - **Tema:** `GET /financeiro/dre` + endpoint fechamento + reabertura controlada (`SUPER_ADMIN`) + UI.
-- **Persona:** Walter gera DRE do mês + fecha + reabre se necessário com auditoria.
+- **Persona:** Luciano + orquestrador gera DRE do mês + fecha + reabre se necessário com auditoria.
 - **Critério de pronto:** DRE consolidada por parceiro + fechamento bloqueia novos lançamentos no mês fechado + reabertura registra em AuditLog + UI usável.
 - **Estimativa:** 1-2 semanas Code.
 - **Dependências:** **D1 ajuda mas não bloqueia** (D2 pode rodar com lançamentos manuais).

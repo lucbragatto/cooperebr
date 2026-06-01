@@ -43,7 +43,7 @@ Antes de começar, lembre:
 | 4 — Usinas | Marcos ou Luciano | Cadastro técnico |
 | 5 — Contratos e migrações | Marcos | Vínculo cooperado × usina × UC |
 | 6 — Dashboard e relatórios | Marcos + Luciano | Visão executiva |
-| 7 — Financeiro | **Walter (contador externo)** | Conferência contábil |
+| 7 — Financeiro | **Luciano + orquestrador (contador externo)** | Conferência contábil |
 | 8 — Comunicação | Marcos com supervisão Luciano | Risco de disparo real |
 | 9 — Cooper Token / indicações / convênios | Marcos | Features comerciais |
 | 10 — Auditoria e segurança | Luciano | Visão multi-tenant SUPER_ADMIN |
@@ -293,7 +293,7 @@ Antes de começar, lembre:
 
 **Tempo estimado:** 30 min
 
-> **Quem deve rodar:** Walter (contador externo). Luciano pode acompanhar.
+> **Quem deve rodar:** Luciano + orquestrador (contador externo). Luciano pode acompanhar.
 
 ### Passos
 
@@ -319,7 +319,7 @@ Antes de começar, lembre:
 
 ### Critério de sucesso
 
-✅ Cobranças arredondadas + LancamentoCaixa espelhado + Asaas sandbox funciona + Walter consegue auditar valores.
+✅ Cobranças arredondadas + LancamentoCaixa espelhado + Asaas sandbox funciona + Luciano + orquestrador consegue auditar valores.
 
 ---
 
