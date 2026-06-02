@@ -549,29 +549,62 @@ export class CobrancasService {
 
     // CT.3 — Hook contábil classificado (fire-and-forget, NUNCA reverte pagamento).
     // Idempotente via @@unique([origemTipo, origemId]). cooperativaId da fonte.
+    //
+    // D-FISCAL-2.4.4c — ROTEAMENTO da consolidada custeio (Caso 1 — empresa
+    // paga total). Quando cobranca.convenioContabilCobrancaId != null (cobrança
+    // gerada por ConveniosCusteioService 2.4.4a), o lançamento fiscal usa a
+    // naturezaAtoCooperativo DO CONVÊNIO (médico = AUXILIAR configurável)
+    // via criarLancamentoConvenioContrato (2.2) — não o default
+    // criarLancamentoAutomatico(COBRANCA→PRÓPRIO da factory cooperativo.regime).
+    // SUBSTITUI (não complementa) — senão geraria 2 lançamentos fiscais
+    // pra mesma cobrança paga.
+    //
+    // Bloco OPERACIONAL (LancamentoCaixa caixa puro acima) permanece
+    // intocado — esse é sobre fluxo de caixa, não classificação fiscal.
     if (this.contabilidadeTributaria) {
       const coopIdHook = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
       const tipoCoopHook = cobranca.contrato?.cooperado?.tipoCooperado ?? null;
+      const convenioContabilId = (cobranca as any).convenioContabilCobrancaId as string | null;
       if (coopIdHook) {
         const mesRefHook = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
-        this.contabilidadeTributaria
-          .criarLancamentoAutomatico({
-            cooperativaId: coopIdHook,
-            origemTipo: 'COBRANCA',
-            origemId: cobranca.id,
-            fonte: { tipo: 'COBRANCA', cooperadoTipoCooperado: tipoCoopHook },
-            tipo: 'RECEITA',
-            descricao: `[CT] Cobrança paga — ${cobranca.id.slice(0, 8)}`,
-            valor: valorFinal,
-            competencia: mesRefHook,
-            dataPagamento: dtPagamento,
-            cooperadoId: cobranca.contrato?.cooperadoId ?? null,
-          })
-          .catch((err) =>
-            this.logger.error(
-              `[CT.3 hook] cobranca ${cobranca.id} classificação falhou: ${err.message}`,
-            ),
-          );
+        if (convenioContabilId) {
+          // CONSOLIDADA — usa natureza do convênio (AUXILIAR/PRÓPRIO/etc)
+          this.contabilidadeTributaria
+            .criarLancamentoConvenioContrato({
+              contratoConvenioId: convenioContabilId,
+              valor: valorFinal,
+              dataMovimento: dtPagamento,
+              competencia: mesRefHook, // CT.9.1: competência LOCAL via string
+              descricao: `[CT] Consolidada custeio paga — cobrança ${cobranca.id.slice(0, 8)}`,
+              cooperativaId: coopIdHook,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `[D-FISCAL-2.4.4c hook] cobrança consolidada ${cobranca.id} ` +
+                  `lançamento de convênio falhou: ${err.message}`,
+              ),
+            );
+        } else {
+          // COBRANÇA NORMAL — caminho CT.3 original (factory classifica PRÓPRIO)
+          this.contabilidadeTributaria
+            .criarLancamentoAutomatico({
+              cooperativaId: coopIdHook,
+              origemTipo: 'COBRANCA',
+              origemId: cobranca.id,
+              fonte: { tipo: 'COBRANCA', cooperadoTipoCooperado: tipoCoopHook },
+              tipo: 'RECEITA',
+              descricao: `[CT] Cobrança paga — ${cobranca.id.slice(0, 8)}`,
+              valor: valorFinal,
+              competencia: mesRefHook,
+              dataPagamento: dtPagamento,
+              cooperadoId: cobranca.contrato?.cooperadoId ?? null,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `[CT.3 hook] cobranca ${cobranca.id} classificação falhou: ${err.message}`,
+              ),
+            );
+        }
       }
     }
 
