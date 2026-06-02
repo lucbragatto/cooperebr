@@ -49,6 +49,13 @@ export class PlanosService implements OnModuleInit {
     // modeloCobranca=FIXO_MENSAL: passa o freeze BLOQUEIO_MODELOS_NAO_FIXO,
     // mas o guard pula geração de cobrança antes de calcular qualquer valor.
     await this.ensurePlanoCusteadoPorConvenio();
+
+    // D-FISCAL-2.4.4a — Plano "Consolidador de Custeio" (idempotente).
+    // Plano técnico usado pelo Contrato consolidador SEM_UC da empresa
+    // pagadora (Caso 1). NÃO É custeado (custeadoPorConvenio=false) — senão
+    // o GUARD da 2.4.2 suprimiria a própria cobrança consolidada.
+    // FIXO_MENSAL + publico=false + escondido em findAtivos.
+    await this.ensurePlanoConsolidadorCusteio();
   }
 
   /**
@@ -80,6 +87,46 @@ export class PlanosService implements OnModuleInit {
     });
     this.logger.log(
       `[D-FISCAL-2.4.2] Plano global "Custeado por convênio" criado (id=${novo.id})`,
+    );
+  }
+
+  /**
+   * D-FISCAL-2.4.4a — garante que o plano "Consolidador de Custeio" exista
+   * (idempotente). Usado pelo Contrato consolidador SEM_UC do pagadorCooperado
+   * (Caso 1). NÃO É custeado (`custeadoPorConvenio=false`) — senão os 3 GUARDs
+   * da 2.4.2 suprimiriam a própria cobrança consolidada. FIXO_MENSAL +
+   * publico=false. Escondido também em `findAtivos` (filtro adicional por nome).
+   */
+  private async ensurePlanoConsolidadorCusteio() {
+    const existente = await this.prisma.plano.findFirst({
+      where: {
+        nome: 'Consolidador de Custeio',
+        cooperativaId: null,
+      },
+      select: { id: true, nome: true },
+    });
+    if (existente) {
+      return; // idempotente
+    }
+    const novo = await this.prisma.plano.create({
+      data: {
+        nome: 'Consolidador de Custeio',
+        descricao:
+          'Plano técnico interno — vincula o Contrato consolidador SEM_UC da empresa pagadora ' +
+          '(Caso 1 D-FISCAL-2.4). NÃO usar em cadastro de cooperado comum. A cobrança consolidada ' +
+          'mensal nasce neste contrato. Plano FIXO_MENSAL + custeadoPorConvenio=false (sob pena de ' +
+          'os GUARDs da 2.4.2 suprimirem a própria consolidada).',
+        modeloCobranca: ModeloCobranca.FIXO_MENSAL,
+        descontoBase: 0,
+        publico: false,
+        ativo: true,
+        tipoCampanha: TipoCampanha.PADRAO,
+        custeadoPorConvenio: false,
+        cooperativaId: null,
+      },
+    });
+    this.logger.log(
+      `[D-FISCAL-2.4.4a] Plano global "Consolidador de Custeio" criado (id=${novo.id})`,
     );
   }
 
@@ -168,6 +215,10 @@ export class PlanosService implements OnModuleInit {
         // de planos comerciais. Ele é selecionado via toggle no Step3 (admin) e radio
         // no /cadastro (público), não via card de plano.
         custeadoPorConvenio: false,
+        // D-FISCAL-2.4.4a — esconder plano técnico "Consolidador de Custeio"
+        // (usado pelo Contrato consolidador SEM_UC do pagadorCooperado em Caso 1).
+        // Não deve aparecer em nenhum selector de plano comercial.
+        nome: { not: 'Consolidador de Custeio' },
         AND: andFilters,
       },
       orderBy: { createdAt: 'desc' },

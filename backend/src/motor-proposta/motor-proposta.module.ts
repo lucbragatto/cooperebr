@@ -20,7 +20,8 @@ const multerLib = require('multer') as { memoryStorage: () => object };
 
 @Module({
   // D-FISCAL-2.4.3: ConveniosModule fornece ConveniosMembrosService pro vínculo
-  // custeio dentro da transação do aceite.
+  // custeio dentro da transação do aceite. Sem forwardRef (Convenios não importa
+  // de volta — Cobrancas é quebrado em 2.4.4a chamando prisma direto).
   imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, EmailModule, ConveniosModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [MotorPropostaController],
   providers: [MotorPropostaService, MotorPropostaJob, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],

@@ -261,12 +261,17 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
     it('Test 10: Seed onModuleInit cria FIXO_MENSAL (não COMPENSADOS) quando banco vazio', async () => {
       planoCount.mockResolvedValueOnce(0);
       planoCreate.mockResolvedValueOnce({ id: 'seed' });
-      // D-FISCAL-2.4.2 — ensurePlanoCusteadoPorConvenio é chamado depois
-      // do seed clássico. Aqui simulamos plano já existente pra não
-      // criar 2 vezes.
+      // D-FISCAL-2.4.2 + 2.4.4a — onModuleInit roda 3 passos:
+      //   1. seed Plano Básico (planoCount=0)
+      //   2. ensurePlanoCusteadoPorConvenio (findFirst → existe)
+      //   3. ensurePlanoConsolidadorCusteio (findFirst → existe)
       planoFindFirst.mockResolvedValueOnce({
         id: 'plano-custeado-existente',
         nome: 'Custeado por convênio',
+      });
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-consolidador-existente',
+        nome: 'Consolidador de Custeio',
       });
       await service.onModuleInit();
       const data = planoCreate.mock.calls[0][0].data;
@@ -280,12 +285,14 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
 
     it('onModuleInit() não cria plano se banco já tem registros', async () => {
       planoCount.mockResolvedValueOnce(5);
-      // D-FISCAL-2.4.2 — segundo passo do onModuleInit roda mesmo com
-      // banco populado; aqui simulamos plano custeado já presente
-      // pra confirmar idempotência (planoCreate continua não chamado).
+      // Ambos os planos globais já existem → planoCreate NÃO chamado
       planoFindFirst.mockResolvedValueOnce({
         id: 'plano-custeado-existente',
         nome: 'Custeado por convênio',
+      });
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-consolidador-existente',
+        nome: 'Consolidador de Custeio',
       });
       await service.onModuleInit();
       expect(planoCreate).not.toHaveBeenCalled();
@@ -295,8 +302,13 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
     // o plano global quando não existe.
     it('D-FISCAL-2.4.2: ensurePlanoCusteadoPorConvenio cria plano global se não existir', async () => {
       planoCount.mockResolvedValueOnce(5); // pula o seed clássico
-      planoFindFirst.mockResolvedValueOnce(null); // não existe ainda
+      planoFindFirst.mockResolvedValueOnce(null); // custeado não existe → cria
       planoCreate.mockResolvedValueOnce({ id: 'novo-custeado' });
+      // Plano consolidador já existe (não vai criar)
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-consolidador-existente',
+        nome: 'Consolidador de Custeio',
+      });
       await service.onModuleInit();
       expect(planoCreate).toHaveBeenCalledTimes(1);
       const data = planoCreate.mock.calls[0][0].data;
@@ -307,6 +319,31 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
       expect(data.publico).toBe(false);
       expect(data.ativo).toBe(true);
       expect(data.nome).toBe('Custeado por convênio');
+    });
+
+    // D-FISCAL-2.4.4a — caso novo: ensurePlanoConsolidadorCusteio cria
+    // plano técnico do Contrato consolidador SEM_UC quando não existe.
+    // CRÍTICO: custeadoPorConvenio=FALSE (senão GUARDs 2.4.2 suprimem
+    // a própria consolidada).
+    it('D-FISCAL-2.4.4a: ensurePlanoConsolidadorCusteio cria plano técnico se não existir', async () => {
+      planoCount.mockResolvedValueOnce(5); // pula seed clássico
+      // Plano custeado já existe (pula)
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-custeado-existente',
+        nome: 'Custeado por convênio',
+      });
+      // Plano consolidador NÃO existe → cria
+      planoFindFirst.mockResolvedValueOnce(null);
+      planoCreate.mockResolvedValueOnce({ id: 'novo-consolidador' });
+      await service.onModuleInit();
+      expect(planoCreate).toHaveBeenCalledTimes(1);
+      const data = planoCreate.mock.calls[0][0].data;
+      expect(data.nome).toBe('Consolidador de Custeio');
+      expect(data.custeadoPorConvenio).toBe(false); // CRÍTICO!
+      expect(data.cooperativaId).toBeNull();
+      expect(data.modeloCobranca).toBe(ModeloCobranca.FIXO_MENSAL);
+      expect(data.publico).toBe(false);
+      expect(data.ativo).toBe(true);
     });
   });
 });

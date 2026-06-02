@@ -69,7 +69,7 @@ export class MotorPropostaService {
     private whatsappSender: WhatsappSenderService,
     private propostaPdf: PropostaPdfService,
     private pdfGenerator: PdfGeneratorService,
-    // D-FISCAL-2.4.3 — vínculo membro custeio dentro da transação do aceite
+    // D-FISCAL-2.4.3 — vínculo membro custeio dentro da transação do aceite.
     private conveniosMembros: ConveniosMembrosService,
   ) {}
 

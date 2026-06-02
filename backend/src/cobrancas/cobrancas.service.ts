@@ -133,6 +133,15 @@ export class CobrancasService {
     valorLiquido?: number;
     dataVencimento: Date | string;
     dataPagamento?: Date | string;
+    /**
+     * D-FISCAL-2.4.4a — Caso 1 custeio: id do ContratoConvenio (pagador=EMPRESA)
+     * que originou esta cobrança consolidada. Quando presente, o `darBaixa`
+     * roteia o lançamento contábil pro `criarLancamentoConvenioContrato`
+     * (natureza do convênio — médico=AUXILIAR) em vez do hook CT.3 padrão
+     * (que classificaria como PRÓPRIO). NÃO valida tenant aqui (já filtrado
+     * upstream no convenios-custeio.service).
+     */
+    convenioContabilCobrancaId?: string;
   }, cooperativaId?: string) {
     // T6 Sprint 5: guard anti-duplicacao.
     // Mesma logica dos outros 2 gatilhos (pipeline individual + lote no
