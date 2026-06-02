@@ -681,7 +681,35 @@ export class MotorPropostaService {
       });
       const ucDisponivel = ucsDoCooperado.find(uc => uc.contratos.length === 0);
       if (ucsDoCooperado.length === 0) {
-        return { proposta, contrato: null, emListaEspera: false, aviso: 'Sem UC vinculada — contrato não criado automaticamente.', nomeCooperado, numero: null };
+        // D-novo-CAD-CUSTEADO-FATURA (02/06/2026) — Modo teste sem fatura:
+        // cooperado custeado é criado SEM UC (Step1 pulado). Preserva o
+        // vínculo no convênio (objetivo principal do custeio) chamando
+        // adicionarMembro ANTES do early-return. Sem isso, médico teste
+        // não vira membro do convênio e não entra no consolidado.
+        let convenioVinculadoSemUc: { id: string; empresaNome: string } | null = null;
+        if (custeioContext) {
+          await this.conveniosMembros.adicionarMembro(
+            custeioContext.convenioId,
+            dto.cooperadoId,
+            undefined,
+            tx,
+          );
+          convenioVinculadoSemUc = {
+            id: custeioContext.convenioId,
+            empresaNome: custeioContext.empresaNome,
+          };
+        }
+        return {
+          proposta,
+          contrato: null,
+          emListaEspera: false,
+          aviso: convenioVinculadoSemUc
+            ? `Sem UC vinculada — contrato não criado, MAS membro vinculado ao convênio "${convenioVinculadoSemUc.empresaNome}" (modo custeio).`
+            : 'Sem UC vinculada — contrato não criado automaticamente.',
+          nomeCooperado,
+          numero: null,
+          convenioVinculado: convenioVinculadoSemUc,
+        };
       }
       if (!ucDisponivel) {
         return { proposta, contrato: null, emListaEspera: false, aviso: 'Todas as UCs deste cooperado já possuem contrato ativo. Cadastre uma nova UC para criar outro contrato.', nomeCooperado, numero: null };

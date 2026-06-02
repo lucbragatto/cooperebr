@@ -259,6 +259,42 @@ describe('MotorPropostaService.aceitar — D-FISCAL-2.4.3 (custeio)', () => {
     expect(contratoCreate).not.toHaveBeenCalled();
   });
 
+  // ============================================================
+  // D-novo-CAD-CUSTEADO-FATURA (02/06/2026) — Modo teste sem UC
+  // ============================================================
+
+  it('D-novo-CAD-CUSTEADO-FATURA: custeio sem UC (modo teste) → vincula no convênio mesmo SEM contrato', async () => {
+    contratoConvenioFindUnique.mockResolvedValueOnce({
+      id: 'conv-teste',
+      cooperativaId: 'coop-A',
+      status: 'ATIVO',
+      pagador: 'EMPRESA',
+      empresaNome: 'Clínica Teste',
+    });
+    planoFindFirst.mockResolvedValueOnce({ id: 'plano-custeado-global' });
+    // 0 UCs vinculadas ao cooperado (modo teste sem fatura)
+    ucFindMany.mockResolvedValueOnce([]);
+
+    const r = await service.aceitar({
+      cooperadoId: 'cooperado-teste',
+      resultado: resultado as any,
+      mesReferencia: '2026-05',
+      convenioCusteioId: 'conv-teste',
+    });
+
+    // Aceite NÃO cria contrato (sem UC) mas vincula no convênio
+    expect(r.contrato).toBeNull();
+    expect((r as any).aviso).toMatch(/membro vinculado ao convênio/i);
+    // adicionarMembro foi chamado com tx ANTES do early-return 0 UCs
+    expect(conveniosMembrosAdicionar).toHaveBeenCalledTimes(1);
+    const [convArg, coopArg, , txArg] = conveniosMembrosAdicionar.mock.calls[0];
+    expect(convArg).toBe('conv-teste');
+    expect(coopArg).toBe('cooperado-teste');
+    expect(txArg).toBeDefined();
+    // contratoCreate NÃO foi chamado (sem UC = sem contrato)
+    expect(contratoCreate).not.toHaveBeenCalled();
+  });
+
   it('plano global custeado não encontrado → BadRequestException', async () => {
     contratoConvenioFindUnique.mockResolvedValueOnce({
       id: 'conv-1',

@@ -30,6 +30,8 @@ interface Step2Props {
   faturaData: Step1Data;
   onChange: (partial: Partial<Step2Data>) => void;
   tipoMembro: string;
+  /** D-novo-CAD-CUSTEADO-FATURA: marca cooperado como ambienteTeste=true */
+  modoTeste?: boolean;
 }
 
 const cls = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500';
@@ -87,7 +89,7 @@ function validarCNPJ(cnpj: string): boolean {
   return parseInt(nums[13]) === d2;
 }
 
-export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: Step2Props) {
+export default function Step2Dados({ data, faturaData, onChange, tipoMembro, modoTeste = false }: Step2Props) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const [cpfDuplicado, setCpfDuplicado] = useState<{ id: string; nomeCompleto: string; email: string } | null>(null);
@@ -159,6 +161,8 @@ export default function Step2Dados({ data, faturaData, onChange, tipoMembro }: S
         status: 'PENDENTE',
         tipoPessoa: data.tipoPessoa,
         preferenciaCobranca: data.formaPagamento,
+        // D-novo-CAD-CUSTEADO-FATURA: marca cooperado como ambienteTeste
+        ...(modoTeste ? { ambienteTeste: true } : {}),
       };
       if (isPJ) {
         payload.representanteLegalNome = data.representanteLegalNome || undefined;

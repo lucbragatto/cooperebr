@@ -417,6 +417,8 @@ export class CooperadosService {
     cooperativaId?: string;
     usinaPropriaId?: string;
     percentualRepasse?: number;
+    // D-novo-CAD-CUSTEADO-FATURA (02/06/2026)
+    ambienteTeste?: boolean;
   }) {
     let cooperado;
     try {

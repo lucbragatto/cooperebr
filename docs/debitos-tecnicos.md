@@ -899,6 +899,30 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
+### D-novo-SEC-AMBIENTE-TESTE — gatear toggle "Modo teste" do Wizard pra prod
+
+**Arquivo:** `web/app/dashboard/cooperados/novo/page.tsx` (toggle introduzido em D-novo-CAD-CUSTEADO-FATURA).
+
+O toggle "Modo teste" no header do Wizard de cadastro libera fatura/motor e marca
+o cooperado com `ambienteTeste=true`. **Hoje é visível pra qualquer ADMIN** —
+útil em dev/staging pra smoke E2E do Caso 1 custeio.
+
+**Risco:** ADMIN de parceiro real pode marcar membros como teste em produção
+pra contornar validações de UC/fatura. A flag `ambienteTeste=true` JÁ bloqueia
+ativação como ATIVO (`cooperados.service.ts:720`), mas o cadastro em si fica
+poluindo o tenant + relatórios mostram "fake actives".
+
+**Fix proposto:**
+1. Toggle só aparece se `!isAmbienteReal()` (NUNCA produção real).
+2. OU `ambienteTeste=true` só pode ser setado por `SUPER_ADMIN` (não ADMIN comum).
+3. OU AuditLog específico `cooperado.criado_modo_teste` pra rastrear.
+4. Job de housekeeping: alerta semanal de cooperados ambienteTeste=true com mais
+   de 30 dias.
+
+**Severidade:** P3 (catalogado 02/06 — não bloqueia smoke do Caso 1).
+
+---
+
 ### D-novo-UX-Dialog-Backdrop — backdrop-blur do Dialog faz a taskbar do Windows piscar
 
 **Arquivo:** `web/components/ui/dialog.tsx:34`

@@ -64,6 +64,10 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 export default function NovoMembroWizard() {
   const { tipoMembro, tipoMembroPlural, tipoParceiro } = useTipoParceiro();
   const [etapa, setEtapa] = useState(0);
+  // D-novo-CAD-CUSTEADO-FATURA (02/06/2026) — Modo teste: libera fatura
+  // obrigatória + relaxa validators dos demais steps. Cooperado fica
+  // marcado ambienteTeste=true (não entra em billing real).
+  const [modoTeste, setModoTeste] = useState(false);
 
   const STEP_LABELS = [
     'Fatura',
@@ -181,6 +185,8 @@ export default function NovoMembroWizard() {
   function validarEtapa(): string | null {
     switch (etapa) {
       case 0:
+        // D-novo-CAD-CUSTEADO-FATURA: modo teste libera fatura obrigatória
+        if (modoTeste) return null;
         if (!step1.ocr) return 'Processe a fatura antes de avançar.';
         return null;
       case 1:
@@ -194,13 +200,21 @@ export default function NovoMembroWizard() {
         // D-FISCAL-2.4.3 — modo custeio tem validação própria (convênio obrigatório, plano dispensado).
         if (step3.custeadoPorConvenio) {
           if (!step3.convenioCusteioId) return 'Selecione a empresa cooperada pagadora antes de avançar.';
+          // D-novo-CAD-CUSTEADO-FATURA: modo teste dispensa síntese resultadoMotor
+          if (modoTeste) return null;
           if (!step3.resultadoMotor) return 'Aguarde — sintetizando dados de consumo da fatura.';
           return null;
         }
+        // D-novo-CAD-CUSTEADO-FATURA: modo teste sem custeio relaxa motor + plano
+        // (cooperado fica criado mas sem proposta ativa — pra teste de cadastro só)
+        if (modoTeste) return null;
         if (!step3.resultadoMotor) return 'Execute o cálculo do motor antes de avançar.';
         if (!step3.planoSelecionadoId) return 'Selecione um plano antes de avançar.';
         return null;
       case 3:
+        // D-novo-CAD-CUSTEADO-FATURA: modo teste pula aceite proposta (sem fatura
+        // = sem motor = sem proposta). Vínculo do convênio já foi feito no Step3.
+        if (modoTeste) return null;
         if (!step4.propostaId) return 'Aceite a proposta antes de avançar.';
         return null;
       case 4:
@@ -238,7 +252,7 @@ export default function NovoMembroWizard() {
       case 0:
         return <Step1Fatura data={step1} onChange={updateStep1} tipoMembro={tipoMembro} />;
       case 1:
-        return <Step2Dados data={step2} faturaData={step1} onChange={updateStep2} tipoMembro={tipoMembro} />;
+        return <Step2Dados data={step2} faturaData={step1} onChange={updateStep2} tipoMembro={tipoMembro} modoTeste={modoTeste} />;
       case 2:
         return <Step3Simulacao data={step3} faturaData={step1} cooperadoId={step2.cooperadoId} onChange={updateStep3} tipoMembro={tipoMembro} />;
       case 3:
@@ -263,13 +277,51 @@ export default function NovoMembroWizard() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-neutral-800">Novo {tipoMembro}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-neutral-800">Novo {tipoMembro}</h1>
+          {modoTeste && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+              MODO TESTE
+            </span>
+          )}
+        </div>
         <Link href="/dashboard/cooperados" className="text-sm text-neutral-500 hover:text-neutral-700">
           &larr; Voltar
         </Link>
       </div>
 
-      {etapa === 0 && (
+      {/* D-novo-CAD-CUSTEADO-FATURA (02/06/2026) — Toggle Modo teste no header */}
+      <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-3 flex items-start gap-3">
+        <input
+          id="modo-teste-toggle"
+          type="checkbox"
+          checked={modoTeste}
+          onChange={(e) => setModoTeste(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-amber-700"
+        />
+        <label htmlFor="modo-teste-toggle" className="flex-1 cursor-pointer">
+          <div className="text-sm font-semibold text-amber-900">
+            Modo teste — cadastro sem fatura
+          </div>
+          <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+            {modoTeste ? (
+              <>
+                <strong>ATIVO.</strong> Wizard libera Step1 (Fatura) e relaxa validações dos demais Steps.
+                Cooperado fica marcado <code>ambienteTeste=true</code> — <strong>não entra em billing real</strong>
+                {' '}e bloqueia ativação como ATIVO (regra existente). Em modo custeio, o vínculo no convênio
+                é preservado mesmo sem UC. <strong>Use só em testes</strong> — não cadastre membros reais com isso ligado.
+              </>
+            ) : (
+              <>
+                Marque pra cadastrar membros sem fatura (útil pra smoke E2E do Caso 1 custeio).
+                Cooperado fica marcado <code>ambienteTeste=true</code> e não entra em billing real.
+              </>
+            )}
+          </p>
+        </label>
+      </div>
+
+      {etapa === 0 && !modoTeste && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 flex items-start gap-2">
           <span className="font-semibold">Sem unidade consumidora?</span>
           <span>
