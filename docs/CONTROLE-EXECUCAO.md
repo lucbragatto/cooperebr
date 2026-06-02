@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-01 noite tarde — M19 D-FISCAL-2.4.2 + 2.4.3 (Caso 1 custeio: plano + guards + selector + vínculo)**. 2 commits trabalho (`e265e63` D-FISCAL-2.4.2 → `07ae417` D-FISCAL-2.4.3) + 1 commit fechamento. Entregue **estrutura completa do Caso 1** (empresa cooperada paga total): **2.4.2** plano global "Custeado por convênio" via seed idempotente em `PlanosService.onModuleInit` + 3 guards bloqueando geração de cobrança individual nos 3 caminhos (Path A `gerarCobrancaPosFatura`, Path B `aprovarFatura` for-loop, manual `cobrancas.create`) · **2.4.3** selector de empresa no cadastro **admin** (toggle Step3 + select nativo) e **público** (radio renderStep3 + select nativo) + endpoint público `/publico/convenios-pagador-empresa?tenant=` minimalista + integração no `motor-proposta.aceitar` (valida convênio ANTES da tx + override planoId + vínculo `ConvenioCooperado` na MESMA transação serializável) + ajuste `adicionarMembro` aceitando `tx` opcional (pula MLM side effects no Caso 1). **Sem schema delta** (descoberta Fase 1: público aceita no mesmo request, `convenioCusteioId` viaja em memória). Zero migração. 9 specs novos (3 cobrancas-custeio + 6 motor-proposta.aceitar-custeio), 24 specs ajustados pra nova assinatura. **141/141 specs verde** em motor-proposta + convenios + publico + cobrancas + planos. Smoke real: endpoint público responde (`[]` esperado, banco só tem 2 CADA_MEMBRO legado), sem JWT bloqueia, plano global criado uma única vez (idempotência confirmada 2 restarts PM2). **Próximo Code: D-FISCAL-2.4.4** (motor cobrança consolidada + cron + hook Design B). Detalhe: `docs/sessoes/2026-06-01-dfiscal-242-243-custeio-convenio.md`.
+> Última atualização: **2026-06-02 noite — M20 Sprint D-FISCAL-2.4 Caso 1 custeio 100% completa**. 8 commits trabalho (`80d3e75` 2.4.4a → `74858bb` 2.4.4a.1 → `f593917` 2.4.4a.2 → `b2e0cad` 2.4.4b → `3fa9a34` 2.4.4c → `9a201cb` 2.4.4d → `a135934` 2.4.4e → `14d0948` 2.4.4f) + 1 commit fechamento em 1 sessão Code maratona. Entregue **CASO 1 ponta-a-ponta** (empresa cooperada paga total): **2.4.4a** motor consolidado + UC sintética `CONSOLIDADOR-*` + plano técnico "Consolidador de Custeio" + helper compartilhado `tarifa-helper.ts` · **2.4.4a.1** UC própria da empresa COM_UC entra no total (dedup defensivo Map<ucId>) · **2.4.4a.2** invariante custeado⟺consolidado eliminando double-bill matematicamente (filtro `plano.custeadoPorConvenio=true`) · **2.4.4b** cron mensal `@AsPlatform()` mês fechado + endpoints REST + emissão Asaas com guard `isAmbienteReal()` · **2.4.4c** hook `darBaixa` roteia consolidada paga pro `criarLancamentoConvenioContrato` (natureza convênio AUXILIAR/PRÓPRIO configurável) · **2.4.4d** tela admin `/dashboard/convenios/[id]/cobrancas-consolidadas` + estorno gate apuração FECHADA + HelpBox · **2.4.4e** UI config no form do convênio (pagador/base/desconto/kwhAlocado) + validação service-level · **2.4.4f** ALOCACAO_FIXA gera sem membros + 3 banners feedback claro (CRIADA verde / JA_EXISTE azul / SEM_MEMBROS amber). **200/200 specs verde** convenios + cobrancas + planos + motor-proposta · `lint:tenant` zero novos · zero regressão · 2 débitos P3 catalogados (Dialog backdrop blur + tarifa-fallback). CV-2026-0001 "Clinica teste" ALOCACAO_FIXA 200000 kWh × 20% desconto **PRONTA pra Luciano fazer smoke E2E real** (R$ 126.289,60 esperado). **Próximo Code: 3 caminhos** — (1) smoke E2E real CV-2026-0001 OU (2) D-FISCAL-2.5 (aposentar `/contabilidade/convenios` + migrar CT) OU (3) D-FISCAL-2.6 (corrigir relatório 31/05 Hangar errado). Detalhe: `docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md`.
+
+> Histórico: **2026-06-01 noite tarde — M19 D-FISCAL-2.4.2 + 2.4.3 (Caso 1 custeio: plano + guards + selector + vínculo)**. 2 commits trabalho (`e265e63` D-FISCAL-2.4.2 → `07ae417` D-FISCAL-2.4.3) + 1 commit fechamento. Entregue **estrutura completa do Caso 1** (empresa cooperada paga total): **2.4.2** plano global "Custeado por convênio" via seed idempotente em `PlanosService.onModuleInit` + 3 guards bloqueando geração de cobrança individual nos 3 caminhos (Path A `gerarCobrancaPosFatura`, Path B `aprovarFatura` for-loop, manual `cobrancas.create`) · **2.4.3** selector de empresa no cadastro **admin** (toggle Step3 + select nativo) e **público** (radio renderStep3 + select nativo) + endpoint público `/publico/convenios-pagador-empresa?tenant=` minimalista + integração no `motor-proposta.aceitar` (valida convênio ANTES da tx + override planoId + vínculo `ConvenioCooperado` na MESMA transação serializável) + ajuste `adicionarMembro` aceitando `tx` opcional (pula MLM side effects no Caso 1). **Sem schema delta** (descoberta Fase 1: público aceita no mesmo request, `convenioCusteioId` viaja em memória). Zero migração. 141/141 specs verde. Detalhe: `docs/sessoes/2026-06-01-dfiscal-242-243-custeio-convenio.md`.
 
 > Histórico: **2026-06-01 noite — Arco Contabilidade + Convênios (CT.7→CT.9.1) + Decisões fiscais estruturais (D-FISCAL-1/2/MLM)**. 5 commits trabalho (`12ca409` CT.7 → `4cf71d2` PUX-A → `d086550` CT.8 → `61bbc7e` CT.9 → `d953381` CT.9.1) + 1 commit fechamento em 1 sessão Code. Entregue: **CT.7** PDFs autenticados via blob + apuração estado consciente · **PUX-A** Convênio página própria + `<HelpBox>` reusável · **CT.8** classificação inline Tipo A do Plano de Contas Segregado, multi-tipo (enforcement P0-1) · **CT.9** botão "Registrar movimento" no convênio → `LancamentoCaixa` Auxiliar Art. 88 síncrono · **CT.9.1** bugfix timezone competência + estorno do movimento + sweep "Walter" 8 arquivos código. 284 specs verdes mantidos · zero regressão · zero `--accept-data-loss`. **Decisão UX esclarecida 01/06** (refina 31/05): Dialog OK pra ações simples (confirmar/estornar/aprovar/remover); página própria SÓ pra cadastro/edição de entidade; HelpBox obrigatório. **3 decisões fiscais estruturais** catalogadas como débitos (D-FISCAL-1 classificação configurável do convênio CT / D-FISCAL-2 consolidação convênio único / D-FISCAL-MLM Hangar≠Art.88) + correção relatório 2026-05-31. Detalhe: `docs/sessoes/2026-06-01-contabilidade-convenios.md`.
 
@@ -20,6 +22,54 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-02 noite (Code — M20 Sprint D-FISCAL-2.4 Caso 1 custeio 100% completa)
+
+**8 commits trabalho** `80d3e75..14d0948` + 1 commit fechamento em 1 sessão Code maratona (8 sub-fatias incrementais 2.4.4a→f).
+
+| Sub-fatia | Commit | Marco |
+|---|---|---|
+| 2.4.4a | `80d3e75` | Motor consolidado (`ConveniosCusteioService.gerarCobrancaConsolidada`) + UC sintética `CONSOLIDADOR-{convenioId}` + plano técnico "Consolidador de Custeio" (FIXO_MENSAL `custeadoPorConvenio=false`) + helper compartilhado `common/tarifa-helper.ts` (extraído de faturas.service, modo `throwIfNotFound`). Ciclo de módulos resolvido chamando prisma direto (não CobrancasService). |
+| 2.4.4a.1 | `74858bb` | UC própria da empresa COM_UC entra no total (busca `Uc.findMany cooperadoId=pagador NOT startsWith 'CONSOLIDADOR-'`) + dedup defensivo `Map<ucId>` evita double-count. |
+| 2.4.4a.2 | `f593917` | **INVARIANTE custeado⟺consolidado**: filtro `prisma.contrato.findMany({where: {ucId in candidatas, status: ATIVO, plano: { custeadoPorConvenio: true }}})`. UC entra no consolidado ⟺ tem contrato custeado. **Garantia matemática zero double-bill.** |
+| 2.4.4b | `b2e0cad` | Cron `gerarConsolidadasMensalCusteio` `@Cron('0 4 * * *') @AsPlatform()` (mês FECHADO anterior) + `GET /convenios/:id/cobrancas-consolidadas` + `POST .../gerar?mesReferencia=YYYY-MM` `@AuditLog` + `emitirNoGateway` private (3 guards: gateway nulo / `!isAmbienteReal()` PULA dev / sem formaPagamento). |
+| 2.4.4c | `3fa9a34` | Hook `darBaixa` roteia: `convenioContabilCobrancaId != null` → `criarLancamentoConvenioContrato` (natureza convênio AUXILIAR/PRÓPRIO) **SUBSTITUI** CT.3 default. Best-effort não reverte pagamento. Descricao usa `cobranca.id` completo. |
+| 2.4.4d | `9a201cb` | Tela admin `/dashboard/convenios/[id]/cobrancas-consolidadas/page.tsx` (tabela + Dialog Gerar + Dialog Estornar + HelpBox) + `POST .../estornar` `@AuditLog` + service `estornarCobrancaConsolidada` (gate apuração FECHADA via `prisma.apuracaoMensalSegregada.findFirst` busca direta). |
+| 2.4.4e | `a135934` | DTO Create/Update aceita 5 campos custeio (`pagador, pagadorCooperadoId, baseCobrancaCusteio, kwhAlocadoMensal, descontoKwhCusteio`) + helper `validarBlocoCusteio` + `ConvenioCusteioBloco.tsx` novo componente (select pagador + revela campos quando EMPRESA + HelpBox). Reusado em /novo + /editar. |
+| 2.4.4f | `14d0948` | Bug fix: ALOCACAO_FIXA gera sem membros (early-return SEM_MEMBROS movido pra branch CONSUMO_REAL) + 3 banners feedback (CRIADA verde main / JA_EXISTE azul dialog / SEM_MEMBROS amber dialog). Dialog mantém-se ABERTO em info importante. |
+
+**Validação:** 200/200 specs verde · `lint:tenant` zero novos · zero regressão · backend rebuild + restart PM2 OK em todas as 8 sub-fatias · frontend `npm run build` + `pm2 restart cooperebr-frontend` aplicado (lição BN: HMR NÃO basta pra componente novo — reaberta uma vez na 2.4.4e e corrigida).
+
+**Descobertas arquiteturais (Decisão 23 aplicada 8× na sessão):**
+- **Ciclo de módulos NestJS** Convenios→Cobrancas→Whatsapp→MotorProposta→Convenios não resolve com forwardRef em ambos os lados — solução foi **quebrar a dep** e chamar prisma direto.
+- **Invariante 2.4.4a.2 só funciona** se descrição do lançamento usar `cobranca.id` completo (não slice 8) — ajuste cirúrgico em darBaixa pro estorno achar.
+- **`isAmbienteReal()` PULA emissão real em dev** — fail-safe, sem mexer em dados do Cooperado (regra contatos teste 14/05 sem invasão).
+- **ALOCACAO_FIXA gera sem membros** (decisão produto 02/06): pacote fixo independe de membros.
+
+**Smoke real pendente:** CV-2026-0001 "Clinica teste" (ALOCACAO_FIXA 200000 kWh × 20% desc) PRONTA pra Luciano testar — `/dashboard/convenios/cmpwof5h6000avaf8547cj3pb/cobrancas-consolidadas` → "Gerar agora" maio/2026 → R$ 126.289,60 esperado.
+
+**Próximo bloco — 3 caminhos válidos (Luciano decide):**
+
+1. **Smoke E2E real CV-2026-0001** (~10min — valida ponta-a-ponta).
+2. **D-FISCAL-2.5** (aposentar `/dashboard/contabilidade/convenios` + migrar 1 Convenio CT existente → ContratoConvenio consolidado).
+3. **D-FISCAL-2.6** (corrigir relatório `docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md` removendo exemplo Hangar errado).
+
+Recomendação: começar por (1).
+
+**Detalhe:** `docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md`.
+
+**Decisões aplicadas:**
+- Decisão 23 (Fase 1 read-only) — 8 vezes na sessão (uma por sub-fatia).
+- Regra HELP obrigatório 19/05 — HelpBox + 3 banners feedback + tooltip botões.
+- Regra selects NATIVOS 19/05 — todos os dropdowns (pagador / cooperados / base / mês).
+- Regra rebuild backend obrigatório.
+- Regra D-novo-AS/BN (HMR NÃO basta pra componente novo) — reaplicada na 2.4.4e.
+- Regra `isAmbienteReal()` (NUNCA `NODE_ENV`).
+- Transações Prisma Serializable em operações multi-modelo.
+- `@AsPlatform()` cron + `@TenantResource @AuditLog` endpoints.
+- Ciclo de módulos: quebrar dep em vez de forçar forwardRef.
 
 ---
 
@@ -1357,148 +1407,148 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento da sessão 01/06 noite tarde (M19 D-FISCAL-2.4.2 + 2.4.3
-   Caso 1 custeio: plano + guards + selector + vínculo).
+   fechamento da sessão 02/06 noite (M20 Sprint D-FISCAL-2.4 Caso 1
+   custeio 100% completa — 8 sub-fatias 2.4.4a→f).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online.
 
 PASSO 1 — Frase comandante (próximo Code arranca aqui):
 
-Executar D-FISCAL-2.4.4 — Motor de cobrança consolidada do Caso 1
-(empresa cooperada paga total). Última fatia da sprint D-FISCAL-2.
+CASO 1 CUSTEIO BACKEND+UI = 100% COMPLETO. 3 CAMINHOS VÁLIDOS — Luciano
+escolhe ANTES de Code arrancar:
 
-ESCOPO (a fatiar pós Fase 1):
-1. Service: varre membros custeados ativos por convênio (ContratoConvenio
-   com pagador=EMPRESA), soma kWh do mês via FaturaProcessada.kwhContrato
-   (ou da própria fatura se houver), gera UMA Cobrança consolidada por
-   convênio por competência mensal — destinatário = pagadorCooperadoId
-   (campo schema 2.4.1).
-2. Hook Design B: vincula a cobrança gerada ao ContratoConvenio via
-   Cobranca.convenioContabilCobrancaId (campo schema 2.4.1) pra trilha
-   contábil Auxiliar Art. 88 + alimentar LancamentoCaixa do convênio.
-3. Cron mensal (regra @AsPlatform() obrigatória) que dispara o motor
-   por tenant.
-4. Frontend admin: tela /dashboard/convenios/[id]/cobrancas-consolidadas
-   listando + estornando (Dialog Tipo C — padrão UX vigente).
-5. Specs: motor consolida 3 membros custeados em 1 cobrança · ignora
-   membros não-custeados · estorno reverte LancamentoCaixa · cron
-   idempotente (re-rodar não duplica).
-6. Smoke real: criar convênio EMPRESA + cadastrar 2 membros custeados
-   via UI 2.4.3 + rodar motor + confirmar 1 cobrança consolidada criada.
+OPÇÃO 1 — Smoke E2E real CV-2026-0001 "Clinica teste" (RECOMENDADO ~10min):
+Luciano abre /dashboard/convenios/cmpwof5h6000avaf8547cj3pb/cobrancas-consolidadas
+→ clica "Gerar agora" → seleciona maio/2026 → confirma:
+  • Banner verde "Cobrança gerada — R$ 126.289,60 (líquido) · id=X"
+  • Cobrança aparece na tabela com status A_VENCER + valor correto
+  • R$ 126.289,60 = 200000 kWh × R$ 0.78931 × (1 - 0.20) [ALOCACAO_FIXA + 20% desc]
+Se OK: fé total na entrega — partir pra Opção 2 ou 3. Se falhar: bug
+operacional inesperado pra investigar.
 
-REPORTAR Fase 1 (escopo refinado + perguntas decisórias) ANTES de
-tocar código. Decisão 23 ativa.
+OPÇÃO 2 — D-FISCAL-2.5 (aposentar /dashboard/contabilidade/convenios +
+migrar 1 Convenio CT existente → ContratoConvenio consolidado).
 
-CONTEXTO DA SESSÃO ANTERIOR (01/06 noite tarde):
-2 commits trabalho `e265e63..07ae417` entregaram a estrutura completa
-do Caso 1 custeio:
-- D-FISCAL-2.4.2 (e265e63) plano global "Custeado por convênio" via
-  seed idempotente em PlanosService.onModuleInit + 3 GUARDs nos 3
-  caminhos de geração de cobrança individual:
-  · GUARD #1 FaturasService.gerarCobrancaPosFatura (Path A): marca
-    fatura APROVADA + statusRevisao=AUTO_APROVADO_CUSTEIO_CONVENIO +
-    return null (caller já trata)
-  · GUARD Path B FaturasService.aprovarFatura for-loop: continue +
-    aviso descritivo (segue processando demais contratos)
-  · GUARD #2 CobrancasService.create: BadRequestException manual
-- D-FISCAL-2.4.3 (07ae417) selector + integração:
-  · AceitarPropostaDto.convenioCusteioId? opcional
-  · MotorPropostaService.aceitar valida ANTES da tx (NotFound/Forbidden/
-    BadRequest pagador≠EMPRESA) + override planoId pro plano custeado
-    global + chama conveniosMembros.adicionarMembro com TX (dentro do
-    $transaction Serializable do Contrato → atomicidade total)
-  · ConveniosMembrosService.adicionarMembro: 4º param opcional tx;
-    quando presente usa db=tx??this.prisma e PULA side effects MLM
-    (recalcularFaixa + registrarIndicacaoConvenio) — não se aplicam
-    ao Caso 1 puro
-  · Endpoint público GET /publico/convenios-pagador-empresa?tenant=X
-    retornando só [{id, empresaNome}] (sem CNPJ/desconto/MLM)
-  · UI admin Step3: toggle "Custeado por convênio (empresa paga)" +
-    HelpBox amarela + select NATIVO + síntese resultadoMotor do consumo
-  · UI público renderStep3: radio NATIVO + select NATIVO + banner azul
-  · PlanosService.findAtivos filtra custeadoPorConvenio=false
+OPÇÃO 3 — D-FISCAL-2.6 (corrigir relatório
+docs/relatorios/2026-05-31-conformidade-contabil-multi-regime.md
+removendo exemplo Hangar errado — relatório cita Hangar como Auxiliar
+Art. 88 mas Hangar é MLM/captação, deveria ser Art. 86).
 
-141/141 specs verde · zero migração · zero --accept-data-loss · backend
-rebuild + restart PM2 OK · endpoint público responde [] (esperado, banco
-só tem 2 CADA_MEMBRO legado) · idempotência confirmada após 2 restarts.
+Recomendação: começar por (1) pra fechar fé na entrega, depois (2) ou (3).
 
-DESCOBERTA ARQUITETURAL (Fase 1 da 2.4.3):
-Schema delta PropostaCooperado.convenioCusteioId proposto originalmente
-foi DESCARTADO — público aceita no mesmo request (cadastroWebV2 chama
-motorProposta.aceitar imediatamente), então convenioCusteioId viaja em
-memória do front → controller → service. Zero persistência intermediária.
-Decisão aprovada por Luciano antes de Fase 2.
+CONTEXTO DA SESSÃO ANTERIOR (02/06 noite — 8 commits 80d3e75..14d0948):
+- 2.4.4a (80d3e75) motor ConveniosCusteioService + UC sintética CONSOLIDADOR-*
+  + plano "Consolidador de Custeio" (custeadoPorConvenio=FALSE crítico) +
+  common/tarifa-helper.ts. Ciclo de módulos resolvido chamando prisma direto.
+- 2.4.4a.1 (74858bb) UCs reais do pagador no total + dedup Map<ucId>.
+- 2.4.4a.2 (f593917) INVARIANTE custeado⟺consolidado via filtro
+  contrato.plano.custeadoPorConvenio=true. Garantia matemática ZERO double-bill.
+- 2.4.4b (b2e0cad) cron @AsPlatform() mês FECHADO + GET listar + POST gerar
+  manual + emissão gateway com guard isAmbienteReal() (em dev PULA total).
+- 2.4.4c (3fa9a34) hook darBaixa roteia consolidada paga pra
+  criarLancamentoConvenioContrato (natureza AUXILIAR/PRÓPRIO configurável)
+  em vez do CT.3 default (COBRANCA→PRÓPRIO). SUBSTITUI sem duplicar.
+- 2.4.4d (9a201cb) tela /dashboard/convenios/[id]/cobrancas-consolidadas
+  + Dialog estornar + HelpBox + estornarCobrancaConsolidada com gate
+  apuração FECHADA.
+- 2.4.4e (a135934) DTO Create/Update aceita 5 campos custeio + helper
+  validarBlocoCusteio + ConvenioCusteioBloco.tsx (select pagador + EMPRESA
+  revela campos). Reusado em /novo + /editar.
+- 2.4.4f (14d0948) ALOCACAO_FIXA gera sem membros (early-return movido
+  pro branch CONSUMO_REAL) + 3 banners feedback claro (CRIADA verde / 
+  JA_EXISTE azul / SEM_MEMBROS amber). Dialog mantém-se aberto em info.
+
+200/200 specs verde · lint:tenant 0 novos · zero regressão · backend
+rebuild + restart PM2 OK · frontend npm run build + pm2 restart
+cooperebr-frontend (lição BN: HMR NÃO basta pra componente novo —
+reaplicada na 2.4.4e e corrigida em sub-fatia separada).
+
+DESCOBERTAS ARQUITETURAIS DA SESSÃO:
+- Ciclo de módulos NestJS Convenios→Cobrancas→Whatsapp→MotorProposta→Convenios
+  NÃO resolve com forwardRef em ambos os lados. Solução: quebrar a dep e
+  chamar prisma direto.
+- isAmbienteReal() PULA emissão real em dev — fail-safe sem mexer em dados
+  do Cooperado (regra contatos teste 14/05 sem invasão).
+- Invariante custeado⟺consolidado é o ÚNICO caminho que garante zero
+  double-bill matematicamente.
+- ALOCACAO_FIXA NÃO depende de membros (decisão produto 02/06) — pacote
+  fixo é a fonte; convênio "pré-pago" funciona sem ninguém vinculado.
+
+ENTREGA PRONTA PRA SMOKE REAL:
+CV-2026-0001 "Clinica teste" (id cmpwof5h6000avaf8547cj3pb):
+- status=ATIVO · pagador=EMPRESA · pagadorCooperadoId=cmpwnuid50006vaf8th51y2s7
+- baseCobrancaCusteio=ALOCACAO_FIXA · kwhAlocadoMensal=200000 · descontoKwhCusteio=20%
+- contratoConsolidadorId=cmpwolcbf000evaf83u6hy1b8 (CONS-547CJ3PB) ✓
+- naturezaAtoCooperativo=AUXILIAR · geraLancamentoContabil=true ✓
+- Plano "Consolidador de Custeio" global criado e configurado ✓
+- Tarifa EDP-ES disponível ✓
+- 0 membros (não precisa — ALOCACAO_FIXA gera sozinho após 2.4.4f)
 
 CONSTRAINTS APLICÁVEIS:
-- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código (foi
+  aplicada 8 vezes na sessão 02/06 — manter disciplina).
 - @TenantResource em todo handler novo de mutação (lint força)
-- @AsPlatform() em todo cron/listener novo (CRÍTICO pra D-FISCAL-2.4.4)
+- @AsPlatform() em todo cron/listener novo
 - Multi-tenant: TODA query Prisma filtra por cooperativaId
 - isAmbienteReal() em endpoints dev (NUNCA NODE_ENV)
 - Regra contatos teste: 27981341348 + lucbragatto@gmail.com
 - Decisão 24: frase de retomada local único
-- Padrão UX vigente 01/06: Dialog OK pra ação simples; página própria
-  SÓ pra cadastro/edição; HelpBox obrigatório (regra 19/05)
-- Selects NATIVOS dentro de Dialog/wizard (regra 19/05)
+- Padrão UX vigente 02/06: Dialog OK pra ação simples; página própria
+  SÓ pra cadastro/edição/gestão financeira; HelpBox obrigatório (19/05);
+  selects NATIVOS dentro de Dialog/wizard (19/05)
 - Math.round(x*100)/100 em todo valor monetário
 - Schema aditivo sem --accept-data-loss; ritual PM2 nas migrations
-- Transações Prisma serializáveis pra operações multi-modelo críticas
+- Transações Prisma Serializable pra operações multi-modelo críticas
+- ⚠️ Lição D-novo-AS/BN: frontend componente NOVO exige npm run build
+  + pm2 restart cooperebr-frontend (HMR NÃO basta — confirmado 2× na
+  sessão 02/06)
+- Ciclo de módulos: quebrar dep em vez de forçar forwardRef
 
 PRE-REQUISITOS LEITURA (ordem fixa):
 1. docs/CONTROLE-EXECUCAO.md (este arquivo, ## ONDE PARAMOS topo)
 2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
-3. docs/sessoes/2026-06-01-dfiscal-242-243-custeio-convenio.md
-   (contexto pleno desta sessão)
-4. docs/sessoes/2026-06-01-contabilidade-convenios.md (sessão anterior
-   da tarde — CT.7→CT.9.1 + D-FISCAL-2.1)
-5. docs/debitos-tecnicos.md — D-FISCAL-2 (sprint em curso),
-   D-FISCAL-1, D-FISCAL-MLM, D-novo-CT-CONVENIO-HOOK (resolvido)
-6. backend/prisma/schema.prisma — modelos:
-   · ContratoConvenio (campos schema 2.4.1: pagadorCooperadoId,
-     baseCobrancaCusteio, kwhAlocadoMensal, descontoKwhCusteio,
-     contratoConsolidadorId + relations pagadorCooperado e
-     contratoConsolidador)
-   · Cobranca.convenioContabilCobrancaId (FK Design B já presente)
-   · ConvenioCooperado (vínculo membro×convenio)
-   · Plano.custeadoPorConvenio (seed global criado em 2.4.2)
-   · FaturaProcessada (fonte do kWh real do mês)
-7. backend/src/motor-proposta/motor-proposta.service.ts
-   · linha ~530-580 custeioContext (validação 2.4.3)
-   · linha ~830 adicionarMembro(...tx) (vínculo na transação)
-8. backend/src/cobrancas/cobrancas.service.ts linha ~166 (GUARD #2)
-9. backend/src/faturas/faturas.service.ts linhas ~602 (GUARD Path A)
-   + ~1061 (GUARD Path B)
-10. backend/src/convenios/convenios-membros.service.ts adicionarMembro
-    (entender adicionar/remover/listar pra reaproveitar lookups)
-11. backend/src/contabilidade-tributaria/contabilidade-tributaria.service.ts
-    criarLancamentoConvenioContrato (motor contábil já consciente do
-    ContratoConvenio desde 2.2 — reusar pra trilha Auxiliar Art. 88)
-12. backend/scripts/dfiscal242-check-plano.ts (template pra script
-    de smoke da 2.4.4)
+3. docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md (contexto pleno
+   desta sessão maratona)
+4. docs/sessoes/2026-06-01-dfiscal-242-243-custeio-convenio.md (sessão
+   anterior — M19 2.4.2 + 2.4.3)
+5. docs/debitos-tecnicos.md — D-FISCAL-2 (Caso 1 RESOLVIDO; Caso 2 MLM
+   legado ainda), D-FISCAL-1, D-FISCAL-MLM (relatório 31/05 errado —
+   alvo da Opção 3), D-novo-UX-Dialog-Backdrop (P3 catalogado 02/06),
+   D-novo-CT-TARIFA-ALOCACAO (P3 catalogado 02/06)
+6. backend/src/convenios/convenios-custeio.service.ts (serviço completo
+   da sprint — gerar, listar, cron, emitir gateway, estornar, lazy create
+   contratoConsolidador)
+7. backend/src/cobrancas/cobrancas.service.ts:443-606 (darBaixa com
+   roteamento 2.4.4c)
+8. backend/src/convenios/convenios.controller.ts:285-380 (3 endpoints
+   novos: GET listar + POST gerar + POST estornar)
+9. backend/src/convenios/convenios.job.ts:38-72 (cron gerarConsolidadasMensalCusteio)
+10. web/app/dashboard/convenios/[id]/cobrancas-consolidadas/page.tsx (UI
+    com Dialog Gerar + Estornar + HelpBox + 3 banners feedback)
+11. web/components/convenios/ConvenioCusteioBloco.tsx (config no form)
+12. backend/scripts/dfiscal244-diag-cv-2026-0001.ts (script de diag —
+    template pra qualquer convênio EMPRESA novo)
 13. CLAUDE.md + .claude/CLAUDE.md (regras)
 14. git log --oneline -20
 
 CARRY-OVERS (não-bloqueantes):
-- 15 erros TS pré-existentes em backend/src/agents/* (sentinela +
-  repasses-despesas + cobranca) — dist/ é gerado, runtime OK, débito P3
+- 15 erros TS pré-existentes em backend/src/agents/* (P3 — dist/ é gerado,
+  runtime OK)
 - Convenção MENSAL (Mini-Bloco H'.9 17/05) ainda não aplicada — 2 usinas
-  com capacidadeKwh em ANUAL precisam refactor antes do motor consolidado
-  final usar kWh real médio
-- Custeio plano: hoje Contrato custeado guarda kwhContrato=consumo do
-  Step1 (placeholder informacional) — em 2.4.4 o motor consolidado usa
-  kWh REAL do mês via FaturaProcessada
-- Smoke E2E manual: banco tem ZERO convênios com pagador=EMPRESA
-  (2 vivos são CADA_MEMBRO legado) — Luciano precisa criar 1 convênio
-  teste com pagador=EMPRESA OU 2.4.4 vira sprint "vazio" sem dados
-- 43+ untracked scripts/relatorios — Sprint Housekeeping futuro
-- 256 legados allowlist lint:tenant — esvaziar incrementalmente
-- D-novo-PUX (Polimento UX) parcialmente coberto em PUX-A
+  em ANUAL
+- D-novo-UX-Dialog-Backdrop P3 (backdrop-blur do Dialog faz taskbar
+  Windows piscar — fix trivial)
+- D-novo-CT-TARIFA-ALOCACAO P3 (distribuidora null em ALOCACAO_FIXA
+  sem membros cai no fallback — acerta hoje com EDP-ES único)
 - D-novo-CT-PDF-AUXILIAR P2 — PDFs ignoram Auxiliar
 - D-novo-CT-VALIDACAO-FISCAL P0 — pendente validação interna alíquotas
-- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 — bloqueia Sinergia
+  (bloqueia produção fiscal real, NÃO bloqueia 2.5/2.6 dev)
+- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 (bloqueia Sinergia)
 - D-novo-BM (P0 BLOQUEADOR REMOÇÃO PRÉ-PROD — painel credenciais teste)
 - D-novo-BP (P3 convergência /parceiro vs /dashboard)
+- 43+ untracked scripts/relatorios — Sprint Housekeeping futuro
+- 256 legados allowlist lint:tenant — esvaziar incrementalmente
 
 FRENTES OPERACIONAIS LUCIANO (acumulado):
 ⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção
