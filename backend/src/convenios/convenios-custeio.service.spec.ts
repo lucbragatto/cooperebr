@@ -740,6 +740,319 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     expect(createCobranca).not.toHaveBeenCalled();
   });
 
+  // ============================================================
+  // D-FISCAL-2.4.4b — Emissão no gateway (Asaas/Banestes)
+  // ============================================================
+
+  describe('D-FISCAL-2.4.4b — emissão no gateway', () => {
+    const gatewayEmitir = jest.fn();
+    const findUniqueFormaPag = jest.fn();
+    const gatewayMock = { emitirCobranca: gatewayEmitir } as any;
+    let serviceComGateway: ConveniosCusteioService;
+
+    beforeEach(() => {
+      jest.resetAllMocks();
+      // Setup default mocks pra cenário sucesso completo
+      findUniqueContrato.mockResolvedValue({
+        id: 'contrato-cons-1',
+        plano: { custeadoPorConvenio: false, nome: 'Consolidador de Custeio' },
+      });
+      findFirstPlano.mockResolvedValue({
+        id: 'plano-cons',
+        custeadoPorConvenio: false,
+      });
+      createCobranca.mockResolvedValue({ id: 'cob-gw-1' });
+      createLancamentoCaixa.mockResolvedValue({ id: 'lanc-gw-1' });
+      transactionFn.mockImplementation(async (cb: any) => cb(txMock));
+      findManyUcsPagador.mockResolvedValue([]);
+      findManyContratosCusteado.mockImplementation(async (args: any) => {
+        const ucIds: string[] = args?.where?.ucId?.in ?? [];
+        return ucIds.map((ucId) => ({ ucId }));
+      });
+      // Prisma adicional pro gateway path
+      (prismaMock as any).formaPagamentoCooperado = { findUnique: findUniqueFormaPag };
+
+      serviceComGateway = new ConveniosCusteioService(prismaMock, gatewayMock);
+
+      findFirstConvenio.mockResolvedValue(convenioBase);
+      findFirstCobranca.mockResolvedValue(null);
+      findManyMembros.mockResolvedValue([
+        {
+          cooperado: {
+            id: 'mem-1',
+            nomeCompleto: 'Dr. A',
+            ucs: [{ id: 'uc-mem-1', numero: '001', distribuidora: 'EDP_ES' }],
+          },
+        },
+      ]);
+      findManyFaturas.mockResolvedValue([
+        { ucId: 'uc-mem-1', dadosExtraidos: { consumoAtualKwh: 500 }, mediaKwhCalculada: '500' },
+      ]);
+      findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+    });
+
+    afterEach(() => {
+      delete process.env.AMBIENTE_REAL;
+    });
+
+    it('AMBIENTE_REAL=false (dev) → PULA emissão real (regra contatos teste 14/05)', async () => {
+      delete process.env.AMBIENTE_REAL;
+
+      const r = await serviceComGateway.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.status).toBe('CRIADA');
+      expect(createCobranca).toHaveBeenCalledTimes(1);
+      // Gateway NUNCA chamado em dev
+      expect(gatewayEmitir).not.toHaveBeenCalled();
+      // Não busca forma pagamento (skip antes)
+      expect(findUniqueFormaPag).not.toHaveBeenCalled();
+    });
+
+    it('AMBIENTE_REAL=true + formaPagamento configurada → EMITE no gateway com cobrancaId correto', async () => {
+      process.env.AMBIENTE_REAL = 'true';
+      findUniqueFormaPag.mockResolvedValueOnce({ tipo: 'BOLETO' });
+      gatewayEmitir.mockResolvedValueOnce({
+        gateway: 'ASAAS',
+        gatewayId: 'asaas-cob-123',
+        status: 'PENDING',
+      });
+
+      const r = await serviceComGateway.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.status).toBe('CRIADA');
+      expect(gatewayEmitir).toHaveBeenCalledTimes(1);
+      const [cooperadoArg, coopArg, dadosArg] = gatewayEmitir.mock.calls[0];
+      expect(cooperadoArg).toBe('pagador-1'); // pagador da empresa
+      expect(coopArg).toBe('coop-A');
+      expect(dadosArg.cobrancaId).toBe('cob-gw-1'); // mesma Cobranca recém-criada
+      expect(dadosArg.formaPagamento).toBe('BOLETO');
+      expect(dadosArg.valor).toBeCloseTo(394.66, 2);
+      expect(dadosArg.descricao).toContain('Clínica Médica X');
+    });
+
+    it('AMBIENTE_REAL=true + sem formaPagamento → PULA emissão (log INFO)', async () => {
+      process.env.AMBIENTE_REAL = 'true';
+      findUniqueFormaPag.mockResolvedValueOnce(null);
+
+      const r = await serviceComGateway.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.status).toBe('CRIADA'); // Cobrança criada normalmente
+      expect(gatewayEmitir).not.toHaveBeenCalled(); // gateway NÃO chamado
+    });
+
+    it('AMBIENTE_REAL=true + gateway erro → log warn, NÃO bloqueia retorno', async () => {
+      process.env.AMBIENTE_REAL = 'true';
+      findUniqueFormaPag.mockResolvedValueOnce({ tipo: 'PIX' });
+      gatewayEmitir.mockRejectedValueOnce(new Error('Asaas down'));
+
+      const r = await serviceComGateway.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.status).toBe('CRIADA'); // Cobrança criada apesar do erro
+      expect(gatewayEmitir).toHaveBeenCalledTimes(1);
+    });
+
+    it('Service sem gateway injetado → skip silencioso (backward-compat)', async () => {
+      process.env.AMBIENTE_REAL = 'true';
+      const serviceSemGateway = new ConveniosCusteioService(prismaMock);
+
+      const r = await serviceSemGateway.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.status).toBe('CRIADA');
+      expect(gatewayEmitir).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // D-FISCAL-2.4.4b — listarConsolidadasDoConvenio
+  // ============================================================
+
+  describe('D-FISCAL-2.4.4b — listarConsolidadasDoConvenio', () => {
+    const findManyCobrancas = jest.fn();
+
+    beforeEach(() => {
+      jest.resetAllMocks();
+      (prismaMock as any).cobranca = {
+        findFirst: findFirstCobranca,
+        create: createCobranca,
+        findMany: findManyCobrancas,
+      };
+    });
+
+    it('multi-tenant: convênio de outro tenant → NotFound', async () => {
+      findFirstConvenio.mockResolvedValueOnce(null);
+
+      await expect(
+        service.listarConsolidadasDoConvenio('conv-1', 'coop-OUTRA'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(findManyCobrancas).not.toHaveBeenCalled();
+    });
+
+    it('lista cobranças filtradas por convenioContabilCobrancaId + cooperativaId', async () => {
+      findFirstConvenio.mockResolvedValueOnce({
+        id: 'conv-1',
+        empresaNome: 'Clínica Médica X',
+      });
+      findManyCobrancas.mockResolvedValueOnce([
+        { id: 'cob-1', mesReferencia: 5, anoReferencia: 2026, valorLiquido: '947.17', status: 'PENDENTE' },
+        { id: 'cob-2', mesReferencia: 4, anoReferencia: 2026, valorLiquido: '800.00', status: 'PAGO' },
+      ]);
+
+      const r = await service.listarConsolidadasDoConvenio('conv-1', 'coop-A');
+
+      expect(r).toHaveLength(2);
+      expect(findManyCobrancas).toHaveBeenCalledTimes(1);
+      const args = findManyCobrancas.mock.calls[0][0];
+      expect(args.where).toEqual({
+        convenioContabilCobrancaId: 'conv-1',
+        cooperativaId: 'coop-A',
+      });
+      expect(args.orderBy).toEqual([
+        { anoReferencia: 'desc' },
+        { mesReferencia: 'desc' },
+      ]);
+    });
+  });
+
+  // ============================================================
+  // D-FISCAL-2.4.4b — cronGerarConsolidadasDoMesFechado
+  // ============================================================
+
+  describe('D-FISCAL-2.4.4b — cron mensal', () => {
+    const findManyConvenios = jest.fn();
+    let serviceCron: ConveniosCusteioService;
+    let gerarSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      jest.resetAllMocks();
+      (prismaMock as any).contratoConvenio = {
+        findFirst: findFirstConvenio,
+        update: updateConvenio,
+        findMany: findManyConvenios,
+      };
+      serviceCron = new ConveniosCusteioService(prismaMock);
+      gerarSpy = jest.spyOn(serviceCron, 'gerarCobrancaConsolidada').mockResolvedValue({
+        status: 'CRIADA',
+        cobrancaId: 'cob-cron-1',
+        valorBruto: 100,
+        valorLiquido: 100,
+      } as any);
+    });
+
+    afterEach(() => {
+      gerarSpy.mockRestore();
+    });
+
+    it('zero convênios EMPRESA com diaEnvioRelatorio==hoje → não chama gerar', async () => {
+      findManyConvenios.mockResolvedValueOnce([]);
+
+      const r = await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 5, 5)); // 05/06/2026
+
+      expect(r.processados).toBe(0);
+      expect(r.criados).toBe(0);
+      expect(gerarSpy).not.toHaveBeenCalled();
+      // Filtro do query: pagador=EMPRESA + ATIVO + diaEnvioRelatorio=dia
+      const args = findManyConvenios.mock.calls[0][0];
+      expect(args.where.pagador).toBe('EMPRESA');
+      expect(args.where.status).toBe('ATIVO');
+      expect(args.where.diaEnvioRelatorio).toBe(5);
+    });
+
+    it('gera consolidada do MÊS FECHADO ANTERIOR (não corrente)', async () => {
+      findManyConvenios.mockResolvedValueOnce([
+        { id: 'conv-1', empresaNome: 'Clínica X', cooperativaId: 'coop-A' },
+      ]);
+
+      // Hoje = 15/06/2026 → gera 05/2026 (mês fechado)
+      await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 5, 15));
+
+      expect(gerarSpy).toHaveBeenCalledTimes(1);
+      const opts = gerarSpy.mock.calls[0][0];
+      expect(opts.mesReferencia).toBe(5); // maio
+      expect(opts.anoReferencia).toBe(2026);
+      expect(opts.skipIfExists).toBe(true);
+    });
+
+    it('virada de ano: hoje=15/01/2026 → gera 12/2025', async () => {
+      findManyConvenios.mockResolvedValueOnce([
+        { id: 'conv-1', empresaNome: 'Clínica X', cooperativaId: 'coop-A' },
+      ]);
+
+      await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 0, 15));
+
+      const opts = gerarSpy.mock.calls[0][0];
+      expect(opts.mesReferencia).toBe(12);
+      expect(opts.anoReferencia).toBe(2025);
+    });
+
+    it('idempotência: convênio com cobrança já existente → conta como jaExistem (não falha)', async () => {
+      findManyConvenios.mockResolvedValueOnce([
+        { id: 'conv-1', empresaNome: 'Clínica X', cooperativaId: 'coop-A' },
+        { id: 'conv-2', empresaNome: 'Clínica Y', cooperativaId: 'coop-A' },
+      ]);
+      gerarSpy.mockResolvedValueOnce({ status: 'CRIADA', cobrancaId: 'novo', valorBruto: 100, valorLiquido: 100 } as any);
+      gerarSpy.mockResolvedValueOnce({ status: 'JA_EXISTE', cobrancaId: 'velho' } as any);
+
+      const r = await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 5, 5));
+
+      expect(r.processados).toBe(2);
+      expect(r.criados).toBe(1);
+      expect(r.jaExistem).toBe(1);
+      expect(r.falhas).toBe(0);
+    });
+
+    it('falha em 1 convênio (kWh=0) não derruba os outros', async () => {
+      findManyConvenios.mockResolvedValueOnce([
+        { id: 'conv-falha', empresaNome: 'Clínica Sem Faturas', cooperativaId: 'coop-A' },
+        { id: 'conv-ok', empresaNome: 'Clínica X', cooperativaId: 'coop-A' },
+      ]);
+      gerarSpy.mockRejectedValueOnce(new Error('nenhuma fatura APROVADA encontrada'));
+      gerarSpy.mockResolvedValueOnce({ status: 'CRIADA', cobrancaId: 'ok', valorBruto: 100, valorLiquido: 100 } as any);
+
+      const r = await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 5, 5));
+
+      expect(r.processados).toBe(2);
+      expect(r.criados).toBe(1);
+      expect(r.falhas).toBe(1);
+    });
+
+    it('convênio sem cooperativaId → skip + falha contada', async () => {
+      findManyConvenios.mockResolvedValueOnce([
+        { id: 'conv-orfao', empresaNome: 'Órfão', cooperativaId: null },
+      ]);
+
+      const r = await serviceCron.cronGerarConsolidadasDoMesFechado(new Date(2026, 5, 5));
+
+      expect(r.falhas).toBe(1);
+      expect(gerarSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it('D-FISCAL-2.4.4a.1: convênio só com pagador COM_UC (zero membros UCs) → consolidada gerada', async () => {
     findFirstConvenio.mockResolvedValue(convenioBase);
     findFirstCobranca.mockResolvedValue(null);

@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, ForbiddenException, HttpCode,
+  Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, ForbiddenException, BadRequestException, HttpCode,
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -8,6 +8,7 @@ import { AuditLog } from '../audit/audit-log.decorator';
 import { ConveniosService } from './convenios.service';
 import { ConveniosMembrosService } from './convenios-membros.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
+import { ConveniosCusteioService } from './convenios-custeio.service';
 import { CreateConvenioDto, UpdateConvenioDto, AddMembroDto, UpdateMembroDto } from './convenios.dto';
 import { RegistrarMovimentoConvenioContratoDto } from './dto/registrar-movimento-convenio-contrato.dto';
 import { ConfigBeneficio } from './convenios-progressao.service';
@@ -22,6 +23,8 @@ export class ConveniosController {
     private readonly membrosService: ConveniosMembrosService,
     private readonly progressaoService: ConveniosProgressaoService,
     private readonly contabilidade: ContabilidadeTributariaService,
+    // D-FISCAL-2.4.4b — endpoints de cobranças consolidadas custeio
+    private readonly custeioService: ConveniosCusteioService,
   ) {}
 
   // ─── CRUD Convênio ──────────────────────────────────────────────────────
@@ -274,6 +277,78 @@ export class ConveniosController {
       cooperativaId,
       motivo: body?.motivo,
       usuarioId: req.user?.id ?? req.user?.userId,
+    });
+  }
+
+  // ─── D-FISCAL-2.4.4b — Cobranças consolidadas custeio (Caso 1) ────────
+
+  /**
+   * Lista cobranças consolidadas de um convênio (alimenta a tela 2.4.4d).
+   * Filtra Cobranca por `convenioContabilCobrancaId`. Multi-tenant via
+   * @TenantResource + filtro explícito no service.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'contratoConvenio' })
+  @Get(':id/cobrancas-consolidadas')
+  async listarCobrancasConsolidadas(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    return this.custeioService.listarConsolidadasDoConvenio(id, cooperativaId);
+  }
+
+  /**
+   * Gera consolidada manual sob demanda (botão "Gerar agora" na UI 2.4.4d).
+   * Query `?mesReferencia=YYYY-MM`. Valida mes <= corrente. Idempotente —
+   * se já existir, retorna {status: 'JA_EXISTE', cobrancaId}.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.consolidada.gerar_manual',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(201)
+  @Post(':id/cobrancas-consolidadas/gerar')
+  async gerarCobrancaConsolidadaManual(
+    @Param('id') id: string,
+    @Query('mesReferencia') mesReferencia: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    if (!mesReferencia || !/^\d{4}-\d{2}$/.test(mesReferencia)) {
+      throw new BadRequestException(
+        `Query param mesReferencia obrigatório no formato YYYY-MM (ex: 2026-05). Recebido: "${mesReferencia}".`,
+      );
+    }
+    const [anoStr, mesStr] = mesReferencia.split('-');
+    const ano = Number(anoStr);
+    const mes = Number(mesStr);
+    if (mes < 1 || mes > 12) {
+      throw new BadRequestException(`Mês inválido: ${mes}. Use 1-12.`);
+    }
+    // Valida mes <= corrente (não permite gerar pra mês futuro/em curso)
+    const hoje = new Date();
+    const corrente = hoje.getFullYear() * 100 + (hoje.getMonth() + 1);
+    const alvo = ano * 100 + mes;
+    if (alvo > corrente) {
+      throw new BadRequestException(
+        `mesReferencia ${mesReferencia} é futuro. Use o mês corrente ou anterior.`,
+      );
+    }
+    return this.custeioService.gerarCobrancaConsolidada({
+      convenioId: id,
+      mesReferencia: mes,
+      anoReferencia: ano,
+      cooperativaId,
     });
   }
 

@@ -28,10 +28,13 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { buscarTarifaPorDistribuidora } from '../common/tarifa-helper';
+import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.service';
+import { isAmbienteReal } from '../common/safety/ambiente';
 
 const PLANO_CONSOLIDADOR_NOME = 'Consolidador de Custeio';
 
@@ -41,7 +44,12 @@ type TxOrPrisma = Prisma.TransactionClient | PrismaService;
 export class ConveniosCusteioService {
   private readonly logger = new Logger(ConveniosCusteioService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    // D-FISCAL-2.4.4b: emissão da consolidada no gateway (boleto/PIX).
+    // Optional pra não quebrar specs pré-2.4.4b que instanciam direto.
+    @Optional() private gatewayPagamento?: GatewayPagamentoService,
+  ) {}
 
   /**
    * Gera (ou pula, se já existe) a cobrança consolidada de um convênio
@@ -423,12 +431,97 @@ export class ConveniosCusteioService {
         `(desconto ${descontoPct}%) · cobrancaId=${cobranca.id}`,
     );
 
+    // D-FISCAL-2.4.4b — Emissão no gateway (Asaas/Banestes) FORA da tx.
+    // Best-effort (não bloqueia retorno se falhar — log warn).
+    // Regra contatos teste (14/05/2026): só emite real em ambiente real
+    // (AMBIENTE_REAL=true). Em dev (default), PULA emissão pra não disparar
+    // boleto real pra empresa pagadora real. Solução fail-safe e simples —
+    // sem mexer em dados do Cooperado pagador.
+    await this.emitirNoGateway(
+      cobranca.id,
+      convenio.cooperativaId!,
+      convenio.pagadorCooperadoId!,
+      valorLiquido,
+      dataVencimento,
+      `Cobrança consolidada — ${convenio.empresaNome} — ${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`,
+    );
+
     return {
       status: 'CRIADA',
       cobrancaId: cobranca.id,
       valorBruto,
       valorLiquido,
     };
+  }
+
+  /**
+   * D-FISCAL-2.4.4b — Emite a cobrança consolidada no gateway (Asaas/Banestes).
+   * Best-effort, NUNCA reverte a Cobranca criada.
+   *
+   * Guarda dupla:
+   *  1. isAmbienteReal()=false → PULA totalmente (regra contatos teste 14/05).
+   *  2. cooperado sem formaPagamento configurada → PULA com log INFO.
+   *  3. Erro do adapter → log warn (não joga pra cima).
+   *
+   * Mesma filosofia do CobrancasService.tentarEmitirNoGateway:770-803.
+   */
+  private async emitirNoGateway(
+    cobrancaId: string,
+    cooperativaId: string,
+    cooperadoId: string,
+    valor: number,
+    dataVencimento: Date,
+    descricao: string,
+  ): Promise<void> {
+    if (!this.gatewayPagamento) {
+      this.logger.debug(
+        `[D-FISCAL-2.4.4b] GatewayPagamentoService não injetado — skip emissão da consolidada ${cobrancaId}.`,
+      );
+      return;
+    }
+    if (!isAmbienteReal()) {
+      this.logger.log(
+        `[D-FISCAL-2.4.4b] AMBIENTE_REAL=false — skip emissão real da consolidada ${cobrancaId} ` +
+          `(regra contatos teste 14/05/2026 — fail-safe). ` +
+          `Pra emitir em dev, configure AMBIENTE_REAL=true no .env.`,
+      );
+      return;
+    }
+    try {
+      const formaPagamento = await this.prisma.formaPagamentoCooperado.findUnique({
+        where: { cooperadoId },
+      });
+      const formasValidas = ['BOLETO', 'PIX', 'CARTAO_CREDITO', 'CREDIT_CARD'];
+      const tipo = formaPagamento?.tipo;
+      if (!tipo || !formasValidas.includes(tipo)) {
+        this.logger.log(
+          `[D-FISCAL-2.4.4b] Empresa pagadora ${cooperadoId} sem formaPagamento configurada ` +
+            `(ou tipo inválido: ${tipo}). Skip emissão da consolidada ${cobrancaId} — ` +
+            `admin deve cobrar manualmente.`,
+        );
+        return;
+      }
+      const resultado = await this.gatewayPagamento.emitirCobranca(
+        cooperadoId,
+        cooperativaId,
+        {
+          valor,
+          vencimento: dataVencimento.toISOString().split('T')[0],
+          descricao,
+          formaPagamento: tipo as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
+          cobrancaId,
+        },
+      );
+      this.logger.log(
+        `[D-FISCAL-2.4.4b] Consolidada ${cobrancaId} EMITIDA no gateway ${resultado.gateway} ` +
+          `(gatewayId=${resultado.gatewayId}, status=${resultado.status}).`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[D-FISCAL-2.4.4b] Falha ao emitir consolidada ${cobrancaId} no gateway: ` +
+          `${(err as Error).message}. Cobrança ficou em PENDENTE — admin pode reenviar.`,
+      );
+    }
   }
 
   /**
@@ -565,6 +658,137 @@ export class ConveniosCusteioService {
     );
 
     return contrato.id;
+  }
+
+  /**
+   * D-FISCAL-2.4.4b — Lista cobranças consolidadas de um convênio (tenant-scoped).
+   * Filtra Cobranca por convenioContabilCobrancaId. Usada pelo endpoint
+   * GET /convenios/:id/cobrancas-consolidadas (alimenta a tela 2.4.4d).
+   */
+  async listarConsolidadasDoConvenio(convenioId: string, cooperativaId: string) {
+    // Cross-check tenant primeiro (defesa em profundidade — controller já tem @TenantResource)
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: { id: true, empresaNome: true },
+    });
+    if (!convenio) {
+      throw new NotFoundException(
+        `Convênio ${convenioId} não encontrado neste tenant`,
+      );
+    }
+
+    return this.prisma.cobranca.findMany({
+      where: {
+        convenioContabilCobrancaId: convenioId,
+        cooperativaId, // dupla camada multi-tenant
+      },
+      select: {
+        id: true,
+        mesReferencia: true,
+        anoReferencia: true,
+        valorBruto: true,
+        valorDesconto: true,
+        valorLiquido: true,
+        valorPago: true,
+        status: true,
+        dataVencimento: true,
+        dataPagamento: true,
+        createdAt: true,
+      },
+      orderBy: [
+        { anoReferencia: 'desc' },
+        { mesReferencia: 'desc' },
+      ],
+    });
+  }
+
+  /**
+   * D-FISCAL-2.4.4b — Cron varre todos os convênios EMPRESA+ATIVO e gera a
+   * consolidada do MÊS FECHADO ANTERIOR pros que têm `diaEnvioRelatorio == hoje`.
+   * Idempotência soft via skipIfExists=true (constraint @@unique na cobrança
+   * faz idempotência hard se a soft falhar).
+   *
+   * Decisão Luciano #5 da Fase 1 (D-FISCAL-2.4.4): mês FECHADO anterior — não o
+   * corrente — porque faturas dos membros do mês corrente ainda não chegaram.
+   *
+   * Roda no AsPlatform context (cron mensal por tenant — cooperativaId vem do
+   * convênio). Erros por convênio não derrubam os outros.
+   */
+  async cronGerarConsolidadasDoMesFechado(hoje = new Date()): Promise<{
+    processados: number;
+    criados: number;
+    jaExistem: number;
+    falhas: number;
+  }> {
+    const diaHoje = hoje.getDate();
+    // Mês FECHADO anterior: se hoje é 02/06, gera 05/2026
+    const mesAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    const mesReferencia = mesAnterior.getMonth() + 1;
+    const anoReferencia = mesAnterior.getFullYear();
+
+    const convenios = await this.prisma.contratoConvenio.findMany({
+      where: {
+        pagador: 'EMPRESA',
+        status: 'ATIVO',
+        diaEnvioRelatorio: diaHoje,
+      },
+      select: {
+        id: true,
+        empresaNome: true,
+        cooperativaId: true,
+      },
+    });
+
+    if (convenios.length === 0) {
+      return { processados: 0, criados: 0, jaExistem: 0, falhas: 0 };
+    }
+
+    this.logger.log(
+      `[D-FISCAL-2.4.4b cron] ${convenios.length} convênio(s) EMPRESA com ` +
+        `diaEnvioRelatorio=${diaHoje} — gerando consolidadas pra ${String(mesReferencia).padStart(2, '0')}/${anoReferencia}.`,
+    );
+
+    let criados = 0;
+    let jaExistem = 0;
+    let falhas = 0;
+    for (const conv of convenios) {
+      if (!conv.cooperativaId) {
+        this.logger.warn(
+          `[D-FISCAL-2.4.4b cron] Convênio ${conv.id} (${conv.empresaNome}) sem ` +
+            `cooperativaId — skip.`,
+        );
+        falhas++;
+        continue;
+      }
+      try {
+        const r = await this.gerarCobrancaConsolidada({
+          convenioId: conv.id,
+          mesReferencia,
+          anoReferencia,
+          cooperativaId: conv.cooperativaId,
+          skipIfExists: true,
+        });
+        if (r.status === 'CRIADA') {
+          criados++;
+        } else if (r.status === 'JA_EXISTE') {
+          jaExistem++;
+        }
+      } catch (err) {
+        // CONSUMO_REAL pode lançar se kWh=0 (faturas dos membros não chegaram).
+        // Log warn — admin pode rodar manual depois via POST.
+        this.logger.warn(
+          `[D-FISCAL-2.4.4b cron] Falha em convênio ${conv.id} (${conv.empresaNome}): ` +
+            `${(err as Error).message}. Admin pode tentar manual via UI 2.4.4d.`,
+        );
+        falhas++;
+      }
+    }
+
+    this.logger.log(
+      `[D-FISCAL-2.4.4b cron] Concluído: processados=${convenios.length}, ` +
+        `criados=${criados}, jaExistem=${jaExistem}, falhas=${falhas}.`,
+    );
+    return { processados: convenios.length, criados, jaExistem, falhas };
   }
 
   /** Retorna o elemento que aparece mais vezes na lista (ou null). */
