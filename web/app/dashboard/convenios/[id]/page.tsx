@@ -105,6 +105,14 @@ export default function ConvenioDetalhePage() {
           <Badge className={convenio.status === 'ATIVO' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
             {convenio.status}
           </Badge>
+          {/* D-FISCAL-2.4.4d — link pra tela de cobranças consolidadas (Caso 1) */}
+          {convenio.pagador === 'EMPRESA' && (
+            <Link href={`/dashboard/convenios/${id}/cobrancas-consolidadas`}>
+              <Button variant="outline" size="sm" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                Cobranças consolidadas
+              </Button>
+            </Link>
+          )}
           <Link href={`/dashboard/convenios/${id}/editar`}>
             <Button variant="outline" size="sm" className="border-cyan-300 text-cyan-700 hover:bg-cyan-50">
               <Pencil className="h-3.5 w-3.5 mr-1" />

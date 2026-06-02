@@ -352,4 +352,36 @@ export class ConveniosController {
     });
   }
 
+  /**
+   * D-FISCAL-2.4.4d — Estorna cobrança consolidada (gate apuração FECHADA).
+   * PAGA → reverte status pra A_VENCER + deleta LancamentoCaixa operacional+fiscal.
+   * A_VENCER/PENDENTE → CANCELADO + cancela PREVISTO operacional.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.consolidada.estornar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @Post(':id/cobrancas-consolidadas/:cobrancaId/estornar')
+  async estornarCobrancaConsolidada(
+    @Param('id') id: string,
+    @Param('cobrancaId') cobrancaId: string,
+    @Body() body: { motivo?: string } | undefined,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    return this.custeioService.estornarCobrancaConsolidada({
+      convenioId: id,
+      cobrancaId,
+      cooperativaId,
+      motivo: body?.motivo,
+      usuarioId: req.user?.id ?? req.user?.userId,
+    });
+  }
+
 }

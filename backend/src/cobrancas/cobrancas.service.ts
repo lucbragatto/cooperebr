@@ -575,7 +575,7 @@ export class CobrancasService {
               valor: valorFinal,
               dataMovimento: dtPagamento,
               competencia: mesRefHook, // CT.9.1: competência LOCAL via string
-              descricao: `[CT] Consolidada custeio paga — cobrança ${cobranca.id.slice(0, 8)}`,
+              descricao: `[CT] Consolidada custeio paga — cobrança ${cobranca.id}`,
               cooperativaId: coopIdHook,
             })
             .catch((err) =>

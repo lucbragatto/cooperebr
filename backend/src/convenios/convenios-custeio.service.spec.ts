@@ -1053,6 +1053,205 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     });
   });
 
+  // ============================================================
+  // D-FISCAL-2.4.4d — Estorno cobrança consolidada
+  // ============================================================
+
+  describe('D-FISCAL-2.4.4d — estornarCobrancaConsolidada', () => {
+    const findFirstCobrancaEstorno = jest.fn();
+    const updateCobrancaEstorno = jest.fn();
+    const findUniqueApuracao = jest.fn();
+    const findManyLancamentos = jest.fn();
+    const deleteManyLancamentos = jest.fn();
+    const updateManyLancamentos = jest.fn();
+
+    beforeEach(() => {
+      jest.resetAllMocks();
+      (prismaMock as any).cobranca = {
+        findFirst: findFirstCobrancaEstorno,
+        create: createCobranca,
+        update: updateCobrancaEstorno,
+      };
+      (prismaMock as any).apuracaoMensalSegregada = {
+        findFirst: findUniqueApuracao, // service usa findFirst (unique compound ano+mes)
+      };
+      (prismaMock as any).lancamentoCaixa = {
+        create: createLancamentoCaixa,
+        findMany: findManyLancamentos,
+        deleteMany: deleteManyLancamentos,
+        updateMany: updateManyLancamentos,
+      };
+      transactionFn.mockImplementation(async (cb: any) =>
+        cb({
+          cobranca: { update: updateCobrancaEstorno },
+          lancamentoCaixa: {
+            findMany: findManyLancamentos,
+            deleteMany: deleteManyLancamentos,
+            updateMany: updateManyLancamentos,
+          },
+        }),
+      );
+    });
+
+    it('cobrança não encontrada (multi-tenant ou convenioId errado) → NotFound', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce(null);
+
+      await expect(
+        service.estornarCobrancaConsolidada({
+          convenioId: 'conv-1',
+          cobrancaId: 'cob-1',
+          cooperativaId: 'coop-OUTRA',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(updateCobrancaEstorno).not.toHaveBeenCalled();
+    });
+
+    it('cobrança já CANCELADA → BadRequest', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'CANCELADO',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+        convenioContabilCobrancaId: 'conv-1',
+      });
+
+      await expect(
+        service.estornarCobrancaConsolidada({
+          convenioId: 'conv-1',
+          cobrancaId: 'cob-1',
+          cooperativaId: 'coop-A',
+        }),
+      ).rejects.toThrow(/já está CANCELADA/);
+    });
+
+    it('apuração FECHADA → BadRequest (gate bloqueia)', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'PAGO',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+        convenioContabilCobrancaId: 'conv-1',
+      });
+      findUniqueApuracao.mockResolvedValueOnce({ status: 'FECHADA' });
+
+      await expect(
+        service.estornarCobrancaConsolidada({
+          convenioId: 'conv-1',
+          cobrancaId: 'cob-1',
+          cooperativaId: 'coop-A',
+        }),
+      ).rejects.toThrow(/FECHADA/);
+
+      expect(transactionFn).not.toHaveBeenCalled();
+    });
+
+    it('PAGA + apuração ABERTA → reverte status, deleta lancamentos operacional + fiscal', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce({
+        id: 'cob-pago-1',
+        status: 'PAGO',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+        convenioContabilCobrancaId: 'conv-1',
+      });
+      findUniqueApuracao.mockResolvedValueOnce({ status: 'ABERTA' });
+      // 1 operacional + 1 fiscal
+      findManyLancamentos.mockResolvedValueOnce([{ id: 'lanc-op-1' }]);
+      findManyLancamentos.mockResolvedValueOnce([{ id: 'lanc-fiscal-1' }]);
+      deleteManyLancamentos.mockResolvedValue({ count: 1 });
+
+      const r = await service.estornarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        cobrancaId: 'cob-pago-1',
+        cooperativaId: 'coop-A',
+        motivo: 'Erro de cálculo',
+        usuarioId: 'admin-1',
+      });
+
+      expect(r.statusAnterior).toBe('PAGO');
+      expect(r.statusNovo).toBe('A_VENCER');
+
+      // Cobrança: status PAGO → A_VENCER, zera campos pagamento
+      expect(updateCobrancaEstorno).toHaveBeenCalledTimes(1);
+      const updArg = updateCobrancaEstorno.mock.calls[0][0];
+      expect(updArg.where.id).toBe('cob-pago-1');
+      expect(updArg.data.status).toBe('A_VENCER');
+      expect(updArg.data.dataPagamento).toBeNull();
+      expect(updArg.data.valorPago).toBeNull();
+
+      // 2 chamadas findMany: 1 operacional + 1 fiscal
+      expect(findManyLancamentos).toHaveBeenCalledTimes(2);
+      // operacional filtra por observacoes contendo cobrancaId
+      const opArgs = findManyLancamentos.mock.calls[0][0];
+      expect(opArgs.where.observacoes.contains).toBe('Ref. cobrança cob-pago-1');
+      // fiscal filtra por origemTipo=CONVENIO + convenioId (FK ContratoConvenio) + descricao contendo cobrancaId
+      const fiscalArgs = findManyLancamentos.mock.calls[1][0];
+      expect(fiscalArgs.where.origemTipo).toBe('CONVENIO');
+      expect(fiscalArgs.where.convenioId).toBe('conv-1');
+      expect(fiscalArgs.where.descricao.contains).toBe('cob-pago-1');
+
+      // 2 deleteMany (operacional + fiscal)
+      expect(deleteManyLancamentos).toHaveBeenCalledTimes(2);
+    });
+
+    it('A_VENCER + apuração ABERTA → CANCELADO + cancela PREVISTO operacional', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce({
+        id: 'cob-aberta-1',
+        status: 'A_VENCER',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+        convenioContabilCobrancaId: 'conv-1',
+      });
+      findUniqueApuracao.mockResolvedValueOnce({ status: 'ABERTA' });
+      findManyLancamentos.mockResolvedValueOnce([{ id: 'lanc-prev-1' }]);
+      updateManyLancamentos.mockResolvedValue({ count: 1 });
+
+      const r = await service.estornarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        cobrancaId: 'cob-aberta-1',
+        cooperativaId: 'coop-A',
+        motivo: 'Convênio rescindido',
+      });
+
+      expect(r.statusAnterior).toBe('A_VENCER');
+      expect(r.statusNovo).toBe('CANCELADO');
+
+      const updArg = updateCobrancaEstorno.mock.calls[0][0];
+      expect(updArg.data.status).toBe('CANCELADO');
+      expect(updArg.data.motivoCancelamento).toBe('Convênio rescindido');
+
+      // Cancela PREVISTO (não deleta — preserva trilha)
+      expect(updateManyLancamentos).toHaveBeenCalledTimes(1);
+      const updMany = updateManyLancamentos.mock.calls[0][0];
+      expect(updMany.data.status).toBe('CANCELADO');
+    });
+
+    it('apuração inexistente (nunca fechada) → permite estorno', async () => {
+      findFirstCobrancaEstorno.mockResolvedValueOnce({
+        id: 'cob-1',
+        status: 'A_VENCER',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+        convenioContabilCobrancaId: 'conv-1',
+      });
+      findUniqueApuracao.mockResolvedValueOnce(null); // sem apuração
+      findManyLancamentos.mockResolvedValueOnce([]);
+
+      const r = await service.estornarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        cobrancaId: 'cob-1',
+        cooperativaId: 'coop-A',
+      });
+
+      expect(r.statusNovo).toBe('CANCELADO');
+    });
+  });
+
   it('D-FISCAL-2.4.4a.1: convênio só com pagador COM_UC (zero membros UCs) → consolidada gerada', async () => {
     findFirstConvenio.mockResolvedValue(convenioBase);
     findFirstCobranca.mockResolvedValue(null);

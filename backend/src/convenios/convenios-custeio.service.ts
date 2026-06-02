@@ -791,6 +791,177 @@ export class ConveniosCusteioService {
     return { processados: convenios.length, criados, jaExistem, falhas };
   }
 
+  /**
+   * D-FISCAL-2.4.4d — Estorna uma cobrança consolidada de custeio.
+   *
+   * Regras:
+   *  1. Posse tenant validada (cobrança deve ter convenioContabilCobrancaId
+   *     set + pertencer ao tenant).
+   *  2. Gate apuração FECHADA: bloqueia se mês da competência já foi fechado
+   *     contabilmente (busca direta em apuracaoMensalSegregada — evita ciclo
+   *     com ApuracaoService).
+   *  3. Atômico via $transaction:
+   *     - Se PAGO: reverte status pra A_VENCER, zera dataPagamento/valorPago,
+   *       deleta LancamentoCaixa OPERACIONAL (caixa REALIZADO com
+   *       observacoes contém cobrancaId) e LancamentoCaixa FISCAL CONVENIO
+   *       (origemTipo=CONVENIO + convenioContratoId match + descricao contém
+   *       cobrancaId — depende do fix 2.4.4d em cobrancas.service.ts:587).
+   *     - Se A_VENCER/PENDENTE/VENCIDO: marca CANCELADO + motivoCancelamento +
+   *       cancela LancamentoCaixa PREVISTO operacional.
+   *  4. Logger (AuditLog inativo — D-30N).
+   */
+  async estornarCobrancaConsolidada(opts: {
+    convenioId: string;
+    cobrancaId: string;
+    cooperativaId: string;
+    motivo?: string;
+    usuarioId?: string;
+  }): Promise<{ cobrancaId: string; statusAnterior: string; statusNovo: string }> {
+    // 1. Carrega cobrança + valida posse tenant + vínculo ao convênio
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: {
+        id: opts.cobrancaId,
+        cooperativaId: opts.cooperativaId,
+        convenioContabilCobrancaId: opts.convenioId,
+      },
+      select: {
+        id: true,
+        status: true,
+        mesReferencia: true,
+        anoReferencia: true,
+        cooperativaId: true,
+        convenioContabilCobrancaId: true,
+      },
+    });
+    if (!cobranca) {
+      throw new NotFoundException(
+        `Cobrança consolidada ${opts.cobrancaId} não encontrada no convênio ` +
+          `${opts.convenioId} deste tenant`,
+      );
+    }
+    if (cobranca.status === 'CANCELADO') {
+      throw new BadRequestException(
+        `Cobrança consolidada ${opts.cobrancaId} já está CANCELADA`,
+      );
+    }
+
+    const competencia = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
+
+    // 2. Gate apuração FECHADA — busca direta (evita ciclo com ApuracaoService)
+    // Schema: @@unique([cooperativaId, ano, mes]) — usa findFirst pra simplicidade.
+    const apuracao = await this.prisma.apuracaoMensalSegregada.findFirst({
+      where: {
+        cooperativaId: opts.cooperativaId,
+        ano: cobranca.anoReferencia,
+        mes: cobranca.mesReferencia,
+      },
+      select: { status: true },
+    });
+    if (apuracao && apuracao.status === 'FECHADA') {
+      throw new BadRequestException(
+        `Apuração mensal de ${competencia} está FECHADA — estorno bloqueado. ` +
+          `Reabra a apuração antes de estornar a consolidada.`,
+      );
+    }
+
+    const statusAnterior = cobranca.status;
+
+    // 3. Estorno atômico
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        if (statusAnterior === 'PAGO') {
+          // Reverte pagamento — status volta pra A_VENCER + zera campos de pagamento
+          await tx.cobranca.update({
+            where: { id: cobranca.id },
+            data: {
+              status: 'A_VENCER',
+              dataPagamento: null,
+              valorPago: null,
+              motivoCancelamento: null,
+            },
+          });
+          // Deleta LancamentoCaixa OPERACIONAL (REALIZADO com observacoes contém cobrancaId)
+          const lancsOperacionais = await tx.lancamentoCaixa.findMany({
+            where: {
+              cooperativaId: opts.cooperativaId,
+              observacoes: { contains: `Ref. cobrança ${cobranca.id}` },
+            },
+            select: { id: true },
+          });
+          if (lancsOperacionais.length > 0) {
+            await tx.lancamentoCaixa.deleteMany({
+              where: { id: { in: lancsOperacionais.map((l) => l.id) } },
+            });
+          }
+          // Deleta LancamentoCaixa FISCAL CONVENIO (origemTipo=CONVENIO +
+          // convenioId=FK ContratoConvenio + descricao contém cobrancaId).
+          // criarLancamentoConvenioContrato (contabilidade-tributaria.service:626)
+          // grava convenioId. NÃO confundir com convenioContabilId (modelo Convenio CT).
+          const lancsFiscais = await tx.lancamentoCaixa.findMany({
+            where: {
+              cooperativaId: opts.cooperativaId,
+              origemTipo: 'CONVENIO',
+              convenioId: opts.convenioId,
+              descricao: { contains: cobranca.id },
+            },
+            select: { id: true },
+          });
+          if (lancsFiscais.length > 0) {
+            await tx.lancamentoCaixa.deleteMany({
+              where: { id: { in: lancsFiscais.map((l) => l.id) } },
+            });
+          }
+          return {
+            cobrancaId: cobranca.id,
+            statusAnterior,
+            statusNovo: 'A_VENCER',
+            lancsOperacionaisDeleted: lancsOperacionais.length,
+            lancsFiscaisDeleted: lancsFiscais.length,
+          };
+        }
+        // A_VENCER / PENDENTE / VENCIDO → cancela
+        await tx.cobranca.update({
+          where: { id: cobranca.id },
+          data: {
+            status: 'CANCELADO',
+            motivoCancelamento: opts.motivo ?? 'Estorno consolidada',
+          },
+        });
+        // Cancela LancamentoCaixa PREVISTO operacional
+        const lancsPrevistos = await tx.lancamentoCaixa.findMany({
+          where: {
+            cooperativaId: opts.cooperativaId,
+            observacoes: { contains: `Ref. cobrança ${cobranca.id}` },
+            status: 'PREVISTO',
+          },
+          select: { id: true },
+        });
+        if (lancsPrevistos.length > 0) {
+          await tx.lancamentoCaixa.updateMany({
+            where: { id: { in: lancsPrevistos.map((l) => l.id) } },
+            data: { status: 'CANCELADO' },
+          });
+        }
+        return {
+          cobrancaId: cobranca.id,
+          statusAnterior,
+          statusNovo: 'CANCELADO',
+          lancsPrevistosCanceled: lancsPrevistos.length,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    this.logger.log(
+      `[D-FISCAL-2.4.4d] Consolidada ${cobranca.id} ESTORNADA: ` +
+        `${statusAnterior} → ${result.statusNovo} · convenio=${opts.convenioId} ` +
+        `· competencia=${competencia} · usuario=${opts.usuarioId ?? '?'} ` +
+        `· motivo="${opts.motivo ?? '(sem motivo)'}" · ${JSON.stringify(result)}`,
+    );
+
+    return result;
+  }
+
   /** Retorna o elemento que aparece mais vezes na lista (ou null). */
   private predominante<T extends string>(arr: T[]): T | null {
     if (arr.length === 0) return null;
