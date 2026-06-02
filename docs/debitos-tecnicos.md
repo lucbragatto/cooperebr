@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-05-15 — **Bloco A Sub-Fase B AMAGES fechado** (commits `ccde5ec` + `a09a66e`). Marco M4 redefinido: 1ª validação engine COMPENSADOS em ambiente real (cooperado AMAGES PJ + 2 UCs + Plano + Contrato CTR-2026-0008 + cobrança R$ 979,20 calculada pela engine via PATCH /faturas/aprovar). **D-46.SEED RESOLVIDO** (5 planos publico=false permanente). LancamentoCaixa PREVISTO criado automaticamente (D-54 não ressurgiu).
+**Última atualização:** 2026-06-02 — **D-FISCAL-2 (Caso 1 custeio) fechado**. Pontos 1 (D-novo-CAD-CUSTEADO-FATURA `cfb4208`) e 2a (D-novo-CT-TARIFA-FIXA-EMPRESA `3665099`) entregues. Convite-convênio (Ponto 3) **ADIADO** pra sprint próprio com aprovação dupla. **3 débitos novos** catalogados nesta noite: **D-novo-SEC-AUTOINSCRICAO-CUSTEADA (P1)** + **D-novo-CONVITE-CONVENIO reframe (P1)** + **D-novo-PORTAL-CUSTEADO (P2)**.
 
 ---
 
@@ -104,6 +104,73 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 ---
 
 ## P1 — Bloqueia entrada de parceiro real
+
+### D-novo-SEC-AUTOINSCRICAO-CUSTEADA — Link público de auto-inscrição custeada vira MEMBRO_ATIVO sem aprovação (fraude financeira contra a empresa pagadora)
+
+**Severidade:** P1 — bloqueia divulgar qualquer link público de custeio (Caso 1 D-FISCAL-2)
+**Detectado em:** 2026-06-02 (Ponto 3 Fase 1 read-only — investigação `motor-proposta.service.ts:473-543` + `publico.controller.ts:457` + `web/app/cadastro/page.tsx:496`)
+**Onde:** `backend/src/motor-proposta/motor-proposta.service.ts` (método `aceitar` aceita `convenioCusteioId` direto via body público sem aprovação intermediária) + `backend/src/convenios/convenios.service.ts` (`adicionarMembro` ativa imediatamente).
+
+**Risco:** o caminho público `/cadastro` JÁ aceita `convenioCusteioId` no body (D-FISCAL-2.4.3 wired). Se um link `?conv={convenioId}` for divulgado abertamente (ex: WhatsApp viral, link compartilhado, post em rede social), **qualquer pessoa com CPF válido vira MEMBRO_ATIVO custeado pela empresa pagadora — sem aprovação da empresa nem do admin**. A empresa só descobre na próxima fatura consolidada, quando R$ X foi cobrado por N "membros" que ela nunca autorizou. Fraude financeira contra terceiro (a empresa convênio) sem fricção.
+
+**Por que não foi pego antes:** Caso 1 nasceu com cadastro pelo admin (`/dashboard/cooperados/novo`) — onde a aprovação é implícita (admin já é gatekeeper). Ao pensar em link público de convite, o gatekeeper some.
+
+**Resolução (sprint próprio Convite-Convênio):**
+
+1. **Fluxo de aprovação dupla obrigatório** — cadastro público com `convenioCusteioId` gera membro com status `PENDENTE_APROVACAO_EMPRESA` (não MEMBRO_ATIVO). Notificação automática pra empresa via email/WA com link de aprovação. Empresa aprova → status `PENDENTE_APROVACAO_ADMIN` → admin confere → MEMBRO_ATIVO. Empresa rejeita → cooperado vira pagante normal (fluxo PRÓPRIA com plano genérico).
+2. **Teto de quota na admissão** — `ContratoConvenio.limiteMembros` (campo novo). Quando atinge o teto, link público bloqueia novas auto-inscrições (HTTP 409 amigável). Evita auto-inscrição em massa virar custo descontrolado.
+3. **Dedup CPF** — se CPF já existe como membro ATIVO do mesmo convênio, retornar erro amigável (não criar duplicata pendente).
+4. **Notificação imediata da empresa** — email + WA pra contato da empresa toda vez que um novo PENDENTE_APROVACAO_EMPRESA chega (não esperar batch). Permite vetar fraude em tempo real.
+5. **Rate-limit por IP/CPF** — máximo N auto-inscrições/hora por IP (anti-bot) e por CPF (anti-fraude).
+6. **AuditLog específico** — `convenio.membro.auto_inscrito_publico` com IP, user-agent, status final. Permite rastrear padrões suspeitos.
+
+**Bloqueio operacional:** até o sprint Convite-Convênio entregar fluxo aprovação dupla, **proibido divulgar qualquer link público que carregue `convenioCusteioId` direto** (`?conv=`). Cadastro custeado segue 100% via admin no dashboard.
+
+---
+
+### D-novo-CONVITE-CONVENIO — Sprint próprio: convite direcionado COM aprovação dupla + UX Portal/Cadastro (reframe Ponto 3 adiado)
+
+**Severidade:** P1 — desbloqueia distribuição em escala do Caso 1 custeio (sem este sprint, custeio fica 100% manual via admin)
+**Detectado em:** 2026-06-02 (Ponto 3 D-FISCAL-2 pós-Caso 1 — após Pontos 1/2a, este foi adiado pra sprint próprio em aprovação dupla com Luciano por causa do risco D-novo-SEC-AUTOINSCRICAO-CUSTEADA acima)
+**Onde (caminhos já mapeados Fase 1):**
+- `web/app/cadastro/page.tsx:144` lê `?ref=` (MLM) e `?tenant=` — falta `?conv=` que pré-seleciona + trava convênio.
+- `backend/src/publico/publico.controller.ts:457` já encaminha `convenioCusteioId` do body pro motor (caminho 100% wired desde D-FISCAL-2.4.3).
+- `backend/src/motor-proposta/motor-proposta.service.ts:473-543` valida convênio (tenant, status ATIVO, pagador=EMPRESA) e força `planoIdResolvido=planoCusteado` — **MAS ativa imediato (sem aprovação dupla)**.
+- `web/app/dashboard/convenios/[id]/page.tsx:108-115` é o lugar natural pro botão "Gerar link de convite" (ao lado dos botões "Cobranças consolidadas" + "Editar").
+- `prisma/schema.prisma:2376-2405` model `ConviteIndicacao` JÁ TEM `convenioId String?` mas exige `cooperadoIndicadorId String` NOT NULL (MLM-shape) — não serve sem adaptação.
+
+**Escopo (sprint dedicado — estimativa 2-3 dias Code):**
+
+1. **FASE 1 — Backend aprovação dupla** (resolve D-novo-SEC-AUTOINSCRICAO-CUSTEADA acima):
+   - Schema: `MembroConvenio.status` ganha valores `PENDENTE_APROVACAO_EMPRESA`, `PENDENTE_APROVACAO_ADMIN`, `REJEITADO_EMPRESA`, `REJEITADO_ADMIN`.
+   - Endpoint público `POST /convenios/auto-inscrever` (separado de `cadastro/v2`) — cria cooperado + membro PENDENTE_APROVACAO_EMPRESA + notifica empresa.
+   - Endpoint `POST /convenios/:id/membros/:cooperadoId/aprovar-empresa` (autenticação via token de aprovação enviado por email/WA pra contato da empresa).
+   - Endpoint `POST /convenios/:id/membros/:cooperadoId/aprovar-admin` (admin já existente).
+   - Rate-limit, dedup CPF, teto quota — ver D-novo-SEC-AUTOINSCRICAO-CUSTEADA.
+
+2. **FASE 2 — Frontend cadastro público (UX Ponto 3 original):**
+   - Ler `?conv={convenioId}` em `cadastro/page.tsx`.
+   - `setConvenioCusteioId(conv)` + `setTipoCobranca('CUSTEADA')` + travar dropdown convênio (disabled).
+   - Validar convênio (existe, ATIVO, pagador=EMPRESA) via endpoint público novo — se falhar mostrar erro amigável ("este link de convite expirou ou foi cancelado").
+
+3. **FASE 3 — Frontend admin convênio detalhe:**
+   - Botão "Gerar link de convite" em `web/app/dashboard/convenios/[id]/page.tsx` (linha 108-115).
+   - Dialog modal com link copiável `${origin}/cadastro?tenant={cooperativaId}&conv={convenioId}` + botão copiar + (opcional) QR code.
+   - Aba "Membros pendentes" mostra PENDENTE_APROVACAO_EMPRESA e PENDENTE_APROVACAO_ADMIN com botões aprovar/rejeitar.
+
+4. **FASE 4 — Portal do membro custeado** (intersecta com D-novo-PORTAL-CUSTEADO abaixo).
+
+**Decisões pendentes (5 catalogadas no Fase 1 Ponto 3 — confirmar antes do sprint):**
+
+1. Modelo persistência: link efêmero stateless via `?conv=` (recomendado) vs reusar ConviteIndicacao adaptado vs criar ConviteConvenio novo.
+2. Lock do dropdown convênio quando `?conv=` veio: disabled (recomendado) vs editável.
+3. Lock do tipoCobranca: fixo CUSTEADA (recomendado) vs usuário pode mudar pra PRÓPRIA.
+4. Validação client-side: erro amigável (recomendado) vs cair silencioso em modo manual.
+5. Botão tela detalhe: dialog modal (recomendado) vs página própria com QR + métricas.
+
+**Bloqueio:** ver D-novo-SEC-AUTOINSCRICAO-CUSTEADA — proibido divulgar link público até aprovação dupla entregar.
+
+---
 
 ### D-30C — Schema 1:1 Contrato↔Usina bloqueia UC com créditos de múltiplas usinas
 
@@ -227,6 +294,46 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 ---
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
+
+### D-novo-PORTAL-CUSTEADO — Membro custeado vê portal financeiro vazio sem aviso "você é custeado pela empresa X"
+
+**Severidade:** P2 — UX confusa, não bloqueia produção mas gera tickets desnecessários ("cadê minhas faturas?")
+**Detectado em:** 2026-06-02 (Ponto 3 D-FISCAL-2 — UX dual portal/admin)
+**Onde:** `backend/src/cooperados/cooperados.service.ts` método `meuPerfil()` + `web/app/portal/*` (telas Financeiro/Faturas/Saldo).
+
+**Sintoma:** cooperado custeado (vinculado a `ContratoConvenio.pagador=EMPRESA` via plano `custeadoPorConvenio=true` D-FISCAL-2.4) entra no Portal e vê:
+- "Minhas faturas" vazio (correto — empresa paga consolidada).
+- "Saldo" vazio (correto — sem créditos individuais).
+- "Cobranças" vazio (correto — `planoCusteado` suprime cobrança individual via guard 2.4.2).
+- **Nenhum aviso explicando POR QUÊ está vazio.** Usuário pensa que sistema está quebrado.
+
+**Risco:** ticket de suporte recorrente + sensação de "fui esquecido"/"sou cidadão de segunda classe" + custeado pode questionar a empresa "por que não recebo nada?" gerando atrito.
+
+**Resolução:**
+
+1. **Backend `meuPerfil()` retorna flag `custeio` com objeto:**
+   ```typescript
+   custeio: {
+     ativo: true,
+     empresaNome: 'Hangar Academia',
+     convenioId: '...',
+     desde: '2026-05-15',
+     tipoTarifa: 'PERCENTUAL_DESCONTO' | 'VALOR_FIXO',
+   } | null
+   ```
+   Resolve via `prisma.contratoConvenio.findFirst({ where: { membros: { some: { cooperadoId, ativo: true } }, pagador: 'EMPRESA' } })`.
+
+2. **Frontend banner permanente** no header do Portal (todas as páginas) quando `custeio.ativo`:
+   > "Sua conta de energia é custeada pela **{empresaNome}** desde {desde}. Você não recebe cobranças individuais — a empresa paga a consolidação mensal. Dúvidas? Contate o RH da {empresaNome}."
+
+3. **Empty states explicativos** nas telas Faturas/Saldo/Cobranças:
+   > "Não há fatura pra você. O custeio da sua energia é feito pela **{empresaNome}** em consolidação mensal."
+
+4. **Tela "Custeio"** nova no Portal mostra histórico das cobranças consolidadas (read-only) que a empresa pagou — referenciando o cooperado custeado (transparência).
+
+**Severidade reframe:** P2 inicial — sobe pra P1 se Caso 1 escalar pra 50+ membros custeados (UX confusa em escala vira incêndio de suporte).
+
+---
 
 ### D-30F — Sem cron de auditoria de concentração por usina
 
