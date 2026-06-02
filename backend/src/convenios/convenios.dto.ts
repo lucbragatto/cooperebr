@@ -24,6 +24,17 @@ export enum FluxoFinanceiroDto {
   CUSTO_OPERACIONAL_INTERNO = 'CUSTO_OPERACIONAL_INTERNO',
 }
 
+/** D-FISCAL-2.4.4e — enums Caso 1 (custeio) mirror do Prisma. */
+export enum PagadorConvenioDto {
+  CADA_MEMBRO = 'CADA_MEMBRO',
+  EMPRESA = 'EMPRESA',
+}
+
+export enum BaseCobrancaCusteioDto {
+  CONSUMO_REAL = 'CONSUMO_REAL',
+  ALOCACAO_FIXA = 'ALOCACAO_FIXA',
+}
+
 export class FaixaDto {
   @IsInt()
   @Min(0)
@@ -170,6 +181,33 @@ export class CreateConvenioDto {
   @IsOptional()
   @IsDateString({}, { message: 'vigenciaFim deve ser ISO date (YYYY-MM-DD)' })
   vigenciaFim?: string;
+
+  // D-FISCAL-2.4.4e — bloco de custeio (Caso 1: empresa paga total).
+  // Quando pagador=EMPRESA, pagadorCooperadoId + baseCobrancaCusteio são
+  // obrigatórios (validados no service). Default CADA_MEMBRO mantém
+  // backward-compat com os 2 convênios legados MLM (Hangar/Moradas).
+  @IsOptional()
+  @IsEnum(PagadorConvenioDto)
+  pagador?: PagadorConvenioDto;
+
+  @IsOptional()
+  @IsString()
+  pagadorCooperadoId?: string;
+
+  @IsOptional()
+  @IsEnum(BaseCobrancaCusteioDto)
+  baseCobrancaCusteio?: BaseCobrancaCusteioDto;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  kwhAlocadoMensal?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  descontoKwhCusteio?: number;
 }
 
 export enum StatusConvenioDto {
@@ -280,6 +318,28 @@ export class UpdateConvenioDto {
 
   @IsOptional()
   vigenciaFim?: string | null;
+
+  // D-FISCAL-2.4.4e — bloco de custeio editável (idem CreateConvenioDto).
+  @IsOptional()
+  @IsEnum(PagadorConvenioDto)
+  pagador?: PagadorConvenioDto;
+
+  @IsOptional()
+  pagadorCooperadoId?: string | null;
+
+  @IsOptional()
+  baseCobrancaCusteio?: BaseCobrancaCusteioDto | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  kwhAlocadoMensal?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  descontoKwhCusteio?: number | null;
 }
 
 export class AddMembroDto {

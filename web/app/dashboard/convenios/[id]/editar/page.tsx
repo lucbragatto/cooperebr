@@ -24,6 +24,10 @@ import {
   ConvenioFiscalBloco,
   type ConvenioFiscalState,
 } from '@/components/convenios/ConvenioFiscalBloco';
+import {
+  ConvenioCusteioBloco,
+  type ConvenioCusteioState,
+} from '@/components/convenios/ConvenioCusteioBloco';
 import { MovimentosConvenioSection } from '@/components/convenios/MovimentosConvenioSection';
 
 interface ConvenioApi {
@@ -41,6 +45,12 @@ interface ConvenioApi {
   classificacaoFiscal: string | null;
   vigenciaInicio: string | null;
   vigenciaFim: string | null;
+  // Bloco custeio (D-FISCAL-2.4.1)
+  pagador: 'CADA_MEMBRO' | 'EMPRESA' | null;
+  pagadorCooperadoId: string | null;
+  baseCobrancaCusteio: 'CONSUMO_REAL' | 'ALOCACAO_FIXA' | null;
+  kwhAlocadoMensal: number | null;
+  descontoKwhCusteio: number | string | null;
 }
 
 export default function EditarConvenioLegadoPage() {
@@ -69,6 +79,15 @@ export default function EditarConvenioLegadoPage() {
     vigenciaFim: '',
   });
 
+  // D-FISCAL-2.4.4e — bloco custeio (Caso 1: empresa paga total)
+  const [custeio, setCusteio] = useState<ConvenioCusteioState>({
+    pagador: 'CADA_MEMBRO',
+    pagadorCooperadoId: '',
+    baseCobrancaCusteio: 'CONSUMO_REAL',
+    kwhAlocadoMensal: '',
+    descontoKwhCusteio: '',
+  });
+
   async function carregar() {
     if (!id) return;
     setLoading(true);
@@ -86,6 +105,17 @@ export default function EditarConvenioLegadoPage() {
         classificacaoFiscal: data.classificacaoFiscal ?? '',
         vigenciaInicio: data.vigenciaInicio ? data.vigenciaInicio.substring(0, 10) : '',
         vigenciaFim: data.vigenciaFim ? data.vigenciaFim.substring(0, 10) : '',
+      });
+      // D-FISCAL-2.4.4e — bloco custeio
+      setCusteio({
+        pagador: (data.pagador as any) ?? 'CADA_MEMBRO',
+        pagadorCooperadoId: data.pagadorCooperadoId ?? '',
+        baseCobrancaCusteio: (data.baseCobrancaCusteio as any) ?? 'CONSUMO_REAL',
+        kwhAlocadoMensal: data.kwhAlocadoMensal ?? '',
+        descontoKwhCusteio:
+          data.descontoKwhCusteio !== null && data.descontoKwhCusteio !== undefined
+            ? Number(data.descontoKwhCusteio)
+            : '',
       });
     } catch (err: any) {
       setErro(err?.response?.data?.message ?? 'Falha ao carregar convênio');
@@ -115,6 +145,21 @@ export default function EditarConvenioLegadoPage() {
       }
     }
 
+    // D-FISCAL-2.4.4e — validação custeio
+    if (custeio.pagador === 'EMPRESA') {
+      if (!custeio.pagadorCooperadoId) {
+        setErro('Custeio: selecione a empresa pagadora (cooperado PJ).');
+        return;
+      }
+      if (
+        custeio.baseCobrancaCusteio === 'ALOCACAO_FIXA' &&
+        (!custeio.kwhAlocadoMensal || Number(custeio.kwhAlocadoMensal) <= 0)
+      ) {
+        setErro('Custeio: ALOCACAO_FIXA exige kWh alocado por mês > 0.');
+        return;
+      }
+    }
+
     setSalvando(true);
     try {
       const payload: any = {
@@ -131,6 +176,20 @@ export default function EditarConvenioLegadoPage() {
         classificacaoFiscal: fiscal.classificacaoFiscal.trim() || null,
         vigenciaInicio: fiscal.vigenciaInicio || null,
         vigenciaFim: fiscal.vigenciaFim || null,
+        // D-FISCAL-2.4.4e — bloco custeio
+        pagador: custeio.pagador,
+        pagadorCooperadoId:
+          custeio.pagador === 'EMPRESA' ? custeio.pagadorCooperadoId : null,
+        baseCobrancaCusteio:
+          custeio.pagador === 'EMPRESA' ? custeio.baseCobrancaCusteio : null,
+        kwhAlocadoMensal:
+          custeio.pagador === 'EMPRESA' && custeio.kwhAlocadoMensal !== ''
+            ? Number(custeio.kwhAlocadoMensal)
+            : null,
+        descontoKwhCusteio:
+          custeio.pagador === 'EMPRESA' && custeio.descontoKwhCusteio !== ''
+            ? Number(custeio.descontoKwhCusteio)
+            : null,
       };
       await api.patch(`/convenios/${id}`, payload);
       setMsg('Convênio atualizado com sucesso.');
@@ -216,6 +275,17 @@ export default function EditarConvenioLegadoPage() {
                     onChange={(e) => setTelefone(e.target.value)}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* D-FISCAL-2.4.4e — bloco custeio (Caso 1) */}
+            <Card>
+              <CardContent className="pt-4">
+                <ConvenioCusteioBloco
+                  state={custeio}
+                  onChange={(patch) => setCusteio((prev) => ({ ...prev, ...patch }))}
+                  helpId={`convenio-editar-${id}-custeio`}
+                />
               </CardContent>
             </Card>
 

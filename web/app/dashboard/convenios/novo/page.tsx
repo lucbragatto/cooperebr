@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { ConvenioFiscalBloco, type ConvenioFiscalState } from '@/components/convenios/ConvenioFiscalBloco';
+import { ConvenioCusteioBloco, type ConvenioCusteioState } from '@/components/convenios/ConvenioCusteioBloco';
 
 const tipoOpcoes = [
   { value: 'CONDOMINIO', label: 'Condomínio' },
@@ -59,6 +60,15 @@ export default function NovoConvenioPage() {
     classificacaoFiscal: '',
     vigenciaInicio: '',
     vigenciaFim: '',
+  });
+
+  // D-FISCAL-2.4.4e — bloco custeio (Caso 1: empresa paga total)
+  const [custeio, setCusteio] = useState<ConvenioCusteioState>({
+    pagador: 'CADA_MEMBRO',
+    pagadorCooperadoId: '',
+    baseCobrancaCusteio: 'CONSUMO_REAL',
+    kwhAlocadoMensal: '',
+    descontoKwhCusteio: '',
   });
 
   const [faixas, setFaixas] = useState<Faixa[]>([
@@ -118,6 +128,33 @@ export default function NovoConvenioPage() {
           faixas,
         },
       };
+
+      // D-FISCAL-2.4.4e — bloco custeio (Caso 1). Validação client-side
+      // antes de enviar; backend revalida + checa cooperado.
+      if (custeio.pagador === 'EMPRESA') {
+        if (!custeio.pagadorCooperadoId) {
+          setErro('Custeio: selecione a empresa pagadora (cooperado PJ).');
+          setSalvando(false);
+          return;
+        }
+        if (
+          custeio.baseCobrancaCusteio === 'ALOCACAO_FIXA' &&
+          (!custeio.kwhAlocadoMensal || Number(custeio.kwhAlocadoMensal) <= 0)
+        ) {
+          setErro('Custeio: ALOCACAO_FIXA exige kWh alocado por mês > 0.');
+          setSalvando(false);
+          return;
+        }
+        payload.pagador = 'EMPRESA';
+        payload.pagadorCooperadoId = custeio.pagadorCooperadoId;
+        payload.baseCobrancaCusteio = custeio.baseCobrancaCusteio;
+        if (custeio.kwhAlocadoMensal !== '') {
+          payload.kwhAlocadoMensal = Number(custeio.kwhAlocadoMensal);
+        }
+        if (custeio.descontoKwhCusteio !== '') {
+          payload.descontoKwhCusteio = Number(custeio.descontoKwhCusteio);
+        }
+      }
 
       // D-FISCAL-2.3 — bloco fiscal opcional. Se ligado, valida + envia.
       if (fiscal.geraLancamentoContabil) {
@@ -296,6 +333,17 @@ export default function NovoConvenioPage() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* D-FISCAL-2.4.4e — bloco custeio (Caso 1: empresa paga total) */}
+        <Card>
+          <CardContent className="pt-6">
+            <ConvenioCusteioBloco
+              state={custeio}
+              onChange={(patch) => setCusteio((prev) => ({ ...prev, ...patch }))}
+              helpId="convenio-custeio-help-novo"
+            />
           </CardContent>
         </Card>
 

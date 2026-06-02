@@ -83,6 +83,9 @@ export class ConveniosService {
       this.validarFaixas(dto.configBeneficio.faixas);
     }
 
+    // D-FISCAL-2.4.4e — Validação bloco custeio (Caso 1)
+    await this.validarBlocoCusteio(cooperativaId, dto.pagador, dto.pagadorCooperadoId, dto.baseCobrancaCusteio, dto.kwhAlocadoMensal);
+
     // Retry loop para lidar com race condition no numero sequencial
     for (let tentativa = 0; tentativa < 5; tentativa++) {
       const numero = await this.gerarNumero(tentativa);
@@ -120,6 +123,12 @@ export class ConveniosService {
             classificacaoFiscal: dto.classificacaoFiscal ?? null,
             vigenciaInicio: dto.vigenciaInicio ? this.parseLocalDate(dto.vigenciaInicio) : null,
             vigenciaFim: dto.vigenciaFim ? this.parseLocalDate(dto.vigenciaFim) : null,
+            // D-FISCAL-2.4.4e — bloco custeio Caso 1
+            pagador: (dto.pagador ?? 'CADA_MEMBRO') as any,
+            pagadorCooperadoId: dto.pagadorCooperadoId ?? null,
+            baseCobrancaCusteio: (dto.baseCobrancaCusteio ?? 'CONSUMO_REAL') as any,
+            kwhAlocadoMensal: dto.kwhAlocadoMensal ?? null,
+            descontoKwhCusteio: dto.descontoKwhCusteio ?? null,
           },
         });
       } catch (err: any) {
@@ -128,6 +137,52 @@ export class ConveniosService {
       }
     }
     throw new BadRequestException('Falha ao criar convênio');
+  }
+
+  /**
+   * D-FISCAL-2.4.4e — Validação do bloco custeio (Caso 1: empresa paga total).
+   * pagador=EMPRESA exige pagadorCooperadoId + baseCobrancaCusteio.
+   * baseCobrancaCusteio=ALOCACAO_FIXA exige kwhAlocadoMensal>0.
+   * pagador=CADA_MEMBRO (default) ignora os outros campos.
+   */
+  private async validarBlocoCusteio(
+    cooperativaId: string,
+    pagador: string | undefined,
+    pagadorCooperadoId: string | null | undefined,
+    baseCobrancaCusteio: string | null | undefined,
+    kwhAlocadoMensal: number | null | undefined,
+  ) {
+    if (pagador !== 'EMPRESA') return; // CADA_MEMBRO (default) — sem validação
+
+    if (!pagadorCooperadoId) {
+      throw new BadRequestException(
+        'pagador=EMPRESA exige pagadorCooperadoId (empresa cooperada que paga a consolidada).',
+      );
+    }
+    const pagadorCoop = await this.prisma.cooperado.findFirst({
+      where: { id: pagadorCooperadoId, cooperativaId },
+      select: { id: true, status: true, nomeCompleto: true },
+    });
+    if (!pagadorCoop) {
+      throw new BadRequestException(
+        `pagadorCooperadoId "${pagadorCooperadoId}" não encontrado neste tenant.`,
+      );
+    }
+    if (pagadorCoop.status !== 'ATIVO') {
+      throw new BadRequestException(
+        `Cooperado pagador "${pagadorCoop.nomeCompleto}" não está ATIVO (status=${pagadorCoop.status}).`,
+      );
+    }
+    if (!baseCobrancaCusteio) {
+      throw new BadRequestException(
+        'pagador=EMPRESA exige baseCobrancaCusteio (CONSUMO_REAL ou ALOCACAO_FIXA).',
+      );
+    }
+    if (baseCobrancaCusteio === 'ALOCACAO_FIXA' && (!kwhAlocadoMensal || kwhAlocadoMensal <= 0)) {
+      throw new BadRequestException(
+        'baseCobrancaCusteio=ALOCACAO_FIXA exige kwhAlocadoMensal > 0.',
+      );
+    }
   }
 
   async findAll(cooperativaId: string, params?: {
@@ -200,6 +255,29 @@ export class ConveniosService {
       this.validarFaixas(dto.configBeneficio.faixas);
     }
 
+    // D-FISCAL-2.4.4e — Validação bloco custeio. Resolve "pagador efetivo"
+    // (dto.pagador se enviado; senão usa o atual no banco) pra checar
+    // dependentes corretamente em updates parciais.
+    if (convenio.cooperativaId) {
+      const pagadorEfetivo = dto.pagador ?? convenio.pagador;
+      const pagadorCoopEfetivo = dto.pagadorCooperadoId !== undefined
+        ? dto.pagadorCooperadoId
+        : convenio.pagadorCooperadoId;
+      const baseEfetiva = dto.baseCobrancaCusteio !== undefined
+        ? dto.baseCobrancaCusteio
+        : convenio.baseCobrancaCusteio;
+      const kwhEfetivo = dto.kwhAlocadoMensal !== undefined
+        ? dto.kwhAlocadoMensal
+        : convenio.kwhAlocadoMensal;
+      await this.validarBlocoCusteio(
+        convenio.cooperativaId,
+        pagadorEfetivo as any,
+        pagadorCoopEfetivo,
+        baseEfetiva as any,
+        kwhEfetivo as any,
+      );
+    }
+
     const data: any = {};
 
     if (dto.nome !== undefined) data.empresaNome = dto.nome;
@@ -233,6 +311,13 @@ export class ConveniosService {
     if (dto.vigenciaFim !== undefined) {
       data.vigenciaFim = dto.vigenciaFim ? this.parseLocalDate(dto.vigenciaFim) : null;
     }
+
+    // D-FISCAL-2.4.4e — bloco custeio editável
+    if (dto.pagador !== undefined) data.pagador = dto.pagador;
+    if (dto.pagadorCooperadoId !== undefined) data.pagadorCooperadoId = dto.pagadorCooperadoId;
+    if (dto.baseCobrancaCusteio !== undefined) data.baseCobrancaCusteio = dto.baseCobrancaCusteio;
+    if (dto.kwhAlocadoMensal !== undefined) data.kwhAlocadoMensal = dto.kwhAlocadoMensal;
+    if (dto.descontoKwhCusteio !== undefined) data.descontoKwhCusteio = dto.descontoKwhCusteio;
 
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },
