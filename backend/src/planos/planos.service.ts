@@ -35,6 +35,52 @@ export class PlanosService implements OnModuleInit {
       });
       this.logger.log('Plano padrão "Plano Básico" (FIXO_MENSAL) criado automaticamente');
     }
+
+    // D-FISCAL-2.4.2 — Plano "Custeado por convênio" (idempotente, decisão #2:
+    // 1 plano global compartilhado entre tenants). Cooperados em Caso 1 são
+    // vinculados a esse plano automaticamente pelo cadastro (fatia 2.4.3) —
+    // o guard nos 2 caminhos de geração de cobrança (gerarCobrancaPosFatura
+    // + cobrancas.service.create) suprime a cobrança individual.
+    //
+    // publico=false: NÃO aparece na vitrine pública (cadastro escolhe via
+    // selector específico em 2.4.3, não como plano comum).
+    // descontoBase=0: cooperado não paga (custeio = empresa banca o consumo
+    // dele). Valor zerado evita confusão em telas que mostram desconto.
+    // modeloCobranca=FIXO_MENSAL: passa o freeze BLOQUEIO_MODELOS_NAO_FIXO,
+    // mas o guard pula geração de cobrança antes de calcular qualquer valor.
+    await this.ensurePlanoCusteadoPorConvenio();
+  }
+
+  /**
+   * D-FISCAL-2.4.2 — garante que o plano "Custeado por convênio" exista
+   * (idempotente). Reusa o pattern do seed legado.
+   */
+  private async ensurePlanoCusteadoPorConvenio() {
+    const existente = await this.prisma.plano.findFirst({
+      where: { custeadoPorConvenio: true, cooperativaId: null },
+      select: { id: true, nome: true },
+    });
+    if (existente) {
+      return; // já existe — idempotente
+    }
+    const novo = await this.prisma.plano.create({
+      data: {
+        nome: 'Custeado por convênio',
+        descricao:
+          'Plano sem cobrança individual. Membros de um convênio onde a empresa paga o total ' +
+          'usam este plano automaticamente — a cobrança vai consolidada pra empresa.',
+        modeloCobranca: ModeloCobranca.FIXO_MENSAL,
+        descontoBase: 0,
+        publico: false,
+        ativo: true,
+        tipoCampanha: TipoCampanha.PADRAO,
+        custeadoPorConvenio: true,
+        cooperativaId: null,
+      },
+    });
+    this.logger.log(
+      `[D-FISCAL-2.4.2] Plano global "Custeado por convênio" criado (id=${novo.id})`,
+    );
   }
 
   /**

@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus } from 'lucide-react';
+import { Plus, Info } from 'lucide-react';
 import Link from 'next/link';
 import { getUsuario } from '@/lib/auth';
 
@@ -72,6 +72,18 @@ export default function PlanosPage() {
         </Link>
       </div>
 
+      {/* D-FISCAL-2.4.2 — HelpBox: explica o que é "Custeado — sem cobrança" */}
+      <div className="mb-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <Info className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600" />
+        <div>
+          <span className="font-medium">Custeado por convênio:</span>{' '}
+          quando um plano aparece com o selo <span className="font-medium">Custeado — sem cobrança</span>, os membros vinculados a ele
+          NÃO recebem cobrança individual — a fatura é preservada (alimenta o consumo), mas o pagamento vai
+          consolidado pra empresa pagadora do convênio (caso típico: clínica/empresa que paga a energia de
+          todos os funcionários). Use esse plano para membros de convênios com pagador = EMPRESA.
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium text-gray-600">
@@ -127,11 +139,21 @@ export default function PlanosPage() {
                         </TableCell>
                       )}
                       <TableCell>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeloClass[p.modeloCobranca]}`}
-                        >
-                          {modeloLabel[p.modeloCobranca]}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${modeloClass[p.modeloCobranca]}`}
+                          >
+                            {modeloLabel[p.modeloCobranca]}
+                          </span>
+                          {p.custeadoPorConvenio && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200 w-fit"
+                              title="D-FISCAL-2.4.2: Membros deste plano NÃO recebem cobrança individual. A empresa do convênio paga a consolidada."
+                            >
+                              Custeado — sem cobrança
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{Number(p.descontoBase).toFixed(1)}%</TableCell>
                       <TableCell>

@@ -594,6 +594,28 @@ export class FaturasService {
       return null;
     }
 
+    // D-FISCAL-2.4.2 — GUARD #1: plano custeado por convênio (Caso 1).
+    // Membro de convênio onde a empresa paga total NÃO gera cobrança
+    // individual. A fatura segue processada (preserva histórico de
+    // consumo pra alimentar a cobrança consolidada da empresa em 2.4.4).
+    // O caller já trata `return null` (linhas 535-543 + 983-985).
+    if ((contrato as any).plano?.custeadoPorConvenio) {
+      this.logger.log(
+        `[D-FISCAL-2.4.2] Fatura ${faturaId}: cooperado ${fatura.cooperadoId} tem ` +
+        `plano custeado por convênio — cobrança individual SUPRIMIDA. ` +
+        `Fatura preservada (statusRevisao=AUTO_APROVADO_CUSTEIO_CONVENIO) ` +
+        `pra alimentar cobrança consolidada da empresa pagadora.`,
+      );
+      await this.prisma.faturaProcessada.update({
+        where: { id: faturaId },
+        data: {
+          status: 'APROVADA',
+          statusRevisao: 'AUTO_APROVADO_CUSTEIO_CONVENIO',
+        },
+      });
+      return null;
+    }
+
     // Resolver modelo de cobrança
     const modeloCobranca = await this.resolverModeloCobranca(contrato, contrato.usina, cooperativaIdFatura);
 
@@ -1043,6 +1065,20 @@ export class FaturasService {
       });
       if (existe) {
         avisos.push(`Cobrança já existe para contrato ${contrato.numero} ref. ${mesRef}.`);
+        continue;
+      }
+
+      // D-FISCAL-2.4.2 — GUARD Path B: plano custeado por convênio (Caso 1).
+      if ((contrato as any).plano?.custeadoPorConvenio) {
+        this.logger.log(
+          `[D-FISCAL-2.4.2] Path B: contrato ${contrato.numero} (cooperado ${contrato.cooperadoId}) ` +
+          `custeado por convênio — cobrança individual SUPRIMIDA. ` +
+          `Fatura ${fatura.id} preservada pra alimentar cobrança consolidada da empresa pagadora.`,
+        );
+        avisos.push(
+          `Contrato ${contrato.numero}: cooperado custeado por convênio — ` +
+          `cobrança individual não gerada (empresa paga consolidada).`,
+        );
         continue;
       }
 

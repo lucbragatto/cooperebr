@@ -159,6 +159,15 @@ export class CobrancasService {
       include: { cooperado: true, plano: true },
     });
 
+    // D-FISCAL-2.4.2 — GUARD #2: bloquear cobrança individual em cooperado
+    // custeado por convênio (Caso 1: empresa paga total).
+    if ((contrato as any)?.plano?.custeadoPorConvenio) {
+      throw new BadRequestException(
+        `Cooperado custeado por convênio — cobrança individual não permitida; ` +
+        `a empresa paga a consolidada (plano "${contrato!.plano!.nome}", contrato ${contrato!.numero}).`,
+      );
+    }
+
     // Resolver cooperativaId: parâmetro > contrato
     const resolvedCoopId = cooperativaId || contrato?.cooperativaId || undefined;
 

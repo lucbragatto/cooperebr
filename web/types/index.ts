@@ -359,6 +359,8 @@ export interface Plano {
   tokenValorFixo: number | null;
   tokenDescontoMaxPerc: number | null;
   tokenExpiracaoMeses: number | null;
+  /** D-FISCAL-2.4.2 — Caso 1: empresa paga total. Plano marcado aqui SUPRIME cobrança individual; a cobrança vai consolidada pra empresa pagadora do convênio. */
+  custeadoPorConvenio?: boolean;
   cooperativaId: string | null;
   createdAt: string;
   updatedAt: string;

@@ -7,6 +7,7 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
   let service: PlanosService;
   const planoFindMany = jest.fn();
   const planoFindUnique = jest.fn();
+  const planoFindFirst = jest.fn();
   const planoCreate = jest.fn();
   const planoUpdate = jest.fn();
   const planoDelete = jest.fn();
@@ -17,6 +18,7 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
     plano: {
       findMany: planoFindMany,
       findUnique: planoFindUnique,
+      findFirst: planoFindFirst,
       create: planoCreate,
       update: planoUpdate,
       delete: planoDelete,
@@ -259,6 +261,13 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
     it('Test 10: Seed onModuleInit cria FIXO_MENSAL (não COMPENSADOS) quando banco vazio', async () => {
       planoCount.mockResolvedValueOnce(0);
       planoCreate.mockResolvedValueOnce({ id: 'seed' });
+      // D-FISCAL-2.4.2 — ensurePlanoCusteadoPorConvenio é chamado depois
+      // do seed clássico. Aqui simulamos plano já existente pra não
+      // criar 2 vezes.
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-custeado-existente',
+        nome: 'Custeado por convênio',
+      });
       await service.onModuleInit();
       const data = planoCreate.mock.calls[0][0].data;
       expect(data.modeloCobranca).toBe(ModeloCobranca.FIXO_MENSAL);
@@ -271,8 +280,33 @@ describe('PlanosService - Multi-tenant (Fase A)', () => {
 
     it('onModuleInit() não cria plano se banco já tem registros', async () => {
       planoCount.mockResolvedValueOnce(5);
+      // D-FISCAL-2.4.2 — segundo passo do onModuleInit roda mesmo com
+      // banco populado; aqui simulamos plano custeado já presente
+      // pra confirmar idempotência (planoCreate continua não chamado).
+      planoFindFirst.mockResolvedValueOnce({
+        id: 'plano-custeado-existente',
+        nome: 'Custeado por convênio',
+      });
       await service.onModuleInit();
       expect(planoCreate).not.toHaveBeenCalled();
+    });
+
+    // D-FISCAL-2.4.2 — caso novo: ensurePlanoCusteadoPorConvenio cria
+    // o plano global quando não existe.
+    it('D-FISCAL-2.4.2: ensurePlanoCusteadoPorConvenio cria plano global se não existir', async () => {
+      planoCount.mockResolvedValueOnce(5); // pula o seed clássico
+      planoFindFirst.mockResolvedValueOnce(null); // não existe ainda
+      planoCreate.mockResolvedValueOnce({ id: 'novo-custeado' });
+      await service.onModuleInit();
+      expect(planoCreate).toHaveBeenCalledTimes(1);
+      const data = planoCreate.mock.calls[0][0].data;
+      expect(data.custeadoPorConvenio).toBe(true);
+      expect(data.cooperativaId).toBeNull();
+      expect(data.modeloCobranca).toBe(ModeloCobranca.FIXO_MENSAL);
+      expect(data.descontoBase).toBe(0);
+      expect(data.publico).toBe(false);
+      expect(data.ativo).toBe(true);
+      expect(data.nome).toBe('Custeado por convênio');
     });
   });
 });
