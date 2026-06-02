@@ -26,6 +26,7 @@ describe('MotorPropostaService.enviarAprovacao — BQ.3 A7 IDOR', () => {
     service = new MotorPropostaService(
       prismaMock,
       {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+      {} as any, // D-FISCAL-2.4.3: ConveniosMembrosService
     );
     propUpdate.mockResolvedValue({ id: 'p1' });
   });

@@ -39,6 +39,28 @@ export class PublicoController {
     return { percentual: desconto / 100 };
   }
 
+  // D-FISCAL-2.4.3 — selector custeio público.
+  // Lista mínima de convênios pagador=EMPRESA + status=ATIVO do tenant.
+  // Retorna SÓ id + empresaNome (nada sensível: sem CNPJ, sem desconto, sem regras MLM).
+  // Usado pelo /cadastro público pra montar o select "Sou custeado por uma empresa cooperada".
+  @Public()
+  @Get('convenios-pagador-empresa')
+  async listarConveniosPagadorEmpresa(@Query('tenant') tenant?: string) {
+    if (!tenant) {
+      throw new BadRequestException('Query param ?tenant= é obrigatório');
+    }
+    const convenios = await this.prisma.contratoConvenio.findMany({
+      where: {
+        cooperativaId: tenant,
+        status: 'ATIVO',
+        pagador: 'EMPRESA',
+      },
+      select: { id: true, empresaNome: true },
+      orderBy: { empresaNome: 'asc' },
+    });
+    return convenios;
+  }
+
   @Public()
   @Post('iniciar-cadastro')
   async iniciarCadastro(
@@ -166,6 +188,10 @@ export class PublicoController {
         valorCompensadoReais?: number;
         valorTotalFatura?: number;
       };
+      // D-FISCAL-2.4.3 — Caso 1 custeio: id do ContratoConvenio escolhido
+      // pelo step "Tipo de cobrança" no /cadastro público. Vivendo em
+      // memória até motorProposta.aceitar (não persistido na Proposta).
+      convenioCusteioId?: string;
     },
     @Query('tenant') tenantParam?: string,
   ) {
@@ -302,6 +328,8 @@ export class PublicoController {
       aceitaClube?: boolean;
       valorUltimaFatura?: number;
       historicoConsumo?: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
+      // D-FISCAL-2.4.3 — Caso 1 custeio
+      convenioCusteioId?: string;
     },
     cooperativaId: string,
   ) {
@@ -425,6 +453,8 @@ export class PublicoController {
           resultado: resultado.resultado,
           mesReferencia: resultado.resultado.mesReferencia,
           planoId: body.planoId || undefined,
+          // D-FISCAL-2.4.3 — Caso 1: força plano custeado + vincula ao convênio
+          convenioCusteioId: body.convenioCusteioId || undefined,
         });
         propostaId = aceite.proposta?.id ?? null;
         emListaEspera = aceite.emListaEspera ?? false;

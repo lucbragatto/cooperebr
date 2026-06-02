@@ -279,11 +279,12 @@ describe('MotorPropostaService.calcularComPlano — Tipo I e Tipo II', () => {
 
   beforeEach(() => {
     planoFindUnique.mockReset();
-    // 10 deps no construtor; só prisma importa para esta função.
+    // 11 deps no construtor (D-FISCAL-2.4.3 adicionou ConveniosMembrosService); só prisma importa para esta função.
     service = new MotorPropostaService(
       prismaMock,
       empty, empty, empty, empty,
       empty, empty, empty, empty, empty,
+      empty,
     );
   });
 

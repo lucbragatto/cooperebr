@@ -164,6 +164,10 @@ export class PlanosService implements OnModuleInit {
       where: {
         ativo: true,
         ...(publico === true && { publico: true }),
+        // D-FISCAL-2.4.3 — esconder plano global "Custeado por convênio" da listagem
+        // de planos comerciais. Ele é selecionado via toggle no Step3 (admin) e radio
+        // no /cadastro (público), não via card de plano.
+        custeadoPorConvenio: false,
         AND: andFilters,
       },
       orderBy: { createdAt: 'desc' },

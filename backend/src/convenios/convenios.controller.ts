@@ -38,6 +38,7 @@ export class ConveniosController {
     @Req() req: any,
     @Query('tipo') tipo?: string,
     @Query('status') status?: string,
+    @Query('pagador') pagador?: string,
     @Query('busca') busca?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -45,6 +46,7 @@ export class ConveniosController {
     return this.conveniosService.findAll(req.user.cooperativaId, {
       tipo,
       status,
+      pagador,
       busca,
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,

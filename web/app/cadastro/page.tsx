@@ -154,6 +154,11 @@ function CadastroPageInner() {
   const [planoSelecionadoId, setPlanoSelecionadoId] = useState<string>('');
   const planoSelecionado = planos.find((p) => p.id === planoSelecionadoId) ?? null;
 
+  // D-FISCAL-2.4.3 — Caso 1 custeio (empresa paga total)
+  const [tipoCobranca, setTipoCobranca] = useState<'PROPRIA' | 'CUSTEADA'>('PROPRIA');
+  const [conveniosCusteio, setConveniosCusteio] = useState<Array<{ id: string; empresaNome: string }>>([]);
+  const [convenioCusteioId, setConvenioCusteioId] = useState<string>('');
+
   // OCR state
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSucesso, setOcrSucesso] = useState(false);
@@ -203,6 +208,18 @@ function CadastroPageInner() {
         if (Array.isArray(data)) setPlanos(data);
       })
       .catch(() => {});
+  }, [searchParams]);
+
+  // D-FISCAL-2.4.3 — Buscar convênios pagador=EMPRESA disponíveis pro custeio.
+  useEffect(() => {
+    const tenant = searchParams.get('tenant') ?? process.env.NEXT_PUBLIC_COOPERATIVA_ID;
+    if (!tenant) return;
+    fetch(`${API_URL}/publico/convenios-pagador-empresa?tenant=${encodeURIComponent(tenant)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setConveniosCusteio(data);
+      })
+      .catch(() => setConveniosCusteio([]));
   }, [searchParams]);
 
   useEffect(() => {
@@ -427,7 +444,13 @@ function CadastroPageInner() {
         setErro('Voce precisa aceitar os termos de adesao.');
         return;
       }
-      if (planos.length > 0 && !planoSelecionadoId) {
+      // D-FISCAL-2.4.3 — em modo custeio, plano é dispensado (override no backend pra "Custeado por convênio")
+      if (tipoCobranca === 'CUSTEADA') {
+        if (!convenioCusteioId) {
+          setErro('Selecione a empresa cooperada pagadora para continuar.');
+          return;
+        }
+      } else if (planos.length > 0 && !planoSelecionadoId) {
         setErro('Selecione um plano para continuar.');
         return;
       }
@@ -467,6 +490,11 @@ function CadastroPageInner() {
         cooperativaId: tenant || undefined,
         aceitaClube,
       };
+
+      // D-FISCAL-2.4.3 — Caso 1 custeio: convenioCusteioId vai pro backend e força plano custeado + vínculo.
+      if (tipoCobranca === 'CUSTEADA' && convenioCusteioId) {
+        payload.convenioCusteioId = convenioCusteioId;
+      }
 
       if (refCode) {
         payload.codigoRef = refCode;
@@ -994,8 +1022,8 @@ function CadastroPageInner() {
           </div>
         </div>
 
-        {/* 4b. Simulacao de economia */}
-        {Number(instalacao.consumoMedioKwh) > 0 && (
+        {/* 4b. Simulacao de economia — escondida no modo custeio (D-FISCAL-2.4.3) */}
+        {tipoCobranca === 'PROPRIA' && Number(instalacao.consumoMedioKwh) > 0 && (
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-800 flex items-center gap-2">
               <Zap className="h-4 w-4 text-green-600" /> Simulacao de economia
@@ -1053,13 +1081,78 @@ function CadastroPageInner() {
           </div>
         )}
 
-        {/* 4c. Escolha do plano */}
-        {planos.length > 0 && !planoSelecionadoId && (
+        {/* D-FISCAL-2.4.3 — Tipo de cobrança (radio + selector custeio) */}
+        {conveniosCusteio.length > 0 && (
+          <div className="space-y-3 rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
+            <h3 className="font-semibold text-blue-900 text-sm">Tipo de cobrança</h3>
+            <p className="text-xs text-blue-800 leading-relaxed">
+              Sua energia é paga por uma empresa cooperada? Se sim, selecione-a abaixo. Você não terá cobrança — a empresa cuida disso.
+            </p>
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer rounded-lg bg-white border border-blue-200 p-3 hover:border-blue-400">
+                <input
+                  type="radio"
+                  name="tipoCobranca"
+                  value="PROPRIA"
+                  checked={tipoCobranca === 'PROPRIA'}
+                  onChange={() => {
+                    setTipoCobranca('PROPRIA');
+                    setConvenioCusteioId('');
+                  }}
+                  className="mt-0.5 w-4 h-4 accent-blue-600"
+                />
+                <div>
+                  <span className="text-sm font-semibold text-gray-800">Eu pago minha conta</span>
+                  <p className="text-xs text-gray-600 mt-0.5">Receba desconto direto na sua fatura.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer rounded-lg bg-white border border-blue-200 p-3 hover:border-blue-400">
+                <input
+                  type="radio"
+                  name="tipoCobranca"
+                  value="CUSTEADA"
+                  checked={tipoCobranca === 'CUSTEADA'}
+                  onChange={() => setTipoCobranca('CUSTEADA')}
+                  className="mt-0.5 w-4 h-4 accent-blue-600"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-semibold text-gray-800">Sou custeado por uma empresa cooperada</span>
+                  <p className="text-xs text-gray-600 mt-0.5">A empresa paga o total. Você não recebe cobrança.</p>
+                </div>
+              </label>
+            </div>
+            {tipoCobranca === 'CUSTEADA' && (
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-blue-900">
+                  Empresa pagadora <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={convenioCusteioId}
+                  onChange={(e) => setConvenioCusteioId(e.target.value)}
+                  className="w-full rounded-md border border-blue-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">— selecione a empresa —</option>
+                  {conveniosCusteio.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.empresaNome}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-blue-700">
+                  Seu cadastro será criado e vinculado à empresa — você não escolhe plano nem recebe cobrança individual.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 4c. Escolha do plano — esconde no modo custeado */}
+        {tipoCobranca === 'PROPRIA' && planos.length > 0 && !planoSelecionadoId && (
           <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800">
             Para finalizar, escolha um plano abaixo:
           </div>
         )}
-        {planos.length > 0 && (
+        {tipoCobranca === 'PROPRIA' && planos.length > 0 && (
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-800">Escolha seu plano</h3>
             {planos.map((p) => {

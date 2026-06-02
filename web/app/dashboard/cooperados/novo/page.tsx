@@ -191,6 +191,12 @@ export default function NovoMembroWizard() {
         if (!step2.cooperadoId) return 'Salve o cooperado antes de avançar.';
         return null;
       case 2:
+        // D-FISCAL-2.4.3 — modo custeio tem validação própria (convênio obrigatório, plano dispensado).
+        if (step3.custeadoPorConvenio) {
+          if (!step3.convenioCusteioId) return 'Selecione a empresa cooperada pagadora antes de avançar.';
+          if (!step3.resultadoMotor) return 'Aguarde — sintetizando dados de consumo da fatura.';
+          return null;
+        }
         if (!step3.resultadoMotor) return 'Execute o cálculo do motor antes de avançar.';
         if (!step3.planoSelecionadoId) return 'Selecione um plano antes de avançar.';
         return null;

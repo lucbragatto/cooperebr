@@ -13,12 +13,15 @@ import { UsinasModule } from '../usinas/usinas.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { EmailModule } from '../email/email.module';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { ConveniosModule } from '../convenios/convenios.module';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const multerLib = require('multer') as { memoryStorage: () => object };
 
 @Module({
-  imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, EmailModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
+  // D-FISCAL-2.4.3: ConveniosModule fornece ConveniosMembrosService pro vínculo
+  // custeio dentro da transação do aceite.
+  imports: [NotificacoesModule, forwardRef(() => CooperadosModule), forwardRef(() => ContratosModule), UsinasModule, ConfigTenantModule, EmailModule, ConveniosModule, MulterModule.register({ storage: multerLib.memoryStorage() })],
   controllers: [MotorPropostaController],
   providers: [MotorPropostaService, MotorPropostaJob, PropostaPdfService, PdfGeneratorService, WhatsappSenderService, PrismaService],
   exports: [MotorPropostaService],

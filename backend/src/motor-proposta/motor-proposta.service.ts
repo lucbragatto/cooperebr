@@ -11,6 +11,7 @@ import { EmailService } from '../email/email.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { PropostaPdfService } from './proposta-pdf.service';
 import { PdfGeneratorService } from './pdf-generator.service';
+import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
 import { TarifaConcessionariaDto } from './dto/tarifa-concessionaria.dto';
@@ -68,6 +69,8 @@ export class MotorPropostaService {
     private whatsappSender: WhatsappSenderService,
     private propostaPdf: PropostaPdfService,
     private pdfGenerator: PdfGeneratorService,
+    // D-FISCAL-2.4.3 — vínculo membro custeio dentro da transação do aceite
+    private conveniosMembros: ConveniosMembrosService,
   ) {}
 
   async getConfiguracao() {
@@ -472,6 +475,8 @@ export class MotorPropostaService {
     resultado: ResultadoCalculo['resultado'];
     mesReferencia: string;
     planoId?: string;
+    /** D-FISCAL-2.4.3 — Caso 1: empresa paga total. Ver AceitarPropostaDto. */
+    convenioCusteioId?: string;
   }, cooperativaId?: string, usuarioId?: string) {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
@@ -491,6 +496,50 @@ export class MotorPropostaService {
     // Multi-tenant: cross-check quando caller informou tenant
     if (cooperativaId && dono.cooperativaId !== cooperativaId) {
       throw new ForbiddenException('Cooperado não pertence à sua cooperativa');
+    }
+
+    // D-FISCAL-2.4.3 — Caso 1: validar convênio custeio ANTES de entrar na transação.
+    // Falhas aqui (convênio inexistente, errado tenant, errado pagador) devem
+    // estourar antes de tocar Proposta/Contrato. Carregamos o plano custeado
+    // global pra resolver planoId no fluxo principal.
+    let custeioContext: {
+      convenioId: string;
+      empresaNome: string;
+      planoCusteadoId: string;
+    } | null = null;
+    if (dto.convenioCusteioId) {
+      const conv = await this.prisma.contratoConvenio.findUnique({
+        where: { id: dto.convenioCusteioId },
+        select: { id: true, cooperativaId: true, status: true, pagador: true, empresaNome: true },
+      });
+      if (!conv) {
+        throw new NotFoundException(`Convênio custeio ${dto.convenioCusteioId} não encontrado`);
+      }
+      if (conv.cooperativaId !== dono.cooperativaId) {
+        throw new ForbiddenException('Convênio não pertence à cooperativa do cooperado');
+      }
+      if (conv.status !== 'ATIVO') {
+        throw new BadRequestException(`Convênio ${conv.empresaNome} não está ATIVO (status=${conv.status})`);
+      }
+      if (conv.pagador !== 'EMPRESA') {
+        throw new BadRequestException(
+          `Convênio ${conv.empresaNome} tem pagador=${conv.pagador}; custeio exige pagador=EMPRESA (Caso 1).`,
+        );
+      }
+      const planoCusteado = await this.prisma.plano.findFirst({
+        where: { custeadoPorConvenio: true, cooperativaId: null, ativo: true },
+        select: { id: true },
+      });
+      if (!planoCusteado) {
+        throw new BadRequestException(
+          'Plano global "Custeado por convênio" não encontrado/ativo. Reinicie o backend pra disparar o seed (D-FISCAL-2.4.2).',
+        );
+      }
+      custeioContext = {
+        convenioId: conv.id,
+        empresaNome: conv.empresaNome,
+        planoCusteadoId: planoCusteado.id,
+      };
     }
 
     // T3 PARTE 4 camada 2: validação de ranges no resultado.
@@ -519,9 +568,16 @@ export class MotorPropostaService {
     // /dashboard/cooperados/[id]/page.tsx), fallback pro primeiro plano ativo
     // do tenant. Isso é comportamento preexistente — a T3 só preserva.
     // Caso fallback: registrar flag para notificação pós-transação.
+    //
+    // D-FISCAL-2.4.3 — Caso 1 custeio: se custeioContext foi resolvido,
+    // override do planoId pelo plano global custeado (ignora dto.planoId
+    // e o fallback de tenant). custeadoPorConvenio=true ativa o guard
+    // 2.4.2 (suprime cobrança individual).
     let planoIdResolvido: string | null = dto.planoId ?? null;
     let usouFallbackPlano = false;
-    if (!planoIdResolvido) {
+    if (custeioContext) {
+      planoIdResolvido = custeioContext.planoCusteadoId;
+    } else if (!planoIdResolvido) {
       const primeiroPlano = await this.prisma.plano.findFirst({
         where: { ativo: true, cooperativaId: dono.cooperativaId },
         select: { id: true },
@@ -788,7 +844,33 @@ export class MotorPropostaService {
         });
       }
 
-      return { proposta, contrato, emListaEspera: statusContrato === 'LISTA_ESPERA', nomeCooperado, numero };
+      // 11. D-FISCAL-2.4.3 — Caso 1 custeio: vincular cooperado ao convênio
+      // dentro da MESMA transação serializável (atômico com o Contrato).
+      // ConveniosMembrosService.adicionarMembro aceita tx (D-FISCAL-2.4.3)
+      // e pula side effects MLM (recalcularFaixa/indicação) quando tx presente.
+      // Enforça 1:1 ativo via membroOutro check do próprio service.
+      let convenioVinculado: { id: string; empresaNome: string } | null = null;
+      if (custeioContext) {
+        await this.conveniosMembros.adicionarMembro(
+          custeioContext.convenioId,
+          dto.cooperadoId,
+          undefined,
+          tx,
+        );
+        convenioVinculado = {
+          id: custeioContext.convenioId,
+          empresaNome: custeioContext.empresaNome,
+        };
+      }
+
+      return {
+        proposta,
+        contrato,
+        emListaEspera: statusContrato === 'LISTA_ESPERA',
+        nomeCooperado,
+        numero,
+        convenioVinculado,
+      };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     // Notificações fora da transação (side effects não-críticos)

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { BarChart2, FileText, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { BarChart2, FileText, RefreshCw, Loader2, AlertTriangle, Info } from 'lucide-react';
 import type { Step1Data, HistoricoItemEditavel } from './Step1Fatura';
 import { detectarSuspeitos } from './Step1Fatura';
 
@@ -15,6 +15,12 @@ interface PlanoOption {
   temPromocao: boolean;
   descontoPromocional: string | null;
   mesesPromocao: number | null;
+}
+
+// D-FISCAL-2.4.3 — selector custeio: convênios pagador=EMPRESA + status=ATIVO do tenant.
+interface ConvenioCusteioOption {
+  id: string;
+  empresaNome: string;
 }
 
 export interface OpcaoCalculo {
@@ -68,6 +74,9 @@ export interface Step3Data {
     mesesGratis: number;
   } | null;
   resultadoMotor: ResultadoMotor | null;
+  // D-FISCAL-2.4.3 — Caso 1 custeio: convênio escolhido (passa pro Step4 aceite)
+  convenioCusteioId?: string;
+  custeadoPorConvenio?: boolean;
 }
 
 interface Step3Props {
@@ -79,37 +88,86 @@ interface Step3Props {
 }
 
 export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange, tipoMembro }: Step3Props) {
-  const { planoSelecionadoId, simulacao, resultadoMotor } = data;
+  const { planoSelecionadoId, simulacao, resultadoMotor, custeadoPorConvenio, convenioCusteioId } = data;
   const { ocr, historico, mesesSelecionados, componentesMarcados, componentesEditados, baseDesconto } = faturaData;
 
   const [planosAtivos, setPlanosAtivos] = useState<PlanoOption[]>([]);
   const [calculando, setCalculando] = useState(false);
   const [erroCalculo, setErroCalculo] = useState('');
   const [opcoesOutlier, setOpcoesOutlier] = useState<OpcaoCalculo[] | null>(null);
+  // D-FISCAL-2.4.3 — convênios disponíveis pra custeio (pagador=EMPRESA, ATIVO)
+  const [conveniosCusteio, setConveniosCusteio] = useState<ConvenioCusteioOption[]>([]);
 
   useEffect(() => {
     api.get<PlanoOption[]>('/planos/ativos').then(r => setPlanosAtivos(r.data)).catch(() => {});
+    // D-FISCAL-2.4.3 — carregar convênios pagador=EMPRESA do tenant (admin/JWT)
+    api
+      .get<{ data: Array<{ id: string; empresaNome: string }> }>('/convenios?pagador=EMPRESA&status=ATIVO&limit=200')
+      .then(r => setConveniosCusteio(r.data?.data ?? []))
+      .catch(() => setConveniosCusteio([]));
   }, []);
 
   // Auto-calcular ao montar se cooperadoId + planoSelecionadoId disponíveis.
   // D-45 fix sub-fix 1: bloqueia auto-cálculo sem planoId — DTO motor-proposta
   // exige @IsNotEmpty() planoId, antes disparava 400 no mount.
+  // D-FISCAL-2.4.3: pular auto-cálculo quando custeado (não há simulação de economia).
   useEffect(() => {
     if (!cooperadoId || resultadoMotor) return;
+    if (custeadoPorConvenio) return;
     if (!planoSelecionadoId) {
       setErroCalculo('Selecione um plano antes de simular.');
       return;
     }
     chamarMotor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooperadoId, planoSelecionadoId]);
+  }, [cooperadoId, planoSelecionadoId, custeadoPorConvenio]);
 
-  // Recalcular ao trocar plano ou base de desconto
+  // Recalcular ao trocar plano ou base de desconto (não recalcular no modo custeio)
   useEffect(() => {
     if (!cooperadoId || !resultadoMotor) return;
+    if (custeadoPorConvenio) return;
     chamarMotor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planoSelecionadoId, baseDesconto]);
+
+  // D-FISCAL-2.4.3 — quando custeado, sintetiza resultadoMotor mínimo a partir da fatura
+  // pra Step4 conseguir chamar /motor-proposta/aceitar (não há simulação de economia).
+  useEffect(() => {
+    if (!custeadoPorConvenio) return;
+    if (resultadoMotor) return;
+    const selecionados = historico.filter((_, i) => mesesSelecionados.has(i));
+    const ultimoMes = selecionados.length > 0 ? selecionados[selecionados.length - 1] : null;
+    const consumoKwh = ocr?.consumoAtualKwh ?? ultimoMes?.consumoKwh ?? 0;
+    const valorFatura = ocr?.totalAPagar ?? ultimoMes?.valorRS ?? 0;
+    if (consumoKwh <= 0) return; // aguarda dados Step1
+    const tarifaUnitSemTrib = (ocr?.tarifaTUSD ?? 0) + (ocr?.tarifaTE ?? 0);
+    const sintetico: ResultadoMotor = {
+      base: 'MES_RECENTE',
+      label: 'Custeado por convênio',
+      kwhApuradoBase: valorFatura > 0 && consumoKwh > 0 ? valorFatura / consumoKwh : tarifaUnitSemTrib,
+      descontoPercentual: 0,
+      descontoAbsoluto: 0,
+      kwhContrato: consumoKwh,
+      valorCooperado: 0,
+      economiaAbsoluta: 0,
+      economiaPercentual: 0,
+      economiaMensal: 0,
+      economiaAnual: 0,
+      mesesEquivalentes: 0,
+      tarifaUnitSemTrib: tarifaUnitSemTrib || 0,
+      tusdUtilizada: ocr?.tarifaTUSD ?? 0,
+      teUtilizada: ocr?.tarifaTE ?? 0,
+      kwhMesRecente: consumoKwh,
+      valorMesRecente: valorFatura,
+      kwhMedio12m: consumoKwh,
+      valorMedio12m: valorFatura,
+      mediaCooperativaKwh: 0,
+      resultadoVsMedia: 0,
+      mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
+    };
+    onChange({ resultadoMotor: sintetico, simulacao: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [custeadoPorConvenio, historico, mesesSelecionados, ocr]);
 
   // Helpers para cards de resumo (display only — não influenciam o cálculo do motor)
   function calcularEstatisticas() {
@@ -193,6 +251,71 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
         <p className="text-sm text-gray-500">Calcule a economia estimada para o {tipoMembro.toLowerCase()}.</p>
       </div>
 
+      {/* D-FISCAL-2.4.3 — Toggle "Custeado por convênio" (Caso 1: empresa paga total) */}
+      <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 mt-0.5 text-amber-700 flex-shrink-0" />
+          <div className="flex-1">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={custeadoPorConvenio ?? false}
+                onChange={(e) => {
+                  const ativo = e.target.checked;
+                  onChange({
+                    custeadoPorConvenio: ativo,
+                    // Limpa plano + simulação quando ativa; limpa convenio quando desativa
+                    ...(ativo
+                      ? { planoSelecionadoId: '', simulacao: null, resultadoMotor: null }
+                      : { convenioCusteioId: undefined }),
+                  });
+                }}
+                className="w-4 h-4 accent-amber-700"
+              />
+              <span className="text-sm font-semibold text-amber-900">
+                Custeado por convênio (empresa paga)
+              </span>
+            </label>
+            <p className="text-xs text-amber-800 mt-1.5 leading-relaxed">
+              Marque se este {tipoMembro.toLowerCase()} é custeado por uma empresa cooperada. Ele <strong>não escolhe plano nem
+              recebe cobrança</strong> — a empresa paga o total via cobrança consolidada. A simulação de economia
+              não se aplica.
+            </p>
+          </div>
+        </div>
+
+        {custeadoPorConvenio && (
+          <div className="pl-8 space-y-2">
+            <label className="block text-xs font-semibold text-amber-900">
+              Empresa pagadora <span className="text-red-700">*</span>
+            </label>
+            {conveniosCusteio.length === 0 ? (
+              <div className="text-xs text-amber-800 italic">
+                Nenhum convênio pagador=EMPRESA cadastrado neste parceiro. Cadastre um em{' '}
+                <a href="/dashboard/convenios/novo" className="underline font-medium" target="_blank">/dashboard/convenios/novo</a>{' '}
+                primeiro (campo &quot;Pagador&quot; = EMPRESA).
+              </div>
+            ) : (
+              <select
+                value={convenioCusteioId ?? ''}
+                onChange={(e) => onChange({ convenioCusteioId: e.target.value || undefined })}
+                className="w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">— selecione a empresa —</option>
+                {conveniosCusteio.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.empresaNome}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="text-[11px] text-amber-700">
+              O contrato será criado com o plano global &quot;Custeado por convênio&quot; e o membro vinculado automaticamente.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Resumo do consumo (referência — dados do Step1) */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
@@ -219,6 +342,9 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
           {mesesSuspeitosSelecionados.length} mês(es) suspeitos incluídos no cálculo. Considere voltar e desmarcar.
         </div>
       )}
+
+      {/* D-FISCAL-2.4.3 — quando custeado: esconde tudo abaixo (plano/simulação/economia) */}
+      {!custeadoPorConvenio && (<>
 
       {/* Plano (cards) — vincula ao contrato, não influencia cálculo do motor */}
       <div className="space-y-3">
@@ -356,6 +482,9 @@ export default function Step3Simulacao({ data, faturaData, cooperadoId, onChange
           </div>
         </div>
       )}
+
+      </>)}
+      {/* D-FISCAL-2.4.3 — fim do guard custeio */}
     </div>
   );
 }

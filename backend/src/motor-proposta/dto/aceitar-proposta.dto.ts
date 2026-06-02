@@ -29,4 +29,19 @@ export class AceitarPropostaDto {
   @IsOptional()
   @IsString()
   planoId?: string;
+
+  /**
+   * D-FISCAL-2.4.3 — Caso 1: membro custeado por convênio (empresa paga total).
+   * Quando presente:
+   *   1. planoId é IGNORADO — força o plano global "Custeado por convênio"
+   *      (Plano.custeadoPorConvenio=true, cooperativaId=null).
+   *   2. Após criar o Contrato, vincula o cooperado ao ContratoConvenio
+   *      como ConvenioCooperado ATIVO, dentro da mesma transação.
+   *   3. Enforça 1:1 (cooperado só pode estar em UM convênio ativo).
+   *   4. Enforça convenio.pagador=EMPRESA (Caso 1) e mesma cooperativa.
+   * Quando ausente: fluxo normal (planoId usado / fallback).
+   */
+  @IsOptional()
+  @IsString()
+  convenioCusteioId?: string;
 }

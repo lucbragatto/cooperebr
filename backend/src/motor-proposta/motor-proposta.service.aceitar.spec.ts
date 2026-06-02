@@ -121,6 +121,7 @@ describe('MotorPropostaService.aceitar — snapshots T3', () => {
       cooperadosMock,
       contratosMock,
       empty, empty, empty, empty, empty, empty,
+      empty, // D-FISCAL-2.4.3: ConveniosMembrosService (não usado nos casos cobertos)
     );
   });
 

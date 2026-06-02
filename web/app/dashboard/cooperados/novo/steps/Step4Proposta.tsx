@@ -25,7 +25,8 @@ interface Step4Props {
 
 export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onChange, tipoMembro }: Step4Props) {
   const { propostaEnviada, canalEnvio, propostaAceita, propostaId } = data;
-  const { simulacao, resultadoMotor, planoSelecionadoId } = simulacaoData;
+  // D-FISCAL-2.4.3: custeio carrega convenioCusteioId (não tem simulação de economia)
+  const { simulacao, resultadoMotor, planoSelecionadoId, custeadoPorConvenio, convenioCusteioId } = simulacaoData;
   const [enviando, setEnviando] = useState(false);
   const [aceitando, setAceitando] = useState(false);
   const [telefoneEnvio, setTelefoneEnvio] = useState(dadosPessoais.telefone);
@@ -104,7 +105,9 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
         cooperadoId: dadosPessoais.cooperadoId,
         resultado: resultadoMotor,
         mesReferencia: resultadoMotor.mesReferencia,
-        planoId: planoSelecionadoId || undefined,
+        // D-FISCAL-2.4.3: em custeio, planoId é IGNORADO no backend (override pro plano custeado global).
+        planoId: custeadoPorConvenio ? undefined : (planoSelecionadoId || undefined),
+        ...(custeadoPorConvenio && convenioCusteioId ? { convenioCusteioId } : {}),
       });
       setResultadoAceite({
         contrato: resp.contrato ? { numero: resp.contrato.numero } : null,
@@ -127,8 +130,23 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
         <p className="text-sm text-gray-500">Envie a proposta para o {tipoMembro.toLowerCase()} ou registre aceitação presencial.</p>
       </div>
 
-      {/* Preview da proposta */}
-      {simulacao && (
+      {/* D-FISCAL-2.4.3 — banner custeio: explica que não há envio de proposta */}
+      {custeadoPorConvenio && (
+        <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            {tipoMembro} custeado por convênio — sem proposta comercial
+          </p>
+          <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+            Este {tipoMembro.toLowerCase()} não recebe simulação de economia nem proposta enviada por WhatsApp/email.
+            Ao clicar em <strong>Aceitar proposta</strong> abaixo, o contrato é criado direto com o plano
+            <strong> &quot;Custeado por convênio&quot;</strong> e o membro vinculado automaticamente à empresa pagadora.
+            A cobrança individual fica suprimida (a empresa paga a consolidada).
+          </p>
+        </div>
+      )}
+
+      {/* Preview da proposta — apenas se NÃO custeado */}
+      {!custeadoPorConvenio && simulacao && (
         <div className="border border-gray-200 rounded-lg p-5 space-y-4 print:border-0">
           <div className="flex items-center gap-2 mb-2">
             <FileText className="h-5 w-5 text-green-700" />
@@ -158,7 +176,8 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
         </div>
       )}
 
-      {/* Opções de envio */}
+      {/* Opções de envio — escondidas no modo custeio (não há proposta a enviar) */}
+      {!custeadoPorConvenio && (<>
       <div className="space-y-3 print:hidden">
         {/* WhatsApp */}
         <div className="border border-gray-200 rounded-lg p-4 space-y-2">
@@ -213,6 +232,8 @@ export default function Step4Proposta({ data, dadosPessoais, simulacaoData, onCh
       )}
 
       {erro && <p className="text-sm text-red-600">{erro}</p>}
+      </>)}
+      {/* /D-FISCAL-2.4.3 fim do guard custeio (envio + status) */}
 
       {/* Aceitar proposta — chama o motor de proposta real */}
       <div className="border-t border-gray-200 pt-4 space-y-3">

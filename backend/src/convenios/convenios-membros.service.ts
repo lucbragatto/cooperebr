@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 
@@ -11,12 +12,32 @@ export class ConveniosMembrosService {
     private progressaoService: ConveniosProgressaoService,
   ) {}
 
-  async adicionarMembro(convenioId: string, cooperadoId: string, matricula?: string) {
-    const convenio = await this.prisma.contratoConvenio.findUnique({ where: { id: convenioId } });
+  /**
+   * D-FISCAL-2.4.3 (01/06/2026 noite) — `tx` opcional adicionado.
+   *
+   * Quando chamado dentro de uma transação serializável (ex: aceite de
+   * proposta com convenioCusteioId), passe o `tx` do `$transaction` pra
+   * vincular o membro atomicamente junto ao Contrato. Os side effects
+   * MLM (recalcularFaixa + registrarIndicacao) ficam pulados no caminho
+   * tx — eles dependem de `this.prisma` e não fazem sentido pro Caso 1
+   * (custeio puro, sem MLM/indicação).
+   *
+   * Quando chamado sem `tx` (fluxo legado de admin/manual), comportamento
+   * idêntico ao anterior.
+   */
+  async adicionarMembro(
+    convenioId: string,
+    cooperadoId: string,
+    matricula?: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const db = tx ?? this.prisma;
+
+    const convenio = await db.contratoConvenio.findUnique({ where: { id: convenioId } });
     if (!convenio) throw new NotFoundException('Convênio não encontrado');
     if (convenio.status !== 'ATIVO') throw new BadRequestException('Convênio não está ativo');
 
-    const cooperado = await this.prisma.cooperado.findUnique({ where: { id: cooperadoId } });
+    const cooperado = await db.cooperado.findUnique({ where: { id: cooperadoId } });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
 
     // Verificar que cooperado pertence à mesma cooperativa
@@ -25,7 +46,7 @@ export class ConveniosMembrosService {
     }
 
     // Verificar se cooperado já é membro de outro convênio ativo
-    const membroOutro = await this.prisma.convenioCooperado.findFirst({
+    const membroOutro = await db.convenioCooperado.findFirst({
       where: {
         cooperadoId,
         ativo: true,
@@ -37,7 +58,7 @@ export class ConveniosMembrosService {
     }
 
     // Verificar se já existe vínculo
-    const existente = await this.prisma.convenioCooperado.findUnique({
+    const existente = await db.convenioCooperado.findUnique({
       where: { convenioId_cooperadoId: { convenioId, cooperadoId } },
     });
 
@@ -45,7 +66,7 @@ export class ConveniosMembrosService {
     if (existente) {
       if (existente.ativo) throw new BadRequestException('Cooperado já vinculado a este convênio');
       // Reativar
-      membro = await this.prisma.convenioCooperado.update({
+      membro = await db.convenioCooperado.update({
         where: { id: existente.id },
         data: {
           ativo: true,
@@ -56,7 +77,7 @@ export class ConveniosMembrosService {
         },
       });
     } else {
-      membro = await this.prisma.convenioCooperado.create({
+      membro = await db.convenioCooperado.create({
         data: {
           convenioId,
           cooperadoId,
@@ -68,17 +89,18 @@ export class ConveniosMembrosService {
       });
     }
 
-    // Registrar como indicação se configurado
-    if (convenio.registrarComoIndicacao && convenio.conveniadoId) {
-      try {
-        await this.registrarIndicacaoConvenio(convenio.conveniadoId, cooperadoId, convenio.cooperativaId, membro.id);
-      } catch (err) {
-        this.logger.warn(`Falha ao registrar indicação do convênio: ${err.message}`);
+    // Side effects MLM — só fora de transação serializável (Caso legado).
+    // Em custeio (caller passa tx), tier/indicação não se aplicam ao Caso 1.
+    if (!tx) {
+      if (convenio.registrarComoIndicacao && convenio.conveniadoId) {
+        try {
+          await this.registrarIndicacaoConvenio(convenio.conveniadoId, cooperadoId, convenio.cooperativaId, membro.id);
+        } catch (err) {
+          this.logger.warn(`Falha ao registrar indicação do convênio: ${err.message}`);
+        }
       }
+      await this.progressaoService.recalcularFaixa(convenioId, 'NOVO_MEMBRO');
     }
-
-    // Recalcular faixa
-    await this.progressaoService.recalcularFaixa(convenioId, 'NOVO_MEMBRO');
 
     return membro;
   }

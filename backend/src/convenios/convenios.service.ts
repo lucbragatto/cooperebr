@@ -133,15 +133,18 @@ export class ConveniosService {
   async findAll(cooperativaId: string, params?: {
     tipo?: string;
     status?: string;
+    pagador?: string;
     busca?: string;
     page?: number;
     limit?: number;
   }) {
-    const { tipo, status, busca, page = 1, limit = 20 } = params ?? {};
+    const { tipo, status, pagador, busca, page = 1, limit = 20 } = params ?? {};
     const where: any = { cooperativaId };
 
     if (tipo) where.tipo = tipo;
     if (status) where.status = status;
+    // D-FISCAL-2.4.3 — selector custeio: admin filtra pagador=EMPRESA pra montar o select
+    if (pagador) where.pagador = pagador;
     if (busca) {
       where.OR = [
         { empresaNome: { contains: busca, mode: 'insensitive' } },

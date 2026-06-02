@@ -33,6 +33,7 @@ describe('MotorPropostaService.aprovarPresencial — BQ.2 IDOR posse via coopera
       {} as any,
       {} as any,
       {} as any,
+      {} as any, // D-FISCAL-2.4.3: ConveniosMembrosService
     );
     propUpdate.mockResolvedValue({ id: 'p1', status: 'ACEITA' });
   });
