@@ -172,23 +172,8 @@ export class ConveniosCusteioService {
     }
 
     // D-FISCAL-2.4.4a.1 — Empresa COM_UC: incluir UCs reais do pagadorCooperado
-    // no total consolidado (gap descoberto pós-2.4.4a). A empresa pagadora é
-    // beneficiária quando tem instalação própria, então o consumo dela ENTRA
-    // no que ela paga. Dedup defensivo via Set<ucId> evita double-count se a
-    // empresa também estiver em ConvenioCooperado (caminho a — ideal). UC
-    // sintética CONSOLIDADOR-* é excluída via filtro (não tem fatura real).
-    //
-    // Empresa SEM_UC: query retorna [] → contribui 0 (correto, só pagadora).
-    //
-    // Caminho ideal (a): admin cadastra empresa COM_UC como ConvenioCooperado
-    // membro do próprio convênio (Wizard 2.4.3 toggle "custeado") → UC dela
-    // ganha plano custeado → GUARDs 2.4.2 suprimem cobrança individual da UC
-    // dela → entra UMA vez no consolidado (via membership).
-    //
-    // Caminho defensivo (b): se admin esquecer (a), a busca abaixo inclui
-    // a UC mesmo assim. ⚠️ Mas o GUARD 2.4.2 NÃO dispara (contrato sem plano
-    // custeado) → cobrança individual da UC ainda é gerada → DOUBLE-BILL real.
-    // Logger.warn alerta o admin.
+    // no total consolidado (gap descoberto pós-2.4.4a). UC sintética
+    // CONSOLIDADOR-* é excluída via filtro (não tem fatura real).
     const ucsPagadorReais = await this.prisma.uc.findMany({
       where: {
         cooperadoId: convenio.pagadorCooperadoId!,
@@ -196,19 +181,6 @@ export class ConveniosCusteioService {
       },
       select: { id: true, numero: true, distribuidora: true },
     });
-    const pagadorEMembro = membros.some(
-      (m) => m.cooperado.id === convenio.pagadorCooperadoId,
-    );
-    if (ucsPagadorReais.length > 0 && !pagadorEMembro) {
-      this.logger.warn(
-        `[D-FISCAL-2.4.4a.1] Convênio "${convenio.empresaNome}": pagadorCooperadoId ` +
-          `tem ${ucsPagadorReais.length} UC(s) real(is) mas NÃO está em ConvenioCooperado. ` +
-          `UCs serão incluídas no consolidado (defesa em profundidade), MAS a cobrança ` +
-          `individual delas pode ainda disparar (GUARDs 2.4.2 dependem do plano custeado ` +
-          `no contrato). Recomendação: cadastrar empresa como membro custeado do próprio ` +
-          `convênio via Wizard /dashboard/cooperados/novo.`,
-      );
-    }
 
     // 5. Calcular kWh consolidado conforme base
     const base = convenio.baseCobrancaCusteio ?? 'CONSUMO_REAL';
@@ -217,9 +189,21 @@ export class ConveniosCusteioService {
     const detalhamento: Array<{ origem: string; kwh: number; ucNumero?: string; distribuidora?: string }> = [];
 
     if (base === 'CONSUMO_REAL') {
-      // Soma kWh real via FaturaProcessada — dedup por ucId (Set) cobre o caso
-      // em que empresa pagadora também é membro (UC aparece em ambos os
-      // caminhos). Mapa ucId → fonte humana pra log/auditoria.
+      // D-FISCAL-2.4.4a.2 — INVARIANTE: UC entra no consolidado SE E SOMENTE SE
+      // o contrato ATIVO dela usa plano custeadoPorConvenio=true.
+      // Elimina risco de double-bill: nenhuma UC pode estar simultaneamente
+      // em cobrança individual (contrato comum) E no consolidado.
+      //
+      // Como o GUARD da 2.4.2 só suprime cobrança individual de UCs com plano
+      // custeado, fazer o consolidado depender do MESMO critério garante que
+      // a relação custeado⟺consolidado é bijetiva (uma UC ou está em um, ou
+      // está em outro, nunca em ambos, nunca em nenhum).
+      //
+      // Membros são custeados por construção (Wizard 2.4.3 força plano custeado
+      // no aceite), mas filtramos TODAS uniformemente — defesa contra:
+      //   (a) membro com contrato antigo NÃO migrado pro plano custeado
+      //   (b) UC do pagador NÃO cadastrada como membro (sem plano custeado)
+      //   (c) regressões futuras no fluxo de cadastro
       const mesRefStr = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
       const ucIdToOrigem = new Map<string, { origem: string; numero: string; distribuidora: string }>();
       // Membros
@@ -234,7 +218,8 @@ export class ConveniosCusteioService {
           }
         }
       }
-      // UCs reais do pagador (caminho b defensivo)
+      // UCs reais do pagador (defensivo — só entra no total se passar pelo
+      // filtro custeado abaixo, garantindo invariante anti-double-bill)
       for (const uc of ucsPagadorReais) {
         if (!ucIdToOrigem.has(uc.id)) {
           ucIdToOrigem.set(uc.id, {
@@ -245,14 +230,56 @@ export class ConveniosCusteioService {
         }
       }
 
-      const ucIds = [...ucIdToOrigem.keys()];
-      if (ucIds.length === 0) {
+      const ucIdsCandidatos = [...ucIdToOrigem.keys()];
+      if (ucIdsCandidatos.length === 0) {
         throw new BadRequestException(
           `Convênio "${convenio.empresaNome}" tem ${membros.length} membros mas ` +
             `nenhum tem UC cadastrada (nem o pagador). Cadastre UCs antes de gerar ` +
             `consolidada CONSUMO_REAL.`,
         );
       }
+
+      // ⭐ FILTRO INVARIANTE: só UCs cujo contrato ATIVO usa plano custeado
+      const contratosCusteadosNasUCs = await this.prisma.contrato.findMany({
+        where: {
+          ucId: { in: ucIdsCandidatos },
+          status: 'ATIVO',
+          plano: { custeadoPorConvenio: true },
+        },
+        select: { ucId: true },
+      });
+      const ucIdsCusteados = new Set(
+        contratosCusteadosNasUCs.map((c) => c.ucId).filter(Boolean) as string[],
+      );
+
+      // Auditoria UX: UCs candidatas que foram EXCLUÍDAS (não-custeadas)
+      const ucIdsExcluidas = ucIdsCandidatos.filter((id) => !ucIdsCusteados.has(id));
+      if (ucIdsExcluidas.length > 0) {
+        const detalhesExcluidos = ucIdsExcluidas
+          .map((id) => {
+            const meta = ucIdToOrigem.get(id);
+            return `${meta?.numero ?? id} (${meta?.origem ?? '?'})`;
+          })
+          .join(', ');
+        this.logger.log(
+          `[D-FISCAL-2.4.4a.2] Convênio "${convenio.empresaNome}": ${ucIdsExcluidas.length} ` +
+            `UC(s) candidata(s) EXCLUÍDA(s) do consolidado por NÃO terem contrato ATIVO ` +
+            `com plano custeado: ${detalhesExcluidos}. ` +
+            `Essas UCs seguem cobrança individual normal. ` +
+            `Pra consolidá-las, cadastre o cooperado dono como membro custeado do convênio ` +
+            `via /dashboard/cooperados/novo (toggle "custeado por convênio").`,
+        );
+      }
+
+      const ucIds = [...ucIdsCusteados];
+      if (ucIds.length === 0) {
+        throw new BadRequestException(
+          `Convênio "${convenio.empresaNome}": nenhuma das ${ucIdsCandidatos.length} UC(s) ` +
+            `candidatas (membros + pagador) tem contrato ATIVO com plano custeado. ` +
+            `Cadastre os membros como custeados via Wizard antes de gerar consolidada.`,
+        );
+      }
+
       const faturas = await this.prisma.faturaProcessada.findMany({
         where: {
           ucId: { in: ucIds },
@@ -284,9 +311,8 @@ export class ConveniosCusteioService {
       if (kwhTotal === 0) {
         throw new BadRequestException(
           `Convênio "${convenio.empresaNome}": nenhuma fatura APROVADA encontrada ` +
-            `em ${mesRefStr} pras UCs dos ${membros.length} membros` +
-            (ucsPagadorReais.length > 0 ? ` + ${ucsPagadorReais.length} UC(s) do pagador` : '') +
-            `. Aguarde processamento das faturas ou troque a base pra ALOCACAO_FIXA.`,
+            `em ${mesRefStr} pras ${ucIds.length} UC(s) custeada(s). ` +
+            `Aguarde processamento das faturas ou troque a base pra ALOCACAO_FIXA.`,
         );
       }
       // Distribuidora predominante: a que aparece mais vezes nos detalhes
@@ -390,8 +416,8 @@ export class ConveniosCusteioService {
     this.logger.log(
       `[D-FISCAL-2.4.4a] Consolidada CRIADA convênio "${convenio.empresaNome}" ` +
         `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}: ` +
-        `${membros.length} membros + ${ucsPagadorReais.length} UC(s) reais do pagador ` +
-        `· base=${base} · kWh=${kwhTotal} · ` +
+        `${membros.length} membros · ${ucsPagadorReais.length} UC(s) pagador candidatas ` +
+        `· ${detalhamento.length} UC(s) custeada(s) consolidada(s) · base=${base} · kWh=${kwhTotal} · ` +
         `tarifa=R$ ${tarifaInfo.tarifaKwh.toFixed(5)}/kWh (${distribuidoraUsada}) · ` +
         `bruto=R$ ${valorBruto.toFixed(2)} · líquido=R$ ${valorLiquido.toFixed(2)} ` +
         `(desconto ${descontoPct}%) · cobrancaId=${cobranca.id}`,

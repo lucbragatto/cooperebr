@@ -36,6 +36,8 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
   const findManyUcsPagador = jest.fn();
   const findUniqueContrato = jest.fn();
   const createContrato = jest.fn();
+  // D-FISCAL-2.4.4a.2: filtro invariante custeado⟺consolidado
+  const findManyContratosCusteado = jest.fn();
   const createLancamentoCaixa = jest.fn();
   const transactionFn = jest.fn();
 
@@ -57,7 +59,11 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     },
     plano: { findFirst: findFirstPlano },
     uc: { findUnique: findUniqueUc, create: createUc, findMany: findManyUcsPagador },
-    contrato: { findUnique: findUniqueContrato, create: createContrato },
+    contrato: {
+      findUnique: findUniqueContrato,
+      create: createContrato,
+      findMany: findManyContratosCusteado, // D-FISCAL-2.4.4a.2 filtro custeado
+    },
     $transaction: transactionFn,
   } as any;
 
@@ -104,6 +110,14 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     // D-FISCAL-2.4.4a.1 — default: pagador SEM UC própria (empresa SEM_UC).
     // Specs específicos de COM_UC sobrescrevem com mockResolvedValueOnce.
     findManyUcsPagador.mockResolvedValue([]);
+    // D-FISCAL-2.4.4a.2 — default: TODAS as UCs candidatas têm contrato custeado.
+    // Specs específicos do invariante sobrescrevem com mockResolvedValueOnce
+    // pra simular UCs não-custeadas (que devem ser excluídas).
+    findManyContratosCusteado.mockImplementation(async (args: any) => {
+      const ucIds: string[] = args?.where?.ucId?.in ?? [];
+      // Por default, retorna 1 contrato custeado pra cada UC candidata
+      return ucIds.map((ucId) => ({ ucId }));
+    });
   });
 
   // ============================================================
@@ -484,7 +498,10 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
   // D-FISCAL-2.4.4a.1 — empresa COM_UC beneficiária no consolidado
   // ============================================================
 
-  it('D-FISCAL-2.4.4a.1: empresa COM_UC (não-membro) → UC própria entra no consolidado', async () => {
+  it('D-FISCAL-2.4.4a.1: empresa COM_UC com contrato custeado (pré-existente) → UC própria entra no consolidado', async () => {
+    // Cenário: empresa COM_UC com contrato pré-existente já marcado como custeado
+    // (ex: setup manual via admin antes do Wizard 2.4.3). UC passa pelo filtro
+    // invariante 2.4.4a.2 e entra no total.
     findFirstConvenio.mockResolvedValue(convenioBase);
     findFirstCobranca.mockResolvedValue(null);
     findManyMembros.mockResolvedValue([
@@ -496,10 +513,12 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
         },
       },
     ]);
-    // Pagador (empresa) tem 1 UC real própria (NÃO é membro)
+    // Pagador (empresa) tem 1 UC real própria
     findManyUcsPagador.mockResolvedValueOnce([
       { id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' },
     ]);
+    // Default do mock: ambas UCs (uc-mem-1 + uc-empresa-1) têm contrato custeado
+    // → passam pelo filtro invariante 2.4.4a.2
     findManyFaturas.mockResolvedValue([
       { ucId: 'uc-mem-1', dadosExtraidos: { consumoAtualKwh: 400 }, mediaKwhCalculada: '400' },
       { ucId: 'uc-empresa-1', dadosExtraidos: { consumoAtualKwh: 600 }, mediaKwhCalculada: '600' },
@@ -601,6 +620,124 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     const ucIdsArg = findManyFaturas.mock.calls[0][0].where.ucId.in as string[];
     expect(ucIdsArg).toHaveLength(2);
     expect(new Set(ucIdsArg)).toEqual(new Set(['uc-empresa-1', 'uc-mem-2']));
+  });
+
+  // ============================================================
+  // D-FISCAL-2.4.4a.2 — INVARIANTE custeado⟺consolidado (zero double-bill)
+  // ============================================================
+
+  it('D-FISCAL-2.4.4a.2: empresa COM_UC membro custeado → UC no consolidado', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'pagador-1', // empresa é membro
+          nomeCompleto: 'Clínica X (membro)',
+          ucs: [{ id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    // UC da empresa TEM contrato custeado (porque ela é membro custeado)
+    findManyContratosCusteado.mockResolvedValueOnce([{ ucId: 'uc-empresa-1' }]);
+    findManyFaturas.mockResolvedValue([
+      { ucId: 'uc-empresa-1', dadosExtraidos: { consumoAtualKwh: 800 }, mediaKwhCalculada: '800' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    // 800 × 0.78931 = 631.45
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(631.45, 2);
+    // Filtro custeado foi consultado com a UC candidata
+    expect(findManyContratosCusteado).toHaveBeenCalledTimes(1);
+    const filterArgs = findManyContratosCusteado.mock.calls[0][0];
+    expect(filterArgs.where.status).toBe('ATIVO');
+    expect(filterArgs.where.plano).toEqual({ custeadoPorConvenio: true });
+    expect(filterArgs.where.ucId.in).toContain('uc-empresa-1');
+  });
+
+  it('D-FISCAL-2.4.4a.2: empresa COM_UC NÃO-membro (UC sem contrato custeado) → UC EXCLUÍDA do consolidado', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A (membro custeado)',
+          ucs: [{ id: 'uc-mem-1', numero: '001', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    // Pagador tem UC real, mas NÃO é membro → contrato dela NÃO é custeado
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-NAO-custeada', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    // Filtro custeado retorna SÓ a UC do membro — a UC da empresa NÃO entra
+    findManyContratosCusteado.mockResolvedValueOnce([{ ucId: 'uc-mem-1' }]);
+    findManyFaturas.mockResolvedValue([
+      // Mesmo se houver fatura da UC da empresa, ela não entra (filtro impede)
+      { ucId: 'uc-mem-1', dadosExtraidos: { consumoAtualKwh: 500 }, mediaKwhCalculada: '500' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    // Total = só membro (500). UC da empresa NÃO-custeada NÃO entra.
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(394.66, 2); // 500 × 0.78931
+
+    // findManyFaturas foi chamado SÓ com a UC custeada (uc-mem-1), não a NÃO-custeada
+    const faturasArgs = findManyFaturas.mock.calls[0][0];
+    expect(faturasArgs.where.ucId.in).toEqual(['uc-mem-1']);
+    expect(faturasArgs.where.ucId.in).not.toContain('uc-empresa-NAO-custeada');
+  });
+
+  it('D-FISCAL-2.4.4a.2: ZERO UC custeada → BadRequest (não gera consolidada vazia)', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A (contrato antigo NÃO migrado)',
+          ucs: [{ id: 'uc-mem-1', numero: '001', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-NAO-custeada', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    // Filtro custeado retorna VAZIO — nenhuma UC candidata tem contrato custeado
+    findManyContratosCusteado.mockResolvedValueOnce([]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    await expect(
+      service.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      }),
+    ).rejects.toThrow(/nenhuma.*contrato ATIVO com plano custeado/);
+
+    expect(createCobranca).not.toHaveBeenCalled();
   });
 
   it('D-FISCAL-2.4.4a.1: convênio só com pagador COM_UC (zero membros UCs) → consolidada gerada', async () => {
