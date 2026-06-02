@@ -51,6 +51,9 @@ interface ConvenioApi {
   baseCobrancaCusteio: 'CONSUMO_REAL' | 'ALOCACAO_FIXA' | null;
   kwhAlocadoMensal: number | null;
   descontoKwhCusteio: number | string | null;
+  // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+  tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO' | 'VALOR_FIXO' | null;
+  tarifaFixaKwhEmpresa: number | string | null;
 }
 
 export default function EditarConvenioLegadoPage() {
@@ -80,12 +83,15 @@ export default function EditarConvenioLegadoPage() {
   });
 
   // D-FISCAL-2.4.4e — bloco custeio (Caso 1: empresa paga total)
+  // D-novo-CT-TARIFA-FIXA-EMPRESA — tipoTarifaEmpresa + tarifaFixaKwhEmpresa
   const [custeio, setCusteio] = useState<ConvenioCusteioState>({
     pagador: 'CADA_MEMBRO',
     pagadorCooperadoId: '',
     baseCobrancaCusteio: 'CONSUMO_REAL',
     kwhAlocadoMensal: '',
     descontoKwhCusteio: '',
+    tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
+    tarifaFixaKwhEmpresa: '',
   });
 
   async function carregar() {
@@ -106,7 +112,7 @@ export default function EditarConvenioLegadoPage() {
         vigenciaInicio: data.vigenciaInicio ? data.vigenciaInicio.substring(0, 10) : '',
         vigenciaFim: data.vigenciaFim ? data.vigenciaFim.substring(0, 10) : '',
       });
-      // D-FISCAL-2.4.4e — bloco custeio
+      // D-FISCAL-2.4.4e + D-novo-CT-TARIFA-FIXA-EMPRESA — bloco custeio
       setCusteio({
         pagador: (data.pagador as any) ?? 'CADA_MEMBRO',
         pagadorCooperadoId: data.pagadorCooperadoId ?? '',
@@ -115,6 +121,11 @@ export default function EditarConvenioLegadoPage() {
         descontoKwhCusteio:
           data.descontoKwhCusteio !== null && data.descontoKwhCusteio !== undefined
             ? Number(data.descontoKwhCusteio)
+            : '',
+        tipoTarifaEmpresa: (data.tipoTarifaEmpresa as any) ?? 'PERCENTUAL_DESCONTO',
+        tarifaFixaKwhEmpresa:
+          data.tarifaFixaKwhEmpresa !== null && data.tarifaFixaKwhEmpresa !== undefined
+            ? Number(data.tarifaFixaKwhEmpresa)
             : '',
       });
     } catch (err: any) {
@@ -158,6 +169,14 @@ export default function EditarConvenioLegadoPage() {
         setErro('Custeio: ALOCACAO_FIXA exige kWh alocado por mês > 0.');
         return;
       }
+      // D-novo-CT-TARIFA-FIXA-EMPRESA: VALOR_FIXO exige tarifaFixaKwhEmpresa>0
+      if (
+        custeio.tipoTarifaEmpresa === 'VALOR_FIXO' &&
+        (!custeio.tarifaFixaKwhEmpresa || Number(custeio.tarifaFixaKwhEmpresa) <= 0)
+      ) {
+        setErro('Custeio: tarifa fixa R$/kWh exige valor > 0.');
+        return;
+      }
     }
 
     setSalvando(true);
@@ -189,6 +208,13 @@ export default function EditarConvenioLegadoPage() {
         descontoKwhCusteio:
           custeio.pagador === 'EMPRESA' && custeio.descontoKwhCusteio !== ''
             ? Number(custeio.descontoKwhCusteio)
+            : null,
+        // D-novo-CT-TARIFA-FIXA-EMPRESA
+        tipoTarifaEmpresa:
+          custeio.pagador === 'EMPRESA' ? custeio.tipoTarifaEmpresa : null,
+        tarifaFixaKwhEmpresa:
+          custeio.pagador === 'EMPRESA' && custeio.tarifaFixaKwhEmpresa !== ''
+            ? Number(custeio.tarifaFixaKwhEmpresa)
             : null,
       };
       await api.patch(`/convenios/${id}`, payload);

@@ -376,6 +376,105 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     expect(createCobranca).not.toHaveBeenCalled();
   });
 
+  // ============================================================
+  // D-novo-CT-TARIFA-FIXA-EMPRESA — modo VALOR_FIXO R$/kWh negociado
+  // ============================================================
+
+  it('D-novo-CT-TARIFA-FIXA-EMPRESA: VALOR_FIXO calcula kWh × tarifaFixa (ignora concessionária, sem desconto)', async () => {
+    findFirstConvenio.mockResolvedValue({
+      ...convenioBase,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 200000,
+      descontoKwhCusteio: '20', // setado, mas IGNORADO em VALOR_FIXO
+      tipoTarifaEmpresa: 'VALOR_FIXO',
+      tarifaFixaKwhEmpresa: '0.80000',
+    });
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([]);
+    findManyUcsPagador.mockResolvedValue([]);
+    // Concessionária tarifa NÃO deveria ser consultada — não mockamos retorno
+    // (qualquer chamada faria findManyTarifas mock retornar undefined e quebrar)
+    findManyTarifas.mockResolvedValue([{
+      concessionaria: 'EDP_ES',
+      tusdNova: '0.46863',
+      teNova: '0.32068',
+      dataVigencia: new Date('2026-01-01'),
+    }]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    // 200000 × 0.80 = R$ 160.000,00 — SEM desconto (mesmo com descontoKwhCusteio=20 setado)
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(160000.00, 1);
+    expect(Number(bodyArg.valorLiquido)).toBeCloseTo(160000.00, 1);
+    expect(Number(bodyArg.percentualDesconto)).toBe(0);
+    expect(Number(bodyArg.valorDesconto)).toBe(0);
+  });
+
+  it('D-novo-CT-TARIFA-FIXA-EMPRESA: VALOR_FIXO sem tarifaFixaKwhEmpresa → BadRequest', async () => {
+    findFirstConvenio.mockResolvedValue({
+      ...convenioBase,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 5000,
+      tipoTarifaEmpresa: 'VALOR_FIXO',
+      tarifaFixaKwhEmpresa: null, // ausente
+    });
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([]);
+    findManyUcsPagador.mockResolvedValue([]);
+
+    await expect(
+      service.gerarCobrancaConsolidada({
+        convenioId: 'conv-1',
+        mesReferencia: 5,
+        anoReferencia: 2026,
+        cooperativaId: 'coop-A',
+      }),
+    ).rejects.toThrow(/tarifaFixaKwhEmpresa.*não está definida/);
+
+    expect(createCobranca).not.toHaveBeenCalled();
+  });
+
+  it('D-novo-CT-TARIFA-FIXA-EMPRESA: PERCENTUAL_DESCONTO (default) mantém cálculo atual (REGRESSÃO)', async () => {
+    findFirstConvenio.mockResolvedValue({
+      ...convenioBase,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 5000,
+      descontoKwhCusteio: '20',
+      tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
+      tarifaFixaKwhEmpresa: null,
+    });
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([]);
+    findManyUcsPagador.mockResolvedValue([]);
+    findManyTarifas.mockResolvedValue([]); // distribuidora=null → cai no fallback
+    findFirstTarifa.mockResolvedValue({
+      concessionaria: 'EDP_ES',
+      tusdNova: '0.46863',
+      teNova: '0.32068',
+      dataVigencia: new Date('2026-01-01'),
+    });
+
+    await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    // 5000 × 0.78931 × 0.80 = 3157.24 — mesmo cálculo legado (regressão preservada)
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(3946.55, 1);
+    expect(Number(bodyArg.valorLiquido)).toBeCloseTo(3157.24, 1);
+    expect(Number(bodyArg.percentualDesconto)).toBe(20);
+  });
+
   // D-FISCAL-2.4.4f — ALOCACAO_FIXA é pacote fixo: kwhAlocadoMensal é a fonte,
   // não depende de membros. Convênio "pré-pago" sem membros DEVE gerar.
   it('D-FISCAL-2.4.4f: ALOCACAO_FIXA sem membros → CRIADA (pacote fixo independe de membros)', async () => {

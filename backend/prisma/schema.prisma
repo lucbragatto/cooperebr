@@ -339,6 +339,16 @@ enum BaseCobrancaCusteio {
   ALOCACAO_FIXA
 }
 
+/// D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — Modo de cobrança da empresa
+/// no Caso 1 custeio.
+///   PERCENTUAL_DESCONTO (default, atual): tarifa = concessionária × (1 - desconto%).
+///   VALOR_FIXO: tarifa = tarifaFixaKwhEmpresa (negociada R$/kWh, ignora concessionária).
+/// HIBRIDO fica pra futuro (não nesta fatia).
+enum TipoTarifaEmpresa {
+  PERCENTUAL_DESCONTO
+  VALOR_FIXO
+}
+
 enum EfeitoMudancaFaixa {
   SOMENTE_PROXIMAS
   INCLUIR_PENDENTES
@@ -1395,6 +1405,14 @@ model ContratoConvenio {
   descontoKwhCusteio     Decimal?            @db.Decimal(5, 2)
   contratoConsolidadorId String?             @unique
   contratoConsolidador   Contrato?           @relation("ConvenioConsolidador", fields: [contratoConsolidadorId], references: [id])
+
+  // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — Modo de cobrança da empresa.
+  // PERCENTUAL_DESCONTO (default, atual): kWh × tarifa_concessionária × (1-desconto%).
+  // VALOR_FIXO: kWh × tarifaFixaKwhEmpresa (sem desconto, sem concessionária).
+  // Default PERCENTUAL_DESCONTO preserva backward-compat dos 2 convênios vivos
+  // (Hangar/Moradas) + CV-2026-0001 (Clínica teste, já criada com desconto 20%).
+  tipoTarifaEmpresa      TipoTarifaEmpresa?  @default(PERCENTUAL_DESCONTO)
+  tarifaFixaKwhEmpresa   Decimal?            @db.Decimal(10, 5)
 
   // Back-rel pra Cobrancas geradas via convenio (hook Design B — D-FISCAL-2.4.1)
   cobrancasGeradas       Cobranca[]          @relation("CobrancaConvenio")

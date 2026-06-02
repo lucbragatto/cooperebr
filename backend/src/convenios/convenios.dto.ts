@@ -35,6 +35,12 @@ export enum BaseCobrancaCusteioDto {
   ALOCACAO_FIXA = 'ALOCACAO_FIXA',
 }
 
+/** D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — modo de cobrança da empresa */
+export enum TipoTarifaEmpresaDto {
+  PERCENTUAL_DESCONTO = 'PERCENTUAL_DESCONTO',
+  VALOR_FIXO = 'VALOR_FIXO',
+}
+
 export class FaixaDto {
   @IsInt()
   @Min(0)
@@ -208,6 +214,16 @@ export class CreateConvenioDto {
   @Min(0)
   @Max(100)
   descontoKwhCusteio?: number;
+
+  // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+  @IsOptional()
+  @IsEnum(TipoTarifaEmpresaDto)
+  tipoTarifaEmpresa?: TipoTarifaEmpresaDto;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  tarifaFixaKwhEmpresa?: number;
 }
 
 export enum StatusConvenioDto {
@@ -340,6 +356,16 @@ export class UpdateConvenioDto {
   @Min(0)
   @Max(100)
   descontoKwhCusteio?: number | null;
+
+  // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+  @IsOptional()
+  @IsEnum(TipoTarifaEmpresaDto)
+  tipoTarifaEmpresa?: TipoTarifaEmpresaDto | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  tarifaFixaKwhEmpresa?: number | null;
 }
 
 export class AddMembroDto {

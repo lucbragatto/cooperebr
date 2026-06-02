@@ -95,6 +95,9 @@ export class ConveniosCusteioService {
         kwhAlocadoMensal: true,
         descontoKwhCusteio: true,
         contratoConsolidadorId: true,
+        // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+        tipoTarifaEmpresa: true,
+        tarifaFixaKwhEmpresa: true,
       },
     });
     if (!convenio) {
@@ -359,19 +362,45 @@ export class ConveniosCusteioService {
       );
     }
 
-    // 6. Resolver tarifa (THROW se ausente — decisão Luciano)
-    const tarifaInfo = await buscarTarifaPorDistribuidora(
-      this.prisma,
-      distribuidoraUsada,
-      { throwIfNotFound: true },
-    );
+    // 6. Resolver tarifa + calcular valores (Math.round monetário obrigatório).
+    // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — 2 ramos:
+    //   PERCENTUAL_DESCONTO (atual, default): kWh × tarifa_concessionária × (1-desconto%).
+    //   VALOR_FIXO: kWh × tarifaFixaKwhEmpresa (preço negociado, IGNORA concessionária).
+    const tipoTarifa = convenio.tipoTarifaEmpresa ?? 'PERCENTUAL_DESCONTO';
+    let valorBruto: number;
+    let valorLiquido: number;
+    let valorDesconto: number;
+    let descontoPct: number;
+    let tarifaUsada: number; // R$/kWh efetivo aplicado — vai pro log
 
-    // 7. Calcular valores (Math.round monetário obrigatório)
-    const descontoPct = Number(convenio.descontoKwhCusteio ?? 0);
-    const valorBruto = Math.round(kwhTotal * tarifaInfo.tarifaKwh * 100) / 100;
-    const valorLiquido =
-      Math.round(valorBruto * (1 - descontoPct / 100) * 100) / 100;
-    const valorDesconto = Math.round((valorBruto - valorLiquido) * 100) / 100;
+    if (tipoTarifa === 'VALOR_FIXO') {
+      const tarifaFixa = Number(convenio.tarifaFixaKwhEmpresa ?? 0);
+      if (tarifaFixa <= 0) {
+        throw new BadRequestException(
+          `Convênio "${convenio.empresaNome}" tipoTarifaEmpresa=VALOR_FIXO mas ` +
+            `tarifaFixaKwhEmpresa não está definida (>0). Configure no cadastro.`,
+        );
+      }
+      // VALOR_FIXO: tarifa negociada R$/kWh — sem desconto, sem consultar concessionária.
+      tarifaUsada = tarifaFixa;
+      descontoPct = 0;
+      valorBruto = Math.round(kwhTotal * tarifaFixa * 100) / 100;
+      valorLiquido = valorBruto;
+      valorDesconto = 0;
+    } else {
+      // PERCENTUAL_DESCONTO (atual): tarifa concessionária × (1 - desconto%).
+      // THROW se tarifa ausente (decisão Luciano — NUNCA fallback 0.5 silencioso).
+      const tarifaInfo = await buscarTarifaPorDistribuidora(
+        this.prisma,
+        distribuidoraUsada,
+        { throwIfNotFound: true },
+      );
+      tarifaUsada = tarifaInfo.tarifaKwh;
+      descontoPct = Number(convenio.descontoKwhCusteio ?? 0);
+      valorBruto = Math.round(kwhTotal * tarifaInfo.tarifaKwh * 100) / 100;
+      valorLiquido = Math.round(valorBruto * (1 - descontoPct / 100) * 100) / 100;
+      valorDesconto = Math.round((valorBruto - valorLiquido) * 100) / 100;
+    }
 
     // 8. Data de vencimento (default: dia 10 do próximo mês)
     const dataVencimento =
@@ -433,7 +462,7 @@ export class ConveniosCusteioService {
         `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}: ` +
         `${membros.length} membros · ${ucsPagadorReais.length} UC(s) pagador candidatas ` +
         `· ${detalhamento.length} UC(s) custeada(s) consolidada(s) · base=${base} · kWh=${kwhTotal} · ` +
-        `tarifa=R$ ${tarifaInfo.tarifaKwh.toFixed(5)}/kWh (${distribuidoraUsada}) · ` +
+        `tarifa=R$ ${tarifaUsada.toFixed(5)}/kWh (${tipoTarifa === 'VALOR_FIXO' ? 'FIXA negociada' : distribuidoraUsada}) · ` +
         `bruto=R$ ${valorBruto.toFixed(2)} · líquido=R$ ${valorLiquido.toFixed(2)} ` +
         `(desconto ${descontoPct}%) · cobrancaId=${cobranca.id}`,
     );

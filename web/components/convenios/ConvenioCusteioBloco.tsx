@@ -21,6 +21,8 @@ import { HelpBox } from '@/components/ui/help-box';
 
 export type Pagador = 'CADA_MEMBRO' | 'EMPRESA';
 export type BaseCobrancaCusteio = 'CONSUMO_REAL' | 'ALOCACAO_FIXA';
+// D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+export type TipoTarifaEmpresa = 'PERCENTUAL_DESCONTO' | 'VALOR_FIXO';
 
 export interface ConvenioCusteioState {
   pagador: Pagador;
@@ -28,6 +30,9 @@ export interface ConvenioCusteioState {
   baseCobrancaCusteio: BaseCobrancaCusteio;
   kwhAlocadoMensal: number | '';
   descontoKwhCusteio: number | '';
+  // D-novo-CT-TARIFA-FIXA-EMPRESA
+  tipoTarifaEmpresa: TipoTarifaEmpresa;
+  tarifaFixaKwhEmpresa: number | '';
 }
 
 interface ConvenioCusteioBlocoProps {
@@ -53,6 +58,12 @@ const PAGADOR_OPCOES: { value: Pagador; label: string }[] = [
 const BASE_OPCOES: { value: BaseCobrancaCusteio; label: string }[] = [
   { value: 'CONSUMO_REAL', label: 'Consumo real (soma das faturas dos membros)' },
   { value: 'ALOCACAO_FIXA', label: 'Alocação fixa (pacote mensal de kWh)' },
+];
+
+// D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
+const TIPO_TARIFA_OPCOES: { value: TipoTarifaEmpresa; label: string }[] = [
+  { value: 'PERCENTUAL_DESCONTO', label: '% desconto sobre a tarifa da concessionária (dinâmico)' },
+  { value: 'VALOR_FIXO', label: 'Valor fixo R$/kWh (preço negociado com a empresa)' },
 ];
 
 export function ConvenioCusteioBloco({
@@ -113,8 +124,9 @@ export function ConvenioCusteioBloco({
             chegada das faturas). Útil pra convênios de quota fechada.
           </li>
           <li>
-            <strong>Desconto (%):</strong> aplicado sobre a tarifa da distribuidora ao calcular o
-            valor da consolidada.
+            <strong>Modo da tarifa:</strong>{' '}
+            <strong>% desconto</strong> (dinâmico — segue a concessionária menos um %) OU{' '}
+            <strong>R$/kWh fixo</strong> (preço negociado, ignora concessionária — ex: R$ 0,80/kWh).
           </li>
         </ul>
         <p className="mt-2 text-amber-800 bg-amber-50 border border-amber-300 rounded p-2">
@@ -139,6 +151,9 @@ export function ConvenioCusteioBloco({
                 baseCobrancaCusteio: 'CONSUMO_REAL',
                 kwhAlocadoMensal: '',
                 descontoKwhCusteio: '',
+                // D-novo-CT-TARIFA-FIXA-EMPRESA: limpa também os novos campos
+                tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
+                tarifaFixaKwhEmpresa: '',
               });
             } else {
               onChange({ pagador: novo });
@@ -228,29 +243,89 @@ export function ConvenioCusteioBloco({
             </div>
           )}
 
+          {/* D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — modo de cobrança */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Desconto sobre a tarifa (%) — opcional
+              Como cobrar a empresa *
             </label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              value={state.descontoKwhCusteio}
-              onChange={(e) =>
-                onChange({
-                  descontoKwhCusteio: e.target.value === '' ? '' : Number(e.target.value),
-                })
-              }
-              placeholder="Ex: 20 (deixe vazio = 0% / paga cheio)"
-              className="w-full border rounded px-2 py-1.5 text-sm"
-            />
+            <select
+              value={state.tipoTarifaEmpresa}
+              onChange={(e) => {
+                const novo = e.target.value as TipoTarifaEmpresa;
+                // Limpa campos dependentes ao trocar o modo (evita dados órfãos no payload)
+                if (novo === 'PERCENTUAL_DESCONTO') {
+                  onChange({ tipoTarifaEmpresa: novo, tarifaFixaKwhEmpresa: '' });
+                } else {
+                  onChange({ tipoTarifaEmpresa: novo, descontoKwhCusteio: '' });
+                }
+              }}
+              className="w-full border rounded px-2 py-1.5 text-sm bg-white"
+              required={isEmpresa}
+            >
+              {TIPO_TARIFA_OPCOES.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
             <p className="text-[11px] text-gray-500 mt-1">
-              Desconto aplicado sobre a tarifa da distribuidora ao calcular o valor da consolidada.
-              0–100. Vazio = paga cheio (sem desconto).
+              <strong>Dinâmico:</strong> tarifa segue a concessionária (TUSD+TE da TarifaConcessionaria atual)
+              {' '}menos o desconto configurado.
+              <br />
+              <strong>Fixo:</strong> preço fechado em R$/kWh (ex: R$ 0,80/kWh negociado direto com a empresa) —
+              {' '}independe da tarifa da concessionária e ignora desconto percentual.
             </p>
           </div>
+
+          {state.tipoTarifaEmpresa === 'PERCENTUAL_DESCONTO' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Desconto sobre a tarifa (%) — opcional
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                value={state.descontoKwhCusteio}
+                onChange={(e) =>
+                  onChange({
+                    descontoKwhCusteio: e.target.value === '' ? '' : Number(e.target.value),
+                  })
+                }
+                placeholder="Ex: 20 (deixe vazio = 0% / paga cheio)"
+                className="w-full border rounded px-2 py-1.5 text-sm"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Desconto aplicado sobre a tarifa da distribuidora ao calcular o valor da consolidada.
+                0–100. Vazio = paga cheio (sem desconto).
+              </p>
+            </div>
+          )}
+
+          {state.tipoTarifaEmpresa === 'VALOR_FIXO' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Tarifa fixa R$/kWh *
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.00001}
+                value={state.tarifaFixaKwhEmpresa}
+                onChange={(e) =>
+                  onChange({
+                    tarifaFixaKwhEmpresa: e.target.value === '' ? '' : Number(e.target.value),
+                  })
+                }
+                placeholder="Ex: 0.80 (R$ 0,80 por kWh)"
+                className="w-full border rounded px-2 py-1.5 text-sm"
+                required={isEmpresa && state.tipoTarifaEmpresa === 'VALOR_FIXO'}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Preço negociado por kWh. Valor da consolidada = <strong>kWh × tarifa fixa</strong>
+                {' '}(sem desconto, sem consultar concessionária). Use até 5 casas decimais.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

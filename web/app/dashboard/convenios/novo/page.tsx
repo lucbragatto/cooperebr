@@ -63,12 +63,15 @@ export default function NovoConvenioPage() {
   });
 
   // D-FISCAL-2.4.4e — bloco custeio (Caso 1: empresa paga total)
+  // D-novo-CT-TARIFA-FIXA-EMPRESA — tipoTarifaEmpresa + tarifaFixaKwhEmpresa
   const [custeio, setCusteio] = useState<ConvenioCusteioState>({
     pagador: 'CADA_MEMBRO',
     pagadorCooperadoId: '',
     baseCobrancaCusteio: 'CONSUMO_REAL',
     kwhAlocadoMensal: '',
     descontoKwhCusteio: '',
+    tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
+    tarifaFixaKwhEmpresa: '',
   });
 
   const [faixas, setFaixas] = useState<Faixa[]>([
@@ -145,6 +148,15 @@ export default function NovoConvenioPage() {
           setSalvando(false);
           return;
         }
+        // D-novo-CT-TARIFA-FIXA-EMPRESA: VALOR_FIXO exige tarifaFixaKwhEmpresa>0
+        if (
+          custeio.tipoTarifaEmpresa === 'VALOR_FIXO' &&
+          (!custeio.tarifaFixaKwhEmpresa || Number(custeio.tarifaFixaKwhEmpresa) <= 0)
+        ) {
+          setErro('Custeio: tarifa fixa R$/kWh exige valor > 0.');
+          setSalvando(false);
+          return;
+        }
         payload.pagador = 'EMPRESA';
         payload.pagadorCooperadoId = custeio.pagadorCooperadoId;
         payload.baseCobrancaCusteio = custeio.baseCobrancaCusteio;
@@ -153,6 +165,11 @@ export default function NovoConvenioPage() {
         }
         if (custeio.descontoKwhCusteio !== '') {
           payload.descontoKwhCusteio = Number(custeio.descontoKwhCusteio);
+        }
+        // D-novo-CT-TARIFA-FIXA-EMPRESA
+        payload.tipoTarifaEmpresa = custeio.tipoTarifaEmpresa;
+        if (custeio.tarifaFixaKwhEmpresa !== '') {
+          payload.tarifaFixaKwhEmpresa = Number(custeio.tarifaFixaKwhEmpresa);
         }
       }
 

@@ -83,8 +83,16 @@ export class ConveniosService {
       this.validarFaixas(dto.configBeneficio.faixas);
     }
 
-    // D-FISCAL-2.4.4e — Validação bloco custeio (Caso 1)
-    await this.validarBlocoCusteio(cooperativaId, dto.pagador, dto.pagadorCooperadoId, dto.baseCobrancaCusteio, dto.kwhAlocadoMensal);
+    // D-FISCAL-2.4.4e + D-novo-CT-TARIFA-FIXA-EMPRESA — Validação bloco custeio (Caso 1)
+    await this.validarBlocoCusteio(
+      cooperativaId,
+      dto.pagador,
+      dto.pagadorCooperadoId,
+      dto.baseCobrancaCusteio,
+      dto.kwhAlocadoMensal,
+      dto.tipoTarifaEmpresa,
+      dto.tarifaFixaKwhEmpresa,
+    );
 
     // Retry loop para lidar com race condition no numero sequencial
     for (let tentativa = 0; tentativa < 5; tentativa++) {
@@ -129,6 +137,9 @@ export class ConveniosService {
             baseCobrancaCusteio: (dto.baseCobrancaCusteio ?? 'CONSUMO_REAL') as any,
             kwhAlocadoMensal: dto.kwhAlocadoMensal ?? null,
             descontoKwhCusteio: dto.descontoKwhCusteio ?? null,
+            // D-novo-CT-TARIFA-FIXA-EMPRESA
+            tipoTarifaEmpresa: (dto.tipoTarifaEmpresa ?? 'PERCENTUAL_DESCONTO') as any,
+            tarifaFixaKwhEmpresa: dto.tarifaFixaKwhEmpresa ?? null,
           },
         });
       } catch (err: any) {
@@ -151,6 +162,8 @@ export class ConveniosService {
     pagadorCooperadoId: string | null | undefined,
     baseCobrancaCusteio: string | null | undefined,
     kwhAlocadoMensal: number | null | undefined,
+    tipoTarifaEmpresa?: string | null,
+    tarifaFixaKwhEmpresa?: number | null,
   ) {
     if (pagador !== 'EMPRESA') return; // CADA_MEMBRO (default) — sem validação
 
@@ -181,6 +194,12 @@ export class ConveniosService {
     if (baseCobrancaCusteio === 'ALOCACAO_FIXA' && (!kwhAlocadoMensal || kwhAlocadoMensal <= 0)) {
       throw new BadRequestException(
         'baseCobrancaCusteio=ALOCACAO_FIXA exige kwhAlocadoMensal > 0.',
+      );
+    }
+    // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026): VALOR_FIXO exige tarifaFixaKwhEmpresa>0.
+    if (tipoTarifaEmpresa === 'VALOR_FIXO' && (!tarifaFixaKwhEmpresa || tarifaFixaKwhEmpresa <= 0)) {
+      throw new BadRequestException(
+        'tipoTarifaEmpresa=VALOR_FIXO exige tarifaFixaKwhEmpresa > 0 (R$/kWh negociado com a empresa).',
       );
     }
   }
@@ -255,9 +274,9 @@ export class ConveniosService {
       this.validarFaixas(dto.configBeneficio.faixas);
     }
 
-    // D-FISCAL-2.4.4e — Validação bloco custeio. Resolve "pagador efetivo"
-    // (dto.pagador se enviado; senão usa o atual no banco) pra checar
-    // dependentes corretamente em updates parciais.
+    // D-FISCAL-2.4.4e + D-novo-CT-TARIFA-FIXA-EMPRESA — Validação bloco custeio.
+    // Resolve "pagador efetivo" (dto.pagador se enviado; senão usa o atual no
+    // banco) pra checar dependentes corretamente em updates parciais.
     if (convenio.cooperativaId) {
       const pagadorEfetivo = dto.pagador ?? convenio.pagador;
       const pagadorCoopEfetivo = dto.pagadorCooperadoId !== undefined
@@ -269,12 +288,20 @@ export class ConveniosService {
       const kwhEfetivo = dto.kwhAlocadoMensal !== undefined
         ? dto.kwhAlocadoMensal
         : convenio.kwhAlocadoMensal;
+      const tipoTarifaEfetivo = dto.tipoTarifaEmpresa !== undefined
+        ? dto.tipoTarifaEmpresa
+        : (convenio as any).tipoTarifaEmpresa;
+      const tarifaFixaEfetiva = dto.tarifaFixaKwhEmpresa !== undefined
+        ? dto.tarifaFixaKwhEmpresa
+        : (convenio as any).tarifaFixaKwhEmpresa;
       await this.validarBlocoCusteio(
         convenio.cooperativaId,
         pagadorEfetivo as any,
         pagadorCoopEfetivo,
         baseEfetiva as any,
         kwhEfetivo as any,
+        tipoTarifaEfetivo as any,
+        tarifaFixaEfetiva as any,
       );
     }
 
@@ -318,6 +345,9 @@ export class ConveniosService {
     if (dto.baseCobrancaCusteio !== undefined) data.baseCobrancaCusteio = dto.baseCobrancaCusteio;
     if (dto.kwhAlocadoMensal !== undefined) data.kwhAlocadoMensal = dto.kwhAlocadoMensal;
     if (dto.descontoKwhCusteio !== undefined) data.descontoKwhCusteio = dto.descontoKwhCusteio;
+    // D-novo-CT-TARIFA-FIXA-EMPRESA
+    if (dto.tipoTarifaEmpresa !== undefined) data.tipoTarifaEmpresa = dto.tipoTarifaEmpresa;
+    if (dto.tarifaFixaKwhEmpresa !== undefined) data.tarifaFixaKwhEmpresa = dto.tarifaFixaKwhEmpresa;
 
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },
