@@ -88,6 +88,13 @@ export default function CobrancasConsolidadasPage() {
   const [mesEscolhido, setMesEscolhido] = useState<string>('');
   const [gerando, setGerando] = useState(false);
   const [gerarErro, setGerarErro] = useState<string | null>(null);
+  // D-FISCAL-2.4.4f — feedback estruturado (CRIADA/JA_EXISTE/SEM_MEMBROS)
+  const [gerarInfo, setGerarInfo] = useState<
+    | { kind: 'CRIADA'; valor: number; cobrancaId: string }
+    | { kind: 'JA_EXISTE'; cobrancaId: string }
+    | { kind: 'SEM_MEMBROS' }
+    | null
+  >(null);
 
   // Dialog estornar
   const [estornarOpen, setEstornarOpen] = useState(false);
@@ -140,13 +147,28 @@ export default function CobrancasConsolidadasPage() {
     }
     setGerando(true);
     setGerarErro(null);
+    setGerarInfo(null);
     try {
-      await api.post(
-        `/convenios/${convenioId}/cobrancas-consolidadas/gerar?mesReferencia=${mesEscolhido}`,
-      );
-      setGerarOpen(false);
-      setMesEscolhido('');
-      await carregar();
+      // D-FISCAL-2.4.4f — surfacear response.data.status com banner claro.
+      // CRIADA → fecha dialog + recarrega + banner verde.
+      // JA_EXISTE / SEM_MEMBROS → mantém dialog ABERTO + banner info.
+      const resp = await api.post<
+        | { status: 'CRIADA'; cobrancaId: string; valorBruto: number; valorLiquido: number }
+        | { status: 'JA_EXISTE'; cobrancaId: string }
+        | { status: 'SEM_MEMBROS'; convenioId: string }
+      >(`/convenios/${convenioId}/cobrancas-consolidadas/gerar?mesReferencia=${mesEscolhido}`);
+      const data = resp.data;
+      if (data.status === 'CRIADA') {
+        setGerarInfo({ kind: 'CRIADA', valor: Number(data.valorLiquido), cobrancaId: data.cobrancaId });
+        setGerarOpen(false);
+        setMesEscolhido('');
+        await carregar();
+      } else if (data.status === 'JA_EXISTE') {
+        setGerarInfo({ kind: 'JA_EXISTE', cobrancaId: data.cobrancaId });
+        await carregar();
+      } else if (data.status === 'SEM_MEMBROS') {
+        setGerarInfo({ kind: 'SEM_MEMBROS' });
+      }
     } catch (err: any) {
       setGerarErro(err?.response?.data?.message ?? err?.message ?? 'Erro ao gerar cobrança consolidada');
     } finally {
@@ -231,7 +253,7 @@ export default function CobrancasConsolidadasPage() {
         <Button
           variant="default"
           size="sm"
-          onClick={() => { setGerarOpen(true); setGerarErro(null); }}
+          onClick={() => { setGerarOpen(true); setGerarErro(null); setGerarInfo(null); }}
           title="Força a geração da consolidada de um mês (o cron gera automático no dia configurado)"
           className="bg-emerald-600 hover:bg-emerald-700"
         >
@@ -258,6 +280,25 @@ export default function CobrancasConsolidadasPage() {
         <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
           <div>{erro}</div>
+        </div>
+      )}
+
+      {/* D-FISCAL-2.4.4f — banner verde CRIADA (no main page, depois que dialog fechou) */}
+      {gerarInfo?.kind === 'CRIADA' && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 flex items-start gap-2">
+          <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-emerald-600" />
+          <div className="flex-1">
+            <strong>Cobrança consolidada gerada — {moeda(gerarInfo.valor)}</strong> (líquido).
+            <span className="block text-xs opacity-70 mt-0.5">id={gerarInfo.cobrancaId}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGerarInfo(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-xs"
+            aria-label="Dispensar"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -361,10 +402,38 @@ export default function CobrancasConsolidadasPage() {
                 {gerarErro}
               </div>
             )}
+            {/* D-FISCAL-2.4.4f — banner JA_EXISTE (azul) — dialog mantém-se aberto */}
+            {gerarInfo?.kind === 'JA_EXISTE' && (
+              <div className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded p-3 flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-600" />
+                <div>
+                  <strong>Cobrança já existia pra esse mês — não duplicou.</strong>
+                  <div className="opacity-70 mt-0.5">id={gerarInfo.cobrancaId}</div>
+                </div>
+              </div>
+            )}
+            {/* D-FISCAL-2.4.4f — banner SEM_MEMBROS (amber) — só ocorre em CONSUMO_REAL */}
+            {gerarInfo?.kind === 'SEM_MEMBROS' && (
+              <div className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
+                <div>
+                  <strong>Convênio sem membros ativos — nada gerado.</strong>
+                  <div className="opacity-80 mt-1">
+                    Cadastre cooperados como membros custeados deste convênio via
+                    {' '}<a href="/dashboard/cooperados/novo" className="underline font-medium" target="_blank">/dashboard/cooperados/novo</a>
+                    {' '}(toggle &quot;Custeado por convênio&quot; no Step 3).
+                  </div>
+                  <div className="opacity-70 mt-1 text-[11px]">
+                    Dica: se quiser cobrança fixa SEM membros (pacote pré-pago), edite o convênio e
+                    troque a base pra <strong>ALOCACAO_FIXA</strong> com <strong>kWh alocado mensal</strong>.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setGerarOpen(false)} disabled={gerando}>
-              Cancelar
+              {gerarInfo ? 'Fechar' : 'Cancelar'}
             </Button>
             <Button
               onClick={gerarManual}

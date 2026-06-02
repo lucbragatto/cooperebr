@@ -899,6 +899,47 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
+### D-novo-UX-Dialog-Backdrop — backdrop-blur do Dialog faz a taskbar do Windows piscar
+
+**Arquivo:** `web/components/ui/dialog.tsx:34`
+
+`DialogOverlay` = `fixed inset-0 isolate z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs`.
+Combinado com scroll-lock do Radix no body, faz o browser recalcular viewport e
+"piscar" a taskbar transparente do Windows ao abrir/fechar Dialogs.
+
+**Fix proposto:** trocar `backdrop-blur-xs` por `bg-black/30` sólido (sem blur) OU
+remover o `backdrop-blur` totalmente (mantém só o `bg-black/10`).
+
+**Severidade:** P3 (cosmético — não afeta funcionalidade).
+**Catalogado:** 02/06/2026 (D-FISCAL-2.4.4f diagnóstico — Luciano relatou "barra do
+Windows some" ao clicar "Gerar agora" da consolidada custeio).
+
+---
+
+### D-novo-CT-TARIFA-ALOCACAO — ALOCACAO_FIXA sem membros + sem UC do pagador cai no fallback genérico de tarifa
+
+**Arquivo:** `backend/src/convenios/convenios-custeio.service.ts:307-317` +
+`backend/src/common/tarifa-helper.ts:42-50`.
+
+Quando o convênio é `ALOCACAO_FIXA` + `pagador=EMPRESA` SEM_UC + zero membros (caso
+real "pacote pré-pago"), `distribuidoraUsada` resolve `null` (não há UCs
+predominantes nem do pagador). O helper `buscarTarifaPorDistribuidora` cai no
+fallback `findFirst orderBy dataVigencia desc` — pega a TarifaConcessionaria mais
+recente do banco INDEPENDENTE da distribuidora.
+
+**Hoje serve:** SISGD opera EDP-ES como única tarifa relevante — o fallback acerta.
+Mas com tenant multi-distribuidora ou múltiplas tarifas vigentes simultâneas,
+pode pegar tarifa errada silenciosamente.
+
+**Fix proposto:** adicionar campo opcional `ContratoConvenio.distribuidoraReferenciaTarifa`
+(enum DistribuidoraEnum) — se setado, força a busca por essa distribuidora; senão
+cai no fallback atual.
+
+**Severidade:** P3 (não-bloqueante — fallback acerta no contexto atual).
+**Catalogado:** 02/06/2026 (D-FISCAL-2.4.4f).
+
+---
+
 ### Specs quebrados desde commit `4d70b19`
 
 **Arquivos:**

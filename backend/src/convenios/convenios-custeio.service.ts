@@ -171,13 +171,10 @@ export class ConveniosCusteioService {
         },
       },
     });
-    if (membros.length === 0) {
-      this.logger.warn(
-        `[D-FISCAL-2.4.4a] Convênio ${convenio.empresaNome} sem membros ativos — ` +
-          `consolidada não gerada.`,
-      );
-      return { status: 'SEM_MEMBROS', convenioId: convenio.id };
-    }
+    // D-FISCAL-2.4.4f — early-return SEM_MEMBROS movido PRA DENTRO do branch
+    // CONSUMO_REAL. ALOCACAO_FIXA é pacote fixo (kwhAlocadoMensal) — funciona
+    // sem membros (convênio "pré-pago"). CONSUMO_REAL ainda exige membros
+    // (sem UCs = sem faturas = sem soma).
 
     // D-FISCAL-2.4.4a.1 — Empresa COM_UC: incluir UCs reais do pagadorCooperado
     // no total consolidado (gap descoberto pós-2.4.4a). UC sintética
@@ -197,6 +194,16 @@ export class ConveniosCusteioService {
     const detalhamento: Array<{ origem: string; kwh: number; ucNumero?: string; distribuidora?: string }> = [];
 
     if (base === 'CONSUMO_REAL') {
+      // D-FISCAL-2.4.4f — em CONSUMO_REAL, sem membros = nada pra somar.
+      // ALOCACAO_FIXA segue normal (pacote fixo independe de membros).
+      if (membros.length === 0) {
+        this.logger.warn(
+          `[D-FISCAL-2.4.4a] Convênio ${convenio.empresaNome} (base=CONSUMO_REAL) ` +
+            `sem membros ativos — consolidada não gerada.`,
+        );
+        return { status: 'SEM_MEMBROS', convenioId: convenio.id };
+      }
+
       // D-FISCAL-2.4.4a.2 — INVARIANTE: UC entra no consolidado SE E SOMENTE SE
       // o contrato ATIVO dela usa plano custeadoPorConvenio=true.
       // Elimina risco de double-bill: nenhuma UC pode estar simultaneamente

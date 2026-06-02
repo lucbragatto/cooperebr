@@ -360,8 +360,8 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('sem membros ativos → SEM_MEMBROS (sem erro, log + skip)', async () => {
-    findFirstConvenio.mockResolvedValue(convenioBase);
+  it('CONSUMO_REAL sem membros ativos → SEM_MEMBROS (sem erro, log + skip)', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase); // base=CONSUMO_REAL
     findFirstCobranca.mockResolvedValue(null);
     findManyMembros.mockResolvedValue([]);
 
@@ -374,6 +374,38 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
 
     expect(r.status).toBe('SEM_MEMBROS');
     expect(createCobranca).not.toHaveBeenCalled();
+  });
+
+  // D-FISCAL-2.4.4f — ALOCACAO_FIXA é pacote fixo: kwhAlocadoMensal é a fonte,
+  // não depende de membros. Convênio "pré-pago" sem membros DEVE gerar.
+  it('D-FISCAL-2.4.4f: ALOCACAO_FIXA sem membros → CRIADA (pacote fixo independe de membros)', async () => {
+    findFirstConvenio.mockResolvedValue({
+      ...convenioBase,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 200000,
+      descontoKwhCusteio: '20',
+    });
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([]); // ZERO membros
+    findManyUcsPagador.mockResolvedValue([]); // pagador SEM_UC
+    // distribuidoraUsada=null → helper cai no findFirst (fallback mais recente)
+    findManyTarifas.mockResolvedValue([]);
+    findFirstTarifa.mockResolvedValue(tarifaEdpEs);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    expect(createCobranca).toHaveBeenCalledTimes(1);
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    // 200000 kWh × 0.78931 × (1 - 0.20) = 200000 × 0.78931 × 0.80 = 126289.60
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(157862.00, 1);
+    expect(Number(bodyArg.valorLiquido)).toBeCloseTo(126289.60, 1);
+    expect(Number(bodyArg.percentualDesconto)).toBe(20);
   });
 
   // ============================================================
