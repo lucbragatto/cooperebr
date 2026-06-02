@@ -101,6 +101,9 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     createLancamentoCaixa.mockResolvedValue({ id: 'lanc-1' });
     // $transaction roda o callback passando o tx mock
     transactionFn.mockImplementation(async (cb: any) => cb(txMock));
+    // D-FISCAL-2.4.4a.1 — default: pagador SEM UC própria (empresa SEM_UC).
+    // Specs específicos de COM_UC sobrescrevem com mockResolvedValueOnce.
+    findManyUcsPagador.mockResolvedValue([]);
   });
 
   // ============================================================
@@ -475,5 +478,164 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     // Cobrança usa o contrato recém-criado
     const bodyArg = createCobranca.mock.calls[0][0].data;
     expect(bodyArg.contratoId).toBe('contrato-cons-novo');
+  });
+
+  // ============================================================
+  // D-FISCAL-2.4.4a.1 — empresa COM_UC beneficiária no consolidado
+  // ============================================================
+
+  it('D-FISCAL-2.4.4a.1: empresa COM_UC (não-membro) → UC própria entra no consolidado', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A',
+          ucs: [{ id: 'uc-mem-1', numero: '001', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    // Pagador (empresa) tem 1 UC real própria (NÃO é membro)
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    findManyFaturas.mockResolvedValue([
+      { ucId: 'uc-mem-1', dadosExtraidos: { consumoAtualKwh: 400 }, mediaKwhCalculada: '400' },
+      { ucId: 'uc-empresa-1', dadosExtraidos: { consumoAtualKwh: 600 }, mediaKwhCalculada: '600' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    // Total: 400 (membro) + 600 (empresa) = 1000 kWh × 0.78931 = 789.31
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(789.31, 2);
+
+    // Query filtrou UC sintética via NOT startsWith
+    expect(findManyUcsPagador).toHaveBeenCalledTimes(1);
+    const argsUcs = findManyUcsPagador.mock.calls[0][0];
+    expect(argsUcs.where.cooperadoId).toBe('pagador-1');
+    expect(argsUcs.where.NOT).toEqual({ numero: { startsWith: 'CONSOLIDADOR-' } });
+  });
+
+  it('D-FISCAL-2.4.4a.1: empresa SEM_UC → total = só membros (zero UC pagador)', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A',
+          ucs: [{ id: 'uc-mem-1', numero: '001', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    // Pagador SEM UC real (default já é [] no beforeEach)
+    findManyFaturas.mockResolvedValue([
+      { ucId: 'uc-mem-1', dadosExtraidos: { consumoAtualKwh: 500 }, mediaKwhCalculada: '500' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    // Só o membro: 500 × 0.78931 = 394.66
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(394.66, 2);
+  });
+
+  it('D-FISCAL-2.4.4a.1: SEM double-count quando empresa COM_UC TAMBÉM é membro', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    // Pagador (id='pagador-1') é MEMBRO e tem a mesma UC real
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'pagador-1', // o próprio pagador é membro
+          nomeCompleto: 'Clínica Médica X',
+          ucs: [{ id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' }],
+        },
+      },
+      {
+        cooperado: {
+          id: 'mem-2',
+          nomeCompleto: 'Dr. B',
+          ucs: [{ id: 'uc-mem-2', numero: '002', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    // Mesma UC retornada também via busca do pagador (cenário real)
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    // Faturas: 1 pra cada UC distinta
+    findManyFaturas.mockResolvedValue([
+      { ucId: 'uc-empresa-1', dadosExtraidos: { consumoAtualKwh: 800 }, mediaKwhCalculada: '800' },
+      { ucId: 'uc-mem-2', dadosExtraidos: { consumoAtualKwh: 200 }, mediaKwhCalculada: '200' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    // SEM double-count: 800 + 200 = 1000 kWh × 0.78931 = 789.31 (NÃO 1800)
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(789.31, 2);
+
+    // Validação extra: faturas foi chamado com 2 ucIds únicos (dedup via Set)
+    const ucIdsArg = findManyFaturas.mock.calls[0][0].where.ucId.in as string[];
+    expect(ucIdsArg).toHaveLength(2);
+    expect(new Set(ucIdsArg)).toEqual(new Set(['uc-empresa-1', 'uc-mem-2']));
+  });
+
+  it('D-FISCAL-2.4.4a.1: convênio só com pagador COM_UC (zero membros UCs) → consolidada gerada', async () => {
+    findFirstConvenio.mockResolvedValue(convenioBase);
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      // Membro placeholder sem UC (caso real: empresa pagadora cadastrada
+      // como único membro mas a UC dela ainda não foi vinculada como membership;
+      // a busca explícita por pagador resolve)
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A',
+          ucs: [],
+        },
+      },
+    ]);
+    findManyUcsPagador.mockResolvedValueOnce([
+      { id: 'uc-empresa-1', numero: '999', distribuidora: 'EDP_ES' },
+    ]);
+    findManyFaturas.mockResolvedValue([
+      { ucId: 'uc-empresa-1', dadosExtraidos: { consumoAtualKwh: 700 }, mediaKwhCalculada: '700' },
+    ]);
+    findManyTarifas.mockResolvedValue([tarifaEdpEs]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('CRIADA');
+    // 700 × 0.78931 = 552.52
+    const bodyArg = createCobranca.mock.calls[0][0].data;
+    expect(Number(bodyArg.valorBruto)).toBeCloseTo(552.52, 2);
   });
 });
