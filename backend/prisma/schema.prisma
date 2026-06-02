@@ -193,6 +193,8 @@ model Cooperado {
   contratosUso            ContratoUso[]
   convenios               ConvenioCooperado[]
   conveniosRepresentados  ContratoConvenio[]         @relation("ConveniadoConvenio")
+  // D-FISCAL-2.4.1 — Caso 1: cooperado PJ pagador da cobrança consolidada
+  conveniosPagando        ContratoConvenio[]         @relation("ConvenioPagador")
   formaPagamento          FormaPagamentoCooperado?
   cobrancasBancarias      CobrancaBancaria[]
   usinasProprietario      Usina[]                    @relation("UsinaProprietario")
@@ -323,6 +325,18 @@ enum StatusMembroConvenio {
 enum PagadorConvenio {
   EMPRESA
   CADA_MEMBRO
+}
+
+/// D-FISCAL-2.4.1 (01/06/2026 noite) — Base de cálculo da cobrança consolidada
+/// no Caso 1 (empresa paga total):
+///  - CONSUMO_REAL  → soma o consumo mensal das UCs dos membros ativos
+///                    (FaturaProcessada.mediaKwhCalculada do mês ref.)
+///  - ALOCACAO_FIXA → usa `ContratoConvenio.kwhAlocadoMensal` (valor fixo
+///                    independente do consumo real dos membros)
+/// Cálculo final: base × tarifa × (1 - descontoKwhCusteio/100).
+enum BaseCobrancaCusteio {
+  CONSUMO_REAL
+  ALOCACAO_FIXA
 }
 
 enum EfeitoMudancaFaixa {
@@ -571,6 +585,8 @@ model Contrato {
   enviosLista              EnvioListaCooperado[]
   // Bloco 5 (24/05) — Solicitacoes de alteracao via WhatsApp aguardando admin
   solicitacoesAlteracao    SolicitacaoAlteracaoContrato[]
+  // D-FISCAL-2.4.1 — Caso 1: contrato consolidador SEM_UC da empresa pagadora
+  convenioConsolidado      ContratoConvenio?  @relation("ConvenioConsolidador")
 
   @@map("contratos")
 }
@@ -615,6 +631,13 @@ model Plano {
   tokenSocialAtivo     Boolean  @default(false)
   tokenFlexAtivo       Boolean  @default(false)
   modoToken            String   @default("DESCONTO_DIRETO") // DESCONTO_DIRETO | FATURA_CHEIA_TOKEN
+
+  // ── D-FISCAL-2.4.1 (01/06/2026 noite) — Caso 1: plano custeado por convênio ──
+  // Quando true, o motor de cobrança (gerarCobrancaPosFatura + cobrancas.service.create)
+  // PULA a geração de cobrança individual do cooperado. A energia é cobrada na
+  // cobrança consolidada da empresa pagadora (ContratoConvenio.pagadorCooperadoId).
+  // Default false garante backward-compat dos 86 contratos vivos.
+  custeadoPorConvenio  Boolean  @default(false)
 
   @@map("planos")
 }
@@ -728,9 +751,17 @@ model Cobranca {
   createdAt                DateTime             @default(now())
   updatedAt                DateTime             @updatedAt
 
+  // D-FISCAL-2.4.1 (01/06/2026 noite) — Caso 1: cobrança consolidada à empresa
+  // pagadora vinculada ao convênio gerador (rastreabilidade + Design B do hook
+  // contábil). NULL pra todas as cobranças pré-existentes (45) — comportamento
+  // inalterado.
+  convenioContabilCobrancaId String?
+  convenioContabilCobranca   ContratoConvenio?  @relation("CobrancaConvenio", fields: [convenioContabilCobrancaId], references: [id])
+
   // T6 Sprint 5: anti-duplicacao por contrato + competencia. Dupla camada:
   // guards em codigo (cobrancas.service, faturas.service) + constraint no banco.
   @@unique([contratoId, mesReferencia, anoReferencia], map: "cobranca_contrato_competencia_unique")
+  @@index([convenioContabilCobrancaId])
 
   @@map("cobrancas")
 }
@@ -1346,6 +1377,27 @@ model ContratoConvenio {
   vigenciaInicio         DateTime?
   vigenciaFim            DateTime?
   pagador                PagadorConvenio     @default(CADA_MEMBRO)
+
+  // ── D-FISCAL-2.4.1 (01/06/2026 noite) — Caso 1: empresa paga total ──
+  // Só ativo quando pagador=EMPRESA. Aditivo / nullable / defaults seguros.
+  // pagadorCooperadoId = FK pro Cooperado PJ que paga (cadastrado no setup
+  //                      do convênio Caso 1, antes dos membros).
+  // baseCobrancaCusteio = CONSUMO_REAL (soma fatura dos membros) ou
+  //                       ALOCACAO_FIXA (kwhAlocadoMensal).
+  // kwhAlocadoMensal = quantidade fixa quando base=ALOCACAO_FIXA.
+  // descontoKwhCusteio = % de desconto sobre tarifa (0/null = paga cheio).
+  // contratoConsolidadorId = FK pro Contrato consolidador SEM_UC criado no
+  //                          setup (cobranças mensais vão pra esse contrato).
+  pagadorCooperadoId     String?
+  pagadorCooperado       Cooperado?          @relation("ConvenioPagador", fields: [pagadorCooperadoId], references: [id])
+  baseCobrancaCusteio    BaseCobrancaCusteio? @default(CONSUMO_REAL)
+  kwhAlocadoMensal       Int?
+  descontoKwhCusteio     Decimal?            @db.Decimal(5, 2)
+  contratoConsolidadorId String?             @unique
+  contratoConsolidador   Contrato?           @relation("ConvenioConsolidador", fields: [contratoConsolidadorId], references: [id])
+
+  // Back-rel pra Cobrancas geradas via convenio (hook Design B — D-FISCAL-2.4.1)
+  cobrancasGeradas       Cobranca[]          @relation("CobrancaConvenio")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
