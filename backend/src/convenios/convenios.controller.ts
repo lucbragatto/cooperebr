@@ -9,6 +9,9 @@ import { ConveniosService } from './convenios.service';
 import { ConveniosMembrosService } from './convenios-membros.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 import { ConveniosCusteioService } from './convenios-custeio.service';
+// Sprint Convite-Convênio Fatia 2a (03/06/2026)
+import { ConvitesConvenioService } from './convites-convenio.service';
+import { CriarConviteMembroDto } from './dto/criar-convite-membro.dto';
 import { CreateConvenioDto, UpdateConvenioDto, AddMembroDto, UpdateMembroDto } from './convenios.dto';
 import { RegistrarMovimentoConvenioContratoDto } from './dto/registrar-movimento-convenio-contrato.dto';
 import { ConfigBeneficio } from './convenios-progressao.service';
@@ -25,6 +28,8 @@ export class ConveniosController {
     private readonly contabilidade: ContabilidadeTributariaService,
     // D-FISCAL-2.4.4b — endpoints de cobranças consolidadas custeio
     private readonly custeioService: ConveniosCusteioService,
+    // Sprint Convite-Convênio Fatia 2a — endpoints admin de convite per-recipient
+    private readonly convitesService: ConvitesConvenioService,
   ) {}
 
   // ─── CRUD Convênio ──────────────────────────────────────────────────────
@@ -382,6 +387,155 @@ export class ConveniosController {
       motivo: body?.motivo,
       usuarioId: req.user?.id ?? req.user?.userId,
     });
+  }
+
+  // ─── Sprint Convite-Convênio Fatia 2a (03/06/2026) — Convites per-recipient ─
+
+  /**
+   * Cria convite per-recipient (token + WhatsApp). Empresa/admin informa
+   * { nomeConvidado, telefone } e o sistema:
+   *  1. Normaliza telefone pra E.164 BR (55DDXXXXXXXXX).
+   *  2. Reuse-if-alive: se já existe convite vivo pra (convenioId, telefone),
+   *     reusa em vez de criar duplicado.
+   *  3. Gera token crypto.randomBytes(32).hex + TTL 7d.
+   *  4. Envia WhatsApp pro telefone DO CONVITE com link `/convite/{token}`.
+   *
+   * Multi-tenant + @TenantResource. Audit via @AuditLog.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.criar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(201)
+  @Post(':id/convites')
+  async criarConviteMembro(
+    @Param('id') convenioId: string,
+    @Body() dto: CriarConviteMembroDto,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const userId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário.');
+    }
+    if (!userId) {
+      throw new ForbiddenException('userId obrigatório no contexto do usuário.');
+    }
+
+    const convite = await this.convitesService.criarConvite({
+      convenioId,
+      nomeConvidado: dto.nomeConvidado,
+      telefone: dto.telefone,
+      criadoPorUserId: userId,
+      cooperativaId,
+    });
+
+    // Best-effort: envia o link por WA. Falha NÃO reverte a criação do convite
+    // (admin pode reenviar manualmente via POST :id/convites/:conviteId/reenviar).
+    const envio = await this.convitesService.enviarLinkPorWhatsapp({
+      telefone: convite.telefone,
+      link: convite.link,
+      nomeConvidado: convite.nomeConvidado,
+      empresaNome: convite.empresaNome,
+      cooperativaId,
+    });
+
+    // Sufixos pra UX admin (defesa LGPD — não expor token integral)
+    return {
+      id: convite.id,
+      tokenSufixo: '...' + convite.token.slice(-6),
+      nomeConvidado: convite.nomeConvidado,
+      telefone: convite.telefone,
+      expiresAt: convite.expiresAt,
+      reused: convite.reused,
+      whatsappEnviado: envio.enviado,
+      whatsappErro: envio.erro,
+    };
+  }
+
+  /**
+   * Lista convites do convênio (admin). Tokens são retornados apenas como
+   * sufixo (defesa LGPD — token integral só vai no WA do destinatário).
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'contratoConvenio' })
+  @Get(':id/convites')
+  async listarConvitesMembro(@Param('id') convenioId: string, @Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário.');
+    }
+    return this.convitesService.listarPorConvenio(convenioId, cooperativaId);
+  }
+
+  /**
+   * Cancela convite (DELETE real). Só permitido se ainda não usado.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.cancelar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @Delete(':id/convites/:conviteId')
+  async cancelarConviteMembro(
+    @Param('id') _convenioId: string,
+    @Param('conviteId') conviteId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário.');
+    }
+    return this.convitesService.cancelar(conviteId, cooperativaId);
+  }
+
+  /**
+   * Reenvia convite (regenera token + estende TTL + envia novo link por WA).
+   * NÃO mexe no OTP (responsabilidade da Fatia 2b /solicitar-otp).
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.reenviar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(200)
+  @Post(':id/convites/:conviteId/reenviar')
+  async reenviarConviteMembro(
+    @Param('id') _convenioId: string,
+    @Param('conviteId') conviteId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário.');
+    }
+    const atualizado = await this.convitesService.reenviarConvite(conviteId, cooperativaId);
+    // Carrega nome convidado + empresa pra reusar template WA
+    const convite = await this.convitesService['prisma'].conviteConvenioMembro.findUnique({
+      where: { id: atualizado.id },
+      include: { convenio: { select: { empresaNome: true } } },
+    });
+    if (convite) {
+      await this.convitesService.enviarLinkPorWhatsapp({
+        telefone: convite.telefone,
+        link: atualizado.link,
+        nomeConvidado: convite.nomeConvidado,
+        empresaNome: convite.convenio.empresaNome,
+        cooperativaId,
+      });
+    }
+    return {
+      id: atualizado.id,
+      tokenSufixo: '...' + atualizado.token.slice(-6),
+      expiresAt: atualizado.expiresAt,
+    };
   }
 
 }

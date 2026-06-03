@@ -1446,6 +1446,11 @@ model ContratoConvenio {
   // Back-rel pra Cobrancas geradas via convenio (hook Design B — D-FISCAL-2.4.1)
   cobrancasGeradas       Cobranca[]          @relation("CobrancaConvenio")
 
+  // Sprint Convite-Convênio Fatia 2a (03/06/2026) — convites per-recipient
+  // phone-bound (link + OTP). Empresa cadastra { nome, telefone } → sistema
+  // gera token + envia WhatsApp + (2b) valida OTP.
+  convitesMembro         ConviteConvenioMembro[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1501,6 +1506,11 @@ model ConvenioCooperado {
   // Back-rel 1-1 pro magic link de aprovação da empresa (criado quando origem=CONVITE_PUBLICO).
   aprovacao AprovacaoConvenioMembro?
 
+  // Sprint Convite-Convênio Fatia 2a (03/06/2026) — back-rel 1-1 pro convite
+  // per-recipient (token + OTP) que originou este membro. Null pra origens
+  // ADMIN_MANUAL/CSV. Vinculado na Fatia 2c quando /auto-inscrever valida o OTP.
+  convite ConviteConvenioMembro?
+
   @@unique([convenioId, cooperadoId])
   @@index([convenioId, ativo])
   @@index([convenioId, status])
@@ -1509,6 +1519,50 @@ model ConvenioCooperado {
   // (count auto-inscrições da última 1h por tenant) sem scan O(n). Aditivo.
   @@index([cooperadoId, createdAt])
   @@map("convenio_cooperados")
+}
+
+/// Sprint Convite-Convênio Fatia 2a (03/06/2026) — Convite per-recipient
+/// phone-bound (link + OTP por WhatsApp). Substitui o desenho stateless `?conv=`
+/// inicial. Empresa cadastra `{ nomeConvidado, telefone }` → backend gera token
+/// + envia link via WA → destinatário abre, recebe OTP no MESMO telefone (prova
+/// de posse) → valida → /auto-inscrever (Fatia 2c) cria Cooperado + Membro
+/// PENDENTE_APROVACAO_EMPRESA. Hash sha256+salt rotativo, comparação constant-time.
+/// TTL convite = 7d (alinhado ConviteProprietario M31). TTL OTP = 10min.
+model ConviteConvenioMembro {
+  id                  String              @id @default(cuid())
+  convenioId          String
+  convenio            ContratoConvenio    @relation(fields: [convenioId], references: [id])
+  cooperativaId       String              // defesa em profundidade (multi-tenant)
+  nomeConvidado       String
+  telefone            String              // E.164 BR normalizado: 55DDXXXXXXXXX — alvo do OTP
+  token               String              @unique // crypto.randomBytes(32).hex (64 chars)
+  expiresAt           DateTime
+  usedAt              DateTime?
+
+  // OTP (Fatia 2b vai preencher) — null no MVP da 2a, apenas estrutura.
+  otpCodigoHash       String?             // sha256(codigo + salt) — NUNCA plain
+  otpSalt             String?             // salt por OTP (rotaciona a cada solicitar/reenviar)
+  otpExpiresAt        DateTime?           // TTL 10min do código atual
+  otpTentativas       Int                 @default(0)
+  otpReenvios         Int                 @default(0)
+  otpUltimoEnvioEm    DateTime?
+  otpValidadoEm       DateTime?
+  otpBloqueadoAte     DateTime?
+
+  // Audit
+  createdBy           String              // userId admin/empresa que criou
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Cross-ref pro membro criado após validar OTP + cadastrar (Fatia 2c)
+  membroId            String?             @unique
+  membro              ConvenioCooperado?  @relation(fields: [membroId], references: [id])
+
+  @@unique([convenioId, telefone])       // 1 convite vivo por (convênio, telefone)
+  @@index([token])
+  @@index([telefone])
+  @@index([cooperativaId, createdAt])
+  @@map("convites_convenio_membro")
 }
 
 /// Sprint Convite-Convênio (02/06/2026) — Magic link stateless pra empresa aprovar

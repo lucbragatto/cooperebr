@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConveniosController } from './convenios.controller';
 import { ConveniosPortalController } from './convenios-portal.controller';
 import { ConveniosService } from './convenios.service';
@@ -6,9 +6,12 @@ import { ConveniosMembrosService } from './convenios-membros.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 import { ConveniosCusteioService } from './convenios-custeio.service';
 import { ConveniosJob } from './convenios.job';
+// Sprint Convite-Convênio Fatia 2a (03/06/2026)
+import { ConvitesConvenioService } from './convites-convenio.service';
 import { PrismaService } from '../prisma.service';
 import { ContabilidadeTributariaModule } from '../contabilidade-tributaria/contabilidade-tributaria.module';
 import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
   // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
@@ -21,7 +24,14 @@ import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.m
   // GatewayPagamentoModule → AsaasModule + BanestesModule → EncryptionModule).
   // Permite ConveniosCusteioService emitir cobrança consolidada no Asaas
   // após criar Cobranca. Best-effort (não bloqueia se falhar).
-  imports: [ContabilidadeTributariaModule, GatewayPagamentoModule],
+  // Sprint Convite-Convênio Fatia 2a: ConvitesConvenioService injeta
+  // WhatsappSenderService (envia link do convite por WA). WhatsappModule via
+  // forwardRef pra evitar potencial ciclo (CoopereAi → Convenios futuro).
+  imports: [
+    ContabilidadeTributariaModule,
+    GatewayPagamentoModule,
+    forwardRef(() => WhatsappModule),
+  ],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [
     ConveniosService,
@@ -29,6 +39,7 @@ import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.m
     ConveniosProgressaoService,
     ConveniosCusteioService,
     ConveniosJob,
+    ConvitesConvenioService,
     PrismaService,
   ],
   exports: [
@@ -36,6 +47,7 @@ import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.m
     ConveniosMembrosService,
     ConveniosProgressaoService,
     ConveniosCusteioService,
+    ConvitesConvenioService,
   ],
 })
 export class ConveniosModule {}

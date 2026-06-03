@@ -12,6 +12,7 @@ import { FaturasService } from '../faturas/faturas.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
+import { ConvitesConvenioService } from '../convenios/convites-convenio.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
 
@@ -27,6 +28,8 @@ export class PublicoController {
     private motorProposta: MotorPropostaService,
     private indicacoes: IndicacoesService,
     private conveniosMembros: ConveniosMembrosService,
+    // Sprint Convite-Convênio Fatia 2a (03/06/2026) — validação pública do token
+    private convitesConvenio: ConvitesConvenioService,
   ) {}
 
   @Public()
@@ -313,6 +316,31 @@ export class PublicoController {
     }
   }
 
+  // ─── Sprint Convite-Convênio Fatia 2a (03/06/2026) ─────────────────────────
+  // Validação pública do token de convite (página /convite/[token] consulta este
+  // endpoint pra mostrar { empresaNome, nomeConvidado, telefoneSufixo }).
+  // NÃO retorna telefone integral — defesa LGPD/anti-enumeration.
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @Get('convites/:token')
+  async validarConviteConvenio(@Param('token') token: string) {
+    const r = await this.convitesConvenio.validarToken(token);
+    // Resposta uniforme — não vazar diferença entre "não existe" e "expirou"
+    // pra cliente não-autenticado (anti-enumeration). Apenas { valido } + dados
+    // quando válido.
+    if (!r.valido) {
+      return { valido: false, motivo: r.motivo ?? 'Convite indisponível.' };
+    }
+    return {
+      valido: true,
+      empresaNome: r.dados!.empresaNome,
+      nomeConvidado: r.dados!.nomeConvidado,
+      telefoneSufixo: r.dados!.telefoneSufixo,
+      expiresAt: r.dados!.expiresAt,
+      otpJaValidado: r.dados!.otpJaValidado,
+    };
+  }
+
   // ─── Sprint Convite-Convênio Fatia 2 (03/06/2026) ──────────────────────────
   // Endpoint público de auto-inscrição via link `?conv={convenioId}`.
   // Delega pra cadastroWebV2 com origem=CONVITE_PUBLICO (que propaga até
@@ -337,6 +365,23 @@ export class PublicoController {
   @Post('convenios/auto-inscrever')
   async autoInscreverConvenio(@Body() dto: AutoInscreverConvenioDto) {
     const ERRO_GENERICO = 'Não foi possível concluir o cadastro. Entre em contato com a empresa pra solicitar inclusão manual.';
+
+    // Sprint Convite-Convênio Fatia 2a (03/06/2026) — FEATURE FLAG `CONVITE_OTP_ATIVO`.
+    // Default `true` BLOQUEIA o caminho atual sem `{ token, otp }`. A Fatia 2c
+    // vai refatorar este endpoint pra exigir token+OTP do convite; até lá, o
+    // único caminho válido pra cadastro custeado público fica desabilitado
+    // (fecha a janela que poderia ser fuzzada antes do OTP chegar).
+    // Pra desligar a flag (perigoso! só pra rollback emergencial), setar
+    // `CONVITE_OTP_ATIVO=false` no .env do backend.
+    const conviteOtpAtivo = (process.env.CONVITE_OTP_ATIVO ?? 'true').toLowerCase() !== 'false';
+    if (conviteOtpAtivo) {
+      this.logger.warn(
+        `[auto-inscrever] BLOQUEADO por feature flag CONVITE_OTP_ATIVO=true. ` +
+          `Caminho legado sem token/OTP desabilitado até Fatia 2c. ` +
+          `convenioIdTentativa=${dto.convenioId} cpfSufixo=...${(dto.cpf ?? '').slice(-4)}`,
+      );
+      throw new NotFoundException(ERRO_GENERICO);
+    }
 
     // (1) Validar convênio — multi-tenant cross-check ANTES de qualquer create
     const convenio = await this.prisma.contratoConvenio.findUnique({
