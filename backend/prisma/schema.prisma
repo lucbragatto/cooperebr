@@ -131,6 +131,10 @@ model Usuario {
   repassesRegistrados      RepasseProprietario[] @relation("RepasseRegistradoPor")
   repassesCancelados       RepasseProprietario[] @relation("RepasseCanceladoPor")
 
+  // ── Sprint Convite-Convênio Fatia 3 (03/06/2026) — audit aprovação ──
+  membrosAprovadosPorAdmin   ConvenioCooperado[] @relation("ConvenioMembroAprovadoPorAdmin")
+  membrosRejeitadosPorAdmin  ConvenioCooperado[] @relation("ConvenioMembroRejeitadoPorAdmin")
+
   @@map("usuarios")
 }
 
@@ -1502,6 +1506,16 @@ model ConvenioCooperado {
   rejeitadoPorEmpresaEm DateTime?
   rejeitadoPorAdminEm   DateTime?
   motivoRejeicao        String?
+
+  // Sprint Convite-Convênio Fatia 3 (03/06/2026) — audit aprovação admin
+  // + documentação pendente. documentacaoSolicitadaEm marca o momento; o
+  // status NÃO muda (membro fica em PENDENTE_APROVACAO_ADMIN até cooperado
+  // anexar docs E admin retomar com aprovar/rejeitar). Aditivo.
+  documentacaoSolicitadaEm DateTime?
+  aprovadoPorAdminUserId   String?
+  aprovadoPorAdminUser     Usuario? @relation("ConvenioMembroAprovadoPorAdmin", fields: [aprovadoPorAdminUserId], references: [id])
+  rejeitadoPorAdminUserId  String?
+  rejeitadoPorAdminUser    Usuario? @relation("ConvenioMembroRejeitadoPorAdmin", fields: [rejeitadoPorAdminUserId], references: [id])
 
   // Back-rel 1-1 pro magic link de aprovação da empresa (criado quando origem=CONVITE_PUBLICO).
   aprovacao AprovacaoConvenioMembro?

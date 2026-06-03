@@ -12,6 +12,11 @@ import { ConveniosCusteioService } from './convenios-custeio.service';
 // Sprint Convite-Convênio Fatia 2a (03/06/2026)
 import { ConvitesConvenioService } from './convites-convenio.service';
 import { CriarConviteMembroDto } from './dto/criar-convite-membro.dto';
+// Sprint Convite-Convênio Fatia 3 (03/06/2026)
+import { ConvenioAprovacaoService } from './convenios-aprovacao.service';
+import { SolicitarDocumentacaoDto } from './dto/solicitar-documentacao.dto';
+import { RejeitarMembroAdminDto } from './dto/rejeitar-membro-admin.dto';
+import { StatusMembroConvenio } from '@prisma/client';
 import { CreateConvenioDto, UpdateConvenioDto, AddMembroDto, UpdateMembroDto } from './convenios.dto';
 import { RegistrarMovimentoConvenioContratoDto } from './dto/registrar-movimento-convenio-contrato.dto';
 import { ConfigBeneficio } from './convenios-progressao.service';
@@ -30,6 +35,8 @@ export class ConveniosController {
     private readonly custeioService: ConveniosCusteioService,
     // Sprint Convite-Convênio Fatia 2a — endpoints admin de convite per-recipient
     private readonly convitesService: ConvitesConvenioService,
+    // Sprint Convite-Convênio Fatia 3 — fluxo aprovação 3 portas
+    private readonly aprovacaoService: ConvenioAprovacaoService,
   ) {}
 
   // ─── CRUD Convênio ──────────────────────────────────────────────────────
@@ -134,10 +141,53 @@ export class ConveniosController {
     return this.membrosService.updateMembro(id, cooperadoId, dto);
   }
 
+  /**
+   * DELETE membro do convênio. Comportamento dual (Fatia 3 B.1):
+   *  - MEMBRO_ATIVO → soft-delete legado (status=MEMBRO_DESLIGADO, ativo=false)
+   *  - PENDENTE_APROVACAO_* / MEMBRO_REJEITADO_* / MEMBRO_DESLIGADO →
+   *    hard delete via cleanupPendente (remove ConvenioCooperado +
+   *    AprovacaoConvenioMembro + limpa cross-ref ConviteConvenioMembro)
+   */
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({
+    acao: 'convenio.membro.remover',
+    recurso: 'ConvenioCooperado',
+    recursoIdParam: 'cooperadoId',
+  })
   @Delete(':id/membros/:cooperadoId')
-  async removerMembro(@Param('id') id: string, @Param('cooperadoId') cooperadoId: string, @Req() req: any) {
-    await this.conveniosService.findOne(id, req.user.cooperativaId);
+  async removerMembro(
+    @Param('id') id: string,
+    @Param('cooperadoId') cooperadoId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new ForbiddenException('cooperativaId obrigatório.');
+    await this.conveniosService.findOne(id, cooperativaId);
+
+    // Carrega o vínculo pra decidir o caminho
+    const membro = await this.conveniosService['prisma'].convenioCooperado.findUnique({
+      where: { convenioId_cooperadoId: { convenioId: id, cooperadoId } },
+      select: { id: true, status: true },
+    });
+    if (!membro) {
+      throw new BadRequestException('Vínculo não encontrado.');
+    }
+    const isPendenteOuTerminal =
+      membro.status === 'PENDENTE_APROVACAO_EMPRESA' ||
+      membro.status === 'PENDENTE_APROVACAO_ADMIN' ||
+      membro.status === 'MEMBRO_REJEITADO_EMPRESA' ||
+      membro.status === 'MEMBRO_REJEITADO_ADMIN' ||
+      membro.status === 'MEMBRO_DESLIGADO';
+    if (isPendenteOuTerminal) {
+      const adminUserId = req.user?.id ?? req.user?.userId;
+      if (!adminUserId) throw new ForbiddenException('userId obrigatório.');
+      return this.aprovacaoService.cleanupPendente({
+        membroId: membro.id,
+        cooperativaId,
+        adminUserId,
+      });
+    }
+    // MEMBRO_ATIVO → soft-delete legado (MEMBRO_DESLIGADO + recalcularFaixa)
     return this.membrosService.removerMembro(id, cooperadoId);
   }
 
@@ -386,6 +436,165 @@ export class ConveniosController {
       cooperativaId,
       motivo: body?.motivo,
       usuarioId: req.user?.id ?? req.user?.userId,
+    });
+  }
+
+  // ─── Sprint Convite-Convênio Fatia 3 (03/06/2026) — Aprovação 3 portas ──
+
+  /**
+   * Lista membros PENDENTE_* do convênio (admin pode revisar quem aguarda).
+   * Filtros: ?status=PENDENTE_APROVACAO_EMPRESA|PENDENTE_APROVACAO_ADMIN.
+   * Sem filter → lista AMBOS.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'contratoConvenio' })
+  @Get(':id/membros-pendentes')
+  listarMembrosPendentes(
+    @Param('id') convenioId: string,
+    @Req() req: any,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new ForbiddenException('cooperativaId obrigatório.');
+    const statusFiltrado =
+      status === 'PENDENTE_APROVACAO_EMPRESA' || status === 'PENDENTE_APROVACAO_ADMIN'
+        ? (status as StatusMembroConvenio)
+        : undefined;
+    return this.aprovacaoService.listarPendentes(convenioId, cooperativaId, {
+      status: statusFiltrado,
+      page: page ? Math.max(1, parseInt(page, 10)) : 1,
+      limit: limit ? Math.min(100, Math.max(1, parseInt(limit, 10))) : 50,
+    });
+  }
+
+  /**
+   * Admin aprova membro PENDENTE_APROVACAO_ADMIN → MEMBRO_ATIVO. Entra na
+   * consolidada na próxima geração. GUARD: rejeita outros status.
+   *
+   * UI HELP (Fatia 4/5): "Ativa o membro custeado — a partir daqui ele entra
+   * na cobrança consolidada da empresa."
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.membro.aprovar_admin',
+    recurso: 'ConvenioCooperado',
+    recursoIdParam: 'membroId',
+  })
+  @HttpCode(200)
+  @Post(':id/membros/:membroId/aprovar-admin')
+  aprovarMembroAdmin(
+    @Param('id') _convenioId: string,
+    @Param('membroId') membroId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const adminUserId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId || !adminUserId) {
+      throw new ForbiddenException('Contexto de usuário incompleto.');
+    }
+    return this.aprovacaoService.aprovarPorAdmin({
+      membroId,
+      cooperativaId,
+      adminUserId,
+    });
+  }
+
+  /**
+   * Admin solicita documentação ao cooperado. Cria N DocumentoCooperado
+   * (PENDENTE). Status do membro mantém PENDENTE_APROVACAO_ADMIN.
+   *
+   * UI HELP: "Pede documentos ao cooperado antes de aprovar (ex: RG +
+   * contrato social)."
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.membro.solicitar_documentacao',
+    recurso: 'ConvenioCooperado',
+    recursoIdParam: 'membroId',
+  })
+  @HttpCode(200)
+  @Post(':id/membros/:membroId/solicitar-documentacao')
+  solicitarDocumentacaoMembro(
+    @Param('id') _convenioId: string,
+    @Param('membroId') membroId: string,
+    @Body() dto: SolicitarDocumentacaoDto,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const adminUserId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId || !adminUserId) {
+      throw new ForbiddenException('Contexto de usuário incompleto.');
+    }
+    return this.aprovacaoService.solicitarDocumentacao({
+      membroId,
+      cooperativaId,
+      adminUserId,
+      tipos: dto.tipos,
+    });
+  }
+
+  /**
+   * Admin rejeita membro PENDENTE_APROVACAO_ADMIN. Motivo obrigatório.
+   *
+   * UI HELP: "Recusa o cadastro (ex: dados não conferem). O cooperado é
+   * avisado com o motivo."
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.membro.rejeitar_admin',
+    recurso: 'ConvenioCooperado',
+    recursoIdParam: 'membroId',
+  })
+  @HttpCode(200)
+  @Post(':id/membros/:membroId/rejeitar-admin')
+  rejeitarMembroAdmin(
+    @Param('id') _convenioId: string,
+    @Param('membroId') membroId: string,
+    @Body() dto: RejeitarMembroAdminDto,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const adminUserId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId || !adminUserId) {
+      throw new ForbiddenException('Contexto de usuário incompleto.');
+    }
+    return this.aprovacaoService.rejeitarPorAdmin({
+      membroId,
+      cooperativaId,
+      adminUserId,
+      motivo: dto.motivo,
+    });
+  }
+
+  /**
+   * Reenvia magic link da empresa (regenera token + estende TTL + WA).
+   * Útil quando WA não chegou ou link expirou. GUARD:
+   * PENDENTE_APROVACAO_EMPRESA only.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.membro.reenviar_aprovacao_empresa',
+    recurso: 'ConvenioCooperado',
+    recursoIdParam: 'membroId',
+  })
+  @HttpCode(200)
+  @Post(':id/membros/:membroId/reenviar-aprovacao-empresa')
+  reenviarAprovacaoEmpresa(
+    @Param('id') _convenioId: string,
+    @Param('membroId') membroId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) throw new ForbiddenException('cooperativaId obrigatório.');
+    return this.aprovacaoService.reenviarAprovacaoEmpresa({
+      membroId,
+      cooperativaId,
     });
   }
 

@@ -8,10 +8,13 @@ import { ConveniosCusteioService } from './convenios-custeio.service';
 import { ConveniosJob } from './convenios.job';
 // Sprint Convite-Convênio Fatia 2a (03/06/2026)
 import { ConvitesConvenioService } from './convites-convenio.service';
+// Sprint Convite-Convênio Fatia 3 (03/06/2026)
+import { ConvenioAprovacaoService } from './convenios-aprovacao.service';
 import { PrismaService } from '../prisma.service';
 import { ContabilidadeTributariaModule } from '../contabilidade-tributaria/contabilidade-tributaria.module';
 import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 
 @Module({
   // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
@@ -31,6 +34,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     ContabilidadeTributariaModule,
     GatewayPagamentoModule,
     forwardRef(() => WhatsappModule),
+    NotificacoesModule,
   ],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [
@@ -40,6 +44,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     ConveniosCusteioService,
     ConveniosJob,
     ConvitesConvenioService,
+    ConvenioAprovacaoService,
     PrismaService,
   ],
   exports: [
@@ -48,6 +53,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     ConveniosProgressaoService,
     ConveniosCusteioService,
     ConvitesConvenioService,
+    ConvenioAprovacaoService,
   ],
 })
 export class ConveniosModule {}

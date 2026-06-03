@@ -1,5 +1,5 @@
 /// <reference types="multer" />
-import { Controller, Post, Get, Body, Param, Query, BadRequestException, ConflictException, ForbiddenException, NotFoundException, Logger, UploadedFile, UseInterceptors, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Req, BadRequestException, ConflictException, ForbiddenException, NotFoundException, Logger, UploadedFile, UseInterceptors, HttpCode } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, AdmissionOrigem } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
@@ -13,6 +13,8 @@ import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
 import { ConvitesConvenioService } from '../convenios/convites-convenio.service';
+import { ConvenioAprovacaoService } from '../convenios/convenios-aprovacao.service';
+import { DecidirAprovacaoEmpresaDto } from '../convenios/dto/decidir-aprovacao-empresa.dto';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
 import { ValidarOtpConviteDto } from './dto/validar-otp-convite.dto';
@@ -31,6 +33,8 @@ export class PublicoController {
     private conveniosMembros: ConveniosMembrosService,
     // Sprint Convite-Convênio Fatia 2a (03/06/2026) — validação pública do token
     private convitesConvenio: ConvitesConvenioService,
+    // Sprint Convite-Convênio Fatia 3 (03/06/2026) — magic link aprovação empresa
+    private convenioAprovacao: ConvenioAprovacaoService,
   ) {}
 
   @Public()
@@ -368,6 +372,49 @@ export class PublicoController {
     @Body() dto: ValidarOtpConviteDto,
   ) {
     return this.convitesConvenio.validarOtp(token, dto.codigo);
+  }
+
+  // ─── Sprint Convite-Convênio Fatia 3 (03/06/2026) — Empresa via magic link ──
+  // Magic link da empresa (gerado quando origem=CONVITE_PUBLICO, ver Fatia 2c.1)
+  // permite que o pagadorCooperado (representante da empresa) APROVE ou REJEITE
+  // o cadastro sem precisar de login no portal. Token single-use TTL 7d.
+  //
+  // GET /publico/aprovacao-membro/:token — valida pra UI mostrar nome do
+  // cooperado + sufixos (LGPD).
+  //
+  // POST /publico/aprovacao-membro/:token { decisao, motivo? } — registra a
+  // decisão atomicamente. Captura ip+userAgent pra audit forense.
+
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @Get('aprovacao-membro/:token')
+  async validarTokenAprovacaoEmpresa(@Param('token') token: string) {
+    return this.convenioAprovacao.validarTokenAprovacao(token);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @AuditLog({ acao: 'convenio.aprovacao_empresa', recurso: 'AprovacaoConvenioMembro' })
+  @HttpCode(200)
+  @Post('aprovacao-membro/:token')
+  async decidirAprovacaoEmpresa(
+    @Param('token') token: string,
+    @Body() dto: DecidirAprovacaoEmpresaDto,
+    @Req() req: any,
+  ) {
+    const ip =
+      (req.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      undefined;
+    const userAgent = req.headers?.['user-agent'] as string | undefined;
+    return this.convenioAprovacao.decidirAprovacaoEmpresa({
+      token,
+      decisao: dto.decisao,
+      motivo: dto.motivo,
+      ip,
+      userAgent,
+    });
   }
 
   // ─── Sprint Convite-Convênio Fatia 2c (03/06/2026) ─────────────────────────
