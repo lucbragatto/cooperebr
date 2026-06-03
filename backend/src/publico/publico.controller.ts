@@ -568,103 +568,129 @@ export class PublicoController {
       }
     }
 
-    // (8) CONSUME-ONCE ATÔMICO: marcar convite.usedAt ANTES de cadastroWebV2.
-    // Update com where:{id, usedAt:null} retorna P2025 se outro POST já consumiu —
-    // resolve race condition de 2 POSTs simultâneos com mesmo token.
-    try {
-      await this.prisma.conviteConvenioMembro.update({
-        where: { id: convite.id, usedAt: null },
-        data: { usedAt: new Date() },
-      });
-    } catch (err: any) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-        this.logger.warn(
-          `[auto-inscrever] Race condition consume-once: conviteId=${convite.id} já consumido por outro POST`,
-        );
-        throw new ConflictException(ERRO_GENERICO);
-      }
-      throw err;
-    }
-
-    // (9) Cria Cooperado + Membro PENDENTE direto (NÃO delega pra cadastroWebV2).
+    // ─── ATOMICIDADE (Fatia 2c.1 hardening) ──────────────────────────────
+    // Etapas (9)-(12) em UMA $transaction Serializable. Se qualquer create
+    // falhar no meio, rollback NATIVO do Postgres reverte tudo (consume-once
+    // + Cooperado + Membro + AprovacaoConvenioMembro + cross-ref). Sem mais
+    // compensação manual (cooperado.delete .catch + rollbackConviteUsedAt) —
+    // tx faz o trabalho corretamente. Garante: zero Cooperado órfão, zero
+    // Membro sem magic link, zero convite consumido sem membro.
     //
     // Decisão Fatia 2c: caminho CONVITE_PUBLICO NÃO precisa de Proposta+Contrato+UC
     // no momento do cadastro — tudo isso vem na aprovação (Fatia 3/5) quando empresa
-    // confirma + admin anexa UC. cadastroWebV2 cria UC fake e roda motor que pode
-    // falhar com kWh=0; aqui evitamos toda essa complexidade criando o mínimo
-    // necessário (Cooperado + Membro PENDENTE) e deixando o resto pro fluxo de
-    // aprovação.
-    //
-    // adicionarMembro(origem=CONVITE_PUBLICO) cuida de criar AprovacaoConvenioMembro
-    // (magic link da empresa) atomicamente — desenho já validado na Fatia 1+2a.
+    // confirma + admin anexa UC. cadastroWebV2 cria UC fake + roda motor que pode
+    // falhar com kWh=0; aqui criamos o mínimo necessário (Cooperado + Membro
+    // PENDENTE + magic link) e deixamos o resto pro fluxo de aprovação.
     const telefoneLimpo =
       (dto.telefone || '').replace(/\D/g, '') || convite.telefone;
 
     let cooperadoId: string;
+    let membroId: string;
+
     try {
-      const cooperadoCriado = await this.prisma.cooperado.create({
-        data: {
-          nomeCompleto: dto.nome.trim(),
-          cpf: cpfLimpo,
-          email: dto.email.trim(),
-          telefone: telefoneLimpo,
-          status: 'PENDENTE',
-          tipoCooperado: 'SEM_UC', // UC vem na aprovação (Fatia 3/5)
-          cooperativaId,
-          termoAdesaoAceito: true,
-          termoAdesaoAceitoEm: new Date(),
+      const resultadoTx = await this.prisma.$transaction(
+        async (tx) => {
+          // (9) Consume-once atômico DENTRO do tx. P2025 = outro POST consumiu
+          // antes (race) → 409 genérico. Em Serializable, dois POSTs concorrentes
+          // serializam ou um deles aborta com erro 40001 (Prisma traduz pra
+          // PrismaClientUnknownRequestError) — capturado fora do try.
+          try {
+            await tx.conviteConvenioMembro.update({
+              where: { id: convite.id, usedAt: null },
+              data: { usedAt: new Date() },
+            });
+          } catch (err: any) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+              throw new ConflictException('CONSUME_ONCE_RACE');
+            }
+            throw err;
+          }
+
+          // (10) Cria Cooperado. P2002 (CPF/email já existe) → 409 genérico.
+          let cooperadoNovo;
+          try {
+            cooperadoNovo = await tx.cooperado.create({
+              data: {
+                nomeCompleto: dto.nome.trim(),
+                cpf: cpfLimpo,
+                email: dto.email.trim(),
+                telefone: telefoneLimpo,
+                status: 'PENDENTE',
+                tipoCooperado: 'SEM_UC',
+                cooperativaId,
+                termoAdesaoAceito: true,
+                termoAdesaoAceitoEm: new Date(),
+              },
+              select: { id: true },
+            });
+          } catch (err: any) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+              throw new ConflictException('CPF_OU_EMAIL_EXISTE');
+            }
+            throw err;
+          }
+
+          // (11) Cria Membro PENDENTE + AprovacaoConvenioMembro (magic link)
+          // DENTRO do mesmo tx. ConveniosMembrosService.adicionarMembro usa
+          // o tx passado (db = tx ?? this.prisma) — Membro + AprovacaoConvenioMembro
+          // ficam atômicos com o consume-once + Cooperado.
+          const membroNovo = await this.conveniosMembros.adicionarMembro(
+            convenio.id,
+            cooperadoNovo.id,
+            undefined,
+            tx,
+            'CONVITE_PUBLICO',
+          );
+
+          // (12) Cross-ref convite → membro (também dentro do tx)
+          await tx.conviteConvenioMembro.update({
+            where: { id: convite.id },
+            data: { membroId: membroNovo.id },
+          });
+
+          return { cooperadoId: cooperadoNovo.id, membroId: membroNovo.id };
         },
-        select: { id: true },
-      });
-      cooperadoId = cooperadoCriado.id;
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      cooperadoId = resultadoTx.cooperadoId;
+      membroId = resultadoTx.membroId;
     } catch (err: any) {
-      // Rollback consume-once
-      await this.rollbackConviteUsedAt(convite.id);
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      // Erros marcados internamente → erro genérico anti-enumeration
+      if (err instanceof ConflictException) {
+        const motivo = err.message;
+        if (motivo === 'CONSUME_ONCE_RACE') {
+          this.logger.warn(
+            `[auto-inscrever] Race condition consume-once: conviteId=${convite.id} já consumido por outro POST`,
+          );
+        } else if (motivo === 'CPF_OU_EMAIL_EXISTE') {
+          this.logger.warn(
+            `[auto-inscrever] P2002 ao criar Cooperado (tx rolled back): ` +
+              `cpf=...${cpfLimpo.slice(-4)} convenioId=${convenio.id}`,
+          );
+        }
+        throw new ConflictException(ERRO_GENERICO);
+      }
+      // Serialization conflict do Postgres (40001) — tx aborta, rollback nativo,
+      // outro POST ganhou. Genérico.
+      if (
+        err instanceof Prisma.PrismaClientUnknownRequestError ||
+        (err?.code === '40001' || /serialization|concurrent|serializable/i.test(err?.message ?? ''))
+      ) {
         this.logger.warn(
-          `[auto-inscrever] P2002 ao criar Cooperado: cpf/email já existem ` +
-            `cpf=...${cpfLimpo.slice(-4)} convenioId=${convenio.id}`,
+          `[auto-inscrever] Serialization conflict (tx rolled back): conviteId=${convite.id}`,
         );
         throw new ConflictException(ERRO_GENERICO);
       }
       this.logger.error(
-        `[auto-inscrever] Falha ao criar Cooperado: ${err?.message ?? 'erro'}`,
-      );
-      throw err;
-    }
-
-    // (10) Cria Membro PENDENTE_APROVACAO_EMPRESA + AprovacaoConvenioMembro (magic
-    // link da empresa). adicionarMembro com origem=CONVITE_PUBLICO faz tudo
-    // atomicamente (mesmo sem tx — opera direto com this.prisma do service).
-    let membroId: string;
-    try {
-      const membroCriado = await this.conveniosMembros.adicionarMembro(
-        convenio.id,
-        cooperadoId,
-        undefined,
-        undefined,
-        'CONVITE_PUBLICO',
-      );
-      membroId = membroCriado.id;
-    } catch (err: any) {
-      // Rollback Cooperado + convite consume-once
-      await this.prisma.cooperado.delete({ where: { id: cooperadoId } }).catch(() => {});
-      await this.rollbackConviteUsedAt(convite.id);
-      this.logger.error(
-        `[auto-inscrever] Falha ao criar membro pendente: ${err?.message ?? 'erro'} ` +
-          `cooperadoId=${cooperadoId} convenioId=${convenio.id}`,
+        `[auto-inscrever] Falha no tx atômico (rollback total feito pelo Prisma): ` +
+          `conviteId=${convite.id} ${err?.message ?? 'erro'}`,
       );
       throw new BadRequestException(ERRO_GENERICO);
     }
 
-    // (11) Cross-ref convite → membro
-    await this.prisma.conviteConvenioMembro.update({
-      where: { id: convite.id },
-      data: { membroId },
-    });
-
     this.logger.log(
-      `[auto-inscrever] OK: conviteId=${convite.id} convenioId=${convenio.id} ` +
+      `[auto-inscrever] OK (tx atômico): conviteId=${convite.id} convenioId=${convenio.id} ` +
         `cooperadoId=${cooperadoId} membroId=${membroId} empresa=${convenio.empresaNome}`,
     );
 
@@ -673,22 +699,6 @@ export class PublicoController {
       membroId,
       status: 'PENDENTE_APROVACAO_EMPRESA',
     };
-  }
-
-  private async rollbackConviteUsedAt(conviteId: string): Promise<void> {
-    try {
-      await this.prisma.conviteConvenioMembro.update({
-        where: { id: conviteId },
-        data: { usedAt: null },
-      });
-      this.logger.warn(
-        `[auto-inscrever] Rollback usedAt: conviteId=${conviteId}`,
-      );
-    } catch (err) {
-      this.logger.error(
-        `[auto-inscrever] FALHA no rollback usedAt: conviteId=${conviteId} ${err instanceof Error ? err.message : 'erro'}`,
-      );
-    }
   }
 
   // ── Cadastro V2: cria Cooperado + UC + Proposta real via motor ──────────────
