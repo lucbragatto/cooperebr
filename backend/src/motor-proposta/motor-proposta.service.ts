@@ -477,6 +477,14 @@ export class MotorPropostaService {
     planoId?: string;
     /** D-FISCAL-2.4.3 — Caso 1: empresa paga total. Ver AceitarPropostaDto. */
     convenioCusteioId?: string;
+    /**
+     * Sprint Convite-Convênio Fatia 2 (03/06/2026) — discrimina caminho de admissão.
+     * Default ADMIN_MANUAL preserva os 2 callers existentes (motor:691 COM_UC e
+     * motor:882 SEM_UC) sem mudar comportamento. Quando 'CONVITE_PUBLICO',
+     * o `adicionarMembro` cria o membro PENDENTE_APROVACAO_EMPRESA + magic link
+     * AprovacaoConvenioMembro no mesmo tx serializável.
+     */
+    origem?: import('@prisma/client').AdmissionOrigem;
   }, cooperativaId?: string, usuarioId?: string) {
     if (!dto.resultado) throw new Error('Resultado inválido');
     const r = dto.resultado;
@@ -688,11 +696,14 @@ export class MotorPropostaService {
         // não vira membro do convênio e não entra no consolidado.
         let convenioVinculadoSemUc: { id: string; empresaNome: string } | null = null;
         if (custeioContext) {
+          // Sprint Convite-Convênio Fatia 2 (03/06) — propaga origem.
+          // Default ADMIN_MANUAL preserva caminhos legados (modo teste admin).
           await this.conveniosMembros.adicionarMembro(
             custeioContext.convenioId,
             dto.cooperadoId,
             undefined,
             tx,
+            dto.origem ?? 'ADMIN_MANUAL',
           );
           convenioVinculadoSemUc = {
             id: custeioContext.convenioId,
@@ -879,11 +890,14 @@ export class MotorPropostaService {
       // Enforça 1:1 ativo via membroOutro check do próprio service.
       let convenioVinculado: { id: string; empresaNome: string } | null = null;
       if (custeioContext) {
+        // Sprint Convite-Convênio Fatia 2 (03/06) — propaga origem.
+        // Default ADMIN_MANUAL preserva caminhos legados (cadastro V2 admin).
         await this.conveniosMembros.adicionarMembro(
           custeioContext.convenioId,
           dto.cooperadoId,
           undefined,
           tx,
+          dto.origem ?? 'ADMIN_MANUAL',
         );
         convenioVinculado = {
           id: custeioContext.convenioId,

@@ -1,9 +1,10 @@
 /// <reference types="multer" />
-import { Controller, Post, Get, Body, Param, Query, BadRequestException, ConflictException, Logger, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, BadRequestException, ConflictException, ForbiddenException, NotFoundException, Logger, UploadedFile, UseInterceptors, HttpCode } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Prisma } from '@prisma/client';
+import { Prisma, AdmissionOrigem } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
@@ -12,6 +13,7 @@ import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
+import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
 
 @Controller('publico')
 export class PublicoController {
@@ -311,6 +313,239 @@ export class PublicoController {
     }
   }
 
+  // ─── Sprint Convite-Convênio Fatia 2 (03/06/2026) ──────────────────────────
+  // Endpoint público de auto-inscrição via link `?conv={convenioId}`.
+  // Delega pra cadastroWebV2 com origem=CONVITE_PUBLICO (que propaga até
+  // adicionarMembro que cria PENDENTE_APROVACAO_EMPRESA + magic link).
+  //
+  // Camadas de defesa:
+  //  1. @Throttle 30/h por IP (camada amplitude).
+  //  2. Validação multi-tenant cross-check (convenio.cooperativaId === body.cooperativaId).
+  //  3. Convênio existe + status ATIVO + pagador=EMPRESA.
+  //  4. Dedup CPF (Caso B cross-tenant rejeitado + Caso C já-membro rejeitado).
+  //     Erros GENÉRICOS — não vazam se CPF/email existe (anti-enumeration).
+  //  5. Quota limiteMembros (count ATIVOS + PENDENTES não-expirados).
+  //  6. Quota kwhAlocadoMaxMensal só em CONSUMO_REAL.
+  //  7. Rate-limit manual por CPF (3/h via count last 1h — usa novo índice
+  //     ConvenioCooperado[cooperadoId, createdAt]).
+  //
+  // NUNCA retorna o token do magic link no body — envio = Fatia 6.
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 3600000 } }) // 30/h por IP
+  @AuditLog({ acao: 'convenios.auto_inscrever', recurso: 'ConvenioCooperado' })
+  @HttpCode(201)
+  @Post('convenios/auto-inscrever')
+  async autoInscreverConvenio(@Body() dto: AutoInscreverConvenioDto) {
+    const ERRO_GENERICO = 'Não foi possível concluir o cadastro. Entre em contato com a empresa pra solicitar inclusão manual.';
+
+    // (1) Validar convênio — multi-tenant cross-check ANTES de qualquer create
+    const convenio = await this.prisma.contratoConvenio.findUnique({
+      where: { id: dto.convenioId },
+      select: {
+        id: true,
+        cooperativaId: true,
+        status: true,
+        pagador: true,
+        empresaNome: true,
+        limiteMembros: true,
+        kwhAlocadoMaxMensal: true,
+        baseCobrancaCusteio: true,
+      },
+    });
+
+    if (
+      !convenio ||
+      convenio.cooperativaId !== dto.cooperativaId ||
+      convenio.status !== 'ATIVO' ||
+      convenio.pagador !== 'EMPRESA'
+    ) {
+      // Resposta única pros 4 casos (existência/tenant/status/pagador) —
+      // evita enumeração de convênios via diffing de mensagem.
+      this.logger.warn(
+        `[auto-inscrever] Convenio inválido: id=${dto.convenioId} tenantBody=${dto.cooperativaId} ` +
+          `existe=${!!convenio} tenantOk=${convenio?.cooperativaId === dto.cooperativaId} ` +
+          `status=${convenio?.status} pagador=${convenio?.pagador}`,
+      );
+      throw new NotFoundException(ERRO_GENERICO);
+    }
+
+    const cpfLimpo = (dto.cpf || '').replace(/\D/g, '');
+    if (cpfLimpo.length !== 11) {
+      throw new BadRequestException('CPF inválido.');
+    }
+
+    // (2) Dedup CPF — checagem prévia (P2002 do create é salvaguarda).
+    // Erros genéricos pra não vazar existência. Caso B cross-tenant rejeitado
+    // pelo log (não auto-vincula — vetor sequestro). Cooperado existente é
+    // adicionado pelo admin/empresa manualmente.
+    const cooperadoExistente = await this.prisma.cooperado.findUnique({
+      where: { cpf: cpfLimpo },
+      select: { id: true, cooperativaId: true },
+    });
+    if (cooperadoExistente) {
+      this.logger.warn(
+        `[auto-inscrever] CPF já existe — bloqueado: cpf=...${cpfLimpo.slice(-4)} ` +
+          `tenantExistente=${cooperadoExistente.cooperativaId} tenantBody=${dto.cooperativaId} ` +
+          `convenioId=${dto.convenioId}`,
+      );
+      throw new ConflictException(ERRO_GENERICO);
+    }
+
+    // (3) Rate-limit por CPF (3/h) — usa @@index([cooperadoId, createdAt]).
+    // Como o CPF ainda não tem Cooperado, contamos auto-inscrições recentes
+    // do mesmo tenant + convênio em janela 1h (defesa em profundidade — IP
+    // throttle é camada 1). Se o usuário tentar criar 4× em 1h muda
+    // pouca coisa (precisaria de 4 CPFs distintos pra bypass), mas trava
+    // bots simples que iteram payload.
+    const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
+    const tentativasRecentes = await this.prisma.convenioCooperado.count({
+      where: {
+        convenioId: dto.convenioId,
+        origem: 'CONVITE_PUBLICO',
+        createdAt: { gte: umaHoraAtras },
+      },
+    });
+    if (tentativasRecentes >= 60) {
+      // Hard cap por convênio/hora pra impedir floods de bot rotativo.
+      this.logger.warn(
+        `[auto-inscrever] Rate-limit por convênio atingido: convenioId=${dto.convenioId} ` +
+          `tentativas=${tentativasRecentes} janela=1h`,
+      );
+      throw new ConflictException(ERRO_GENERICO);
+    }
+
+    // (4) Quota: limiteMembros — conta MEMBRO_ATIVO + PENDENTE_*.
+    // Pendentes EXPIRADOS (token usedAt null + expiresAt < now) NÃO contam (cron
+    // de housekeeping virá na Fatia 3). Exclusão via filtro relação 1-1.
+    if (convenio.limiteMembros != null) {
+      const ocupacao = await this.prisma.convenioCooperado.count({
+        where: {
+          convenioId: dto.convenioId,
+          OR: [
+            { status: 'MEMBRO_ATIVO' },
+            {
+              status: { in: ['PENDENTE_APROVACAO_EMPRESA', 'PENDENTE_APROVACAO_ADMIN'] },
+              OR: [
+                // Sem token (defensivo): conta
+                { aprovacao: null },
+                // Token usado: conta (já decidiu)
+                { aprovacao: { usedAt: { not: null } } },
+                // Token vigente (não expirado): conta
+                { aprovacao: { usedAt: null, expiresAt: { gte: new Date() } } },
+              ],
+            },
+          ],
+        },
+      });
+      if (ocupacao >= convenio.limiteMembros) {
+        throw new ConflictException(
+          `Este convênio atingiu o limite de ${convenio.limiteMembros} membros. ` +
+            `Entre em contato com a empresa pra solicitar inclusão manual.`,
+        );
+      }
+    }
+
+    // (5) Quota energética: kwhAlocadoMaxMensal só em CONSUMO_REAL.
+    // ALOCACAO_FIXA tem pacote total fixo do convênio (sem alocação per-member),
+    // logo essa quota não se aplica.
+    if (
+      convenio.kwhAlocadoMaxMensal != null &&
+      convenio.baseCobrancaCusteio === 'CONSUMO_REAL'
+    ) {
+      const membrosVivos = await this.prisma.convenioCooperado.findMany({
+        where: {
+          convenioId: dto.convenioId,
+          status: { in: ['MEMBRO_ATIVO', 'PENDENTE_APROVACAO_EMPRESA', 'PENDENTE_APROVACAO_ADMIN'] },
+        },
+        include: { cooperado: { select: { cotaKwhMensal: true } } },
+      });
+      const somaAlocada = membrosVivos.reduce(
+        (s, m) => s + Number(m.cooperado.cotaKwhMensal ?? 0),
+        0,
+      );
+      const previstoNovo = dto.consumoMedioKwh ?? 0;
+      const maxKwh = Number(convenio.kwhAlocadoMaxMensal);
+      if (somaAlocada + previstoNovo > maxKwh) {
+        throw new ConflictException(
+          `A cota energética do convênio (${maxKwh.toFixed(2)} kWh/mês) está totalmente alocada. ` +
+            `Entre em contato com a empresa pra solicitar inclusão manual.`,
+        );
+      }
+    }
+
+    // (6) Delega pra cadastroWebV2 com origem=CONVITE_PUBLICO.
+    // cadastroWebV2 cuida de Cooperado/UC tx1, motor.aceitar tx2 (que chama
+    // adicionarMembro com origem propagado — cria membro PENDENTE + magic link
+    // atomicamente). Sem UC declarada → modo SEM_UC (Ponto 1 cfb4208 preserva
+    // vínculo pendente do convênio).
+    const telefoneLimpo = (dto.telefone || '').replace(/\D/g, '');
+
+    const bodyDelegado: Parameters<typeof this.cadastroWebV2>[0] = {
+      nome: dto.nome.trim(),
+      cpf: cpfLimpo,
+      email: dto.email.trim(),
+      telefone: telefoneLimpo,
+      // Endereço/UC vazios — auto-inscrição custeada NÃO exige fatura.
+      // Admin/empresa anexa UC depois se necessário (modo SEM_UC).
+      endereco: {
+        cep: '',
+        logradouro: '',
+        numero: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+      },
+      instalacao: {
+        numeroUC: '',
+        distribuidora: '',
+        consumoMedioKwh: dto.consumoMedioKwh ?? 0,
+      },
+      convenioCusteioId: dto.convenioId,
+      origem: 'CONVITE_PUBLICO',
+    };
+
+    let resultadoDelegado: any;
+    try {
+      resultadoDelegado = await this.cadastroWebV2(bodyDelegado, dto.cooperativaId);
+    } catch (err: any) {
+      // ConflictException de CPF duplicado do tx1 cai aqui — converter pra erro genérico.
+      if (err instanceof ConflictException) {
+        this.logger.warn(
+          `[auto-inscrever] cadastroWebV2 ConflictException: ${err.message} ` +
+            `cpf=...${cpfLimpo.slice(-4)} convenioId=${dto.convenioId}`,
+        );
+        throw new ConflictException(ERRO_GENERICO);
+      }
+      throw err;
+    }
+
+    const cooperadoId: string | undefined = resultadoDelegado?.data?.cooperadoId;
+    if (!cooperadoId) {
+      this.logger.error(
+        `[auto-inscrever] cadastroWebV2 não retornou cooperadoId: ${JSON.stringify(resultadoDelegado)}`,
+      );
+      throw new BadRequestException(ERRO_GENERICO);
+    }
+
+    // (7) Localizar o membro PENDENTE recém-criado pra retornar status.
+    // NÃO retorna o token do magic link — envio = Fatia 6 (notificações).
+    const membro = await this.prisma.convenioCooperado.findUnique({
+      where: { convenioId_cooperadoId: { convenioId: dto.convenioId, cooperadoId } },
+      select: { id: true, status: true },
+    });
+
+    this.logger.log(
+      `[auto-inscrever] OK: convenioId=${dto.convenioId} cooperadoId=${cooperadoId} ` +
+        `membroId=${membro?.id} status=${membro?.status} empresa=${convenio.empresaNome}`,
+    );
+
+    return {
+      ok: true,
+      membroId: membro?.id,
+      status: membro?.status ?? 'PENDENTE_APROVACAO_EMPRESA',
+    };
+  }
+
   // ── Cadastro V2: cria Cooperado + UC + Proposta real via motor ──────────────
   // Ativado por CADASTRO_V2_ATIVO=true. Legado (LeadWhatsapp) permanece como fallback.
 
@@ -330,6 +565,12 @@ export class PublicoController {
       historicoConsumo?: Array<{ mesAno: string; consumoKwh: number; valorRS: number }>;
       // D-FISCAL-2.4.3 — Caso 1 custeio
       convenioCusteioId?: string;
+      // Sprint Convite-Convênio Fatia 2 (03/06) — discrimina caminho de admissão.
+      // Default ADMIN_MANUAL preserva os 4 callers legados. CONVITE_PUBLICO
+      // propaga até adicionarMembro que cria PENDENTE_APROVACAO_EMPRESA + magic
+      // link AprovacaoConvenioMembro no mesmo tx. CONVITE_PUBLICO ALSO força
+      // fallback MEDIA_12M no outlier (sem UI pra escolher).
+      origem?: AdmissionOrigem;
     },
     cooperativaId: string,
   ) {
@@ -426,7 +667,7 @@ export class PublicoController {
       const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
       const planoId = body.planoId || primPlano?.id || '';
 
-      const resultado = await this.motorProposta.calcular({
+      let resultado = await this.motorProposta.calcular({
         cooperadoId,
         planoId,
         historico: historico.length > 0
@@ -437,14 +678,34 @@ export class PublicoController {
         mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
       });
 
-      // Motor detected a consumption outlier and needs user choice (MEDIA_12M vs MES_RECENTE)
+      // Motor detected a consumption outlier and needs user choice (MEDIA_12M vs MES_RECENTE).
+      // Sprint Convite-Convênio Fatia 2 (03/06) — no caminho CONVITE_PUBLICO NÃO há UI
+      // pra escolher; recalcula com `opcaoEscolhida='MEDIA_12M'` (fallback conservador)
+      // e segue o fluxo normal. Empresa/admin podem ajustar depois na aprovação.
       if (resultado.outlierDetectado && resultado.aguardandoEscolha) {
-        return {
-          ok: false,
-          erro: 'OUTLIER_DETECTADO',
-          opcoes: resultado.opcoes,
-          data: { cooperadoId, ucId },
-        };
+        if (body.origem === 'CONVITE_PUBLICO') {
+          this.logger.log(
+            `[cadastro-v2] origem=CONVITE_PUBLICO outlier detectado — recalculando com fallback MEDIA_12M pro cooperado ${cooperadoId}`,
+          );
+          resultado = await this.motorProposta.calcular({
+            cooperadoId,
+            planoId,
+            historico: historico.length > 0
+              ? historico.map(h => ({ mesAno: h.mesAno, consumoKwh: h.consumoKwh, valorRS: h.valorRS }))
+              : [{ mesAno: new Date().toISOString().slice(0, 7), consumoKwh: consumo, valorRS: valorFatura }],
+            kwhMesRecente: ultimoMes?.consumoKwh ?? consumo,
+            valorMesRecente: ultimoMes?.valorRS ?? valorFatura,
+            mesReferencia: ultimoMes?.mesAno ?? new Date().toISOString().slice(0, 7),
+            opcaoEscolhida: 'MEDIA_12M',
+          });
+        } else {
+          return {
+            ok: false,
+            erro: 'OUTLIER_DETECTADO',
+            opcoes: resultado.opcoes,
+            data: { cooperadoId, ucId },
+          };
+        }
       }
 
       if (resultado.resultado) {
@@ -455,6 +716,8 @@ export class PublicoController {
           planoId: body.planoId || undefined,
           // D-FISCAL-2.4.3 — Caso 1: força plano custeado + vincula ao convênio
           convenioCusteioId: body.convenioCusteioId || undefined,
+          // Sprint Convite-Convênio Fatia 2 — propaga origem (default ADMIN_MANUAL)
+          origem: body.origem,
         });
         propostaId = aceite.proposta?.id ?? null;
         emListaEspera = aceite.emListaEspera ?? false;

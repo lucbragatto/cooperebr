@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-06-02 — **D-FISCAL-2 (Caso 1 custeio) fechado**. Pontos 1 (D-novo-CAD-CUSTEADO-FATURA `cfb4208`) e 2a (D-novo-CT-TARIFA-FIXA-EMPRESA `3665099`) entregues. Convite-convênio (Ponto 3) **ADIADO** pra sprint próprio com aprovação dupla. **3 débitos novos** catalogados nesta noite: **D-novo-SEC-AUTOINSCRICAO-CUSTEADA (P1)** + **D-novo-CONVITE-CONVENIO reframe (P1)** + **D-novo-PORTAL-CUSTEADO (P2)**.
+**Última atualização:** 2026-06-03 — **Sprint Convite-Convênio Fatia 2 entregue** (`a definir`): endpoint público `POST /publico/convenios/auto-inscrever` `@Public` + param `origem: AdmissionOrigem` em `adicionarMembro` (default ADMIN_MANUAL preserva 4 callers) + CONVITE_PUBLICO cria membro PENDENTE_APROVACAO_EMPRESA + magic link `AprovacaoConvenioMembro` (token 64 hex TTL 7d) atomicamente + dedup CPF genérico (anti-enumeration) + quota `limiteMembros` + `kwhAlocadoMaxMensal` em CONSUMO_REAL + rate-limit `@Throttle` 30/h IP + check manual 60/h por convênio + outlier fallback MEDIA_12M no caminho público + índice aditivo `@@index([cooperadoId, createdAt])`. 11/11 specs verde. **3 follow-ups Fatia 3+**: cron limpeza pendente expirado + endpoints aprovação empresa/admin + notificações (5 helpers). Catalogados em **D-novo-CONVITE-CONVENIO-F3-F8** (P1).
 
 ---
 
@@ -104,6 +104,29 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 ---
 
 ## P1 — Bloqueia entrada de parceiro real
+
+### D-novo-CONVITE-F3-CRON-LIMPEZA-PENDENTE — Cron de limpeza de membros PENDENTE com magic link expirado
+
+**Severidade:** P2 (não-bloqueante mas necessário antes de produção pra evitar lixo no banco)
+**Detectado em:** 2026-06-03 (Fatia 2 entregue — endpoint auto-inscrever cria PENDENTE + magic link TTL 7d)
+**Onde:** futuro `backend/src/convenios/convenios.job.ts` (adicionar `@Cron @AsPlatform`).
+
+**Sintoma:** auto-inscrições via link público criam `ConvenioCooperado` PENDENTE_APROVACAO_EMPRESA + `AprovacaoConvenioMembro` com `expiresAt = now + 7d`. Se ninguém aprovar/rejeitar em 7d, ambos ficam órfãos no banco. A quota `limiteMembros` da Fatia 2 já EXCLUI pendentes expirados (filtro `aprovacao.usedAt=null AND expiresAt < now → NÃO conta`), mas:
+- Tabela cresce sem reaproveitar
+- Cooperado fica em status PENDENTE (limbo)
+- Cobrança nunca dispara
+
+**Resolução (Fatia 3 ou cron próprio):** `@Cron('0 5 * * *') @AsPlatform()` diário que:
+1. `findMany(aprovacaoConvenioMembro where usedAt:null AND expiresAt < now)` — pendentes expirados.
+2. Para cada, marcar `convenioCooperado.status = MEMBRO_REJEITADO_EMPRESA + motivoRejeicao='Magic link expirou sem decisão da empresa'`.
+3. Opcionalmente: deletar `aprovacaoConvenioMembro` (ou manter pra audit retroativo).
+4. Notificar Cooperado: "Sua inscrição expirou. Cadastre-se de novo OU fale com a empresa."
+
+**Estimativa:** ~2-3h Code (job + spec + smoke).
+
+**Catalogado em:** Fatia 2 commit (03/06/2026).
+
+---
 
 ### D-novo-SEC-AUTOINSCRICAO-CUSTEADA — Link público de auto-inscrição custeada vira MEMBRO_ATIVO sem aprovação (fraude financeira contra a empresa pagadora)
 

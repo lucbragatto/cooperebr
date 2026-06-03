@@ -1505,6 +1505,9 @@ model ConvenioCooperado {
   @@index([convenioId, ativo])
   @@index([convenioId, status])
   @@index([cooperadoId])
+  // Sprint Convite-Convênio Fatia 2 (03/06/2026) — suporta rate-limit por CPF
+  // (count auto-inscrições da última 1h por tenant) sem scan O(n). Aditivo.
+  @@index([cooperadoId, createdAt])
   @@map("convenio_cooperados")
 }
 

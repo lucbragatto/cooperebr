@@ -1,7 +1,12 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, AdmissionOrigem, StatusMembroConvenio } from '@prisma/client';
+import * as crypto from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
+
+// Sprint Convite-Convênio Fatia 2 (03/06/2026) — TTL do magic link de aprovação
+// da empresa (alinhado com ConviteProprietarioService M31).
+const APROVACAO_TTL_DIAS = 7;
 
 @Injectable()
 export class ConveniosMembrosService {
@@ -14,6 +19,7 @@ export class ConveniosMembrosService {
 
   /**
    * D-FISCAL-2.4.3 (01/06/2026 noite) — `tx` opcional adicionado.
+   * Sprint Convite-Convênio Fatia 2 (03/06/2026) — `origem` opcional adicionada.
    *
    * Quando chamado dentro de uma transação serializável (ex: aceite de
    * proposta com convenioCusteioId), passe o `tx` do `$transaction` pra
@@ -21,6 +27,17 @@ export class ConveniosMembrosService {
    * MLM (recalcularFaixa + registrarIndicacao) ficam pulados no caminho
    * tx — eles dependem de `this.prisma` e não fazem sentido pro Caso 1
    * (custeio puro, sem MLM/indicação).
+   *
+   * `origem` discrimina o caminho de admissão:
+   *  - ADMIN_MANUAL (default): membro nasce MEMBRO_ATIVO + ativo=true → entra
+   *    direto na consolidada. Preserva os 4 callers legados (admin manual via
+   *    /convenios/:id/membros, CSV import, motor.aceitar via UI admin Caso 1,
+   *    vínculo MLM via codigoRef).
+   *  - CSV: idem ADMIN_MANUAL (import em massa supõe pré-aprovação).
+   *  - CONVITE_PUBLICO: membro nasce PENDENTE_APROVACAO_EMPRESA + ativo=false
+   *    (NÃO entra na consolidada) + cria AprovacaoConvenioMembro no MESMO `tx`
+   *    (magic link token crypto.randomBytes(32).hex, TTL 7d). Pula MLM porque
+   *    custeio público não é MLM.
    *
    * Quando chamado sem `tx` (fluxo legado de admin/manual), comportamento
    * idêntico ao anterior.
@@ -30,6 +47,7 @@ export class ConveniosMembrosService {
     cooperadoId: string,
     matricula?: string,
     tx?: Prisma.TransactionClient,
+    origem: AdmissionOrigem = 'ADMIN_MANUAL',
   ) {
     const db = tx ?? this.prisma;
 
@@ -62,18 +80,41 @@ export class ConveniosMembrosService {
       where: { convenioId_cooperadoId: { convenioId, cooperadoId } },
     });
 
+    // Sprint Convite-Convênio Fatia 2 — status/ativo conforme origem.
+    // CONVITE_PUBLICO nasce pendente; demais entram ATIVO (preserva legado).
+    const isConvitePublico = origem === 'CONVITE_PUBLICO';
+    const statusNovo: StatusMembroConvenio = isConvitePublico
+      ? 'PENDENTE_APROVACAO_EMPRESA'
+      : 'MEMBRO_ATIVO';
+    const ativoNovo = !isConvitePublico;
+
     let membro;
     if (existente) {
-      if (existente.ativo) throw new BadRequestException('Cooperado já vinculado a este convênio');
-      // Reativar
+      // Bloqueio defensivo: vínculo pendente OU ativo bloqueia novo cadastro do
+      // mesmo CPF neste convênio (dedup Caso C da Fatia 2 — proteção em camada).
+      if (
+        existente.ativo ||
+        existente.status === 'PENDENTE_APROVACAO_EMPRESA' ||
+        existente.status === 'PENDENTE_APROVACAO_ADMIN'
+      ) {
+        throw new BadRequestException('Cooperado já vinculado a este convênio');
+      }
+      // Reativar — usa estado conforme origem (CONVITE_PUBLICO reativa em PENDENTE)
       membro = await db.convenioCooperado.update({
         where: { id: existente.id },
         data: {
-          ativo: true,
-          status: 'MEMBRO_ATIVO',
+          ativo: ativoNovo,
+          status: statusNovo,
+          origem,
           matricula: matricula ?? existente.matricula,
           dataAdesao: new Date(),
           dataDesligamento: null,
+          // Limpa carimbos de aprovação antigos (nova rodada de fluxo)
+          aprovadoPorEmpresaEm: null,
+          aprovadoPorAdminEm: null,
+          rejeitadoPorEmpresaEm: null,
+          rejeitadoPorAdminEm: null,
+          motivoRejeicao: null,
         },
       });
     } else {
@@ -82,16 +123,37 @@ export class ConveniosMembrosService {
           convenioId,
           cooperadoId,
           matricula,
-          ativo: true,
-          status: 'MEMBRO_ATIVO',
+          ativo: ativoNovo,
+          status: statusNovo,
+          origem,
           dataAdesao: new Date(),
         },
       });
     }
 
-    // Side effects MLM — só fora de transação serializável (Caso legado).
-    // Em custeio (caller passa tx), tier/indicação não se aplicam ao Caso 1.
-    if (!tx) {
+    // CONVITE_PUBLICO — criar magic link de aprovação da empresa no MESMO tx.
+    // Atômico: se a criação do token falhar, rollback total do vínculo.
+    if (isConvitePublico) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + APROVACAO_TTL_DIAS * 24 * 60 * 60 * 1000);
+      await db.aprovacaoConvenioMembro.create({
+        data: {
+          membroId: membro.id,
+          token,
+          expiresAt,
+        },
+      });
+      this.logger.log(
+        `[convite-publico] Membro PENDENTE criado: convenioId=${convenioId} ` +
+          `cooperadoId=${cooperadoId} membroId=${membro.id} tokenSufixo=...${token.slice(-6)} ` +
+          `expira=${expiresAt.toISOString()}`,
+      );
+    }
+
+    // Side effects MLM — só fora de transação serializável (Caso legado)
+    // E só pra origens não-públicas. CONVITE_PUBLICO nunca dispara MLM
+    // (custeio puro) nem recalcula faixa (pendente não ocupa faixa MLM).
+    if (!tx && !isConvitePublico) {
       if (convenio.registrarComoIndicacao && convenio.conveniadoId) {
         try {
           await this.registrarIndicacaoConvenio(convenio.conveniadoId, cooperadoId, convenio.cooperativaId, membro.id);
