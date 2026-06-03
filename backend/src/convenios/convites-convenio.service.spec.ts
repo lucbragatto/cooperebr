@@ -121,7 +121,8 @@ describe('ConvitesConvenioService — Fatia 2a', () => {
       expect(r.telefone).toBe('5527981341348');
       expect(r.empresaNome).toBe('Clínica Teste');
       expect(r.reused).toBe(false);
-      expect(r.link).toContain('/convite/' + 'a'.repeat(64));
+      // Fatia 4 fix: rota correta é /convite-convenio/{token} (anti-colisão MLM)
+      expect(r.link).toContain('/convite-convenio/' + 'a'.repeat(64));
 
       // Confirma que normalizou + passou pra prisma o telefone normalizado
       const callArgs = createConvite.mock.calls[0][0];

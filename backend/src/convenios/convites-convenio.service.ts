@@ -256,8 +256,25 @@ export class ConvitesConvenioService {
   }
 
   /**
-   * Lista convites do convênio (admin). Tenant-scoped via convênio.
+   * Lista convites do convênio (admin + empresa). Tenant-scoped via convênio.
    * NÃO retorna o token integral (apenas sufixo) — defesa LGPD.
+   *
+   * Sprint Convite-Convênio Fatia 5 (03/06/2026) — status DERIVADO refinado:
+   * cruza ConviteConvenioMembro + ConvenioCooperado + AprovacaoConvenioMembro
+   * pra dar uma string única coerente com o pipeline 3 portas + contadores
+   * agregados pro card de overview. Mesmo endpoint serve admin e empresa
+   * (Fatia 9.1) — só muda o caller.
+   *
+   * Status possíveis (9):
+   *  - AGUARDANDO_OTP            (convite vivo, nunca solicitou OTP)
+   *  - AGUARDANDO_CADASTRO       (OTP validado, ainda não usou o convite)
+   *  - PENDENTE_APROVACAO_EMPRESA (cadastrou, aguarda empresa)
+   *  - PENDENTE_APROVACAO_ADMIN  (empresa aprovou, aguarda CoopereBR)
+   *  - AGUARDANDO_DOCS           (admin solicitou docs — sub-estado do PENDENTE_ADMIN)
+   *  - ATIVO                     (admin aprovou, entra na consolidada)
+   *  - REJEITADO_EMPRESA
+   *  - REJEITADO_ADMIN
+   *  - LINK_EXPIRADO             (convite expirado sem uso)
    */
   async listarPorConvenio(convenioId: string, cooperativaId: string) {
     const convenio = await this.prisma.contratoConvenio.findFirst({
@@ -269,28 +286,74 @@ export class ConvitesConvenioService {
     const convites = await this.prisma.conviteConvenioMembro.findMany({
       where: { convenioId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        membro: {
+          select: {
+            id: true,
+            status: true,
+            ativo: true,
+            documentacaoSolicitadaEm: true,
+            motivoRejeicao: true,
+            cooperado: {
+              select: {
+                id: true,
+                nomeCompleto: true,
+                cpf: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const agora = new Date();
-    return convites.map((c) => ({
-      id: c.id,
-      nomeConvidado: c.nomeConvidado,
-      telefone: c.telefone,
-      tokenSufixo: '...' + c.token.slice(-6),
-      expiresAt: c.expiresAt,
-      usedAt: c.usedAt,
-      createdAt: c.createdAt,
-      createdBy: c.createdBy,
-      otpValidadoEm: c.otpValidadoEm,
-      membroId: c.membroId,
-      status: c.usedAt
-        ? 'USADO'
-        : c.expiresAt <= agora
-          ? 'EXPIRADO'
-          : c.otpValidadoEm
-            ? 'OTP_VALIDADO'
-            : 'PENDENTE',
-    }));
+    const data = convites.map((c) => {
+      const status = derivarStatusConvite(c, agora);
+      return {
+        id: c.id,
+        nomeConvidado: c.nomeConvidado,
+        telefone: c.telefone,
+        tokenSufixo: '...' + c.token.slice(-6),
+        expiresAt: c.expiresAt,
+        usedAt: c.usedAt,
+        createdAt: c.createdAt,
+        createdBy: c.createdBy,
+        otpValidadoEm: c.otpValidadoEm,
+        membroId: c.membroId,
+        status,
+        // Dados do membro (quando já cadastrou) — sufixos LGPD
+        membro: c.membro
+          ? {
+              id: c.membro.id,
+              status: c.membro.status,
+              ativo: c.membro.ativo,
+              documentacaoSolicitadaEm: c.membro.documentacaoSolicitadaEm,
+              motivoRejeicao: c.membro.motivoRejeicao,
+              cooperadoNome: c.membro.cooperado?.nomeCompleto ?? null,
+              cooperadoCpfSufixo: c.membro.cooperado?.cpf
+                ? '...' + c.membro.cooperado.cpf.slice(-3)
+                : null,
+            }
+          : null,
+      };
+    });
+
+    // Contadores agregados pro overview
+    const contadores = {
+      total: data.length,
+      aguardando_otp: data.filter((d) => d.status === 'AGUARDANDO_OTP').length,
+      aguardando_cadastro: data.filter((d) => d.status === 'AGUARDANDO_CADASTRO').length,
+      pendente_empresa: data.filter((d) => d.status === 'PENDENTE_APROVACAO_EMPRESA').length,
+      pendente_admin: data.filter((d) => d.status === 'PENDENTE_APROVACAO_ADMIN').length,
+      aguardando_docs: data.filter((d) => d.status === 'AGUARDANDO_DOCS').length,
+      ativo: data.filter((d) => d.status === 'ATIVO').length,
+      rejeitado_empresa: data.filter((d) => d.status === 'REJEITADO_EMPRESA').length,
+      rejeitado_admin: data.filter((d) => d.status === 'REJEITADO_ADMIN').length,
+      link_expirado: data.filter((d) => d.status === 'LINK_EXPIRADO').length,
+    };
+
+    return { data, contadores };
   }
 
   /**
@@ -703,6 +766,75 @@ export class ConvitesConvenioService {
   private montarLink(token: string): string {
     const baseUrl =
       process.env.FRONTEND_URL ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3001';
-    return `${baseUrl}/convite/${token}`;
+    // Fatia 4 — rota correta é /convite-convenio/{token} (anti-colisão MLM).
+    return `${baseUrl}/convite-convenio/${token}`;
+  }
+}
+
+/**
+ * Sprint Convite-Convênio Fatia 5 (03/06/2026) — Status derivado de um convite.
+ *
+ * Cruza ConviteConvenioMembro + ConvenioCooperado em uma única string coerente
+ * com o pipeline de 3 portas. Export nomeado pra reusar nos specs.
+ *
+ * Tabela de decisão (em ordem de prioridade):
+ *  - convite.usedAt=null + expiresAt < now             → LINK_EXPIRADO
+ *  - convite.usedAt=null + otpValidadoEm=null          → AGUARDANDO_OTP
+ *  - convite.usedAt=null + otpValidadoEm!=null         → AGUARDANDO_CADASTRO
+ *  - membro.status=MEMBRO_ATIVO                        → ATIVO
+ *  - membro.status=MEMBRO_REJEITADO_EMPRESA            → REJEITADO_EMPRESA
+ *  - membro.status=MEMBRO_REJEITADO_ADMIN              → REJEITADO_ADMIN
+ *  - membro.status=PENDENTE_APROVACAO_EMPRESA          → PENDENTE_APROVACAO_EMPRESA
+ *  - membro.status=PENDENTE_APROVACAO_ADMIN
+ *      + documentacaoSolicitadaEm!=null                → AGUARDANDO_DOCS
+ *  - membro.status=PENDENTE_APROVACAO_ADMIN            → PENDENTE_APROVACAO_ADMIN
+ *  - fallback (nunca deveria atingir)                  → AGUARDANDO_OTP
+ */
+export type StatusConviteDerivado =
+  | 'AGUARDANDO_OTP'
+  | 'AGUARDANDO_CADASTRO'
+  | 'PENDENTE_APROVACAO_EMPRESA'
+  | 'PENDENTE_APROVACAO_ADMIN'
+  | 'AGUARDANDO_DOCS'
+  | 'ATIVO'
+  | 'REJEITADO_EMPRESA'
+  | 'REJEITADO_ADMIN'
+  | 'LINK_EXPIRADO';
+
+export function derivarStatusConvite(
+  convite: {
+    usedAt: Date | null;
+    expiresAt: Date;
+    otpValidadoEm: Date | null;
+    membro: {
+      status: string;
+      documentacaoSolicitadaEm: Date | null;
+    } | null;
+  },
+  agora: Date = new Date(),
+): StatusConviteDerivado {
+  // Convite ainda não foi usado pra cadastro
+  if (!convite.usedAt) {
+    if (convite.expiresAt <= agora) return 'LINK_EXPIRADO';
+    if (!convite.otpValidadoEm) return 'AGUARDANDO_OTP';
+    return 'AGUARDANDO_CADASTRO';
+  }
+  // Convite usado — status vem do membro
+  if (!convite.membro) return 'AGUARDANDO_OTP'; // defensivo: usado mas sem membro = inconsistente
+  switch (convite.membro.status) {
+    case 'MEMBRO_ATIVO':
+      return 'ATIVO';
+    case 'MEMBRO_REJEITADO_EMPRESA':
+      return 'REJEITADO_EMPRESA';
+    case 'MEMBRO_REJEITADO_ADMIN':
+      return 'REJEITADO_ADMIN';
+    case 'PENDENTE_APROVACAO_EMPRESA':
+      return 'PENDENTE_APROVACAO_EMPRESA';
+    case 'PENDENTE_APROVACAO_ADMIN':
+      return convite.membro.documentacaoSolicitadaEm
+        ? 'AGUARDANDO_DOCS'
+        : 'PENDENTE_APROVACAO_ADMIN';
+    default:
+      return 'PENDENTE_APROVACAO_ADMIN';
   }
 }

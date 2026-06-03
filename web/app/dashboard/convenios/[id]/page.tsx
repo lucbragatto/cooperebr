@@ -5,11 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, UserPlus, Trash2, RefreshCw, TrendingUp, Users, Percent, Pencil, FileCheck } from 'lucide-react';
+import { ArrowLeft, Trash2, RefreshCw, TrendingUp, Users, Percent, Pencil, FileCheck } from 'lucide-react';
 import Link from 'next/link';
+import { GestaoConvitesSection } from '@/components/convenios/GestaoConvitesSection';
+import { MembrosPendentesSection } from '@/components/convenios/MembrosPendentesSection';
 
 const NATUREZA_LABEL: Record<string, string> = {
   PROPRIO: 'PRÓPRIO (Art. 79 — isento)',
@@ -32,8 +33,6 @@ export default function ConvenioDetalhePage() {
   const router = useRouter();
   const [convenio, setConvenio] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
-  const [addCooperadoId, setAddCooperadoId] = useState('');
-  const [addMatricula, setAddMatricula] = useState('');
   const [recalculando, setRecalculando] = useState(false);
 
   function carregar() {
@@ -45,20 +44,10 @@ export default function ConvenioDetalhePage() {
 
   useEffect(() => { carregar(); }, [id]);
 
-  async function adicionarMembro() {
-    if (!addCooperadoId.trim()) return;
-    try {
-      await api.post(`/convenios/${id}/membros`, {
-        cooperadoId: addCooperadoId.trim(),
-        matricula: addMatricula.trim() || undefined,
-      });
-      setAddCooperadoId('');
-      setAddMatricula('');
-      carregar();
-    } catch (err: any) {
-      alert(err.response?.data?.message ?? 'Erro ao adicionar membro');
-    }
-  }
+  // Sprint Convite-Convênio Fatia 5 (03/06/2026) — REMOVIDA `adicionarMembro`
+  // legacy (input "ID do cooperado" cru + silent return se vazio — inutilizável).
+  // Substituída pelos componentes <GestaoConvitesSection> + <MembrosPendentesSection>
+  // que reusam endpoints da Fatia 2a (convite per-recipient) + Fatia 3 (aprovação).
 
   async function removerMembro(cooperadoId: string, nome: string) {
     if (!confirm(`Desligar "${nome}" do convênio?`)) return;
@@ -272,29 +261,23 @@ export default function ConvenioDetalhePage() {
         </CardContent>
       </Card>
 
-      {/* Membros */}
+      {/* Sprint Convite-Convênio Fatia 5 (03/06/2026) — Gestão de convites
+          per-recipient (criar / reenviar / cancelar) + Membros pendentes
+          (aprovar / solicitar doc / rejeitar / reenviar magic link). */}
+      <GestaoConvitesSection convenioId={id} source="admin" />
+      <MembrosPendentesSection convenioId={id} source="admin" />
+
+      {/* Membros ATIVOS (tabela legacy) */}
       <Card>
         <CardHeader>
-          <CardTitle>Membros ({membrosAtivos.length})</CardTitle>
+          <CardTitle>Membros ativos ({membrosAtivos.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="ID do cooperado"
-              value={addCooperadoId}
-              onChange={e => setAddCooperadoId(e.target.value)}
-              className="w-64"
-            />
-            <Input
-              placeholder="Matrícula (opcional)"
-              value={addMatricula}
-              onChange={e => setAddMatricula(e.target.value)}
-              className="w-48"
-            />
-            <Button onClick={adicionarMembro}>
-              <UserPlus className="h-4 w-4 mr-1" /> Adicionar
-            </Button>
-          </div>
+          {/* Sprint Convite-Convênio Fatia 5 (03/06/2026) — REMOVIDO input
+              "ID do cooperado" cru (inutilizável). Gestão de convites +
+              membros pendentes agora vive em <GestaoConvitesSection> +
+              <MembrosPendentesSection> ABAIXO desta tabela de ativos.
+              Pra adicionar membro: usar "Gerar convite" nas seções novas. */}
 
           <Table>
             <TableHeader>
