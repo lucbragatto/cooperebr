@@ -1029,6 +1029,27 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
+### D-novo-CONVITE-ROTA-CONSOLIDAR — consolidar rotas /convite/[codigo] (MLM) + /convite-convenio/[token] (custeio)
+
+**Severidade:** P3 (UX — usuário lê o link sem perceber a diferença; não-bloqueante)
+**Detectado em:** 2026-06-03 (Fatia 4 do Sprint Convite-Convênio)
+**Onde:** `web/app/convite/[codigo]/page.tsx` (MLM Sprint 9B) + `web/app/convite-convenio/[token]/page.tsx` (Fatia 4 nova).
+
+**Sintoma:** Next.js App Router só permite UM segmento dinâmico no mesmo nível de pasta — `/convite/[codigo]` (MLM via `codigoIndicacao`) e `/convite/[token]` (convite-convênio com magic link) NÃO podem coexistir. Solução da Fatia 4 foi sufixar a rota: `/convite-convenio/[token]`. Funciona, mas duas rotas semanticamente próximas com nomes diferentes confundem usuário.
+
+**Resolução (sprint refator UX futuro):**
+1. **Opção A** — mover MLM pra `/indicacao/[codigo]` (semanticamente mais correto pra "indicação" do programa de afiliados) + simplificar `/convite/[token]` único pra convênio.
+2. **Opção B** — manter ambas mas roteamento smart: `/convite/[id]` com lookup no backend (`GET /publico/convite-ou-indicacao/:id`) discriminando tipo. Mais fragil.
+3. **Opção C** — deixar como está e documentar o ponto (decisão Luciano).
+
+**Recomendação:** Opção A (refator mais limpo). Inclui redirect 301 do `/convite/[codigo]` → `/indicacao/[codigo]` pra preservar links MLM já distribuídos.
+
+**Estimativa:** 2-3h Code.
+
+**Catalogado em:** Fatia 4 commit (03/06/2026).
+
+---
+
 ### D-novo-SEC-AMBIENTE-TESTE — gatear toggle "Modo teste" do Wizard pra prod
 
 **Arquivo:** `web/app/dashboard/cooperados/novo/page.tsx` (toggle introduzido em D-novo-CAD-CUSTEADO-FATURA).
