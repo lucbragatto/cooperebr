@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-02 noite — M20 Sprint D-FISCAL-2.4 Caso 1 custeio 100% completa**. 8 commits trabalho (`80d3e75` 2.4.4a → `74858bb` 2.4.4a.1 → `f593917` 2.4.4a.2 → `b2e0cad` 2.4.4b → `3fa9a34` 2.4.4c → `9a201cb` 2.4.4d → `a135934` 2.4.4e → `14d0948` 2.4.4f) + 1 commit fechamento em 1 sessão Code maratona. Entregue **CASO 1 ponta-a-ponta** (empresa cooperada paga total): **2.4.4a** motor consolidado + UC sintética `CONSOLIDADOR-*` + plano técnico "Consolidador de Custeio" + helper compartilhado `tarifa-helper.ts` · **2.4.4a.1** UC própria da empresa COM_UC entra no total (dedup defensivo Map<ucId>) · **2.4.4a.2** invariante custeado⟺consolidado eliminando double-bill matematicamente (filtro `plano.custeadoPorConvenio=true`) · **2.4.4b** cron mensal `@AsPlatform()` mês fechado + endpoints REST + emissão Asaas com guard `isAmbienteReal()` · **2.4.4c** hook `darBaixa` roteia consolidada paga pro `criarLancamentoConvenioContrato` (natureza convênio AUXILIAR/PRÓPRIO configurável) · **2.4.4d** tela admin `/dashboard/convenios/[id]/cobrancas-consolidadas` + estorno gate apuração FECHADA + HelpBox · **2.4.4e** UI config no form do convênio (pagador/base/desconto/kwhAlocado) + validação service-level · **2.4.4f** ALOCACAO_FIXA gera sem membros + 3 banners feedback claro (CRIADA verde / JA_EXISTE azul / SEM_MEMBROS amber). **200/200 specs verde** convenios + cobrancas + planos + motor-proposta · `lint:tenant` zero novos · zero regressão · 2 débitos P3 catalogados (Dialog backdrop blur + tarifa-fallback). CV-2026-0001 "Clinica teste" ALOCACAO_FIXA 200000 kWh × 20% desconto **PRONTA pra Luciano fazer smoke E2E real** (R$ 126.289,60 esperado). **Próximo Code: 3 caminhos** — (1) smoke E2E real CV-2026-0001 OU (2) D-FISCAL-2.5 (aposentar `/contabilidade/convenios` + migrar CT) OU (3) D-FISCAL-2.6 (corrigir relatório 31/05 Hangar errado). Detalhe: `docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md`.
+> Última atualização: **2026-06-02 noite tarde — Finalização Convênio Médico (Pontos 1+2a) + HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1**. 7 commits trabalho em 1 sessão Code maratona pós-M20: **Ponto 1** (`cfb4208`) modo teste libera fatura no cadastro + preserva vínculo convênio sem UC · **Ponto 2a** (`3665099`) tarifa fixa R$/kWh negociada com a empresa (enum `TipoTarifaEmpresa` + `tarifaFixaKwhEmpresa`) · **HOTFIX** root-cause do 400 PATCH = `src/agents` untracked com 15 erros TS quebrava build há 3 dias → dist velho rejeitando campos novos. Fix: excluir `src/agents` do `tsconfig.build.json`. **LIÇÃO: "build passou" mentia — sempre verificar dist.** · **D-FISCAL-2.5** (`2666412`) `/dashboard/contabilidade/convenios` virou lente fiscal read-only sobre ContratoConvenio legado + aposentou CRUD CT (deprecated + WARN) + deletou Convenio CT órfão "teste" · **D-FISCAL-2.6** (`13eb1d7`) corrigiu exemplo Hangar no relatório conformidade 31/05 · **Débitos** (`37fa529`) catalogados 3 novos pós-investigação 6 sub-agentes: D-novo-SEC-AUTOINSCRICAO-CUSTEADA P1 (vetor fraude link público) + D-novo-PORTAL-CUSTEADO P2 + D-novo-CONVITE-CONVENIO P1 reframe · **Sprint Convite-Convênio Fatia 1** (`12bff1e`) schema delta aditivo: enum `StatusMembroConvenio` +4 valores (PENDENTE_APROVACAO_EMPRESA/ADMIN + REJEITADO_*) + enum `AdmissionOrigem` (ADMIN_MANUAL/CSV/CONVITE_PUBLICO) + 6 campos novos em `ConvenioCooperado` + 2 quotas em `ContratoConvenio` (`limiteMembros` + `kwhAlocadoMaxMensal`) + model novo `AprovacaoConvenioMembro` (magic link da empresa). **3 convênios + 215 membros intactos** (defaults preservam tudo). **Decisões travadas:** auth aprovação empresa = HÍBRIDO (magic link no núcleo + login portal como camada, mesmo endpoint); SEM_UC rejeitado = fica PENDENTE pro admin; invite = STATELESS `?conv=`; rate-limit 3/h CPF + 30-60/h IP. **Estado:** convênio médico USÁVEL pelo admin ponta-a-ponta (cadastro modo teste + tarifa fixa/% + consolidada + lente fiscal). Convite com aprovação dupla = sprint em andamento (Fatia 1/8 feita). Smoke E2E real Caso 1 ainda pendente Luciano. **IDEIA NOVA (Luciano):** Fatia 9 = portal self-service da empresa conveniada (gera + envia convite via WA/email + aprova pendentes na própria tela) — depende de provisionar login portal pra empresa. Detalhe: `docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md`.
+
+> Histórico: **2026-06-02 noite — M20 Sprint D-FISCAL-2.4 Caso 1 custeio 100% completa**. 8 commits trabalho (`80d3e75` 2.4.4a → `74858bb` 2.4.4a.1 → `f593917` 2.4.4a.2 → `b2e0cad` 2.4.4b → `3fa9a34` 2.4.4c → `9a201cb` 2.4.4d → `a135934` 2.4.4e → `14d0948` 2.4.4f) + 1 commit fechamento em 1 sessão Code maratona. Entregue **CASO 1 ponta-a-ponta** (empresa cooperada paga total): **2.4.4a** motor consolidado + UC sintética `CONSOLIDADOR-*` + plano técnico "Consolidador de Custeio" + helper compartilhado `tarifa-helper.ts` · **2.4.4a.1** UC própria da empresa COM_UC entra no total (dedup defensivo Map<ucId>) · **2.4.4a.2** invariante custeado⟺consolidado eliminando double-bill matematicamente (filtro `plano.custeadoPorConvenio=true`) · **2.4.4b** cron mensal `@AsPlatform()` mês fechado + endpoints REST + emissão Asaas com guard `isAmbienteReal()` · **2.4.4c** hook `darBaixa` roteia consolidada paga pro `criarLancamentoConvenioContrato` (natureza convênio AUXILIAR/PRÓPRIO configurável) · **2.4.4d** tela admin `/dashboard/convenios/[id]/cobrancas-consolidadas` + estorno gate apuração FECHADA + HelpBox · **2.4.4e** UI config no form do convênio (pagador/base/desconto/kwhAlocado) + validação service-level · **2.4.4f** ALOCACAO_FIXA gera sem membros + 3 banners feedback claro (CRIADA verde / JA_EXISTE azul / SEM_MEMBROS amber). **200/200 specs verde** convenios + cobrancas + planos + motor-proposta · `lint:tenant` zero novos · zero regressão · 2 débitos P3 catalogados (Dialog backdrop blur + tarifa-fallback). CV-2026-0001 "Clinica teste" ALOCACAO_FIXA 200000 kWh × 20% desconto **PRONTA pra Luciano fazer smoke E2E real** (R$ 126.289,60 esperado). **Próximo Code: 3 caminhos** — (1) smoke E2E real CV-2026-0001 OU (2) D-FISCAL-2.5 (aposentar `/contabilidade/convenios` + migrar CT) OU (3) D-FISCAL-2.6 (corrigir relatório 31/05 Hangar errado). Detalhe: `docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md`.
 
 > Histórico: **2026-06-01 noite tarde — M19 D-FISCAL-2.4.2 + 2.4.3 (Caso 1 custeio: plano + guards + selector + vínculo)**. 2 commits trabalho (`e265e63` D-FISCAL-2.4.2 → `07ae417` D-FISCAL-2.4.3) + 1 commit fechamento. Entregue **estrutura completa do Caso 1** (empresa cooperada paga total): **2.4.2** plano global "Custeado por convênio" via seed idempotente em `PlanosService.onModuleInit` + 3 guards bloqueando geração de cobrança individual nos 3 caminhos (Path A `gerarCobrancaPosFatura`, Path B `aprovarFatura` for-loop, manual `cobrancas.create`) · **2.4.3** selector de empresa no cadastro **admin** (toggle Step3 + select nativo) e **público** (radio renderStep3 + select nativo) + endpoint público `/publico/convenios-pagador-empresa?tenant=` minimalista + integração no `motor-proposta.aceitar` (valida convênio ANTES da tx + override planoId + vínculo `ConvenioCooperado` na MESMA transação serializável) + ajuste `adicionarMembro` aceitando `tx` opcional (pula MLM side effects no Caso 1). **Sem schema delta** (descoberta Fase 1: público aceita no mesmo request, `convenioCusteioId` viaja em memória). Zero migração. 141/141 specs verde. Detalhe: `docs/sessoes/2026-06-01-dfiscal-242-243-custeio-convenio.md`.
 
@@ -22,6 +24,69 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-02 noite tarde (Code — Finalização Convênio Médico + HOTFIX + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1)
+
+**7 commits trabalho** em 1 sessão Code maratona pós-M20 (continuação do dia 02/06):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `cfb4208` | feat | **Ponto 1 D-novo-CAD-CUSTEADO-FATURA** — toggle "Modo teste" no wizard libera fatura obrigatória + relaxa validators dos Steps 0/2/3 + `MotorPropostaService.aceitar:683` no early-return 0 UCs chama `adicionarMembro(tx)` ANTES (preserva vínculo do convênio sem UC). Cooperado marcado `ambienteTeste=true`. |
+| `3665099` | feat | **Ponto 2a D-novo-CT-TARIFA-FIXA-EMPRESA** — schema aditivo: enum `TipoTarifaEmpresa { PERCENTUAL_DESCONTO \| VALOR_FIXO }` + 2 campos `ContratoConvenio.tipoTarifaEmpresa` + `tarifaFixaKwhEmpresa`. Default PERCENTUAL_DESCONTO preserva 3 vivos. Service 2 ramos + ConvenioCusteioBloco.tsx select tipoTarifa nativo. |
+| `37fa529` | docs | **3 débitos** pós-investigação 6 sub-agentes: **D-novo-SEC-AUTOINSCRICAO-CUSTEADA P1** (vetor fraude — link `?conv=` divulgado aberto vira fraude financeira contra empresa pagadora) + **D-novo-PORTAL-CUSTEADO P2** (membro custeado vê portal vazio sem aviso "você é custeado pela empresa X") + **D-novo-CONVITE-CONVENIO P1 reframe** (sprint próprio com aprovação dupla). |
+| _(implícito 12bff1e)_ | chore | **HOTFIX tsconfig.build** — adicionado `src/agents/**` no exclude. **Root cause** descoberto: pasta untracked criada 31/05 com 15 erros TS quebrava o build inteiro do backend há 3 dias, `nest build` emitia parcial com exit code != 0, `pm2 restart` nunca disparava, dist ficava velho. Fix consolidado no commit Fatia 1. |
+| `2666412` | feat | **D-FISCAL-2.5 lente fiscal read-only** — `/dashboard/contabilidade/convenios` repurposado no mesmo URL (evita órfão) como lente Art. 79/86/88 sobre `ContratoConvenio` legado. Páginas `novo/` + `[id]/editar/` deletadas. ConveniosCtController `@deprecated` + WARN no boot. Convenio CT órfão "teste" deletado (0 FK). Endpoint `/convenios/:id/movimentos-contabeis` legado intacto. Sidebar label "Convênios (lente fiscal)". |
+| `13eb1d7` | docs | **D-FISCAL-2.6** — linha 46 de `2026-05-31-conformidade-contabil-multi-regime.md` substitui "convenio Hangar Academia (cooperado PJ que financia custeio)" por "convênios de custeio recebido (Caso 1 D-FISCAL-2.4 — empresa terceira paga a conta de N cooperados, ex.: clínica custeando médicos cooperados)". Grep `hangar` agora zero ocorrências. |
+| `12bff1e` | feat | **Sprint Convite-Convênio Fatia 1/8 — schema delta** — 100% aditivo. enum `StatusMembroConvenio` +4 valores (PENDENTE_APROVACAO_EMPRESA/ADMIN + REJEITADO_*) + enum NOVO `AdmissionOrigem` (3 valores) + ConvenioCooperado +6 campos (origem ADMIN_MANUAL + 4 timestamps + motivoRejeicao + back-rel) + ContratoConvenio +2 quotas (limiteMembros, kwhAlocadoMaxMensal) + tabela nova `AprovacaoConvenioMembro` (magic link 10 cols). Validação: 3 convênios + 215 membros 100% intactos com origem ADMIN_MANUAL automática. Build limpo zero erros tsc após exclude src/agents. |
+
+**HOTFIX em detalhe (lição operacional):**
+- **Sintoma:** PATCH `/convenios/:id` retornava `400 "property tipoTarifaEmpresa should not exist"` apesar do source ter os campos.
+- **Diagnóstico:** `npm run build` retornava exit code != 0 por 15 erros TS em `src/agents/` (pasta untracked criada 31/05, fora do `AppModule`). `nest build` é tolerante (emite parcial), mas o build do Ponto 2a (19:56) saiu com erro silencioso → `pm2 restart` nunca disparou → dist ficou velho 3 dias.
+- **Fix imediato:** rebuild forçado → grep confirmou campos no dist → PM2 restart → smoke OK.
+- **Fix preventivo:** `tsconfig.build.json` ganhou `src/agents/**` no exclude. Build agora zero erros.
+- **LIÇÃO REGISTRADA:** "build passou" mentia. Sempre validar dist (`grep` no .js) após `npm run build`, especialmente quando há erros conhecidos em outras pastas.
+- **D-novo-AGENTS-ORPHAN P3** pendente catalogar formalmente: deletar OU consertar OU `.gitignore` a pasta órfã (próximo housekeeping).
+
+**Workflow investigação convite (6 agentes paralelos):**
+Antes do reframe D-novo-CONVITE-CONVENIO, lançamos 6 sub-agentes para mapear vetor de fraude + gap UX. Achados: caminho `/cadastro` JÁ aceita `convenioCusteioId` no body (wired desde D-FISCAL-2.4.3) — qualquer link `?conv=` divulgado vira fraude. Portal cooperado custeado mostra Faturas/Saldo/Cobranças vazias sem aviso. `ConviteIndicacao` é MLM-shape inadequado. Padrão `ConviteProprietarioService` (M31) ideal pra reuso (token stateless + TTL 7d + `@Public()`).
+
+**Sprint Convite-Convênio — Fase 1 mapeada (A-J) + 12 decisões travadas:**
+1. **Auth empresa = HÍBRIDO** (magic link no núcleo + login portal como camada, mesmo endpoint).
+2. Lock dropdown convênio quando `?conv=` = disabled.
+3. Lock tipoCobranca = fixo CUSTEADA.
+4. `?conv=` inválido = erro amigável.
+5. Botão tela detalhe = dialog modal (MVP).
+6. TTL magic link = 7d (consistência ConviteProprietario).
+7. Quota = ambos opcionais (limiteMembros + kwhAlocadoMaxMensal).
+8. **SEM_UC rejeitado pela empresa = fica PENDENTE pro admin** (não cancela cadastro).
+9. Reenvio magic link = sim (pattern reusado).
+10. AuditLog = 5 eventos (criação, aceite, aprovação empresa, aprovação admin, rejeições).
+11. **Rate-limit = 3/h por CPF + 30-60/h por IP**.
+12. Contador pendentes = badge sidebar.
+
+**Estado atual:**
+- **Convênio médico USÁVEL pelo admin** ponta-a-ponta (cadastro modo teste + tarifa fixa/% + consolidada + lente fiscal Art. 79/86/88).
+- **Convite com aprovação dupla = sprint em andamento** (Fatia 1/8 entregue, restam 7 fatias ~20-26h).
+- **Smoke E2E real CV-2026-0001 ainda pendente Luciano** (R$ 126.289,60 PERCENTUAL ou R$ 160.000,00 VALOR_FIXO@0.80).
+
+**IDEIA NOVA (Luciano, 02/06 noite):** **Fatia 9 = portal self-service da empresa conveniada** — empresa gera e envia convite pros seus médicos via WhatsApp/email + aprova pendentes na própria tela. Vira perna "portal login" do híbrido. Depende de provisionar login portal pra empresa. Recomendação: WA+email primeiro, Telegram (net-new) a avaliar.
+
+**Próximo bloco — Fatia 2 do Sprint Convite-Convênio** (backend admissão pública).
+
+**Detalhe:** `docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md`.
+
+**Decisões aplicadas:**
+- Decisão 23 (Fase 1 read-only) — 4 vezes (Ponto 1, Ponto 2a, D-FISCAL-2.5, Sprint Convite Fase 1).
+- Decisão 24 (frase de retomada local único — esta seção é a fonte canônica).
+- Regra rebuild backend obrigatório + verificar dist (formalizada pós-hotfix).
+- Regra HELP obrigatório + selects NATIVOS dentro de Dialog/wizard (19/05).
+- Schema aditivo sem `--accept-data-loss`; ritual PM2 (stop → port livre → db push → start) — 2× (Ponto 2a + Fatia 1).
+- `isAmbienteReal()` em endpoints dev (NUNCA `NODE_ENV`).
+- Regra contatos teste: `27981341348` + `lucbragatto@gmail.com`.
+- `@TenantResource @AuditLog` em handlers novos.
+- Padrão ConviteProprietarioService M31 como template canônico magic link.
 
 ---
 
@@ -1407,13 +1472,178 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento da sessão 02/06 noite (M20 Sprint D-FISCAL-2.4 Caso 1
-   custeio 100% completa — 8 sub-fatias 2.4.4a→f).
+   fechamento da sessão 02/06 noite tarde (Finalização Convênio Médico +
+   HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online.
 
 PASSO 1 — Frase comandante (próximo Code arranca aqui):
+
+RODAR FATIA 2 DO SPRINT CONVITE-CONVÊNIO — BACKEND ADMISSÃO PÚBLICA.
+
+Implementar:
+- Endpoint `POST /publico/convenios/auto-inscrever` `@Public()` que recebe
+  cooperativaId + convenioId + dados cooperado (CPF/nome/email/telefone) e
+  cria Cooperado + ConvenioCooperado com `origem=CONVITE_PUBLICO` +
+  `status=PENDENTE_APROVACAO_EMPRESA` + `ativo=false` + cria
+  AprovacaoConvenioMembro (magic link `crypto.randomBytes(32).hex` TTL 7d)
+  na MESMA transação Serializable.
+- Param `origem: AdmissionOrigem` em `ConveniosMembrosService.adicionarMembro`
+  (default ADMIN_MANUAL preserva caminhos legados; CONVITE_PUBLICO força
+  status=PENDENTE_APROVACAO_EMPRESA + ativo=false). Quando `tx` passado E
+  origem=CONVITE_PUBLICO, NÃO disparar side effects MLM nem recálculo faixa.
+- Dedup CPF por convênio: ANTES do create, verificar
+  `convenioCooperado.findFirst({where: {convenioId, cooperado: {cpf},
+  status: {in: [MEMBRO_ATIVO, PENDENTE_APROVACAO_EMPRESA,
+  PENDENTE_APROVACAO_ADMIN]}}})`. Se achar, BadRequestException amigável
+  ("Este CPF já está em processo de cadastro neste convênio").
+- Quota check: ANTES do create, validar `count(membros ativos+pendentes) <
+  limiteMembros` (se limite definido) E `soma kwhAlocado consolidadas vivas +
+  alocação prevista deste novo membro <= kwhAlocadoMaxMensal` (se quota
+  energética definida). Se estourar, BadRequestException com explicação.
+- Rate-limit: 3 auto-inscrições/hora por CPF + 30-60 por IP (configurar via
+  helper rate-limit do projeto — verificar se já existe pattern, senão usar
+  `@nestjs/throttler` consistente com outros endpoints públicos).
+
+Fase 1 + 12 decisões já travadas (ver ## ONDE PARAMOS topo + memória +
+doc-sessão). Schema da Fatia 1 já aplicado (commit 12bff1e):
+StatusMembroConvenio +4 + AdmissionOrigem + 6 campos ConvenioCooperado +
+2 quotas ContratoConvenio + tabela AprovacaoConvenioMembro.
+
+Decisão 23: SEMPRE Fase 1 read-only ANTES de tocar código:
+1. Verificar se já existe pattern de rate-limit no projeto.
+2. Verificar como dedup CPF funciona em outros pontos (cooperados.service).
+3. Verificar quota de outros módulos (modelo conceitual reutilizável?).
+4. Identificar todas as chamadas atuais de `adicionarMembro` pra confirmar
+   que adicionar param `origem` (default ADMIN_MANUAL) NÃO quebra ninguém.
+5. Reportar achados + propor escopo + AGUARDAR OK antes de codar.
+
+ENTREGA ESPERADA FATIA 2: backend admite cadastro público em estado
+PENDENTE_APROVACAO_EMPRESA + magic link gerado + zero quebra em
+adicionarMembro legado. Specs Jest verdes (Fatia 8 fará o smoke E2E).
+
+CONTEXTO DA SESSÃO ANTERIOR (02/06 noite tarde — 7 commits cfb4208..12bff1e):
+- cfb4208 Ponto 1: modo teste no wizard cadastro + preserva vínculo
+  convênio sem UC.
+- 3665099 Ponto 2a: tarifa fixa R$/kWh empresa (enum TipoTarifaEmpresa).
+- 37fa529 3 débitos novos pós-investigação 6 sub-agentes (SEC-AUTOINSCRICAO
+  P1 + PORTAL-CUSTEADO P2 + CONVITE-CONVENIO P1 reframe).
+- HOTFIX build (consolidado em 12bff1e): src/agents untracked com 15 erros
+  TS quebrava build há 3 dias → tsconfig.build.json exclude `src/agents/**`.
+  LIÇÃO: "build passou" mentia, SEMPRE verificar dist.
+- 2666412 D-FISCAL-2.5: lente fiscal read-only no mesmo URL + deprecation
+  ConveniosCtController + delete Convenio CT órfão.
+- 13eb1d7 D-FISCAL-2.6: linha 46 relatório conformidade — Hangar removido.
+- 12bff1e Fatia 1 schema delta: enum +4 valores + AdmissionOrigem + 6
+  campos ConvenioCooperado + 2 quotas ContratoConvenio + tabela nova
+  AprovacaoConvenioMembro. Aditivo zero perda. 3 convênios + 215 membros
+  intactos. Build limpo zero erros tsc após exclude src/agents.
+
+ENTREGA PRONTA PRA SMOKE REAL (carry-over Luciano):
+CV-2026-0001 "Clinica teste" (id cmpwof5h6000avaf8547cj3pb):
+- pagador=EMPRESA · pagadorCooperadoId=cmpwnuid50006vaf8th51y2s7
+- baseCobrancaCusteio=ALOCACAO_FIXA · kwhAlocadoMensal=200000
+- 2 modos disponíveis pós-Ponto 2a: descontoKwhCusteio=20% (PERCENTUAL,
+  R$ 126.289,60) OU tarifaFixaKwhEmpresa=0.80 (VALOR_FIXO, R$ 160.000,00)
+- Tela: /dashboard/convenios/cmpwof5h6000avaf8547cj3pb/cobrancas-consolidadas
+
+IDEIA REGISTRADA (Luciano 02/06 noite — Fatia 9 futura):
+Portal self-service da empresa conveniada — empresa gera+envia convite
+via WA/email + aprova pendentes na própria tela. Vira perna "portal login"
+do híbrido. Depende de provisionar Usuario perfil COOPERADO pra pagador
+da empresa. Recomendação: WA+email primeiro, Telegram (net-new) avaliar.
+
+CONSTRAINTS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Decisão 24: frase de retomada local único (esta seção).
+- @TenantResource + @AuditLog em handlers novos de mutação.
+- @AsPlatform() em cron/listener novos.
+- Multi-tenant: TODA query Prisma filtra por cooperativaId (publico endpoint
+  recebe cooperativaId via body/query, valida).
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV).
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com.
+- Math.round(x*100)/100 em todo valor monetário.
+- Schema aditivo sem --accept-data-loss; ritual PM2 nas migrations
+  (stop → port livre → db push → start).
+- Transações Prisma Serializable em operações multi-modelo (auto-inscrever
+  cria Cooperado + ConvenioCooperado + AprovacaoConvenioMembro juntos).
+- ⚠️ Lição D-novo-AS/BN: frontend componente NOVO exige npm run build +
+  pm2 restart cooperebr-frontend (HMR NÃO basta).
+- ⚠️ LIÇÃO HOTFIX 02/06 noite tarde: "build passou" mentia — sempre
+  verificar dist via grep no .js compilado após npm run build.
+- Padrão ConviteProprietarioService M31 (backend/src/proprietario/
+  convite-proprietario.service.ts) = template canônico magic link
+  (crypto.randomBytes 64 hex + TTL 7d + idempotência reuso + endpoints
+  @Public).
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md
+   (contexto pleno desta sessão maratona — 7 commits)
+4. docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md (M20 anterior)
+5. docs/debitos-tecnicos.md — header atualizado + 3 débitos novos P1/P1/P2
+   + Fatia 1 schema delta
+6. backend/prisma/schema.prisma:313-340 (enum + AdmissionOrigem) :1404-1411
+   (quota) :1439-1510 (ConvenioCooperado + AprovacaoConvenioMembro)
+7. backend/src/proprietario/convite-proprietario.service.ts — template
+   padrão a reusar
+8. backend/src/convenios/convenios-membros.service.ts — onde injetar param
+   origem + dedup + quota
+9. backend/src/publico/publico.controller.ts:457 — caminho convenioCusteioId
+   no cadastroWebV2 (vai precisar do irmão /auto-inscrever)
+10. backend/src/cooperados/cooperados.service.ts — método create + dedup
+    CPF padrão existente
+11. CLAUDE.md + .claude/CLAUDE.md (regras)
+12. git log --oneline -20
+
+CARRY-OVERS (não-bloqueantes):
+- Smoke E2E real CV-2026-0001 (Luciano manual).
+- D-novo-AGENTS-ORPHAN P3 (pasta src/agents agora EXCLUÍDA do build —
+  decidir deletar/consertar/.gitignore em housekeeping futuro).
+- D-novo-UX-Dialog-Backdrop P3.
+- D-novo-CT-TARIFA-ALOCACAO P3.
+- D-novo-CT-PDF-AUXILIAR P2.
+- D-novo-CT-VALIDACAO-FISCAL P0 (gate fiscal interno).
+- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 (bloqueia Sinergia).
+- D-novo-BM P0 BLOQUEADOR REMOÇÃO PRÉ-PROD.
+- D-novo-BP P3 convergência /parceiro vs /dashboard.
+- 43+ untracked scripts/relatórios — Sprint Housekeeping futuro.
+- 256 legados allowlist lint:tenant — esvaziar incrementalmente.
+- Convenção MENSAL (Mini-Bloco H'.9 17/05) ainda não aplicada — 2 usinas
+  em ANUAL.
+- IDEIA Fatia 9 (portal self-service da empresa) — registrada.
+
+FRENTES OPERACIONAIS LUCIANO (acumulado):
+⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção
+   contábil) — alíquotas + presunção + flag isencao PIS/COFINS + classif
+   repasse + 10 contas seed + 10 lançamentos amostrais
+⏳ Smoke E2E real CV-2026-0001 Caso 1 custeio
+⏳ Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Revisar relatório auditoria classe GD
+⏳ Definir matriz responsabilidadeDespesas
+⏳ Definir valorKwhPadrao OU TarifaConcessionaria EDP_ES
+⏳ Obter credenciais Sungrow/iSolar Cloud
+⏳ Obter script.sql do hb06a (libera Sub-Sprint B ETL)
+⏳ Obter .pfx sandbox Banestes
+⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536 (advogado)
+⏳ AVALIAR Fatia 9 portal self-service empresa (decidir provisionamento
+   Usuario PJ empresa pagadora)
+
+DOC-SESSAO 02/06 noite tarde:
+docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md
+```
+
+---
+
+### Frase Sprint Caso 1 D-FISCAL-2.4 (anterior, arquivada — substituída pela Fatia 2 Convite-Convênio acima)
+
+```
+[FRASE SPRINT D-FISCAL-2.4 — substituída acima pelo arranque da Fatia 2
+do Sprint Convite-Convênio. Conteúdo histórico preservado abaixo apenas
+pra rastreabilidade de retomada — NÃO COLAR no Code.]
 
 CASO 1 CUSTEIO BACKEND+UI = 100% COMPLETO. 3 CAMINHOS VÁLIDOS — Luciano
 escolhe ANTES de Code arrancar:
