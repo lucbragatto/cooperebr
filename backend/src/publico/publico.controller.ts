@@ -15,6 +15,7 @@ import { ConveniosMembrosService } from '../convenios/convenios-membros.service'
 import { ConvitesConvenioService } from '../convenios/convites-convenio.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
+import { ValidarOtpConviteDto } from './dto/validar-otp-convite.dto';
 
 @Controller('publico')
 export class PublicoController {
@@ -339,6 +340,34 @@ export class PublicoController {
       expiresAt: r.dados!.expiresAt,
       otpJaValidado: r.dados!.otpJaValidado,
     };
+  }
+
+  // ─── Sprint Convite-Convênio Fatia 2b (03/06/2026) — OTP ──────────────────
+  // Solicita OTP: gera código 6 dígitos + envia WA pro convite.telefone (NUNCA
+  // pra outro número). Service aplica guards (bloqueio/reenvios/cooldown).
+  // @Throttle 5/min por IP (camada amplitude) — guard de cooldown 60s é a
+  // camada por-convite (mais granular).
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(200)
+  @Post('convites/:token/solicitar-otp')
+  async solicitarOtpConvite(@Param('token') token: string) {
+    return this.convitesConvenio.solicitarOtp(token);
+  }
+
+  // Valida OTP digitado pelo usuário. Comparação constant-time. Conta
+  // tentativas; 5 erros → bloqueio 1h. @Throttle agressivo por IP (10/min)
+  // pra dificultar brute-force distribuído (5 tentativas × código de 6 dig =
+  // 1 em 200k chance; throttle limita rounds).
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(200)
+  @Post('convites/:token/validar-otp')
+  async validarOtpConvite(
+    @Param('token') token: string,
+    @Body() dto: ValidarOtpConviteDto,
+  ) {
+    return this.convitesConvenio.validarOtp(token, dto.codigo);
   }
 
   // ─── Sprint Convite-Convênio Fatia 2 (03/06/2026) ──────────────────────────

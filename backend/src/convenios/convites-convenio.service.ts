@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -30,6 +32,13 @@ import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 export class ConvitesConvenioService {
   private readonly logger = new Logger(ConvitesConvenioService.name);
   private static readonly CONVITE_TTL_DIAS = 7;
+
+  // Fatia 2b (03/06/2026) — Política OTP
+  static readonly OTP_TTL_MIN = 10;             // 10 minutos
+  static readonly OTP_MAX_TENTATIVAS = 5;       // 5 erros → bloqueio
+  static readonly OTP_MAX_REENVIOS = 3;         // 3 reenvios por convite
+  static readonly OTP_COOLDOWN_SEG = 60;        // 60s entre reenvios
+  static readonly OTP_BLOQUEIO_HORAS = 1;       // bloqueio 1h após exaustão
 
   constructor(
     private readonly prisma: PrismaService,
@@ -376,6 +385,313 @@ export class ConvitesConvenioService {
       );
       return { enviado: false, erro: msg };
     }
+  }
+
+  // ─── Sprint Convite-Convênio Fatia 2b (03/06/2026) — OTP ────────────
+
+  /**
+   * Gera código OTP de 6 dígitos (000000 a 999999) usando crypto.randomInt
+   * (CSPRNG). Zero-padded à esquerda pra sempre 6 chars.
+   */
+  static gerarCodigoOtp(): string {
+    const num = crypto.randomInt(0, 1_000_000);
+    return num.toString().padStart(6, '0');
+  }
+
+  /**
+   * Gera salt rotativo (16 bytes hex = 32 chars) novo a cada solicitar-otp.
+   * Garante que mesmo se o atacante conseguir o hash de um OTP antigo, não
+   * pode reusar entre reenvios.
+   */
+  static gerarSaltOtp(): string {
+    return crypto.randomBytes(16).toString('hex');
+  }
+
+  /**
+   * Hash sha256(codigo + salt). Sufiente pra 6 dígitos × TTL 10min (não
+   * justifica work factor bcrypt). Output 64 chars hex.
+   */
+  static hashOtp(codigo: string, salt: string): string {
+    return crypto.createHash('sha256').update(codigo + salt).digest('hex');
+  }
+
+  /**
+   * Comparação constant-time via crypto.timingSafeEqual. Evita timing attack
+   * que vazaria info por diferença de tempo de resposta entre código próximo
+   * vs distante.
+   */
+  static compararOtp(codigo: string, salt: string, hashEsperado: string): boolean {
+    const calculado = ConvitesConvenioService.hashOtp(codigo, salt);
+    // Mesmo comprimento garantido pelos hashes sha256 (64 hex) — defensivo:
+    if (calculado.length !== hashEsperado.length) return false;
+    const bufA = Buffer.from(calculado, 'hex');
+    const bufB = Buffer.from(hashEsperado, 'hex');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
+
+  /**
+   * Gera código OTP novo + envia por WhatsApp pro `convite.telefone` (NUNCA
+   * pra outro número). Atualiza otpCodigoHash/Salt/ExpiresAt + carimbo
+   * envio + incremento reenvios + reset tentativas (novo código = nova chance).
+   *
+   * Guards (ordem):
+   *  1. Convite vivo (existe + não usado + não expirado).
+   *  2. otpBloqueadoAte > now → HTTP 429 'bloqueado' (5 erros consumiram cota).
+   *  3. otpReenvios >= 3 → HTTP 429 'reenvios_esgotados'.
+   *  4. otpUltimoEnvioEm + 60s > now → HTTP 429 'cooldown' (informa segundos restantes).
+   *
+   * Best-effort no envio WA: se WA falhar, NÃO reverte a gravação do hash
+   * (admin pode re-emitir via reenvio); retorna { whatsappEnviado: false, erro }.
+   */
+  async solicitarOtp(token: string): Promise<{
+    ok: boolean;
+    expiraEmSegundos: number;
+    reenviosRestantes: number;
+    whatsappEnviado: boolean;
+    whatsappErro?: string;
+  }> {
+    const convite = await this.prisma.conviteConvenioMembro.findUnique({
+      where: { token },
+      include: { convenio: { select: { empresaNome: true } } },
+    });
+    if (!convite) {
+      throw new NotFoundException('Convite indisponível.');
+    }
+    if (convite.usedAt) {
+      throw new BadRequestException('Convite já utilizado.');
+    }
+    if (convite.expiresAt <= new Date()) {
+      throw new BadRequestException('Convite expirado.');
+    }
+
+    const now = new Date();
+
+    // Guard 1: bloqueio temporário por exaustão de tentativas
+    if (convite.otpBloqueadoAte && convite.otpBloqueadoAte > now) {
+      const segundos = Math.ceil((convite.otpBloqueadoAte.getTime() - now.getTime()) / 1000);
+      throw new HttpException(
+        {
+          erro: 'bloqueado',
+          mensagem: `Muitas tentativas erradas. Tente novamente em ${segundos} segundos.`,
+          desbloqueadoEm: convite.otpBloqueadoAte,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Guard 2: reenvios esgotados
+    if (convite.otpReenvios >= ConvitesConvenioService.OTP_MAX_REENVIOS) {
+      throw new HttpException(
+        {
+          erro: 'reenvios_esgotados',
+          mensagem:
+            `Limite de ${ConvitesConvenioService.OTP_MAX_REENVIOS} reenvios atingido. ` +
+            `Solicite um novo convite à empresa.`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Guard 3: cooldown entre reenvios
+    if (convite.otpUltimoEnvioEm) {
+      const proximoLiberadoEm = new Date(
+        convite.otpUltimoEnvioEm.getTime() + ConvitesConvenioService.OTP_COOLDOWN_SEG * 1000,
+      );
+      if (proximoLiberadoEm > now) {
+        const aguarde = Math.ceil((proximoLiberadoEm.getTime() - now.getTime()) / 1000);
+        throw new HttpException(
+          {
+            erro: 'cooldown',
+            mensagem: `Aguarde ${aguarde} segundos para solicitar um novo código.`,
+            liberadoEm: proximoLiberadoEm,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    // Gera código + salt + hash; expira em 10min; zera tentativas (novo código,
+    // nova chance — caso atacante esteja brute-forçando o anterior, ele não
+    // pode somar tentativas no novo).
+    const codigo = ConvitesConvenioService.gerarCodigoOtp();
+    const salt = ConvitesConvenioService.gerarSaltOtp();
+    const hash = ConvitesConvenioService.hashOtp(codigo, salt);
+    const expiresAt = new Date(now.getTime() + ConvitesConvenioService.OTP_TTL_MIN * 60 * 1000);
+
+    const atualizado = await this.prisma.conviteConvenioMembro.update({
+      where: { id: convite.id },
+      data: {
+        otpCodigoHash: hash,
+        otpSalt: salt,
+        otpExpiresAt: expiresAt,
+        otpUltimoEnvioEm: now,
+        otpReenvios: { increment: 1 },
+        otpTentativas: 0,
+      },
+      select: { otpReenvios: true },
+    });
+
+    // Envia WA pro telefone DO CONVITE (NUNCA pra outro número)
+    const texto =
+      `Olá, ${convite.nomeConvidado}!\n\n` +
+      `Seu código de confirmação CoopereBR (convênio *${convite.convenio.empresaNome}*):\n\n` +
+      `*${codigo}*\n\n` +
+      `Válido por ${ConvitesConvenioService.OTP_TTL_MIN} minutos.\n\n` +
+      `Se você não solicitou, ignore esta mensagem.`;
+
+    let whatsappEnviado = true;
+    let whatsappErro: string | undefined;
+    try {
+      await this.waSender.enviarMensagem(convite.telefone, texto, {
+        tipoDisparo: 'convite_convenio_otp',
+        cooperativaId: convite.cooperativaId,
+      });
+    } catch (err) {
+      whatsappEnviado = false;
+      whatsappErro = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(
+        `[convite-otp] Falha WA telefone=${convite.telefone.slice(0, 4)}***${convite.telefone.slice(-4)}: ${whatsappErro}`,
+      );
+    }
+
+    this.logger.log(
+      `[convite-otp] Código emitido: conviteId=${convite.id} ` +
+        `telefone=${convite.telefone.slice(0, 4)}***${convite.telefone.slice(-4)} ` +
+        `reenvio=${atualizado.otpReenvios}/${ConvitesConvenioService.OTP_MAX_REENVIOS} ` +
+        `expira=${expiresAt.toISOString()} wa=${whatsappEnviado}`,
+    );
+
+    return {
+      ok: true,
+      expiraEmSegundos: ConvitesConvenioService.OTP_TTL_MIN * 60,
+      reenviosRestantes: ConvitesConvenioService.OTP_MAX_REENVIOS - atualizado.otpReenvios,
+      whatsappEnviado,
+      whatsappErro,
+    };
+  }
+
+  /**
+   * Valida código OTP digitado pelo destinatário. Mantém comparação
+   * constant-time (timingSafeEqual). Em erro, incrementa tentativas; ao
+   * atingir limite, marca otpBloqueadoAte=+1h.
+   *
+   * Casos de retorno:
+   *  - OK: { ok: true } + marca otpValidadoEm=now (consumível 1× pela Fatia 2c)
+   *  - código vazio/curto: 400 erro 'codigo_invalido' (sem contar como tentativa)
+   *  - sem OTP solicitado ainda: 400 erro 'sem_codigo_pendente'
+   *  - expirado: 400 erro 'expirado' + podeReenviar:true
+   *  - bloqueado: 429 erro 'bloqueado' + desbloqueadoEm
+   *  - errado: 400 erro 'codigo_invalido' + tentativasRestantes (após increment)
+   *  - errado E atingiu limite: 429 erro 'bloqueado' + desbloqueadoEm
+   */
+  async validarOtp(token: string, codigo: string): Promise<{ ok: true }> {
+    if (!codigo || typeof codigo !== 'string' || !/^\d{6}$/.test(codigo)) {
+      throw new BadRequestException({
+        erro: 'codigo_invalido',
+        mensagem: 'Código deve conter 6 dígitos.',
+      });
+    }
+
+    const convite = await this.prisma.conviteConvenioMembro.findUnique({
+      where: { token },
+    });
+    if (!convite) throw new NotFoundException('Convite indisponível.');
+    if (convite.usedAt) throw new BadRequestException('Convite já utilizado.');
+    if (convite.expiresAt <= new Date()) {
+      throw new BadRequestException('Convite expirado.');
+    }
+
+    const now = new Date();
+
+    // Bloqueio temporário ativo
+    if (convite.otpBloqueadoAte && convite.otpBloqueadoAte > now) {
+      const segundos = Math.ceil((convite.otpBloqueadoAte.getTime() - now.getTime()) / 1000);
+      throw new HttpException(
+        {
+          erro: 'bloqueado',
+          mensagem: `Muitas tentativas erradas. Tente novamente em ${segundos} segundos.`,
+          desbloqueadoEm: convite.otpBloqueadoAte,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Não há código pendente (nunca solicitado)
+    if (!convite.otpCodigoHash || !convite.otpSalt || !convite.otpExpiresAt) {
+      throw new BadRequestException({
+        erro: 'sem_codigo_pendente',
+        mensagem: 'Solicite o código primeiro.',
+      });
+    }
+
+    // Código expirou (TTL 10min)
+    if (convite.otpExpiresAt <= now) {
+      throw new BadRequestException({
+        erro: 'expirado',
+        mensagem: 'Código expirado. Solicite um novo.',
+        podeReenviar:
+          convite.otpReenvios < ConvitesConvenioService.OTP_MAX_REENVIOS,
+      });
+    }
+
+    // Comparação constant-time
+    const ok = ConvitesConvenioService.compararOtp(
+      codigo,
+      convite.otpSalt,
+      convite.otpCodigoHash,
+    );
+
+    if (ok) {
+      // Valida — marca otpValidadoEm (Fatia 2c consome em /auto-inscrever)
+      await this.prisma.conviteConvenioMembro.update({
+        where: { id: convite.id },
+        data: { otpValidadoEm: now },
+      });
+      this.logger.log(
+        `[convite-otp] Código VALIDADO: conviteId=${convite.id} ` +
+          `tentativas=${convite.otpTentativas}/${ConvitesConvenioService.OTP_MAX_TENTATIVAS}`,
+      );
+      return { ok: true };
+    }
+
+    // Errado — incrementa tentativas; se atingir limite, bloqueia
+    const novasTentativas = convite.otpTentativas + 1;
+    const atingiuLimite = novasTentativas >= ConvitesConvenioService.OTP_MAX_TENTATIVAS;
+    const otpBloqueadoAte = atingiuLimite
+      ? new Date(now.getTime() + ConvitesConvenioService.OTP_BLOQUEIO_HORAS * 60 * 60 * 1000)
+      : convite.otpBloqueadoAte;
+
+    await this.prisma.conviteConvenioMembro.update({
+      where: { id: convite.id },
+      data: {
+        otpTentativas: novasTentativas,
+        otpBloqueadoAte,
+      },
+    });
+
+    this.logger.warn(
+      `[convite-otp] Código ERRADO: conviteId=${convite.id} ` +
+        `tentativas=${novasTentativas}/${ConvitesConvenioService.OTP_MAX_TENTATIVAS}` +
+        (atingiuLimite ? ' → BLOQUEADO por 1h' : ''),
+    );
+
+    if (atingiuLimite) {
+      throw new HttpException(
+        {
+          erro: 'bloqueado',
+          mensagem: 'Muitas tentativas erradas. Tente novamente em 1 hora.',
+          desbloqueadoEm: otpBloqueadoAte,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    throw new BadRequestException({
+      erro: 'codigo_invalido',
+      mensagem: 'Código incorreto.',
+      tentativasRestantes:
+        ConvitesConvenioService.OTP_MAX_TENTATIVAS - novasTentativas,
+    });
   }
 
   // ─── Helpers privados ────────────────────────────────────────────────
