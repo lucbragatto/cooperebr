@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-02 noite tarde — Finalização Convênio Médico (Pontos 1+2a) + HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1**. 7 commits trabalho em 1 sessão Code maratona pós-M20: **Ponto 1** (`cfb4208`) modo teste libera fatura no cadastro + preserva vínculo convênio sem UC · **Ponto 2a** (`3665099`) tarifa fixa R$/kWh negociada com a empresa (enum `TipoTarifaEmpresa` + `tarifaFixaKwhEmpresa`) · **HOTFIX** root-cause do 400 PATCH = `src/agents` untracked com 15 erros TS quebrava build há 3 dias → dist velho rejeitando campos novos. Fix: excluir `src/agents` do `tsconfig.build.json`. **LIÇÃO: "build passou" mentia — sempre verificar dist.** · **D-FISCAL-2.5** (`2666412`) `/dashboard/contabilidade/convenios` virou lente fiscal read-only sobre ContratoConvenio legado + aposentou CRUD CT (deprecated + WARN) + deletou Convenio CT órfão "teste" · **D-FISCAL-2.6** (`13eb1d7`) corrigiu exemplo Hangar no relatório conformidade 31/05 · **Débitos** (`37fa529`) catalogados 3 novos pós-investigação 6 sub-agentes: D-novo-SEC-AUTOINSCRICAO-CUSTEADA P1 (vetor fraude link público) + D-novo-PORTAL-CUSTEADO P2 + D-novo-CONVITE-CONVENIO P1 reframe · **Sprint Convite-Convênio Fatia 1** (`12bff1e`) schema delta aditivo: enum `StatusMembroConvenio` +4 valores (PENDENTE_APROVACAO_EMPRESA/ADMIN + REJEITADO_*) + enum `AdmissionOrigem` (ADMIN_MANUAL/CSV/CONVITE_PUBLICO) + 6 campos novos em `ConvenioCooperado` + 2 quotas em `ContratoConvenio` (`limiteMembros` + `kwhAlocadoMaxMensal`) + model novo `AprovacaoConvenioMembro` (magic link da empresa). **3 convênios + 215 membros intactos** (defaults preservam tudo). **Decisões travadas:** auth aprovação empresa = HÍBRIDO (magic link no núcleo + login portal como camada, mesmo endpoint); SEM_UC rejeitado = fica PENDENTE pro admin; invite = STATELESS `?conv=`; rate-limit 3/h CPF + 30-60/h IP. **Estado:** convênio médico USÁVEL pelo admin ponta-a-ponta (cadastro modo teste + tarifa fixa/% + consolidada + lente fiscal). Convite com aprovação dupla = sprint em andamento (Fatia 1/8 feita). Smoke E2E real Caso 1 ainda pendente Luciano. **IDEIA NOVA (Luciano):** Fatia 9 = portal self-service da empresa conveniada (gera + envia convite via WA/email + aprova pendentes na própria tela) — depende de provisionar login portal pra empresa. Detalhe: `docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md`.
+> Última atualização: **2026-06-03 — Sprint Convite-Convênio NÚCLEO BACKEND COMPLETO** (Fatias 1+2a+2b+2c+2c.1+3 + chore higiene build). 7 commits em 1 sessão Code maratona: **2a** (`d6a4a50`) ConviteConvenioMembro per-recipient + envio WhatsApp + feature flag CONVITE_OTP_ATIVO bloqueia caminho legado · **2b** (`29e01c0`) OTP 6 dígitos sha256+salt rotativo + crypto.timingSafeEqual + 5 tentativas (bloqueio 1h) + 3 reenvios (cooldown 60s) — WhatsApp REAL disparado pro Luciano · **2c** (`4c3ee0a`) /auto-inscrever refatorado pra exigir `token`+`otp validado` (janela 30min) + tenant resolvido DO CONVITE (anti-spoof) + consume-once via update where `usedAt:null` · **2c.1** (`e4c7348`) hardening atomicidade — Cooperado+Membro+magic link+consume-once em `$transaction Serializable` única + removido helper `rollbackConviteUsedAt` + `cooperado.delete .catch` compensatório · **chore** (`7b14287`) tsconfig.build+`.gitignore` ignoram `tmp_*.ts`+`*smoke*.ts` (anti build-poison) · **3** (`c432cb8`) aprovação 3 portas — empresa magic link (POST /publico/aprovacao-membro/:token + ip+ua audit) + admin dashboard (5 endpoints aprovar/solicitar-doc/rejeitar/reenviar/cleanup) + state machine 4 estados (PENDENTE_APROVACAO_EMPRESA → PENDENTE_APROVACAO_ADMIN → MEMBRO_ATIVO; REJEITADO_*/DESLIGADO terminais) + GUARD strict admin NÃO PULA empresa. Schema: 1 model NOVO (ConviteConvenioMembro 20 cols) + 3 colunas em ConvenioCooperado (documentacaoSolicitadaEm + aprovadoPorAdminUserId + rejeitadoPorAdminUserId rel Usuario). 215 membros + 3 convênios vivos preservados. **187/187 specs convenios verdes** (85 novos no sprint, zero regressão). 5 smokes vivos rodados (3 com WhatsApp REAL no Luciano `5527981341348`). Estado: **backend do sprint = 100% funcional**, núcleo seguro atômico fechado, frontend ZERO (Fatias 4-5 próximas), notif WA/email rich pendente (Fatia 6), portal self-service empresa = Fatia 9 futura. Detalhe: `docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md`.
+
+> Histórico: **2026-06-02 noite tarde — Finalização Convênio Médico (Pontos 1+2a) + HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1**. 7 commits trabalho em 1 sessão Code maratona pós-M20: **Ponto 1** (`cfb4208`) modo teste libera fatura no cadastro + preserva vínculo convênio sem UC · **Ponto 2a** (`3665099`) tarifa fixa R$/kWh negociada com a empresa (enum `TipoTarifaEmpresa` + `tarifaFixaKwhEmpresa`) · **HOTFIX** root-cause do 400 PATCH = `src/agents` untracked com 15 erros TS quebrava build há 3 dias → dist velho rejeitando campos novos. Fix: excluir `src/agents` do `tsconfig.build.json`. **LIÇÃO: "build passou" mentia — sempre verificar dist.** · **D-FISCAL-2.5** (`2666412`) `/dashboard/contabilidade/convenios` virou lente fiscal read-only sobre ContratoConvenio legado + aposentou CRUD CT (deprecated + WARN) + deletou Convenio CT órfão "teste" · **D-FISCAL-2.6** (`13eb1d7`) corrigiu exemplo Hangar no relatório conformidade 31/05 · **Débitos** (`37fa529`) catalogados 3 novos pós-investigação 6 sub-agentes: D-novo-SEC-AUTOINSCRICAO-CUSTEADA P1 (vetor fraude link público) + D-novo-PORTAL-CUSTEADO P2 + D-novo-CONVITE-CONVENIO P1 reframe · **Sprint Convite-Convênio Fatia 1** (`12bff1e`) schema delta aditivo: enum `StatusMembroConvenio` +4 valores (PENDENTE_APROVACAO_EMPRESA/ADMIN + REJEITADO_*) + enum `AdmissionOrigem` (ADMIN_MANUAL/CSV/CONVITE_PUBLICO) + 6 campos novos em `ConvenioCooperado` + 2 quotas em `ContratoConvenio` (`limiteMembros` + `kwhAlocadoMaxMensal`) + model novo `AprovacaoConvenioMembro` (magic link da empresa). **3 convênios + 215 membros intactos** (defaults preservam tudo). **Decisões travadas:** auth aprovação empresa = HÍBRIDO (magic link no núcleo + login portal como camada, mesmo endpoint); SEM_UC rejeitado = fica PENDENTE pro admin; invite = STATELESS `?conv=`; rate-limit 3/h CPF + 30-60/h IP. **Estado:** convênio médico USÁVEL pelo admin ponta-a-ponta (cadastro modo teste + tarifa fixa/% + consolidada + lente fiscal). Convite com aprovação dupla = sprint em andamento (Fatia 1/8 feita). Smoke E2E real Caso 1 ainda pendente Luciano. **IDEIA NOVA (Luciano):** Fatia 9 = portal self-service da empresa conveniada (gera + envia convite via WA/email + aprova pendentes na própria tela) — depende de provisionar login portal pra empresa. Detalhe: `docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md`.
 
 > Histórico: **2026-06-02 noite — M20 Sprint D-FISCAL-2.4 Caso 1 custeio 100% completa**. 8 commits trabalho (`80d3e75` 2.4.4a → `74858bb` 2.4.4a.1 → `f593917` 2.4.4a.2 → `b2e0cad` 2.4.4b → `3fa9a34` 2.4.4c → `9a201cb` 2.4.4d → `a135934` 2.4.4e → `14d0948` 2.4.4f) + 1 commit fechamento em 1 sessão Code maratona. Entregue **CASO 1 ponta-a-ponta** (empresa cooperada paga total): **2.4.4a** motor consolidado + UC sintética `CONSOLIDADOR-*` + plano técnico "Consolidador de Custeio" + helper compartilhado `tarifa-helper.ts` · **2.4.4a.1** UC própria da empresa COM_UC entra no total (dedup defensivo Map<ucId>) · **2.4.4a.2** invariante custeado⟺consolidado eliminando double-bill matematicamente (filtro `plano.custeadoPorConvenio=true`) · **2.4.4b** cron mensal `@AsPlatform()` mês fechado + endpoints REST + emissão Asaas com guard `isAmbienteReal()` · **2.4.4c** hook `darBaixa` roteia consolidada paga pro `criarLancamentoConvenioContrato` (natureza convênio AUXILIAR/PRÓPRIO configurável) · **2.4.4d** tela admin `/dashboard/convenios/[id]/cobrancas-consolidadas` + estorno gate apuração FECHADA + HelpBox · **2.4.4e** UI config no form do convênio (pagador/base/desconto/kwhAlocado) + validação service-level · **2.4.4f** ALOCACAO_FIXA gera sem membros + 3 banners feedback claro (CRIADA verde / JA_EXISTE azul / SEM_MEMBROS amber). **200/200 specs verde** convenios + cobrancas + planos + motor-proposta · `lint:tenant` zero novos · zero regressão · 2 débitos P3 catalogados (Dialog backdrop blur + tarifa-fallback). CV-2026-0001 "Clinica teste" ALOCACAO_FIXA 200000 kWh × 20% desconto **PRONTA pra Luciano fazer smoke E2E real** (R$ 126.289,60 esperado). **Próximo Code: 3 caminhos** — (1) smoke E2E real CV-2026-0001 OU (2) D-FISCAL-2.5 (aposentar `/contabilidade/convenios` + migrar CT) OU (3) D-FISCAL-2.6 (corrigir relatório 31/05 Hangar errado). Detalhe: `docs/sessoes/2026-06-02-dfiscal-244-caso1-completo.md`.
 
@@ -24,6 +26,109 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-03 (Code — Sprint Convite-Convênio NÚCLEO BACKEND COMPLETO)
+
+**7 commits trabalho** em 1 sessão Code maratona (6 feats + 1 chore + commit fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `d6a4a50` | feat | **Fatia 2a** — `ConviteConvenioMembro` per-recipient (20 cols) + `ConvitesConvenioService` + 4 endpoints admin (POST cria + GET lista + DELETE cancela + POST reenvia) + endpoint @Public `GET /publico/convites/:token` (defesa LGPD sufixo telefone) + feature flag `CONVITE_OTP_ATIVO` bloqueia caminho legado |
+| `29e01c0` | feat | **Fatia 2b** — OTP 6 dígitos via WhatsApp pro telefone DO CONVITE (nunca pra outro): helpers `gerarCodigoOtp` + `gerarSaltOtp` (rotativo) + `hashOtp` sha256 + `compararOtp` constant-time `crypto.timingSafeEqual`. Política: TTL 10min + max 5 tentativas (bloqueio 1h) + max 3 reenvios (cooldown 60s). 2 endpoints @Public: `solicitar-otp` (5/min IP) + `validar-otp` (10/min IP). Smoke vivo: WA REAL entregue pro Luciano |
+| `4c3ee0a` | feat | **Fatia 2c** — `/auto-inscrever` refatorado: DTO removeu `cooperativaId`+`convenioId` (anti-spoof) + EXIGE `token`+`otp validado` (janela 30min). Tenant + convênio resolvidos DO CONVITE. Consume-once via `update where {id, usedAt:null}` (P2025 = race 409). NÃO delega mais pra `cadastroWebV2` — cria Cooperado direto (`tipoCooperado=SEM_UC`) + chama `adicionarMembro` (PENDENTE + magic link). Tudo restante (UC/Contrato) vem na aprovação |
+| `e4c7348` | fix | **Fatia 2c.1 HARDENING** — `/auto-inscrever` antes criava Cooperado e Membro SEM tx → janela Membro sem AprovacaoConvenioMembro. Solução: única `$transaction(IsolationLevel.Serializable)` envolvendo consume-once + cooperado.create + adicionarMembro(tx) + cross-ref. Removidos: helper `rollbackConviteUsedAt` + `cooperado.delete .catch` compensatório. Rollback nativo do Postgres faz o trabalho. 3 specs integrados verdes |
+| `7b14287` | chore | **Higiene build** — `tsconfig.build.json` exclude `tmp_*.ts`+`**/tmp_*.ts`+`**/*smoke*.ts`. `.gitignore` bloqueia commits acidentais. Causa raiz: `tmp_smoke*.ts` órfãos no root quebravam o build (Fatia 2c). 5+5+1 órfãos limpos |
+| `c432cb8` | feat | **Fatia 3** — Aprovação 3 portas. Schema +3 campos audit (documentacaoSolicitadaEm + aprovadoPorAdminUserId + rejeitadoPorAdminUserId rel Usuario). `ConvenioAprovacaoService` 550+ linhas com 8 métodos. **5 endpoints admin novos** (`listar-membros-pendentes` + `aprovar-admin` + `solicitar-documentacao` + `rejeitar-admin` + `reenviar-aprovacao-empresa`) + 1 refinado (DELETE rota por status: ATIVO=soft-delete legado, PENDENTE_*/REJEITADO_*/DESLIGADO=cleanup hard delete). **2 endpoints @Public** (`GET /publico/aprovacao-membro/:token` + `POST .../:token { decisao, motivo? }` com captura IP+UA pra audit). State machine 4 estados + GUARD strict admin NÃO PULA empresa |
+| _(este)_ | docs | fechamento sessão 03/06 |
+
+**Schema delta da sessão (aditivo, 2 `db push`):**
+
+| Mudança | Origem |
+|---|---|
+| model NOVO `ConviteConvenioMembro` (20 cols) | Fatia 2a |
+| ContratoConvenio.convitesMembro back-rel | Fatia 2a |
+| ConvenioCooperado.convite back-rel | Fatia 2a |
+| ConvenioCooperado.documentacaoSolicitadaEm | Fatia 3 |
+| ConvenioCooperado.aprovadoPorAdminUserId + rel Usuario | Fatia 3 |
+| ConvenioCooperado.rejeitadoPorAdminUserId + rel Usuario | Fatia 3 |
+| Usuario.membrosAprovadosPorAdmin + membrosRejeitadosPorAdmin back-rels | Fatia 3 |
+
+**215 membros + 3 convênios + 0 convites pré-existentes intactos.**
+
+**11 endpoints novos no sprint (5 admin + 6 público):**
+- Admin: 4 da Fatia 2a + 5 da Fatia 3 + DELETE refinado = 10
+- Público: 1 Fatia 2a + 2 Fatia 2b + 1 Fatia 2c.1 + 2 Fatia 3 = 6
+
+**State machine ConvenioCooperado (Fatia 3 cravou):**
+
+```
+PENDENTE_APROVACAO_EMPRESA (criado via auto-inscrever 2c.1)
+    ├─ empresa magic link APROVAR → PENDENTE_APROVACAO_ADMIN
+    ├─ empresa magic link REJEITAR → MEMBRO_REJEITADO_EMPRESA + motivo
+    ├─ admin DELETE → cleanupPendente (hard delete + magic link + clear convite cross-ref)
+    └─ admin REENVIA → regen token + WA
+
+PENDENTE_APROVACAO_ADMIN
+    ├─ admin APROVA → MEMBRO_ATIVO + ativo=true ← ENTRA NA CONSOLIDADA
+    ├─ admin SOLICITA DOC → mantém status + N DocumentoCooperado PENDENTE
+    └─ admin REJEITA → MEMBRO_REJEITADO_ADMIN + audit userId
+
+MEMBRO_REJEITADO_* / MEMBRO_DESLIGADO → terminais
+```
+
+GUARD strict: **admin NÃO PULA empresa** (decisão Luciano). Em PENDENTE_APROVACAO_EMPRESA admin só DELETE/REENVIAR.
+
+**Especificações OTP travadas:**
+- TTL 10min · max 5 tentativas (bloqueio 1h) · max 3 reenvios · cooldown 60s · hash sha256+salt rotativo + timingSafeEqual constant-time
+
+**Atomicidade ($tx Serializable em todos os pontos críticos):**
+- `/auto-inscrever`: consume + cooperado + adicionarMembro + cross-ref (Fatia 2c.1)
+- `decidirAprovacaoEmpresa`: update aprovacao + updateMany membro guard status (Fatia 3)
+- `aprovarPorAdmin`: updateMany membro guard status (Fatia 3)
+- `solicitarDocumentacao`: update membro + upsert N DocumentoCooperado (Fatia 3)
+- `rejeitarPorAdmin`: updateMany membro guard status (Fatia 3)
+- `cleanupPendente`: deleteMany aprovacao + updateMany convite + delete membro (Fatia 3)
+
+**5 smokes vivos rodados:**
+1. Fatia 2b: WhatsApp REAL pro Luciano `5527981341348` com código OTP entregue
+2. Fatia 2c E2E: auto-inscrever criou Cooperado + Membro PENDENTE + AprovacaoConvenioMembro atomicamente
+3. Fatia 2c.1 atomicidade (3 specs integrados verdes — sucesso + rollback total + consume-once race)
+4. Fatia 3 magic link empresa: GET + POST APROVAR + 2º POST 409 single-use + audit IP/UA capturado
+5. Cleanup E2E pós-smoke (respeitando FKs)
+
+**Specs (85 novos no sprint, suite convenios 187/187):**
+- `convenios-membros-origem.spec.ts` (Fatia 1): 11/11
+- `convites-convenio.service.spec.ts` (Fatia 2a): 25/25
+- `convites-convenio-otp.spec.ts` (Fatia 2b): 23/23
+- `publico-auto-inscrever-atomico.spec.ts` (Fatia 2c.1): 3/3
+- `convenios-aprovacao.service.spec.ts` (Fatia 3): 26/26
+
+**Estado:**
+- **Backend do Sprint Convite-Convênio = 100% funcional + atômico.**
+- **Convênio médico Caso 1 D-FISCAL-2.4 segue intacto.**
+- **CV-2026-0001 smoke E2E real ainda pendente Luciano** (carry-over).
+- **Frontend ZERO** — endpoints sem UI.
+- **Notificações in-app only** — WA/email rich = Fatia 6.
+
+**Próximo bloco — Fatia 4 frontend** (`/convite/[token]` 3 etapas + `/aprovacao-membro/[token]` página empresa decidir).
+
+**Detalhe:** `docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md`.
+
+**Decisões aplicadas:**
+- Decisão 23 (Fase 1 read-only) — 4 vezes (Fatia 2 inicial, reframe OTP, Fatia 2c, Fatia 3)
+- Decisão 24 (frase de retomada local único) — preservada
+- Regra rebuild + verificar dist — aplicada em cada commit (grep no dist)
+- Regra `isAmbienteReal()` em endpoints dev
+- Regra contatos teste 14/05 — usado nos 5 smokes
+- Regra HELP obrigatório 19/05 — textos cravados pra Fatias 4-5
+- Padrão `ConviteProprietarioService` M31 (token 64 hex + TTL 7d + idempotência reuso) espelhado em 2 services
+- Schema aditivo sem `--accept-data-loss`
+- `$transaction Serializable` em transições críticas
+- `@TenantResource + @AuditLog` em handlers admin novos
+- Admin NÃO PULA empresa (decisão Luciano)
+- Token single-use (`usedAt + decisao`) + magic link defesa LGPD (sufixos)
 
 ---
 
@@ -1472,13 +1577,163 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento da sessão 02/06 noite tarde (Finalização Convênio Médico +
-   HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1).
+   fechamento da sessão 03/06 (Sprint Convite-Convênio NÚCLEO BACKEND
+   COMPLETO — Fatias 1+2a+2b+2c+2c.1+3 + chore higiene build).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online.
 
 PASSO 1 — Frase comandante (próximo Code arranca aqui):
+
+RODAR FATIA 4 DO SPRINT CONVITE-CONVÊNIO — FRONTEND DAS 2 PÁGINAS PÚBLICAS.
+
+Implementar:
+
+A) /convite/[token] — 3 etapas (token + OTP + cadastro), single-page:
+   1. Componente "ValidarToken" → GET /publico/convites/:token → mostra
+      empresaNome + nomeConvidado + telefoneSufixo + status (otpJaValidado?).
+      Erros amigáveis (expirado/inexistente/usado) com botão "Voltar".
+   2. Componente "SolicitarOTP" → POST /publico/convites/:token/solicitar-otp
+      → mostra "Código enviado pro WhatsApp ...XX99 — válido 10min".
+      Botão "Reenviar" desabilitado durante cooldown 60s (contador regressivo).
+   3. Componente "ValidarOTP" → POST .../validar-otp { codigo: 6 dígitos }
+      → input numérico 6 boxes (auto-advance entre dígitos). Erros: tentativas
+      restantes + bloqueio com countdown.
+   4. Componente "PreencherCadastro" → POST /publico/convenios/auto-inscrever
+      { token, cpf, nome, email, telefone?, consumoMedioKwh? } →
+      Sucesso: tela "Cadastro enviado, aguarde aprovação da empresa".
+
+B) /aprovacao-membro/[token] — página da empresa decidir:
+   1. GET /publico/aprovacao-membro/:token → mostra empresaNome (sua),
+      nomeConvidado, cpfSufixo, telefoneSufixo, dataAdesao.
+   2. HelpBox proeminente: "Você está confirmando que [nome] é seu funcionário
+      ou médico..." (texto cravado na Fatia 3 — regra 19/05).
+   3. 2 botões grandes: CONFIRMAR (verde) e RECUSAR (textarea motivo obrigatório).
+   4. POST .../:token { decisao, motivo? } → tela "Decisão registrada" +
+      orienta cooperado.
+
+Pré-requisitos Fase 1 read-only OBRIGATÓRIOS:
+1. Mapear UI existente de cadastro público /cadastro (componentes shadcn,
+   padrão wizard, validação formulário, regra HELP 19/05 com 3 banners
+   feedback).
+2. Identificar componentes reusáveis (HelpBox, banners, selects nativos
+   em dialogs/wizards — regra 19/05).
+3. Confirmar Next.js App Router pattern pra páginas dinâmicas [token].
+4. Confirmar como o frontend consome erros do backend (ConflictException
+   com message JSON tipo {erro:'cooldown', mensagem, liberadoEm}).
+5. Listar componentes a criar vs reusar + estimativa.
+
+Fatia 3 já entregou backend 100% pronto + textos HELP cravados:
+- "Magic link empresa": Você está confirmando que [nome] é seu funcionário/
+  médico. Ao CONFIRMAR, ele entra no convênio e a energia dele passa a ser
+  custeada pela sua empresa. Ao RECUSAR, ele não é incluído. Ex: confirme
+  só quem realmente trabalha na sua empresa.
+
+Decisão 23: SEMPRE Fase 1 read-only ANTES de codar.
+LIÇÃO D-novo-AS/BN: frontend componente NOVO exige npm run build + pm2
+restart cooperebr-frontend. HMR NÃO basta.
+
+CONTEXTO DA SESSÃO ANTERIOR (03/06 — 7 commits d6a4a50..c432cb8):
+
+- d6a4a50 Fatia 2a: ConviteConvenioMembro per-recipient (model novo 20
+  cols + 4 endpoints admin + 1 público GET valida token + envio WA +
+  feature flag CONVITE_OTP_ATIVO bloqueia caminho legado).
+- 29e01c0 Fatia 2b: OTP 6 dígitos sha256+salt rotativo + timingSafeEqual.
+  Política: TTL 10min + max 5 tentativas (bloqueio 1h) + max 3 reenvios
+  (cooldown 60s). 2 endpoints @Public solicitar-otp + validar-otp.
+- 4c3ee0a Fatia 2c: /auto-inscrever refatorado pra exigir token+otp
+  validado (30min). Tenant resolvido do convite (anti-spoof). Consume-once.
+- e4c7348 Fatia 2c.1 HARDENING: tudo em $transaction Serializable única
+  — Cooperado + Membro + magic link + consume-once atômicos. Removido
+  rollbackConviteUsedAt + cooperado.delete .catch.
+- 7b14287 chore higiene build: tsconfig + .gitignore ignoram tmp_/*smoke*.
+- c432cb8 Fatia 3: aprovação 3 portas. Schema +3 campos audit
+  (documentacaoSolicitadaEm + aprovado/rejeitadoPorAdminUserId rel
+  Usuario). ConvenioAprovacaoService 550+ linhas + 7 endpoints (5 admin
+  + 2 @Public). State machine 4 estados (PENDENTE_APROVACAO_EMPRESA →
+  PENDENTE_APROVACAO_ADMIN → MEMBRO_ATIVO; REJEITADO_*/DESLIGADO
+  terminais). GUARD strict: admin NÃO PULA empresa.
+
+187/187 specs convenios verdes (85 novos no sprint). 5 smokes vivos
+rodados (3 com WhatsApp REAL pro Luciano 5527981341348).
+
+ENTREGAS PRONTAS PRA SMOKE COMPLETO (carry-overs Luciano):
+- CV-2026-0001 Caso 1 custeio (modo PERCENTUAL R$ 126.289,60 ou
+  VALOR_FIXO R$ 160.000,00).
+- Fluxo convite-convênio backend ponta-a-ponta (sem UI ainda).
+
+CONSTRAINTS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Decisão 24: frase de retomada local único (esta seção).
+- Multi-tenant em toda query Prisma; @TenantResource + @AuditLog em
+  handlers admin.
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV).
+- Regra contatos teste: 27981341348 + lucbragatto@gmail.com.
+- Math.round(x*100)/100 em todo valor monetário.
+- Schema aditivo sem --accept-data-loss; ritual PM2.
+- Transações Prisma Serializable em operações multi-modelo críticas.
+- ⚠️ Lição D-novo-AS/BN: frontend componente NOVO = npm run build + pm2
+  restart cooperebr-frontend (HMR NÃO basta).
+- ⚠️ LIÇÃO BUILD-POISON: tmp_*.ts/smoke*.ts já estão excluídos (chore
+  7b14287). Não criar mais no root. Use scripts/ se for smoke ad-hoc.
+- ⚠️ LIÇÃO @Throttle: spec integrado HTTP bate rate-limit entre runs
+  jest. Usar smoke ts-node single-run em vez disso.
+- Regra HELP 19/05: TODA tela nova exibe help inline contextual.
+- Selects NATIVOS em Dialog/wizard (não Shadcn select que tem z-index issue).
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md
+   (contexto pleno desta sprint — 6 fatias)
+4. backend/src/convenios/convites-convenio.service.ts (Fatia 2a+2b)
+5. backend/src/convenios/convenios-aprovacao.service.ts (Fatia 3)
+6. backend/src/publico/publico.controller.ts (6 endpoints @Public)
+7. web/app/cadastro/page.tsx (padrão wizard cadastro público
+   referência pra /convite/[token])
+8. web/components/convenios/ConvenioCusteioBloco.tsx (padrão HelpBox +
+   banner feedback)
+9. web/lib/api.ts (axios instance pra chamadas backend)
+10. CLAUDE.md + .claude/CLAUDE.md (regras)
+11. git log --oneline -15
+
+CARRY-OVERS (não-bloqueantes):
+- Smoke E2E real CV-2026-0001 (Luciano manual)
+- Fatia 5 dashboard admin (lista membros pendentes + botões)
+- Fatia 6 notificações ricas (WA + email + templates)
+- Fatia 7 portal UX custeado (D-novo-PORTAL-CUSTEADO P2)
+- Fatia 8 specs amplos + smoke E2E final
+- Fatia 9 futura: portal self-service da empresa
+- D-novo-CONVITE-F3-CRON-LIMPEZA-PENDENTE P2 (cron expirar pendentes)
+- D-novo-AGENTS-ORPHAN P3 (pasta src/agents)
+- D-novo-UX-Dialog-Backdrop P3
+- D-novo-CT-TARIFA-ALOCACAO P3
+- D-novo-CT-PDF-AUXILIAR P2
+- D-novo-CT-VALIDACAO-FISCAL P0 (gate fiscal interno)
+- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 (bloqueia Sinergia)
+- D-novo-BM P0 BLOQUEADOR REMOÇÃO PRÉ-PROD
+- D-novo-BP P3 convergência /parceiro vs /dashboard
+- 256 legados allowlist lint:tenant
+- Convenção MENSAL Mini-Bloco H'.9
+
+FRENTES OPERACIONAIS LUCIANO:
+⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção contábil)
+⏳ Smoke E2E real CV-2026-0001 Caso 1 custeio
+⏳ Preencher cooperebr1 (gatilho F.4 smoke produção)
+⏳ Cadastrar Usuario E-Solares real
+⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536 (advogado)
+⏳ Provisionamento Usuario PJ pra Fatia 9 (portal empresa)
+
+DOC-SESSAO 03/06:
+docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md
+```
+
+---
+
+### Frase Fatia 2 Sprint Convite-Convênio (anterior, arquivada — substituída pela Fatia 4 acima)
+
+```
+[FRASE FATIA 2 — substituída pela Fatia 4 frontend. Histórica.]
 
 RODAR FATIA 2 DO SPRINT CONVITE-CONVÊNIO — BACKEND ADMISSÃO PÚBLICA.
 
