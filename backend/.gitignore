@@ -70,5 +70,15 @@ fatura-*.txt
 
 tmp-diagnostico/
 
+# Fatia 3 Sprint Convite-Convênio (03/06/2026) — anti build-poison.
+# Scripts ad-hoc tmp_*.ts no root do backend quebraram o build em 02-03/06
+# (cooperado.delete .catch compensatório só foi descoberto pq tmp_smoke4.ts
+# tinha select inválido). Bloqueia commits acidentais.
+tmp_*.ts
+tmp_*.js
+*smoke*.ts
+*smoke*.js
+!scripts/**/*smoke*
+
 # D-novo-BH BH.3.1 (29/05/2026) — comprovantes de despesa operacional
 uploads/

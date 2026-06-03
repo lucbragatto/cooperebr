@@ -6,7 +6,10 @@
     "dist",
     "scripts",
     "**/*spec.ts",
-    "src/agents/**"
+    "src/agents/**",
+    "tmp_*.ts",
+    "**/tmp_*.ts",
+    "**/*smoke*.ts"
   ]
 }
 
