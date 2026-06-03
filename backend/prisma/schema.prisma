@@ -314,6 +314,27 @@ enum StatusMembroConvenio {
   MEMBRO_ATIVO
   MEMBRO_SUSPENSO
   MEMBRO_DESLIGADO
+  // Sprint Convite-Convênio (02/06/2026) — fluxo aprovação dupla (empresa + admin).
+  // PENDENTE_APROVACAO_EMPRESA: cadastro via link público, aguarda decisão da empresa pagadora.
+  // PENDENTE_APROVACAO_ADMIN:   empresa aprovou, aguarda conferência final do admin do tenant.
+  // MEMBRO_REJEITADO_EMPRESA:   empresa recusou; fluxo fallback (vira pagante normal — ver
+  //                              decisão produto: SEM_UC rejeitado fica PENDENTE pro admin).
+  // MEMBRO_REJEITADO_ADMIN:     admin recusou após empresa ter aprovado.
+  // `ativo=true` continua sendo o filtro da consolidada (custeio.service:160,619) — pendentes
+  // ficam `ativo=false` até virarem MEMBRO_ATIVO. Zero quebra de contagens.
+  PENDENTE_APROVACAO_EMPRESA
+  PENDENTE_APROVACAO_ADMIN
+  MEMBRO_REJEITADO_EMPRESA
+  MEMBRO_REJEITADO_ADMIN
+}
+
+/// Sprint Convite-Convênio (02/06/2026) — Origem da admissão do membro.
+/// Discrimina cadastros via link público (entram PENDENTE) de cadastros via admin/CSV
+/// (entram ATIVO direto). Default ADMIN_MANUAL preserva backward-compat dos 215 membros vivos.
+enum AdmissionOrigem {
+  ADMIN_MANUAL
+  CSV
+  CONVITE_PUBLICO
 }
 
 /// D-FISCAL-2.1 (01/06/2026 noite) — Discriminador de quem paga o convênio:
@@ -1414,6 +1435,14 @@ model ContratoConvenio {
   tipoTarifaEmpresa      TipoTarifaEmpresa?  @default(PERCENTUAL_DESCONTO)
   tarifaFixaKwhEmpresa   Decimal?            @db.Decimal(10, 5)
 
+  // Sprint Convite-Convênio (02/06/2026) — Quotas opcionais de admissão.
+  // limiteMembros: count(membros ativos) não pode ultrapassar; nullable = sem limite.
+  // kwhAlocadoMaxMensal: soma das alocações fixas não pode ultrapassar; nullable = sem limite.
+  // Ambos validados no service ANTES da admissão (Fatia 2). Defaults null preservam
+  // comportamento atual dos 3 convênios vivos (CV-2026-0001 + Hangar + Moradas).
+  limiteMembros          Int?
+  kwhAlocadoMaxMensal    Decimal?            @db.Decimal(10, 2)
+
   // Back-rel pra Cobrancas geradas via convenio (hook Design B — D-FISCAL-2.4.1)
   cobrancasGeradas       Cobranca[]          @relation("CobrancaConvenio")
 
@@ -1457,11 +1486,54 @@ model ConvenioCooperado {
   indicacaoId String?    @unique
   indicacao   Indicacao? @relation(fields: [indicacaoId], references: [id])
 
+  // Sprint Convite-Convênio (02/06/2026) — Rastreio admissão + aprovação dupla.
+  // origem default ADMIN_MANUAL preserva os 215 membros vivos (admin/CSV histórico).
+  // CONVITE_PUBLICO nasce com status PENDENTE_APROVACAO_EMPRESA + ativo=false.
+  // Carimbos `aprovadoPor*Em` / `rejeitadoPor*Em` permitem auditoria FSM read-only.
+  // motivoRejeicao texto livre (empresa OU admin escreve ao recusar).
+  origem                AdmissionOrigem @default(ADMIN_MANUAL)
+  aprovadoPorEmpresaEm  DateTime?
+  aprovadoPorAdminEm    DateTime?
+  rejeitadoPorEmpresaEm DateTime?
+  rejeitadoPorAdminEm   DateTime?
+  motivoRejeicao        String?
+
+  // Back-rel 1-1 pro magic link de aprovação da empresa (criado quando origem=CONVITE_PUBLICO).
+  aprovacao AprovacaoConvenioMembro?
+
   @@unique([convenioId, cooperadoId])
   @@index([convenioId, ativo])
   @@index([convenioId, status])
   @@index([cooperadoId])
   @@map("convenio_cooperados")
+}
+
+/// Sprint Convite-Convênio (02/06/2026) — Magic link stateless pra empresa aprovar
+/// um membro pendente sem precisar de login no /portal. Token stateless gerado por
+/// `crypto.randomBytes(32).toString('hex')` (padrão ConviteProprietarioService M31).
+/// TTL recomendado 7d (alinhar com ConviteProprietario).
+///
+/// Auth HÍBRIDO: o mesmo endpoint que valida o token também aceita JWT do pagadorCooperado
+/// se ele tiver Usuario com perfil COOPERADO ativo no /portal — defesa em profundidade.
+///
+/// Decisão registrada: `decisao` é null quando pendente, 'APROVADO' ou 'REJEITADO' após
+/// uso. `usedAt` carimba o momento da decisão. `aprovadorIp` / `aprovadorUserAgent` ajudam
+/// auditoria forense em caso de fraude.
+model AprovacaoConvenioMembro {
+  id              String   @id @default(cuid())
+  membroId        String   @unique
+  membro          ConvenioCooperado @relation(fields: [membroId], references: [id])
+  token           String   @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  decisao         String?  // 'APROVADO' | 'REJEITADO'
+  motivoRejeicao  String?
+  aprovadorIp     String?
+  aprovadorUserAgent String?
+  createdAt       DateTime @default(now())
+
+  @@index([token])
+  @@map("aprovacoes_convenio_membro")
 }
 
 model HistoricoFaixaConvenio {
