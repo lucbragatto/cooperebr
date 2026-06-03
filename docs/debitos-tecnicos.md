@@ -105,6 +105,29 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 
 ## P1 — Bloqueia entrada de parceiro real
 
+### D-novo-CONVITE-FRONTEND-URL — `FRONTEND_URL` precisa ser pública antes do piloto Sinergia/qualquer envio real
+
+**Severidade:** P1 — bloqueia smoke E2E real e qualquer envio de convite via WhatsApp em produção
+**Detectado em:** 2026-06-03 (Fase 1 da Sprint Portal da Empresa Conveniada)
+**Onde:** `backend/.env` linha `FRONTEND_URL=...` lido em `convites-convenio.service.ts:705` (link convite) + `convenios-aprovacao.service.ts:546` (magic link aprovação empresa).
+
+**Sintoma:** os endpoints da Fatia 2a (envia link do convite por WhatsApp) e Fatia 3 (envia magic link da empresa) usam `process.env.FRONTEND_URL ?? 'http://localhost:3001'`. `localhost:3001` no link enviado por WhatsApp **NÃO funciona no celular do destinatário** (localhost do celular ≠ máquina dev). Em dev, o IP local (`http://192.168.3.88:3001`) resolve teste de rede interna; **em produção exige URL pública (HTTPS)**.
+
+**Status:**
+- ✅ Dev fixado em `9.4 chore` desta sessão: `FRONTEND_URL=http://192.168.3.88:3001`
+- ✅ Documentado em `.env.example` que produção exige URL pública
+- ⏳ **Pendente Luciano:** definir + configurar domínio/URL pública (ex: `https://app.cooperebr.com.br`) antes do piloto Sinergia
+
+**Checklist pré-produção:**
+1. Obter URL pública (Cloudflare Pages OU domínio próprio).
+2. Setar `FRONTEND_URL=https://...` no `.env` de produção.
+3. Restart PM2 backend pra propagar.
+4. Smoke real: criar convite → confirmar que link chega clicável no celular real.
+
+**Catalogado em:** Fatia 9.4 commit (03/06/2026).
+
+---
+
 ### D-novo-CONVITE-F3-CRON-LIMPEZA-PENDENTE — Cron de limpeza de membros PENDENTE com magic link expirado
 
 **Severidade:** P2 (não-bloqueante mas necessário antes de produção pra evitar lixo no banco)
