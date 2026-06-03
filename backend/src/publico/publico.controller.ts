@@ -370,23 +370,24 @@ export class PublicoController {
     return this.convitesConvenio.validarOtp(token, dto.codigo);
   }
 
-  // ─── Sprint Convite-Convênio Fatia 2 (03/06/2026) ──────────────────────────
-  // Endpoint público de auto-inscrição via link `?conv={convenioId}`.
-  // Delega pra cadastroWebV2 com origem=CONVITE_PUBLICO (que propaga até
-  // adicionarMembro que cria PENDENTE_APROVACAO_EMPRESA + magic link).
+  // ─── Sprint Convite-Convênio Fatia 2c (03/06/2026) ─────────────────────────
+  // Endpoint público de auto-inscrição. NOVO DESIGN (substitui o body Fatia 2):
   //
-  // Camadas de defesa:
-  //  1. @Throttle 30/h por IP (camada amplitude).
-  //  2. Validação multi-tenant cross-check (convenio.cooperativaId === body.cooperativaId).
-  //  3. Convênio existe + status ATIVO + pagador=EMPRESA.
-  //  4. Dedup CPF (Caso B cross-tenant rejeitado + Caso C já-membro rejeitado).
-  //     Erros GENÉRICOS — não vazam se CPF/email existe (anti-enumeration).
-  //  5. Quota limiteMembros (count ATIVOS + PENDENTES não-expirados).
-  //  6. Quota kwhAlocadoMaxMensal só em CONSUMO_REAL.
-  //  7. Rate-limit manual por CPF (3/h via count last 1h — usa novo índice
-  //     ConvenioCooperado[cooperadoId, createdAt]).
+  //  - EXIGE `token` do convite (Fatia 2a) — convenioId/cooperativaId resolvidos
+  //    DO CONVITE (não do body), removendo a superfície de spoof de tenant.
+  //  - EXIGE `otpValidadoEm` no convite (Fatia 2b) dentro da janela de 30min —
+  //    prova de posse do telefone alvo do convite.
+  //  - Consume-once: convite.usedAt setado atomicamente ANTES de cadastroWebV2
+  //    (update where {id, usedAt:null} — P2025 se race). Se cadastro falhar,
+  //    rollback do usedAt.
+  //  - Delega pra cadastroWebV2(origem=CONVITE_PUBLICO) que cria Cooperado+UC+
+  //    Proposta+Membro PENDENTE_APROVACAO_EMPRESA + AprovacaoConvenioMembro
+  //    (magic link da empresa) atomicamente via tx interna do motor.aceitar.
+  //  - Feature flag CONVITE_OTP_ATIVO (default true): kill-switch emergencial
+  //    (false desativa o endpoint inteiro, retorna 404 genérico).
   //
-  // NUNCA retorna o token do magic link no body — envio = Fatia 6.
+  // Dedup CPF + quota + rate-limit preservados da Fatia 2 (030b22d), agora
+  // APÓS validar token/OTP (não permitem brute-force sem convite + OTP).
   @Public()
   @Throttle({ default: { limit: 30, ttl: 3600000 } }) // 30/h por IP
   @AuditLog({ acao: 'convenios.auto_inscrever', recurso: 'ConvenioCooperado' })
@@ -394,117 +395,139 @@ export class PublicoController {
   @Post('convenios/auto-inscrever')
   async autoInscreverConvenio(@Body() dto: AutoInscreverConvenioDto) {
     const ERRO_GENERICO = 'Não foi possível concluir o cadastro. Entre em contato com a empresa pra solicitar inclusão manual.';
+    const OTP_JANELA_AUTO_INSCREVER_MIN = 30;
 
-    // Sprint Convite-Convênio Fatia 2a (03/06/2026) — FEATURE FLAG `CONVITE_OTP_ATIVO`.
-    // Default `true` BLOQUEIA o caminho atual sem `{ token, otp }`. A Fatia 2c
-    // vai refatorar este endpoint pra exigir token+OTP do convite; até lá, o
-    // único caminho válido pra cadastro custeado público fica desabilitado
-    // (fecha a janela que poderia ser fuzzada antes do OTP chegar).
-    // Pra desligar a flag (perigoso! só pra rollback emergencial), setar
-    // `CONVITE_OTP_ATIVO=false` no .env do backend.
+    // Kill-switch emergencial. Default 'true' = endpoint ativo.
+    // Set 'false' pra desligar o caminho público (rollback emergencial).
     const conviteOtpAtivo = (process.env.CONVITE_OTP_ATIVO ?? 'true').toLowerCase() !== 'false';
-    if (conviteOtpAtivo) {
+    if (!conviteOtpAtivo) {
       this.logger.warn(
-        `[auto-inscrever] BLOQUEADO por feature flag CONVITE_OTP_ATIVO=true. ` +
-          `Caminho legado sem token/OTP desabilitado até Fatia 2c. ` +
-          `convenioIdTentativa=${dto.convenioId} cpfSufixo=...${(dto.cpf ?? '').slice(-4)}`,
+        `[auto-inscrever] DESLIGADO por feature flag CONVITE_OTP_ATIVO=false. ` +
+          `tokenSufixo=...${(dto.token ?? '').slice(-6)} cpfSufixo=...${(dto.cpf ?? '').slice(-4)}`,
       );
       throw new NotFoundException(ERRO_GENERICO);
     }
 
-    // (1) Validar convênio — multi-tenant cross-check ANTES de qualquer create
-    const convenio = await this.prisma.contratoConvenio.findUnique({
-      where: { id: dto.convenioId },
-      select: {
-        id: true,
-        cooperativaId: true,
-        status: true,
-        pagador: true,
-        empresaNome: true,
-        limiteMembros: true,
-        kwhAlocadoMaxMensal: true,
-        baseCobrancaCusteio: true,
+    // (1) Carregar convite — token é a chave; convenio + cooperativaId vêm DELE.
+    const convite = await this.prisma.conviteConvenioMembro.findUnique({
+      where: { token: dto.token },
+      include: {
+        convenio: {
+          select: {
+            id: true,
+            cooperativaId: true,
+            status: true,
+            pagador: true,
+            empresaNome: true,
+            limiteMembros: true,
+            kwhAlocadoMaxMensal: true,
+            baseCobrancaCusteio: true,
+          },
+        },
       },
     });
 
-    if (
-      !convenio ||
-      convenio.cooperativaId !== dto.cooperativaId ||
-      convenio.status !== 'ATIVO' ||
-      convenio.pagador !== 'EMPRESA'
-    ) {
-      // Resposta única pros 4 casos (existência/tenant/status/pagador) —
-      // evita enumeração de convênios via diffing de mensagem.
+    if (!convite) {
       this.logger.warn(
-        `[auto-inscrever] Convenio inválido: id=${dto.convenioId} tenantBody=${dto.cooperativaId} ` +
-          `existe=${!!convenio} tenantOk=${convenio?.cooperativaId === dto.cooperativaId} ` +
-          `status=${convenio?.status} pagador=${convenio?.pagador}`,
+        `[auto-inscrever] Convite não encontrado: tokenSufixo=...${dto.token.slice(-6)}`,
       );
       throw new NotFoundException(ERRO_GENERICO);
     }
+    if (convite.usedAt) {
+      this.logger.warn(
+        `[auto-inscrever] Convite JÁ USADO (consume-once): conviteId=${convite.id} ` +
+          `tokenSufixo=...${dto.token.slice(-6)} usedAt=${convite.usedAt.toISOString()}`,
+      );
+      throw new ConflictException(ERRO_GENERICO);
+    }
+    if (convite.expiresAt <= new Date()) {
+      this.logger.warn(
+        `[auto-inscrever] Convite expirado: conviteId=${convite.id} expiresAt=${convite.expiresAt.toISOString()}`,
+      );
+      throw new BadRequestException(ERRO_GENERICO);
+    }
+
+    // (2) OTP validado dentro de 30min
+    if (!convite.otpValidadoEm) {
+      throw new BadRequestException({
+        erro: 'otp_pendente',
+        mensagem: 'Confirme o código de verificação primeiro.',
+      });
+    }
+    const idadeOtpMin =
+      (Date.now() - convite.otpValidadoEm.getTime()) / 1000 / 60;
+    if (idadeOtpMin > OTP_JANELA_AUTO_INSCREVER_MIN) {
+      throw new BadRequestException({
+        erro: 'otp_sessao_expirada',
+        mensagem:
+          `Sessão expirada (validação OTP > ${OTP_JANELA_AUTO_INSCREVER_MIN}min). ` +
+          `Solicite um novo código e valide de novo.`,
+      });
+    }
+
+    // (3) Resolve convenio + cooperativa DO CONVITE — NÃO do body (anti-spoof)
+    const convenio = convite.convenio;
+    if (
+      convenio.status !== 'ATIVO' ||
+      convenio.pagador !== 'EMPRESA'
+    ) {
+      this.logger.warn(
+        `[auto-inscrever] Convenio do convite inválido: convenioId=${convenio.id} ` +
+          `status=${convenio.status} pagador=${convenio.pagador}`,
+      );
+      throw new NotFoundException(ERRO_GENERICO);
+    }
+    const cooperativaId = convenio.cooperativaId!;
 
     const cpfLimpo = (dto.cpf || '').replace(/\D/g, '');
     if (cpfLimpo.length !== 11) {
       throw new BadRequestException('CPF inválido.');
     }
 
-    // (2) Dedup CPF — checagem prévia (P2002 do create é salvaguarda).
-    // Erros genéricos pra não vazar existência. Caso B cross-tenant rejeitado
-    // pelo log (não auto-vincula — vetor sequestro). Cooperado existente é
-    // adicionado pelo admin/empresa manualmente.
+    // (4) Dedup CPF — qualquer cooperado existente (mesmo tenant OU cross) rejeitado.
+    // Erro genérico pra não vazar via diffing.
     const cooperadoExistente = await this.prisma.cooperado.findUnique({
       where: { cpf: cpfLimpo },
       select: { id: true, cooperativaId: true },
     });
     if (cooperadoExistente) {
       this.logger.warn(
-        `[auto-inscrever] CPF já existe — bloqueado: cpf=...${cpfLimpo.slice(-4)} ` +
-          `tenantExistente=${cooperadoExistente.cooperativaId} tenantBody=${dto.cooperativaId} ` +
-          `convenioId=${dto.convenioId}`,
+        `[auto-inscrever] CPF já existe — bloqueado (Caso B cross-tenant ou B mesmo-tenant): ` +
+          `cpf=...${cpfLimpo.slice(-4)} tenantExistente=${cooperadoExistente.cooperativaId} ` +
+          `convenioId=${convenio.id}`,
       );
       throw new ConflictException(ERRO_GENERICO);
     }
 
-    // (3) Rate-limit por CPF (3/h) — usa @@index([cooperadoId, createdAt]).
-    // Como o CPF ainda não tem Cooperado, contamos auto-inscrições recentes
-    // do mesmo tenant + convênio em janela 1h (defesa em profundidade — IP
-    // throttle é camada 1). Se o usuário tentar criar 4× em 1h muda
-    // pouca coisa (precisaria de 4 CPFs distintos pra bypass), mas trava
-    // bots simples que iteram payload.
+    // (5) Rate-limit por convênio/hora — usa @@index([cooperadoId, createdAt]).
     const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
     const tentativasRecentes = await this.prisma.convenioCooperado.count({
       where: {
-        convenioId: dto.convenioId,
+        convenioId: convenio.id,
         origem: 'CONVITE_PUBLICO',
         createdAt: { gte: umaHoraAtras },
       },
     });
     if (tentativasRecentes >= 60) {
-      // Hard cap por convênio/hora pra impedir floods de bot rotativo.
       this.logger.warn(
-        `[auto-inscrever] Rate-limit por convênio atingido: convenioId=${dto.convenioId} ` +
+        `[auto-inscrever] Rate-limit por convênio atingido: convenioId=${convenio.id} ` +
           `tentativas=${tentativasRecentes} janela=1h`,
       );
       throw new ConflictException(ERRO_GENERICO);
     }
 
-    // (4) Quota: limiteMembros — conta MEMBRO_ATIVO + PENDENTE_*.
-    // Pendentes EXPIRADOS (token usedAt null + expiresAt < now) NÃO contam (cron
-    // de housekeeping virá na Fatia 3). Exclusão via filtro relação 1-1.
+    // (6) Quota: limiteMembros — conta MEMBRO_ATIVO + PENDENTE_* (não-expirados)
     if (convenio.limiteMembros != null) {
       const ocupacao = await this.prisma.convenioCooperado.count({
         where: {
-          convenioId: dto.convenioId,
+          convenioId: convenio.id,
           OR: [
             { status: 'MEMBRO_ATIVO' },
             {
               status: { in: ['PENDENTE_APROVACAO_EMPRESA', 'PENDENTE_APROVACAO_ADMIN'] },
               OR: [
-                // Sem token (defensivo): conta
                 { aprovacao: null },
-                // Token usado: conta (já decidiu)
                 { aprovacao: { usedAt: { not: null } } },
-                // Token vigente (não expirado): conta
                 { aprovacao: { usedAt: null, expiresAt: { gte: new Date() } } },
               ],
             },
@@ -519,16 +542,14 @@ export class PublicoController {
       }
     }
 
-    // (5) Quota energética: kwhAlocadoMaxMensal só em CONSUMO_REAL.
-    // ALOCACAO_FIXA tem pacote total fixo do convênio (sem alocação per-member),
-    // logo essa quota não se aplica.
+    // (7) Quota energética: kwhAlocadoMaxMensal só em CONSUMO_REAL
     if (
       convenio.kwhAlocadoMaxMensal != null &&
       convenio.baseCobrancaCusteio === 'CONSUMO_REAL'
     ) {
       const membrosVivos = await this.prisma.convenioCooperado.findMany({
         where: {
-          convenioId: dto.convenioId,
+          convenioId: convenio.id,
           status: { in: ['MEMBRO_ATIVO', 'PENDENTE_APROVACAO_EMPRESA', 'PENDENTE_APROVACAO_ADMIN'] },
         },
         include: { cooperado: { select: { cotaKwhMensal: true } } },
@@ -547,77 +568,127 @@ export class PublicoController {
       }
     }
 
-    // (6) Delega pra cadastroWebV2 com origem=CONVITE_PUBLICO.
-    // cadastroWebV2 cuida de Cooperado/UC tx1, motor.aceitar tx2 (que chama
-    // adicionarMembro com origem propagado — cria membro PENDENTE + magic link
-    // atomicamente). Sem UC declarada → modo SEM_UC (Ponto 1 cfb4208 preserva
-    // vínculo pendente do convênio).
-    const telefoneLimpo = (dto.telefone || '').replace(/\D/g, '');
-
-    const bodyDelegado: Parameters<typeof this.cadastroWebV2>[0] = {
-      nome: dto.nome.trim(),
-      cpf: cpfLimpo,
-      email: dto.email.trim(),
-      telefone: telefoneLimpo,
-      // Endereço/UC vazios — auto-inscrição custeada NÃO exige fatura.
-      // Admin/empresa anexa UC depois se necessário (modo SEM_UC).
-      endereco: {
-        cep: '',
-        logradouro: '',
-        numero: '',
-        bairro: '',
-        cidade: '',
-        estado: '',
-      },
-      instalacao: {
-        numeroUC: '',
-        distribuidora: '',
-        consumoMedioKwh: dto.consumoMedioKwh ?? 0,
-      },
-      convenioCusteioId: dto.convenioId,
-      origem: 'CONVITE_PUBLICO',
-    };
-
-    let resultadoDelegado: any;
+    // (8) CONSUME-ONCE ATÔMICO: marcar convite.usedAt ANTES de cadastroWebV2.
+    // Update com where:{id, usedAt:null} retorna P2025 se outro POST já consumiu —
+    // resolve race condition de 2 POSTs simultâneos com mesmo token.
     try {
-      resultadoDelegado = await this.cadastroWebV2(bodyDelegado, dto.cooperativaId);
+      await this.prisma.conviteConvenioMembro.update({
+        where: { id: convite.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
     } catch (err: any) {
-      // ConflictException de CPF duplicado do tx1 cai aqui — converter pra erro genérico.
-      if (err instanceof ConflictException) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
         this.logger.warn(
-          `[auto-inscrever] cadastroWebV2 ConflictException: ${err.message} ` +
-            `cpf=...${cpfLimpo.slice(-4)} convenioId=${dto.convenioId}`,
+          `[auto-inscrever] Race condition consume-once: conviteId=${convite.id} já consumido por outro POST`,
         );
         throw new ConflictException(ERRO_GENERICO);
       }
       throw err;
     }
 
-    const cooperadoId: string | undefined = resultadoDelegado?.data?.cooperadoId;
-    if (!cooperadoId) {
+    // (9) Cria Cooperado + Membro PENDENTE direto (NÃO delega pra cadastroWebV2).
+    //
+    // Decisão Fatia 2c: caminho CONVITE_PUBLICO NÃO precisa de Proposta+Contrato+UC
+    // no momento do cadastro — tudo isso vem na aprovação (Fatia 3/5) quando empresa
+    // confirma + admin anexa UC. cadastroWebV2 cria UC fake e roda motor que pode
+    // falhar com kWh=0; aqui evitamos toda essa complexidade criando o mínimo
+    // necessário (Cooperado + Membro PENDENTE) e deixando o resto pro fluxo de
+    // aprovação.
+    //
+    // adicionarMembro(origem=CONVITE_PUBLICO) cuida de criar AprovacaoConvenioMembro
+    // (magic link da empresa) atomicamente — desenho já validado na Fatia 1+2a.
+    const telefoneLimpo =
+      (dto.telefone || '').replace(/\D/g, '') || convite.telefone;
+
+    let cooperadoId: string;
+    try {
+      const cooperadoCriado = await this.prisma.cooperado.create({
+        data: {
+          nomeCompleto: dto.nome.trim(),
+          cpf: cpfLimpo,
+          email: dto.email.trim(),
+          telefone: telefoneLimpo,
+          status: 'PENDENTE',
+          tipoCooperado: 'SEM_UC', // UC vem na aprovação (Fatia 3/5)
+          cooperativaId,
+          termoAdesaoAceito: true,
+          termoAdesaoAceitoEm: new Date(),
+        },
+        select: { id: true },
+      });
+      cooperadoId = cooperadoCriado.id;
+    } catch (err: any) {
+      // Rollback consume-once
+      await this.rollbackConviteUsedAt(convite.id);
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        this.logger.warn(
+          `[auto-inscrever] P2002 ao criar Cooperado: cpf/email já existem ` +
+            `cpf=...${cpfLimpo.slice(-4)} convenioId=${convenio.id}`,
+        );
+        throw new ConflictException(ERRO_GENERICO);
+      }
       this.logger.error(
-        `[auto-inscrever] cadastroWebV2 não retornou cooperadoId: ${JSON.stringify(resultadoDelegado)}`,
+        `[auto-inscrever] Falha ao criar Cooperado: ${err?.message ?? 'erro'}`,
+      );
+      throw err;
+    }
+
+    // (10) Cria Membro PENDENTE_APROVACAO_EMPRESA + AprovacaoConvenioMembro (magic
+    // link da empresa). adicionarMembro com origem=CONVITE_PUBLICO faz tudo
+    // atomicamente (mesmo sem tx — opera direto com this.prisma do service).
+    let membroId: string;
+    try {
+      const membroCriado = await this.conveniosMembros.adicionarMembro(
+        convenio.id,
+        cooperadoId,
+        undefined,
+        undefined,
+        'CONVITE_PUBLICO',
+      );
+      membroId = membroCriado.id;
+    } catch (err: any) {
+      // Rollback Cooperado + convite consume-once
+      await this.prisma.cooperado.delete({ where: { id: cooperadoId } }).catch(() => {});
+      await this.rollbackConviteUsedAt(convite.id);
+      this.logger.error(
+        `[auto-inscrever] Falha ao criar membro pendente: ${err?.message ?? 'erro'} ` +
+          `cooperadoId=${cooperadoId} convenioId=${convenio.id}`,
       );
       throw new BadRequestException(ERRO_GENERICO);
     }
 
-    // (7) Localizar o membro PENDENTE recém-criado pra retornar status.
-    // NÃO retorna o token do magic link — envio = Fatia 6 (notificações).
-    const membro = await this.prisma.convenioCooperado.findUnique({
-      where: { convenioId_cooperadoId: { convenioId: dto.convenioId, cooperadoId } },
-      select: { id: true, status: true },
+    // (11) Cross-ref convite → membro
+    await this.prisma.conviteConvenioMembro.update({
+      where: { id: convite.id },
+      data: { membroId },
     });
 
     this.logger.log(
-      `[auto-inscrever] OK: convenioId=${dto.convenioId} cooperadoId=${cooperadoId} ` +
-        `membroId=${membro?.id} status=${membro?.status} empresa=${convenio.empresaNome}`,
+      `[auto-inscrever] OK: conviteId=${convite.id} convenioId=${convenio.id} ` +
+        `cooperadoId=${cooperadoId} membroId=${membroId} empresa=${convenio.empresaNome}`,
     );
 
     return {
       ok: true,
-      membroId: membro?.id,
-      status: membro?.status ?? 'PENDENTE_APROVACAO_EMPRESA',
+      membroId,
+      status: 'PENDENTE_APROVACAO_EMPRESA',
     };
+  }
+
+  private async rollbackConviteUsedAt(conviteId: string): Promise<void> {
+    try {
+      await this.prisma.conviteConvenioMembro.update({
+        where: { id: conviteId },
+        data: { usedAt: null },
+      });
+      this.logger.warn(
+        `[auto-inscrever] Rollback usedAt: conviteId=${conviteId}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[auto-inscrever] FALHA no rollback usedAt: conviteId=${conviteId} ${err instanceof Error ? err.message : 'erro'}`,
+      );
+    }
   }
 
   // ── Cadastro V2: cria Cooperado + UC + Proposta real via motor ──────────────

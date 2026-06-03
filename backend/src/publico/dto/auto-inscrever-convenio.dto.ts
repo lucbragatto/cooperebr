@@ -5,30 +5,30 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Min,
 } from 'class-validator';
 
 /**
- * Sprint Convite-Convênio Fatia 2 (03/06/2026) — DTO da auto-inscrição pública.
+ * Sprint Convite-Convênio Fatia 2c (03/06/2026) — DTO refatorado.
  *
- * Body MÍNIMO de quem cadastra via link `?conv={convenioId}` divulgado pela
- * empresa pagadora. Sem fatura/UC/planoId — auto-inscrição custeada não exige
- * fatura (admin/empresa anexa depois se for SEM_UC).
+ * NOVO DESIGN: body NÃO carrega mais `cooperativaId` nem `convenioId` —
+ * ambos resolvidos do convite a partir do `token`. Remove a superfície de
+ * spoof de tenant (cliente não escolhe pra qual convênio se inscrever; o
+ * convite gerado pela empresa já tem ambos travados).
  *
- * `cooperativaId` + `convenioId` são obrigatórios pra validar multi-tenant
- * cross-check ANTES de criar Cooperado (endpoint é @Public — não há JWT).
+ * `token` precisa ter sido EMITIDO pela empresa (Fatia 2a) E ter o `otpValidadoEm`
+ * setado (Fatia 2b) dentro da janela de 30min antes do auto-inscrever.
  *
- * `consumoMedioKwh` opcional: usado pra quota energética em CONSUMO_REAL
- * (estimativa de alocação prevista). Default 0 = sem quota energética.
+ * Telefone opcional: usuário pode informar outro contato (ex.: WhatsApp pessoal
+ * vs corporativo). OTP já provou posse do telefone original (do convite).
  */
 export class AutoInscreverConvenioDto {
   @IsString()
   @IsNotEmpty()
-  cooperativaId!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  convenioId!: string;
+  @Length(64, 64)
+  @Matches(/^[0-9a-f]{64}$/, { message: 'token inválido' })
+  token!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -43,9 +43,9 @@ export class AutoInscreverConvenioDto {
   @IsEmail()
   email!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  telefone!: string;
+  telefone?: string;
 
   @IsOptional()
   @IsNumber()
