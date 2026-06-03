@@ -341,6 +341,89 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-TOKEN-TAXA-CONFIGURAVEL — taxa de emissão/QR hardcoded 2%/1% + sem entrada/saída/híbrido + sem teto + sem isenção Quota de Rateio + arrecadação não-contabilizada
+
+**Severidade:** P2 — bloqueia entrada do Clube de Vantagens em produção real (descoberto na Fase 1 read-only da economia do token, com Regulamento Art. 4º como referência)
+**Detectado em:** 2026-06-03 (Fase 1 read-only — confirmação do spec `docs/templates-documentos/regulamento-interno-clube-vantagens-tokens.md` Art. 4º vs implementação)
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:45-48` (constantes module-level `TAXA_EMISSAO = 0.02` + `TAXA_QR = 0.01`).
+
+**Estado atual confirmado (read-only):**
+- `TAXA_EMISSAO = 0.02` aplicada em `creditar():103` — `taxaEmissao = quantidade × 2%`. Cooperado recebe `quantidadeLiquida = bruta - taxa`.
+- `TAXA_QR = 0.01` aplicada em `processarPagamentoQr():977` + `:1334` — pagador debita integral, recebedor recebe líquido.
+- **`ConfigCooperToken` model (schema:2566-2587)**: campos `valorTokenReais`, `descontoMaxPerc`, `limiteTokenMensal`, `tetoCoop`, `modoGeracao`, `modeloVida`, `ativo`. **ZERO campo de taxa.** Não-configurável por parceiro.
+- **Destino da taxa**: a diferença `bruta - liquida` **NÃO vai pra nenhum saldo** (nem CooperTokenSaldoParceiro nem Fundo de Reserva). É só um diferencial implícito — taxa "evapora" no rastro contábil. Descrição do ledger menciona ("taxa emissão 2%: X") mas valor não é movido pra lugar nenhum.
+- **NÃO há LancamentoCaixa registrando a arrecadação da taxa.** Gap fiscal/contábil.
+
+**Gaps vs Regulamento Art. 4º:**
+
+| Requisito Regulamento | Estado |
+|---|---|
+| Taxa configurável por parceiro | ❌ hardcoded |
+| Modos ENTRADA / SAÍDA / HÍBRIDO | ❌ só "saída" (debita do creditado) |
+| Teto 15% | ❌ inexistente (qualquer valor passa se mudar a constante) |
+| Isenção pra Quota de Rateio | ❌ não há distinção por tipo de operação |
+| Arrecadação destinada (Fundo Reserva / receita parceiro) | ❌ taxa evapora |
+| Lançamento contábil da taxa | ❌ não há `naturezaClube='TOKEN_TAXA_ARRECADADA'` |
+
+**Resolução:**
+1. Adicionar a `ConfigCooperToken`: `taxaEmissaoPerc Decimal(5,2)? @default(2)`, `taxaQrPerc Decimal(5,2)? @default(1)`, `taxaModo String? @default("SAIDA")` (ENTRADA/SAIDA/HIBRIDO), `taxaTetoPerc Decimal(5,2) @default(15)` (validation guard), `taxaIsentaQuotaRateio Boolean @default(true)`.
+2. Service lê config no `creditar/processarPagamentoQr` em vez das constantes.
+3. Quando aplicada, taxa vai pra `CooperTokenSaldoParceiro` OU pra um novo `CooperTokenFundoReserva` (a decidir com decisão #2).
+4. Cria `LancamentoCaixa naturezaClube='TOKEN_TAXA_ARRECADADA'` por evento de cobrança da taxa.
+5. Tela admin permite editar config (regulamento por convênio).
+6. Spec garante migration aditiva preserva 3 cooperativas vivas (defaults = comportamento atual).
+
+**Estimativa:** ~6-8h Code (schema + service + UI admin + specs + lançamento contábil).
+
+**Catalogado em:** Fase 1 read-only da economia do token (03/06/2026).
+
+---
+
+### D-novo-TOKEN-DESVALORIZACAO-PARAMS — desvalorização contínua dormente, sem graça/piso, sem reversão pro Fundo de Reserva (Regulamento Art. 5º §2)
+
+**Severidade:** P2 — bloqueia entrada do Clube de Vantagens em produção real
+**Detectado em:** 2026-06-03 (Fase 1 read-only — confirmação spec vs implementação)
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:477-577` (`expirarVencidos`) + `cooper-token.job.ts:123-158` (cron mensal) + `ConfigCooperToken.modeloVida` (schema:2573).
+
+**Estado atual confirmado (read-only):**
+- `ConfigCooperToken.modeloVida String @default("AMBOS")` — aceita `EXPIRACAO_29D | DECAY_CONTINUO | AMBOS`. **MAS o campo está DORMENTE**: grep `DECAY_CONTINUO` em `src/cooper-token/` retornou ZERO hits no service/job — não há leitura.
+- O que está implementado: **apenas EXPIRACAO binária** baseada em `cooperTokenLedger.expiracaoEm` (setado em `creditar:147-148` com `expiracaoMeses ?? 12`). Cron mensal `expirarTokensVencidos` (`job.ts:123`) zera tokens vencidos.
+- **NÃO há decay contínuo** (taxa progressiva por mês).
+- **NÃO há período de graça** (decisão produto 30d antes da queda iniciar).
+- **NÃO há piso** (valor mínimo abaixo do qual o token não desvaloriza mais).
+- **Reversão pro Fundo de Reserva NÃO EXISTE**: `expirarVencidos:529-538` apenas decrementa `saldoDisponivel` do cooperado + incrementa `totalExpirado` (contador). NÃO move pra `CooperTokenSaldoParceiro` nem pra um Fundo.
+- **`LancamentoCaixa` da expiração NÃO É GERADO**: `contabilidade-clube.controller.ts:36` LÊ `naturezaClube === 'PROVISIONAL_TOKEN_EXPIRACAO'`, mas `expirarVencidos` cria apenas `CooperTokenLedger` (operacao=EXPIRACAO) **sem o LancamentoCaixa correspondente**. Contabilidade desbalanceada.
+
+**Gaps vs Regulamento Art. 5º:**
+
+| Requisito Regulamento Art. 5º | Estado |
+|---|---|
+| Desvalorização gradual configurável (% ao mês) | ❌ binário (acabou OU não) |
+| Período de graça (X dias sem decay) | ❌ inexistente |
+| Piso de valor (não desvaloriza abaixo de Y) | ❌ inexistente |
+| Saldo decaído reverte pro Fundo de Reserva (§2) | ❌ saldo evapora |
+| Lançamento contábil da expiração/decay | ❌ ledger sim, LancamentoCaixa não |
+| Configurável por parceiro | ⏳ `modeloVida` existe mas dormente |
+
+**Resolução:**
+1. Adicionar a `ConfigCooperToken`: `decayTaxaMensalPerc Decimal(5,2)? @default(2)`, `decayPeriodoGracaDias Int? @default(30)`, `decayPisoPerc Decimal(5,2)? @default(50)` (piso 50% do valor original), `fundoReservaCooperativaId String?` (FK opcional pra cooperativa receptora).
+2. Service novo `aplicarDecayContinuo(cooperativaId)`: lê config, calcula decay diário/mensal pra cada ledger CREDITO com `idadeDias > graca`, decrementa valor mantendo `valor >= ledger.original × piso%`.
+3. Cron novo `aplicarDecayDiario` (`@AsPlatform()` `@Cron('0 3 * * *')` — todo dia 3h) chama o service.
+4. Quando `modeloVida = 'EXPIRACAO_29D'` puro, mantém comportamento atual; `DECAY_CONTINUO` ativa o novo; `AMBOS` aplica decay + binária no expiracaoEm.
+5. Saldo decaído/expirado **vira receita do parceiro** (incrementa `CooperTokenSaldoParceiro.totalRecebido`) OU vai pra um modelo novo `CooperTokenFundoReserva` (decisão produto pendente).
+6. **`PROVISIONAL_TOKEN_EXPIRACAO` LancamentoCaixa**: criar inline no `expirarVencidos` igual ao padrão `PROVISIONAL_TOKEN_EMISSAO:182-202` — fecha o gap de contabilidade.
+7. Tela admin permite editar params via UI (similar à decisão #1 de taxa).
+
+**Decisões pendentes:**
+- Saldo decaído destino: Fundo Reserva (modelo novo) vs SaldoParceiro existente. Recomendo **Fundo Reserva** (cumpre §2 literal).
+- Decay diário vs mensal: diário é mais "contínuo" mas pesa mais; mensal é mais simples + alinha com cron já existente.
+
+**Estimativa:** ~8-10h Code (schema + service decay + cron novo + lançamento contábil expiração + UI admin + specs).
+
+**Catalogado em:** Fase 1 read-only da economia do token (03/06/2026).
+
+---
+
 ### D-novo-PORTAL-CUSTEADO — Membro custeado vê portal financeiro vazio sem aviso "você é custeado pela empresa X"
 
 **Severidade:** P2 — UX confusa, não bloqueia produção mas gera tickets desnecessários ("cadê minhas faturas?")
