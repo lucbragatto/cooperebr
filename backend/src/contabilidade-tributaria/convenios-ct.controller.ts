@@ -4,6 +4,8 @@ import {
   Delete,
   Get,
   HttpCode,
+  Logger,
+  OnModuleInit,
   Param,
   Patch,
   Post,
@@ -25,21 +27,35 @@ const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
  * D-novo-BR-CT CT.2 (31/05/2026) — Convenio CRUD (model novo da contabilidade
  * tributária, NÃO ContratoConvenio legado).
  *
- * Multi-tenant via Guard sistêmico F1.1+F1.2:
+ * @deprecated D-FISCAL-2.5 (02/06/2026) — CRUD redundante após consolidação
+ * fiscal no legado ContratoConvenio + flag `geraLancamentoContabil`. Mantido
+ * por 1 sprint pra rastrear chamadas órfãs (log warn a cada hit) antes da
+ * remoção definitiva. Use `/convenios` (ContratoConvenio) pra criar/editar/
+ * remover convênios; classificação fiscal vai no bloco "Classificação fiscal"
+ * da página de edição. Tela `/dashboard/contabilidade/convenios` agora é
+ * uma LENTE FISCAL read-only.
+ *
+ * Multi-tenant via Guard sistêmico F1.1+F1.2 (mantém durante deprecation):
  *   - GET listas: filtradas por cooperativaId do JWT no service.
  *   - POST: cooperativaId vem do JWT (não body — anti body-injection).
  *   - PATCH/DELETE: @TenantResource({model:'convenio'}) bloqueia cross-tenant
  *     antes do service.
- *
- * Endpoints protegidos pelo lint baseline+ratchet F1.4 (cada handler
- * declara explicitamente).
  */
 @Controller('contabilidade-tributaria/convenios')
-export class ConveniosCtController {
+export class ConveniosCtController implements OnModuleInit {
+  private readonly logger = new Logger(ConveniosCtController.name);
+
   constructor(
     private readonly service: ConveniosCtService,
     private readonly contabilidade: ContabilidadeTributariaService,
   ) {}
+
+  onModuleInit() {
+    this.logger.warn(
+      'DEPRECATED (D-FISCAL-2.5 02/06/2026): ConveniosCtController será removido em 1 sprint. ' +
+        'Use /convenios (ContratoConvenio legado) pra CRUD; /dashboard/contabilidade/convenios virou lente read-only.',
+    );
+  }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()

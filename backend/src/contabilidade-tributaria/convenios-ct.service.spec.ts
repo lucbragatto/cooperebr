@@ -5,6 +5,12 @@ import { ConveniosCtService } from './convenios-ct.service';
 /**
  * D-novo-BR-CT CT.2 — Specs do CRUD Convenio (model novo segregação).
  *
+ * @deprecated D-FISCAL-2.5 (02/06/2026) — service deprecated junto com o
+ * ConveniosCtController. Specs mantidos durante o período de transição
+ * (1 sprint) pra garantir multi-tenant continua bloqueando enquanto
+ * chamadas órfãs forem rastreadas. Remover specs + service + controller
+ * em D-FISCAL-2.5 cleanup (pós-sprint).
+ *
  * Multi-tenant: tenant A não vê/altera convênio de B (defesa em
  * profundidade — Guard sistêmico já bloqueia via @TenantResource, mas
  * service mantém findFirst {id, cooperativaId} como segunda camada).
