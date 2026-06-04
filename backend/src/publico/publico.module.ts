@@ -2,6 +2,8 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { PublicoController } from './publico.controller';
 import { PrismaService } from '../prisma.service';
+// Convergência convite custeio Fatia 1 (04/06/2026)
+import { CadastroUploadService } from './cadastro-upload.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 import { FaturasModule } from '../faturas/faturas.module';
@@ -26,6 +28,6 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [PublicoController],
-  providers: [PrismaService],
+  providers: [PrismaService, CadastroUploadService],
 })
 export class PublicoModule {}

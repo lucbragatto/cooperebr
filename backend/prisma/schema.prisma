@@ -162,6 +162,11 @@ model Cooperado {
   tipoCooperado           TipoCooperado              @default(COM_UC)
   termoAdesaoAceito       Boolean                    @default(false)
   termoAdesaoAceitoEm     DateTime?
+  // Convergência convite custeio Fatia 1 (04/06/2026) — consentimento LGPD
+  // específico pro tratamento de RG/CNH/selfie (separado do termo de
+  // adesão genérico). Aditivo; default null pra cooperados pré-Fatia 1.
+  consentimentoDocsAceito Boolean?
+  consentimentoDocsAceitoEm DateTime?
   usinaPropriaId          String?
   percentualRepasse       Decimal?                   @db.Decimal(5, 2)
   cooperativaId           String?
@@ -268,6 +273,10 @@ enum TipoDocumento {
   CNH_VERSO
   CONTRATO_SOCIAL
   OUTROS
+  // Convergência convite custeio Fatia 1 (04/06/2026) — selfie do
+  // cooperado pra match facial com RG/CNH. Opcional no MVP — admin pode
+  // pedir via "Solicitar Documentação" depois.
+  SELFIE
 }
 
 enum StatusDocumento {
@@ -402,6 +411,13 @@ model Uc {
   modalidadeTarifaria String?
   tensaoNominal       String?
   tipoFornecimento    String?
+  // Convergência convite custeio Fatia 1 (04/06/2026) — discrimina UC real
+  // (associada a uma instalação física da concessionária com fatura) de UC
+  // sintética (placeholder pra membros custeados SEM_UC própria, ex: médicos
+  // em clínica sem instalação no nome deles). UC sintética NUNCA recebe
+  // fatura nem entra na lista de envio à concessionária. Substitui o
+  // fallback fake 'UC-'+Date.now() removido em publico.controller.ts.
+  tipoUc              TipoUc             @default(NORMAL)
   cooperadoId         String
   cooperado           Cooperado          @relation(fields: [cooperadoId], references: [id])
   cooperativaId       String?
@@ -412,6 +428,12 @@ model Uc {
   faturasProcessadas  FaturaProcessada[]
 
   @@map("ucs")
+}
+
+// Convergência convite custeio Fatia 1 (04/06/2026)
+enum TipoUc {
+  NORMAL    // instalação real da concessionária (default; comportamento legado)
+  SINTETICA // placeholder pra membro custeado SEM_UC própria — não entra em SCEE/listas
 }
 
 enum DistribuidoraEnum {
@@ -1593,6 +1615,14 @@ model ConviteConvenioMembro {
   createdBy           String              // userId admin/empresa que criou
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
+
+  // Convergência convite custeio Fatia 1 (04/06/2026) — discrimina o caminho
+  // de admissão. Default false (= membro COM_UC real, vai pelo /cadastro
+  // completo com numeroUC obrigatório). True (= empresa marcou "membro NÃO
+  // tem UC própria", ex: médico em clínica) habilita o slim /auto-inscrever
+  // com Uc.tipoUc=SINTETICA. Decisão E: admin define no momento de gerar o
+  // convite (Fatia 3).
+  permiteSemUc        Boolean             @default(false)
 
   // Cross-ref pro membro criado após validar OTP + cadastrar (Fatia 2c)
   membroId            String?             @unique

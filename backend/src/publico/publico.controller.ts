@@ -19,6 +19,8 @@ import { coerceDistribuidora } from '../ucs/ucs.service';
 import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
 import { ValidarOtpConviteDto } from './dto/validar-otp-convite.dto';
 import { isAmbienteReal } from '../common/safety/ambiente';
+import { validarENormalizarCadastro } from '../common/safety/cadastro-validacao';
+import { CadastroUploadService } from './cadastro-upload.service';
 
 @Controller('publico')
 export class PublicoController {
@@ -36,6 +38,8 @@ export class PublicoController {
     private convitesConvenio: ConvitesConvenioService,
     // Sprint Convite-Convênio Fatia 3 (03/06/2026) — magic link aprovação empresa
     private convenioAprovacao: ConvenioAprovacaoService,
+    // Convergência convite custeio Fatia 1 (04/06/2026) — upload pré-cadastro
+    private cadastroUpload: CadastroUploadService,
   ) {}
 
   @Public()
@@ -219,9 +223,10 @@ export class PublicoController {
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
     const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
 
-    // Validações controladas por env var: em dev fica desligado para facilitar testes,
-    // em prod `CADASTRO_VALIDACOES_ATIVAS=true` rejeita leads inválidos.
-    if (process.env.CADASTRO_VALIDACOES_ATIVAS === 'true') {
+    // Convergência Fatia 1 (04/06/2026) — gate UNIFICADO via isAmbienteReal().
+    // Substitui o CADASTRO_VALIDACOES_ATIVAS legado (discriminador frágil).
+    // Em REAL: nome/cpf/email/telefone obrigatórios. Em DEV/teste: relaxado.
+    if (isAmbienteReal()) {
       if (!body.nome || !body.cpf || !body.email || !body.telefone) {
         throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
       }
@@ -436,6 +441,35 @@ export class PublicoController {
   //
   // Dedup CPF + quota + rate-limit preservados da Fatia 2 (030b22d), agora
   // APÓS validar token/OTP (não permitem brute-force sem convite + OTP).
+  /**
+   * Convergência convite custeio Fatia 1 (04/06/2026) — Upload pré-cadastro.
+   *
+   * Gated por token de convite + otpValidadoEm (janela 30min, mesma do
+   * auto-inscrever). Salva o arquivo em Supabase Storage no path tmp
+   * `documentos-cooperados/tmp/convite-uploads/<conviteId>/`. Fatia 2 vai
+   * mover esses blobs pro path final do cooperado quando o cadastroWebV2
+   * concluir.
+   *
+   * Body multipart: `arquivo` (File) + form-data `tipo`
+   *   (FATURA|RG_FRENTE|RG_VERSO|CNH_FRENTE|CNH_VERSO|SELFIE).
+   *
+   * Throttle agressivo: 30/h por IP (mesmo do auto-inscrever; alinhado com
+   * o caminho convite).
+   */
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 3600000 } })
+  @AuditLog({ acao: 'cadastro.upload_doc', recurso: 'ConviteConvenioMembro' })
+  @HttpCode(200)
+  @Post('cadastro/upload-doc')
+  @UseInterceptors(FileInterceptor('arquivo'))
+  async uploadDocCadastro(
+    @Body('token') token: string,
+    @Body('tipo') tipo: string,
+    @UploadedFile() arquivo: Express.Multer.File,
+  ) {
+    return this.cadastroUpload.uploadComConvite(token, tipo, arquivo);
+  }
+
   @Public()
   @Throttle({ default: { limit: 30, ttl: 3600000 } }) // 30/h por IP
   @AuditLog({ acao: 'convenios.auto_inscrever', recurso: 'ConvenioCooperado' })
@@ -807,24 +841,27 @@ export class PublicoController {
       // link AprovacaoConvenioMembro no mesmo tx. CONVITE_PUBLICO ALSO força
       // fallback MEDIA_12M no outlier (sem UI pra escolher).
       origem?: AdmissionOrigem;
+      // Convergência convite custeio Fatia 1 (04/06/2026) — quando true (vindo
+      // de convite com `permiteSemUc=true`), cria UC sintética em vez de
+      // exigir numeroUC real. Fatia 2 (frontend) resolverá via token do convite.
+      permiteSemUc?: boolean;
     },
     cooperativaId: string,
   ) {
-    const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
-    const telefoneLimpo = (body.telefone || '').replace(/\D/g, '');
-
-    // Validações (reutiliza as mesmas do legado, guardadas por CADASTRO_VALIDACOES_ATIVAS)
-    if (process.env.CADASTRO_VALIDACOES_ATIVAS === 'true') {
-      if (!body.nome || !body.cpf || !body.email || !body.telefone) {
-        throw new BadRequestException('Nome, CPF, email e telefone são obrigatórios');
-      }
-      if (cpfLimpo.length !== 11) {
-        throw new BadRequestException('CPF inválido');
-      }
-      if (telefoneLimpo.length < 10) {
-        throw new BadRequestException('Telefone inválido');
-      }
-    }
+    // Convergência Fatia 1 — gate UNIFICADO via isAmbienteReal() em vez do
+    // CADASTRO_VALIDACOES_ATIVAS legado. Fecha D-novo-CAD-UC-FALSA +
+    // D-novo-CAD-CONSUMO-ZERO. Aceita modo teste (relaxa tudo); REAL strict.
+    const normalizado = validarENormalizarCadastro(
+      {
+        nome: body.nome,
+        cpf: body.cpf,
+        email: body.email,
+        telefone: body.telefone,
+        instalacao: body.instalacao,
+      },
+      { permiteSemUc: body.permiteSemUc },
+    );
+    const { cpfLimpo, telefoneLimpo, email, nome, numeroUC, strict } = normalizado;
 
     // PASSO 1+2 — Criar Cooperado + UC em transação atômica
     const { cooperadoId, ucId } = await this.prisma.$transaction(async (tx) => {
@@ -836,14 +873,19 @@ export class PublicoController {
             ? 'CLUBE'
             : 'DESCONTO';
 
+        // Convergência Fatia 1: tipoCooperado discrimina o caminho. Quando
+        // permiteSemUc + numeroUC=null, cria SEM_UC (slim path). Senão COM_UC
+        // padrão (caminho /cadastro completo).
+        const tipoCooperado = body.permiteSemUc && numeroUC === null ? 'SEM_UC' : 'COM_UC';
+
         cooperado = await tx.cooperado.create({
           data: {
-            nomeCompleto: body.nome.trim(),
+            nomeCompleto: nome.trim(),
             cpf: cpfLimpo,
-            email: body.email.trim(),
+            email: email.trim(),
             telefone: telefoneLimpo || undefined,
             status: 'PENDENTE',
-            tipoCooperado: 'COM_UC',
+            tipoCooperado,
             cooperativaId,
             modoRemuneracao: modoRemuneracao as any,
             termoAdesaoAceito: true,
@@ -857,39 +899,69 @@ export class PublicoController {
         throw err;
       }
 
-      // Sprint 11 — Arquitetura UC: numero = canônico (até 10 díg) | numeroUC = legado (até 9 díg)
-      const numeroCanonicoRaw = (body.instalacao.numeroUC || '').replace(/\D/g, '');
-      const numeroCanonicoFinal = numeroCanonicoRaw
-        ? numeroCanonicoRaw.slice(-10).padStart(10, '0')
-        : `UC-${Date.now()}`;
-      const numeroUCLegadoRaw = (body.instalacao.numeroUCLegado || '').replace(/\D/g, '');
-      const numeroUCFinal = numeroUCLegadoRaw
-        ? numeroUCLegadoRaw.slice(-9).padStart(9, '0')
-        : undefined;
+      // Convergência Fatia 1 (04/06/2026) — REMOVIDO o fallback fake
+      // `'UC-' + Date.now()` (D-novo-CAD-UC-FALSA P1). numeroUC=null vindo
+      // do helper SÓ acontece quando permiteSemUc=true (caso contrário o
+      // helper lança BadRequestException). Nesse caso cria UC SINTÉTICA
+      // explícita (tipoUc=SINTETICA) que NUNCA recebe fatura nem entra em
+      // listas de envio à concessionária.
+      let uc;
+      if (numeroUC === null) {
+        // Caminho SEM_UC explícito (slim path com permiteSemUc=true)
+        uc = await tx.uc.create({
+          data: {
+            numero: `SINTETICA-${cooperado.id}`,
+            tipoUc: 'SINTETICA' as any,
+            endereco: body.endereco?.logradouro
+              ? `${body.endereco.logradouro}, ${body.endereco.numero}`
+              : '(sem endereço — UC sintética)',
+            cidade: body.endereco?.cidade ?? '',
+            estado: body.endereco?.estado ?? '',
+            cooperadoId: cooperado.id,
+            cep: body.endereco?.cep || undefined,
+            bairro: body.endereco?.bairro || undefined,
+            distribuidora: 'OUTRAS',
+          },
+        });
+      } else {
+        // Caminho COM_UC normal — numeroUC já validado e normalizado
+        const numeroUCLegadoRaw = (body.instalacao.numeroUCLegado || '').replace(/\D/g, '');
+        const numeroUCFinal = numeroUCLegadoRaw
+          ? numeroUCLegadoRaw.slice(-9).padStart(9, '0')
+          : undefined;
 
-      const numeroOriginalRaw = (body.instalacao.numeroConcessionariaOriginal || '').trim();
-      const numeroConcessionariaOriginal =
-        numeroOriginalRaw && numeroOriginalRaw.length <= 50 ? numeroOriginalRaw : undefined;
+        const numeroOriginalRaw = (body.instalacao.numeroConcessionariaOriginal || '').trim();
+        const numeroConcessionariaOriginal =
+          numeroOriginalRaw && numeroOriginalRaw.length <= 50 ? numeroOriginalRaw : undefined;
 
-      const uc = await tx.uc.create({
-        data: {
-          numero: numeroCanonicoFinal,
-          numeroUC: numeroUCFinal,
-          numeroConcessionariaOriginal,
-          endereco: body.endereco.logradouro
-            ? `${body.endereco.logradouro}, ${body.endereco.numero}`
-            : '',
-          cidade: body.endereco.cidade,
-          estado: body.endereco.estado,
-          cooperadoId: cooperado.id,
-          cep: body.endereco.cep || undefined,
-          bairro: body.endereco.bairro || undefined,
-          distribuidora: coerceDistribuidora(body.instalacao.distribuidora),
-        },
-      });
+        uc = await tx.uc.create({
+          data: {
+            numero: numeroUC,
+            tipoUc: 'NORMAL' as any,
+            numeroUC: numeroUCFinal,
+            numeroConcessionariaOriginal,
+            endereco: body.endereco.logradouro
+              ? `${body.endereco.logradouro}, ${body.endereco.numero}`
+              : '',
+            cidade: body.endereco.cidade,
+            estado: body.endereco.estado,
+            cooperadoId: cooperado.id,
+            cep: body.endereco.cep || undefined,
+            bairro: body.endereco.bairro || undefined,
+            distribuidora: coerceDistribuidora(body.instalacao.distribuidora),
+          },
+        });
+      }
 
       return { cooperadoId: cooperado.id, ucId: uc.id };
     });
+
+    if (!strict) {
+      this.logger.warn(
+        `[cadastro-v2] DEV/teste relaxed — cooperadoId=${cooperadoId} nome="${nome}" ` +
+          `numeroUC=${numeroUC ?? 'SINTETICA'}. Em PROD essas validações seriam strict.`,
+      );
+    }
 
     // PASSO 3+4 — Motor de Proposta (fora da transação — pode ser lento)
     let propostaId: string | null = null;
