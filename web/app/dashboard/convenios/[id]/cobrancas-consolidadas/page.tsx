@@ -32,9 +32,13 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { HelpBox } from '@/components/ui/help-box';
-import { ArrowLeft, Loader2, RefreshCw, RotateCcw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, RotateCcw, AlertTriangle, CheckCircle, Send } from 'lucide-react';
 
 type StatusCob = 'PENDENTE' | 'A_VENCER' | 'PAGO' | 'CANCELADO' | 'VENCIDO';
+// Sprint Financeiro F1 (04/06/2026) — estado da emissão no gateway
+type StatusEmissao = 'AGUARDANDO_EMISSAO' | 'EMITIDO' | 'FALHA_EMISSAO';
+
+const RETRY_MAX = 5;
 
 interface CobrancaConsolidada {
   id: string;
@@ -48,6 +52,11 @@ interface CobrancaConsolidada {
   dataVencimento: string;
   dataPagamento: string | null;
   createdAt: string;
+  // Sprint F1 — emissão
+  statusEmissao: StatusEmissao | null;
+  tentativasEmissao: number;
+  ultimoErroEmissao: string | null;
+  ultimaTentativaEmissaoEm: string | null;
 }
 
 const STATUS_LABEL: Record<StatusCob, { texto: string; cor: string }> = {
@@ -56,6 +65,21 @@ const STATUS_LABEL: Record<StatusCob, { texto: string; cor: string }> = {
   PAGO: { texto: 'Paga', cor: 'bg-green-100 text-green-700 border-green-300' },
   CANCELADO: { texto: 'Cancelada', cor: 'bg-red-100 text-red-700 border-red-300' },
   VENCIDO: { texto: 'Vencida', cor: 'bg-amber-100 text-amber-700 border-amber-300' },
+};
+
+const EMISSAO_LABEL: Record<StatusEmissao, { texto: (n: number) => string; cor: string }> = {
+  AGUARDANDO_EMISSAO: {
+    texto: (n) => (n > 0 ? `Emitindo... ${n}/${RETRY_MAX}` : 'Aguardando emissão'),
+    cor: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  },
+  EMITIDO: {
+    texto: () => 'Emitida',
+    cor: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  },
+  FALHA_EMISSAO: {
+    texto: () => `Falha na emissão (${RETRY_MAX}×)`,
+    cor: 'bg-red-100 text-red-700 border-red-300',
+  },
 };
 
 function mesNome(mes: number): string {
@@ -102,6 +126,10 @@ export default function CobrancasConsolidadasPage() {
   const [motivoEstorno, setMotivoEstorno] = useState('');
   const [estornando, setEstornando] = useState(false);
   const [estornoErro, setEstornoErro] = useState<string | null>(null);
+
+  // Sprint F1 — reemissão por cobrança
+  const [reemitindoId, setReemitindoId] = useState<string | null>(null);
+  const [reemitirErro, setReemitirErro] = useState<{ cobrancaId: string; msg: string } | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -181,6 +209,24 @@ export default function CobrancasConsolidadasPage() {
     setMotivoEstorno('');
     setEstornoErro(null);
     setEstornarOpen(true);
+  }
+
+  async function reemitir(cob: CobrancaConsolidada) {
+    setReemitindoId(cob.id);
+    setReemitirErro(null);
+    try {
+      await api.post(
+        `/convenios/${convenioId}/cobrancas-consolidadas/${cob.id}/reemitir`,
+      );
+      await carregar();
+    } catch (err: any) {
+      setReemitirErro({
+        cobrancaId: cob.id,
+        msg: err?.response?.data?.message ?? err?.message ?? 'Erro ao reemitir',
+      });
+    } finally {
+      setReemitindoId(null);
+    }
   }
 
   async function confirmarEstorno() {
@@ -274,6 +320,35 @@ export default function CobrancasConsolidadasPage() {
           <li><strong>Estornar:</strong> reverte a cobrança e o lançamento contábil do convênio. Bloqueado se o mês contábil já estiver <strong>FECHADO</strong> — reabra a apuração primeiro.</li>
           <li><strong>Natureza fiscal:</strong> o lançamento contábil usa a natureza configurada no convênio (Auxiliar / Próprio / Não-Cooperativo), não o padrão de cobrança individual.</li>
         </ul>
+        <div className="mt-3 pt-3 border-t border-blue-200">
+          <p className="font-semibold mb-1">Estado da emissão no gateway (Asaas/Banestes)</p>
+          <p>
+            Depois que a cobrança é gerada aqui, o sistema tenta <strong>emitir o documento de
+            pagamento</strong> (boleto/PIX) no gateway configurado. Esse estado é separado do status
+            da cobrança em si.
+          </p>
+          <ul className="list-disc list-inside mt-1.5">
+            <li>
+              <span className="inline-block px-1.5 py-0.5 rounded border bg-yellow-100 text-yellow-800 border-yellow-300 text-[10px] font-medium">
+                Emitindo... N/5
+              </span>{' '}
+              — em retry automático a cada 30min (cap 5 tentativas). Ex: gateway temporariamente fora.
+            </li>
+            <li>
+              <span className="inline-block px-1.5 py-0.5 rounded border bg-emerald-100 text-emerald-700 border-emerald-300 text-[10px] font-medium">
+                Emitida
+              </span>{' '}
+              — empresa tem documento de pagamento disponível.
+            </li>
+            <li>
+              <span className="inline-block px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-300 text-[10px] font-medium">
+                Falha na emissão (5×)
+              </span>{' '}
+              — admin precisa intervir. Verifique a forma de pagamento da empresa (Asaas configurado?
+              PIX/boleto?) e clique em <strong>Tentar de novo</strong> pra reiniciar o ciclo.
+            </li>
+          </ul>
+        </div>
       </HelpBox>
 
       {erro && (
@@ -331,6 +406,14 @@ export default function CobrancasConsolidadasPage() {
                 {cobrancas.map((c) => {
                   const st = STATUS_LABEL[c.status] ?? { texto: c.status, cor: 'bg-gray-100' };
                   const podeEstornar = c.status !== 'CANCELADO';
+                  const em = c.statusEmissao;
+                  const emLabel = em ? EMISSAO_LABEL[em] : null;
+                  // Tentar de novo: visível em FALHA_EMISSAO (cap atingido) OU AGUARDANDO_EMISSAO travada (>=1 tentativa registrada)
+                  const podeReemitir =
+                    em === 'FALHA_EMISSAO' ||
+                    (em === 'AGUARDANDO_EMISSAO' && c.tentativasEmissao > 0);
+                  const reemitindoEsta = reemitindoId === c.id;
+                  const erroEsta = reemitirErro?.cobrancaId === c.id ? reemitirErro.msg : null;
                   return (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">
@@ -348,23 +431,68 @@ export default function CobrancasConsolidadasPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={st.cor}>{st.texto}</Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className={st.cor}>{st.texto}</Badge>
+                          {emLabel && (
+                            <Badge
+                              variant="outline"
+                              className={`${emLabel.cor} text-[10px] w-fit`}
+                              title={
+                                c.ultimoErroEmissao
+                                  ? `Último erro: ${c.ultimoErroEmissao}`
+                                  : 'Estado da emissão no gateway de pagamento'
+                              }
+                            >
+                              {emLabel.texto(c.tentativasEmissao)}
+                            </Badge>
+                          )}
+                          {erroEsta && (
+                            <div className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                              {erroEsta}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {podeEstornar && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => abrirEstorno(c)}
-                            className="text-red-700 hover:bg-red-50"
-                            title={c.status === 'PAGO'
-                              ? 'Reverte pagamento + deleta lançamentos contábeis'
-                              : 'Cancela a cobrança'}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                            Estornar
-                          </Button>
-                        )}
+                        <div className="flex justify-end gap-1 flex-wrap">
+                          {podeReemitir && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => reemitir(c)}
+                              disabled={reemitindoEsta}
+                              className="text-amber-700 hover:bg-amber-50"
+                              title={
+                                em === 'FALHA_EMISSAO'
+                                  ? `Reseta tentativas e tenta emitir de novo no gateway. ${
+                                      c.ultimoErroEmissao ? `Último erro: ${c.ultimoErroEmissao}` : ''
+                                    }`
+                                  : 'Reset e nova tentativa imediata (não espera o cron 30min)'
+                              }
+                            >
+                              {reemitindoEsta ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              ) : (
+                                <Send className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              Tentar de novo
+                            </Button>
+                          )}
+                          {podeEstornar && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => abrirEstorno(c)}
+                              className="text-red-700 hover:bg-red-50"
+                              title={c.status === 'PAGO'
+                                ? 'Reverte pagamento + deleta lançamentos contábeis'
+                                : 'Cancela a cobrança'}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                              Estornar
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

@@ -3,7 +3,12 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
 import { ConveniosCusteioService } from './convenios-custeio.service';
 import { AsPlatform } from '../common/tenant-context';
+import { PrismaService } from '../prisma.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { isAmbienteReal } from '../common/safety/ambiente';
 
+const RETRY_BACKOFF_MIN = 30;
+const RETRY_MAX_TENTATIVAS = 5;
 
 @Injectable()
 export class ConveniosJob {
@@ -13,6 +18,9 @@ export class ConveniosJob {
     private progressaoService: ConveniosProgressaoService,
     // D-FISCAL-2.4.4b — cron consolidada custeio
     private custeioService: ConveniosCusteioService,
+    // Sprint Financeiro F1 (04/06/2026) — job retry emissão consolidada
+    private prisma: PrismaService,
+    private notificacoes: NotificacoesService,
   ) {}
 
   // Reconciliação diária às 3h da manhã
@@ -61,5 +69,193 @@ export class ConveniosJob {
         `[D-FISCAL-2.4.4b] Erro fatal no cron de consolidadas: ${err.message}`,
       );
     }
+  }
+
+  /**
+   * Sprint Financeiro F1 (04/06/2026) — Cron retry da emissão de cobranças
+   * consolidadas no gateway. Roda a cada 30min em ambiente real.
+   *
+   * Decisões Luciano (travadas):
+   *  (1) Campo separado `statusEmissao` (não polui StatusCobranca).
+   *  (2) Cap 5 tentativas + back-off 30min entre tentativas.
+   *  (5) Dev (!isAmbienteReal) mantém AGUARDANDO sem retry — job short-circuit.
+   *
+   * Critérios de busca:
+   *  - convenioContabilCobrancaId != null  (só consolidadas)
+   *  - statusEmissao = AGUARDANDO_EMISSAO
+   *  - tentativasEmissao < 5
+   *  - ultimaTentativaEmissaoEm null OR < now-30min  (back-off)
+   *
+   * Após chamar emitirNoGateway:
+   *  - Re-lê a cobrança; se tentativasEmissao atingiu cap E ainda em
+   *    AGUARDANDO_EMISSAO → marca FALHA_EMISSAO + notifica admin (in-app).
+   */
+  @Cron('*/30 * * * *')
+  @AsPlatform()
+  async retryEmissaoConsolidadas() {
+    // Decisão #5: dev fica AGUARDANDO permanente — não rodar retry
+    if (!isAmbienteReal()) {
+      this.logger.debug(
+        '[F1 retry] AMBIENTE_REAL=false — skip retry (consolidadas ficam AGUARDANDO_EMISSAO em dev).',
+      );
+      return;
+    }
+
+    const limite = new Date(Date.now() - RETRY_BACKOFF_MIN * 60 * 1000);
+
+    const pendentes = await this.prisma.cobranca.findMany({
+      where: {
+        convenioContabilCobrancaId: { not: null },
+        statusEmissao: 'AGUARDANDO_EMISSAO',
+        tentativasEmissao: { lt: RETRY_MAX_TENTATIVAS },
+        OR: [
+          { ultimaTentativaEmissaoEm: null },
+          { ultimaTentativaEmissaoEm: { lt: limite } },
+        ],
+      },
+      select: {
+        id: true,
+        valorLiquido: true,
+        dataVencimento: true,
+        cooperativaId: true,
+        mesReferencia: true,
+        anoReferencia: true,
+        convenioContabilCobranca: {
+          select: {
+            id: true,
+            empresaNome: true,
+            cooperativaId: true,
+            pagadorCooperadoId: true,
+          },
+        },
+      },
+      take: 50, // batch defensivo
+    });
+
+    if (pendentes.length === 0) {
+      this.logger.debug('[F1 retry] Nenhuma consolidada AGUARDANDO_EMISSAO elegível.');
+      return;
+    }
+
+    this.logger.log(
+      `[F1 retry] ${pendentes.length} consolidada(s) elegível(is) pra retry de emissão.`,
+    );
+
+    let tentadas = 0;
+    let emitidas = 0;
+    let falhas = 0;
+
+    for (const c of pendentes) {
+      const conv = c.convenioContabilCobranca;
+      const cooperativaId = c.cooperativaId ?? conv?.cooperativaId;
+      const pagadorCooperadoId = conv?.pagadorCooperadoId;
+
+      if (!conv || !cooperativaId || !pagadorCooperadoId) {
+        this.logger.warn(
+          `[F1 retry] Cobrança ${c.id} sem convênio/cooperativa/pagador resolvíveis — skip.`,
+        );
+        continue;
+      }
+
+      const descricao = `Cobrança consolidada — ${conv.empresaNome} — ${String(c.mesReferencia).padStart(2, '0')}/${c.anoReferencia}`;
+
+      tentadas++;
+      try {
+        await this.custeioService.emitirNoGateway(
+          c.id,
+          cooperativaId,
+          pagadorCooperadoId,
+          Number(c.valorLiquido),
+          c.dataVencimento,
+          descricao,
+        );
+      } catch (err) {
+        // emitirNoGateway tem try/catch interno — não deveria propagar.
+        // Mas se algo escapar, logamos e seguimos pra próxima.
+        this.logger.error(
+          `[F1 retry] Exceção inesperada em emitirNoGateway pra ${c.id}: ${(err as Error).message}`,
+        );
+      }
+
+      // Re-lê estado pós-tentativa. Se atingiu cap E ainda AGUARDANDO, marca FALHA.
+      const atual = await this.prisma.cobranca.findUnique({
+        where: { id: c.id },
+        select: {
+          statusEmissao: true,
+          tentativasEmissao: true,
+          ultimoErroEmissao: true,
+        },
+      });
+
+      if (!atual) continue;
+
+      if (atual.statusEmissao === 'EMITIDO') {
+        emitidas++;
+        continue;
+      }
+
+      if (
+        atual.statusEmissao === 'AGUARDANDO_EMISSAO' &&
+        atual.tentativasEmissao >= RETRY_MAX_TENTATIVAS
+      ) {
+        falhas++;
+        await this.marcarFalhaEmissao(
+          c.id,
+          conv.empresaNome,
+          cooperativaId,
+          atual.ultimoErroEmissao ?? 'erro desconhecido',
+        );
+      }
+    }
+
+    this.logger.log(
+      `[F1 retry] Concluído — tentadas=${tentadas}, emitidas=${emitidas}, ` +
+        `marcadas como FALHA_EMISSAO=${falhas}.`,
+    );
+  }
+
+  /**
+   * F1 — após 5ª falha consecutiva, marca FALHA_EMISSAO + cria notificação
+   * in-app pros admins do tenant (adminId=null roteia pra todos os admins
+   * da cooperativaId — ver NotificacoesService.buildWhere).
+   */
+  private async marcarFalhaEmissao(
+    cobrancaId: string,
+    empresaNome: string,
+    cooperativaId: string,
+    ultimoErro: string,
+  ) {
+    try {
+      await this.prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: { statusEmissao: 'FALHA_EMISSAO' },
+      });
+    } catch (err) {
+      this.logger.error(
+        `[F1 retry] Falha ao marcar FALHA_EMISSAO em ${cobrancaId}: ${(err as Error).message}`,
+      );
+      return;
+    }
+
+    try {
+      await this.notificacoes.criar({
+        tipo: 'COBRANCA_EMISSAO_FALHOU',
+        titulo: 'Emissão de cobrança falhou',
+        mensagem:
+          `Cobrança consolidada de ${empresaNome} falhou ${RETRY_MAX_TENTATIVAS}× ao emitir no gateway. ` +
+          `Último erro: ${ultimoErro.slice(0, 200)}. Use "Tentar de novo" na tela do convênio.`,
+        cooperativaId,
+        link: '/dashboard/convenios',
+      });
+    } catch (err) {
+      this.logger.error(
+        `[F1 retry] Falha ao criar notificação admin pra ${cobrancaId}: ${(err as Error).message}`,
+      );
+    }
+
+    this.logger.warn(
+      `[F1 retry] Cobrança ${cobrancaId} (${empresaNome}) marcada FALHA_EMISSAO ` +
+        `após ${RETRY_MAX_TENTATIVAS} tentativas. Admin notificado.`,
+    );
   }
 }

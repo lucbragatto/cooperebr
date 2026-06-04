@@ -793,12 +793,37 @@ model Cobranca {
   convenioContabilCobrancaId String?
   convenioContabilCobranca   ContratoConvenio?  @relation("CobrancaConvenio", fields: [convenioContabilCobrancaId], references: [id])
 
+  // Sprint Financeiro F1 (04/06/2026) — Emissão no gateway desacoplada do
+  // status de cobrança (Decisão Luciano: blast radius mínimo). Aditivo:
+  //  - statusEmissao=null nas cobranças pré-existentes (não-consolidadas)
+  //  - AGUARDANDO_EMISSAO + tentativasEmissao=0 nas consolidadas novas
+  //  - Job retry 30min × 5 tentativas → FALHA_EMISSAO + notif admin
+  //  - Endpoint admin reemitir reseta tentativas
+  statusEmissao            StatusEmissao?
+  tentativasEmissao        Int                  @default(0)
+  ultimoErroEmissao        String?
+  ultimaTentativaEmissaoEm DateTime?
+
   // T6 Sprint 5: anti-duplicacao por contrato + competencia. Dupla camada:
   // guards em codigo (cobrancas.service, faturas.service) + constraint no banco.
   @@unique([contratoId, mesReferencia, anoReferencia], map: "cobranca_contrato_competencia_unique")
   @@index([convenioContabilCobrancaId])
+  // Sprint Financeiro F1 — job de retry varre statusEmissao=AGUARDANDO_EMISSAO
+  // com tentativasEmissao < 5 (back-off 30min via ultimaTentativaEmissaoEm).
+  @@index([statusEmissao, tentativasEmissao])
 
   @@map("cobrancas")
+}
+
+/// Sprint Financeiro F1 (04/06/2026) — Estado da emissão no gateway de pagamento.
+/// Desacoplado de StatusCobranca (cobrança "PENDENTE" pode estar EMITIDA ou não).
+///  - AGUARDANDO_EMISSAO: criada, gateway ainda não emitiu (skip ambiente OU retry).
+///  - EMITIDO: AsaasCobranca/etc gravada; empresa tem documento de pagamento.
+///  - FALHA_EMISSAO: 5+ tentativas falharam; admin precisa intervir (botão "Tentar de novo").
+enum StatusEmissao {
+  AGUARDANDO_EMISSAO
+  EMITIDO
+  FALHA_EMISSAO
 }
 
 enum StatusCobranca {

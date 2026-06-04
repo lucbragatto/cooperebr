@@ -434,6 +434,11 @@ export class ConveniosCusteioService {
             dataVencimento,
             cooperativaId: convenio.cooperativaId!,
             convenioContabilCobrancaId: convenio.id, // hook Design B (2.4.4c roteia darBaixa)
+            // Sprint Financeiro F1 (04/06/2026) — desacopla emissão do status.
+            // Cobrança nasce AGUARDANDO_EMISSAO; emitirNoGateway abaixo (FORA
+            // do tx) atualiza pra EMITIDO ou incrementa tentativas. Job retry
+            // varre AGUARDANDO_EMISSAO com tentativas < 5 (back-off 30min).
+            statusEmissao: 'AGUARDANDO_EMISSAO',
           },
         });
 
@@ -491,17 +496,24 @@ export class ConveniosCusteioService {
   }
 
   /**
-   * D-FISCAL-2.4.4b — Emite a cobrança consolidada no gateway (Asaas/Banestes).
-   * Best-effort, NUNCA reverte a Cobranca criada.
+   * D-FISCAL-2.4.4b + Sprint Financeiro F1 (04/06/2026) — Emite a cobrança
+   * consolidada no gateway (Asaas/Banestes). Best-effort, NUNCA reverte a
+   * Cobranca criada (já está commitada).
    *
-   * Guarda dupla:
-   *  1. isAmbienteReal()=false → PULA totalmente (regra contatos teste 14/05).
-   *  2. cooperado sem formaPagamento configurada → PULA com log INFO.
-   *  3. Erro do adapter → log warn (não joga pra cima).
+   * Sprint F1 mudou:
+   *  - statusEmissao agora reflete o resultado (AGUARDANDO_EMISSAO → EMITIDO
+   *    ou tentativasEmissao++).
+   *  - Skip propositais (gateway nulo / !isAmbienteReal / sem formaPagamento)
+   *    NÃO incrementam tentativas — job filtra esses por `isAmbienteReal()`.
+   *  - Falha real do adapter (HTTP / 4xx / 5xx) incrementa tentativas +
+   *    grava ultimoErroEmissao + ultimaTentativaEmissaoEm. Job retry roda
+   *    a cada 30min, cap 5 tentativas → FALHA_EMISSAO + notif admin.
    *
-   * Mesma filosofia do CobrancasService.tentarEmitirNoGateway:770-803.
+   * Visível: este método NÃO altera statusEmissao no skip por gateway nulo /
+   * !isAmbienteReal — fica AGUARDANDO_EMISSAO permanentemente em dev (admin
+   * sabe pelo banco que precisa ligar AMBIENTE_REAL=true).
    */
-  private async emitirNoGateway(
+  async emitirNoGateway(
     cobrancaId: string,
     cooperativaId: string,
     cooperadoId: string,
@@ -511,14 +523,16 @@ export class ConveniosCusteioService {
   ): Promise<void> {
     if (!this.gatewayPagamento) {
       this.logger.debug(
-        `[D-FISCAL-2.4.4b] GatewayPagamentoService não injetado — skip emissão da consolidada ${cobrancaId}.`,
+        `[F1] GatewayPagamentoService não injetado — skip emissão da consolidada ${cobrancaId}. ` +
+          `statusEmissao mantém AGUARDANDO_EMISSAO (sem incrementar tentativas).`,
       );
       return;
     }
     if (!isAmbienteReal()) {
       this.logger.log(
-        `[D-FISCAL-2.4.4b] AMBIENTE_REAL=false — skip emissão real da consolidada ${cobrancaId} ` +
+        `[F1] AMBIENTE_REAL=false — skip emissão real da consolidada ${cobrancaId} ` +
           `(regra contatos teste 14/05/2026 — fail-safe). ` +
+          `statusEmissao mantém AGUARDANDO_EMISSAO. ` +
           `Pra emitir em dev, configure AMBIENTE_REAL=true no .env.`,
       );
       return;
@@ -531,9 +545,9 @@ export class ConveniosCusteioService {
       const tipo = formaPagamento?.tipo;
       if (!tipo || !formasValidas.includes(tipo)) {
         this.logger.log(
-          `[D-FISCAL-2.4.4b] Empresa pagadora ${cooperadoId} sem formaPagamento configurada ` +
-            `(ou tipo inválido: ${tipo}). Skip emissão da consolidada ${cobrancaId} — ` +
-            `admin deve cobrar manualmente.`,
+          `[F1] Empresa pagadora ${cooperadoId} sem formaPagamento configurada ` +
+            `(ou tipo inválido: ${tipo}). Skip emissão da consolidada ${cobrancaId}. ` +
+            `statusEmissao mantém AGUARDANDO_EMISSAO (não conta tentativa — gate operacional).`,
         );
         return;
       }
@@ -548,14 +562,41 @@ export class ConveniosCusteioService {
           cobrancaId,
         },
       );
+      // SUCESSO — marca EMITIDO (Sprint F1)
+      await this.prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: {
+          statusEmissao: 'EMITIDO',
+          ultimoErroEmissao: null, // limpa erro anterior se foi retry
+        },
+      });
       this.logger.log(
-        `[D-FISCAL-2.4.4b] Consolidada ${cobrancaId} EMITIDA no gateway ${resultado.gateway} ` +
-          `(gatewayId=${resultado.gatewayId}, status=${resultado.status}).`,
+        `[F1] Consolidada ${cobrancaId} EMITIDA no gateway ${resultado.gateway} ` +
+          `(gatewayId=${resultado.gatewayId}, status=${resultado.status}). statusEmissao=EMITIDO.`,
       );
     } catch (err) {
+      // FALHA REAL — incrementa tentativas, salva erro, mantém AGUARDANDO_EMISSAO.
+      // Job retry ou endpoint admin podem retomar.
+      const erroMsg = (err as Error).message?.slice(0, 500) ?? 'erro desconhecido';
+      try {
+        await this.prisma.cobranca.update({
+          where: { id: cobrancaId },
+          data: {
+            tentativasEmissao: { increment: 1 },
+            ultimoErroEmissao: erroMsg,
+            ultimaTentativaEmissaoEm: new Date(),
+            // Mantém statusEmissao=AGUARDANDO_EMISSAO. Decisão de FALHA_EMISSAO
+            // fica com o job (que sabe se atingiu o cap 5).
+          },
+        });
+      } catch (updateErr) {
+        this.logger.error(
+          `[F1] Falha ao gravar tentativasEmissao na cobrança ${cobrancaId}: ${(updateErr as Error).message}`,
+        );
+      }
       this.logger.warn(
-        `[D-FISCAL-2.4.4b] Falha ao emitir consolidada ${cobrancaId} no gateway: ` +
-          `${(err as Error).message}. Cobrança ficou em PENDENTE — admin pode reenviar.`,
+        `[F1] Falha ao emitir consolidada ${cobrancaId} no gateway: ${erroMsg}. ` +
+          `statusEmissao=AGUARDANDO_EMISSAO; tentativasEmissao++; job retry tenta de novo em 30min.`,
       );
     }
   }
@@ -730,12 +771,128 @@ export class ConveniosCusteioService {
         dataVencimento: true,
         dataPagamento: true,
         createdAt: true,
+        // Sprint Financeiro F1 (04/06/2026) — estado da emissão no gateway
+        // (admin precisa enxergar AGUARDANDO_EMISSAO / EMITIDO / FALHA_EMISSAO
+        // + tentativas + último erro pra decidir se reemite).
+        statusEmissao: true,
+        tentativasEmissao: true,
+        ultimoErroEmissao: true,
+        ultimaTentativaEmissaoEm: true,
       },
       orderBy: [
         { anoReferencia: 'desc' },
         { mesReferencia: 'desc' },
       ],
     });
+  }
+
+  /**
+   * Sprint Financeiro F1 (04/06/2026) — Admin tenta reemitir consolidada que
+   * está em FALHA_EMISSAO (ou em AGUARDANDO_EMISSAO travada). Reseta o
+   * contador de tentativas, volta pra AGUARDANDO_EMISSAO e chama
+   * emitirNoGateway imediatamente (não espera o cron).
+   *
+   * Multi-tenant: valida posse via convenioId+cooperativaId.
+   *
+   * Pré-condições:
+   *  - Cobrança deve ser consolidada (convenioContabilCobrancaId set).
+   *  - Cobrança deve estar EMITIDO=false (não tem por que reemitir EMITIDO).
+   */
+  async reemitirCobrancaConsolidada(opts: {
+    convenioId: string;
+    cobrancaId: string;
+    cooperativaId: string;
+  }): Promise<{
+    cobrancaId: string;
+    statusEmissao: 'AGUARDANDO_EMISSAO' | 'EMITIDO' | 'FALHA_EMISSAO';
+    tentativasEmissao: number;
+    ultimoErroEmissao: string | null;
+  }> {
+    const { convenioId, cobrancaId, cooperativaId } = opts;
+
+    // 1. Carrega + valida posse multi-tenant + vínculo ao convênio
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: {
+        id: cobrancaId,
+        cooperativaId,
+        convenioContabilCobrancaId: convenioId,
+      },
+      select: {
+        id: true,
+        valorLiquido: true,
+        dataVencimento: true,
+        mesReferencia: true,
+        anoReferencia: true,
+        statusEmissao: true,
+        convenioContabilCobranca: {
+          select: {
+            empresaNome: true,
+            pagadorCooperadoId: true,
+            cooperativaId: true,
+          },
+        },
+      },
+    });
+    if (!cobranca || !cobranca.convenioContabilCobranca) {
+      throw new NotFoundException(
+        `Cobrança consolidada ${cobrancaId} não encontrada neste convênio/tenant`,
+      );
+    }
+    if (cobranca.statusEmissao === 'EMITIDO') {
+      throw new BadRequestException(
+        `Cobrança ${cobrancaId} já está EMITIDA — nada a reemitir`,
+      );
+    }
+    const pagadorCooperadoId = cobranca.convenioContabilCobranca.pagadorCooperadoId;
+    if (!pagadorCooperadoId) {
+      throw new BadRequestException(
+        `Convênio ${convenioId} sem pagadorCooperadoId — configure antes de reemitir`,
+      );
+    }
+
+    // 2. Reset: AGUARDANDO + tentativas=0 + limpa erro/timestamp
+    await this.prisma.cobranca.update({
+      where: { id: cobrancaId },
+      data: {
+        statusEmissao: 'AGUARDANDO_EMISSAO',
+        tentativasEmissao: 0,
+        ultimoErroEmissao: null,
+        ultimaTentativaEmissaoEm: null,
+      },
+    });
+
+    this.logger.log(
+      `[F1 reemitir] Admin acionou reemissão da consolidada ${cobrancaId} ` +
+        `(${cobranca.convenioContabilCobranca.empresaNome}). Reset tentativas → tentando agora.`,
+    );
+
+    // 3. Tenta emitir imediatamente (não espera cron 30min)
+    const descricao = `Cobrança consolidada — ${cobranca.convenioContabilCobranca.empresaNome} — ${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+    await this.emitirNoGateway(
+      cobranca.id,
+      cooperativaId,
+      pagadorCooperadoId,
+      Number(cobranca.valorLiquido),
+      cobranca.dataVencimento,
+      descricao,
+    );
+
+    // 4. Retorna estado atualizado
+    const atual = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      select: {
+        statusEmissao: true,
+        tentativasEmissao: true,
+        ultimoErroEmissao: true,
+      },
+    });
+
+    return {
+      cobrancaId,
+      statusEmissao: atual?.statusEmissao ?? 'AGUARDANDO_EMISSAO',
+      tentativasEmissao: atual?.tentativasEmissao ?? 0,
+      ultimoErroEmissao: atual?.ultimoErroEmissao ?? null,
+    };
   }
 
   /**

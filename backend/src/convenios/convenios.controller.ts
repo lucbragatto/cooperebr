@@ -439,6 +439,38 @@ export class ConveniosController {
     });
   }
 
+  /**
+   * Sprint Financeiro F1 (04/06/2026) — Reemite cobrança consolidada após
+   * FALHA_EMISSAO (ou enquanto AGUARDANDO_EMISSAO travada). Reseta tentativas
+   * → AGUARDANDO_EMISSAO → tenta no gateway imediatamente.
+   *
+   * UI: botão "Tentar de novo" nos badges AGUARDANDO_EMISSAO/FALHA_EMISSAO.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.consolidada.reemitir',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(200)
+  @Post(':id/cobrancas-consolidadas/:cobrancaId/reemitir')
+  async reemitirCobrancaConsolidada(
+    @Param('id') id: string,
+    @Param('cobrancaId') cobrancaId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('cooperativaId obrigatório no contexto do usuário');
+    }
+    return this.custeioService.reemitirCobrancaConsolidada({
+      convenioId: id,
+      cobrancaId,
+      cooperativaId,
+    });
+  }
+
   // ─── Sprint Convite-Convênio Fatia 3 (03/06/2026) — Aprovação 3 portas ──
 
   /**
