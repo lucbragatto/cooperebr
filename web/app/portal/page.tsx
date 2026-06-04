@@ -272,8 +272,8 @@ export default function PortalInicioPage() {
         {[
           { href: '/portal/convenio', label: 'Meu Convênio', icon: '🤝' },
           { href: '/portal/clube', label: 'Clube de Vantagens', icon: '🏆' },
-          { href: '/portal/tokens', label: 'Pagar com Tokens', icon: '🪙' },
-          { href: '/portal/creditos', label: 'Converter Créditos', icon: '💱' },
+          { href: '/portal/tokens', label: 'Meus CooperTokens', icon: '🪙' },
+          { href: '/portal/creditos', label: 'Crédito de Energia (R$)', icon: '💱' },
           { href: '/portal/conta', label: 'Minha Conta', icon: '👤' },
           { href: '/portal/ranking', label: 'Ranking', icon: '📊' },
         ].map(item => (

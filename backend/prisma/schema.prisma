@@ -2630,6 +2630,7 @@ model ConfigCooperToken {
   limiteTokenMensal Int?
   valorTokenReais   Decimal     @default(0.45) @db.Decimal(10, 2)
   descontoMaxPerc   Decimal     @default(30) @db.Decimal(5, 2)
+  bonusIndicacao    Int         @default(50) // tokens ao indicador (Fatia B 04/06 — antes hardcoded)
   tetoCoop          Int?
   ativo             Boolean     @default(true)
   cooperativaId     String      @unique

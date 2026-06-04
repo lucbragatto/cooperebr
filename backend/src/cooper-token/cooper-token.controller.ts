@@ -330,6 +330,7 @@ export class CooperTokenController {
       limiteTokenMensal?: number | null;
       valorTokenReais?: number;
       descontoMaxPerc?: number;
+      bonusIndicacao?: number;
       tetoCoop?: number | null;
       ativo?: boolean;
     },
@@ -351,6 +352,7 @@ export class CooperTokenController {
       limiteTokenMensal: null,
       valorTokenReais: 0.45,
       descontoMaxPerc: 30,
+      bonusIndicacao: 50,
       tetoCoop: null,
       ativo: true,
     };

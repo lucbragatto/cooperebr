@@ -168,7 +168,14 @@ export default function PortalTokensPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Usar Tokens</h1>
+      <h1 className="text-2xl font-bold">Meus CooperTokens</h1>
+
+      {/* Ajuda contextual (regra de help inline) */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-3 text-sm space-y-1">
+        <p><strong>O que são CooperTokens?</strong> São seu benefício de fidelidade na cooperativa.</p>
+        <p>Use para <strong>abater sua fatura de energia</strong> (abaixo) ou <strong>pagar em parceiros do Clube</strong> (gerando um QR Code).</p>
+        <p className="text-blue-700"><strong>Importante:</strong> CooperTokens valem <strong>desconto</strong> — não viram dinheiro para você. Ex.: usar 50 CooperTokens abate o valor equivalente na sua próxima fatura.</p>
+      </div>
 
       <Card>
         <CardHeader>
@@ -178,7 +185,7 @@ export default function PortalTokensPage() {
         </CardHeader>
         <CardContent>
           <p className="text-3xl font-bold text-green-600">
-            {saldo.toFixed(4)} CTK
+            {saldo.toFixed(4)} CooperTokens
           </p>
         </CardContent>
       </Card>
@@ -187,7 +194,7 @@ export default function PortalTokensPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Receipt className="h-5 w-5" /> Usar Tokens na Fatura
+            <Receipt className="h-5 w-5" /> Abater minha fatura com CooperTokens
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -268,7 +275,7 @@ export default function PortalTokensPage() {
               </h3>
               <p className="text-sm text-muted-foreground mb-3">
                 Valor atual: <strong>R$ {Number(modalCobranca.valorLiquido).toFixed(2)}</strong>
-                {' | '}Saldo: <strong>{saldo.toFixed(4)} CTK</strong>
+                {' | '}Saldo: <strong>{saldo.toFixed(4)} CooperTokens</strong>
               </p>
 
               {erroFatura && (
@@ -309,7 +316,7 @@ export default function PortalTokensPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <QrCode className="h-5 w-5" /> Gerar QR Code para Usar Tokens
+            <QrCode className="h-5 w-5" /> Pagar em parceiro do Clube (QR Code)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -331,7 +338,7 @@ export default function PortalTokensPage() {
                 required
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Taxa de pagamento QR: 1% retida no pagamento
+                Taxa da rede: 1% retida em CooperTokens nesta operação
               </p>
             </div>
             <Button type="submit" disabled={gerando}>
@@ -357,8 +364,8 @@ export default function PortalTokensPage() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground text-center max-w-sm">
-                Apresente este QR Code ao parceiro para que ele escaneie e
-                processe o pagamento.
+                Apresente este QR Code ao parceiro do Clube para usar seus
+                CooperTokens como desconto.
               </p>
             </div>
           )}

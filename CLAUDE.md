@@ -278,6 +278,26 @@ sempre visíveis no portal. WhatsApp notifica antes de eventos.
 Antes de implementar Sprint 8, investigar /cadastro público —
 pode já ter partes do Clube.
 
+### Circuito CooperToken + Convênio — desenho consolidado (04/06/2026)
+
+Plano de finalização completo em **`docs/especificacao-circuito-cooper-token-convenio.md`**
+(diagrama visual em `Downloads/circuito-cooper-token-completo.html`). Decisões travadas:
+
+- **COOPERADO-ONLY:** só cooperado (PF ou PJ) participa do Clube ou faz convênio (já no
+  estatuto) → tudo é ato cooperativo (Art. 79). "Parceiro do Clube" = cooperado PF/PJ
+  (NÃO confundir com `/parceiro/*` = o tenant/cooperativa).
+- **Dois rios:** ENERGIA→SOBRA (dinheiro, proporcional à energia, mensal) × TOKEN→
+  BENEFÍCIO (circuito fechado; abate fatura/parceiros; sai por **resgate**). Sobra
+  acompanha energia, NUNCA token.
+- **Token = voucher de circuito fechado**, cooperativa = emissora única. Saída em R$:
+  parceiro = **resgate/liquidação** (recibo, sem NF de venda); cooperado = **sobra**.
+  **Nunca "recompra".** Coop tributa só spread/queima; valor cheio é trânsito.
+- **Convênio = 2 pontas (energia + token), fatura única SEGREGADA** (Art. 87 obrigatório).
+- 3 pareceres `cooperebr-analista-conformidade` + memória `decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md`.
+- ⚠️ STF Tema 536 (isenção ato cooperativo) em julgamento — monitorar.
+- Após build+teste do circuito → **Módulo Contabilidade Tributária Segregada**
+  (atualizado com energia×token×quebra/queima).
+
 ## Gateways de pagamento
 
 Novos gateways sempre via adapter pattern (`src/gateway-pagamento/`).
@@ -399,18 +419,25 @@ Regra criada após sessão de 2026-04-25, onde 1h foi gasta debugando
 erros 500 em `/ocorrencias` e `/contratos` que eram só engine Prisma
 antigo carregado em memória pelo backend que o PM2 mantinha respawnado.
 
-### Frontend Next.js dev — terminal vivo, NÃO gerenciado pelo PM2
+### Frontend Next.js — `next start` (build de produção) SOB PM2 (corrigido 2026-06-04)
 
-O **frontend** (`web/`) roda via `npm run dev` em **terminal interativo**.
-**Não está sob PM2.** Se o terminal/VS Code fecha, o frontend cai.
+⚠️ **CORREÇÃO 2026-06-04:** o frontend NÃO roda em `npm run dev`/HMR. Roda em
+**`next start -p 3001`** (build de produção do `.next/`) gerenciado pelo **PM2 como
+`cooperebr-frontend`**. **NÃO HÁ HMR.**
 
-Sintomas de "frontend caiu":
-- Browser mostra "Cannot connect" em `localhost:3001`
-- Rotas que funcionavam viram 404
-- HMR para de atualizar mudanças
+**Consequência crítica:** **toda** mudança em `web/` (qualquer `.tsx`, não só páginas
+novas) só aparece no browser **após rebuild + restart**:
+```
+cd web ; npm run build ; pm2 restart cooperebr-frontend
+```
+Depois, **hard reload** no browser (Ctrl+Shift+R).
 
-Recuperação: abrir terminal novo, `cd web ; npm run dev`. Não tem
-ressuscitação automática.
+Sintoma de "esqueci de rebuildar o frontend": a edição está no arquivo-fonte (confirma com
+grep) mas o browser mostra a versão antiga — o bundle servido foi compilado antes da mudança.
+
+Recuperação se cair: `pm2 restart cooperebr-frontend` (ou `pm2 start` se stopped).
+Origem: sessão 2026-06-04 — Fatia A (nomenclatura CooperToken no portal) não aparecia no
+browser porque o frontend estava em `next start`, não `next dev`. ~30min até diagnosticar.
 
 **Cuidado com VS Code reload:** ao reabrir VS Code/terminal integrado
 e usar histórico do PowerShell, é fácil rodar comando velho de PM2

@@ -11,6 +11,8 @@ import {
   Users,
   LogOut,
   User,
+  Coins,
+  Award,
 } from 'lucide-react';
 import { useContexto } from '@/hooks/useContexto';
 import ContextoSwitcher from '@/components/ContextoSwitcher';
@@ -19,6 +21,8 @@ const navItems = [
   { href: '/portal', label: 'Início', icon: Home },
   { href: '/portal/ucs', label: 'UCs', icon: Zap },
   { href: '/portal/financeiro', label: 'Financeiro', icon: DollarSign },
+  { href: '/portal/tokens', label: 'Tokens', icon: Coins },
+  { href: '/portal/clube', label: 'Clube', icon: Award },
   { href: '/portal/documentos', label: 'Docs', icon: FileText },
   { href: '/portal/indicacoes', label: 'Indicar', icon: Users },
 ];
@@ -93,7 +97,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <Link
                 key={href}
                 href={href}
-                className={`flex flex-col items-center py-2 px-3 min-w-[60px] text-xs transition-colors ${
+                className={`flex flex-col items-center py-2 px-1 flex-1 min-w-0 text-[10px] transition-colors ${
                   isActive
                     ? 'text-green-700 font-semibold'
                     : 'text-gray-500 hover:text-green-600'

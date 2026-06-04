@@ -380,11 +380,9 @@ export class IndicacoesService {
           continue;
         }
 
-        // Sprint 8A: bonusIndicacao fixo em 50 tokens.
-        // Campo bonusIndicacao não existe em ConfigCooperToken (era fantasma).
-        // Quando ConfigCooperToken for implementado de verdade (Sprint 8B+),
-        // ler de lá. Por enquanto: constante documentada.
-        const bonusQtd = 50;
+        // Fatia B (04/06): bonusIndicacao agora vem da config por cooperativa (default 50).
+        const configCtk = await this.cooperTokenService.getConfig(cooperativaId);
+        const bonusQtd = Number(configCtk?.bonusIndicacao ?? 50);
 
         await this.cooperTokenService.creditar({
           cooperadoId: indicacao.cooperadoIndicadorId,

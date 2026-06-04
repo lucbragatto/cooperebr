@@ -879,6 +879,7 @@ export class CooperTokenService {
       limiteTokenMensal?: number | null;
       valorTokenReais?: number;
       descontoMaxPerc?: number;
+      bonusIndicacao?: number;
       tetoCoop?: number | null;
       ativo?: boolean;
     },

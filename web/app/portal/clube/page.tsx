@@ -90,11 +90,17 @@ export default function PortalClubePage() {
         Clube de Vantagens
       </h1>
 
+      {/* Ajuda contextual (regra de help inline) */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-3 text-sm space-y-1">
+        <p><strong>Como funciona o Clube?</strong> Troque seus <strong>CooperTokens</strong> por ofertas e benefícios dos parceiros.</p>
+        <p>Ao resgatar uma oferta, você recebe um <strong>código</strong> — é só apresentá-lo ao parceiro para usar o benefício. Ex.: resgatar uma oferta de 100 CooperTokens gera um código que vale o benefício no estabelecimento.</p>
+      </div>
+
       {/* Saldo */}
       <Card>
         <CardContent className="py-4">
           <p className="text-sm text-muted-foreground">Seu saldo</p>
-          <p className="text-2xl font-bold text-green-600">{saldo.toFixed(0)} CTK</p>
+          <p className="text-2xl font-bold text-green-600">{saldo.toFixed(0)} CooperTokens</p>
         </CardContent>
       </Card>
 
@@ -109,11 +115,11 @@ export default function PortalClubePage() {
             <p className="text-sm text-muted-foreground">{confirmando.beneficio}</p>
             <div className="bg-white border rounded-lg p-3 mt-2">
               <p className="text-xs text-muted-foreground">Custo</p>
-              <p className="text-xl font-bold text-amber-600">{confirmando.quantidadeTokens} CTK</p>
+              <p className="text-xl font-bold text-amber-600">{confirmando.quantidadeTokens} CooperTokens</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Saldo atual: <span className="font-medium text-green-600">{saldo.toFixed(0)} CTK</span>
+                Saldo atual: <span className="font-medium text-green-600">{saldo.toFixed(0)} CooperTokens</span>
                 {' → '}
-                Saldo apos: <span className="font-medium">{(saldo - confirmando.quantidadeTokens).toFixed(0)} CTK</span>
+                Saldo apos: <span className="font-medium">{(saldo - confirmando.quantidadeTokens).toFixed(0)} CooperTokens</span>
               </p>
             </div>
             <div className="flex gap-2 justify-center mt-3">
@@ -203,7 +209,7 @@ export default function PortalClubePage() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-lg font-bold text-amber-600">
-                        {oferta.quantidadeTokens} CTK
+                        {oferta.quantidadeTokens} CooperTokens
                       </p>
                       <Button
                         size="sm"
@@ -237,7 +243,7 @@ export default function PortalClubePage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm">{r.oferta.titulo}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(r.createdAt).toLocaleDateString('pt-BR')} — {r.tokensUsados} CTK
+                      {new Date(r.createdAt).toLocaleDateString('pt-BR')} — {r.tokensUsados} CooperTokens
                     </p>
                     <p className="text-xs font-mono text-muted-foreground break-all">
                       {r.codigoResgate}

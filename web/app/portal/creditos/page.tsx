@@ -56,7 +56,14 @@ export default function PortalCreditosPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Converter Créditos</h1>
+      <h1 className="text-2xl font-bold">Converter Crédito de Energia em Dinheiro</h1>
+
+      {/* Ajuda contextual (regra de help inline) */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-3 text-sm space-y-1">
+        <p><strong>O que é isto?</strong> Aqui você converte seu <strong>crédito de energia (kWh)</strong> em <strong>dinheiro via PIX</strong> — para cooperados <strong>sem unidade consumidora (UC)</strong>, que não têm fatura própria para abater.</p>
+        <p className="text-blue-700"><strong>Não confunda:</strong> isto é <strong>crédito de energia</strong> (vira dinheiro). Já os <strong>CooperTokens</strong> são outro saldo — valem desconto em energia/parceiros, não viram dinheiro para você.</p>
+        <p>A solicitação passa por <strong>aprovação</strong> antes do pagamento. Ex.: solicitar 100 kWh gera um pedido com o valor em R$ calculado pela tarifa vigente.</p>
+      </div>
 
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Send className="h-5 w-5" /> Solicitar Conversão</CardTitle></CardHeader>
