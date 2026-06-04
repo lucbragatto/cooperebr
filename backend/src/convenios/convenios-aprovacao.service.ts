@@ -248,6 +248,133 @@ export class ConvenioAprovacaoService {
     return { ok: true, status: novoStatus };
   }
 
+  // ─── Porta 1b (Empresa logada via portal) ─────────────────────────
+
+  /**
+   * Sprint Portal Empresa HOTFIX (04/06/2026) — empresa decide IN-PORTAL
+   * (JWT, sem depender de AprovacaoConvenioMembro/magic link). Espelha a
+   * state machine de `decidirAprovacaoEmpresa` mas opera direto no membroId.
+   *
+   * Justificativa: o magic link só é criado quando o admin envia "Reenviar
+   * aprovação empresa". No /auto-inscrever da Fatia 2c o membro nasce
+   * PENDENTE_APROVACAO_EMPRESA sem AprovacaoConvenioMembro automaticamente
+   * (depende do admin clicar reenviar). Empresa logada NÃO depende disso —
+   * o JWT já comprova posse via PagadorCooperadoGuard.
+   *
+   * GUARDS:
+   *  - Multi-tenant via cooperativaId (guard externo + carregarMembroDoTenant).
+   *  - status === PENDENTE_APROVACAO_EMPRESA (senão erro claro 409).
+   *  - REJEITAR exige motivo >= 2 chars.
+   *  - $transaction Serializable + updateMany com status check (idempotência
+   *    + anti-race) — mesma defesa em profundidade da Porta 1.
+   *
+   * EFEITOS:
+   *  - APROVAR → status PENDENTE_APROVACAO_ADMIN + aprovadoPorEmpresaEm=now.
+   *  - REJEITAR → MEMBRO_REJEITADO_EMPRESA + rejeitadoPorEmpresaEm=now + motivoRejeicao.
+   *  - Se EXISTIR AprovacaoConvenioMembro pro membro, marca usedAt+decisao
+   *    pra consistência (NÃO exige). IP + UA gravados também se houver.
+   *  - Notificações mesma cadeia da Porta 1 (notificarPosAprovacaoEmpresa).
+   */
+  async decidirAprovacaoEmpresaLogada(input: {
+    membroId: string;
+    cooperativaId: string;
+    decisao: 'APROVAR' | 'REJEITAR';
+    motivo?: string;
+    ip?: string;
+    userAgent?: string;
+  }): Promise<{ ok: true; status: StatusMembroConvenio }> {
+    const { membroId, cooperativaId, decisao, motivo, ip, userAgent } = input;
+
+    if (decisao === 'REJEITAR' && (!motivo || motivo.trim().length < 2)) {
+      throw new BadRequestException(
+        'Motivo obrigatório ao recusar (mínimo 2 caracteres).',
+      );
+    }
+
+    const membro = await this.carregarMembroDoTenant(membroId, cooperativaId, {
+      includeAprovacao: true,
+    });
+
+    if (membro.status !== 'PENDENTE_APROVACAO_EMPRESA') {
+      throw new ConflictException(
+        'Este cadastro não está mais aguardando sua confirmação.',
+      );
+    }
+
+    const novoStatus: StatusMembroConvenio =
+      decisao === 'APROVAR' ? 'PENDENTE_APROVACAO_ADMIN' : 'MEMBRO_REJEITADO_EMPRESA';
+    const agora = new Date();
+
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          // 1. Atualiza ConvenioCooperado (membro) com guard de status
+          const dadosMembro: Prisma.ConvenioCooperadoUpdateInput =
+            decisao === 'APROVAR'
+              ? {
+                  status: novoStatus,
+                  aprovadoPorEmpresaEm: agora,
+                }
+              : {
+                  status: novoStatus,
+                  rejeitadoPorEmpresaEm: agora,
+                  motivoRejeicao: motivo!.trim(),
+                };
+
+          const r = await tx.convenioCooperado.updateMany({
+            where: {
+              id: membroId,
+              status: 'PENDENTE_APROVACAO_EMPRESA',
+            },
+            data: dadosMembro,
+          });
+          if (r.count === 0) {
+            throw new ConflictException('RACE_STATUS_CHANGED');
+          }
+
+          // 2. Se houver AprovacaoConvenioMembro pendente, consome ela pra
+          //    manter consistência (single-use). NÃO falha se não existir.
+          const aprov = (membro as any).aprovacao;
+          if (aprov && !aprov.usedAt) {
+            await tx.aprovacaoConvenioMembro.update({
+              where: { id: aprov.id },
+              data: {
+                usedAt: agora,
+                decisao: decisao === 'APROVAR' ? 'APROVADO' : 'REJEITADO',
+                motivoRejeicao: decisao === 'REJEITAR' ? motivo?.trim() : null,
+                aprovadorIp: ip,
+                aprovadorUserAgent: userAgent,
+              },
+            });
+          }
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (err: any) {
+      if (err instanceof ConflictException && err.message === 'RACE_STATUS_CHANGED') {
+        this.logger.warn(
+          `[aprovacao-empresa-logada] Race em membroId=${membroId}: status já mudou.`,
+        );
+        throw new ConflictException('Esta decisão já foi registrada.');
+      }
+      throw err;
+    }
+
+    await this.notificarPosAprovacaoEmpresa({
+      membroId,
+      convenioId: membro.convenio.id,
+      decisao,
+      motivo,
+    });
+
+    this.logger.log(
+      `[aprovacao-empresa-logada] OK: membroId=${membroId} ` +
+        `decisao=${decisao} novoStatus=${novoStatus} (sem token; via JWT empresa)`,
+    );
+
+    return { ok: true, status: novoStatus };
+  }
+
   // ─── Porta 2 (CoopereBR ADMIN via dashboard) ──────────────────────
 
   /**

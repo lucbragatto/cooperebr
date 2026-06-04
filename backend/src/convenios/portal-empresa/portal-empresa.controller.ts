@@ -220,14 +220,15 @@ export class PortalEmpresaController {
   }
 
   /**
-   * Sprint Portal Empresa 9.1 (04/06/2026) — Empresa decide in-portal
-   * (JWT, sem magic link). Wrapper sobre decidirAprovacaoEmpresa que
-   * resolve o token a partir do membroId (criado quando o cooperado se
-   * cadastrou via /auto-inscrever).
+   * Sprint Portal Empresa 9.1 + HOTFIX (04/06/2026) — Empresa decide in-portal
+   * (JWT, sem magic link). Chama decidirAprovacaoEmpresaLogada que opera
+   * direto no membroId — NÃO depende de AprovacaoConvenioMembro existente
+   * (magic link só é criado quando admin clica "Reenviar aprovação empresa").
    *
    * Body: { decisao: 'APROVAR' | 'REJEITAR', motivo?: string }
    *
-   * Audit + state machine intactos (mesmo serviço da Porta 1 magic link).
+   * Multi-tenant: cooperativaId vem do PagadorCooperadoGuard (req.empresa).
+   * Audit + state machine + notificações intactos (mesma cadeia da Porta 1).
    */
   @PagadorCooperadoOnly()
   @AuditLog({
@@ -243,17 +244,13 @@ export class PortalEmpresaController {
     @Body() body: { decisao: 'APROVAR' | 'REJEITAR'; motivo?: string },
     @Req() req: any,
   ) {
-    // Resolve token de aprovação do membro pra reusar a state machine
-    // existente (decidirAprovacaoEmpresa) sem duplicar lógica.
-    const aprov = await this.aprovacaoService['prisma'].aprovacaoConvenioMembro.findUnique({
-      where: { membroId },
-      select: { token: true },
-    });
-    if (!aprov) {
-      throw new ForbiddenException('Aprovação não encontrada pra este membro.');
+    const cooperativaId = req.empresa?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('Contexto sem cooperativaId.');
     }
-    return this.aprovacaoService.decidirAprovacaoEmpresa({
-      token: aprov.token,
+    return this.aprovacaoService.decidirAprovacaoEmpresaLogada({
+      membroId,
+      cooperativaId,
       decisao: body.decisao,
       motivo: body.motivo,
       ip: req.ip,
