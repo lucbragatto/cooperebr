@@ -18,6 +18,7 @@ import { DecidirAprovacaoEmpresaDto } from '../convenios/dto/decidir-aprovacao-e
 import { coerceDistribuidora } from '../ucs/ucs.service';
 import { AutoInscreverConvenioDto } from './dto/auto-inscrever-convenio.dto';
 import { ValidarOtpConviteDto } from './dto/validar-otp-convite.dto';
+import { isAmbienteReal } from '../common/safety/ambiente';
 
 @Controller('publico')
 export class PublicoController {
@@ -444,6 +445,15 @@ export class PublicoController {
     const ERRO_GENERICO = 'Não foi possível concluir o cadastro. Entre em contato com a empresa pra solicitar inclusão manual.';
     const OTP_JANELA_AUTO_INSCREVER_MIN = 30;
 
+    // HOTFIX (04/06/2026) — em DEV (!isAmbienteReal()), surfaceia o motivo
+    // real do bloqueio pra acelerar diagnóstico do Luciano. Em PROD mantém
+    // o genérico (anti-enumeração — quem ataca não sabe se é CPF duplicado,
+    // convite usado, quota, etc.). O payload usa o mesmo shape dos erros
+    // OTP estruturados ({ erro, mensagem }).
+    const ehDev = !isAmbienteReal();
+    const erroDetalhe = (erro: string, motivoDev: string) =>
+      ehDev ? { erro, mensagem: ERRO_GENERICO, dev_motivo: motivoDev } : ERRO_GENERICO;
+
     // Kill-switch emergencial. Default 'true' = endpoint ativo.
     // Set 'false' pra desligar o caminho público (rollback emergencial).
     const conviteOtpAtivo = (process.env.CONVITE_OTP_ATIVO ?? 'true').toLowerCase() !== 'false';
@@ -452,7 +462,12 @@ export class PublicoController {
         `[auto-inscrever] DESLIGADO por feature flag CONVITE_OTP_ATIVO=false. ` +
           `tokenSufixo=...${(dto.token ?? '').slice(-6)} cpfSufixo=...${(dto.cpf ?? '').slice(-4)}`,
       );
-      throw new NotFoundException(ERRO_GENERICO);
+      const ehDevKill = !isAmbienteReal();
+      throw new NotFoundException(
+        ehDevKill
+          ? { erro: 'kill_switch', mensagem: ERRO_GENERICO, dev_motivo: 'CONVITE_OTP_ATIVO=false' }
+          : ERRO_GENERICO,
+      );
     }
 
     // (1) Carregar convite — token é a chave; convenio + cooperativaId vêm DELE.
@@ -478,20 +493,24 @@ export class PublicoController {
       this.logger.warn(
         `[auto-inscrever] Convite não encontrado: tokenSufixo=...${dto.token.slice(-6)}`,
       );
-      throw new NotFoundException(ERRO_GENERICO);
+      throw new NotFoundException(erroDetalhe('convite_inexistente', 'token não encontrado'));
     }
     if (convite.usedAt) {
       this.logger.warn(
         `[auto-inscrever] Convite JÁ USADO (consume-once): conviteId=${convite.id} ` +
           `tokenSufixo=...${dto.token.slice(-6)} usedAt=${convite.usedAt.toISOString()}`,
       );
-      throw new ConflictException(ERRO_GENERICO);
+      throw new ConflictException(
+        erroDetalhe('convite_ja_usado', `convite usado em ${convite.usedAt.toISOString()}`),
+      );
     }
     if (convite.expiresAt <= new Date()) {
       this.logger.warn(
         `[auto-inscrever] Convite expirado: conviteId=${convite.id} expiresAt=${convite.expiresAt.toISOString()}`,
       );
-      throw new BadRequestException(ERRO_GENERICO);
+      throw new BadRequestException(
+        erroDetalhe('convite_expirado', `convite expirou em ${convite.expiresAt.toISOString()}`),
+      );
     }
 
     // (2) OTP validado dentro de 30min
@@ -522,7 +541,12 @@ export class PublicoController {
         `[auto-inscrever] Convenio do convite inválido: convenioId=${convenio.id} ` +
           `status=${convenio.status} pagador=${convenio.pagador}`,
       );
-      throw new NotFoundException(ERRO_GENERICO);
+      throw new NotFoundException(
+        erroDetalhe(
+          'convenio_invalido',
+          `convenio status=${convenio.status} pagador=${convenio.pagador} (esperado ATIVO+EMPRESA)`,
+        ),
+      );
     }
     const cooperativaId = convenio.cooperativaId!;
 
@@ -543,7 +567,12 @@ export class PublicoController {
           `cpf=...${cpfLimpo.slice(-4)} tenantExistente=${cooperadoExistente.cooperativaId} ` +
           `convenioId=${convenio.id}`,
       );
-      throw new ConflictException(ERRO_GENERICO);
+      throw new ConflictException(
+        erroDetalhe(
+          'cpf_ja_cadastrado',
+          `CPF ...${cpfLimpo.slice(-4)} já existe em outro cooperado (id=${cooperadoExistente.id} tenant=${cooperadoExistente.cooperativaId})`,
+        ),
+      );
     }
 
     // (5) Rate-limit por convênio/hora — usa @@index([cooperadoId, createdAt]).
@@ -560,7 +589,12 @@ export class PublicoController {
         `[auto-inscrever] Rate-limit por convênio atingido: convenioId=${convenio.id} ` +
           `tentativas=${tentativasRecentes} janela=1h`,
       );
-      throw new ConflictException(ERRO_GENERICO);
+      throw new ConflictException(
+        erroDetalhe(
+          'rate_limit_convenio',
+          `${tentativasRecentes} cadastros via convite na última 1h pro convenio (limite 60)`,
+        ),
+      );
     }
 
     // (6) Quota: limiteMembros — conta MEMBRO_ATIVO + PENDENTE_* (não-expirados)
