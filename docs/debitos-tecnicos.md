@@ -4503,6 +4503,157 @@ Quando aparecer débito novo durante sessão:
 
 ---
 
+### D-novo-CAD-UC-FALSA — /cadastro inventa numeroUC fake quando não vem do form (P1, bloqueia SCEE em silêncio)
+
+**Origem:** Auditoria /cadastro público (04/06/2026) durante HOTFIX Portal Empresa. `publico.controller.ts:864` cria `Uc { numero: 'UC-' + Date.now() }` quando o wizard pula a etapa de UC (fluxo SEM_UC, modo manual, fluxo via convite slim).
+
+**Impacto:**
+- Cooperado nasce com UC fake `UC-1717505000000` que nunca casa com fatura real da distribuidora.
+- SCEE (Sistema de Compensação de Energia Elétrica) **NÃO compensa** créditos em UCs fake — só em UCs reais registradas na concessionária com instalação validada.
+- Bug aparece SEMANAS depois quando a 1ª fatura chega — créditos não foram alocados pra esse cooperado.
+- Caminho de descoberta hoje: zero alarme (silencioso). Detecta no PDF da concessionária com kWh `crédito acumulado` divergente do `enviado pela cooperativa`.
+
+**Fix (na convergência):**
+1. `numeroUC` OBRIGATÓRIO em TODA admissão (slim OU /cadastro). Validar formato por distribuidora (EDP-ES = 10 dígitos, etc).
+2. REMOVER o fallback `'UC-' + Date.now()` de `publico.controller.ts:864`.
+3. Pra fluxo SEM_UC (consórcios sem instalação própria — Hangar Academia), criar UC SINTÉTICA *explícita* (`tipoUc='SINTETICA' + numero='SINTETICA-<convenioId>'`) que NUNCA recebe fatura — schema delta + flag clara.
+4. Pra fluxo CONVITE_PUBLICO (custeio médico), exigir numeroUC + fatura PDF anexada (Etapa 3 do wizard).
+
+**Prioridade:** **P1** — bloqueia produção dos primeiros membros COM_UC reais. Não bloqueia SEM_UC se schema for clarificado.
+
+**Estimativa:** 4-6h Code (schema + validação + UI etapa).
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag + auditoria /cadastro).
+
+---
+
+### D-novo-CAD-ESTADOS-TRAVADOS — Cadastros em PENDENTE_* sem job de lembrete/expiração (P2)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). Estados intermediários não têm transição automática:
+- `Cooperado.status = PENDENTE_DOCUMENTOS` (aguardando upload) → sem prazo, sem lembrete WA, sem expiração.
+- `Contrato.status = PENDENTE_ATIVACAO` (motor calculou, falta admin ativar) → sem alerta pra admin.
+- `Contrato.status = LISTA_ESPERA` (sem usina alocável no momento) → sem reprocessamento quando vaga abrir.
+- `AprovacaoConvenioMembro` expirado (TTL 7d) → membro fica em `PENDENTE_APROVACAO_EMPRESA` sem aviso de que o magic link caducou; precisa admin reenviar manual.
+
+**Impacto:** cooperado abandona o funil silenciosamente. Lista de espera vira cemitério. Admin descobre quando reclama no SAC.
+
+**Fix:**
+1. Cron diário `lembrar-pendentes` (já existe `convenios.job.ts` — adicionar handlers):
+   - PENDENTE_DOCUMENTOS > 3d → WA lembrete; > 14d → expira pra REJEITADO + notif admin.
+   - PENDENTE_ATIVACAO > 5d → notifica admin (não auto-ativa).
+   - LISTA_ESPERA → diário verifica `Usina` com `capacidadeDisponivel > kwhContrato`; auto-promove pra APROVADO + WA.
+   - AprovacaoConvenioMembro expirado → notifica admin (botão "Reenviar" no painel).
+2. Schema delta: `Cooperado.lembretePendenteEnviadoEm` + `Contrato.alertaPendenteAdminEnviadoEm` (anti-spam).
+
+**Prioridade:** **P2** — não bloqueia produção (admin pode acompanhar manualmente os ~10 cadastros vivos). Vira P1 quando passar de 50 cadastros/semana.
+
+**Estimativa:** 8-12h Code (4 handlers de cron + schema delta + UI badges).
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
+### D-novo-CAD-FILA-CONGELADA — Posição da ListaEspera nunca rebaixa (snapshot estático) (P3)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). Quando cooperado entra na `ListaEspera` (motor não achou usina alocável), grava `posicao` como snapshot fixo do momento. Não rebaixa quando entradas mais antigas ATIVAM ou cancelam.
+
+**Impacto:** UI mostra "Você é o 5º na fila" pra alguém que já é o 2º (cooperados acima dele saíram). Erosão de confiança quando o cooperado descobre.
+
+**Fix:**
+1. `ListaEspera.posicao` vira `posicaoSnapshot` (histórico) e adiciona `posicaoAtual` computado.
+2. Endpoint público `/lista-espera/minha-posicao?token=<token>` recalcula com base em `createdAt` rank atual.
+3. UI consome `posicaoAtual` (com tooltip "atualizado em <timestamp>").
+4. Bonus: gatilho WA "boa notícia — você subiu pra <N>º" quando rank cair >= 3 posições.
+
+**Prioridade:** **P3** — cosmético até atingir lista real de >20 esperando (hoje ~3).
+
+**Estimativa:** 3-4h Code.
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
+### D-novo-CAD-CONSUMO-ZERO — Consumo do form vira Number()||0 sem validação real (P2)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). `consumoMedioKwh` é coerced via `Number(valor) || 0` em vários pontos do controller + motor. Inputs inválidos (string vazia, `"abc"`, negativo) viram 0 → motor calcula proposta com economia ZERO → cooperado vê "você economiza R$ 0/mês" e abandona.
+
+**Impacto:**
+- Motor não detecta consumo zerado vs consumo válido → propostas falsas geradas.
+- Em CONSUMO_REAL (Caso 1 Casa 1 convenio), membros nascem com cota 0 → consolidada não cobra → empresa nunca paga.
+- Métricas de "economia média do parceiro" infladas/zeradas dependendo do quanto entra zerado.
+
+**Fix:**
+1. DTO Zod/class-validator: `consumoMedioKwh` é `@IsNumber()` `@Min(20)` `@Max(50000)` (range razoável residencial→industrial).
+2. Erro claro pra UI: "Consumo deve ser entre 20 e 50000 kWh/mês".
+3. Cron diário verifica `Cooperado.consumoMedioKwh < 20` E `Contrato.status=ATIVO` → flagga pra admin auditar (relatório semanal).
+
+**Prioridade:** **P2** — não bloqueia mas degrada produto silenciosamente.
+
+**Estimativa:** 3-4h Code.
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
+### D-novo-CAD-INDICACAO-SILENT — Indicação fire-and-forget engole erro (P3)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). `publico.controller.ts:1004-1007` chama `indicacoesService.registrarIndicacaoCadastro(...).catch(() => {})` — se a indicação falhar (referenceCode inválido, indicador deletado, race), o cadastro do indicado segue normal MAS a indicação some sem rastro.
+
+**Impacto:** programa MLM perde tracking. Indicador que indicou 5 pessoas vê só 3 contadas no Clube de Vantagens (e nunca sabe que 2 falharam silenciosamente). Suporte vira "minha indicação não bateu — por quê?".
+
+**Fix:**
+1. Trocar `.catch(() => {})` por `.catch((err) => { this.logger.error(...) + criar Notificacao(adminId=null, cooperativaId, tipo='INDICACAO_FALHOU_REGISTRO', ...) })`.
+2. Cron diário verifica `Cooperado` com `referenceCodeUsado != null` SEM `Indicacao` correspondente → corrige retroativamente OU cria flag de revisão admin.
+
+**Prioridade:** **P3** — não bloqueia produto principal; cria ressaca de suporte.
+
+**Estimativa:** 2-3h Code.
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
+### D-novo-CAD-CONTRATO-IDEMPOTENCIA — Sem @@unique em Contrato.propostaId; retry duplica contrato (P2)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). Wizard chama `POST /motor/aceitar` → cria Contrato a partir da Proposta. Se a request der timeout no client (Wi-Fi instável) e retry → 2 Contratos criados pra mesma Proposta. Schema atual NÃO tem `@@unique([propostaId])` em Contrato.
+
+**Impacto:**
+- Cooperado vira "duplicado" no funil: 2 contratos PENDENTE_ATIVACAO pra mesma proposta.
+- Admin descobre quando vai gerar cobrança e o número do contrato bate em 2 registros.
+- Em CONSUMO_REAL (consolidada custeio), 2 contratos × tarifa → cobrança dobrada na consolidada.
+
+**Fix:**
+1. Schema delta: `Contrato.@@unique([propostaId])` (aditivo se hoje só há ≤1/proposta — auditar antes).
+2. Service `motor.aceitar`: usar `upsert` por `propostaId` ou catch P2002 retornando 200 com contrato existente (idempotente).
+3. Audit prévio: rodar `SELECT propostaId, COUNT(*) FROM contratos GROUP BY propostaId HAVING count>1` — se houver duplicatas, resolver MANUALMENTE antes do delta.
+
+**Prioridade:** **P2** — não bloqueia hoje (raro), bloqueia quando volume crescer.
+
+**Estimativa:** 4-6h Code (audit + schema + service + spec). Cuidado com a regra de migration do CLAUDE.md (audit prévio obrigatório).
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
+### D-novo-CAD-MODO-MANUAL-NAV — Modo manual pula da etapa 0 pra revisão, omitindo a etapa de UC (P3)
+
+**Origem:** Auditoria /cadastro público (04/06/2026). Wizard `/cadastro` modo manual (sem fatura OCR) pula direto da Etapa 0 (dados pessoais) pra Etapa final (revisão), **ocultando** a etapa de UC. Resultado: cooperado nasce SEM `numeroUC` (cai no fallback fake — ver D-novo-CAD-UC-FALSA).
+
+**Impacto:** combinado com D-novo-CAD-UC-FALSA, é o caminho MAIS COMUM de gerar cooperado com UC fake (toda vez que o OCR falha ou o usuário não tem o PDF da fatura).
+
+**Fix (na convergência):**
+1. Modo manual NÃO pula a Etapa UC — força input manual de `numeroUC + distribuidora`.
+2. UI: "Não tem a fatura? Tudo bem — informe o número da sua UC manualmente. Está no canto superior direito da sua fatura de luz."
+3. Validação em tempo real (range por distribuidora).
+
+**Prioridade:** **P3** isolado, mas vira **P1** combinado com CAD-UC-FALSA (fix conjunto).
+
+**Estimativa:** 1-2h Code (resolver junto com CAD-UC-FALSA).
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa diag).
+
+---
+
 ### D-novo-DEV-LAN-ACCESS — CORS_ORIGINS + NEXT_PUBLIC_API_URL apontam pro IP LAN do dev (P3, remover antes de produção)
 
 **Origem:** HOTFIX Portal Empresa (04/06/2026). Convite por WhatsApp gera link em `FRONTEND_URL=http://192.168.3.88:3001` (IP LAN do Luciano), pra que o celular do convidado consiga abrir. Mas:
