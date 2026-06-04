@@ -188,6 +188,58 @@ function CadastroPageInner() {
   const [bannerVisivel, setBannerVisivel] = useState(true);
   const [descontoPercentual, setDescontoPercentual] = useState(DESCONTO_PERCENTUAL_FALLBACK);
 
+  // ─── Convergência Fatia 2 (04/06/2026) — convite custeio ─────────
+  // ?conv=<token> → wizard pra cadastro custeado (empresa paga a energia
+  // do funcionário). Diferente de ?ref= (indicador MLM): aqui não há MLM.
+  type EtapaOtp = 'aguardando' | 'solicitando' | 'codigo-enviado' | 'validado';
+  interface ConviteData {
+    empresaNome: string;
+    nomeConvidado: string;
+    telefoneSufixo: string;
+    convenioId: string;
+    permiteSemUc?: boolean;
+  }
+  const conviteToken = searchParams.get('conv');
+  const [conviteData, setConviteData] = useState<ConviteData | null>(null);
+  const [conviteErro, setConviteErro] = useState<string>('');
+  const [otpEtapa, setOtpEtapa] = useState<EtapaOtp>('aguardando');
+  const [otpCodigo, setOtpCodigo] = useState('');
+  const [otpErro, setOtpErro] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [consentimentoDocs, setConsentimentoDocs] = useState(false);
+  // Uploads opcionais via /publico/cadastro/upload-doc (Fatia 1 endpoint)
+  type TipoUploadConvite = 'RG_FRENTE' | 'RG_VERSO' | 'CNH_FRENTE' | 'CNH_VERSO' | 'SELFIE';
+  const [uploadsConvite, setUploadsConvite] = useState<Partial<Record<TipoUploadConvite, { ref: string; publicUrl: string }>>>({});
+  const [uploadConviteLoading, setUploadConviteLoading] = useState<TipoUploadConvite | null>(null);
+  const [uploadConviteErro, setUploadConviteErro] = useState<string>('');
+
+  // Modo teste — espelho do backend (Fatia 1 unificou isAmbienteReal).
+  // NEXT_PUBLIC_AMBIENTE_REAL='true' (prod) → strict; senão (dev) → relaxa.
+  const ehModoTeste = process.env.NEXT_PUBLIC_AMBIENTE_REAL !== 'true';
+
+  async function uploadDocConvite(tipo: TipoUploadConvite, file: File) {
+    if (!conviteToken) return;
+    setUploadConviteErro('');
+    setUploadConviteLoading(tipo);
+    try {
+      const form = new FormData();
+      form.append('token', conviteToken);
+      form.append('tipo', tipo);
+      form.append('arquivo', file);
+      const r = await fetch(`${API_URL}/publico/cadastro/upload-doc`, {
+        method: 'POST',
+        body: form,
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.message?.mensagem ?? data?.message ?? 'Falha ao enviar arquivo');
+      setUploadsConvite((s) => ({ ...s, [tipo]: { ref: data.ref, publicUrl: data.publicUrl } }));
+    } catch (err: any) {
+      setUploadConviteErro(err?.message ?? 'Erro no upload.');
+    } finally {
+      setUploadConviteLoading(null);
+    }
+  }
+
   useEffect(() => {
     fetch(`${API_URL}/publico/desconto-padrao`)
       .then((r) => r.json())
@@ -258,6 +310,84 @@ function CadastroPageInner() {
     distribuidora: '',
     consumoMedioKwh: '',
   });
+
+  // ─── Convergência Fatia 2 (04/06/2026) — fetch convite + OTP handlers ─
+  // Carrega ?conv=<token> e travia o wizard pra modo custeado. Defesa
+  // LGPD: backend só retorna sufixos + nome do convidado.
+  useEffect(() => {
+    if (!conviteToken) return;
+    fetch(`${API_URL}/publico/convites/${conviteToken}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          throw new Error(data?.message || 'Convite inválido ou expirado.');
+        }
+        return r.json();
+      })
+      .then((data: any) => {
+        if (data?.valido === false) {
+          setConviteErro(data?.motivo || 'Convite inválido ou expirado.');
+          return;
+        }
+        setConviteData({
+          empresaNome: data.empresaNome ?? 'empresa cooperada',
+          nomeConvidado: data.nomeConvidado ?? '',
+          telefoneSufixo: data.telefoneSufixo ?? '',
+          convenioId: data.convenioId,
+          permiteSemUc: data.permiteSemUc ?? false,
+        });
+        if (data.nomeConvidado) {
+          setPessoais((p) => ({ ...p, nome: data.nomeConvidado }));
+        }
+        setTipoCobranca('CUSTEADA');
+        if (data.convenioId) setConvenioCusteioId(data.convenioId);
+      })
+      .catch((err) => {
+        setConviteErro(err?.message ?? 'Erro ao validar convite.');
+      });
+  }, [conviteToken]);
+
+  async function solicitarOtp() {
+    if (!conviteToken) return;
+    setOtpErro('');
+    setOtpLoading(true);
+    setOtpEtapa('solicitando');
+    try {
+      const r = await fetch(`${API_URL}/publico/convites/${conviteToken}/solicitar-otp`, { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.message?.mensagem ?? data?.message ?? 'Erro ao solicitar código');
+      setOtpEtapa('codigo-enviado');
+    } catch (err: any) {
+      setOtpErro(err?.message ?? 'Erro ao solicitar código.');
+      setOtpEtapa('aguardando');
+    } finally {
+      setOtpLoading(false);
+    }
+  }
+
+  async function validarOtp() {
+    if (!conviteToken) return;
+    if (otpCodigo.replace(/\D/g, '').length !== 6) {
+      setOtpErro('Código deve ter 6 dígitos.');
+      return;
+    }
+    setOtpErro('');
+    setOtpLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/publico/convites/${conviteToken}/validar-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo: otpCodigo.replace(/\D/g, '') }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.message?.mensagem ?? data?.message ?? 'Código inválido');
+      setOtpEtapa('validado');
+    } catch (err: any) {
+      setOtpErro(err?.message ?? 'Código inválido.');
+    } finally {
+      setOtpLoading(false);
+    }
+  }
 
   // ─── Tarifa dinâmica por distribuidora (BUG-11-002) ─────
   const [tarifaKwh, setTarifaKwh] = useState(0);
@@ -390,24 +520,17 @@ function CadastroPageInner() {
 
   // ─── Navigation ──────────────────────────────────────────
 
+  // Convergência Fatia 2 (04/06/2026) — modoManual NÃO pula mais a etapa
+  // de UC (D-novo-CAD-MODO-MANUAL-NAV fechado). Wizard agora SEMPRE passa
+  // pela etapa 2 (numeroUC obrigatório em REAL — fecha D-novo-CAD-UC-FALSA).
   function avancar() {
     setErro('');
-    // No modo manual, step 0 pula direto para revisão (step 3)
-    if (modoManual && step === 0) {
-      setStep(3);
-    } else {
-      setStep(step + 1);
-    }
+    setStep(step + 1);
   }
   function pular() { setErro(''); setStep(step + 1); }
   function voltar() {
     setErro('');
-    // No modo manual, da revisão volta para step 0
-    if (modoManual && step === 3) {
-      setStep(0);
-    } else {
-      setStep(step - 1);
-    }
+    setStep(step - 1);
   }
 
   // ─── Simulacao ───────────────────────────────────────────
@@ -434,7 +557,10 @@ function CadastroPageInner() {
   // ─── Submit ──────────────────────────────────────────────
 
   async function handleSubmit() {
-    const modoTeste = process.env.NEXT_PUBLIC_MODO_TESTE === 'true';
+    // Convergência Fatia 2 — gate UNIFICADO via NEXT_PUBLIC_AMBIENTE_REAL
+    // (espelha o backend isAmbienteReal). Legacy NEXT_PUBLIC_MODO_TESTE
+    // ainda respeitado pra compatibilidade.
+    const modoTeste = ehModoTeste || process.env.NEXT_PUBLIC_MODO_TESTE === 'true';
     if (!modoTeste) {
       if (!pessoais.nome || !pessoais.cpf || !pessoais.email || !pessoais.telefone) {
         setErro('Preencha todos os dados pessoais obrigatórios.');
@@ -496,7 +622,22 @@ function CadastroPageInner() {
         payload.convenioCusteioId = convenioCusteioId;
       }
 
-      if (refCode) {
+      // Convergência Fatia 2 — quando veio via convite custeio, propaga
+      // token + origem=CONVITE_PUBLICO + permiteSemUc + consentimentoDocs.
+      if (conviteToken && conviteData) {
+        payload.token = conviteToken;
+        payload.origem = 'CONVITE_PUBLICO';
+        if (conviteData.permiteSemUc) {
+          payload.permiteSemUc = true;
+        }
+      }
+      if (consentimentoDocs) {
+        payload.consentimentoDocs = true;
+      }
+
+      // No fluxo ?conv= NÃO há indicador MLM (decisão Luciano: convite custeio
+      // não dispara MLM). codigoRef só vale fora do convite.
+      if (refCode && !conviteToken) {
         payload.codigoRef = refCode;
       }
 
@@ -1206,6 +1347,61 @@ function CadastroPageInner() {
           </div>
         )}
 
+        {/* Convergência Fatia 2 (04/06/2026) — Uploads opcionais (KYC).
+            Só aparece no fluxo convite + OTP validado. Os arquivos vão pro
+            /publico/cadastro/upload-doc (Fatia 1) e são movidos no backend
+            quando cadastroWebV2 conclui (cooperados/<id>/docs/). */}
+        {conviteData && (
+          <div className="space-y-2 border border-amber-200 rounded-lg p-4 bg-amber-50/40">
+            <h3 className="font-semibold text-amber-900 text-sm flex items-center gap-2">
+              📎 Documentos (opcional — admin pode pedir depois)
+            </h3>
+            <p className="text-xs text-gray-600 mb-2">
+              Anexe agora pra acelerar a aprovação. Tire foto direto pela câmera (mobile-friendly).
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {([
+                { tipo: 'RG_FRENTE' as TipoUploadConvite, label: 'RG ou CNH (frente)' },
+                { tipo: 'RG_VERSO' as TipoUploadConvite, label: 'RG ou CNH (verso)' },
+                { tipo: 'SELFIE' as TipoUploadConvite, label: 'Selfie (foto sua agora)' },
+              ]).map(({ tipo, label }) => {
+                const enviado = uploadsConvite[tipo];
+                return (
+                  <label key={tipo} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="file"
+                      accept={tipo === 'SELFIE' ? 'image/*' : 'image/*,application/pdf'}
+                      capture={tipo === 'SELFIE' ? 'user' : 'environment'}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadDocConvite(tipo, f);
+                      }}
+                      className="hidden"
+                      disabled={uploadConviteLoading === tipo}
+                    />
+                    <span
+                      className={`flex-1 inline-flex items-center justify-between border rounded px-3 py-2 ${enviado ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-300 text-gray-700'}`}
+                    >
+                      <span>
+                        {enviado ? '✓ ' : ''}{label}
+                        {uploadConviteLoading === tipo && ' (enviando...)'}
+                      </span>
+                      <span className="text-xs underline">
+                        {enviado ? 'Trocar' : 'Anexar'}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {uploadConviteErro && (
+              <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 mt-2">
+                {uploadConviteErro}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* 4d. Checkboxes de termos */}
         <div className="space-y-3">
           <label className="flex items-start gap-3 p-4 border border-green-200 rounded-lg bg-green-50 cursor-pointer">
@@ -1233,6 +1429,26 @@ function CadastroPageInner() {
               aceito os termos do clube — descontos e beneficios exclusivos com parceiros!
             </span>
           </label>
+
+          {/* Convergência Fatia 2 (04/06/2026) — consentimento LGPD pra docs
+              (RG/CNH/selfie). Só aparece no fluxo convite (vai ter upload
+              opcional na próxima fatia 9.x). Grava Cooperado.consentimentoDocsAceito. */}
+          {conviteData && (
+            <label className="flex items-start gap-3 p-4 border border-amber-200 rounded-lg bg-amber-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consentimentoDocs}
+                onChange={(e) => setConsentimentoDocs(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                🛡 Autorizo o tratamento dos meus <strong>documentos pessoais</strong> (RG/CNH
+                e selfie, quando enviados) pela CoopereBR <strong>exclusivamente para validação
+                do cadastro cooperativo</strong>, conforme a LGPD. Posso revogar este consentimento
+                a qualquer momento.
+              </span>
+            </label>
+          )}
         </div>
 
         {/* Botão modo teste removido — produção */}
@@ -1495,13 +1711,107 @@ function CadastroPageInner() {
           <h1 className="text-2xl font-bold text-green-700">CoopereBR</h1>
         </div>
         <p className="text-sm text-gray-500 mt-1">Cadastro de novo cooperado</p>
+        {/* Convergência Fatia 2 — badge MODO TESTE em DEV (regra 19/05). */}
+        {ehModoTeste && (
+          <div className="mt-2 inline-block bg-amber-100 border border-amber-300 rounded-full px-3 py-0.5 text-[10px] font-semibold text-amber-900">
+            ⚠ MODO TESTE — validações relaxadas (não use em produção)
+          </div>
+        )}
       </header>
 
       {/* Main */}
       <main className="flex-1 flex items-start justify-center px-4 pb-12">
         <div className="w-full max-w-lg space-y-4">
-          {/* Banner de boas-vindas (quando veio com ?ref=) */}
-          {nomeIndicador && bannerVisivel && (
+          {/* Convergência Fatia 2 — Convite custeio: banner "convidado por empresa" */}
+          {conviteData && (
+            <div className="relative bg-gradient-to-r from-orange-600 to-amber-500 rounded-xl p-5 text-white shadow-lg">
+              <p className="text-lg font-bold mb-1">
+                🏢 Você foi convidado pela <strong>{conviteData.empresaNome}</strong>
+              </p>
+              <p className="text-sm text-white/90 leading-relaxed">
+                Sua empresa custeia sua energia — você não paga a conta de luz dela. Complete
+                o cadastro abaixo pra ativar o benefício.
+              </p>
+              {conviteData.permiteSemUc && (
+                <p className="text-xs text-white/85 mt-2">
+                  ℹ Este convite aceita cadastro <strong>sem fatura de luz própria</strong>{' '}
+                  (você está vinculado ao consumo da empresa).
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Convite inválido/expirado → erro claro + sugere voltar */}
+          {conviteToken && conviteErro && (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+              <p className="font-semibold mb-1">Convite indisponível</p>
+              <p>{conviteErro}</p>
+              <p className="mt-2 text-xs">Solicite um novo convite à empresa.</p>
+            </div>
+          )}
+
+          {/* OTP gate: bloqueia o wizard até validar OTP do convite */}
+          {conviteData && !conviteErro && otpEtapa !== 'validado' && (
+            <div className="bg-white border border-amber-300 rounded-xl p-5 space-y-3">
+              <p className="text-base font-semibold text-amber-900">
+                🔐 Confirme seu WhatsApp
+              </p>
+              <p className="text-sm text-gray-700">
+                Pra garantir que é você, vamos enviar um código de 6 dígitos pro número que a empresa
+                cadastrou {conviteData.telefoneSufixo ? <>(<strong>{conviteData.telefoneSufixo}</strong>)</> : ''}.
+              </p>
+              {otpEtapa === 'aguardando' && (
+                <Button
+                  onClick={solicitarOtp}
+                  disabled={otpLoading}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {otpLoading ? 'Enviando...' : 'Enviar código por WhatsApp'}
+                </Button>
+              )}
+              {otpEtapa === 'codigo-enviado' && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600">
+                    Código enviado! Digite os 6 dígitos abaixo (válido por 10min).
+                  </p>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otpCodigo}
+                    onChange={(e) => setOtpCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="text-center text-lg font-mono tracking-widest"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={validarOtp}
+                      disabled={otpLoading || otpCodigo.length !== 6}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {otpLoading ? 'Validando...' : 'Confirmar código'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={solicitarOtp}
+                      disabled={otpLoading}
+                      className="text-xs"
+                    >
+                      Reenviar
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {otpErro && (
+                <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                  {otpErro}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Banner de boas-vindas (quando veio com ?ref=) — só mostra se NÃO veio ?conv= */}
+          {nomeIndicador && bannerVisivel && !conviteData && (
             <div className="relative bg-gradient-to-r from-green-600 to-emerald-500 rounded-xl p-5 text-white shadow-lg">
               <button
                 onClick={() => setBannerVisivel(false)}
@@ -1526,11 +1836,19 @@ function CadastroPageInner() {
             </div>
           )}
 
+          {/* Convergência Fatia 2 — wizard só aparece após OTP validado (no fluxo ?conv=).
+              Sem ?conv= ativo, sempre mostra (caminho legado). */}
+          {(!conviteData || otpEtapa === 'validado') && !conviteErro && (
           <Card>
             {/* Badge persistente de convite */}
-            {nomeIndicador && (
+            {nomeIndicador && !conviteData && (
               <div className="bg-green-50 border-b border-green-100 px-4 py-2 text-sm text-green-700 flex items-center gap-2">
                 🤝 Convidado por <strong>{nomeIndicador}</strong>
+              </div>
+            )}
+            {conviteData && (
+              <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 text-sm text-orange-800 flex items-center gap-2">
+                🏢 Custeio confirmado por <strong>{conviteData.empresaNome}</strong>
               </div>
             )}
 
@@ -1595,22 +1913,20 @@ function CadastroPageInner() {
 
                 {step < STEPS.length - 1 ? (
                   <div className="flex gap-2">
-                    {!(modoManual && step === 0) && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={pular}
-                        className="gap-1 text-gray-500 hover:text-gray-700"
-                      >
-                        Pular <SkipForward className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={pular}
+                      className="gap-1 text-gray-500 hover:text-gray-700"
+                    >
+                      Pular <SkipForward className="h-4 w-4" />
+                    </Button>
                     <Button
                       type="button"
                       onClick={avancar}
                       className="bg-green-600 hover:bg-green-700 text-white gap-1"
                     >
-                      {modoManual && step === 0 ? 'Continuar' : 'Proximo'} <ArrowRight className="h-4 w-4" />
+                      Proximo <ArrowRight className="h-4 w-4" />
                     </Button>
                   </div>
                 ) : (
@@ -1630,6 +1946,7 @@ function CadastroPageInner() {
               </div>
             </CardContent>
           </Card>
+          )}
         </div>
       </main>
 

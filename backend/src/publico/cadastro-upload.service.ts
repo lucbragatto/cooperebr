@@ -185,4 +185,131 @@ export class CadastroUploadService {
       mime: arquivo.mimetype,
     };
   }
+
+  /**
+   * Convergência Fatia 2 (04/06/2026) — Move TODOS os blobs tmp do convite
+   * pra path final do cooperado + cria DocumentoCooperado registros.
+   *
+   * Chamado APÓS cadastroWebV2 criar o Cooperado (fim do fluxo). Best-effort:
+   * se falhar, registra warning mas NÃO derruba o cadastro (o blob fica tmp
+   * + admin pode subir manual depois).
+   *
+   * Mapeamento tipos:
+   *  - FATURA: NÃO vira DocumentoCooperado (já é processada pelo OCR
+   *    pré-cadastro; só ref é guardado em separado pra anexar à proposta).
+   *    Por enquanto, MOVE pra path final do cooperado mas NÃO grava registro
+   *    em DocumentoCooperado (que é só pra docs de KYC).
+   *  - RG_FRENTE / RG_VERSO / CNH_FRENTE / CNH_VERSO / SELFIE: cria
+   *    DocumentoCooperado com status=PENDENTE.
+   *
+   * Supabase não tem move atômico — copy+delete. Falha no delete não
+   * derruba (blob fica órfão tmp; cron de housekeeping limpa).
+   */
+  async moverUploadsConviteParaCooperado(
+    conviteId: string,
+    cooperadoId: string,
+  ): Promise<{
+    movidos: number;
+    documentos: number;
+    falhas: number;
+  }> {
+    const prefix = `${TMP_PREFIX}/${conviteId}/`;
+    let movidos = 0;
+    let documentos = 0;
+    let falhas = 0;
+
+    // Lista blobs do tmp
+    const { data: arquivos, error: listErr } = await this.supabase.storage
+      .from(BUCKET)
+      .list(prefix.replace(/\/$/, ''), { limit: 50 });
+
+    if (listErr) {
+      this.logger.warn(
+        `[doc-move] Erro ao listar tmp uploads convite=${conviteId}: ${listErr.message}`,
+      );
+      return { movidos: 0, documentos: 0, falhas: 1 };
+    }
+
+    if (!arquivos || arquivos.length === 0) {
+      // Nada pra mover — cooperado não fez upload no wizard. Normal.
+      return { movidos: 0, documentos: 0, falhas: 0 };
+    }
+
+    for (const blob of arquivos) {
+      const fonte = `${prefix}${blob.name}`;
+      // Pattern do nome: `<TIPO>_<timestamp>.<ext>` — ver uploadComConvite
+      const match = blob.name.match(/^([A-Z_]+)_\d+\.(\w+)$/);
+      if (!match) {
+        this.logger.warn(`[doc-move] Nome de blob não-reconhecido: ${fonte}`);
+        falhas++;
+        continue;
+      }
+      const tipo = match[1];
+      const ext = match[2];
+      const destino = `${cooperadoId}/${tipo.toLowerCase()}_${Date.now()}.${ext}`;
+
+      // copy
+      const { error: copyErr } = await this.supabase.storage
+        .from(BUCKET)
+        .copy(fonte, destino);
+      if (copyErr) {
+        this.logger.warn(`[doc-move] copy falhou ${fonte}→${destino}: ${copyErr.message}`);
+        falhas++;
+        continue;
+      }
+
+      const { data: urlData } = this.supabase.storage
+        .from(BUCKET)
+        .getPublicUrl(destino);
+
+      // Cria DocumentoCooperado SE tipo for KYC (não cria pra FATURA)
+      const tiposKyc = new Set(['RG_FRENTE', 'RG_VERSO', 'CNH_FRENTE', 'CNH_VERSO', 'SELFIE']);
+      if (tiposKyc.has(tipo)) {
+        try {
+          await this.prisma.documentoCooperado.upsert({
+            where: { cooperadoId_tipo: { cooperadoId, tipo: tipo as any } },
+            update: {
+              url: urlData.publicUrl,
+              nomeArquivo: blob.name,
+              status: 'PENDENTE',
+              motivoRejeicao: null,
+            },
+            create: {
+              cooperadoId,
+              tipo: tipo as any,
+              url: urlData.publicUrl,
+              nomeArquivo: blob.name,
+              status: 'PENDENTE',
+            },
+          });
+          documentos++;
+        } catch (err: any) {
+          this.logger.warn(
+            `[doc-move] DocumentoCooperado upsert falhou cooperado=${cooperadoId} tipo=${tipo}: ${err?.message ?? 'erro'}`,
+          );
+          falhas++;
+          continue;
+        }
+      }
+
+      movidos++;
+
+      // best-effort delete do tmp (não bloqueia se falhar)
+      await this.supabase.storage
+        .from(BUCKET)
+        .remove([fonte])
+        .catch((err) =>
+          this.logger.warn(
+            `[doc-move] remove tmp falhou ${fonte}: ${err?.message ?? 'erro'}`,
+          ),
+        );
+    }
+
+    this.logger.log(
+      `[doc-move] convite=${conviteId} cooperado=${cooperadoId} — movidos=${movidos} ` +
+        `documentos=${documentos} falhas=${falhas}`,
+    );
+
+    return { movidos, documentos, falhas };
+  }
 }

@@ -845,6 +845,12 @@ export class PublicoController {
       // de convite com `permiteSemUc=true`), cria UC sintética em vez de
       // exigir numeroUC real. Fatia 2 (frontend) resolverá via token do convite.
       permiteSemUc?: boolean;
+      // Convergência Fatia 2 (04/06/2026) — token do convite, usado pra:
+      //  (a) localizar o conviteId pra moverUploadsConviteParaCooperado;
+      //  (b) marcar consume-once + cross-ref membroId (fluxo CONVITE_PUBLICO);
+      //  (c) gravar Cooperado.consentimentoDocsAceito quando consentimentoDocs=true.
+      token?: string;
+      consentimentoDocs?: boolean;
     },
     cooperativaId: string,
   ) {
@@ -890,6 +896,14 @@ export class PublicoController {
             modoRemuneracao: modoRemuneracao as any,
             termoAdesaoAceito: true,
             termoAdesaoAceitoEm: new Date(),
+            // Convergência Fatia 2 — checkbox LGPD docs (RG/selfie) do Step 3.
+            // Aceito apenas quando o caller (frontend wizard) marca explícito.
+            ...(body.consentimentoDocs
+              ? {
+                  consentimentoDocsAceito: true,
+                  consentimentoDocsAceitoEm: new Date(),
+                }
+              : {}),
           },
         });
       } catch (err) {
@@ -1079,8 +1093,46 @@ export class PublicoController {
       }
     }
 
-    this.logger.log(`[cadastro-v2] Cooperado ${cooperadoId} criado (proposta=${propostaId ?? 'nenhuma'}, espera=${emListaEspera})`);
-    return { ok: true, data: { cooperadoId, ucId, propostaId, emListaEspera } };
+    // Convergência Fatia 2 (04/06/2026) — doc-move: blobs tmp do convite
+    // foram colados em tmp/convite-uploads/<conviteId>/. Agora que o Cooperado
+    // existe, MOVE pra path final cooperados/<id>/ + cria DocumentoCooperado
+    // (RG/SELFIE; FATURA só move o blob, não cria registro de KYC).
+    // Best-effort: falha não derruba o cadastro (admin pode subir manual).
+    let docsResult: { movidos: number; documentos: number; falhas: number } | null = null;
+    if (body.token && body.token.length === 64) {
+      try {
+        const convite = await this.prisma.conviteConvenioMembro.findUnique({
+          where: { token: body.token },
+          select: { id: true },
+        });
+        if (convite) {
+          docsResult = await this.cadastroUpload.moverUploadsConviteParaCooperado(
+            convite.id,
+            cooperadoId,
+          );
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `[cadastro-v2] doc-move falhou pra cooperado=${cooperadoId} token=...${body.token.slice(-6)}: ${err?.message ?? 'erro'}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `[cadastro-v2] Cooperado ${cooperadoId} criado ` +
+        `(proposta=${propostaId ?? 'nenhuma'}, espera=${emListaEspera}` +
+        `${docsResult ? `, docs movidos=${docsResult.movidos} kyc=${docsResult.documentos}` : ''})`,
+    );
+    return {
+      ok: true,
+      data: {
+        cooperadoId,
+        ucId,
+        propostaId,
+        emListaEspera,
+        ...(docsResult ? { docs: docsResult } : {}),
+      },
+    };
   }
 
   private async processarIndicacao(codigoRef: string, nomeNovo: string, leadId: string) {
