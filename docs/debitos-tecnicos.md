@@ -4501,6 +4501,32 @@ Quando aparecer débito novo durante sessão:
 3. Sugerir fix com tempo estimado
 4. Fazer commit isolado: `docs(debitos): registra <descrição>` quando o débito for material; senão pode ir junto com commit de fechamento de sprint
 
+---
+
+### D-novo-DEV-LAN-ACCESS — CORS_ORIGINS + NEXT_PUBLIC_API_URL apontam pro IP LAN do dev (P3, remover antes de produção)
+
+**Origem:** HOTFIX Portal Empresa (04/06/2026). Convite por WhatsApp gera link em `FRONTEND_URL=http://192.168.3.88:3001` (IP LAN do Luciano), pra que o celular do convidado consiga abrir. Mas:
+- `backend/main.ts:enableCors` só liberava `localhost:3001` por default → bloqueio CORS.
+- `web/.env.local:NEXT_PUBLIC_API_URL=http://localhost:3000` → browser do celular tentava chamar localhost → "Erro de comunicação".
+
+**Fix aplicado (DEV):**
+- `backend/.env:CORS_ORIGINS=...,http://192.168.3.88:3001,http://192.168.3.88:3000`
+- `web/.env.local:NEXT_PUBLIC_API_URL=http://192.168.3.88:3000` + `NEXT_PUBLIC_WHATSAPP_URL=http://192.168.3.88:3002`
+
+**Antes de produção:**
+1. Trocar `CORS_ORIGINS` pelos domínios públicos reais (ex: `https://app.cooperebr.com.br,https://www.cooperebr.com.br`).
+2. Trocar `NEXT_PUBLIC_API_URL` pelo domínio público da API (ex: `https://api.cooperebr.com.br`).
+3. **Rebuildar** o frontend após mudar `NEXT_PUBLIC_*` (env é "baked" no bundle Next.js — HMR não pega).
+4. Remover IP LAN do `.env.example` (manter só placeholders localhost ou prod).
+
+**Prioridade:** P3 (não bloqueia desenvolvimento; risco operacional baixo enquanto está restrito ao dev local).
+
+**Estimativa:** 15min Code + ops (apontar DNS + rebuild + deploy).
+
+**Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa).
+
+---
+
 ## Como remover item
 
 Quando débito for resolvido:
