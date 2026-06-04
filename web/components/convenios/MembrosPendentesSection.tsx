@@ -180,6 +180,31 @@ export function MembrosPendentesSection({
     }
   }
 
+  // Sprint Portal Empresa 9.1 (04/06/2026) — empresa decide in-portal
+  // (JWT, sem magic link). Endpoint: /portal/meus-convenios/:id/membros/:mid/decidir
+  async function decidirEmpresa(
+    membroId: string,
+    decisao: 'APROVAR' | 'REJEITAR',
+    motivo?: string,
+  ) {
+    setAcaoMembroId(membroId);
+    try {
+      await api.post(
+        `/portal/meus-convenios/${convenioId}/membros/${membroId}/decidir`,
+        { decisao, motivo: motivo?.trim() || undefined },
+      );
+      setDialogAprovarMembroId(null);
+      setDialogRejeitarMembroId(null);
+      setMotivoRejeicao('');
+      await carregar();
+      onAcaoConcluida?.();
+    } catch (err) {
+      setErro(formatErroBackend(err));
+    } finally {
+      setAcaoMembroId(null);
+    }
+  }
+
   async function solicitarDocs(membroId: string) {
     setAcaoMembroId(membroId);
     try {
@@ -287,6 +312,19 @@ export function MembrosPendentesSection({
             </p>
           </div>
         )}
+        {/* Sprint Portal Empresa 9.1 — banner âmbar pra empresa (consequência financeira) */}
+        {source === 'empresa' && (
+          <div className="bg-amber-50 border-l-4 border-amber-500 p-3 rounded">
+            <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Confirme com atenção
+            </p>
+            <p className="text-xs text-amber-800 mt-1">
+              Ao <strong>CONFIRMAR</strong>, a pessoa entra no convênio e a energia dela passa a ser
+              custeada pela sua empresa (você paga).{' '}
+              <strong>Ex:</strong> confirme só quem realmente trabalha na sua empresa.
+            </p>
+          </div>
+        )}
 
         {erro && (
           <p className="text-sm text-red-700 bg-red-50 border border-red-300 rounded p-2">{erro}</p>
@@ -380,6 +418,34 @@ export function MembrosPendentesSection({
                               <XCircle className="h-4 w-4" />
                             </Button>
                           )}
+                          {/* Sprint Portal Empresa 9.1 — empresa decide in-portal */}
+                          {source === 'empresa' && m.status === 'PENDENTE_APROVACAO_EMPRESA' && (
+                            <>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                disabled={acaoMembroId === m.id}
+                                onClick={() => setDialogAprovarMembroId(m.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                Confirmar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={acaoMembroId === m.id}
+                                onClick={() => {
+                                  setMotivoRejeicao('');
+                                  setDialogRejeitarMembroId(m.id);
+                                }}
+                                className="border-red-300 text-red-700 hover:bg-red-50"
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                Recusar
+                              </Button>
+                            </>
+                          )}
                           {/* Reenviar magic link da empresa — só em PENDENTE_APROVACAO_EMPRESA */}
                           {source === 'admin' && m.status === 'PENDENTE_APROVACAO_EMPRESA' && (
                             <Button
@@ -416,10 +482,20 @@ export function MembrosPendentesSection({
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-700">
-              <ShieldCheck className="h-5 w-5" /> Aprovar membro custeado?
+              <ShieldCheck className="h-5 w-5" />
+              {source === 'empresa'
+                ? 'Confirmar funcionário?'
+                : 'Aprovar membro custeado?'}
             </DialogTitle>
             <DialogDescription>
-              {aprovarMembro && (
+              {aprovarMembro && source === 'empresa' && (
+                <>
+                  Ao confirmar, <strong>{aprovarMembro.cooperado.nomeCompleto}</strong> entra no
+                  convênio e a energia dele passa a ser custeada pela sua empresa (você paga).
+                  Em seguida, a CoopereBR faz a aprovação final.
+                </>
+              )}
+              {aprovarMembro && source === 'admin' && (
                 <>
                   Ao aprovar, <strong>{aprovarMembro.cooperado.nomeCompleto}</strong> passa a ser membro
                   ATIVO do convênio. Sua energia entra na cobrança consolidada da empresa a partir da
@@ -429,8 +505,18 @@ export function MembrosPendentesSection({
             </DialogDescription>
           </DialogHeader>
           <div className="bg-amber-50 border-l-4 border-amber-500 p-3 rounded text-xs text-amber-800 my-2">
-            <strong>Confirme se a empresa já confirmou.</strong> O fluxo é: empresa confirma primeiro
-            (magic link no WA) → admin aprova depois.
+            {source === 'empresa' ? (
+              <>
+                <strong>Atenção — consequência financeira.</strong> Confirme apenas se essa
+                pessoa realmente trabalha na sua empresa. A partir daqui o custo de energia
+                dela é seu.
+              </>
+            ) : (
+              <>
+                <strong>Confirme se a empresa já confirmou.</strong> O fluxo é: empresa confirma primeiro
+                (magic link no WA) → admin aprova depois.
+              </>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -441,12 +527,17 @@ export function MembrosPendentesSection({
               Cancelar
             </Button>
             <Button
-              onClick={() => aprovarMembro && aprovarAdmin(aprovarMembro.id)}
+              onClick={() =>
+                aprovarMembro &&
+                (source === 'empresa'
+                  ? decidirEmpresa(aprovarMembro.id, 'APROVAR')
+                  : aprovarAdmin(aprovarMembro.id))
+              }
               disabled={!!acaoMembroId}
               className="bg-green-600 hover:bg-green-700"
             >
               {acaoMembroId && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Aprovar e ativar
+              {source === 'empresa' ? 'Confirmar funcionário' : 'Aprovar e ativar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -493,13 +584,18 @@ export function MembrosPendentesSection({
               Cancelar
             </Button>
             <Button
-              onClick={() => rejeitarMembro && rejeitarAdmin(rejeitarMembro.id)}
+              onClick={() =>
+                rejeitarMembro &&
+                (source === 'empresa'
+                  ? decidirEmpresa(rejeitarMembro.id, 'REJEITAR', motivoRejeicao)
+                  : rejeitarAdmin(rejeitarMembro.id))
+              }
               disabled={!!acaoMembroId || motivoRejeicao.trim().length < 2}
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
             >
               {acaoMembroId && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              Rejeitar
+              {source === 'empresa' ? 'Recusar' : 'Rejeitar'}
             </Button>
           </DialogFooter>
         </DialogContent>

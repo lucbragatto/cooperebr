@@ -8,6 +8,7 @@ import {
   User,
   Sun,
   Users,
+  Briefcase,
   ChevronDown,
   ArrowRightLeft,
 } from 'lucide-react';
@@ -20,6 +21,8 @@ const iconesPorTipo: Record<TipoContexto, typeof Shield> = {
   cooperado: User,
   proprietario_usina: Sun,
   admin_agregador: Users,
+  // Sprint Portal Empresa 9.0 (04/06/2026)
+  empresa_conveniada: Briefcase,
 };
 
 const coresPorTipo: Record<TipoContexto, string> = {
@@ -28,6 +31,7 @@ const coresPorTipo: Record<TipoContexto, string> = {
   cooperado: 'text-green-700 bg-green-50',
   proprietario_usina: 'text-amber-700 bg-amber-50',
   admin_agregador: 'text-teal-700 bg-teal-50',
+  empresa_conveniada: 'text-orange-700 bg-orange-50',
 };
 
 interface Props {
