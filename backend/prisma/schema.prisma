@@ -145,6 +145,7 @@ enum PerfilUsuario {
   COOPERADO
   AGREGADOR
   PROPRIETARIO // Sub-Sprint F (M30, 2026-05-26): proprietario de usina (E-Solares, etc) que arrenda usina pra cooperativa. Acessa /proprietario (root) — leitura pura.
+  EMPRESA_CONVENIADA // Sprint Portal Empresa 9.0 (04/06/2026): responsável da empresa pagadora de convênio. Acessa /conveniada — gera convites, aprova membros, vê cobranças. Vínculo Usuario↔Cooperado(PJ pagador) por email match (mesma estratégia COOPERADO).
 }
 
 model Cooperado {

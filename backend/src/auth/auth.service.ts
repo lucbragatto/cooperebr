@@ -513,6 +513,49 @@ export class AuthService {
       });
     }
 
+    // Sprint Portal Empresa 9.0 (04/06/2026) — contexto EMPRESA_CONVENIADA:
+    // o Usuario é o responsável de uma empresa pagadora de algum convênio.
+    // O vínculo Usuario → Cooperado(PJ pagador) é o mesmo do COOPERADO
+    // (match por email). Se esse cooperado é pagadorCooperadoId de pelo
+    // menos um convênio ATIVO, exibe o contexto.
+    if (cooperado) {
+      const conveniosOndeEhPagador = await this.prisma.contratoConvenio.findMany({
+        where: {
+          pagadorCooperadoId: cooperado.id,
+          status: 'ATIVO',
+        },
+        select: {
+          id: true,
+          empresaNome: true,
+          cooperativaId: true,
+        },
+        orderBy: { empresaNome: 'asc' },
+      });
+
+      if (conveniosOndeEhPagador.length > 0) {
+        const label =
+          conveniosOndeEhPagador.length === 1
+            ? `Empresa — ${conveniosOndeEhPagador[0].empresaNome}`
+            : `Empresa — ${conveniosOndeEhPagador.length} convênios`;
+        // Cooperativa relation precisa ser buscada à parte (ContratoConvenio
+        // não tem @relation pra Cooperativa no schema)
+        const primCoopId = conveniosOndeEhPagador[0].cooperativaId;
+        const primCoop = primCoopId
+          ? await this.prisma.cooperativa.findUnique({
+              where: { id: primCoopId },
+              select: { nome: true },
+            })
+          : null;
+        contextos.push({
+          tipo: 'empresa_conveniada',
+          label,
+          id: cooperado.id, // cooperadoId do pagador (identifica a empresa no portal)
+          cooperativaId: primCoopId ?? undefined,
+          cooperativaNome: primCoop?.nome ?? undefined,
+        });
+      }
+    }
+
     // 4. Verificar se o usuário é proprietário de usina (via cooperado ou por email)
     let usinasProprietario: any[] = [];
     if (cooperado) {

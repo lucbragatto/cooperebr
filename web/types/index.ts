@@ -1,4 +1,4 @@
-export type PerfilUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'OPERADOR' | 'COOPERADO' | 'AGREGADOR';
+export type PerfilUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'OPERADOR' | 'COOPERADO' | 'AGREGADOR' | 'PROPRIETARIO' | 'EMPRESA_CONVENIADA';
 
 export type StatusCooperado = 'PENDENTE' | 'ATIVO' | 'SUSPENSO' | 'ENCERRADO';
 
@@ -177,7 +177,7 @@ export interface AuthResponse {
 
 // --- Multi-contexto ---
 
-export type TipoContexto = 'super_admin' | 'admin_parceiro' | 'cooperado' | 'proprietario_usina' | 'admin_agregador';
+export type TipoContexto = 'super_admin' | 'admin_parceiro' | 'cooperado' | 'proprietario_usina' | 'admin_agregador' | 'empresa_conveniada';
 
 export interface ResumoSaas {
   totalParceiros: number;

@@ -91,5 +91,8 @@ export function rotaPorContexto(tipo: TipoContexto): string {
       return '/proprietario';
     case 'admin_agregador':
       return '/agregador';
+    case 'empresa_conveniada':
+      // Sprint Portal Empresa 9.0 (04/06/2026)
+      return '/conveniada';
   }
 }
