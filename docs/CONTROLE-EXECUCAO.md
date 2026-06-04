@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-03 — Sprint Convite-Convênio NÚCLEO BACKEND COMPLETO** (Fatias 1+2a+2b+2c+2c.1+3 + chore higiene build). 7 commits em 1 sessão Code maratona: **2a** (`d6a4a50`) ConviteConvenioMembro per-recipient + envio WhatsApp + feature flag CONVITE_OTP_ATIVO bloqueia caminho legado · **2b** (`29e01c0`) OTP 6 dígitos sha256+salt rotativo + crypto.timingSafeEqual + 5 tentativas (bloqueio 1h) + 3 reenvios (cooldown 60s) — WhatsApp REAL disparado pro Luciano · **2c** (`4c3ee0a`) /auto-inscrever refatorado pra exigir `token`+`otp validado` (janela 30min) + tenant resolvido DO CONVITE (anti-spoof) + consume-once via update where `usedAt:null` · **2c.1** (`e4c7348`) hardening atomicidade — Cooperado+Membro+magic link+consume-once em `$transaction Serializable` única + removido helper `rollbackConviteUsedAt` + `cooperado.delete .catch` compensatório · **chore** (`7b14287`) tsconfig.build+`.gitignore` ignoram `tmp_*.ts`+`*smoke*.ts` (anti build-poison) · **3** (`c432cb8`) aprovação 3 portas — empresa magic link (POST /publico/aprovacao-membro/:token + ip+ua audit) + admin dashboard (5 endpoints aprovar/solicitar-doc/rejeitar/reenviar/cleanup) + state machine 4 estados (PENDENTE_APROVACAO_EMPRESA → PENDENTE_APROVACAO_ADMIN → MEMBRO_ATIVO; REJEITADO_*/DESLIGADO terminais) + GUARD strict admin NÃO PULA empresa. Schema: 1 model NOVO (ConviteConvenioMembro 20 cols) + 3 colunas em ConvenioCooperado (documentacaoSolicitadaEm + aprovadoPorAdminUserId + rejeitadoPorAdminUserId rel Usuario). 215 membros + 3 convênios vivos preservados. **187/187 specs convenios verdes** (85 novos no sprint, zero regressão). 5 smokes vivos rodados (3 com WhatsApp REAL no Luciano `5527981341348`). Estado: **backend do sprint = 100% funcional**, núcleo seguro atômico fechado, frontend ZERO (Fatias 4-5 próximas), notif WA/email rich pendente (Fatia 6), portal self-service empresa = Fatia 9 futura. Detalhe: `docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md`.
+> Última atualização: **2026-06-04 — M21 Sprint Multi-Frente: Portal Empresa Conveniada 9.0+9.1 + Sprint Financeiro F1 + Convergência Convite-Custeio (Fatias 1+2) + Circuito CooperToken Fatia A+B**. **11 commits trabalho** em 1 sessão Code maratona: `0d698d4` Sprint Financeiro F1 (statusEmissao separado + cron retry 30min cap 5 + endpoint reemitir + UI badges + 13 specs) · `695e574` Portal Empresa 9.0 (perfil EMPRESA_CONVENIADA + guard @PagadorCooperadoOnly anti-enumeração + 9 endpoints + seed dev + box credenciais login) · `6eaa7a6` Portal Empresa 9.1 (dashboard /conveniada/convenio/[id] reusando GestaoConvitesSection+MembrosPendentesSection source='empresa' + decidir in-portal + HelpBox em cada bloco) · `bfad278` HOTFIX BUG1 CORS+API_URL LAN (acesso por IP do celular) · `4fb9a0c` HOTFIX BUG2 decidir in-portal sem magic link (decidirAprovacaoEmpresaLogada opera direto no membroId + 9 specs) · `baf7fc1` HOTFIX diag erro detalhado em DEV no /auto-inscrever · `9f18e13` docs 7 débitos auditoria /cadastro · `badeb5f` Convergência Fatia 1 backend (DTO strict + REMOÇÃO UC-fake + helper validarENormalizarCadastro + POST cadastro/upload-doc + schema delta TipoUc/SELFIE/permiteSemUc/consentimentoDocs + 35 specs) · `0559660` Convergência Fatia 2 wizard (/cadastro?conv= + OTP gate + uploads opcionais + LGPD + doc-move backend + redirect slim 553→38 linhas + smoke E2E 9/9) · `feda124` Circuito CooperToken Fatia A+B (portal nomenclatura/help/menu + bonusIndicacao configurável + spec catalogada). **Suite total impactada 374/374 verdes** (23 suites src/publico + src/convenios + src/auth + src/common/safety). 4 débitos resolvidos estruturalmente: D-novo-CAD-UC-FALSA P1, D-novo-CAD-CONSUMO-ZERO P2, D-novo-CAD-MODO-MANUAL-NAV P3, D-novo-CONVITE-ROTA-CONSOLIDAR P3. 2 débitos novos catalogados: D-novo-PORTAL-EMPRESA-SEED-TESTE P3 + D-novo-DEV-LAN-ACCESS P3. **DESCOBERTA OPERACIONAL CRÍTICA:** frontend é `next start` sob PM2 (NÃO `next dev`) — toda mudança de frontend exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Documentado em CLAUDE.md. Detalhe: `docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md`.
+
+> Histórico: **2026-06-03 — Sprint Convite-Convênio NÚCLEO BACKEND COMPLETO** (Fatias 1+2a+2b+2c+2c.1+3 + chore higiene build). 7 commits em 1 sessão Code maratona: **2a** (`d6a4a50`) ConviteConvenioMembro per-recipient + envio WhatsApp + feature flag CONVITE_OTP_ATIVO bloqueia caminho legado · **2b** (`29e01c0`) OTP 6 dígitos sha256+salt rotativo + crypto.timingSafeEqual + 5 tentativas (bloqueio 1h) + 3 reenvios (cooldown 60s) — WhatsApp REAL disparado pro Luciano · **2c** (`4c3ee0a`) /auto-inscrever refatorado pra exigir `token`+`otp validado` (janela 30min) + tenant resolvido DO CONVITE (anti-spoof) + consume-once via update where `usedAt:null` · **2c.1** (`e4c7348`) hardening atomicidade — Cooperado+Membro+magic link+consume-once em `$transaction Serializable` única + removido helper `rollbackConviteUsedAt` + `cooperado.delete .catch` compensatório · **chore** (`7b14287`) tsconfig.build+`.gitignore` ignoram `tmp_*.ts`+`*smoke*.ts` (anti build-poison) · **3** (`c432cb8`) aprovação 3 portas — empresa magic link (POST /publico/aprovacao-membro/:token + ip+ua audit) + admin dashboard (5 endpoints aprovar/solicitar-doc/rejeitar/reenviar/cleanup) + state machine 4 estados (PENDENTE_APROVACAO_EMPRESA → PENDENTE_APROVACAO_ADMIN → MEMBRO_ATIVO; REJEITADO_*/DESLIGADO terminais) + GUARD strict admin NÃO PULA empresa. Schema: 1 model NOVO (ConviteConvenioMembro 20 cols) + 3 colunas em ConvenioCooperado (documentacaoSolicitadaEm + aprovadoPorAdminUserId + rejeitadoPorAdminUserId rel Usuario). 215 membros + 3 convênios vivos preservados. **187/187 specs convenios verdes** (85 novos no sprint, zero regressão). 5 smokes vivos rodados (3 com WhatsApp REAL no Luciano `5527981341348`). Estado: **backend do sprint = 100% funcional**, núcleo seguro atômico fechado, frontend ZERO (Fatias 4-5 próximas), notif WA/email rich pendente (Fatia 6), portal self-service empresa = Fatia 9 futura. Detalhe: `docs/sessoes/2026-06-03-sprint-convite-convenio-nucleo-backend.md`.
 
 > Histórico: **2026-06-02 noite tarde — Finalização Convênio Médico (Pontos 1+2a) + HOTFIX build + D-FISCAL-2 FECHADO + Sprint Convite-Convênio Fatia 1**. 7 commits trabalho em 1 sessão Code maratona pós-M20: **Ponto 1** (`cfb4208`) modo teste libera fatura no cadastro + preserva vínculo convênio sem UC · **Ponto 2a** (`3665099`) tarifa fixa R$/kWh negociada com a empresa (enum `TipoTarifaEmpresa` + `tarifaFixaKwhEmpresa`) · **HOTFIX** root-cause do 400 PATCH = `src/agents` untracked com 15 erros TS quebrava build há 3 dias → dist velho rejeitando campos novos. Fix: excluir `src/agents` do `tsconfig.build.json`. **LIÇÃO: "build passou" mentia — sempre verificar dist.** · **D-FISCAL-2.5** (`2666412`) `/dashboard/contabilidade/convenios` virou lente fiscal read-only sobre ContratoConvenio legado + aposentou CRUD CT (deprecated + WARN) + deletou Convenio CT órfão "teste" · **D-FISCAL-2.6** (`13eb1d7`) corrigiu exemplo Hangar no relatório conformidade 31/05 · **Débitos** (`37fa529`) catalogados 3 novos pós-investigação 6 sub-agentes: D-novo-SEC-AUTOINSCRICAO-CUSTEADA P1 (vetor fraude link público) + D-novo-PORTAL-CUSTEADO P2 + D-novo-CONVITE-CONVENIO P1 reframe · **Sprint Convite-Convênio Fatia 1** (`12bff1e`) schema delta aditivo: enum `StatusMembroConvenio` +4 valores (PENDENTE_APROVACAO_EMPRESA/ADMIN + REJEITADO_*) + enum `AdmissionOrigem` (ADMIN_MANUAL/CSV/CONVITE_PUBLICO) + 6 campos novos em `ConvenioCooperado` + 2 quotas em `ContratoConvenio` (`limiteMembros` + `kwhAlocadoMaxMensal`) + model novo `AprovacaoConvenioMembro` (magic link da empresa). **3 convênios + 215 membros intactos** (defaults preservam tudo). **Decisões travadas:** auth aprovação empresa = HÍBRIDO (magic link no núcleo + login portal como camada, mesmo endpoint); SEM_UC rejeitado = fica PENDENTE pro admin; invite = STATELESS `?conv=`; rate-limit 3/h CPF + 30-60/h IP. **Estado:** convênio médico USÁVEL pelo admin ponta-a-ponta (cadastro modo teste + tarifa fixa/% + consolidada + lente fiscal). Convite com aprovação dupla = sprint em andamento (Fatia 1/8 feita). Smoke E2E real Caso 1 ainda pendente Luciano. **IDEIA NOVA (Luciano):** Fatia 9 = portal self-service da empresa conveniada (gera + envia convite via WA/email + aprova pendentes na própria tela) — depende de provisionar login portal pra empresa. Detalhe: `docs/sessoes/2026-06-02-convenio-medico-finalizacao-e-convite-fase1.md`.
 
@@ -26,6 +28,43 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-04 (Code — M21 Sprint Multi-Frente: Portal Empresa + F1 + Convergência + CooperToken)
+
+**11 commits trabalho** em 1 sessão Code maratona (10 feats/fixes + 1 commit fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `0d698d4` | feat | Sprint Financeiro F1 — emissão consolidada com retry + statusEmissao separado |
+| `695e574` | feat | Portal Empresa 9.0 — perfil EMPRESA_CONVENIADA + guard + 9 endpoints + seed dev |
+| `6eaa7a6` | feat | Portal Empresa 9.1 — dashboard /conveniada/convenio/[id] + decidir in-portal |
+| `bfad278` | chore | HOTFIX BUG1 CORS+API_URL LAN (acesso celular via IP) |
+| `4fb9a0c` | fix | HOTFIX BUG2 decidir in-portal sem magic link + 9 specs |
+| `baf7fc1` | fix | HOTFIX diag erro detalhado em DEV no /auto-inscrever |
+| `9f18e13` | docs | 7 débitos auditoria /cadastro |
+| `badeb5f` | feat | Convergência Fatia 1 backend — DTO strict + REMOÇÃO UC-fake + upload-doc + 35 specs |
+| `0559660` | feat | Convergência Fatia 2 wizard — /cadastro?conv= + OTP gate + uploads + LGPD + smoke 9/9 |
+| `feda124` | feat | Circuito CooperToken Fatia A+B (portal nomenclatura + bonusIndicacao configurável) |
+| `<próximo>` | docs | Fechamento desta sessão |
+
+**Em curso:** —
+
+**Próximo passo:** Fatia F-G1 do Circuito CooperToken (cooperativa cria/envia convite de indicação pela web — atribuição C salvo decisão contrária) + mover acesso do "Crédito de Energia" pra dentro do Financeiro → Meus Créditos + investigar erro `/portal/indicacoes` (provável perfil EMPRESA_CONVENIADA em endpoint de membro).
+
+**Pendente após próximo:** Fatias C/D/E/F-G2/G do Circuito CooperToken → Módulo Contabilidade Tributária Segregada.
+
+**Carry-overs (não-bloqueantes):**
+- Smoke E2E real Luciano manual: portal empresa via celular, /cadastro?conv= via WA, aprovar/recusar in-portal.
+- D-novo-PORTAL-EMPRESA-SEED-TESTE P3, D-novo-DEV-LAN-ACCESS P3 (remover antes prod).
+- 7 débitos /cadastro (3 P3 + 3 P2 + 1 P1) — alguns resolvidos estruturalmente.
+- Erro `/portal/indicacoes` (investigar na Fatia F-G1).
+- Slim deprecation 1 sprint pra remover /convite-convenio/[token] redirect.
+- Convênio teste tem 1 membro "Smoke Convergência" + Dr. Race 1 em PENDENTE_APROVACAO_ADMIN.
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 04/06 fechamento M21).
+> Detalhe: `docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md`.
 
 ---
 
@@ -1577,11 +1616,152 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento da sessão 03/06 (Sprint Convite-Convênio NÚCLEO BACKEND
-   COMPLETO — Fatias 1+2a+2b+2c+2c.1+3 + chore higiene build).
+   fechamento da sessão 04/06 (M21 Sprint Multi-Frente: Portal Empresa
+   9.0+9.1 + Sprint Financeiro F1 + Convergência Convite-Custeio
+   Fatias 1+2 + Circuito CooperToken Fatia A+B).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   online.
+   online. ⚠ Frontend é `next start` sob PM2 (NÃO `next dev`) — toda
+   mudança de frontend exige rebuild + pm2 restart.
+
+PASSO 1 — Frase comandante (próximo Code arranca aqui):
+
+Retomar Circuito CooperToken — Fatia F-G1. PASSO 0: estar no main repo
+C:\Users\Luciano\cooperebr, rodar `git status --short` + `pm2 list`
+(confirmar cooperebr-backend e cooperebr-frontend online). Fatia A
+(portal nomenclatura/help/menu/rios) e Fatia B (bonusIndicacao
+configurável) JÁ ESTÃO NO AR e validadas. AÇÃO IMEDIATA: implementar a
+Fatia F-G1 (cooperativa cria/envia convite de indicação pela web —
+atribuição C salvo decisão contrária) + mover acesso do "Crédito de
+Energia" pra dentro do Financeiro → Meus Créditos + investigar o erro
+/portal/indicacoes (provável perfil EMPRESA_CONVENIADA em endpoint de
+membro). Empacotar com `cd web ; npm run build ; pm2 restart
+cooperebr-frontend`. Toda mudança de frontend = rebuild (next start,
+sem HMR). Spec: docs/especificacao-circuito-cooper-token-convenio.md.
+Memória: decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md.
+
+Pré-requisitos Fase 1 read-only OBRIGATÓRIOS:
+1. Ler docs/especificacao-circuito-cooper-token-convenio.md
+2. Confirmar memória decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
+3. Mapear endpoints existentes /indicacoes (admin + portal) — entender
+   onde está o erro perfil EMPRESA_CONVENIADA
+4. Mapear web/app/portal/{financeiro,creditos}.tsx — onde encaixar o
+   acesso "Crédito de Energia → Meus Créditos"
+5. Mapear web/app/dashboard/cooperados/* e/ou web/components/cooperados/*
+   pra wireframe da fatia F-G1 (cooperativa cria/envia convite indicação)
+
+Decisão 23: SEMPRE Fase 1 read-only ANTES de codar.
+LIÇÃO `next start` (04/06): frontend mudou → `cd web ; npm run build ;
+pm2 restart cooperebr-frontend`. HMR NÃO ROLA neste setup.
+
+CONTEXTO DA SESSÃO 04/06 (11 commits 0d698d4..feda124):
+
+- 0d698d4 Sprint Financeiro F1 (statusEmissao separado + cron retry
+  30min cap 5 + endpoint reemitir + UI badges + 13 specs)
+- 695e574 Portal Empresa 9.0 (perfil EMPRESA_CONVENIADA + guard
+  PagadorCooperadoOnly + 9 endpoints + seed dev + box credenciais login)
+- 6eaa7a6 Portal Empresa 9.1 (dashboard /conveniada/convenio/[id] +
+  reuso GestaoConvitesSection/MembrosPendentesSection source='empresa')
+- bfad278 HOTFIX BUG1 CORS+API_URL LAN (acesso por IP do celular)
+- 4fb9a0c HOTFIX BUG2 decidir in-portal sem magic link
+  (decidirAprovacaoEmpresaLogada opera direto no membroId + 9 specs)
+- baf7fc1 HOTFIX diag erro detalhado em DEV no /auto-inscrever
+- 9f18e13 docs 7 débitos auditoria /cadastro
+- badeb5f Convergência Fatia 1 backend (DTO strict + REMOÇÃO UC-fake
+  + helper validarENormalizarCadastro + POST cadastro/upload-doc +
+  schema delta TipoUc/SELFIE/permiteSemUc/consentimentoDocs + 35 specs)
+- 0559660 Convergência Fatia 2 wizard (/cadastro?conv= + OTP gate +
+  uploads opcionais + LGPD + doc-move backend + redirect slim 553→38
+  linhas + smoke E2E 9/9)
+- feda124 Circuito CooperToken Fatia A+B (portal nomenclatura/help/menu
+  + bonusIndicacao configurável + spec catalogada)
+
+Suite total impactada 374/374 verdes. Fatias resolveram estruturalmente:
+D-novo-CAD-UC-FALSA P1, D-novo-CAD-CONSUMO-ZERO P2, D-novo-CAD-MODO-MANUAL-NAV
+P3, D-novo-CONVITE-ROTA-CONSOLIDAR P3.
+
+ENTREGAS PRONTAS PRA SMOKE (carry-overs Luciano):
+- Portal Empresa golden path E2E manual via celular (192.168.3.88:3001):
+  /login → preenche credenciais dev → /selecionar-contexto auto-redirect
+  → /conveniada auto-redirect → /conveniada/convenio/[id] dashboard.
+- /cadastro?conv=<token> via WA do convite (Fatia 2 convergência).
+- Aprovar/recusar membro pendente in-portal (Fatia 9.1 portal empresa).
+- Smoke gateway DOWN→UP F1 (precisa Asaas sandbox).
+
+CONSTRAINTS APLICÁVEIS:
+- Decisão 23: Fase 1 read-only OBRIGATÓRIA antes de tocar código.
+- Decisão 24: frase de retomada local único (esta seção).
+- Multi-tenant em toda query Prisma; @TenantResource + @AuditLog em
+  handlers admin. 404 (não 403) em mismatch — anti-enumeração.
+- isAmbienteReal() em endpoints dev (NUNCA NODE_ENV — regra 18/05).
+- Regra contatos teste: 27981341348 + lucbragatto+*@gmail.com.
+- Math.round(x*100)/100 em todo valor monetário.
+- Schema aditivo sem --accept-data-loss; ritual PM2 (stop → port livre
+  → db push → generate → restart).
+- Transações Prisma Serializable em operações multi-modelo críticas.
+- ⚠️ LIÇÃO `next start` (04/06): toda mudança de frontend exige
+  `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO
+  ROLA. Documentado em CLAUDE.md.
+- ⚠️ LIÇÃO BUILD-POISON: tmp_*.ts/smoke*.ts excluídos do build (chore
+  7b14287); src/agents excluído do tsconfig.build. Não criar mais no root.
+- ⚠️ LIÇÃO commit SCOPED: NUNCA `git add .` ou `-A`. Lista exata de
+  arquivos pra evitar carry-overs (.agent/, .claude/agents,
+  backend/src/agents, tmp_*).
+- Regra HELP 19/05: TODA tela nova exibe help inline contextual.
+- Selects NATIVOS em Dialog/wizard (Shadcn select tem z-index issue).
+
+PRE-REQUISITOS LEITURA (ordem fixa):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo)
+2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+3. docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md
+   (contexto pleno desta sessão — 4 frentes + Cooper Token Fatia A+B)
+4. docs/especificacao-circuito-cooper-token-convenio.md (spec circuito)
+5. backend/src/cooper-token/cooper-token.service.ts (bonusIndicacao)
+6. backend/src/indicacoes/indicacoes.service.ts (lê config)
+7. web/app/portal/page.tsx + tokens.tsx + creditos.tsx (Fatia A aplicada)
+8. backend/src/convenios/portal-empresa/ (Fatia 9 empresa)
+9. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
+10. git log --oneline -15
+
+CARRY-OVERS (não-bloqueantes):
+- Smoke E2E manual Luciano: golden path portal empresa via celular,
+  /cadastro?conv= via WA do convite, aprovar/recusar in-portal.
+- D-novo-PORTAL-EMPRESA-SEED-TESTE P3 (remover seed + box credenciais
+  antes de prod).
+- D-novo-DEV-LAN-ACCESS P3 (CORS+API_URL pra domínio público + rebuild).
+- 7 débitos /cadastro: 3 P3 + 3 P2 + 1 P1 (alguns já resolvidos
+  estruturalmente — ver doc-sessão).
+- Erro /portal/indicacoes (investigar na Fatia F-G1).
+- Convênio teste tem 1 membro "Smoke Convergência" + Dr. Race 1 já em
+  PENDENTE_APROVACAO_ADMIN (admin pode aprovar pra completar fluxo).
+- Slim /convite-convenio/[token] deprecation 1 sprint pra remover
+  redirect quando confirmar zero tráfego.
+- D-novo-CT-VALIDACAO-FISCAL P0 (gate fiscal interno)
+- D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 (bloqueia Sinergia)
+- D-novo-BM P0 BLOQUEADOR REMOÇÃO PRÉ-PROD
+- D-novo-AGENTS-ORPHAN P3 (pasta src/agents)
+- 256 legados allowlist lint:tenant
+
+FRENTES OPERACIONAIS LUCIANO:
+⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção contábil)
+⏳ Smoke E2E real Portal Empresa Conveniada via celular
+⏳ Smoke E2E /cadastro?conv= via WA real
+⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536 (advogado)
+⏳ Decisão F-G1 (atribuição A/B/C indicação por convite cooperativa)
+⏳ Cadastrar Usuario E-Solares real
+
+DOC-SESSAO 04/06:
+docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md
+```
+
+---
+
+### Frase Fatia 4 Sprint Convite-Convênio (anterior 03/06, arquivada — substituída pela frase Fatia F-G1 CooperToken acima)
+
+Substituída pelo M21 Sprint Multi-Frente 04/06.
+
+```
+[frase arquivada — substituída pelo M21 Sprint Multi-Frente 04/06]
 
 PASSO 1 — Frase comandante (próximo Code arranca aqui):
 
