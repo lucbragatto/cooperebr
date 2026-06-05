@@ -9,13 +9,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-// Sprint Portal Empresa 9.0 (04/06/2026) — credenciais de teste dev-only.
-// Geradas pelo seed `backend/scripts/seed-portal-empresa-teste.ts`.
-// D-novo-PORTAL-EMPRESA-SEED-TESTE (P3): remover antes de produção.
-const CRED_TESTE_EMPRESA = {
+// Sprint Portal Empresa 9.0 (04/06/2026) + ajuste Fatia F-G1 (05/06/2026):
+// box dev-only com 2 contas pra acelerar testes — SUPER_ADMIN (acesso a
+// /dashboard + painel /dev/credenciais-teste pra impersonate) + Empresa
+// cooperada (perfil COOPERADO, acesso a /conveniada via contexto).
+// Senhas resetadas pelos seeds dev (`reset-senha-superadmin-teste.ts` +
+// `seed-portal-empresa-teste.ts`). NÃO persistidas em config — só vivem
+// nos seeds executados sob demanda.
+// D-novo-PORTAL-EMPRESA-SEED-TESTE (P3): remover este box antes de produção.
+type CredTeste = { email: string; senha: string; titulo: string; desc: string };
+
+const CRED_SUPER_ADMIN: CredTeste = {
+  email: 'superadmin@cooperebr.com.br',
+  senha: 'Teste@123',
+  titulo: 'SUPER ADMIN',
+  desc: 'Acesso global · /dashboard · painel impersonate (dev/credenciais-teste)',
+};
+const CRED_EMPRESA: CredTeste = {
   email: 'lucbragatto+empresa-teste@gmail.com',
   senha: 'Teste@123',
+  titulo: 'Empresa cooperada',
+  desc: 'Cooperado PJ (Clínica Teste) · /conveniada (via contexto)',
 };
+
 // isAmbienteReal() do backend = process.env.AMBIENTE_REAL==='true'. No front:
 // NEXT_PUBLIC_AMBIENTE_REAL não definido OU 'false' → dev → mostra box.
 const isProducao = process.env.NEXT_PUBLIC_AMBIENTE_REAL === 'true';
@@ -27,9 +43,9 @@ export default function LoginPage() {
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  function preencherCredenciaisTeste() {
-    setIdentificador(CRED_TESTE_EMPRESA.email);
-    setSenha(CRED_TESTE_EMPRESA.senha);
+  function preencherCred(c: CredTeste) {
+    setIdentificador(c.email);
+    setSenha(c.senha);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -101,37 +117,54 @@ export default function LoginPage() {
               </div>
             </form>
 
-            {/* Sprint Portal Empresa 9.0 — box dev-only de credenciais de teste.
+            {/* Box dev-only de credenciais de teste — Sprint Portal Empresa 9.0
+                + ajuste Fatia F-G1 (05/06): 2 contas (SUPER_ADMIN + Empresa).
+                Use SUPER_ADMIN pra acessar /dashboard/dev/credenciais-teste e
+                impersonar QUALQUER outro perfil (admin/cooperado/proprietário)
+                sem digitar senha.
                 D-novo-PORTAL-EMPRESA-SEED-TESTE (P3): remover antes de produção. */}
             {!isProducao && (
-              <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs space-y-2">
+              <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-amber-900">
                     🔑 Credenciais de teste (DEV)
                   </p>
                   <span className="text-[10px] uppercase tracking-wide text-amber-700 font-bold">
-                    Portal Empresa
+                    2 contas
                   </span>
                 </div>
-                <div className="text-amber-800 space-y-0.5 font-mono text-[11px]">
-                  <div>
-                    <span className="opacity-70">login:</span>{' '}
-                    <span className="select-all">{CRED_TESTE_EMPRESA.email}</span>
+
+                {[CRED_SUPER_ADMIN, CRED_EMPRESA].map((c) => (
+                  <div key={c.email} className="border border-amber-200 rounded-md bg-white p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-amber-900 text-[11px]">{c.titulo}</p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => preencherCred(c)}
+                        className="border-amber-400 text-amber-900 hover:bg-amber-100 h-6 text-[10px] px-2"
+                      >
+                        Preencher
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-amber-700 opacity-80 leading-snug">{c.desc}</p>
+                    <div className="text-amber-800 space-y-0.5 font-mono text-[10px]">
+                      <div>
+                        <span className="opacity-70">login:</span>{' '}
+                        <span className="select-all">{c.email}</span>
+                      </div>
+                      <div>
+                        <span className="opacity-70">senha:</span>{' '}
+                        <span className="select-all">{c.senha}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="opacity-70">senha:</span>{' '}
-                    <span className="select-all">{CRED_TESTE_EMPRESA.senha}</span>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={preencherCredenciaisTeste}
-                  className="w-full border-amber-400 text-amber-900 hover:bg-amber-100 h-8 text-xs"
-                >
-                  Preencher (dev only)
-                </Button>
+                ))}
+
+                <p className="text-[10px] text-amber-700 opacity-80 leading-snug">
+                  💡 Logue como <strong>SUPER ADMIN</strong> e vá em <code>/dashboard/dev/credenciais-teste</code> pra impersonar admin/cooperado/proprietário sem precisar de senha de cada um.
+                </p>
                 <p className="text-[10px] text-amber-700 opacity-80">
                   Este box NÃO aparece em produção (NEXT_PUBLIC_AMBIENTE_REAL=true).
                 </p>

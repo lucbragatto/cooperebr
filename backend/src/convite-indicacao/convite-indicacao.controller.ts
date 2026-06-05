@@ -48,9 +48,25 @@ export class ConviteIndicacaoController {
     @Req() req: any,
     @Body() body: { nomeConvidado: string; telefone: string; indicadorId?: string; cooperativaId?: string },
   ) {
-    const cooperativaId = resolverCooperativaId(req, body.cooperativaId);
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId obrigatório (admin de cooperativa).');
+    // Fatia F-G1 ajuste pós-merge: SUPER_ADMIN obrigatoriamente envia
+    // cooperativaId no body (selecionada na UI). ADMIN usa a própria do JWT
+    // (body.cooperativaId ignorado por segurança — não permite cross-tenant).
+    const perfil = req.user?.perfil;
+    let cooperativaId: string | undefined;
+    if (perfil === 'SUPER_ADMIN') {
+      if (!body.cooperativaId) {
+        throw new BadRequestException(
+          'SUPER_ADMIN deve informar `cooperativaId` no body (seletor de cooperativa).',
+        );
+      }
+      cooperativaId = body.cooperativaId;
+    } else {
+      // ADMIN/etc: usa a própria coop do JWT (body.cooperativaId IGNORADO —
+      // anti-spoof cross-tenant).
+      cooperativaId = resolverCooperativaId(req);
+      if (!cooperativaId) {
+        throw new BadRequestException('cooperativaId obrigatório no contexto do admin.');
+      }
     }
     if (!body.nomeConvidado || body.nomeConvidado.trim().length < 2) {
       throw new BadRequestException('nomeConvidado é obrigatório (mínimo 2 caracteres).');
@@ -58,6 +74,16 @@ export class ConviteIndicacaoController {
     const telLimpo = (body.telefone || '').replace(/\D/g, '');
     if (telLimpo.length < 10) {
       throw new BadRequestException('telefone obrigatório (10-11 dígitos com DDD).');
+    }
+
+    // Carrega cooperativa selecionada (nome dinâmico no template WA — sem
+    // hardcode "CoopereBR"; SISGD é multi-tenant).
+    const coopAlvo = await this.institucional['prisma'].cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: { id: true, nome: true, ativo: true },
+    });
+    if (!coopAlvo || !coopAlvo.ativo) {
+      throw new BadRequestException('Cooperativa inválida ou inativa.');
     }
 
     // Decisão Luciano #1: indicador opcional. Se ausente → fantasma institucional.
@@ -97,6 +123,7 @@ export class ConviteIndicacaoController {
       telefone: telLimpo,
       nomeConvidado: body.nomeConvidado.trim(),
       nomeIndicador,
+      cooperativaNome: coopAlvo.nome,
       cooperativaId,
       institucional: isInstitucional,
     });
@@ -110,6 +137,7 @@ export class ConviteIndicacaoController {
         status: r.convite!.status,
       },
       institucional: isInstitucional,
+      cooperativaNome: coopAlvo.nome,
       whatsappEnviado: envio.enviado,
       whatsappErro: envio.erro,
     };

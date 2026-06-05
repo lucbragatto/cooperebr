@@ -103,18 +103,28 @@ export class ConviteIndicacaoService {
     telefone: string;
     nomeConvidado: string;
     nomeIndicador: string;
+    /** Nome da cooperativa (tenant) — usado dinamicamente no template (sem
+     *  hardcode "CoopereBR" — SISGD é multi-tenant). */
+    cooperativaNome: string;
     cooperativaId: string;
     institucional?: boolean;
   }): Promise<{ enviado: boolean; erro?: string }> {
-    const { telefone, nomeConvidado, nomeIndicador, cooperativaId, institucional } =
-      input;
+    const {
+      telefone,
+      nomeConvidado,
+      nomeIndicador,
+      cooperativaNome,
+      cooperativaId,
+      institucional,
+    } = input;
     // Mensagem padrão. Em institucional, nome do indicador omitido pra evitar
-    // "Você foi convidado por 'CoopereBR — Institucional'" (confunde).
+    // "Você foi convidado por '<Coop> — Institucional'" (confunde).
+    // Multi-tenant: nome da cooperativa vem do banco, NÃO hardcode "CoopereBR".
     const texto = institucional
-      ? `Olá ${nomeConvidado}! A cooperativa CoopereBR te convidou pra conhecer o programa.\n\n` +
-        `Com a CoopereBR você economiza até 20% na conta de luz, sem investimento.\n\n` +
+      ? `Olá ${nomeConvidado}! A cooperativa ${cooperativaNome} te convidou pra conhecer o programa.\n\n` +
+        `Com a ${cooperativaNome} você economiza até 20% na conta de luz, sem investimento.\n\n` +
         `Mande a foto da sua conta de energia pra começar! ⚡`
-      : `Olá ${nomeConvidado}! ${nomeIndicador} te convidou para a CoopereBR.\n\n` +
+      : `Olá ${nomeConvidado}! ${nomeIndicador} te convidou para a ${cooperativaNome}.\n\n` +
         `Economize até 20% na conta de luz sem investimento.\n\n` +
         `Mande a foto da sua conta de energia para começar! ⚡`;
     try {

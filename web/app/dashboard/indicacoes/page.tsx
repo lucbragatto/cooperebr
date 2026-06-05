@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { getUsuario } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -487,16 +488,55 @@ export default function IndicacoesPage() {
   // Admin convida funcionário/cliente em nome da cooperativa (indicador =
   // institucional fantasma). Decisão Luciano: ação simples → Dialog (padrão
   // UX 17/05). HelpBox 19/05 explicando o fluxo.
+  // Ajuste pós-merge (05/06): SUPER_ADMIN escolhe a cooperativa via select
+  // obrigatório; ADMIN usa a própria (sem seletor). Título + template WA
+  // ficam dinâmicos (sem hardcode "CoopereBR" — SISGD é multi-tenant).
   const [conviteDialogOpen, setConviteDialogOpen] = useState(false);
   const [conviteNome, setConviteNome] = useState('');
   const [conviteTelefone, setConviteTelefone] = useState('');
   const [convidando, setConvidando] = useState(false);
   const [conviteErro, setConviteErro] = useState('');
   const [conviteSucesso, setConviteSucesso] = useState<
-    | { tipo: 'criado'; nomeConvidado: string; whatsappEnviado: boolean }
+    | { tipo: 'criado'; nomeConvidado: string; whatsappEnviado: boolean; cooperativaNome: string }
     | { tipo: 'ja_cooperado'; cooperadoNome: string }
     | null
   >(null);
+
+  // Perfil do user (pra branching SUPER_ADMIN × ADMIN no Dialog)
+  const [perfilUser, setPerfilUser] = useState<string | null>(null);
+  const [cooperativaUserNome, setCooperativaUserNome] = useState<string>('');
+  const [cooperativaSelecionadaId, setCooperativaSelecionadaId] = useState<string>('');
+  const [cooperativasDisponiveis, setCooperativasDisponiveis] = useState<
+    Array<{ id: string; nome: string }>
+  >([]);
+
+  // Carrega perfil + cooperativas quando necessário
+  useEffect(() => {
+    const u = getUsuario();
+    if (!u) return;
+    setPerfilUser(u.perfil);
+    if (u.perfil === 'SUPER_ADMIN') {
+      // Lista todas cooperativas pra select
+      api
+        .get<Array<{ id: string; nome: string; ativo: boolean }>>('/cooperativas')
+        .then((r) => {
+          const ativas = (r.data ?? []).filter((c) => c.ativo).map((c) => ({ id: c.id, nome: c.nome }));
+          setCooperativasDisponiveis(ativas);
+        })
+        .catch(() => setCooperativasDisponiveis([]));
+    } else {
+      // ADMIN/etc: pega o nome da própria cooperativa via /auth/me
+      api
+        .get<{ cooperativaId?: string | null; contextos?: Array<{ tipo: string; cooperativaNome?: string }> }>('/auth/me')
+        .then((r) => {
+          const adminCtx = r.data.contextos?.find((c) => c.tipo === 'admin_parceiro');
+          if (adminCtx?.cooperativaNome) {
+            setCooperativaUserNome(adminCtx.cooperativaNome);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   async function enviarConvite() {
     setConviteErro('');
@@ -509,12 +549,22 @@ export default function IndicacoesPage() {
       setConviteErro('Telefone precisa de 10-11 dígitos (com DDD).');
       return;
     }
+    // SUPER_ADMIN obrigado a selecionar cooperativa
+    if (perfilUser === 'SUPER_ADMIN' && !cooperativaSelecionadaId) {
+      setConviteErro('Selecione a cooperativa em nome de quem o convite será enviado.');
+      return;
+    }
+
     setConvidando(true);
     try {
-      const { data } = await api.post('/convite-indicacao/admin', {
+      const payload: Record<string, unknown> = {
         nomeConvidado: conviteNome.trim(),
         telefone: telLimpo,
-      });
+      };
+      if (perfilUser === 'SUPER_ADMIN') {
+        payload.cooperativaId = cooperativaSelecionadaId;
+      }
+      const { data } = await api.post('/convite-indicacao/admin', payload);
       if (data.jaCooperado) {
         setConviteSucesso({
           tipo: 'ja_cooperado',
@@ -525,6 +575,7 @@ export default function IndicacoesPage() {
           tipo: 'criado',
           nomeConvidado: data.convite?.nomeConvidado ?? conviteNome.trim(),
           whatsappEnviado: !!data.whatsappEnviado,
+          cooperativaNome: data.cooperativaNome ?? '',
         });
         // Limpa form pra próximo
         setConviteNome('');
@@ -538,6 +589,16 @@ export default function IndicacoesPage() {
       setConvidando(false);
     }
   }
+
+  // Nome da cooperativa a exibir no título (dinâmico, sem hardcode)
+  const cooperativaNomeTitulo = (() => {
+    if (perfilUser === 'SUPER_ADMIN') {
+      return (
+        cooperativasDisponiveis.find((c) => c.id === cooperativaSelecionadaId)?.nome ?? ''
+      );
+    }
+    return cooperativaUserNome;
+  })();
 
   function formatarTelefone(valor: string): string {
     const n = valor.replace(/\D/g, '').slice(0, 11);
@@ -679,7 +740,10 @@ export default function IndicacoesPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-green-600" />
-              Convidar pessoa pra CoopereBR
+              {/* Título dinâmico (sem hardcode "CoopereBR" — SISGD multi-tenant) */}
+              {cooperativaNomeTitulo
+                ? `Convidar pessoa pra ${cooperativaNomeTitulo}`
+                : 'Convidar pessoa'}
             </DialogTitle>
             <DialogDescription>
               A pessoa recebe um link por WhatsApp pra começar o cadastro.
@@ -692,8 +756,7 @@ export default function IndicacoesPage() {
             <p className="leading-relaxed">
               Você convida em nome da cooperativa (convite institucional —
               sem indicador-pessoa específico). A pessoa recebe um link no
-              WhatsApp.{' '}
-              <em>Ex: "Olá Ana! A CoopereBR te convidou pra economizar 20% na conta de luz..."</em>
+              WhatsApp com o nome da cooperativa selecionada.
             </p>
             <p className="leading-relaxed">
               <strong>Quando ela paga a 1ª fatura:</strong> entra no sistema como
@@ -709,7 +772,8 @@ export default function IndicacoesPage() {
               <div>
                 <p className="font-semibold">Convite enviado ✓</p>
                 <p className="text-xs leading-relaxed">
-                  {conviteSucesso.nomeConvidado} recebeu o link.{' '}
+                  {conviteSucesso.nomeConvidado} recebeu o link
+                  {conviteSucesso.cooperativaNome ? ` em nome de ${conviteSucesso.cooperativaNome}` : ''}.{' '}
                   {conviteSucesso.whatsappEnviado
                     ? 'WhatsApp confirmado.'
                     : '(WhatsApp não confirmou — use "Reenviar" na aba Rede se a pessoa não receber.)'}
@@ -732,6 +796,32 @@ export default function IndicacoesPage() {
 
           {/* Form */}
           <div className="space-y-3 py-2">
+            {/* SUPER_ADMIN: seletor de cooperativa obrigatório.
+                ADMIN: sem seletor — usa a própria cooperativa do JWT.
+                Select NATIVO (regra 19/05 — Shadcn select tem z-index issue em Dialog). */}
+            {perfilUser === 'SUPER_ADMIN' && (
+              <div>
+                <Label htmlFor="convite-coop">Cooperativa *</Label>
+                <select
+                  id="convite-coop"
+                  value={cooperativaSelecionadaId}
+                  onChange={(e) => setCooperativaSelecionadaId(e.target.value)}
+                  disabled={convidando}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">— selecione a cooperativa —</option>
+                  {cooperativasDisponiveis.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  O convite e a mensagem do WhatsApp serão enviados em nome desta cooperativa.
+                </p>
+              </div>
+            )}
+
             <div>
               <Label htmlFor="convite-nome">Nome do convidado *</Label>
               <Input
@@ -771,7 +861,12 @@ export default function IndicacoesPage() {
             </Button>
             <Button
               onClick={enviarConvite}
-              disabled={convidando || !conviteNome.trim() || conviteTelefone.replace(/\D/g, '').length < 10}
+              disabled={
+                convidando ||
+                !conviteNome.trim() ||
+                conviteTelefone.replace(/\D/g, '').length < 10 ||
+                (perfilUser === 'SUPER_ADMIN' && !cooperativaSelecionadaId)
+              }
               className="bg-green-600 hover:bg-green-700 gap-1"
             >
               {convidando ? (
