@@ -13,11 +13,20 @@
 import { isAmbienteReal } from './ambiente';
 
 export const WHITELIST_TELEFONES_TESTE: string[] = [
-  '+5527981341348', // Luciano (admin dev)
+  // Ambos = números de teste do Luciano (regra 14/05 + 05/06).
+  '+5527981341348', // Luciano (admin dev) — regra 14/05
   '5527981341348',
   '27981341348',
   '(27)98134-1348',
   '(27) 98134-1348',
+  // Adicional 05/06 (Fatia F-G1 smoke G1 institucional): segundo número
+  // de teste do Luciano usado pra simular "novo convidado" no fluxo de
+  // convite institucional via /dashboard/indicacoes.
+  '+5527999479097',
+  '5527999479097',
+  '27999479097',
+  '(27)99947-9097',
+  '(27) 99947-9097',
 ];
 
 export const WHITELIST_EMAILS_TESTE: string[] = [

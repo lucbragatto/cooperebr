@@ -9,6 +9,31 @@ export interface WhatsappMensagemEnviadaEvent {
   direcao: 'ENVIADA' | 'RECEBIDA';
 }
 
+/**
+ * D-novo-WA-DEV-FALSE-OK (05/06/2026) — Resultado estruturado do envio.
+ *
+ * Antes: `enviarMensagem` retornava `Promise<void>` e fazia `return` silencioso
+ * em 2 caminhos (`isNumeroProtegido` + `!podeEnviarEmDev`), o que dava falso
+ * positivo "enviado ✓" pra callers que assumiam `await sem throw = enviado`.
+ *
+ * Agora: retorna `WhatsappEnvioResult` explícito. Callers que ignorarem o
+ * valor continuam compatíveis (await Promise<X> aceita ignorar). Callers
+ * que se importam (ex: convite-indicacao.service) propagam o motivo até
+ * a UI dev pra mostrar status honesto.
+ *
+ * Em PROD (`AMBIENTE_REAL=true`), nenhum skip dev acontece — só falha real
+ * vira `{ enviado: false, motivo: 'erro-runtime' }` ou throw (HTTP 4xx/5xx).
+ */
+export type WhatsappEnvioMotivo =
+  | 'whitelist-dev'      // pulou por whitelist em DEV (regra 18/05)
+  | 'numero-protegido'   // número fake/anonimizado bloqueado (defense in depth)
+  | 'erro-runtime';      // erro inesperado (espelhamento failed, etc — não-throw)
+
+export interface WhatsappEnvioResult {
+  enviado: boolean;
+  motivo?: WhatsappEnvioMotivo;
+}
+
 export interface OpcaoMenu {
   id: string;
   texto: string;
@@ -70,16 +95,16 @@ export class WhatsappSenderService {
     telefone: string,
     texto: string,
     opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
-  ): Promise<void> {
+  ): Promise<WhatsappEnvioResult> {
     // Bloquear envio para números de teste/anonimizados
     if (this.isNumeroProtegido(telefone)) {
       this.logger.warn(`[BLOQUEADO] Tentativa de envio para número de teste: ${telefone}`);
-      return;
+      return { enviado: false, motivo: 'numero-protegido' };
     }
     // Whitelist em dev: só envia para números autorizados
     if (!podeEnviarEmDev(telefone, 'WA')) {
       this.logger.log(`[DEV] WA para ${telefone} SKIPPED (não está na whitelist)`);
-      return;
+      return { enviado: false, motivo: 'whitelist-dev' };
     }
     const res = await fetch(`${this.baseUrl}/send-message`, {
       method: 'POST',
@@ -115,8 +140,11 @@ export class WhatsappSenderService {
         });
       } catch (err) {
         this.logger.warn(`Falha ao espelhar mensagem para super admin: ${err.message}`);
+        // Espelhamento é best-effort — não invalida o envio principal.
       }
     }
+
+    return { enviado: true };
   }
 
   /**

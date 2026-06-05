@@ -139,6 +139,9 @@ export class ConviteIndicacaoController {
       institucional: isInstitucional,
       cooperativaNome: coopAlvo.nome,
       whatsappEnviado: envio.enviado,
+      // D-novo-WA-DEV-FALSE-OK (05/06): propaga motivo do skip pra UI mostrar
+      // status honesto (ex: "whitelist-dev" → "bloqueio de teste/whitelist").
+      whatsappMotivo: envio.motivo,
       whatsappErro: envio.erro,
     };
   }

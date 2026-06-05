@@ -108,7 +108,7 @@ export class ConviteIndicacaoService {
     cooperativaNome: string;
     cooperativaId: string;
     institucional?: boolean;
-  }): Promise<{ enviado: boolean; erro?: string }> {
+  }): Promise<{ enviado: boolean; motivo?: string; erro?: string }> {
     const {
       telefone,
       nomeConvidado,
@@ -128,17 +128,27 @@ export class ConviteIndicacaoService {
         `Economize até 20% na conta de luz sem investimento.\n\n` +
         `Mande a foto da sua conta de energia para começar! ⚡`;
     try {
-      await this.sender.enviarMensagem(telefone, texto, {
+      // D-novo-WA-DEV-FALSE-OK (05/06): sender agora retorna status
+      // explícito. Em DEV, se o número não está na whitelist, sender
+      // retorna { enviado: false, motivo: 'whitelist-dev' } SEM throw.
+      // Antes víamos { enviado: true } falsamente (try/catch só pega
+      // exception). Agora propagamos o motivo até a UI.
+      const r = await this.sender.enviarMensagem(telefone, texto, {
         tipoDisparo: 'convite_indicacao_admin',
         cooperativaId,
       });
-      return { enviado: true };
+      if (!r.enviado) {
+        this.logger.warn(
+          `[convite-indicacao] WA pra ${telefone.slice(0, 4)}***${telefone.slice(-4)} NÃO enviado (motivo=${r.motivo}).`,
+        );
+      }
+      return { enviado: r.enviado, motivo: r.motivo };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido';
       this.logger.warn(
         `[convite-indicacao] Falha enviar WA pra ${telefone.slice(0, 4)}***${telefone.slice(-4)}: ${msg}`,
       );
-      return { enviado: false, erro: msg };
+      return { enviado: false, motivo: 'erro-runtime', erro: msg };
     }
   }
 

@@ -497,7 +497,15 @@ export default function IndicacoesPage() {
   const [convidando, setConvidando] = useState(false);
   const [conviteErro, setConviteErro] = useState('');
   const [conviteSucesso, setConviteSucesso] = useState<
-    | { tipo: 'criado'; nomeConvidado: string; whatsappEnviado: boolean; cooperativaNome: string }
+    | {
+        tipo: 'criado';
+        nomeConvidado: string;
+        whatsappEnviado: boolean;
+        /** D-novo-WA-DEV-FALSE-OK (05/06): motivo do skip do sender em DEV
+         *  (whitelist-dev | numero-protegido | erro-runtime). Em PROD não vem. */
+        whatsappMotivo?: string;
+        cooperativaNome: string;
+      }
     | { tipo: 'ja_cooperado'; cooperadoNome: string }
     | null
   >(null);
@@ -575,6 +583,7 @@ export default function IndicacoesPage() {
           tipo: 'criado',
           nomeConvidado: data.convite?.nomeConvidado ?? conviteNome.trim(),
           whatsappEnviado: !!data.whatsappEnviado,
+          whatsappMotivo: data.whatsappMotivo,
           cooperativaNome: data.cooperativaNome ?? '',
         });
         // Limpa form pra próximo
@@ -765,22 +774,52 @@ export default function IndicacoesPage() {
             </p>
           </div>
 
-          {/* Feedback de sucesso */}
-          {conviteSucesso?.tipo === 'criado' && (
-            <div className="bg-green-50 border border-green-300 rounded-md p-3 text-sm text-green-900 flex items-start gap-2">
-              <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-semibold">Convite enviado ✓</p>
-                <p className="text-xs leading-relaxed">
-                  {conviteSucesso.nomeConvidado} recebeu o link
-                  {conviteSucesso.cooperativaNome ? ` em nome de ${conviteSucesso.cooperativaNome}` : ''}.{' '}
-                  {conviteSucesso.whatsappEnviado
-                    ? 'WhatsApp confirmado.'
-                    : '(WhatsApp não confirmou — use "Reenviar" na aba Rede se a pessoa não receber.)'}
-                </p>
+          {/* Feedback de sucesso (D-novo-WA-DEV-FALSE-OK 05/06: status honesto).
+              Mostra 3 estados distintos:
+              - convite criado + WA enviado de fato → verde "✓ WhatsApp confirmado"
+              - convite criado + WA bloqueado por whitelist DEV → amber "⚠ bloqueio teste/whitelist"
+              - convite criado + WA falhou (runtime) → amber "WhatsApp não confirmou"  */}
+          {conviteSucesso?.tipo === 'criado' && (() => {
+            const ehWhitelistDev = conviteSucesso.whatsappMotivo === 'whitelist-dev';
+            const ehProtegido = conviteSucesso.whatsappMotivo === 'numero-protegido';
+            const cor = conviteSucesso.whatsappEnviado
+              ? 'bg-green-50 border-green-300 text-green-900'
+              : 'bg-amber-50 border-amber-300 text-amber-900';
+            const Icon = conviteSucesso.whatsappEnviado ? CheckCircle : AlertTriangle;
+            return (
+              <div className={`border rounded-md p-3 text-sm flex items-start gap-2 ${cor}`}>
+                <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold">
+                    {conviteSucesso.whatsappEnviado
+                      ? 'Convite criado e WhatsApp enviado ✓'
+                      : 'Convite criado · WhatsApp NÃO enviado'}
+                  </p>
+                  <p className="text-xs leading-relaxed mt-0.5">
+                    {conviteSucesso.nomeConvidado} foi registrado
+                    {conviteSucesso.cooperativaNome ? ` em nome de ${conviteSucesso.cooperativaNome}` : ''}.{' '}
+                    {conviteSucesso.whatsappEnviado ? (
+                      <>O link foi disparado via WhatsApp.</>
+                    ) : ehWhitelistDev ? (
+                      <>
+                        <strong>Bloqueio de teste/whitelist (DEV):</strong> o número{' '}
+                        <span className="font-mono">{conviteTelefone || '—'}</span> não está
+                        na <code className="px-1 bg-amber-100 rounded">WHITELIST_TELEFONES_TESTE</code>.{' '}
+                        Em produção (<code>AMBIENTE_REAL=true</code>) o envio ocorre normalmente.
+                      </>
+                    ) : ehProtegido ? (
+                      <>
+                        <strong>Número protegido</strong> (fake/anonimizado detectado).
+                        Defense in depth — bloqueado em qualquer ambiente.
+                      </>
+                    ) : (
+                      <>WhatsApp não confirmou (use "Reenviar" na aba Rede se a pessoa não receber).</>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           {conviteSucesso?.tipo === 'ja_cooperado' && (
             <div className="bg-amber-50 border border-amber-300 rounded-md p-3 text-sm text-amber-900 flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
