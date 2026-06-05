@@ -25,6 +25,18 @@ const CRED_SUPER_ADMIN: CredTeste = {
   titulo: 'SUPER ADMIN',
   desc: 'Acesso global · /dashboard · painel impersonate (dev/credenciais-teste)',
 };
+const CRED_ADMIN: CredTeste = {
+  email: 'admin@cooperebr.com.br',
+  senha: 'Teste@123',
+  titulo: 'ADMIN — CoopereBR',
+  desc: 'Admin da cooperativa · /parceiro (gestão tenant) · também acessa /dashboard',
+};
+const CRED_COOPERADO: CredTeste = {
+  email: 'teste@cooperebr.com',
+  senha: 'Teste@123',
+  titulo: 'COOPERADO',
+  desc: 'Cooperado de teste (Luciano Teste) · /portal',
+};
 const CRED_EMPRESA: CredTeste = {
   email: 'lucbragatto+empresa-teste@gmail.com',
   senha: 'Teste@123',
@@ -130,11 +142,11 @@ export default function LoginPage() {
                     🔑 Credenciais de teste (DEV)
                   </p>
                   <span className="text-[10px] uppercase tracking-wide text-amber-700 font-bold">
-                    2 contas
+                    4 contas
                   </span>
                 </div>
 
-                {[CRED_SUPER_ADMIN, CRED_EMPRESA].map((c) => (
+                {[CRED_SUPER_ADMIN, CRED_ADMIN, CRED_COOPERADO, CRED_EMPRESA].map((c) => (
                   <div key={c.email} className="border border-amber-200 rounded-md bg-white p-2.5 space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-semibold text-amber-900 text-[11px]">{c.titulo}</p>
