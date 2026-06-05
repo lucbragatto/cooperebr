@@ -51,7 +51,10 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
     email: 'lucbragatto+empresa-teste@gmail.com',
     cpf: null,
     telefone: null,
-    perfil: 'EMPRESA_CONVENIADA',
+    // Opção A (Fatia F-G1 — 05/06/2026): empresa cooperada PJ tem perfil
+    // COOPERADO (decisão COOPERADO-ONLY). Contexto empresa_conveniada é
+    // derivado de match Cooperado pagador, não do perfil.
+    perfil: 'COOPERADO',
     cooperativaId: null,
     administradoraId: null,
   };

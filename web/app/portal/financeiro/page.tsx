@@ -57,6 +57,8 @@ export default function PortalFinanceiroPage() {
   const [relatorioModal, setRelatorioModal] = useState<any>(null);
   const [relatorioData, setRelatorioData] = useState<any>(null);
   const [cooperadoId, setCooperadoId] = useState<string>('');
+  // Fatia F-G1 (05/06/2026) — gate SEM_UC pro CTA "Converter créditos em PIX"
+  const [tipoCooperado, setTipoCooperado] = useState<'COM_UC' | 'SEM_UC' | null>(null);
 
   // Upload self-service
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -73,6 +75,7 @@ export default function PortalFinanceiroPage() {
       api.get('/cooperados/meu-perfil').then(async (r) => {
         const id = r.data.id;
         setCooperadoId(id);
+        setTipoCooperado(r.data.tipoCooperado ?? null);
         const [cobRes, fatRes, benRes] = await Promise.all([
           api.get('/cooperados/meu-perfil/cobrancas').catch(() => ({ data: [] })),
           api.get(`/faturas/cooperado/${id}`).catch(() => ({ data: [] })),
@@ -154,7 +157,9 @@ export default function PortalFinanceiroPage() {
 
   const abas: { id: AbaPortal; label: string; icon: typeof CreditCard }[] = [
     { id: 'cobrancas', label: 'Minhas Cobranças', icon: CreditCard },
-    { id: 'creditos', label: 'Meus Créditos', icon: Zap },
+    // Fatia F-G1 (05/06/2026) — rename "Meus Créditos" → "Créditos de Energia"
+    // pra deixar explícito que é Rio 1 (kWh) e separar do Rio 2 (CooperToken).
+    { id: 'creditos', label: 'Créditos de Energia', icon: Zap },
     { id: 'faturas', label: 'Faturas Concessionária', icon: FileText },
     { id: 'beneficios', label: 'Meus Benefícios', icon: Gift },
   ];
@@ -302,9 +307,19 @@ export default function PortalFinanceiroPage() {
         </div>
       )}
 
-      {/* ═══ Aba: Meus Créditos ═══ */}
+      {/* ═══ Aba: Créditos de Energia (Rio 1 — kWh; separado do Rio 2 CooperToken) ═══ */}
       {abaAtiva === 'creditos' && (
         <div className="space-y-3">
+          {/* HelpBox 19/05 — separação Rio 1 × Rio 2 (regra Circuito CooperToken 04/06) */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+            <p className="font-semibold mb-1">ℹ️ O que são "Créditos de Energia"?</p>
+            <p className="leading-relaxed">
+              Aqui você vê os <strong>kWh</strong> que a CoopereBR injeta na rede e que abatem
+              da sua conta de luz. <em>Não confundir com CooperToken</em> (benefício de circuito
+              fechado — vá em <strong>Meus CooperTokens</strong> pra ver tokens).
+            </p>
+          </div>
+
           <Card>
             <CardContent className="pt-4 pb-3">
               <div className="flex items-center gap-3">
@@ -320,6 +335,33 @@ export default function PortalFinanceiroPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/*
+            Fatia F-G1 (05/06/2026) — CTA SEM_UC pra converter créditos kWh→PIX.
+            Antes era atalho na home /portal (card "Crédito de Energia (R$) 💱")
+            mostrado pra TODO MUNDO sem gate. Agora aparece SÓ pra SEM_UC,
+            dentro da aba certa, com explicação clara. /portal/creditos
+            continua como página separada (ação requer formulário próprio).
+          */}
+          {tipoCooperado === 'SEM_UC' && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm">
+              <p className="font-semibold text-amber-900 mb-1">
+                💱 Você não tem UC própria? Pode converter seus créditos em PIX
+              </p>
+              <p className="text-xs text-amber-800 mb-3 leading-relaxed">
+                Como você é cooperado <strong>SEM UC</strong>, seus créditos acumulados podem
+                ser convertidos em <strong>R$ via PIX</strong> em vez de abatidos numa fatura
+                de luz. <em>Ex: 100 kWh acumulados × tarifa = valor em reais depositado na
+                sua chave PIX.</em>
+              </p>
+              <a
+                href="/portal/creditos"
+                className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-md px-3 py-1.5"
+              >
+                Solicitar conversão → PIX
+              </a>
+            </div>
+          )}
 
           <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Histórico Mensal</h3>
           {faturas.length === 0 ? (

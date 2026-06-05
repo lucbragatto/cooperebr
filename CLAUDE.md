@@ -183,6 +183,30 @@ sistêmica depende dessa disciplina.
 
 **Origem:** sessões claude.ai 30/04 (Decisão 14), 01/05 (Decisão 15), 02/05 (Decisão 20).
 
+## Cooperados institucionais — SALVAGUARDA (Fatia F-G1, 05/06/2026)
+
+Cada cooperativa pode ter um **cooperado fantasma** com nome
+`"{Nome da cooperativa} — Institucional"` e email
+`institucional+<cooperativaId>@sisgd.invalid` (RFC 2606 — domínio
+reservado, nunca roteável).
+
+São **registros de sistema** usados como `cooperadoIndicadorId` em
+convites de indicação institucionais (criados pelo admin da cooperativa
+via `POST /convite-indicacao/admin` sem `indicadorId` específico — Fatia
+F-G1 do Circuito CooperToken).
+
+**REGRAS INEGOCIÁVEIS:**
+- **NUNCA deletar** cooperados institucionais. Não são "dado de teste"
+  mesmo com aparência sintética — são registros de sistema.
+- **Qualquer rotina automática de limpeza de dados de teste DEVE excluir
+  explicitamente** os emails `LIKE 'institucional+%@sisgd.invalid'`.
+- O service `CooperadoInstitucionalService.garantirInstitucional` é
+  idempotente — chame on-demand, nunca duplica.
+- Quando o convite institucional vira `Indicacao` + 1ª fatura paga:
+  `processarPrimeiraFaturaPaga` detecta via `ehInstitucional()` e
+  **pula a emissão de BeneficioIndicacao + tokens** (não há referrer
+  real pra premiar). A `Indicacao` é criada (rastreabilidade preservada).
+
 ## Antes de qualquer tarefa, SEMPRE ler primeiro (nesta ordem)
 
 1. `docs/COOPEREBR-ALINHAMENTO.md` — estado consolidado do projeto

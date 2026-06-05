@@ -70,12 +70,16 @@ export class PagadorCooperadoGuard implements CanActivate {
     // SUPER_ADMIN pode acessar pra debug/impersonate
     if (user.perfil === PerfilUsuario.SUPER_ADMIN) return true;
 
-    // Só EMPRESA_CONVENIADA passa por esse guard
-    if (user.perfil !== PerfilUsuario.EMPRESA_CONVENIADA) {
-      throw new ForbiddenException(
-        'Este endpoint é exclusivo do perfil EMPRESA_CONVENIADA.',
-      );
-    }
+    // Opção A (Fatia F-G1 — 05/06/2026): em vez de gate por perfil
+    // (EMPRESA_CONVENIADA), validamos posse real via email match +
+    // pagadorCooperadoId (já feito mais abaixo). Empresa cooperada PJ tem
+    // perfil COOPERADO (decisão COOPERADO-ONLY 04/06), então gate por
+    // perfil quebrava o caminho. A própria checagem cooperado.id ===
+    // convenio.pagadorCooperadoId garante autorização: cooperado comum
+    // sem ser pagador → NotFound (anti-enumeração); empresa cooperada
+    // pagadora → passa. PerfilUsuario.EMPRESA_CONVENIADA continua
+    // existindo no enum (deprecated) — caso algum Usuario legado tenha
+    // sido criado com ele, também passa por aqui (não é rejeitado).
 
     if (!user.email) {
       throw new ForbiddenException('Usuário sem email no token.');

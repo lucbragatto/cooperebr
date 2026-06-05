@@ -268,12 +268,19 @@ export default function PortalInicioPage() {
       )}
 
       {/* Links rápidos */}
+      {/*
+        Fatia F-G1 (05/06/2026) — separação de Rios:
+        - "Crédito de Energia (R$)" removido daqui: vira sub-conteúdo da
+          aba "Créditos de Energia" no /portal/financeiro (gated por
+          tipoCooperado=SEM_UC, pois só SEM_UC converte kWh→PIX).
+        - Mantemos só os atalhos universais.
+      */}
       <div className="grid grid-cols-2 gap-2">
         {[
           { href: '/portal/convenio', label: 'Meu Convênio', icon: '🤝' },
           { href: '/portal/clube', label: 'Clube de Vantagens', icon: '🏆' },
           { href: '/portal/tokens', label: 'Meus CooperTokens', icon: '🪙' },
-          { href: '/portal/creditos', label: 'Crédito de Energia (R$)', icon: '💱' },
+          { href: '/portal/financeiro', label: 'Financeiro', icon: '💼' },
           { href: '/portal/conta', label: 'Minha Conta', icon: '👤' },
           { href: '/portal/ranking', label: 'Ranking', icon: '📊' },
         ].map(item => (

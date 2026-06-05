@@ -2,6 +2,14 @@
  * Sprint Portal Empresa 9.0 (04/06/2026) — Seed do usuário de teste do
  * portal da empresa conveniada (CV-2026-0001 = Clínica teste).
  *
+ * Atualizado Fatia F-G1 (05/06/2026 — Opção A): perfil canônico do
+ * Usuario passou de EMPRESA_CONVENIADA → COOPERADO. Decisão COOPERADO-
+ * ONLY (04/06) tornou a empresa um cooperado PJ — perfil de auth é
+ * COOPERADO; o papel "empresa conveniada" vira contexto derivado em
+ * obterContextosUsuario (match Cooperado.id === conv.pagadorCooperadoId).
+ * O enum PerfilUsuario.EMPRESA_CONVENIADA segue no schema (deprecated,
+ * não usado em Usuarios novos).
+ *
  * REGRA INEGOCIÁVEL (14/05): em dev, contato é lucbragatto@gmail.com.
  * O Cooperado PJ pagador do CV-2026-0001 já tem email cadastrado — buscamos
  * dinâmicamente e criamos o Usuario com o MESMO email pra match em
@@ -85,7 +93,7 @@ async function main() {
       console.log(`[seed-portal-empresa] Promovendo Usuario existente (${usuarioExistente.id}) pro perfil EMPRESA_CONVENIADA`);
       await prisma.usuario.update({
         where: { id: usuarioExistente.id },
-        data: { perfil: 'EMPRESA_CONVENIADA' as any, ativo: true },
+        data: { perfil: 'COOPERADO' as any, ativo: true },
       });
     } else {
       console.log(`[seed-portal-empresa] Usuario já existe (${usuarioExistente.id}) com perfil EMPRESA_CONVENIADA.`);
@@ -114,7 +122,7 @@ async function main() {
         nome: cooperado.nomeCompleto,
         email: emailUsuario,
         supabaseId: sb.user.id,
-        perfil: 'EMPRESA_CONVENIADA' as any,
+        perfil: 'COOPERADO' as any,
         cooperativaId: cooperado.cooperativaId,
         ativo: true,
       },

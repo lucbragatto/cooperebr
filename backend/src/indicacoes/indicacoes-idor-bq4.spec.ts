@@ -43,6 +43,9 @@ describe('IndicacoesService — BQ.4 M2 + M3 IDOR isolamento', () => {
       prismaMock,
       {} as any, {} as any, {} as any,
       { creditar: jest.fn() } as any,
+      // Fatia F-G1 (05/06): CooperadoInstitucionalService.ehInstitucional —
+      // mock retorna false (cenários BQ.4 não envolvem institucional).
+      { ehInstitucional: jest.fn().mockResolvedValue(false) } as any,
     );
   });
 

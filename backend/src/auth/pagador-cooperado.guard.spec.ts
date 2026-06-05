@@ -60,20 +60,78 @@ describe('PagadorCooperadoGuard', () => {
     expect(findFirstCooperado).not.toHaveBeenCalled();
   });
 
-  it('perfil ≠ EMPRESA_CONVENIADA → Forbidden', async () => {
+  it('Opção A (Fatia F-G1): perfil COOPERADO + email casa pagador → true', async () => {
+    // Decisão COOPERADO-ONLY 04/06: empresa cooperada PJ tem perfil
+    // COOPERADO. Guarda valida posse via email match + pagadorCooperadoId,
+    // não por perfil. Substituiu o gate antigo (perfil === EMPRESA_CONVENIADA).
     (reflector.getAllAndOverride as jest.Mock).mockReturnValueOnce({});
+    findFirstCooperado.mockResolvedValueOnce({ id: 'coop-1', cooperativaId: 'coop-A' });
+    findUniqueConvenio.mockResolvedValueOnce({
+      id: 'conv-1',
+      pagadorCooperadoId: 'coop-1',
+      cooperativaId: 'coop-A',
+      empresaNome: 'Clínica Teste',
+      status: 'ATIVO',
+    });
+    const req: any = {
+      user: { perfil: PerfilUsuario.COOPERADO, email: 'lucbragatto+empresa-teste@gmail.com' },
+      params: { id: 'conv-1' },
+    };
+    const r = await guard.canActivate(buildCtx(req));
+    expect(r).toBe(true);
+    expect(req.empresa).toEqual({
+      cooperadoId: 'coop-1',
+      cooperativaId: 'coop-A',
+      convenio: { id: 'conv-1', empresaNome: 'Clínica Teste', status: 'ATIVO' },
+    });
+  });
+
+  it('COOPERADO comum (não é pagador) → NotFound (anti-enumeração)', async () => {
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValueOnce({});
+    findFirstCooperado.mockResolvedValueOnce({ id: 'coop-x', cooperativaId: 'coop-A' });
+    findUniqueConvenio.mockResolvedValueOnce({
+      id: 'conv-1',
+      pagadorCooperadoId: 'OUTRO-PAGADOR',
+      cooperativaId: 'coop-A',
+      empresaNome: 'Clínica X',
+      status: 'ATIVO',
+    });
     await expect(
       guard.canActivate(
-        buildCtx({ user: { perfil: PerfilUsuario.ADMIN, email: 'a@b.com' } }),
+        buildCtx({
+          user: { perfil: PerfilUsuario.COOPERADO, email: 'normal@x.com' },
+          params: { id: 'conv-1' },
+        }),
       ),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('EMPRESA_CONVENIADA legado (Usuario pré-Opção A) — também passa por email match', async () => {
+    // Compat: enum EMPRESA_CONVENIADA segue no schema (deprecated). Se
+    // algum Usuario legado ficou com esse perfil, guard NÃO rejeita —
+    // valida pela mesma lógica (email + pagadorCooperadoId).
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValueOnce({});
+    findFirstCooperado.mockResolvedValueOnce({ id: 'coop-1', cooperativaId: 'coop-A' });
+    findUniqueConvenio.mockResolvedValueOnce({
+      id: 'conv-1',
+      pagadorCooperadoId: 'coop-1',
+      cooperativaId: 'coop-A',
+      empresaNome: 'Clínica Legado',
+      status: 'ATIVO',
+    });
+    const req: any = {
+      user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'legado@x.com' },
+      params: { id: 'conv-1' },
+    };
+    const r = await guard.canActivate(buildCtx(req));
+    expect(r).toBe(true);
   });
 
   it('sem email no token → Forbidden', async () => {
     (reflector.getAllAndOverride as jest.Mock).mockReturnValueOnce({});
     await expect(
       guard.canActivate(
-        buildCtx({ user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA } }),
+        buildCtx({ user: { perfil: PerfilUsuario.COOPERADO } }),
       ),
     ).rejects.toThrow(ForbiddenException);
   });
@@ -84,7 +142,7 @@ describe('PagadorCooperadoGuard', () => {
     await expect(
       guard.canActivate(
         buildCtx({
-          user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'x@y.com' },
+          user: { perfil: PerfilUsuario.COOPERADO, email: 'x@y.com' },
           params: { id: 'conv-1' },
         }),
       ),
@@ -97,7 +155,7 @@ describe('PagadorCooperadoGuard', () => {
     await expect(
       guard.canActivate(
         buildCtx({
-          user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'x@y.com' },
+          user: { perfil: PerfilUsuario.COOPERADO, email: 'x@y.com' },
           params: {},
         }),
       ),
@@ -111,7 +169,7 @@ describe('PagadorCooperadoGuard', () => {
     await expect(
       guard.canActivate(
         buildCtx({
-          user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'x@y.com' },
+          user: { perfil: PerfilUsuario.COOPERADO, email: 'x@y.com' },
           params: { id: 'conv-1' },
         }),
       ),
@@ -131,7 +189,7 @@ describe('PagadorCooperadoGuard', () => {
     await expect(
       guard.canActivate(
         buildCtx({
-          user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'x@y.com' },
+          user: { perfil: PerfilUsuario.COOPERADO, email: 'x@y.com' },
           params: { id: 'conv-1' },
         }),
       ),
@@ -149,7 +207,7 @@ describe('PagadorCooperadoGuard', () => {
       status: 'ATIVO',
     });
     const req: any = {
-      user: { perfil: PerfilUsuario.EMPRESA_CONVENIADA, email: 'x@y.com' },
+      user: { perfil: PerfilUsuario.COOPERADO, email: 'x@y.com' },
       params: { id: 'conv-1' },
     };
     const r = await guard.canActivate(buildCtx(req));

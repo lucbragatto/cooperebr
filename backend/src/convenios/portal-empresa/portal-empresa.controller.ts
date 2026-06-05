@@ -31,10 +31,15 @@ import { PortalEmpresaService } from './portal-empresa.service';
 import { ConvitesConvenioService } from '../convites-convenio.service';
 import { ConvenioAprovacaoService } from '../convenios-aprovacao.service';
 
-const { SUPER_ADMIN, EMPRESA_CONVENIADA } = PerfilUsuario;
+const { SUPER_ADMIN, COOPERADO, EMPRESA_CONVENIADA } = PerfilUsuario;
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(SUPER_ADMIN, EMPRESA_CONVENIADA)
+// Opção A (Fatia F-G1 — 05/06/2026): empresa cooperada PJ tem perfil
+// COOPERADO (decisão COOPERADO-ONLY 04/06). RolesGuard libera; o gate de
+// posse real é o @PagadorCooperadoOnly em cada handler (validação por
+// email match + pagadorCooperadoId). EMPRESA_CONVENIADA mantido por
+// compat — qualquer Usuario legado com esse perfil continua entrando.
+@Roles(SUPER_ADMIN, COOPERADO, EMPRESA_CONVENIADA)
 @Controller('portal/meus-convenios')
 export class PortalEmpresaController {
   constructor(

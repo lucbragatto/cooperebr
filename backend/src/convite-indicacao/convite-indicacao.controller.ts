@@ -1,8 +1,10 @@
-import { Controller, Get, Put, Post, Patch, Body, Param, Query, Req, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Patch, Body, Param, Query, Req, UnauthorizedException, BadRequestException, HttpCode } from '@nestjs/common';
 import { ConviteIndicacaoService } from './convite-indicacao.service';
+import { CooperadoInstitucionalService } from './cooperado-institucional.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { StatusConvite } from '@prisma/client';
+import { AuditLog } from '../audit/audit-log.decorator';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -16,7 +18,102 @@ function resolverCooperativaId(req: any, queryCoopId?: string): string | undefin
 
 @Controller('convite-indicacao')
 export class ConviteIndicacaoController {
-  constructor(private readonly service: ConviteIndicacaoService) {}
+  constructor(
+    private readonly service: ConviteIndicacaoService,
+    // Fatia F-G1 (05/06/2026) — cooperado institucional pra G1
+    private readonly institucional: CooperadoInstitucionalService,
+  ) {}
+
+  // ─── Fatia F-G1: Admin cria convite de indicação pela web ────────────
+  //
+  // Substitui o caminho "apenas via bot WhatsApp" (whatsapp-bot.service:2196).
+  // Admin chama POST com { nomeConvidado, telefone, indicadorId? }.
+  //
+  // - indicadorId presente → cooperado real é o indicador (caminho legado MLM).
+  //   Quando 1ª fatura é paga, processarPrimeiraFaturaPaga dá bônus normal.
+  // - indicadorId AUSENTE → indicador = cooperado institucional fantasma da
+  //   cooperativa (criado on-demand via garantirInstitucional). Decisão
+  //   Luciano 05/06: nesse caso NÃO emite BeneficioIndicacao nem tokens
+  //   (skip via `ehInstitucional` em processarPrimeiraFaturaPaga).
+  //
+  // Best-effort: envio WhatsApp não bloqueia criação (admin pode reenviar).
+  @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({
+    acao: 'convite_indicacao.admin.criar',
+    recurso: 'ConviteIndicacao',
+  })
+  @HttpCode(201)
+  @Post('admin')
+  async criarPeloAdmin(
+    @Req() req: any,
+    @Body() body: { nomeConvidado: string; telefone: string; indicadorId?: string; cooperativaId?: string },
+  ) {
+    const cooperativaId = resolverCooperativaId(req, body.cooperativaId);
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório (admin de cooperativa).');
+    }
+    if (!body.nomeConvidado || body.nomeConvidado.trim().length < 2) {
+      throw new BadRequestException('nomeConvidado é obrigatório (mínimo 2 caracteres).');
+    }
+    const telLimpo = (body.telefone || '').replace(/\D/g, '');
+    if (telLimpo.length < 10) {
+      throw new BadRequestException('telefone obrigatório (10-11 dígitos com DDD).');
+    }
+
+    // Decisão Luciano #1: indicador opcional. Se ausente → fantasma institucional.
+    let indicadorId = body.indicadorId;
+    let isInstitucional = false;
+    let nomeIndicador = '';
+    if (!indicadorId) {
+      const inst = await this.institucional.garantirInstitucional(cooperativaId);
+      indicadorId = inst.id;
+      isInstitucional = true;
+      nomeIndicador = inst.nomeCompleto;
+    } else {
+      // Carrega nome real do indicador pra mensagem WA
+      const ind = await this.institucional['prisma'].cooperado.findFirst({
+        where: { id: indicadorId, cooperativaId },
+        select: { nomeCompleto: true },
+      });
+      if (!ind) throw new BadRequestException('Indicador não encontrado neste tenant.');
+      nomeIndicador = ind.nomeCompleto;
+    }
+
+    // Cria/upsert o convite (reusa caminho existente do bot)
+    const r = await this.service.criarConvite(
+      indicadorId,
+      body.nomeConvidado.trim(),
+      telLimpo,
+      cooperativaId,
+    );
+    if (r.jaCooperado) {
+      // Telefone já é cooperado ativo. Não é erro de aplicação — retornamos
+      // status semântico pro frontend mostrar mensagem amigável.
+      return { ok: false, jaCooperado: true, cooperado: r.cooperado };
+    }
+
+    // Best-effort: envia WhatsApp
+    const envio = await this.service.enviarLinkPorWhatsappIndicacao({
+      telefone: telLimpo,
+      nomeConvidado: body.nomeConvidado.trim(),
+      nomeIndicador,
+      cooperativaId,
+      institucional: isInstitucional,
+    });
+
+    return {
+      ok: true,
+      convite: {
+        id: r.convite!.id,
+        nomeConvidado: r.convite!.nomeConvidado,
+        telefoneConvidado: r.convite!.telefoneConvidado,
+        status: r.convite!.status,
+      },
+      institucional: isInstitucional,
+      whatsappEnviado: envio.enviado,
+      whatsappErro: envio.erro,
+    };
+  }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Get()

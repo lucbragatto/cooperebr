@@ -6,6 +6,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ClubeVantagensService } from '../clube-vantagens/clube-vantagens.service';
 import { WhatsappCicloVidaService } from '../whatsapp/whatsapp-ciclo-vida.service';
 import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.service';
+import { CooperadoInstitucionalService } from '../convite-indicacao/cooperado-institucional.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -18,6 +19,8 @@ export class IndicacoesService {
     @Inject(forwardRef(() => WhatsappCicloVidaService)) private whatsappCicloVida: WhatsappCicloVidaService,
     @Inject(forwardRef(() => ConviteIndicacaoService)) private conviteIndicacao: ConviteIndicacaoService,
     private cooperTokenService: CooperTokenService,
+    // Fatia F-G1 (05/06/2026) — skip bônus se indicador=institucional
+    private cooperadoInstitucional: CooperadoInstitucionalService,
   ) {}
 
   @OnEvent('cobranca.primeira.paga')
@@ -311,6 +314,20 @@ export class IndicacoesService {
         data: { status: 'PRIMEIRA_FATURA_PAGA', primeiraFaturaPagaEm: new Date() },
       });
 
+      // Fatia F-G1 (05/06/2026) — skip de bônus quando indicador=institucional.
+      // Decisão Luciano: institucional cria Indicacao (rastreabilidade do
+      // "veio via convite institucional" preservada acima), mas NÃO emite
+      // BeneficioIndicacao nem tokens — não há referrer real pra premiar.
+      const isInstitucional = await this.cooperadoInstitucional.ehInstitucional(
+        indicacao.cooperadoIndicadorId,
+      );
+      if (isInstitucional) {
+        this.logger.log(
+          `[indicacao ${indicacao.id}] indicador=${indicacao.cooperadoIndicadorId} é INSTITUCIONAL — skip BeneficioIndicacao + CooperToken (G1)`,
+        );
+        continue;
+      }
+
       const nivelConfig = niveisConfig.find((n: any) => n.nivel === indicacao.nivel);
       if (!nivelConfig) continue;
 
@@ -365,6 +382,13 @@ export class IndicacoesService {
 
     // CooperToken: creditar bônus de indicação ao indicador (uma vez por indicação)
     for (const indicacao of indicacoes) {
+      // Fatia F-G1: skip se indicador=institucional (mesmo critério acima).
+      const isInst = await this.cooperadoInstitucional.ehInstitucional(
+        indicacao.cooperadoIndicadorId,
+      );
+      if (isInst) {
+        continue;
+      }
       try {
         // Verificar se já creditou tokens para esta indicação (idempotência multi-tenant)
         const jaCredidato = await this.prisma.cooperTokenLedger.findFirst({

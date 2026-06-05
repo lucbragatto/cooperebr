@@ -6,8 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Gift, Users, Settings, BarChart3, Plus, Trash2, Download, Loader2, ChevronRight,
+  Send, AlertTriangle, CheckCircle, UserPlus,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -477,6 +483,69 @@ export default function IndicacoesPage() {
   const [relatorio, setRelatorio] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
 
+  // Fatia F-G1 (05/06/2026) — Dialog Tipo C: convite de indicação pela web.
+  // Admin convida funcionário/cliente em nome da cooperativa (indicador =
+  // institucional fantasma). Decisão Luciano: ação simples → Dialog (padrão
+  // UX 17/05). HelpBox 19/05 explicando o fluxo.
+  const [conviteDialogOpen, setConviteDialogOpen] = useState(false);
+  const [conviteNome, setConviteNome] = useState('');
+  const [conviteTelefone, setConviteTelefone] = useState('');
+  const [convidando, setConvidando] = useState(false);
+  const [conviteErro, setConviteErro] = useState('');
+  const [conviteSucesso, setConviteSucesso] = useState<
+    | { tipo: 'criado'; nomeConvidado: string; whatsappEnviado: boolean }
+    | { tipo: 'ja_cooperado'; cooperadoNome: string }
+    | null
+  >(null);
+
+  async function enviarConvite() {
+    setConviteErro('');
+    if (conviteNome.trim().length < 2) {
+      setConviteErro('Nome do convidado precisa de pelo menos 2 caracteres.');
+      return;
+    }
+    const telLimpo = conviteTelefone.replace(/\D/g, '');
+    if (telLimpo.length < 10) {
+      setConviteErro('Telefone precisa de 10-11 dígitos (com DDD).');
+      return;
+    }
+    setConvidando(true);
+    try {
+      const { data } = await api.post('/convite-indicacao/admin', {
+        nomeConvidado: conviteNome.trim(),
+        telefone: telLimpo,
+      });
+      if (data.jaCooperado) {
+        setConviteSucesso({
+          tipo: 'ja_cooperado',
+          cooperadoNome: data.cooperado?.nomeCompleto ?? 'cooperado ativo',
+        });
+      } else {
+        setConviteSucesso({
+          tipo: 'criado',
+          nomeConvidado: data.convite?.nomeConvidado ?? conviteNome.trim(),
+          whatsappEnviado: !!data.whatsappEnviado,
+        });
+        // Limpa form pra próximo
+        setConviteNome('');
+        setConviteTelefone('');
+      }
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ?? err?.message ?? 'Erro ao enviar convite.';
+      setConviteErro(typeof msg === 'string' ? msg : 'Erro ao enviar convite.');
+    } finally {
+      setConvidando(false);
+    }
+  }
+
+  function formatarTelefone(valor: string): string {
+    const n = valor.replace(/\D/g, '').slice(0, 11);
+    if (n.length <= 2) return n;
+    if (n.length <= 7) return `(${n.slice(0, 2)}) ${n.slice(2)}`;
+    return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  }
+
   const carregarConfig = useCallback(async () => {
     try {
       const { data } = await api.get('/indicacoes/config');
@@ -543,9 +612,23 @@ export default function IndicacoesPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Gift className="h-6 w-6 text-green-600" />
-        <h1 className="text-xl font-bold text-gray-800">Indicações em Cascata (MLM)</h1>
+      <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Gift className="h-6 w-6 text-green-600" />
+          <h1 className="text-xl font-bold text-gray-800">Indicações em Cascata (MLM)</h1>
+        </div>
+        {/* Fatia F-G1 (05/06/2026) — botão pra Dialog Tipo C de convite */}
+        <Button
+          onClick={() => {
+            setConviteErro('');
+            setConviteSucesso(null);
+            setConviteDialogOpen(true);
+          }}
+          className="bg-green-600 hover:bg-green-700 text-white gap-2"
+        >
+          <UserPlus className="h-4 w-4" />
+          Convidar pessoa
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -578,6 +661,129 @@ export default function IndicacoesPage() {
           <TabRelatorio relatorio={relatorio} />
         )}
       </div>
+
+      {/* Fatia F-G1 (05/06/2026) — Dialog Tipo C: convite de indicação pela web */}
+      <Dialog
+        open={conviteDialogOpen}
+        onOpenChange={(open) => {
+          if (!convidando) {
+            setConviteDialogOpen(open);
+            if (!open) {
+              setConviteSucesso(null);
+              setConviteErro('');
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-green-600" />
+              Convidar pessoa pra CoopereBR
+            </DialogTitle>
+            <DialogDescription>
+              A pessoa recebe um link por WhatsApp pra começar o cadastro.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* HelpBox 19/05 — Como funciona */}
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-900 space-y-1">
+            <p className="font-semibold">💡 Como funciona</p>
+            <p className="leading-relaxed">
+              Você convida em nome da cooperativa (convite institucional —
+              sem indicador-pessoa específico). A pessoa recebe um link no
+              WhatsApp.{' '}
+              <em>Ex: "Olá Ana! A CoopereBR te convidou pra economizar 20% na conta de luz..."</em>
+            </p>
+            <p className="leading-relaxed">
+              <strong>Quando ela paga a 1ª fatura:</strong> entra no sistema como
+              cooperado normal, mas <strong>não gera bônus de indicação</strong>{' '}
+              (não há indicador-pessoa pra premiar — é institucional).
+            </p>
+          </div>
+
+          {/* Feedback de sucesso */}
+          {conviteSucesso?.tipo === 'criado' && (
+            <div className="bg-green-50 border border-green-300 rounded-md p-3 text-sm text-green-900 flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">Convite enviado ✓</p>
+                <p className="text-xs leading-relaxed">
+                  {conviteSucesso.nomeConvidado} recebeu o link.{' '}
+                  {conviteSucesso.whatsappEnviado
+                    ? 'WhatsApp confirmado.'
+                    : '(WhatsApp não confirmou — use "Reenviar" na aba Rede se a pessoa não receber.)'}
+                </p>
+              </div>
+            </div>
+          )}
+          {conviteSucesso?.tipo === 'ja_cooperado' && (
+            <div className="bg-amber-50 border border-amber-300 rounded-md p-3 text-sm text-amber-900 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">Esse número já é cooperado</p>
+                <p className="text-xs leading-relaxed">
+                  {conviteSucesso.cooperadoNome} já está cadastrado e ativo.
+                  Nada foi enviado.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Form */}
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="convite-nome">Nome do convidado *</Label>
+              <Input
+                id="convite-nome"
+                value={conviteNome}
+                onChange={(e) => setConviteNome(e.target.value)}
+                placeholder="Ex: Dra. Ana Souza"
+                disabled={convidando}
+                maxLength={120}
+              />
+            </div>
+            <div>
+              <Label htmlFor="convite-tel">WhatsApp (com DDD) *</Label>
+              <Input
+                id="convite-tel"
+                value={conviteTelefone}
+                onChange={(e) => setConviteTelefone(formatarTelefone(e.target.value))}
+                placeholder="(27) 99999-9999"
+                disabled={convidando}
+                inputMode="numeric"
+              />
+            </div>
+            {conviteErro && (
+              <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
+                {conviteErro}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConviteDialogOpen(false)}
+              disabled={convidando}
+            >
+              Fechar
+            </Button>
+            <Button
+              onClick={enviarConvite}
+              disabled={convidando || !conviteNome.trim() || conviteTelefone.replace(/\D/g, '').length < 10}
+              className="bg-green-600 hover:bg-green-700 gap-1"
+            >
+              {convidando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Enviar convite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

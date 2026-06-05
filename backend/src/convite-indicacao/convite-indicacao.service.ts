@@ -88,6 +88,50 @@ export class ConviteIndicacaoService {
     return { jaCooperado: false, convite };
   }
 
+  // ─── Helper de envio WhatsApp (Fatia F-G1 — usado pelo POST admin web) ───
+
+  /**
+   * Envia mensagem de convite por WhatsApp. Análogo ao
+   * `enviarLinkPorWhatsapp` do convite-convênio. Best-effort: erro de envio
+   * é registrado no log do WA-sender mas NÃO reverte a criação do convite.
+   *
+   * `nomeIndicador` pode ser o nome do cooperado real OU "Sua empresa
+   * cooperada" quando indicador = institucional (decisão Luciano 05/06 —
+   * não revelar nome interno do fantasma "{Coop} — Institucional").
+   */
+  async enviarLinkPorWhatsappIndicacao(input: {
+    telefone: string;
+    nomeConvidado: string;
+    nomeIndicador: string;
+    cooperativaId: string;
+    institucional?: boolean;
+  }): Promise<{ enviado: boolean; erro?: string }> {
+    const { telefone, nomeConvidado, nomeIndicador, cooperativaId, institucional } =
+      input;
+    // Mensagem padrão. Em institucional, nome do indicador omitido pra evitar
+    // "Você foi convidado por 'CoopereBR — Institucional'" (confunde).
+    const texto = institucional
+      ? `Olá ${nomeConvidado}! A cooperativa CoopereBR te convidou pra conhecer o programa.\n\n` +
+        `Com a CoopereBR você economiza até 20% na conta de luz, sem investimento.\n\n` +
+        `Mande a foto da sua conta de energia pra começar! ⚡`
+      : `Olá ${nomeConvidado}! ${nomeIndicador} te convidou para a CoopereBR.\n\n` +
+        `Economize até 20% na conta de luz sem investimento.\n\n` +
+        `Mande a foto da sua conta de energia para começar! ⚡`;
+    try {
+      await this.sender.enviarMensagem(telefone, texto, {
+        tipoDisparo: 'convite_indicacao_admin',
+        cooperativaId,
+      });
+      return { enviado: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(
+        `[convite-indicacao] Falha enviar WA pra ${telefone.slice(0, 4)}***${telefone.slice(-4)}: ${msg}`,
+      );
+      return { enviado: false, erro: msg };
+    }
+  }
+
   // ─── Reenviar Convite ─────────────────────────────────────────────────────────
 
   async reenviarConvite(conviteId: string, cooperativaId: string) {
