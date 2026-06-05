@@ -137,6 +137,101 @@ describe('validarENormalizarCadastro — Fatia 1', () => {
       ).toThrow(BadRequestException);
     });
 
+    // D-novo-OCR-UC-CANON (05/06/2026) — formato EDP-ES atual 15 díg.
+    it('numeroUC formato EDP-ES atual 15 díg (com pontuação) → aceita e normaliza pro canônico interno (slice 3,13)', () => {
+      // Caso real Luciano: fatura Clínica `0.000.374.127.054-59`
+      // → 15 díg `000037412705459` → slice(3, 13) = `0374127054` (10 díg).
+      const r = validarENormalizarCadastro({
+        nome: 'Marina',
+        cpf: '12345678909',
+        email: 'a@b.com',
+        telefone: '27981341348',
+        instalacao: { numeroUC: '0.000.374.127.054-59', consumoMedioKwh: 300 },
+      });
+      expect(r.numeroUC).toBe('0374127054');
+    });
+
+    it('numeroUC 15 díg sem pontuação (formato EDP-ES) → normaliza igual', () => {
+      const r = validarENormalizarCadastro({
+        nome: 'Marina',
+        cpf: '12345678909',
+        email: 'a@b.com',
+        telefone: '27981341348',
+        instalacao: { numeroUC: '000037412705459', consumoMedioKwh: 300 },
+      });
+      expect(r.numeroUC).toBe('0374127054');
+    });
+
+    it('numeroUC 15 díg outro caso EDP-ES (banco real) → bate com canônico do banco', () => {
+      // Caso amostra banco: `0.001.334.421.054-40` → canônico esperado `1334421054`.
+      const r = validarENormalizarCadastro({
+        nome: 'Marina',
+        cpf: '12345678909',
+        email: 'a@b.com',
+        telefone: '27981341348',
+        instalacao: { numeroUC: '0.001.334.421.054-40', consumoMedioKwh: 300 },
+      });
+      expect(r.numeroUC).toBe('1334421054');
+    });
+
+    it('numeroUC formato canônico 10 díg (admin/legado) → continua passando intacto', () => {
+      const r = validarENormalizarCadastro({
+        nome: 'Marina',
+        cpf: '12345678909',
+        email: 'a@b.com',
+        telefone: '27981341348',
+        instalacao: { numeroUC: '0400702214', consumoMedioKwh: 300 },
+      });
+      expect(r.numeroUC).toBe('0400702214');
+    });
+
+    it('numeroUC 12-14 díg (sem padrão conhecido) → BadRequest com mensagem clara', () => {
+      expect(() =>
+        validarENormalizarCadastro({
+          nome: 'Marina',
+          cpf: '12345678909',
+          email: 'a@b.com',
+          telefone: '27981341348',
+          instalacao: { numeroUC: '123456789012', consumoMedioKwh: 300 }, // 12 díg = limbo
+        }),
+      ).toThrow(/6-11 dígitos.*15 dígitos/);
+    });
+
+    it('numeroUC > 15 díg → BadRequest', () => {
+      expect(() =>
+        validarENormalizarCadastro({
+          nome: 'Marina',
+          cpf: '12345678909',
+          email: 'a@b.com',
+          telefone: '27981341348',
+          instalacao: { numeroUC: '12345678901234567', consumoMedioKwh: 300 }, // 17 díg
+        }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('INVARIANTE SCEE: validador NUNCA produz o "antigo EDP" (numeroUC 9 díg) automaticamente', () => {
+      // Validador normaliza `numero` interno SISGD. NÃO derive numeroUC GD/SCEE.
+      // Caller (controller/service) é responsável por receber `body.instalacao.numeroUCLegado`
+      // se cooperado preencher, e gravar em `Uc.numeroUC` separadamente.
+      // Esta spec garante que o output do validador NÃO contém esse campo.
+      const r = validarENormalizarCadastro({
+        nome: 'Marina',
+        cpf: '12345678909',
+        email: 'a@b.com',
+        telefone: '27981341348',
+        instalacao: { numeroUC: '0.000.374.127.054-59', consumoMedioKwh: 300 },
+      });
+      const keys = Object.keys(r);
+      // Output schema NÃO tem numeroUCLegado nem nenhum campo "antigo".
+      expect(keys).not.toContain('numeroUCLegado');
+      expect(keys).not.toContain('numeroAntigo');
+      // numeroUC do output é o ID interno SISGD (10 díg), NÃO o antigo de 9 díg.
+      expect(r.numeroUC?.length).toBe(10);
+      // E NÃO bate por acaso com o "antigo" esperado pro caso Luciano (160085263).
+      expect(r.numeroUC).not.toBe('160085263');
+      expect(r.numeroUC).not.toBe('037412705'); // 9 primeiros do canônico — tampouco
+    });
+
     it('consumo < 20 → BadRequest (fecha D-novo-CAD-CONSUMO-ZERO)', () => {
       expect(() =>
         validarENormalizarCadastro({

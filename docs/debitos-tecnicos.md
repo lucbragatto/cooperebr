@@ -4,7 +4,9 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-06-05 (tarde-noite) — **Sprint Hardening Golden Path ?conv= / ?ref=** (7 commits `9291d32..beef066` no dia). **4 RESOLVIDOS:** `D-novo-OCR-RESILIENCIA` P1 (retry+timeout+max_tokens+motivo+UI, 30 specs · commit `4c05aea`) · `D-novo-CADWEB-CONV-TENANT` P1 (resolve cooperativaId via body.token anti-spoof, 6 specs · `004372c`) · `D-novo-CADWEB-CONV-MEMBRO` P1 (porta criação de Membro+consume-once pro mesmo tx, 8 specs + smoke E2E 0 falhas · `beef066`) · `D-novo-WA-DEV-FALSE-OK` P1 (WhatsappEnvioResult com motivo propagado até UI · `9291d32`). **6 ABERTOS:** `D-novo-OTP-429-UX` P3 (mensagem genérica no UI quando OTP estoura limite) · `D-novo-OTP-DEV-RELAX` P3 (rate-limit engessa smoke manual em DEV) · `D-novo-AUTO-INSCREVER-DEPRECATION` P3 (housekeeping pós-fix CONV-MEMBRO) · `D-novo-CAD-CONSUMO-MENSAL` P2 · `D-novo-CONVITE-MENUS-UX` P3 · `D-novo-TESTS-MOCK-PRISMA` P2.
+**Última atualização:** 2026-06-05 (noite) — **D-novo-OCR-UC-CANON RESOLVIDO** (guard aceita formato EDP-ES atual 15 díg + normaliza pro canônico interno; INVARIANTE SCEE preservado — `numeroUC` antigo NUNCA derivado). 6 specs novos no guard + 34/34 verdes. Substitui parcialmente a tentativa de derivação do commit `20cacf6` (revert do mapper que tentava preencher campo principal com 15 díg crus; agora envia direto e guard normaliza). **D-novo-CADASTRO-NUMERO-EDP-UX P3** catalogado (help text claro distinguindo 3 números independentes). **D-novo-REGISTER-ADMIN-TENANT P2** catalogado (buraco arquitetural em `/auth/register-admin`).
+
+> **Histórico:** 2026-06-05 (tarde-noite) — **Sprint Hardening Golden Path ?conv= / ?ref=** (7 commits `9291d32..beef066` no dia). **4 RESOLVIDOS:** `D-novo-OCR-RESILIENCIA` P1 (retry+timeout+max_tokens+motivo+UI, 30 specs · commit `4c05aea`) · `D-novo-CADWEB-CONV-TENANT` P1 (resolve cooperativaId via body.token anti-spoof, 6 specs · `004372c`) · `D-novo-CADWEB-CONV-MEMBRO` P1 (porta criação de Membro+consume-once pro mesmo tx, 8 specs + smoke E2E 0 falhas · `beef066`) · `D-novo-WA-DEV-FALSE-OK` P1 (WhatsappEnvioResult com motivo propagado até UI · `9291d32`). **6 ABERTOS:** `D-novo-OTP-429-UX` P3 (mensagem genérica no UI quando OTP estoura limite) · `D-novo-OTP-DEV-RELAX` P3 (rate-limit engessa smoke manual em DEV) · `D-novo-AUTO-INSCREVER-DEPRECATION` P3 (housekeeping pós-fix CONV-MEMBRO) · `D-novo-CAD-CONSUMO-MENSAL` P2 · `D-novo-CONVITE-MENUS-UX` P3 · `D-novo-TESTS-MOCK-PRISMA` P2.
 
 ---
 
@@ -4675,6 +4677,102 @@ Quando aparecer débito novo durante sessão:
 **Estimativa:** 15min Code + ops (apontar DNS + rebuild + deploy).
 
 **Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa).
+
+---
+
+### D-novo-OCR-UC-CANON — Guard cadastro aceita formato EDP-ES atual (15 díg) + INVARIANTE SCEE preservado (P1 → ✅ RESOLVIDO)
+
+**Severidade resolvida:** P1 — bloqueava o golden path do convite com qualquer fatura EDP-ES atual (1ª UC real do Luciano caiu nesse bug).
+
+**Origem:** Smoke manual 05/06/2026 fatura Clínica (`0.000.374.127.054-59`). OCR retornava só `numeroConcessionariaOriginal` (15 díg) — comportamento confirmado E2E real Sprint 11 Fase D-2 (`docs/sessoes/2026-04-26-sprint11-fase-d-e2e.md`). Frontend mapper (commit `20cacf6`) tentava encher `form.numeroUC` com `originalDigitos` (15 díg crus) → guard `cadastro-validacao.ts:124-130` rejeitava com 400 ("Número da UC deve ter entre 6 e 11 dígitos").
+
+**Causa raiz arquitetural (Sprint 11 Bloco 2 + E2E Fase D-2):**
+
+UC tem 3 números **INDEPENDENTES** (não-derivável entre si — provado contra UC real Luciano):
+
+| Campo | Valor real Luciano | Semântica |
+|---|---|---|
+| `Uc.numero` | `0400702214` | ID INTERNO SISGD (sem semântica EDP) |
+| `Uc.numeroUC` | `160085263` | Número ANTIGO EDP (9 díg) — **GD/SCEE listas de compensação** |
+| `Uc.numeroConcessionariaOriginal` | `0.001.421.380.054-70` | Número NOVO fatura atual EDP-ES (formato display) |
+
+OCR de fatura atual EDP-ES SÓ popula `numeroConcessionariaOriginal`. Os outros 2 são MANUAIS (cooperado/admin preenchem).
+
+**Tentativa anterior (commit `20cacf6`) errada:** mapper frontend usava `slice` pra "derivar" canônico/legado dos 15 díg. Provado matematicamente impossível: `slice(3, 13)` de `000142138005470` = `1421380054` ≠ `0400702214` (canônico real). Foi revertido nesta entrega.
+
+**Fix correto aplicado (commit pendente):**
+
+1. **Backend guard `cadastro-validacao.ts:119-178`** — aceita 2 formatos pra `numeroUC` (ID interno SISGD, NÃO o antigo SCEE):
+   - **6-11 díg** (canônico legado): `.slice(-10).padStart(10, '0')` (compat preservada).
+   - **15 díg** (formato EDP-ES atual): `slice(3, 13)` extrai os 10 díg centrais (descarta 3 zeros prefix + 2 DV). Determinístico, único entre UCs.
+   - **Demais** (12-14, >15): 400 com mensagem clara.
+   - **Regra documentada inline** explicando POR QUE não toca o antigo/GD.
+
+2. **Frontend mapper `web/lib/ocr-mapping.ts`** — revert da derivação errada + nova prioridade:
+   - `numeroUC` (form principal) = canônico OCR > **original 15 díg (passa adiante, guard normaliza)** > legado OCR > vazio.
+   - `numeroUCLegado` = **NUNCA derivado**. Só passa quando OCR retornou explícito (raro). **INVARIANTE SCEE**.
+   - `numeroConcessionariaOriginal` = preservado como veio.
+   - Documentação JSDoc completa explicando os 3 números independentes.
+
+3. **UX `/cadastro` step Instalação** — help text reforçado:
+   - Campo principal: "O número da sua fatura. Aceitamos o formato com pontos da EDP-ES (ex: 0.000.512.828.054-91) ou o formato antigo de 10 dígitos."
+   - Campo antigo: "**Preencha SÓ se a EDP já te enviou** um número antigo de 9 dígitos (carta ou documento oficial pra listas de compensação GD/SCEE). **Esse número NÃO está na sua fatura nova** — você não precisa procurar."
+   - Campo original: "Cópia do formato com pontuação/hífen exatamente como aparece."
+
+**Specs (34/34 verdes):**
+- 6 cenários novos no `cadastro-validacao.spec.ts`: 15 díg c/ pontuação · 15 díg s/ pontuação · 15 díg outro caso banco · 10 díg canônico legado (compat) · 12-14 díg limbo (400 c/ mensagem) · > 15 díg (400) · **INVARIANTE SCEE** (guard NUNCA produz "antigo EDP" 9 díg automaticamente).
+- `publico.controller.ocr-prefill.spec.ts` (5/5) ajustado: caso golden path Clínica documenta nova regra (campo principal pré-preenchido com 15 díg, antigo VAZIO).
+
+**Smoke E2E regression:** 0 falhas (12 passos verdes — `smoke-golden-path-conv-ref.ts`).
+
+**Regra de normalização documentada (extrato do código):**
+```
+slice 3-13 do formato 15 díg EDP-ES é PROVADAMENTE DIFERENTE do número
+antigo da EDP (confirmado contra UC real Luciano):
+  numeroConcessionariaOriginal: 0.001.421.380.054-70
+  numero (canônico SISGD):       0400702214 ← ID interno banco
+  numeroUC (antigo GD):          160085263 ← MANUAL, não derivado
+`slice(3, 13)` de `000142138005470` = `1421380054` ≠ ambos os números reais.
+Confirma: é só ID interno arbitrário. Não pretende ser canônico EDP.
+```
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 (commit pendente — substituí parcialmente o `20cacf6`).
+
+---
+
+### D-novo-CADASTRO-NUMERO-EDP-UX — Help text do step Instalação reforçado distinguindo 3 números (P3 → ✅ RESOLVIDO inline)
+
+**Severidade resolvida:** P3 cosmético; sem o help, cooperado tendia a procurar "número antigo" inexistente na fatura nova → fricção.
+
+**Origem:** Decisão Luciano 05/06 ao analisar bug D-novo-OCR-UC-CANON. UI não orientava sobre o dual-numbering (antigo manual × novo na fatura). Cooperado real digitava o que via (15 díg EDP-ES) no campo canônico sem entender o destino.
+
+**Fix aplicado** (entregue no mesmo commit do D-novo-OCR-UC-CANON):
+
+- Campo principal "Número da instalação (UC) *" — help: aceita formato EDP-ES com pontos OU 10 díg antigo; pré-preenchido se subiu fatura.
+- Campo "Número antigo" — help: **só preenche se EDP enviou**; **não está na fatura nova**; finalidade GD/SCEE.
+- Campo "Número exato da fatura" — help: cópia preservada com pontuação.
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 (commit pendente — incluído no D-novo-OCR-UC-CANON).
+
+---
+
+### D-novo-REGISTER-ADMIN-TENANT — POST /auth/register-admin não vincula cooperativaId (P2)
+
+**Severidade:** P2 — buraco arquitetural latente, não bloqueia operação atual (admin é criado via outras rotas).
+
+**Origem:** Fase 1 read-only F-G2 (05/06/2026 — `backend/src/auth/auth.service.ts:30-76`). `authService.register()` aceita `perfil` mas **não recebe nem grava `cooperativaId`** no Usuario criado. Logo, qualquer chamada de `POST /auth/register-admin` (`@Roles(SUPER_ADMIN)`) cria um admin **órfão** — sem `cooperativaId`, sem tenant associado.
+
+**Impacto:** rotina existe na API mas não é usável pra "criar admin de cooperativa" como o nome sugere. Caminho correto hoje é `POST /auth/criar-usuario` (`authService.criarUsuario`, l.213-257) que aceita `cooperativaId` no body + valida tenant do admin caller. Mas o `register-admin` continua exposto via JWT SUPER_ADMIN e pode gerar admins órfãos por engano.
+
+**Escopo proposto:**
+1. Estender `register()` pra aceitar opcional `cooperativaId` quando `perfil === ADMIN`.
+2. Validar: `ADMIN` sem `cooperativaId` → BadRequest no register.
+3. Ou: marcar `register-admin` como `@deprecated` e redirecionar callers pra `criar-usuario`.
+4. (Recomendação) Criar endpoint atômico `POST /super-admin/onboarding-parceiro` (F-G2a Opção A) que faz `Cooperativa + Usuario(ADMIN) + plano + config` em `$transaction Serializable` — resolve raiz do problema.
+
+**Estimativa:** 1-2h Code para gate defensivo no `register()`. F-G2a Opção A absorve este débito naturalmente (~8-12h).
+
+**Status:** 📋 Catalogado em 2026-06-05 (Fase 1 read-only F-G2).
 
 ---
 

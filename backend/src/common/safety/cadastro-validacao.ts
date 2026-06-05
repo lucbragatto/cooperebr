@@ -116,18 +116,57 @@ export function validarENormalizarCadastro(
     );
   }
 
-  // ─── numeroUC ─────────────────────────────────────────────────────────
+  // ─── numeroUC (ID INTERNO SISGD — não é o "antigo EDP" do GD/SCEE) ────
+  //
+  // D-novo-OCR-UC-CANON (05/06/2026) — aceita formato EDP-ES atual (15 díg).
+  //
+  // CONTEXTO ARQUITETURAL — Sprint 11 Bloco 2 (auditoria 26/04, E2E Fase D 26/04):
+  // - `Uc.numero` (este campo) = **ID INTERNO SISGD**. NÃO tem semântica EDP.
+  //   Único requisito real: ser DETERMINÍSTICO + ÚNICO entre UCs no banco.
+  // - `Uc.numeroUC` (NÃO MEXIDO AQUI) = **número ANTIGO EDP de 9 díg** usado em
+  //   listas de compensação GD/SCEE. CAPTURADO MANUALMENTE pelo cooperado (carta
+  //   da EDP). OCR de fatura atual EDP-ES NÃO retorna esse número (confirmado
+  //   E2E real Luciano `docs/sessoes/2026-04-26-sprint11-fase-d-e2e.md`). Sprint
+  //   11 Fase D-1 implementou guard de ativação que bloqueia status ATIVO sem
+  //   esse campo — preserva integridade SCEE.
+  // - `Uc.numeroConcessionariaOriginal` (preservado intacto pelo caller) =
+  //   string display 15 díg `0.XXX.XXX.XXX.XXX-YY` da fatura nova EDP-ES.
+  //
+  // REGRA DE NORMALIZAÇÃO PRA NUMERO INTERNO:
+  //   - 6-11 díg → mantém via `.slice(-10).padStart(10, '0')` (compat com
+  //     fluxo legado: formato canônico 9-10 díg digitado pelo admin/cooperado).
+  //   - 15 díg (formato EDP-ES atual) → `slice(3, 13)` extrai os 10 díg centrais
+  //     (descarta 3 zeros prefix + 2 DV). Determinístico, único entre UCs (a
+  //     parte central é a "informativa" do formato EDP-ES), preserva visualidade
+  //     pra admin debugar.
+  //   - Demais comprimentos → 400 com mensagem clara.
+  //
+  // POR QUE ESSA REGRA NÃO TOCA O ANTIGO/GD:
+  //   O slice 3-13 do formato 15 díg EDP-ES é PROVADAMENTE DIFERENTE do número
+  //   antigo da EDP (confirmado contra UC real Luciano:
+  //     numeroConcessionariaOriginal: 0.001.421.380.054-70
+  //     numero (canônico SISGD):       0400702214 ← ID interno banco
+  //     numeroUC (antigo GD):          160085263 ← MANUAL, não derivado
+  //   `slice(3, 13)` de `000142138005470` = `1421380054` ≠ ambos os números reais.
+  //   Confirma: é só ID interno arbitrário. Não pretende ser canônico EDP.
+  //
   // Fecha D-novo-CAD-UC-FALSA: NÃO há mais fallback 'UC-'+Date.now(). Quando
   // numeroUC é vazio E permiteSemUc=false, é erro real (em STRICT e TESTE).
   // Quando permiteSemUc=true e vazio, retorna null → caller usa SINTETICA.
   let numeroUC: string | null = null;
   if (numeroUCBruto) {
-    if (numeroUCBruto.length < 6 || numeroUCBruto.length > 11) {
+    if (numeroUCBruto.length === 15) {
+      // Formato EDP-ES atual: zeros prefix + 10 díg centrais + 2 DV.
+      // Pega os 10 centrais como ID interno determinístico.
+      numeroUC = numeroUCBruto.slice(3, 13);
+    } else if (numeroUCBruto.length >= 6 && numeroUCBruto.length <= 11) {
+      // Formato canônico legado (cadastro admin / OCR antigo / digitação manual).
+      numeroUC = numeroUCBruto.slice(-10).padStart(10, '0');
+    } else {
       throw new BadRequestException(
-        'Número da UC deve ter entre 6 e 11 dígitos (formato da concessionária).',
+        'Número da UC deve ter 6-11 dígitos (formato canônico) ou 15 dígitos (formato EDP-ES atual da fatura).',
       );
     }
-    numeroUC = numeroUCBruto.slice(-10).padStart(10, '0');
   } else if (!permiteSemUc) {
     throw new BadRequestException(
       strict

@@ -1114,30 +1114,30 @@ function CadastroPageInner() {
           <Label htmlFor="numeroUC">Numero da instalacao (UC) *</Label>
           <Input
             id="numeroUC"
-            placeholder="Numero que consta na conta de luz"
+            placeholder="Numero como aparece na sua fatura"
             value={instalacao.numeroUC}
             onChange={(e) => updateInstalacao('numeroUC', e.target.value)}
             className="h-10"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Encontre este numero no canto superior da sua conta de luz (ate 10 digitos).
+            O numero da sua fatura. Aceitamos o formato com pontos da EDP-ES (ex: 0.000.512.828.054-91) ou o formato antigo de 10 digitos. Se subiu a fatura, ja preenchemos pra voce.
           </p>
         </div>
         <div>
-          <Label htmlFor="numeroUCLegado">Numero antigo (se a EDP ja te mandou)</Label>
+          <Label htmlFor="numeroUCLegado">Numero antigo da EDP — opcional</Label>
           <Input
             id="numeroUCLegado"
-            placeholder="9 digitos, opcional"
+            placeholder="Ex: 160085263 (9 digitos)"
             value={instalacao.numeroUCLegado}
             onChange={(e) => updateInstalacao('numeroUCLegado', e.target.value)}
             className="h-10"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Opcional. Se a sua concessionaria ja te enviou um numero antigo de 9 digitos para listas de compensacao, informe aqui.
+            <strong>Preencha SO se a EDP ja te enviou um numero antigo de 9 digitos</strong> (carta ou documento oficial pra listas de compensacao GD/SCEE). Esse numero NAO esta na sua fatura nova — voce nao precisa procurar.
           </p>
         </div>
         <div>
-          <Label htmlFor="numeroConcessionariaOriginal">Numero exato impresso na fatura (opcional)</Label>
+          <Label htmlFor="numeroConcessionariaOriginal">Numero exato impresso na fatura — opcional</Label>
           <Input
             id="numeroConcessionariaOriginal"
             placeholder="0.000.512.828.054-91"
@@ -1147,7 +1147,7 @@ function CadastroPageInner() {
             className="h-10"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Opcional. Util quando a fatura usa formato com pontuacao/hifen (ex: 0.000.512.828.054-91 da EDP ES). Mantenha exatamente como aparece.
+            Opcional. Copia do formato com pontuacao/hifen exatamente como aparece. Se subiu a fatura, ja preenchemos pra voce.
           </p>
         </div>
         <div>

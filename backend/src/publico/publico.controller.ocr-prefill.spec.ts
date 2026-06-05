@@ -110,8 +110,12 @@ describe('PublicoController.processarFaturaOcr — payload expõe 3 variantes de
   });
 
   it('4) golden path do convite — fatura EDP-ES atual (só numeroConcessionariaOriginal)', async () => {
-    // Caso real do convite Clínica 05/06: UC só vem em formato com pontos,
-    // legado ausente. Backend agora expõe pra UI fazer o mapping correto.
+    // Caso real do convite Clínica 05/06: UC só vem em formato com pontos
+    // (15 díg EDP-ES atual). Backend expõe os 3 campos; frontend mapper
+    // pré-preenche `form.numeroUC` com o original (15 díg), guard backend
+    // normaliza pra `Uc.numero` interno 10 díg via slice(3, 13).
+    // `numeroUCLegado` (antigo EDP/GD) FICA VAZIO — invariante SCEE, cooperado
+    // preenche manual no campo separado "Número antigo (se EDP já te mandou)".
     faturasServiceMock.extrairOcr.mockResolvedValue({
       ...dadosOcrCompletos,
       numero: '',
@@ -122,10 +126,8 @@ describe('PublicoController.processarFaturaOcr — payload expõe 3 variantes de
     const r = await controller.processarFaturaOcr(arquivoPdf());
 
     expect(r.dados.numeroConcessionariaOriginal).toBe('0.000.374.127.054-59');
-    // Antes do fix, payload viria com numeroUC='' e SEM numeroConcessionariaOriginal;
-    // frontend não pré-preenchia nada e usuário batia no guard de UC vazia.
-    // Agora frontend mapeia via web/lib/ocr-mapping.ts:
-    //   numeroUC = '' || '' || '000037412705459' (dígitos do original) → form preenche.
+    expect(r.dados.numero).toBe('');
+    expect(r.dados.numeroUC).toBe('');
   });
 
   it('5) campos extras do payload (nome, distribuidora, consumo) preservados', async () => {
