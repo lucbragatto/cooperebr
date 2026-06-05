@@ -4678,6 +4678,83 @@ Quando aparecer débito novo durante sessão:
 
 ---
 
+### D-novo-OTP-DEV-RELAX — Rate-limit do solicitar-otp engessa smoke E2E manual em DEV (P3)
+
+**Severidade:** P3 — não bloqueia produção (limites são corretos lá). Engessa só o smoke manual.
+
+**Origem:** Reset emergencial 05/06/2026 — Luciano travado no convite `cmq13x7xh000evaq47jv4mlut` durante validação manual do golden path `?conv=`. Precisou de script ad-hoc pra zerar `otpReenvios=3/3` + `otpValidadoEm` expirado.
+
+**Constantes hardcoded em `backend/src/convenios/convites-convenio.service.ts:39-41`:**
+- `OTP_MAX_REENVIOS = 3` (3 reenvios totais por convite)
+- `OTP_COOLDOWN_SEG = 60` (60s entre reenvios)
+- `OTP_BLOQUEIO_HORAS = 1` (bloqueio 1h após exaustão de tentativas)
+
+**Em produção real:** limites OK (proteção anti-spam e anti-brute-force).
+**Em DEV (`isAmbienteReal() === false`):** Luciano dispara muitos OTPs durante smoke pra testar variações (timeout, refresh, etc) e bate no limite a cada validação.
+
+**Escopo proposto (3 opções, decidir):**
+
+1. **Relaxar em DEV via guard `isAmbienteReal()`** (caminho rápido, ~20min Code):
+   - `OTP_MAX_REENVIOS = isAmbienteReal() ? 3 : 20`
+   - `OTP_COOLDOWN_SEG = isAmbienteReal() ? 60 : 5`
+   - `OTP_BLOQUEIO_HORAS = isAmbienteReal() ? 1 : 0` (sem bloqueio em DEV)
+
+2. **Endpoint admin DEV-only `POST /publico/convites/:token/dev-reset`** (~40min Code):
+   - Gating `isAmbienteReal() === false` + `@Roles(SUPER_ADMIN)` + `@AuditLog`.
+   - Zera reenvios + tentativas + validação + bloqueio sem precisar de SQL.
+   - Mantém limites estritos em DEV pra simular UX real, mas com escape hatch.
+
+3. **Botão "Resetar OTP" no dashboard do convênio (admin)** (~1-2h Code):
+   - Mais visível, alinhado com Decisão UX 17/05 (ação simples = Dialog Tipo C).
+   - Mesma proteção `isAmbienteReal() === false` + `@Roles(SUPER_ADMIN, ADMIN)`.
+
+**Estimativa:** 20min-2h dependendo da opção. Recomendação: **Opção 2** (endpoint dev-reset) — destrava smoke sem afrouxar produção e sem UI custosa.
+
+**Status:** 📋 Catalogado em 2026-06-05 (reset emergencial Luciano). Script ad-hoc `backend/scripts/reset-otp-convite-emergencial.ts` resolve no curto prazo.
+
+---
+
+### D-novo-OCR-RESILIENCIA — Resiliência da chamada Anthropic no OCR de fatura (P1 → ✅ RESOLVIDO)
+
+**Severidade resolvida:** P1 — afetava o golden path `/cadastro?conv=` (caminho principal de onboarding de novo cooperado).
+
+**Origem:** Falha capturada 2026-06-05 16:36:11 BRT no convite Clínica Médica. `request_id req_011Cbkg4RZ9ghXJSoLjtdD1V` retornou HTTP 529 `overloaded_error` (sobrecarga transitória da Anthropic). Código era one-shot → primeira flutuação virava "preencha manualmente" pro cooperado.
+
+**Fix aplicado (commit `4c05aea`):**
+
+1. **Retry com backoff exponencial** em 429/500/503/529 — 3 retries (4 tentativas total) com delays 2s/4s/8s. Demais status (4xx exceto 429) = terminais sem retry.
+2. **Timeout fetch 30s** via `AbortController` — fail-fast em latência alta.
+3. **`max_tokens` 2048 → 8192** — apertado antes pra fatura com `historicoConsumo` 12-13 meses + 30+ campos. Suspeita real de truncar JSON em faturas longas.
+4. **Detecção de `stop_reason === 'max_tokens'`** ANTES do `JSON.parse` — dá motivo correto (`response-truncated`) em vez de `response-invalid-json`.
+5. **Classe `OcrFalhaError`** com motivo categorizado: `anthropic-overload | anthropic-rate-limit | anthropic-server | response-truncated | response-invalid-json | timeout | unknown`.
+6. **Payload `/publico/processar-fatura-ocr`** propaga `motivo` + mensagem específica. UI `/cadastro` mostra banner amber + "Tentar de novo" pros recuperáveis em vez de cair em modo manual.
+7. **Telemetria**: cada log inclui `status` + `request_id` + `tamanhoBase64` + `tentativa`.
+8. **30 specs Jest verdes** cobrindo retry exponencial, classificação por status, AbortError, erro de rede, extração de `request_id`, terminal vs retryable.
+
+**NÃO trocado (proposital, separado em P2):** modelo `claude-sonnet-4-20250514` + header beta `pdfs-2024-09-25`. Aguarda confirmação do ID atual do Sonnet via docs/claude-code-guide — orientação Luciano: não chuta nome de modelo.
+
+**Conexão com D-novo-CAD-CONSUMO-MENSAL:** prompt já extrai `historicoConsumo` da pág. 2 da fatura. Resiliência + `max_tokens=8192` habilita backbone do consumo mês-a-mês.
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 commit `4c05aea`. Catalogado pra registro histórico do padrão (chamadas externas críticas exigem retry+timeout+telemetria categorizada).
+
+---
+
+### D-novo-CADWEB-CONV-TENANT — POST /publico/cadastro-web 400 quando vem via ?conv= sem ?tenant= (P1 → ✅ RESOLVIDO)
+
+**Severidade resolvida:** P1 — quebrava o golden path do convite `?conv=` (caminho oficial de onboarding via Fatia F-G1+Convergência).
+
+**Origem:** Smoke E2E 05/06/2026 Luciano. Wizard `/cadastro?conv=<token>` postava em `/publico/cadastro-web` e backend rejeitava com 400 "cooperativaId ou query param ?tenant= é obrigatório no modo v2", mesmo com `payload.token` chegando no body.
+
+**Causa raiz:** Handler `cadastroWeb` (linha 215-219) só conhecia 2 fontes de tenant — `body.cooperativaId` e `?tenant=`. Frontend lia `NEXT_PUBLIC_COOPERATIVA_ID` como fallback, mas no celular real (link via WhatsApp) essa env é vazia → `cooperativaId = undefined`. Não usava `body.token` que chegava do payload.
+
+**Fix aplicado:** Server-side, antes do gate, deriva `cooperativaId` do `ConviteConvenioMembro.cooperativaId` quando `body.token` presente. Espelha o padrão anti-spoof já estabelecido em `/auto-inscrever:568` ("Resolve convenio + cooperativa DO CONVITE — NÃO do body"). Token inválido → 400 "Convite inválido ou expirado" (mensagem específica em vez do genérico).
+
+**Cobertura specs (6 cenários verdes):** token válido sem `cooperativaId` → resolve; token + `body.cooperativaId` diferente → anti-spoof; token inválido sem fallback → "Convite inválido ou expirado"; token inválido com `cooperativaId` → mesma mensagem (não mascara erro); sem token nem `cooperativaId`/`?tenant=` → 400 genérico (regressão guard); sem token com `?tenant=` → caminho legado segue funcionando.
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 — fix + 6 specs.
+
+---
+
 ### D-novo-CAD-CONSUMO-MENSAL — Cadastro precisa capturar consumo mês-a-mês + projetar créditos + visibilidade pra empresa/cooperativa (P2)
 
 **Severidade:** P2 — não bloqueia operação atual (cadastro funciona com média), mas spec §9 do circuito CooperToken pressupõe consumo mensal pra projeção e Sprint Convênio Médico/PJ depende da visibilidade.

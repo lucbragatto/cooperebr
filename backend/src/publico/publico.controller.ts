@@ -213,11 +213,34 @@ export class PublicoController {
     // Feature toggle: v2 cria Cooperado + UC + Proposta real; legado cria LeadWhatsapp
     const v2Ativo = process.env.CADASTRO_V2_ATIVO === 'true';
     if (v2Ativo) {
-      const cooperativaId = body.cooperativaId ?? tenantParam;
+      let cooperativaId = body.cooperativaId ?? tenantParam;
+
+      // Convergência Fatia 2 (05/06/2026) — quando o cadastro vem via convite
+      // público (?conv=<token>), deriva cooperativaId do convênio do convite
+      // server-side. Espelha o padrão anti-spoof de /auto-inscrever (linha 568):
+      // tenant DO CONVITE sobrepõe qualquer cooperativaId/?tenant= do client.
+      // Validação completa do convite (OTP/expiração/consume-once) fica dentro
+      // do cadastroWebV2 quando origem=CONVITE_PUBLICO.
+      const conviteTokenHint = (body as { token?: string }).token;
+      if (conviteTokenHint) {
+        const convite = await this.prisma.conviteConvenioMembro.findUnique({
+          where: { token: conviteTokenHint },
+          select: { cooperativaId: true },
+        });
+        if (convite?.cooperativaId) {
+          cooperativaId = convite.cooperativaId;
+        } else {
+          // Token presente mas não resolve = convite inexistente, expirado ou
+          // revogado. Mensagem específica em vez do genérico "cooperativaId
+          // obrigatório" pra não confundir admin durante smoke.
+          throw new BadRequestException('Convite inválido ou expirado.');
+        }
+      }
+
       if (!cooperativaId) {
         throw new BadRequestException('cooperativaId ou query param ?tenant= é obrigatório no modo v2');
       }
-      return this.cadastroWebV2(body as Parameters<typeof this.cadastroWebV2>[0], cooperativaId);
+      return this.cadastroWebV2(body as Parameters<PublicoController['cadastroWebV2']>[0], cooperativaId);
     }
 
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
