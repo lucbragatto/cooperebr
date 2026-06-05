@@ -4739,6 +4739,62 @@ Quando aparecer débito novo durante sessão:
 
 ---
 
+### D-novo-CADWEB-CONV-MEMBRO — cadastroWebV2 não criava ConvenioCooperado quando vinha via ?conv= (P1 → ✅ RESOLVIDO)
+
+**Severidade resolvida:** P1 — quebrava o golden path completo do convite `?conv=` apesar do gate inicial estar OK. Cooperado era criado, mas convite ficava órfão (reusável infinitas vezes) e empresa não tinha membro pendente pra aprovar.
+
+**Origem:** Smoke E2E programático 05/06/2026 (`backend/scripts/smoke-golden-path-conv-ref.ts`). Cadastro completava 201 (Cooperado + UC criados), mas:
+- `ConvenioCooperado` NÃO era criado
+- `AprovacaoConvenioMembro` (magic link da empresa) NÃO era gerada
+- Convite `usedAt` ficava `null` → reusável
+
+**Causa raiz arquitetural:** Convergência Fatia 2 (04/06) unificou o frontend pra postar em `/cadastro-web` em vez de `/auto-inscrever`. Mas `cadastroWebV2` só criava `ConvenioCooperado` em 2 caminhos:
+1. `body.codigoRef` presente (MLM clássico — PASSO 5)
+2. `body.convenioCusteioId` presente (Caso 1 custeio — via `motor.proposta.aceitar`)
+
+O caminho `?conv=` (com `body.token + body.origem='CONVITE_PUBLICO'`) caía entre as duas — sem `codigoRef`, sem `convenioCusteioId` — e perdia o vínculo de membro.
+
+**Fix aplicado:** Portado o padrão de atomicidade do `/auto-inscrever:710-792` (Fatia 2c.1) pro `cadastroWebV2`. Dentro da MESMA `$transaction Serializable` que cria Cooperado + UC:
+
+1. **Resolve + consume-once do convite** ANTES de criar Cooperado (token inválido/usado/expirado → throw, aborta tudo antes de gerar estado órfão).
+2. **`tx.conviteConvenioMembro.update({where:{id,usedAt:null}, data:{usedAt:now()}})`** — race-safe (P2025 = race com 2º POST concorrente → 409).
+3. **`conveniosMembros.adicionarMembro(convenioId, cooperadoId, _, tx, 'CONVITE_PUBLICO')`** dentro do tx — cria `ConvenioCooperado` com `status=PENDENTE_APROVACAO_EMPRESA` + `ativo=false` + `AprovacaoConvenioMembro` (magic link da empresa) no mesmo tx, pulando MLM e recálculo de faixa (custeio puro).
+4. **Cross-ref `convite.membroId = membro.id`** fecha o ciclo (usedAt + membroId apontam um pro outro).
+
+**Atomicidade garantida:** se qualquer passo falhar, rollback nativo do Postgres reverte TUDO — zero Cooperado órfão, zero convite consumido sem membro, zero magic link sem cooperado.
+
+**Specs (cadastro-web-conv.spec.ts, 14/14 verdes):** 6 do fix de tenant (D-novo-CADWEB-CONV-TENANT) + 8 do membro/consume-once: sem token não chama adicionarMembro · convite válido → consume-once + adicionarMembro + cross-ref · convite inexistente → throw antes de criar Cooperado · convite usado → 409 · convite expirado → throw · race P2025 → 409 · adicionarMembro falha → propaga (rollback nativo) · cross-ref usa membroId correto.
+
+**Smoke E2E programático (`backend/scripts/smoke-golden-path-conv-ref.ts`): 0 falhas** — 7 passos do `?conv=` (criação → GET → bypass OTP → POST 201 → cooperativaId derivado → UC criada → membro PENDENTE → magic link → consume-once usedAt → 2ª chamada 409) + 5 passos do `?ref=` (indicador → GET → POST 201 → cooperado → Indicacao MLM).
+
+**Flag pra housekeeping futuro:** `/publico/convenios/auto-inscrever` (Fatia 2c slim) provavelmente vira código morto agora — frontend wizard `/cadastro?conv=` posta exclusivamente em `/cadastro-web`. Deprecar num sprint de housekeeping junto com a slim `/convite-convenio/[token]` (que também ficou redirect-only).
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 (commit pendente). Catalogado em `D-novo-AUTO-INSCREVER-DEPRECATION` (P3 — housekeeping).
+
+---
+
+### D-novo-AUTO-INSCREVER-DEPRECATION — Deprecar /publico/convenios/auto-inscrever após D-novo-CADWEB-CONV-MEMBRO (P3)
+
+**Severidade:** P3 — código morto não bloqueia funcionalidade; remoção é higiene.
+
+**Origem:** Após D-novo-CADWEB-CONV-MEMBRO RESOLVIDO 05/06/2026, o endpoint `/publico/convenios/auto-inscrever` (Fatia 2c slim) provavelmente perdeu chamadores. O wizard `/cadastro?conv=` agora posta direto em `/cadastro-web` com o fluxo completo (Cooperado + UC + Membro + magic link no mesmo tx).
+
+**Verificações antes de remover:**
+1. `grep -r "auto-inscrever" web/ backend/` em todo o repo — confirmar zero chamadores ativos.
+2. Logs PM2 dos últimos 7 dias — confirmar zero hits no endpoint após data do fix.
+3. Confirmar com Luciano se há clientes externos (futuro app mobile, integrações) que ainda dependem.
+
+**Escopo proposto:**
+1. Adicionar `@deprecated` no método + log `WARN` em cada hit.
+2. Após 1 sprint de monitoramento sem hits → remover endpoint + DTO + specs.
+3. Aproveitar e remover também a slim `/convite-convenio/[token]` (redirect-only após Convergência Fatia 2).
+
+**Estimativa:** 15min Code (deprecação) + 30min Code (remoção pós-monitoramento).
+
+**Status:** 📋 Catalogado em 2026-06-05 (gerado por D-novo-CADWEB-CONV-MEMBRO).
+
+---
+
 ### D-novo-CADWEB-CONV-TENANT — POST /publico/cadastro-web 400 quando vem via ?conv= sem ?tenant= (P1 → ✅ RESOLVIDO)
 
 **Severidade resolvida:** P1 — quebrava o golden path do convite `?conv=` (caminho oficial de onboarding via Fatia F-G1+Convergência).

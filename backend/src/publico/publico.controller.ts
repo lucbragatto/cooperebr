@@ -892,8 +892,52 @@ export class PublicoController {
     );
     const { cpfLimpo, telefoneLimpo, email, nome, numeroUC, strict } = normalizado;
 
-    // PASSO 1+2 — Criar Cooperado + UC em transação atômica
-    const { cooperadoId, ucId } = await this.prisma.$transaction(async (tx) => {
+    // PASSO 1+2+3 — Criar Cooperado + UC + (opcional) Membro Convênio em
+    // transação atômica Serializable.
+    //
+    // D-novo-CADWEB-CONV-MEMBRO (05/06/2026) — quando vem via convite público
+    // (?conv=), consume-once + criação de Membro PENDENTE_APROVACAO_EMPRESA +
+    // magic link da empresa ficam DENTRO do mesmo tx que cria Cooperado/UC.
+    // Atomicidade total: se qualquer passo falhar, rollback nativo do Postgres
+    // reverte tudo (zero estado órfão: cooperado sem membro, convite consumido
+    // sem membro, magic link sem cooperado). Espelha o padrão consolidado em
+    // /auto-inscrever:710-792 (Fatia 2c.1) — mesma decisão arquitetural.
+    const { cooperadoId, ucId, membroId: _membroIdCriado } = await this.prisma.$transaction(
+      async (tx) => {
+      // (0) Resolve + consume-once do convite quando vem via ?conv=. Falha
+      // aqui aborta tudo antes de criar Cooperado órfão.
+      let conviteResolved: { id: string; convenioId: string } | null = null;
+      if (body.token && body.origem === 'CONVITE_PUBLICO') {
+        const convite = await tx.conviteConvenioMembro.findUnique({
+          where: { token: body.token },
+          select: { id: true, convenioId: true, usedAt: true, expiresAt: true },
+        });
+        if (!convite) {
+          throw new BadRequestException('Convite inválido ou expirado.');
+        }
+        if (convite.usedAt) {
+          throw new ConflictException('Convite já utilizado.');
+        }
+        if (convite.expiresAt <= new Date()) {
+          throw new BadRequestException('Convite expirado.');
+        }
+        // Consume-once: where {id, usedAt:null} + update → P2025 em race com
+        // 2º POST concorrente. Em Serializable os POSTs serializam OU um aborta
+        // com 40001 (capturado fora do try).
+        try {
+          await tx.conviteConvenioMembro.update({
+            where: { id: convite.id, usedAt: null },
+            data: { usedAt: new Date() },
+          });
+        } catch (err: any) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+            throw new ConflictException('Convite já utilizado.');
+          }
+          throw err;
+        }
+        conviteResolved = { id: convite.id, convenioId: convite.convenioId };
+      }
+
       let cooperado;
       try {
         // Sprint 8A: propagar modoRemuneracao do cadastro público
@@ -990,8 +1034,32 @@ export class PublicoController {
         });
       }
 
-      return { cooperadoId: cooperado.id, ucId: uc.id };
-    });
+      // D-novo-CADWEB-CONV-MEMBRO — cria Membro PENDENTE_APROVACAO_EMPRESA +
+      // magic link da empresa dentro do MESMO tx. adicionarMembro com tx +
+      // origem=CONVITE_PUBLICO faz: status PENDENTE_APROVACAO_EMPRESA,
+      // ativo=false, cria AprovacaoConvenioMembro (magic link), pula MLM e
+      // recálculo de faixa (custeio puro). Cross-ref convite→membro fecha o
+      // ciclo (usedAt + membroId apontam um pro outro).
+      let membroIdCriado: string | null = null;
+      if (conviteResolved) {
+        const membro = await this.conveniosMembros.adicionarMembro(
+          conviteResolved.convenioId,
+          cooperado.id,
+          undefined,
+          tx,
+          'CONVITE_PUBLICO',
+        );
+        membroIdCriado = membro.id;
+        await tx.conviteConvenioMembro.update({
+          where: { id: conviteResolved.id },
+          data: { membroId: membro.id },
+        });
+      }
+
+      return { cooperadoId: cooperado.id, ucId: uc.id, membroId: membroIdCriado };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     if (!strict) {
       this.logger.warn(
