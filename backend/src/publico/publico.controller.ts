@@ -1346,7 +1346,16 @@ export class PublicoController {
         dados: {
           nome: dadosExtraidos.titular || '',
           cpf: dadosExtraidos.documento || '',
+          // D-novo-OCR-UC-PREFILL (05/06/2026) — expor as 3 variantes de UC.
+          // Antes só `numeroUC` (legado 9 díg) era retornado; faturas EDP-ES
+          // atuais trazem o número predominantemente em formato `numeroConcessionariaOriginal`
+          // (com pontos, ex `0.000.374.127.054-59`), com o legado ausente. Resultado:
+          // form ficava vazio e quebrava o golden path do convite. Frontend usa
+          // `mapearOcrParaInstalacao` (web/lib/ocr-mapping.ts) com prioridade
+          // canônico → legado → dígitos-do-original.
+          numero: dadosExtraidos.numero || '',
           numeroUC: dadosExtraidos.numeroUC || '',
+          numeroConcessionariaOriginal: dadosExtraidos.numeroConcessionariaOriginal || '',
           distribuidora: dadosExtraidos.distribuidora || '',
           consumoMedioKwh: consumoMedio,
           totalAPagar: dadosExtraidos.totalAPagar || 0,

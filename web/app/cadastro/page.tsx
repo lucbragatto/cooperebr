@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
+import { mapearOcrParaInstalacao } from '@/lib/ocr-mapping';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -106,7 +107,10 @@ interface HistoricoItem {
 interface OcrDados {
   nome?: string;
   cpf?: string;
-  numeroUC?: string;
+  // D-novo-OCR-UC-PREFILL (05/06) — 3 variantes da UC retornadas pelo OCR
+  numero?: string;                          // canônico 10 dig (formato SISGD)
+  numeroUC?: string;                        // legado 9 dig (forma EDP antiga)
+  numeroConcessionariaOriginal?: string;    // string preservada (formato EDP-ES atual)
   distribuidora?: string;
   consumoMedioKwh?: number;
   totalAPagar?: number;
@@ -464,13 +468,26 @@ function CadastroPageInner() {
           }));
         }
 
-        // Pre-fill instalacao — converte distribuidora para enum, mantém número como veio
-        if (data.dados.numeroUC) setInstalacao((i) => ({
-          ...i,
+        // Pre-fill instalacao — D-novo-OCR-UC-PREFILL (05/06):
+        // Usa mapper puro (web/lib/ocr-mapping.ts) com prioridade
+        // canônico (numero) → legado (numeroUC) → dígitos-do-original
+        // (numeroConcessionariaOriginal). Resolve faturas EDP-ES atuais
+        // que só trazem o número em formato com pontos — antes o form
+        // ficava vazio e quebrava o golden path do convite.
+        const ucMapeada = mapearOcrParaInstalacao({
+          numero: data.dados.numero,
           numeroUC: data.dados.numeroUC,
-          // Preserva formato original quando OCR detectar formato com pontuação (ex: 0.000.512.828.054-91)
-          numeroConcessionariaOriginal: /[.\-/]/.test(data.dados.numeroUC) ? data.dados.numeroUC : i.numeroConcessionariaOriginal,
-        }));
+          numeroConcessionariaOriginal: data.dados.numeroConcessionariaOriginal,
+        });
+        if (ucMapeada.numeroUC) {
+          setInstalacao((i) => ({
+            ...i,
+            numeroUC: ucMapeada.numeroUC,
+            numeroUCLegado: ucMapeada.numeroUCLegado || i.numeroUCLegado,
+            numeroConcessionariaOriginal:
+              ucMapeada.numeroConcessionariaOriginal || i.numeroConcessionariaOriginal,
+          }));
+        }
         if (data.dados.distribuidora) setInstalacao((i) => ({ ...i, distribuidora: mapearDistribuidoraOcr(data.dados.distribuidora) }));
         if (data.dados.consumoMedioKwh) setInstalacao((i) => ({ ...i, consumoMedioKwh: String(data.dados.consumoMedioKwh) }));
 
@@ -715,13 +732,26 @@ function CadastroPageInner() {
           cidade: endereco.cidade || ocrDados.cidade || '',
           estado: endereco.estado || ocrDados.estado || '',
         },
-        instalacao: {
-          numeroUC: instalacao.numeroUC || ocrDados.numeroUC || '',
-          numeroUCLegado: instalacao.numeroUCLegado || undefined,
-          numeroConcessionariaOriginal: instalacao.numeroConcessionariaOriginal || undefined,
-          distribuidora: instalacao.distribuidora || mapearDistribuidoraOcr(ocrDados.distribuidora) || '',
-          consumoMedioKwh: Number(instalacao.consumoMedioKwh) || ocrDados.consumoMedioKwh || 0,
-        },
+        instalacao: (() => {
+          // D-novo-OCR-UC-PREFILL (05/06) — fallback consistente com mapper:
+          // se o usuário não preencheu, usa mesma prioridade canônico → legado
+          // → dígitos-do-original (em vez do fallback antigo só pra `numeroUC`).
+          const fallback = mapearOcrParaInstalacao({
+            numero: ocrDados.numero,
+            numeroUC: ocrDados.numeroUC,
+            numeroConcessionariaOriginal: ocrDados.numeroConcessionariaOriginal,
+          });
+          return {
+            numeroUC: instalacao.numeroUC || fallback.numeroUC || '',
+            numeroUCLegado: instalacao.numeroUCLegado || fallback.numeroUCLegado || undefined,
+            numeroConcessionariaOriginal:
+              instalacao.numeroConcessionariaOriginal ||
+              fallback.numeroConcessionariaOriginal ||
+              undefined,
+            distribuidora: instalacao.distribuidora || mapearDistribuidoraOcr(ocrDados.distribuidora) || '',
+            consumoMedioKwh: Number(instalacao.consumoMedioKwh) || ocrDados.consumoMedioKwh || 0,
+          };
+        })(),
         temCreditosInjetados: true,
         dadosOcr: {
           energiaFornecidaKwh: ocrDados.energiaFornecidaKwh || 0,
