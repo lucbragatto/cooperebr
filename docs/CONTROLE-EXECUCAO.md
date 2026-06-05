@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-05 — M22 Fatia F-G1 Circuito CooperToken + Opção A + WA honesto**. **4 commits trabalho** em 1 sessão Code: `a99a7f2` Fatia F-G1 (convite indicação web por admin com cooperado institucional fantasma `institucional+<cooperativaId>@sisgd.invalid` + skip BeneficioIndicacao/tokens via `ehInstitucional` + Opção A perfil COOPERADO único + Crédito de Energia movido pro Financeiro com gate SEM_UC CTA "Solicitar conversão → PIX") · `4690a5d` pós-F-G1 ajustes (SUPER_ADMIN seletor coop no Dialog + nome dinâmico no template WA — zero hardcode "CoopereBR", SISGD é multi-tenant + login bootstrap 2 contas) · `fc4cc24` box dev login 4 cards (SUPER_ADMIN + ADMIN — CoopereBR + COOPERADO + Empresa cooperada PJ) · `9291d32` whitelist permanente `+5527999479097` (5 variantes) + D-novo-WA-DEV-FALSE-OK RESOLVIDO (`WhatsappEnvioResult` com motivo `whitelist-dev`/`numero-protegido`/`erro-runtime` propagado até UI dev). **WA chega via convite admin web — golden path Fatia F-G1 destravado.** Opção A consolidou COOPERADO-ONLY: empresa cooperada PJ tem perfil COOPERADO; `EMPRESA_CONVENIADA` `@deprecated` (compat só pra tokens em circulação). 3 débitos novos catalogados (D-novo-CAD-CONSUMO-MENSAL P2 + D-novo-CONVITE-MENUS-UX P3 + D-novo-TESTS-MOCK-PRISMA P2) + 1 RESOLVIDO mesmo dia (D-novo-WA-DEV-FALSE-OK). Sugestões #10 (práticas Anthropic) + #11 (banco de modelos de mensagens) catalogadas em memória. Detalhe: `docs/sessoes/2026-06-05-fatia-fg1-cooper-token-ajustes.md`.
+> Última atualização: **2026-06-05 tarde-noite — M23 Hardening Golden Path /cadastro?conv= e ?ref=**. **5 commits trabalho + 1 fechamento** em 1 sessão Code maratona: `9291d32` whitelist WA `+27999479097` + status honesto do envio (`WhatsappEnvioResult` com motivo propagado até UI dev, D-novo-WA-DEV-FALSE-OK RESOLVIDO) · `8ab10c8` docs fechamento M22 · `4c05aea` **D-novo-OCR-RESILIENCIA P1 RESOLVIDO** (Anthropic retornou HTTP 529 overloaded_error req `req_011Cbkg4RZ9ghXJSoLjtdD1V` 16:36 BRT; fix: retry exponencial 2s/4s/8s em 429/500/503/529 + AbortController timeout 30s + `max_tokens` 2048→8192 + classe `OcrFalhaError` com 7 motivos categorizados + UI mostra banner amber "Tentar de novo" pros recuperáveis em vez de cair em modo manual; 30 specs verdes) · `004372c` **D-novo-CADWEB-CONV-TENANT P1 RESOLVIDO** (`/cadastro-web` 400 quando vem via `?conv=` sem `?tenant=`; fix: resolve `cooperativaId` server-side via `body.token` espelhando padrão anti-spoof de `/auto-inscrever:568`; 6 specs + script `reset-otp-convite-emergencial.ts` + token correto do convite Luciano destravado: `e1bb49fea48d8cd27a4a646e236c6b1cf1c8d097a1c4eb883a88b6ef281b007b`) · `beef066` **D-novo-CADWEB-CONV-MEMBRO P1 RESOLVIDO** (smoke E2E expôs bug arquitetural: `cadastroWebV2` criava Cooperado+UC mas NÃO criava `ConvenioCooperado` nem marcava `usedAt`, convite ficava órfão reusável; fix: portado padrão de atomicidade de `/auto-inscrever:710-792` pro `cadastroWebV2` — consume-once + `adicionarMembro(CONVITE_PUBLICO)` + cross-ref `convite.membroId` dentro do mesmo `$transaction Serializable` que cria Cooperado+UC; 8 specs novos + smoke E2E programático 0 falhas em 12 passos). **44 specs verdes totais** (30 OCR + 14 cadastro-web). **4 RESOLVIDOS:** OCR-RESILIENCIA, CADWEB-CONV-TENANT, CADWEB-CONV-MEMBRO, WA-DEV-FALSE-OK. **6 ABERTOS catalogados:** D-novo-OTP-429-UX P3 (mensagem genérica no UI quando OTP estoura limite) · D-novo-OTP-DEV-RELAX P3 (rate-limit engessa smoke manual) · D-novo-AUTO-INSCREVER-DEPRECATION P3 (housekeeping pós-fix CONV-MEMBRO) · D-novo-CAD-CONSUMO-MENSAL P2 · D-novo-CONVITE-MENUS-UX P3 · D-novo-TESTS-MOCK-PRISMA P2. Detalhe: `docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md`.
+
+> Histórico: **2026-06-05 — M22 Fatia F-G1 Circuito CooperToken + Opção A + WA honesto**. **4 commits trabalho** em 1 sessão Code: `a99a7f2` Fatia F-G1 (convite indicação web por admin com cooperado institucional fantasma `institucional+<cooperativaId>@sisgd.invalid` + skip BeneficioIndicacao/tokens via `ehInstitucional` + Opção A perfil COOPERADO único + Crédito de Energia movido pro Financeiro com gate SEM_UC CTA "Solicitar conversão → PIX") · `4690a5d` pós-F-G1 ajustes (SUPER_ADMIN seletor coop no Dialog + nome dinâmico no template WA — zero hardcode "CoopereBR", SISGD é multi-tenant + login bootstrap 2 contas) · `fc4cc24` box dev login 4 cards (SUPER_ADMIN + ADMIN — CoopereBR + COOPERADO + Empresa cooperada PJ) · `9291d32` whitelist permanente `+5527999479097` (5 variantes) + D-novo-WA-DEV-FALSE-OK RESOLVIDO (`WhatsappEnvioResult` com motivo `whitelist-dev`/`numero-protegido`/`erro-runtime` propagado até UI dev). **WA chega via convite admin web — golden path Fatia F-G1 destravado.** Opção A consolidou COOPERADO-ONLY: empresa cooperada PJ tem perfil COOPERADO; `EMPRESA_CONVENIADA` `@deprecated` (compat só pra tokens em circulação). 3 débitos novos catalogados (D-novo-CAD-CONSUMO-MENSAL P2 + D-novo-CONVITE-MENUS-UX P3 + D-novo-TESTS-MOCK-PRISMA P2) + 1 RESOLVIDO mesmo dia (D-novo-WA-DEV-FALSE-OK). Sugestões #10 (práticas Anthropic) + #11 (banco de modelos de mensagens) catalogadas em memória. Detalhe: `docs/sessoes/2026-06-05-fatia-fg1-cooper-token-ajustes.md`.
 
 > Histórico: **2026-06-04 — M21 Sprint Multi-Frente: Portal Empresa Conveniada 9.0+9.1 + Sprint Financeiro F1 + Convergência Convite-Custeio (Fatias 1+2) + Circuito CooperToken Fatia A+B**. **11 commits trabalho** em 1 sessão Code maratona: `0d698d4` Sprint Financeiro F1 (statusEmissao separado + cron retry 30min cap 5 + endpoint reemitir + UI badges + 13 specs) · `695e574` Portal Empresa 9.0 (perfil EMPRESA_CONVENIADA + guard @PagadorCooperadoOnly anti-enumeração + 9 endpoints + seed dev + box credenciais login) · `6eaa7a6` Portal Empresa 9.1 (dashboard /conveniada/convenio/[id] reusando GestaoConvitesSection+MembrosPendentesSection source='empresa' + decidir in-portal + HelpBox em cada bloco) · `bfad278` HOTFIX BUG1 CORS+API_URL LAN (acesso por IP do celular) · `4fb9a0c` HOTFIX BUG2 decidir in-portal sem magic link (decidirAprovacaoEmpresaLogada opera direto no membroId + 9 specs) · `baf7fc1` HOTFIX diag erro detalhado em DEV no /auto-inscrever · `9f18e13` docs 7 débitos auditoria /cadastro · `badeb5f` Convergência Fatia 1 backend (DTO strict + REMOÇÃO UC-fake + helper validarENormalizarCadastro + POST cadastro/upload-doc + schema delta TipoUc/SELFIE/permiteSemUc/consentimentoDocs + 35 specs) · `0559660` Convergência Fatia 2 wizard (/cadastro?conv= + OTP gate + uploads opcionais + LGPD + doc-move backend + redirect slim 553→38 linhas + smoke E2E 9/9) · `feda124` Circuito CooperToken Fatia A+B (portal nomenclatura/help/menu + bonusIndicacao configurável + spec catalogada). **Suite total impactada 374/374 verdes** (23 suites src/publico + src/convenios + src/auth + src/common/safety). 4 débitos resolvidos estruturalmente: D-novo-CAD-UC-FALSA P1, D-novo-CAD-CONSUMO-ZERO P2, D-novo-CAD-MODO-MANUAL-NAV P3, D-novo-CONVITE-ROTA-CONSOLIDAR P3. 2 débitos novos catalogados: D-novo-PORTAL-EMPRESA-SEED-TESTE P3 + D-novo-DEV-LAN-ACCESS P3. **DESCOBERTA OPERACIONAL CRÍTICA:** frontend é `next start` sob PM2 (NÃO `next dev`) — toda mudança de frontend exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Documentado em CLAUDE.md. Detalhe: `docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md`.
 
@@ -30,6 +32,35 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-05 tarde-noite (Code — M23 Hardening Golden Path /cadastro?conv= e ?ref=)
+
+**5 commits trabalho** em 1 sessão Code maratona (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `9291d32` | fix | whitelist `+27999479097` + `WhatsappEnvioResult` honesto (D-novo-WA-DEV-FALSE-OK RESOLVIDO) |
+| `8ab10c8` | docs | fechamento M22 |
+| `4c05aea` | fix | OCR resiliência — retry+timeout+max_tokens 8192+`OcrFalhaError` 7 motivos+UI (D-novo-OCR-RESILIENCIA RESOLVIDO, 30 specs) |
+| `004372c` | fix | `cadastro-web` resolve cooperativaId via convite (anti-spoof D-novo-CADWEB-CONV-TENANT RESOLVIDO, 6 specs + script reset OTP) |
+| `beef066` | fix | porta Membro+consume-once pro mesmo tx (D-novo-CADWEB-CONV-MEMBRO RESOLVIDO, 8 specs + smoke E2E 0 falhas) |
+| `<próximo>` | docs | fechamento desta sessão (M23) |
+
+**Em curso:** —
+
+**Próximo passo:** **Fatia F-G2 do Circuito CooperToken** — super-admin provisiona novo parceiro/cooperativa + cooperados a nível SISGD. Fase 1 read-only obrigatória.
+
+**Pendente após próximo:** Fatias C/D/E/G do Circuito CooperToken → Módulo Contabilidade Tributária Segregada.
+
+**Carry-overs (não-bloqueantes):**
+- Smoke E2E manual Luciano via celular (golden path F-G1 destravado — convite Clínica teste com token `e1bb49fe...b007b`, OTP zerado, válido até 12/06).
+- 6 débitos abertos da sessão: D-novo-OTP-429-UX P3 · D-novo-OTP-DEV-RELAX P3 · D-novo-AUTO-INSCREVER-DEPRECATION P3 · D-novo-CAD-CONSUMO-MENSAL P2 · D-novo-CONVITE-MENUS-UX P3 · D-novo-TESTS-MOCK-PRISMA P2.
+- Carry-overs anteriores: D-novo-PORTAL-EMPRESA-SEED-TESTE P3 · D-novo-DEV-LAN-ACCESS P3 · 7 débitos `/cadastro` sessão 04/06 · D-novo-CT-VALIDACAO-FISCAL P0 · D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 · D-novo-BM P0 BLOQUEADOR PRÉ-PROD · 256 legados allowlist `lint:tenant`.
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 05/06 tarde-noite fechamento M23).
+> Detalhe: `docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md`.
 
 ---
 
@@ -1650,8 +1681,9 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento da sessão 05/06 (M22 Fatia F-G1 Circuito CooperToken +
-   Opção A perfil COOPERADO + WA honesto + whitelist +27999479097).
+   fechamento da sessão 05/06 tarde-noite (M23 Hardening Golden Path
+   /cadastro?conv= e ?ref= — OCR resiliência + cadastro-web fix tenant
+   + cadastro-web fix membro+consume-once + WA honesto).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online. ⚠ Frontend é `next start` sob PM2 (NÃO `next dev`) — toda
@@ -1660,13 +1692,18 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase comandante (próximo Code arranca aqui):
 
-Retomar Circuito CooperToken — Fatia F-G2. PASSO 0: main repo
-C:\Users\Luciano\cooperebr, `git status --short` + `pm2 list`
-(backend+frontend online; frontend = next start, sem HMR → rebuild).
-Fatias A, B, F3, F2, F-G1 (+ super-admin/login/WA honesto/whitelist)
-JÁ NO AR e validadas — WA chega via convite admin web. AÇÃO IMEDIATA:
-Fase 1 read-only da F-G2 (super-admin convida novo parceiro/cooperativa
-+ novos cooperados a nível SISGD — mapear criação de tenant). Spec:
+Retomar Circuito CooperToken — Fatia F-G2. Fatias A, B, F3, F2, F-G1
+JÁ NO AR e VALIDADAS via smoke E2E programático (golden path do convite
+?conv= 100% verde em 12 passos: OCR resiliente, cadastro-web deriva tenant
+do convite via body.token anti-spoof, ConvenioCooperado criado dentro do
+mesmo $transaction Serializable que cria Cooperado+UC com status
+PENDENTE_APROVACAO_EMPRESA + magic link da empresa + cross-ref
+convite.membroId, consume-once race-safe via where {id, usedAt:null}).
+PASSO 0: main repo C:\Users\Luciano\cooperebr, `git status --short` +
+`pm2 list` (backend+frontend online; frontend = next start, sem HMR →
+rebuild). AÇÃO IMEDIATA: Fase 1 read-only da F-G2 (super-admin provisiona
+novo parceiro/cooperativa + cooperados a nível SISGD — mapear criação de
+tenant + onboarding via convite institucional). Spec:
 docs/especificacao-circuito-cooper-token-convenio.md. Memória:
 decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md. Depois F-G2 →
 Fatias C/D/E/G → Módulo Contabilidade Tributária Segregada.
@@ -1676,14 +1713,16 @@ Pré-requisitos Fase 1 read-only OBRIGATÓRIOS (mapear, NÃO codar):
    (Fatias F-G2/C/D/E/G — entender provisionamento tenant + onboarding)
 2. Confirmar memória
    decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
-3. Mapear backend/src/cooperativas/ (provisionamento tenant atual —
+3. Ler docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md
+   (contexto pleno desta sessão — 5 commits, 44 specs, smoke E2E)
+4. Mapear backend/src/cooperativas/ (provisionamento tenant atual —
    entender o que existe vs o que precisa criar pro F-G2)
-4. Mapear backend/src/auth/perfil.enum.ts + roles.decorator.ts
+5. Mapear backend/src/auth/perfil.enum.ts + roles.decorator.ts
    (SUPER_ADMIN vs ADMIN — quem cria tenant, quem cria admin inicial)
-5. Mapear backend/src/convite-indicacao/cooperado-institucional.service.ts
+6. Mapear backend/src/convite-indicacao/cooperado-institucional.service.ts
    (padrão fantasma da F-G1 — reuso/extensão pro convite institucional
    do parceiro novo a nível SISGD)
-6. Mapear web/app/dashboard/super-admin/ + cooperativas/ (UI existente
+7. Mapear web/app/dashboard/super-admin/ + cooperativas/ (UI existente
    pra cooperativas — entender se já há "criar parceiro" ou precisa fatia)
 
 Decisão 23: SEMPRE Fase 1 read-only ANTES de codar.
@@ -1692,30 +1731,48 @@ pm2 restart cooperebr-frontend`. HMR NÃO ROLA neste setup.
 LIÇÃO Opção A (05/06): perfil COOPERADO único + contextos derivados.
 EMPRESA_CONVENIADA @deprecated (compat tokens em circulação).
 
-CONTEXTO DA SESSÃO 05/06 (4 commits a99a7f2..9291d32):
+CONTEXTO DA SESSÃO 05/06 tarde-noite (5 commits 9291d32..beef066):
 
-- a99a7f2 feat Fatia F-G1 — convite indicação web (admin) com cooperado
-  institucional fantasma `institucional+<cooperativaId>@sisgd.invalid`
-  (idempotente, skip BeneficioIndicacao/tokens via `ehInstitucional`)
-  + Opção A perfil COOPERADO único + créditos no Financeiro (gate
-  SEM_UC com CTA "Solicitar conversão → PIX")
-- 4690a5d fix pós-F-G1 — SUPER_ADMIN seletor de cooperativa no Dialog
-  (anti-spoof cross-tenant: ADMIN body.cooperativaId IGNORADO, usa
-  próprio JWT) + nome dinâmico no template WA (zero hardcode
-  "CoopereBR" — SISGD é multi-tenant) + login bootstrap 2 contas
-- fc4cc24 fix login box dev — 4 cards (SUPER_ADMIN + ADMIN — CoopereBR
-  + COOPERADO + Empresa cooperada PJ). Senhas Teste@123 via scripts
-  efêmeros já descartados
 - 9291d32 fix whitelist permanente `+5527999479097` (5 variantes E.164/
   sem DDI/máscara) + WhatsappEnvioResult (D-novo-WA-DEV-FALSE-OK
   RESOLVIDO) — `enviarMensagem` retorna { enviado, motivo: 'whitelist-
   dev' | 'numero-protegido' | 'erro-runtime' } em vez de `return`
   silencioso. UI dev propaga motivo
+- 8ab10c8 docs(sessao) fechamento M22 — Fatia F-G1 + Opção A
+- 4c05aea fix(ocr) RESILIÊNCIA OCR ANTHROPIC (D-novo-OCR-RESILIENCIA
+  P1 RESOLVIDO): retry exponencial 2s/4s/8s em 429/500/503/529 +
+  AbortController timeout 30s + max_tokens 2048→8192 + classe
+  OcrFalhaError com 7 motivos (anthropic-overload, anthropic-rate-limit,
+  anthropic-server, response-truncated, response-invalid-json, timeout,
+  unknown) + UI banner amber "Tentar de novo" pros recuperáveis em vez
+  de cair em modo manual. 30 specs verdes. Causa raiz: HTTP 529
+  overloaded_error transitório da Anthropic às 16:36 BRT (req
+  req_011Cbkg4RZ9ghXJSoLjtdD1V) virava "preencha manualmente" em
+  chamada one-shot.
+- 004372c fix(cadastro-web) RESOLVE COOPERATIVAID VIA CONVITE
+  (D-novo-CADWEB-CONV-TENANT P1 RESOLVIDO): /cadastro-web retornava
+  400 quando wizard ?conv= postava sem ?tenant= (link WA não tem). Fix
+  server-side: deriva cooperativaId do body.token espelhando padrão
+  anti-spoof de /auto-inscrever:568. Token inválido → 400 "Convite
+  inválido ou expirado". 6 specs + script reset-otp-convite-emergencial.ts
+- beef066 fix(cadastro-web) PORTA MEMBRO+CONSUME-ONCE PRO MESMO TX
+  (D-novo-CADWEB-CONV-MEMBRO P1 RESOLVIDO): smoke E2E expôs que
+  cadastroWebV2 criava Cooperado+UC mas NÃO criava ConvenioCooperado
+  nem marcava convite.usedAt — golden path quebrado, convite órfão
+  reusável. Fix: portado padrão de atomicidade de /auto-inscrever:710-792
+  pro cadastroWebV2 — consume-once + adicionarMembro('CONVITE_PUBLICO')
+  + cross-ref convite.membroId DENTRO da mesma $transaction Serializable
+  que cria Cooperado+UC. Zero estado órfão (rollback Postgres nativo).
+  8 specs novos + smoke E2E programático 0 falhas em 12 passos.
 
 ENTREGAS PRONTAS PRA SMOKE (carry-overs Luciano):
-- Golden path Fatia F-G1: /dashboard/indicacoes → Dialog "Convidar
-  conhecido" → SUPER_ADMIN escolhe coop → WA chega em +27999479097 →
-  abre /cadastro?conv= no celular → admin aprova in-portal.
+- Golden path Fatia F-G1 VALIDADO via smoke E2E programático
+  (backend/scripts/smoke-golden-path-conv-ref.ts) 0 falhas em 12 passos.
+  Convite ativo Luciano: token e1bb49fea48d8cd27a4a646e236c6b1cf1c8d097
+  a1c4eb883a88b6ef281b007b (OTP zerado, válido 12/06). Cola em
+  /cadastro?conv=<token> no celular → "Enviar código" → OTP chega no
+  +5527981341348 → preenche wizard → submit → cooperado pendente
+  aprovação na Clínica teste.
 - Portal Empresa golden path E2E manual via celular (192.168.3.88:3001)
   (carry-over da sessão 04/06).
 - Smoke gateway DOWN→UP F1 (precisa Asaas sandbox).
@@ -1756,27 +1813,33 @@ PRE-REQUISITOS LEITURA (ordem fixa):
 2. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
 3. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/
    decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
-4. docs/sessoes/2026-06-05-fatia-fg1-cooper-token-ajustes.md (esta)
-5. docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md
-   (contexto Fatia A+B + Portal Empresa)
-6. docs/especificacao-circuito-cooper-token-convenio.md (spec circuito)
-7. backend/src/convite-indicacao/cooperado-institucional.service.ts
+4. docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md (esta —
+   M23 hardening golden path com smoke E2E)
+5. docs/sessoes/2026-06-05-fatia-fg1-cooper-token-ajustes.md (anterior —
+   M22 Fatia F-G1 + Opção A)
+6. docs/sessoes/2026-06-04-portal-empresa-convergencia-cooper-token.md
+   (contexto Fatia A+B + Portal Empresa + Convergência Fatia 1+2)
+7. docs/especificacao-circuito-cooper-token-convenio.md (spec circuito)
+8. backend/src/convite-indicacao/cooperado-institucional.service.ts
    (padrão fantasma — reuso F-G2)
-8. backend/src/cooperativas/ (provisionamento tenant atual)
-9. backend/src/auth/perfil.enum.ts + roles.decorator.ts (SUPER_ADMIN)
-10. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
-11. git log --oneline -20
+9. backend/src/cooperativas/ (provisionamento tenant atual)
+10. backend/src/auth/perfil.enum.ts + roles.decorator.ts (SUPER_ADMIN)
+11. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
+12. git log --oneline -25
 
 CARRY-OVERS (não-bloqueantes):
-- Smoke E2E manual Luciano: golden path F-G1 via celular
-  (convite admin web → WA → cadastro?conv= → aprovar).
-- 3 débitos novos da sessão: D-novo-CAD-CONSUMO-MENSAL P2 +
-  D-novo-CONVITE-MENUS-UX P3 + D-novo-TESTS-MOCK-PRISMA P2.
+- Smoke E2E manual Luciano: golden path F-G1 via celular (convite
+  Clínica teste token e1bb49fe...b007b destravado, OTP zerado).
+- 6 débitos novos da sessão M23: D-novo-OTP-429-UX P3 +
+  D-novo-OTP-DEV-RELAX P3 + D-novo-AUTO-INSCREVER-DEPRECATION P3 +
+  D-novo-CAD-CONSUMO-MENSAL P2 + D-novo-CONVITE-MENUS-UX P3 +
+  D-novo-TESTS-MOCK-PRISMA P2.
 - D-novo-PORTAL-EMPRESA-SEED-TESTE P3 (remover seed + box credenciais
   antes de prod).
 - D-novo-DEV-LAN-ACCESS P3 (CORS+API_URL pra domínio público + rebuild).
 - 7 débitos /cadastro (sessão 04/06).
-- Slim /convite-convenio/[token] deprecation 1 sprint.
+- Slim /convite-convenio/[token] + /publico/convenios/auto-inscrever
+  candidatos a deprecação (housekeeping pós-fix CONV-MEMBRO).
 - D-novo-CT-VALIDACAO-FISCAL P0 (gate fiscal interno)
 - D-novo-CT-MULTI-REGIME-CLASSIFICACAO P1 (bloqueia Sinergia)
 - D-novo-BM P0 BLOQUEADOR REMOÇÃO PRÉ-PROD
@@ -1785,14 +1848,13 @@ CARRY-OVERS (não-bloqueantes):
 
 FRENTES OPERACIONAIS LUCIANO:
 ⏳ PRIORITARIO: Sessão de Validação Fiscal Interna (gate produção contábil)
-⏳ Smoke E2E real Fatia F-G1 via celular
+⏳ Smoke E2E real Fatia F-G1 via celular (golden path destravado)
 ⏳ Smoke E2E real Portal Empresa Conveniada via celular
-⏳ Smoke E2E /cadastro?conv= via WA real
 ⏳ Decisões regulatórias Sub-Sprint A (advogado) + STF Tema 536
 ⏳ Cadastrar Usuario E-Solares real
 
-DOC-SESSAO 05/06:
-docs/sessoes/2026-06-05-fatia-fg1-cooper-token-ajustes.md
+DOC-SESSAO 05/06 tarde-noite:
+docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md
 ```
 
 ---

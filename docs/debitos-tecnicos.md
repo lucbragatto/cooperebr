@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-06-05 — **Fatia F-G1 Circuito CooperToken + Opção A + WA honesto** (4 commits `a99a7f2..9291d32`). 3 novos catalogados (`D-novo-CAD-CONSUMO-MENSAL` P2 + `D-novo-CONVITE-MENUS-UX` P3 + `D-novo-TESTS-MOCK-PRISMA` P2) + 1 RESOLVIDO mesmo dia (`D-novo-WA-DEV-FALSE-OK` — status honesto do envio WA propagado até UI dev via `WhatsappEnvioResult`).
+**Última atualização:** 2026-06-05 (tarde-noite) — **Sprint Hardening Golden Path ?conv= / ?ref=** (7 commits `9291d32..beef066` no dia). **4 RESOLVIDOS:** `D-novo-OCR-RESILIENCIA` P1 (retry+timeout+max_tokens+motivo+UI, 30 specs · commit `4c05aea`) · `D-novo-CADWEB-CONV-TENANT` P1 (resolve cooperativaId via body.token anti-spoof, 6 specs · `004372c`) · `D-novo-CADWEB-CONV-MEMBRO` P1 (porta criação de Membro+consume-once pro mesmo tx, 8 specs + smoke E2E 0 falhas · `beef066`) · `D-novo-WA-DEV-FALSE-OK` P1 (WhatsappEnvioResult com motivo propagado até UI · `9291d32`). **6 ABERTOS:** `D-novo-OTP-429-UX` P3 (mensagem genérica no UI quando OTP estoura limite) · `D-novo-OTP-DEV-RELAX` P3 (rate-limit engessa smoke manual em DEV) · `D-novo-AUTO-INSCREVER-DEPRECATION` P3 (housekeeping pós-fix CONV-MEMBRO) · `D-novo-CAD-CONSUMO-MENSAL` P2 · `D-novo-CONVITE-MENUS-UX` P3 · `D-novo-TESTS-MOCK-PRISMA` P2.
 
 ---
 
@@ -4675,6 +4675,38 @@ Quando aparecer débito novo durante sessão:
 **Estimativa:** 15min Code + ops (apontar DNS + rebuild + deploy).
 
 **Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa).
+
+---
+
+### D-novo-OTP-429-UX — Mensagem genérica/técnica quando OTP estoura limite no /cadastro?conv= (P3)
+
+**Severidade:** P3 — cosmético UX; usuário entende o problema com esforço, mas a fricção é alta.
+
+**Origem:** Sessão 05/06/2026 — Luciano travado no smoke manual quando OTP estourou `otpReenvios=3/3` e a tela mostrou erro genérico tipo "429" / "Limite excedido" sem orientação clara do que fazer. Demanda reset emergencial via DB pra desbloquear.
+
+**Estado atual:** Backend (`convites-convenio.service.ts:541-561`) retorna `BadRequestException` com payload estruturado quando atinge limite:
+```typescript
+{ erro: 'reenvios_esgotados', mensagem: 'Limite de 3 reenvios atingido. ...' }
+```
+ou
+```typescript
+{ erro: 'bloqueado', desbloqueadoEm: <Date> }
+```
+
+Frontend `/cadastro?conv=` provavelmente só mostra `data.mensagem` ou `data.error` genérico, perdendo:
+- Diferença entre `reenvios_esgotados` (limite atingido) × `bloqueado` (tentativas erradas → 1h)
+- Tempo restante de bloqueio (`desbloqueadoEm` disponível)
+- Sugestão de ação: pedir novo convite ao admin, aguardar X minutos, etc.
+
+**Escopo proposto:**
+1. Mapear na UI `/cadastro?conv=` os 3 estados (`reenvios_esgotados` / `bloqueado` / `otp_invalido`) com banners + iconografia distintos.
+2. Pra `bloqueado`: countdown visual usando `desbloqueadoEm`.
+3. Pra `reenvios_esgotados`: CTA "Solicitar novo convite ao admin" (link mailto/WA pré-formatado com `tokenSufixo` pra rastreabilidade).
+4. Pra `otp_invalido`: feedback inline tentativas restantes (4/5, 3/5, etc).
+
+**Estimativa:** 2-3h Code (UI + 4 specs).
+
+**Status:** 📋 Catalogado em 2026-06-05 (smoke manual Luciano).
 
 ---
 
