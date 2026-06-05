@@ -4,7 +4,7 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
-**Última atualização:** 2026-06-03 — **Sprint Convite-Convênio Fatia 2 entregue** (`a definir`): endpoint público `POST /publico/convenios/auto-inscrever` `@Public` + param `origem: AdmissionOrigem` em `adicionarMembro` (default ADMIN_MANUAL preserva 4 callers) + CONVITE_PUBLICO cria membro PENDENTE_APROVACAO_EMPRESA + magic link `AprovacaoConvenioMembro` (token 64 hex TTL 7d) atomicamente + dedup CPF genérico (anti-enumeration) + quota `limiteMembros` + `kwhAlocadoMaxMensal` em CONSUMO_REAL + rate-limit `@Throttle` 30/h IP + check manual 60/h por convênio + outlier fallback MEDIA_12M no caminho público + índice aditivo `@@index([cooperadoId, createdAt])`. 11/11 specs verde. **3 follow-ups Fatia 3+**: cron limpeza pendente expirado + endpoints aprovação empresa/admin + notificações (5 helpers). Catalogados em **D-novo-CONVITE-CONVENIO-F3-F8** (P1).
+**Última atualização:** 2026-06-05 — **Fatia F-G1 Circuito CooperToken + Opção A + WA honesto** (4 commits `a99a7f2..9291d32`). 3 novos catalogados (`D-novo-CAD-CONSUMO-MENSAL` P2 + `D-novo-CONVITE-MENUS-UX` P3 + `D-novo-TESTS-MOCK-PRISMA` P2) + 1 RESOLVIDO mesmo dia (`D-novo-WA-DEV-FALSE-OK` — status honesto do envio WA propagado até UI dev via `WhatsappEnvioResult`).
 
 ---
 
@@ -4675,6 +4675,102 @@ Quando aparecer débito novo durante sessão:
 **Estimativa:** 15min Code + ops (apontar DNS + rebuild + deploy).
 
 **Status:** 📋 Catalogado em 2026-06-04 (HOTFIX Portal Empresa).
+
+---
+
+### D-novo-CAD-CONSUMO-MENSAL — Cadastro precisa capturar consumo mês-a-mês + projetar créditos + visibilidade pra empresa/cooperativa (P2)
+
+**Severidade:** P2 — não bloqueia operação atual (cadastro funciona com média), mas spec §9 do circuito CooperToken pressupõe consumo mensal pra projeção e Sprint Convênio Médico/PJ depende da visibilidade.
+
+**Origem:** Spec `docs/especificacao-circuito-cooper-token-convenio.md` §9 + decisão Luciano 05/06.
+
+**Impacto:**
+- Sem consumo mês-a-mês, projeção de créditos vira média linear — não reflete sazonalidade real (verão vs inverno; férias; expansão de UC).
+- Empresa cooperada PJ (após Opção A) não consegue ver/ajustar consumo dos titulares membros que ela custeia — quebra o ciclo de gestão.
+- Cooperativa não tem visão consolidada por mês × cooperado.
+
+**Escopo proposto:**
+1. Wizard `/cadastro` (público + admin) — após upload de fatura, OCR pré-preenche 12 meses de consumo (Claude já extrai). Campos editáveis. Default = média anual quando OCR falha.
+2. Schema: `Cooperado.consumoMensal Json?` (array 12 posições) ou nova tabela `ConsumoMensalCooperado(cooperadoId, ano, mes, kwh)` indexada.
+3. Engine `motor-proposta` lê consumo mensal pra cálculo de créditos projetados quando disponível; fallback média atual.
+4. Portal empresa (`/conveniada/convenio/[id]`) ganha visualização "Consumo dos membros" + edição inline.
+5. Dashboard cooperativa (`/dashboard/cooperados/[id]`) ganha aba "Consumo mensal" com timeline.
+
+**Estimativa:** 12-18h Code (schema delta aditivo + wizard + engine ajuste + 2 telas + specs).
+
+**Status:** 📋 Catalogado em 2026-06-05 (Fatia F-G1 CooperToken — decisão produto).
+
+---
+
+### D-novo-CONVITE-MENUS-UX — Consolidar/renomear 3 menus (Meu Convite / Indicações / Convites) + pointer pro admin (P3)
+
+**Severidade:** P3 — UX cosmético, não bloqueia funcionalidade.
+
+**Origem:** Auditoria sessão 05/06 após F-G1 — 3 menus distintos no portal/dashboard com nomes próximos confundem cooperado:
+- `/portal/meu-convite` — slot pessoal (cooperado fala "indique outro")
+- `/dashboard/indicacoes` — admin cria convite indicação web (Fatia F-G1)
+- `/dashboard/convenios/[id]/convites` — empresa convida funcionários (Fatia 3 Convite-Convênio)
+
+**Escopo proposto:**
+1. Renomear pra reduzir colisão semântica:
+   - `/portal/meu-convite` → "Indicar conhecido" (verbo claro)
+   - `/dashboard/indicacoes` → "Convites de indicação" (admin)
+   - `/dashboard/convenios/[id]/convites` → "Convites de membros" (já está OK)
+2. Em `/portal/meu-convite`, adicionar pointer condicional pro caminho admin quando cooperado tem perfil ADMIN (raro, mas existe).
+3. HelpBox 19/05 em cada uma explicando o público-alvo.
+
+**Estimativa:** 2-3h Code (3 renames + 1 pointer + 3 HelpBox + ajuste sidebar).
+
+**Status:** 📋 Catalogado em 2026-06-05 (Fatia F-G1 CooperToken).
+
+---
+
+### D-novo-TESTS-MOCK-PRISMA — Testes pré-existentes quebrados por mock Prisma incompleto (P2)
+
+**Severidade:** P2 — não bloqueia desenvolvimento (suites isoladas passam), mas mascara regressões.
+
+**Origem:** Verificado em sessão 05/06 via `git stash` antes de mudanças F-G1. Falhas pré-existentes (não introduzidas pela Fatia F-G1):
+- `backend/src/proprietario/proprietario.service.spec.ts`
+- `backend/src/cooperados/cooperados.service.spec.ts` (subset)
+- `backend/src/usinas/usinas.service.spec.ts` (subset)
+
+**Erro típico:**
+```
+TypeError: Cannot read properties of undefined (reading 'findMany')
+  at Object.<anonymous> (.../cooperados.service.spec.ts:XX:YY)
+```
+
+**Causa raiz:** mock Prisma usado nesses specs declara só alguns models (ex: `cooperado`) e operações (`create`, `findUnique`), mas o service evoluiu chamando `findMany`/`updateMany`/relações que não existem no mock. Mocks ficaram defasados sem teste guard.
+
+**Escopo proposto:**
+1. Criar helper compartilhado `backend/test/helpers/prisma-mock.ts` com factory completo (todos os models + todas operações jest.fn()).
+2. Migrar os 3 specs quebrados pro helper.
+3. Adicionar smoke runtime que falha CI quando spec chama operação não-mockada.
+4. (Opcional, futuro) Avaliar `jest-mock-extended` ou `prisma-mock` em vez de mock manual.
+
+**Estimativa:** 3-5h Code (helper + 3 migrações + smoke + docs).
+
+**Status:** 📋 Catalogado em 2026-06-05 (Fatia F-G1 CooperToken — descoberto via `git stash` audit).
+
+---
+
+### D-novo-WA-DEV-FALSE-OK — Envio WhatsApp em DEV retornava `Promise<void>` silencioso (falso positivo "enviado ✓") — ✅ RESOLVIDO
+
+**Severidade resolvida:** P1 dev (impactava confiança no smoke E2E — admin via "enviado" e WA nunca chegava).
+
+**Origem:** Descoberto 05/06 durante validação smoke F-G1 — admin criava convite no `/dashboard/indicacoes`, UI mostrava "✓ WhatsApp enviado", mas número novo `+27999479097` não recebia mensagem. Caminho raiz duplo:
+1. Número novo não estava na whitelist `whitelist-teste.ts` → `podeEnviarEmDev` retornava `false`.
+2. `WhatsappSenderService.enviarMensagem` retornava `Promise<void>` e fazia `return` silencioso em 2 caminhos (`isNumeroProtegido` + `!podeEnviarEmDev`) → callers viam `await sem throw = enviado`.
+
+**Fix aplicado (commit `9291d32`):**
+1. `WhatsappEnvioResult` type explícito: `{ enviado: boolean, motivo?: 'whitelist-dev'|'numero-protegido'|'erro-runtime' }`.
+2. `enviarMensagem` mudou de `Promise<void>` pra `Promise<WhatsappEnvioResult>`. Callers que ignoram retorno continuam compatíveis (await aceita ignorar). Callers que se importam (`convite-indicacao.service`) propagam motivo até UI dev.
+3. Whitelist permanente: adicionados 5 variantes do `+5527999479097` (E.164/sem DDI/máscara) em `WHITELIST_TELEFONES_TESTE`.
+4. UI `/dashboard/indicacoes` mostra feedback 3-estados honesto (verde enviado / amber whitelist-dev / amber numero-protegido / vermelho erro-runtime).
+
+**Comportamento em PROD:** `AMBIENTE_REAL=true` → nenhum skip dev acontece → só falha real vira `{ enviado: false, motivo: 'erro-runtime' }` ou throw HTTP 4xx/5xx.
+
+**Status:** ✅ RESOLVIDO em 2026-06-05 commit `9291d32`. Catalogado pra registro histórico do padrão (`Promise<void>` silencioso é anti-pattern — sempre `Result` explícito em integrações externas).
 
 ---
 

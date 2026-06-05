@@ -192,3 +192,19 @@ agora **atualizado com as novidades:**
 - **⚠️ STF Tema 536** em julgamento (plenário físico) — monitorar; cenário fallback se tributar.
 - **CLT 458** no convênio — risco da empresa; cláusula no contrato de convênio.
 - **Lei 12.865** — só relevante se abrir rede a não-cooperados (não é o caso: cooperado-only).
+
+## 9. Débito de cadastro/onboarding — D-novo-CAD-CONSUMO-MENSAL (capturado 05/06 na validação)
+
+**Origem:** Luciano, percorrendo o `/cadastro?conv=` (step Instalação), notou que o consumo é **1 campo só** ("consumo médio mensal"). Quer **mês-a-mês + projeção + visibilidade**.
+
+**Feature desejada:**
+1. Step Instalação: capturar consumo **mês a mês (12 meses)** em vez de 1 média. **Recomendação: o OCR da fatura PRÉ-PREENCHE** os 12 meses (a conta de luz já traz o histórico) + a pessoa **confere/edita** (menos fricção). Manual como fallback.
+2. Calcular **total + média** automaticamente.
+3. **Projeção de créditos:** mostrar à pessoa "você vai receber ~X kWh de crédito/mês" / economia estimada — **reusa o motor-proposta**.
+4. **Salvar** histórico mensal + média + projeção, vinculado ao cadastro/UC/contrato.
+5. **Visibilidade:** a **empresa conveniada** (ex.: Clinica) vê os dados dos seus funcionários (portal empresa) **e** a **cooperativa** (admin) vê na **lista de espera** / cadastro do membro.
+6. Contexto: a pessoa entra na **lista de espera** → admin aprova **vendo consumo + projeção**.
+
+**Reusa:** motor-proposta (cálculo), faturas/OCR (histórico mensal), lista-espera, portal-empresa (visibilidade).
+**Fase 1 necessária:** mapear estruturas de consumo (FaturaProcessada / histórico / campos da UC), o que o OCR já extrai, o cálculo do motor, onde o cadastro salva hoje, como lista-espera + portal-empresa exibem dados do membro.
+**Custo:** médio (~8-15h). Fatia própria. NÃO bloqueia F-G2.
