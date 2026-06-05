@@ -211,7 +211,54 @@ interface AnthropicContent {
 
 interface AnthropicResponse {
   content: AnthropicContent[];
+  // D-novo-OCR-RESILIENCIA (05/06/2026): `stop_reason === 'max_tokens'` indica
+  // truncamento — JSON parcial não vai parsear. Detectar antes do JSON.parse pra
+  // dar motivo correto na UI ("response-truncated" vs "overload").
+  stop_reason?: string;
 }
+
+/**
+ * D-novo-OCR-RESILIENCIA (05/06/2026) — falha categorizada do OCR Anthropic.
+ *
+ * Motivação: até hoje qualquer falha (overload, timeout, JSON truncado, rede)
+ * virava `BadRequestException('Erro na API Claude: ...')` e a UI mostrava
+ * sempre "Leitura automática não disponível. Preencha manualmente." mesmo
+ * quando o erro era transitório recuperável (HTTP 529 Overloaded — caso
+ * registrado 2026-06-05 16:36:11 request_id req_011Cbkg4RZ9ghXJSoLjtdD1V).
+ *
+ * Agora o caller (PublicoController) inspeciona `motivo` e mostra mensagem
+ * apropriada: "Serviço ocupado, tente de novo em ~30s" pra `anthropic-overload`
+ * vs "Preenche manual" pros casos terminais.
+ */
+export type OcrFalhaMotivo =
+  | 'anthropic-overload'      // HTTP 529 — capacidade lotada do lado deles
+  | 'anthropic-rate-limit'    // HTTP 429 — rate limit deles ou nosso
+  | 'anthropic-server'        // HTTP 500/503 — erro transitório de servidor
+  | 'response-truncated'      // stop_reason=max_tokens — JSON cortado no meio
+  | 'response-invalid-json'   // resposta veio mas não é JSON parseável
+  | 'timeout'                 // AbortController timeout local (30s)
+  | 'unknown';                // qualquer outro (rede caiu, DNS, etc)
+
+export class OcrFalhaError extends Error {
+  constructor(
+    message: string,
+    public readonly motivo: OcrFalhaMotivo,
+    public readonly requestId: string | null = null,
+    public readonly status: number | null = null,
+    public readonly tamanhoBase64: number | null = null,
+  ) {
+    super(message);
+    this.name = 'OcrFalhaError';
+  }
+}
+
+// D-novo-OCR-RESILIENCIA — constantes do retry com backoff exponencial.
+// Status considerados transitórios: 429 (rate-limit), 500/503 (server),
+// 529 (overloaded). Demais não-OK = terminal (auth, payload, model, etc).
+const OCR_STATUS_RETRYABLE = new Set([429, 500, 503, 529]);
+const OCR_RETRY_DELAYS_MS = [2000, 4000, 8000]; // 3 retries = 4 tentativas total
+const OCR_TIMEOUT_MS = 30_000;
+const OCR_MAX_TOKENS = 8192; // antes era 2048 — apertado pra histórico 13 meses + tarifas
 
 const tipoDocumentoLabel: Record<string, string> = {
   RG_FRENTE: 'RG (Frente)',
@@ -1514,7 +1561,7 @@ IMPORTANTE:
 
     const body = {
       model: CLAUDE_MODEL,
-      max_tokens: 2048,
+      max_tokens: OCR_MAX_TOKENS,
       messages: [
         {
           role: 'user',
@@ -1532,33 +1579,57 @@ IMPORTANTE:
       ],
     };
 
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
-      },
-      body: JSON.stringify(body),
-    });
+    const tamanhoBase64 = arquivoBase64.length;
+    this.logger.log(
+      `[OCR] Iniciando extração: tipoArquivo=${tipoArquivo} tamanhoBase64=${tamanhoBase64}`,
+    );
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new BadRequestException(`Erro na API Claude: ${err}`);
-    }
+    // D-novo-OCR-RESILIENCIA — chamada vai com retry + timeout. Lança OcrFalhaError
+    // categorizada quando esgota retries ou erro terminal.
+    const { response, requestId } = await this.chamarAnthropicComRetry(
+      body,
+      tamanhoBase64,
+    );
 
     const result = (await response.json()) as AnthropicResponse;
+
+    // stop_reason=max_tokens → resposta truncada, JSON parcial não vai parsear.
+    // Detectar ANTES do parse pra dar motivo correto (response-truncated, não
+    // response-invalid-json), facilitando triagem futura.
+    if (result.stop_reason === 'max_tokens') {
+      this.logger.warn(
+        `[OCR] Resposta truncada (stop_reason=max_tokens) requestId=${requestId} tamanhoBase64=${tamanhoBase64} max_tokens=${OCR_MAX_TOKENS}`,
+      );
+      throw new OcrFalhaError(
+        'Resposta da Claude truncada por max_tokens',
+        'response-truncated',
+        requestId,
+        200,
+        tamanhoBase64,
+      );
+    }
+
     const text = result.content.find((c) => c.type === 'text')?.text ?? '';
 
     let dados: DadosExtraidos;
     try {
       dados = JSON.parse(text) as DadosExtraidos;
     } catch {
-      throw new BadRequestException(
+      this.logger.warn(
+        `[OCR] JSON inválido na resposta Anthropic requestId=${requestId} tamanhoBase64=${tamanhoBase64} preview="${text.slice(0, 120)}"`,
+      );
+      throw new OcrFalhaError(
         `Resposta da Claude não é JSON válido: ${text.slice(0, 200)}`,
+        'response-invalid-json',
+        requestId,
+        200,
+        tamanhoBase64,
       );
     }
+
+    this.logger.log(
+      `[OCR] Extração OK requestId=${requestId} tamanhoBase64=${tamanhoBase64}`,
+    );
 
     // Sprint 6 Tickets 8: pós-processamento de normalização.
     // OCR retorna numeroUC com pontos/hífen e mesReferencia em MM/YYYY.
@@ -1572,6 +1643,171 @@ IMPORTANTE:
     }
 
     return dados;
+  }
+
+  /**
+   * D-novo-OCR-RESILIENCIA (05/06/2026) — chamada Anthropic com retry exponencial
+   * + timeout local. Lança `OcrFalhaError` categorizada quando esgota retries
+   * ou em erro terminal.
+   *
+   * Política:
+   * - 4 tentativas total (1 + 3 retries) com delays 2s/4s/8s.
+   * - Retryable: HTTP 429 (rate-limit), 500/503 (server), 529 (overloaded),
+   *   timeout local 30s, erros de rede genéricos.
+   * - Terminal: HTTP 4xx (exceto 429), JSON inválido, payload inválido.
+   *
+   * Telemetria: cada tentativa loga status + request_id + tamanhoBase64 +
+   * tentativa atual. Sucesso retorna `response` (Response não consumida) +
+   * `requestId` extraído do header.
+   */
+  private async chamarAnthropicComRetry(
+    body: object,
+    tamanhoBase64: number,
+  ): Promise<{ response: Response; requestId: string | null }> {
+    const totalTentativas = OCR_RETRY_DELAYS_MS.length + 1;
+
+    for (let tentativa = 0; tentativa < totalTentativas; tentativa++) {
+      const isUltimaTentativa = tentativa === totalTentativas - 1;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(ANTHROPIC_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.ANTHROPIC_API_KEY!,
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'pdfs-2024-09-25',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        // Sucesso: retorna response sem consumir o body
+        if (response.ok) {
+          const requestId =
+            response.headers.get('request-id') ??
+            response.headers.get('x-request-id');
+          if (tentativa > 0) {
+            this.logger.log(
+              `[OCR] Sucesso após ${tentativa} retry(s) requestId=${requestId}`,
+            );
+          }
+          return { response, requestId };
+        }
+
+        // Falha HTTP: ler body + extrair request_id
+        const errBody = await response.text();
+        const requestId =
+          response.headers.get('request-id') ??
+          response.headers.get('x-request-id') ??
+          this.extrairRequestIdDoBody(errBody);
+
+        const retryable = OCR_STATUS_RETRYABLE.has(response.status);
+
+        if (!retryable || isUltimaTentativa) {
+          const motivo = this.classificarStatusAnthropic(response.status);
+          this.logger.warn(
+            `[OCR] Anthropic falhou (final): status=${response.status} motivo=${motivo} requestId=${requestId} tamanhoBase64=${tamanhoBase64} tentativa=${tentativa + 1}/${totalTentativas} body=${errBody.slice(0, 250)}`,
+          );
+          throw new OcrFalhaError(
+            `Erro na API Claude: ${errBody}`,
+            motivo,
+            requestId,
+            response.status,
+            tamanhoBase64,
+          );
+        }
+
+        // Retryable + tem tentativa restante: aguarda backoff
+        const delay = OCR_RETRY_DELAYS_MS[tentativa];
+        this.logger.warn(
+          `[OCR] Anthropic ${response.status} (retryable) — aguardando ${delay}ms (tentativa ${tentativa + 1}/${totalTentativas}, requestId=${requestId})`,
+        );
+        await this.sleep(delay);
+      } catch (err: unknown) {
+        clearTimeout(timeoutId);
+
+        // OcrFalhaError já categorizada → propaga
+        if (err instanceof OcrFalhaError) throw err;
+
+        const isAbort =
+          err instanceof Error &&
+          (err.name === 'AbortError' || err.message.includes('aborted'));
+
+        if (isAbort) {
+          if (isUltimaTentativa) {
+            this.logger.warn(
+              `[OCR] Timeout local ${OCR_TIMEOUT_MS}ms (final) tamanhoBase64=${tamanhoBase64} tentativa=${tentativa + 1}/${totalTentativas}`,
+            );
+            throw new OcrFalhaError(
+              `Timeout de ${OCR_TIMEOUT_MS}ms ao chamar Anthropic`,
+              'timeout',
+              null,
+              null,
+              tamanhoBase64,
+            );
+          }
+          const delay = OCR_RETRY_DELAYS_MS[tentativa];
+          this.logger.warn(
+            `[OCR] Timeout local ${OCR_TIMEOUT_MS}ms — retry em ${delay}ms (tentativa ${tentativa + 1}/${totalTentativas})`,
+          );
+          await this.sleep(delay);
+          continue;
+        }
+
+        // Erro de rede genérico (DNS, conexão recusada, etc)
+        const msg = err instanceof Error ? err.message : String(err);
+        if (isUltimaTentativa) {
+          this.logger.warn(
+            `[OCR] Erro de rede (final): ${msg} tamanhoBase64=${tamanhoBase64} tentativa=${tentativa + 1}/${totalTentativas}`,
+          );
+          throw new OcrFalhaError(
+            `Erro de rede ao chamar Anthropic: ${msg}`,
+            'unknown',
+            null,
+            null,
+            tamanhoBase64,
+          );
+        }
+        const delay = OCR_RETRY_DELAYS_MS[tentativa];
+        this.logger.warn(
+          `[OCR] Erro de rede (${msg}) — retry em ${delay}ms (tentativa ${tentativa + 1}/${totalTentativas})`,
+        );
+        await this.sleep(delay);
+      }
+    }
+
+    // Inalcançável (loop sempre return ou throw na última tentativa), defensivo
+    throw new OcrFalhaError(
+      'Falha inesperada no retry loop',
+      'unknown',
+      null,
+      null,
+      tamanhoBase64,
+    );
+  }
+
+  private classificarStatusAnthropic(status: number): OcrFalhaMotivo {
+    if (status === 529) return 'anthropic-overload';
+    if (status === 429) return 'anthropic-rate-limit';
+    if (status === 500 || status === 503) return 'anthropic-server';
+    return 'unknown';
+  }
+
+  private extrairRequestIdDoBody(body: string): string | null {
+    try {
+      const parsed = JSON.parse(body) as { request_id?: string };
+      return parsed?.request_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private calcularMedia(

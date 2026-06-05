@@ -8,7 +8,7 @@ import { AuditLog } from '../audit/audit-log.decorator';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
-import { FaturasService } from '../faturas/faturas.service';
+import { FaturasService, OcrFalhaError, OcrFalhaMotivo } from '../faturas/faturas.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { IndicacoesService } from '../indicacoes/indicacoes.service';
 import { ConveniosMembrosService } from '../convenios/convenios-membros.service';
@@ -1196,6 +1196,7 @@ export class PublicoController {
   ): Promise<{
     sucesso: boolean;
     mensagem?: string;
+    motivo?: OcrFalhaMotivo;
     dados: Record<string, unknown>;
   }> {
     // Aceitar base64 via JSON quando não vier arquivo multipart
@@ -1213,8 +1214,8 @@ export class PublicoController {
           : dadosExtraidos.consumoAtualKwh || 0;
         const temCreditosInjetados = !!(dadosExtraidos as any).energiaInjetadaKwh && (dadosExtraidos as any).energiaInjetadaKwh > 0;
         return { sucesso: true, dados: { ...dadosExtraidos, consumoMedio, temCreditosInjetados } };
-      } catch(e: any) {
-        return { sucesso: false, mensagem: 'OCR não disponivel ou falhou: ' + (e.message || ''), dados: {} };
+      } catch (e: unknown) {
+        return this.respostaOcrFalha(e);
       }
     }
     if (!arquivo) {
@@ -1272,13 +1273,61 @@ export class PublicoController {
         },
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      this.logger.warn(`OCR fatura pública falhou: ${message}`);
+      return this.respostaOcrFalha(err);
+    }
+  }
+
+  /**
+   * D-novo-OCR-RESILIENCIA (05/06/2026) — converte erro do OCR em payload
+   * estruturado com `motivo` categorizado pra UI decidir a mensagem.
+   *
+   * Mensagens diferenciam:
+   * - `anthropic-overload` / `anthropic-rate-limit` / `anthropic-server` /
+   *   `timeout` → recuperáveis: UI sugere tentar de novo.
+   * - `response-truncated` / `response-invalid-json` / `unknown` → terminais
+   *   nesta tentativa: UI orienta preencher manualmente.
+   */
+  private respostaOcrFalha(err: unknown): {
+    sucesso: false;
+    mensagem: string;
+    motivo: OcrFalhaMotivo;
+    dados: Record<string, unknown>;
+  } {
+    if (err instanceof OcrFalhaError) {
+      this.logger.warn(
+        `OCR fatura pública falhou: motivo=${err.motivo} status=${err.status} requestId=${err.requestId} tamanhoBase64=${err.tamanhoBase64} message="${err.message.slice(0, 250)}"`,
+      );
       return {
         sucesso: false,
-        mensagem: 'Leitura automática não disponível. Preencha manualmente.',
+        mensagem: this.mensagemPorMotivo(err.motivo),
+        motivo: err.motivo,
         dados: {},
       };
+    }
+    const message = err instanceof Error ? err.message : 'Erro desconhecido';
+    this.logger.warn(`OCR fatura pública falhou (não categorizado): ${message}`);
+    return {
+      sucesso: false,
+      mensagem: 'Leitura automática não disponível. Preencha manualmente.',
+      motivo: 'unknown',
+      dados: {},
+    };
+  }
+
+  private mensagemPorMotivo(motivo: OcrFalhaMotivo): string {
+    switch (motivo) {
+      case 'anthropic-overload':
+        return 'Serviço de leitura ocupado agora. Tente de novo em ~30 segundos.';
+      case 'anthropic-rate-limit':
+        return 'Muitas leituras em sequência. Aguarde ~30 segundos e tente de novo.';
+      case 'anthropic-server':
+      case 'timeout':
+        return 'Falha temporária na leitura. Tente de novo em alguns segundos.';
+      case 'response-truncated':
+      case 'response-invalid-json':
+      case 'unknown':
+      default:
+        return 'Leitura automática não disponível. Preencha manualmente.';
     }
   }
 

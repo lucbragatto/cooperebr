@@ -163,6 +163,10 @@ function CadastroPageInner() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSucesso, setOcrSucesso] = useState(false);
   const [ocrErro, setOcrErro] = useState('');
+  // D-novo-OCR-RESILIENCIA (05/06/2026) — motivo categorizado retornado pelo
+  // backend distingue recuperáveis (overload/rate-limit/timeout → mostra
+  // "Tentar de novo") de terminais (truncated/invalid-json/unknown → modo manual).
+  const [ocrMotivoRecuperavel, setOcrMotivoRecuperavel] = useState(false);
   const [ocrDados, setOcrDados] = useState<OcrDados>({});
   const [historicoConsumo, setHistoricoConsumo] = useState<HistoricoItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -425,6 +429,7 @@ function CadastroPageInner() {
   async function handleOcrUpload(file: File) {
     setOcrLoading(true);
     setOcrErro('');
+    setOcrMotivoRecuperavel(false);
     setOcrSucesso(false);
 
     try {
@@ -479,12 +484,21 @@ function CadastroPageInner() {
           setCreditosInjetados(true);
         }
       } else {
+        // D-novo-OCR-RESILIENCIA (05/06/2026) — backend retorna `motivo` categorizado.
+        // Recuperáveis (Anthropic ocupada / timeout / rate-limit) → NÃO cai em modo
+        // manual: usuário pode reupload a mesma fatura em alguns segundos.
+        // Terminais (truncated / JSON inválido / unknown) → vai pra modo manual.
+        const motivoRecuperavel = ['anthropic-overload', 'anthropic-rate-limit', 'anthropic-server', 'timeout'].includes(data.motivo);
         setOcrErro(data.mensagem || 'Nao foi possivel ler automaticamente.');
-        setModoManual(true);
-        setFaturaArquivo(file);
+        setOcrMotivoRecuperavel(motivoRecuperavel);
+        if (!motivoRecuperavel) {
+          setModoManual(true);
+          setFaturaArquivo(file);
+        }
       }
     } catch {
       setOcrErro('Erro ao processar fatura.');
+      setOcrMotivoRecuperavel(false);
       setModoManual(true);
       setFaturaArquivo(file);
     } finally {
@@ -815,8 +829,19 @@ function CadastroPageInner() {
           ) : (
             <>
               {ocrErro && !modoManual && (
-                <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                <div
+                  className={`border rounded-md p-3 text-sm ${
+                    ocrMotivoRecuperavel
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
                   {ocrErro}
+                  {ocrMotivoRecuperavel && (
+                    <span className="block mt-1 text-xs text-amber-700">
+                      Clique abaixo pra reenviar a mesma fatura.
+                    </span>
+                  )}
                 </div>
               )}
               {!modoManual && (
@@ -827,7 +852,7 @@ function CadastroPageInner() {
                   className="w-full gap-2 border-dashed border-2 border-amber-300 hover:border-amber-400 hover:bg-amber-50 py-6"
                 >
                   <Upload className="h-5 w-5 text-amber-600" />
-                  <span>Enviar foto ou PDF da fatura</span>
+                  <span>{ocrMotivoRecuperavel ? 'Tentar enviar de novo' : 'Enviar foto ou PDF da fatura'}</span>
                 </Button>
               )}
             </>
