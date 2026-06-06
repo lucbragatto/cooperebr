@@ -46,12 +46,21 @@ describe('ConvenioAprovacaoService.decidirAprovacaoEmpresaLogada — HOTFIX 04/0
 
   const notificacoesMock = { criar: jest.fn().mockResolvedValue(undefined) } as any;
   const waSenderMock = { enviarMensagem: jest.fn() } as any;
+  // Fatia 1.3: MembroBuilder injetado. Aqui só `decidirAprovacaoEmpresaLogada`
+  // é testado — esse caminho sai em PENDENTE_APROVACAO_ADMIN (gate intermediário),
+  // NÃO chama o helper. Mock vazio é suficiente.
+  const membroBuilderMock = { construirMembroCompleto: jest.fn() } as any;
 
   let service: ConvenioAprovacaoService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ConvenioAprovacaoService(prismaMock, notificacoesMock, waSenderMock);
+    service = new ConvenioAprovacaoService(
+      prismaMock,
+      notificacoesMock,
+      waSenderMock,
+      membroBuilderMock,
+    );
 
     // notificarPosAprovacaoEmpresa faz findUnique direto (não tx) — mocka
     // pra não quebrar com null e seguir o fluxo.

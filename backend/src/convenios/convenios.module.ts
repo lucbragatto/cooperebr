@@ -18,6 +18,11 @@ import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — PlanoClubeService injetado
 // em ConveniosCusteioService pra somar membros × mensalidade na consolidada.
 import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
+// Sprint Onboarding Bloco 1 Fatia 1.3 (06/06/2026) — Helper que CONSTRÓI o membro
+// no gate MEMBRO_ATIVO (motor.aceitar + matrícula clube + flip status + pendência).
+import { MembroBuilderService } from './membro-builder.service';
+import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
+import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
 
 @Module({
   // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
@@ -39,6 +44,11 @@ import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
     forwardRef(() => WhatsappModule),
     NotificacoesModule,
     PlanoClubeModule,
+    // Fatia 1.3: forwardRef pra MotorProposta pois MotorPropostaModule importa
+    // ConveniosModule (ciclo Convenios↔MotorProposta resolvido com lazy DI).
+    // ClubeVantagensModule NÃO tem ciclo com Convenios — import direto.
+    forwardRef(() => MotorPropostaModule),
+    ClubeVantagensModule,
   ],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [
@@ -49,6 +59,7 @@ import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
     ConveniosJob,
     ConvitesConvenioService,
     ConvenioAprovacaoService,
+    MembroBuilderService,
     PrismaService,
   ],
   exports: [
@@ -58,6 +69,7 @@ import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
     ConveniosCusteioService,
     ConvitesConvenioService,
     ConvenioAprovacaoService,
+    MembroBuilderService,
   ],
 })
 export class ConveniosModule {}

@@ -79,12 +79,28 @@ describe('ConvenioAprovacaoService — Fatia 3', () => {
 
   const notificacoesMock = { criar: jest.fn().mockResolvedValue(undefined) } as any;
   const waSenderMock = { enviarMensagem: jest.fn().mockResolvedValue(undefined) } as any;
+  // Fatia 1.3: helper que CONSTRÓI o membro completo no gate MEMBRO_ATIVO.
+  // Mock retorna sucesso default; testes específicos podem sobrescrever.
+  const membroBuilderMock = {
+    construirMembroCompleto: jest.fn().mockResolvedValue({
+      cooperadoAtivado: true,
+      contratoCriado: true,
+      contratoId: 'ctr-mock-1',
+      clubeMatriculado: true,
+      pendenciaMotor: null,
+    }),
+  } as any;
 
   let service: ConvenioAprovacaoService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ConvenioAprovacaoService(prismaMock, notificacoesMock, waSenderMock);
+    service = new ConvenioAprovacaoService(
+      prismaMock,
+      notificacoesMock,
+      waSenderMock,
+      membroBuilderMock,
+    );
   });
 
   // ─── validarTokenAprovacao ──────────────────────────────────────

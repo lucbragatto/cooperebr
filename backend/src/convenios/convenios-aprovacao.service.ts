@@ -17,6 +17,9 @@ import * as crypto from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+// Sprint Onboarding Bloco 1 Fatia 1.3 (06/06/2026) — gate MEMBRO_ATIVO constrói
+// o membro completo (contrato + clube + flip status + pendência).
+import { MembroBuilderService } from './membro-builder.service';
 
 /**
  * Sprint Convite-Convênio Fatia 3 (03/06/2026) — Aprovação 3 portas.
@@ -59,6 +62,8 @@ export class ConvenioAprovacaoService {
     private readonly prisma: PrismaService,
     private readonly notificacoes: NotificacoesService,
     private readonly waSender: WhatsappSenderService,
+    // Fatia 1.3 — gate único MEMBRO_ATIVO.
+    private readonly membroBuilder: MembroBuilderService,
   ) {}
 
   // ─── Porta 1 (EMPRESA via magic link) ─────────────────────────────
@@ -473,6 +478,25 @@ export class ConvenioAprovacaoService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    // Fatia 1.3 — CONSTRÓI o membro (contrato + clube + flip status + pendência).
+    // Roda FORA do tx Serializable acima porque motor.aceitar abre tx Serializable
+    // própria (Prisma savepoint nested não funciona bem em Serializable).
+    // try/catch — NUNCA propaga. Aprovação JÁ foi feita; falha aqui vira pendência
+    // catalogada no Cooperado, admin reconcilia depois (Fatia 1.4).
+    try {
+      await this.membroBuilder.construirMembroCompleto({
+        cooperadoId: membro.cooperadoId,
+        convenioId: membro.convenio.id,
+        cooperativaId,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'erro desconhecido';
+      this.logger.warn(
+        `[aprovar-admin] construirMembroCompleto falhou (membroId=${membroId}): ${msg} — ` +
+          `aprovação MEMBRO_ATIVO já efetivada, reconciliação manual via Fatia 1.4.`,
+      );
+    }
 
     // TODO Fatia 6: notif WA+email pro Cooperado ("você foi aprovado!")
     await this.notificacoes
