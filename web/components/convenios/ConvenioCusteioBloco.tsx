@@ -33,6 +33,9 @@ export interface ConvenioCusteioState {
   // D-novo-CT-TARIFA-FIXA-EMPRESA
   tipoTarifaEmpresa: TipoTarifaEmpresa;
   tarifaFixaKwhEmpresa: number | '';
+  // Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — Plano de Clube vinculado.
+  // String vazia = sem plano (default).
+  planoClubeId: string;
 }
 
 interface ConvenioCusteioBlocoProps {
@@ -48,6 +51,19 @@ interface CooperadoOption {
   cpf?: string;
   status?: string;
   tipoCooperado?: string;
+}
+
+interface PlanoClubeOption {
+  id: string;
+  nome: string;
+  valorMensal: string;
+  cobra: boolean;
+  ativo: boolean;
+}
+
+function formatBRL(v: number | string) {
+  const n = typeof v === 'string' ? Number(v) : v;
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 const PAGADOR_OPCOES: { value: Pagador; label: string }[] = [
@@ -73,6 +89,9 @@ export function ConvenioCusteioBloco({
 }: ConvenioCusteioBlocoProps) {
   const [cooperados, setCooperados] = useState<CooperadoOption[]>([]);
   const [carregandoCoop, setCarregandoCoop] = useState(false);
+  // Fatia 0.2 — planos ativos do tenant pra select.
+  const [planosClube, setPlanosClube] = useState<PlanoClubeOption[]>([]);
+  const [carregandoPlanos, setCarregandoPlanos] = useState(false);
 
   useEffect(() => {
     // Carrega cooperados ATIVOs do tenant pra dropdown do pagador.
@@ -93,6 +112,24 @@ export function ConvenioCusteioBloco({
       .catch(() => setCooperados([]))
       .finally(() => setCarregandoCoop(false));
   }, [state.pagador, cooperados.length]);
+
+  // Fatia 0.2 — carrega planos de clube ATIVOS do tenant. Sempre carrega
+  // (independente do pagador), pois o select pode ser usado em qualquer modelo.
+  useEffect(() => {
+    if (planosClube.length > 0) return;
+    setCarregandoPlanos(true);
+    api
+      .get<PlanoClubeOption[]>('/plano-clube')
+      .then((r) => {
+        setPlanosClube(
+          (r.data ?? [])
+            .filter((p) => p.ativo)
+            .sort((a, b) => a.nome.localeCompare(b.nome)),
+        );
+      })
+      .catch(() => setPlanosClube([]))
+      .finally(() => setCarregandoPlanos(false));
+  }, [planosClube.length]);
 
   const isEmpresa = state.pagador === 'EMPRESA';
   const isAlocacaoFixa = state.baseCobrancaCusteio === 'ALOCACAO_FIXA';
@@ -154,6 +191,8 @@ export function ConvenioCusteioBloco({
                 // D-novo-CT-TARIFA-FIXA-EMPRESA: limpa também os novos campos
                 tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
                 tarifaFixaKwhEmpresa: '',
+                // Fatia 0.2 — clube só faz sentido em EMPRESA paga
+                planoClubeId: '',
               });
             } else {
               onChange({ pagador: novo });
@@ -326,6 +365,49 @@ export function ConvenioCusteioBloco({
               </p>
             </div>
           )}
+
+          {/* Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — Plano de Clube vinculado */}
+          <div className="mt-4 pt-4 border-t border-emerald-200">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Plano de Clube vinculado (opcional)
+            </label>
+            <select
+              value={state.planoClubeId}
+              onChange={(e) => onChange({ planoClubeId: e.target.value })}
+              className="w-full border rounded px-2 py-1.5 text-sm bg-white"
+              disabled={carregandoPlanos}
+            >
+              <option value="">
+                {carregandoPlanos ? '— carregando planos —' : '— Sem plano de clube —'}
+              </option>
+              {planosClube.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}{' '}
+                  {p.cobra
+                    ? `— ${formatBRL(p.valorMensal)}/mês`
+                    : '— Grátis'}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 text-[11px] text-gray-700 bg-amber-50 border border-amber-200 rounded p-2">
+              <p>
+                <strong>Ao escolher um plano de clube aqui, a EMPRESA paga a mensalidade de clube
+                de todos os funcionários ativos do convênio</strong> (adesão obrigatória pra
+                funcionário de conveniado).
+              </p>
+              <p className="mt-1">
+                O valor é somado à energia na cobrança consolidada, discriminado em linha separada:
+                <em> Energia (com desconto) + (nº membros × mensalidade) = Total</em>.
+              </p>
+              <p className="mt-1 text-gray-600">
+                Não precisa cadastrar plano? Crie um em{' '}
+                <a href="/dashboard/clube/planos" className="underline" target="_blank">
+                  /dashboard/clube/planos
+                </a>
+                {' '}ou deixe "Sem plano de clube".
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

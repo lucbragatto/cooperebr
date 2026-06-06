@@ -1437,6 +1437,14 @@ model ContratoConvenio {
   // ── Tier mínimo Clube de Vantagens ──
   tierMinimoClube String? // null = sem requisito; 'BRONZE' | 'PRATA' | 'OURO' | 'DIAMANTE'
 
+  // ── Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — Plano de Clube ──
+  // Quando preenchido (e PlanoClube.cobra=true), a EMPRESA paga a mensalidade
+  // do clube de TODOS os membros ativos (adesão é obrigatória pra funcionário
+  // de conveniado) — soma `membros.length × planoClube.valorMensal` ao valor
+  // da energia na cobrança consolidada (Fatia 0.4). null = convênio sem clube.
+  planoClubeId String?
+  planoClube   PlanoClube? @relation(fields: [planoClubeId], references: [id])
+
   // ── Sprint 9B: Benefício do conveniado via tokens ──
   tipoBeneficioConveniado     String   @default("DESCONTO") // DESCONTO | TOKENS | MISTO
   percentualBeneficioToken    Decimal? @db.Decimal(5, 2) // 0-100, usado se MISTO
@@ -2335,6 +2343,9 @@ model PlanoClube {
   tierMinimo    String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  // Fatia 0.2 — back-ref pra ContratoConvenio.planoClubeId.
+  contratosConvenio ContratoConvenio[]
 
   @@index([cooperativaId])
   @@index([cooperativaId, ativo])

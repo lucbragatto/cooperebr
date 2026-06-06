@@ -224,6 +224,14 @@ export class CreateConvenioDto {
   @IsNumber()
   @Min(0)
   tarifaFixaKwhEmpresa?: number;
+
+  // Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — Plano de Clube vinculado.
+  // null/vazio = convênio sem clube. Quando presente, empresa paga mensalidade
+  // do clube de todos os membros ativos (adesão obrigatória — funcionário de
+  // conveniado). Service valida que pertence ao tenant e está ativo.
+  @IsOptional()
+  @IsString()
+  planoClubeId?: string;
 }
 
 export enum StatusConvenioDto {
@@ -366,6 +374,12 @@ export class UpdateConvenioDto {
   @IsNumber()
   @Min(0)
   tarifaFixaKwhEmpresa?: number | null;
+
+  // Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — Plano de Clube vinculado.
+  // null/vazio explícito desvincula. Service valida tenant/ativo.
+  @IsOptional()
+  @IsString()
+  planoClubeId?: string | null;
 }
 
 export class AddMembroDto {

@@ -94,6 +94,10 @@ export class ConveniosService {
       dto.tarifaFixaKwhEmpresa,
     );
 
+    // Sprint Onboarding Bloco 0 Fatia 0.2 — valida PlanoClube vinculado
+    // (tenant + ativo). null/vazio = sem clube, sem validação.
+    await this.validarPlanoClube(cooperativaId, dto.planoClubeId);
+
     // Retry loop para lidar com race condition no numero sequencial
     for (let tentativa = 0; tentativa < 5; tentativa++) {
       const numero = await this.gerarNumero(tentativa);
@@ -140,6 +144,8 @@ export class ConveniosService {
             // D-novo-CT-TARIFA-FIXA-EMPRESA
             tipoTarifaEmpresa: (dto.tipoTarifaEmpresa ?? 'PERCENTUAL_DESCONTO') as any,
             tarifaFixaKwhEmpresa: dto.tarifaFixaKwhEmpresa ?? null,
+            // Sprint Onboarding Bloco 0 Fatia 0.2 — Plano de Clube vinculado.
+            planoClubeId: dto.planoClubeId || null,
           },
         });
       } catch (err: any) {
@@ -200,6 +206,37 @@ export class ConveniosService {
     if (tipoTarifaEmpresa === 'VALOR_FIXO' && (!tarifaFixaKwhEmpresa || tarifaFixaKwhEmpresa <= 0)) {
       throw new BadRequestException(
         'tipoTarifaEmpresa=VALOR_FIXO exige tarifaFixaKwhEmpresa > 0 (R$/kWh negociado com a empresa).',
+      );
+    }
+  }
+
+  /**
+   * Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026) — valida PlanoClube
+   * vinculado ao convênio.
+   *
+   * Regras:
+   *  - null/undefined/'' = sem clube (válido, sem validação).
+   *  - planoClubeId presente: precisa pertencer ao tenant + estar ativo.
+   *    Caso contrário, 400 com mensagem clara (anti-vazamento cross-tenant
+   *    + bloqueia vinculação de plano inativo).
+   */
+  private async validarPlanoClube(
+    cooperativaId: string,
+    planoClubeId: string | null | undefined,
+  ): Promise<void> {
+    if (!planoClubeId) return;
+    const plano = await this.prisma.planoClube.findFirst({
+      where: { id: planoClubeId, cooperativaId },
+      select: { id: true, ativo: true },
+    });
+    if (!plano) {
+      throw new BadRequestException(
+        'planoClubeId inválido ou pertence a outra cooperativa.',
+      );
+    }
+    if (!plano.ativo) {
+      throw new BadRequestException(
+        'planoClubeId aponta pra um PlanoClube inativo. Reative o plano ou escolha outro.',
       );
     }
   }
@@ -303,6 +340,11 @@ export class ConveniosService {
         tipoTarifaEfetivo as any,
         tarifaFixaEfetiva as any,
       );
+
+      // Fatia 0.2 — valida PlanoClube quando vier no patch. null/'' = desvincular.
+      if (dto.planoClubeId !== undefined) {
+        await this.validarPlanoClube(convenio.cooperativaId, dto.planoClubeId);
+      }
     }
 
     const data: any = {};
@@ -348,6 +390,12 @@ export class ConveniosService {
     // D-novo-CT-TARIFA-FIXA-EMPRESA
     if (dto.tipoTarifaEmpresa !== undefined) data.tipoTarifaEmpresa = dto.tipoTarifaEmpresa;
     if (dto.tarifaFixaKwhEmpresa !== undefined) data.tarifaFixaKwhEmpresa = dto.tarifaFixaKwhEmpresa;
+
+    // Sprint Onboarding Bloco 0 Fatia 0.2 — Plano de Clube editável.
+    // Normaliza '' → null pra desvincular.
+    if (dto.planoClubeId !== undefined) {
+      data.planoClubeId = dto.planoClubeId || null;
+    }
 
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },

@@ -92,6 +92,8 @@ export default function EditarConvenioLegadoPage() {
     descontoKwhCusteio: '',
     tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
     tarifaFixaKwhEmpresa: '',
+    // Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026)
+    planoClubeId: '',
   });
 
   async function carregar() {
@@ -127,6 +129,8 @@ export default function EditarConvenioLegadoPage() {
           data.tarifaFixaKwhEmpresa !== null && data.tarifaFixaKwhEmpresa !== undefined
             ? Number(data.tarifaFixaKwhEmpresa)
             : '',
+        // Sprint Onboarding Bloco 0 Fatia 0.2 — Plano de Clube vinculado.
+        planoClubeId: (data as any).planoClubeId ?? '',
       });
     } catch (err: any) {
       setErro(err?.response?.data?.message ?? 'Falha ao carregar convênio');
@@ -215,6 +219,12 @@ export default function EditarConvenioLegadoPage() {
         tarifaFixaKwhEmpresa:
           custeio.pagador === 'EMPRESA' && custeio.tarifaFixaKwhEmpresa !== ''
             ? Number(custeio.tarifaFixaKwhEmpresa)
+            : null,
+        // Sprint Onboarding Bloco 0 Fatia 0.2 — Plano de Clube vinculado.
+        // Quando CADA_MEMBRO, envia null pra desvincular (UI já zerou via onChange).
+        planoClubeId:
+          custeio.pagador === 'EMPRESA' && custeio.planoClubeId
+            ? custeio.planoClubeId
             : null,
       };
       await api.patch(`/convenios/${id}`, payload);

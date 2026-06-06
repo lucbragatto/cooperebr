@@ -72,6 +72,8 @@ export default function NovoConvenioPage() {
     descontoKwhCusteio: '',
     tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
     tarifaFixaKwhEmpresa: '',
+    // Sprint Onboarding Bloco 0 Fatia 0.2 (06/06/2026)
+    planoClubeId: '',
   });
 
   const [faixas, setFaixas] = useState<Faixa[]>([
@@ -170,6 +172,10 @@ export default function NovoConvenioPage() {
         payload.tipoTarifaEmpresa = custeio.tipoTarifaEmpresa;
         if (custeio.tarifaFixaKwhEmpresa !== '') {
           payload.tarifaFixaKwhEmpresa = Number(custeio.tarifaFixaKwhEmpresa);
+        }
+        // Fatia 0.2 — Plano de Clube vinculado (opcional). Vazio = sem clube.
+        if (custeio.planoClubeId) {
+          payload.planoClubeId = custeio.planoClubeId;
         }
       }
 
