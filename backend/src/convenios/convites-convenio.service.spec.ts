@@ -297,6 +297,8 @@ describe('ConvitesConvenioService — Fatia 2a', () => {
         telefone: '5527981341348',
         nomeConvidado: 'Dr. João',
         otpValidadoEm: null,
+        convenioId: 'cv-clinica',
+        permiteSemUc: false,
         convenio: { empresaNome: 'Clínica Teste' },
       });
 
@@ -308,6 +310,56 @@ describe('ConvitesConvenioService — Fatia 2a', () => {
       expect(r.dados?.telefoneSufixo).toBe('...1348');
       // Defesa LGPD: NÃO retorna telefone integral
       expect(JSON.stringify(r)).not.toContain('5527981341348');
+    });
+
+    // Sprint Onboarding Bloco 1 Fatia 1.1 (06/06/2026).
+    it('token vivo → devolve convenioId + permiteSemUc (frontend vincula convênio + slim path)', async () => {
+      findUniqueConvite.mockResolvedValue({
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        telefone: '5527981341348',
+        nomeConvidado: 'Dr. João',
+        otpValidadoEm: null,
+        convenioId: 'cv-clinica-001',
+        permiteSemUc: false,
+        convenio: { empresaNome: 'Clínica Teste' },
+      });
+
+      const r = await service.validarToken('tok');
+
+      expect(r.dados?.convenioId).toBe('cv-clinica-001');
+      expect(r.dados?.permiteSemUc).toBe(false);
+    });
+
+    it('Fatia 1.1 — convite com permiteSemUc=true devolve o flag intacto (slim path)', async () => {
+      findUniqueConvite.mockResolvedValue({
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        telefone: '5527981341348',
+        nomeConvidado: 'Indicador Puro',
+        otpValidadoEm: null,
+        convenioId: 'cv-sem-uc',
+        permiteSemUc: true,
+        convenio: { empresaNome: 'Convênio Slim' },
+      });
+
+      const r = await service.validarToken('tok');
+
+      expect(r.dados?.permiteSemUc).toBe(true);
+      expect(r.dados?.convenioId).toBe('cv-sem-uc');
+    });
+
+    it('Fatia 1.1 — service usa SELECT explícito incluindo convenioId + permiteSemUc do convite', async () => {
+      findUniqueConvite.mockResolvedValue(null);
+
+      await service.validarToken('tok');
+
+      const args = findUniqueConvite.mock.calls[0]?.[0];
+      expect(args?.select).toMatchObject({
+        convenioId: true,
+        permiteSemUc: true,
+        convenio: { select: { empresaNome: true } },
+      });
     });
 
     it('token inexistente → inválido', async () => {

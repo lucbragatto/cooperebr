@@ -372,6 +372,11 @@ export class PublicoController {
       telefoneSufixo: r.dados!.telefoneSufixo,
       expiresAt: r.dados!.expiresAt,
       otpJaValidado: r.dados!.otpJaValidado,
+      // Sprint Onboarding Bloco 1 Fatia 1.1 (06/06/2026) — repasse do convite.
+      // Frontend setState(convenioCusteioId, permiteSemUc) → payload do POST
+      // /cadastro-web já leva convênio CERTO e respeita slim path.
+      convenioId: r.dados!.convenioId,
+      permiteSemUc: r.dados!.permiteSemUc,
     };
   }
 

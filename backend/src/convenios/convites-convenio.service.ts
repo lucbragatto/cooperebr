@@ -201,13 +201,31 @@ export class ConvitesConvenioService {
       telefoneSufixo: string;
       expiresAt: Date;
       otpJaValidado: boolean;
+      // Sprint Onboarding Bloco 1 Fatia 1.1 (06/06/2026) — repasse do convite.
+      // convenioId pro frontend setar `convenioCusteioId` (vincula ao convênio
+      // CERTO, server-side, anti-spoof). permiteSemUc pro frontend respeitar
+      // o slim path (cooperado SEM_UC vs COM_UC).
+      convenioId: string;
+      permiteSemUc: boolean;
     };
   }> {
     if (!token) return { valido: false, motivo: 'Token ausente.' };
 
     const convite = await this.prisma.conviteConvenioMembro.findUnique({
       where: { token },
-      include: { convenio: { select: { empresaNome: true } } },
+      // Fatia 1.1 — convenioId + permiteSemUc DO CONVITE (anti-spoof: vem do
+      // próprio modelo, não do client). Frontend usa pra payload do
+      // /cadastro-web; backend cadastroWebV2 também re-valida pelo token.
+      select: {
+        usedAt: true,
+        expiresAt: true,
+        nomeConvidado: true,
+        telefone: true,
+        otpValidadoEm: true,
+        convenioId: true,
+        permiteSemUc: true,
+        convenio: { select: { empresaNome: true } },
+      },
     });
 
     if (!convite) return { valido: false, motivo: 'Convite não encontrado.' };
@@ -224,6 +242,8 @@ export class ConvitesConvenioService {
         telefoneSufixo: '...' + convite.telefone.slice(-4),
         expiresAt: convite.expiresAt,
         otpJaValidado: !!convite.otpValidadoEm,
+        convenioId: convite.convenioId,
+        permiteSemUc: convite.permiteSemUc,
       },
     };
   }
