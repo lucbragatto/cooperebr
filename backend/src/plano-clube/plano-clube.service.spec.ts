@@ -231,5 +231,34 @@ describe('PlanoClubeService', () => {
 
       expect(r).toEqual({ id: 'p1', valorMensal: 19.9, cobra: true, nome: 'Ouro' });
     });
+
+    // Fatia 0.4 alinhamento — caller espera null pra clube grátis ou zero.
+    it('cobra=false (clube grátis) → null (não soma na cobrança)', async () => {
+      prismaMock.planoClube.findFirst.mockResolvedValue({
+        id: 'p1',
+        valorMensal: '0',
+        cobra: false,
+        nome: 'Grátis',
+      });
+
+      const r = await service.resolverParaCobranca('p1', TENANT_A);
+
+      expect(r).toBeNull();
+    });
+
+    it('cobra=true mas valorMensal=0 → null (defesa em profundidade)', async () => {
+      // Caso defensivo: criação proíbe, mas algum admin maluco editando direto
+      // pelo banco poderia gerar este estado. Helper protege.
+      prismaMock.planoClube.findFirst.mockResolvedValue({
+        id: 'p1',
+        valorMensal: '0',
+        cobra: true,
+        nome: 'Zero',
+      });
+
+      const r = await service.resolverParaCobranca('p1', TENANT_A);
+
+      expect(r).toBeNull();
+    });
   });
 });

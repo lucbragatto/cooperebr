@@ -52,6 +52,9 @@ interface CobrancaConsolidada {
   dataVencimento: string;
   dataPagamento: string | null;
   createdAt: string;
+  // Fatia 0.4 — clube discriminado (valorLiquido inclui clube; carve-out abaixo).
+  valorMensalidadeClube?: string | null;
+  planoClubeId?: string | null;
   // Sprint F1 — emissão
   statusEmissao: StatusEmissao | null;
   tentativasEmissao: number;
@@ -423,7 +426,15 @@ export default function CobrancasConsolidadasPage() {
                       <TableCell className="text-right font-mono text-gray-500">
                         {Number(c.valorDesconto) > 0 ? `- ${moeda(c.valorDesconto)}` : '—'}
                       </TableCell>
-                      <TableCell className="text-right font-mono font-semibold">{moeda(c.valorLiquido)}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold">
+                        {moeda(c.valorLiquido)}
+                        {Number(c.valorMensalidadeClube ?? 0) > 0 && (
+                          <div className="text-[10px] text-amber-700 font-normal whitespace-nowrap">
+                            Energia {moeda(Number(c.valorLiquido) - Number(c.valorMensalidadeClube ?? 0))} ·
+                            {' '}Clube {moeda(c.valorMensalidadeClube ?? 0)}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs text-gray-600">
                         {dataBr(c.dataVencimento)}
                         {c.dataPagamento && (

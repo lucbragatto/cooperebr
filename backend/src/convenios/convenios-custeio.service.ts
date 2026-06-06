@@ -35,6 +35,8 @@ import { PrismaService } from '../prisma.service';
 import { buscarTarifaPorDistribuidora } from '../common/tarifa-helper';
 import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.service';
 import { isAmbienteReal } from '../common/safety/ambiente';
+// Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026)
+import { PlanoClubeService } from '../plano-clube/plano-clube.service';
 
 const PLANO_CONSOLIDADOR_NOME = 'Consolidador de Custeio';
 
@@ -49,6 +51,9 @@ export class ConveniosCusteioService {
     // D-FISCAL-2.4.4b: emissão da consolidada no gateway (boleto/PIX).
     // Optional pra não quebrar specs pré-2.4.4b que instanciam direto.
     @Optional() private gatewayPagamento?: GatewayPagamentoService,
+    // Sprint Onboarding Bloco 0 Fatia 0.4 — resolve PlanoClube vinculado
+    // ao convênio pra somar mensalidade × nº membros na consolidada.
+    @Optional() private planoClubeService?: PlanoClubeService,
   ) {}
 
   /**
@@ -98,6 +103,8 @@ export class ConveniosCusteioService {
         // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026)
         tipoTarifaEmpresa: true,
         tarifaFixaKwhEmpresa: true,
+        // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026)
+        planoClubeId: true,
       },
     });
     if (!convenio) {
@@ -411,6 +418,32 @@ export class ConveniosCusteioService {
         10,
       );
 
+    // 8.1 Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — componente CLUBE.
+    // Quando convenio.planoClubeId vinculado E plano.cobra=true, soma
+    // membros.length × planoClube.valorMensal. Funcionário de conveniado é
+    // OBRIGATÓRIO no clube — não filtramos "quem aderiu" (adesão compulsória).
+    //
+    // INVARIANTE: valorLiquido = energia_liquida + (membros × mensalidade).
+    //   - Caso clube grátis (cobra=false), helper retorna null → soma 0.
+    //   - Caso ALOCACAO_FIXA + 0 membros: helper poderia somar 0 — early-return
+    //     SEM_MEMBROS já barra CONSUMO_REAL; ALOCACAO_FIXA segue normal.
+    //   - resolverParaCobranca filtra ativo + tenant — defesa cross-tenant.
+    let valorMensalidadeClubeConsolidada = 0;
+    let planoClubeIdConsolidado: string | null = null;
+    if (this.planoClubeService && (convenio as any).planoClubeId) {
+      const snap = await this.planoClubeService.resolverParaCobranca(
+        (convenio as any).planoClubeId,
+        convenio.cooperativaId!,
+      );
+      if (snap && snap.cobra && snap.valorMensal > 0 && membros.length > 0) {
+        valorMensalidadeClubeConsolidada =
+          Math.round(membros.length * snap.valorMensal * 100) / 100;
+        planoClubeIdConsolidado = snap.id;
+      }
+    }
+    const valorLiquidoComClube =
+      Math.round((valorLiquido + valorMensalidadeClubeConsolidada) * 100) / 100;
+
     // 9. Criar Cobrança + LancamentoCaixa PREVISTO em transação serializável.
     // NÃO chama cobrancas.service.create (evita ciclo de módulos
     // Convenios↔Cobrancas↔Whatsapp↔MotorProposta). A lógica reproduzida aqui
@@ -430,7 +463,7 @@ export class ConveniosCusteioService {
             valorBruto,
             percentualDesconto: descontoPct,
             valorDesconto,
-            valorLiquido,
+            valorLiquido: valorLiquidoComClube,
             dataVencimento,
             cooperativaId: convenio.cooperativaId!,
             convenioContabilCobrancaId: convenio.id, // hook Design B (2.4.4c roteia darBaixa)
@@ -439,6 +472,13 @@ export class ConveniosCusteioService {
             // do tx) atualiza pra EMITIDO ou incrementa tentativas. Job retry
             // varre AGUARDANDO_EMISSAO com tentativas < 5 (back-off 30min).
             statusEmissao: 'AGUARDANDO_EMISSAO',
+            // Fatia 0.4 — componente clube discriminado (carve-out).
+            ...(valorMensalidadeClubeConsolidada > 0
+              ? { valorMensalidadeClube: valorMensalidadeClubeConsolidada }
+              : {}),
+            ...(planoClubeIdConsolidado
+              ? { planoClubeId: planoClubeIdConsolidado }
+              : {}),
           },
         });
 
@@ -448,7 +488,7 @@ export class ConveniosCusteioService {
           data: {
             tipo: 'RECEITA',
             descricao: `Cobrança consolidada — ${convenio.empresaNome} — ${mesRef}`,
-            valor: valorLiquido,
+            valor: valorLiquidoComClube,
             competencia,
             status: 'PREVISTO',
             cooperativaId: convenio.cooperativaId!,

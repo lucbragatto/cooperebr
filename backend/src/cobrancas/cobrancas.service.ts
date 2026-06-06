@@ -11,6 +11,8 @@ import { EmailService } from '../email/email.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
 import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
+// Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — clube discriminado.
+import { CooperadoClubeService } from '../cooperado-clube/cooperado-clube.service';
 import { CooperTokenTipo } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -68,6 +70,10 @@ export class CobrancasService {
     private cooperTokenService: CooperTokenService,
     private tokenContabil: TokenContabilService,
     private calculoMultaJuros: CalculoMultaJurosService,
+    // Sprint Onboarding Bloco 0 Fatia 0.4 — resolve adesão opt-in pra somar
+    // mensalidade no valorLiquido. @Optional pra preservar compat com specs
+    // existentes que instanciam o service em isolamento.
+    @Optional() private cooperadoClubeService?: CooperadoClubeService,
     // CT.3 — hook contábil opcional (módulo registra; tests podem omitir)
     @Optional() private contabilidadeTributaria?: ContabilidadeTributariaService,
   ) {}
@@ -201,11 +207,43 @@ export class CobrancasService {
       ? normalizarData(data.dataPagamento, 'dataPagamento')
       : undefined;
 
+    // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — componente CLUBE.
+    // Quando cooperado tem adesão opt-in ativa (Cooperado.planoClubeId) e o
+    // plano cobra (cobra=true + valorMensal>0), soma a mensalidade no
+    // valorLiquido DEPOIS do desconto de energia.
+    //
+    // INVARIANTE crítica: valorLiquido = energia_liquida + mensalidade_clube.
+    //   - Gateway/PIX/boleto cobra valorLiquido → clube TEM que estar dentro.
+    //   - valorMensalidadeClube é CARVE-OUT discriminativo (UI mostra
+    //     "Energia: R$ X − Clube: R$ Y = Total R$ Z").
+    //   - Funcionário custeado por convênio: guard custeado-por-convênio
+    //     (linhas 173-178 acima) JÁ BARRA cobrança individual. Defesa redundante:
+    //     CooperadoClubeService.aderir() bloqueia setar planoClubeId em
+    //     conveniado (Fatia 0.3). Aqui só somamos quando o helper resolve.
+    let valorMensalidadeClube = 0;
+    let planoClubeIdCobrado: string | null = null;
+    if (this.cooperadoClubeService && contrato?.cooperadoId) {
+      const cooperativaPraClube =
+        resolvedCoopId || contrato.cooperativaId || undefined;
+      if (cooperativaPraClube) {
+        const snap = await this.cooperadoClubeService.resolverParaCobrancaIndividual(
+          contrato.cooperadoId,
+          cooperativaPraClube,
+        );
+        if (snap) {
+          valorMensalidadeClube = Math.round(snap.valorMensal * 100) / 100;
+          planoClubeIdCobrado = snap.planoClubeId;
+        }
+      }
+    }
+    const valLiqComClube =
+      Math.round((valLiq + valorMensalidadeClube) * 100) / 100;
+
     // Refletir valores resolvidos em data pra o código posterior
     // (CooperToken, gateway, lançamento contábil) ler valLiquido/valDesc.
     data.percentualDesconto = pctDesc;
     data.valorDesconto = valDesc;
-    data.valorLiquido = valLiq;
+    data.valorLiquido = valLiqComClube;
     data.dataVencimento = dataVenc;
     if (dataPag) data.dataPagamento = dataPag;
 
@@ -214,10 +252,12 @@ export class CobrancasService {
         ...data,
         percentualDesconto: pctDesc,
         valorDesconto: valDesc,
-        valorLiquido: valLiq,
+        valorLiquido: valLiqComClube,
         dataVencimento: dataVenc,
         ...(dataPag ? { dataPagamento: dataPag } : {}),
         ...(resolvedCoopId ? { cooperativaId: resolvedCoopId } : {}),
+        ...(valorMensalidadeClube > 0 ? { valorMensalidadeClube } : {}),
+        ...(planoClubeIdCobrado ? { planoClubeId: planoClubeIdCobrado } : {}),
       },
     });
 
@@ -565,6 +605,14 @@ export class CobrancasService {
       const coopIdHook = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
       const tipoCoopHook = cobranca.contrato?.cooperado?.tipoCooperado ?? null;
       const convenioContabilId = (cobranca as any).convenioContabilCobrancaId as string | null;
+      // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — não inflar energia.
+      // valorFinal inclui a mensalidade do clube (carve-out semântico). O
+      // lançamento de natureza ENERGIA_SCEE deve usar APENAS a parte de
+      // energia — senão o clube vira receita SCEE (natureza fiscal errada).
+      // 2º lançamento de natureza "taxa de clube" fica adiado pra Sprint
+      // Contabilidade (D-novo-CLUBE-LANCAMENTO-FISCAL P3).
+      const valorClube = Number((cobranca as any).valorMensalidadeClube ?? 0);
+      const valorEnergiaFiscal = Math.round((valorFinal - valorClube) * 100) / 100;
       if (coopIdHook) {
         const mesRefHook = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
         if (convenioContabilId) {
@@ -572,7 +620,7 @@ export class CobrancasService {
           this.contabilidadeTributaria
             .criarLancamentoConvenioContrato({
               contratoConvenioId: convenioContabilId,
-              valor: valorFinal,
+              valor: valorEnergiaFiscal,
               dataMovimento: dtPagamento,
               competencia: mesRefHook, // CT.9.1: competência LOCAL via string
               descricao: `[CT] Consolidada custeio paga — cobrança ${cobranca.id}`,
@@ -594,7 +642,7 @@ export class CobrancasService {
               fonte: { tipo: 'COBRANCA', cooperadoTipoCooperado: tipoCoopHook },
               tipo: 'RECEITA',
               descricao: `[CT] Cobrança paga — ${cobranca.id.slice(0, 8)}`,
-              valor: valorFinal,
+              valor: valorEnergiaFiscal,
               competencia: mesRefHook,
               dataPagamento: dtPagamento,
               cooperadoId: cobranca.contrato?.cooperadoId ?? null,

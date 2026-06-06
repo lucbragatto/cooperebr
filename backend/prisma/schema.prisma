@@ -820,6 +820,16 @@ model Cobranca {
   tokenDescontoQt          Decimal?             @db.Decimal(10, 4)
   tokenDescontoReais       Decimal?             @db.Decimal(10, 2)
   ledgerDebitoId           String?
+
+  // ── Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — Clube discriminado ──
+  // Semântica CRÍTICA: `valorLiquido` INCLUI a mensalidade do clube
+  // (gateway/boleto cobra valorLiquido → clube tem que estar dentro).
+  // `valorMensalidadeClube` é CARVE-OUT — guarda só a parte do clube pra
+  // discriminação na UI: Energia = valorLiquido − valorMensalidadeClube.
+  // null = cobrança sem componente de clube (caso default).
+  valorMensalidadeClube    Decimal?             @db.Decimal(10, 2)
+  planoClubeId             String?
+  planoClubeCobrado        PlanoClube?          @relation("CobrancasComClube", fields: [planoClubeId], references: [id])
   // Sprint 10: lembretes de vencimento
   lembreteD3EnviadoEm      DateTime?
   lembreteD1EnviadoEm      DateTime?
@@ -2363,6 +2373,9 @@ model PlanoClube {
 
   // Fatia 0.3 — back-ref pra Cooperado.planoClubeId (adesão opt-in individual).
   cooperadosAderidos Cooperado[] @relation("CooperadosAderidos")
+
+  // Fatia 0.4 — back-ref pra Cobranca.planoClubeId (rastreabilidade do componente).
+  cobrancasComClube  Cobranca[] @relation("CobrancasComClube")
 
   @@index([cooperativaId])
   @@index([cooperativaId, ativo])

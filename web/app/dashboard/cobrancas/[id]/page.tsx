@@ -194,6 +194,23 @@ export default function CobrancaDetailPage() {
                   <span>+{formatBRL(cobranca.valorBandeira!)}</span>
                 </div>
               )}
+              {(cobranca.valorMensalidadeClube ?? 0) > 0 && (
+                <>
+                  <hr className="my-2" />
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Energia (com desconto)</span>
+                    <span>
+                      {formatBRL(
+                        cobranca.valorLiquido - (cobranca.valorMensalidadeClube ?? 0),
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm text-amber-700">
+                    <span>Clube (mensalidade)</span>
+                    <span>+{formatBRL(cobranca.valorMensalidadeClube!)}</span>
+                  </div>
+                </>
+              )}
               <hr className="my-2" />
               <div className="flex justify-between font-medium text-sm">
                 <span>Total a pagar</span>

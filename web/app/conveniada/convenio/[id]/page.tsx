@@ -82,6 +82,8 @@ interface DashboardResponse {
     status: StatusCob;
     dataVencimento: string;
     dataPagamento: string | null;
+    // Fatia 0.4 — discriminação opcional do clube.
+    valorMensalidadeClube?: string | null;
     asaasCobrancas: Array<{
       linkPagamento: string | null;
       boletoUrl: string | null;
@@ -368,6 +370,12 @@ export default function ConveniadaConvenioDashboard() {
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold">
                         {moeda(cob.valorLiquido)}
+                        {Number(cob.valorMensalidadeClube ?? 0) > 0 && (
+                          <div className="text-[10px] text-amber-700 font-normal whitespace-nowrap">
+                            Energia {moeda(Number(cob.valorLiquido) - Number(cob.valorMensalidadeClube ?? 0))} ·
+                            {' '}Clube {moeda(cob.valorMensalidadeClube ?? 0)}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs">{dataBr(cob.dataVencimento)}</TableCell>
                       <TableCell className="text-xs text-emerald-700">

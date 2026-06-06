@@ -12,9 +12,11 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
 import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 import { FinanceiroModule } from '../financeiro/financeiro.module';
+// Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026)
+import { CooperadoClubeModule } from '../cooperado-clube/cooperado-clube.module';
 
 @Module({
-  imports: [GatewayPagamentoModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule, FinanceiroModule],
+  imports: [GatewayPagamentoModule, ClubeVantagensModule, WhatsappModule, EmailModule, CooperTokenModule, FinanceiroModule, CooperadoClubeModule],
   controllers: [CobrancasController],
   providers: [CobrancasService, CobrancasJob, CobrancaPdfService, CalculoMultaJurosService, PdfGeneratorService, PrismaService],
   exports: [CobrancasService, CalculoMultaJurosService],

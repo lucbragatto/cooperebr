@@ -15,6 +15,9 @@ import { ContabilidadeTributariaModule } from '../contabilidade-tributaria/conta
 import { GatewayPagamentoModule } from '../gateway-pagamento/gateway-pagamento.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { NotificacoesModule } from '../notificacoes/notificacoes.module';
+// Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — PlanoClubeService injetado
+// em ConveniosCusteioService pra somar membros × mensalidade na consolidada.
+import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
 
 @Module({
   // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
@@ -35,6 +38,7 @@ import { NotificacoesModule } from '../notificacoes/notificacoes.module';
     GatewayPagamentoModule,
     forwardRef(() => WhatsappModule),
     NotificacoesModule,
+    PlanoClubeModule,
   ],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [

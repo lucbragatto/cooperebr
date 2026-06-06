@@ -141,6 +141,10 @@ export class PlanoClubeService {
       select: { id: true, valorMensal: true, cobra: true, nome: true },
     });
     if (!p) return null;
+    // Fatia 0.4 alinhamento: caller (cobrança consolidada/individual) só leva
+    // linha quando `cobra=true` E `valorMensal > 0`. Aplica regra na fonte
+    // pra evitar caller esquecer a checagem e somar zero "ativamente".
+    if (!p.cobra || Number(p.valorMensal) <= 0) return null;
     return {
       id: p.id,
       valorMensal: Number(p.valorMensal),

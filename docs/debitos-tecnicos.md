@@ -4756,6 +4756,87 @@ Confirma: é só ID interno arbitrário. Não pretende ser canônico EDP.
 
 ---
 
+### D-novo-LISTA-ESPERA-TENANT — Motor não grava cooperativaId em ListaEspera (P2)
+
+**Severidade:** P2 — entradas criadas via wizard `/cadastro` somem do filtro multi-tenant na UI de admin.
+
+**Origem:** Fase 1 read-only Sprint Onboarding (06/06/2026). Mapeado em `decisao_plano_clube_mensalidade_06_06.md`.
+
+**Localização:**
+- ❌ `backend/src/motor-proposta/motor-proposta.service.ts:875-883` — `tx.listaEspera.create({ data: { cooperadoId, contratoId, kwhNecessario, posicao, status } })` **sem `cooperativaId`**.
+- ✅ `backend/src/cooperados/cooperados.service.ts:650` — caminho admin grava corretamente (`cooperativaId: cooperativaId || dto.cooperativaId`).
+- ⚠️ `backend/src/motor-proposta/motor-proposta.service.ts:1264` — `getListaEspera` filtra `...(cooperativaId ? { cooperativaId } : {})` → entradas criadas via motor **somem da UI** porque o filtro tenant-scoped não bate com `cooperativaId=null`.
+- Schema `Uc.ListaEspera.cooperativaId String?` (nullable) — backfill necessário pra entradas legadas.
+
+**Impacto:** LEONARDO e outros membros custeados que viram lista de espera via `/cadastro` ficam invisíveis pro admin que filtra por cooperativa (caso real reportado na sessão 05/06).
+
+**Fix:** 2-3 linhas em `motor-proposta.service.ts:875-883` (incluir `cooperativaId: dono.cooperativaId` no `data`) + script de backfill pra entradas órfãs (`UPDATE lista_espera SET cooperativaId = (SELECT cooperativaId FROM cooperados c WHERE c.id = cooperadoId) WHERE cooperativaId IS NULL`).
+
+**Estimativa:** ~30min Code (fix + backfill + smoke).
+
+**Status:** 📋 Catalogado em 2026-06-06 (Fase 1 read-only Bloco 0). Será resolvido no Bloco 2 (Empresa vê kWh) onde precisa pra incluir LEONARDO na consolidada.
+
+---
+
+### D-novo-FATURA-SEGREGADA-ITENS — ItemCobranca + fatura 2 linhas fiscais segregadas (P3, adiado)
+
+**Severidade:** P3 — base atual (componente escalar discriminado da Fatia 0.4) já cobre exibição na UI + cálculo. Falta segregação fiscal formal Art. 87 (Lei 5.764/71) pra emissão de NF segregada empresa-conveniada.
+
+**Origem:** Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — decisão Luciano: "fatura com 2 linhas fiscais segregadas fica pra Contabilidade (adiada)".
+
+**Estado atual (suficiente pra Fatia 0.4):**
+- `Cobranca.valorLiquido` = energia + clube (gateway cobra este valor).
+- `Cobranca.valorMensalidadeClube` = carve-out discriminativo (UI mostra "Energia: X + Clube: Y").
+- `Cobranca.planoClubeId` = rastreabilidade.
+- Lançamento contábil de energia já desinflado (subtrai `valorMensalidadeClube` no hook `darBaixa:564+`).
+
+**O que falta (Sprint Contabilidade futuro):**
+1. `model ItemCobranca` — schema delta com `cobrancaId`, `natureza` (`ENERGIA_SCEE` / `TAXA_CLUBE`), `valor`, `descricao`.
+2. Migration popula 1 item ENERGIA_SCEE + (se `valorMensalidadeClube>0`) 1 item TAXA_CLUBE pra cobranças existentes.
+3. Emissor de NF (Asaas) recebe array de itens — gera nota com 2 linhas separadas.
+4. Hooks contábeis usam itens (não soma escalar) — natureza fiscal individual por item.
+5. Conexão com Art. 87 — exige assembleia/regulamento aprovando a discriminação.
+
+**Estimativa:** ~3-5 dias Code (schema delta + migration + emissor + 2 hooks + specs).
+
+**Status:** 📋 Catalogado em 2026-06-06 (Bloco 0 Fatia 0.4). Adiado pra Sprint Contabilidade Tributária Segregada.
+
+---
+
+### D-novo-CLUBE-LANCAMENTO-FISCAL — 2º lançamento contábil natureza TAXA_CLUBE (P3, adiado)
+
+**Severidade:** P3 — base de energia já corrigida (não infla com clube), mas falta o **lançamento dedicado** da taxa de clube com natureza fiscal correta.
+
+**Origem:** Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026). Decisão Luciano: "o hook contábil roteado já existe (cobrancas.service.ts:564-587 darBaixa → contabilidade-tributaria). O 2º lançamento de natureza 'taxa de clube' entra junto da Contabilidade (adiado), não agora."
+
+**O que JÁ está corrigido (Fatia 0.4):**
+
+`backend/src/cobrancas/cobrancas.service.ts:darBaixa` (linhas ~570-619) — base de energia agora desinfla o clube:
+
+```typescript
+// Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — não inflar energia.
+// valorFinal inclui a mensalidade do clube (carve-out semântico). O
+// lançamento de natureza ENERGIA_SCEE deve usar APENAS a parte de
+// energia — senão o clube vira receita SCEE (natureza fiscal errada).
+const valorClube = Number((cobranca as any).valorMensalidadeClube ?? 0);
+const valorEnergiaFiscal = Math.round((valorFinal - valorClube) * 100) / 100;
+```
+
+Aplicado nos 2 ramos: `criarLancamentoConvenioContrato` (consolidada) e `criarLancamentoAutomatico` (individual). Energia entra com `valorEnergiaFiscal`.
+
+**O que falta (Sprint Contabilidade):**
+
+1. **2º lançamento** logo após o de energia, com `natureza: TAXA_CLUBE` (enum novo no `naturezaContabil`?) — valor = `valorClube`, conta diferente, regime fiscal de **taxa de serviço associativa** (não ENERGIA_SCEE).
+2. Ponto de inserção: `cobrancas.service.ts:darBaixa` após o `if (convenioContabilId) { ... } else { ... }` atual — adicionar bloco `if (valorClube > 0) { contabilidadeTributaria.criarLancamentoTaxaClube(...) }`.
+3. Service novo `criarLancamentoTaxaClube` no `ContabilidadeTributariaService` (módulo ainda não tem natureza pra taxa-clube — schema delta ou reuso de `OUTRA_RECEITA`).
+4. Specs: confirmar que cobranças com `valorMensalidadeClube>0` geram 2 lançamentos (energia + clube) com naturezas corretas.
+
+**Estimativa:** ~2-3 dias Code (schema delta naturezaContabil + service + hook + specs).
+
+**Status:** 📋 Catalogado em 2026-06-06 (Bloco 0 Fatia 0.4). Base de energia OK; 2º lançamento adiado pra Sprint Contabilidade.
+
+---
+
 ### D-novo-REGISTER-ADMIN-TENANT — POST /auth/register-admin não vincula cooperativaId (P2)
 
 **Severidade:** P2 — buraco arquitetural latente, não bloqueia operação atual (admin é criado via outras rotas).

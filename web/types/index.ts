@@ -131,6 +131,11 @@ export interface Cobranca {
   valorEconomiaAno?: number | null;
   valorEconomia5anos?: number | null;
   valorEconomia15anos?: number | null;
+  // ── Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — Clube discriminado ──
+  // valorLiquido inclui mensalidade do clube; este campo é o CARVE-OUT.
+  // Energia liquida = valorLiquido - (valorMensalidadeClube ?? 0).
+  valorMensalidadeClube?: number | null;
+  planoClubeId?: string | null;
 }
 
 export interface Ocorrencia {
