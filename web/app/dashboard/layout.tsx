@@ -120,6 +120,7 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/cooper-token', label: 'CooperToken', icon: Coins },
         { href: '/dashboard/clube-vantagens', label: 'Clube de Vantagens', icon: Gift },
         { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
+        { href: '/dashboard/clube/planos', label: 'Planos do Clube', icon: Gift },
         { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
         { href: '/dashboard/administradoras', label: 'Agregadores', icon: Building2 },

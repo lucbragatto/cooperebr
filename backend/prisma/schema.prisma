@@ -97,6 +97,9 @@ model Cooperativa {
   apuracoesMensaisSegregadas ApuracaoMensalSegregada[]
   configuracaoTributaria    ConfiguracaoTributaria?
 
+  // Sprint Onboarding Bloco 0 (06/06/2026) — Planos do Clube com mensalidade.
+  planosClube               PlanoClube[]
+
   @@map("cooperativas")
 }
 
@@ -2303,6 +2306,39 @@ model HistoricoProgressao {
   createdAt        DateTime        @default(now())
 
   @@map("historico_progressao")
+}
+
+/// Sprint Onboarding Completo do Membro — Bloco 0 Fatia 0.1 (06/06/2026).
+///
+/// Plano de adesão ao Clube de Vantagens com mensalidade. Cada cooperativa
+/// pode ter N PlanosClube; cada plano define se o clube é gago (`cobra=true`,
+/// `valorMensal > 0`) ou GRÁTIS (`cobra=false`). Funcionário de conveniado é
+/// obrigatório no clube e a EMPRESA paga (Fatia 0.2 + 0.4 consolidada).
+/// Cooperado comum / SEM_UC aderem por opt-in (Fatia 0.3) e pagam a própria
+/// mensalidade (Fatia 0.4 individual).
+///
+/// NÃO reusa o model `Plano` (que é de ENERGIA/desconto sobre tarifa) — semântica
+/// distinta. Mensalidade entra como componente ESCALAR DISCRIMINADO na Cobranca
+/// (depois do desconto de energia; nunca dentro do valorBruto/desconto).
+model PlanoClube {
+  id            String      @id @default(cuid())
+  cooperativaId String
+  cooperativa   Cooperativa @relation(fields: [cooperativaId], references: [id])
+  nome          String
+  descricao     String?
+  /// Valor mensal R$. Quando `cobra=false`, o valor é informativo (clube grátis).
+  valorMensal   Decimal     @default(0) @db.Decimal(10, 2)
+  /// Se false, clube é grátis: cooperativa matricula sem gerar linha na cobrança.
+  cobra         Boolean     @default(true)
+  ativo         Boolean     @default(true)
+  /// Tier mínimo opcional (BRONZE/PRATA/OURO/DIAMANTE) — futuro vínculo com ProgressaoClube.
+  tierMinimo    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([cooperativaId])
+  @@index([cooperativaId, ativo])
+  @@map("planos_clube")
 }
 
 // ─── Observador ─────────────────────────────────────────────────────────────

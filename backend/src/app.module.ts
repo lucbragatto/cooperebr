@@ -47,6 +47,8 @@ import { RelatoriosModule } from './relatorios/relatorios.module';
 import { CooperTokenModule } from './cooper-token/cooper-token.module';
 import { ConviteIndicacaoModule } from './convite-indicacao/convite-indicacao.module';
 import { ConveniosModule } from './convenios/convenios.module';
+// Sprint Onboarding Bloco 0 Fatia 0.1 (06/06/2026) — Planos do Clube com mensalidade.
+import { PlanoClubeModule } from './plano-clube/plano-clube.module';
 // Sprint Portal Empresa 9.0 (04/06/2026)
 import { PortalEmpresaModule } from './convenios/portal-empresa/portal-empresa.module';
 import { ConversaoCreditoModule } from './conversao-credito/conversao-credito.module';
@@ -115,6 +117,7 @@ import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietar
     CooperTokenModule,
     ConviteIndicacaoModule,
     ConveniosModule,
+    PlanoClubeModule,
     PortalEmpresaModule,
     ConversaoCreditoModule,
     EmailMonitorModule,
