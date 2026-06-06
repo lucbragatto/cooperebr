@@ -260,14 +260,34 @@ export class MembroBuilderService {
       });
     }
 
+    // ETAPA 4: matrícula clube CONFIG-DEPENDENTE (Fatia 1.4).
+    // Só matricula se ConfigClubeVantagens da cooperativa existe E está ativa.
+    // Sem config (cooperativa sem clube configurado) ou desativada → pula sem falha.
+    // Idempotente: criarOuObterProgressao já retorna a existente se houver.
     let clubeMatriculado = false;
+    let clubePulado: string | null = null;
     try {
-      await this.clubeVantagens.criarOuObterProgressao(cooperadoId);
-      clubeMatriculado = true;
+      const config = await this.prisma.configClubeVantagens.findUnique({
+        where: { cooperativaId },
+        select: { ativo: true },
+      });
+      if (!config) {
+        clubePulado = 'cooperativa sem ConfigClubeVantagens — clube não ofertado';
+      } else if (!config.ativo) {
+        clubePulado = 'ConfigClubeVantagens.ativo=false — clube desativado nesta cooperativa';
+      } else {
+        await this.clubeVantagens.criarOuObterProgressao(cooperadoId);
+        clubeMatriculado = true;
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido';
       this.logger.warn(
         `[membro-builder] Falha matricular clube cooperadoId=${cooperadoId}: ${msg}`,
+      );
+    }
+    if (clubePulado) {
+      this.logger.log(
+        `[membro-builder] Clube pulado cooperadoId=${cooperadoId}: ${clubePulado}`,
       );
     }
 

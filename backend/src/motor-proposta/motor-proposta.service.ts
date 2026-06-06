@@ -870,8 +870,13 @@ export class MotorPropostaService {
       });
 
       // 10. Se lista de espera, criar entrada
+      // D-novo-LISTA-ESPERA-TENANT (Fatia 1.4 06/06/2026): cooperativaId obrigatório
+      // pra isolamento multi-tenant da fila. Antes era criado sem o campo →
+      // /lista-espera de qualquer tenant via geral. Backfill via script SQL.
       if (statusContrato === 'LISTA_ESPERA') {
-        const posicao = await tx.listaEspera.count({ where: { status: 'AGUARDANDO' } });
+        const posicao = await tx.listaEspera.count({
+          where: { status: 'AGUARDANDO', cooperativaId: dono.cooperativaId },
+        });
         await tx.listaEspera.create({
           data: {
             cooperadoId: dto.cooperadoId,
@@ -879,6 +884,7 @@ export class MotorPropostaService {
             kwhNecessario: r.kwhContrato,
             posicao: posicao + 1,
             status: 'AGUARDANDO',
+            cooperativaId: dono.cooperativaId,
           },
         });
       }

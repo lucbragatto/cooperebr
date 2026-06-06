@@ -41,6 +41,10 @@ describe('MembroBuilderService — Fatia 1.3', () => {
       plano: {
         findFirst: jest.fn().mockResolvedValue({ id: PLANO_ID }),
       },
+      // Fatia 1.4: matrícula clube config-dependente. Default = ativa.
+      configClubeVantagens: {
+        findUnique: jest.fn().mockResolvedValue({ ativo: true }),
+      },
       $transaction: jest.fn(async (fn: any) => fn(prismaMock)),
     };
     motorMock = { calcular: jest.fn(), aceitar: jest.fn() };
@@ -412,6 +416,64 @@ describe('MembroBuilderService — Fatia 1.3', () => {
       expect.objectContaining({ opcaoEscolhida: 'MEDIA_12M' }),
     );
     expect(r.contratoCriado).toBe(true);
+  });
+
+  // ─── (h) clube config-dependente (Fatia 1.4) ────────────────────────
+  it('(h) ConfigClubeVantagens inexistente → clube pulado (NÃO falha)', async () => {
+    prismaMock.cooperado.findUnique.mockResolvedValue({
+      id: COOPERADO_ID,
+      cooperativaId: TENANT_A,
+      status: 'PENDENTE',
+      cotaKwhMensal: null,
+      consumoStashOcr: null,
+      contratos: [],
+    });
+    prismaMock.contratoConvenio.findUnique.mockResolvedValue({
+      id: CONVENIO_ID,
+      cooperativaId: TENANT_A,
+      status: 'ATIVO',
+      pagador: 'EMPRESA',
+      empresaNome: 'Clínica X',
+    });
+    prismaMock.configClubeVantagens.findUnique.mockResolvedValue(null);
+
+    const r = await service.construirMembroCompleto({
+      cooperadoId: COOPERADO_ID,
+      convenioId: CONVENIO_ID,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(clubeMock.criarOuObterProgressao).not.toHaveBeenCalled();
+    expect(r.cooperadoAtivado).toBe(true);
+    expect(r.clubeMatriculado).toBe(false);
+  });
+
+  it('(h) ConfigClubeVantagens.ativo=false → clube pulado (NÃO falha)', async () => {
+    prismaMock.cooperado.findUnique.mockResolvedValue({
+      id: COOPERADO_ID,
+      cooperativaId: TENANT_A,
+      status: 'PENDENTE',
+      cotaKwhMensal: null,
+      consumoStashOcr: null,
+      contratos: [],
+    });
+    prismaMock.contratoConvenio.findUnique.mockResolvedValue({
+      id: CONVENIO_ID,
+      cooperativaId: TENANT_A,
+      status: 'ATIVO',
+      pagador: 'EMPRESA',
+      empresaNome: 'Clínica X',
+    });
+    prismaMock.configClubeVantagens.findUnique.mockResolvedValue({ ativo: false });
+
+    const r = await service.construirMembroCompleto({
+      cooperadoId: COOPERADO_ID,
+      convenioId: CONVENIO_ID,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(clubeMock.criarOuObterProgressao).not.toHaveBeenCalled();
+    expect(r.clubeMatriculado).toBe(false);
   });
 
   // ─── pagador != EMPRESA → motor pulado ──────────────────────────────
