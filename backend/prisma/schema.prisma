@@ -249,6 +249,23 @@ model Cooperado {
   emailFaturasAtivoEm     DateTime?
   emailFaturasObservacao  String?
 
+  // ── Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — Pendência visível do motor ──
+  // Quando cadastroWebV2 cria Cooperado+UC mas o motor (calcular/aceitar) falha,
+  // gravamos uma pendência LEGÍVEL aqui (não só log). UI mostra selo amarelo
+  // "Cadastro incompleto — não gerou contrato automático" na listagem/detalhe.
+  // LIMPA na Fatia 1.3 quando construirMembroCompleto cria o contrato — senão
+  // vira flag fantasma stale.
+  pendenciaMotorMsg       String?
+  pendenciaMotorEm        DateTime?
+  // Stash do consumo capturado no cadastro (OCR ou input manual) — fonte da
+  // verdade pra reconstrução de membros oco em Fatia 1.4 sem precisar reupload
+  // de fatura. Estrutura: { consumoMedioKwh: number, historicoConsumo: [...],
+  // valorUltimaFatura: number, dadosOcr: {...} } — Json livre.
+  // Decisão Luciano: persistir AQUI em vez de criar FaturaProcessada completa
+  // (mais barato; FaturaProcessada exige 28 campos + pipeline OCR — fica como
+  // D-novo-CADWEB-FATURA-PROCESSADA P3).
+  consumoStashOcr         Json?
+
   // ── Sprint Onboarding Bloco 0 Fatia 0.3 (06/06/2026) — Adesão opt-in ao Clube ──
   // EXCLUSIVO do caminho INDIVIDUAL (cooperado comum / sem-UC paga a propria
   // mensalidade). Funcionário de conveniado NUNCA usa este campo — o clube

@@ -4756,6 +4756,41 @@ Confirma: é só ID interno arbitrário. Não pretende ser canônico EDP.
 
 ---
 
+### D-novo-CADWEB-FATURA-PROCESSADA — Stash do consumo em Cooperado em vez de FaturaProcessada completa (P3, adiado)
+
+**Severidade:** P3 — funcional sem ele (Fatia 1.2 do Sprint Onboarding já persiste stash leve via `Cooperado.consumoStashOcr Json?`, suficiente pra reconciliação).
+
+**Origem:** Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026). Decisão Luciano após eu inspecionar `FaturaProcessada` (28 campos + pipeline OCR pesada): **não persistir** FaturaProcessada no `cadastroWebV2` agora — usar campo JSON leve em `Cooperado` por simplicidade.
+
+**Estado atual (Fatia 1.2):** `Cooperado.consumoStashOcr Json?` guarda:
+- `consumoMedioKwh: number | null`
+- `historicoConsumo: Array<{mesAno, consumoKwh, valorRS}>`
+- `valorUltimaFatura: number | null`
+- `dadosOcr: object | null`
+- `capturadoEm: ISO date`
+- `fonteRota: string`
+
+Permite reconciliação (Fatia 1.4) reconstruir membro oco sem reupload de fatura.
+
+**O que falta (sprint futuro):**
+
+Persistir `FaturaProcessada` completa no `cadastroWebV2` quando há fatura OCR válida. Benefícios:
+1. Aproveita pipeline contábil existente (Fase B snapshots: `valorCheioKwh`, `tarifaSemImpostos`).
+2. Aparece automaticamente em `/dashboard/faturas` (admin opera).
+3. Permite revisão da fatura sem precisar do cadastroWebV2 rerun.
+4. Hook contábil já enxerga `FaturaProcessada` via `cobranca.faturaProcessadaId`.
+
+**Trade-off:** complexidade alta — precisa preencher 28 campos (`mesesUtilizados`, `mesesDescartados`, `mediaKwhCalculada`, `thresholdUtilizado`, status, etc.) + integrar com `relatorio-fatura.service`.
+
+**Migração futura do stash:**
+Quando D-novo-CADWEB-FATURA-PROCESSADA for resolvido, criar migration que lê `consumoStashOcr` de cooperados ativos sem `FaturaProcessada` vinculada e cria os registros faltantes. Stash continua útil até lá.
+
+**Estimativa:** ~4-6h Code (schema mapping + ajustes pipeline + specs).
+
+**Status:** 📋 Catalogado em 2026-06-06 (Fatia 1.2 Bloco 1).
+
+---
+
 ### D-novo-LISTA-ESPERA-TENANT — Motor não grava cooperativaId em ListaEspera (P2)
 
 **Severidade:** P2 — entradas criadas via wizard `/cadastro` somem do filtro multi-tenant na UI de admin.

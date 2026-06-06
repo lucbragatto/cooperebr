@@ -22,6 +22,35 @@ import { isAmbienteReal } from '../common/safety/ambiente';
 import { validarENormalizarCadastro } from '../common/safety/cadastro-validacao';
 import { CadastroUploadService } from './cadastro-upload.service';
 
+/**
+ * Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026).
+ *
+ * Deriva cota mensal pra gravar em `Cooperado.cotaKwhMensal` durante o
+ * cadastro. Regra acordada com Luciano:
+ *   consumoMedioKwh ?? média(historicoConsumo)
+ *
+ * Arredonda 2 casas (Decimal evita lixo de float).
+ * Retorna 0 quando ambas fontes vazias — caller decide se grava (não-zero
+ * apenas) ou se deixa nulo (campo opcional no schema).
+ */
+export function derivarCotaKwhMensal(input: {
+  consumoMedioKwh?: number | null;
+  historicoConsumo?: Array<{ consumoKwh: number }> | null;
+}): number {
+  const direto = Number(input.consumoMedioKwh ?? 0);
+  if (Number.isFinite(direto) && direto > 0) {
+    return Math.round(direto * 100) / 100;
+  }
+  const historico = input.historicoConsumo ?? [];
+  if (historico.length === 0) return 0;
+  const soma = historico.reduce(
+    (acc, h) => acc + Number(h.consumoKwh ?? 0),
+    0,
+  );
+  if (soma <= 0) return 0;
+  return Math.round((soma / historico.length) * 100) / 100;
+}
+
 @Controller('publico')
 export class PublicoController {
   private readonly logger = new Logger(PublicoController.name);
@@ -956,6 +985,18 @@ export class PublicoController {
         // padrão (caminho /cadastro completo).
         const tipoCooperado = body.permiteSemUc && numeroUC === null ? 'SEM_UC' : 'COM_UC';
 
+        // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — capturar cota
+        // mensal do cooperado no cadastro. Antes era descartado (motor
+        // recebia via body via outro caminho); agora persistimos pra a
+        // aprovação (Fatia 1.3) reconstruir o membro mesmo sem o body.
+        //
+        // Regra: consumoMedioKwh ?? média(historicoConsumo). Se ambos vazios,
+        // grava 0 (motor falha → pendência visível Fatia 1.3).
+        const cotaKwhMensal = derivarCotaKwhMensal({
+          consumoMedioKwh: body.instalacao?.consumoMedioKwh,
+          historicoConsumo: body.historicoConsumo,
+        });
+
         cooperado = await tx.cooperado.create({
           data: {
             nomeCompleto: nome.trim(),
@@ -968,6 +1009,8 @@ export class PublicoController {
             modoRemuneracao: modoRemuneracao as any,
             termoAdesaoAceito: true,
             termoAdesaoAceitoEm: new Date(),
+            // Fatia 1.2 — cota mensal gravada na fonte (não descarta mais o OCR).
+            ...(cotaKwhMensal > 0 ? { cotaKwhMensal } : {}),
             // Convergência Fatia 2 — checkbox LGPD docs (RG/selfie) do Step 3.
             // Aceito apenas quando o caller (frontend wizard) marca explícito.
             ...(body.consentimentoDocs
@@ -1143,6 +1186,59 @@ export class PublicoController {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido';
       this.logger.warn(`[cadastro-v2] Motor falhou para cooperado ${cooperadoId}: ${msg}`);
+
+      // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — não engolir erro.
+      // Grava pendência VISÍVEL no cooperado pra admin ver "Cadastro
+      // incompleto" na listagem/detalhe (selo amarelo). Limpa na Fatia 1.3
+      // quando construirMembroCompleto cria o contrato.
+      // Best-effort (fora do tx do Cooperado): se gravação da pendência
+      // falhar, log mas não derruba o cadastro — admin pode usar a
+      // reconciliação manual da Fatia 1.4.
+      try {
+        await this.prisma.cooperado.update({
+          where: { id: cooperadoId },
+          data: {
+            pendenciaMotorMsg: msg.slice(0, 500),
+            pendenciaMotorEm: new Date(),
+          },
+        });
+      } catch (gravarErr: unknown) {
+        const gMsg = gravarErr instanceof Error ? gravarErr.message : 'erro';
+        this.logger.warn(
+          `[cadastro-v2] Falha ao gravar pendenciaMotorMsg para ${cooperadoId}: ${gMsg}`,
+        );
+      }
+    }
+
+    // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — stash do consumo
+    // (best-effort, fora do tx). Permite reconciliação futura (Fatia 1.4)
+    // reconstruir membro oco sem reupload de fatura. Decisão Luciano:
+    // persistir JSON leve aqui em vez de FaturaProcessada completa (esta
+    // exige 28 campos + pipeline OCR — fica como D-novo-CADWEB-FATURA-
+    // PROCESSADA P3).
+    try {
+      const temAlgoPraStash =
+        body.instalacao?.consumoMedioKwh ||
+        (body.historicoConsumo && body.historicoConsumo.length > 0) ||
+        body.valorUltimaFatura;
+      if (temAlgoPraStash) {
+        await this.prisma.cooperado.update({
+          where: { id: cooperadoId },
+          data: {
+            consumoStashOcr: {
+              consumoMedioKwh: body.instalacao?.consumoMedioKwh ?? null,
+              historicoConsumo: body.historicoConsumo ?? [],
+              valorUltimaFatura: body.valorUltimaFatura ?? null,
+              dadosOcr: (body as any).dadosOcr ?? null,
+              capturadoEm: new Date().toISOString(),
+              fonteRota: 'cadastroWebV2',
+            },
+          },
+        });
+      }
+    } catch (err: unknown) {
+      const sMsg = err instanceof Error ? err.message : 'erro';
+      this.logger.warn(`[cadastro-v2] stash consumoStashOcr falhou pra ${cooperadoId}: ${sMsg}`);
     }
 
     // PASSO 5 — Indicação (fire-and-forget)

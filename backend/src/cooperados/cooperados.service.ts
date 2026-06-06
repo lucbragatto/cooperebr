@@ -366,6 +366,11 @@ export class CooperadosService {
         checklistItems,
         createdAt: c.createdAt,
         progressaoClube: (c as any).progressaoClube ?? null,
+        // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — pendência visível
+        // do motor. UI mostra selo amarelo "Cadastro incompleto" na listagem.
+        // LIMPADO na Fatia 1.3 quando construirMembroCompleto cria o contrato.
+        pendenciaMotorMsg: (c as any).pendenciaMotorMsg ?? null,
+        pendenciaMotorEm: (c as any).pendenciaMotorEm ?? null,
         // SUPER_ADMIN: info do parceiro (quando sem filtro cooperativaId)
         ...(!cooperativaId && (c as any).cooperativa ? {
           nomeParceiro: (c as any).cooperativa.nome,

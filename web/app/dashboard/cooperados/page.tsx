@@ -45,6 +45,9 @@ interface CooperadoLista {
   checklist: string;
   checklistPronto: boolean;
   checklistItems: ChecklistItem[];
+  // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — pendência visível do motor.
+  pendenciaMotorMsg?: string | null;
+  pendenciaMotorEm?: string | null;
   progressaoClube?: {
     nivelAtual: string;
     indicadosAtivos: number;
@@ -283,28 +286,43 @@ function TabelaCooperados({
                   />
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1">
-                    <Link href={`/dashboard/cooperados/${c.id}`} className="font-medium text-blue-600 hover:underline">{c.nomeCompleto}</Link>
-                    {c.tipoCooperado === 'SEM_UC' && (
-                      <Badge className="ml-2 bg-amber-100 text-amber-800 border-amber-200" title="Cooperado SEM unidade consumidora (Indicador Puro / MLM / CooperToken)">
-                        SEM_UC
-                      </Badge>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                      <Link href={`/dashboard/cooperados/${c.id}`} className="font-medium text-blue-600 hover:underline">{c.nomeCompleto}</Link>
+                      {c.tipoCooperado === 'SEM_UC' && (
+                        <Badge className="ml-2 bg-amber-100 text-amber-800 border-amber-200" title="Cooperado SEM unidade consumidora (Indicador Puro / MLM / CooperToken)">
+                          SEM_UC
+                        </Badge>
+                      )}
+                      {c.pendenciaMotorMsg && (
+                        <Badge
+                          className="ml-2 bg-yellow-100 text-yellow-900 border-yellow-300 cursor-help"
+                          title={`Cadastro incompleto — não gerou contrato automático.\nMotivo: ${c.pendenciaMotorMsg}\nRevisar manualmente ou usar reconciliação.`}
+                        >
+                          ⚠️ Cadastro incompleto
+                        </Badge>
+                      )}
+                      <button
+                        title="Observar este membro"
+                        className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const fn = (window as any).__observadorAbrirModal;
+                          if (fn) {
+                            fn({ id: c.id, nomeCompleto: c.nomeCompleto, cpf: c.cpf, telefone: c.telefone, cooperativaId: c.cooperativaId });
+                          } else {
+                            window.location.href = `/dashboard/observador?userId=${c.id}&nome=${encodeURIComponent(c.nomeCompleto)}&telefone=${c.telefone || ''}`;
+                          }
+                        }}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {c.pendenciaMotorMsg && (
+                      <p className="text-xs text-yellow-800 leading-tight max-w-md">
+                        Não gerou contrato automático: {c.pendenciaMotorMsg.length > 80 ? c.pendenciaMotorMsg.slice(0, 80) + '…' : c.pendenciaMotorMsg}
+                      </p>
                     )}
-                    <button
-                      title="Observar este membro"
-                      className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const fn = (window as any).__observadorAbrirModal;
-                        if (fn) {
-                          fn({ id: c.id, nomeCompleto: c.nomeCompleto, cpf: c.cpf, telefone: c.telefone, cooperativaId: c.cooperativaId });
-                        } else {
-                          window.location.href = `/dashboard/observador?userId=${c.id}&nome=${encodeURIComponent(c.nomeCompleto)}&telefone=${c.telefone || ''}`;
-                        }
-                      }}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-gray-600">{c.cpf}</TableCell>
