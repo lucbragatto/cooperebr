@@ -249,6 +249,20 @@ model Cooperado {
   emailFaturasAtivoEm     DateTime?
   emailFaturasObservacao  String?
 
+  // ── Sprint Onboarding Bloco 0 Fatia 0.3 (06/06/2026) — Adesão opt-in ao Clube ──
+  // EXCLUSIVO do caminho INDIVIDUAL (cooperado comum / sem-UC paga a propria
+  // mensalidade). Funcionário de conveniado NUNCA usa este campo — o clube
+  // dele é pago pela empresa via `ContratoConvenio.planoClubeId` (Fatia 0.2).
+  // Setar nos dois lugares geraria cobrança DUPLA. Service `CooperadoClubeService`
+  // bloqueia adesão quando cooperado é membro ATIVO de convênio com clube.
+  //
+  // Fatia 0.4 (cobrança individual): linha de mensalidade só quando este campo
+  // setado + planoClube.cobra=true. Guard custeado-por-convênio (cobrancas.
+  // service.ts:171-178) ja barra individual de conveniado — defesa redundante.
+  planoClubeId            String?
+  planoClubeAdesao        PlanoClube?                @relation("CooperadosAderidos", fields: [planoClubeId], references: [id])
+  adesaoClubeEm           DateTime?
+
   @@map("cooperados")
 }
 
@@ -2346,6 +2360,9 @@ model PlanoClube {
 
   // Fatia 0.2 — back-ref pra ContratoConvenio.planoClubeId.
   contratosConvenio ContratoConvenio[]
+
+  // Fatia 0.3 — back-ref pra Cooperado.planoClubeId (adesão opt-in individual).
+  cooperadosAderidos Cooperado[] @relation("CooperadosAderidos")
 
   @@index([cooperativaId])
   @@index([cooperativaId, ativo])
