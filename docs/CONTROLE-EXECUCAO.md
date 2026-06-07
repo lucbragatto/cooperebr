@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-06 — M24 Sprint Onboarding Completo do Membro — Bloco 0 (Plano de Clube) + Bloco 1 (Aprovação CONSTRÓI o membro)**. **8 commits trabalho** em 1 sessão Code maratona: `a9794a8` Fatia 0.1 (PlanoClube model + CRUD + tela admin) · `6584aec` Fatia 0.2 (planoClubeId no ContratoConvenio) · `29999c6` Fatia 0.3 (adesão opt-in `Cooperado.planoClubeId` + INVARIANTE anti-cobrança-dupla) · `34a66c8` Fatia 0.4 (componente CLUBE escalar discriminado nas 2 cobranças — Bloco 0 COMPLETO) · `d18e7f6` Fatia 1.1 (validarToken propaga `convenioId` + `permiteSemUc` com anti-spoof) · `cfc6421` Fatia 1.2 (cadastroWebV2 persiste `cotaKwhMensal` + `pendenciaMotorMsg` best-effort + `consumoStashOcr` snapshot — bug arquitetural dados perdidos fechado) · `412b2da` Fatia 1.3 (`MembroBuilderService.construirMembroCompleto` único ponto de entrada idempotente — flip status ANTES do motor + `planoId` direto + degradação graciosa) · `8e47737` Fatia 1.4 (matrícula clube config-dependente via ConfigClubeVantagens.ativo + DRY-RUN reconciliação script + fix inline `D-novo-LISTA-ESPERA-TENANT` P1 + smoke integração cobrança — Bloco 1 COMPLETO). **234/234 specs convenios verdes** + 25/25 smoke E2E Fatia 1.3 + 8/8 smoke integração 1.4 (guard `custeadoPorConvenio` bloqueia double-bill; consolidada ALOCACAO_FIXA `valorBruto=R$200000`). ⚠️ ACHADO operacional: 218 membros parciais detectados no tenant CoopereBR pelo DRY-RUN — exige SEGMENTAÇÃO (oco × SEM_UC legítimo × lista de espera × teste sintético) antes de `--apply` em massa, catalogado como tarefa P2. **LEONARDO PIZZOL VIGNA reconciliado nesta sessão** (script `--membro <id>`): status PENDENTE→ATIVO + ProgressaoClube BRONZE + pendenciaMotor "cota não capturada"; sem contrato forçado (cota perdida pré-Fatia 1.2). **4 RESOLVIDOS:** `D-novo-LISTA-ESPERA-TENANT` P1 + bug arquitetural aprovação-só-flipa + bug dados perdidos cadastro + bug contexto convite. **3 ABERTOS novos P3:** `D-novo-FATURA-SEGREGADA-ITENS` · `D-novo-CLUBE-LANCAMENTO-FISCAL` · `D-novo-CADWEB-FATURA-PROCESSADA`. Detalhe: `docs/sessoes/2026-06-06-bloco-0-1-onboarding-membro.md`.
+> Última atualização: **2026-06-07 — M25 Bloco 2 Sprint Onboarding (Empresa vê kWh dos funcionários) + Correção modelo kWh + Sprint Convite-Lote completo**. **11 commits trabalho** em 1 sessão Code maratona: `6664aed` Fatia 2.1 (helper previewKwhConsolidado fonte única) · `70bf820` Fatia 2.2 (helper rateio puro com INVARIANTE centavo) · `4a8dec3` Fatia 2.3 (endpoint kwh-consumo + LGPD mascarada + anti-IDOR 404) · `f74c3d6` Fatia 2.4 (tela consumo funcionários — Bloco 2 COMPLETO) · `5f66ab3` **FIX kWh** modelo correto (total = soma dinâmica das cotas; kwhAlocadoMensal = REFERÊNCIA da assinatura, não valor cobrado) · `0756dcb` LOTE.1 (preview CSV + 5 estados + dedup) · `8de49e0` LOTE.2+3 (envio em fila throttle 2s + schema delta loteId + status) · `e427230` **FIX kWh complemento** valorAPagar exposto no preview + tela 3 colunas corretas (Disponível × Total atual × Valor a pagar) · `635143e` LOTE.4 (tela Convidar em lote portal + admin) · `dac1907` **FIX UI crítico** tabela SEMPRE renderiza quando há membros + seed demo Clínica Teste 300/400/500 (Total 1.200 kWh / R$ 1.200,00) · `8a957bd` LOTE.5 (modo B Abrir no WhatsApp + helper wa.me reusável MLM + schema cooperadoIndicadorId). **310/310 specs convenios verdes** + smoke prova-real 14/14 (preview.valorAPagar === cobranca.valorLiquido — FONTE ÚNICA do dinheiro confirmada). ⚠️ Bug arquitetural P0 RESOLVIDO: ALOCACAO_FIXA cobrava 200k SEMPRE; agora soma cotas. ⚠️ Bug UX cega P0 RESOLVIDO: tela escondia funcionários quando total=0; agora tabela sempre presente. Sprint Convite-Lote completo 5/5 fatias com 2 modos (automático em fila + manual wa.me) + atribuição MLM preparada. Detalhe: `docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md`.
+
+> Histórico: **2026-06-06 — M24 Sprint Onboarding Completo do Membro — Bloco 0 (Plano de Clube) + Bloco 1 (Aprovação CONSTRÓI o membro)**. **8 commits trabalho** em 1 sessão Code maratona: `a9794a8` Fatia 0.1 (PlanoClube model + CRUD + tela admin) · `6584aec` Fatia 0.2 (planoClubeId no ContratoConvenio) · `29999c6` Fatia 0.3 (adesão opt-in `Cooperado.planoClubeId` + INVARIANTE anti-cobrança-dupla) · `34a66c8` Fatia 0.4 (componente CLUBE escalar discriminado nas 2 cobranças — Bloco 0 COMPLETO) · `d18e7f6` Fatia 1.1 (validarToken propaga `convenioId` + `permiteSemUc` com anti-spoof) · `cfc6421` Fatia 1.2 (cadastroWebV2 persiste `cotaKwhMensal` + `pendenciaMotorMsg` best-effort + `consumoStashOcr` snapshot — bug arquitetural dados perdidos fechado) · `412b2da` Fatia 1.3 (`MembroBuilderService.construirMembroCompleto` único ponto de entrada idempotente — flip status ANTES do motor + `planoId` direto + degradação graciosa) · `8e47737` Fatia 1.4 (matrícula clube config-dependente via ConfigClubeVantagens.ativo + DRY-RUN reconciliação script + fix inline `D-novo-LISTA-ESPERA-TENANT` P1 + smoke integração cobrança — Bloco 1 COMPLETO). **234/234 specs convenios verdes** + 25/25 smoke E2E Fatia 1.3 + 8/8 smoke integração 1.4 (guard `custeadoPorConvenio` bloqueia double-bill; consolidada ALOCACAO_FIXA `valorBruto=R$200000`). ⚠️ ACHADO operacional: 218 membros parciais detectados no tenant CoopereBR pelo DRY-RUN — exige SEGMENTAÇÃO (oco × SEM_UC legítimo × lista de espera × teste sintético) antes de `--apply` em massa, catalogado como tarefa P2. **LEONARDO PIZZOL VIGNA reconciliado nesta sessão** (script `--membro <id>`): status PENDENTE→ATIVO + ProgressaoClube BRONZE + pendenciaMotor "cota não capturada"; sem contrato forçado (cota perdida pré-Fatia 1.2). **4 RESOLVIDOS:** `D-novo-LISTA-ESPERA-TENANT` P1 + bug arquitetural aprovação-só-flipa + bug dados perdidos cadastro + bug contexto convite. **3 ABERTOS novos P3:** `D-novo-FATURA-SEGREGADA-ITENS` · `D-novo-CLUBE-LANCAMENTO-FISCAL` · `D-novo-CADWEB-FATURA-PROCESSADA`. Detalhe: `docs/sessoes/2026-06-06-bloco-0-1-onboarding-membro.md`.
 
 > Histórico: **2026-06-05 tarde-noite — M23 Hardening Golden Path /cadastro?conv= e ?ref=**. **5 commits trabalho + 1 fechamento** em 1 sessão Code maratona: `9291d32` whitelist WA `+27999479097` + status honesto do envio (`WhatsappEnvioResult` com motivo propagado até UI dev, D-novo-WA-DEV-FALSE-OK RESOLVIDO) · `8ab10c8` docs fechamento M22 · `4c05aea` **D-novo-OCR-RESILIENCIA P1 RESOLVIDO** (Anthropic retornou HTTP 529 overloaded_error req `req_011Cbkg4RZ9ghXJSoLjtdD1V` 16:36 BRT; fix: retry exponencial 2s/4s/8s em 429/500/503/529 + AbortController timeout 30s + `max_tokens` 2048→8192 + classe `OcrFalhaError` com 7 motivos categorizados + UI mostra banner amber "Tentar de novo" pros recuperáveis em vez de cair em modo manual; 30 specs verdes) · `004372c` **D-novo-CADWEB-CONV-TENANT P1 RESOLVIDO** (`/cadastro-web` 400 quando vem via `?conv=` sem `?tenant=`; fix: resolve `cooperativaId` server-side via `body.token` espelhando padrão anti-spoof de `/auto-inscrever:568`; 6 specs + script `reset-otp-convite-emergencial.ts` + token correto do convite Luciano destravado: `e1bb49fea48d8cd27a4a646e236c6b1cf1c8d097a1c4eb883a88b6ef281b007b`) · `beef066` **D-novo-CADWEB-CONV-MEMBRO P1 RESOLVIDO** (smoke E2E expôs bug arquitetural: `cadastroWebV2` criava Cooperado+UC mas NÃO criava `ConvenioCooperado` nem marcava `usedAt`, convite ficava órfão reusável; fix: portado padrão de atomicidade de `/auto-inscrever:710-792` pro `cadastroWebV2` — consume-once + `adicionarMembro(CONVITE_PUBLICO)` + cross-ref `convite.membroId` dentro do mesmo `$transaction Serializable` que cria Cooperado+UC; 8 specs novos + smoke E2E programático 0 falhas em 12 passos). **44 specs verdes totais** (30 OCR + 14 cadastro-web). **4 RESOLVIDOS:** OCR-RESILIENCIA, CADWEB-CONV-TENANT, CADWEB-CONV-MEMBRO, WA-DEV-FALSE-OK. **6 ABERTOS catalogados:** D-novo-OTP-429-UX P3 (mensagem genérica no UI quando OTP estoura limite) · D-novo-OTP-DEV-RELAX P3 (rate-limit engessa smoke manual) · D-novo-AUTO-INSCREVER-DEPRECATION P3 (housekeeping pós-fix CONV-MEMBRO) · D-novo-CAD-CONSUMO-MENSAL P2 · D-novo-CONVITE-MENUS-UX P3 · D-novo-TESTS-MOCK-PRISMA P2. Detalhe: `docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md`.
 
@@ -34,6 +36,47 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-07 (Code — M25 Bloco 2 Empresa vê kWh + Correção modelo kWh + Sprint Convite-Lote)
+
+**11 commits trabalho** em 1 sessão Code maratona (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `6664aed` | feat | Fatia 2.1 — helper read-only `previewKwhConsolidado` (fonte única) |
+| `70bf820` | feat | Fatia 2.2 — helper puro `ratearProporcionalCusteio` (INVARIANTE centavo) |
+| `4a8dec3` | feat | Fatia 2.3 — endpoint `GET /portal/meus-convenios/:id/kwh-consumo` (UC mascarada + anti-IDOR) |
+| `f74c3d6` | feat | Fatia 2.4 — tela consumo dos funcionários (Bloco 2 COMPLETO) |
+| `5f66ab3` | **fix** | **kWh: total = soma das cotas (modelo correto, kwhAlocadoMensal vira referência)** |
+| `0756dcb` | feat | LOTE.1 — backend preview CSV + 5 estados + dedup |
+| `8de49e0` | feat | LOTE.2+3 — envio em fila throttle 2s + schema `loteId` + status |
+| `e427230` | **fix** | **kWh complemento: valorAPagar no preview + tela 3 colunas correta** |
+| `635143e` | feat | LOTE.4 — tela Convidar em lote (portal + admin) |
+| `dac1907` | **fix** | **UI tela kWh — tabela SEMPRE renderiza quando há membros + seed demo Clínica Teste 300/400/500** |
+| `8a957bd` | feat | LOTE.5 — modo B "Abrir no WhatsApp" + helper wa.me reusável MLM (`cooperadoIndicadorId`) |
+| `<próximo>` | docs | fechamento M25 (esta sessão) |
+
+**Em curso:** —
+
+**Próximo passo (Luciano decide):**
+1. **Bloco 3 Sprint Onboarding** — cadastro fácil sem UC (membro entra sem UC ativa; cooperativa gera UC depois).
+2. **Módulo Pagar Concessionária (Mandato)** — concretiza o 3º modelo do circuito CooperToken (memória `decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md`). Cooperado dá mandato pra cooperativa pagar concessionária direto; transparência fiscal-tributária. Demanda parecer ANEEL/CC.
+
+**Pendência paralela P2 (não-bloqueante):**
+- Segmentar os 218 membros parciais detectados pelo DRY-RUN da M24 ANTES de reconciliação em massa (oco genuíno × SEM_UC legítimo × lista de espera × cooperado sintético). Estimativa: ~2-4h script de segmentação.
+- Reprocessar fatura do LEONARDO PIZZOL VIGNA (cota 500 demo aplicada na M25; fatura real ainda pendente).
+- Aplicar mensagem de convite nova no Code (sugerida pelo Luciano).
+
+**Carry-overs novos (não-bloqueantes):**
+- Helper `ratearProporcionalCusteio` (Fatia 2.2) órfão funcional pós-fix kWh — housekeeping futuro P3 (mantido com 15/15 specs vigentes).
+- `.claude/agents/wa-bot-agent.md` modificado (não-meu — vem de outro tooling/IDE com adições Stack OpenClaw+ECC+Obsidian). Luciano avalia commit/descarte.
+
+**Carry-overs anteriores preservados:** 6 débitos M23 P3 + 3 débitos M24 P3 + `D-novo-CT-VALIDACAO-FISCAL` P0 + `D-novo-CT-MULTI-REGIME-CLASSIFICACAO` P1 + `D-novo-BM` P0 BLOQUEADOR PRÉ-PROD + 256 legados allowlist `lint:tenant`.
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 07/06 fechamento M25).
+> Detalhe: `docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md`.
 
 ---
 
@@ -1716,75 +1759,128 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
-   limpo (untracked carry-overs catalogados), último commit é o de
-   fechamento M24 (Bloco 0 + Bloco 1 Sprint Onboarding Completo do Membro
-   — Plano de Clube + aprovação CONSTRÓI o membro via helper único +
-   reconciliação script-driven + fix LISTA-ESPERA multi-tenant).
+   limpo (untracked carry-overs catalogados + 1 modificação não-minha
+   em .claude/agents/wa-bot-agent.md que Luciano avalia), último commit
+   é o de fechamento M25 (Bloco 2 Empresa vê kWh + Correção modelo kWh
+   + Sprint Convite-Lote completo 5/5).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    online. ⚠ Frontend é `next start` sob PM2 (NÃO `next dev`) — toda
    mudança de frontend exige `cd web ; npm run build ; pm2 restart
    cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante (próximo Code arranca aqui):
+PASSO 1 — Frase comandante (Luciano DECIDE qual das 2 opções):
 
-Iniciar Bloco 2 do Sprint Onboarding Completo do Membro — empresa pagadora
-vê total de kWh consumido pelos funcionários (membros custeados) no portal
-da empresa conveniada `/conveniada/convenio/[id]`. Fase 1 read-only
-obrigatória primeiro (mapear `backend/src/convenios/portal-empresa/`,
-`web/app/conveniada/convenio/[id]/page.tsx`, agregação de UCs por convênio,
-padrão breakdown vs total, semântica do componente kWh consolidado vs
-energia ALOCACAO_FIXA quando não há FaturaProcessada). Spec:
-`docs/especificacao-circuito-cooper-token-convenio.md`. Bloco 0 +
-Bloco 1 ENTREGUES e validados (smoke E2E 25/25 + 8/8 verdes; LEONARDO
-PIZZOL VIGNA reconciliado individualmente — status ATIVO + clube BRONZE +
-pendência de consumo visível, sem contrato forçado).
+Sessão 07/06 entregou M25 — Bloco 2 do Sprint Onboarding (empresa
+pagadora vê total de kWh dos funcionários no portal `/conveniada/`)
++ Correção arquitetural do modelo kWh (total = SOMA DINÂMICA das
+cotas dos membros, NÃO rateio do pacote; kwhAlocadoMensal vira
+"crédito disponível"/referência) + Sprint Convite-Lote completo
+em 5 fatias (preview CSV → envio em fila throttle 2s → tela →
+modo B Abrir no WhatsApp + helper wa.me reusável MLM).
 
-Pendência paralela P2 (NÃO bloqueia Bloco 2; tarefa separada quando
-houver janela): segmentar os 218 membros parciais detectados pelo
-DRY-RUN no tenant CoopereBR antes de reconciliação em massa. Distinguir:
-(a) membros oco genuínos (LEONARDO-like, eram reais e perderam dados),
-(b) SEM_UC legítimo (membro de convênio sem fatura própria), (c) lista
-de espera (sem usina alocada ainda), (d) cooperado sintético de teste
-(Hangar/Condomínio Moradas dominam). Promover sintético a MEMBRO_ATIVO
-+ matriculá-lo no clube é bug de dados. Estimativa: ~2-4h pra script
-de segmentação + dry-run categorizado antes de qualquer `--apply` em
-massa. Reprocessar fatura do LEONARDO depois pra fechar o contrato
-dele (cota perdida pré-Fatia 1.2 — precisa OCR + recadastro de UC).
+11 commits trabalho `6664aed..8a957bd` (incluindo 3 fixes críticos:
+modelo kWh `5f66ab3` + complemento valorAPagar `e427230` + UI cega
+`dac1907`). 310/310 specs convenios verdes. Smoke prova-real 14/14
+confirmou `preview.valorAPagar === cobranca.valorLiquido` (fonte
+única do dinheiro). Tela Clínica Teste agora mostra Total 1.200 kWh
+/ R$ 1.200,00 com 3 membros (seed cotas 300/400/500 aplicado).
+
+DECIDA — duas opções pra arrancar:
+
+(A) BLOCO 3 SPRINT ONBOARDING — cadastro fácil sem UC. Continua
+    roadmap A→H do Sprint Onboarding (após Blocos 0/1/2 entregues).
+    Membro pode entrar mesmo sem ter UC ativa; cooperativa gera UC
+    depois via fluxo separado. Spec:
+    `docs/especificacao-circuito-cooper-token-convenio.md`. Estado
+    atual: `/publico/cadastro-sem-uc` existe (M22 Fatia F-G1) com
+    UC sintética; refinar/expandir.
+
+(B) MÓDULO PAGAR CONCESSIONÁRIA (MANDATO) — concretiza o 3º modelo
+    do circuito CooperToken (memória `decisao_modelo_token_voucher
+    _sobra_resgate_2026_06_04.md`). Cooperado dá mandato pra
+    cooperativa pagar concessionária direto; transparência fiscal-
+    tributária total; PIS/COFINS isenção ato cooperativo preservada.
+    Demanda parecer regulatório (ANEEL/CC) + spec contratual de
+    mandato. Mapear: `docs/especificacao-contabilidade-cooperativa-
+    segregada.md` § ato cooperativo Art. 79.
+
+Fase 1 read-only obrigatória qualquer que seja a escolha (Decisão 23).
+
+Pendência paralela P2 (NÃO bloqueia escolha — tarefa separada):
+- Segmentar 218 membros parciais detectados pelo DRY-RUN M24 antes
+  de reconciliação em massa (oco × SEM_UC legítimo × lista espera ×
+  sintético teste). Estimativa ~2-4h script.
+- Reprocessar fatura do LEONARDO PIZZOL VIGNA (cota 500 demo aplicada
+  M25; fatura real ainda pendente OCR + recadastro UC).
+- Aplicar mensagem de convite nova no Code (Luciano sugeriu em
+  paralelo).
 
 Pré-requisitos Fase 1 read-only OBRIGATÓRIOS (mapear, NÃO codar):
-1. Ler docs/sessoes/2026-06-06-bloco-0-1-onboarding-membro.md (esta —
-   M24, contexto pleno Bloco 0+1, 8 commits, 234/234 specs convenios,
-   25/25 smoke E2E 1.3, 8/8 smoke integração 1.4)
-2. Ler docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M24 + M23)
+1. Ler docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M25)
+2. Ler docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md (M25 — esta)
 3. Ler ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
-4. Mapear backend/src/convenios/portal-empresa/ (portal empresa
-   conveniada atual — Fatia 9.0/9.1 da Convergência 04/06)
-5. Mapear web/app/conveniada/convenio/[id]/page.tsx (dashboard empresa
-   — GestaoConvitesSection + MembrosPendentesSection + HelpBox)
-6. Mapear backend/src/convenios/convenios-membros.service.ts
-   (membros do convênio — agregação base pra Bloco 2)
-7. Mapear backend/src/convenios/convenios-custeio.service.ts (linhas
-   200-370 — fluxo CONSUMO_REAL × ALOCACAO_FIXA que dá total atual da
-   consolidada; semântica kWh agregado já existe lá)
-8. Mapear web/app/conveniada/convenio/[id]/membros (se existir) ou
-   GestaoConvitesSection (referência de listagem reusável)
-9. Mapear backend/src/convenios/membro-builder.service.ts (helper
-   Fatia 1.3 — pra entender quais campos do Cooperado já estão
-   disponíveis pra agregação)
-10. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
-11. git log --oneline -15
+4. Ler memory/decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
+   (3 modelos token/mandato — referência crítica pra opção B)
+5. Ler docs/sessoes/2026-06-06-bloco-0-1-onboarding-membro.md (M24
+   anterior, Bloco 0+1 — referência pra opção A)
+6. docs/especificacao-circuito-cooper-token-convenio.md (Bloco 3+)
+7. Se opção A: mapear backend/src/cooperados/cooperados.service.ts
+   + backend/src/ucs/ucs.service.ts + endpoint
+   /publico/cadastro-sem-uc atual
+8. Se opção B: docs/especificacao-contabilidade-cooperativa-
+   segregada.md (PIS/COFINS isenção) + memória mandato
+9. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
+10. git log --oneline -15
 
 Decisão 23: SEMPRE Fase 1 read-only ANTES de codar.
 LIÇÃO `next start` (04/06): frontend mudou → `cd web ; npm run build ;
 pm2 restart cooperebr-frontend`. HMR NÃO ROLA neste setup.
-LIÇÃO Opção A (05/06): perfil COOPERADO único + contextos derivados.
-EMPRESA_CONVENIADA @deprecated (compat tokens em circulação).
-LIÇÃO M24 (06/06): aprovação CONSTRÓI o membro (não só flipa status);
-helper único `construirMembroCompleto` PER-STEP idempotente; ordem
-flip→motor importa (motor.aceitar tem marcarPendenteDocumentos que
-atropela se rodar antes); `planoId` direto > `convenioCusteioId`
-quando membro JÁ está MEMBRO_ATIVO; degradação graciosa NUNCA propaga.
+LIÇÃO PM2 backend: schema delta → `pm2 stop ; db push ; generate ; pm2 restart`.
+LIÇÃO M25 (07/06): kwhAlocadoMensal é REFERÊNCIA (crédito disponível),
+NÃO valor cobrado. Total = soma dinâmica das cotas (ALOCACAO_FIXA) ou
+soma das faturas (CONSUMO_REAL). FONTE ÚNICA preservada via helper
+privado `calcularValorEnergia` compartilhado entre preview e cobrança.
+LIÇÃO M25 UI: tabela de listagem NUNCA esconde itens — mensagens de
+estado (vazio, parcial) viram BANNER, não substituem a tabela.
+
+CONTEXTO DA SESSÃO 07/06 (11 commits 6664aed..8a957bd):
+
+- 6664aed Fatia 2.1 — `previewKwhConsolidado` (helper read-only fonte
+  única — gerarCobrancaConsolidada DELEGA). 5 estados não-throw + anti-IDOR.
+- 70bf820 Fatia 2.2 — `ratearProporcionalCusteio` (helper puro com
+  INVARIANTE fechamento centavo, 15/15 specs — APOSENTADO pós-fix kWh).
+- 4a8dec3 Fatia 2.3 — `GET /portal/meus-convenios/:id/kwh-consumo`
+  gated @PagadorCooperadoOnly + @AuditLog + UC mascarada `...054` LGPD.
+- f74c3d6 Fatia 2.4 — Tela consumo dos funcionários (`ConsumoFuncionariosCard`
+  inline com selector mês + tabela + HelpBox).
+- 5f66ab3 **FIX modelo kWh** — total = SOMA DINÂMICA das cotas (não
+  rateio do pacote). kwhAlocadoMensal vira referência. ALOCACAO_FIXA
+  sem cotas → SEM_CONSUMO_CAPTURADO (skip cobrança, não cobra 200k vazios).
+- 0756dcb LOTE.1 — Backend preview CSV/TXT + 5 estados (PRONTO/
+  DUPLICATA_CSV/JA_MEMBRO/JA_CONVIDADO/INVALIDO) + dedup interno/externo.
+- 8de49e0 LOTE.2+3 — Schema delta `loteId` + envio em fila `setImmediate`
+  + throttle 2s + status agregado com sufixo telefone LGPD.
+- e427230 **FIX kWh complemento** — `valorAPagar` exposto no preview
+  via helper privado `calcularValorEnergia` (FONTE ÚNICA compartilhada
+  com gerarCobrancaConsolidada). Tela 3 colunas: Disponível × Total
+  atual × Valor a pagar.
+- 635143e LOTE.4 — Tela `EnvioLoteSection` (4 steps state machine:
+  upload→previa→enviando→concluido) no portal-empresa + admin.
+- dac1907 **FIX UI cega kWh** — tabela SEMPRE renderiza quando há
+  membros (banner azul informativo NÃO substitui lista). + seed demo
+  Clínica Teste cotas 300/400/500 → Total 1.200 kWh / R$ 1.200,00.
+- 8a957bd LOTE.5 — Modo B "Abrir no WhatsApp" (`wa.me/<tel>?text=msg`)
+  + helper puro `buildWaMeConviteUrl` com 2 variantes (CONVENIO_EMPRESA
+  + INDICACAO_COOPERADO) preparado pra MLM individual futuro. Schema
+  delta `cooperadoIndicadorId String?` pra atribuição.
+
+ACHADOS OPERACIONAIS M25:
+- Bug arquitetural ALOCACAO_FIXA cobrando 200k SEMPRE (mesmo sem
+  funcionários) — RESOLVIDO via modelo correto.
+- Bug UX cega tela kWh escondia tabela quando total=0 — RESOLVIDO.
+- FONTE ÚNICA do dinheiro: `preview.valorAPagar === cobranca.valorLiquido`
+  validado em smoke prova-real 14/14.
 
 CONTEXTO DA SESSÃO 06/06 (8 commits a9794a8..8e47737):
 
