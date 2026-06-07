@@ -37,6 +37,8 @@ import { GatewayPagamentoService } from '../gateway-pagamento/gateway-pagamento.
 import { isAmbienteReal } from '../common/safety/ambiente';
 // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026)
 import { PlanoClubeService } from '../plano-clube/plano-clube.service';
+// Sprint Onboarding Bloco 2 Fatia 2.2 (07/06/2026) — helper puro de rateio.
+import { ratearProporcionalCusteio } from './lib/ratear-proporcional-custeio';
 
 const PLANO_CONSOLIDADOR_NOME = 'Consolidador de Custeio';
 
@@ -451,17 +453,22 @@ export class ConveniosCusteioService {
       };
     }
 
-    // Rateio proporcional ao cotaKwhMensal (porte da fórmula condominios.calcularRateio
-    // PROPORCIONAL_CONSUMO — vai virar helper standalone na Fatia 2.2).
-    // Fallback IGUALITARIO se totalCota === 0 (nenhum membro tem cota capturada).
-    const cotasPorMembro = membros.map((m) => Number(m.cooperado.cotaKwhMensal ?? 0));
-    const totalCota = cotasPorMembro.reduce((acc, v) => acc + v, 0);
-    const warningRateioIgualitario = totalCota === 0;
-    const membrosDetalhe: PreviewKwhMembroDetalhe[] = membros.map((m, idx) => {
-      const cota = cotasPorMembro[idx]!;
-      const kwhAlocado = warningRateioIgualitario
-        ? Math.round((kwhTotal / membros.length) * 100) / 100
-        : Math.round(kwhTotal * (cota / totalCota) * 100) / 100;
+    // Fatia 2.2 (07/06/2026) — rateio via helper puro `ratearProporcionalCusteio`.
+    // Fórmula consumo/total + fallback IGUALITARIO quando soma dos pesos = 0.
+    // INVARIANTE CRÍTICA garantida pelo helper: a soma das parcelas FECHA EXATAMENTE
+    // com o kwhTotal (último item absorve diferença de arredondamento de centavo).
+    // Sem isso a fatura da empresa pode sobrar/faltar R$0,01.
+    const rateio = ratearProporcionalCusteio(
+      kwhTotal,
+      membros.map((m) => ({
+        id: m.cooperado.id,
+        peso: Number(m.cooperado.cotaKwhMensal ?? 0),
+      })),
+    );
+    const warningRateioIgualitario = rateio.modo === 'IGUALITARIO_FALLBACK';
+    const kwhPorMembro = new Map(rateio.saidas.map((s) => [s.id, s.valor]));
+    const membrosDetalhe: PreviewKwhMembroDetalhe[] = membros.map((m) => {
+      const kwhAlocado = kwhPorMembro.get(m.cooperado.id) ?? 0;
       return {
         cooperadoId: m.cooperado.id,
         nome: m.cooperado.nomeCompleto,
