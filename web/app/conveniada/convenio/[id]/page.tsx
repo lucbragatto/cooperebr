@@ -240,24 +240,18 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
     carregar();
   }, [carregar]);
 
-  const renderEstadoSemDados = () => {
-    if (!data) return null;
+  const mensagemEstado = (s: KwhStatus, mesRefStr: string): string => {
     const msgs: Record<KwhStatus, string> = {
       OK: '',
       SEM_MEMBROS:
         'Nenhum funcionário cadastrado neste convênio ainda. Use o card de convites pra começar.',
       SEM_UCS_CUSTEADAS:
         'Os funcionários ainda não têm UC custeada. O admin da cooperativa precisa ativar o contrato custeado de cada um.',
-      SEM_FATURAS_NO_MES:
-        `Nenhuma fatura aprovada em ${data.mesRefStr} ainda. As faturas chegam pela concessionária e o admin precisa aprovar pelo OCR.`,
+      SEM_FATURAS_NO_MES: `Nenhuma fatura aprovada em ${mesRefStr} ainda. As faturas chegam pela concessionária e o admin precisa aprovar pelo OCR.`,
       SEM_CONSUMO_CAPTURADO:
-        'Funcionários cadastrados, mas o consumo médio (kWh/mês) de cada um ainda não foi capturado. O admin da cooperativa precisa cadastrar o consumo de cada funcionário pra calcular o total.',
+        'Funcionários cadastrados, mas o consumo médio (kWh/mês) ainda não foi capturado. O admin da cooperativa cadastra o consumo de cada um pra calcular o total e o valor a pagar.',
     };
-    return (
-      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-        {msgs[data.status]}
-      </div>
-    );
+    return msgs[s];
   };
 
   return (
@@ -408,13 +402,19 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
               </div>
             )}
 
-            {/* Tabela ou estado vazio */}
-            {data.status !== 'OK' ? (
-              renderEstadoSemDados()
-            ) : data.membros.length === 0 ? (
+            {/* Banner informativo de estado (acima da tabela — NÃO substitui). */}
+            {data.status !== 'OK' && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-blue-700" />
+                <div>{mensagemEstado(data.status, data.mesRefStr)}</div>
+              </div>
+            )}
+
+            {/* Tabela: SEMPRE renderiza quando há membros (cota 0 também aparece). */}
+            {data.membros.length === 0 ? (
               <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-                Pacote de {data.kwhTotal.toLocaleString('pt-BR')} kWh contratado, mas
-                sem funcionários cadastrados ainda. Use o card de convites pra começar.
+                Nenhum funcionário cadastrado neste convênio ainda. Use o card de
+                convites pra começar.
               </div>
             ) : (
               <Table className="mt-3">
@@ -455,7 +455,9 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
                         {m.kwh.toLocaleString('pt-BR')}
                       </TableCell>
                       <TableCell className="text-right text-xs text-slate-600">
-                        {m.percentual.toFixed(2).replace('.', ',')}%
+                        {data.kwhTotal > 0
+                          ? `${m.percentual.toFixed(2).replace('.', ',')}%`
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         {m.semFaturaNoMes ? (
