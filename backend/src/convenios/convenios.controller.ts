@@ -698,6 +698,40 @@ export class ConveniosController {
   }
 
   /**
+   * Sprint Convite-Lote LOTE.1 (07/06/2026) — preview de convites em lote.
+   *
+   * Recebe CSV/TXT colado e classifica cada linha pra mostrar prévia antes
+   * do envio em lote (que vem na LOTE.2). NÃO cria convite, NÃO envia WA.
+   * Multi-tenant via @TenantResource — convenioId pertence ao tenant.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.lote.preview',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(200)
+  @Post(':id/convites/lote/preview')
+  async previewConviteLote(
+    @Param('id') convenioId: string,
+    @Body() body: { csv: string },
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException(
+        'cooperativaId obrigatório no contexto do usuário.',
+      );
+    }
+    return this.convitesService.previewLote({
+      convenioId,
+      cooperativaId,
+      csv: body?.csv ?? '',
+    });
+  }
+
+  /**
    * Lista convites do convênio (admin). Tokens são retornados apenas como
    * sufixo (defesa LGPD — token integral só vai no WA do destinatário).
    */

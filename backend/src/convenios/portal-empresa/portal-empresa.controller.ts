@@ -222,6 +222,33 @@ export class PortalEmpresaController {
   }
 
   /**
+   * Sprint Convite-Lote LOTE.1 (07/06/2026) — preview do lote no portal-empresa.
+   * Anti-IDOR via @PagadorCooperadoOnly (já valida posse e injeta cooperativaId
+   * em req.empresa). Service revalida tenant — defesa em profundidade.
+   */
+  @PagadorCooperadoOnly()
+  @AuditLog({
+    acao: 'portal-empresa.convite.lote.preview',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(200)
+  @Post(':id/convites/lote/preview')
+  async previewConviteLote(
+    @Param('id') convenioId: string,
+    @Body() body: { csv: string },
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.empresa?.cooperativaId;
+    if (!cooperativaId) throw new ForbiddenException('Contexto sem cooperativaId.');
+    return this.convitesService.previewLote({
+      convenioId,
+      cooperativaId,
+      csv: body?.csv ?? '',
+    });
+  }
+
+  /**
    * Reenvia link do convite (regenera token + TTL + WA).
    */
   @PagadorCooperadoOnly()

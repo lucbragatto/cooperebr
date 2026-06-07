@@ -75,6 +75,253 @@ export class ConvitesConvenioService {
     return t;
   }
 
+  // ─── Sprint Convite-Lote (07/06/2026) — preview do lote ──────────────
+
+  /**
+   * Status de cada linha do preview.
+   *  - PRONTO: passa nas validações e dedups; pode entrar no envio.
+   *  - DUPLICATA_CSV: mesmo telefone aparece mais de uma vez no CSV; só a 1ª
+   *    fica PRONTO, as demais ficam DUPLICATA_CSV.
+   *  - JA_MEMBRO: telefone bate com cooperado que já é membro ATIVO no convênio
+   *    (não precisa convidar de novo).
+   *  - JA_CONVIDADO: já existe ConviteConvenioMembro vivo (não-usado, não-
+   *    expirado) pra mesmo (convenioId, telefone). Empresa pode reenviar pelo
+   *    endpoint existente em vez de criar outro.
+   *  - INVALIDO: nome muito curto ou telefone fora do padrão BR.
+   */
+  static readonly PREVIEW_STATUS = [
+    'PRONTO',
+    'DUPLICATA_CSV',
+    'JA_MEMBRO',
+    'JA_CONVIDADO',
+    'INVALIDO',
+  ] as const;
+
+  /**
+   * Faz preview READ-ONLY de uma planilha de destinatários (CSV/TXT colado).
+   *
+   * NÃO cria convite, NÃO envia WA. Só parseia, valida e classifica linha-a-
+   * linha pra o frontend mostrar a tabela de prévia antes do envio em lote.
+   * O envio em si vem na fatia LOTE.2.
+   *
+   * Anti-IDOR: caller passa `cooperativaId` resolvido server-side (do guard
+   * `@PagadorCooperadoOnly` no portal-empresa, ou do `req.user.cooperativaId`
+   * no admin). Service valida que o convênio pertence ao tenant; cross-tenant
+   * retorna 404 (anti-enumeração).
+   */
+  async previewLote(input: {
+    convenioId: string;
+    cooperativaId: string;
+    csv: string;
+  }): Promise<{
+    resumo: {
+      total: number;
+      pronto: number;
+      duplicataCsv: number;
+      jaMembro: number;
+      jaConvidado: number;
+      invalido: number;
+    };
+    linhas: Array<{
+      linha: number;
+      nome: string;
+      telefone: string;
+      telefoneFmt: string | null;
+      status: (typeof ConvitesConvenioService.PREVIEW_STATUS)[number];
+      motivo?: string;
+    }>;
+  }> {
+    const { convenioId, cooperativaId } = input;
+    if (!convenioId) throw new BadRequestException('convenioId obrigatório.');
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório.');
+    }
+    if (!input.csv || typeof input.csv !== 'string') {
+      throw new BadRequestException('csv obrigatório (string com linhas).');
+    }
+
+    // Anti-IDOR: confirma posse do convênio no tenant + pagador=EMPRESA + ATIVO.
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: { id: true, status: true, pagador: true, empresaNome: true },
+    });
+    if (!convenio) {
+      throw new NotFoundException('Convênio não encontrado neste tenant.');
+    }
+    if (convenio.status !== 'ATIVO') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" não está ATIVO.`,
+      );
+    }
+    if (convenio.pagador !== 'EMPRESA') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" tem pagador=${convenio.pagador}; ` +
+          `convites de custeio exigem pagador=EMPRESA.`,
+      );
+    }
+
+    // Parse + normalização inicial. Sem dedups ainda.
+    const linhasRaw = input.csv
+      .split(/\r?\n/)
+      .map((l, idx) => ({ raw: l, idx: idx + 1 }))
+      .filter((l) => l.raw.trim().length > 0);
+
+    type Bruto = {
+      linha: number;
+      nome: string;
+      telefoneOriginal: string;
+      telefoneNorm: string | null;
+      erroParse?: string;
+    };
+    const brutos: Bruto[] = linhasRaw.map((l) => {
+      // Detecta separador (vírgula, ponto e vírgula, tab). Pega o primeiro
+      // que aparece na string — se nenhum, considera nome inteiro sem telefone.
+      const sep = [',', ';', '\t'].find((s) => l.raw.includes(s)) ?? null;
+      let nome = l.raw.trim();
+      let telefoneOriginal = '';
+      if (sep) {
+        const partes = l.raw.split(sep);
+        nome = (partes[0] ?? '').trim();
+        telefoneOriginal = (partes.slice(1).join(sep) ?? '').trim();
+      }
+      // Cabeçalho comum (`nome,telefone`) — ignora se a 1ª linha bate.
+      const ehCabecalho =
+        l.idx === 1 &&
+        /^nome$/i.test(nome) &&
+        /^(telefone|celular|whats?app)$/i.test(telefoneOriginal);
+      if (ehCabecalho) {
+        return {
+          linha: l.idx,
+          nome: '',
+          telefoneOriginal: '',
+          telefoneNorm: null,
+          erroParse: 'CABECALHO',
+        };
+      }
+      let telefoneNorm: string | null = null;
+      let erroParse: string | undefined;
+      if (!telefoneOriginal) {
+        erroParse = 'Telefone ausente — formato esperado "Nome, Telefone".';
+      } else {
+        try {
+          telefoneNorm =
+            ConvitesConvenioService.normalizarTelefoneBR(telefoneOriginal);
+        } catch (err) {
+          erroParse = err instanceof Error ? err.message : 'Telefone inválido.';
+        }
+      }
+      return { linha: l.idx, nome, telefoneOriginal, telefoneNorm, erroParse };
+    });
+
+    // Remove cabeçalho do conjunto retornado (não conta no resumo).
+    const semCabecalho = brutos.filter((b) => b.erroParse !== 'CABECALHO');
+
+    // Carrega snapshots de DB pra dedup externo (uma query por tipo).
+    const telefonesValidos = semCabecalho
+      .filter((b) => b.telefoneNorm !== null)
+      .map((b) => b.telefoneNorm!);
+
+    const [membrosAtivos, convitesVivos] = await Promise.all([
+      telefonesValidos.length > 0
+        ? this.prisma.convenioCooperado.findMany({
+            where: {
+              convenioId,
+              ativo: true,
+              cooperado: { telefone: { in: telefonesValidos } },
+            },
+            select: { cooperado: { select: { telefone: true } } },
+          })
+        : Promise.resolve([]),
+      telefonesValidos.length > 0
+        ? this.prisma.conviteConvenioMembro.findMany({
+            where: {
+              convenioId,
+              telefone: { in: telefonesValidos },
+              usedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+            select: { telefone: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const telefonesJaMembro = new Set(
+      membrosAtivos
+        .map((m) => m.cooperado?.telefone)
+        .filter((t): t is string => Boolean(t)),
+    );
+    const telefonesJaConvidado = new Set(convitesVivos.map((c) => c.telefone));
+
+    // Classificação final + dedup interno (1ª aparição PRONTO; resto DUPLICATA_CSV).
+    const telefonesVistosNoCsv = new Set<string>();
+    const linhas = semCabecalho.map((b) => {
+      const base = {
+        linha: b.linha,
+        nome: b.nome,
+        telefone: b.telefoneOriginal,
+        telefoneFmt: b.telefoneNorm,
+      };
+      // Validação básica
+      if (!b.nome || b.nome.length < 2) {
+        return {
+          ...base,
+          status: 'INVALIDO' as const,
+          motivo: 'Nome obrigatório (mínimo 2 caracteres).',
+        };
+      }
+      if (b.erroParse || !b.telefoneNorm) {
+        return {
+          ...base,
+          status: 'INVALIDO' as const,
+          motivo: b.erroParse ?? 'Telefone inválido.',
+        };
+      }
+      // Dedup interno: telefone repetido no próprio CSV
+      if (telefonesVistosNoCsv.has(b.telefoneNorm)) {
+        return {
+          ...base,
+          status: 'DUPLICATA_CSV' as const,
+          motivo: 'Telefone aparece mais de uma vez no arquivo.',
+        };
+      }
+      telefonesVistosNoCsv.add(b.telefoneNorm);
+      // Dedup externo: já é membro ATIVO?
+      if (telefonesJaMembro.has(b.telefoneNorm)) {
+        return {
+          ...base,
+          status: 'JA_MEMBRO' as const,
+          motivo: 'Telefone já vinculado a um funcionário ativo neste convênio.',
+        };
+      }
+      // Dedup externo: já tem convite vivo?
+      if (telefonesJaConvidado.has(b.telefoneNorm)) {
+        return {
+          ...base,
+          status: 'JA_CONVIDADO' as const,
+          motivo:
+            'Já existe um convite ativo pra este telefone — use "reenviar" se quiser.',
+        };
+      }
+      return { ...base, status: 'PRONTO' as const };
+    });
+
+    const resumo = {
+      total: linhas.length,
+      pronto: linhas.filter((l) => l.status === 'PRONTO').length,
+      duplicataCsv: linhas.filter((l) => l.status === 'DUPLICATA_CSV').length,
+      jaMembro: linhas.filter((l) => l.status === 'JA_MEMBRO').length,
+      jaConvidado: linhas.filter((l) => l.status === 'JA_CONVIDADO').length,
+      invalido: linhas.filter((l) => l.status === 'INVALIDO').length,
+    };
+
+    this.logger.log(
+      `[convite-lote] Preview convênio="${convenio.empresaNome}" total=${resumo.total} ` +
+        `pronto=${resumo.pronto} jaMembro=${resumo.jaMembro} jaConvidado=${resumo.jaConvidado} ` +
+        `duplicataCsv=${resumo.duplicataCsv} invalido=${resumo.invalido}`,
+    );
+
+    return { resumo, linhas };
+  }
+
   /**
    * Cria convite (ou reusa se já existe vivo pra mesmo convenioId+telefone).
    * Multi-tenant: convênio deve pertencer ao cooperativaId do admin.
