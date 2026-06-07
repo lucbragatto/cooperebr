@@ -10,6 +10,7 @@
  */
 
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -18,6 +19,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -78,6 +80,81 @@ export class PortalEmpresaController {
   @Get(':id/dashboard')
   async dashboard(@Param('id') id: string) {
     return this.portalService.dashboardConvenio(id);
+  }
+
+  /**
+   * Sprint Onboarding Bloco 2 Fatia 2.3 (07/06/2026) — kWh consolidado por mês.
+   *
+   * Empresa pagadora visualiza total de kWh consumido pelos funcionários (membros
+   * custeados) + breakdown por funcionário. FONTE ÚNICA com a cobrança real —
+   * o que a empresa vê aqui = o que ela paga na consolidada.
+   *
+   * Multi-tenant: guard `@PagadorCooperadoOnly()` JÁ validou que o cooperado
+   * autenticado é o pagador do convênio e injetou `req.empresa.cooperativaId`.
+   * Service usa esse `cooperativaId` no filtro do preview (defesa em profundidade).
+   * Cross-convênio (não é pagador) → guard retorna 404 (anti-enumeração).
+   *
+   * AuditLog: visão financeira sensível — empresa vê o consumo dos funcionários.
+   *
+   * Query param `mes`: formato YYYY-MM. Default: mês ANTERIOR ao corrente (o cron
+   * de cobrança consolidada opera em mês fechado; preview alinha). Validação
+   * `mes <= corrente` — sem futuro.
+   */
+  @PagadorCooperadoOnly()
+  @AuditLog({
+    acao: 'portal-empresa.kwh-consumo.visualizar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @Get(':id/kwh-consumo')
+  async kwhConsumo(
+    @Param('id') id: string,
+    @Query('mes') mes: string | undefined,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.empresa?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException('Contexto sem cooperativaId.');
+    }
+
+    // Resolve mês alvo (default: mês anterior).
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth() + 1;
+    const anoAtual = hoje.getFullYear();
+    const mesAnteriorMes = mesAtual === 1 ? 12 : mesAtual - 1;
+    const mesAnteriorAno = mesAtual === 1 ? anoAtual - 1 : anoAtual;
+
+    let mesAlvo = mesAnteriorMes;
+    let anoAlvo = mesAnteriorAno;
+
+    if (mes) {
+      if (!/^\d{4}-\d{2}$/.test(mes)) {
+        throw new BadRequestException(
+          `Query param mes inválido: "${mes}". Use YYYY-MM (ex: 2026-05).`,
+        );
+      }
+      const [anoStr, mesStr] = mes.split('-');
+      anoAlvo = Number(anoStr);
+      mesAlvo = Number(mesStr);
+      if (mesAlvo < 1 || mesAlvo > 12) {
+        throw new BadRequestException(`Mês inválido: ${mesAlvo}. Use 1-12.`);
+      }
+      // mes <= corrente (não permite futuro)
+      const corrente = anoAtual * 100 + mesAtual;
+      const alvo = anoAlvo * 100 + mesAlvo;
+      if (alvo > corrente) {
+        throw new BadRequestException(
+          `mes ${mes} é futuro. Use o mês corrente ou anterior.`,
+        );
+      }
+    }
+
+    return this.portalService.kwhConsumoConvenio({
+      convenioId: id,
+      mesReferencia: mesAlvo,
+      anoReferencia: anoAlvo,
+      cooperativaId,
+    });
   }
 
   // ─── Convites — reusa ConvitesConvenioService ────────────────────────

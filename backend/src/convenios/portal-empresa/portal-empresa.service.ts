@@ -13,12 +13,68 @@
  *  - Status derivado de membros calculado no backend (mesma lógica da Fatia 5).
  */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import {
+  ConveniosCusteioService,
+  PreviewKwhConsolidadoResult,
+  PreviewKwhMembroDetalhe,
+} from '../convenios-custeio.service';
+
+/**
+ * Sprint Onboarding Bloco 2 Fatia 2.3 (07/06/2026) — shape público da resposta
+ * de `/portal/meus-convenios/:id/kwh-consumo`. UC mascarada (últimos 3 dígitos
+ * + distribuidora completa) — LGPD: empresa paga, mas não tem direito ao número
+ * cheio da UC do funcionário.
+ */
+export interface KwhConsumoEntradaPublica {
+  cooperadoId: string;
+  nome: string;
+  ucs: Array<{ numeroMascarado: string; distribuidora: string }>;
+  kwh: number;
+  fonte: 'fatura' | 'rateio' | 'sem-dado';
+  percentual: number;
+  semFaturaNoMes?: boolean;
+  isPagador?: boolean;
+}
+
+export interface KwhConsumoResponse {
+  convenioId: string;
+  convenioNome: string;
+  base: 'CONSUMO_REAL' | 'ALOCACAO_FIXA';
+  mesReferencia: number;
+  anoReferencia: number;
+  mesRefStr: string;
+  status: PreviewKwhConsolidadoResult['status'];
+  kwhTotal: number;
+  membros: KwhConsumoEntradaPublica[];
+  warningRateioIgualitario?: boolean;
+}
+
+/**
+ * Mascara o número da UC mantendo só os 3 últimos dígitos.
+ * Ex: '0001421380054' → '...054'. Strings curtas (<=3) ficam intactas.
+ */
+export function mascararNumeroUc(numero: string): string {
+  if (!numero) return numero;
+  if (numero.length <= 3) return numero;
+  return '...' + numero.slice(-3);
+}
 
 @Injectable()
 export class PortalEmpresaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    // Fatia 2.3 — fonte única do kWh consolidado (preview read-only).
+    @Inject(forwardRef(() => ConveniosCusteioService))
+    private custeioService: ConveniosCusteioService,
+  ) {}
 
   /**
    * Lista todos os convênios ATIVOS onde o cooperadoId é o pagador.
@@ -146,6 +202,70 @@ export class PortalEmpresaService {
       convenio: { ...convenio, cooperativa },
       contadoresMembros,
       cobrancas,
+    };
+  }
+
+  /**
+   * Sprint Onboarding Bloco 2 Fatia 2.3 (07/06/2026) — kWh consolidado por mês.
+   *
+   * FONTE ÚNICA: delega pro `ConveniosCusteioService.previewKwhConsolidado` (mesma
+   * fonte que `gerarCobrancaConsolidada` usa pra cobrar). Preview e cobrança real
+   * NUNCA divergem por construção.
+   *
+   * Segurança em profundidade:
+   *  - Caller passa `cooperativaId` derivado de `req.empresa.cooperativaId` (guard
+   *    `@PagadorCooperadoOnly` já validou posse). Service não confia no `:id` da URL.
+   *  - Cross-convênio (cooperativaId não bate) → preview retorna NotFoundException
+   *    (anti-enumeração, alinhado com o guard).
+   *
+   * Default `mes`: mês anterior (cron de cobrança opera em mês fechado — preview
+   * idem). Validação `mes <= corrente` é responsabilidade do controller.
+   *
+   * Mascaramento LGPD: UC retorna só os 3 últimos dígitos (`...054`) + distribuidora
+   * completa. Empresa paga, mas dado da UC é pessoal do funcionário.
+   */
+  async kwhConsumoConvenio(opts: {
+    convenioId: string;
+    mesReferencia: number;
+    anoReferencia: number;
+    cooperativaId: string;
+  }): Promise<KwhConsumoResponse> {
+    const preview = await this.custeioService.previewKwhConsolidado({
+      convenioId: opts.convenioId,
+      mesReferencia: opts.mesReferencia,
+      anoReferencia: opts.anoReferencia,
+      cooperativaId: opts.cooperativaId,
+    });
+
+    const membros: KwhConsumoEntradaPublica[] = preview.membros.map(
+      (m: PreviewKwhMembroDetalhe) => ({
+        cooperadoId: m.cooperadoId,
+        nome: m.nome,
+        ucs: m.ucs.map((u) => ({
+          numeroMascarado: mascararNumeroUc(u.numero),
+          distribuidora: u.distribuidora,
+        })),
+        kwh: m.kwh,
+        fonte: m.fonte,
+        percentual: m.percentual,
+        ...(m.semFaturaNoMes ? { semFaturaNoMes: true } : {}),
+        ...(m.isPagador ? { isPagador: true } : {}),
+      }),
+    );
+
+    return {
+      convenioId: preview.convenioId,
+      convenioNome: preview.convenioNome,
+      base: preview.base,
+      mesReferencia: preview.mesReferencia,
+      anoReferencia: preview.anoReferencia,
+      mesRefStr: preview.mesRefStr,
+      status: preview.status,
+      kwhTotal: preview.kwhTotal,
+      membros,
+      ...(preview.warningRateioIgualitario
+        ? { warningRateioIgualitario: true }
+        : {}),
     };
   }
 }
