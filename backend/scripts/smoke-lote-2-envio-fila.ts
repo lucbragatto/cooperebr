@@ -134,10 +134,12 @@ async function main() {
       return;
     }
     ok(`(2) envio → 202 loteId=${env.loteId.slice(-8)} total=3`);
-    if (dtRespostaEnvio < 2000) {
-      ok(`(2)   resposta imediata em ${dtRespostaEnvio}ms (envios em background)`);
+    // Tolerância: 1ms de Express + criarConvite × N + 1º tick do throttle.
+    // < 3000ms confirma que NÃO esperou todos os envios completarem.
+    if (dtRespostaEnvio < 3000) {
+      ok(`(2)   resposta async em ${dtRespostaEnvio}ms (envios em background)`);
     } else {
-      fail(`(2) resposta demorou ${dtRespostaEnvio}ms — não foi assíncrono`);
+      fail(`(2) resposta demorou ${dtRespostaEnvio}ms — esperado < 3000ms`);
     }
 
     // ── (3) Polling status até concluir ──

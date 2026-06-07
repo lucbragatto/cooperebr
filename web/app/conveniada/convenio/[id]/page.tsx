@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/table';
 import { GestaoConvitesSection } from '@/components/convenios/GestaoConvitesSection';
 import { MembrosPendentesSection } from '@/components/convenios/MembrosPendentesSection';
+import { EnvioLoteSection } from '@/components/convenios/EnvioLoteSection';
 
 type StatusCob = 'PENDENTE' | 'A_VENCER' | 'PAGO' | 'CANCELADO' | 'VENCIDO';
 type Natureza = 'AUXILIAR' | 'PROPRIO' | 'NAO_COOPERATIVO';
@@ -673,6 +674,13 @@ export default function ConveniadaConvenioDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 2.5 Convidar em lote — Sprint Convite-Lote LOTE.4 (07/06/2026) */}
+      <EnvioLoteSection
+        convenioId={convenioId}
+        source="empresa"
+        onAcaoConcluida={carregar}
+      />
 
       {/* 3. Aprovações pendentes — reuso com source='empresa' */}
       <Card>

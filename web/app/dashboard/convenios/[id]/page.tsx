@@ -11,6 +11,7 @@ import { ArrowLeft, Trash2, RefreshCw, TrendingUp, Users, Percent, Pencil, FileC
 import Link from 'next/link';
 import { GestaoConvitesSection } from '@/components/convenios/GestaoConvitesSection';
 import { MembrosPendentesSection } from '@/components/convenios/MembrosPendentesSection';
+import { EnvioLoteSection } from '@/components/convenios/EnvioLoteSection';
 
 const NATUREZA_LABEL: Record<string, string> = {
   PROPRIO: 'PRÓPRIO (Art. 79 — isento)',
@@ -265,6 +266,10 @@ export default function ConvenioDetalhePage() {
           per-recipient (criar / reenviar / cancelar) + Membros pendentes
           (aprovar / solicitar doc / rejeitar / reenviar magic link). */}
       <GestaoConvitesSection convenioId={id} source="admin" />
+
+      {/* Sprint Convite-Lote LOTE.4 (07/06/2026) — convite em lote via CSV. */}
+      <EnvioLoteSection convenioId={id} source="admin" />
+
       <MembrosPendentesSection convenioId={id} source="admin" />
 
       {/* Membros ATIVOS (tabela legacy) */}
