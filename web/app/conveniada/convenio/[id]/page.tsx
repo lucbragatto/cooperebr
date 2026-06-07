@@ -33,6 +33,7 @@ import {
   CalendarClock,
   Mail,
   Phone,
+  Zap,
 } from 'lucide-react';
 import { HelpBox } from '@/components/ui/help-box';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -128,6 +129,301 @@ function moeda(v: string | number | null) {
 function dataBr(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Sprint Onboarding Bloco 2 Fatia 2.4 (07/06/2026) — Consumo dos funcionários
+// ────────────────────────────────────────────────────────────────────────
+
+type KwhStatus = 'OK' | 'SEM_MEMBROS' | 'SEM_UCS_CUSTEADAS' | 'SEM_FATURAS_NO_MES';
+type KwhFonte = 'fatura' | 'rateio' | 'sem-dado';
+
+interface KwhConsumoEntrada {
+  cooperadoId: string;
+  nome: string;
+  ucs: Array<{ numeroMascarado: string; distribuidora: string }>;
+  kwh: number;
+  fonte: KwhFonte;
+  percentual: number;
+  semFaturaNoMes?: boolean;
+  isPagador?: boolean;
+}
+
+interface KwhConsumoResponse {
+  convenioId: string;
+  convenioNome: string;
+  base: 'CONSUMO_REAL' | 'ALOCACAO_FIXA';
+  mesReferencia: number;
+  anoReferencia: number;
+  mesRefStr: string;
+  status: KwhStatus;
+  kwhTotal: number;
+  membros: KwhConsumoEntrada[];
+  warningRateioIgualitario?: boolean;
+}
+
+/** Default: mês anterior corrente no formato YYYY-MM. */
+function defaultMesAnterior(): string {
+  const hoje = new Date();
+  const mes = hoje.getMonth() + 1;
+  const ano = hoje.getFullYear();
+  const m = mes === 1 ? 12 : mes - 1;
+  const a = mes === 1 ? ano - 1 : ano;
+  return `${a}-${String(m).padStart(2, '0')}`;
+}
+
+/** Gera lista dos últimos 12 meses (incluindo o anterior corrente). */
+function gerarOpcoesMes(): Array<{ value: string; label: string }> {
+  const opts: Array<{ value: string; label: string }> = [];
+  const hoje = new Date();
+  let mes = hoje.getMonth() + 1;
+  let ano = hoje.getFullYear();
+  // Começa do mês ANTERIOR corrente (regra do endpoint — sem futuro).
+  mes = mes === 1 ? 12 : mes - 1;
+  ano = mes === 12 ? ano - 1 : ano;
+  for (let i = 0; i < 12; i++) {
+    opts.push({
+      value: `${ano}-${String(mes).padStart(2, '0')}`,
+      label: `${mesNome(mes)}/${ano}`,
+    });
+    mes = mes === 1 ? 12 : mes - 1;
+    if (mes === 12) ano -= 1;
+  }
+  return opts;
+}
+
+interface ConsumoFuncionariosCardProps {
+  convenioId: string;
+}
+
+function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
+  const [mesSel, setMesSel] = useState<string>(defaultMesAnterior());
+  const [data, setData] = useState<KwhConsumoResponse | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const opcoesMes = gerarOpcoesMes();
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const r = await api.get<KwhConsumoResponse>(
+        `/portal/meus-convenios/${convenioId}/kwh-consumo`,
+        { params: { mes: mesSel } },
+      );
+      setData(r.data);
+    } catch (err: any) {
+      setErro(err?.response?.data?.message ?? err?.message ?? 'Erro ao carregar consumo');
+      setData(null);
+    } finally {
+      setCarregando(false);
+    }
+  }, [convenioId, mesSel]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const renderEstadoSemDados = () => {
+    if (!data) return null;
+    const msgs: Record<KwhStatus, string> = {
+      OK: '',
+      SEM_MEMBROS:
+        'Nenhum funcionário cadastrado neste convênio ainda. Use o card de convites pra começar.',
+      SEM_UCS_CUSTEADAS:
+        'Os funcionários ainda não têm UC custeada. O admin da cooperativa precisa ativar o contrato custeado de cada um.',
+      SEM_FATURAS_NO_MES:
+        `Nenhuma fatura aprovada em ${data.mesRefStr} ainda. As faturas chegam pela concessionária e o admin precisa aprovar pelo OCR.`,
+    };
+    return (
+      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+        {msgs[data.status]}
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base text-orange-700 flex items-center gap-2">
+          <Zap className="h-4 w-4" /> Consumo dos funcionários — kWh por mês
+        </CardTitle>
+        <p className="text-xs text-slate-500">
+          Quanto cada funcionário consumiu — e quanto da sua fatura é dele.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <HelpBox id="conveniada-kwh-consumo-help" titulo="Como ler esta tabela">
+          <strong>Total:</strong> energia total que você paga no mês escolhido —{' '}
+          <em>é o mesmo número da cobrança consolidada (sem surpresa na fatura).</em>
+          <br />
+          <strong>%:</strong> participação de cada funcionário no total. Soma 100%.
+          <br />
+          <strong>Base "Consumo real":</strong> soma as faturas APROVADAS de cada UC no mês.
+          Se aparecer <em>"sem fatura aprovada"</em> num funcionário, é porque a fatura
+          dele ainda não foi processada pelo OCR — o admin da cooperativa resolve.
+          <br />
+          <strong>Base "Pacote fixo":</strong> kWh contratado mensal rateado entre os
+          funcionários proporcional ao consumo médio cadastrado de cada um.
+        </HelpBox>
+
+        {/* Selector de mês */}
+        <div className="mt-3 flex items-center gap-2">
+          <label htmlFor="kwh-mes-select" className="text-xs font-medium text-slate-600">
+            Mês:
+          </label>
+          <select
+            id="kwh-mes-select"
+            value={mesSel}
+            onChange={(e) => setMesSel(e.target.value)}
+            className="text-xs px-2 py-1 rounded border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+          >
+            {opcoesMes.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Estados */}
+        {carregando && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando consumo...
+          </div>
+        )}
+
+        {!carregando && erro && (
+          <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <div>{erro}</div>
+          </div>
+        )}
+
+        {!carregando && !erro && data && (
+          <>
+            {/* Header com total */}
+            <div className="mt-4 rounded-md border border-orange-200 bg-orange-50 px-4 py-3">
+              <div className="flex items-baseline justify-between flex-wrap gap-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-orange-700 font-semibold">
+                    Total
+                  </div>
+                  <div className="text-2xl font-bold text-orange-900 font-mono">
+                    {data.kwhTotal.toLocaleString('pt-BR')} kWh
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wide text-slate-500">
+                    Competência
+                  </div>
+                  <div className="text-sm font-semibold text-slate-700">
+                    {data.mesRefStr}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {data.base === 'ALOCACAO_FIXA'
+                      ? 'Pacote fixo (kWh contratado/mês)'
+                      : 'Consumo real (soma das faturas)'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Warning rateio igualitário */}
+            {data.warningRateioIgualitario && (
+              <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <strong>Rateio aproximado:</strong> nenhum funcionário tem consumo
+                  médio cadastrado, então o pacote foi dividido em partes iguais. Quando
+                  as primeiras faturas forem processadas, a distribuição fica mais precisa.
+                </div>
+              </div>
+            )}
+
+            {/* Tabela ou estado vazio */}
+            {data.status !== 'OK' ? (
+              renderEstadoSemDados()
+            ) : data.membros.length === 0 ? (
+              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+                Pacote de {data.kwhTotal.toLocaleString('pt-BR')} kWh contratado, mas
+                sem funcionários cadastrados ainda. Use o card de convites pra começar.
+              </div>
+            ) : (
+              <Table className="mt-3">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Funcionário</TableHead>
+                    <TableHead>UC</TableHead>
+                    <TableHead className="text-right">kWh</TableHead>
+                    <TableHead className="text-right">%</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.membros.map((m) => (
+                    <TableRow key={m.cooperadoId}>
+                      <TableCell className="font-medium">
+                        {m.nome}
+                        {m.isPagador && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 bg-blue-50 text-blue-700 border-blue-300 text-[10px]"
+                          >
+                            Sua empresa
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 font-mono">
+                        {m.ucs.length === 0
+                          ? '—'
+                          : m.ucs
+                              .map(
+                                (u) =>
+                                  `${u.numeroMascarado} (${u.distribuidora})`,
+                              )
+                              .join(', ')}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold">
+                        {m.kwh.toLocaleString('pt-BR')}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-slate-600">
+                        {m.percentual.toFixed(2).replace('.', ',')}%
+                      </TableCell>
+                      <TableCell>
+                        {m.semFaturaNoMes ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-50 text-amber-700 border-amber-300 text-[10px]"
+                          >
+                            Sem fatura aprovada
+                          </Badge>
+                        ) : m.fonte === 'rateio' ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-slate-50 text-slate-700 border-slate-300 text-[10px]"
+                          >
+                            Pacote rateado
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px]"
+                          >
+                            Fatura processada
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ConveniadaConvenioDashboard() {
@@ -414,11 +710,14 @@ export default function ConveniadaConvenioDashboard() {
         </CardContent>
       </Card>
 
-      {/* Bloco capacidade kWh + tokens — FASE FUTURA */}
+      {/* 5. Consumo dos funcionários — Bloco 2 Fatia 2.4 (ATIVADO 07/06/2026) */}
+      <ConsumoFuncionariosCard convenioId={convenioId} />
+
+      {/* 6. Tokens & benefícios — FASE FUTURA (fora do escopo ENERGIA) */}
       <Card className="opacity-70 border-dashed">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-slate-500 flex items-center gap-2">
-            ⚡ Capacidade do plano · 🎟️ Tokens &amp; benefícios
+            🎟️ Tokens &amp; benefícios
             <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 text-[10px]">
               FASE FUTURA
             </Badge>
@@ -426,12 +725,8 @@ export default function ConveniadaConvenioDashboard() {
         </CardHeader>
         <CardContent className="text-xs text-slate-500 space-y-1">
           <p>
-            <strong>Capacidade kWh:</strong> visão de pacote contratado × consumo dos funcionários
-            ativos (próxima fatia 9.2).
-          </p>
-          <p>
-            <strong>Tokens &amp; benefícios:</strong> acompanhamento dos tokens dos funcionários
-            na rede de benefícios (fase posterior — fora do escopo ENERGIA).
+            Acompanhamento dos tokens dos funcionários na rede de benefícios — fase
+            posterior, fora do escopo ENERGIA.
           </p>
         </CardContent>
       </Card>
