@@ -43,7 +43,17 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
 
   beforeEach(() => {
     prismaMock = {
-      contratoConvenio: { findFirst: jest.fn() },
+      contratoConvenio: {
+        findFirst: jest.fn(),
+        // Fix kWh complemento — enriquecerComValorAPagar faz findUnique pra
+        // obter config de tarifa. Default: VALOR_FIXO R$1/kWh → valorAPagar = kwhTotal × 1.
+        findUnique: jest.fn().mockResolvedValue({
+          empresaNome: 'Clínica X',
+          tipoTarifaEmpresa: 'VALOR_FIXO',
+          tarifaFixaKwhEmpresa: '1',
+          descontoKwhCusteio: null,
+        }),
+      },
       convenioCooperado: { findMany: jest.fn() },
       uc: { findMany: jest.fn().mockResolvedValue([]) },
       contrato: { findMany: jest.fn() },
@@ -413,6 +423,100 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
         cooperativaId: TENANT_A,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // ─── Fix kWh complemento: valorAPagar ──────────────────────────────
+  it('valorAPagar: VALOR_FIXO R$1/kWh × 1200 kWh = R$1200 (mesma fórmula da cobrança real)', async () => {
+    prismaMock.contratoConvenio.findFirst.mockResolvedValue({
+      ...baseConvenio,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 5000,
+    });
+    prismaMock.convenioCooperado.findMany.mockResolvedValue([
+      { cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: 300, ucs: [] } },
+      { cooperado: { id: 'c2', nomeCompleto: 'B', cotaKwhMensal: 400, ucs: [] } },
+      { cooperado: { id: 'c3', nomeCompleto: 'C', cotaKwhMensal: 500, ucs: [] } },
+    ]);
+
+    const r = await service.previewKwhConsolidado({
+      convenioId: CONVENIO_ID,
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(r.kwhTotal).toBe(1200);
+    expect(r.valorAPagar).toBe(1200); // 1200 × R$1
+    expect(r.tarifaKwh).toBe(1);
+  });
+
+  it('valorAPagar: PERCENTUAL_DESCONTO 20% sobre tarifa 0.78931 → desconto aplicado', async () => {
+    prismaMock.contratoConvenio.findFirst.mockResolvedValue({
+      ...baseConvenio,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 5000,
+    });
+    prismaMock.contratoConvenio.findUnique.mockResolvedValue({
+      empresaNome: 'Clínica X',
+      tipoTarifaEmpresa: 'PERCENTUAL_DESCONTO',
+      tarifaFixaKwhEmpresa: null,
+      descontoKwhCusteio: '20',
+    });
+    prismaMock.convenioCooperado.findMany.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'c1',
+          nomeCompleto: 'A',
+          cotaKwhMensal: 100,
+          ucs: [{ id: 'u1', numero: 'U001', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
+    prismaMock.tarifaConcessionaria = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          concessionaria: 'EDP_ES',
+          tusdNova: '0.46863',
+          teNova: '0.32068',
+          dataVigencia: new Date('2026-01-01'),
+        },
+      ]),
+      findFirst: jest.fn(),
+    };
+
+    const r = await service.previewKwhConsolidado({
+      convenioId: CONVENIO_ID,
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: TENANT_A,
+    });
+
+    // 100 × 0.78931 × (1-0.20) = 100 × 0.78931 × 0.80 = 63.14
+    expect(r.kwhTotal).toBe(100);
+    expect(r.valorAPagar).toBeCloseTo(63.14, 2);
+    expect(r.tarifaKwh).toBeCloseTo(0.78931, 5);
+  });
+
+  it('valorAPagar=null quando status != OK (ex: SEM_CONSUMO_CAPTURADO)', async () => {
+    prismaMock.contratoConvenio.findFirst.mockResolvedValue({
+      ...baseConvenio,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 1000,
+    });
+    prismaMock.convenioCooperado.findMany.mockResolvedValue([
+      { cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: null, ucs: [] } },
+    ]);
+
+    const r = await service.previewKwhConsolidado({
+      convenioId: CONVENIO_ID,
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(r.status).toBe('SEM_CONSUMO_CAPTURADO');
+    expect(r.valorAPagar).toBeNull();
+    expect(r.tarifaKwh).toBeNull();
   });
 
   // ─── (l) UCs do pagador entram como entrada virtual isPagador ───────

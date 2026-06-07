@@ -89,6 +89,26 @@ export interface PreviewKwhConsolidadoResult {
   excedente?: boolean;
   membros: PreviewKwhMembroDetalhe[];
   distribuidoraUsada: string | null;
+  /**
+   * Valor da ENERGIA a pagar (sem componente clube) — kwhTotal × tarifa do convênio.
+   * VALOR_FIXO: kWh × tarifaFixaKwhEmpresa. PERCENTUAL_DESCONTO: kWh × tarifaConcessionária × (1-desconto%).
+   * null quando status != OK OU tarifa não pôde ser resolvida (concessionária ausente).
+   */
+  valorAPagar: number | null;
+  /** R$/kWh efetivo aplicado no cálculo. null quando valorAPagar=null. */
+  tarifaKwh: number | null;
+  /** Motivo de `valorAPagar=null` quando aplicável (UI mostra). */
+  motivoSemValor?: string;
+}
+
+/** Resultado interno do cálculo de tarifa/valor — usado por preview + cobrança real (fonte única). */
+interface CalculoValorEnergia {
+  tipoTarifa: 'VALOR_FIXO' | 'PERCENTUAL_DESCONTO';
+  tarifaUsada: number;        // R$/kWh efetivo
+  descontoPct: number;        // 0-100
+  valorBruto: number;         // kWh × tarifa
+  valorDesconto: number;      // bruto - liquido
+  valorLiquido: number;       // valor final a cobrar (sem clube)
 }
 
 @Injectable()
@@ -129,6 +149,69 @@ export class ConveniosCusteioService {
     anoReferencia: number;
     cooperativaId: string;
   }): Promise<PreviewKwhConsolidadoResult> {
+    const base = await this.previewKwhConsolidadoSemValor(opts);
+    return this.enriquecerComValorAPagar(base);
+  }
+
+  /**
+   * Enriquece o preview com `valorAPagar` + `tarifaKwh` quando aplicável.
+   * Mantém `valorAPagar=null` em estados não-OK ou quando tarifa não pôde
+   * ser resolvida (UI mostra `motivoSemValor`).
+   */
+  private async enriquecerComValorAPagar(
+    preview: PreviewKwhConsolidadoResult,
+  ): Promise<PreviewKwhConsolidadoResult> {
+    if (preview.status !== 'OK' || preview.kwhTotal <= 0) {
+      return preview;
+    }
+    // Carrega config de tarifa do convênio (não veio no shape do helper).
+    const convenio = await this.prisma.contratoConvenio.findUnique({
+      where: { id: preview.convenioId },
+      select: {
+        empresaNome: true,
+        tipoTarifaEmpresa: true,
+        tarifaFixaKwhEmpresa: true,
+        descontoKwhCusteio: true,
+      },
+    });
+    if (!convenio) return preview;
+    try {
+      const calc = await this.calcularValorEnergia({
+        convenio,
+        kwhTotal: preview.kwhTotal,
+        distribuidoraUsada: preview.distribuidoraUsada,
+      });
+      return {
+        ...preview,
+        valorAPagar: calc.valorLiquido,
+        tarifaKwh: calc.tarifaUsada,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'tarifa indisponível';
+      this.logger.warn(
+        `[preview-kwh] valorAPagar=null por config tarifa convenioId=${preview.convenioId}: ${msg}`,
+      );
+      return { ...preview, motivoSemValor: msg };
+    }
+  }
+
+  /**
+   * Versão raw do preview — calcula kwhTotal + breakdown SEM o `valorAPagar`.
+   * Wrapper `previewKwhConsolidado` enriquece com valor (fonte única real
+   * compartilhada com `gerarCobrancaConsolidada`).
+   */
+  /**
+   * Versão raw do preview — calcula kwhTotal + breakdown SEM `valorAPagar`.
+   * Pública (usada por `gerarCobrancaConsolidada` internamente que já tem o
+   * convênio carregado e calcula valor separadamente). Para a UI, usar
+   * `previewKwhConsolidado` (wrapper que enriquece com valor).
+   */
+  async previewKwhConsolidadoSemValor(opts: {
+    convenioId: string;
+    mesReferencia: number;
+    anoReferencia: number;
+    cooperativaId: string;
+  }): Promise<PreviewKwhConsolidadoResult> {
     const { convenioId, mesReferencia, anoReferencia, cooperativaId } = opts;
 
     if (mesReferencia < 1 || mesReferencia > 12) {
@@ -150,6 +233,11 @@ export class ConveniosCusteioService {
         pagadorCooperadoId: true,
         baseCobrancaCusteio: true,
         kwhAlocadoMensal: true,
+        // Fix kWh complemento (07/06/2026) — campos pra calcular valorAPagar
+        // dentro do preview (mesma fórmula da cobrança real).
+        tipoTarifaEmpresa: true,
+        tarifaFixaKwhEmpresa: true,
+        descontoKwhCusteio: true,
       },
     });
     if (!convenio) {
@@ -222,6 +310,8 @@ export class ConveniosCusteioService {
           status: 'SEM_MEMBROS',
           kwhTotal: 0,
           disponivelAssinatura,
+          valorAPagar: null,
+          tarifaKwh: null,
           membros: [],
           distribuidoraUsada: null,
         };
@@ -293,6 +383,8 @@ export class ConveniosCusteioService {
           status: 'SEM_UCS_CUSTEADAS',
           kwhTotal: 0,
           disponivelAssinatura,
+          valorAPagar: null,
+          tarifaKwh: null,
           membros: buildEntriesSemDados(null),
           distribuidoraUsada: null,
         };
@@ -321,6 +413,8 @@ export class ConveniosCusteioService {
           status: 'SEM_UCS_CUSTEADAS',
           kwhTotal: 0,
           disponivelAssinatura,
+          valorAPagar: null,
+          tarifaKwh: null,
           membros: buildEntriesSemDados(null),
           distribuidoraUsada: null,
         };
@@ -370,6 +464,8 @@ export class ConveniosCusteioService {
           status: 'SEM_FATURAS_NO_MES',
           kwhTotal: 0,
           disponivelAssinatura,
+          valorAPagar: null,
+          tarifaKwh: null,
           membros: buildEntriesSemDados(ucIdsCusteados),
           distribuidoraUsada: null,
         };
@@ -436,6 +532,8 @@ export class ConveniosCusteioService {
         status: 'OK',
         kwhTotal,
         disponivelAssinatura,
+        valorAPagar: null,
+        tarifaKwh: null,
         ...(excedente ? { excedente: true } : {}),
         membros: membrosDetalhe,
         distribuidoraUsada,
@@ -472,6 +570,8 @@ export class ConveniosCusteioService {
         status: 'SEM_MEMBROS',
         kwhTotal: 0,
         disponivelAssinatura,
+        valorAPagar: null,
+        tarifaKwh: null,
         membros: [],
         distribuidoraUsada,
       };
@@ -526,6 +626,8 @@ export class ConveniosCusteioService {
         status: 'SEM_CONSUMO_CAPTURADO',
         kwhTotal: 0,
         disponivelAssinatura,
+        valorAPagar: null,
+        tarifaKwh: null,
         membros: membrosDetalhePre.map((m) => ({
           ...m,
           fonte: 'sem-dado' as const,
@@ -562,9 +664,71 @@ export class ConveniosCusteioService {
       status: 'OK',
       kwhTotal,
       disponivelAssinatura,
+      valorAPagar: null,
+      tarifaKwh: null,
       ...(excedente ? { excedente: true } : {}),
       membros: membrosDetalhe,
       distribuidoraUsada,
+    };
+  }
+
+  /**
+   * Helper privado — calcula valor da ENERGIA cobrado (sem componente clube)
+   * conforme `tipoTarifaEmpresa` do convênio. Usado pelo preview E pelo
+   * `gerarCobrancaConsolidada` — fonte única de verdade do dinheiro.
+   *
+   * THROW se config errada (VALOR_FIXO sem tarifaFixaKwhEmpresa ou
+   * PERCENTUAL_DESCONTO sem tarifa concessionária pra distribuidoraUsada).
+   */
+  private async calcularValorEnergia(input: {
+    convenio: {
+      empresaNome: string;
+      tipoTarifaEmpresa: 'VALOR_FIXO' | 'PERCENTUAL_DESCONTO' | null;
+      tarifaFixaKwhEmpresa: Prisma.Decimal | string | null;
+      descontoKwhCusteio: Prisma.Decimal | string | null;
+    };
+    kwhTotal: number;
+    distribuidoraUsada: string | null;
+  }): Promise<CalculoValorEnergia> {
+    const { convenio, kwhTotal, distribuidoraUsada } = input;
+    const tipoTarifa = convenio.tipoTarifaEmpresa ?? 'PERCENTUAL_DESCONTO';
+
+    if (tipoTarifa === 'VALOR_FIXO') {
+      const tarifaFixa = Number(convenio.tarifaFixaKwhEmpresa ?? 0);
+      if (tarifaFixa <= 0) {
+        throw new BadRequestException(
+          `Convênio "${convenio.empresaNome}" tipoTarifaEmpresa=VALOR_FIXO mas ` +
+            `tarifaFixaKwhEmpresa não está definida (>0). Configure no cadastro.`,
+        );
+      }
+      const valorBruto = Math.round(kwhTotal * tarifaFixa * 100) / 100;
+      return {
+        tipoTarifa,
+        tarifaUsada: tarifaFixa,
+        descontoPct: 0,
+        valorBruto,
+        valorDesconto: 0,
+        valorLiquido: valorBruto,
+      };
+    }
+
+    // PERCENTUAL_DESCONTO: tarifa concessionária × (1 - desconto%).
+    const tarifaInfo = await buscarTarifaPorDistribuidora(
+      this.prisma,
+      distribuidoraUsada,
+      { throwIfNotFound: true },
+    );
+    const descontoPct = Number(convenio.descontoKwhCusteio ?? 0);
+    const valorBruto = Math.round(kwhTotal * tarifaInfo.tarifaKwh * 100) / 100;
+    const valorLiquido =
+      Math.round(valorBruto * (1 - descontoPct / 100) * 100) / 100;
+    return {
+      tipoTarifa,
+      tarifaUsada: tarifaInfo.tarifaKwh,
+      descontoPct,
+      valorBruto,
+      valorDesconto: Math.round((valorBruto - valorLiquido) * 100) / 100,
+      valorLiquido,
     };
   }
 
@@ -690,11 +854,11 @@ export class ConveniosCusteioService {
       );
     }
 
-    // Fatia 2.1 (07/06/2026) — DELEGA pro previewKwhConsolidado (fonte única).
-    // Preview retorna estado + kwhTotal + breakdown. Aqui traduzimos estados
-    // pros mesmos throws/returns que o fluxo legado fazia inline — comportamento
-    // externo preservado pra callers (cron, UI 2.4.4d, smokes).
-    const preview = await this.previewKwhConsolidado({
+    // Fatia 2.1 (07/06/2026) — DELEGA pro previewKwhConsolidadoSemValor (fonte
+    // única do kWh + breakdown). Usa a versão raw porque calcularValorEnergia
+    // abaixo recebe o convenio já carregado — evita findUnique extra do wrapper
+    // público (que é otimizado pra UI, que NÃO tem o convenio em mão).
+    const preview = await this.previewKwhConsolidadoSemValor({
       convenioId: convenio.id,
       mesReferencia,
       anoReferencia,
@@ -752,45 +916,14 @@ export class ConveniosCusteioService {
       where: { convenioId: convenio.id, ativo: true },
     });
 
-    // 6. Resolver tarifa + calcular valores (Math.round monetário obrigatório).
-    // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — 2 ramos:
-    //   PERCENTUAL_DESCONTO (atual, default): kWh × tarifa_concessionária × (1-desconto%).
-    //   VALOR_FIXO: kWh × tarifaFixaKwhEmpresa (preço negociado, IGNORA concessionária).
-    const tipoTarifa = convenio.tipoTarifaEmpresa ?? 'PERCENTUAL_DESCONTO';
-    let valorBruto: number;
-    let valorLiquido: number;
-    let valorDesconto: number;
-    let descontoPct: number;
-    let tarifaUsada: number; // R$/kWh efetivo aplicado — vai pro log
-
-    if (tipoTarifa === 'VALOR_FIXO') {
-      const tarifaFixa = Number(convenio.tarifaFixaKwhEmpresa ?? 0);
-      if (tarifaFixa <= 0) {
-        throw new BadRequestException(
-          `Convênio "${convenio.empresaNome}" tipoTarifaEmpresa=VALOR_FIXO mas ` +
-            `tarifaFixaKwhEmpresa não está definida (>0). Configure no cadastro.`,
-        );
-      }
-      // VALOR_FIXO: tarifa negociada R$/kWh — sem desconto, sem consultar concessionária.
-      tarifaUsada = tarifaFixa;
-      descontoPct = 0;
-      valorBruto = Math.round(kwhTotal * tarifaFixa * 100) / 100;
-      valorLiquido = valorBruto;
-      valorDesconto = 0;
-    } else {
-      // PERCENTUAL_DESCONTO (atual): tarifa concessionária × (1 - desconto%).
-      // THROW se tarifa ausente (decisão Luciano — NUNCA fallback 0.5 silencioso).
-      const tarifaInfo = await buscarTarifaPorDistribuidora(
-        this.prisma,
-        distribuidoraUsada,
-        { throwIfNotFound: true },
-      );
-      tarifaUsada = tarifaInfo.tarifaKwh;
-      descontoPct = Number(convenio.descontoKwhCusteio ?? 0);
-      valorBruto = Math.round(kwhTotal * tarifaInfo.tarifaKwh * 100) / 100;
-      valorLiquido = Math.round(valorBruto * (1 - descontoPct / 100) * 100) / 100;
-      valorDesconto = Math.round((valorBruto - valorLiquido) * 100) / 100;
-    }
+    // 6. Resolver tarifa + calcular valores via helper compartilhado
+    // (fonte única — preview chama o MESMO `calcularValorEnergia`).
+    const calc = await this.calcularValorEnergia({
+      convenio,
+      kwhTotal,
+      distribuidoraUsada,
+    });
+    const { tipoTarifa, tarifaUsada, descontoPct, valorBruto, valorDesconto, valorLiquido } = calc;
 
     // 8. Data de vencimento (default: dia 10 do próximo mês)
     const dataVencimento =

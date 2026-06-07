@@ -168,6 +168,12 @@ interface KwhConsumoResponse {
   disponivelAssinatura: number | null;
   /** kwhTotal > disponivelAssinatura → sinaliza (sem bloquear). */
   excedente?: boolean;
+  /** Valor da ENERGIA a pagar (sem clube) = kwhTotal × tarifa. null se status != OK. */
+  valorAPagar: number | null;
+  /** R$/kWh efetivo aplicado. null se valorAPagar=null. */
+  tarifaKwh: number | null;
+  /** Motivo quando valorAPagar=null (ex: tarifa não configurada). */
+  motivoSemValor?: string;
   membros: KwhConsumoEntrada[];
 }
 
@@ -266,17 +272,19 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
       <CardContent>
         <HelpBox id="conveniada-kwh-consumo-help" titulo="Como ler esta tabela">
           <strong>Disponível (assinatura):</strong> o crédito de energia da sua assinatura
-          mensal — é a referência, não o limite duro.
+          mensal — referência, não limite duro.
           <br />
-          <strong>Total atual (soma):</strong> a soma do consumo de cada funcionário no
-          mês. Pode ficar acima (excedente) ou abaixo (sobra) do disponível.{' '}
-          <em>É o MESMO número da cobrança consolidada (sem surpresa na fatura).</em>
+          <strong>Total atual (soma):</strong> a soma do consumo dos funcionários no mês.
+          Pode ficar acima (excedente) ou abaixo (sobra) do disponível.
+          <br />
+          <strong>Valor a pagar:</strong> Total × preço do kWh negociado no seu convênio.
+          <em> É o MESMO número da cobrança consolidada (sem surpresa na fatura).</em>
           <br />
           <strong>%:</strong> participação de cada funcionário no total. Soma 100%.
           <br />
           <strong>Base "Consumo real":</strong> soma as faturas APROVADAS de cada UC no mês.
-          Se aparecer <em>"sem fatura aprovada"</em> num funcionário, é porque a fatura
-          dele ainda não foi processada pelo OCR — o admin da cooperativa resolve.
+          Se aparecer <em>"sem fatura aprovada"</em>, a fatura ainda não foi processada
+          pelo OCR — o admin da cooperativa resolve.
           <br />
           <strong>Base "Pacote fixo":</strong> soma o consumo médio cadastrado (kWh/mês)
           de cada funcionário. Se o total subir muito acima do disponível, fale com o
@@ -318,8 +326,13 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
 
         {!carregando && !erro && data && (
           <>
-            {/* Header com 3 colunas: Disponível × Total atual × Competência */}
-            <div className="mt-4 rounded-md border border-orange-200 bg-orange-50 px-4 py-3">
+            {/* Competência no topo */}
+            <div className="mt-3 text-xs text-slate-500">
+              Competência: <strong className="text-slate-700">{data.mesRefStr}</strong>
+            </div>
+
+            {/* Header 3 colunas: Disponível (assinatura) × Total atual (soma) × Valor a pagar */}
+            <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-4 py-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-slate-600 font-semibold">
@@ -343,26 +356,42 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
                   </div>
                   <div className="text-[10px] text-slate-600 mt-0.5">
                     {data.base === 'ALOCACAO_FIXA'
-                      ? 'Soma do consumo médio dos funcionários'
+                      ? 'Soma do consumo dos funcionários'
                       : 'Soma das faturas APROVADAS'}
                   </div>
                 </div>
                 <div className="sm:text-right">
-                  <div className="text-[10px] uppercase tracking-wide text-slate-500">
-                    Competência
+                  <div className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold">
+                    Valor a pagar
                   </div>
-                  <div className="text-sm font-semibold text-slate-700">
-                    {data.mesRefStr}
+                  <div className="text-2xl font-bold text-emerald-900 font-mono">
+                    {data.valorAPagar !== null
+                      ? data.valorAPagar.toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                        })
+                      : '—'}
                   </div>
-                  {data.disponivelAssinatura !== null && data.kwhTotal > 0 && (
-                    <div className="text-[10px] text-slate-600 mt-0.5">
-                      {data.excedente
-                        ? `Acima do disponível: +${(data.kwhTotal - data.disponivelAssinatura).toLocaleString('pt-BR')} kWh`
-                        : `Sobra do crédito: ${(data.disponivelAssinatura - data.kwhTotal).toLocaleString('pt-BR')} kWh`}
-                    </div>
-                  )}
+                  <div className="text-[10px] text-slate-600 mt-0.5">
+                    {data.valorAPagar !== null && data.tarifaKwh !== null
+                      ? `${data.kwhTotal.toLocaleString('pt-BR')} kWh × R$ ${data.tarifaKwh.toFixed(5)}/kWh`
+                      : (data.motivoSemValor ?? 'tarifa não configurada no convênio')}
+                  </div>
                 </div>
               </div>
+              {/* Sobra/Excedente em linha separada (sem ocupar a 3ª coluna principal) */}
+              {data.disponivelAssinatura !== null && data.kwhTotal > 0 && (
+                <div className="mt-3 pt-2 border-t border-orange-200 text-[11px] text-slate-700 flex items-center justify-between gap-2">
+                  <span>
+                    {data.excedente
+                      ? `⚠ Acima do disponível: +${(data.kwhTotal - data.disponivelAssinatura).toLocaleString('pt-BR')} kWh`
+                      : `Sobra do crédito: ${(data.disponivelAssinatura - data.kwhTotal).toLocaleString('pt-BR')} kWh`}
+                  </span>
+                  <span className="text-slate-500">
+                    {data.base === 'ALOCACAO_FIXA' ? 'Pacote fixo' : 'Consumo real'}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Warning de excedente (sinaliza sem bloquear) */}

@@ -279,6 +279,16 @@ async function main() {
     } else {
       ok(`(2)   3 membros (300+400+500) somam 1200 kWh ✓`);
     }
+    // Confirma valorAPagar do preview = soma × tarifa
+    if (preview.valorAPagar === null) {
+      fail(`(2) valorAPagar=null no preview — esperado valor calculado`);
+    } else if (preview.tarifaKwh !== 1) {
+      fail(`(2) tarifaKwh esperada=1 (Clinica Teste VALOR_FIXO R$1) obtida=${preview.tarifaKwh}`);
+    } else {
+      ok(
+        `(2)   valorAPagar=R$${preview.valorAPagar} (= kwhTotal=${preview.kwhTotal} × R$${preview.tarifaKwh}/kWh)`,
+      );
+    }
     if (preview.disponivelAssinatura !== 200000) {
       fail(
         `(2) disponivelAssinatura esperada=200000 (config Clinica) obtida=${preview.disponivelAssinatura}`,
@@ -339,6 +349,14 @@ async function main() {
       ok(
         `(3)   FONTE ÚNICA confirmada: preview.kwhTotal=${preview.kwhTotal} × R$${tarifa} = R$${valorBrutoEsperado} === cobrança.valorBruto`,
       );
+    }
+    // valorAPagar do preview deve = valorLiquido da cobrança (sem clube)
+    if (preview.valorAPagar !== null && Math.abs(preview.valorAPagar - cons.valorLiquido) > 0.01) {
+      fail(
+        `(3) preview.valorAPagar=R$${preview.valorAPagar} ≠ cobrança.valorLiquido=R$${cons.valorLiquido}`,
+      );
+    } else {
+      ok(`(3)   preview.valorAPagar === cobrança.valorLiquido (UI mostra mesmo valor da fatura)`);
     }
     if (cons.valorBruto >= 1200) {
       ok(

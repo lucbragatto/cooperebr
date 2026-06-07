@@ -58,6 +58,12 @@ export interface KwhConsumoResponse {
   disponivelAssinatura: number | null;
   /** kwhTotal > disponivelAssinatura → UI sinaliza (sem bloquear). */
   excedente?: boolean;
+  /** Valor da ENERGIA a pagar (sem clube) = kwhTotal × tarifa. null se status != OK. */
+  valorAPagar: number | null;
+  /** R$/kWh efetivo aplicado. null se valorAPagar=null. */
+  tarifaKwh: number | null;
+  /** Motivo quando valorAPagar=null (ex: tarifa não configurada). */
+  motivoSemValor?: string;
   membros: KwhConsumoEntradaPublica[];
 }
 
@@ -267,7 +273,10 @@ export class PortalEmpresaService {
       status: preview.status,
       kwhTotal: preview.kwhTotal,
       disponivelAssinatura: preview.disponivelAssinatura,
+      valorAPagar: preview.valorAPagar,
+      tarifaKwh: preview.tarifaKwh,
       ...(preview.excedente ? { excedente: true } : {}),
+      ...(preview.motivoSemValor ? { motivoSemValor: preview.motivoSemValor } : {}),
       membros,
     };
   }
