@@ -241,6 +241,10 @@ model Cooperado {
   cooperTokenLedger       CooperTokenLedger[]
   cooperTokenSaldo        CooperTokenSaldo?
   convitesEnviados        ConviteIndicacao[]         @relation("ConvitesEnviados")
+  // Sprint Convite-Lote LOTE.5 (07/06/2026) — convites de convênio que este
+  // cooperado fez (member-to-member MLM). Não confundir com `convitesEnviados`
+  // que é ConviteIndicacao (caminho original do MLM).
+  convitesConvenioComoIndicador ConviteConvenioMembro[] @relation("ConvitesConvenioComoIndicador")
   conversoesCreditoSemUc  ConversaoCreditoSemUc[]
   resgatesClubeVantagens  ResgateClubeVantagens[]
   historicoStatus         HistoricoStatusCooperado[]
@@ -1693,11 +1697,20 @@ model ConviteConvenioMembro {
   loteEnvioWaErro     String?
   loteEnvioWaEm       DateTime?
 
+  // Sprint Convite-Lote LOTE.5 (07/06/2026) — atribuição MLM/indicação.
+  // Quando o convite vem de outro cooperado (member-to-member, MLM), grava
+  // o id de quem convidou pra creditar bônus de indicação na 1ª fatura paga.
+  // Convites do admin ou empresa pagadora ficam null aqui (sem indicador
+  // individual). Index pra agregação rápida ("quantos eu já indiquei").
+  cooperadoIndicadorId String?
+  cooperadoIndicador   Cooperado?         @relation("ConvitesConvenioComoIndicador", fields: [cooperadoIndicadorId], references: [id])
+
   @@unique([convenioId, telefone])       // 1 convite vivo por (convênio, telefone)
   @@index([token])
   @@index([telefone])
   @@index([cooperativaId, createdAt])
   @@index([loteId])
+  @@index([cooperadoIndicadorId])         // LOTE.5: agregação MLM
   @@map("convites_convenio_membro")
 }
 

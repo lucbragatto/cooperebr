@@ -698,6 +698,40 @@ export class ConveniosController {
   }
 
   /**
+   * Sprint Convite-Lote LOTE.5 (07/06/2026) — convite individual com URL wa.me.
+   *
+   * Cria 1 convite + devolve URL `wa.me/<tel>?text=...` pra o admin abrir o
+   * WhatsApp pessoal. NÃO dispara envio automático via API Meta.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.modo-b.criar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(201)
+  @Post(':id/convites/modo-b')
+  async criarConviteModoB(
+    @Param('id') convenioId: string,
+    @Body() dto: { nomeConvidado: string; telefone: string },
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const userId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId)
+      throw new ForbiddenException('cooperativaId obrigatório no contexto.');
+    if (!userId) throw new ForbiddenException('userId obrigatório no contexto.');
+    return this.convitesService.criarConviteComUrlWa({
+      convenioId,
+      nomeConvidado: dto.nomeConvidado,
+      telefone: dto.telefone,
+      criadoPorUserId: userId,
+      cooperativaId,
+    });
+  }
+
+  /**
    * Sprint Convite-Lote LOTE.2 (07/06/2026) — envio em lote async.
    *
    * Cria N convites síncronos no DB (com loteId + statusEnvio=PENDENTE) e

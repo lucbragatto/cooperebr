@@ -27,6 +27,7 @@ import {
   Clock,
   FileUp,
   Loader2,
+  MessageCircle,
   Send,
   Upload,
   Users,
@@ -289,6 +290,47 @@ export function EnvioLoteSection({
     onAcaoConcluida?.();
   };
 
+  // LOTE.5 — Modo B "Abrir no WhatsApp": cria 1 convite individual e abre wa.me
+  // no app pessoal do remetente. Modo A (automático via API Meta) segue intacto.
+  const [linhaAbrindoWa, setLinhaAbrindoWa] = useState<number | null>(null);
+  const [erroLinha, setErroLinha] = useState<{ linha: number; msg: string } | null>(null);
+
+  const abrirWhatsappManual = useCallback(
+    async (linha: PreviaLinha) => {
+      if (linha.status !== 'PRONTO' || !linha.telefoneFmt) return;
+      setLinhaAbrindoWa(linha.linha);
+      setErroLinha(null);
+      try {
+        const r = await api.post<{
+          id: string;
+          urlWa: string;
+          mensagem: string;
+          reused: boolean;
+        }>(`${endpointBase.replace('/lote', '')}/modo-b`, {
+          nomeConvidado: linha.nome,
+          telefone: linha.telefoneFmt,
+        });
+        // window.open com noopener — Meta abre app/web do WA do usuário com texto preenchido
+        window.open(r.data.urlWa, '_blank', 'noopener,noreferrer');
+      } catch (err) {
+        const e = err as {
+          response?: { data?: { message?: string } };
+          message?: string;
+        };
+        setErroLinha({
+          linha: linha.linha,
+          msg:
+            e?.response?.data?.message ??
+            e?.message ??
+            'Erro ao gerar convite individual.',
+        });
+      } finally {
+        setLinhaAbrindoWa(null);
+      }
+    },
+    [endpointBase],
+  );
+
   const toggleLinha = (linha: number) => {
     setSelecionados((prev) => {
       const next = new Set(prev);
@@ -351,8 +393,16 @@ export function EnvioLoteSection({
           <em>Já é funcionária</em> · <em>Já tem convite ativo</em> ·{' '}
           <em>Inválido</em>. Você marca quais quer enviar.
           <br />
-          <strong>Ritmo de envio:</strong> os WhatsApps saem com ~2 segundos entre
-          cada — assim o Meta não considera spam e ninguém perde o link.
+          <strong>2 modos de envio:</strong>
+          <br />
+          • <strong>Automático (em lote):</strong> selecione vários e clique
+          "Enviar X convites" — o sistema dispara os WhatsApps com ~2s entre cada
+          (anti-spam Meta). Status aparece em tempo real.
+          <br />
+          • <strong>Manual (1 a 1):</strong> clique no botão verde{' '}
+          <MessageCircle className="inline h-3 w-3" /> ao lado da linha → abre o
+          SEU WhatsApp com a mensagem pronta. Você revisa e envia. Útil pra
+          toque pessoal ou se o automático estiver fora do ar.
           <br />
           <strong>Privacidade:</strong> os telefones aparecem com os últimos 4
           dígitos no painel de status (LGPD).
@@ -464,12 +514,14 @@ export function EnvioLoteSection({
                   <TableHead>Nome</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {previa.linhas.map((l) => {
                   const lbl = STATUS_PREVIA[l.status];
                   const desabilitado = l.status !== 'PRONTO';
+                  const abrindo = linhaAbrindoWa === l.linha;
                   return (
                     <TableRow key={l.linha}>
                       <TableCell>
@@ -495,6 +547,29 @@ export function EnvioLoteSection({
                           <div className="text-[10px] text-slate-500 mt-0.5">
                             {l.motivo}
                           </div>
+                        )}
+                        {erroLinha?.linha === l.linha && (
+                          <div className="text-[10px] text-red-600 mt-0.5">
+                            {erroLinha.msg}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {l.status === 'PRONTO' && (
+                          <button
+                            type="button"
+                            onClick={() => abrirWhatsappManual(l)}
+                            disabled={abrindo}
+                            title="Abrir no MEU WhatsApp com a mensagem pronta"
+                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 border border-emerald-300 disabled:opacity-50"
+                          >
+                            {abrindo ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <MessageCircle className="h-3 w-3" />
+                            )}
+                            Abrir no WhatsApp
+                          </button>
                         )}
                       </TableCell>
                     </TableRow>

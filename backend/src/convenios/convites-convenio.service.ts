@@ -10,6 +10,11 @@ import {
 import * as crypto from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+// Sprint Convite-Lote LOTE.5 (07/06/2026) — helper reusável de wa.me.
+import {
+  buildWaMeConviteUrl,
+  type WaMeConviteParams,
+} from './lib/wa-me-builder';
 
 /**
  * Sprint Convite-Convênio Fatia 2a (03/06/2026).
@@ -322,6 +327,75 @@ export class ConvitesConvenioService {
     return { resumo, linhas };
   }
 
+  // ─── Sprint Convite-Lote LOTE.5 (07/06/2026) — modo B "Abrir no WhatsApp" ──
+
+  /**
+   * Cria convite individual e devolve URL `wa.me` pra o cliente abrir o
+   * WhatsApp pessoal do remetente. NÃO dispara WA via API Meta (modo
+   * automático fica intacto via `criarConvite` + `enviarLinkPorWhatsapp`).
+   *
+   * Reusa o helper puro `buildWaMeConviteUrl` — mesmo gerador será usado
+   * pelo convite individual de indicação (MLM futuro, portal do membro).
+   *
+   * Atribuição: `cooperadoIndicadorId` opcional carimba quem indicou
+   * (member-to-member). Empresa/admin convidando = null.
+   */
+  async criarConviteComUrlWa(input: {
+    convenioId: string;
+    nomeConvidado: string;
+    telefone: string;
+    criadoPorUserId: string;
+    cooperativaId: string;
+    cooperadoIndicadorId?: string | null;
+    /** Variante da mensagem — default CONVENIO_EMPRESA. */
+    variante?: WaMeConviteParams['variante'];
+    /** Para INDICACAO_COOPERADO: nome do indicador (vem do JWT no caller). */
+    nomeIndicador?: string;
+  }): Promise<{
+    id: string;
+    tokenSufixo: string;
+    link: string;
+    telefone: string;
+    nomeConvidado: string;
+    urlWa: string;
+    mensagem: string;
+    reused: boolean;
+    expiresAt: Date;
+  }> {
+    const convite = await this.criarConvite({
+      convenioId: input.convenioId,
+      nomeConvidado: input.nomeConvidado,
+      telefone: input.telefone,
+      criadoPorUserId: input.criadoPorUserId,
+      cooperativaId: input.cooperativaId,
+      cooperadoIndicadorId: input.cooperadoIndicadorId,
+    });
+    const wa = buildWaMeConviteUrl({
+      telefoneDestinatario: convite.telefone,
+      nomeDestinatario: convite.nomeConvidado,
+      empresaNome: convite.empresaNome,
+      linkConvite: convite.link,
+      variante: input.variante,
+      nomeIndicador: input.nomeIndicador,
+    });
+    this.logger.log(
+      `[convite-modo-b] Convite individual com wa.me: convenioId=${input.convenioId} ` +
+        `tokenSufixo=...${convite.token.slice(-6)} ` +
+        `indicador=${input.cooperadoIndicadorId ?? 'admin/empresa'}`,
+    );
+    return {
+      id: convite.id,
+      tokenSufixo: '...' + convite.token.slice(-6),
+      link: convite.link,
+      telefone: convite.telefone,
+      nomeConvidado: convite.nomeConvidado,
+      urlWa: wa.urlWa,
+      mensagem: wa.mensagem,
+      reused: convite.reused,
+      expiresAt: convite.expiresAt,
+    };
+  }
+
   // ─── Sprint Convite-Lote LOTE.2 (07/06/2026) — envio em fila ─────────
 
   /** Throttle entre envios WA — anti-spam Meta. 2s = ~30 envios/min. */
@@ -587,6 +661,8 @@ export class ConvitesConvenioService {
     telefone: string;
     criadoPorUserId: string;
     cooperativaId: string;
+    /** LOTE.5 — opcional: cooperado que indica (member-to-member MLM). */
+    cooperadoIndicadorId?: string | null;
   }): Promise<{
     id: string;
     token: string;
@@ -667,6 +743,9 @@ export class ConvitesConvenioService {
         token,
         expiresAt,
         createdBy: criadoPorUserId,
+        ...(input.cooperadoIndicadorId
+          ? { cooperadoIndicadorId: input.cooperadoIndicadorId }
+          : {}),
       },
     });
 
