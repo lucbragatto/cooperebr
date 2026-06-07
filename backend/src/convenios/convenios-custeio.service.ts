@@ -42,6 +42,49 @@ const PLANO_CONSOLIDADOR_NOME = 'Consolidador de Custeio';
 
 type TxOrPrisma = Prisma.TransactionClient | PrismaService;
 
+// ─── Sprint Onboarding Bloco 2 Fatia 2.1 (07/06/2026) — preview kWh read-only ───
+//
+// Tipos públicos exportados pro portal-empresa.controller (Fatia 2.3) e o
+// service de breakdown UI (Fatia 2.4). `previewKwhConsolidado` é a FONTE
+// ÚNICA DA VERDADE: tanto a UI quanto a `gerarCobrancaConsolidada` chamam
+// esse método pra obter `kwhTotal` + breakdown — preview NUNCA pode divergir
+// da cobrança real (se divergir, empresa contesta a fatura).
+
+export type PreviewKwhFonte = 'fatura' | 'rateio' | 'sem-dado';
+
+export type PreviewKwhStatus =
+  | 'OK'                    // tem dados — UI renderiza tabela
+  | 'SEM_MEMBROS'           // CONSUMO_REAL com 0 membros ativos
+  | 'SEM_UCS_CUSTEADAS'     // CONSUMO_REAL com membros mas nenhuma UC com plano custeado
+  | 'SEM_FATURAS_NO_MES';   // CONSUMO_REAL com UCs custeadas mas 0 faturas APROVADAS
+
+export interface PreviewKwhMembroDetalhe {
+  cooperadoId: string;
+  nome: string;
+  ucs: Array<{ numero: string; distribuidora: string }>;
+  kwh: number;          // 2 casas decimais
+  fonte: PreviewKwhFonte;
+  percentual: number;   // 0-100 com 2 casas (kwh × 100 / kwhTotal)
+  semFaturaNoMes?: boolean; // true só em CONSUMO_REAL quando membro não tem fatura aprovada
+  /** true quando a entrada é a empresa pagadora COM_UC (não é "funcionário" — UI pode separar). */
+  isPagador?: boolean;
+}
+
+export interface PreviewKwhConsolidadoResult {
+  convenioId: string;
+  convenioNome: string;
+  base: 'CONSUMO_REAL' | 'ALOCACAO_FIXA';
+  mesReferencia: number;        // 1-12
+  anoReferencia: number;
+  mesRefStr: string;            // "MM/YYYY"
+  status: PreviewKwhStatus;
+  kwhTotal: number;             // 2 casas
+  membros: PreviewKwhMembroDetalhe[];
+  distribuidoraUsada: string | null;
+  /** ALOCACAO_FIXA: nenhum membro tem cotaKwhMensal → rateio caiu pra igualitário (aproximado). */
+  warningRateioIgualitario?: boolean;
+}
+
 @Injectable()
 export class ConveniosCusteioService {
   private readonly logger = new Logger(ConveniosCusteioService.name);
@@ -57,12 +100,437 @@ export class ConveniosCusteioService {
   ) {}
 
   /**
+   * Sprint Onboarding Bloco 2 Fatia 2.1 (07/06/2026) — preview kWh read-only.
+   *
+   * FONTE ÚNICA DA VERDADE do kWh consolidado do convênio numa competência.
+   * Usado pelo portal-empresa (UI da Fatia 2.4) E internamente pelo
+   * `gerarCobrancaConsolidada` (mesma fonte = preview e cobrança real
+   * NUNCA divergem). 0 efeitos colaterais — não cria nada, só lê.
+   *
+   * Estados NÃO-OK (sem throw — caller decide como tratar):
+   *  - SEM_MEMBROS: CONSUMO_REAL com 0 membros ativos
+   *  - SEM_UCS_CUSTEADAS: membros mas nenhuma UC com plano custeadoPorConvenio=true
+   *  - SEM_FATURAS_NO_MES: UCs custeadas mas 0 faturas APROVADAS no mês
+   *  - ALOCACAO_FIXA sem `kwhAlocadoMensal` → THROW BadRequest (config errada — caller corrige)
+   *
+   * Anti-IDOR: exige `cooperativaId` no input + verifica match com o
+   * convênio. Portal-empresa controller deve passar o `cooperativaId` derivado
+   * do guard `@PagadorCooperadoOnly` (NUNCA do query string).
+   */
+  async previewKwhConsolidado(opts: {
+    convenioId: string;
+    mesReferencia: number;
+    anoReferencia: number;
+    cooperativaId: string;
+  }): Promise<PreviewKwhConsolidadoResult> {
+    const { convenioId, mesReferencia, anoReferencia, cooperativaId } = opts;
+
+    if (mesReferencia < 1 || mesReferencia > 12) {
+      throw new BadRequestException(`mesReferencia inválido: ${mesReferencia}`);
+    }
+    if (anoReferencia < 2000 || anoReferencia > 2100) {
+      throw new BadRequestException(`anoReferencia inválido: ${anoReferencia}`);
+    }
+
+    // Anti-IDOR: convênio precisa pertencer ao tenant informado
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: {
+        id: true,
+        empresaNome: true,
+        status: true,
+        pagador: true,
+        cooperativaId: true,
+        pagadorCooperadoId: true,
+        baseCobrancaCusteio: true,
+        kwhAlocadoMensal: true,
+      },
+    });
+    if (!convenio) {
+      throw new NotFoundException(
+        `Convênio ${convenioId} não encontrado neste tenant`,
+      );
+    }
+    if (convenio.status !== 'ATIVO') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" não está ATIVO (status=${convenio.status})`,
+      );
+    }
+    if (convenio.pagador !== 'EMPRESA') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" tem pagador=${convenio.pagador}; ` +
+          `preview kWh consolidado exige pagador=EMPRESA (Caso 1).`,
+      );
+    }
+
+    const base = (convenio.baseCobrancaCusteio ?? 'CONSUMO_REAL') as
+      | 'CONSUMO_REAL'
+      | 'ALOCACAO_FIXA';
+    const mesRefStr = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
+
+    // Carrega membros ativos + UCs (single source)
+    const membros = await this.prisma.convenioCooperado.findMany({
+      where: { convenioId, ativo: true },
+      include: {
+        cooperado: {
+          select: {
+            id: true,
+            nomeCompleto: true,
+            cotaKwhMensal: true,
+            ucs: { select: { id: true, numero: true, distribuidora: true } },
+          },
+        },
+      },
+    });
+
+    // UCs reais do pagador (empresa COM_UC). Entram no consolidado como
+    // entrada virtual (preserva paridade com gerarCobrancaConsolidada que
+    // já agregava UCs do pagador no total — fonte única exige).
+    const ucsPagadorReais = await this.prisma.uc.findMany({
+      where: {
+        cooperadoId: convenio.pagadorCooperadoId!,
+        NOT: { numero: { startsWith: 'CONSOLIDADOR-' } },
+      },
+      select: { id: true, numero: true, distribuidora: true },
+    });
+    const PAGADOR_ENTRY_ID = `__pagador__${convenio.pagadorCooperadoId}`;
+    const PAGADOR_ENTRY_NOME = `${convenio.empresaNome} (pagador COM_UC)`;
+
+    if (base === 'CONSUMO_REAL') {
+      if (membros.length === 0 && ucsPagadorReais.length === 0) {
+        return {
+          convenioId: convenio.id,
+          convenioNome: convenio.empresaNome,
+          base,
+          mesReferencia,
+          anoReferencia,
+          mesRefStr,
+          status: 'SEM_MEMBROS',
+          kwhTotal: 0,
+          membros: [],
+          distribuidoraUsada: null,
+        };
+      }
+
+      // Filtro INVARIANTE (D-FISCAL-2.4.4a.2): UC entra só se tem contrato ATIVO + plano custeado.
+      // Mapeia ucId → entryId (cooperadoId do membro OU PAGADOR_ENTRY_ID).
+      const ucIdToEntryId = new Map<string, string>();
+      const ucIdToInfo = new Map<string, { numero: string; distribuidora: string }>();
+      for (const membro of membros) {
+        for (const uc of membro.cooperado.ucs) {
+          if (!ucIdToEntryId.has(uc.id)) {
+            ucIdToEntryId.set(uc.id, membro.cooperado.id);
+            ucIdToInfo.set(uc.id, { numero: uc.numero, distribuidora: uc.distribuidora });
+          }
+        }
+      }
+      for (const uc of ucsPagadorReais) {
+        if (!ucIdToEntryId.has(uc.id)) {
+          ucIdToEntryId.set(uc.id, PAGADOR_ENTRY_ID);
+          ucIdToInfo.set(uc.id, { numero: uc.numero, distribuidora: uc.distribuidora });
+        }
+      }
+
+      const buildEntriesSemDados = (
+        ucIdsVisiveis: Set<string> | null,
+      ): PreviewKwhMembroDetalhe[] => {
+        const entries: PreviewKwhMembroDetalhe[] = membros.map((m) => ({
+          cooperadoId: m.cooperado.id,
+          nome: m.cooperado.nomeCompleto,
+          ucs: m.cooperado.ucs
+            .filter((u) => !ucIdsVisiveis || ucIdsVisiveis.has(u.id))
+            .map((u) => ({ numero: u.numero, distribuidora: u.distribuidora })),
+          kwh: 0,
+          fonte: 'sem-dado' as const,
+          percentual: 0,
+          semFaturaNoMes: true,
+        }));
+        const ucsPagadorVisiveis = ucsPagadorReais.filter(
+          (u) => !ucIdsVisiveis || ucIdsVisiveis.has(u.id),
+        );
+        if (ucsPagadorVisiveis.length > 0) {
+          entries.push({
+            cooperadoId: PAGADOR_ENTRY_ID,
+            nome: PAGADOR_ENTRY_NOME,
+            ucs: ucsPagadorVisiveis.map((u) => ({
+              numero: u.numero,
+              distribuidora: u.distribuidora,
+            })),
+            kwh: 0,
+            fonte: 'sem-dado' as const,
+            percentual: 0,
+            semFaturaNoMes: true,
+            isPagador: true,
+          });
+        }
+        return entries;
+      };
+
+      const ucIdsCandidatos = [...ucIdToEntryId.keys()];
+      if (ucIdsCandidatos.length === 0) {
+        return {
+          convenioId: convenio.id,
+          convenioNome: convenio.empresaNome,
+          base,
+          mesReferencia,
+          anoReferencia,
+          mesRefStr,
+          status: 'SEM_UCS_CUSTEADAS',
+          kwhTotal: 0,
+          membros: buildEntriesSemDados(null),
+          distribuidoraUsada: null,
+        };
+      }
+
+      const contratosCusteadosNasUCs = await this.prisma.contrato.findMany({
+        where: {
+          ucId: { in: ucIdsCandidatos },
+          status: 'ATIVO',
+          plano: { custeadoPorConvenio: true },
+        },
+        select: { ucId: true },
+      });
+      const ucIdsCusteados = new Set(
+        contratosCusteadosNasUCs.map((c) => c.ucId).filter(Boolean) as string[],
+      );
+
+      if (ucIdsCusteados.size === 0) {
+        return {
+          convenioId: convenio.id,
+          convenioNome: convenio.empresaNome,
+          base,
+          mesReferencia,
+          anoReferencia,
+          mesRefStr,
+          status: 'SEM_UCS_CUSTEADAS',
+          kwhTotal: 0,
+          membros: buildEntriesSemDados(null),
+          distribuidoraUsada: null,
+        };
+      }
+
+      // Carrega faturas APROVADAS dessas UCs no mês
+      const faturas = await this.prisma.faturaProcessada.findMany({
+        where: {
+          ucId: { in: [...ucIdsCusteados] },
+          mesReferencia: mesRefStr,
+          status: 'APROVADA',
+        },
+        select: { ucId: true, dadosExtraidos: true, mediaKwhCalculada: true },
+      });
+
+      // Soma kWh por entry (1 fatura por UC; dedup por Set)
+      const kwhPorEntry = new Map<string, number>();
+      const ucComConsumo = new Set<string>();
+      const distribuidorasUsadas: string[] = [];
+      for (const fatura of faturas) {
+        if (!fatura.ucId || ucComConsumo.has(fatura.ucId)) continue;
+        if (!ucIdsCusteados.has(fatura.ucId)) continue;
+        const dados = (fatura.dadosExtraidos as any) ?? {};
+        const consumo =
+          Number(dados.consumoAtualKwh ?? 0) ||
+          Number(fatura.mediaKwhCalculada ?? 0);
+        if (consumo > 0) {
+          ucComConsumo.add(fatura.ucId);
+          const entryId = ucIdToEntryId.get(fatura.ucId)!;
+          kwhPorEntry.set(entryId, (kwhPorEntry.get(entryId) ?? 0) + consumo);
+          const info = ucIdToInfo.get(fatura.ucId);
+          if (info?.distribuidora) distribuidorasUsadas.push(info.distribuidora);
+        }
+      }
+
+      const kwhTotalRaw = [...kwhPorEntry.values()].reduce((acc, v) => acc + v, 0);
+      const kwhTotal = Math.round(kwhTotalRaw * 100) / 100;
+
+      if (kwhTotal === 0) {
+        return {
+          convenioId: convenio.id,
+          convenioNome: convenio.empresaNome,
+          base,
+          mesReferencia,
+          anoReferencia,
+          mesRefStr,
+          status: 'SEM_FATURAS_NO_MES',
+          kwhTotal: 0,
+          membros: buildEntriesSemDados(ucIdsCusteados),
+          distribuidoraUsada: null,
+        };
+      }
+
+      const distribuidoraUsada = this.predominante(distribuidorasUsadas);
+
+      const membrosDetalhe: PreviewKwhMembroDetalhe[] = membros.map((m) => {
+        const kwhMembro =
+          Math.round((kwhPorEntry.get(m.cooperado.id) ?? 0) * 100) / 100;
+        const ucsDoMembro = m.cooperado.ucs.filter((u) => ucIdsCusteados.has(u.id));
+        return {
+          cooperadoId: m.cooperado.id,
+          nome: m.cooperado.nomeCompleto,
+          ucs: ucsDoMembro.map((u) => ({
+            numero: u.numero,
+            distribuidora: u.distribuidora,
+          })),
+          kwh: kwhMembro,
+          fonte: kwhMembro > 0 ? ('fatura' as const) : ('sem-dado' as const),
+          percentual:
+            kwhTotal > 0
+              ? Math.round((kwhMembro * 100 * 100) / kwhTotal) / 100
+              : 0,
+          ...(kwhMembro === 0 ? { semFaturaNoMes: true } : {}),
+        };
+      });
+
+      // Entrada virtual do pagador (se tem UCs custeadas com consumo)
+      const ucsPagadorCusteadasComInfo = ucsPagadorReais.filter((u) =>
+        ucIdsCusteados.has(u.id),
+      );
+      if (ucsPagadorCusteadasComInfo.length > 0) {
+        const kwhPagador =
+          Math.round((kwhPorEntry.get(PAGADOR_ENTRY_ID) ?? 0) * 100) / 100;
+        membrosDetalhe.push({
+          cooperadoId: PAGADOR_ENTRY_ID,
+          nome: PAGADOR_ENTRY_NOME,
+          ucs: ucsPagadorCusteadasComInfo.map((u) => ({
+            numero: u.numero,
+            distribuidora: u.distribuidora,
+          })),
+          kwh: kwhPagador,
+          fonte: kwhPagador > 0 ? ('fatura' as const) : ('sem-dado' as const),
+          percentual:
+            kwhTotal > 0
+              ? Math.round((kwhPagador * 100 * 100) / kwhTotal) / 100
+              : 0,
+          ...(kwhPagador === 0 ? { semFaturaNoMes: true } : {}),
+          isPagador: true,
+        });
+      }
+
+      return {
+        convenioId: convenio.id,
+        convenioNome: convenio.empresaNome,
+        base,
+        mesReferencia,
+        anoReferencia,
+        mesRefStr,
+        status: 'OK',
+        kwhTotal,
+        membros: membrosDetalhe,
+        distribuidoraUsada,
+      };
+    }
+
+    // ── ALOCACAO_FIXA: pacote fixo (kwhAlocadoMensal) rateado por cotaKwhMensal ──
+    if (!convenio.kwhAlocadoMensal || convenio.kwhAlocadoMensal <= 0) {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" usa base ALOCACAO_FIXA mas não tem ` +
+          `kwhAlocadoMensal definido. Configure no cadastro.`,
+      );
+    }
+    const kwhTotal = Math.round(convenio.kwhAlocadoMensal * 100) / 100;
+
+    // Sem membros: pacote fixo segue, breakdown vazio (cobrança real faz o
+    // mesmo — empresa "pré-pago" um pacote sem ter funcionários cadastrados).
+    if (membros.length === 0) {
+      const distribuidorasPagador = await this.distribuidorasPagador(
+        convenio.pagadorCooperadoId!,
+      );
+      const distribuidoraUsada =
+        this.predominante(distribuidorasPagador.filter((d) => d !== 'OUTRAS')) ??
+        this.predominante(distribuidorasPagador);
+      return {
+        convenioId: convenio.id,
+        convenioNome: convenio.empresaNome,
+        base,
+        mesReferencia,
+        anoReferencia,
+        mesRefStr,
+        status: 'OK',
+        kwhTotal,
+        membros: [],
+        distribuidoraUsada,
+      };
+    }
+
+    // Rateio proporcional ao cotaKwhMensal (porte da fórmula condominios.calcularRateio
+    // PROPORCIONAL_CONSUMO — vai virar helper standalone na Fatia 2.2).
+    // Fallback IGUALITARIO se totalCota === 0 (nenhum membro tem cota capturada).
+    const cotasPorMembro = membros.map((m) => Number(m.cooperado.cotaKwhMensal ?? 0));
+    const totalCota = cotasPorMembro.reduce((acc, v) => acc + v, 0);
+    const warningRateioIgualitario = totalCota === 0;
+    const membrosDetalhe: PreviewKwhMembroDetalhe[] = membros.map((m, idx) => {
+      const cota = cotasPorMembro[idx]!;
+      const kwhAlocado = warningRateioIgualitario
+        ? Math.round((kwhTotal / membros.length) * 100) / 100
+        : Math.round(kwhTotal * (cota / totalCota) * 100) / 100;
+      return {
+        cooperadoId: m.cooperado.id,
+        nome: m.cooperado.nomeCompleto,
+        ucs: m.cooperado.ucs.map((u) => ({
+          numero: u.numero,
+          distribuidora: u.distribuidora,
+        })),
+        kwh: kwhAlocado,
+        fonte: 'rateio' as const,
+        percentual:
+          kwhTotal > 0
+            ? Math.round((kwhAlocado * 100 * 100) / kwhTotal) / 100
+            : 0,
+      };
+    });
+
+    // Distribuidora predominante: membros + UCs do pagador
+    const distribuidorasMembros = membros.flatMap((m) =>
+      m.cooperado.ucs.map((u) => u.distribuidora),
+    );
+    const distribuidorasPagador = await this.distribuidorasPagador(
+      convenio.pagadorCooperadoId!,
+    );
+    const distribuidoraUsada =
+      this.predominante(
+        [...distribuidorasMembros, ...distribuidorasPagador].filter(
+          (d) => d && d !== 'OUTRAS',
+        ),
+      ) ??
+      this.predominante([...distribuidorasMembros, ...distribuidorasPagador]);
+
+    return {
+      convenioId: convenio.id,
+      convenioNome: convenio.empresaNome,
+      base,
+      mesReferencia,
+      anoReferencia,
+      mesRefStr,
+      status: 'OK',
+      kwhTotal,
+      membros: membrosDetalhe,
+      distribuidoraUsada,
+      ...(warningRateioIgualitario ? { warningRateioIgualitario: true } : {}),
+    };
+  }
+
+  /** Helper privado — UCs reais do pagador (exclui CONSOLIDADOR-*). */
+  private async distribuidorasPagador(pagadorCooperadoId: string): Promise<string[]> {
+    const ucs = await this.prisma.uc.findMany({
+      where: {
+        cooperadoId: pagadorCooperadoId,
+        NOT: { numero: { startsWith: 'CONSOLIDADOR-' } },
+      },
+      select: { distribuidora: true },
+    });
+    return ucs.map((u) => u.distribuidora).filter(Boolean) as string[];
+  }
+
+  /**
    * Gera (ou pula, se já existe) a cobrança consolidada de um convênio
    * `pagador=EMPRESA` numa competência mensal.
    *
    * Idempotência garantida pelo `@@unique([contratoId, mesReferencia, anoReferencia])`
    * do model Cobranca — duas chamadas pra mesmo convênio/mês resultam em 1 cobrança.
    * Validação prévia explícita pra mensagem amigável (em vez de erro Prisma cru).
+   *
+   * Fatia 2.1 (07/06/2026): kwhTotal + breakdown vêm de `previewKwhConsolidado`
+   * (mesma fonte que o portal-empresa usa pra mostrar a empresa o que ela paga).
+   * Preview e cobrança real NUNCA divergem por construção.
    */
   async gerarCobrancaConsolidada(opts: {
     convenioId: string;
@@ -162,212 +630,56 @@ export class ConveniosCusteioService {
       );
     }
 
-    // 4. Carregar membros custeados ATIVOS + UCs
-    const membros = await this.prisma.convenioCooperado.findMany({
-      where: { convenioId: convenio.id, ativo: true },
-      include: {
-        cooperado: {
-          select: {
-            id: true,
-            nomeCompleto: true,
-            ucs: {
-              select: {
-                id: true,
-                numero: true,
-                distribuidora: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    // D-FISCAL-2.4.4f — early-return SEM_MEMBROS movido PRA DENTRO do branch
-    // CONSUMO_REAL. ALOCACAO_FIXA é pacote fixo (kwhAlocadoMensal) — funciona
-    // sem membros (convênio "pré-pago"). CONSUMO_REAL ainda exige membros
-    // (sem UCs = sem faturas = sem soma).
-
-    // D-FISCAL-2.4.4a.1 — Empresa COM_UC: incluir UCs reais do pagadorCooperado
-    // no total consolidado (gap descoberto pós-2.4.4a). UC sintética
-    // CONSOLIDADOR-* é excluída via filtro (não tem fatura real).
-    const ucsPagadorReais = await this.prisma.uc.findMany({
-      where: {
-        cooperadoId: convenio.pagadorCooperadoId!,
-        NOT: { numero: { startsWith: 'CONSOLIDADOR-' } },
-      },
-      select: { id: true, numero: true, distribuidora: true },
+    // Fatia 2.1 (07/06/2026) — DELEGA pro previewKwhConsolidado (fonte única).
+    // Preview retorna estado + kwhTotal + breakdown. Aqui traduzimos estados
+    // pros mesmos throws/returns que o fluxo legado fazia inline — comportamento
+    // externo preservado pra callers (cron, UI 2.4.4d, smokes).
+    const preview = await this.previewKwhConsolidado({
+      convenioId: convenio.id,
+      mesReferencia,
+      anoReferencia,
+      cooperativaId,
     });
 
-    // 5. Calcular kWh consolidado conforme base
-    const base = convenio.baseCobrancaCusteio ?? 'CONSUMO_REAL';
-    let kwhTotal = 0;
-    let distribuidoraUsada: string | null = null;
-    const detalhamento: Array<{ origem: string; kwh: number; ucNumero?: string; distribuidora?: string }> = [];
-
-    if (base === 'CONSUMO_REAL') {
-      // D-FISCAL-2.4.4f — em CONSUMO_REAL, sem membros = nada pra somar.
-      // ALOCACAO_FIXA segue normal (pacote fixo independe de membros).
-      if (membros.length === 0) {
-        this.logger.warn(
-          `[D-FISCAL-2.4.4a] Convênio ${convenio.empresaNome} (base=CONSUMO_REAL) ` +
-            `sem membros ativos — consolidada não gerada.`,
-        );
-        return { status: 'SEM_MEMBROS', convenioId: convenio.id };
-      }
-
-      // D-FISCAL-2.4.4a.2 — INVARIANTE: UC entra no consolidado SE E SOMENTE SE
-      // o contrato ATIVO dela usa plano custeadoPorConvenio=true.
-      // Elimina risco de double-bill: nenhuma UC pode estar simultaneamente
-      // em cobrança individual (contrato comum) E no consolidado.
-      //
-      // Como o GUARD da 2.4.2 só suprime cobrança individual de UCs com plano
-      // custeado, fazer o consolidado depender do MESMO critério garante que
-      // a relação custeado⟺consolidado é bijetiva (uma UC ou está em um, ou
-      // está em outro, nunca em ambos, nunca em nenhum).
-      //
-      // Membros são custeados por construção (Wizard 2.4.3 força plano custeado
-      // no aceite), mas filtramos TODAS uniformemente — defesa contra:
-      //   (a) membro com contrato antigo NÃO migrado pro plano custeado
-      //   (b) UC do pagador NÃO cadastrada como membro (sem plano custeado)
-      //   (c) regressões futuras no fluxo de cadastro
-      const mesRefStr = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
-      const ucIdToOrigem = new Map<string, { origem: string; numero: string; distribuidora: string }>();
-      // Membros
-      for (const membro of membros) {
-        for (const uc of membro.cooperado.ucs) {
-          if (!ucIdToOrigem.has(uc.id)) {
-            ucIdToOrigem.set(uc.id, {
-              origem: membro.cooperado.nomeCompleto,
-              numero: uc.numero,
-              distribuidora: uc.distribuidora,
-            });
-          }
-        }
-      }
-      // UCs reais do pagador (defensivo — só entra no total se passar pelo
-      // filtro custeado abaixo, garantindo invariante anti-double-bill)
-      for (const uc of ucsPagadorReais) {
-        if (!ucIdToOrigem.has(uc.id)) {
-          ucIdToOrigem.set(uc.id, {
-            origem: `${convenio.empresaNome} (pagador COM_UC)`,
-            numero: uc.numero,
-            distribuidora: uc.distribuidora,
-          });
-        }
-      }
-
-      const ucIdsCandidatos = [...ucIdToOrigem.keys()];
-      if (ucIdsCandidatos.length === 0) {
-        throw new BadRequestException(
-          `Convênio "${convenio.empresaNome}" tem ${membros.length} membros mas ` +
-            `nenhum tem UC cadastrada (nem o pagador). Cadastre UCs antes de gerar ` +
-            `consolidada CONSUMO_REAL.`,
-        );
-      }
-
-      // ⭐ FILTRO INVARIANTE: só UCs cujo contrato ATIVO usa plano custeado
-      const contratosCusteadosNasUCs = await this.prisma.contrato.findMany({
-        where: {
-          ucId: { in: ucIdsCandidatos },
-          status: 'ATIVO',
-          plano: { custeadoPorConvenio: true },
-        },
-        select: { ucId: true },
-      });
-      const ucIdsCusteados = new Set(
-        contratosCusteadosNasUCs.map((c) => c.ucId).filter(Boolean) as string[],
+    if (preview.status === 'SEM_MEMBROS') {
+      this.logger.warn(
+        `[D-FISCAL-2.4.4a] Convênio ${convenio.empresaNome} (base=CONSUMO_REAL) ` +
+          `sem membros ativos — consolidada não gerada.`,
       );
-
-      // Auditoria UX: UCs candidatas que foram EXCLUÍDAS (não-custeadas)
-      const ucIdsExcluidas = ucIdsCandidatos.filter((id) => !ucIdsCusteados.has(id));
-      if (ucIdsExcluidas.length > 0) {
-        const detalhesExcluidos = ucIdsExcluidas
-          .map((id) => {
-            const meta = ucIdToOrigem.get(id);
-            return `${meta?.numero ?? id} (${meta?.origem ?? '?'})`;
-          })
-          .join(', ');
-        this.logger.log(
-          `[D-FISCAL-2.4.4a.2] Convênio "${convenio.empresaNome}": ${ucIdsExcluidas.length} ` +
-            `UC(s) candidata(s) EXCLUÍDA(s) do consolidado por NÃO terem contrato ATIVO ` +
-            `com plano custeado: ${detalhesExcluidos}. ` +
-            `Essas UCs seguem cobrança individual normal. ` +
-            `Pra consolidá-las, cadastre o cooperado dono como membro custeado do convênio ` +
-            `via /dashboard/cooperados/novo (toggle "custeado por convênio").`,
-        );
-      }
-
-      const ucIds = [...ucIdsCusteados];
-      if (ucIds.length === 0) {
-        throw new BadRequestException(
-          `Convênio "${convenio.empresaNome}": nenhuma das ${ucIdsCandidatos.length} UC(s) ` +
-            `candidatas (membros + pagador) tem contrato ATIVO com plano custeado. ` +
-            `Cadastre os membros como custeados via Wizard antes de gerar consolidada.`,
-        );
-      }
-
-      const faturas = await this.prisma.faturaProcessada.findMany({
-        where: {
-          ucId: { in: ucIds },
-          mesReferencia: mesRefStr,
-          status: 'APROVADA',
-        },
-        select: { ucId: true, dadosExtraidos: true, mediaKwhCalculada: true },
-      });
-      // Soma direto por fatura (NÃO por membro) — garante 1 fatura = 1 contribuição
-      const ucIdComConsumo = new Set<string>();
-      for (const fatura of faturas) {
-        if (!fatura.ucId || ucIdComConsumo.has(fatura.ucId)) continue;
-        const dados = (fatura.dadosExtraidos as any) ?? {};
-        const consumo =
-          Number(dados.consumoAtualKwh ?? 0) ||
-          Number(fatura.mediaKwhCalculada ?? 0);
-        if (consumo > 0) {
-          ucIdComConsumo.add(fatura.ucId);
-          kwhTotal += consumo;
-          const meta = ucIdToOrigem.get(fatura.ucId);
-          detalhamento.push({
-            origem: meta?.origem ?? '(UC sem origem mapeada)',
-            kwh: consumo,
-            ucNumero: meta?.numero,
-            distribuidora: meta?.distribuidora,
-          });
-        }
-      }
-      if (kwhTotal === 0) {
-        throw new BadRequestException(
-          `Convênio "${convenio.empresaNome}": nenhuma fatura APROVADA encontrada ` +
-            `em ${mesRefStr} pras ${ucIds.length} UC(s) custeada(s). ` +
-            `Aguarde processamento das faturas ou troque a base pra ALOCACAO_FIXA.`,
-        );
-      }
-      // Distribuidora predominante: a que aparece mais vezes nos detalhes
-      distribuidoraUsada = this.predominante(
-        detalhamento.map((d) => d.distribuidora).filter(Boolean) as string[],
-      );
-    } else {
-      // ALOCACAO_FIXA: kwhAlocadoMensal único
-      if (!convenio.kwhAlocadoMensal || convenio.kwhAlocadoMensal <= 0) {
-        throw new BadRequestException(
-          `Convênio "${convenio.empresaNome}" usa base ALOCACAO_FIXA mas não tem ` +
-            `kwhAlocadoMensal definido. Configure no cadastro.`,
-        );
-      }
-      kwhTotal = convenio.kwhAlocadoMensal;
-      // D-FISCAL-2.4.4a.1 — Distribuidora predominante dos membros + UCs reais
-      // do pagador (ambos podem ser beneficiárias). Fallback: UCs do pagador
-      // com distribuidora != OUTRAS (mais específico).
-      const distribuidorasMembros = membros.flatMap((m) =>
-        m.cooperado.ucs.map((u) => u.distribuidora),
-      );
-      const distribuidorasPagador = ucsPagadorReais.map((u) => u.distribuidora);
-      distribuidoraUsada = this.predominante(
-        [...distribuidorasMembros, ...distribuidorasPagador].filter(
-          (d) => d && d !== 'OUTRAS',
-        ),
-      ) ?? this.predominante(
-        [...distribuidorasMembros, ...distribuidorasPagador],
+      return { status: 'SEM_MEMBROS', convenioId: convenio.id };
+    }
+    if (preview.status === 'SEM_UCS_CUSTEADAS') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}": nenhuma UC custeada ` +
+          `(membros + pagador) tem contrato ATIVO com plano custeado. ` +
+          `Cadastre os membros como custeados via Wizard antes de gerar consolidada.`,
       );
     }
+    if (preview.status === 'SEM_FATURAS_NO_MES') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}": nenhuma fatura APROVADA encontrada ` +
+          `em ${preview.mesRefStr}. Aguarde processamento das faturas ou troque ` +
+          `a base pra ALOCACAO_FIXA.`,
+      );
+    }
+
+    // OK — temos kwhTotal + breakdown + distribuidora. Reconstrói shape antigo pro log.
+    const kwhTotal = preview.kwhTotal;
+    const distribuidoraUsada = preview.distribuidoraUsada;
+    const base = preview.base;
+    const detalhamento = preview.membros
+      .filter((m) => m.kwh > 0)
+      .map((m) => ({
+        origem: m.nome,
+        kwh: m.kwh,
+        ucNumero: m.ucs[0]?.numero,
+        distribuidora: m.ucs[0]?.distribuidora,
+      }));
+
+    // Conta membros pra cálculo do clube (apenas length é necessário).
+    const membrosCount = await this.prisma.convenioCooperado.count({
+      where: { convenioId: convenio.id, ativo: true },
+    });
 
     // 6. Resolver tarifa + calcular valores (Math.round monetário obrigatório).
     // D-novo-CT-TARIFA-FIXA-EMPRESA (02/06/2026) — 2 ramos:
@@ -435,9 +747,9 @@ export class ConveniosCusteioService {
         (convenio as any).planoClubeId,
         convenio.cooperativaId!,
       );
-      if (snap && snap.cobra && snap.valorMensal > 0 && membros.length > 0) {
+      if (snap && snap.cobra && snap.valorMensal > 0 && membrosCount > 0) {
         valorMensalidadeClubeConsolidada =
-          Math.round(membros.length * snap.valorMensal * 100) / 100;
+          Math.round(membrosCount * snap.valorMensal * 100) / 100;
         planoClubeIdConsolidado = snap.id;
       }
     }
@@ -502,10 +814,11 @@ export class ConveniosCusteioService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
+    const entradasPagador = preview.membros.filter((m) => m.isPagador).length;
     this.logger.log(
       `[D-FISCAL-2.4.4a] Consolidada CRIADA convênio "${convenio.empresaNome}" ` +
         `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}: ` +
-        `${membros.length} membros · ${ucsPagadorReais.length} UC(s) pagador candidatas ` +
+        `${membrosCount} membros · ${entradasPagador} entrada(s) pagador COM_UC ` +
         `· ${detalhamento.length} UC(s) custeada(s) consolidada(s) · base=${base} · kWh=${kwhTotal} · ` +
         `tarifa=R$ ${tarifaUsada.toFixed(5)}/kWh (${tipoTarifa === 'VALOR_FIXO' ? 'FIXA negociada' : distribuidoraUsada}) · ` +
         `bruto=R$ ${valorBruto.toFixed(2)} · líquido=R$ ${valorLiquido.toFixed(2)} ` +

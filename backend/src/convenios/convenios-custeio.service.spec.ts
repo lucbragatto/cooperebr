@@ -51,7 +51,7 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     contratoConvenio: { findFirst: findFirstConvenio, update: updateConvenio },
     cobranca: { findFirst: findFirstCobranca, create: createCobranca },
     lancamentoCaixa: { create: createLancamentoCaixa },
-    convenioCooperado: { findMany: findManyMembros },
+    convenioCooperado: { findMany: findManyMembros, count: jest.fn() },
     faturaProcessada: { findMany: findManyFaturas },
     tarifaConcessionaria: {
       findMany: findManyTarifas,
@@ -117,6 +117,14 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       const ucIds: string[] = args?.where?.ucId?.in ?? [];
       // Por default, retorna 1 contrato custeado pra cada UC candidata
       return ucIds.map((ucId) => ({ ucId }));
+    });
+    // Fatia 2.1 (07/06/2026): gerarCobrancaConsolidada delega pro
+    // previewKwhConsolidado e depois conta membros pra cálculo do clube.
+    // Default: retorna length de findManyMembros se já configurado nessa rodada.
+    (prismaMock.convenioCooperado.count as jest.Mock).mockImplementation(async () => {
+      const last = findManyMembros.mock.results[findManyMembros.mock.results.length - 1];
+      const arr = last?.value ?? [];
+      return Array.isArray(arr) ? arr.length : 0;
     });
   });
 
@@ -580,6 +588,11 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       id: 'conv-1',
       contratoConsolidadorId: null,
       empresaNome: 'Clínica Médica X',
+    });
+    // Fatia 2.1: previewKwhConsolidado faz seu próprio findFirst do convênio
+    findFirstConvenio.mockResolvedValueOnce({
+      ...convenioBase,
+      contratoConsolidadorId: null,
     });
     findUniqueUc.mockResolvedValueOnce(null); // UC sintética não existe
     createUc.mockResolvedValueOnce({ id: 'uc-sintetica-1' });
