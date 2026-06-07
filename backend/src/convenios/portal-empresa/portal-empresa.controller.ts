@@ -222,6 +222,53 @@ export class PortalEmpresaController {
   }
 
   /**
+   * Sprint Convite-Lote LOTE.2 (07/06/2026) — envio em lote async (portal-empresa).
+   */
+  @PagadorCooperadoOnly()
+  @AuditLog({
+    acao: 'portal-empresa.convite.lote.enviar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(202)
+  @Post(':id/convites/lote/enviar')
+  async enviarConviteLote(
+    @Param('id') convenioId: string,
+    @Body() body: { destinatarios: Array<{ nome: string; telefone: string }> },
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.empresa?.cooperativaId;
+    const userId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId) throw new ForbiddenException('Contexto sem cooperativaId.');
+    if (!userId) throw new ForbiddenException('userId obrigatório no contexto.');
+    return this.convitesService.enviarLote({
+      convenioId,
+      cooperativaId,
+      criadoPorUserId: userId,
+      destinatarios: body?.destinatarios ?? [],
+    });
+  }
+
+  /**
+   * Sprint Convite-Lote LOTE.3 (07/06/2026) — status do lote (portal-empresa).
+   */
+  @PagadorCooperadoOnly()
+  @Get(':id/convites/lote/:loteId/status')
+  async statusConviteLote(
+    @Param('id') convenioId: string,
+    @Param('loteId') loteId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.empresa?.cooperativaId;
+    if (!cooperativaId) throw new ForbiddenException('Contexto sem cooperativaId.');
+    return this.convitesService.statusLote({
+      loteId,
+      convenioId,
+      cooperativaId,
+    });
+  }
+
+  /**
    * Sprint Convite-Lote LOTE.1 (07/06/2026) — preview do lote no portal-empresa.
    * Anti-IDOR via @PagadorCooperadoOnly (já valida posse e injeta cooperativaId
    * em req.empresa). Service revalida tenant — defesa em profundidade.

@@ -1680,10 +1680,24 @@ model ConviteConvenioMembro {
   membroId            String?             @unique
   membro              ConvenioCooperado?  @relation(fields: [membroId], references: [id])
 
+  // Sprint Convite-Lote LOTE.2 (07/06/2026) — convites criados via envio em
+  // lote compartilham o mesmo loteId pra UI mostrar status agregado.
+  // - loteId: id opaco gerado no momento do envio (cuid()-like).
+  // - loteEnvioWaStatus: PENDENTE (na fila) | ENVIADO (WA confirmou) | FALHOU (WA erro).
+  // - loteEnvioWaErro: motivo curto quando FALHOU (pra UI mostrar tooltip).
+  // - loteEnvioWaEm: timestamp da última tentativa (ENVIADO ou FALHOU).
+  // Todos nullable — convites individuais (não-lote) ficam com null. Sem migração
+  // de perda.
+  loteId              String?
+  loteEnvioWaStatus   String?             // PENDENTE | ENVIADO | FALHOU
+  loteEnvioWaErro     String?
+  loteEnvioWaEm       DateTime?
+
   @@unique([convenioId, telefone])       // 1 convite vivo por (convênio, telefone)
   @@index([token])
   @@index([telefone])
   @@index([cooperativaId, createdAt])
+  @@index([loteId])
   @@map("convites_convenio_membro")
 }
 

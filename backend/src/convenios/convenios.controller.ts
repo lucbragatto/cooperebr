@@ -698,6 +698,62 @@ export class ConveniosController {
   }
 
   /**
+   * Sprint Convite-Lote LOTE.2 (07/06/2026) — envio em lote async.
+   *
+   * Cria N convites síncronos no DB (com loteId + statusEnvio=PENDENTE) e
+   * dispara fila de envio WA assíncrona em background (throttle 2s entre cada
+   * — anti-spam). Caller recebe { loteId, total } imediato. UI polla status.
+   */
+  @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'contratoConvenio' })
+  @AuditLog({
+    acao: 'convenio.convite.lote.enviar',
+    recurso: 'ContratoConvenio',
+    recursoIdParam: 'id',
+  })
+  @HttpCode(202)
+  @Post(':id/convites/lote/enviar')
+  async enviarConviteLote(
+    @Param('id') convenioId: string,
+    @Body() body: { destinatarios: Array<{ nome: string; telefone: string }> },
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const userId = req.user?.id ?? req.user?.userId;
+    if (!cooperativaId)
+      throw new ForbiddenException('cooperativaId obrigatório no contexto.');
+    if (!userId) throw new ForbiddenException('userId obrigatório no contexto.');
+    return this.convitesService.enviarLote({
+      convenioId,
+      cooperativaId,
+      criadoPorUserId: userId,
+      destinatarios: body?.destinatarios ?? [],
+    });
+  }
+
+  /**
+   * Sprint Convite-Lote LOTE.3 (07/06/2026) — status agregado do lote.
+   * Anti-IDOR via filtro cooperativaId + convenioId no service.
+   */
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'contratoConvenio' })
+  @Get(':id/convites/lote/:loteId/status')
+  async statusConviteLote(
+    @Param('id') convenioId: string,
+    @Param('loteId') loteId: string,
+    @Req() req: any,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId)
+      throw new ForbiddenException('cooperativaId obrigatório no contexto.');
+    return this.convitesService.statusLote({
+      loteId,
+      convenioId,
+      cooperativaId,
+    });
+  }
+
+  /**
    * Sprint Convite-Lote LOTE.1 (07/06/2026) — preview de convites em lote.
    *
    * Recebe CSV/TXT colado e classifica cada linha pra mostrar prévia antes

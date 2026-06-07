@@ -228,6 +228,143 @@ describe('ConvitesConvenioService.previewLote — LOTE.1', () => {
     expect(r.linhas).toEqual([]);
   });
 
+  // ─── LOTE.2 — enviarLote ─────────────────────────────────────────────
+  describe('enviarLote — LOTE.2', () => {
+    beforeEach(() => {
+      // Mocks adicionais pra criarConvite + update do statusEnvio.
+      prismaMock.conviteConvenioMembro.findUnique = jest.fn().mockResolvedValue(null);
+      prismaMock.conviteConvenioMembro.delete = jest.fn().mockResolvedValue({});
+      prismaMock.conviteConvenioMembro.create = jest.fn();
+      prismaMock.conviteConvenioMembro.update = jest.fn().mockResolvedValue({});
+      let counter = 0;
+      prismaMock.conviteConvenioMembro.create.mockImplementation(async (args: any) => ({
+        id: `conv-id-${++counter}`,
+        token: 'a'.repeat(64),
+        nomeConvidado: args.data.nomeConvidado,
+        telefone: args.data.telefone,
+        expiresAt: new Date(Date.now() + 7 * 86400000),
+      }));
+    });
+
+    it('cria N convites + retorna loteId imediato', async () => {
+      const r = await service.enviarLote({
+        convenioId: CONVENIO_ID,
+        cooperativaId: TENANT_A,
+        criadoPorUserId: 'admin-1',
+        destinatarios: [
+          { nome: 'Dra. Ana', telefone: '27999990001' },
+          { nome: 'Dr. Bruno', telefone: '27999990002' },
+        ],
+      });
+      expect(r.loteId).toMatch(/^[0-9a-f]+$/);
+      expect(r.total).toBe(2);
+      expect(prismaMock.conviteConvenioMembro.create).toHaveBeenCalledTimes(2);
+      // updates pra setar loteId + statusEnvio=PENDENTE
+      expect(prismaMock.conviteConvenioMembro.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ loteEnvioWaStatus: 'PENDENTE' }),
+        }),
+      );
+    });
+
+    it('destinatarios vazio → BadRequest', async () => {
+      await expect(
+        service.enviarLote({
+          convenioId: CONVENIO_ID,
+          cooperativaId: TENANT_A,
+          criadoPorUserId: 'admin-1',
+          destinatarios: [],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('cooperativaId errada → NotFound', async () => {
+      prismaMock.contratoConvenio.findFirst.mockResolvedValue(null);
+      await expect(
+        service.enviarLote({
+          convenioId: CONVENIO_ID,
+          cooperativaId: 'OUTRO',
+          criadoPorUserId: 'admin-1',
+          destinatarios: [{ nome: 'A', telefone: '27999990001' }],
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('todos destinatários inválidos → BadRequest "Nenhum convite criado"', async () => {
+      // Força criarConvite a falhar em cada item
+      prismaMock.conviteConvenioMembro.create.mockRejectedValue(
+        new Error('telefone duplicado'),
+      );
+      await expect(
+        service.enviarLote({
+          convenioId: CONVENIO_ID,
+          cooperativaId: TENANT_A,
+          criadoPorUserId: 'admin-1',
+          destinatarios: [
+            { nome: 'A', telefone: '27999990001' },
+            { nome: 'B', telefone: '27999990002' },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  // ─── LOTE.3 — statusLote ────────────────────────────────────────────
+  describe('statusLote — LOTE.3', () => {
+    it('retorna agregado + lista com sufixo do telefone (LGPD)', async () => {
+      prismaMock.conviteConvenioMembro.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          nomeConvidado: 'Dra. Ana',
+          telefone: '5527999990001',
+          loteEnvioWaStatus: 'ENVIADO',
+          loteEnvioWaEm: new Date('2026-06-07'),
+          loteEnvioWaErro: null,
+        },
+        {
+          id: 'c2',
+          nomeConvidado: 'Dr. Bruno',
+          telefone: '5527999990002',
+          loteEnvioWaStatus: 'FALHOU',
+          loteEnvioWaEm: new Date('2026-06-07'),
+          loteEnvioWaErro: 'numero não existe no WA',
+        },
+        {
+          id: 'c3',
+          nomeConvidado: 'Dra. Carla',
+          telefone: '5527999990003',
+          loteEnvioWaStatus: 'PENDENTE',
+          loteEnvioWaEm: null,
+          loteEnvioWaErro: null,
+        },
+      ]);
+
+      const r = await service.statusLote({
+        loteId: 'lote-abc',
+        convenioId: CONVENIO_ID,
+        cooperativaId: TENANT_A,
+      });
+
+      expect(r.resumo).toEqual({ total: 3, pendente: 1, enviado: 1, falhou: 1 });
+      expect(r.itens[0]!.telefoneSufixo).toBe('...0001');
+      expect(r.itens[1]!.telefoneSufixo).toBe('...0002');
+      expect(r.itens[1]!.erro).toBe('numero não existe no WA');
+      // Não vaza telefone integral
+      r.itens.forEach((i) => expect(i).not.toHaveProperty('telefone'));
+    });
+
+    it('lote inexistente / cross-tenant → NotFound', async () => {
+      prismaMock.conviteConvenioMembro.findMany.mockResolvedValue([]);
+      await expect(
+        service.statusLote({
+          loteId: 'lote-xyz',
+          convenioId: CONVENIO_ID,
+          cooperativaId: 'OUTRO',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   it('caso composto: 5 linhas variadas → resumo bate', async () => {
     prismaMock.convenioCooperado.findMany.mockResolvedValue([
       { cooperado: { telefone: '5527999990002' } },

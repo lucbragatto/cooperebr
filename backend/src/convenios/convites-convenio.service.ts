@@ -322,6 +322,261 @@ export class ConvitesConvenioService {
     return { resumo, linhas };
   }
 
+  // ─── Sprint Convite-Lote LOTE.2 (07/06/2026) — envio em fila ─────────
+
+  /** Throttle entre envios WA — anti-spam Meta. 2s = ~30 envios/min. */
+  static readonly LOTE_THROTTLE_MS = 2000;
+
+  /**
+   * Envia convites em lote pra uma lista pré-validada de destinatários.
+   *
+   * Síncrono no DB (cria todos os ConviteConvenioMembro com `loteEnvioWaStatus=
+   * PENDENTE` antes de retornar), assíncrono no WA (envios disparam em fila com
+   * throttle de 2s entre cada — protege contra rate-limit do WhatsApp Business).
+   * Caller (controller) recebe `loteId` IMEDIATO + total. UI polla
+   * `GET /lote/:loteId/status` (LOTE.3) pra acompanhar.
+   *
+   * Reusa `criarConvite` por destinatário — herda reuse-if-alive (idempotência)
+   * + validações de tenant/pagador/ativo. Cada item rodado isolado: falha num
+   * NÃO derruba os outros (logger.warn + statusEnvio='FALHOU').
+   *
+   * Anti-IDOR: caller passa `cooperativaId` resolvido server-side. Service
+   * confia no caller (mesmo padrão de `previewLote`); `criarConvite` revalida
+   * tenant em cada item.
+   *
+   * Destinatários inválidos (nome curto / telefone errado) já foram filtrados
+   * pelo preview (LOTE.1) — service confia que `destinatarios` veio só com
+   * status=PRONTO da prévia.
+   */
+  async enviarLote(input: {
+    convenioId: string;
+    cooperativaId: string;
+    criadoPorUserId: string;
+    destinatarios: Array<{ nome: string; telefone: string }>;
+  }): Promise<{ loteId: string; total: number }> {
+    const { convenioId, cooperativaId, criadoPorUserId } = input;
+    if (!convenioId) throw new BadRequestException('convenioId obrigatório.');
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório.');
+    }
+    if (!criadoPorUserId) {
+      throw new BadRequestException('criadoPorUserId obrigatório.');
+    }
+    if (
+      !Array.isArray(input.destinatarios) ||
+      input.destinatarios.length === 0
+    ) {
+      throw new BadRequestException(
+        'destinatarios obrigatório (array não-vazio).',
+      );
+    }
+
+    // Anti-IDOR + posse do convênio (defesa em profundidade — `criarConvite`
+    // também valida, mas falhar cedo evita criar convites parciais).
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: { id: true, status: true, pagador: true, empresaNome: true },
+    });
+    if (!convenio) {
+      throw new NotFoundException('Convênio não encontrado neste tenant.');
+    }
+    if (convenio.status !== 'ATIVO') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" não está ATIVO.`,
+      );
+    }
+    if (convenio.pagador !== 'EMPRESA') {
+      throw new BadRequestException(
+        `Convênio "${convenio.empresaNome}" tem pagador=${convenio.pagador}.`,
+      );
+    }
+
+    // loteId opaco — caller usa pro poll de status.
+    const loteId = crypto.randomBytes(12).toString('hex');
+
+    // Cria os convites em sequência (não em tx — cada criarConvite tem reuse-
+    // if-alive que pode ler/criar diferente por linha; tx longa segura WA).
+    // Após criar, marca loteId+statusEnvio=PENDENTE.
+    type ItemLote = {
+      conviteId: string;
+      nomeConvidado: string;
+      telefone: string;
+      link: string;
+      reused: boolean;
+    };
+    const itens: ItemLote[] = [];
+    for (const dest of input.destinatarios) {
+      try {
+        const convite = await this.criarConvite({
+          convenioId,
+          nomeConvidado: dest.nome,
+          telefone: dest.telefone,
+          criadoPorUserId,
+          cooperativaId,
+        });
+        await this.prisma.conviteConvenioMembro.update({
+          where: { id: convite.id },
+          data: { loteId, loteEnvioWaStatus: 'PENDENTE' },
+        });
+        itens.push({
+          conviteId: convite.id,
+          nomeConvidado: convite.nomeConvidado,
+          telefone: convite.telefone,
+          link: convite.link,
+          reused: convite.reused,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'erro';
+        this.logger.warn(
+          `[convite-lote] criarConvite falhou pra ${dest.nome.slice(0, 20)} ` +
+            `(${dest.telefone}): ${msg}`,
+        );
+        // Não bloqueia o lote — pula este destinatário.
+      }
+    }
+
+    if (itens.length === 0) {
+      throw new BadRequestException(
+        'Nenhum convite pôde ser criado neste lote.',
+      );
+    }
+
+    this.logger.log(
+      `[convite-lote] Lote criado: loteId=${loteId} convênio="${convenio.empresaNome}" ` +
+        `total=${itens.length} (de ${input.destinatarios.length} solicitados)`,
+    );
+
+    // Dispara fila de envio WA em background (não bloqueia a resposta HTTP).
+    // setImmediate desacopla do request lifecycle. NUNCA propaga erros — cada
+    // item é registrado individualmente.
+    setImmediate(() => {
+      void this.processarFilaWa(itens, convenio.empresaNome, cooperativaId);
+    });
+
+    return { loteId, total: itens.length };
+  }
+
+  /**
+   * Processa fila de envio WA com throttle in-process. Roda em background
+   * (chamado via setImmediate por enviarLote). Cada item atualiza
+   * `loteEnvioWaStatus` + `loteEnvioWaEm` + `loteEnvioWaErro` no banco.
+   *
+   * Throttle de 2s entre envios garante ~30 mensagens/min — suficiente pro
+   * volume típico de uma clínica (10-50 funcionários) e seguro contra rate-
+   * limit do WhatsApp Business.
+   */
+  private async processarFilaWa(
+    itens: Array<{
+      conviteId: string;
+      nomeConvidado: string;
+      telefone: string;
+      link: string;
+    }>,
+    empresaNome: string,
+    cooperativaId: string,
+  ): Promise<void> {
+    for (let i = 0; i < itens.length; i++) {
+      const item = itens[i]!;
+      const envio = await this.enviarLinkPorWhatsapp({
+        telefone: item.telefone,
+        link: item.link,
+        nomeConvidado: item.nomeConvidado,
+        empresaNome,
+        cooperativaId,
+      });
+      await this.prisma.conviteConvenioMembro
+        .update({
+          where: { id: item.conviteId },
+          data: {
+            loteEnvioWaStatus: envio.enviado ? 'ENVIADO' : 'FALHOU',
+            loteEnvioWaEm: new Date(),
+            loteEnvioWaErro: envio.enviado ? null : (envio.erro ?? 'falha WA'),
+          },
+        })
+        .catch((err) =>
+          this.logger.warn(
+            `[convite-lote] Falha update statusEnvio conviteId=${item.conviteId}: ${err instanceof Error ? err.message : 'erro'}`,
+          ),
+        );
+      // Throttle entre envios (último não precisa esperar).
+      if (i < itens.length - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, ConvitesConvenioService.LOTE_THROTTLE_MS),
+        );
+      }
+    }
+    this.logger.log(
+      `[convite-lote] Fila WA processada: ${itens.length} envios (throttle ${ConvitesConvenioService.LOTE_THROTTLE_MS}ms)`,
+    );
+  }
+
+  /**
+   * Sprint Convite-Lote LOTE.3 (07/06/2026) — status do lote.
+   *
+   * Retorna lista de envios + agregados pra UI mostrar progresso ("X de N
+   * enviados / Y falhas / Z pendentes"). Anti-IDOR via cooperativaId no filtro.
+   */
+  async statusLote(input: {
+    loteId: string;
+    convenioId: string;
+    cooperativaId: string;
+  }): Promise<{
+    loteId: string;
+    convenioId: string;
+    resumo: { total: number; pendente: number; enviado: number; falhou: number };
+    itens: Array<{
+      conviteId: string;
+      nomeConvidado: string;
+      telefoneSufixo: string; // LGPD — só últimos 4 dígitos
+      statusEnvio: 'PENDENTE' | 'ENVIADO' | 'FALHOU';
+      enviadoEm: Date | null;
+      erro: string | null;
+    }>;
+  }> {
+    const { loteId, convenioId, cooperativaId } = input;
+    if (!loteId) throw new BadRequestException('loteId obrigatório.');
+
+    const convites = await this.prisma.conviteConvenioMembro.findMany({
+      where: {
+        loteId,
+        convenioId,
+        cooperativaId,
+      },
+      select: {
+        id: true,
+        nomeConvidado: true,
+        telefone: true,
+        loteEnvioWaStatus: true,
+        loteEnvioWaEm: true,
+        loteEnvioWaErro: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (convites.length === 0) {
+      throw new NotFoundException('Lote não encontrado neste convênio.');
+    }
+
+    const itens = convites.map((c) => ({
+      conviteId: c.id,
+      nomeConvidado: c.nomeConvidado,
+      telefoneSufixo: '...' + c.telefone.slice(-4),
+      statusEnvio: (c.loteEnvioWaStatus ?? 'PENDENTE') as
+        | 'PENDENTE'
+        | 'ENVIADO'
+        | 'FALHOU',
+      enviadoEm: c.loteEnvioWaEm,
+      erro: c.loteEnvioWaErro,
+    }));
+    const resumo = {
+      total: itens.length,
+      pendente: itens.filter((i) => i.statusEnvio === 'PENDENTE').length,
+      enviado: itens.filter((i) => i.statusEnvio === 'ENVIADO').length,
+      falhou: itens.filter((i) => i.statusEnvio === 'FALHOU').length,
+    };
+    return { loteId, convenioId, resumo, itens };
+  }
+
   /**
    * Cria convite (ou reusa se já existe vivo pra mesmo convenioId+telefone).
    * Multi-tenant: convênio deve pertencer ao cooperativaId do admin.
