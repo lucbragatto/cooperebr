@@ -232,11 +232,11 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     expect(Number(bodyArg.percentualDesconto)).toBe(20);
   });
 
-  it('ALOCACAO_FIXA: usa kwhAlocadoMensal, não soma faturas', async () => {
+  it('ALOCACAO_FIXA: SOMA cotaKwhMensal dos membros (fix 07/06 — não usa mais pacote como total)', async () => {
     findFirstConvenio.mockResolvedValue({
       ...convenioBase,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
-      kwhAlocadoMensal: 5000,
+      kwhAlocadoMensal: 5000, // ← agora é REFERÊNCIA, total vem das cotas
     });
     findFirstCobranca.mockResolvedValue(null);
     findManyMembros.mockResolvedValue([
@@ -244,6 +244,7 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
         cooperado: {
           id: 'mem-1',
           nomeCompleto: 'Dr. A',
+          cotaKwhMensal: 5000, // ← soma das cotas = 5000
           ucs: [{ id: 'uc-1', distribuidora: 'EDP_ES' }],
         },
       },
@@ -257,7 +258,7 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       cooperativaId: 'coop-A',
     });
 
-    // 5000 * 0.78931 = 3946.55
+    // 5000 (soma cotas) * 0.78931 = 3946.55
     const bodyArg = createCobranca.mock.calls[0][0].data;
     expect(Number(bodyArg.valorBruto)).toBeCloseTo(3946.55, 2);
     // NÃO consultou faturas (base ALOCACAO_FIXA)
@@ -392,13 +393,22 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     findFirstConvenio.mockResolvedValue({
       ...convenioBase,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
-      kwhAlocadoMensal: 200000,
+      kwhAlocadoMensal: 200000, // ← referência
       descontoKwhCusteio: '20', // setado, mas IGNORADO em VALOR_FIXO
       tipoTarifaEmpresa: 'VALOR_FIXO',
       tarifaFixaKwhEmpresa: '0.80000',
     });
     findFirstCobranca.mockResolvedValue(null);
-    findManyMembros.mockResolvedValue([]);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'Dr. A',
+          cotaKwhMensal: 200000, // ← soma cotas = 200k (fix 07/06)
+          ucs: [],
+        },
+      },
+    ]);
     findManyUcsPagador.mockResolvedValue([]);
     // Concessionária tarifa NÃO deveria ser consultada — não mockamos retorno
     // (qualquer chamada faria findManyTarifas mock retornar undefined e quebrar)
@@ -434,7 +444,9 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       tarifaFixaKwhEmpresa: null, // ausente
     });
     findFirstCobranca.mockResolvedValue(null);
-    findManyMembros.mockResolvedValue([]);
+    findManyMembros.mockResolvedValue([
+      { cooperado: { id: 'mem-1', nomeCompleto: 'A', cotaKwhMensal: 5000, ucs: [] } },
+    ]);
     findManyUcsPagador.mockResolvedValue([]);
 
     await expect(
@@ -459,7 +471,16 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       tarifaFixaKwhEmpresa: null,
     });
     findFirstCobranca.mockResolvedValue(null);
-    findManyMembros.mockResolvedValue([]);
+    findManyMembros.mockResolvedValue([
+      {
+        cooperado: {
+          id: 'mem-1',
+          nomeCompleto: 'A',
+          cotaKwhMensal: 5000,
+          ucs: [{ id: 'uc-1', distribuidora: 'EDP_ES' }],
+        },
+      },
+    ]);
     findManyUcsPagador.mockResolvedValue([]);
     findManyTarifas.mockResolvedValue([]); // distribuidora=null → cai no fallback
     findFirstTarifa.mockResolvedValue({
@@ -483,9 +504,10 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     expect(Number(bodyArg.percentualDesconto)).toBe(20);
   });
 
-  // D-FISCAL-2.4.4f — ALOCACAO_FIXA é pacote fixo: kwhAlocadoMensal é a fonte,
-  // não depende de membros. Convênio "pré-pago" sem membros DEVE gerar.
-  it('D-FISCAL-2.4.4f: ALOCACAO_FIXA sem membros → CRIADA (pacote fixo independe de membros)', async () => {
+  // Fix 07/06/2026 (modelo correto): ALOCACAO_FIXA SEM membros → SEM_MEMBROS.
+  // Antes da Fatia 2 (fix), pacote era cobrado sem membros — Luciano corrigiu:
+  // kwhAlocadoMensal é REFERÊNCIA, não total. Sem funcionários, nada a cobrar.
+  it('Fix 07/06: ALOCACAO_FIXA sem membros → SEM_MEMBROS (skip cobrança, admin orienta cadastrar)', async () => {
     findFirstConvenio.mockResolvedValue({
       ...convenioBase,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
@@ -494,10 +516,8 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
     });
     findFirstCobranca.mockResolvedValue(null);
     findManyMembros.mockResolvedValue([]); // ZERO membros
-    findManyUcsPagador.mockResolvedValue([]); // pagador SEM_UC
-    // distribuidoraUsada=null → helper cai no findFirst (fallback mais recente)
+    findManyUcsPagador.mockResolvedValue([]);
     findManyTarifas.mockResolvedValue([]);
-    findFirstTarifa.mockResolvedValue(tarifaEdpEs);
 
     const r = await service.gerarCobrancaConsolidada({
       convenioId: 'conv-1',
@@ -506,13 +526,33 @@ describe('ConveniosCusteioService — D-FISCAL-2.4.4a', () => {
       cooperativaId: 'coop-A',
     });
 
-    expect(r.status).toBe('CRIADA');
-    expect(createCobranca).toHaveBeenCalledTimes(1);
-    const bodyArg = createCobranca.mock.calls[0][0].data;
-    // 200000 kWh × 0.78931 × (1 - 0.20) = 200000 × 0.78931 × 0.80 = 126289.60
-    expect(Number(bodyArg.valorBruto)).toBeCloseTo(157862.00, 1);
-    expect(Number(bodyArg.valorLiquido)).toBeCloseTo(126289.60, 1);
-    expect(Number(bodyArg.percentualDesconto)).toBe(20);
+    expect(r.status).toBe('SEM_MEMBROS');
+    expect(createCobranca).not.toHaveBeenCalled();
+  });
+
+  // Fix 07/06: ALOCACAO_FIXA com membros mas TODAS cotaKwhMensal=0 → SEM_MEMBROS (skip).
+  it('Fix 07/06: ALOCACAO_FIXA com membros mas todas cotas=0 → SEM_CONSUMO_CAPTURADO interno → return SEM_MEMBROS pro caller (skip cobrança)', async () => {
+    findFirstConvenio.mockResolvedValue({
+      ...convenioBase,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 200000,
+    });
+    findFirstCobranca.mockResolvedValue(null);
+    findManyMembros.mockResolvedValue([
+      { cooperado: { id: 'mem-1', nomeCompleto: 'A', cotaKwhMensal: null, ucs: [] } },
+      { cooperado: { id: 'mem-2', nomeCompleto: 'B', cotaKwhMensal: 0, ucs: [] } },
+    ]);
+    findManyUcsPagador.mockResolvedValue([]);
+
+    const r = await service.gerarCobrancaConsolidada({
+      convenioId: 'conv-1',
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: 'coop-A',
+    });
+
+    expect(r.status).toBe('SEM_MEMBROS');
+    expect(createCobranca).not.toHaveBeenCalled();
   });
 
   // ============================================================

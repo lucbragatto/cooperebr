@@ -249,19 +249,19 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
     expect(r.membros[0]!.semFaturaNoMes).toBe(true);
   });
 
-  // ─── (g) ALOCACAO_FIXA com cotas distintas ──────────────────────────
-  it('(g) ALOCACAO_FIXA com cotas 600/300/100 → rateio proporcional ao kwhAlocadoMensal=1000', async () => {
+  // ─── (g) ALOCACAO_FIXA — Fix 07/06: total = SOMA das cotas (não pacote) ─
+  it('(g) ALOCACAO_FIXA com cotas 300/400/500 → kwhTotal=1200 (soma), disponivelAssinatura=1000, excedente=true', async () => {
     prismaMock.contratoConvenio.findFirst.mockResolvedValue({
       ...baseConvenio,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
-      kwhAlocadoMensal: 1000,
+      kwhAlocadoMensal: 1000, // ← agora é REFERÊNCIA, não total
     });
     prismaMock.convenioCooperado.findMany.mockResolvedValue([
       {
         cooperado: {
           id: 'c1',
           nomeCompleto: 'A',
-          cotaKwhMensal: 600,
+          cotaKwhMensal: 300,
           ucs: [{ id: 'uc1', numero: 'UC001', distribuidora: 'EDP_ES' }],
         },
       },
@@ -269,7 +269,7 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
         cooperado: {
           id: 'c2',
           nomeCompleto: 'B',
-          cotaKwhMensal: 300,
+          cotaKwhMensal: 400,
           ucs: [{ id: 'uc2', numero: 'UC002', distribuidora: 'EDP_ES' }],
         },
       },
@@ -277,7 +277,7 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
         cooperado: {
           id: 'c3',
           nomeCompleto: 'C',
-          cotaKwhMensal: 100,
+          cotaKwhMensal: 500,
           ucs: [{ id: 'uc3', numero: 'UC003', distribuidora: 'EDP_ES' }],
         },
       },
@@ -291,32 +291,25 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
     });
 
     expect(r.status).toBe('OK');
-    expect(r.kwhTotal).toBe(1000);
-    expect(r.warningRateioIgualitario).toBeUndefined();
+    expect(r.kwhTotal).toBe(1200); // ← SOMA, não rateio do pacote
+    expect(r.disponivelAssinatura).toBe(1000);
+    expect(r.excedente).toBe(true); // 1200 > 1000
     expect(r.membros).toHaveLength(3);
-    expect(r.membros.find((m) => m.cooperadoId === 'c1')!.kwh).toBe(600);
-    expect(r.membros.find((m) => m.cooperadoId === 'c2')!.kwh).toBe(300);
-    expect(r.membros.find((m) => m.cooperadoId === 'c3')!.kwh).toBe(100);
-    expect(r.membros[0]!.fonte).toBe('rateio');
+    expect(r.membros.find((m) => m.cooperadoId === 'c1')!.kwh).toBe(300);
+    expect(r.membros.find((m) => m.cooperadoId === 'c2')!.kwh).toBe(400);
+    expect(r.membros.find((m) => m.cooperadoId === 'c3')!.kwh).toBe(500);
+    expect(r.membros[0]!.fonte).toBe('cota');
   });
 
-  // ─── (h) ALOCACAO_FIXA fallback IGUALITARIO ─────────────────────────
-  it('(h) ALOCACAO_FIXA com todas cotas=null → fallback IGUALITARIO + warning=true', async () => {
+  it('(g.2) ALOCACAO_FIXA com cotas que SOMAM MENOS que disponivel → sem excedente', async () => {
     prismaMock.contratoConvenio.findFirst.mockResolvedValue({
       ...baseConvenio,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
-      kwhAlocadoMensal: 900,
+      kwhAlocadoMensal: 5000,
     });
     prismaMock.convenioCooperado.findMany.mockResolvedValue([
-      {
-        cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: null, ucs: [] },
-      },
-      {
-        cooperado: { id: 'c2', nomeCompleto: 'B', cotaKwhMensal: null, ucs: [] },
-      },
-      {
-        cooperado: { id: 'c3', nomeCompleto: 'C', cotaKwhMensal: null, ucs: [] },
-      },
+      { cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: 100, ucs: [] } },
+      { cooperado: { id: 'c2', nomeCompleto: 'B', cotaKwhMensal: 200, ucs: [] } },
     ]);
 
     const r = await service.previewKwhConsolidado({
@@ -327,27 +320,61 @@ describe('ConveniosCusteioService.previewKwhConsolidado — Fatia 2.1', () => {
     });
 
     expect(r.status).toBe('OK');
-    expect(r.warningRateioIgualitario).toBe(true);
-    expect(r.membros).toHaveLength(3);
-    expect(r.membros.every((m) => m.kwh === 300)).toBe(true);
+    expect(r.kwhTotal).toBe(300); // soma
+    expect(r.disponivelAssinatura).toBe(5000);
+    expect(r.excedente).toBeUndefined(); // 300 < 5000, sem excedente
+  });
+
+  // ─── (h) ALOCACAO_FIXA SEM_CONSUMO_CAPTURADO (todas cotas=0) ────────
+  it('(h) ALOCACAO_FIXA com todas cotas=null → SEM_CONSUMO_CAPTURADO (UI orienta cadastrar)', async () => {
+    prismaMock.contratoConvenio.findFirst.mockResolvedValue({
+      ...baseConvenio,
+      baseCobrancaCusteio: 'ALOCACAO_FIXA',
+      kwhAlocadoMensal: 900,
+    });
+    prismaMock.convenioCooperado.findMany.mockResolvedValue([
+      { cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: null, ucs: [] } },
+      { cooperado: { id: 'c2', nomeCompleto: 'B', cotaKwhMensal: null, ucs: [] } },
+    ]);
+
+    const r = await service.previewKwhConsolidado({
+      convenioId: CONVENIO_ID,
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(r.status).toBe('SEM_CONSUMO_CAPTURADO');
+    expect(r.kwhTotal).toBe(0);
+    expect(r.disponivelAssinatura).toBe(900);
+    expect(r.excedente).toBeUndefined();
+    expect(r.membros).toHaveLength(2);
+    expect(r.membros.every((m) => m.kwh === 0)).toBe(true);
+    expect(r.membros[0]!.semFaturaNoMes).toBe(true);
   });
 
   // ─── (i) ALOCACAO_FIXA sem kwhAlocadoMensal ─────────────────────────
-  it('(i) ALOCACAO_FIXA sem kwhAlocadoMensal → throw BadRequest (config errada)', async () => {
+  it('(i) ALOCACAO_FIXA sem kwhAlocadoMensal → disponivelAssinatura=null + soma das cotas continua funcionando', async () => {
     prismaMock.contratoConvenio.findFirst.mockResolvedValue({
       ...baseConvenio,
       baseCobrancaCusteio: 'ALOCACAO_FIXA',
       kwhAlocadoMensal: null,
     });
+    prismaMock.convenioCooperado.findMany.mockResolvedValue([
+      { cooperado: { id: 'c1', nomeCompleto: 'A', cotaKwhMensal: 100, ucs: [] } },
+    ]);
 
-    await expect(
-      service.previewKwhConsolidado({
-        convenioId: CONVENIO_ID,
-        mesReferencia: 5,
-        anoReferencia: 2026,
-        cooperativaId: TENANT_A,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const r = await service.previewKwhConsolidado({
+      convenioId: CONVENIO_ID,
+      mesReferencia: 5,
+      anoReferencia: 2026,
+      cooperativaId: TENANT_A,
+    });
+
+    expect(r.status).toBe('OK');
+    expect(r.kwhTotal).toBe(100);
+    expect(r.disponivelAssinatura).toBeNull();
+    expect(r.excedente).toBeUndefined(); // sem disponível, sem comparação
   });
 
   // ─── (j) anti-IDOR: cooperativaId errada ────────────────────────────

@@ -38,7 +38,7 @@ export interface KwhConsumoEntradaPublica {
   nome: string;
   ucs: Array<{ numeroMascarado: string; distribuidora: string }>;
   kwh: number;
-  fonte: 'fatura' | 'rateio' | 'sem-dado';
+  fonte: 'fatura' | 'cota' | 'rateio' | 'sem-dado';
   percentual: number;
   semFaturaNoMes?: boolean;
   isPagador?: boolean;
@@ -52,9 +52,13 @@ export interface KwhConsumoResponse {
   anoReferencia: number;
   mesRefStr: string;
   status: PreviewKwhConsolidadoResult['status'];
+  /** Soma DINÂMICA do consumo dos membros (cotas em ALOCACAO_FIXA, faturas em CONSUMO_REAL). */
   kwhTotal: number;
+  /** Crédito de energia INICIALMENTE disponível na assinatura (referência). */
+  disponivelAssinatura: number | null;
+  /** kwhTotal > disponivelAssinatura → UI sinaliza (sem bloquear). */
+  excedente?: boolean;
   membros: KwhConsumoEntradaPublica[];
-  warningRateioIgualitario?: boolean;
 }
 
 /**
@@ -262,10 +266,9 @@ export class PortalEmpresaService {
       mesRefStr: preview.mesRefStr,
       status: preview.status,
       kwhTotal: preview.kwhTotal,
+      disponivelAssinatura: preview.disponivelAssinatura,
+      ...(preview.excedente ? { excedente: true } : {}),
       membros,
-      ...(preview.warningRateioIgualitario
-        ? { warningRateioIgualitario: true }
-        : {}),
     };
   }
 }

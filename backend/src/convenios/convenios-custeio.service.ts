@@ -52,13 +52,14 @@ type TxOrPrisma = Prisma.TransactionClient | PrismaService;
 // esse método pra obter `kwhTotal` + breakdown — preview NUNCA pode divergir
 // da cobrança real (se divergir, empresa contesta a fatura).
 
-export type PreviewKwhFonte = 'fatura' | 'rateio' | 'sem-dado';
+export type PreviewKwhFonte = 'fatura' | 'cota' | 'rateio' | 'sem-dado';
 
 export type PreviewKwhStatus =
-  | 'OK'                    // tem dados — UI renderiza tabela
-  | 'SEM_MEMBROS'           // CONSUMO_REAL com 0 membros ativos
-  | 'SEM_UCS_CUSTEADAS'     // CONSUMO_REAL com membros mas nenhuma UC com plano custeado
-  | 'SEM_FATURAS_NO_MES';   // CONSUMO_REAL com UCs custeadas mas 0 faturas APROVADAS
+  | 'OK'                       // tem dados — UI renderiza tabela
+  | 'SEM_MEMBROS'              // 0 membros ativos
+  | 'SEM_UCS_CUSTEADAS'        // CONSUMO_REAL: membros mas nenhuma UC com plano custeado
+  | 'SEM_FATURAS_NO_MES'       // CONSUMO_REAL: UCs custeadas mas 0 faturas APROVADAS
+  | 'SEM_CONSUMO_CAPTURADO';   // ALOCACAO_FIXA: membros mas todas cotas=0 (UI orienta cadastrar)
 
 export interface PreviewKwhMembroDetalhe {
   cooperadoId: string;
@@ -80,11 +81,14 @@ export interface PreviewKwhConsolidadoResult {
   anoReferencia: number;
   mesRefStr: string;            // "MM/YYYY"
   status: PreviewKwhStatus;
-  kwhTotal: number;             // 2 casas
+  /** Soma DINÂMICA do consumo dos membros. CONSUMO_REAL=soma faturas; ALOCACAO_FIXA=soma das cotaKwhMensal. */
+  kwhTotal: number;
+  /** Crédito de energia INICIALMENTE disponível na assinatura (referência, NÃO o total). */
+  disponivelAssinatura: number | null;
+  /** kwhTotal > disponivelAssinatura → sinaliza (sem bloquear). */
+  excedente?: boolean;
   membros: PreviewKwhMembroDetalhe[];
   distribuidoraUsada: string | null;
-  /** ALOCACAO_FIXA: nenhum membro tem cotaKwhMensal → rateio caiu pra igualitário (aproximado). */
-  warningRateioIgualitario?: boolean;
 }
 
 @Injectable()
@@ -170,6 +174,14 @@ export class ConveniosCusteioService {
       | 'ALOCACAO_FIXA';
     const mesRefStr = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
 
+    // Fix 07/06/2026 — `kwhAlocadoMensal` agora é REFERÊNCIA de assinatura
+    // (crédito disponível), aplicável aos 2 ramos. Exposto na resposta pra
+    // UI poder mostrar 3 colunas: Disponível × Total atual × Valor a pagar.
+    const disponivelAssinatura =
+      convenio.kwhAlocadoMensal && convenio.kwhAlocadoMensal > 0
+        ? Math.round(convenio.kwhAlocadoMensal * 100) / 100
+        : null;
+
     // Carrega membros ativos + UCs (single source)
     const membros = await this.prisma.convenioCooperado.findMany({
       where: { convenioId, ativo: true },
@@ -209,6 +221,7 @@ export class ConveniosCusteioService {
           mesRefStr,
           status: 'SEM_MEMBROS',
           kwhTotal: 0,
+          disponivelAssinatura,
           membros: [],
           distribuidoraUsada: null,
         };
@@ -279,6 +292,7 @@ export class ConveniosCusteioService {
           mesRefStr,
           status: 'SEM_UCS_CUSTEADAS',
           kwhTotal: 0,
+          disponivelAssinatura,
           membros: buildEntriesSemDados(null),
           distribuidoraUsada: null,
         };
@@ -306,6 +320,7 @@ export class ConveniosCusteioService {
           mesRefStr,
           status: 'SEM_UCS_CUSTEADAS',
           kwhTotal: 0,
+          disponivelAssinatura,
           membros: buildEntriesSemDados(null),
           distribuidoraUsada: null,
         };
@@ -354,6 +369,7 @@ export class ConveniosCusteioService {
           mesRefStr,
           status: 'SEM_FATURAS_NO_MES',
           kwhTotal: 0,
+          disponivelAssinatura,
           membros: buildEntriesSemDados(ucIdsCusteados),
           distribuidoraUsada: null,
         };
@@ -407,6 +423,9 @@ export class ConveniosCusteioService {
         });
       }
 
+      // CONSUMO_REAL: excedente se total > kwhAlocadoMensal (assinatura).
+      const excedente =
+        disponivelAssinatura !== null && kwhTotal > disponivelAssinatura;
       return {
         convenioId: convenio.id,
         convenioNome: convenio.empresaNome,
@@ -416,22 +435,26 @@ export class ConveniosCusteioService {
         mesRefStr,
         status: 'OK',
         kwhTotal,
+        disponivelAssinatura,
+        ...(excedente ? { excedente: true } : {}),
         membros: membrosDetalhe,
         distribuidoraUsada,
       };
     }
 
-    // ── ALOCACAO_FIXA: pacote fixo (kwhAlocadoMensal) rateado por cotaKwhMensal ──
-    if (!convenio.kwhAlocadoMensal || convenio.kwhAlocadoMensal <= 0) {
-      throw new BadRequestException(
-        `Convênio "${convenio.empresaNome}" usa base ALOCACAO_FIXA mas não tem ` +
-          `kwhAlocadoMensal definido. Configure no cadastro.`,
-      );
-    }
-    const kwhTotal = Math.round(convenio.kwhAlocadoMensal * 100) / 100;
+    // ── ALOCACAO_FIXA — fix 07/06/2026 (modelo correto do Luciano) ──
+    //
+    // kwhTotal = SOMA DINÂMICA das cotaKwhMensal dos membros (NÃO distribuição
+    // do kwhAlocadoMensal). kwhAlocadoMensal vira REFERÊNCIA de assinatura
+    // ("crédito disponível") — total pode ficar acima (excedente, sinaliza
+    // sem bloquear) ou abaixo (sobra do crédito).
+    //
+    // Valor cobrado = kwhTotal × tarifa (ramo de tarifa já existe no caller).
+    // Fonte única: gerarCobrancaConsolidada delega pra cá, então preview e
+    // cobrança real seguem o MESMO número.
 
-    // Sem membros: pacote fixo segue, breakdown vazio (cobrança real faz o
-    // mesmo — empresa "pré-pago" um pacote sem ter funcionários cadastrados).
+    // Sem membros: cobrança real também não gera (orientar admin a cadastrar
+    // funcionários antes de cobrar a empresa pelo pacote).
     if (membros.length === 0) {
       const distribuidorasPagador = await this.distribuidorasPagador(
         convenio.pagadorCooperadoId!,
@@ -446,29 +469,19 @@ export class ConveniosCusteioService {
         mesReferencia,
         anoReferencia,
         mesRefStr,
-        status: 'OK',
-        kwhTotal,
+        status: 'SEM_MEMBROS',
+        kwhTotal: 0,
+        disponivelAssinatura,
         membros: [],
         distribuidoraUsada,
       };
     }
 
-    // Fatia 2.2 (07/06/2026) — rateio via helper puro `ratearProporcionalCusteio`.
-    // Fórmula consumo/total + fallback IGUALITARIO quando soma dos pesos = 0.
-    // INVARIANTE CRÍTICA garantida pelo helper: a soma das parcelas FECHA EXATAMENTE
-    // com o kwhTotal (último item absorve diferença de arredondamento de centavo).
-    // Sem isso a fatura da empresa pode sobrar/faltar R$0,01.
-    const rateio = ratearProporcionalCusteio(
-      kwhTotal,
-      membros.map((m) => ({
-        id: m.cooperado.id,
-        peso: Number(m.cooperado.cotaKwhMensal ?? 0),
-      })),
-    );
-    const warningRateioIgualitario = rateio.modo === 'IGUALITARIO_FALLBACK';
-    const kwhPorMembro = new Map(rateio.saidas.map((s) => [s.id, s.valor]));
-    const membrosDetalhe: PreviewKwhMembroDetalhe[] = membros.map((m) => {
-      const kwhAlocado = kwhPorMembro.get(m.cooperado.id) ?? 0;
+    // Soma direta: kwh do membro = própria cotaKwhMensal (sem rateio).
+    const membrosDetalhePre = membros.map((m) => {
+      const cota = Number(m.cooperado.cotaKwhMensal ?? 0);
+      const kwh =
+        Number.isFinite(cota) && cota > 0 ? Math.round(cota * 100) / 100 : 0;
       return {
         cooperadoId: m.cooperado.id,
         nome: m.cooperado.nomeCompleto,
@@ -476,16 +489,15 @@ export class ConveniosCusteioService {
           numero: u.numero,
           distribuidora: u.distribuidora,
         })),
-        kwh: kwhAlocado,
-        fonte: 'rateio' as const,
-        percentual:
-          kwhTotal > 0
-            ? Math.round((kwhAlocado * 100 * 100) / kwhTotal) / 100
-            : 0,
+        kwh,
       };
     });
+    const kwhTotal =
+      Math.round(
+        membrosDetalhePre.reduce((acc, m) => acc + m.kwh, 0) * 100,
+      ) / 100;
 
-    // Distribuidora predominante: membros + UCs do pagador
+    // Distribuidora predominante: membros + UCs do pagador (pra tarifa).
     const distribuidorasMembros = membros.flatMap((m) =>
       m.cooperado.ucs.map((u) => u.distribuidora),
     );
@@ -500,6 +512,46 @@ export class ConveniosCusteioService {
       ) ??
       this.predominante([...distribuidorasMembros, ...distribuidorasPagador]);
 
+    if (kwhTotal === 0) {
+      // Membros existem mas todas cotas=0 — caso real Clínica Teste hoje
+      // (cadastrada antes da Fatia 1.2 capturar consumo).
+      // UI orienta admin a cadastrar cotaKwhMensal de cada funcionário.
+      return {
+        convenioId: convenio.id,
+        convenioNome: convenio.empresaNome,
+        base,
+        mesReferencia,
+        anoReferencia,
+        mesRefStr,
+        status: 'SEM_CONSUMO_CAPTURADO',
+        kwhTotal: 0,
+        disponivelAssinatura,
+        membros: membrosDetalhePre.map((m) => ({
+          ...m,
+          fonte: 'sem-dado' as const,
+          percentual: 0,
+          semFaturaNoMes: true,
+        })),
+        distribuidoraUsada,
+      };
+    }
+
+    const membrosDetalhe: PreviewKwhMembroDetalhe[] = membrosDetalhePre.map(
+      (m) => ({
+        cooperadoId: m.cooperadoId,
+        nome: m.nome,
+        ucs: m.ucs,
+        kwh: m.kwh,
+        fonte: m.kwh > 0 ? ('cota' as const) : ('sem-dado' as const),
+        percentual:
+          kwhTotal > 0 ? Math.round((m.kwh * 100 * 100) / kwhTotal) / 100 : 0,
+        ...(m.kwh === 0 ? { semFaturaNoMes: true } : {}),
+      }),
+    );
+
+    const excedente =
+      disponivelAssinatura !== null && kwhTotal > disponivelAssinatura;
+
     return {
       convenioId: convenio.id,
       convenioNome: convenio.empresaNome,
@@ -509,9 +561,10 @@ export class ConveniosCusteioService {
       mesRefStr,
       status: 'OK',
       kwhTotal,
+      disponivelAssinatura,
+      ...(excedente ? { excedente: true } : {}),
       membros: membrosDetalhe,
       distribuidoraUsada,
-      ...(warningRateioIgualitario ? { warningRateioIgualitario: true } : {}),
     };
   }
 
@@ -668,6 +721,17 @@ export class ConveniosCusteioService {
           `em ${preview.mesRefStr}. Aguarde processamento das faturas ou troque ` +
           `a base pra ALOCACAO_FIXA.`,
       );
+    }
+    if (preview.status === 'SEM_CONSUMO_CAPTURADO') {
+      // Fix 07/06/2026 (modelo correto): ALOCACAO_FIXA com membros mas todas
+      // cotaKwhMensal=0 → nada a cobrar. Retorna SEM_MEMBROS pro caller (cron
+      // + UI) tratar como "skip mês" em vez de erro 400.
+      this.logger.warn(
+        `[D-FISCAL-2.4.4a] Convênio ${convenio.empresaNome} (base=ALOCACAO_FIXA) ` +
+          `com ${preview.membros.length} membros mas TODAS as cotaKwhMensal=0 — ` +
+          `consolidada não gerada. Admin precisa cadastrar consumo médio de cada funcionário.`,
+      );
+      return { status: 'SEM_MEMBROS', convenioId: convenio.id };
     }
 
     // OK — temos kwhTotal + breakdown + distribuidora. Reconstrói shape antigo pro log.

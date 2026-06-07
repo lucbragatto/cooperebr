@@ -135,8 +135,13 @@ function dataBr(iso: string | null) {
 // Sprint Onboarding Bloco 2 Fatia 2.4 (07/06/2026) — Consumo dos funcionários
 // ────────────────────────────────────────────────────────────────────────
 
-type KwhStatus = 'OK' | 'SEM_MEMBROS' | 'SEM_UCS_CUSTEADAS' | 'SEM_FATURAS_NO_MES';
-type KwhFonte = 'fatura' | 'rateio' | 'sem-dado';
+type KwhStatus =
+  | 'OK'
+  | 'SEM_MEMBROS'
+  | 'SEM_UCS_CUSTEADAS'
+  | 'SEM_FATURAS_NO_MES'
+  | 'SEM_CONSUMO_CAPTURADO';
+type KwhFonte = 'fatura' | 'cota' | 'rateio' | 'sem-dado';
 
 interface KwhConsumoEntrada {
   cooperadoId: string;
@@ -157,9 +162,13 @@ interface KwhConsumoResponse {
   anoReferencia: number;
   mesRefStr: string;
   status: KwhStatus;
+  /** Soma DINÂMICA do consumo dos membros. */
   kwhTotal: number;
+  /** Crédito de energia INICIALMENTE disponível na assinatura (referência). */
+  disponivelAssinatura: number | null;
+  /** kwhTotal > disponivelAssinatura → sinaliza (sem bloquear). */
+  excedente?: boolean;
   membros: KwhConsumoEntrada[];
-  warningRateioIgualitario?: boolean;
 }
 
 /** Default: mês anterior corrente no formato YYYY-MM. */
@@ -234,6 +243,8 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
         'Os funcionários ainda não têm UC custeada. O admin da cooperativa precisa ativar o contrato custeado de cada um.',
       SEM_FATURAS_NO_MES:
         `Nenhuma fatura aprovada em ${data.mesRefStr} ainda. As faturas chegam pela concessionária e o admin precisa aprovar pelo OCR.`,
+      SEM_CONSUMO_CAPTURADO:
+        'Funcionários cadastrados, mas o consumo médio (kWh/mês) de cada um ainda não foi capturado. O admin da cooperativa precisa cadastrar o consumo de cada funcionário pra calcular o total.',
     };
     return (
       <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
@@ -254,8 +265,12 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
       </CardHeader>
       <CardContent>
         <HelpBox id="conveniada-kwh-consumo-help" titulo="Como ler esta tabela">
-          <strong>Total:</strong> energia total que você paga no mês escolhido —{' '}
-          <em>é o mesmo número da cobrança consolidada (sem surpresa na fatura).</em>
+          <strong>Disponível (assinatura):</strong> o crédito de energia da sua assinatura
+          mensal — é a referência, não o limite duro.
+          <br />
+          <strong>Total atual (soma):</strong> a soma do consumo de cada funcionário no
+          mês. Pode ficar acima (excedente) ou abaixo (sobra) do disponível.{' '}
+          <em>É o MESMO número da cobrança consolidada (sem surpresa na fatura).</em>
           <br />
           <strong>%:</strong> participação de cada funcionário no total. Soma 100%.
           <br />
@@ -263,8 +278,9 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
           Se aparecer <em>"sem fatura aprovada"</em> num funcionário, é porque a fatura
           dele ainda não foi processada pelo OCR — o admin da cooperativa resolve.
           <br />
-          <strong>Base "Pacote fixo":</strong> kWh contratado mensal rateado entre os
-          funcionários proporcional ao consumo médio cadastrado de cada um.
+          <strong>Base "Pacote fixo":</strong> soma o consumo médio cadastrado (kWh/mês)
+          de cada funcionário. Se o total subir muito acima do disponível, fale com o
+          admin pra ampliar a assinatura.
         </HelpBox>
 
         {/* Selector de mês */}
@@ -302,41 +318,62 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
 
         {!carregando && !erro && data && (
           <>
-            {/* Header com total */}
+            {/* Header com 3 colunas: Disponível × Total atual × Competência */}
             <div className="mt-4 rounded-md border border-orange-200 bg-orange-50 px-4 py-3">
-              <div className="flex items-baseline justify-between flex-wrap gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-slate-600 font-semibold">
+                    Disponível (assinatura)
+                  </div>
+                  <div className="text-lg font-bold text-slate-700 font-mono">
+                    {data.disponivelAssinatura !== null
+                      ? `${data.disponivelAssinatura.toLocaleString('pt-BR')} kWh`
+                      : '—'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    crédito de energia mensal
+                  </div>
+                </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wide text-orange-700 font-semibold">
-                    Total
+                    Total atual (soma)
                   </div>
                   <div className="text-2xl font-bold text-orange-900 font-mono">
                     {data.kwhTotal.toLocaleString('pt-BR')} kWh
                   </div>
+                  <div className="text-[10px] text-slate-600 mt-0.5">
+                    {data.base === 'ALOCACAO_FIXA'
+                      ? 'Soma do consumo médio dos funcionários'
+                      : 'Soma das faturas APROVADAS'}
+                  </div>
                 </div>
-                <div className="text-right">
+                <div className="sm:text-right">
                   <div className="text-[10px] uppercase tracking-wide text-slate-500">
                     Competência
                   </div>
                   <div className="text-sm font-semibold text-slate-700">
                     {data.mesRefStr}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    {data.base === 'ALOCACAO_FIXA'
-                      ? 'Pacote fixo (kWh contratado/mês)'
-                      : 'Consumo real (soma das faturas)'}
-                  </div>
+                  {data.disponivelAssinatura !== null && data.kwhTotal > 0 && (
+                    <div className="text-[10px] text-slate-600 mt-0.5">
+                      {data.excedente
+                        ? `Acima do disponível: +${(data.kwhTotal - data.disponivelAssinatura).toLocaleString('pt-BR')} kWh`
+                        : `Sobra do crédito: ${(data.disponivelAssinatura - data.kwhTotal).toLocaleString('pt-BR')} kWh`}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Warning rateio igualitário */}
-            {data.warningRateioIgualitario && (
+            {/* Warning de excedente (sinaliza sem bloquear) */}
+            {data.excedente && (
               <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <div>
-                  <strong>Rateio aproximado:</strong> nenhum funcionário tem consumo
-                  médio cadastrado, então o pacote foi dividido em partes iguais. Quando
-                  as primeiras faturas forem processadas, a distribuição fica mais precisa.
+                  <strong>Total acima do disponível:</strong> os funcionários estão
+                  consumindo mais que o crédito da assinatura. A cobrança usa o total
+                  consumido (não trava em 0); se quiser ampliar a assinatura, fale com
+                  o admin da cooperativa.
                 </div>
               </div>
             )}
@@ -396,7 +433,16 @@ function ConsumoFuncionariosCard({ convenioId }: ConsumoFuncionariosCardProps) {
                             variant="outline"
                             className="bg-amber-50 text-amber-700 border-amber-300 text-[10px]"
                           >
-                            Sem fatura aprovada
+                            {data.base === 'ALOCACAO_FIXA'
+                              ? 'Sem consumo cadastrado'
+                              : 'Sem fatura aprovada'}
+                          </Badge>
+                        ) : m.fonte === 'cota' ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-700 border-blue-300 text-[10px]"
+                          >
+                            Consumo médio
                           </Badge>
                         ) : m.fonte === 'rateio' ? (
                           <Badge
