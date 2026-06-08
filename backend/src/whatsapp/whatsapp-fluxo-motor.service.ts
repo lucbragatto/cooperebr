@@ -359,6 +359,24 @@ export class WhatsappFluxoMotorService {
       return true;
     }
 
+    // Adendo "Qual cadastro?" (08/06/2026) — INICIO/MENU tenta reconhecer
+    // cooperado PELO TELEFONE antes de cair no fluxo padrão INICIAL. Garante
+    // que cooperado já cadastrado pula direto pro MENU_COOPERADO (1 cadastro)
+    // ou MENU_ESCOLHA_CADASTRO (>1). Visitante (0 cadastros) cai no fluxo
+    // padrão preservando funil atual.
+    //
+    // Pré-condições: só atira reconhecimento se conversa.cooperadoId AINDA
+    // não tem (evita re-disparar quando user já está em sessão estabelecida).
+    if ((comando === 'INICIO' || comando === 'MENU') && !conversa.cooperadoId) {
+      const reconheceu = await this.tentarReconhecerEEntrarMenu(conversa);
+      if (reconheceu) {
+        this.logger.log(
+          `Comando universal ${comando}: reconhecimento automatico ativou cooperado (conversa ${conversa.id})`,
+        );
+        return true;
+      }
+    }
+
     const proximoEstado = this.resolverEstadoComandoUniversal(comando, conversa);
     if (!proximoEstado) {
       this.logger.warn(`Comando ${comando} resolveu null fora de SAIR — nao deveria acontecer`);
@@ -1106,30 +1124,64 @@ export class WhatsappFluxoMotorService {
     cooperadoId?: string | null;
     cooperativaId?: string | null;
   }): Promise<void> {
+    const reconheceu = await this.tentarReconhecerEEntrarMenu(conversa);
+    if (reconheceu) return;
+
+    // 0 cadastros: mensagem explícita do gatilho "1 Já sou cooperado".
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '⚠️ Não encontrei seu cadastro ATIVO.\n\n' +
+      'Se você já se cadastrou e está aguardando ativação, aguarde nosso contato.\n\n' +
+      'Pra se cadastrar agora, digite *2* (Quero ser cooperado).',
+    );
+    this.logger.log(
+      `VERIFICAR_COOPERADO: telefone ${conversa.telefone} NAO encontrado`,
+    );
+  }
+
+  /**
+   * Wrapper público (chamado por WhatsappBotService.handleMenuPrincipalInicio).
+   * Mesma lógica de `tentarReconhecerEEntrarMenu` — interface estável pra
+   * consumo externo.
+   */
+  async tentarReconhecerVisitante(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<boolean> {
+    return this.tentarReconhecerEEntrarMenu(conversa);
+  }
+
+  /**
+   * Adendo "Qual cadastro?" (08/06/2026) — helper reusável de reconhecimento.
+   *
+   * Tenta reconhecer cooperado pelo telefone:
+   *  - 1 cadastro: entrarMenuCooperado (popula sessão + transiciona) → true
+   *  - >1 cadastros: MENU_ESCOLHA_CADASTRO (persiste candidatos) → true
+   *  - 0 cadastros: NÃO envia mensagem, NÃO transiciona → false
+   *    (caller decide UX — VERIFICAR_COOPERADO manda "não encontrei",
+   *     INICIO/MENU deixam fluxo padrão renderizar menu visitante).
+   *
+   * Anti-IDOR: candidatos persistidos no banco (dadosTemp.candidatosCadastro)
+   * → ESCOLHER_CADASTRO_COOPERADO re-lê e valida (nunca confia em payload).
+   */
+  private async tentarReconhecerEEntrarMenu(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<boolean> {
     const cooperados = await acharCooperadosPorTelefone(this.prisma, conversa.telefone);
 
-    if (cooperados.length === 0) {
-      await this.sender.enviarMensagem(
-        conversa.telefone,
-        '⚠️ Não encontrei seu cadastro ATIVO.\n\n' +
-        'Se você já se cadastrou e está aguardando ativação, aguarde nosso contato.\n\n' +
-        'Pra se cadastrar agora, digite *2* (Quero ser cooperado).',
-      );
-      this.logger.log(
-        `VERIFICAR_COOPERADO: telefone ${conversa.telefone} NAO encontrado`,
-      );
-      return;
-    }
+    if (cooperados.length === 0) return false;
 
-    // 1 cadastro: comportamento legado preservado (return early).
     if (cooperados.length === 1) {
       await this.entrarMenuCooperado(conversa, cooperados[0]);
-      return;
+      return true;
     }
 
-    // >1 cadastros: oferecer escolha. Persiste candidatos em dadosTemp
-    // (anti-IDOR: ESCOLHER_CADASTRO_COOPERADO valida que id escolhido
-    // esta nessa lista).
+    // >1 cadastros: oferecer escolha. Persiste candidatos em dadosTemp.
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
@@ -1150,8 +1202,9 @@ export class WhatsappFluxoMotorService {
       '\n\n_Você pode trocar a qualquer momento digitando *TROCAR CADASTRO*._',
     );
     this.logger.log(
-      `VERIFICAR_COOPERADO: ${cooperados.length} cadastros pra ${conversa.telefone} -> MENU_ESCOLHA_CADASTRO`,
+      `Reconhecimento: ${cooperados.length} cadastros pra ${conversa.telefone} -> MENU_ESCOLHA_CADASTRO`,
     );
+    return true;
   }
 
   /**

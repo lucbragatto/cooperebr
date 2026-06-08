@@ -96,6 +96,11 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     // por acidente (suites específicas mockam o que precisam).
     prismaMock.cooperativa.findMany.mockReset();
     prismaMock.cooperativa.findMany.mockResolvedValue([]);
+    // Adendo "Qual cadastro?" (08/06/2026): reconhecimento automático em
+    // INICIO/MENU chama cooperado.findMany. Default vazio = visitante
+    // (mantém comportamento legado das specs que não setam matches).
+    prismaMock.cooperado.findMany.mockReset();
+    prismaMock.cooperado.findMany.mockResolvedValue([]);
     service = new WhatsappFluxoMotorService(
       prismaMock,
       modeloMensagemMock,

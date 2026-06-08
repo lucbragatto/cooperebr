@@ -626,6 +626,19 @@ export class WhatsappBotService {
 
   private async handleMenuPrincipalInicio(msg: MensagemRecebida, conversa: any): Promise<void> {
     const { telefone } = msg;
+    // Adendo "Qual cadastro?" (08/06/2026) — tenta reconhecer cooperado pelo
+    // telefone ANTES de renderizar menu visitante. Se reconhecer (1 ou >1),
+    // o motor cuida da transição e envia menu apropriado. Visitante (0) cai
+    // no fluxo padrão hardcoded abaixo.
+    if (!conversa.cooperadoId) {
+      const reconheceu = await this.fluxoMotor.tentarReconhecerVisitante({
+        id: conversa.id,
+        telefone,
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId: conversa.cooperativaId,
+      });
+      if (reconheceu) return;
+    }
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: { estado: 'MENU_PRINCIPAL', contadorFallback: 0 },
