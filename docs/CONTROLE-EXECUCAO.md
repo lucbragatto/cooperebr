@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-07 — M25 Bloco 2 Sprint Onboarding (Empresa vê kWh dos funcionários) + Correção modelo kWh + Sprint Convite-Lote completo**. **11 commits trabalho** em 1 sessão Code maratona: `6664aed` Fatia 2.1 (helper previewKwhConsolidado fonte única) · `70bf820` Fatia 2.2 (helper rateio puro com INVARIANTE centavo) · `4a8dec3` Fatia 2.3 (endpoint kwh-consumo + LGPD mascarada + anti-IDOR 404) · `f74c3d6` Fatia 2.4 (tela consumo funcionários — Bloco 2 COMPLETO) · `5f66ab3` **FIX kWh** modelo correto (total = soma dinâmica das cotas; kwhAlocadoMensal = REFERÊNCIA da assinatura, não valor cobrado) · `0756dcb` LOTE.1 (preview CSV + 5 estados + dedup) · `8de49e0` LOTE.2+3 (envio em fila throttle 2s + schema delta loteId + status) · `e427230` **FIX kWh complemento** valorAPagar exposto no preview + tela 3 colunas corretas (Disponível × Total atual × Valor a pagar) · `635143e` LOTE.4 (tela Convidar em lote portal + admin) · `dac1907` **FIX UI crítico** tabela SEMPRE renderiza quando há membros + seed demo Clínica Teste 300/400/500 (Total 1.200 kWh / R$ 1.200,00) · `8a957bd` LOTE.5 (modo B Abrir no WhatsApp + helper wa.me reusável MLM + schema cooperadoIndicadorId). **310/310 specs convenios verdes** + smoke prova-real 14/14 (preview.valorAPagar === cobranca.valorLiquido — FONTE ÚNICA do dinheiro confirmada). ⚠️ Bug arquitetural P0 RESOLVIDO: ALOCACAO_FIXA cobrava 200k SEMPRE; agora soma cotas. ⚠️ Bug UX cega P0 RESOLVIDO: tela escondia funcionários quando total=0; agora tabela sempre presente. Sprint Convite-Lote completo 5/5 fatias com 2 modos (automático em fila + manual wa.me) + atribuição MLM preparada. Detalhe: `docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md`.
+> Última atualização: **2026-06-08 — M26 Sprint Token-WA Fase 1+2 completa + hardening F2.9 + F2.10 + "Qual cadastro?" multi-cadastro + reconhecimento automático na entrada**. **22 commits trabalho** em sessão Code maratona: `ccf0074` Fase 1 read-only (saldo + extrato bot) · `481cebc..9ca604c` Fase 2 completa F2.1→F2.8 (schema aditivo PIN + AparelhoVinculado + OtpDesafio + TokenTransacao rica; otp-helper; PinCooperadoService lockout 30min; LimiteTokenService; TokenNotificacaoService; smoke E2E 22/22; "Alterar limite" no WA) · `8e867a5` adendo TokenTransacao rica + diag bot · `f4d20c7` **F2.9 hardening P0** (JWT sem fallback, updateMany anti-IDOR, validarPin private, timezone São Paulo, OtpDesafio.cooperativaId) + **destrava bot WA** (webhook ?secret= + telefone Luciano E.164) · `f8b629b` **F2.10 implementa VERIFICAR_COOPERADO** (estava faltando) + opção 8 hardcoded + setup SISGD teste (490 tokens) · `de4e725` fix render `**` patológico defensivo · `dcce884` persona "P"→"Coop" · `29dd88e` acentos visitante (6 strings + 4 modelos) · `0e8c084` tenant default por env (DEFAULT_TENANT_ID) · `97b61f3` Sprint "Qual cadastro?" Fix 1 — helper compartilhado matcher · `09d5531` Fix 2 WA — escolha com anti-IDOR + TROCAR CADASTRO · `a04fd54` Fix 3+4 portal — obterContextos findMany + trocar anti-IDOR · `7d3a9ec` Fix 3 web — ContextoSwitcher chama backend · `83ef5bf` adendo reconhecimento automático na ENTRADA · `8f51f58` INICIAL global aponta pra menu_principal + gatilhos. **310+ specs Jest verde** (89 unit Fase 2 + 14 matcher + 11 WA multi + 16 portal multi + 5 tenant + 266 motor + smoke E2E 22/22). Bot WA destravado e funcional. Detalhe: `docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md`.
+
+> Histórico: **2026-06-07 — M25 Bloco 2 Sprint Onboarding (Empresa vê kWh dos funcionários) + Correção modelo kWh + Sprint Convite-Lote completo**. **11 commits trabalho** em 1 sessão Code maratona: `6664aed` Fatia 2.1 (helper previewKwhConsolidado fonte única) · `70bf820` Fatia 2.2 (helper rateio puro com INVARIANTE centavo) · `4a8dec3` Fatia 2.3 (endpoint kwh-consumo + LGPD mascarada + anti-IDOR 404) · `f74c3d6` Fatia 2.4 (tela consumo funcionários — Bloco 2 COMPLETO) · `5f66ab3` **FIX kWh** modelo correto (total = soma dinâmica das cotas; kwhAlocadoMensal = REFERÊNCIA da assinatura, não valor cobrado) · `0756dcb` LOTE.1 (preview CSV + 5 estados + dedup) · `8de49e0` LOTE.2+3 (envio em fila throttle 2s + schema delta loteId + status) · `e427230` **FIX kWh complemento** valorAPagar exposto no preview + tela 3 colunas corretas (Disponível × Total atual × Valor a pagar) · `635143e` LOTE.4 (tela Convidar em lote portal + admin) · `dac1907` **FIX UI crítico** tabela SEMPRE renderiza quando há membros + seed demo Clínica Teste 300/400/500 (Total 1.200 kWh / R$ 1.200,00) · `8a957bd` LOTE.5 (modo B Abrir no WhatsApp + helper wa.me reusável MLM + schema cooperadoIndicadorId). **310/310 specs convenios verdes** + smoke prova-real 14/14 (preview.valorAPagar === cobranca.valorLiquido — FONTE ÚNICA do dinheiro confirmada). ⚠️ Bug arquitetural P0 RESOLVIDO: ALOCACAO_FIXA cobrava 200k SEMPRE; agora soma cotas. ⚠️ Bug UX cega P0 RESOLVIDO: tela escondia funcionários quando total=0; agora tabela sempre presente. Sprint Convite-Lote completo 5/5 fatias com 2 modos (automático em fila + manual wa.me) + atribuição MLM preparada. Detalhe: `docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md`.
 
 > Histórico: **2026-06-06 — M24 Sprint Onboarding Completo do Membro — Bloco 0 (Plano de Clube) + Bloco 1 (Aprovação CONSTRÓI o membro)**. **8 commits trabalho** em 1 sessão Code maratona: `a9794a8` Fatia 0.1 (PlanoClube model + CRUD + tela admin) · `6584aec` Fatia 0.2 (planoClubeId no ContratoConvenio) · `29999c6` Fatia 0.3 (adesão opt-in `Cooperado.planoClubeId` + INVARIANTE anti-cobrança-dupla) · `34a66c8` Fatia 0.4 (componente CLUBE escalar discriminado nas 2 cobranças — Bloco 0 COMPLETO) · `d18e7f6` Fatia 1.1 (validarToken propaga `convenioId` + `permiteSemUc` com anti-spoof) · `cfc6421` Fatia 1.2 (cadastroWebV2 persiste `cotaKwhMensal` + `pendenciaMotorMsg` best-effort + `consumoStashOcr` snapshot — bug arquitetural dados perdidos fechado) · `412b2da` Fatia 1.3 (`MembroBuilderService.construirMembroCompleto` único ponto de entrada idempotente — flip status ANTES do motor + `planoId` direto + degradação graciosa) · `8e47737` Fatia 1.4 (matrícula clube config-dependente via ConfigClubeVantagens.ativo + DRY-RUN reconciliação script + fix inline `D-novo-LISTA-ESPERA-TENANT` P1 + smoke integração cobrança — Bloco 1 COMPLETO). **234/234 specs convenios verdes** + 25/25 smoke E2E Fatia 1.3 + 8/8 smoke integração 1.4 (guard `custeadoPorConvenio` bloqueia double-bill; consolidada ALOCACAO_FIXA `valorBruto=R$200000`). ⚠️ ACHADO operacional: 218 membros parciais detectados no tenant CoopereBR pelo DRY-RUN — exige SEGMENTAÇÃO (oco × SEM_UC legítimo × lista de espera × teste sintético) antes de `--apply` em massa, catalogado como tarefa P2. **LEONARDO PIZZOL VIGNA reconciliado nesta sessão** (script `--membro <id>`): status PENDENTE→ATIVO + ProgressaoClube BRONZE + pendenciaMotor "cota não capturada"; sem contrato forçado (cota perdida pré-Fatia 1.2). **4 RESOLVIDOS:** `D-novo-LISTA-ESPERA-TENANT` P1 + bug arquitetural aprovação-só-flipa + bug dados perdidos cadastro + bug contexto convite. **3 ABERTOS novos P3:** `D-novo-FATURA-SEGREGADA-ITENS` · `D-novo-CLUBE-LANCAMENTO-FISCAL` · `D-novo-CADWEB-FATURA-PROCESSADA`. Detalhe: `docs/sessoes/2026-06-06-bloco-0-1-onboarding-membro.md`.
 
@@ -36,6 +38,59 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-08 (Code — M26 Token-WA Fase 1+2 completa + hardening + "Qual cadastro?" multi-cadastro)
+
+**22 commits trabalho** em sessão Code maratona (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `ccf0074` | feat | Token-WA Fase 1 — consultas read-only (saldo + extrato) pelo bot |
+| `481cebc` | feat | F2.1 schema aditivo: PIN + limites + 3 tabelas (AparelhoVinculado, OtpDesafio, TokenTransacao rica) |
+| `124f3d5` | refactor | F2.2 otp-helper.ts genérico |
+| `7c3b824` | feat | F2.3 PinCooperadoService (hash + rate-limit + lockout) |
+| `be82b0c` | feat | F2.4 AparelhoVinculadoService + OtpDesafioService |
+| `83953f6` | feat | F2.5 LimiteTokenService (cooperativa × cooperado) |
+| `0ba29ae` | feat | F2.6 TokenNotificacaoService (WA 2 lados + email alto valor) |
+| `5204f91` | test | F2.7 smoke E2E 22/22 verde |
+| `9ca604c` | feat | F2.8 "Alterar meu limite" no submenu CooperTokens (WA) |
+| `8e867a5` | feat | Adendo Fase 2/3 — TokenTransacao rica + diag bot WA |
+| `f4d20c7` | **feat** | **F2.9 hardening P0** + **destrava bot WA** + cataloga D-novo-WA-PHONE-NORMALIZE |
+| `f8b629b` | **feat** | **F2.10 implementa VERIFICAR_COOPERADO** + opção 8 hardcoded + setup SISGD teste |
+| `de4e725` | **fix** | **Elimina render `**` patológico** quando variável vazia |
+| `dcce884` | fix | Persona "P" → "Coop" |
+| `29dd88e` | fix | Acentos no funil visitante (6 strings + 4 modelos) |
+| `0e8c084` | fix | Tenant default por env (DEFAULT_TENANT_ID) — opção B |
+| `97b61f3` | feat | "Qual cadastro?" Fix 1 — helper compartilhado matcher |
+| `09d5531` | feat | "Qual cadastro?" Fix 2 WA — escolha com anti-IDOR + TROCAR CADASTRO |
+| `a04fd54` | feat | "Qual cadastro?" Fix 3+4 portal — obterContextos listMany + trocar anti-IDOR |
+| `7d3a9ec` | feat | "Qual cadastro?" Fix 3 web — ContextoSwitcher chama backend |
+| `83ef5bf` | **feat** | **Reconhecer cooperado na ENTRADA** (INICIO/MENU/saudação) |
+| `8f51f58` | fix | INICIAL global aponta pra menu_principal + gatilhos 1/2/3/4 |
+| `<próximo>` | docs | fechamento M26 (esta sessão) |
+
+**Em curso:** —
+
+**Próximo passo (Luciano decide):**
+1. **Fase 3 Token-WA** — TokenTransacao + QR + pagamento real (move dinheiro; PIN/limite já implementados na Fase 2).
+2. **Outro bloco do roadmap A→H** — Bloco 3 Sprint Onboarding (cadastro sem UC), Módulo Pagar Concessionária (Mandato), etc.
+
+Validar primeiro fluxo "qual cadastro?" pelo WA com Luciano (mandar "INÍCIO" → deve aparecer "Qual cadastro? 1 LUCIANO (PF) 2 SISGDSOLAR (PJ)" sem precisar passar pelo menu visitante).
+
+**Pendência paralela P2 (não-bloqueante):**
+- D-novo-WA-PHONE-NORMALIZE: migração ampla da base com auditoria prévia obrigatória.
+- 218 membros parciais (segmentação pendente — carry-over M24/M25).
+- 3 ações declaradas em gatilhos sem implementação (`PROCESSAR_OCR`, `MOSTRAR_MENU_PRINCIPAL`, etc).
+- 17 modelos BOT órfãos sem etapa associada.
+- Empresa_conveniada / proprietario_usina iteram só `cooperados[0]` (refator quando 2º cooperado virar pagador/proprietário).
+
+**Carry-overs novos (não-bloqueantes):**
+- Tenant CoopereBR INICIAL override sem `acao=VERIFICAR_COOPERADO` no gatilho "1" (global já tem — drift válido enquanto reconhecimento automático cobre).
+- Modificação alheia em `.claude/agents/wa-bot-agent.md` (não desta sessão; investigar origem).
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 08/06 fechamento M26).
 
 ---
 
@@ -1761,6 +1816,125 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 2. Rodar `git status --short`. Esperado pós-fechamento: working tree
    limpo (untracked carry-overs catalogados + 1 modificação não-minha
    em .claude/agents/wa-bot-agent.md que Luciano avalia), último commit
+   é o de fechamento M26 (Token-WA Fase 1+2 completa + hardening F2.9 +
+   F2.10 VERIFICAR_COOPERADO + "Qual cadastro?" multi-cadastro +
+   reconhecimento automático na entrada).
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
+   cooperebr-whatsapp online. ⚠ Frontend é `next start` sob PM2 (NÃO
+   `next dev`) — toda mudança de frontend exige `cd web ; npm run build ;
+   pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
+
+PASSO 1 — Frase comandante (Luciano DECIDE qual das 2 opções):
+
+Sessão 08/06 entregou M26 em 22 commits (`ccf0074..8f51f58`):
+- Sprint Token-WA Fase 1 (consultas read-only saldo/extrato pelo bot).
+- Sprint Token-WA Fase 2 completa F2.1→F2.8 (schema aditivo PIN +
+  AparelhoVinculado + OtpDesafio + TokenTransacao rica; otp-helper
+  genérico; PinCooperadoService lockout 30min; LimiteTokenService 2
+  níveis; TokenNotificacaoService; smoke E2E 22/22; submenu "Alterar
+  limite" WA).
+- F2.9 hardening P0: JWT sem fallback; updateMany cooperativaId
+  anti-IDOR; validarPin private; somarGastoHoje em America/Sao_Paulo;
+  status ATIVO guard; OtpDesafio.cooperativaId.
+- F2.10: implementa VERIFICAR_COOPERADO (ausente — bot ficava silencioso);
+  opção 8 "💎 CooperTokens" no menu hardcoded; setup SISGD teste
+  (cooperado PJ SEM_UC + 490 tokens).
+- Adendo schema TokenTransacao rica (merchantNome/descricao/categoria/
+  localCidade/tipoOperacao/referenciaExterna pra extrato estilo cartão).
+- **Bot WA destravado**: webhook ?secret= + telefone Luciano E.164.
+- Fixes UX: render `**` patológico eliminado; persona "P"→"Coop"; acentos
+  6 strings + 4 modelos; tenant default por env DEFAULT_TENANT_ID.
+- Sprint "Qual cadastro?" 4 fixes (helper matcher + WA escolha
+  ESCOLHER_CADASTRO_COOPERADO + Portal multi-cadastro obterContextos
+  findMany + ContextoSwitcher chama backend com cooperadoId). Anti-IDOR
+  forte em ambos canais (re-lê do banco no WA, re-busca contextos no portal).
+- Adendo reconhecimento automático na entrada (INÍCIO/MENU/saudação
+  dispara reconhecimento antes do fluxo padrão; INICIAL global agora
+  aponta pra menu_principal + gatilhos 1/2/3/4).
+
+310+ specs Jest verde (89 unit Fase 2 + 14 matcher + 11 WA multi + 16
+portal multi + 5 tenant + 266 motor + smoke E2E 22/22).
+
+DECIDA — duas opções pra arrancar:
+
+(A) FASE 3 TOKEN-WA — TokenTransacao + QR + pagamento real (move
+    dinheiro). Infraestrutura PIN + limite + notificações já pronta
+    da Fase 2. Spec: docs/especificacao-circuito-cooper-token-convenio.md
+    + memória decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md.
+    Implementa: gerar QR (jti uso-único anti-replay) → escanear →
+    validar PIN + (>R$50 OU 1º uso) step-up OTP → confirmar transação
+    + notificar 2 lados. **Move dinheiro real — exige Luciano pausa
+    pra parecer de produto antes**.
+
+(B) OUTRO BLOCO DO ROADMAP A→H — Bloco 3 Sprint Onboarding (cadastro
+    sem UC), Módulo Pagar Concessionária (Mandato), Sprint contabilidade
+    tributária, etc.
+
+Validar primeiro fluxo "qual cadastro?" pelo WA com Luciano (mandar
+"INÍCIO" → deve aparecer "Qual cadastro? 1 LUCIANO (PF) 2 SISGDSOLAR
+(PJ)" sem precisar passar pelo menu visitante).
+
+Fase 1 read-only obrigatória qualquer que seja a escolha (Decisão 23).
+
+Pré-requisitos Fase 1 read-only OBRIGATÓRIOS (mapear, NÃO codar):
+1. Ler docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M26)
+2. Ler docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md (M26 — esta)
+3. Ler ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
+4. Ler docs/debitos-tecnicos.md (D-novo-WA-PHONE-NORMALIZE P2 + débitos)
+5. Se opção A: backend/scripts/smoke-token-wa-fase2.ts (referência),
+   docs/especificacao-circuito-cooper-token-convenio.md,
+   memória decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
+6. Se opção B: docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md +
+   spec do bloco escolhido
+7. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
+8. git log --oneline -25 (cobrir M26 inteiro)
+
+DIRETRIZES F2.9 hardening (preservar):
+- JWT_SECRET sem fallback — throw se ausente.
+- updateMany sempre com cooperativaId no where (defesa em profundidade).
+- validarPin é private — só validarPinComLockout consumido externamente.
+- Lockout PIN 30min (não 15).
+- Tempo "hoje" em América/São_Paulo (timezone-aware).
+- Invariante "só consultas sem PIN; dinheiro só com PIN" — Fase 3 precisa
+  exigir validarPinComLockout do cooperado escolhido antes de mover saldo.
+
+CONTEXTO DE 08/06 (22 commits M26):
+- ccf0074 Fase 1 read-only do bot
+- 481cebc-9ca604c Fase 2 F2.1→F2.8 (8 fatias)
+- 8e867a5 Adendo TokenTransacao rica
+- f4d20c7 F2.9 hardening P0 + destrava bot
+- f8b629b F2.10 VERIFICAR_COOPERADO + setup SISGD
+- de4e725 Render `**` fix
+- dcce884 Persona Coop
+- 29dd88e Acentos visitante
+- 0e8c084 Tenant default env
+- 97b61f3-8f51f58 Sprint "Qual cadastro?" + reconhecimento entrada
+
+DOC-SESSÃO 08/06:
+docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md
+```
+
+---
+
+### Frase M25 anterior (07/06 — arquivada)
+
+(substituída pela frase M26 acima — preservada abaixo só pra histórico curto;
+detalhes em `docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md`).
+
+<details>
+<summary>Frase M25 arquivada (clicar pra expandir)</summary>
+
+```
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+   Se não aparecer, parar e avisar.
+
+2. Rodar `git status --short`. Esperado pós-fechamento: working tree
+   limpo (untracked carry-overs catalogados + 1 modificação não-minha
+   em .claude/agents/wa-bot-agent.md que Luciano avalia), último commit
    é o de fechamento M25 (Bloco 2 Empresa vê kWh + Correção modelo kWh
    + Sprint Convite-Lote completo 5/5).
 
@@ -2041,6 +2215,8 @@ FRENTES OPERACIONAIS LUCIANO:
 DOC-SESSAO 05/06 tarde-noite:
 docs/sessoes/2026-06-05-hardening-golden-path-conv-ref.md
 ```
+
+</details>
 
 ---
 
