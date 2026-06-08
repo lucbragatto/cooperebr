@@ -9,6 +9,9 @@ import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
 // Sprint Token-WA Fase 1 (07/06/2026) — consultas read-only de CooperTokens.
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
+// Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite" no submenu CooperTokens.
+import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
+import { LimiteTokenService } from '../cooper-token/limite-token.service';
 
 interface MensagemRecebida {
   telefone: string;
@@ -68,6 +71,9 @@ export class WhatsappFluxoMotorService {
     private notificacoes: NotificacoesService,
     // Sprint Token-WA Fase 1 — getSaldo / getExtrato pelo bot.
     private cooperTokenService: CooperTokenService,
+    // Sprint Token-WA Fase 2 F2.8 — "Alterar meu limite" no submenu CooperTokens.
+    private pinCooperadoService: PinCooperadoService,
+    private limiteTokenService: LimiteTokenService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -522,6 +528,26 @@ export class WhatsappFluxoMotorService {
           break;
         case 'EXTRATO_TOKENS_PAGINAR':
           await this.executarExtratoTokensPaginar(conversa, corpo);
+          break;
+        // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite":
+        //  CONSULTAR_LIMITE_TOKENS: ação automática em VER_LIMITE_TOKENS;
+        //    mostra teto coop + auto-limite + uso hoje + instrução
+        //    "digite 'alterar' pra mudar".
+        //  VALIDAR_PIN_ALTERAR_LIMITE: ação wildcard em
+        //    ALTERAR_LIMITE_AGUARDANDO_PIN; valida PIN com rate-limit +
+        //    lockout, transiciona pra AGUARDANDO_VALOR ou volta com erro.
+        //  SALVAR_NOVO_LIMITE_TOKEN: ação wildcard em
+        //    ALTERAR_LIMITE_AGUARDANDO_VALOR; valida número + persiste via
+        //    LimiteTokenService.definirAutoLimiteCooperado, confirma e
+        //    volta pro submenu.
+        case 'CONSULTAR_LIMITE_TOKENS':
+          await this.executarConsultarLimiteTokens(conversa);
+          break;
+        case 'VALIDAR_PIN_ALTERAR_LIMITE':
+          await this.executarValidarPinAlterarLimite(conversa, corpo);
+          break;
+        case 'SALVAR_NOVO_LIMITE_TOKEN':
+          await this.executarSalvarNovoLimiteToken(conversa, corpo);
           break;
         // Etapa C Bloco 4 (22/05): 3 acoes ATUALIZAR_*_COOPERADO disparadas via
         // gatilho.acao (wildcard nas etapas AGUARDANDO_NOVO_*). Recebem o
@@ -984,6 +1010,237 @@ export class WhatsappFluxoMotorService {
     const dados = (conversaAtual?.dadosTemp ?? {}) as { extratoPagina?: number };
     const proxima = (dados.extratoPagina ?? 1) + 1;
     await this.executarConsultarExtratoTokens(conversa, proxima);
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite":
+  //   3 ações no submenu MENU_COOPERTOKENS opção "3 Alterar meu limite":
+  //   1. CONSULTAR_LIMITE_TOKENS: mostra limite efetivo + uso hoje
+  //   2. VALIDAR_PIN_ALTERAR_LIMITE: valida PIN com rate-limit/lockout
+  //   3. SALVAR_NOVO_LIMITE_TOKEN: parse R$ + persiste via LimiteTokenService
+  // ────────────────────────────────────────────────────────────────────
+
+  private fmtBRL(v: number): string {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  /**
+   * Mostra limite efetivo (transação + diário), origem (teto/auto), gasto
+   * hoje, saldo disponível. Convida cooperado a digitar 'alterar' pra entrar
+   * no fluxo de alteração (que pede PIN).
+   */
+  private async executarConsultarLimiteTokens(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    try {
+      const limite = await this.limiteTokenService.limiteEfetivo({
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId: conversa.cooperativaId,
+      });
+      const verif = await this.limiteTokenService.verificarValor({
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId: conversa.cooperativaId,
+        valorReais: 0.01, // dummy só pra obter gastoHoje (verificarValor rejeita 0)
+      });
+
+      const gastoHoje = verif.ok ? verif.gastoHoje : 0;
+      const saldoHoje = Math.max(limite.limiteDiario - gastoHoje, 0);
+
+      const origemTrans =
+        limite.origemTransacao === 'COOPERADO' ? ' _(seu auto-limite)_' : ' _(teto da cooperativa)_';
+      const origemDiario =
+        limite.origemDiario === 'COOPERADO' ? ' _(seu auto-limite)_' : ' _(teto da cooperativa)_';
+
+      const texto =
+        `🔐 *Seus limites CooperToken*\n\n` +
+        `*Por transação:* ${this.fmtBRL(limite.limiteTransacao)}${origemTrans}\n` +
+        `*Diário:* ${this.fmtBRL(limite.limiteDiario)}${origemDiario}\n\n` +
+        `🗓️ *Hoje:*\n` +
+        `• Já gastei: ${this.fmtBRL(gastoHoje)}\n` +
+        `• Ainda posso usar: ${this.fmtBRL(saldoHoje)}\n\n` +
+        `💡 Pra mudar seu auto-limite (sempre dentro do teto da cooperativa), digite *alterar*.\n` +
+        `Pra voltar, digite *0* ou *voltar*.`;
+
+      await this.sender.enviarMensagem(conversa.telefone, texto);
+      this.logger.log(
+        `CONSULTAR_LIMITE_TOKENS: enviado pra ${conversa.telefone} (cooperado=${conversa.cooperadoId}, transacao=${limite.limiteTransacao}, diario=${limite.limiteDiario}, gastoHoje=${gastoHoje})`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`CONSULTAR_LIMITE_TOKENS falhou: ${msg}`);
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui buscar seus limites agora. Tente novamente em alguns minutos.',
+      );
+    }
+  }
+
+  /**
+   * Recebe PIN digitado, valida com rate-limit. Em sucesso: transiciona
+   * conversa pra ALTERAR_LIMITE_AGUARDANDO_VALOR + envia mensagem pedindo
+   * valor. Em falha: mensagem clara (sem revelar tentativas restantes pra
+   * anti-enumeração) + mantém estado pra retry. Em lockout: volta pro
+   * submenu CooperTokens.
+   */
+  private async executarValidarPinAlterarLimite(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    const pin = String(corpo ?? '').trim();
+    if (!/^\d{6}$/.test(pin)) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ PIN deve ter exatamente 6 dígitos. Tente novamente:',
+      );
+      return;
+    }
+
+    const r = await this.pinCooperadoService.validarPinComLockout({
+      cooperadoId: conversa.cooperadoId,
+      pin,
+      cooperativaId: conversa.cooperativaId,
+    });
+
+    if (r.ok) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'ALTERAR_LIMITE_AGUARDANDO_VALOR' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '✅ PIN ok!\n\nDigite o novo *limite por transação* em reais (ex: *200* ou *200,00*).\n\n_Ele será aplicado tanto à transação quanto ao diário (que será 4x o valor)._\n\nOu digite *0* pra cancelar.',
+      );
+      return;
+    }
+
+    if (r.motivo === 'PIN_NAO_DEFINIDO') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '🔒 Você ainda não tem um PIN cadastrado. Acesse o portal web pra criar seu PIN e voltar aqui depois.\n\nVoltando ao menu CooperTokens.',
+      );
+      return;
+    }
+
+    if (r.motivo === 'PIN_BLOQUEADO') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `🔒 PIN bloqueado por excesso de tentativas. Tente novamente após ${r.desbloqueiaEm.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.\n\nVoltando ao menu.`,
+      );
+      return;
+    }
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '❌ PIN incorreto. Tente novamente, ou digite *0* pra cancelar:',
+    );
+  }
+
+  /**
+   * Recebe valor digitado (R$), parseia, persiste auto-limite via
+   * LimiteTokenService. Em sucesso: confirma + volta MENU_COOPERTOKENS.
+   * Em erro de teto/validação: mantém estado pra retry com mensagem clara.
+   */
+  private async executarSalvarNovoLimiteToken(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    const entrada = String(corpo ?? '').trim();
+    if (entrada === '0' || entrada.toLowerCase() === 'cancelar') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '🆗 Alteração de limite cancelada. Voltando ao menu CooperTokens.',
+      );
+      return;
+    }
+
+    // Parse "200" / "200,00" / "R$ 200,50" → number
+    const num = Number(entrada.replace(/[^0-9,.-]/g, '').replace(',', '.'));
+    if (!Number.isFinite(num) || num <= 0) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ Valor inválido. Digite só números (ex: *200* ou *200,00*), ou *0* pra cancelar.',
+      );
+      return;
+    }
+
+    const limiteTransacao = Math.round(num * 100) / 100;
+    const limiteDiario = limiteTransacao * 4;
+
+    try {
+      await this.limiteTokenService.definirAutoLimiteCooperado({
+        cooperadoId: conversa.cooperadoId,
+        cooperativaId: conversa.cooperativaId,
+        limiteTransacao,
+        limiteDiario,
+      });
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ *Auto-limite atualizado!*\n\n• Por transação: ${this.fmtBRL(limiteTransacao)}\n• Diário: ${this.fmtBRL(limiteDiario)}\n\n_Lembrando: se o teto da cooperativa for menor, vale o menor._\n\nVoltando ao menu CooperTokens.`,
+      );
+      this.logger.log(
+        `SALVAR_NOVO_LIMITE_TOKEN: cooperado=${conversa.cooperadoId} transacao=${limiteTransacao} diario=${limiteDiario}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`SALVAR_NOVO_LIMITE_TOKEN falhou: ${msg}`);
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `❌ Não consegui salvar: ${msg}\n\nDigite outro valor ou *0* pra cancelar.`,
+      );
+    }
   }
 
   /**

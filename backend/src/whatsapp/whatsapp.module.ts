@@ -27,9 +27,13 @@ import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 // pelo bot (saldo + extrato no submenu MENU_COOPERTOKENS). Sem ciclo:
 // CooperTokenModule não importa WhatsappModule.
 import { CooperTokenModule } from '../cooper-token/cooper-token.module';
+// Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite" no submenu
+// MENU_COOPERTOKENS exige PinCooperadoService do CooperadosModule.
+// forwardRef porque CooperadosModule importa WhatsappModule (ciclo).
+import { CooperadosModule } from '../cooperados/cooperados.module';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule), CooperTokenModule],
+  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule), CooperTokenModule, forwardRef(() => CooperadosModule)],
   controllers: [WhatsappFaturaController, WhatsappSimulacaoController],
   providers: [
     WhatsappFaturaService,

@@ -14,6 +14,8 @@ import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasModule } from '../usinas/usinas.module';
 import { UcsModule } from '../ucs/ucs.module';
+// Sprint Token-WA Fase 2 F2.8 (07/06/2026) — WhatsappModule importa CooperadosModule
+// (PinCooperadoService no motor de fluxo), entao reverso vira forwardRef.
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
 import { FaturasModule } from '../faturas/faturas.module';
@@ -26,7 +28,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
   imports: [
     UsinasModule,
     UcsModule,
-    WhatsappModule,
+    forwardRef(() => WhatsappModule),
     EmailModule,
     FaturasModule,
     forwardRef(() => MotorPropostaModule),
