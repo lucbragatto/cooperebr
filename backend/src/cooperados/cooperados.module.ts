@@ -3,6 +3,9 @@ import { MulterModule } from '@nestjs/platform-express';
 import { CooperadosController } from './cooperados.controller';
 import { CooperadosService } from './cooperados.service';
 import { CooperadosJob } from './cooperados.job';
+// Sprint Token-WA Fase 2 F2.3 (07/06/2026) — PIN do cooperado pra
+// autorização de transações CooperToken via WhatsApp.
+import { PinCooperadoService } from './pin-cooperado.service';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasModule } from '../usinas/usinas.module';
@@ -26,7 +29,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [CooperadosController],
-  providers: [CooperadosService, CooperadosJob, PrismaService, NotificacoesService],
-  exports: [CooperadosService],
+  providers: [CooperadosService, CooperadosJob, PinCooperadoService, PrismaService, NotificacoesService],
+  exports: [CooperadosService, PinCooperadoService],
 })
 export class CooperadosModule {}
