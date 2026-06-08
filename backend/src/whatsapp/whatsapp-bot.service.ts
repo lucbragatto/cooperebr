@@ -669,6 +669,9 @@ export class WhatsappBotService {
         where: { id: conversa.id },
         data: { estado: 'MENU_COOPERADO', cooperadoId: cooperado.id, contadorFallback: 0 },
       });
+      // F2.10 (08/06/2026): adicionado "8 CooperTokens" pra paridade com o
+      // menu dinâmico do MENU_COOPERADO (seed F1.3). Caminho hardcoded ainda
+      // existe pra cooperado vindo do handleMenuPrincipal direto (sem motor).
       await this.sender.enviarMenuComBotoes(telefone, {
         titulo: 'Menu do Cooperado',
         corpo: `${E.ok} Olá, *${cooperado.nomeCompleto || 'Cooperado'}*! O que você precisa?`,
@@ -680,6 +683,7 @@ export class WhatsappBotService {
           { id: '5', texto: `${E.presente} Indicar um amigo`, descricao: 'Ganhe desconto na fatura' },
           { id: '6', texto: `${E.engrenagem} Suporte / Ocorrência`, descricao: 'Abrir chamado' },
           { id: '7', texto: `${E.pessoa} Falar com atendente`, descricao: 'Atendimento humano' },
+          { id: '8', texto: '💎 CooperTokens', descricao: 'Saldo, extrato e limite' },
         ],
       });
       return;
@@ -896,8 +900,13 @@ export class WhatsappBotService {
       return;
     }
 
+    // F2.10 (08/06/2026): "8 CooperTokens" no fallback também.
+    // Note que se cooperado digitar "8" no MENU_COOPERADO, o motor dinâmico
+    // (linha 410 processarComFluxoDinamico) processa via gatilho seed F1.3
+    // ANTES deste handler ser chamado — logo este case "8" é dead code,
+    // mas a mensagem de ajuda precisa mencionar.
     await this.incrementarFallback(conversa, telefone,
-      'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte) ou *7* (atendente).',
+      'Responda *1* (créditos), *2* (fatura), *3* (cadastro), *4* (contrato), *5* (indicar), *6* (suporte), *7* (atendente) ou *8* (CooperTokens).',
       corpo,
     );
   }

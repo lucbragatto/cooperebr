@@ -540,6 +540,14 @@ export class WhatsappFluxoMotorService {
         //    ALTERAR_LIMITE_AGUARDANDO_VALOR; valida número + persiste via
         //    LimiteTokenService.definirAutoLimiteCooperado, confirma e
         //    volta pro submenu.
+        // F2.10 (08/06/2026) — VERIFICAR_COOPERADO faltava implementação.
+        // Causa raiz de Luciano não receber "8 CooperTokens": gatilho "1"
+        // do MENU_PRINCIPAL global tinha acao=VERIFICAR_COOPERADO mas o
+        // motor caía no default("Acao desconhecida"), bot ficava silencioso,
+        // cooperado nunca chegava em MENU_COOPERADO.
+        case 'VERIFICAR_COOPERADO':
+          await this.executarVerificarCooperado(conversa);
+          break;
         case 'CONSULTAR_LIMITE_TOKENS':
           await this.executarConsultarLimiteTokens(conversa);
           break;
@@ -1022,6 +1030,114 @@ export class WhatsappFluxoMotorService {
 
   private fmtBRL(v: number): string {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  /**
+   * F2.10 (08/06/2026) — ação VERIFICAR_COOPERADO.
+   *
+   * Disparada por gatilho "1" do MENU_PRINCIPAL global ("Já sou cooperado").
+   * Antes essa ação não existia → motor caía no default("Acao desconhecida"),
+   * cooperado nunca chegava em MENU_COOPERADO + nunca via "8 CooperTokens".
+   *
+   * Comportamento:
+   * 1. Normaliza telefone (strip não-dígitos + variantes c/s 55).
+   * 2. Lookup multi-tenant Cooperado por telefone com status ATIVO/equivalente.
+   * 3. Se ENCONTRA: popula conversa.cooperadoId/cooperativaId + transiciona
+   *    pra MENU_COOPERADO + renderiza modelo dinâmico (que TEM opção 8).
+   * 4. Se NÃO encontra: mantém estado, envia mensagem amigável + dica.
+   *
+   * D-novo-WA-PHONE-NORMALIZE (catalogado P2): matcher tolerante a variantes
+   * (strip + c/s 55) — não corrige base inteira mas funciona pra cooperados
+   * com telefone em formato canônico OU comum.
+   */
+  private async executarVerificarCooperado(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<void> {
+    const telNorm = conversa.telefone.replace(/\D/g, '');
+    const telSemPais = telNorm.replace(/^55/, '');
+    const variantes = Array.from(new Set([telNorm, telSemPais, `55${telSemPais}`]));
+
+    const STATUS_ATIVOS = ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'PENDENTE_DOCUMENTOS', 'ATIVO_RECEBENDO_CREDITOS'];
+
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: {
+        telefone: { in: variantes },
+        status: { in: STATUS_ATIVOS as any[] },
+      },
+      select: { id: true, nomeCompleto: true, cooperativaId: true },
+    });
+
+    const cooperado = cooperados[0];
+
+    if (!cooperado) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não encontrei seu cadastro ATIVO.\n\n' +
+        'Se você já se cadastrou e está aguardando ativação, aguarde nosso contato.\n\n' +
+        'Pra se cadastrar agora, digite *2* (Quero ser cooperado).',
+      );
+      this.logger.log(
+        `VERIFICAR_COOPERADO: telefone ${conversa.telefone} NAO encontrado (variantes=[${variantes.join(',')}])`,
+      );
+      return;
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'MENU_COOPERADO',
+        cooperadoId: cooperado.id,
+        cooperativaId: cooperado.cooperativaId,
+        contadorFallback: 0,
+      },
+    });
+
+    const cooperativaId = cooperado.cooperativaId ?? undefined;
+    const etapaMenu = await this.buscarEtapa('MENU_COOPERADO', cooperativaId);
+    if (etapaMenu?.modeloMensagemId) {
+      const modelo = await this.prisma.modeloMensagem.findFirst({
+        where: {
+          id: etapaMenu.modeloMensagemId,
+          ...this.filtroTenantSomenteLeitura(cooperativaId),
+        },
+      });
+      if (modelo) {
+        const ctxCoop = await this.carregarContextoCooperativa(cooperativaId);
+        const conversaCtx = {
+          ...conversa,
+          cooperadoId: cooperado.id,
+          cooperativaId: cooperado.cooperativaId,
+        } as { id: string; telefone: string; cooperadoId?: string | null; cooperativaId?: string | null; dadosTemp?: any };
+        const vars = this.extrairVariaveis(conversaCtx, ctxCoop);
+        if (!vars.nome) vars.nome = cooperado.nomeCompleto ?? 'Cooperado';
+        const texto = this.anexarRodape(
+          this.renderizarTemplate(modelo.conteudo, vars),
+          etapaMenu,
+        );
+        await this.sender.enviarMensagem(conversa.telefone, texto);
+        await this.modeloMensagem.incrementarUso(modelo.id);
+      }
+    } else {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `✅ Olá, *${cooperado.nomeCompleto || 'Cooperado'}*! O que você precisa?\n\n` +
+        '1️⃣ ⚡ Ver saldo de créditos\n' +
+        '2️⃣ 📄 Ver próxima fatura\n' +
+        '3️⃣ ✏️ Atualizar meu cadastro\n' +
+        '4️⃣ 🔄 Atualizar meu contrato\n' +
+        '5️⃣ 🎁 Indicar um amigo\n' +
+        '6️⃣ 🔧 Suporte\n' +
+        '7️⃣ 👤 Falar com atendente\n' +
+        '8️⃣ 💎 CooperTokens',
+      );
+    }
+
+    this.logger.log(
+      `VERIFICAR_COOPERADO: encontrado cooperadoId=${cooperado.id} tenant=${cooperado.cooperativaId} telefone=${conversa.telefone} -> MENU_COOPERADO`,
+    );
   }
 
   /**
