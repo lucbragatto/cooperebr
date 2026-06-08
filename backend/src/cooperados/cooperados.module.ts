@@ -6,6 +6,10 @@ import { CooperadosJob } from './cooperados.job';
 // Sprint Token-WA Fase 2 F2.3 (07/06/2026) — PIN do cooperado pra
 // autorização de transações CooperToken via WhatsApp.
 import { PinCooperadoService } from './pin-cooperado.service';
+// Sprint Token-WA Fase 2 F2.4 (07/06/2026) — vínculo persistente
+// cooperado×WhatsApp (anti SIM-swap).
+import { AparelhoVinculadoService } from './aparelho-vinculado.service';
+import { OtpDesafioService } from '../common/security/otp-desafio.service';
 import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasModule } from '../usinas/usinas.module';
@@ -29,7 +33,20 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [CooperadosController],
-  providers: [CooperadosService, CooperadosJob, PinCooperadoService, PrismaService, NotificacoesService],
-  exports: [CooperadosService, PinCooperadoService],
+  providers: [
+    CooperadosService,
+    CooperadosJob,
+    PinCooperadoService,
+    AparelhoVinculadoService,
+    OtpDesafioService,
+    PrismaService,
+    NotificacoesService,
+  ],
+  exports: [
+    CooperadosService,
+    PinCooperadoService,
+    AparelhoVinculadoService,
+    OtpDesafioService,
+  ],
 })
 export class CooperadosModule {}
