@@ -1394,6 +1394,7 @@ enum OrigemLancamento {
   REPASSE      // hook RepasseProprietario marcarPago
   MANUAL       // lançamento manual via UI (sem idempotência cruzada)
   CONVENIO     // CT.9 (01/06/2026) — movimento manual de Convênio (Art. 88 Auxiliar)
+  TOKEN_TRANSACAO // F2/F3 (08/06/2026) — hook TokenTransacao com impacto em R$ (compra de token, resgate/PIX, taxa/MDR)
 }
 
 model LancamentoCaixa {
@@ -3586,6 +3587,29 @@ model TokenTransacao {
 
   /// merchantId (id do estabelecimento que gerou QR — Fase 3).
   merchantId              String?
+
+  // ── Adendo Fase 2/3 (08/06/2026) — campos do EXTRATO estilo cartão.
+  // Adicionados desde F2.1 pra evitar 2a migration na Fase 3. Nullable
+  // até a Fase 3 popular nas operacoes reais. Espelham o que o portal
+  // (extrato detalhado) e o WA (resumo) precisam mostrar.
+  /// Nome do estabelecimento/recebedor pra extrato ("Padaria Sol").
+  merchantNome            String?
+  /// Descricao livre da transacao ("Almoco terca", "Recarga celular").
+  descricao               String?
+  /// Categoria pra agrupamento no extrato (ALIMENTACAO|SERVICO|RECARGA|
+  /// COMBUSTIVEL|MERCADO|OUTROS). String pra flex; enum no TS.
+  categoria               String?
+  /// Local da operacao ("Vitoria/ES" — pode vir do merchant ou geo do QR).
+  localCidade             String?
+  /// Tipo da operacao pra extrato (independente do `status` da maquina):
+  /// PAGAMENTO (cooperado paga estabelecimento) | TRANSFERENCIA (token->token
+  /// entre cooperados) | RECEBIMENTO (chega de outro cooperado) | RESGATE
+  /// (sai em R$ via PIX) | COMPRA_TOKEN (entra com R$, recebe token).
+  tipoOperacao            String?
+  /// Referencia externa (Asaas paymentId, NF id, etc). Idempotencia INTERNA
+  /// usa `jti`; este campo serve pra rastrear sistema-fonte externa.
+  referenciaExterna       String?
+  // ── Fim adendo extrato.
 
   /// Tier do valor: BAIXO (≤R$50 = só PIN) | ALTO (>R$50 = PIN+OTP).
   /// 1º uso/destinatário novo: sempre ALTO independente do valor.
