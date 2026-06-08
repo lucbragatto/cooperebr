@@ -23,9 +23,13 @@ import { CoopereAiService } from './coopere-ai.service';
 import { ConviteIndicacaoModule } from '../convite-indicacao/convite-indicacao.module';
 import { CepModule } from '../common/cep/cep.module';
 import { NotificacoesModule } from '../notificacoes/notificacoes.module';
+// Sprint Token-WA Fase 1 (07/06/2026) — consultas read-only de CooperTokens
+// pelo bot (saldo + extrato no submenu MENU_COOPERTOKENS). Sem ciclo:
+// CooperTokenModule não importa WhatsappModule.
+import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule)],
+  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule), CooperTokenModule],
   controllers: [WhatsappFaturaController, WhatsappSimulacaoController],
   providers: [
     WhatsappFaturaService,

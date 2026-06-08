@@ -41,7 +41,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   const prismaMock: any = {
     fluxoEtapa: { findFirst: etapaFindFirst },
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
-    conversaWhatsapp: { update: conversaUpdate },
+    conversaWhatsapp: { update: conversaUpdate, findUnique: jest.fn() },
     cooperativa: { findUnique: cooperativaFindUnique },
     cooperado: {
       findUnique: cooperadoFindUnique,
@@ -75,6 +75,15 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
   // Bloco 5 Etapa B (24/05): NotificacoesService injetado pras acoes
   // SALVAR_SOLICITACAO_* notificarem equipe via Notificacao persistente.
   const notificacoesServiceMock: any = { criar: notificacaoCriarMock };
+  // Sprint Token-WA Fase 1 (07/06/2026): CooperTokenService injetado pras
+  // 3 acoes novas (CONSULTAR_SALDO_TOKENS + CONSULTAR_EXTRATO_TOKENS +
+  // EXTRATO_TOKENS_PAGINAR). Cada teste mocka getSaldo/getExtrato conforme.
+  const getSaldoMock = jest.fn();
+  const getExtratoMock = jest.fn();
+  const cooperTokenServiceMock: any = {
+    getSaldo: getSaldoMock,
+    getExtrato: getExtratoMock,
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -85,6 +94,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       cepServiceMock,
       faturasServiceMock,
       notificacoesServiceMock,
+      cooperTokenServiceMock,
     );
   });
 
@@ -4864,6 +4874,264 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
         where: { id: 'c1' },
         data: { estado: 'MENU_COOPERADO' },
       });
+    });
+  });
+
+  // ============================================================
+  // Sprint Token-WA Fase 1 (07/06/2026) — Consultas read-only de CooperTokens
+  // ============================================================
+  describe('CONSULTAR_SALDO_TOKENS - getSaldo do CooperTokenService', () => {
+    const TELEFONE = '5527981341348';
+    const COOPERADO_ID = 'coop-luc';
+
+    it('Cooperado válido com saldo → mostra disponível + valor estimado + disclaimer', async () => {
+      getSaldoMock.mockResolvedValueOnce({
+        saldoDisponivel: 1500,
+        saldoPendente: 0,
+        valorAtualEstimado: 675,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'mod-1',
+        conteudo:
+          'Saldo: *{{saldo_disponivel}} CooperTokens*{{saldo_pendente}}\nValor: {{valor_estimado}}',
+      });
+
+      await (service as any).executarConsultarSaldoTokens({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: COOPERADO_ID,
+        cooperativaId: 'coop-A',
+      });
+
+      expect(getSaldoMock).toHaveBeenCalledWith(COOPERADO_ID);
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('1.500 CooperTokens'),
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('R$ 675,00'),
+      );
+      expect(incrementarUso).toHaveBeenCalledWith('mod-1');
+    });
+
+    it('Cooperado com saldo pendente → linha extra aparece', async () => {
+      getSaldoMock.mockResolvedValueOnce({
+        saldoDisponivel: 100,
+        saldoPendente: 50,
+        valorAtualEstimado: 45,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'mod-1',
+        conteudo: '{{saldo_disponivel}}{{saldo_pendente}}',
+      });
+
+      await (service as any).executarConsultarSaldoTokens({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: COOPERADO_ID,
+        cooperativaId: 'coop-A',
+      });
+
+      const msg = enviarMensagem.mock.calls[0][1];
+      expect(msg).toMatch(/Pendentes.*50.*CooperTokens/);
+    });
+
+    it('Saldo zero → não mostra linha pendentes, valor R$ 0,00', async () => {
+      getSaldoMock.mockResolvedValueOnce({
+        saldoDisponivel: 0,
+        saldoPendente: 0,
+        valorAtualEstimado: 0,
+      });
+      modeloFindFirst.mockResolvedValueOnce({
+        id: 'mod-1',
+        conteudo: 'D[{{saldo_disponivel}}]P[{{saldo_pendente}}]V[{{valor_estimado}}]',
+      });
+
+      await (service as any).executarConsultarSaldoTokens({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: COOPERADO_ID,
+      });
+
+      const msg = enviarMensagem.mock.calls[0][1];
+      expect(msg).toMatch(/D\[0\]P\[\]V\[R/);
+    });
+
+    it('Sem cooperadoId → mensagem CTA cadastro, NÃO chama getSaldo', async () => {
+      await (service as any).executarConsultarSaldoTokens({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: null,
+      });
+      expect(getSaldoMock).not.toHaveBeenCalled();
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('cooperado'),
+      );
+    });
+
+    it('Modelo "saldo_tokens_resultado" ausente → log warn, ação aborta', async () => {
+      getSaldoMock.mockResolvedValueOnce({
+        saldoDisponivel: 100,
+        saldoPendente: 0,
+        valorAtualEstimado: 45,
+      });
+      modeloFindFirst.mockResolvedValueOnce(null);
+
+      await (service as any).executarConsultarSaldoTokens({
+        id: 'c1',
+        telefone: TELEFONE,
+        cooperadoId: COOPERADO_ID,
+      });
+      expect(enviarMensagem).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CONSULTAR_EXTRATO_TOKENS - getExtrato + paginação', () => {
+    const TELEFONE = '5527981341348';
+    const COOPERADO_ID = 'coop-luc';
+
+    it('Extrato vazio página 1 → mensagem orientativa', async () => {
+      getExtratoMock.mockResolvedValueOnce({ items: [], total: 0, page: 1, limit: 10 });
+
+      await (service as any).executarConsultarExtratoTokens(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        1,
+      );
+
+      expect(getExtratoMock).toHaveBeenCalledWith(COOPERADO_ID, 1, 10);
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        TELEFONE,
+        expect.stringContaining('ainda não tem transações'),
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { dadosTemp: { extratoPagina: 1 } },
+        }),
+      );
+    });
+
+    it('Extrato com 10 itens página 1 + total > 10 → mostra "Digite MAIS"', async () => {
+      const items = Array.from({ length: 10 }, (_, i) => ({
+        id: `t${i}`,
+        createdAt: new Date('2026-06-01'),
+        operacao: 'CREDITO',
+        quantidade: 100 + i,
+        descricao: `Transação ${i}`,
+      }));
+      getExtratoMock.mockResolvedValueOnce({
+        items,
+        total: 25,
+        page: 1,
+        limit: 10,
+      });
+
+      await (service as any).executarConsultarExtratoTokens(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        1,
+      );
+
+      const msg = enviarMensagem.mock.calls[0][1];
+      expect(msg).toMatch(/página 1\/3/);
+      expect(msg).toMatch(/Digite \*MAIS\*/);
+      // 10 linhas + cabeçalho + rodapé < 4096 chars (limite WA)
+      expect(msg.length).toBeLessThan(4096);
+    });
+
+    it('Última página → mostra "Fim do extrato"', async () => {
+      getExtratoMock.mockResolvedValueOnce({
+        items: [
+          {
+            id: 't1',
+            createdAt: new Date('2026-06-01'),
+            operacao: 'DEBITO',
+            quantidade: -50,
+            descricao: 'Resgate',
+          },
+        ],
+        total: 11,
+        page: 2,
+        limit: 10,
+      });
+
+      await (service as any).executarConsultarExtratoTokens(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        2,
+      );
+
+      const msg = enviarMensagem.mock.calls[0][1];
+      expect(msg).toMatch(/página 2\/2/);
+      expect(msg).toMatch(/Fim do extrato/);
+      expect(msg).not.toMatch(/Digite \*MAIS\*/);
+    });
+
+    it('Sem cooperadoId → mensagem CTA, NÃO chama getExtrato', async () => {
+      await (service as any).executarConsultarExtratoTokens(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: null },
+        1,
+      );
+      expect(getExtratoMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('EXTRATO_TOKENS_PAGINAR - resposta "MAIS"', () => {
+    const TELEFONE = '5527981341348';
+    const COOPERADO_ID = 'coop-luc';
+
+    it('Entrada "MAIS" → avança página armazenada em dadosTemp', async () => {
+      (prismaMock.conversaWhatsapp.findUnique as jest.Mock).mockResolvedValueOnce({
+        dadosTemp: { extratoPagina: 1 },
+      });
+      getExtratoMock.mockResolvedValueOnce({
+        items: [
+          {
+            id: 't2',
+            createdAt: new Date('2026-06-02'),
+            operacao: 'CREDITO',
+            quantidade: 200,
+            descricao: 'Bônus',
+          },
+        ],
+        total: 12,
+        page: 2,
+        limit: 10,
+      });
+
+      await (service as any).executarExtratoTokensPaginar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        'MAIS',
+      );
+
+      // Chamou getExtrato com página 2 (1 + 1)
+      expect(getExtratoMock).toHaveBeenCalledWith(COOPERADO_ID, 2, 10);
+    });
+
+    it('Entrada qualquer outra (não-MAIS) → NÃO chama getExtrato', async () => {
+      await (service as any).executarExtratoTokensPaginar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        'qualquer',
+      );
+      expect(getExtratoMock).not.toHaveBeenCalled();
+    });
+
+    it('Sem página prévia em dadosTemp → começa em página 2', async () => {
+      (prismaMock.conversaWhatsapp.findUnique as jest.Mock).mockResolvedValueOnce({
+        dadosTemp: null,
+      });
+      getExtratoMock.mockResolvedValueOnce({
+        items: [],
+        total: 0,
+        page: 2,
+        limit: 10,
+      });
+
+      await (service as any).executarExtratoTokensPaginar(
+        { id: 'c1', telefone: TELEFONE, cooperadoId: COOPERADO_ID },
+        'mais',
+      );
+      // 1 (default) + 1 = 2
+      expect(getExtratoMock).toHaveBeenCalledWith(COOPERADO_ID, 2, 10);
     });
   });
 });

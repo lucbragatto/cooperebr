@@ -7,6 +7,8 @@ import { CepService } from '../common/cep/cep.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { getLabelMembro } from '../cooperativas/tipo-parceiro.helper';
+// Sprint Token-WA Fase 1 (07/06/2026) — consultas read-only de CooperTokens.
+import { CooperTokenService } from '../cooper-token/cooper-token.service';
 
 interface MensagemRecebida {
   telefone: string;
@@ -64,6 +66,8 @@ export class WhatsappFluxoMotorService {
     private cepService: CepService,
     private faturasService: FaturasService,
     private notificacoes: NotificacoesService,
+    // Sprint Token-WA Fase 1 — getSaldo / getExtrato pelo bot.
+    private cooperTokenService: CooperTokenService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -507,6 +511,18 @@ export class WhatsappFluxoMotorService {
         case 'CONSULTAR_PROXIMA_FATURA':
           await this.executarConsultarProximaFatura(conversa);
           break;
+        // Sprint Token-WA Fase 1 (07/06/2026) — submenu CooperTokens read-only.
+        // ZERO dinheiro, ZERO PIN. Apenas getSaldo + getExtrato do
+        // CooperTokenService (já validado). Pagamento/transferência = Fase 3.
+        case 'CONSULTAR_SALDO_TOKENS':
+          await this.executarConsultarSaldoTokens(conversa);
+          break;
+        case 'CONSULTAR_EXTRATO_TOKENS':
+          await this.executarConsultarExtratoTokens(conversa, 1);
+          break;
+        case 'EXTRATO_TOKENS_PAGINAR':
+          await this.executarExtratoTokensPaginar(conversa, corpo);
+          break;
         // Etapa C Bloco 4 (22/05): 3 acoes ATUALIZAR_*_COOPERADO disparadas via
         // gatilho.acao (wildcard nas etapas AGUARDANDO_NOVO_*). Recebem o
         // `corpo` digitado pelo cooperado e cuidam de validar/atualizar/responder/
@@ -790,6 +806,184 @@ export class WhatsappFluxoMotorService {
     this.logger.log(
       `CONSULTAR_SALDO_CREDITOS: enviado para ${conversa.telefone} (cooperado=${conversa.cooperadoId}, kwhContrato=${kwhContratoTotal}, saldoKwh=${saldoKwhNum}, tenant=${cooperativaId ?? 'global'})`,
     );
+  }
+
+  // ─── Sprint Token-WA Fase 1 (07/06/2026) — Consultas read-only ───────
+  //
+  // 3 ações pro submenu MENU_COOPERTOKENS:
+  //  - CONSULTAR_SALDO_TOKENS: mostra saldo + valor estimado em R$ + disclaimer.
+  //  - CONSULTAR_EXTRATO_TOKENS: 10 últimas transações + paginação MAIS.
+  //  - EXTRATO_TOKENS_PAGINAR: ação de gatilho wildcard quando estado=
+  //    VER_EXTRATO_TOKENS e usuário digita "MAIS" (próxima página).
+  //
+  // NOMENCLATURA DURA: "CooperTokens" ≠ "créditos de energia (kWh)". Mensagens
+  // são explícitas pra não confundir os 2 conceitos.
+
+  private async executarConsultarSaldoTokens(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar seu saldo de CooperTokens você precisa ser cooperado. Faça seu cadastro pelo bot enviando uma foto da sua conta de luz, e em seguida volte aqui pra ver suas informações!',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const saldo = await this.cooperTokenService.getSaldo(conversa.cooperadoId);
+
+    const disp = Number(saldo.saldoDisponivel ?? 0);
+    const pend = Number(saldo.saldoPendente ?? 0);
+    const valorEst = Number((saldo as { valorAtualEstimado?: number }).valorAtualEstimado ?? 0);
+
+    const modelo = await this.prisma.modeloMensagem.findFirst({
+      where: {
+        nome: 'saldo_tokens_resultado',
+        ...this.filtroTenantSomenteLeitura(cooperativaId),
+      },
+    });
+    if (!modelo) {
+      this.logger.warn(
+        `CONSULTAR_SALDO_TOKENS: modelo "saldo_tokens_resultado" não encontrado (tenant=${cooperativaId ?? 'global'}) — ação abortada`,
+      );
+      return;
+    }
+
+    const vars: Record<string, string> = {
+      saldo_disponivel: disp.toLocaleString('pt-BR'),
+      saldo_pendente:
+        pend > 0
+          ? `\n⏳ Pendentes (aguardando liberação): ${pend.toLocaleString('pt-BR')} CooperTokens`
+          : '',
+      valor_estimado:
+        valorEst > 0
+          ? valorEst.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          : 'R$ 0,00',
+    };
+    const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
+    await this.sender.enviarMensagem(conversa.telefone, texto);
+    await this.modeloMensagem.incrementarUso(modelo.id);
+    this.logger.log(
+      `CONSULTAR_SALDO_TOKENS: enviado pra ${conversa.telefone} (cooperado=${conversa.cooperadoId}, disp=${disp}, pend=${pend}, valor=${valorEst})`,
+    );
+  }
+
+  /** Tamanho de página do extrato no WhatsApp. */
+  private static readonly EXTRATO_TOKENS_PAGE_SIZE = 10;
+
+  private async executarConsultarExtratoTokens(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    pagina: number,
+  ): Promise<void> {
+    if (!conversa.cooperadoId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        'Para consultar seu extrato de CooperTokens você precisa ser cooperado.',
+      );
+      return;
+    }
+
+    const cooperativaId = conversa.cooperativaId ?? undefined;
+    const extrato = await this.cooperTokenService.getExtrato(
+      conversa.cooperadoId,
+      pagina,
+      WhatsappFluxoMotorService.EXTRATO_TOKENS_PAGE_SIZE,
+    );
+
+    if (extrato.items.length === 0) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        pagina === 1
+          ? '📋 *Extrato de CooperTokens*\n\nVocê ainda não tem transações registradas.\n\nQuando você fizer pagamentos, recebimentos ou conversões, elas aparecerão aqui.'
+          : `📋 Não há mais transações na página ${pagina}.`,
+      );
+      // Guarda página atual na conversa pra paginação
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { dadosTemp: { extratoPagina: pagina } as unknown as object },
+      });
+      return;
+    }
+
+    // Calcula saldo acumulado em ordem cronológica reversa.
+    // ledger.quantidade é positivo (crédito) ou negativo (débito) — depende
+    // do `operacao` (CREDITO/DEBITO/RESGATE/EXPIRACAO). Pra exibir, mostramos
+    // ±qtd com base no sinal da operacao.
+    const linhas = extrato.items.map((it) => {
+      const ts = new Date(it.createdAt).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+      });
+      const op = String(it.operacao).slice(0, 3); // "CRE", "DEB", "RES", "EXP"
+      const qtd = Number(it.quantidade);
+      const sinal = qtd > 0 ? '+' : '';
+      const descricao = String(it.descricao ?? '').slice(0, 24);
+      return `${ts} · ${op} · ${sinal}${qtd.toLocaleString('pt-BR')} ${descricao ? '· ' + descricao : ''}`;
+    });
+
+    const totalPaginas = Math.ceil(
+      extrato.total / WhatsappFluxoMotorService.EXTRATO_TOKENS_PAGE_SIZE,
+    );
+    const temMais = pagina < totalPaginas;
+
+    const corpo =
+      `📋 *Extrato de CooperTokens — página ${pagina}/${totalPaginas}*\n` +
+      `(${extrato.total} transações no total)\n\n` +
+      linhas.join('\n') +
+      (temMais
+        ? '\n\n_Digite *MAIS* pra ver as próximas ' +
+          Math.min(
+            WhatsappFluxoMotorService.EXTRATO_TOKENS_PAGE_SIZE,
+            extrato.total - pagina * WhatsappFluxoMotorService.EXTRATO_TOKENS_PAGE_SIZE,
+          ) +
+          ' transações._'
+        : '\n\n_Fim do extrato._');
+
+    await this.sender.enviarMensagem(conversa.telefone, this.anexarRodape(corpo));
+    // Guarda página atual na conversa pra paginação
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { dadosTemp: { extratoPagina: pagina } as unknown as object },
+    });
+    this.logger.log(
+      `CONSULTAR_EXTRATO_TOKENS: enviado pra ${conversa.telefone} (cooperado=${conversa.cooperadoId}, pagina=${pagina}/${totalPaginas}, itens=${extrato.items.length}, tenant=${cooperativaId ?? 'global'})`,
+    );
+  }
+
+  private async executarExtratoTokensPaginar(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    // Aceita "MAIS", "mais", "+", "PROXIMA" (case-insensitive). Qualquer outra
+    // entrada vira no-op (motor volta pra MENU_COOPERTOKENS no gatilho default).
+    const entrada = String(corpo ?? '').trim().toLowerCase();
+    if (!['mais', '+', 'proxima', 'próxima', 'next'].includes(entrada)) {
+      // Conversa sai do estado e cai no MENU_COOPERTOKENS — motor cuida via gatilho.
+      return;
+    }
+
+    // Recupera página atual de dadosTemp e avança.
+    const conversaAtual = await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    });
+    const dados = (conversaAtual?.dadosTemp ?? {}) as { extratoPagina?: number };
+    const proxima = (dados.extratoPagina ?? 1) + 1;
+    await this.executarConsultarExtratoTokens(conversa, proxima);
   }
 
   /**
