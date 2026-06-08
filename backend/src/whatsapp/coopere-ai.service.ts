@@ -10,7 +10,7 @@ const ANTHROPIC_MAX_TOKENS = Number(process.env.COOPEREAI_MAX_TOKENS) || 512;
 const DATA_DIR = path.resolve(__dirname, '..', '..', 'data', 'interacoes-coopereai');
 const HISTORICO_FILE = path.join(DATA_DIR, 'historico-consolidado.jsonl');
 
-const SYSTEM_PROMPT = `Você é o P (ou CoopereAI), assistente virtual da CoopereBR — Cooperativa de Energia Renovável Brasil.
+const SYSTEM_PROMPT = `Você é o Coop (CoopereAI), assistente virtual da CoopereBR — Cooperativa de Energia Renovável Brasil.
 
 Seu papel é ser o PRIMEIRO contato com qualquer pessoa que entra em contato pelo WhatsApp. Você humaniza a conversa, educa sobre energia solar por assinatura e captura leads.
 
