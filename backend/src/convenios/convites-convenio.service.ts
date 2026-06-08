@@ -15,6 +15,14 @@ import {
   buildWaMeConviteUrl,
   type WaMeConviteParams,
 } from './lib/wa-me-builder';
+// Sprint Token-WA Fase 2 F2.2 (07/06/2026) — OTP helpers extraídos pra reuso
+// (AparelhoVinculadoService, TokenTransacaoService, etc).
+import {
+  gerarCodigoOtp,
+  gerarSaltOtp,
+  hashOtp,
+  compararOtp,
+} from '../common/security/otp-helper';
 
 /**
  * Sprint Convite-Convênio Fatia 2a (03/06/2026).
@@ -1054,44 +1062,25 @@ export class ConvitesConvenioService {
   // ─── Sprint Convite-Convênio Fatia 2b (03/06/2026) — OTP ────────────
 
   /**
-   * Gera código OTP de 6 dígitos (000000 a 999999) usando crypto.randomInt
-   * (CSPRNG). Zero-padded à esquerda pra sempre 6 chars.
+   * Statics OTP — DELEGATE pra `common/security/otp-helper.ts` (F2.2 Sprint
+   * Token-WA, 07/06/2026). Mantidos como métodos estáticos pra compatibilidade
+   * com specs existentes (F1.4 Sprint Convite-Convênio); novos consumidores
+   * devem importar diretamente do helper.
    */
   static gerarCodigoOtp(): string {
-    const num = crypto.randomInt(0, 1_000_000);
-    return num.toString().padStart(6, '0');
+    return gerarCodigoOtp();
   }
 
-  /**
-   * Gera salt rotativo (16 bytes hex = 32 chars) novo a cada solicitar-otp.
-   * Garante que mesmo se o atacante conseguir o hash de um OTP antigo, não
-   * pode reusar entre reenvios.
-   */
   static gerarSaltOtp(): string {
-    return crypto.randomBytes(16).toString('hex');
+    return gerarSaltOtp();
   }
 
-  /**
-   * Hash sha256(codigo + salt). Sufiente pra 6 dígitos × TTL 10min (não
-   * justifica work factor bcrypt). Output 64 chars hex.
-   */
   static hashOtp(codigo: string, salt: string): string {
-    return crypto.createHash('sha256').update(codigo + salt).digest('hex');
+    return hashOtp(codigo, salt);
   }
 
-  /**
-   * Comparação constant-time via crypto.timingSafeEqual. Evita timing attack
-   * que vazaria info por diferença de tempo de resposta entre código próximo
-   * vs distante.
-   */
   static compararOtp(codigo: string, salt: string, hashEsperado: string): boolean {
-    const calculado = ConvitesConvenioService.hashOtp(codigo, salt);
-    // Mesmo comprimento garantido pelos hashes sha256 (64 hex) — defensivo:
-    if (calculado.length !== hashEsperado.length) return false;
-    const bufA = Buffer.from(calculado, 'hex');
-    const bufB = Buffer.from(hashEsperado, 'hex');
-    if (bufA.length !== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
+    return compararOtp(codigo, salt, hashEsperado);
   }
 
   /**
