@@ -14,6 +14,10 @@ import {
 } from 'lucide-react';
 import type { ContextoUsuario, TipoContexto } from '@/types';
 import { rotaPorContexto, setContextoAtivo } from '@/hooks/useContexto';
+// Sprint "Qual cadastro?" Fix 3 (08/06/2026) — troca real no backend
+// (substitui o JWT) quando muda de contexto. Pra contexto 'cooperado' com
+// múltiplos cadastros do mesmo dono, envia cooperadoId pro backend selecionar.
+import { trocarContextoBackend } from '@/lib/auth';
 
 const iconesPorTipo: Record<TipoContexto, typeof Shield> = {
   super_admin: Shield,
@@ -62,8 +66,23 @@ export default function ContextoSwitcher({ contextos, contextoAtivo, onTrocar, c
   const Icon = atual ? iconesPorTipo[atual.tipo] : ArrowRightLeft;
   const cor = atual ? coresPorTipo[atual.tipo] : 'text-gray-600 bg-gray-50';
 
-  function handleSelect(ctx: ContextoUsuario) {
+  async function handleSelect(ctx: ContextoUsuario) {
     setAberto(false);
+    // Fix 3 (08/06/2026): pra contexto cooperado com múltiplos cadastros do
+    // mesmo dono (PF + PJ), envia cooperadoId pro backend selecionar. Pra
+    // outros tipos, cooperadoId fica undefined (backend usa lógica legada).
+    const cooperadoId = ctx.tipo === 'cooperado' ? ctx.id : undefined;
+    try {
+      await trocarContextoBackend(ctx.tipo, {
+        cooperadoId,
+        cooperativaId: ctx.tipo === 'super_admin' ? ctx.cooperativaId : undefined,
+      });
+    } catch (err) {
+      // Se o backend rejeitar (ex: anti-IDOR), interrompe — não muda
+      // contexto local pra evitar estado inconsistente.
+      console.error('Falha ao trocar contexto:', err);
+      return;
+    }
     setContextoAtivo(ctx.tipo);
     onTrocar(ctx.tipo);
     router.push(rotaPorContexto(ctx.tipo));

@@ -50,3 +50,29 @@ export function getUsuario(): Usuario | null {
 export function isAutenticado(): boolean {
   return !!Cookies.get(TOKEN_KEY);
 }
+
+/**
+ * Sprint "Qual cadastro?" Fix 3 (08/06/2026) — troca o contexto no backend
+ * e substitui o JWT no cookie. Pra contexto 'cooperado' com mais de 1 cadastro
+ * do mesmo dono, `cooperadoId` é obrigatório (backend responde 403 se omitido).
+ *
+ * Anti-IDOR: backend revalida que o cooperadoId pertence ao usuario.id do JWT
+ * — front nunca é fonte de verdade da posse.
+ */
+export async function trocarContextoBackend(
+  contexto: string,
+  opts?: { cooperativaId?: string; cooperadoId?: string },
+): Promise<{ token: string; contexto: string; cooperativaId: string | null; cooperadoId: string | null }> {
+  const { data } = await api.post<{
+    token: string;
+    contexto: string;
+    cooperativaId: string | null;
+    cooperadoId: string | null;
+  }>('/auth/trocar-contexto', {
+    contexto,
+    cooperativaId: opts?.cooperativaId,
+    cooperadoId: opts?.cooperadoId,
+  });
+  Cookies.set(TOKEN_KEY, data.token, COOKIE_OPTS);
+  return data;
+}
