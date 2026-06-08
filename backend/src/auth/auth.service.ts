@@ -489,29 +489,48 @@ export class AuthService {
       }
     }
 
-    // 3. Verificar se o usuário também é cooperado (match por CPF ou email)
+    // 3. Verificar se o usuário também é cooperado (match por CPF ou email).
+    // Sprint "Qual cadastro?" Fix 3 (08/06/2026): findMany (era findFirst).
+    // Mesmo Usuario pode ter cadastros PF + PJ(s) → 1 contexto cooperado por
+    // cadastro com `id` diferente (cooperadoId). Front lista no ContextoSwitcher.
     const cooperadoWhere: any[] = [{ email: usuario.email }];
     if (usuario.cpf) cooperadoWhere.push({ cpf: usuario.cpf });
 
-    const cooperado = await this.prisma.cooperado.findFirst({
+    const cooperados = await this.prisma.cooperado.findMany({
       where: { OR: cooperadoWhere },
       select: {
         id: true,
         nomeCompleto: true,
+        razaoSocial: true,
+        tipoPessoa: true,
         cooperativaId: true,
         cooperativa: { select: { id: true, nome: true } },
       },
+      orderBy: { createdAt: 'asc' },
     });
 
-    if (cooperado) {
+    for (const cooperado of cooperados) {
+      const tipo = (cooperado.tipoPessoa ?? 'PF').toUpperCase();
+      const nomeExibir =
+        tipo === 'PJ' && cooperado.razaoSocial ? cooperado.razaoSocial : cooperado.nomeCompleto;
+      const label =
+        cooperados.length === 1
+          ? `Cooperado — ${cooperado.cooperativa?.nome ?? 'Sem parceiro'}`
+          : `Cooperado ${tipo} — ${nomeExibir}`;
       contextos.push({
         tipo: 'cooperado',
-        label: `Cooperado — ${cooperado.cooperativa?.nome ?? 'Sem parceiro'}`,
+        label,
         id: cooperado.id,
         cooperativaId: cooperado.cooperativaId ?? undefined,
         cooperativaNome: cooperado.cooperativa?.nome ?? undefined,
       });
     }
+
+    // Compat retro com o resto da função: variável `cooperado` (singular)
+    // continua referenciando o 1º — usada por seções subsequentes
+    // (empresa_conveniada + proprietario_usina). Quando 2º cooperado entrar
+    // como pagador/proprietario, fixar essas seções pra iterar também.
+    const cooperado = cooperados[0] ?? null;
 
     // Sprint Portal Empresa 9.0 (04/06/2026) — contexto EMPRESA_CONVENIADA:
     // o Usuario é o responsável de uma empresa pagadora de algum convênio.
@@ -601,9 +620,55 @@ export class AuthService {
     };
   }
 
-  async trocarContexto(usuario: any, contexto: string, cooperativaId?: string) {
+  /**
+   * Sprint "Qual cadastro?" Fix 3+4 (08/06/2026) — `cooperadoIdEscolhido`
+   * é opcional, usado quando Usuario tem múltiplos contextos `cooperado`
+   * (PF + PJs) e precisa especificar qual ativar.
+   *
+   * ANTI-IDOR (Fix 4): SEMPRE re-busca contextos pelo `usuario.id` e
+   * valida que o `cooperadoIdEscolhido` está na lista permitida. Payload
+   * do usuário NÃO é fonte de verdade — só seleciona dentre opções já
+   * comprovadas como dele.
+   */
+  async trocarContexto(
+    usuario: any,
+    contexto: string,
+    cooperativaId?: string,
+    cooperadoIdEscolhido?: string,
+  ) {
     const contextos = await this.obterContextosUsuario(usuario);
-    const contextoValido = contextos.contextos.find((c) => c.tipo === contexto);
+
+    // Pra contextos sem `id` distintivo (1 entrada por tipo) basta achar
+    // por tipo. Pra `cooperado` (que agora pode ter múltiplos), se
+    // cooperadoIdEscolhido vier, validar que está na lista DESSE usuário.
+    let contextoValido = contextos.contextos.find((c) => c.tipo === contexto);
+
+    if (contexto === 'cooperado') {
+      const cooperadosDoUsuario = contextos.contextos.filter((c) => c.tipo === 'cooperado');
+      if (cooperadosDoUsuario.length === 0) {
+        throw new ForbiddenException('Contexto cooperado não disponível para este usuário');
+      }
+      if (cooperadoIdEscolhido) {
+        const escolhido = cooperadosDoUsuario.find((c) => c.id === cooperadoIdEscolhido);
+        if (!escolhido) {
+          // anti-IDOR: tentativa de trocar pra cadastro de terceiro
+          throw new ForbiddenException(
+            'Cadastro cooperado não pertence a este usuário',
+          );
+        }
+        contextoValido = escolhido;
+      } else if (cooperadosDoUsuario.length > 1) {
+        // Múltiplos sem escolha explícita → erro instrutivo (front deve
+        // passar cooperadoId). Mantém fallback no primeiro pra compat
+        // com chamadores antigos seria silenciar bug — preferimos exigir.
+        throw new ForbiddenException(
+          'Múltiplos cadastros cooperado — informe cooperadoId no body',
+        );
+      } else {
+        contextoValido = cooperadosDoUsuario[0];
+      }
+    }
+
     if (!contextoValido) {
       throw new ForbiddenException('Contexto não disponível para este usuário');
     }
@@ -638,7 +703,7 @@ export class AuthService {
       administradoraId: contexto === 'admin_agregador' ? usuario.administradoraId : undefined,
     });
 
-    return { token, contexto, cooperativaId: coopId ?? null };
+    return { token, contexto, cooperativaId: coopId ?? null, cooperadoId: cooperadoId ?? null };
   }
 
   private async buscarPorIdentificador(identificador: string) {

@@ -18,6 +18,7 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   const findUniqueCooperativa = jest.fn();
   const findUniqueAdministradora = jest.fn();
   const findFirstCooperado = jest.fn();
+  const findManyCooperado = jest.fn();
   const findManyUsina = jest.fn();
   const findManyConvenios = jest.fn();
   const findManyCooperativas = jest.fn();
@@ -25,7 +26,7 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   const prisma: any = {
     cooperativa: { findUnique: findUniqueCooperativa, findMany: findManyCooperativas },
     administradora: { findUnique: findUniqueAdministradora },
-    cooperado: { findFirst: findFirstCooperado },
+    cooperado: { findFirst: findFirstCooperado, findMany: findManyCooperado },
     usina: { findMany: findManyUsina },
     contratoConvenio: { findMany: findManyConvenios },
   };
@@ -60,12 +61,14 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   };
 
   it('cooperado match + 1 convênio ATIVO como pagador → contexto empresa_conveniada incluído', async () => {
-    findFirstCooperado.mockResolvedValueOnce({
+    findManyCooperado.mockResolvedValueOnce([{
       id: 'coop-1',
       nomeCompleto: 'Clinica Teste LTDA',
+      razaoSocial: null,
+      tipoPessoa: 'PJ',
       cooperativaId: 'coop-A',
       cooperativa: { id: 'coop-A', nome: 'CoopereBR' },
-    });
+    }]);
     findManyConvenios.mockResolvedValueOnce([
       {
         id: 'conv-1',
@@ -84,12 +87,14 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   });
 
   it('cooperado match mas SEM convênios como pagador → não inclui contexto empresa', async () => {
-    findFirstCooperado.mockResolvedValueOnce({
+    findManyCooperado.mockResolvedValueOnce([{
       id: 'coop-1',
       nomeCompleto: 'João',
+      razaoSocial: null,
+      tipoPessoa: 'PF',
       cooperativaId: 'coop-A',
       cooperativa: { id: 'coop-A', nome: 'CoopereBR' },
-    });
+    }]);
     findManyConvenios.mockResolvedValueOnce([]); // não é pagador
 
     const r = await svc.obterContextosUsuario(usuarioBase);
@@ -97,7 +102,7 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   });
 
   it('sem cooperado match (email não casa) → nenhum contexto empresa', async () => {
-    findFirstCooperado.mockResolvedValueOnce(null);
+    findManyCooperado.mockResolvedValueOnce([]);
 
     const r = await svc.obterContextosUsuario(usuarioBase);
     expect(r.contextos.find((c) => c.tipo === 'empresa_conveniada')).toBeUndefined();
@@ -105,12 +110,14 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   });
 
   it('múltiplos convênios → label agregado "N convênios"', async () => {
-    findFirstCooperado.mockResolvedValueOnce({
+    findManyCooperado.mockResolvedValueOnce([{
       id: 'coop-1',
       nomeCompleto: 'Grupo Saude',
+      razaoSocial: null,
+      tipoPessoa: 'PJ',
       cooperativaId: 'coop-A',
       cooperativa: { id: 'coop-A', nome: 'CoopereBR' },
-    });
+    }]);
     findManyConvenios.mockResolvedValueOnce([
       { id: 'c-1', empresaNome: 'Clinica A', cooperativaId: 'coop-A', cooperativa: null },
       { id: 'c-2', empresaNome: 'Clinica B', cooperativaId: 'coop-A', cooperativa: null },
@@ -124,12 +131,14 @@ describe('AuthService.obterContextosUsuario — branch EMPRESA_CONVENIADA', () =
   });
 
   it('filtra status=ATIVO via where Prisma (chamada inclui filtro)', async () => {
-    findFirstCooperado.mockResolvedValueOnce({
+    findManyCooperado.mockResolvedValueOnce([{
       id: 'coop-1',
       nomeCompleto: 'X',
+      razaoSocial: null,
+      tipoPessoa: 'PF',
       cooperativaId: 'coop-A',
       cooperativa: null,
-    });
+    }]);
     findManyConvenios.mockResolvedValueOnce([]);
 
     await svc.obterContextosUsuario(usuarioBase);

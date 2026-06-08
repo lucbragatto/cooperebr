@@ -125,9 +125,17 @@ export class AuthController {
   @Post('trocar-contexto')
   trocarContexto(
     @CurrentUser() usuario: any,
-    @Body() body: { contexto: string; cooperativaId?: string },
+    // Sprint "Qual cadastro?" Fix 3 (08/06/2026) — cooperadoId opcional pra
+    // selecionar entre múltiplos cadastros (PF + PJs) do mesmo dono.
+    // Validação anti-IDOR no service (re-busca contextos pelo usuario.id).
+    @Body() body: { contexto: string; cooperativaId?: string; cooperadoId?: string },
   ) {
-    return this.authService.trocarContexto(usuario, body.contexto, body.cooperativaId);
+    return this.authService.trocarContexto(
+      usuario,
+      body.contexto,
+      body.cooperativaId,
+      body.cooperadoId,
+    );
   }
 
   // --- CRUD Usuários (ADMIN / SUPER_ADMIN) ---
