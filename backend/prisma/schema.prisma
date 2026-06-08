@@ -100,6 +100,16 @@ model Cooperativa {
   // Sprint Onboarding Bloco 0 (06/06/2026) — Planos do Clube com mensalidade.
   planosClube               PlanoClube[]
 
+  // ── Sprint Token-WA Fase 2 (07/06/2026) — Tetos de limite de transação ──
+  // Cooperativa define o TETO; cooperado pode baixar (auto-limite ≤ teto).
+  // Defaults R$500/transação · R$2000/dia (decisão Luciano 07/06).
+  // Admin pode ajustar via UI/endpoint futuro (Fase 2 pode hardcoded por enquanto).
+  limiteTokenTransacaoTeto  Decimal                           @default(500) @db.Decimal(10, 2)
+  limiteTokenDiarioTeto     Decimal                           @default(2000) @db.Decimal(10, 2)
+
+  aparelhosVinculados       AparelhoVinculado[]
+  tokenTransacoesPagador    TokenTransacao[]                  @relation("TokenTransacaoPagadorCoop")
+
   @@map("cooperativas")
 }
 
@@ -283,6 +293,28 @@ model Cooperado {
   planoClubeId            String?
   planoClubeAdesao        PlanoClube?                @relation("CooperadosAderidos", fields: [planoClubeId], references: [id])
   adesaoClubeEm           DateTime?
+
+  // ── Sprint Token-WA Fase 2 (07/06/2026) — PIN de transação ──
+  // PIN 6 dígitos hash sha256(codigo + salt) — política idêntica ao OTP.
+  // Default tudo null = PIN não definido (cooperado ainda não criou).
+  // pinTentativas/BloqueadoAte = anti-brute-force (5 tentativas → lockout 1h).
+  pinHash                 String?
+  pinSalt                 String?
+  pinTentativas           Int                        @default(0)
+  pinBloqueadoAte         DateTime?
+  pinDefinidoEm           DateTime?
+
+  // ── Sprint Token-WA Fase 2 (07/06/2026) — auto-limite por cooperado ──
+  // Cooperado define o PRÓPRIO limite (pelo WA/portal), sempre ≤ teto cooperativa.
+  // Default null = aplica teto da cooperativa (sem auto-limite explícito).
+  // Vale SEMPRE o MENOR dos dois (min(teto, auto)).
+  limiteTokenTransacao    Decimal?                   @db.Decimal(10, 2)
+  limiteTokenDiario       Decimal?                   @db.Decimal(10, 2)
+
+  // ── Sprint Token-WA Fase 2 (07/06/2026) — relacões inversas ──
+  aparelhosVinculados     AparelhoVinculado[]
+  tokenTransacoesPagador  TokenTransacao[]           @relation("TokenTransacaoPagador")
+  tokenTransacoesRecebedor TokenTransacao[]          @relation("TokenTransacaoRecebedor")
 
   @@map("cooperados")
 }
@@ -3430,4 +3462,165 @@ model ConfiguracaoTributaria {
   updatedAt                   DateTime    @updatedAt
 
   @@map("configuracoes_tributarias")
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Sprint Token-WA Fase 2 (07/06/2026) — Camada de segurança
+// Spec: ~/.claude/projects/.../memory/spec_seguranca_pagamento_token_wa_06_06.md
+// ════════════════════════════════════════════════════════════════════
+
+/// Aparelho do cooperado vinculado ao bot pra fazer transação de CooperToken.
+/// Vinculação 2-fator: OTP no WhatsApp + confirmação no portal autenticado
+/// (login web autoriza o aparelho — corrige raiz de identidade=telefone).
+/// Bloqueio em troca de SIM/aparelho = comparação de pushName/IP em cada
+/// transação; mismatch dispara revogação + alerta + re-ativação obrigatória.
+model AparelhoVinculado {
+  id                  String        @id @default(cuid())
+  cooperadoId         String
+  cooperado           Cooperado     @relation(fields: [cooperadoId], references: [id])
+  /// Defesa em profundidade — multi-tenant.
+  cooperativaId       String
+  cooperativa         Cooperativa   @relation(fields: [cooperativaId], references: [id])
+
+  /// E.164 BR (`55DDXXXXXXXXX`) — bate com Cooperado.telefone na vinculação.
+  numeroTelefone      String
+  /// Nome do WhatsApp (pra detecção de troca de aparelho — mismatch = revogação).
+  pushName            String?
+  ipAtivacao          String?
+  userAgentAtivacao   String?
+
+  /// Quando o cooperado confirmou no portal (2º fator).
+  ativadoEm           DateTime      @default(now())
+  /// Null = ativo. Setado quando revogado (troca de SIM, usuário ou admin).
+  revogadoEm          DateTime?
+  /// SIM_SWAP_DETECTED | TROCA_APARELHO | USUARIO_REVOGOU | ADMIN_REVOGOU
+  motivoRevogacao     String?
+
+  /// Última vez que esse aparelho fez uma operação (heartbeat informal).
+  usadoEm             DateTime?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  /// 1 aparelho ATIVO por par cooperado+telefone — novo registro vira ativo,
+  /// anterior revogado (`revogadoEm` setado pelo service). Sem @@unique aqui
+  /// porque vários registros revogados podem coexistir pra mesmo cooperado.
+  @@index([cooperadoId, revogadoEm])
+  @@index([cooperativaId])
+  @@index([numeroTelefone])
+  @@map("aparelhos_vinculados")
+}
+
+/// OTP genérico (Fase 2) — desacopla OTP do ConviteConvenioMembro pra reuso
+/// em ativação de aparelho + step-up de transação alta + outros sujeitos
+/// futuros (PIN reset, etc).
+model OtpDesafio {
+  id              String          @id @default(cuid())
+  /// COOPERADO_DEVICE_BIND | TOKEN_TRANSACAO_STEP_UP | PIN_RESET | ...
+  motivo          String
+  /// Tipo do sujeito: 'COOPERADO' | 'TOKEN_TRANSACAO' | 'CONVITE' | ...
+  sujeitoTipo     String
+  /// Id do sujeito (cooperadoId, tokenTransacaoId, etc).
+  sujeitoId       String
+
+  /// sha256(codigo + salt). NUNCA armazenar plain.
+  codigoHash      String
+  salt            String
+  expiresAt       DateTime
+  validadoEm      DateTime?
+
+  /// Anti-brute-force.
+  tentativas      Int             @default(0)
+  bloqueadoAte    DateTime?
+
+  /// Audit / forense.
+  criadoPorIp     String?
+  criadoPorUserAgent String?
+  validadoPorIp   String?
+
+  /// Telefone do destinatário do OTP — usado pra envio WA e match futuro.
+  telefoneDestino String
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([sujeitoTipo, sujeitoId, motivo])
+  @@index([expiresAt])
+  @@map("otp_desafios")
+}
+
+/// Transação de CooperToken — registra cada operação completa do circuito
+/// fechado cooperado-only (Fase 2/3). `jti` é uso-único anti-replay; cada
+/// QR gerado tem `jti` único e a transação que o consome marca CONFIRMADA
+/// (idempotência: 2ª chamada com mesmo jti → rejeitada).
+///
+/// Status na máquina:
+///   PENDENTE_QR    = QR gerado, ainda não escaneado (TTL 60s)
+///   PENDENTE_PIN   = QR escaneado, aguardando PIN do pagador
+///   PENDENTE_OTP   = PIN OK, mas tier exige step-up OTP
+///   CONFIRMADA     = PIN+OTP OK, saldo movimentado
+///   EXPIRADA       = TTL vencido sem confirmar
+///   CANCELADA      = cooperado cancelou no fluxo
+///   ESTORNADA      = admin estornou (anomalia/coerção/erro)
+model TokenTransacao {
+  id                      String          @id @default(cuid())
+
+  /// JTI uso-único (UUID v4 hex). Idempotência: @unique. Anti-replay.
+  jti                     String          @unique
+
+  /// Pagador (cooperado) + tenant.
+  pagadorId               String
+  pagador                 Cooperado       @relation("TokenTransacaoPagador", fields: [pagadorId], references: [id])
+  pagadorCooperativaId    String
+  pagadorCooperativa      Cooperativa     @relation("TokenTransacaoPagadorCoop", fields: [pagadorCooperativaId], references: [id])
+
+  /// Recebedor (cooperado-estabelecimento) — pode ser null antes do scan.
+  recebedorId             String?
+  recebedor               Cooperado?      @relation("TokenTransacaoRecebedor", fields: [recebedorId], references: [id])
+  recebedorCooperativaId  String?
+
+  /// Quantos CooperTokens.
+  quantidadeTokens        Decimal         @db.Decimal(10, 4)
+  /// Valor estimado em R$ no momento (referência — depreciação temporal aplicada).
+  valorReaisEstimado      Decimal         @db.Decimal(10, 2)
+
+  /// merchantId (id do estabelecimento que gerou QR — Fase 3).
+  merchantId              String?
+
+  /// Tier do valor: BAIXO (≤R$50 = só PIN) | ALTO (>R$50 = PIN+OTP).
+  /// 1º uso/destinatário novo: sempre ALTO independente do valor.
+  tier                    String
+
+  /// PRIMEIRO_USO | DESTINATARIO_NOVO | VALOR_ALTO | null (sem step-up)
+  motivoStepUp            String?
+
+  /// Status da máquina (ver doc do model).
+  status                  String          @default("PENDENTE_QR")
+
+  /// QR expira em 60s (Fase 3 spec).
+  qrExpiresAt             DateTime
+
+  pinValidadoEm           DateTime?
+  /// FK opcional pro desafio OTP (quando tier=ALTO).
+  otpDesafioId            String?         @unique
+
+  /// Qual aparelho gerou o QR (pagador) — bate com AparelhoVinculado.
+  aparelhoVinculadoId     String?
+
+  confirmadaEm            DateTime?
+  expiradaEm              DateTime?
+  canceladaEm             DateTime?
+  estornadaEm             DateTime?
+  estornoMotivo           String?
+  estornoPorUserId        String?
+
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@index([pagadorId, createdAt])
+  @@index([recebedorId, createdAt])
+  @@index([pagadorCooperativaId])
+  @@index([status])
+  @@index([qrExpiresAt])
+  @@map("token_transacoes")
 }
