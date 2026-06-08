@@ -2093,7 +2093,7 @@ Essa conta de energia e:
 
     await this.sender.enviarMensagem(
       telefone,
-      `${E.festa} Pre-cadastro realizado! A equipe CoopereBR entrara em contato em breve.\n\nVoce gostaria de indicar um amigo agora?\n1\uFE0F\u20E3 Sim, quero indicar\n2\uFE0F\u20E3 Nao, obrigado`,
+      `${E.festa} Pré-cadastro realizado! A equipe CoopereBR entrará em contato em breve.\n\nVocê gostaria de indicar um amigo agora?\n1\uFE0F\u20E3 Sim, quero indicar\n2\uFE0F\u20E3 Não, obrigado`,
     );
   }
 

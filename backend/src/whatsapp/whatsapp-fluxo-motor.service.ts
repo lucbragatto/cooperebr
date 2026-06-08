@@ -296,7 +296,7 @@ export class WhatsappFluxoMotorService {
       });
       await this.sender.enviarMensagem(
         msg.telefone,
-        'Tchau! Quando quiser, e so me chamar de novo. 👋',
+        'Tchau! Quando quiser, é só me chamar de novo. 👋',
       );
       this.logger.log(`Comando universal SAIR: conversa ${conversa.id} encerrada (tenant: ${cooperativaId ?? 'global'})`);
       return true;
@@ -1469,7 +1469,7 @@ export class WhatsappFluxoMotorService {
       // Caso "tudo em dia": modelo renderizado com bloco vazio + linha de boas
       // novas. Mantemos 1 unico modelo no banco com placeholders consistentes.
       const vars: Record<string, string> = {
-        bloco_fatura: '✅ Voce nao tem faturas em aberto no momento!',
+        bloco_fatura: '✅ Você não tem faturas em aberto no momento!',
         link_pagamento: '',
       };
       const texto = this.anexarRodape(this.renderizarTemplate(modelo.conteudo, vars));
@@ -2675,7 +2675,7 @@ export class WhatsappFluxoMotorService {
       const verbo = tipoAlteracao === 'SUSPENDER' ? 'suspender' : 'encerrar';
       await this.sender.enviarMensagem(
         conversa.telefone,
-        `⚠️ Voce tem ${abertas} fatura(s) em aberto. Quitar antes de pedir pra ${verbo} o contrato. Volte ao menu pra ver suas faturas.`,
+        `⚠️ Você tem ${abertas} fatura(s) em aberto. Quitar antes de pedir pra ${verbo} o contrato. Volte ao menu pra ver suas faturas.`,
       );
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
@@ -2895,7 +2895,7 @@ export class WhatsappFluxoMotorService {
     if (!cobranca) {
       await this.sender.enviarMensagem(
         conversa.telefone,
-        '✅ Voce nao tem nenhuma fatura em aberto no momento. Esta tudo em dia! 💚',
+        '✅ Você não tem nenhuma fatura em aberto no momento. Está tudo em dia! 💚',
       );
       return;
     }
@@ -2972,7 +2972,7 @@ export class WhatsappFluxoMotorService {
     if (cobrancas.length === 0) {
       await this.sender.enviarMensagem(
         conversa.telefone,
-        'Voce ainda nao tem nenhuma cobranca registrada. 💛',
+        'Você ainda não tem nenhuma cobrança registrada. 💛',
       );
       return;
     }
@@ -3048,7 +3048,7 @@ export class WhatsappFluxoMotorService {
     if (!cobranca) {
       await this.sender.enviarMensagem(
         conversa.telefone,
-        '✅ Nao encontramos nenhuma fatura em aberto pra confirmar. Voce esta em dia! 💚',
+        '✅ Não encontramos nenhuma fatura em aberto pra confirmar. Você está em dia! 💚',
       );
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
