@@ -3211,14 +3211,49 @@ export class WhatsappFluxoMotorService {
     );
   }
 
+  /**
+   * F2.12 (08/06/2026) — resolve tenant default quando conversa não tem
+   * cooperativaId (visitante / pré-VERIFICAR_COOPERADO).
+   *
+   * Ordem de fallback:
+   *  1. env DEFAULT_TENANT_ID (caminho oficial — explícito por deploy)
+   *  2. única cooperativa ativa (conveniência dev quando env não setada)
+   *  3. null (preserva comportamento legado)
+   *
+   * Sem fallback, modelos globais com `{{parceiro}}` rendiam "" e o bot
+   * mostrava "Sou o assistente da." (lacuna). Caminho oficial pra
+   * single-tenant: setar env. Quando 2º tenant entrar em produção real,
+   * resolver por hostname/número WA (próximo passo, fora deste fix).
+   */
+  private async resolverTenantDefault(): Promise<string | null> {
+    const envId = process.env.DEFAULT_TENANT_ID?.trim();
+    if (envId) return envId;
+
+    try {
+      const ativos = await this.prisma.cooperativa.findMany({
+        where: { ativo: true },
+        select: { id: true },
+        take: 2,
+      });
+      if (ativos.length === 1) return ativos[0].id;
+    } catch {
+      // segue null silenciosamente
+    }
+    return null;
+  }
+
   private async carregarContextoCooperativa(
     cooperativaId: string | undefined,
   ): Promise<ContextoCooperativa | null> {
-    if (!cooperativaId) return null;
+    let idEfetivo = cooperativaId;
+    if (!idEfetivo) {
+      idEfetivo = (await this.resolverTenantDefault()) ?? undefined;
+    }
+    if (!idEfetivo) return null;
 
     try {
       const coop = await this.prisma.cooperativa.findUnique({
-        where: { id: cooperativaId },
+        where: { id: idEfetivo },
         select: {
           nome: true,
           email: true,
@@ -3231,7 +3266,7 @@ export class WhatsappFluxoMotorService {
       return coop ?? null;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erro desconhecido';
-      this.logger.warn(`Falha ao carregar contexto da cooperativa ${cooperativaId}: ${message}`);
+      this.logger.warn(`Falha ao carregar contexto da cooperativa ${idEfetivo}: ${message}`);
       return null;
     }
   }

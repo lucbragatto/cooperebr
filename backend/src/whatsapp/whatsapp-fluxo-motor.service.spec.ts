@@ -42,7 +42,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
     fluxoEtapa: { findFirst: etapaFindFirst },
     modeloMensagem: { findFirst: modeloFindFirst, findUnique: jest.fn() },
     conversaWhatsapp: { update: conversaUpdate, findUnique: jest.fn() },
-    cooperativa: { findUnique: cooperativaFindUnique },
+    cooperativa: { findUnique: cooperativaFindUnique, findMany: jest.fn() },
     cooperado: {
       findUnique: cooperadoFindUnique,
       update: cooperadoUpdate,
@@ -87,6 +87,13 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // F2.12: isolar testes do env DEFAULT_TENANT_ID (setado no .env do projeto).
+    // Cada suite que precisa do fallback re-seta no proprio bloco.
+    delete process.env.DEFAULT_TENANT_ID;
+    // findMany default vazio pra fallback "única cooperativa" não disparar
+    // por acidente (suites específicas mockam o que precisam).
+    prismaMock.cooperativa.findMany.mockReset();
+    prismaMock.cooperativa.findMany.mockResolvedValue([]);
     service = new WhatsappFluxoMotorService(
       prismaMock,
       modeloMensagemMock,
@@ -160,6 +167,66 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
       // Não exigimos colapso perfeito; foco é nao deixar lacuna estranha "  ".
       expect(r).not.toMatch(/   /);
+    });
+  });
+
+  // ============================================================
+  // F2.12 (08/06/2026) — resolverTenantDefault + carregarContextoCooperativa
+  // ============================================================
+  describe('resolverTenantDefault() + carregarContextoCooperativa()', () => {
+    const ENV_ORIGINAL = process.env.DEFAULT_TENANT_ID;
+    afterEach(() => {
+      if (ENV_ORIGINAL === undefined) delete process.env.DEFAULT_TENANT_ID;
+      else process.env.DEFAULT_TENANT_ID = ENV_ORIGINAL;
+    });
+
+    it('Conversa COM cooperativaId -> usa esse, ignora env', async () => {
+      process.env.DEFAULT_TENANT_ID = 'env-tenant';
+      cooperativaFindUnique.mockResolvedValueOnce({ nome: 'Tenant Explícito' });
+      const ctx = await (service as any).carregarContextoCooperativa('explicit-id');
+      expect(ctx?.nome).toBe('Tenant Explícito');
+      expect(cooperativaFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'explicit-id' } }),
+      );
+    });
+
+    it('SEM cooperativaId + env DEFAULT_TENANT_ID setado -> usa env', async () => {
+      process.env.DEFAULT_TENANT_ID = 'env-tenant';
+      cooperativaFindUnique.mockResolvedValueOnce({ nome: 'CoopereBR via env' });
+      const ctx = await (service as any).carregarContextoCooperativa(undefined);
+      expect(ctx?.nome).toBe('CoopereBR via env');
+      expect(cooperativaFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'env-tenant' } }),
+      );
+    });
+
+    it('SEM cooperativaId + SEM env + 1 cooperativa ativa -> fallback', async () => {
+      delete process.env.DEFAULT_TENANT_ID;
+      prismaMock.cooperativa.findMany.mockResolvedValueOnce([{ id: 'unica-coop' }]);
+      cooperativaFindUnique.mockResolvedValueOnce({ nome: 'Única Ativa' });
+      const ctx = await (service as any).carregarContextoCooperativa(undefined);
+      expect(ctx?.nome).toBe('Única Ativa');
+      expect(cooperativaFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'unica-coop' } }),
+      );
+    });
+
+    it('SEM cooperativaId + SEM env + 2 cooperativas ativas -> NULL (sem chute)', async () => {
+      delete process.env.DEFAULT_TENANT_ID;
+      prismaMock.cooperativa.findMany.mockResolvedValueOnce([
+        { id: 'coop-A' },
+        { id: 'coop-B' },
+      ]);
+      const ctx = await (service as any).carregarContextoCooperativa(undefined);
+      expect(ctx).toBeNull();
+      expect(cooperativaFindUnique).not.toHaveBeenCalled();
+    });
+
+    it('SEM cooperativaId + SEM env + 0 cooperativas -> NULL', async () => {
+      delete process.env.DEFAULT_TENANT_ID;
+      prismaMock.cooperativa.findMany.mockResolvedValueOnce([]);
+      const ctx = await (service as any).carregarContextoCooperativa(undefined);
+      expect(ctx).toBeNull();
     });
   });
 
@@ -1957,7 +2024,7 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
 
       const enviado = enviarMensagem.mock.calls[0][1] as string;
-      expect(enviado).toContain('nao tem faturas em aberto');
+      expect(enviado).toContain('não tem faturas em aberto');
       // Quando nao tem cobranca, NAO busca AsaasCobranca
       expect(asaasCobrancaFindFirst).not.toHaveBeenCalled();
     });
