@@ -48,6 +48,8 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       update: cooperadoUpdate,
       updateMany: cooperadoUpdateMany,
       create: cooperadoCreate,
+      // Sprint "Qual cadastro?" Fix 2 — VERIFICAR_COOPERADO + ESCOLHER_*
+      findMany: jest.fn(),
     },
     indicacao: { create: indicacaoCreate },
     contrato: {
@@ -5231,6 +5233,164 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
       // 1 (default) + 1 = 2
       expect(getExtratoMock).toHaveBeenCalledWith(COOPERADO_ID, 2, 10);
+    });
+  });
+
+  // ============================================================
+  // Sprint "Qual cadastro?" Fix 2 (08/06/2026)
+  // VERIFICAR_COOPERADO + ESCOLHER_CADASTRO_COOPERADO + TROCAR_CADASTRO
+  // ============================================================
+  describe('VERIFICAR_COOPERADO — 1 cadastro vs >1 cadastros', () => {
+    const TELEFONE = '5527981341348';
+
+    function mockBuscarEtapaMenuCoop() {
+      // Não força modelo — cai no fallback hardcoded (menu 8 opções).
+      etapaFindFirst.mockResolvedValue(null);
+    }
+
+    it('1 cadastro -> popula cooperadoId + transiciona MENU_COOPERADO', async () => {
+      mockBuscarEtapaMenuCoop();
+      prismaMock.cooperado.findMany.mockResolvedValueOnce([
+        { id: 'coop1', nomeCompleto: 'Luciano', cooperativaId: 'tenantA', tipoPessoa: 'PF', razaoSocial: null },
+      ]);
+
+      await (service as any).executarVerificarCooperado({
+        id: 'conv1',
+        telefone: TELEFONE,
+      });
+
+      const updateCall = conversaUpdate.mock.calls.find(
+        (c: any[]) => c[0].data?.estado === 'MENU_COOPERADO',
+      );
+      expect(updateCall).toBeTruthy();
+      expect(updateCall[0].data).toMatchObject({
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop1',
+        cooperativaId: 'tenantA',
+      });
+    });
+
+    it('>1 cadastros -> transiciona MENU_ESCOLHA_CADASTRO + persiste candidatos', async () => {
+      prismaMock.cooperado.findMany.mockResolvedValueOnce([
+        { id: 'coop1', nomeCompleto: 'Luciano', cooperativaId: 'tenantA', tipoPessoa: 'PF', razaoSocial: null },
+        { id: 'coop2', nomeCompleto: 'SISGD', cooperativaId: 'tenantA', tipoPessoa: 'PJ', razaoSocial: 'SISGDSOLAR' },
+      ]);
+
+      await (service as any).executarVerificarCooperado({
+        id: 'conv1',
+        telefone: TELEFONE,
+      });
+
+      const updateCall = conversaUpdate.mock.calls.find(
+        (c: any[]) => c[0].data?.estado === 'MENU_ESCOLHA_CADASTRO',
+      );
+      expect(updateCall).toBeTruthy();
+      const candidatos = updateCall[0].data.dadosTemp.candidatosCadastro;
+      expect(candidatos).toHaveLength(2);
+      expect(candidatos[0].id).toBe('coop1');
+      expect(candidatos[1].id).toBe('coop2');
+
+      const msg = enviarMensagem.mock.calls[0][1] as string;
+      expect(msg).toContain('mais de um cadastro');
+      expect(msg).toContain('Luciano (PF)');
+      expect(msg).toContain('SISGDSOLAR (PJ)');
+    });
+
+    it('0 cadastros -> mensagem de não encontrado, sem update', async () => {
+      prismaMock.cooperado.findMany.mockResolvedValueOnce([]);
+      await (service as any).executarVerificarCooperado({
+        id: 'conv1',
+        telefone: TELEFONE,
+      });
+      const updateMenu = conversaUpdate.mock.calls.find(
+        (c: any[]) =>
+          c[0].data?.estado === 'MENU_COOPERADO' ||
+          c[0].data?.estado === 'MENU_ESCOLHA_CADASTRO',
+      );
+      expect(updateMenu).toBeUndefined();
+      expect((enviarMensagem.mock.calls[0][1] as string)).toContain('Não encontrei');
+    });
+  });
+
+  describe('ESCOLHER_CADASTRO_COOPERADO — anti-IDOR', () => {
+    const TELEFONE = '5527981341348';
+    const CANDIDATOS = [
+      { id: 'coop1', nomeCompleto: 'Luciano', cooperativaId: 'tenantA', tipoPessoa: 'PF', razaoSocial: null },
+      { id: 'coop2', nomeCompleto: 'SISGD', cooperativaId: 'tenantA', tipoPessoa: 'PJ', razaoSocial: 'SISGDSOLAR' },
+    ];
+
+    it('Índice válido -> popula cooperadoId do candidato salvo (não confia em payload)', async () => {
+      prismaMock.conversaWhatsapp.findUnique.mockResolvedValueOnce({
+        dadosTemp: { candidatosCadastro: CANDIDATOS },
+      });
+      etapaFindFirst.mockResolvedValue(null);
+
+      await (service as any).executarEscolherCadastroCooperado(
+        { id: 'conv1', telefone: TELEFONE, dadosTemp: { candidatosCadastro: CANDIDATOS } },
+        '2',
+      );
+
+      const updateCall = conversaUpdate.mock.calls.find(
+        (c: any[]) => c[0].data?.estado === 'MENU_COOPERADO',
+      );
+      expect(updateCall[0].data).toMatchObject({
+        estado: 'MENU_COOPERADO',
+        cooperadoId: 'coop2', // SISGD (índice 2 = posição 1)
+      });
+    });
+
+    it('Sem candidatos em dadosTemp -> mensagem de sessão expirada, não cria cooperadoId', async () => {
+      prismaMock.conversaWhatsapp.findUnique.mockResolvedValueOnce({ dadosTemp: {} });
+      await (service as any).executarEscolherCadastroCooperado(
+        { id: 'conv1', telefone: TELEFONE, dadosTemp: {} },
+        '1',
+      );
+      const updateMenu = conversaUpdate.mock.calls.find(
+        (c: any[]) => c[0].data?.estado === 'MENU_COOPERADO',
+      );
+      expect(updateMenu).toBeUndefined();
+      expect((enviarMensagem.mock.calls[0][1] as string)).toContain('expirou');
+    });
+
+    it('Índice inválido (fora do range) -> reenvia opções, não cria cooperadoId', async () => {
+      prismaMock.conversaWhatsapp.findUnique.mockResolvedValueOnce({
+        dadosTemp: { candidatosCadastro: CANDIDATOS },
+      });
+      await (service as any).executarEscolherCadastroCooperado(
+        { id: 'conv1', telefone: TELEFONE, dadosTemp: { candidatosCadastro: CANDIDATOS } },
+        '99',
+      );
+      const updateMenu = conversaUpdate.mock.calls.find(
+        (c: any[]) => c[0].data?.estado === 'MENU_COOPERADO',
+      );
+      expect(updateMenu).toBeUndefined();
+      expect((enviarMensagem.mock.calls[0][1] as string)).toContain('Opção inválida');
+    });
+
+    it('Índice não-numérico -> reenvia opções', async () => {
+      prismaMock.conversaWhatsapp.findUnique.mockResolvedValueOnce({
+        dadosTemp: { candidatosCadastro: CANDIDATOS },
+      });
+      await (service as any).executarEscolherCadastroCooperado(
+        { id: 'conv1', telefone: TELEFONE, dadosTemp: { candidatosCadastro: CANDIDATOS } },
+        'abc',
+      );
+      expect((enviarMensagem.mock.calls[0][1] as string)).toContain('Opção inválida');
+    });
+  });
+
+  describe('detectarComandoUniversal — TROCAR CADASTRO', () => {
+    it('Reconhece "TROCAR CADASTRO"', () => {
+      expect(service.detectarComandoUniversal('TROCAR CADASTRO')).toBe('TROCAR_CADASTRO');
+    });
+    it('Reconhece "trocar de cadastro" (case-insensitive)', () => {
+      expect(service.detectarComandoUniversal('trocar de cadastro')).toBe('TROCAR_CADASTRO');
+    });
+    it('Reconhece "outro cadastro"', () => {
+      expect(service.detectarComandoUniversal('OUTRO CADASTRO')).toBe('TROCAR_CADASTRO');
+    });
+    it('Não confunde com "cadastro" sozinho (palavra parcial)', () => {
+      expect(service.detectarComandoUniversal('cadastro')).toBeNull();
     });
   });
 });

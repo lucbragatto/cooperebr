@@ -12,6 +12,12 @@ import { CooperTokenService } from '../cooper-token/cooper-token.service';
 // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite" no submenu CooperTokens.
 import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
 import { LimiteTokenService } from '../cooper-token/limite-token.service';
+// Sprint "Qual cadastro?" Fix 1 (08/06/2026)
+import {
+  acharCooperadosPorTelefone,
+  formatarLabelCadastro,
+  type CandidatoCooperado,
+} from '../cooperados/cooperado-matcher.helper';
 
 interface MensagemRecebida {
   telefone: string;
@@ -197,7 +203,7 @@ export class WhatsappFluxoMotorService {
    */
   detectarComandoUniversal(
     corpo: string,
-  ): 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | null {
+  ): 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | 'TROCAR_CADASTRO' | null {
     if (!corpo) return null;
     const normalizado = corpo.trim().toUpperCase();
 
@@ -215,11 +221,20 @@ export class WhatsappFluxoMotorService {
       'OUTRA HORA',
       'MAIS TARDE',
     ];
+    // Sprint "Qual cadastro?" Fix 2 (08/06/2026) — comando pra reabrir
+    // a escolha quando o telefone tem >1 cadastro vinculado.
+    const SINONIMOS_TROCAR_CADASTRO = [
+      'TROCAR CADASTRO',
+      'TROCAR DE CADASTRO',
+      'OUTRO CADASTRO',
+      'MUDAR CADASTRO',
+    ];
 
     if (SINONIMOS_INICIO.includes(normalizado)) return 'INICIO';
     if (SINONIMOS_SAIR.includes(normalizado)) return 'SAIR';
     if (SINONIMOS_MENU.includes(normalizado)) return 'MENU';
     if (SINONIMOS_CHAMAR_DEPOIS.includes(normalizado)) return 'CHAMAR_DEPOIS';
+    if (SINONIMOS_TROCAR_CADASTRO.includes(normalizado)) return 'TROCAR_CADASTRO';
     return null;
   }
 
@@ -230,7 +245,7 @@ export class WhatsappFluxoMotorService {
    * - SAIR   -> null (sinal especial de encerramento — caminho diferente)
    */
   resolverEstadoComandoUniversal(
-    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | 'TROCAR_CADASTRO',
     conversa: { cooperadoId?: string | null },
   ): string | null {
     if (comando === 'INICIO') return 'INICIAL';
@@ -239,6 +254,9 @@ export class WhatsappFluxoMotorService {
     // (similar ao SAIR — estado quase-terminal AGENDADO_RETORNO). Retorna null
     // pra sinalizar "nao siga o fluxo padrao de transicao".
     if (comando === 'CHAMAR_DEPOIS') return null;
+    // Sprint "Qual cadastro?" Fix 2 (08/06): TROCAR_CADASTRO tem caminho proprio
+    // (re-executa VERIFICAR_COOPERADO). Retorna null.
+    if (comando === 'TROCAR_CADASTRO') return null;
     // MENU: contexto cooperado vs aquisicao
     return conversa.cooperadoId ? 'MENU_COOPERADO' : 'INICIAL';
   }
@@ -276,7 +294,7 @@ export class WhatsappFluxoMotorService {
    * menu) e disparam acaoAutomatica se houver.
    */
   private async executarComandoUniversalReal(
-    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | 'TROCAR_CADASTRO',
     msg: MensagemRecebida,
     conversa: {
       id: string;
@@ -288,6 +306,17 @@ export class WhatsappFluxoMotorService {
     },
   ): Promise<boolean> {
     const cooperativaId = conversa.cooperativaId ?? undefined;
+
+    // Sprint "Qual cadastro?" Fix 2 (08/06/2026) — TROCAR_CADASTRO re-dispara
+    // VERIFICAR_COOPERADO pro telefone atual. Se houver >1 cadastro, oferece
+    // escolha (mesmo caminho do VERIFICAR_COOPERADO original).
+    if (comando === 'TROCAR_CADASTRO') {
+      await this.executarVerificarCooperado(conversa);
+      this.logger.log(
+        `Comando universal TROCAR_CADASTRO: re-disparado VERIFICAR_COOPERADO (conversa ${conversa.id})`,
+      );
+      return true;
+    }
 
     if (comando === 'SAIR') {
       await this.prisma.conversaWhatsapp.update({
@@ -563,6 +592,11 @@ export class WhatsappFluxoMotorService {
         // cooperado nunca chegava em MENU_COOPERADO.
         case 'VERIFICAR_COOPERADO':
           await this.executarVerificarCooperado(conversa);
+          break;
+        // Sprint "Qual cadastro?" Fix 2 (08/06/2026) — escolha de cadastro
+        // quando mais de 1 cooperado bate com o telefone (Luciano PF + SISGD PJ).
+        case 'ESCOLHER_CADASTRO_COOPERADO':
+          await this.executarEscolherCadastroCooperado(conversa, corpo);
           break;
         case 'CONSULTAR_LIMITE_TOKENS':
           await this.executarConsultarLimiteTokens(conversa);
@@ -1072,23 +1106,9 @@ export class WhatsappFluxoMotorService {
     cooperadoId?: string | null;
     cooperativaId?: string | null;
   }): Promise<void> {
-    const telNorm = conversa.telefone.replace(/\D/g, '');
-    const telSemPais = telNorm.replace(/^55/, '');
-    const variantes = Array.from(new Set([telNorm, telSemPais, `55${telSemPais}`]));
+    const cooperados = await acharCooperadosPorTelefone(this.prisma, conversa.telefone);
 
-    const STATUS_ATIVOS = ['ATIVO', 'AGUARDANDO_CONCESSIONARIA', 'PENDENTE_DOCUMENTOS', 'ATIVO_RECEBENDO_CREDITOS'];
-
-    const cooperados = await this.prisma.cooperado.findMany({
-      where: {
-        telefone: { in: variantes },
-        status: { in: STATUS_ATIVOS as any[] },
-      },
-      select: { id: true, nomeCompleto: true, cooperativaId: true },
-    });
-
-    const cooperado = cooperados[0];
-
-    if (!cooperado) {
+    if (cooperados.length === 0) {
       await this.sender.enviarMensagem(
         conversa.telefone,
         '⚠️ Não encontrei seu cadastro ATIVO.\n\n' +
@@ -1096,11 +1116,117 @@ export class WhatsappFluxoMotorService {
         'Pra se cadastrar agora, digite *2* (Quero ser cooperado).',
       );
       this.logger.log(
-        `VERIFICAR_COOPERADO: telefone ${conversa.telefone} NAO encontrado (variantes=[${variantes.join(',')}])`,
+        `VERIFICAR_COOPERADO: telefone ${conversa.telefone} NAO encontrado`,
       );
       return;
     }
 
+    // 1 cadastro: comportamento legado preservado (return early).
+    if (cooperados.length === 1) {
+      await this.entrarMenuCooperado(conversa, cooperados[0]);
+      return;
+    }
+
+    // >1 cadastros: oferecer escolha. Persiste candidatos em dadosTemp
+    // (anti-IDOR: ESCOLHER_CADASTRO_COOPERADO valida que id escolhido
+    // esta nessa lista).
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'MENU_ESCOLHA_CADASTRO',
+        dadosTemp: { candidatosCadastro: cooperados } as any,
+        contadorFallback: 0,
+      },
+    });
+
+    const opcoes = cooperados
+      .map((c, i) => `${i + 1}️⃣ ${formatarLabelCadastro(c)}`)
+      .join('\n');
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '🔀 *Encontrei mais de um cadastro pra este número.*\n\n' +
+      'Qual você quer usar agora?\n\n' +
+      opcoes +
+      '\n\n_Você pode trocar a qualquer momento digitando *TROCAR CADASTRO*._',
+    );
+    this.logger.log(
+      `VERIFICAR_COOPERADO: ${cooperados.length} cadastros pra ${conversa.telefone} -> MENU_ESCOLHA_CADASTRO`,
+    );
+  }
+
+  /**
+   * Sprint "Qual cadastro?" Fix 2 (08/06/2026) — ação ESCOLHER_CADASTRO_COOPERADO.
+   *
+   * Anti-IDOR: valida que o índice digitado mapeia pra um candidato salvo
+   * em dadosTemp.candidatosCadastro (NUNCA confia em id arbitrário do user).
+   * Sem dadosTemp ou índice inválido → mensagem de erro + reenvia opções.
+   */
+  private async executarEscolherCadastroCooperado(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+      dadosTemp?: any;
+    },
+    corpo: string,
+  ): Promise<void> {
+    const dadosAtuais = await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    });
+    const candidatos = ((dadosAtuais?.dadosTemp ?? {}) as {
+      candidatosCadastro?: CandidatoCooperado[];
+    }).candidatosCadastro;
+
+    if (!candidatos || candidatos.length === 0) {
+      // Sem contexto pra escolher — volta pro VERIFICAR_COOPERADO via INICIAL.
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Sessão de escolha expirou. Digite *INÍCIO* pra recomeçar.',
+      );
+      this.logger.warn(
+        `ESCOLHER_CADASTRO_COOPERADO: sem candidatos em dadosTemp (conversa ${conversa.id})`,
+      );
+      return;
+    }
+
+    const indice = parseInt(String(corpo ?? '').trim(), 10) - 1;
+    if (!Number.isInteger(indice) || indice < 0 || indice >= candidatos.length) {
+      const opcoes = candidatos
+        .map((c, i) => `${i + 1}️⃣ ${formatarLabelCadastro(c)}`)
+        .join('\n');
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        `❌ Opção inválida. Responda com o número:\n\n${opcoes}`,
+      );
+      return;
+    }
+
+    // ANTI-IDOR: pega cooperado direto do candidato salvo (não aceita id
+    // do payload do user). Garantia: só transiciona pra cadastros que o
+    // VERIFICAR_COOPERADO previamente comprovou pertencer ao telefone.
+    const escolhido = candidatos[indice];
+    await this.entrarMenuCooperado(conversa, escolhido, { limparCandidatos: true });
+    this.logger.log(
+      `ESCOLHER_CADASTRO_COOPERADO: cooperadoId=${escolhido.id} (indice=${indice}, telefone=${conversa.telefone})`,
+    );
+  }
+
+  /**
+   * Render + transição shared entre VERIFICAR_COOPERADO (1 cadastro) e
+   * ESCOLHER_CADASTRO_COOPERADO (>1 cadastros).
+   */
+  private async entrarMenuCooperado(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    cooperado: CandidatoCooperado,
+    opcoes?: { limparCandidatos?: boolean },
+  ): Promise<void> {
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
@@ -1108,6 +1234,9 @@ export class WhatsappFluxoMotorService {
         cooperadoId: cooperado.id,
         cooperativaId: cooperado.cooperativaId,
         contadorFallback: 0,
+        ...(opcoes?.limparCandidatos
+          ? { dadosTemp: { cadastroEscolhidoId: cooperado.id } as any }
+          : {}),
       },
     });
 
@@ -1150,10 +1279,6 @@ export class WhatsappFluxoMotorService {
         '8️⃣ 💎 CooperTokens',
       );
     }
-
-    this.logger.log(
-      `VERIFICAR_COOPERADO: encontrado cooperadoId=${cooperado.id} tenant=${cooperado.cooperativaId} telefone=${conversa.telefone} -> MENU_COOPERADO`,
-    );
   }
 
   /**
@@ -3493,7 +3618,7 @@ export class WhatsappFluxoMotorService {
    * (estado orfao), avisoTransicao explica.
    */
   private async executarComandoUniversalSimulado(
-    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS',
+    comando: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | 'TROCAR_CADASTRO',
     etapaAtual: FluxoEtapaComModelo,
     cooperativaId: string | undefined,
     conversaFake: { dadosTemp?: any; cooperadoId?: string | null },
@@ -3783,7 +3908,7 @@ export interface SimulacaoOutput {
    * bolha sistema explicativa (ex: "Voce digitou SAIR — conversa encerrada").
    * null = transicao normal por gatilho ou nao-transicao.
    */
-  comandoUniversalAplicado: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | null;
+  comandoUniversalAplicado: 'INICIO' | 'SAIR' | 'MENU' | 'CHAMAR_DEPOIS' | 'TROCAR_CADASTRO' | null;
 }
 
 // Fase C - Preview de modelo de mensagem (sem fluxo)
