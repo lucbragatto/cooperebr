@@ -204,8 +204,10 @@ export class LimiteTokenService {
       }
     }
 
-    await this.prisma.cooperado.update({
-      where: { id: params.cooperadoId },
+    // F2.9 hardening (08/06/2026): updateMany com cooperativaId (anti-IDOR
+    // defesa em profundidade — findFirst guard acima ja barrou cross-tenant).
+    await this.prisma.cooperado.updateMany({
+      where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
       data: {
         limiteTokenTransacao: params.limiteTransacao,
         limiteTokenDiario: params.limiteDiario,
@@ -258,15 +260,19 @@ export class LimiteTokenService {
   }
 
   /**
-   * Soma valor (R$) das TokenTransacao CONFIRMADAS hoje (00:00:00 a now)
-   * onde o cooperado é pagador. Multi-tenant safe.
+   * Soma valor (R$) das TokenTransacao CONFIRMADAS hoje (00:00 local
+   * America/Sao_Paulo a now) onde o cooperado é pagador. Multi-tenant safe.
+   *
+   * F2.9 hardening (08/06/2026): cutoff de "hoje" usa fuso America/Sao_Paulo
+   * em vez de fuso do servidor. Servidor em UTC fazia o ciclo virar 21h
+   * BR (3h adiantado), permitindo gastar 2x o limite diário entre 21h-00h
+   * BR. Cálculo correto: midnight BR convertido pra UTC.
    */
   private async somarGastoHoje(params: {
     cooperadoId: string;
     cooperativaId: string;
   }): Promise<number> {
-    const inicioHoje = new Date();
-    inicioHoje.setHours(0, 0, 0, 0);
+    const inicioHoje = inicioDoDiaEmSaoPaulo(new Date());
 
     const agg = await this.prisma.tokenTransacao.aggregate({
       where: {
@@ -280,4 +286,44 @@ export class LimiteTokenService {
 
     return toNumber(agg._sum.valorReaisEstimado) ?? 0;
   }
+}
+
+/**
+ * Retorna 00:00:00 do dia local em São Paulo, expresso como Date UTC.
+ * Ex: agora=2026-06-08T03:00:00Z (00:00 BRT) → 2026-06-08T03:00:00Z.
+ *     agora=2026-06-08T15:00:00Z (12:00 BRT) → 2026-06-08T03:00:00Z.
+ *
+ * Implementação via Intl.DateTimeFormat (timezone-aware) — robusto a
+ * mudanças de horário de verão.
+ */
+export function inicioDoDiaEmSaoPaulo(referencia: Date): Date {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(referencia).reduce<Record<string, string>>(
+    (acc, p) => {
+      if (p.type !== 'literal') acc[p.type] = p.value;
+      return acc;
+    },
+    {},
+  );
+  const ano = Number(parts.year);
+  const mes = Number(parts.month);
+  const dia = Number(parts.day);
+  const horaBR = Number(parts.hour === '24' ? '00' : parts.hour);
+  const minBR = Number(parts.minute);
+  const segBR = Number(parts.second);
+  // Diferença em ms entre "agora no fuso BR" e UTC = referencia.getTime() - (UTC fictícia com componentes BR)
+  const utcDoMesmoInstanteSeFosseBR = Date.UTC(ano, mes - 1, dia, horaBR, minBR, segBR);
+  const offsetMs = utcDoMesmoInstanteSeFosseBR - referencia.getTime();
+  // Início do dia BR convertido pra Date UTC
+  const inicioDiaUtc = Date.UTC(ano, mes - 1, dia, 0, 0, 0) - offsetMs;
+  return new Date(inicioDiaUtc);
 }

@@ -112,6 +112,7 @@ export class AparelhoVinculadoService {
       motivo: 'COOPERADO_DEVICE_BIND',
       sujeitoTipo: 'COOPERADO',
       sujeitoId: cooperadoId,
+      cooperativaId, // F2.9 hardening
       telefoneDestino: numeroTelefone,
       criadoPorIp: params.ip ?? null,
       criadoPorUserAgent: params.userAgent ?? null,
@@ -147,6 +148,7 @@ export class AparelhoVinculadoService {
     await this.otpDesafios.validarOuLancar({
       desafioId: params.desafioId,
       codigo: params.codigo,
+      cooperativaId: params.cooperativaId, // F2.9 hardening
       validadoPorIp: params.ip ?? null,
     });
 
@@ -237,22 +239,25 @@ export class AparelhoVinculadoService {
       return null;
     }
 
-    return this.prisma.aparelhoVinculado.update({
-      where: { id: aparelho.id },
+    // F2.9 hardening: updateMany com cooperativaId (anti-IDOR defesa em prof).
+    await this.prisma.aparelhoVinculado.updateMany({
+      where: { id: aparelho.id, cooperativaId: params.cooperativaId },
       data: {
         revogadoEm: new Date(),
         motivoRevogacao: params.motivo,
       },
     });
+    return this.prisma.aparelhoVinculado.findUnique({ where: { id: aparelho.id } });
   }
 
   /**
    * Heartbeat informal — registra última operação feita pelo aparelho.
-   * Não exige cooperativaId no path crítico (chamado em alta frequência).
+   * F2.9 hardening (08/06/2026): cooperativaId vira OBRIGATÓRIO (era só
+   * aparelhoId). Path "alta frequência" não justifica IDOR.
    */
-  async registrarUso(aparelhoId: string): Promise<void> {
-    await this.prisma.aparelhoVinculado.update({
-      where: { id: aparelhoId },
+  async registrarUso(aparelhoId: string, cooperativaId: string): Promise<void> {
+    await this.prisma.aparelhoVinculado.updateMany({
+      where: { id: aparelhoId, cooperativaId },
       data: { usadoEm: new Date() },
     });
   }

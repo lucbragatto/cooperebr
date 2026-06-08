@@ -47,6 +47,9 @@ export interface CriarDesafioParams {
   sujeitoTipo: OtpSujeitoTipo;
   sujeitoId: string;
   telefoneDestino: string;
+  /** F2.9 hardening (08/06/2026): cooperativaId pra defesa em profundidade.
+   *  Opcional pra compat com chamadores antigos; novos devem sempre passar. */
+  cooperativaId?: string;
   criadoPorIp?: string | null;
   criadoPorUserAgent?: string | null;
 }
@@ -91,6 +94,7 @@ export class OtpDesafioService {
         motivo: params.motivo,
         sujeitoTipo: params.sujeitoTipo,
         sujeitoId: params.sujeitoId,
+        cooperativaId: params.cooperativaId ?? null,
         codigoHash,
         salt,
         expiresAt,
@@ -116,14 +120,17 @@ export class OtpDesafioService {
   async validar(params: {
     desafioId: string;
     codigo: string;
+    /** F2.9: se passado, valida que desafio pertence à cooperativa esperada. */
+    cooperativaId?: string;
     validadoPorIp?: string | null;
   }): Promise<ValidarDesafioResult> {
-    const { desafioId, codigo, validadoPorIp } = params;
+    const { desafioId, codigo, cooperativaId, validadoPorIp } = params;
 
     const desafio = await this.prisma.otpDesafio.findUnique({
       where: { id: desafioId },
       select: {
         id: true,
+        cooperativaId: true,
         codigoHash: true,
         salt: true,
         expiresAt: true,
@@ -134,6 +141,13 @@ export class OtpDesafioService {
     });
 
     if (!desafio) {
+      return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
+    }
+
+    // F2.9 hardening: se chamador passou cooperativaId esperado, exige match
+    // (anti cross-tenant). Compatível com desafios pre-F2.9 (cooperativaId
+    // null no banco): só rejeita se BOTH passado E mismatch real.
+    if (cooperativaId && desafio.cooperativaId && desafio.cooperativaId !== cooperativaId) {
       return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
     }
 
@@ -193,6 +207,7 @@ export class OtpDesafioService {
   async validarOuLancar(params: {
     desafioId: string;
     codigo: string;
+    cooperativaId?: string;
     validadoPorIp?: string | null;
   }): Promise<void> {
     const r = await this.validar(params);

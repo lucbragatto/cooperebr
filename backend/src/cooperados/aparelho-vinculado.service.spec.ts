@@ -99,6 +99,16 @@ function criarPrismaMock() {
         row.updatedAt = new Date();
         return project(row, select);
       }),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const row = aparelhos.get(where.id);
+        if (!row) return { count: 0 };
+        if (where.cooperativaId && row.cooperativaId !== where.cooperativaId) {
+          return { count: 0 };
+        }
+        for (const k of Object.keys(data)) row[k as keyof AparelhoRow] = data[k];
+        row.updatedAt = new Date();
+        return { count: 1 };
+      }),
     },
   };
 
@@ -117,6 +127,8 @@ function criarPrismaMock() {
       findFirst: tx.aparelhoVinculado.findFirst,
       create: tx.aparelhoVinculado.create,
       update: tx.aparelhoVinculado.update,
+      updateMany: tx.aparelhoVinculado.updateMany,
+      findUnique: jest.fn(async ({ where }: any) => aparelhos.get(where.id) ?? null),
       findMany: jest.fn(async ({ where, orderBy }: any) => {
         const rows = [];
         for (const row of aparelhos.values()) {
@@ -193,6 +205,7 @@ describe('AparelhoVinculadoService', () => {
         motivo: 'COOPERADO_DEVICE_BIND',
         sujeitoTipo: 'COOPERADO',
         sujeitoId: 'coop1',
+        cooperativaId: 'tenantA',
         telefoneDestino: '5527981341348',
         criadoPorIp: '1.2.3.4',
         criadoPorUserAgent: null,

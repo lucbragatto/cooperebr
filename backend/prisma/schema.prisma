@@ -3524,6 +3524,11 @@ model OtpDesafio {
   /// Id do sujeito (cooperadoId, tokenTransacaoId, etc).
   sujeitoId       String
 
+  /// F2.9 hardening (08/06/2026): cooperativaId do desafio — defesa em
+  /// profundidade. Nullable porque desafios pre-F2.9 não têm. Novos sempre
+  /// populam. Em validações, service compara com cooperativaId esperado.
+  cooperativaId   String?
+
   /// sha256(codigo + salt). NUNCA armazenar plain.
   codigoHash      String
   salt            String
@@ -3547,6 +3552,7 @@ model OtpDesafio {
 
   @@index([sujeitoTipo, sujeitoId, motivo])
   @@index([expiresAt])
+  @@index([cooperativaId])
   @@map("otp_desafios")
 }
 

@@ -4,6 +4,8 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
+**Última atualização:** 2026-06-08 — **Sprint Token-WA Fase 2 (F2.1→F2.9 hardening)** (10 commits `481cebc..pendente`). **1 NOVO P2 catalogado:** `D-novo-WA-PHONE-NORMALIZE` — telefones formatados ("(27)98134-1348") não casam com o matcher do bot que espera dígitos puros/E.164. Achado durante diagnóstico bot ao vivo 07/06: Luciano não recebia menu porque `cooperados.telefone` estava com máscara. Outros cooperados podem estar **inalcançáveis silenciosamente**. Fix paliativo dev: `UPDATE` direto. Fix completo: (a) melhorar matcher pra normalizar (strip não-dígitos + E.164 na comparação) e/ou (b) migração de normalização de toda base — **MAS com auditoria prévia obrigatória** (regra schema). Conexão: bug paralelo `BACKEND_WEBHOOK_URL` sem `?secret=` no whatsapp-service/.env (corrigido inline 08/06; webhook silenciosamente rejeitado por 401 não-logado). Catalogar audit ampliada pré-correção em massa.
+
 **Última atualização:** 2026-06-06 — **M24 Sprint Onboarding Membro Bloco 0 + Bloco 1** (8 commits `a9794a8..8e47737`). **1 RESOLVIDO:** `D-novo-LISTA-ESPERA-TENANT` P1 (motor-proposta.service.ts:875 fix inline — tx.listaEspera.create + count() filtrados por cooperativaId; backfill desnecessário, fila atual sintética · commit `8e47737`). **3 ABERTOS novos (P3, todos não-urgentes):** `D-novo-FATURA-SEGREGADA-ITENS` (discriminação visual do componente CLUBE na fatura PDF — quando Polimento UX rodar) · `D-novo-CLUBE-LANCAMENTO-FISCAL` (natureza fiscal própria do CLUBE quando módulo Contabilidade Tributária ativar — hoje entra como linha única em `Cobranca.valorMensalidadeClube`) · `D-novo-CADWEB-FATURA-PROCESSADA` (criar FaturaProcessada completa em vez de stash Json `consumoStashOcr` quando pipeline OCR estabilizar). **ACHADO operacional P2:** 218 membros parciais no tenant CoopereBR pelo DRY-RUN — exige SEGMENTAÇÃO antes de `--apply` em massa (oco × SEM_UC legítimo × lista de espera × teste sintético). Catalogado pra próxima sessão.
 
 > **Histórico:** 2026-06-05 (noite) — **D-novo-OCR-UC-CANON RESOLVIDO** (guard aceita formato EDP-ES atual 15 díg + normaliza pro canônico interno; INVARIANTE SCEE preservado — `numeroUC` antigo NUNCA derivado). 6 specs novos no guard + 34/34 verdes. Substitui parcialmente a tentativa de derivação do commit `20cacf6` (revert do mapper que tentava preencher campo principal com 15 díg crus; agora envia direto e guard normaliza). **D-novo-CADASTRO-NUMERO-EDP-UX P3** catalogado (help text claro distinguindo 3 números independentes). **D-novo-REGISTER-ADMIN-TENANT P2** catalogado (buraco arquitetural em `/auth/register-admin`).
@@ -344,6 +346,41 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 ---
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
+
+### D-novo-WA-PHONE-NORMALIZE — telefones formatados não casam com matcher do bot (cooperados podem ficar inalcançáveis silenciosamente)
+
+**Severidade:** P2 — bot WA não responde a cooperado real com telefone mascarado (sem erro visível, falha silenciosa de UX)
+**Detectado em:** 2026-06-07/08 — diagnóstico bot ao vivo após Sprint Token-WA Fase 2
+**Onde:** múltiplos componentes:
+- Banco: `Cooperado.telefone` aceita formato livre (sem normalização no cadastro). Ex confirmado: `"(27)98134-1348"` no cooperado Luciano (cmn0dsc4w005guols56peyc5h).
+- WhatsApp service (`whatsapp-service/index.mjs`): envia telefone E.164 BR (`5527981341348`) pro backend.
+- Backend bot (`WhatsappBotService.processarMensagem` + reconhecimento de cooperado): faz lookup por `Cooperado.telefone` literal — sem `strip(/\D/g)` ou normalização E.164. Match exato falha → cooperado não reconhecido → bot fica em estado INICIAL e não abre MENU_COOPERADO.
+
+**Estado atual confirmado (read-only):**
+- 4 matches pra `telefone='27981341348'` (sem 55, sem máscara) — incluindo CAROLINA e AMAGES ATIVOS.
+- 1 match pra `telefone='5527981341348'` (E.164 BR) — "teste" PENDENTE.
+- 0 matches pra variantes mascaradas (`(27)98134-1348` etc).
+- Cooperado Luciano estava em `"(27)98134-1348"` — fix paliativo aplicado em dev 08/06 (`UPDATE` direto pra `5527981341348` no script `scripts/fix-telefone-luciano.ts`).
+
+**Impacto:**
+- Cooperados onboardeados com telefone formatado pelo wizard antigo (sem máscara strip) ficam inalcançáveis pelo bot.
+- Não há erro logado — backend recebe webhook OK (pós-fix do `?secret=`) mas reconhecimento de cooperado retorna null silenciosamente.
+- Multi-tenant: mesmo número compartilhado entre múltiplos cooperados (lucbragatto+aliases) pode causar lookup ambíguo se normalização não considerar `cooperativaId`.
+
+**Conexão com bug paralelo resolvido:**
+- `whatsapp-service/.env` tinha `BACKEND_WEBHOOK_URL` SEM `?secret=cooperebr_wh_2026` → backend rejeitava webhook com `401 UnauthorizedException` SILENCIOSAMENTE (controller só loga "Mensagem recebida" APÓS validar secret; WA service não loga erro porque fetch resolve com status 401). Fix aplicado inline 08/06: adicionado `?secret=...` na env do WA service.
+
+**Fix proposto (2 partes):**
+1. **Matcher tolerante** (P2, sem migração de dados): normalizar telefone em `WhatsappBotService` no momento do lookup — `Cooperado.findFirst({ where: { telefone: { in: [tel, tel.slice(2), `55${tel}`, stripFormat(tel)] }, cooperativaId } })`. Específico do bot, sem risco de afetar telas que renderizam telefone formatado.
+2. **Migração de normalização** (P2, com auditoria prévia obrigatória): SCRIPT `scripts/audit-telefones-mascarados.ts` em dry-run primeiro — listar TODOS os Cooperado.telefone com caracteres não-numéricos, mostrar distribuição (qtos com `()`, qtos com `-`, qtos com `+55`, qtos vazios). Reportar pro Luciano + autorização explícita ANTES de aplicar `UPDATE` em massa (regra schema/dados). Pós-normalização: trigger ou hook no cadastro pra enforce E.164 BR daqui em diante.
+
+**Risco da auditoria:** alguns cooperados podem ter telefone com extensão/observação textual (`27999999999 ramal 5`) — strip cego perderia info. Auditoria precisa segmentar:
+- 100% dígitos (10-13 chars) → safe pra E.164 BR.
+- Com máscara comum `(DD)NNNNN-NNNN` → strip safe.
+- Com texto livre → review manual.
+- Vazios/null → ignorar.
+
+**Não bloqueia:** cooperados novos cadastrados via wizard recente que já aplicava strip. Bloqueia: cooperados legados + cooperados onboardeados via importação CSV/admin sem normalização.
 
 ### D-novo-TOKEN-TAXA-CONFIGURAVEL — taxa de emissão/QR hardcoded 2%/1% + sem entrada/saída/híbrido + sem teto + sem isenção Quota de Rateio + arrecadação não-contabilizada
 

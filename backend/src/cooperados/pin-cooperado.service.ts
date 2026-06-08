@@ -30,7 +30,8 @@ import { PrismaService } from '../prisma.service';
 import { hashOtp } from '../common/security/otp-helper';
 
 const MAX_TENTATIVAS = 5;
-const LOCKOUT_MINUTOS = 15;
+// F2.9 hardening (08/06/2026): lockout aumentado de 15 -> 30min.
+const LOCKOUT_MINUTOS = 30;
 const PIN_REGEX = /^\d{6}$/;
 
 export type ValidarPinResult =
@@ -75,8 +76,11 @@ export class PinCooperadoService {
     const salt = crypto.randomBytes(16).toString('hex');
     const pinHash = hashOtp(pin, salt);
 
-    await this.prisma.cooperado.update({
-      where: { id: cooperadoId },
+    // F2.9 hardening (08/06/2026): updateMany com cooperativaId no where
+    // (defesa em profundidade contra IDOR; findFirst guard acima ja barra
+    // 404 cross-tenant, mas updateMany impede mesmo se houvesse race).
+    await this.prisma.cooperado.updateMany({
+      where: { id: cooperadoId, cooperativaId },
       data: {
         pinHash,
         pinSalt: salt,
@@ -91,9 +95,12 @@ export class PinCooperadoService {
 
   /**
    * Valida PIN sem efeitos colaterais (não incrementa tentativas — só lê).
-   * Útil pra dry-run/test. Use `validarPinComLockout` em fluxos reais.
+   * F2.9 hardening (08/06/2026): PRIVATE — qualquer consumo de fora deve
+   * passar por `validarPinComLockout` (rate-limit + lockout). Antes era
+   * public e poderia ser usado pra brute-force sem incrementar tentativas.
+   * Specs acessam via `(sut as any).validarPin` (pragmatic).
    */
-  async validarPin(params: {
+  private async validarPin(params: {
     cooperadoId: string;
     pin: string;
     cooperativaId: string;
@@ -154,8 +161,10 @@ export class PinCooperadoService {
     const resultado = await this.validarPin(params);
 
     if (resultado.ok) {
-      await this.prisma.cooperado.update({
-        where: { id: params.cooperadoId },
+      // F2.9 hardening: updateMany com cooperativaId no where (defesa em
+      // profundidade — findFirst dentro de validarPin ja barrou cross-tenant).
+      await this.prisma.cooperado.updateMany({
+        where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
         data: {
           pinTentativas: 0,
           pinBloqueadoAte: null,
@@ -170,16 +179,20 @@ export class PinCooperadoService {
     }
 
     // PIN_INCORRETO → incrementa tentativas + aplica lockout se excedeu.
-    const cooperado = await this.prisma.cooperado.update({
-      where: { id: params.cooperadoId },
+    // F2.9: updateMany (anti-IDOR) + leitura via findFirst tenant-safe.
+    await this.prisma.cooperado.updateMany({
+      where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
       data: { pinTentativas: { increment: 1 } },
+    });
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
       select: { pinTentativas: true },
     });
 
-    if (cooperado.pinTentativas >= MAX_TENTATIVAS) {
+    if (cooperado && cooperado.pinTentativas >= MAX_TENTATIVAS) {
       const desbloqueiaEm = new Date(Date.now() + LOCKOUT_MINUTOS * 60 * 1000);
-      await this.prisma.cooperado.update({
-        where: { id: params.cooperadoId },
+      await this.prisma.cooperado.updateMany({
+        where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
         data: {
           pinBloqueadoAte: desbloqueiaEm,
           pinTentativas: 0, // reset pra próxima janela
@@ -253,8 +266,9 @@ export class PinCooperadoService {
       throw new NotFoundException('Cooperado não encontrado.');
     }
 
-    await this.prisma.cooperado.update({
-      where: { id: params.cooperadoId },
+    // F2.9 hardening: updateMany com cooperativaId (anti-IDOR defesa em prof).
+    await this.prisma.cooperado.updateMany({
+      where: { id: params.cooperadoId, cooperativaId: params.cooperativaId },
       data: {
         pinHash: null,
         pinSalt: null,

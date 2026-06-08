@@ -1110,6 +1110,24 @@ export class WhatsappFluxoMotorService {
       return;
     }
 
+    // F2.9 hardening (08/06/2026): guard status=ATIVO antes de aceitar PIN.
+    // Cooperado PENDENTE/SUSPENSO/DESLIGADO/BLOQUEADO não pode alterar limite.
+    const cooperadoStatus = await this.prisma.cooperado.findFirst({
+      where: { id: conversa.cooperadoId, cooperativaId: conversa.cooperativaId },
+      select: { status: true },
+    });
+    if (!cooperadoStatus || cooperadoStatus.status !== 'ATIVO') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '🔒 Sua conta não está ATIVA. Fale com o atendente pra regularizar antes de alterar limites.\n\nVoltando ao menu.',
+      );
+      return;
+    }
+
     const pin = String(corpo ?? '').trim();
     if (!/^\d{6}$/.test(pin)) {
       await this.sender.enviarMensagem(
@@ -2111,7 +2129,14 @@ export class WhatsappFluxoMotorService {
     }
 
     // 3. Gera JWT 7 dias + persiste no Cooperado
-    const secret = process.env.JWT_SECRET ?? 'fallback-dev-secret';
+    // F2.9 hardening (08/06/2026): sem fallback. JWT_SECRET ausente = throw
+    // (evita assinar com segredo previsível em prod por erro de config).
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error(
+        'JWT_SECRET não configurado — abortando geração de token de assinatura.',
+      );
+    }
     const token = jwt.sign(
       { cooperadoId: novoCooperado.id, tipo: 'assinatura' },
       secret,

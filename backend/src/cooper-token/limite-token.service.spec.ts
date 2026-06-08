@@ -77,6 +77,15 @@ function criarPrismaMock() {
         for (const k of Object.keys(data)) (c as any)[k] = data[k];
         return c;
       }),
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const c = cooperados.get(where.id);
+        if (!c) return { count: 0 };
+        if (where.cooperativaId && c.cooperativaId !== where.cooperativaId) {
+          return { count: 0 };
+        }
+        for (const k of Object.keys(data)) (c as any)[k] = data[k];
+        return { count: 1 };
+      }),
     },
     cooperativa: {
       findUnique: jest.fn(async ({ where, select }: any) => {

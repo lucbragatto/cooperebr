@@ -99,14 +99,14 @@ async function main() {
     });
     assert(temPin === true, 'temPin = true após definir');
 
-    const valOk = await pinService.validarPin({
+    const valOk = await pinService.validarPinComLockout({
       cooperadoId: COOPERADO_ID_TESTE,
       pin: '123456',
       cooperativaId: COOPERATIVA_ID_TESTE,
     });
     assert(valOk.ok === true, 'PIN correto valida');
 
-    const valErrado = await pinService.validarPin({
+    const valErrado = await pinService.validarPinComLockout({
       cooperadoId: COOPERADO_ID_TESTE,
       pin: '999999',
       cooperativaId: COOPERATIVA_ID_TESTE,
@@ -118,7 +118,7 @@ async function main() {
 
     // Multi-tenant
     try {
-      await pinService.validarPin({
+      await pinService.validarPinComLockout({
         cooperadoId: COOPERADO_ID_TESTE,
         pin: '123456',
         cooperativaId: 'outro-tenant',

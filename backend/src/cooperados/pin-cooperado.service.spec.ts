@@ -66,6 +66,23 @@ function criarPrismaMock() {
         }
         return c;
       }),
+      // F2.9 hardening: updateMany com cooperativaId guard.
+      updateMany: jest.fn(async ({ where, data }: any) => {
+        const c = cooperados.get(where.id);
+        if (!c) return { count: 0 };
+        if (where.cooperativaId && c.cooperativaId !== where.cooperativaId) {
+          return { count: 0 };
+        }
+        for (const k of Object.keys(data)) {
+          const v = (data as any)[k];
+          if (v && typeof v === 'object' && 'increment' in v) {
+            (c as any)[k] = ((c as any)[k] ?? 0) + v.increment;
+          } else {
+            (c as any)[k] = v;
+          }
+        }
+        return { count: 1 };
+      }),
     },
   };
 }
@@ -140,7 +157,7 @@ describe('PinCooperadoService', () => {
       const { sut, prismaMock } = await buildSut();
       seed(prismaMock, { id: 'coop1', cooperativaId: 'tenantA' });
       await sut.definirPin({ cooperadoId: 'coop1', pin: '999999', cooperativaId: 'tenantA' });
-      const r = await sut.validarPin({ cooperadoId: 'coop1', pin: '999999', cooperativaId: 'tenantA' });
+      const r = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '999999', cooperativaId: 'tenantA' });
       expect(r.ok).toBe(true);
     });
 
@@ -148,14 +165,14 @@ describe('PinCooperadoService', () => {
       const { sut, prismaMock } = await buildSut();
       seed(prismaMock, { id: 'coop1', cooperativaId: 'tenantA' });
       await sut.definirPin({ cooperadoId: 'coop1', pin: '111111', cooperativaId: 'tenantA' });
-      const r = await sut.validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
+      const r = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
       expect(r).toEqual({ ok: false, motivo: 'PIN_INCORRETO' });
     });
 
     it('retorna PIN_NAO_DEFINIDO quando hash null', async () => {
       const { sut, prismaMock } = await buildSut();
       seed(prismaMock, { id: 'coop1', cooperativaId: 'tenantA' });
-      const r = await sut.validarPin({ cooperadoId: 'coop1', pin: '123456', cooperativaId: 'tenantA' });
+      const r = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '123456', cooperativaId: 'tenantA' });
       expect(r).toEqual({ ok: false, motivo: 'PIN_NAO_DEFINIDO' });
     });
 
@@ -169,7 +186,7 @@ describe('PinCooperadoService', () => {
         pinSalt: 'b'.repeat(32),
         pinBloqueadoAte: futuro,
       });
-      const r = await sut.validarPin({ cooperadoId: 'coop1', pin: '123456', cooperativaId: 'tenantA' });
+      const r = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '123456', cooperativaId: 'tenantA' });
       expect(r).toEqual({ ok: false, motivo: 'PIN_BLOQUEADO', desbloqueiaEm: futuro });
     });
 
@@ -178,7 +195,7 @@ describe('PinCooperadoService', () => {
       seed(prismaMock, { id: 'coop1', cooperativaId: 'tenantA' });
       await sut.definirPin({ cooperadoId: 'coop1', pin: '111111', cooperativaId: 'tenantA' });
       const tentativasAntes = prismaMock.cooperados.get('coop1')!.pinTentativas;
-      await sut.validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
+      await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
       expect(prismaMock.cooperados.get('coop1')!.pinTentativas).toBe(tentativasAntes);
     });
 
@@ -217,7 +234,7 @@ describe('PinCooperadoService', () => {
       expect(prismaMock.cooperados.get('coop1')!.pinTentativas).toBe(0);
     });
 
-    it('aplica lockout 15min após 5 falhas', async () => {
+    it('aplica lockout 30min após 5 falhas', async () => {
       const { sut, prismaMock } = await buildSut();
       seed(prismaMock, { id: 'coop1', cooperativaId: 'tenantA' });
       await sut.definirPin({ cooperadoId: 'coop1', pin: '111111', cooperativaId: 'tenantA' });
@@ -232,9 +249,9 @@ describe('PinCooperadoService', () => {
       const row = prismaMock.cooperados.get('coop1')!;
       expect(row.pinBloqueadoAte).toBeInstanceOf(Date);
       const deltaMs = row.pinBloqueadoAte!.getTime() - antes;
-      // Aproximadamente 15min (900s) — folga 2s pra clock skew
-      expect(deltaMs).toBeGreaterThanOrEqual(15 * 60 * 1000 - 2000);
-      expect(deltaMs).toBeLessThanOrEqual(15 * 60 * 1000 + 2000);
+      // F2.9 hardening (08/06/2026): 30min (era 15min). Folga 2s pra clock skew.
+      expect(deltaMs).toBeGreaterThanOrEqual(30 * 60 * 1000 - 2000);
+      expect(deltaMs).toBeLessThanOrEqual(30 * 60 * 1000 + 2000);
       // Tentativas resetadas pra próxima janela
       expect(row.pinTentativas).toBe(0);
     });
@@ -269,8 +286,8 @@ describe('PinCooperadoService', () => {
         cooperativaId: 'tenantA',
       });
 
-      const r1 = await sut.validarPin({ cooperadoId: 'coop1', pin: '111111', cooperativaId: 'tenantA' });
-      const r2 = await sut.validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
+      const r1 = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '111111', cooperativaId: 'tenantA' });
+      const r2 = await (sut as any).validarPin({ cooperadoId: 'coop1', pin: '222222', cooperativaId: 'tenantA' });
       expect(r1.ok).toBe(false);
       expect(r2.ok).toBe(true);
     });
