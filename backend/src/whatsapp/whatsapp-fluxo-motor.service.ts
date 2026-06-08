@@ -477,8 +477,24 @@ export class WhatsappFluxoMotorService {
   renderizarTemplate(template: string, vars: Record<string, string>): string {
     let texto = template;
     for (const [chave, valor] of Object.entries(vars)) {
-      texto = texto.replace(new RegExp(`\\{\\{${chave}\\}\\}`, 'g'), valor);
+      // F2.11 (08/06/2026) — fix template "**" no nome cooperativa.
+      // Quando valor é string vazia E o placeholder está dentro de marcadores
+      // de bold WhatsApp (*var*), removemos os asteriscos do entorno pra evitar
+      // render patológico tipo "Sou o assistente da **." (visto no print do
+      // Luciano em boas_vindas + menu_principal globais quando conversa sem
+      // cooperativaId → vars.parceiro=''). Defensivo único pra TODOS os
+      // modelos com padrão `*{{var}}*` (8 modelos afetados).
+      if (valor === '' || valor == null) {
+        const padraoComAsteriscos = new RegExp(
+          `\\*+\\s*\\{\\{${chave}\\}\\}\\s*\\*+`,
+          'g',
+        );
+        texto = texto.replace(padraoComAsteriscos, '');
+      }
+      texto = texto.replace(new RegExp(`\\{\\{${chave}\\}\\}`, 'g'), valor ?? '');
     }
+    // Normaliza espaços duplos que possam ter ficado da remoção (ex: "da   ." -> "da.").
+    texto = texto.replace(/  +/g, ' ').replace(/ +\./g, '.').replace(/ +,/g, ',');
     return texto;
   }
 

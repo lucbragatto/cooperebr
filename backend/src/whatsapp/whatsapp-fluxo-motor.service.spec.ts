@@ -129,6 +129,38 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       const r = service.renderizarTemplate('{{x}}-{{x}}', { x: 'A' });
       expect(r).toBe('A-A');
     });
+    // F2.11 (08/06/2026) — defensivo "**" no nome cooperativa.
+    it('Variavel vazia entre asteriscos -> remove asteriscos orfaos', () => {
+      const r = service.renderizarTemplate(
+        'Olá! Sou o assistente da *{{parceiro}}*.',
+        { parceiro: '' },
+      );
+      expect(r).toBe('Olá! Sou o assistente da.');
+      expect(r).not.toContain('**');
+    });
+    it('Variavel vazia entre asteriscos no meio do texto - elimina ** patologico', () => {
+      const r = service.renderizarTemplate(
+        'Olá, *{{nome}}*! Bem-vindo.',
+        { nome: '' },
+      );
+      expect(r).not.toContain('**');
+      expect(r).not.toContain('*!');
+    });
+    it('Variavel preenchida entre asteriscos mantem o bold WA', () => {
+      const r = service.renderizarTemplate(
+        'Olá, *{{nome}}*!',
+        { nome: 'Luciano' },
+      );
+      expect(r).toBe('Olá, *Luciano*!');
+    });
+    it('Variavel vazia SEM asteriscos so colapsa espaco duplo', () => {
+      const r = service.renderizarTemplate(
+        'Oi  {{nome}}  pessoal!',
+        { nome: '' },
+      );
+      // Não exigimos colapso perfeito; foco é nao deixar lacuna estranha "  ".
+      expect(r).not.toMatch(/   /);
+    });
   });
 
   // ============================================================
