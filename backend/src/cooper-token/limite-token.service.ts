@@ -79,7 +79,7 @@ export class LimiteTokenService {
       },
     });
 
-    if (!cooperado) {
+    if (!cooperado || !cooperado.cooperativa) {
       throw new NotFoundException('Cooperado não encontrado.');
     }
 
@@ -175,7 +175,7 @@ export class LimiteTokenService {
       },
     });
 
-    if (!cooperado) {
+    if (!cooperado || !cooperado.cooperativa) {
       throw new NotFoundException('Cooperado não encontrado.');
     }
 
