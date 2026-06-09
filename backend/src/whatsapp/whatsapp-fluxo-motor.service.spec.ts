@@ -1165,10 +1165,10 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
 
       expect(ok).toBe(true);
-      // Update da conversa pra ENCERRADO
+      // Update da conversa pra ENCERRADO + dadosTemp zerado (higiene PII 09/06).
       expect(conversaUpdate).toHaveBeenCalledWith({
         where: { id: 'c1' },
-        data: { estado: 'ENCERRADO' },
+        data: expect.objectContaining({ estado: 'ENCERRADO' }),
       });
       // Mensagem de despedida enviada
       expect(enviarMensagem).toHaveBeenCalledWith(
@@ -1177,6 +1177,20 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
       );
       // Motor NAO buscou etapa (curto-circuito antes)
       expect(etapaFindFirst).not.toHaveBeenCalled();
+    });
+
+    // Revisao 09/06/2026 — higiene de PII: SAIR zera dadosTemp pra nao vazar
+    // candidatos de cadastro / OCR pendente / codigos de indicacao pro proximo
+    // ciclo da mesma conversa.
+    it('SAIR zera dadosTemp pra higiene de PII', async () => {
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'SAIR' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'MENU_COOPERADO', cooperativaId: 'coop-A', cooperadoId: 'coop-luciano' },
+      );
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: expect.objectContaining({ dadosTemp: {} }),
+      });
     });
 
     it('INICIO transiciona pra INICIAL + renderiza modelo da etapa-destino + rodape', async () => {
@@ -1254,9 +1268,38 @@ describe('WhatsappFluxoMotorService - isolamento multi-tenant em runtime', () =>
 
       expect(conversaUpdate).toHaveBeenCalledWith({
         where: { id: 'c1' },
-        data: { estado: 'ENCERRADO' },
+        data: expect.objectContaining({ estado: 'ENCERRADO' }),
       });
       expect(etapaFindFirst).not.toHaveBeenCalled(); // confirmacao do curto-circuito
+    });
+
+    // Revisao 09/06/2026 — blindagem pra Fase 3: cooperado em meio de
+    // operacao sensivel (digitando PIN ou valor de limite token) NAO pode
+    // disparar TROCAR CADASTRO. Bot avisa + segura na etapa atual.
+    it('TROCAR CADASTRO bloqueado em ALTERAR_LIMITE_AGUARDANDO_PIN', async () => {
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'TROCAR CADASTRO' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'ALTERAR_LIMITE_AGUARDANDO_PIN', cooperativaId: 'coop-A', cooperadoId: 'coop-luc' },
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringMatching(/operação sensível/i),
+      );
+      // NAO toca no estado nem busca etapa
+      expect(conversaUpdate).not.toHaveBeenCalled();
+      expect(etapaFindFirst).not.toHaveBeenCalled();
+    });
+
+    it('TROCAR CADASTRO bloqueado em ALTERAR_LIMITE_AGUARDANDO_VALOR', async () => {
+      await service.processarComFluxoDinamico(
+        { telefone: '+5527981341348', tipo: 'texto', corpo: 'TROCAR CADASTRO' },
+        { id: 'c1', telefone: '+5527981341348', estado: 'ALTERAR_LIMITE_AGUARDANDO_VALOR', cooperativaId: 'coop-A', cooperadoId: 'coop-luc' },
+      );
+      expect(enviarMensagem).toHaveBeenCalledWith(
+        '+5527981341348',
+        expect.stringMatching(/operação sensível/i),
+      );
+      expect(conversaUpdate).not.toHaveBeenCalled();
     });
 
     it('Texto NAO-comando ("joão") segue fluxo normal — comando NAO captura wildcard', async () => {

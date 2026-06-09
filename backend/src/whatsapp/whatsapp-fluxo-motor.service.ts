@@ -310,7 +310,28 @@ export class WhatsappFluxoMotorService {
     // Sprint "Qual cadastro?" Fix 2 (08/06/2026) — TROCAR_CADASTRO re-dispara
     // VERIFICAR_COOPERADO pro telefone atual. Se houver >1 cadastro, oferece
     // escolha (mesmo caminho do VERIFICAR_COOPERADO original).
+    //
+    // Revisao 09/06/2026 — blindagem pra Fase 3 (movimentacao de token): se a
+    // conversa esta no meio de uma operacao sensivel (digitacao de PIN ou
+    // valor pra alterar limite de token), TROCAR_CADASTRO eh bloqueado pra
+    // evitar perder contexto sensivel + risco de aplicar PIN do cadastro
+    // antigo no novo. Cooperado deve finalizar/cancelar a operacao primeiro.
     if (comando === 'TROCAR_CADASTRO') {
+      const ESTADOS_SENSIVEIS_TROCA = [
+        'ALTERAR_LIMITE_AGUARDANDO_PIN',
+        'ALTERAR_LIMITE_AGUARDANDO_VALOR',
+      ];
+      if (ESTADOS_SENSIVEIS_TROCA.includes(conversa.estado)) {
+        await this.sender.enviarMensagem(
+          msg.telefone,
+          'Você está no meio de uma operação sensível (CooperToken). ' +
+            'Finalize ou digite *SAIR* antes de trocar de cadastro. 🔒',
+        );
+        this.logger.warn(
+          `Comando universal TROCAR_CADASTRO bloqueado: conversa ${conversa.id} em estado sensivel ${conversa.estado}`,
+        );
+        return true;
+      }
       await this.executarVerificarCooperado(conversa);
       this.logger.log(
         `Comando universal TROCAR_CADASTRO: re-disparado VERIFICAR_COOPERADO (conversa ${conversa.id})`,
@@ -319,9 +340,11 @@ export class WhatsappFluxoMotorService {
     }
 
     if (comando === 'SAIR') {
+      // Revisao 09/06/2026 — higiene de PII: zerar dadosTemp ao encerrar (pode
+      // ter candidatos de cadastro, OCR temporario, codigo de indicacao etc).
       await this.prisma.conversaWhatsapp.update({
         where: { id: conversa.id },
-        data: { estado: 'ENCERRADO' },
+        data: { estado: 'ENCERRADO', dadosTemp: {} as any },
       });
       await this.sender.enviarMensagem(
         msg.telefone,
@@ -357,6 +380,18 @@ export class WhatsappFluxoMotorService {
         `Comando universal CHAMAR_DEPOIS: conversa ${conversa.id} agendada pra ${retornarEm.toISOString()} (tenant: ${cooperativaId ?? 'global'})`,
       );
       return true;
+    }
+
+    // Revisao 09/06/2026 — higiene de PII no reset INICIO: zerar dadosTemp
+    // antes de qualquer transicao (reconhecimento ou fluxo padrao). Garante
+    // que candidatos antigos, OCR pendente, codigos de indicacao etc nao
+    // vazem pra proxima jornada do mesmo telefone.
+    if (comando === 'INICIO') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { dadosTemp: {} as any },
+      });
+      conversa.dadosTemp = {};
     }
 
     // Adendo "Qual cadastro?" (08/06/2026) — INICIO/MENU tenta reconhecer
