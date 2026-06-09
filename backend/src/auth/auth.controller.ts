@@ -121,6 +121,10 @@ export class AuthController {
 
   // --- Trocar Contexto ---
 
+  // Revisao multi-tenant 09/06/2026 — anti-enumeracao: cap de 10/min por IP
+  // (alinhado com /esqueci-senha + /login). Bloqueia tentativa de varredura
+  // de cooperadoIds aleatorios contra o anti-IDOR do trocarContexto.
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @HttpCode(200)
   @Post('trocar-contexto')
   trocarContexto(
