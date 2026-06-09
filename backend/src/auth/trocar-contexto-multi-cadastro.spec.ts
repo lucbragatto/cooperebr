@@ -110,6 +110,20 @@ describe('AuthService — "Qual cadastro?" (Fix 3+4)', () => {
       const r = await svc.obterContextosUsuario(usuario);
       expect(r.contextos.filter((c) => c.tipo === 'cooperado')).toHaveLength(0);
     });
+
+    // Revisao multi-tenant 09/06/2026 — cadastro inativo nao pode virar contexto.
+    it('Filtra cooperado por status IN STATUS_COOPERADO_ATIVOS', async () => {
+      findManyCooperado.mockResolvedValueOnce([]);
+      await svc.obterContextosUsuario(usuario);
+      expect(findManyCooperado).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.any(Array),
+            status: { in: expect.arrayContaining(['ATIVO']) },
+          }),
+        }),
+      );
+    });
   });
 
   describe('trocarContexto — anti-IDOR + multi-cooperado', () => {
@@ -170,6 +184,29 @@ describe('AuthService — "Qual cadastro?" (Fix 3+4)', () => {
       findManyCooperado.mockResolvedValueOnce([]);
       await expect(svc.trocarContexto(usuario, 'tipo_inexistente_X' as any)).rejects.toThrow(
         ForbiddenException,
+      );
+    });
+  });
+
+  // Revisao multi-tenant 09/06/2026 — impersonate dev nao pode resolver cadastro inativo.
+  describe('assinarTokenImpersonate — filtro de status', () => {
+    it('findFirst aplica status IN STATUS_COOPERADO_ATIVOS', async () => {
+      prisma.cooperado.findFirst.mockResolvedValueOnce({ id: 'c-1', cooperativaId: 'T' });
+      await svc.assinarTokenImpersonate({
+        id: 'u-1',
+        email: 'x@y.com',
+        perfil: 'COOPERADO' as any,
+        cooperativaId: null,
+        administradoraId: null,
+        cpf: '111',
+      });
+      expect(prisma.cooperado.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ email: 'x@y.com' }, { cpf: '111' }],
+            status: { in: expect.arrayContaining(['ATIVO']) },
+          }),
+        }),
       );
     });
   });

@@ -66,7 +66,9 @@ describe('acharCooperadosPorUsuario', () => {
     await acharCooperadosPorUsuario(mkPrismaMock(findMany), { email: 'a@b.com', cpf: '123' });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { OR: [{ email: 'a@b.com' }, { cpf: '123' }] },
+        where: expect.objectContaining({
+          OR: [{ email: 'a@b.com' }, { cpf: '123' }],
+        }),
       }),
     );
   });
@@ -75,7 +77,9 @@ describe('acharCooperadosPorUsuario', () => {
     const findMany = jest.fn().mockResolvedValueOnce([]);
     await acharCooperadosPorUsuario(mkPrismaMock(findMany), { email: 'a@b.com' });
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { OR: [{ email: 'a@b.com' }] } }),
+      expect.objectContaining({
+        where: expect.objectContaining({ OR: [{ email: 'a@b.com' }] }),
+      }),
     );
   });
 
@@ -84,6 +88,20 @@ describe('acharCooperadosPorUsuario', () => {
     const r = await acharCooperadosPorUsuario(mkPrismaMock(findMany), {});
     expect(r).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // Revisao multi-tenant 09/06/2026 — cadastro inativo nao pode virar contexto.
+  it('Filtra por status IN STATUS_COOPERADO_ATIVOS', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce([]);
+    await acharCooperadosPorUsuario(mkPrismaMock(findMany), { email: 'a@b.com', cpf: '123' });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [{ email: 'a@b.com' }, { cpf: '123' }],
+          status: { in: expect.arrayContaining(['ATIVO']) },
+        }),
+      }),
+    );
   });
 });
 

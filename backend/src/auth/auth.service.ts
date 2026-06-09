@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { PerfilUsuario } from './perfil.enum';
 import { randomUUID } from 'crypto';
+import { STATUS_COOPERADO_ATIVOS } from '../cooperados/cooperado-matcher.helper';
 
 @Injectable()
 export class AuthService {
@@ -497,7 +498,10 @@ export class AuthService {
     if (usuario.cpf) cooperadoWhere.push({ cpf: usuario.cpf });
 
     const cooperados = await this.prisma.cooperado.findMany({
-      where: { OR: cooperadoWhere },
+      where: {
+        OR: cooperadoWhere,
+        status: { in: STATUS_COOPERADO_ATIVOS as unknown as any[] },
+      },
       select: {
         id: true,
         nomeCompleto: true,
@@ -755,7 +759,10 @@ export class AuthService {
     const cooperadoWhere: any[] = [{ email: target.email }];
     if (target.cpf) cooperadoWhere.push({ cpf: target.cpf });
     const cooperado = await (this.prisma.cooperado as any).findFirst({
-      where: { OR: cooperadoWhere },
+      where: {
+        OR: cooperadoWhere,
+        status: { in: STATUS_COOPERADO_ATIVOS as unknown as any[] },
+      },
       select: { id: true, cooperativaId: true },
     });
 

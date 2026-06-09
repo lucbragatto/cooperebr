@@ -86,7 +86,10 @@ export async function acharCooperadosPorUsuario(
   if (ors.length === 0) return [];
 
   const rows = await prisma.cooperado.findMany({
-    where: { OR: ors },
+    where: {
+      OR: ors,
+      status: { in: STATUS_COOPERADO_ATIVOS as unknown as any[] },
+    },
     select: {
       id: true,
       nomeCompleto: true,
