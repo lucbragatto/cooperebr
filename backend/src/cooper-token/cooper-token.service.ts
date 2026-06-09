@@ -1059,10 +1059,10 @@ export class CooperTokenService {
         },
       });
 
-      // Também creditar no saldo do parceiro (cooperativa do recebedor)
-      if (recebedorCooperativaId) {
-        await this.creditarSaldoParceiroTx(tx, recebedorCooperativaId, quantidadeLiquida);
-      }
+      // F0 (09/06/2026) — Cessão peer-to-peer entre cooperados NÃO emite saldo
+      // novo pra cooperativa: tokens circulam, não nascem. O crédito ao
+      // CooperTokenSaldoParceiro fica restrito aos paths legítimos
+      // (confirmarCompraParceiro, resgate Clube, processarQrParceiro).
 
       this.logger.log(
         `Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa})`,
@@ -1331,9 +1331,12 @@ export class CooperTokenService {
       recebedorCooperativaId: params.parceiroCooperativaId,
     });
 
-    // Taxa de 1% já foi aplicada — creditar o líquido no saldo parceiro
-    const taxa1Pct = Math.round(resultado.quantidadeLiquida * TAXA_QR * 10000) / 10000;
-    const liquidoParceiro = Math.round((resultado.quantidadeLiquida - taxa1Pct) * 10000) / 10000;
+    // F0 (09/06/2026) — TAXA_QR é cobrada UMA ÚNICA VEZ sobre o bruto dentro
+    // de processarPagamentoQr (linhas 978-980). Reusar o que ja saiu de la em
+    // vez de reaplicar TAXA_QR sobre o liquido (era ~1,99% efetivo: 98,01 em
+    // vez de 99 num bruto de 100).
+    const taxa1Pct = resultado.taxa;
+    const liquidoParceiro = resultado.quantidadeLiquida;
 
     await this.prisma.$transaction(async (tx) => {
       let saldoParceiro = await tx.cooperTokenSaldoParceiro.findUnique({
