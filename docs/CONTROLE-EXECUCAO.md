@@ -41,6 +41,45 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-08 (Code — M27 Revisão multi-tenant "qual cadastro?" + skills Coop + F0 Fase 1 read-only CooperToken)
+
+**5 commits trabalho** (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `6f48da7` | fix | filtra cooperado inativo em `obterContextos` + `acharCooperadosPorUsuario` + `assinarTokenImpersonate` (3 pontos + 3 specs) |
+| `9dce791` | feat | skills cooper-token + wa-bot pro agente Coop (`.agent/memory/` + `.agent/AGENTS.md`) |
+| `e1e8c45` | fix | persiste `contexto_ativo_id` + chaves React por id + cookie `secure` em prod |
+| `b0e7cd6` | fix | bloqueia TROCAR CADASTRO em estado sensível (Fase 3 token) + zera `dadosTemp` em SAIR/INÍCIO (higiene PII) |
+| `f980a69` | chore | throttle 10/min em `POST /auth/trocar-contexto` (anti-enumeração) |
+| `<próximo>` | docs | fechamento M27 (esta sessão) |
+
+**Em curso:** —
+
+**Próximo passo único e claro:** **F0 Fase 2 CooperToken** — implementar as 2 correções P0 já confirmadas em Fase 1 read-only desta sessão.
+
+1. `backend/src/cooper-token/cooper-token.service.ts:1062-1065` — remover bloco `if (recebedorCooperativaId) { await this.creditarSaldoParceiroTx(...) }` dentro de `processarPagamentoQr` (QR cooperado→cooperado não emite saldo novo pra cooperativa; tokens só circulam).
+2. `backend/src/cooper-token/cooper-token.service.ts:1335-1336` — corrigir dupla TAXA_QR em `processarQrParceiro`: substituir cálculo por `liquidoParceiro = resultado.quantidadeLiquida; taxa1Pct = resultado.taxa` (reusar o que já saiu de `processarPagamentoQr`).
+3. Specs Jest novos: (a) QR cooperado→cooperado NÃO altera `CooperTokenSaldoParceiro`; (b) taxa QR aplicada exatamente 1×; (c) arredondamento `Math.round(x*100)/100`.
+4. Rebuild PM2 backend (stop → build → restart).
+5. Commit PT: `fix(cooper-token): F0 remove duplo credito saldoParceiro + dupla taxa QR`.
+
+**Pendência paralela P2 (não-bloqueante, carry-overs vivos do M26):**
+- D-novo-WA-PHONE-NORMALIZE — migração ampla da base com auditoria prévia.
+- 3 ações WA declaradas em gatilhos sem implementação (`PROCESSAR_OCR`, `MOSTRAR_MENU_PRINCIPAL`).
+- 17 modelos BOT órfãos sem etapa.
+- `empresa_conveniada` / `proprietario_usina` iterando só `cooperados[0]`.
+- Fase 3 Token-WA (TokenTransacao + QR + pagamento) — pausa explícita Luciano; F0 corrige conformidade do circuito existente ANTES de avançar.
+
+**Carry-overs novos desta sessão (não-bloqueantes):**
+- `.claude/agents/wa-bot-agent.md` modificado não-commitado (carry-over órfão do M26 — adição da seção "Integração com Stack de Agentes OpenClaw/Hermes + ECC + Obsidian").
+- `cooperebr-edge-agent` stopped + `pm2 save` (projeto vizinho `cooperebr-monitoramento`; crash loop não investigado, fora do escopo).
+- Untracked acumulados em `backend/scripts/`, `.claude/agents/`, `backend/src/agents/`, `docs/RECOMENDACAO-ARQUITETURA-FINAL.md`, `docs/arquitetura-agentes-pkm-cooperebr.md`, `tmp_smoke_check.mjs` — Sprint Housekeeping futuro.
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 08/06 fechamento M27).
+
+---
+
 ## ONDE PARAMOS — 2026-06-08 (Code — M26 Token-WA Fase 1+2 completa + hardening + "Qual cadastro?" multi-cadastro)
 
 **22 commits trabalho** em sessão Code maratona (+ 1 fechamento):
@@ -1811,108 +1850,129 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
-   Se não aparecer, parar e avisar.
+   Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
 
-2. Rodar `git status --short`. Esperado pós-fechamento: working tree
-   limpo (untracked carry-overs catalogados + 1 modificação não-minha
-   em .claude/agents/wa-bot-agent.md que Luciano avalia), último commit
-   é o de fechamento M26 (Token-WA Fase 1+2 completa + hardening F2.9 +
-   F2.10 VERIFICAR_COOPERADO + "Qual cadastro?" multi-cadastro +
-   reconhecimento automático na entrada).
+2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
+   Esperado pós-fechamento: working tree limpo (untracked carry-overs
+   catalogados + `.claude/agents/wa-bot-agent.md` modificado é carry-over
+   órfão conhecido do M26 — Luciano avalia em Sprint Housekeeping); último
+   commit é o de fechamento M27 (revisão multi-tenant "qual cadastro?" +
+   skills Coop + F0 Fase 1 read-only CooperToken).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
-   cooperebr-whatsapp online. ⚠ Frontend é `next start` sob PM2 (NÃO
-   `next dev`) — toda mudança de frontend exige `cd web ; npm run build ;
-   pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
+   cooperebr-whatsapp online (3000/3001/3002 LISTENING).
+   `cooperebr-edge-agent` stopped (projeto vizinho `cooperebr-monitoramento`,
+   crash loop não investigado, fora do escopo). Frontend é `next start`
+   sob PM2 (NÃO `next dev`) — toda mudança em web/ exige `cd web ;
+   npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante (Luciano DECIDE qual das 2 opções):
+PASSO 1 — Frase comandante (arranca F0 Fase 2 direto):
 
-Sessão 08/06 entregou M26 em 22 commits (`ccf0074..8f51f58`):
-- Sprint Token-WA Fase 1 (consultas read-only saldo/extrato pelo bot).
-- Sprint Token-WA Fase 2 completa F2.1→F2.8 (schema aditivo PIN +
-  AparelhoVinculado + OtpDesafio + TokenTransacao rica; otp-helper
-  genérico; PinCooperadoService lockout 30min; LimiteTokenService 2
-  níveis; TokenNotificacaoService; smoke E2E 22/22; submenu "Alterar
-  limite" WA).
-- F2.9 hardening P0: JWT sem fallback; updateMany cooperativaId
-  anti-IDOR; validarPin private; somarGastoHoje em America/Sao_Paulo;
-  status ATIVO guard; OtpDesafio.cooperativaId.
-- F2.10: implementa VERIFICAR_COOPERADO (ausente — bot ficava silencioso);
-  opção 8 "💎 CooperTokens" no menu hardcoded; setup SISGD teste
-  (cooperado PJ SEM_UC + 490 tokens).
-- Adendo schema TokenTransacao rica (merchantNome/descricao/categoria/
-  localCidade/tipoOperacao/referenciaExterna pra extrato estilo cartão).
-- **Bot WA destravado**: webhook ?secret= + telefone Luciano E.164.
-- Fixes UX: render `**` patológico eliminado; persona "P"→"Coop"; acentos
-  6 strings + 4 modelos; tenant default por env DEFAULT_TENANT_ID.
-- Sprint "Qual cadastro?" 4 fixes (helper matcher + WA escolha
-  ESCOLHER_CADASTRO_COOPERADO + Portal multi-cadastro obterContextos
-  findMany + ContextoSwitcher chama backend com cooperadoId). Anti-IDOR
-  forte em ambos canais (re-lê do banco no WA, re-busca contextos no portal).
-- Adendo reconhecimento automático na entrada (INÍCIO/MENU/saudação
-  dispara reconhecimento antes do fluxo padrão; INICIAL global agora
-  aponta pra menu_principal + gatilhos 1/2/3/4).
+Sessão 08/06 entregou M27 (revisão multi-tenant + segurança da feature
+"qual cadastro?" do M26 + skills Coop + F0 Fase 1 read-only CooperToken).
+5 commits trabalho `6f48da7..f980a69`:
+- 6f48da7 filtra cooperado inativo em obterContextos + matcher + impersonate
+  (3 pontos backend; cadastro DESLIGADO/REMOVIDO não vira contexto nem JWT).
+- 9dce791 skills cooper-token + wa-bot pro agente Coop (`.agent/memory/`
+  + `.agent/AGENTS.md` itens 7 e 8 da seção Startup).
+- e1e8c45 persiste contexto_ativo_id no front + chaves React por id
+  (ContextoSwitcher + selecionar-contexto) + COOKIE_OPTS.secure em prod
+  (`NODE_ENV === 'production'`).
+- b0e7cd6 bloqueia TROCAR CADASTRO em estado sensível
+  (`ALTERAR_LIMITE_AGUARDANDO_PIN`/`VALOR` — Fase 3 token) + zera
+  `dadosTemp` em SAIR e pre-update em INÍCIO (higiene PII).
+- f980a69 throttle 10/min em `POST /auth/trocar-contexto`
+  (anti-enumeração contra anti-IDOR existente).
 
-310+ specs Jest verde (89 unit Fase 2 + 14 matcher + 11 WA multi + 16
-portal multi + 5 tenant + 266 motor + smoke E2E 22/22).
+297+ specs Jest verde (28 auth/matcher com 3 specs novos do filtro de
+status + 269 motor WA com 4 specs novos: SAIR zera dadosTemp + 2 TROCAR
+CADASTRO bloqueado + ajustes de objectContaining). PM2 backend+frontend
+rebuilt e restartado.
 
-DECIDA — duas opções pra arrancar:
+F0 Fase 1 read-only confirmou 2 bugs P0 de conformidade no CooperToken:
 
-(A) FASE 3 TOKEN-WA — TokenTransacao + QR + pagamento real (move
-    dinheiro). Infraestrutura PIN + limite + notificações já pronta
-    da Fase 2. Spec: docs/especificacao-circuito-cooper-token-convenio.md
-    + memória decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md.
-    Implementa: gerar QR (jti uso-único anti-replay) → escanear →
-    validar PIN + (>R$50 OU 1º uso) step-up OTP → confirmar transação
-    + notificar 2 lados. **Move dinheiro real — exige Luciano pausa
-    pra parecer de produto antes**.
+(a) `backend/src/cooper-token/cooper-token.service.ts:1062-1065` — dentro
+de `processarPagamentoQr`, o trecho
+`if (recebedorCooperativaId) { await this.creditarSaldoParceiroTx(tx,
+recebedorCooperativaId, quantidadeLiquida) }` credita o saldo da
+cooperativa quando um cooperado paga outro por QR. Cessão peer-to-peer
+não emite saldo novo pra cooperativa — tokens só circulam, não nascem.
+Efeito colateral: `processarQrParceiro` chama `processarPagamentoQr` +
+faz seu próprio crédito, então o saldo parceiro é creditado 2× pro QR
+parceiro hoje.
 
-(B) OUTRO BLOCO DO ROADMAP A→H — Bloco 3 Sprint Onboarding (cadastro
-    sem UC), Módulo Pagar Concessionária (Mandato), Sprint contabilidade
-    tributária, etc.
+(b) `cooper-token.service.ts:1335-1336` — em `processarQrParceiro`,
+`const taxa1Pct = Math.round(resultado.quantidadeLiquida * TAXA_QR *
+10000) / 10000` reaplica TAXA_QR sobre `resultado.quantidadeLiquida`
+que JÁ É LÍQUIDA (saiu com 1% descontado em `processarPagamentoQr:978`).
+Resultado: parceiro recebe 98,01 em vez de 99 (taxa efetiva ≈ 1,99%).
 
-Validar primeiro fluxo "qual cadastro?" pelo WA com Luciano (mandar
-"INÍCIO" → deve aparecer "Qual cadastro? 1 LUCIANO (PF) 2 SISGDSOLAR
-(PJ)" sem precisar passar pelo menu visitante).
+ARRANCA F0 Fase 2 — execução direta autorizada:
 
-Fase 1 read-only obrigatória qualquer que seja a escolha (Decisão 23).
+1. Remover bloco `creditarSaldoParceiroTx` em `processarPagamentoQr`
+   linhas 1062-1065 (4 linhas + comentário).
+2. Corrigir dupla taxa em `processarQrParceiro` linhas 1335-1336:
+   substituir por
+   `const liquidoParceiro = resultado.quantidadeLiquida;`
+   `const taxa1Pct = resultado.taxa;`
+   (já vêm arredondados a 4 casas pelo cálculo da linha 978-980).
+3. Specs Jest novos em `cooper-token.service.spec.ts` (ou novo arquivo
+   `cooper-token.qr.spec.ts`):
+   (i) QR cooperado→cooperado NÃO chama
+       `cooperTokenSaldoParceiro.update/create`;
+   (ii) taxa QR contada exatamente 1× (`taxa = bruto * 0.01`,
+        `liquidoParceiro === bruto - taxa`);
+   (iii) arredondamento `Math.round(x*100)/100` no valor monetário
+         derivado quando aplicável.
+4. Rebuild PM2 backend ritual: `pm2 stop cooperebr-backend ;
+   cd backend ; npm run build ; pm2 restart cooperebr-backend`.
+5. Commit pequeno em PT:
+   `fix(cooper-token): F0 remove duplo credito saldoParceiro + dupla taxa QR`.
 
-Pré-requisitos Fase 1 read-only OBRIGATÓRIOS (mapear, NÃO codar):
-1. Ler docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M26)
-2. Ler docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md (M26 — esta)
-3. Ler ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md
-4. Ler docs/debitos-tecnicos.md (D-novo-WA-PHONE-NORMALIZE P2 + débitos)
-5. Se opção A: backend/scripts/smoke-token-wa-fase2.ts (referência),
-   docs/especificacao-circuito-cooper-token-convenio.md,
-   memória decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md
-6. Se opção B: docs/sessoes/2026-06-07-bloco-2-kwh-convite-lote.md +
-   spec do bloco escolhido
-7. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`)
-8. git log --oneline -25 (cobrir M26 inteiro)
+DIRETRIZES OBRIGATÓRIAS:
+- Multi-tenant: `cooperativaId` vem do JWT, nunca do body. Filtros Prisma
+  preservam isolamento.
+- Arredondamento monetário `Math.round(x*100)/100` em qualquer derivação
+  monetária nova (regra CLAUDE.md).
+- Specs verdes obrigatórias antes do commit.
+- Rebuild PM2 backend (stop → build → restart) em toda mudança backend.
+- Fase 1 read-only Decisão 23 já cumprida nesta sessão — Fase 2 está
+  autorizada pelo Luciano no pedido original. Aplicar direto.
 
-DIRETRIZES F2.9 hardening (preservar):
-- JWT_SECRET sem fallback — throw se ausente.
-- updateMany sempre com cooperativaId no where (defesa em profundidade).
-- validarPin é private — só validarPinComLockout consumido externamente.
-- Lockout PIN 30min (não 15).
-- Tempo "hoje" em América/São_Paulo (timezone-aware).
-- Invariante "só consultas sem PIN; dinheiro só com PIN" — Fase 3 precisa
-  exigir validarPinComLockout do cooperado escolhido antes de mover saldo.
+PRÉ-REQUISITOS LEITURA F0 Fase 2 (mapear, complementar à confirmação Fase 1):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M27).
+2. docs/sessoes/2026-06-08-revisao-multi-tenant-qual-cadastro-skills-coop-f0-readonly.md
+   (M27 — esta sessão; seções "F0 — Fase 1 read-only CooperToken" e
+   "Próximo passo").
+3. backend/src/cooper-token/cooper-token.service.ts:939-1090
+   (`processarPagamentoQr` completo).
+4. backend/src/cooper-token/cooper-token.service.ts:1320-1371
+   (`processarQrParceiro` completo).
+5. backend/src/cooper-token/cooper-token.service.ts:1607-1642
+   (`creditarSaldoParceiro` / `creditarSaldoParceiroTx` — entender quem
+   chama, garantir que `processarPagamentoCobranca` e demais paths
+   legítimos continuam intactos).
+6. backend/src/cooper-token/cooper-token.service.spec.ts (se existir;
+   senão criar `cooper-token.qr.spec.ts` ao lado).
+7. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`).
 
-CONTEXTO DE 08/06 (22 commits M26):
-- ccf0074 Fase 1 read-only do bot
-- 481cebc-9ca604c Fase 2 F2.1→F2.8 (8 fatias)
-- 8e867a5 Adendo TokenTransacao rica
-- f4d20c7 F2.9 hardening P0 + destrava bot
-- f8b629b F2.10 VERIFICAR_COOPERADO + setup SISGD
-- de4e725 Render `**` fix
-- dcce884 Persona Coop
-- 29dd88e Acentos visitante
-- 0e8c084 Tenant default env
-- 97b61f3-8f51f58 Sprint "Qual cadastro?" + reconhecimento entrada
+CARRY-OVERS M26 AINDA VIVOS (não-bloqueantes):
+- D-novo-WA-PHONE-NORMALIZE P2 (matcher telefone amplo).
+- 3 ações WA declaradas em gatilhos sem implementação.
+- 17 modelos BOT órfãos.
+- `empresa_conveniada` / `proprietario_usina` iterando só `cooperados[0]`.
+- Fase 3 Token-WA — pausa explícita Luciano (F0 deve fechar antes).
 
-DOC-SESSÃO 08/06:
-docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md
+CARRY-OVERS NOVOS DESTA SESSÃO (não-bloqueantes):
+- `.claude/agents/wa-bot-agent.md` modificado não-commitado (carry-over
+  órfão M26 — Sprint Housekeeping).
+- `cooperebr-edge-agent` stopped (projeto vizinho, fora do escopo).
+- Untracked acumulados em `backend/scripts/`, `.claude/agents/`,
+  `backend/src/agents/`, `docs/RECOMENDACAO-ARQUITETURA-FINAL.md`,
+  `docs/arquitetura-agentes-pkm-cooperebr.md`, `tmp_smoke_check.mjs`.
+
+DOC-SESSÃO 08/06 M27:
+docs/sessoes/2026-06-08-revisao-multi-tenant-qual-cadastro-skills-coop-f0-readonly.md
 ```
 
 ---
