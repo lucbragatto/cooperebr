@@ -78,9 +78,9 @@ export default function SelecionarContextoPage() {
 
         // Se só tem 1 contexto, redirecionar direto
         if (data.contextos.length === 1) {
-          const tipo = data.contextos[0].tipo;
-          setContextoAtivo(tipo);
-          router.replace(rotaPorContexto(tipo));
+          const unico = data.contextos[0];
+          setContextoAtivo(unico.tipo, unico.id);
+          router.replace(rotaPorContexto(unico.tipo));
           return;
         }
 
@@ -100,7 +100,7 @@ export default function SelecionarContextoPage() {
   }, [router]);
 
   function handleSelect(ctx: ContextoUsuario) {
-    setContextoAtivo(ctx.tipo);
+    setContextoAtivo(ctx.tipo, ctx.id);
     router.push(rotaPorContexto(ctx.tipo));
   }
 
@@ -144,7 +144,7 @@ export default function SelecionarContextoPage() {
             const cor = cores[ctx.tipo];
             return (
               <button
-                key={ctx.tipo}
+                key={ctx.id ?? ctx.tipo}
                 onClick={() => handleSelect(ctx)}
                 className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 ${cor.border} ${cor.bg} ${cor.hover} transition-all shadow-sm hover:shadow-md text-left`}
               >

@@ -4,7 +4,14 @@ import type { AuthResponse, Usuario } from '@/types';
 
 const TOKEN_KEY = 'token';
 const USUARIO_KEY = 'usuario';
-const COOKIE_OPTS = { expires: 7, sameSite: 'lax' as const };
+// Revisao multi-tenant 09/06/2026 — secure em prod pra evitar enviar JWT via
+// http; em dev (localhost http) `secure:true` bloquearia o set. NODE_ENV
+// segue como flag pragmatica (suficiente; nao gate de seguranca por si so).
+const COOKIE_OPTS = {
+  expires: 7,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+};
 
 export async function login(identificador: string, senha: string): Promise<void> {
   const { data } = await api.post<AuthResponse>('/auth/login', { identificador, senha });
@@ -21,12 +28,14 @@ export function aplicarSessaoImpersonate(token: string, usuario: Usuario): void 
   Cookies.set(TOKEN_KEY, token, COOKIE_OPTS);
   Cookies.set(USUARIO_KEY, JSON.stringify(usuario), COOKIE_OPTS);
   localStorage.removeItem('contexto_ativo');
+  localStorage.removeItem('contexto_ativo_id');
 }
 
 export function logout(): void {
   Cookies.remove(TOKEN_KEY);
   Cookies.remove(USUARIO_KEY);
   localStorage.removeItem('contexto_ativo');
+  localStorage.removeItem('contexto_ativo_id');
   window.location.href = '/login';
 }
 
@@ -34,6 +43,7 @@ export function logoutPortal(): void {
   Cookies.remove(TOKEN_KEY);
   Cookies.remove(USUARIO_KEY);
   localStorage.removeItem('contexto_ativo');
+  localStorage.removeItem('contexto_ativo_id');
   window.location.href = '/portal/login';
 }
 

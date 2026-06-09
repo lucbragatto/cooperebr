@@ -83,7 +83,7 @@ export default function ContextoSwitcher({ contextos, contextoAtivo, onTrocar, c
       console.error('Falha ao trocar contexto:', err);
       return;
     }
-    setContextoAtivo(ctx.tipo);
+    setContextoAtivo(ctx.tipo, ctx.id);
     onTrocar(ctx.tipo);
     router.push(rotaPorContexto(ctx.tipo));
   }
@@ -115,7 +115,7 @@ export default function ContextoSwitcher({ contextos, contextoAtivo, onTrocar, c
             const isActive = ctx.tipo === contextoAtivo;
             return (
               <button
-                key={ctx.tipo}
+                key={ctx.id ?? ctx.tipo}
                 onClick={() => handleSelect(ctx)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors hover:bg-gray-50 ${
                   isActive ? 'bg-gray-50 font-medium' : 'text-gray-700'
