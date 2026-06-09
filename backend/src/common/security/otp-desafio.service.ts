@@ -38,7 +38,10 @@ export const OTP_LOCKOUT_MINUTOS = 15;
 export type OtpMotivo =
   | 'COOPERADO_DEVICE_BIND'
   | 'TOKEN_TRANSACAO_STEP_UP'
-  | 'PIN_RESET';
+  | 'PIN_RESET'
+  // F1 (09/06/2026) — Definicao inicial de PIN via bot WA. Campo `motivo` no
+  // banco eh String livre, sem migration.
+  | 'PIN_DEFINIR';
 
 export type OtpSujeitoTipo = 'COOPERADO' | 'TOKEN_TRANSACAO';
 

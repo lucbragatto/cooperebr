@@ -72,6 +72,8 @@ import { SolicitacoesConfirmacaoPagamentoModule } from './solicitacoes-confirmac
 import { GatewaysPagamentoConfigModule } from './gateways-pagamento-config/gateways-pagamento-config.module';
 import { ProprietarioModule } from './proprietario/proprietario.module';
 import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietarios.module';
+// F1 (09/06/2026) — Recursos "meu" do cooperado autenticado (PIN inicial).
+import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
 
 @Module({
   imports: [
@@ -135,6 +137,7 @@ import { AdminProprietariosModule } from './admin/proprietarios/admin-proprietar
     GatewaysPagamentoConfigModule,
     ProprietarioModule,
     AdminProprietariosModule,
+    MeuPerfilModule,
   ],
   controllers: [AppController],
   providers: [
