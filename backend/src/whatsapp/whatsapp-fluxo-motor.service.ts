@@ -12,6 +12,9 @@ import { CooperTokenService } from '../cooper-token/cooper-token.service';
 // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — "Alterar meu limite" no submenu CooperTokens.
 import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
 import { LimiteTokenService } from '../cooper-token/limite-token.service';
+// F1 (09/06/2026) — Fluxo "Definir PIN" no submenu CooperTokens (3 estados).
+import { OtpDesafioService } from '../common/security/otp-desafio.service';
+import { isPinFraco } from '../meu-perfil/pin-fraco.helper';
 // Sprint "Qual cadastro?" Fix 1 (08/06/2026)
 import {
   acharCooperadosPorTelefone,
@@ -80,6 +83,8 @@ export class WhatsappFluxoMotorService {
     // Sprint Token-WA Fase 2 F2.8 — "Alterar meu limite" no submenu CooperTokens.
     private pinCooperadoService: PinCooperadoService,
     private limiteTokenService: LimiteTokenService,
+    // F1 (09/06/2026) — Fluxo "Definir PIN" exige OTP + dado pessoal antes do PIN.
+    private otpDesafioService: OtpDesafioService,
   ) {}
 
   async processarComFluxoDinamico(
@@ -659,6 +664,31 @@ export class WhatsappFluxoMotorService {
           break;
         case 'SALVAR_NOVO_LIMITE_TOKEN':
           await this.executarSalvarNovoLimiteToken(conversa, corpo);
+          break;
+        // F1 (09/06/2026) — Fluxo DEFINIR PIN no submenu CooperTokens.
+        //  INICIAR_DEFINIR_PIN: ação automática em DEFINIR_PIN_AGUARDANDO_OTP;
+        //    valida que cooperado não tem PIN, cria OtpDesafio motivo
+        //    PIN_DEFINIR e envia OTP por WA com instrução "código + últimos
+        //    4 do CPF separados por espaço".
+        //  VALIDAR_OTP_PIN_DEFINIR: wildcard em AGUARDANDO_OTP; valida OTP
+        //    + últimos 4 dígitos do CPF; sucesso → AGUARDANDO_PIN.
+        //  RECEBER_NOVO_PIN_DEFINICAO: wildcard em AGUARDANDO_PIN; valida
+        //    6 dígitos + isPinFraco; guarda pinProposto em dadosTemp;
+        //    transita pra AGUARDANDO_CONFIRMACAO.
+        //  CONFIRMAR_PIN_DEFINICAO: wildcard em AGUARDANDO_CONFIRMACAO;
+        //    confere igualdade + chama pinCooperadoService.definirPin +
+        //    zera dadosTemp + volta pro MENU_COOPERTOKENS.
+        case 'INICIAR_DEFINIR_PIN':
+          await this.executarIniciarDefinirPin(conversa);
+          break;
+        case 'VALIDAR_OTP_PIN_DEFINIR':
+          await this.executarValidarOtpPinDefinir(conversa, corpo);
+          break;
+        case 'RECEBER_NOVO_PIN_DEFINICAO':
+          await this.executarReceberNovoPinDefinicao(conversa, corpo);
+          break;
+        case 'CONFIRMAR_PIN_DEFINICAO':
+          await this.executarConfirmarPinDefinicao(conversa, corpo);
           break;
         // Etapa C Bloco 4 (22/05): 3 acoes ATUALIZAR_*_COOPERADO disparadas via
         // gatilho.acao (wildcard nas etapas AGUARDANDO_NOVO_*). Recebem o
@@ -1604,6 +1634,367 @@ export class WhatsappFluxoMotorService {
         `❌ Não consegui salvar: ${msg}\n\nDigite outro valor ou *0* pra cancelar.`,
       );
     }
+  }
+
+  /**
+   * F1 (09/06/2026) — DEFINIR_PIN.
+   *
+   * Padrao do fluxo (3 estados + 4 acoes):
+   *  DEFINIR_PIN_AGUARDANDO_OTP    -> acaoAutomatica=INICIAR_DEFINIR_PIN
+   *  (após resposta wildcard)      -> acao=VALIDAR_OTP_PIN_DEFINIR
+   *  DEFINIR_PIN_AGUARDANDO_PIN    -> acao=RECEBER_NOVO_PIN_DEFINICAO
+   *  DEFINIR_PIN_AGUARDANDO_CONFIRMACAO -> acao=CONFIRMAR_PIN_DEFINICAO
+   *
+   * Decisao Luciano (09/06): OTP sozinho no mesmo canal eh fraco; cooperado
+   * precisa provar com dado pessoal (ultimos 4 digitos do CPF) junto com o
+   * codigo. Padrao "codigo rotativo + dado pessoal" do convite. PII minima
+   * exposta no chat (so 4 digitos).
+   */
+  private async executarIniciarDefinirPin(conversa: {
+    id: string;
+    telefone: string;
+    cooperadoId?: string | null;
+    cooperativaId?: string | null;
+  }): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    // F2.9 hardening: guard status=ATIVO.
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: conversa.cooperadoId, cooperativaId: conversa.cooperativaId },
+      select: { status: true, cpf: true },
+    });
+    if (!cooperado || cooperado.status !== 'ATIVO') {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '🔒 Sua conta não está ATIVA. Fale com o atendente pra regularizar antes de cadastrar PIN.\n\nVoltando ao menu.',
+      );
+      return;
+    }
+
+    // Se ja tem PIN, recusa (orienta usar "Alterar PIN" no portal).
+    const jaTem = await this.pinCooperadoService.temPin({
+      cooperadoId: conversa.cooperadoId,
+      cooperativaId: conversa.cooperativaId,
+    });
+    if (jaTem) {
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: { estado: 'MENU_COOPERTOKENS' },
+      });
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '🔐 Você já tem um PIN cadastrado. Pra trocar, acesse o portal web → Segurança → Alterar PIN.\n\nVoltando ao menu CooperTokens.',
+      );
+      return;
+    }
+
+    // Cria desafio OTP + envia código pelo proprio WA.
+    const desafio = await this.otpDesafioService.criarDesafio({
+      motivo: 'PIN_DEFINIR',
+      sujeitoTipo: 'COOPERADO',
+      sujeitoId: conversa.cooperadoId,
+      telefoneDestino: conversa.telefone,
+      cooperativaId: conversa.cooperativaId,
+    });
+
+    // Guarda desafioId em dadosTemp pra etapa de validacao recuperar.
+    const dadosAtuais = (await this.prisma.conversaWhatsapp
+      .findUnique({ where: { id: conversa.id }, select: { dadosTemp: true } })
+      .then((c) => c?.dadosTemp ?? {})) as Record<string, unknown>;
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        dadosTemp: { ...dadosAtuais, definirPinDesafioId: desafio.desafioId } as any,
+      },
+    });
+
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      `🔐 *Cadastrar PIN*\n\nSeu código: *${desafio.codigo}*\n\nPra confirmar que é você mesmo, digite o código + os *últimos 4 dígitos do CPF* cadastrado, separados por espaço.\n\nExemplo: \`${desafio.codigo} 1234\`\n\nO código expira em 10 minutos.`,
+    );
+
+    this.logger.log(
+      `INICIAR_DEFINIR_PIN: desafio=${desafio.desafioId} cooperado=${conversa.cooperadoId}`,
+    );
+  }
+
+  private async executarValidarOtpPinDefinir(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    const entrada = String(corpo ?? '').trim();
+    if (entrada === '0' || entrada.toLowerCase() === 'cancelar') {
+      await this.cancelarDefinirPin(conversa, 'cancelado');
+      return;
+    }
+
+    // Parse: "<6 digitos OTP> <4 digitos CPF>" — separados por whitespace.
+    const partes = entrada.split(/\s+/).filter(Boolean);
+    if (partes.length !== 2 || !/^\d{6}$/.test(partes[0]) || !/^\d{4}$/.test(partes[1])) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ Formato inválido. Digite o código de 6 dígitos + os últimos 4 do CPF, separados por espaço.\n\nExemplo: `123456 1234`\n\nOu *0* pra cancelar.',
+      );
+      return;
+    }
+    const [codigo, ultimos4Digitados] = partes;
+
+    // Confere dado pessoal ANTES de gastar a tentativa do OTP — fail fast
+    // sem revelar qual dos dois falhou (mensagem neutra anti-enumeracao).
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: conversa.cooperadoId, cooperativaId: conversa.cooperativaId },
+      select: { cpf: true },
+    });
+    const ultimos4Real = String(cooperado?.cpf ?? '').replace(/\D/g, '').slice(-4);
+    if (!ultimos4Real || ultimos4Real !== ultimos4Digitados) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ Dados não conferem. Confira o código e os últimos 4 dígitos do CPF cadastrado, ou digite *0* pra cancelar.',
+      );
+      this.logger.warn(
+        `VALIDAR_OTP_PIN_DEFINIR: dado pessoal nao bate cooperado=${conversa.cooperadoId}`,
+      );
+      return;
+    }
+
+    // Recupera desafioId persistido em dadosTemp.
+    const dadosTemp = ((await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    }))?.dadosTemp ?? {}) as Record<string, unknown>;
+    const desafioId = dadosTemp.definirPinDesafioId as string | undefined;
+    if (!desafioId) {
+      await this.cancelarDefinirPin(conversa, 'desafio-perdido');
+      return;
+    }
+
+    const r = await this.otpDesafioService.validar({
+      desafioId,
+      codigo,
+      cooperativaId: conversa.cooperativaId,
+    });
+
+    if (!r.ok) {
+      // Mensagens neutras (nao revela qual etapa falhou) anti-enumeracao.
+      if (r.motivo === 'DESAFIO_BLOQUEADO') {
+        await this.cancelarDefinirPin(conversa, 'bloqueado');
+        return;
+      }
+      if (r.motivo === 'DESAFIO_EXPIRADO' || r.motivo === 'JA_VALIDADO' || r.motivo === 'DESAFIO_NAO_ENCONTRADO') {
+        await this.cancelarDefinirPin(conversa, 'expirado');
+        return;
+      }
+      // CODIGO_INCORRETO — mantem estado pra retry.
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ Dados não conferem. Tente novamente ou *0* pra cancelar.',
+      );
+      return;
+    }
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'DEFINIR_PIN_AGUARDANDO_PIN' },
+    });
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '✅ Tudo certo!\n\nAgora *escolha seu PIN* de 6 dígitos. Não use sequências (123456, 987654) nem dígitos iguais (111111).\n\nDigite só os 6 dígitos:',
+    );
+    this.logger.log(
+      `VALIDAR_OTP_PIN_DEFINIR: ok cooperado=${conversa.cooperadoId} -> AGUARDANDO_PIN`,
+    );
+  }
+
+  private async executarReceberNovoPinDefinicao(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    const pin = String(corpo ?? '').trim();
+    if (pin === '0' || pin.toLowerCase() === 'cancelar') {
+      await this.cancelarDefinirPin(conversa, 'cancelado');
+      return;
+    }
+    if (!/^\d{6}$/.test(pin)) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ PIN deve ter exatamente 6 dígitos. Tente novamente ou *0* pra cancelar.',
+      );
+      return;
+    }
+    if (isPinFraco(pin)) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ PIN fraco. Evite 6 dígitos iguais ou sequências (123456 / 987654). Escolha outro:',
+      );
+      return;
+    }
+
+    const dadosTemp = ((await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    }))?.dadosTemp ?? {}) as Record<string, unknown>;
+
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'DEFINIR_PIN_AGUARDANDO_CONFIRMACAO',
+        dadosTemp: { ...dadosTemp, definirPinPropostoTemp: pin } as any,
+      },
+    });
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '🔁 Confirme: digite o *mesmo PIN* de novo.',
+    );
+  }
+
+  private async executarConfirmarPinDefinicao(
+    conversa: {
+      id: string;
+      telefone: string;
+      cooperadoId?: string | null;
+      cooperativaId?: string | null;
+    },
+    corpo: string,
+  ): Promise<void> {
+    if (!conversa.cooperadoId || !conversa.cooperativaId) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '⚠️ Não consegui identificar você. Digite *menu* pra voltar.',
+      );
+      return;
+    }
+
+    const pin = String(corpo ?? '').trim();
+    if (pin === '0' || pin.toLowerCase() === 'cancelar') {
+      await this.cancelarDefinirPin(conversa, 'cancelado');
+      return;
+    }
+
+    const dadosTemp = ((await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    }))?.dadosTemp ?? {}) as Record<string, unknown>;
+    const pinProposto = dadosTemp.definirPinPropostoTemp as string | undefined;
+    if (!pinProposto) {
+      await this.cancelarDefinirPin(conversa, 'estado-perdido');
+      return;
+    }
+
+    if (pin !== pinProposto) {
+      await this.sender.enviarMensagem(
+        conversa.telefone,
+        '❌ Os PINs não conferem. Digite o mesmo PIN escolhido na etapa anterior, ou *0* pra cancelar.',
+      );
+      return;
+    }
+
+    try {
+      await this.pinCooperadoService.definirPin({
+        cooperadoId: conversa.cooperadoId,
+        pin,
+        cooperativaId: conversa.cooperativaId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`CONFIRMAR_PIN_DEFINICAO falhou: ${msg}`);
+      await this.cancelarDefinirPin(conversa, 'erro-persistir');
+      return;
+    }
+
+    // Zera credenciais transitórias no dadosTemp (PIN proposto + desafioId).
+    const dadosLimpos = { ...dadosTemp };
+    delete (dadosLimpos as any).definirPinPropostoTemp;
+    delete (dadosLimpos as any).definirPinDesafioId;
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: {
+        estado: 'MENU_COOPERTOKENS',
+        dadosTemp: dadosLimpos as any,
+      },
+    });
+    await this.sender.enviarMensagem(
+      conversa.telefone,
+      '✅ *PIN cadastrado com sucesso!*\n\nAgora você pode autorizar pagamentos com CooperToken e alterar seu limite por aqui.\n\nVoltando ao menu CooperTokens.',
+    );
+    this.logger.log(
+      `CONFIRMAR_PIN_DEFINICAO: PIN definido cooperado=${conversa.cooperadoId}`,
+    );
+  }
+
+  private async cancelarDefinirPin(
+    conversa: { id: string; telefone: string },
+    motivo:
+      | 'cancelado'
+      | 'bloqueado'
+      | 'expirado'
+      | 'desafio-perdido'
+      | 'estado-perdido'
+      | 'erro-persistir',
+  ): Promise<void> {
+    const dadosTemp = ((await this.prisma.conversaWhatsapp.findUnique({
+      where: { id: conversa.id },
+      select: { dadosTemp: true },
+    }))?.dadosTemp ?? {}) as Record<string, unknown>;
+    const limpo = { ...dadosTemp };
+    delete (limpo as any).definirPinPropostoTemp;
+    delete (limpo as any).definirPinDesafioId;
+    await this.prisma.conversaWhatsapp.update({
+      where: { id: conversa.id },
+      data: { estado: 'MENU_COOPERTOKENS', dadosTemp: limpo as any },
+    });
+    const mensagens: Record<typeof motivo, string> = {
+      cancelado: '🆗 Cadastro de PIN cancelado. Voltando ao menu CooperTokens.',
+      bloqueado:
+        '🔒 Excesso de tentativas. Aguarde alguns minutos e tente de novo. Voltando ao menu CooperTokens.',
+      expirado:
+        '⏰ O código expirou. Volte ao menu e escolha "Definir PIN" pra recomeçar. Voltando ao menu CooperTokens.',
+      'desafio-perdido':
+        '⚠️ Não consegui recuperar o início do cadastro. Volte ao menu e tente de novo.',
+      'estado-perdido':
+        '⚠️ Não consegui recuperar o PIN da etapa anterior. Volte ao menu e tente de novo.',
+      'erro-persistir':
+        '⚠️ Não consegui salvar o PIN agora. Tente novamente em alguns minutos.',
+    };
+    await this.sender.enviarMensagem(conversa.telefone, mensagens[motivo]);
+    this.logger.warn(
+      `DEFINIR_PIN cancelado motivo=${motivo} conversa=${conversa.id}`,
+    );
   }
 
   /**
