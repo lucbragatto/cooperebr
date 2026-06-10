@@ -59,6 +59,15 @@ type StatusMembroPendente =
   | 'PENDENTE_APROVACAO_EMPRESA'
   | 'PENDENTE_APROVACAO_ADMIN';
 
+interface UcDoCooperado {
+  id: string;
+  numero: string;
+  tipoUc: 'NORMAL' | 'SINTETICA';
+  numeroUC: string | null;
+  numeroConcessionariaOriginal: string | null;
+  distribuidora: string;
+}
+
 interface MembroPendente {
   id: string;
   status: StatusMembroPendente;
@@ -71,6 +80,9 @@ interface MembroPendente {
     cpf: string;
     email: string;
     telefone: string | null;
+    // Bug C (10/06/2026) — backend agora expoe estes campos no listarPendentes.
+    cotaKwhMensal: number | null;
+    ucs: UcDoCooperado[];
   };
   aprovacao: {
     tokenSufixo: string;
@@ -369,6 +381,14 @@ export function MembrosPendentesSection({
                           CPF ...{m.cooperado.cpf.slice(-3)} ·{' '}
                           {m.cooperado.telefone ? `WA ...${m.cooperado.telefone.slice(-4)}` : 'sem WA'}
                         </div>
+                        {/* Bug C (10/06/2026) — UC + cota mensal visiveis no detalhe */}
+                        <div className="text-xs text-gray-600 mt-1">
+                          <UcResumo ucs={m.cooperado.ucs} />
+                          {' · '}
+                          {typeof m.cooperado.cotaKwhMensal === 'number' && m.cooperado.cotaKwhMensal > 0
+                            ? `${m.cooperado.cotaKwhMensal.toLocaleString('pt-BR')} kWh/mês`
+                            : <span className="text-amber-700">sem cota</span>}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={`${v.cor} border-transparent text-xs`}>
@@ -665,5 +685,50 @@ export function MembrosPendentesSection({
         </DialogContent>
       </Dialog>
     </Card>
+  );
+}
+
+/**
+ * Bug C (10/06/2026) — resumo de UCs do cooperado pendente.
+ *
+ * Regras:
+ *  - 0 UCs → "sem UC" amber (caso raro — cadastroWebV2 sempre cria pelo menos
+ *    uma; pode acontecer se membro foi criado via outro path).
+ *  - 1 UC NORMAL → "UC <numeroUC|numero> · <distribuidora>".
+ *  - 1 UC SINTETICA → "UC sintética (sem fatura)" slate (custeio puro SEM_UC).
+ *  - N>1 UCs → "UC <primeira> · +<N-1> UCs · <distribuidora|misto>".
+ */
+function UcResumo({ ucs }: { ucs: UcDoCooperado[] }) {
+  if (ucs.length === 0) {
+    return <span className="text-amber-700">sem UC</span>;
+  }
+  const principal = ucs[0]!;
+  if (principal.tipoUc === 'SINTETICA') {
+    // Em MEMBROS_PENDENTES com >1 UCs misturando NORMAL + SINTETICA, mostra a primeira
+    // mas sinaliza misto pra empresa/admin ver.
+    if (ucs.length > 1) {
+      return (
+        <span className="text-slate-500">
+          UC sintética + {ucs.length - 1} UC{ucs.length - 1 > 1 ? 's' : ''} adicional{ucs.length - 1 > 1 ? 'is' : ''}
+        </span>
+      );
+    }
+    return <span className="text-slate-500">UC sintética (sem fatura)</span>;
+  }
+  const numeroExibido = principal.numeroUC ?? principal.numero;
+  if (ucs.length === 1) {
+    return (
+      <span>
+        UC {numeroExibido} · {principal.distribuidora}
+      </span>
+    );
+  }
+  const distribuidorasDistintas = new Set(ucs.map((u) => u.distribuidora));
+  const distribuidoraLabel =
+    distribuidorasDistintas.size === 1 ? principal.distribuidora : 'múltiplas';
+  return (
+    <span>
+      UC {numeroExibido} · +{ucs.length - 1} UC{ucs.length - 1 > 1 ? 's' : ''} · {distribuidoraLabel}
+    </span>
   );
 }

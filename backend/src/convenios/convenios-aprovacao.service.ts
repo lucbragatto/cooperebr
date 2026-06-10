@@ -403,12 +403,34 @@ export class ConvenioAprovacaoService {
         ? { equals: status }
         : { in: ['PENDENTE_APROVACAO_EMPRESA', 'PENDENTE_APROVACAO_ADMIN'] },
     };
+    // Bug C (10/06/2026) — listagem expande `cooperado.ucs[]` + `cotaKwhMensal`
+    // pro detalhe do membro pendente exibir UC + energia. Antes a UI mostrava
+    // "sem UC" pra todo mundo porque o select nao incluia a relacao. Tenant
+    // ja assertado em assertConvenioDoTenant acima — cooperativaId continua
+    // vindo do JWT do chamador (controller).
     const [data, total] = await Promise.all([
       this.prisma.convenioCooperado.findMany({
         where,
         include: {
           cooperado: {
-            select: { id: true, nomeCompleto: true, cpf: true, email: true, telefone: true },
+            select: {
+              id: true,
+              nomeCompleto: true,
+              cpf: true,
+              email: true,
+              telefone: true,
+              cotaKwhMensal: true,
+              ucs: {
+                select: {
+                  id: true,
+                  numero: true,
+                  tipoUc: true,
+                  numeroUC: true,
+                  numeroConcessionariaOriginal: true,
+                  distribuidora: true,
+                },
+              },
+            },
           },
           aprovacao: {
             select: { token: true, expiresAt: true, usedAt: true, decisao: true },
@@ -428,6 +450,14 @@ export class ConvenioAprovacaoService {
     return {
       data: data.map((m) => ({
         ...m,
+        cooperado: {
+          ...m.cooperado,
+          // Prisma Decimal → number pra serialização JSON (front consome number).
+          cotaKwhMensal:
+            m.cooperado.cotaKwhMensal != null
+              ? Number(m.cooperado.cotaKwhMensal)
+              : null,
+        },
         aprovacao: m.aprovacao
           ? {
               tokenSufixo: '...' + m.aprovacao.token.slice(-6),

@@ -541,4 +541,115 @@ describe('ConvenioAprovacaoService — Fatia 3', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  // ─── Bug C — listarPendentes inclui ucs[] + cotaKwhMensal (10/06/2026) ────
+  //
+  // Antes (até M28) o select de cooperado era só {id, nomeCompleto, cpf,
+  // email, telefone}. UI mostrava "sem UC" pra todo membro pendente porque a
+  // relação `ucs` não era carregada. Agora a listagem expõe `cooperado.ucs[]`
+  // (id, numero, tipoUc, numeroUC, numeroConcessionariaOriginal, distribuidora)
+  // + `cooperado.cotaKwhMensal` (Decimal → number). Tenant assertion preservada
+  // no `assertConvenioDoTenant` no topo do método.
+  describe('listarPendentes — Bug C ucs + cotaKwhMensal', () => {
+    it('retorna ucs[] e cotaKwhMensal no shape do cooperado', async () => {
+      findFirstConvenio.mockResolvedValue({ id: 'conv1', cooperativaId: 'coopA' });
+      findManyPendentes.mockResolvedValue([
+        {
+          id: 'membro1',
+          status: 'PENDENTE_APROVACAO_EMPRESA',
+          ativo: false,
+          createdAt: new Date('2026-06-10'),
+          cooperado: {
+            id: 'coop1',
+            nomeCompleto: 'Dra. Ana',
+            cpf: '12345678901',
+            email: 'ana@example.com',
+            telefone: '5527999990001',
+            cotaKwhMensal: { toString: () => '250.50' } as any,
+            ucs: [
+              {
+                id: 'uc1',
+                numero: '0400702214',
+                tipoUc: 'NORMAL',
+                numeroUC: '160085263',
+                numeroConcessionariaOriginal: null,
+                distribuidora: 'EDP_ES',
+              },
+            ],
+          },
+          aprovacao: null,
+          convite: null,
+        },
+      ]);
+      countPendentes.mockResolvedValue(1);
+
+      const r = await service.listarPendentes('conv1', 'coopA');
+
+      expect(r.data).toHaveLength(1);
+      expect(r.data[0]!.cooperado.ucs).toEqual([
+        expect.objectContaining({
+          id: 'uc1',
+          numero: '0400702214',
+          tipoUc: 'NORMAL',
+          numeroUC: '160085263',
+          distribuidora: 'EDP_ES',
+        }),
+      ]);
+      // Decimal Prisma serializado como number
+      expect(r.data[0]!.cooperado.cotaKwhMensal).toBe(250.5);
+    });
+
+    it('cotaKwhMensal null → mantém null', async () => {
+      findFirstConvenio.mockResolvedValue({ id: 'conv1', cooperativaId: 'coopA' });
+      findManyPendentes.mockResolvedValue([
+        {
+          id: 'membro2',
+          status: 'PENDENTE_APROVACAO_ADMIN',
+          ativo: false,
+          createdAt: new Date(),
+          cooperado: {
+            id: 'coop2',
+            nomeCompleto: 'Dr. Bruno',
+            cpf: '98765432100',
+            email: null,
+            telefone: null,
+            cotaKwhMensal: null,
+            ucs: [],
+          },
+          aprovacao: null,
+          convite: null,
+        },
+      ]);
+      countPendentes.mockResolvedValue(1);
+
+      const r = await service.listarPendentes('conv1', 'coopA');
+
+      expect(r.data[0]!.cooperado.cotaKwhMensal).toBeNull();
+      expect(r.data[0]!.cooperado.ucs).toEqual([]);
+    });
+
+    it('select do prisma inclui ucs + cotaKwhMensal explicitamente', async () => {
+      findFirstConvenio.mockResolvedValue({ id: 'conv1', cooperativaId: 'coopA' });
+      findManyPendentes.mockResolvedValue([]);
+      countPendentes.mockResolvedValue(0);
+
+      await service.listarPendentes('conv1', 'coopA');
+
+      // Validação anti-regressão: garante que o select.cooperado contém
+      // explicitamente os campos novos (não pode voltar a omitir).
+      const chamada = findManyPendentes.mock.calls[0]![0];
+      const selectCooperado = chamada.include.cooperado.select;
+      expect(selectCooperado.cotaKwhMensal).toBe(true);
+      expect(selectCooperado.ucs).toEqual({
+        select: {
+          id: true,
+          numero: true,
+          tipoUc: true,
+          numeroUC: true,
+          numeroConcessionariaOriginal: true,
+          distribuidora: true,
+        },
+      });
+    });
+  });
 });
