@@ -1,5 +1,5 @@
 # Prompt — Sprint Clube Unificado (hub com cards) + Conclusão do circuito CooperToken
-### Montado pelo orquestrador (claude.ai) em 10/06/2026 · Pronto pra colar no Code APÓS o M29
+### Montado pelo orquestrador (claude.ai) em 10/06/2026 · ATUALIZADO 10/06 — Hub ✅ entregue (e4d0976); próximo: Fase 1.1 (polimento) + F1.5
 > Decisão Luciano 10/06: aglutinar tudo dentro do "Clube" (hub com **cards** → clica no card vai pra função),
 > hub PRIMEIRO, depois concluir o que falta do Clube + Token. Fila: M29 → este sprint (P1) → Hardening Mass-Write (P2).
 > Regra de coerência sistêmica catalogada em memória `regra_coerencia_sistemica_mapa_impacto_10_06.md`.
@@ -36,14 +36,33 @@ A Fase 1 read-only entrega MAPA DE IMPACTO antes de implementar:
 Apresentar MAPA → PAUSAR pro OK → implementar.
 
 ───────────────────────────────────────────────
-FASE 1 — HUB DO CLUBE (aglutinação, só frontend, baixo risco)
-Reunir 6 entradas espalhadas num item "Clube" → página-hub com CARDS (clica → função existente).
-Hoje (web/app/dashboard/layout.tsx ~111-150): CooperToken (/dashboard/cooper-token), Clube de Vantagens (/dashboard/clube-vantagens), Ranking (/dashboard/clube-vantagens/ranking), Planos do Clube (/dashboard/clube/planos), Tokens Recebidos (/dashboard/cooper-token-parceiro), Financeiro Tokens (/dashboard/cooper-token-financeiro).
-Fazer: (1) web/app/dashboard/clube/page.tsx = hub com grid de cards (ícone+título+1 linha+→rota existente); as páginas FICAM onde estão (card só navega). (2) Menu: 1 item "Clube" → /dashboard/clube; rotas antigas seguem vivas. (3) Resolver 3 "Planos" (renomear rótulos: comercial / do Clube / SaaS). (4) Help inline no hub. (5) Commit feat(clube): hub unificado com cards. Rebuild frontend. NÃO toca backend.
+FASE 1 — HUB DO CLUBE ✅ ENTREGUE 10/06 (commit e4d0976)
+Hub com 6 cards (CooperToken, Vantagens, Planos do Clube, Ranking, Tokens Recebidos, Financeiro Tokens) + menu único "Clube" → /dashboard/clube + rotas antigas vivas + help inline. NÃO tocou backend.
 
-FASE 2 — F1.5 CONFIG DA ECONOMIA (base) — card "Configuração" do hub
-Hoje TAXA_EMISSAO(2%)+TAXA_QR chumbadas (cooper-token.service.ts~103); modeloVida=DECAY_CONTINUO só rótulo, sem lógica.
-Fazer (após Mapa de Impacto+OK): (1) Schema aditivo em ConfigCooperToken — taxaOperacaoPerc + taxaOperacaoFixa + taxaOperacaoEmQuais(JSON emissao/transf/qr/resgate) + oxidacaoPercMes + oxidacaoPeriodoGracaDias + oxidacaoPiso. Backfill defaults nas linhas existentes. (2) Service: constantes chumbadas → leitura da config (fallback = valor atual); achar TODOS os usos (emissão/QR/usar-fatura/resgate/compra). Lógica + job de oxidação: SÓ PROSPECTIVO, respeita graça+piso. ⚠️ GATE JURÍDICO: não rodar a rotina em dados reais sem política de quebra escrita/aprovada + auditoria. (3) Tela card config + help. (4) Specs. Reportar → reviewer dinheiro+tenant.
+FASE 1.1 — POLIMENTO DO HUB (frontend, baixo risco) [achados na validação visual 10/06]
+(a) MLM ENTRA NO CLUBE: adicionar 3 cards ao hub — Indicações (/dashboard/indicacoes), Convites de Indicação (/dashboard/convites), Meu Convite (/dashboard/meu-convite). Justificativa: MLM É parte do Clube (o card Ranking já é "progressão MLM"; a indicação PREMIA com tokens). Remover esses 3 do menu flat (como os 6 anteriores). CONFIRMADO: /dashboard/convites é SÓ indicação MLM (chama /convite-indicacao/*), NÃO os convites de convênio/proprietário (esses ficam nas telas de convênio/usina e NÃO entram no Clube).
+(b) BOTÃO VOLTAR (consistência): telas cooper-token, cooper-token-parceiro e cooper-token-financeiro estão SEM "voltar" (clube-vantagens e clube/planos JÁ têm). Adicionar "← Voltar ao Clube" → /dashboard/clube em TODAS as telas alcançadas pelos cards do hub, de forma consistente (incl. as 3 MLM novas). Rebuild frontend. Commit: feat(clube): MLM no hub + voltar consistente. NÃO toca backend.
+
+FASE 2 — F1.5 CONFIG DA ECONOMIA (Taxa de Operação + Oxidação) — card "Configuração" do hub
+MAPA DE IMPACTO (já levantado pelo orquestrador 10/06 — Code confirma na Fase 1):
+- Consumidores: TAXA_EMISSAO=0.02 (cooper-token.service.ts:46 → uso :103) + TAXA_QR=0.01 (:48 → usos :978 e :1334). Config lida via getConfig() (:867).
+- Dados: ConfigCooperToken = 1 linha/coop. Backfill com defaults que PRESERVAM o atual (emissão 2%, QR 1%, oxidação OFF). ⚠️ NÃO zerar taxa sem querer.
+- Propagação: getConfig + PUT admin/config (controller:323) + DTO + getConfigDefaults (:347) + página web/app/dashboard/cooper-token/page.tsx + os 3 usos no service.
+- Navegação: config já é card do hub.
+- Re-teste: emissão com config default (ainda 2%) e custom; taxa do QR; cron de oxidação em DRY-RUN sobre dado de teste; card hub → config.
+
+IMPLEMENTAR (após Mapa confirmado + OK):
+1) SCHEMA aditivo em ConfigCooperToken (auditar antes; parar PM2 antes do db push) — "Taxa de Operação" PER-OPERAÇÃO, defaults preservam o atual:
+   taxaEmissaoPerc Decimal @default(2) + taxaEmissaoFixa @default(0); taxaQrPerc @default(1) + taxaQrFixa @default(0);
+   taxaTransferenciaPerc @default(0) + taxaTransferenciaFixa @default(0); taxaResgatePerc @default(0) + taxaResgateFixa @default(0).
+   Oxidação: oxidacaoPercMes @default(0) (0=DESLIGADA) + oxidacaoPeriodoGracaDias Int @default(0) + oxidacaoPiso @default(0).
+   (Alternativa: 1 JSON taxasOperacao — mas defaults TÊM de manter 2%/1%. Propor no Mapa.)
+2) SERVICE: trocar constantes TAXA_EMISSAO/TAXA_QR por leitura da config (helper calcularTaxa(op, bruto, config) = bruto*perc/100 + fixa, Math.round). FALLBACK: config null → 2%/1% atuais (comportamento intacto). Atualizar os 3 usos (:103, :978, :1334). NÃO mexer na regra F0 (taxa QR 1× sobre o bruto).
+3) OXIDAÇÃO: método aplicarOxidacao(cooperativaId) + cron mensal (espelha expirarVencidos:477 + job:123). DURAS: SÓ PROSPECTIVO (nunca oxida token emitido antes da política); respeita graça+piso; default 0 = cron não faz nada. ⚠️ GATE JURÍDICO: ligar (>0) em dado real exige política de quebra escrita/aprovada + auditoria — UI avisa; NÃO rodar cron em produção sem o gate; PARAR e sinalizar Luciano.
+4) CONTROLLER/DTO: PUT admin/config + getConfig + getConfigDefaults incluem os campos novos (class-validator).
+5) UI: estender web/app/dashboard/cooper-token/page.tsx (card config do hub) com os campos + help inline (o que é Taxa de Operação/em quais incide; oxidação + aviso do gate). Select nativo dentro de dialog se houver dropdown.
+6) SPECS: taxa por operação aplica certo (emissão 2% default + custom); fallback preserva comportamento; oxidação respeita graça+piso+prospectivo; Math.round sem ruído float.
+Commits PT por bloco (schema → service → oxidação → UI). Rebuild PM2 backend+frontend. Reportar → reviewer dinheiro+tenant.
 
 FASE 3 — F2 EMPRESA (PJ-cooperado) COMPRA tokens no nível COOPERADO
 Hoje só parceiro/comprar (credita saldoParceiro=tenant). Criar compra creditando cooperadoId (reusa creditar/CooperTokenCompra/Asaas) + Taxa de Operação na emissão + multi-tenant + idempotência. Refletir em relatórios financeiros (admin/financeiro, fluxo-caixa, rendimento, consolidado) + ledger. Specs. Reportar → reviewer.
