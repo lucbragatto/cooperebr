@@ -2787,6 +2787,32 @@ model ConfigCooperToken {
   bonusIndicacao    Int         @default(50) // tokens ao indicador (Fatia B 04/06 — antes hardcoded)
   tetoCoop          Int?
   ativo             Boolean     @default(true)
+
+  // Sprint Clube P1 — Fase 1.5 Taxa de Operacao (10/06/2026) — % E/OU fixo
+  // por operacao. Defaults preservam TAXA_EMISSAO=2% e TAXA_QR=1% chumbadas
+  // que estavam em cooper-token.service.ts:46-48 antes do refactor. Demais
+  // operacoes default 0 (desligadas) — admin liga via UI quando quiser.
+  taxaEmissaoPerc        Decimal @default(2) @db.Decimal(5, 2)
+  taxaEmissaoFixa        Decimal @default(0) @db.Decimal(10, 4)
+  taxaQrPerc             Decimal @default(1) @db.Decimal(5, 2)
+  taxaQrFixa             Decimal @default(0) @db.Decimal(10, 4)
+  taxaTransferenciaPerc  Decimal @default(0) @db.Decimal(5, 2)
+  taxaTransferenciaFixa  Decimal @default(0) @db.Decimal(10, 4)
+  taxaResgatePerc        Decimal @default(0) @db.Decimal(5, 2)
+  taxaResgateFixa        Decimal @default(0) @db.Decimal(10, 4)
+
+  // Oxidacao DECAY_CONTINUO (Fase 1.5) — SO PROSPECTIVA. Default 0 =
+  // desligada. Marco temporal `oxidacaoAtivadaEm` carimbado quando admin
+  // sobe `oxidacaoPercMes` de 0 → >0 (logica em upsertConfig); resetar
+  // pra 0 limpa o marco. Tokens com ledger.createdAt < oxidacaoAtivadaEm
+  // NUNCA sao oxidados. Em prod, cron exige flag env
+  // OXIDACAO_PRODUCAO_LIBERADA=true (gate juridico — politica de quebra
+  // escrita/aprovada + auditoria).
+  oxidacaoPercMes           Decimal   @default(0) @db.Decimal(5, 2)
+  oxidacaoPeriodoGracaDias  Int       @default(0)
+  oxidacaoPiso              Decimal   @default(0) @db.Decimal(10, 4)
+  oxidacaoAtivadaEm         DateTime?
+
   cooperativaId     String      @unique
   cooperativa       Cooperativa @relation(fields: [cooperativaId], references: [id])
   createdAt         DateTime    @default(now())
