@@ -41,6 +41,50 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-09 (Code — M28 F0 CooperToken Fase 2 + F1 Definir PIN 3 canais + Santi 1ª conveniada + 2 read-only)
+
+**5 commits trabalho** (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `10a1de7` | fix | **F0 CooperToken Fase 2** — remove crédito indevido saldoParceiro em QR coop→coop + corrige dupla TAXA_QR em `processarQrParceiro` (parceiro agora recebe 99 num bruto de 100, era 98,01). 4 specs novos. |
+| `20d3f91` | feat | **F1 backend `meu-perfil`** — GET pin-status + POST definir-pin com 409 anti-rewrite + throttle 10/min + helpers `isPinFraco` + `isEmpresaCooperada` + `OtpMotivo` estendido `PIN_DEFINIR`. 23 specs. |
+| `7f8cd93` | feat | **F1 portal `/portal/seguranca/definir-pin`** — page client + `isPinFraco` espelhado + help inline azul. SEM OTP (JWT prova identidade). |
+| `abf12e2` | feat | **F1 bot WA fluxo DEFINIR PIN** — 3 estados + 4 ações + OTP+últimos-4-CPF (decisão Luciano: anti-SIM-swap) + seed submenu opção "4 Definir PIN". 13 specs. |
+| `b5609e4` | feat | **Santi Medicina Diagnóstica** cadastrada como 1ª empresa conveniada de teste da CoopereBR — Cooperado PJ + Usuario Supabase + CV-SANTI-001 (MISTO 20% pagador EMPRESA). Seed idempotente executado + validado via /auth/login + /auth/me + /portal/meus-convenios. |
+| `<próximo>` | docs | fechamento M28 (esta sessão) |
+
+**Em curso:** —
+
+**Próximo passo (Luciano decide entre 2 opções):**
+
+**(A) Bug exibição/cálculo conveniada VALOR_FIXO + ALOCACAO_FIXA** — front ignora `tipoTarifaEmpresa=VALOR_FIXO` (mostra "Tarifa cheia" pra Santi com tarifa fixa 1,10); backend ALOCACAO_FIXA com 0 membros faz early-out `SEM_MEMBROS` em vez de calcular `kwhAlocadoMensal × tarifa` (100000 × 1,10 = R$ 110.000). Frente Fase 1 read-only completa nesta sessão.
+
+**(B) 3 bugs onboarding conveniada** — (Bug A) lote silenciosamente "ENVIADO" sem disparar via whitelist-dev (helper ignora retorno do sender); (Bug B) `GestaoConvitesSection` sem `onAcaoConcluida` → UI não refresh; (Bug C) listagem `/membros-pendentes` não inclui `cooperado.ucs[]` → "sem UC" no detalhe + cadastroWebV2 slim cria UC SINTÉTICA com distribuidora=OUTRAS. Frente Fase 1 read-only completa nesta sessão.
+
+Validações operacionais paralelas:
+- Bot WA: rodar `cd backend ; npx ts-node scripts/seed-definir-pin-wa.ts` + testar "MENU → 8 CooperTokens → 4 Definir PIN" com telefone Luciano.
+- Portal: testar `/portal/seguranca/definir-pin` logado como cooperado teste.
+- Santi: logar `lucbragatto+santi@gmail.com` / `Santi@2026` ou impersonate em `/dashboard/dev/credenciais-teste`.
+
+**Carry-overs novos desta sessão (não-bloqueantes):**
+- Frente (A) bug VALOR_FIXO/ALOCACAO_FIXA — Fase 1 mapeada, aguarda OK pra implementar.
+- Frente (B) 3 bugs onboarding — Fase 1 mapeada, 3 perguntas decisórias pendentes (Q1/Q2/Q3).
+- IDs Santi: Cooperado `cmq6qo4hi0002va2wti5k1sqw` + Usuario `cmq6qo5c40005va2w8gyyzzj7` + Convenio `cmq6qo5ly0007va2w6hilvs2a`.
+
+**Carry-overs M27/M26 ainda vivos** (não-bloqueantes):
+- D-novo-WA-PHONE-NORMALIZE P2 (matcher telefone amplo).
+- 3 ações WA declaradas sem implementação (`PROCESSAR_OCR`, `MOSTRAR_MENU_PRINCIPAL`).
+- 17 modelos BOT órfãos.
+- `empresa_conveniada` / `proprietario_usina` iterando só `cooperados[0]`.
+- Fase 3 Token-WA (TokenTransacao + QR pagamento real) — pausa explícita; F0 fechou conformidade do circuito existente.
+- `.claude/agents/wa-bot-agent.md` modificado órfão M26.
+- `cooperebr-edge-agent` stopped (projeto vizinho, fora do escopo).
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 09/06 fechamento M28).
+
+---
+
 ## ONDE PARAMOS — 2026-06-08 (Code — M27 Revisão multi-tenant "qual cadastro?" + skills Coop + F0 Fase 1 read-only CooperToken)
 
 **5 commits trabalho** (+ 1 fechamento):
@@ -76,7 +120,37 @@
 - `cooperebr-edge-agent` stopped + `pm2 save` (projeto vizinho `cooperebr-monitoramento`; crash loop não investigado, fora do escopo).
 - Untracked acumulados em `backend/scripts/`, `.claude/agents/`, `backend/src/agents/`, `docs/RECOMENDACAO-ARQUITETURA-FINAL.md`, `docs/arquitetura-agentes-pkm-cooperebr.md`, `tmp_smoke_check.mjs` — Sprint Housekeeping futuro.
 
-> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 08/06 fechamento M27).
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 09/06 fechamento desta sessão QA).
+
+---
+
+## ONDE PARAMOS — 2026-06-09 (QA Funcional — Aprofundamento dossiê modelos de usuário + análise proposta proxy via convênio)
+
+**Trabalho principal:** Aprofundamento das seções 3.5 (PROPRIETARIO_USINA — com detalhes reais do Sprint AN repasse-proprietário completo, código, regras, achados, gaps, dúvidas, melhorias) e 3.6 (ADMIN_AGREGADOR — contexto histórico de Carlos/Hangar MLM capta clientes, estado atual skeleton, sugestões de evolução como ferramenta de captação). Análise completa da proposta do usuário de usar o convênio (empresa_conveniada) como proxy temporário para agregador e condomínio, suprimindo as telas dedicadas e melhorando a tela do convênio. Leitura de sessões adicionais (leitura-total, cadeia-hangar, AN sprint, etc.), código (proprietario, repasses-proprietario, administradoras, conveniada pages), multi-perspectiva (arquiteto, dev, design, usuário). Sugestões de melhorias concretas na tela do convênio (nomenclatura flexível, seção "Minha Rede de Captação", KPIs de captação, suporte a condomínio, flags técnicas, testes QA). Usuário vai passar para o Code analisar tudo antes de retomar aqui.
+
+**Entregas:**
+- Dossiê principal atualizado com seções 3.5/3.6 aprofundadas + análise completa da proposta de proxy (prós, contras, melhorias priorizadas, testes recomendados).
+- Sessão doc ritual: docs/sessoes/2026-06-09-dossie-modelos-usuario-proposta-proxy-convenio.md
+- Resumo curto preparado para envio via WhatsApp do projeto (número +5527981341348) e arquivos em docs/relatorios/ + docs/sessoes/ para Claude Code desktop carregar direto.
+
+**Débitos novos:**
+- D-novo-PROXY-CONVENIO-CONFUSAO-PAPEIS (P2): Risco de confusão entre papéis ao usar convênio como proxy (empresa vs agregador vs condomínio); mitigar com nomenclatura flexível e HelpBoxes.
+- D-novo-PROXY-MIGRACAO (P3): Dívida de migração futura quando evoluirmos portais dedicados.
+- Reforço de bugs conhecidos que impactam o proxy (convite lote, UI refresh, dados cadastro).
+
+**Próximo passo único e claro:** Usuário vai passar o dossiê atualizado para o Code analisar a proposta de proxy via convênio e as sugestões de melhorias na tela do convênio. Ao retomar amanhã: validar feedback do Code, decidir se aprova o proxy + quais melhorias priorizar, então continuar testes funcionais (Cenários 1/2/3 com o proxy se aprovado), e/ou ler mais sessões/fluxos conforme orientação. Manter dossiê vivo.
+
+**Frase de retomada (copie e cole direto pro Code):**
+
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior). Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents disponíveis. Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
+
+2. Rodar `git status --short` (diretriz inegociável catalogada 18/05). Se houver arquivos modificados que NÃO sou eu desta sessão, PAUSAR + Decisão 23. Esperado pós-fechamento: working tree limpo, último commit é o de fechamento.
+
+PASSO 1 — Frase de retomada principal:
+
+Sessão 09/06 (QA Funcional) aprofundou o dossiê de modelos de usuário (especialmente 3.5 PROPRIETARIO_USINA com detalhes do Sprint AN repasse-proprietário completo, código, regras, achados, gaps, dúvidas, melhorias; 3.6 ADMIN_AGREGADOR com contexto histórico de Carlos/Hangar MLM capta clientes, estado atual skeleton, sugestões de evolução como ferramenta de captação). Análise completa da proposta do usuário de usar o convênio (empresa_conveniada) como proxy temporário para agregador e condomínio, suprimindo as telas dedicadas e melhorando a tela do convênio. Leitura de sessões adicionais (leitura-total, cadeia-hangar, AN sprint, etc.), código (proprietario, repasses-proprietario, administradoras, conveniada pages), multi-perspectiva (arquiteto, dev, design, usuário). Sugestões de melhorias concretas na tela do convênio (nomenclatura flexível, seção "Minha Rede de Captação", KPIs de captação, suporte a condomínio, flags técnicas, testes QA). Usuário vai passar para o Code analisar tudo antes de retomar aqui. Entregas: dossiê atualizado com seções aprofundadas + análise da proposta de proxy (prós, contras, melhorias priorizadas, testes recomendados); sessão doc ritual criada; resumo curto preparado para envio via WhatsApp do projeto (número +5527981341348) e arquivos em docs/relatorios/ + docs/sessoes/ para Claude Code desktop. Débitos novos: D-novo-PROXY-CONVENIO-CONFUSAO-PAPEIS (P2), D-novo-PROXY-MIGRACAO (P3), reforço de bugs conhecidos que impactam o proxy. Próximo quando retomar amanhã: validar feedback do Code sobre o dossiê e a proposta, decidir se aprova o proxy + quais melhorias priorizar na tela do convênio, então continuar testes funcionais (Cenários 1/2/3 com o proxy se aprovado), e/ou ler mais sessões/fluxos conforme orientação. Manter dossiê vivo. Pré-requisitos leitura: esta sessão doc, dossiê principal atualizado, CONTROLE-EXECUCAO (seção "Onde paramos" e frase de hoje), sessões relevantes (leitura-total, cadeia-hangar, AN sprint), código do convênio. Carry-overs: proxy risks (confusão de papéis, dívida de migração), bugs conhecidos (convite lote, UI refresh, dados cadastro) que vão impactar o proxy. Diretrizes: Foco em análise e sugestões como QA (só reportar); usar o convênio como proxy é pragmático no curto prazo (aproveita Hangar real), mas exige melhorias na tela (prioridade nomenclatura + seção de rede + KPIs); documentar como temporário. 
 
 ---
 
@@ -1866,7 +1940,171 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    sob PM2 (NÃO `next dev`) — toda mudança em web/ exige `cd web ;
    npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante (arranca F0 Fase 2 direto):
+PASSO 1 — Frase comandante (Luciano DECIDE entre 2 opções):
+
+Sessão 09/06 entregou M28 em 5 commits (`10a1de7..b5609e4`):
+- 10a1de7 F0 CooperToken Fase 2: remove crédito indevido saldoParceiro
+  em QR coop→coop + corrige dupla TAXA_QR em processarQrParceiro
+  (parceiro agora recebe 99 num bruto de 100, era 98,01). 4 specs.
+- 20d3f91 F1 backend meu-perfil: GET pin-status + POST definir-pin com
+  409 anti-rewrite + throttle 10/min + helpers isPinFraco +
+  isEmpresaCooperada + OtpMotivo estendido PIN_DEFINIR. 23 specs.
+- 7f8cd93 F1 portal /portal/seguranca/definir-pin: page client +
+  isPinFraco espelhado + help inline azul. SEM OTP (JWT prova identidade).
+- abf12e2 F1 bot WA fluxo DEFINIR PIN: 3 estados + 4 ações + OTP+
+  últimos-4-CPF anti-SIM-swap (decisão Luciano) + seed do submenu
+  CooperToken opção "4 Definir PIN". 13 specs.
+- b5609e4 Santi Medicina Diagnóstica cadastrada como 1ª empresa
+  conveniada de teste da CoopereBR (Cooperado PJ + Usuario Supabase +
+  ContratoConvenio CV-SANTI-001 MISTO 20% pagador EMPRESA). Seed
+  idempotente executado + validado via /auth/login + /auth/me +
+  /portal/meus-convenios. IDs: Cooperado cmq6qo4hi0002va2wti5k1sqw +
+  Usuario cmq6qo5c40005va2w8gyyzzj7 + Convenio cmq6qo5ly0007va2w6hilvs2a.
+
+341/341 specs Jest verde. PM2 rebuild backend (2×) + frontend (1×),
+portas 3000/3001/3002 LISTENING.
+
+2 frentes READ-ONLY mapeadas SEM código (aguardando OK pra Fase 2):
+
+(A) Bug exibição/cálculo conveniada VALOR_FIXO + ALOCACAO_FIXA:
+- Frontend page.tsx:557-563,630-633 ignora tipoTarifaEmpresa=VALOR_FIXO
+  + tarifaFixaKwhEmpresa. Lê só descontoKwhCusteio (ramo PERCENTUAL_
+  DESCONTO). Pra Santi com tarifa fixa 1,10 → mostra "Tarifa cheia".
+- Backend convenios-custeio.service.ts:556-578 ALOCACAO_FIXA com 0
+  membros faz early-out status=SEM_MEMBROS + valorAPagar=null. Modelo
+  correto: pacote fixo = kwhAlocadoMensal × tarifa, independente dos
+  membros (100000 × 1,10 = R$ 110.000).
+- enriquecerComValorAPagar:164 bloqueia cálculo com status !== OK.
+- DashboardResponse.convenio não inclui tipoTarifaEmpresa/tarifaFixa
+  no select do dashboard endpoint.
+- calcularValorEnergia:696-712 já trata VALOR_FIXO — só não é chamado.
+
+(B) 3 bugs onboarding conveniada:
+- Bug A: lote silenciosamente "ENVIADO" sem disparar —
+  enviarLinkPorWhatsapp:1047-1059 IGNORA retorno do sender que em
+  DEV/whitelist retorna {enviado:false, motivo:'whitelist-dev'} SEM
+  throw. Helper marca enviado:true sempre que não-throws.
+- Bug B: UI não refresh após Aprovar/Recusar —
+  page.tsx conveniada linha 675 <GestaoConvitesSection convenioId
+  source="empresa" /> SEM onAcaoConcluida={carregar}. Componente
+  mantém state interno (useState<ListagemConvites>); refetch do parent
+  não invade.
+- Bug C: UC/energia não aparece — listagem /membros-pendentes faz
+  select só de cooperado.id/nomeCompleto/cpf/email/telefone, NÃO
+  INCLUI cooperado.ucs[]. cadastroWebV2 CRIA UC OK (publico.controller.
+  ts:1066-1082) mas path slim permiteSemUc=true cria UC SINTÉTICA com
+  distribuidora='OUTRAS' que não passa filtro INVARIANTE do preview
+  consolidado. Card consumo zerado também porque membro pode estar
+  ativo=false (PENDENTE_APROVACAO_*).
+
+DECIDA — duas opções pra arrancar Fase 2:
+
+(A) Bug exibição/cálculo conveniada → branch VALOR_FIXO no front
+    + ALOCACAO_FIXA calcula com kwhAlocadoMensal × tarifa mesmo sem
+    membros + expor campos no dashboard endpoint + specs.
+    Commit: `fix(conveniada): expoe VALOR_FIXO + calcula ALOCACAO_FIXA
+    sem membros`.
+
+(B) 3 bugs onboarding → propagar enviado:false + motivo do sender
+    (Bug A) + adicionar refreshKey: number props (Bug B) + estender
+    select listagem com cooperado.ucs[] + cotaKwhMensal (Bug C) +
+    specs. Commits separados por bloco.
+
+Perguntas decisórias pendentes (frente B):
+- Q1: lote whitelist mostra FALHOU+motivo (verdade) ou ENVIADO
+  simpático? Sugestão minha: FALHOU+motivo (visibilidade > mentira).
+- Q2: refreshKey props (simples) vs forwardRef+imperativeHandle (React
+  limpo)? Sugestão minha: refreshKey (explícito + testável).
+- Q3: membros PENDENTE entram no preview ALOCACAO_FIXA OU só
+  ativo=true? Sugestão minha: só ativo + UI mostra "X pendentes" à parte.
+
+Validações operacionais (paralelo, fora das frentes A/B):
+- Bot WA: rodar `cd backend ; npx ts-node scripts/seed-definir-pin-wa.ts`
+  (idempotente) + testar fluxo "MENU → 8 CooperTokens → 4 Definir PIN"
+  com telefone Luciano (whitelisted) — confirma OTP+últimos-4-CPF +
+  define PIN end-to-end.
+- Portal: logar cooperado teste em /portal/seguranca/definir-pin,
+  definir PIN, confirmar {temPin: true} no re-load.
+- Santi: logar http://localhost:3001/login com lucbragatto+santi@gmail.com
+  / Santi@2026 OU impersonate em /dashboard/dev/credenciais-teste →
+  contexto "Empresa — Santi Medicina Diagnostica" →
+  /conveniada/convenio/cmq6qo5ly0007va2w6hilvs2a.
+
+Fase 1 read-only obrigatória qualquer que seja a escolha (Decisão 23).
+Os mapas já produzidos nesta sessão valem como ponto de partida — Code
+pode confirmar via leitura curta + propor diffs.
+
+DIRETRIZES PRESERVAR:
+- F2.9 hardening do PIN: JWT_SECRET sem fallback, updateMany com
+  cooperativaId, validarPin private, lockout 30min, timezone-aware.
+- F0 invariante: cessão peer-to-peer entre cooperados NÃO emite saldo
+  novo pra cooperativa; TAXA_QR cobrada UMA VEZ sobre o bruto.
+- F1 PIN: isPinFraco sincronizado backend↔portal; mensagens neutras
+  anti-enumeração no Bot WA.
+- Santi: ambienteTeste=true + contatos whitelisted; CNPJ real mantido.
+- Multi-tenant: cooperativaId vem do JWT, nunca do body.
+- Arredondamento monetário Math.round(x*100)/100.
+- Specs verdes obrigatórias antes do commit.
+- Rebuild PM2 backend (stop → build → restart) em toda mudança backend.
+- Rebuild web (npm run build → pm2 restart cooperebr-frontend) em
+  toda mudança em web/ — NÃO há HMR.
+
+PRÉ-REQUISITOS LEITURA M28 (mapear, NÃO codar):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M28).
+2. docs/sessoes/2026-06-09-f0-cooper-token-f1-pin-santi-conveniada.md
+   (M28 — esta sessão; seções "2 Fases 1 read-only sem código" +
+   "Próximo passo").
+3. Se opção (A): web/app/conveniada/convenio/[id]/page.tsx
+   (linhas 57-76, 215-441, 540-700) + backend/src/convenios/
+   convenios-custeio.service.ts (linhas 156-300, 540-700, 683-733).
+4. Se opção (B): backend/src/convenios/convites-convenio.service.ts
+   (linhas 1033-1060, 550-593) + backend/src/whatsapp/
+   whatsapp-sender.service.ts (linhas 80-108) + backend/src/common/
+   safety/whitelist-teste.ts + web/components/convenios/
+   GestaoConvitesSection.tsx + MembrosPendentesSection.tsx +
+   EnvioLoteSection.tsx + backend/src/publico/publico.controller.ts
+   (linhas 1030-1110).
+5. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md.
+6. CLAUDE.md + .claude/CLAUDE.md (regras + lição `next start`).
+
+CARRY-OVERS M27/M26 AINDA VIVOS (não-bloqueantes):
+- D-novo-WA-PHONE-NORMALIZE P2 (matcher telefone amplo).
+- 3 ações WA declaradas em gatilhos sem implementação (PROCESSAR_OCR,
+  MOSTRAR_MENU_PRINCIPAL).
+- 17 modelos BOT órfãos.
+- empresa_conveniada / proprietario_usina iterando só cooperados[0]
+  em obterContextosUsuario.
+- Fase 3 Token-WA (TokenTransacao + QR pagamento real) — pausa
+  explícita; F0 fechou conformidade do circuito existente.
+- .claude/agents/wa-bot-agent.md modificado órfão M26 ainda vivo.
+- cooperebr-edge-agent stopped (projeto vizinho, fora do escopo).
+- Untracked acumulados pra Sprint Housekeeping.
+
+CARRY-OVERS NOVOS DESTA SESSÃO M28 (não-bloqueantes):
+- Frente (A) bug VALOR_FIXO/ALOCACAO_FIXA — Fase 1 read-only mapeada,
+  aguarda OK pra implementar.
+- Frente (B) 3 bugs onboarding — Fase 1 read-only mapeada, 3 perguntas
+  decisórias pendentes (Q1/Q2/Q3).
+- IDs Santi pra validação operacional:
+  - Cooperado: cmq6qo4hi0002va2wti5k1sqw
+  - Usuario: cmq6qo5c40005va2w8gyyzzj7
+  - ContratoConvenio: cmq6qo5ly0007va2w6hilvs2a
+  - email/senha: lucbragatto+santi@gmail.com / Santi@2026.
+
+DOC-SESSÃO 09/06 M28:
+docs/sessoes/2026-06-09-f0-cooper-token-f1-pin-santi-conveniada.md
+
+FRASE COMANDANTE COMPACTA (cole DIRETO no Code se Luciano só quer
+arrancar sem ler tudo):
+"Arranca Fase 2 da frente (X) mapeada no doc-sessão M28 — fix(...)
+com specs verdes + rebuild PM2 + commit PT."
+(substituir X por A ou B conforme decisão Luciano).
+
+═══ FIM DA FRASE M28 ═══
+
+— BLOCO ARQUIVADO M27 ABAIXO (clica pra expandir) ——————————————————
+
+PASSO 1 ARQUIVADO — Frase M27 anterior (08/06 — arquivada):
 
 Sessão 08/06 entregou M27 (revisão multi-tenant + segurança da feature
 "qual cadastro?" do M26 + skills Coop + F0 Fase 1 read-only CooperToken).
