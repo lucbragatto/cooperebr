@@ -721,6 +721,34 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
+### [NOVOS — sessão 10/06 Fase 2 Opção B Santi] Débitos P3 catalogados pelos reviewers
+
+#### D-novo-LOTE-PROCESSAR-FILA-INTEGRACAO — spec de integração `processarFilaWa` pós-fix Bug A
+
+**Severidade:** P3
+**Detectado em:** 2026-06-10 (Fase 2 Opção B Santi — reviewer A-1)
+**Onde:** `backend/src/convenios/convites-convenio.service.ts:550-593` (`processarFilaWa`) + `backend/src/convenios/convites-convenio-lote.spec.ts`
+
+O Bug A (commit `56b7666`) consertou `enviarLinkPorWhatsapp` propagar FALHOU + motivo. As 5 specs novas cobrem o helper isolado, mas falta spec de integração que prove **end-to-end** que `processarFilaWa` (executado em background via `setImmediate` pelo `enviarLote`) grava `loteEnvioWaStatus='FALHOU'` + `loteEnvioWaErro='whitelist-dev'` no banco quando sender skipou em DEV. Hoje o caminho é validado só pelo smoke E2E manual.
+
+**Resolução:** spec mocka sender retornando `{enviado:false, motivo:'whitelist-dev'}`, chama `enviarLote` com 2 destinatários, aguarda fila processar (`await new Promise(r => setTimeout(r, throttleMs * 2))`), confirma `update` no `conviteConvenioMembro` com `loteEnvioWaStatus: 'FALHOU'` + `loteEnvioWaErro: 'whitelist-dev'`. ~30min Code.
+
+**Não bloqueia:** smoke E2E manual com whitelist + número não-whitelisted cobre o caminho. Spec automatizada é redundância.
+
+#### D-novo-LABEL-DISTRIBUIDORA-UI — label amigável da distribuidora no resumo de UCs
+
+**Severidade:** P3
+**Detectado em:** 2026-06-10 (Fase 2 Opção B Santi — reviewer C-2)
+**Onde:** `web/components/convenios/MembrosPendentesSection.tsx` (componente `UcResumo`) + qualquer outra tela que renderize o enum `DistribuidoraEnum`
+
+O `UcResumo` (Bug C) exibe o enum cru `EDP_ES`, `OUTRAS` etc. Deveria mostrar label amigável: "EDP — Espírito Santo", "Outras concessionárias", etc. Mesma observação vale pra cards na conveniada/admin que renderizem `Uc.distribuidora` em outras telas.
+
+**Resolução:** criar `web/lib/distribuidora-label.ts` com `Record<DistribuidoraEnum, string>` (label amigável + cor opcional pra badge) + adotar em `UcResumo` e demais consumidores. ~1h Code, oportunidade de centralizar a presentation layer dos enums (D-debito-categoria-enum-labels futuro).
+
+**Não bloqueia:** enum cru é legível ("EDP_ES" → admin/empresa entende). UX-polishing.
+
+---
+
 ### [NOVOS — sessão 03/05] Débitos P3 catalogados durante a maratona
 
 #### D-FASE-A-1 — 3 specs DI pré-existentes falhando
