@@ -1,0 +1,16 @@
+✅ Teste Cadastro Usuário Final + Admin - SISGD/CoopereBR
+
+Resumo:
+- Cadastro público (/auth/register) funciona bem: cria COOPERADO + retorna token.
+- Admin loga e vê lista de cooperados PENDENTES da sua cooperativa.
+- Simulei aprovação: mudaria status + enviaria WhatsApp automático (via WhatsappSenderService).
+
+Relatório completo:
+docs/relatorios/2026-06-09-teste-enduser-cadastro-admin.md
+
+Principais achados:
+• Fluxo de auto-cadastro é simples e rápido.
+• Ainda existem vários cooperados PENDENTES antigos no sistema.
+• Aprovação manual + notificação WhatsApp já está arquitetado no core.
+
+Quer testar o fluxo completo via WhatsApp (depois do cadastro) ou aprovação real de um pendente?
