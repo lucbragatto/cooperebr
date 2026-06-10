@@ -2673,6 +2673,11 @@ enum CooperTokenOperacao {
   ABATIMENTO_ENERGIA
   TRANSFERENCIA_PARCEIRO
   RESGATE_CLUBE
+  // Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026): oxidacao DECAY_CONTINUO
+  // aplicada pelo cron mensal `aplicarOxidacaoMensal` quando admin do tenant
+  // sobe `oxidacaoPercMes > 0`. Audit trail no ledger pra cada oxidacao
+  // (saldoApos + descricao com perc/decaimento aplicado).
+  OXIDACAO
 }
 
 model CooperTokenLedger {

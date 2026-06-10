@@ -892,9 +892,22 @@ export class CooperTokenService {
       bonusIndicacao?: number;
       tetoCoop?: number | null;
       ativo?: boolean;
+      // F1.5 Bloco 2 — Taxa de Operacao (% E/OU fixo por operacao)
+      taxaEmissaoPerc?: number;
+      taxaEmissaoFixa?: number;
+      taxaQrPerc?: number;
+      taxaQrFixa?: number;
+      taxaTransferenciaPerc?: number;
+      taxaTransferenciaFixa?: number;
+      taxaResgatePerc?: number;
+      taxaResgateFixa?: number;
+      // F1.5 Bloco 3 — Oxidacao DECAY_CONTINUO
+      oxidacaoPercMes?: number;
+      oxidacaoPeriodoGracaDias?: number;
+      oxidacaoPiso?: number;
     },
   ) {
-    const payload = {
+    const payload: Prisma.ConfigCooperTokenUncheckedUpdateInput = {
       ...data,
       valorTokenReais: data.valorTokenReais != null
         ? Math.round(data.valorTokenReais * 100) / 100
@@ -902,13 +915,198 @@ export class CooperTokenService {
       descontoMaxPerc: data.descontoMaxPerc != null
         ? Math.round(data.descontoMaxPerc * 100) / 100
         : undefined,
+      // F1.5 Bloco 2: arredondamento das taxas em 4 casas (formato tokens).
+      taxaEmissaoPerc: data.taxaEmissaoPerc != null
+        ? Math.round(data.taxaEmissaoPerc * 100) / 100 : undefined,
+      taxaEmissaoFixa: data.taxaEmissaoFixa != null
+        ? Math.round(data.taxaEmissaoFixa * 10000) / 10000 : undefined,
+      taxaQrPerc: data.taxaQrPerc != null
+        ? Math.round(data.taxaQrPerc * 100) / 100 : undefined,
+      taxaQrFixa: data.taxaQrFixa != null
+        ? Math.round(data.taxaQrFixa * 10000) / 10000 : undefined,
+      taxaTransferenciaPerc: data.taxaTransferenciaPerc != null
+        ? Math.round(data.taxaTransferenciaPerc * 100) / 100 : undefined,
+      taxaTransferenciaFixa: data.taxaTransferenciaFixa != null
+        ? Math.round(data.taxaTransferenciaFixa * 10000) / 10000 : undefined,
+      taxaResgatePerc: data.taxaResgatePerc != null
+        ? Math.round(data.taxaResgatePerc * 100) / 100 : undefined,
+      taxaResgateFixa: data.taxaResgateFixa != null
+        ? Math.round(data.taxaResgateFixa * 10000) / 10000 : undefined,
+      // F1.5 Bloco 3: oxidacao normalizada em 4 casas.
+      oxidacaoPercMes: data.oxidacaoPercMes != null
+        ? Math.round(data.oxidacaoPercMes * 100) / 100 : undefined,
+      oxidacaoPeriodoGracaDias: data.oxidacaoPeriodoGracaDias,
+      oxidacaoPiso: data.oxidacaoPiso != null
+        ? Math.round(data.oxidacaoPiso * 10000) / 10000 : undefined,
     };
+
+    // F1.5 Bloco 3 (10/06/2026) — Marco prospectivo `oxidacaoAtivadaEm`.
+    // Carimba quando admin sobe `oxidacaoPercMes` de 0 (ou config nova) → >0.
+    // Limpa marco quando admin desliga (volta pra 0). Tokens com
+    // ledger.createdAt < oxidacaoAtivadaEm NUNCA sao oxidados.
+    if (data.oxidacaoPercMes !== undefined) {
+      const novoPerc = data.oxidacaoPercMes;
+      const atual = await this.prisma.configCooperToken.findUnique({
+        where: { cooperativaId },
+        select: { oxidacaoPercMes: true, oxidacaoAtivadaEm: true },
+      });
+      const percAtual = atual ? Number(atual.oxidacaoPercMes) : 0;
+      if (novoPerc > 0 && percAtual <= 0) {
+        // Ligou: carimba marco AGORA.
+        payload.oxidacaoAtivadaEm = new Date();
+      } else if (novoPerc <= 0 && percAtual > 0) {
+        // Desligou: limpa marco (nunca mais oxida ate religar).
+        payload.oxidacaoAtivadaEm = null;
+      }
+      // Caso ja estava >0 e continua >0 (so muda a porcentagem) — marco
+      // PRESERVADO. Mudar % nao reinicia prospectividade.
+    }
 
     return this.prisma.configCooperToken.upsert({
       where: { cooperativaId },
       update: payload,
-      create: { cooperativaId, ...payload },
+      create: { cooperativaId, ...payload } as Prisma.ConfigCooperTokenUncheckedCreateInput,
     });
+  }
+
+  /**
+   * Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026).
+   *
+   * Aplica oxidacao DECAY_CONTINUO no saldo dos cooperados de uma
+   * cooperativa, respeitando 3 invariantes inegociaveis:
+   *
+   *  1. PROSPECTIVIDADE: tokens com `ledger.createdAt < oxidacaoAtivadaEm`
+   *     NUNCA sao oxidados. Sempre preservados.
+   *  2. PERIODO DE GRACA: tokens emitidos a menos de `oxidacaoPeriodoGracaDias`
+   *     dias atras NUNCA sao oxidados. Recencia preservada.
+   *  3. PISO: saldoDisponivel apos oxidacao NUNCA cai abaixo de `oxidacaoPiso`.
+   *
+   * Modelo conservador (defensivo):
+   *   saldoElegivel = max(0, saldoAtual - preservados)
+   *   preservados   = soma de CREDITO com createdAt < oxidacaoAtivadaEm
+   *                 + soma de CREDITO com createdAt > now - graca
+   *   decaimento    = round(saldoElegivel * percMes / 100, 4)
+   *   novoSaldo     = max(saldoAtual - decaimento, piso)
+   *
+   * Esta formula NAO rastreia FIFO real, mas garante que tokens preservados
+   * nunca somem matematicamente — oxidacao SEMPRE menor ou igual ao
+   * verdadeiro saldo elegivel.
+   *
+   * Audit trail: cada oxidacao por cooperado cria entrada
+   * CooperTokenLedger(OXIDACAO) com saldoApos final e descricao
+   * explicando o calculo aplicado.
+   *
+   * Tenant scope: cooperativaId vindo do JOB que itera Cooperativa.findMany,
+   * ou direto do controller (caso futuro de execucao manual com tenant
+   * extraido do JWT).
+   */
+  async aplicarOxidacao(cooperativaId: string): Promise<{
+    cooperadosAfetados: number;
+    totalTokensReduzidos: number;
+  }> {
+    const config = await this.getConfig(cooperativaId);
+    if (!config) {
+      this.logger.log(
+        `[oxidacao] ${cooperativaId}: sem config — skip (oxidacao desligada).`,
+      );
+      return { cooperadosAfetados: 0, totalTokensReduzidos: 0 };
+    }
+
+    const percMes = Number(config.oxidacaoPercMes);
+    if (percMes <= 0 || !config.oxidacaoAtivadaEm) {
+      this.logger.log(
+        `[oxidacao] ${cooperativaId}: desligada (percMes=${percMes}, ativadaEm=${config.oxidacaoAtivadaEm ?? 'null'}) — skip.`,
+      );
+      return { cooperadosAfetados: 0, totalTokensReduzidos: 0 };
+    }
+
+    const gracaDias = Number(config.oxidacaoPeriodoGracaDias) || 0;
+    const piso = Number(config.oxidacaoPiso);
+    const ativadaEm = config.oxidacaoAtivadaEm;
+    const agora = new Date();
+    const limiteGraca = new Date(agora.getTime() - gracaDias * 86400000);
+
+    // Cooperados com saldo > 0 nesta cooperativa (potenciais candidatos).
+    const saldos = await this.prisma.cooperTokenSaldo.findMany({
+      where: {
+        saldoDisponivel: { gt: 0 },
+        cooperado: { cooperativaId, status: { in: ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'] } },
+      },
+      select: { cooperadoId: true, saldoDisponivel: true },
+    });
+
+    let cooperadosAfetados = 0;
+    let totalTokensReduzidos = 0;
+
+    for (const s of saldos) {
+      const saldoAtual = Number(s.saldoDisponivel);
+      if (saldoAtual <= piso) continue;
+
+      // Preservados = creditos PRE-marco + creditos em GRACA.
+      const [creditosPreMarcoAgg, creditosEmGracaAgg] = await Promise.all([
+        this.prisma.cooperTokenLedger.aggregate({
+          _sum: { quantidade: true },
+          where: {
+            cooperadoId: s.cooperadoId,
+            cooperativaId,
+            operacao: CooperTokenOperacao.CREDITO,
+            createdAt: { lt: ativadaEm },
+          },
+        }),
+        this.prisma.cooperTokenLedger.aggregate({
+          _sum: { quantidade: true },
+          where: {
+            cooperadoId: s.cooperadoId,
+            cooperativaId,
+            operacao: CooperTokenOperacao.CREDITO,
+            createdAt: { gt: limiteGraca },
+          },
+        }),
+      ]);
+
+      const preservados =
+        Number(creditosPreMarcoAgg._sum.quantidade ?? 0) +
+        Number(creditosEmGracaAgg._sum.quantidade ?? 0);
+
+      const saldoElegivel = Math.max(0, saldoAtual - preservados);
+      if (saldoElegivel <= 0) continue;
+
+      const decaimentoBruto = Math.round((saldoElegivel * percMes) / 100 * 10000) / 10000;
+      const novoSaldoCalculado = saldoAtual - decaimentoBruto;
+      const novoSaldo = Math.max(novoSaldoCalculado, piso);
+      const reducaoReal = Math.round((saldoAtual - novoSaldo) * 10000) / 10000;
+
+      if (reducaoReal <= 0) continue;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: s.cooperadoId },
+          data: { saldoDisponivel: novoSaldo },
+        });
+        await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: s.cooperadoId,
+            cooperativaId,
+            tipo: 'DESCONTO_FATURA' as CooperTokenTipo,
+            operacao: CooperTokenOperacao.OXIDACAO,
+            quantidade: reducaoReal,
+            saldoApos: novoSaldo,
+            descricao:
+              `Oxidacao DECAY_CONTINUO ${percMes}% sobre elegivel ${saldoElegivel}` +
+              ` (graca ${gracaDias}d, piso ${piso}) — reducao ${reducaoReal}`,
+          },
+        });
+      });
+
+      cooperadosAfetados += 1;
+      totalTokensReduzidos = Math.round((totalTokensReduzidos + reducaoReal) * 10000) / 10000;
+    }
+
+    this.logger.log(
+      `[oxidacao] ${cooperativaId}: ${cooperadosAfetados} cooperados afetados, ${totalTokensReduzidos} tokens reduzidos (perc=${percMes}%, graca=${gracaDias}d, piso=${piso}, ativadaEm=${ativadaEm.toISOString()})`,
+    );
+
+    return { cooperadosAfetados, totalTokensReduzidos };
   }
 
   async gerarQrPagamento(params: {

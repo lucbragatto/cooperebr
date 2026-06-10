@@ -1,8 +1,11 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenService } from './cooper-token.service';
-import { CooperTokenTipo } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
+import { CooperTokenTipo } from '@prisma/client';
+import { AsPlatform } from '../common/tenant-context';
+// Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026): gate juridico da oxidacao.
+import { isAmbienteReal } from '../common/safety/ambiente';
 
 
 @Injectable()
@@ -15,7 +18,7 @@ export class CooperTokenJob {
   ) {}
 
   /**
-   * Diariamente Ã s 6h: apura excedentes de faturas processadas
+   * Diariamente Ã s 6h: apura excedentes de faturas processadas
    * em planos com cooperTokenAtivo=true
    */
   @Cron('0 6 * * *')
@@ -118,7 +121,7 @@ export class CooperTokenJob {
   }
 
   /**
-   * Todo dia 1Âº Ã s 2h: expira tokens vencidos
+   * Todo dia 1Âº Ã s 2h: expira tokens vencidos
    */
   @Cron('0 2 1 * *')
 
@@ -156,5 +159,62 @@ export class CooperTokenJob {
       `ExpiraÃ§Ã£o concluÃ­da. Total expirado: ${totalExpirado} tokens`,
     );
   }
-}
 
+  /**
+   * Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026).
+   *
+   * Mensalmente dia 1 as 3h: aplica oxidacao DECAY_CONTINUO nas cooperativas
+   * que ligaram a feature (`ConfigCooperToken.oxidacaoPercMes > 0`).
+   *
+   * Roda 1h DEPOIS do `expirarTokensVencidos` (que esta em 02:00) pra nao
+   * competir por bloqueios de saldo. Cooperativas sem config OU com perc=0
+   * sao puladas pelo proprio `aplicarOxidacao`.
+   *
+   * GATE JURIDICO: em producao real (`isAmbienteReal()` true), exige flag
+   * `OXIDACAO_PRODUCAO_LIBERADA=true` no .env — trava tecnica enquanto
+   * Luciano nao tem politica de quebra escrita+aprovada + auditoria.
+   * Em DEV roda normal (testes operacionais). Decisao confirmada 10/06.
+   */
+  @Cron('0 3 1 * *')
+  @AsPlatform()
+  async aplicarOxidacaoMensal() {
+    this.logger.log('Iniciando oxidacao DECAY_CONTINUO mensal...');
+
+    if (isAmbienteReal() && process.env.OXIDACAO_PRODUCAO_LIBERADA !== 'true') {
+      this.logger.warn(
+        '[oxidacao] Gate juridico ATIVO em producao: OXIDACAO_PRODUCAO_LIBERADA != true. Cron SKIPADO. Liberar so apos politica de quebra escrita/aprovada + auditoria.',
+      );
+      return;
+    }
+
+    const cooperativas = await this.prisma.cooperativa.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true },
+    });
+
+    let totalOxidadoGlobal = 0;
+    let totalCooperadosAfetadosGlobal = 0;
+
+    for (const coop of cooperativas) {
+      try {
+        const r = await this.cooperTokenService.aplicarOxidacao(coop.id);
+        totalOxidadoGlobal += r.totalTokensReduzidos;
+        totalCooperadosAfetadosGlobal += r.cooperadosAfetados;
+
+        if (r.cooperadosAfetados > 0) {
+          this.logger.log(
+            `[oxidacao] ${coop.nome}: ${r.cooperadosAfetados} cooperados, ${r.totalTokensReduzidos} tokens reduzidos`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `[oxidacao] erro ${coop.nome}: ${error instanceof Error ? error.message : 'erro desconhecido'}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `[oxidacao] Mensal concluida. Total ${totalCooperadosAfetadosGlobal} cooperados afetados, ${totalOxidadoGlobal} tokens reduzidos.`,
+    );
+  }
+}
