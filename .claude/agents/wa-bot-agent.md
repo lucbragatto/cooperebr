@@ -37,3 +37,15 @@ if (!isHorarioAtendimento()) {
 - Alterar número do WhatsApp vinculado
 - Resetar todas as sessões ativas
 - Alterar fluxo de onboarding (afeta cooperados novos)
+
+## Integração com Stack de Agentes (OpenClaw/Hermes + ECC + Obsidian)
+
+- Este agente (wa-bot) deve ser carregado como skill base no gateway (OpenClaw ou Hermes) que atende WA + Telegram.
+- Para configuração de fluxos: use a skill **cooperebr-flows** (veja .claude/skills/cooperebr-flows/SKILL.md).
+  - Permite criar/atualizar FluxoEtapa via API do backend.
+  - Sync com Obsidian vault para documentação persistente (LLM Wiki).
+- Use Claw (REPL ECC) para desenvolvimento interativo de novas rotinas (branch sessions, teste prompts).
+- Sempre priorize o motor dinâmico (fluxo-etapas) sobre hardcoded para novas funcionalidades.
+- Mantenha memória em .agent/ + sincronize sínteses importantes para Obsidian (raw/ -> wiki/flows/).
+- Para "novas questões" ou fluxos que interagem: use comandos universais (MENU etc.) + acoes que chamam skills ECC ou CoopereAI.
+
