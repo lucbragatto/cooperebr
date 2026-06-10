@@ -12,6 +12,10 @@ import {
 } from './cooper-token.events';
 // Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): helper de Taxa de Operacao.
 import { calcularTaxa } from './taxa-helper';
+// Sprint Clube P1 — Fase 1.5 G3 (10/06/2026): gate juridico tambem dentro
+// do service (defense in depth — protege chamadores diretos futuros, nao so
+// o cron mensal).
+import { isAmbienteReal } from '../common/safety/ambiente';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -169,7 +173,9 @@ export class CooperTokenService {
           referenciaId,
           referenciaTabela,
           expiracaoEm,
-          descricao: `Crédito ${tipo} de ${quantidadeLiquida} tokens (bruto: ${quantidade}, taxa emissão 2%: ${taxaEmissao})`,
+          // F1.5 G2 (10/06/2026) — sem string hardcoded "2%": taxa real
+          // calculada via calcularTaxa() vai pra descricao.
+          descricao: `Crédito ${tipo} de ${quantidadeLiquida} tokens (bruto: ${quantidade}, taxa: ${taxaEmissao})`,
         },
       });
 
@@ -907,6 +913,13 @@ export class CooperTokenService {
       oxidacaoPiso?: number;
     },
   ) {
+    // F1.5 MT P2 (10/06/2026) — Defesa em profundidade. Controller ja
+    // valida e lanca 400 antes, mas o service tambem trava qualquer chamador
+    // interno futuro que passe undefined/empty (evita where: { cooperativaId:
+    // undefined } no Prisma).
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatorio em upsertConfig.');
+    }
     const payload: Prisma.ConfigCooperTokenUncheckedUpdateInput = {
       ...data,
       valorTokenReais: data.valorTokenReais != null
@@ -1004,6 +1017,17 @@ export class CooperTokenService {
     cooperadosAfetados: number;
     totalTokensReduzidos: number;
   }> {
+    // F1.5 G3 (10/06/2026) — Gate juridico TAMBEM aqui no service (alem do
+    // cron em cooper-token.job.ts:aplicarOxidacaoMensal). Defense in depth:
+    // qualquer chamador futuro (controller manual, script de operacao, smoke)
+    // sera barrado em producao real sem a flag.
+    if (isAmbienteReal() && process.env.OXIDACAO_PRODUCAO_LIBERADA !== 'true') {
+      this.logger.warn(
+        `[oxidacao] ${cooperativaId}: gate juridico ATIVO em producao (OXIDACAO_PRODUCAO_LIBERADA != true). SKIPADO. Liberar so apos politica de quebra escrita/aprovada + auditoria.`,
+      );
+      return { cooperadosAfetados: 0, totalTokensReduzidos: 0 };
+    }
+
     const config = await this.getConfig(cooperativaId);
     if (!config) {
       this.logger.log(
@@ -1271,7 +1295,9 @@ export class CooperTokenService {
           operacao: CooperTokenOperacao.CREDITO,
           quantidade: quantidadeLiquida,
           saldoApos: novoSaldoRecebedor,
-          descricao: `Recebimento QR de ${quantidadeLiquida} tokens (líquido, taxa 1%)`,
+          // F1.5 G2 (10/06/2026) — sem string hardcoded "1%": taxa real
+          // calculada via calcularTaxa() vai pra descricao.
+          descricao: `Recebimento QR de ${quantidadeLiquida} tokens (líquido, taxa: ${taxa})`,
         },
       });
 

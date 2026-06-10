@@ -721,6 +721,67 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
+### [NOVOS — sessão 10/06 Sprint Clube P1 Fase 1.5 pós-review] Débitos catalogados pelos reviewers pesados
+
+#### D-novo-OXIDACAO-LEDGER-TIPO — Criar enum OXIDACAO em CooperTokenTipo + visibilidade no caixa
+
+**Severidade:** P2 (prerequisito de "ligar oxidação" em produção real — junto da política de quebra).
+**Detectado em:** 2026-06-10 (Sprint Clube P1 F1.5 — reviewer financeiro-token).
+**Onde:** `backend/prisma/schema.prisma` enum `CooperTokenTipo` + `backend/src/cooper-token/cooper-token.service.ts:aplicarOxidacao` (linha ~926) + telas que filtram ledger por `tipo`.
+
+Hoje a entrada de ledger criada por `aplicarOxidacao` usa `tipo: 'DESCONTO_FATURA'` como cast (`as CooperTokenTipo`) — fica visível no extrato mas misturada com descontos normais. **Não é problema funcional**, mas:
+
+1. Quando admin/contador for analisar o caixa, oxidação fica indistinguível de uso real do token na fatura.
+2. Relatórios futuros (admin/financeiro, contabilidade-clube — dois rios) precisarão segregar oxidação como "decay/quebra" pra apresentar pra advogado/contador.
+3. Faz parte do checklist regulatório "antes de ligar oxidação em produção" (política de quebra escrita + auditoria do que seria oxidado + **classificação contábil dedicada**).
+
+**Resolução proposta:** adicionar valor `OXIDACAO` ao enum `CooperTokenTipo` (schema delta aditivo) + atualizar `aplicarOxidacao` pra emitir `tipo: CooperTokenTipo.OXIDACAO` + atualizar telas de extrato/admin/financeiro pra renderizar com label e cor distintos + relatório dedicado de oxidação por período. ~3-5h Code.
+
+**Bloqueia:** ligar oxidação em produção real (junto com a política de quebra e flag `OXIDACAO_PRODUCAO_LIBERADA`).
+
+---
+
+#### D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM — Modelo conservador pode subestimar oxidação
+
+**Severidade:** P3 (conservadorismo é o lado seguro, mas vale registrar).
+**Detectado em:** 2026-06-10 (Sprint Clube P1 F1.5 — reviewer financeiro-token).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:aplicarOxidacao` cálculo de `preservados`.
+
+Hoje a fórmula é:
+```
+preservados = sum(CREDITO pre-marco) + sum(CREDITO em graça)
+saldoElegivel = max(0, saldoAtual - preservados)
+```
+
+Se um CREDITO for **pre-marco E em graça** simultaneamente (ex: oxidação ligada hoje + graça de 365 dias + cooperativa nova com créditos recentes pré-marco), ele é contado **duas vezes** em `preservados` → `saldoElegivel` calculado pra menos → oxidação subestima a redução.
+
+O modelo é CONSERVADOR (oxida MENOS do que poderia, nunca MAIS), então o invariante "preservados nunca somem" continua intacto — só fica subutilizando o decay. **Não é bug funcional**, mas pode confundir contadores que esperem o decay teórico.
+
+**Resolução proposta (futuro):** trocar `preservados = preMarco + emGraca` por `preservados = sum(CREDITO where createdAt < ativadaEm OR createdAt > limiteGraca)` (set union via OR no Prisma) — elimina dupla contagem. ~1h Code + 2 specs.
+
+**Não bloqueia:** modelo conservador é defensivo. Catalogar pra revisão quando oxidação for ligada em produção real (lado oposto: contador pode preferir o conservador).
+
+---
+
+#### D-novo-OXIDACAO-SPECS — Cobertura extra (cron + perc=100 + religar) + filtro cooperativaId direto
+
+**Severidade:** P3.
+**Detectado em:** 2026-06-10 (Sprint Clube P1 F1.5 — reviewer multitenant + financeiro-token).
+**Onde:** `backend/src/cooper-token/cooper-token-oxidacao.spec.ts` + `cooper-token.job.ts:aplicarOxidacaoMensal` + `aplicarOxidacao` query inicial.
+
+3 lacunas de spec/defesa identificadas:
+
+1. **Spec do cron `aplicarOxidacaoMensal`** — hoje cobertura é só do método `aplicarOxidacao` (unit do service). Falta spec integração que confirma: cron itera só `cooperativa.findMany({ where: { ativo: true } })`, executa per-tenant em loop, agrega `cooperadosAfetados` + `totalTokensReduzidos`, segue mesmo se 1 tenant lançar exceção. ~30min Code.
+2. **Edge case `oxidacaoPercMes=100`** — fórmula `decaimento = saldoElegivel * 100/100 = saldoElegivel`; se `piso=0`, novoSaldo cai pra zero. Spec confirma comportamento (ou se quer um clamp pra "máximo permitido" — decisão produto futura). ~15min.
+3. **Edge case religar oxidação** — admin desligou (`oxidacaoAtivadaEm` ficou null) → religa depois com perc=5 → marco precisa ser carimbado de NOVO (não reusar marco antigo). Hoje spec cobre "alterar perc sem zerar preserva marco", mas falta "desliga + religa = novo marco". ~15min.
+4. **Filtro `cooperativaId` direto na query inicial** — hoje a query inicial em `aplicarOxidacao` filtra cooperados via `cooperado: { cooperativaId, ... }` (nested where). Reviewer multitenant sugere DUPLICAR o filtro também no nível de `cooperTokenSaldo` (defense in depth contra desnormalização futura). ~10min + 1 spec.
+
+**Resolução proposta:** consolidar tudo em ~1-2h Code num Sprint Housekeeping ou parte do "checklist ligar oxidação".
+
+**Não bloqueia:** specs atuais (74 → 85 nos 7 suites de cooper-token) cobrem os caminhos principais. Edge cases listados são complementares.
+
+---
+
 ### [NOVOS — sessão 10/06 Fase 2 Opção B Santi] Débitos P3 catalogados pelos reviewers
 
 #### D-novo-LOTE-PROCESSAR-FILA-INTEGRACAO — spec de integração `processarFilaWa` pós-fix Bug A

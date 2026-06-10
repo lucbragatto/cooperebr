@@ -327,9 +327,15 @@ export class CooperTokenController {
     @Req() req: any,
     @Body() body: UpsertCooperTokenConfigDto,
   ) {
+    // F1.5 MT P2 (10/06/2026) — `cooperativaId` SEMPRE do JWT, NUNCA
+    // undefined (antes SUPER_ADMIN sem cooperativaId passava undefined ao
+    // Prisma → `where: { cooperativaId: undefined }` poderia bater em
+    // qualquer linha. Multi-tenant inegociavel: 400 se contexto ausente.).
     const cooperativaId = req.user?.cooperativaId;
-    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
-      throw new BadRequestException('Cooperativa não identificada');
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatorio no contexto do usuario. SUPER_ADMIN precisa estar impersonando uma cooperativa pra editar a config.',
+      );
     }
     return this.cooperTokenService.upsertConfig(cooperativaId, body);
   }
