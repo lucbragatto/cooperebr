@@ -1045,10 +1045,21 @@ export class ConvitesConvenioService {
       `Acesse este link para concluir seu cadastro:\n${link}\n\n` +
       `Validade: 7 dias.`;
     try {
-      await this.waSender.enviarMensagem(telefone, texto, {
+      // Bug A (10/06/2026) — sender pode retornar { enviado:false, motivo } SEM throw
+      // em DEV/whitelist ou número-protegido. Antes (até M28) o helper ignorava o
+      // retorno e marcava enviado:true → lote gravava loteEnvioWaStatus='ENVIADO'
+      // mentiroso. Agora propaga FALHOU + motivo para individual + lote + reenvio.
+      const resultado = await this.waSender.enviarMensagem(telefone, texto, {
         tipoDisparo: 'convite_convenio',
         cooperativaId,
       });
+      if (!resultado.enviado) {
+        const motivo = resultado.motivo ?? 'falha desconhecida';
+        this.logger.warn(
+          `[convite-convenio] WA não enviado pra ${telefone.slice(0, 4)}***${telefone.slice(-4)}: ${motivo}`,
+        );
+        return { enviado: false, erro: motivo };
+      }
       return { enviado: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'erro desconhecido';

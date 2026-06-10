@@ -396,3 +396,64 @@ describe('ConvitesConvenioService.previewLote — LOTE.1', () => {
     });
   });
 });
+
+// ─── Bug A — enviarLinkPorWhatsapp propaga FALHOU + motivo (10/06/2026) ─────
+//
+// Antes (até M28) o helper ignorava o retorno de waSender.enviarMensagem e
+// retornava { enviado:true } sempre que não-throws — sender retornando
+// { enviado:false, motivo:'whitelist-dev' } silenciosamente virava ENVIADO no
+// banco. Agora o helper propaga FALHOU + motivo. Cobre individual + lote +
+// reenvio (mesmo helper compartilhado).
+describe('ConvitesConvenioService.enviarLinkPorWhatsapp — Bug A propaga FALHOU', () => {
+  let service: ConvitesConvenioService;
+  let waSenderMock: { enviarMensagem: jest.Mock };
+
+  const INPUT = {
+    telefone: '5527999990001',
+    link: 'https://app.coop/cadastro?conv=abc',
+    nomeConvidado: 'Dra. Ana',
+    empresaNome: 'Clínica X',
+    cooperativaId: 'coop-A',
+  };
+
+  beforeEach(() => {
+    waSenderMock = { enviarMensagem: jest.fn() };
+    service = new ConvitesConvenioService({} as any, waSenderMock as any);
+  });
+
+  it('sender retorna {enviado:false, motivo:"whitelist-dev"} SEM throw → helper retorna FALHOU + erro=whitelist-dev', async () => {
+    waSenderMock.enviarMensagem.mockResolvedValue({
+      enviado: false,
+      motivo: 'whitelist-dev',
+    });
+    const r = await service.enviarLinkPorWhatsapp(INPUT);
+    expect(r).toEqual({ enviado: false, erro: 'whitelist-dev' });
+  });
+
+  it('sender retorna {enviado:false, motivo:"numero-protegido"} → helper retorna FALHOU + erro=numero-protegido', async () => {
+    waSenderMock.enviarMensagem.mockResolvedValue({
+      enviado: false,
+      motivo: 'numero-protegido',
+    });
+    const r = await service.enviarLinkPorWhatsapp(INPUT);
+    expect(r).toEqual({ enviado: false, erro: 'numero-protegido' });
+  });
+
+  it('sender retorna {enviado:false} sem motivo → helper retorna FALHOU + erro="falha desconhecida"', async () => {
+    waSenderMock.enviarMensagem.mockResolvedValue({ enviado: false });
+    const r = await service.enviarLinkPorWhatsapp(INPUT);
+    expect(r).toEqual({ enviado: false, erro: 'falha desconhecida' });
+  });
+
+  it('sender throws → helper segue retornando FALHOU + erro=<msg> (compat preservada)', async () => {
+    waSenderMock.enviarMensagem.mockRejectedValue(new Error('Erro de rede WA'));
+    const r = await service.enviarLinkPorWhatsapp(INPUT);
+    expect(r).toEqual({ enviado: false, erro: 'Erro de rede WA' });
+  });
+
+  it('sender retorna {enviado:true} → helper retorna ENVIADO sem erro', async () => {
+    waSenderMock.enviarMensagem.mockResolvedValue({ enviado: true });
+    const r = await service.enviarLinkPorWhatsapp(INPUT);
+    expect(r).toEqual({ enviado: true });
+  });
+});

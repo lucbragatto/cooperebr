@@ -351,19 +351,27 @@ export class PortalEmpresaController {
       where: { id: atualizado.id },
       include: { convenio: { select: { empresaNome: true } } },
     });
+    // Bug A (10/06/2026) — captura retorno do helper pra propagar FALHOU + motivo
+    // na UI (antes ignorava silenciosamente em DEV/whitelist).
+    let whatsappEnviado: boolean | undefined;
+    let whatsappErro: string | undefined;
     if (convite) {
-      await this.convitesService.enviarLinkPorWhatsapp({
+      const envio = await this.convitesService.enviarLinkPorWhatsapp({
         telefone: convite.telefone,
         link: atualizado.link,
         nomeConvidado: convite.nomeConvidado,
         empresaNome: convite.convenio.empresaNome,
         cooperativaId,
       });
+      whatsappEnviado = envio.enviado;
+      whatsappErro = envio.erro;
     }
     return {
       id: atualizado.id,
       tokenSufixo: '...' + atualizado.token.slice(-6),
       expiresAt: atualizado.expiresAt,
+      whatsappEnviado,
+      whatsappErro,
     };
   }
 
