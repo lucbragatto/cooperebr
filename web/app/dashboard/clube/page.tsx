@@ -23,6 +23,7 @@ import {
   ArrowDownCircle,
   LineChart,
   Info,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -78,6 +79,17 @@ const CARDS: ClubeCard[] = [
     descricao: 'Movimentação financeira do CooperToken (compras, taxas, resgates).',
     icon: LineChart,
     corIcone: 'text-indigo-600',
+  },
+  // Sprint Clube P1 — Fase 1.5 Bloco 4 (10/06/2026): card de Configuração da
+  // Economia (Taxa de Operação + Oxidação DECAY_CONTINUO). Pagina dedicada
+  // em /dashboard/cooper-token/config — substitui a edicao duplicada que
+  // estava em /parceiro/configuracoes (la fica so um link agora).
+  {
+    href: '/dashboard/cooper-token/config',
+    titulo: 'Configuração da Economia',
+    descricao: 'Taxas de operação (emissão/QR/transferência/resgate) + oxidação dos tokens.',
+    icon: Settings,
+    corIcone: 'text-slate-700',
   },
 ];
 

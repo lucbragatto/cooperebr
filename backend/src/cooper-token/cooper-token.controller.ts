@@ -15,6 +15,8 @@ import { CooperTokenJob } from './cooper-token.job';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CooperTokenTipo } from '@prisma/client';
+// Sprint Clube P1 — Fase 1.5 Bloco 4 (10/06/2026): DTO formal com validators.
+import { UpsertCooperTokenConfigDto } from './dto/upsert-cooper-token-config.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -323,17 +325,7 @@ export class CooperTokenController {
   @Put('admin/config')
   async upsertConfig(
     @Req() req: any,
-    @Body()
-    body: {
-      modoGeracao?: string;
-      modeloVida?: string;
-      limiteTokenMensal?: number | null;
-      valorTokenReais?: number;
-      descontoMaxPerc?: number;
-      bonusIndicacao?: number;
-      tetoCoop?: number | null;
-      ativo?: boolean;
-    },
+    @Body() body: UpsertCooperTokenConfigDto,
   ) {
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
@@ -345,8 +337,10 @@ export class CooperTokenController {
   @Roles(SUPER_ADMIN)
   @Get('superadmin/config-defaults')
   async getConfigDefaults() {
-    // Defaults globais — retorna valores padrão do sistema
+    // Defaults globais — retorna valores padrão do sistema (espelham os
+    // @default do schema Prisma em ConfigCooperToken).
     return {
+      // Geral
       modoGeracao: 'AMBOS',
       modeloVida: 'AMBOS',
       limiteTokenMensal: null,
@@ -355,6 +349,20 @@ export class CooperTokenController {
       bonusIndicacao: 50,
       tetoCoop: null,
       ativo: true,
+      // F1.5 Bloco 2 — Taxa de Operacao (defaults preservam 2%/1% antigos)
+      taxaEmissaoPerc: 2,
+      taxaEmissaoFixa: 0,
+      taxaQrPerc: 1,
+      taxaQrFixa: 0,
+      taxaTransferenciaPerc: 0,
+      taxaTransferenciaFixa: 0,
+      taxaResgatePerc: 0,
+      taxaResgateFixa: 0,
+      // F1.5 Bloco 3 — Oxidacao DECAY_CONTINUO (default desligada)
+      oxidacaoPercMes: 0,
+      oxidacaoPeriodoGracaDias: 0,
+      oxidacaoPiso: 0,
+      oxidacaoAtivadaEm: null,
     };
   }
 
