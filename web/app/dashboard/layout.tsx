@@ -113,9 +113,11 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
         { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: MessageCircle },
         { href: '/dashboard/whatsapp-config', label: 'Config. WhatsApp', icon: Settings },
-        { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
-        { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
-        { href: '/dashboard/convites', label: 'Convites', icon: Mail },
+        // Sprint Clube P1 — Fase 1.1 (10/06/2026): Indicacoes + Meu Convite +
+        // Convites de Indicacao migraram pro hub /dashboard/clube (MLM faz
+        // parte do Clube — o ranking ja era MLM). Rotas antigas seguem
+        // vivas (deep-links preservados). COOPERADO/OPERADOR mantem os
+        // atalhos diretos no menu (eles ainda nao tem Clube no menu).
         // Sprint Clube Unificado P1 — Fase 1 HUB (10/06/2026):
         // 6 itens (CooperToken / Clube de Vantagens / Ranking / Planos do
         // Clube / Tokens Recebidos / Financeiro Tokens) foram aglutinados num

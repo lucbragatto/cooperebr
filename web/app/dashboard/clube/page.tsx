@@ -24,6 +24,9 @@ import {
   LineChart,
   Info,
   Settings,
+  Users,
+  Mail,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -90,6 +93,32 @@ const CARDS: ClubeCard[] = [
     descricao: 'Taxas de operação (emissão/QR/transferência/resgate) + oxidação dos tokens.',
     icon: Settings,
     corIcone: 'text-slate-700',
+  },
+  // Sprint Clube P1 — Fase 1.1 (10/06/2026): MLM entra no Clube. O ranking
+  // ja era "progressao MLM" no proprio hub; agora indicacoes + convites de
+  // indicacao + meu convite tambem ficam centralizados aqui (era 3 itens
+  // soltos no menu lateral ADMIN/SUPER_ADMIN). Cooperado/Operador mantem
+  // os atalhos diretos no menu — eles nao tem item Clube ainda.
+  {
+    href: '/dashboard/indicacoes',
+    titulo: 'Indicações',
+    descricao: 'Programa MLM — cadeia de indicações + bônus em tokens.',
+    icon: Users,
+    corIcone: 'text-fuchsia-700',
+  },
+  {
+    href: '/dashboard/convites',
+    titulo: 'Convites de Indicação',
+    descricao: 'Convites para novos cooperados via indicação (MLM).',
+    icon: Mail,
+    corIcone: 'text-violet-700',
+  },
+  {
+    href: '/dashboard/meu-convite',
+    titulo: 'Meu Convite',
+    descricao: 'Seu link pessoal de convite + métricas dos seus indicados.',
+    icon: UserPlus,
+    corIcone: 'text-purple-700',
   },
 ];
 

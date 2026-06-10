@@ -10,7 +10,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Coins, Loader2, ArrowDownCircle, Zap, ArrowRightCircle, Search } from 'lucide-react';
+import { Coins, Loader2, ArrowDownCircle, Zap, ArrowRightCircle, Search, ArrowLeft } from 'lucide-react';
+// Sprint Clube P1 — Fase 1.1 (10/06/2026): botao "Voltar ao Clube" consistente.
+import Link from 'next/link';
 
 interface SaldoParceiro {
   id: string;
@@ -181,6 +183,13 @@ export default function CooperTokenParceiroPage() {
 
   return (
     <div>
+      {/* Sprint Clube P1 — Fase 1.1: voltar ao hub do Clube. */}
+      <Link href="/dashboard/clube" className="inline-block mb-2">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center gap-3 mb-6">
         <ArrowDownCircle className="h-6 w-6 text-amber-600" />
         <h2 className="text-2xl font-bold text-gray-800">Tokens Recebidos</h2>

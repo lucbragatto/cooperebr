@@ -9,8 +9,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Wallet, TrendingUp, TrendingDown, Coins, DollarSign, Users,
+  Wallet, TrendingUp, TrendingDown, Coins, DollarSign, Users, ArrowLeft,
 } from 'lucide-react';
+// Sprint Clube P1 — Fase 1.1 (10/06/2026): botao "Voltar ao Clube" consistente.
+import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
@@ -126,6 +128,13 @@ export default function CooperTokenFinanceiroPage() {
 
   return (
     <div className="space-y-6">
+      {/* Sprint Clube P1 — Fase 1.1: voltar ao hub do Clube. */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Financeiro Tokens</h1>
