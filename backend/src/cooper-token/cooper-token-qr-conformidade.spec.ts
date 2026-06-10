@@ -64,6 +64,13 @@ const buildPrisma = (opts) => {
 
   const prisma = {
     $transaction: jest.fn((cb) => cb(tx)),
+    // F1.5 Bloco 2 (10/06/2026) — processarPagamentoQr agora le ConfigCooperToken
+    // pra extrair taxaQrPerc/taxaQrFixa. Spec mocka findUnique → null pra
+    // disparar o fallback do helper calcularTaxa (default 1% = TAXA_QR antigo).
+    // F0 conformidade segue valendo: bruto 100 → taxa 1 → liquido 99.
+    configCooperToken: {
+      findUnique: jest.fn().mockResolvedValue(opts.config ?? null),
+    },
   };
 
   return { prisma, tx };

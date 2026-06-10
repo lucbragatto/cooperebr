@@ -10,6 +10,8 @@ import {
   CooperTokenExpiradoEvent,
   CooperTokenCompraParceiroPagoEvent,
 } from './cooper-token.events';
+// Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): helper de Taxa de Operacao.
+import { calcularTaxa } from './taxa-helper';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -42,10 +44,10 @@ interface CalcularDescontoParams {
   };
 }
 
-/** Taxa de emissão de tokens (creditar) — 2% */
-const TAXA_EMISSAO = 0.02;
-/** Taxa de pagamento via QR Code (processarPagamentoQr) — 1% */
-const TAXA_QR = 0.01;
+// Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): constantes TAXA_EMISSAO (2%)
+// e TAXA_QR (1%) removidas. Taxas agora vem da ConfigCooperToken via
+// calcularTaxa() — fallback no helper preserva 2%/1% quando config eh null
+// ou campo especifico vem null/undefined. Comportamento antigo: intacto.
 
 @Injectable()
 export class CooperTokenService {
@@ -100,8 +102,16 @@ export class CooperTokenService {
       }
     }
 
-    const taxaEmissao = Math.round(quantidade * TAXA_EMISSAO * 10000) / 10000;
-    const quantidadeLiquida = Math.round((quantidade - taxaEmissao) * 10000) / 10000;
+    // F1.5 Bloco 2 — Taxa de emissao agora vem da ConfigCooperToken do tenant
+    // (campos taxaEmissaoPerc + taxaEmissaoFixa). Fallback: 2% + 0 quando
+    // config null (preserva TAXA_EMISSAO antigo). Leitura ANTES da transacao
+    // porque a config nao muda durante a operacao.
+    const configEmissao = await this.getConfig(cooperativaId);
+    const { taxa: taxaEmissao, liquido: quantidadeLiquida } = calcularTaxa(
+      'emissao',
+      quantidade,
+      configEmissao,
+    );
 
     // Sprint 8A: tokens ficam pendentes até cooperado cumprir 3 condições:
     // 1. Cadastro completo, 2. ATIVO_RECEBENDO_CREDITOS, 3. Primeira fatura paga.
@@ -975,9 +985,17 @@ export class CooperTokenService {
       );
     }
 
-    const taxa = Math.round(decoded.quantidade * TAXA_QR * 10000) / 10000;
-    const quantidadeLiquida =
-      Math.round((decoded.quantidade - taxa) * 10000) / 10000;
+    // F1.5 Bloco 2 — Taxa de QR agora vem da ConfigCooperToken do tenant
+    // (campos taxaQrPerc + taxaQrFixa). Fallback: 1% + 0 quando config null
+    // (preserva TAXA_QR antigo). Cobrada UMA UNICA VEZ sobre o bruto —
+    // processarQrParceiro reusa { taxa, quantidadeLiquida } daqui sem
+    // reaplicar (F0 preservado).
+    const configQr = await this.getConfig(recebedorCooperativaId);
+    const { taxa, liquido: quantidadeLiquida } = calcularTaxa(
+      'qr',
+      decoded.quantidade,
+      configQr,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       // Validate sender balance
