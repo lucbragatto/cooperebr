@@ -421,6 +421,13 @@ export class ConvenioAprovacaoService {
               telefone: true,
               cotaKwhMensal: true,
               ucs: {
+                // C-1 (10/06/2026) — filtro cross-tenant EXPLÍCITO no select
+                // aninhado (defense in depth). Invariante já garantia que
+                // Uc.cooperativaId == Cooperado.cooperativaId == ContratoConvenio.cooperativaId
+                // e o assertConvenioDoTenant acima ja escopa por tenant; este
+                // where torna a regra independente do invariante (resiste a
+                // refator/desnormalizacao futura).
+                where: { cooperativaId },
                 select: {
                   id: true,
                   numero: true,

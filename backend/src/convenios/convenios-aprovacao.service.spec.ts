@@ -636,11 +636,14 @@ describe('ConvenioAprovacaoService — Fatia 3', () => {
       await service.listarPendentes('conv1', 'coopA');
 
       // Validação anti-regressão: garante que o select.cooperado contém
-      // explicitamente os campos novos (não pode voltar a omitir).
+      // explicitamente os campos novos (não pode voltar a omitir) E o filtro
+      // cross-tenant `where: { cooperativaId }` no select aninhado de ucs
+      // (C-1, 10/06/2026 — defense in depth).
       const chamada = findManyPendentes.mock.calls[0]![0];
       const selectCooperado = chamada.include.cooperado.select;
       expect(selectCooperado.cotaKwhMensal).toBe(true);
       expect(selectCooperado.ucs).toEqual({
+        where: { cooperativaId: 'coopA' },
         select: {
           id: true,
           numero: true,
