@@ -511,6 +511,13 @@ export default function ConveniadaConvenioDashboard() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  /**
+   * Bug B (10/06/2026) — bump externo. Incrementa em cada onAcaoConcluida
+   * (lote/pendentes) pra forçar GestaoConvitesSection + MembrosPendentesSection
+   * a re-fetcharem suas listas internas. Sem isso ficavam congelados quando
+   * uma seção irmã mudava o estado.
+   */
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -525,6 +532,11 @@ export default function ConveniadaConvenioDashboard() {
       setCarregando(false);
     }
   }, [convenioId]);
+
+  const carregarComBump = useCallback(async () => {
+    await carregar();
+    setRefreshKey((k) => k + 1);
+  }, [carregar]);
 
   useEffect(() => {
     carregar();
@@ -672,7 +684,11 @@ export default function ConveniadaConvenioDashboard() {
             2 minutos.</em>
           </HelpBox>
           <div className="mt-3">
-            <GestaoConvitesSection convenioId={convenioId} source="empresa" />
+            <GestaoConvitesSection
+              convenioId={convenioId}
+              source="empresa"
+              refreshKey={refreshKey}
+            />
           </div>
         </CardContent>
       </Card>
@@ -681,7 +697,7 @@ export default function ConveniadaConvenioDashboard() {
       <EnvioLoteSection
         convenioId={convenioId}
         source="empresa"
-        onAcaoConcluida={carregar}
+        onAcaoConcluida={carregarComBump}
       />
 
       {/* 3. Aprovações pendentes — reuso com source='empresa' */}
@@ -698,7 +714,8 @@ export default function ConveniadaConvenioDashboard() {
           <MembrosPendentesSection
             convenioId={convenioId}
             source="empresa"
-            onAcaoConcluida={carregar}
+            refreshKey={refreshKey}
+            onAcaoConcluida={carregarComBump}
           />
         </CardContent>
       </Card>

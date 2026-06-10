@@ -98,6 +98,12 @@ interface MembrosPendentesSectionProps {
   source: ConviteSource;
   /** Callback após qualquer ação (aprovar/rejeitar/etc) — pra parent atualizar */
   onAcaoConcluida?: () => void;
+  /**
+   * Bug B (10/06/2026) — bump externo pra forçar re-fetch sem desmontar.
+   * Parent incrementa quando uma seção irmã (lote/convites) gera novos
+   * membros pendentes que precisam aparecer aqui.
+   */
+  refreshKey?: number;
 }
 
 // Tipos de documento disponíveis (espelha enum TipoDocumento do Prisma)
@@ -114,6 +120,7 @@ export function MembrosPendentesSection({
   convenioId,
   source,
   onAcaoConcluida,
+  refreshKey,
 }: MembrosPendentesSectionProps) {
   const [loading, setLoading] = useState(true);
   const [listagem, setListagem] = useState<ListagemPendentes | null>(null);
@@ -147,7 +154,8 @@ export function MembrosPendentesSection({
 
   useEffect(() => {
     carregar();
-  }, [carregar]);
+    // refreshKey no dep array — bump externo dispara re-fetch (Bug B 10/06/2026).
+  }, [carregar, refreshKey]);
 
   async function aprovarAdmin(membroId: string) {
     setAcaoMembroId(membroId);

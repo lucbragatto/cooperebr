@@ -127,12 +127,19 @@ interface GestaoConvitesSectionProps {
   source: ConviteSource;
   /** Callback quando lista muda (pra parent atualizar contadores externos) */
   onListaAtualizada?: (contadores: Contadores) => void;
+  /**
+   * Bug B (10/06/2026) — bump externo pra forçar re-fetch sem desmontar.
+   * Parent incrementa quando uma seção irmã (lote/pendentes) realiza ação
+   * que afeta a lista de convites desta seção.
+   */
+  refreshKey?: number;
 }
 
 export function GestaoConvitesSection({
   convenioId,
   source,
   onListaAtualizada,
+  refreshKey,
 }: GestaoConvitesSectionProps) {
   const [loading, setLoading] = useState(true);
   const [listagem, setListagem] = useState<ListagemConvites | null>(null);
@@ -170,7 +177,8 @@ export function GestaoConvitesSection({
 
   useEffect(() => {
     carregar();
-  }, [carregar]);
+    // refreshKey no dep array — bump externo dispara re-fetch (Bug B 10/06/2026).
+  }, [carregar, refreshKey]);
 
   function formatarTelefone(valor: string): string {
     const nums = valor.replace(/\D/g, '').slice(0, 11);

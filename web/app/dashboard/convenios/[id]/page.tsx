@@ -35,12 +35,23 @@ export default function ConvenioDetalhePage() {
   const [convenio, setConvenio] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [recalculando, setRecalculando] = useState(false);
+  /**
+   * Bug B (10/06/2026) — bump externo. Incrementa em cada acao concluida
+   * de seções irmãs (lote/pendentes) pra forçar GestaoConvitesSection +
+   * MembrosPendentesSection a re-fetcharem suas listas internas.
+   */
+  const [refreshKey, setRefreshKey] = useState(0);
 
   function carregar() {
     setCarregando(true);
     api.get(`/convenios/${id}`)
       .then(r => setConvenio(r.data))
       .finally(() => setCarregando(false));
+  }
+
+  function carregarComBump() {
+    carregar();
+    setRefreshKey((k) => k + 1);
   }
 
   useEffect(() => { carregar(); }, [id]);
@@ -265,12 +276,17 @@ export default function ConvenioDetalhePage() {
       {/* Sprint Convite-Convênio Fatia 5 (03/06/2026) — Gestão de convites
           per-recipient (criar / reenviar / cancelar) + Membros pendentes
           (aprovar / solicitar doc / rejeitar / reenviar magic link). */}
-      <GestaoConvitesSection convenioId={id} source="admin" />
+      <GestaoConvitesSection convenioId={id} source="admin" refreshKey={refreshKey} />
 
       {/* Sprint Convite-Lote LOTE.4 (07/06/2026) — convite em lote via CSV. */}
-      <EnvioLoteSection convenioId={id} source="admin" />
+      <EnvioLoteSection convenioId={id} source="admin" onAcaoConcluida={carregarComBump} />
 
-      <MembrosPendentesSection convenioId={id} source="admin" />
+      <MembrosPendentesSection
+        convenioId={id}
+        source="admin"
+        refreshKey={refreshKey}
+        onAcaoConcluida={carregarComBump}
+      />
 
       {/* Membros ATIVOS (tabela legacy) */}
       <Card>
