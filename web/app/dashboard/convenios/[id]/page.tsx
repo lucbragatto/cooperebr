@@ -42,15 +42,18 @@ export default function ConvenioDetalhePage() {
    */
   const [refreshKey, setRefreshKey] = useState(0);
 
-  function carregar() {
+  async function carregar() {
     setCarregando(true);
-    api.get(`/convenios/${id}`)
-      .then(r => setConvenio(r.data))
-      .finally(() => setCarregando(false));
+    try {
+      const r = await api.get(`/convenios/${id}`);
+      setConvenio(r.data);
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  function carregarComBump() {
-    carregar();
+  async function carregarComBump() {
+    await carregar();
     setRefreshKey((k) => k + 1);
   }
 
