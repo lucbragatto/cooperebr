@@ -41,7 +41,6 @@ import {
   ArrowUpCircle,
   ClipboardList,
   LineChart,
-  Coins,
   TestTube,
   Scale,
   FileSpreadsheet,
@@ -108,7 +107,7 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/repasses', label: 'Repasses', icon: Wallet },
         { href: '/dashboard/usinas/listas', label: 'Listas Concessionária', icon: FileText },
         { href: '/dashboard/contratos', label: 'Contratos', icon: FileText },
-        { href: '/dashboard/planos', label: 'Planos', icon: Tag },
+        { href: '/dashboard/planos', label: 'Planos (Comercial)', icon: Tag },
         { href: '/dashboard/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
         { href: '/dashboard/motor-proposta', label: 'Motor de Proposta', icon: Zap },
         { href: '/dashboard/motor-proposta/lista-espera', label: 'Lista de Espera', icon: Clock },
@@ -117,10 +116,13 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/indicacoes', label: 'Indicações', icon: Gift },
         { href: '/dashboard/meu-convite', label: 'Meu Convite', icon: UserPlus },
         { href: '/dashboard/convites', label: 'Convites', icon: Mail },
-        { href: '/dashboard/cooper-token', label: 'CooperToken', icon: Coins },
-        { href: '/dashboard/clube-vantagens', label: 'Clube de Vantagens', icon: Gift },
-        { href: '/dashboard/clube-vantagens/ranking', label: 'Ranking Indicadores', icon: Tag },
-        { href: '/dashboard/clube/planos', label: 'Planos do Clube', icon: Gift },
+        // Sprint Clube Unificado P1 — Fase 1 HUB (10/06/2026):
+        // 6 itens (CooperToken / Clube de Vantagens / Ranking / Planos do
+        // Clube / Tokens Recebidos / Financeiro Tokens) foram aglutinados num
+        // único item "Clube" → /dashboard/clube com grid de cards. As rotas
+        // antigas seguem vivas (deep-links + ConvenioCusteioBloco continuam
+        // funcionando).
+        { href: '/dashboard/clube', label: 'Clube', icon: Gift },
         { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
         { href: '/dashboard/administradoras', label: 'Agregadores', icon: Building2 },
@@ -146,8 +148,10 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/financeiro/despesas', label: 'Despesas Correntes', icon: ClipboardList },
         { href: '/dashboard/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: LineChart },
         { href: '/dashboard/configuracoes/financeiro', label: 'Plano de Contas', icon: DollarSign },
-        { href: '/dashboard/cooper-token-parceiro', label: 'Tokens Recebidos', icon: ArrowDownCircle },
-        { href: '/dashboard/cooper-token-financeiro', label: 'Financeiro Tokens', icon: Coins },
+        // Sprint Clube Unificado P1 — Fase 1 HUB (10/06/2026): "Tokens
+        // Recebidos" e "Financeiro Tokens" moveram pro hub /dashboard/clube;
+        // rotas continuam vivas. (Eram /dashboard/cooper-token-parceiro e
+        // /dashboard/cooper-token-financeiro respectivamente.)
       ],
     },
     {
