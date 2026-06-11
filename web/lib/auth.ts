@@ -4,13 +4,20 @@ import type { AuthResponse, Usuario } from '@/types';
 
 const TOKEN_KEY = 'token';
 const USUARIO_KEY = 'usuario';
-// Revisao multi-tenant 09/06/2026 — secure em prod pra evitar enviar JWT via
-// http; em dev (localhost http) `secure:true` bloquearia o set. NODE_ENV
-// segue como flag pragmatica (suficiente; nao gate de seguranca por si so).
+// 12/06/2026 — `secure` agora vem do PROTOCOLO REAL da janela em runtime,
+// não de NODE_ENV. PM2 força NODE_ENV=production local → cookie Secure ficava
+// ligado mesmo em acesso http via IP da LAN (192.168.x.x), e o browser
+// rejeitava o set → login falhava silenciosamente fora do localhost.
+// Mesma classe do postmortem 18/05 (backend `isAmbienteReal()` em vez de
+// NODE_ENV); equivalente browser-side é checar window.location.protocol.
+// SSR-safe: typeof window guard pra builds estáticos do Next; nesses casos
+// `Cookies.set` nem roda, então `secure:false` é inócuo.
 const COOKIE_OPTS = {
   expires: 7,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  get secure(): boolean {
+    return typeof window !== 'undefined' && window.location.protocol === 'https:';
+  },
 };
 
 export async function login(identificador: string, senha: string): Promise<void> {
