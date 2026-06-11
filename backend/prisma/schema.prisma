@@ -110,6 +110,15 @@ model Cooperativa {
   aparelhosVinculados       AparelhoVinculado[]
   tokenTransacoesPagador    TokenTransacao[]                  @relation("TokenTransacaoPagadorCoop")
 
+  // ── Sprint Concierge MVP (11/06/2026) — Modulo SaaS Concierge Tributario ──
+  // Quando true, /dashboard/concierge fica acessivel ao admin + endpoints
+  // /concierge/* funcionam pra essa cooperativa. Quando false, modulo bloqueado
+  // com banner upgrade. Default false; SUPER_ADMIN ativa por parceiro via
+  // /dashboard/super-admin/saas/concierge. Plano OURO incluira automaticamente.
+  // Diagnosticos sao persistidos em DiagnosticoIndebito (cooperativaId opcional).
+  moduloConciergeAtivo      Boolean                           @default(false)
+  conciergeAtivadoEm        DateTime?
+
   @@map("cooperativas")
 }
 

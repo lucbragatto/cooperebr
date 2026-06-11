@@ -2003,22 +2003,27 @@ export class CooperTokenService {
       );
       this.eventEmitter.emit('cooper-token-compra-pj.credito-pendente', {
         compraId,
+        cooperadoId: compra.compradorCooperadoId,
         cooperativaId: compra.cooperativaId,
-        compradorCooperadoId: compra.compradorCooperadoId,
         quantidade: Number(compra.quantidade),
         eventId,
+        timestamp: new Date().toISOString(),
       });
       return { creditado: false, alertaPendencia: true };
     }
 
-    const quantidadeLiquida = Number((ledgerEntry as any).quantidade ?? 0);
     this.logger.log(
-      `[compra-pj] compra ${compraId} → ${quantidadeLiquida} tokens creditados ao cooperado ${compra.compradorCooperadoId} (bruto ${compra.quantidade}, taxa via F1.5)`,
+      `[compra-pj] compra ${compraId} credito OK — cooperado ${compra.compradorCooperadoId} +${ledgerEntry.quantidade} tokens (ledger ${ledgerEntry.id})`,
     );
-    return { creditado: true, quantidadeLiquida };
-  }
 
-  // ── Parceiro: Comprar tokens ──
+    return {
+      creditado: true,
+      quantidadeLiquida: Number(ledgerEntry.quantidade),
+      alertaPendencia: false,
+    };
+  }
+}
+ Parceiro: Comprar tokens ──
 
   async comprarTokensParceiro(params: {
     cooperativaId: string;

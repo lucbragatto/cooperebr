@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
+import { ConciergeService } from './concierge.service';
+import { ConciergeController } from './concierge.controller';
 import { EdpEsFaturaAdapter } from './fatura-canonica/edp-es.adapter';
 import { ElfsmFaturaAdapter } from './fatura-canonica/elfsm.adapter';
 import { EnergisaToFaturaAdapter } from './fatura-canonica/energisa-to.adapter';
@@ -11,20 +14,15 @@ import { DetectoresRegistry } from './detectores/detectores.registry';
 /**
  * Modulo Concierge - auditor tributario de fatura de energia.
  *
- * Sprint C2 (Fatura Canonica + Adapters):
- *  - EdpEsFaturaAdapter: cobre 3 formatos (B1 residencial cativo/GD, B3 cooperada, A4 CUSD usina)
- *  - ElfsmFaturaAdapter: esqueleto (NAO_IMPLEMENTADO)
- *  - EnergisaToFaturaAdapter: esqueleto (NAO_IMPLEMENTADO)
- *
- * Sprint C3 (Detectores tributarios determinis ticos):
- *  - DetectorTema69Stricto: PIS/COFINS sem ICMS na base (RE 574.706)
- *  - DetectorTese3PisCofinsSobreScee: PIS/COFINS sobre energia compensada (Tema 69 por analogia)
- *  - DetectorTese2IcmsTusdGeracao: ICMS sobre TUSD-G/demanda/encargos (Tema 176 + Sumula 391)
- *
- * Sprint C4 (proximo): orquestrador + classificador de teses por perfil + POST /concierge/diagnostico.
+ * Sprint C2 (Fatura Canonica + Adapters): EDP_ES + ELFSM (C2.5) + ENERGISA_TO esqueleto.
+ * Sprint C3 (Detectores): Tema 69 stricto + Tese 3 SCEE + Tese 2 TUSD-G.
+ * Sprint C2.6 (ratificacao ELFSM): ementa Tese 3 reforcada.
+ * Sprint MVP-SaaS (11/06/2026): service + controller + 7 endpoints + feature flag.
  */
 @Module({
   providers: [
+    PrismaService,
+    ConciergeService,
     EdpEsFaturaAdapter,
     ElfsmFaturaAdapter,
     EnergisaToFaturaAdapter,
@@ -34,6 +32,7 @@ import { DetectoresRegistry } from './detectores/detectores.registry';
     DetectorTese2IcmsTusdGeracao,
     DetectoresRegistry,
   ],
-  exports: [FaturaAdapterRegistry, DetectoresRegistry],
+  controllers: [ConciergeController],
+  exports: [FaturaAdapterRegistry, DetectoresRegistry, ConciergeService],
 })
 export class ConciergeModule {}

@@ -9,39 +9,11 @@ import { projetar60mSelic } from './detectores.types';
 /**
  * Tese 3 do dossie CoopereBR - PIS/COFINS sobre SCEE.
  *
- * Fundamento: energia compensada via SCEE != receita. E "emprestimo
- * gratuito" do cooperado pra distribuidora (kWh injetado e devolvido).
- * Logo nao deve compor base de PIS/COFINS - apenas o CONSUMO LIQUIDO
- * (pos-compensacao) e fato gerador. Aplicacao por analogia ao Tema 69.
- *
- * EDP/Energisa cobram PIS/COFINS sobre TUSD+TE FORNECIDA BRUTA (sem
- * descontar injecao). Detector recalcula:
- *   - base correta = (TUSD+TE liquido pos-SCEE) - ICMS liquido
- *   - PIS/COFINS legitimo = base correta * (aliqPis + aliqCofins)
- *   - indebito = PIS/COFINS cobrado liquido - PIS/COFINS legitimo
- *
- * INCONSISTENCIA EDP vs ELFSM (achado 11/06/2026 confronto fatura ELFSM):
- *  - EDP-ES aplica SCEE no ICMS (Lei GERAR 11.253/2021-ES) - ICMS efetivo
- *    incide so sobre energia consumida da rede. CORRETO no ICMS.
- *  - EDP-ES NAO aplica SCEE no PIS/COFINS - calcula base como se nao
- *    houvesse compensacao (TUSD+TE brutos menos ICMS bruto). Tese 69
- *    stricto fica satisfeito (base = base ICMS positiva - ICMS), mas
- *    base CORRETA Tese 3 = liquido pos-SCEE - ICMS liquido. INCONSISTENTE.
- *  - ELFSM (Empresa Luz e Forca Santa Maria, ES) aplica SCEE em AMBOS
- *    os tributos - linha de injecao traz PIS/COFINS NEGATIVO cancelando
- *    o positivo do Consumo SCEE. Comportamento conservador favoravel ao
- *    cliente. Tese 3 retorna SEM_DIVERGENCIA pra clientes ELFSM.
- *  - Justificativa juridica da EDP: ICMS e estadual (Lei GERAR obriga),
- *    PIS/COFINS e federal (nao ha lei federal explicita - so analogia ao
- *    Tema 69 STF que ainda nao tem decisao especifica pra SCEE).
- *
- * Achados nas 7 faturas:
- *  - Leonardo (cativo sem SCEE): R$ 0 (tese nao aplica).
- *  - Luciano (B1 GD): ~R$ 49,91/mes em conta de R$ 184 (27%).
- *  - EXFISHES MAR/26 antes GDIII: ~R$ 3.611/mes em conta de R$ 3.997 (90%!).
- *  - EXFISHES ABR/26 GDIII: ~R$ 2.515/mes em conta de R$ 32.486 (7,7%).
- *  - CUSD I/II (usina): proximo de R$ 0 (TUSD/TE cancelam com injecao).
- *  - Guilherme ELFSM B1 GD I: R$ 0 (ELFSM ja aplica corretamente).
+ * Achado estrategico Concierge 11/06/2026: ELFSM aplica corretamente
+ * (PIS/COFINS sobre SCEE com linha negativa cancelando), enquanto EDP
+ * cobra sobre TUSD+TE bruta. ELFSM e PROVA CABAL de descumprimento da
+ * EDP - nao mais "argumento por analogia" e sim tratamento desigual
+ * sob mesma jurisdicao ES + mesma legislacao federal.
  */
 @Injectable()
 export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario {
@@ -51,13 +23,10 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
     const t = fatura.totaisTributarios;
     const aliqTotal = t.aliquotaPis + t.aliquotaCofins;
 
-    // Sem GD - tese nao aplica.
     if (fatura.classificacaoScee === 'NAO_GD') {
       return { detector: this.codigo, padrao: null };
     }
 
-    // Calcula valor liquido das rubricas energeticas pos-SCEE.
-    // Soma TUSD + TE positivas (fornecida) com TUSD + TE negativas (injecao).
     let valorEnergeticoLiquido = 0;
     let icmsEnergeticoLiquido = 0;
     const rubricasEnergeticas = new Set<string>();
@@ -70,14 +39,11 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
       }
     }
 
-    // Base correta sob Tese 3 = valor liquido SCEE menos ICMS liquido.
     const baseCorreta = valorEnergeticoLiquido - icmsEnergeticoLiquido;
 
     // PIS+COFINS LIQUIDO sobre rubricas energeticas - soma com sinal.
-    // EDP: injecao SCEE tem PIS/COFINS == 0 (so positivos contam, igual antes).
-    // ELFSM: injecao SCEE tem PIS/COFINS NEGATIVO que cancela o positivo do
-    // Consumo SCEE - resultado liquido = PIS/COFINS sobre Consumo direto apenas.
-    // Sem essa correcao a ELFSM daria falso positivo de indebito.
+    // EDP: injecao SCEE tem PIS/COFINS == 0 (so positivos contam).
+    // ELFSM: injecao tem PIS/COFINS NEGATIVO cancelando o positivo.
     let pisCofinsCobradoEnergetico = 0;
     for (const r of fatura.rubricas) {
       if (r.tipo === 'TUSD' || r.tipo === 'TE' || r.tipo === 'INJECAO_SCEE') {
@@ -86,19 +52,34 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
     }
 
     if (pisCofinsCobradoEnergetico <= 0) {
-      // Sem PIS/COFINS liquido positivo sobre energetico - sem indebito tese 3.
       return { detector: this.codigo, padrao: null };
     }
 
-    // PIS/COFINS que SERIA legitimo se a base fosse liquida.
     const pisCofinsLegitimo = Math.max(0, baseCorreta * aliqTotal);
-
     const indebito = pisCofinsCobradoEnergetico - pisCofinsLegitimo;
     const TOLERANCIA = 0.5;
 
     if (indebito < TOLERANCIA) {
       return { detector: this.codigo, padrao: null };
     }
+
+    const ementaCabal =
+      'Energia eletrica injetada e compensada via SCEE configura ' +
+      'emprestimo gratuito (Tema 986 STJ ressalva). Nao constitui ' +
+      'receita da concessionaria - logo nao integra base de PIS/COFINS. ' +
+      'Base correta = consumo liquido pos-compensacao (sem ICMS). ' +
+      'PROVA CABAL DE DESCUMPRIMENTO (achado Concierge 11/06/2026): ' +
+      'a propria EDP-ES reconhece a SCEE no ICMS (Lei GERAR 11.253/2021-ES) ' +
+      'mas se recusa a fazer o mesmo no PIS/COFINS. A ELFSM (Empresa Luz e ' +
+      'Forca Santa Maria), concessionaria sob a MESMA jurisdicao do ES, ' +
+      'MESMA legislacao federal (Tema 69 STF, Decreto 12.068/2024, REN 1.059/2023) ' +
+      'e MESMOS orgaos fiscalizadores, aplica a SCEE em AMBOS os tributos - ' +
+      'traz linha de injecao com PIS/COFINS NEGATIVO cancelando o positivo do ' +
+      'Consumo SCEE. Nao e argumento por analogia: e tratamento desigual sob ' +
+      'mesma lei. A EDP nao tem defesa de impossibilidade tecnica nem de ' +
+      'ausencia de precedente operacional - ELFSM e precedente direto no ES. ' +
+      'Inverte o onus argumentativo: cabe a EDP explicar por que NAO faz o ' +
+      'que a ELFSM faz.';
 
     return {
       detector: this.codigo,
@@ -110,15 +91,7 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
         fundamento: {
           tema: 'Tema 69 STF por analogia + Tema 986 STJ (ressalva SCEE)',
           numero: 'RE 574.706 + REsp 1.677.524',
-          ementa:
-            'Energia eletrica injetada e compensada via SCEE configura ' +
-            'emprestimo gratuito (Tema 986 STJ ressalva). Nao constitui ' +
-            'receita da concessionaria - logo nao integra base de PIS/COFINS. ' +
-            'Base correta = consumo liquido pos-compensacao (sem ICMS). ' +
-            'Argumento para o advogado: a propria EDP reconhece a SCEE no ' +
-            'ICMS (Lei GERAR 11.253/2021-ES) mas se recusa a fazer o mesmo ' +
-            'no PIS/COFINS. Concessionarias menores (ELFSM) ja aplicam a ' +
-            'SCEE em ambos os tributos - prova de que tecnicamente e viavel.',
+          ementa: ementaCabal,
           classificacaoDossie: 'T3',
           risco: 'MEDIO',
         },
@@ -131,8 +104,8 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
           `PIS+COFINS legitimo: R$ ${pisCofinsLegitimo.toFixed(2)} | ` +
           `PIS+COFINS cobrado sobre energetico (liquido): R$ ${pisCofinsCobradoEnergetico.toFixed(2)} | ` +
           `Indebito mensal: R$ ${indebito.toFixed(2)} | ` +
-          `OBS auditor: a concessionaria aplica SCEE no ICMS (Lei GERAR-ES) mas NAO no PIS/COFINS - ` +
-          `inconsistencia legal exploravel via Tema 69 STF por analogia (ELFSM ja aplica corretamente).`,
+          `RATIFICACAO ELFSM: concessionaria sob mesma lei ES aplica SCEE em PIS/COFINS - ` +
+          `EDP nao tem defesa de impossibilidade tecnica. Inversao de onus argumentativo.`,
         rubricasEnvolvidas: Array.from(rubricasEnergeticas),
       },
     };
