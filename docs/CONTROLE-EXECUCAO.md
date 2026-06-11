@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-10 — M29 Fase 2 Opção B Santi (3 bugs onboarding) + ajustes P3 reviewers + smoke E2E + 2 sprints enfileirados + Regra de Coerência Sistêmica inegociável**. **8 commits trabalho** (`ae982e3` carry-over wa-bot + `56b7666` Bug A propaga FALHOU+motivo no helper + `747cfbe` Bug B refreshKey externo + `2b0e9a0` Bug C expõe ucs+cotaKwhMensal + `78b7a82` C-1 where cooperativaId explícito + `3789bed` B-1 carregar async admin + `bdbdeba` débitos P3 A-1/C-2 + `2d62b09` smoke E2E reproduzível). 56/56 specs Jest verde + TSC web exit 0. Smoke E2E HTTP real validou Bug A end-to-end (login Santi → POST lote → 1 ENVIADO whitelist + 1 FALHOU `whitelist-dev`). Reviewers `cooperebr-multitenant-reviewer` + `cooperebr-financeiro-token-reviewer` aprovaram zero P0/P1/P2. **2 sprints enfileirados em memória sem código:** Sprint Clube Unificado + CooperToken **P1** (próxima sessão — prompt empacotado em `docs/relatorios/2026-06-10-prompt-sprint-clube-unificado-cooper-token.md`) e Sprint Hardening Mass-Write SUPER_ADMIN **P2** (rebaixado). Regra de Coerência Sistêmica catalogada inegociável global (MAPA DE IMPACTO em 5 dimensões em CADA Fase 1). Detalhe: `docs/sessoes/2026-06-10-bugs-onboarding-santi-fase-2-opcao-b.md`.
+> Última atualização: **2026-06-10 — M30 Sprint Clube Unificado P1: Fase 1 HUB + Fase 1.5 ECONOMIA (4 blocos) + 5º commit fixes pós-review + Fase 1.1 POLIMENTO MLM**. **8 commits trabalho** (`e4d0976..ed33ffb`): Hub `/dashboard/clube` aglutina 6 itens espalhados em grid de cards + menu único + "Planos (Comercial)" desambiguado; F1.5 entrega 11 colunas aditivas em ConfigCooperToken (8 taxas per-operação + 3 oxidação + marco `oxidacaoAtivadaEm`), helper puro `calcularTaxa` substituindo constantes chumbadas (preserva 2%/1% via fallback), `aplicarOxidacao` prospectivo com 3 invariantes (marco + graça + piso) + cron mensal + gate técnico `OXIDACAO_PRODUCAO_LIBERADA`, UI dedicada `/dashboard/cooper-token/config` (banner âmbar gate jurídico + guard de UX) + link único em `/parceiro/configuracoes`; 5º commit fixes pós-review (G2 strings hardcoded + G3 gate duplicado + MT P2 cooperativaId obrigatório) aprovados pelos reviewers `cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer` (zero P0/P1); Fase 1.1 polimento (3 cards MLM no hub + botão "Voltar ao Clube" consistente em cooper-token/parceiro/financeiro). 85/85 specs Jest verde (7 suites cooper-token: taxa-helper + qr-conformidade + oxidacao + f15-fixes + idor-bq2 + limite-token + token-notificacao). TSC web exit 0. 3 débitos novos: D-novo-OXIDACAO-LEDGER-TIPO P2 (pre-requisito ligar oxidação em prod), D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM P3 (conservador), D-novo-OXIDACAO-SPECS P3. Detalhe: `docs/sessoes/2026-06-10-clube-hub-f15-fase11.md`.
+
+> Histórico: **2026-06-10 — M29 Fase 2 Opção B Santi (3 bugs onboarding) + ajustes P3 reviewers + smoke E2E + 2 sprints enfileirados + Regra de Coerência Sistêmica inegociável**. **8 commits trabalho** (`ae982e3` carry-over wa-bot + `56b7666` Bug A propaga FALHOU+motivo no helper + `747cfbe` Bug B refreshKey externo + `2b0e9a0` Bug C expõe ucs+cotaKwhMensal + `78b7a82` C-1 where cooperativaId explícito + `3789bed` B-1 carregar async admin + `bdbdeba` débitos P3 A-1/C-2 + `2d62b09` smoke E2E reproduzível). 56/56 specs Jest verde + TSC web exit 0. Smoke E2E HTTP real validou Bug A end-to-end (login Santi → POST lote → 1 ENVIADO whitelist + 1 FALHOU `whitelist-dev`). Reviewers `cooperebr-multitenant-reviewer` + `cooperebr-financeiro-token-reviewer` aprovaram zero P0/P1/P2. **2 sprints enfileirados em memória sem código:** Sprint Clube Unificado + CooperToken **P1** (próxima sessão — prompt empacotado em `docs/relatorios/2026-06-10-prompt-sprint-clube-unificado-cooper-token.md`) e Sprint Hardening Mass-Write SUPER_ADMIN **P2** (rebaixado). Regra de Coerência Sistêmica catalogada inegociável global (MAPA DE IMPACTO em 5 dimensões em CADA Fase 1). Detalhe: `docs/sessoes/2026-06-10-bugs-onboarding-santi-fase-2-opcao-b.md`.
 
 > Histórico: **2026-06-08 — M26 Sprint Token-WA Fase 1+2 completa + hardening F2.9 + F2.10 + "Qual cadastro?" multi-cadastro + reconhecimento automático na entrada**. **22 commits trabalho** em sessão Code maratona: `ccf0074` Fase 1 read-only (saldo + extrato bot) · `481cebc..9ca604c` Fase 2 completa F2.1→F2.8 (schema aditivo PIN + AparelhoVinculado + OtpDesafio + TokenTransacao rica; otp-helper; PinCooperadoService lockout 30min; LimiteTokenService; TokenNotificacaoService; smoke E2E 22/22; "Alterar limite" no WA) · `8e867a5` adendo TokenTransacao rica + diag bot · `f4d20c7` **F2.9 hardening P0** (JWT sem fallback, updateMany anti-IDOR, validarPin private, timezone São Paulo, OtpDesafio.cooperativaId) + **destrava bot WA** (webhook ?secret= + telefone Luciano E.164) · `f8b629b` **F2.10 implementa VERIFICAR_COOPERADO** (estava faltando) + opção 8 hardcoded + setup SISGD teste (490 tokens) · `de4e725` fix render `**` patológico defensivo · `dcce884` persona "P"→"Coop" · `29dd88e` acentos visitante (6 strings + 4 modelos) · `0e8c084` tenant default por env (DEFAULT_TENANT_ID) · `97b61f3` Sprint "Qual cadastro?" Fix 1 — helper compartilhado matcher · `09d5531` Fix 2 WA — escolha com anti-IDOR + TROCAR CADASTRO · `a04fd54` Fix 3+4 portal — obterContextos findMany + trocar anti-IDOR · `7d3a9ec` Fix 3 web — ContextoSwitcher chama backend · `83ef5bf` adendo reconhecimento automático na ENTRADA · `8f51f58` INICIAL global aponta pra menu_principal + gatilhos. **310+ specs Jest verde** (89 unit Fase 2 + 14 matcher + 11 WA multi + 16 portal multi + 5 tenant + 266 motor + smoke E2E 22/22). Bot WA destravado e funcional. Detalhe: `docs/sessoes/2026-06-08-token-wa-fase-1-2-qual-cadastro.md`.
 
@@ -40,6 +42,57 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-10 (Code — M30 Sprint Clube Unificado P1: Hub + F1.5 Economia + Fase 1.1 Polimento MLM)
+
+**8 commits trabalho** (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `e4d0976` | feat | **Fase 1 HUB** — `/dashboard/clube` com 6 cards aglutinando CooperToken + Vantagens + Planos do Clube + Ranking + Tokens Recebidos + Financeiro Tokens; menu único; "Planos (Comercial)" desambiguado |
+| `52d0d62` | feat | **F1.5 Bloco 1** — schema delta `ConfigCooperToken` + 11 campos (8 taxas + 3 oxidação + marco temporal). 0 rows pré-existentes → backfill trivial. |
+| `c539036` | feat | **F1.5 Bloco 2** — helper puro `calcularTaxa(operacao, bruto, config\|null)` + substitui `TAXA_EMISSAO`/`TAXA_QR` chumbadas em `:103` (creditar) + `:988` (processarPagamentoQr). F0 preservado em `:1338`. 24 specs novos. |
+| `8655d0c` | feat | **F1.5 Bloco 3** — `aplicarOxidacao` prospectivo com 3 invariantes matemáticas (marco + graça + piso) + cron `@Cron('0 3 1 * *')` + gate técnico `OXIDACAO_PRODUCAO_LIBERADA` em produção real. Enum `OXIDACAO` aditivo. 15 specs novos. |
+| `b64f42b` | feat | **F1.5 Bloco 4** — DTO formal `UpsertCooperTokenConfigDto` (class-validator) + PUT/admin/config ampliado + UI dedicada `/dashboard/cooper-token/config` (banner âmbar gate jurídico + guard de UX) + card "Configuração da Economia" no hub + link único em `/parceiro/configuracoes`. |
+| `951e95c` | fix | **F1.5 fixes pós-review** — G2 (valor real nas descrições do ledger) + G3 (gate duplicado em `aplicarOxidacao`) + MT P2 (`cooperativaId` obrigatório no PUT) + 11 specs. |
+| `065216d` | docs | atualização do prompt Sprint Clube (orquestrador): Hub ✅ + Fase 1.1 nova + F1.5 detalhada com MAPA DE IMPACTO. |
+| `ed33ffb` | feat | **Fase 1.1 POLIMENTO** — MLM entra no hub (3 cards: Indicações + Convites + Meu Convite) + remoção do menu flat ADMIN/SUPER_ADMIN + botão "← Voltar ao Clube" consistente em cooper-token/parceiro/financeiro. |
+| `<próximo>` | docs | fechamento M30 (esta sessão). |
+
+**Em curso:** —
+
+**Próximo passo único e claro:** **Arrancar Sprint Clube P1 — FASE 2 (F2 empresa-PJ-cooperada compra)**. Prompt empacotado em `docs/relatorios/2026-06-10-prompt-sprint-clube-unificado-cooper-token.md` **FASE 3** (numeração do prompt; corresponde ao F2 da fila pós-Fase 1.5). Escopo: empresa cooperada PJ compra tokens creditando `cooperadoId` (CooperTokenSaldo + ledger via `creditar()`/`CooperTokenCompra`/Asaas). Hoje só existe `parceiro/comprar` que credita `saldoParceiro=tenant`. Aplicar Taxa de Operação F1.5 (já preparada em `calcularTaxa('emissao')`). Multi-tenant + idempotência (jti). Fase 1 read-only + **MAPA DE IMPACTO 5 dimensões** → PAUSAR pro OK → implementar.
+
+**Reviewers aprovaram zero P0/P1:** `cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer` sobre Blocos 2+3+4 da lógica de dinheiro; 3 fixes P2 entraram no 5º commit + 3 débitos catalogados.
+
+**Decisões importantes registradas narrativamente** (sem memória persistente nova):
+- 8 colunas dedicadas vs 1 JSON `taxasOperacao` → escolhido **8 colunas** (defaults preservam comportamento + validação trivial + queries diretas).
+- UI dedicada `/dashboard/cooper-token/config` vs estender `/parceiro/configuracoes` → escolhido **página própria** (padrão UX Tipo B + fonte única elimina duplicação).
+- Gate técnico `OXIDACAO_PRODUCAO_LIBERADA` exigido em `isAmbienteReal()=true` (DEV roda livre).
+- `oxidacaoAtivadaEm` carimba marco prospectivo automaticamente em `upsertConfig` (ligar carimba; desligar limpa; alterar perc preserva marco).
+- MLM faz parte do Clube (Ranking já era MLM; indicação premia com tokens; convites alimentam cadeia).
+- Remoção do menu lateral só em ADMIN/SUPER_ADMIN (COOPERADO/OPERADOR não têm Clube no menu → perderiam acesso).
+
+**Estado de fila (Decisão 24):**
+1. M30 ✅ entregue.
+2. **PRÓXIMO: F2 Empresa-PJ-cooperada compra.**
+3. F4 Funcionário usa/transfere (PIN/OTP + Serializable + jti).
+4. F3 Empresa distribui em LOTE/INDIVIDUAL (mass-write reusa controles do Hardening; CLT 458).
+5. F6 Estabelecimento resgata (recibo, NÃO recompra; flag `Cooperado.ehEstabelecimento`).
+6. Fatia A Nomenclatura (CTK→CooperToken; dois rios kWh×token).
+7. Sprint Hardening Mass-Write SUPER_ADMIN P2 (rebaixado, aguarda fim do Clube).
+8. Sprint Housekeeping (cleanup smokes Santi + scripts órfãos + worktrees) — slot oportunístico.
+
+**Carry-overs novos M30 (não-bloqueantes):**
+- D-novo-OXIDACAO-LEDGER-TIPO P2 (pre-requisito de ligar oxidação em prod real — junto da política de quebra).
+- D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM P3 (modelo conservador, invariante intacta).
+- D-novo-OXIDACAO-SPECS P3 (cron + perc=100 + religar + filtro cooperativaId direto).
+
+**Carry-overs M28/M29 ainda vivos** (não-bloqueantes): D-novo-WA-PHONE-NORMALIZE P2; 3 ações WA declaradas sem implementação; 17 modelos BOT órfãos; `empresa_conveniada`/`proprietario_usina` iterando só `cooperados[0]`; Fase 3 Token-WA pausa explícita; untracked acumulados pra Housekeeping; 218 membros parciais; 2 convites de smoke no convênio Santi (loteId `6a84832d13679547071f6964`).
+
+> Frase canônica única em [`## FRASE DE RETOMADA — próxima sessão Code`](#frase-de-retomada--próxima-sessão-code) abaixo (Decisão 24 — local único, atualizada 10/06 fechamento M30).
 
 ---
 
@@ -2153,7 +2206,7 @@ com specs verdes + rebuild PM2 + commit PT."
 
 — BLOCO ARQUIVADO M28 (acima — atendido por M29) ——————————————————
 
-═══ FRASE COMANDANTE M29 — ATIVA PRÓXIMA SESSÃO ═══
+═══ FRASE COMANDANTE M29 — ARQUIVADA (atendida por M30) ═══
 
 PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
@@ -2269,6 +2322,138 @@ DOC-SESSÃO 10/06 M29:
 docs/sessoes/2026-06-10-bugs-onboarding-santi-fase-2-opcao-b.md
 
 ═══ FIM DA FRASE M29 ═══
+
+— BLOCO ARQUIVADO M29 (acima — atendido por M30) ——————————————————
+
+═══ FRASE COMANDANTE M30 — ATIVA PRÓXIMA SESSÃO ═══
+
+PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela
+   anterior). Verificar que subagent `cooperebr-qa-funcional` aparece na
+   lista de agents. Se não aparecer, parar e avisar.
+
+2. Rodar `git status --short` (diretriz inegociável 18/05). Esperado
+   pós-fechamento M30: working tree limpo (untracked carry-overs
+   catalogados pra Sprint Housekeeping futuro); último commit é o de
+   fechamento M30.
+
+3. Rodar `pm2 list`. Esperado: `cooperebr-backend` + `cooperebr-frontend`
+   + `cooperebr-whatsapp` online (3000/3001/3002 LISTENING) — M30 deixou
+   stack em runtime após F1.5 + Fase 1.1. Toda mudança em `web/` exige
+   rebuild (`next start` sob PM2, sem HMR).
+
+PASSO 1 — Frase comandante (arrancar Sprint Clube P1, FASE 2 — F2 empresa-PJ-cooperada compra):
+
+Sessão 10/06 entregou M30 em 8 commits (`e4d0976..ed33ffb`): Sprint Clube
+Unificado P1 completou Fase 1 HUB + Fase 1.5 ECONOMIA em 4 blocos + 5o
+commit fixes pos-review reviewers pesados + Fase 1.1 POLIMENTO MLM.
+Estrutura nova entregue: ConfigCooperToken expandida com 11 campos
+aditivos (8 taxas per-operacao + 3 oxidacao + marco temporal
+oxidacaoAtivadaEm), helper puro calcularTaxa substituiu constantes
+chumbadas preservando 2%/1% via fallback, oxidacao DECAY_CONTINUO
+prospectiva com 3 invariantes matematicas + cron mensal + gate tecnico
+OXIDACAO_PRODUCAO_LIBERADA pra producao, UI dedicada
+/dashboard/cooper-token/config com banner ambar de gate juridico + guard
+de UX antes de ligar, hub /dashboard/clube agora com 10 cards (6 originais
++ Configuracao + 3 MLM), botao "Voltar ao Clube" consistente nas 3 telas
+que estavam sem. 85/85 specs Jest verde (7 suites). TSC web exit 0.
+Reviewers cooperebr-financeiro-token-reviewer + cooperebr-multitenant-
+reviewer aprovaram zero P0/P1 sobre Blocos 2+3+4 da logica de dinheiro;
+3 fixes P2 catalogados (G2 + G3 + MT P2) entraram no 5o commit. 3 debitos
+novos: D-novo-OXIDACAO-LEDGER-TIPO P2 (pre-requisito de ligar oxidacao em
+prod), D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM P3 (conservador),
+D-novo-OXIDACAO-SPECS P3.
+
+ARRANCAR: **Sprint Clube Unificado P1 — FASE 2 (F2 empresa-PJ-cooperada
+compra)** conforme prompt empacotado em
+`docs/relatorios/2026-06-10-prompt-sprint-clube-unificado-cooper-token.md`
+FASE 3 (numeracao do prompt — corresponde ao F2 da fila pos-Fase 1.5).
+
+Escopo F2: empresa cooperada PJ compra tokens creditando `cooperadoId`
+(CooperTokenSaldo + ledger via `creditar()`/`CooperTokenCompra`/Asaas).
+Hoje so existe `parceiro/comprar` que credita `saldoParceiro=tenant` —
+falta o caminho cooperado. Aplicar Taxa de Operacao (F1.5 ja preparada —
+`taxaEmissaoPerc`/`taxaEmissaoFixa` via `calcularTaxa('emissao')` ja esta
+no `creditar:103`). Multi-tenant: `cooperativaId` SEMPRE do JWT.
+Idempotencia: `jti` unico pra prevenir cobranca dupla via Asaas. Specs
+cobrindo: empresa-PJ valida (`isEmpresaCooperada`), valor > 0, taxa
+aplicada, ledger entrada CREDITO + COMPRA_PARCEIRO ou similar, Asaas
+webhook valida HMAC, dupla compra com mesmo jti retorna idempotente.
+
+Fase 1 read-only + MAPA DE IMPACTO 5 dimensoes (Consumidores grep / Dados
+Existentes SELECT / Propagacao DTO+types+queries+telas+relatorios+jobs+
+extrato / Navegacao sem deep-link orfao / Re-Teste fluxos listados) →
+PAUSAR pro OK → implementar → specs verdes.
+
+DIRETRIZES INEGOCIAVEIS preservar (area dinheiro/token):
+- Token = VOUCHER de circuito fechado; cooperativa = emissora unica.
+- Saida de valor: estabelecimento = RESGATE/liquidacao (recibo, SEM NF);
+  cooperado = SOBRA. PROIBIDO token→sobra.
+- Multi-tenant: `cooperativaId` SEMPRE do JWT; toda query Prisma filtra
+  `cooperativaId`.
+- Transferencia/uso/compra de token: idempotencia via jti +
+  `$transaction Serializable` quando aplicavel.
+- Monetario: `Math.round(x*100)/100` em R$ + `Math.round(x*10000)/10000`
+  em tokens.
+- Disparo real (WA/email): SO whitelisted (`5527981341348` /
+  `lucbragatto+sufixo@gmail.com`) + `ambienteTeste=true`.
+- Reportar ao orquestrador ao fim da fase F2 → reviewers
+  `cooperebr-financeiro-token-reviewer` +
+  `cooperebr-multitenant-reviewer` antes do push.
+
+PRE-REQUISITOS LEITURA (mapear, NAO codar):
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo — M30).
+2. docs/sessoes/2026-06-10-clube-hub-f15-fase11.md (M30 — esta sessao).
+3. docs/relatorios/2026-06-10-prompt-sprint-clube-unificado-cooper-token.md
+   (PROMPT FASE 3 = F2 na nossa fila).
+4. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/
+   regra_coerencia_sistemica_mapa_impacto_10_06.md.
+5. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/
+   decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md.
+6. backend/src/cooper-token/cooper-token.service.ts:creditar (entry point
+   que F2 vai usar).
+7. backend/src/cooper-token/cooper-token.service.ts:upsertConfig (Taxa de
+   Operacao F1.5 ja aplicada).
+8. backend/src/cooper-token/cooper-token.controller.ts (entradas
+   existentes parceiro/comprar — espelhar shape).
+9. CLAUDE.md + .claude/CLAUDE.md.
+
+ESTADO DE FILA (Decisao 24):
+- M30 ✅ entregue.
+- PROXIMO: F2 Empresa-PJ-cooperada compra.
+- F4 Funcionario usa/transfere (PIN/OTP + Serializable + jti).
+- F3 Empresa distribui em LOTE/INDIVIDUAL (mass-write reusa controles do
+  Hardening; CLT 458).
+- F6 Estabelecimento resgata (recibo, NAO recompra; flag
+  Cooperado.ehEstabelecimento).
+- Fatia A Nomenclatura (CTK→CooperToken, dois rios kWh×token).
+- Sprint Hardening Mass-Write SUPER_ADMIN P2 (rebaixado, aguarda fim do
+  Clube).
+- Sprint Housekeeping (cleanup smokes Santi + scripts orfaos + worktrees)
+  — slot oportunistico.
+
+CARRY-OVERS M28/M29/M30 AINDA VIVOS (nao-bloqueantes):
+- D-novo-OXIDACAO-LEDGER-TIPO P2 (pre-requisito de ligar oxidacao em
+  prod).
+- D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM P3.
+- D-novo-OXIDACAO-SPECS P3.
+- D-novo-WA-PHONE-NORMALIZE P2.
+- 3 acoes WA declaradas sem implementacao (PROCESSAR_OCR,
+  MOSTRAR_MENU_PRINCIPAL).
+- 17 modelos BOT orfaos.
+- empresa_conveniada / proprietario_usina iterando so cooperados[0].
+- Fase 3 Token-WA — pausa explicita.
+- Untracked acumulados em backend/scripts/, backend/src/agents/, docs/.
+- 218 membros parciais.
+- 2 convites de smoke no convenio Santi (loteId
+  6a84832d13679547071f6964) — ambienteTeste=true, mantidos pra
+  Housekeeping.
+
+DOC-SESSAO 10/06 M30:
+docs/sessoes/2026-06-10-clube-hub-f15-fase11.md
+
+═══ FIM DA FRASE M30 ═══
 
 — BLOCO ARQUIVADO M27 ABAIXO (clica pra expandir) ——————————————————
 
