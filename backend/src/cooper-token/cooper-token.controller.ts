@@ -17,6 +17,8 @@ import { PerfilUsuario } from '../auth/perfil.enum';
 import { CooperTokenTipo } from '@prisma/client';
 // Sprint Clube P1 — Fase 1.5 Bloco 4 (10/06/2026): DTO formal com validators.
 import { UpsertCooperTokenConfigDto } from './dto/upsert-cooper-token-config.dto';
+// Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026): cooperado-PJ compra tokens.
+import { ComprarTokensCooperadoDto } from './dto/comprar-tokens-cooperado.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -407,6 +409,34 @@ export class CooperTokenController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 50,
     );
+  }
+
+  // ── Cooperado-PJ: Comprar tokens ──
+  // Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026). Empresa cooperada PJ
+  // compra tokens creditando no proprio CooperTokenSaldo. cooperadoId
+  // SEMPRE do JWT (anti-IDOR). Guard ROLE COOPERADO + service valida
+  // isEmpresaCooperada + status ATIVO/ATIVO_RECEBENDO_CREDITOS.
+
+  @Roles(COOPERADO)
+  @Post('cooperado/comprar')
+  async comprarTokensCooperado(
+    @Req() req: any,
+    @Body() body: ComprarTokensCooperadoDto,
+  ) {
+    const compradorCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!compradorCooperadoId) {
+      throw new BadRequestException('Cooperado nao identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa nao identificada no contexto.');
+    }
+    return this.cooperTokenService.comprarTokensCooperado({
+      compradorCooperadoId,
+      cooperativaId,
+      quantidade: body.quantidade,
+      formaPagamento: body.formaPagamento,
+    });
   }
 
   // ── Parceiro: Comprar tokens ──

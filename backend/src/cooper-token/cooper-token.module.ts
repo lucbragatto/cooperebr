@@ -10,9 +10,12 @@ import { LimiteTokenService } from './limite-token.service';
 import { TokenNotificacaoService } from './token-notificacao.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
+// Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026): empresa-PJ-cooperada
+// compra tokens via Asaas. Service emite cobranca usando emitirCobranca.
+import { AsaasModule } from '../asaas/asaas.module';
 
 @Module({
-  imports: [forwardRef(() => WhatsappModule), EmailModule],
+  imports: [forwardRef(() => WhatsappModule), EmailModule, AsaasModule],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [
     CooperTokenService,

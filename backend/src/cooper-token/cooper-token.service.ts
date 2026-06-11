@@ -16,6 +16,10 @@ import { calcularTaxa } from './taxa-helper';
 // do service (defense in depth — protege chamadores diretos futuros, nao so
 // o cron mensal).
 import { isAmbienteReal } from '../common/safety/ambiente';
+// Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026): empresa-PJ-cooperada
+// compra tokens.
+import { AsaasService } from '../asaas/asaas.service';
+import { isEmpresaCooperada } from '../cooperados/cooperado-tipo.helper';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -60,6 +64,9 @@ export class CooperTokenService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    // Optional — testes unitarios passam undefined (specs antigos nao
+    // dependem do Asaas). F2 chama via comprarTokensCooperado.
+    private asaasService?: AsaasService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -1705,6 +1712,150 @@ export class CooperTokenService {
       novoValor: novoValorLiquido,
       desconto: descontoReais,
       tokensUsados: tokensEfetivos,
+    };
+  }
+
+  // ── Cooperado-PJ (empresa cooperada): Comprar tokens ──
+  // Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026).
+
+  /**
+   * Empresa cooperada PJ compra tokens via Asaas. Diferente do legado
+   * `comprarTokensParceiro` que credita `saldoParceiro` (tenant):
+   *
+   *  - Credito vai pro `CooperTokenSaldo` do proprio cooperado (PJ)
+   *    via `creditar()` (que ja aplica `calcularTaxa('emissao')` da
+   *    ConfigCooperToken — F1.5 sai de graca).
+   *  - Asaas emite cobranca real (PIX/BOLETO) com link de pagamento.
+   *  - Webhook Asaas (Bloco 3) confirma pagamento + chama `creditar()`
+   *    com idempotencia 2 camadas (CooperTokenCompra.ultimoWebhookEventId
+   *    + ledger.referenciaId).
+   *
+   * Guards:
+   *  1. Cooperado existe e pertence ao tenant.
+   *  2. `isEmpresaCooperada(cooperado)` true (tipoPessoa=PJ).
+   *  3. Status ATIVO ou ATIVO_RECEBENDO_CREDITOS (v1 conservador —
+   *     PENDENTE/AGUARDANDO_CONCESSIONARIA nao compram ainda).
+   *  4. Quantidade > 0.
+   *
+   * Reusa shape do legado parceiro/comprar (controller + CooperTokenCompra
+   * + confirmacao via evento) — espinha conceitual identica.
+   */
+  async comprarTokensCooperado(params: {
+    compradorCooperadoId: string;
+    cooperativaId: string;
+    quantidade: number;
+    formaPagamento: 'PIX' | 'BOLETO';
+  }) {
+    const { compradorCooperadoId, cooperativaId, quantidade, formaPagamento } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    // Guard multi-tenant: cooperado existe E pertence ao tenant do JWT.
+    const cooperado = await this.prisma.cooperado.findFirst({
+      where: { id: compradorCooperadoId, cooperativaId },
+      select: { id: true, tipoPessoa: true, status: true, nomeCompleto: true },
+    });
+    if (!cooperado) {
+      throw new NotFoundException('Cooperado nao encontrado ou nao pertence ao seu tenant.');
+    }
+
+    // Guard semantico: so empresa cooperada PJ pode comprar tokens neste caminho.
+    if (!isEmpresaCooperada(cooperado)) {
+      throw new ForbiddenException(
+        'Apenas empresas cooperadas (PJ) podem comprar tokens. Pessoas fisicas recebem tokens por outros caminhos (excedente, indicacao, etc).',
+      );
+    }
+
+    // Guard status (v1 conservador — decisao Luciano 11/06).
+    const STATUS_PERMITIDOS = ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'];
+    if (!STATUS_PERMITIDOS.includes(cooperado.status)) {
+      throw new ForbiddenException(
+        `Status ${cooperado.status} nao permite compra de tokens. Status permitidos: ${STATUS_PERMITIDOS.join(', ')}.`,
+      );
+    }
+
+    // Buscar config para valor do token.
+    const config = await this.prisma.configCooperToken.findUnique({
+      where: { cooperativaId },
+    });
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const valorTotal = Math.round(quantidade * valorTokenReais * 100) / 100;
+
+    // 1. Criar registro CooperTokenCompra pendente (sem asaasId ainda).
+    const compra = await this.prisma.cooperTokenCompra.create({
+      data: {
+        cooperativaId,
+        compradorCooperadoId,
+        quantidade,
+        valorTokenReais,
+        valorTotal,
+        formaPagamento,
+        status: 'AGUARDANDO_PAGAMENTO',
+      },
+    });
+
+    // 2. Emitir cobranca Asaas (vencimento +5 dias).
+    if (!this.asaasService) {
+      // Fallback defensivo — em testes unitarios o spec instancia o service
+      // sem Asaas. Em runtime real o DI sempre injeta (modulo importa
+      // AsaasModule no Bloco 2). Lanca pra nao deixar a compra orfa.
+      throw new BadRequestException(
+        'AsaasService nao disponivel — verifique a configuracao do CooperTokenModule.',
+      );
+    }
+    const vencimento = new Date(Date.now() + 5 * 86400000);
+    let asaasCobranca: any;
+    try {
+      asaasCobranca = await this.asaasService.emitirCobranca(
+        compradorCooperadoId,
+        cooperativaId,
+        {
+          valor: valorTotal,
+          vencimento: vencimento.toISOString().slice(0, 10),
+          descricao: `Compra de ${quantidade} CooperTokens (cooperado PJ)`,
+          formaPagamento,
+        },
+      );
+    } catch (err) {
+      // Cobranca Asaas falhou — marca compra como CANCELADO pra nao deixar
+      // orfa em AGUARDANDO_PAGAMENTO indefinidamente.
+      await this.prisma.cooperTokenCompra
+        .update({
+          where: { id: compra.id },
+          data: { status: 'CANCELADO' },
+        })
+        .catch(() => undefined);
+      throw err;
+    }
+
+    // 3. Linkar bidirecionalmente.
+    const compraAtualizada = await this.prisma.cooperTokenCompra.update({
+      where: { id: compra.id },
+      data: {
+        asaasId: asaasCobranca.asaasId,
+        asaasCobrancaId: asaasCobranca.id,
+      },
+    });
+
+    this.logger.log(
+      `Cooperado PJ ${compradorCooperadoId} (${cooperado.nomeCompleto}) solicitou compra de ${quantidade} tokens (R$ ${valorTotal}) via ${formaPagamento}. CompraId=${compra.id} AsaasId=${asaasCobranca.asaasId}`,
+    );
+
+    return {
+      compraId: compraAtualizada.id,
+      quantidade,
+      valorTokenReais,
+      valorTotal,
+      formaPagamento,
+      status: 'AGUARDANDO_PAGAMENTO',
+      asaasId: asaasCobranca.asaasId,
+      linkPagamento: asaasCobranca.linkPagamento,
+      pixQrCode: asaasCobranca.pixQrCode ?? null,
+      pixCopiaECola: asaasCobranca.pixCopiaECola ?? null,
+      linhaDigitavel: asaasCobranca.linhaDigitavel ?? null,
+      vencimento: vencimento.toISOString(),
     };
   }
 
