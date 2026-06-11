@@ -147,11 +147,21 @@ export class OtpDesafioService {
       return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
     }
 
-    // F2.9 hardening: se chamador passou cooperativaId esperado, exige match
-    // (anti cross-tenant). Compatível com desafios pre-F2.9 (cooperativaId
-    // null no banco): só rejeita se BOTH passado E mismatch real.
-    if (cooperativaId && desafio.cooperativaId && desafio.cooperativaId !== cooperativaId) {
-      return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
+    // F2.9 hardening + F4 Bloco C.1 MT-4 (12/06/2026): se chamador passou
+    // cooperativaId esperado, exige match. **Hardening MT-4**: agora também
+    // rejeita se desafio.cooperativaId for null (caso de desafio criado por
+    // chamador antigo pre-F2.9 OU bug que persistiu sem tenant). Callers
+    // novos (F4+) SEMPRE passam tenant na criação — fluxo legítimo nunca
+    // tem null aqui. Risco da rejeição: desafios pré-F2.9 vão falhar agora;
+    // aceitável porque (1) F4 Bloco C exige OTP só pro caminho admin tier
+    // ALTO novo, (2) desafios pré-F2.9 já estão fora da janela TTL 10min.
+    if (cooperativaId) {
+      if (desafio.cooperativaId === null) {
+        return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
+      }
+      if (desafio.cooperativaId !== cooperativaId) {
+        return { ok: false, motivo: 'DESAFIO_NAO_ENCONTRADO' };
+      }
     }
 
     if (desafio.validadoEm) {

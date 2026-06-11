@@ -34,9 +34,14 @@ function setup(opts: SetupOpts = {}) {
   const cooperativaId = 'tenant-A';
   const cobrancaId = 'cob-1';
 
+  const cobrancaPreviewFindFirst = jest.fn().mockResolvedValue({
+    valorLiquido: opts.cobrancaValorLiquido ?? 100,
+  });
   const tx: any = {
     cobranca: {
-      findUnique: jest.fn().mockResolvedValue({
+      // F4 Bloco C.1 MT-1 — cobrança via findFirst com filtro
+      // contrato:{cooperadoId, cooperativaId} dentro da tx.
+      findFirst: jest.fn().mockResolvedValue({
         id: cobrancaId,
         status: opts.cobrancaStatus ?? 'A_VENCER',
         valorLiquido: opts.cobrancaValorLiquido ?? 100,
@@ -68,10 +73,11 @@ function setup(opts: SetupOpts = {}) {
     lancamentoCaixa: { create: jest.fn().mockResolvedValue({}) },
     // F4 Bloco C — criarTokenTransacao chama tx.cooperado.findUnique (guard
     // multi-tenant) + tx.tokenTransacao.count (motivoStepUp) + .create.
+    // F4 Bloco C.1 FIN-2 — também usado pra ler status dentro da tx.
     cooperado: {
       findUnique: jest
         .fn()
-        .mockResolvedValue({ id: cooperadoId, cooperativaId }),
+        .mockResolvedValue({ id: cooperadoId, cooperativaId, status: 'ATIVO' }),
     },
     tokenTransacao: {
       count: jest.fn().mockResolvedValue(0),
@@ -89,6 +95,10 @@ function setup(opts: SetupOpts = {}) {
 
   const prisma: any = {
     $transaction: transactionFn,
+    // F4 Bloco C.1 FIN-1 — preview read-only fora da tx pra obter valorLiquido.
+    cobranca: {
+      findFirst: cobrancaPreviewFindFirst,
+    },
   };
 
   const pinCooperadoService = {
@@ -232,6 +242,23 @@ describe('F4 Bloco A — usarNaFatura PIN + Serializable + status-guard', () => 
       });
     });
 
+    it('F4 Bloco C.1 FIN-2: cooperado SUSPENSO dentro da tx → Forbidden', async () => {
+      const { service, tx, ids } = setup();
+      // Status SUSPENSO no snapshot dentro da tx
+      tx.cooperado.findUnique.mockResolvedValueOnce({
+        id: ids.cooperadoId,
+        cooperativaId: ids.cooperativaId,
+        status: 'SUSPENSO',
+      });
+      await expect(
+        service.usarNaFatura({
+          ...ids,
+          quantidadeTokens: 10,
+          pin: PIN_OK,
+        }),
+      ).rejects.toThrow(/SUSPENSO|não permite gastar/);
+    });
+
     it('cobrança VENCIDO também é permitida', async () => {
       const { service, ids } = setup({ cobrancaStatus: 'VENCIDO' });
       const r = await service.usarNaFatura({
@@ -243,23 +270,25 @@ describe('F4 Bloco A — usarNaFatura PIN + Serializable + status-guard', () => 
     });
   });
 
-  describe('Ownership multi-tenant', () => {
-    it('cobrança de outro cooperado → BadRequest sem revelar', async () => {
-      const { service, ids } = setup({
-        cobrancaContratoCooperadoId: 'outro-cooperado',
-      });
+  describe('Ownership multi-tenant (Bloco C.1 MT-1)', () => {
+    it('cobrança de outro cooperado → NotFound genérica (não revela)', async () => {
+      // F4 Bloco C.1 MT-1: findFirst com filtro contrato:{cooperadoId, cooperativaId}
+      // não bate → null → NotFound. Não dá pra distinguir "não existe" de
+      // "existe em outro tenant" — exatamente o objetivo do hardening.
+      const { service, tx, ids } = setup();
+      tx.cobranca.findFirst.mockResolvedValueOnce(null);
       await expect(
         service.usarNaFatura({
           ...ids,
           quantidadeTokens: 10,
           pin: PIN_OK,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('cobrança inexistente → NotFound', async () => {
+    it('cobrança inexistente → NotFound (findFirst dentro da tx)', async () => {
       const { service, tx, ids } = setup();
-      tx.cobranca.findUnique.mockResolvedValueOnce(null);
+      tx.cobranca.findFirst.mockResolvedValueOnce(null);
       await expect(
         service.usarNaFatura({
           ...ids,

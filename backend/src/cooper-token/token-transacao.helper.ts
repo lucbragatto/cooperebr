@@ -173,6 +173,14 @@ export async function criarTokenTransacao(
     );
   }
   if (pagador.cooperativaId !== params.pagadorCooperativaId) {
+    // F4 Bloco C.1 MT-3 (12/06/2026) — log de diagnóstico antes do throw.
+    // Detecta cenário de IDOR (caller declarou tenant errado) ou bug interno
+    // (helper invocado com cooperativaId stale). Diferente do logger.warn,
+    // joga no stderr direto via process.stderr.write — não exige Logger
+    // injetado (helper é pure module). Compatível com pm2 logs.
+    process.stderr.write(
+      `[criarTokenTransacao G1] CROSS-TENANT BLOQUEADO | pagadorId=${params.pagadorId} pagador.cooperativaId=${pagador.cooperativaId} param.pagadorCooperativaId=${params.pagadorCooperativaId} tipoOperacao=${params.tipoOperacao} qty=${params.quantidadeTokens} valorR$=${params.valorReaisEstimado}\n`,
+    );
     throw new Error(
       `criarTokenTransacao: cross-tenant bloqueado — pagador ${params.pagadorId} pertence a ${pagador.cooperativaId}, mas operação declarou ${params.pagadorCooperativaId}.`,
     );

@@ -30,6 +30,14 @@ import { criarTokenTransacao, calcularTier } from './token-transacao.helper';
 // (crédito direto, tier ALTO). Reusa OtpDesafioService exportado pelo
 // CooperadosModule (motivo TOKEN_TRANSACAO_STEP_UP).
 import { OtpDesafioService } from '../common/security/otp-desafio.service';
+// F4 Bloco C.1 (12/06/2026) FIN-1: verificar limite por transação +
+// limite diário (LimiteTokenService — F2.5 Sprint Token-WA) ANTES da tx
+// dos 3 endpoints de movimento. SUSPENSO/limite estourado dispara erro
+// antes de bloquear linhas do saldo na tx Serializable.
+import { LimiteTokenService } from './limite-token.service';
+// F4 Bloco C.1 (12/06/2026) FIN-4: jti pra idempotência do caminho admin
+// (clientRequestId-based).
+import { gerarTokenHex } from '../common/security/otp-helper';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -92,10 +100,46 @@ export class CooperTokenService {
     // F4 Bloco C (12/06/2026) — step-up OTP no caminho admin de enviarTokens
     // (tier ALTO). Optional pelas mesmas razões dos demais.
     private otpDesafioService?: OtpDesafioService,
+    // F4 Bloco C.1 (12/06/2026) — limite por transação + diário. Optional
+    // pelas mesmas razões; em prod sempre injetado via CooperTokenModule.providers.
+    private limiteTokenService?: LimiteTokenService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
   private static readonly STATUS_PERMITIDOS_CREDITO = ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'];
+
+  /**
+   * F4 Bloco C.1 FIN-1 (12/06/2026) — guard de limite por transação + diário
+   * usado pelos 3 endpoints de movimento (usarNaFatura, processarPagamentoQr,
+   * enviarTokens cooperado→cooperado). Roda FORA da tx (Serializable).
+   *
+   * Se LimiteTokenService não estiver disponível (specs antigos), pula
+   * silenciosamente — em prod sempre injetado.
+   */
+  private async assertLimite(params: {
+    cooperadoId: string;
+    cooperativaId: string;
+    valorReais: number;
+    origem: 'usarNaFatura' | 'processarPagamentoQr' | 'enviarTokens';
+  }): Promise<void> {
+    if (!this.limiteTokenService) return; // spec antigo sem injeção — skip
+    if (params.valorReais <= 0) return; // ops com valor zero (ex.: clamp) — skip
+    const r = await this.limiteTokenService.verificarValor({
+      cooperadoId: params.cooperadoId,
+      cooperativaId: params.cooperativaId,
+      valorReais: params.valorReais,
+    });
+    if (r.ok) return;
+    if (r.motivo === 'EXCEDE_LIMITE_TRANSACAO') {
+      throw new BadRequestException(
+        `Valor R$ ${params.valorReais.toFixed(2)} excede o limite por transação (R$ ${r.limite.toFixed(2)}). Ajuste o limite em /portal/seguranca ou peça ao admin pra elevar o teto da cooperativa.`,
+      );
+    }
+    // EXCEDE_LIMITE_DIARIO
+    throw new BadRequestException(
+      `Limite diário (R$ ${r.limiteDiario.toFixed(2)}) seria estourado: já gastou R$ ${r.gastoHoje.toFixed(2)} hoje, tentativa de R$ ${params.valorReais.toFixed(2)}. Tente amanhã ou peça ao admin pra elevar o teto.`,
+    );
+  }
 
   async creditar(params: CreditarParams) {
     const {
@@ -330,7 +374,15 @@ export class CooperTokenService {
 
       try {
         const competencia = new Date().toISOString().slice(0, 7);
-        const valorEstimado = Math.round(quantidade * 0.20 * 100) / 100; // TODO: ler valorTokenReais do plano
+        // F4 Bloco C.1 FIN-7 (12/06/2026) — antes era 0.20 chumbado.
+        // valorTokenReais vem da config do tenant (fallback 0.45 = mesmo
+        // default usado em calcularDesconto e processarPagamentoQr).
+        // debitar() é genérico (cron de excedente, etc), então usa config
+        // direto — quando vier do usarNaFatura (caminho com plano), o
+        // valorToken correto é refletido lá pelo inline (espelho mantido).
+        const configDebit = await this.getConfig(cooperativaId);
+        const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
+        const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
         await this.prisma.lancamentoCaixa.create({
           data: {
             tipo: 'PROVISIONAL',
@@ -907,6 +959,14 @@ export class CooperTokenService {
     const valorReaisEstimado =
       Math.round(quantidade * valorTokenReais * 100) / 100;
 
+    // F4 Bloco C.1 FIN-1 — limite por transação / diário do REMETENTE ANTES da tx.
+    await this.assertLimite({
+      cooperadoId: remetenteCooperadoId,
+      cooperativaId,
+      valorReais: valorReaisEstimado,
+      origem: 'enviarTokens',
+    });
+
     return this.prisma.$transaction(
       async (tx) => {
         // Debitar do remetente (quantidade BRUTA).
@@ -1096,11 +1156,33 @@ export class CooperTokenService {
     descricao?: string;
     otpDesafioId?: string;
     otpCodigo?: string;
+    /**
+     * F4 Bloco C.1 FIN-4 (12/06/2026) — idempotency-key gerada pelo cliente
+     * (UUID/uuid no React, header X-Idempotency-Key ou body). Garante que
+     * duplo-clique do MESMO request resulta em 1 crédito (creditar()
+     * já tem idempotência app-level via referenciaId + referenciaTabela).
+     * Obrigatório no caminho admin pra ser auditável.
+     */
+    clientRequestId: string;
   }) {
-    const { destinatarioCooperadoId, cooperativaId, quantidade, descricao, otpDesafioId, otpCodigo } = params;
+    const { destinatarioCooperadoId, cooperativaId, quantidade, descricao, otpDesafioId, otpCodigo, clientRequestId } = params;
 
+    // F4 Bloco C.1 MT-2 — cooperativaId obrigatório (espelha creditarManual:96).
+    // SUPER_ADMIN sem cooperativaId no JWT precisa impersonar tenant ANTES de
+    // enviar. Nunca {sucesso:true, ledgerCreditado:false}.
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório no caminho admin. SUPER_ADMIN deve impersonar uma cooperativa antes de enviar tokens.',
+      );
+    }
     if (quantidade <= 0) {
       throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+    // F4 Bloco C.1 FIN-4 — clientRequestId obrigatório.
+    if (!clientRequestId || clientRequestId.trim().length < 8) {
+      throw new BadRequestException(
+        'clientRequestId obrigatório no caminho admin (mínimo 8 chars; recomendado UUID v4). Usado pra idempotência: duplo-clique do mesmo request não credita 2×.',
+      );
     }
 
     // Calcular tier (mesma fórmula do helper — valorTokenReais da config).
@@ -1129,19 +1211,33 @@ export class CooperTokenService {
       });
     }
 
-    // Crédito direto via creditar() (idempotência app-level já presente).
+    // F4 Bloco C.1 FIN-4 — referenciaId estável = clientRequestId. Combinado
+    // com referenciaTabela='ENVIO_ADMIN' garante idempotência via
+    // creditar() :100 (ledger.findFirst). Duplo-clique do MESMO clientRequestId
+    // retorna o ledger entry existente sem criar novo.
     const ledgerEntry = await this.creditar({
       cooperadoId: destinatarioCooperadoId,
       cooperativaId,
       tipo: CooperTokenTipo.BONUS_INDICACAO,
       quantidade,
-      descricao: descricao ?? `Envio admin tier ${tier}`,
+      descricao: descricao ?? `Envio admin tier ${tier} (req ${clientRequestId})`,
+      referenciaId: clientRequestId,
+      referenciaTabela: 'ENVIO_ADMIN',
       // Bloco C — admin pode enviar pra qualquer status ATIVO ou
       // ATIVO_RECEBENDO_CREDITOS (creditar() já gating); sem forcarDisponivel.
     } as any);
 
+    // MT-2 hardening: se creditar() retornou null (cooperado SUSPENSO/cross-tenant
+    // bloqueado), propagar como BadRequest em vez de devolver {sucesso:true,
+    // ledgerCreditado:false} que confunde o admin (visualmente parece OK).
+    if (!ledgerEntry) {
+      throw new BadRequestException(
+        `Crédito negado: destinatário ${destinatarioCooperadoId} não está apto a receber (status inválido ou cross-tenant). Consulte os logs do servidor.`,
+      );
+    }
+
     this.logger.log(
-      `[F4-C admin] Envio admin tier=${tier} → ${destinatarioCooperadoId}: ${quantidade} tokens (valor R$ ${valorReaisEstimado})`,
+      `[F4-C admin] Envio admin tier=${tier} req=${clientRequestId} → ${destinatarioCooperadoId}: ${quantidade} tokens (valor R$ ${valorReaisEstimado})`,
     );
 
     return {
@@ -1150,7 +1246,8 @@ export class CooperTokenService {
       destinatarioId: destinatarioCooperadoId,
       tier,
       valorReaisEstimado,
-      ledgerCreditado: !!ledgerEntry,
+      clientRequestId,
+      ledgerCreditado: true,
     };
   }
 
@@ -1557,10 +1654,23 @@ export class CooperTokenService {
     const valorReaisEstimado =
       Math.round(decoded.quantidade * valorTokenReais * 100) / 100;
 
+    // F4 Bloco C.1 FIN-1 — limite por transação / diário do PAGADOR ANTES da tx.
+    await this.assertLimite({
+      cooperadoId: decoded.pagadorId,
+      cooperativaId: decoded.cooperativaId,
+      valorReais: valorReaisEstimado,
+      origem: 'processarPagamentoQr',
+    });
+
     return this.prisma.$transaction(async (tx) => {
-      // Validate sender balance
-      const saldoPagador = await tx.cooperTokenSaldo.findUnique({
-        where: { cooperadoId: decoded.pagadorId },
+      // F4 Bloco C.1 MT-5 — saldo do pagador filtrado por cooperativaId
+      // (defesa em profundidade; JWT do QR já trouxe cooperativaId, mas se
+      // alguém forjar pagadorId apontando pra outra tenant, o filtro barra).
+      const saldoPagador = await tx.cooperTokenSaldo.findFirst({
+        where: {
+          cooperadoId: decoded.pagadorId,
+          cooperativaId: decoded.cooperativaId,
+        },
       });
 
       if (
@@ -2041,24 +2151,67 @@ export class CooperTokenService {
       throw new ForbiddenException('PIN incorreto.');
     }
 
+    // F4 Bloco C.1 FIN-1 — verifica limite por transação / diário ANTES da
+    // tx Serializable (não bloqueia row do saldo se o caller já vai abortar).
+    // valorReais = valor MÁXIMO possível do desconto = valorLiquido da cobrança.
+    // O clamp triplo dentro da tx pode reduzir, mas pra autorização usamos
+    // o teto (mais conservador — se o usuário pediu R$ 100 e o limite é R$ 50,
+    // bloqueamos mesmo que o clamp fosse aplicar só R$ 40).
+    // Pré-leitura read-only fora da tx só pra obter valorLiquido pro guard.
+    const cobrancaPreview = await this.prisma.cobranca.findFirst({
+      where: { id: cobrancaId, contrato: { cooperadoId, cooperativaId } },
+      select: { valorLiquido: true },
+    });
+    if (cobrancaPreview) {
+      const valorPreLim = Math.min(
+        Number(cobrancaPreview.valorLiquido),
+        quantidadeTokens * 0.45, // upper bound usando default; clamp real dentro da tx
+      );
+      await this.assertLimite({
+        cooperadoId,
+        cooperativaId,
+        valorReais: valorPreLim,
+        origem: 'usarNaFatura',
+      });
+    }
+
     // ── Tx Serializable: ler cobrança/saldo + debitar + atualizar cobrança ──
     const txResult = await this.prisma.$transaction(
       async (tx) => {
-        // Re-buscar cobrança DENTRO da tx (snapshot consistente).
-        const cobranca = await tx.cobranca.findUnique({
-          where: { id: cobrancaId },
+        // F4 Bloco C.1 MT-1 — multi-tenant via JOIN com contrato (cobrança
+        // tem cooperativaId? nullable; usamos contrato.{cooperadoId,
+        // cooperativaId} como fonte de verdade). NotFound genérica não
+        // revela existência de cobrança em outro tenant.
+        const cobranca = await tx.cobranca.findFirst({
+          where: {
+            id: cobrancaId,
+            contrato: { cooperadoId, cooperativaId },
+          },
           include: { contrato: { include: { plano: true } } },
         });
         if (!cobranca) {
           throw new NotFoundException('Cobrança não encontrada');
         }
-        if (cobranca.contrato?.cooperadoId !== cooperadoId) {
-          throw new BadRequestException('Cobrança não pertence ao cooperado autenticado');
-        }
         const statusAtual = cobranca.status as string;
         if (statusAtual !== 'A_VENCER' && statusAtual !== 'VENCIDO') {
           throw new BadRequestException(
             'Só é possível usar tokens em cobranças A_VENCER ou VENCIDO',
+          );
+        }
+
+        // F4 Bloco C.1 FIN-2 — status do cooperado DENTRO da tx (mesmo
+        // padrão de creditar() :134). SUSPENSO/INATIVO/CADASTRO_INCOMPLETO
+        // não gasta. Defesa contra suspensão entre PIN-validation e debit.
+        const cooperadoSnap = await tx.cooperado.findUnique({
+          where: { id: cooperadoId },
+          select: { status: true, cooperativaId: true },
+        });
+        if (!cooperadoSnap || cooperadoSnap.cooperativaId !== cooperativaId) {
+          throw new NotFoundException('Cooperado não encontrado');
+        }
+        if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(cooperadoSnap.status)) {
+          throw new ForbiddenException(
+            `Status ${cooperadoSnap.status} não permite gastar tokens. Status permitido: ATIVO ou ATIVO_RECEBENDO_CREDITOS.`,
           );
         }
 
@@ -2157,7 +2310,10 @@ export class CooperTokenService {
         // da tx pra consistência referencial com ledger.id.
         try {
           const competencia = new Date().toISOString().slice(0, 7);
-          const valorEstimado = Math.round(tokensEfetivos * 0.20 * 100) / 100;
+          // F4 Bloco C.1 FIN-7 — antes 0.20 chumbado. Aqui usa o `valorToken`
+          // do PLANO da cobrança (já calculado acima como Number(plano.valorTokenReais ?? 0.45)),
+          // mais preciso que default da config porque reflete o plano específico.
+          const valorEstimado = Math.round(tokensEfetivos * valorToken * 100) / 100;
           await tx.lancamentoCaixa.create({
             data: {
               tipo: 'PROVISIONAL',

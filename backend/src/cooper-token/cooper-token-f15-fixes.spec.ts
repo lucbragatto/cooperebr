@@ -104,6 +104,11 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
             if (where.cooperadoId === 'pagador') return Promise.resolve({ saldoDisponivel: 10000 });
             return Promise.resolve(null);
           }),
+          // F4 Bloco C.1 MT-5 — pagador via findFirst com cooperativaId.
+          findFirst: jest.fn(({ where }: any) => {
+            if (where.cooperadoId === 'pagador') return Promise.resolve({ saldoDisponivel: 10000 });
+            return Promise.resolve(null);
+          }),
           update: jest.fn().mockResolvedValue({}),
           create: jest.fn().mockResolvedValue({}),
         },

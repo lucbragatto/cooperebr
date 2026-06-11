@@ -587,6 +587,12 @@ export class CooperTokenController {
 
     // ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR crédito direto (sem cooperadoId próprio).
     if ([ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR].includes(perfil) && !remetenteCooperadoId) {
+      // F4 Bloco C.1 FIN-4 — clientRequestId obrigatório no caminho admin.
+      if (!body.clientRequestId) {
+        throw new BadRequestException(
+          'clientRequestId obrigatório no caminho admin (mínimo 8 chars; recomendado UUID v4). Gere no cliente e envie no body pra evitar duplo-clique creditar 2×.',
+        );
+      }
       return this.cooperTokenService.enviarTokensAdmin({
         destinatarioCooperadoId: body.cooperadoId,
         cooperativaId,
@@ -594,6 +600,7 @@ export class CooperTokenController {
         descricao: body.descricao,
         otpDesafioId: body.otpDesafioId,
         otpCodigo: body.otpCodigo,
+        clientRequestId: body.clientRequestId,
       });
     }
 

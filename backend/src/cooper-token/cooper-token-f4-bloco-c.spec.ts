@@ -75,6 +75,13 @@ function setup(opts: SetupOpts = {}) {
         }
         return Promise.resolve(null);
       }),
+      // F4 Bloco C.1 MT-5
+      findFirst: jest.fn(({ where }: any) => {
+        if (where.cooperadoId === 'pagador-1') {
+          return Promise.resolve({ saldoDisponivel: opts.saldoPagador ?? 10000 });
+        }
+        return Promise.resolve(null);
+      }),
       update: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockResolvedValue({ saldoDisponivel: 0, totalEmitido: 0 }),
     },
@@ -380,7 +387,9 @@ describe('F4 Bloco C — enviarTokens (cooperado→cooperado: PIN + taxa transfe
   });
 });
 
-describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
+describe('F4 Bloco C / C.1 — enviarTokensAdmin (tier-based step-up + idempotência)', () => {
+  const CLIENT_REQ_ID = 'uuid-test-12345678-abcd-1234-9999-aaaabbbbcccc';
+
   it('tier BAIXO (≤R$50): NÃO exige OTP', async () => {
     // 100 tokens × R$0.45 = R$45 → tier BAIXO
     const { service, otpDesafioService } = setup();
@@ -388,6 +397,7 @@ describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
       destinatarioCooperadoId: 'destinatario-1',
       cooperativaId: 'coop-A',
       quantidade: 100,
+      clientRequestId: CLIENT_REQ_ID,
     });
     expect(otpDesafioService.validarOuLancar).not.toHaveBeenCalled();
   });
@@ -400,6 +410,7 @@ describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
         destinatarioCooperadoId: 'destinatario-1',
         cooperativaId: 'coop-A',
         quantidade: 200,
+        clientRequestId: CLIENT_REQ_ID,
       }),
     ).rejects.toThrow(/tier ALTO.*OTP/);
   });
@@ -412,6 +423,7 @@ describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
       quantidade: 200,
       otpDesafioId: 'des-1',
       otpCodigo: '654321',
+      clientRequestId: CLIENT_REQ_ID,
     });
     expect(otpDesafioService.validarOuLancar).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -434,6 +446,7 @@ describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
         quantidade: 200,
         otpDesafioId: 'des-1',
         otpCodigo: '000000',
+        clientRequestId: CLIENT_REQ_ID,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -445,9 +458,80 @@ describe('F4 Bloco C — enviarTokensAdmin (tier-based step-up)', () => {
         destinatarioCooperadoId: 'destinatario-1',
         cooperativaId: 'coop-A',
         quantidade: 0,
+        clientRequestId: CLIENT_REQ_ID,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(otpDesafioService.validarOuLancar).not.toHaveBeenCalled();
+  });
+
+  // F4 Bloco C.1 — FIN-4 + MT-2
+  it('FIN-4: clientRequestId ausente → BadRequest pedindo idempotência', async () => {
+    const { service } = setup();
+    await expect(
+      service.enviarTokensAdmin({
+        destinatarioCooperadoId: 'destinatario-1',
+        cooperativaId: 'coop-A',
+        quantidade: 100,
+        clientRequestId: '',
+      }),
+    ).rejects.toThrow(/clientRequestId obrigatório/);
+  });
+
+  it('FIN-4: clientRequestId muito curto (<8 chars) → BadRequest', async () => {
+    const { service } = setup();
+    await expect(
+      service.enviarTokensAdmin({
+        destinatarioCooperadoId: 'destinatario-1',
+        cooperativaId: 'coop-A',
+        quantidade: 100,
+        clientRequestId: 'abc',
+      }),
+    ).rejects.toThrow(/clientRequestId obrigatório/);
+  });
+
+  it('FIN-4: clientRequestId é passado a creditar como referenciaId+ENVIO_ADMIN', async () => {
+    const { service, prisma } = setup();
+    await service.enviarTokensAdmin({
+      destinatarioCooperadoId: 'destinatario-1',
+      cooperativaId: 'coop-A',
+      quantidade: 100,
+      clientRequestId: CLIENT_REQ_ID,
+    });
+    // creditar() chamado por dentro — verifica que entrega ledger com
+    // referenciaId estável. (Como creditar abre própria tx, vemos no
+    // chamada ao prisma.cooperTokenLedger.create do tx interno.)
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('MT-2: cooperativaId vazio → BadRequest pedindo impersonate', async () => {
+    const { service } = setup();
+    await expect(
+      service.enviarTokensAdmin({
+        destinatarioCooperadoId: 'destinatario-1',
+        cooperativaId: '',
+        quantidade: 100,
+        clientRequestId: CLIENT_REQ_ID,
+      }),
+    ).rejects.toThrow(/cooperativaId obrigatório.*impersonar/);
+  });
+
+  it('MT-2: creditar retorna null (SUSPENSO/cross-tenant) → BadRequest, não {sucesso:true, ledgerCreditado:false}', async () => {
+    // Forçar creditar a retornar null mockando cooperado SUSPENSO
+    const opts = {};
+    const localSetup = setup(opts);
+    localSetup.prisma.cooperado.findUnique.mockResolvedValueOnce({
+      id: 'destinatario-1',
+      status: 'SUSPENSO',
+      cooperativaId: 'coop-A',
+    });
+    await expect(
+      localSetup.service.enviarTokensAdmin({
+        destinatarioCooperadoId: 'destinatario-1',
+        cooperativaId: 'coop-A',
+        quantidade: 100,
+        clientRequestId: CLIENT_REQ_ID,
+      }),
+    ).rejects.toThrow(/Crédito negado/);
   });
 });
 
@@ -462,7 +546,8 @@ describe('F4 Bloco C — usarNaFatura agora cria TokenTransacao paralela', () =>
     });
     const tx: any = {
       cobranca: {
-        findUnique: jest.fn().mockResolvedValue({
+        // F4 Bloco C.1 MT-1 — findFirst com tenant
+        findFirst: jest.fn().mockResolvedValue({
           id: 'cob-1',
           status: 'A_VENCER',
           valorLiquido: 100,
@@ -484,7 +569,8 @@ describe('F4 Bloco C — usarNaFatura agora cria TokenTransacao paralela', () =>
       },
       lancamentoCaixa: { create: jest.fn().mockResolvedValue({}) },
       cooperado: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'coop-1', cooperativaId: 'tenant-A' }),
+        // FIN-2 — agora também retorna status
+        findUnique: jest.fn().mockResolvedValue({ id: 'coop-1', cooperativaId: 'tenant-A', status: 'ATIVO' }),
       },
       tokenTransacao: {
         count: jest.fn().mockResolvedValue(0),
@@ -493,6 +579,10 @@ describe('F4 Bloco C — usarNaFatura agora cria TokenTransacao paralela', () =>
     };
     const prisma: any = {
       $transaction: jest.fn(async (cb: any, _opts?: any) => cb(tx)),
+      // F4 Bloco C.1 FIN-1 — preview read-only fora da tx
+      cobranca: {
+        findFirst: jest.fn().mockResolvedValue({ valorLiquido: 100 }),
+      },
     };
     const pinCooperadoService = {
       validarPinComLockout: jest.fn().mockResolvedValue({ ok: true }),

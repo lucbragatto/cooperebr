@@ -38,6 +38,14 @@ const buildPrisma = (opts) => {
         }
         return Promise.resolve(null);
       }),
+      // F4 Bloco C.1 MT-5 — saldo do pagador agora via findFirst com filtro
+      // cooperativaId (defesa em profundidade).
+      findFirst: jest.fn(({ where }: any) => {
+        if (where.cooperadoId === 'pagador') {
+          return Promise.resolve({ saldoDisponivel: opts.saldoPagador });
+        }
+        return Promise.resolve(null);
+      }),
       update: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockResolvedValue({
         cooperadoId: 'recebedor',

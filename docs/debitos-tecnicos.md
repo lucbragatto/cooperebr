@@ -839,6 +839,51 @@ O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioServ
 
 **Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
 
+#### D-novo-TAXA-TRANSFER-DESTINO — Definir destino contábil da taxa de transferência ANTES de ligar em produção
+
+**Severidade:** P2 (gate).
+**Detectado em:** 2026-06-12 (F4 Bloco C.1 review financeiro-token).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:enviarTokens` aplicação de `calcularTaxa('transferencia')`.
+
+A taxa de transferência (`taxaTransferenciaPerc` / `taxaTransferenciaFixa` em `ConfigCooperToken`) é hoje aplicada no `enviarTokens` (cooperado→cooperado): bruto sai do remetente, líquido entra no destinatário, **a diferença (taxa) some** — não há lançamento contábil destinando esses tokens. Default 0% = inócuo, MAS antes de qualquer cooperativa ligar `taxaTransferenciaPerc > 0` em produção precisa de decisão de destino:
+
+1. **Queima** — tokens viram nulo no sistema (deflação). Lançamento `QUEIMA_TAXA_TRANSFERENCIA` em `CooperTokenLedger` + redução no `totalEmitido` da emissora.
+2. **Crédito à emissora** — saldo da cooperativa-mãe (`CooperTokenSaldoParceiro`) recebe a diferença. Lançamento de crédito.
+3. **Crédito a fundo de reserva** — específico do Regulamento Art. 5º §2 (interno-cooperativa).
+
+**Gate equivalente:** mesmo padrão da oxidação F1.5 Bloco 3 — campo `oxidacaoAtivadaEm` que precisa ser explicitamente setado antes do cron descontar. Aqui equivale a `taxaTransferenciaAtivadaEm` (ou flag separado).
+
+**Resolução proposta (futuro — bloqueador de produção):**
+- Spec: definir destino padrão (sugestão: queima, mais conservador).
+- Schema delta: `ConfigCooperToken.taxaTransferenciaAtivadaEm DateTime?` (gate explícito).
+- `enviarTokens`: se `taxaTransferenciaPerc > 0` E `taxaTransferenciaAtivadaEm IS NULL` → BadRequest "Taxa configurada mas destino não definido".
+- Após gate ativo, gerar lançamento contábil conforme destino.
+- Spec novo: taxa > 0 sem gate ativo lança; com gate ativo aplica e gera lançamento.
+- Estimativa: ~3-4h Code + decisão produto.
+
+**Não bloqueia F4.** Default 0% mantém comportamento atual. Só vira bloqueador quando admin tentar ligar.
+
+#### D-novo-QR-PARCEIRO-PAPEL-DUAL — JSDoc do processar-qr-parceiro deve exigir admin-cooperado
+
+**Severidade:** P3.
+**Detectado em:** 2026-06-12 (F4 Bloco C review multitenant).
+**Onde:** `backend/src/cooper-token/cooper-token.controller.ts:processarQrParceiro` + `service.processarQrParceiro`.
+
+O endpoint `POST /cooper-token/admin/processar-qr-parceiro` recebe um QR de cooperado (decoded.pagadorId) e credita o saldo do tenant (`CooperTokenSaldoParceiro`). Hoje os 4 roles podem chamar (`ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR`), mas a semântica é dupla: o user é simultaneamente admin do tenant + cooperado (recebedor pessoal). O fluxo dispara `processarPagamentoQr` reusando, depois credita CooperTokenSaldoParceiro.
+
+JSDoc atual não documenta esse papel dual. Risco:
+1. ADMIN puro sem cooperadoId no JWT → `processarPagamentoQr` falha (`recebedorId` ausente).
+2. SUPER_ADMIN sem cooperadoId tampouco.
+3. Op legítimo só funciona pra ADMIN-cooperado ou OPERADOR-cooperado (mesma pessoa nos 2 papéis).
+
+**Resolução proposta (futuro):**
+- JSDoc no controller + service explicitando exigência de `req.user.cooperadoId` presente.
+- Guard explícito: se ausente, BadRequest "Esta operação exige usuário com vínculo cooperado (ADMIN-cooperado ou OPERADOR-cooperado)".
+- Spec novo cobrindo: ADMIN puro sem cooperadoId → BadRequest claro (em vez de erro genérico de QR).
+- Estimativa: ~1h Code.
+
+**Não bloqueia F4.** Fluxo legítimo (cooperado-admin escaneia QR pra creditar a cooperativa) segue funcionando; só falta documentação + guard explícito.
+
 #### D-novo-F4-PARCEIRO-TENANT-STEPUP — Endpoints parceiro-tenant sem PIN/OTP nem Serializable
 
 **Severidade:** P2.

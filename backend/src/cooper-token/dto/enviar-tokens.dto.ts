@@ -57,4 +57,16 @@ export class EnviarTokensDto {
   @IsString()
   @Matches(/^\d{6}$/, { message: 'OTP deve ter exatamente 6 dígitos numéricos.' })
   otpCodigo?: string;
+
+  /**
+   * F4 Bloco C.1 FIN-4 (12/06/2026) — idempotency-key gerada pelo cliente
+   * (recomendado UUID v4 ou ULID). Obrigatório no caminho admin pra que
+   * duplo-clique do mesmo POST resulte em 1 crédito; ignorado no caminho
+   * cooperado→cooperado (Bloco C — esse caminho já tem PIN+Serializable+jti).
+   *
+   * Service valida formato (mínimo 8 chars). Recomendado 36 chars (UUID v4).
+   */
+  @IsOptional()
+  @IsString()
+  clientRequestId?: string;
 }
