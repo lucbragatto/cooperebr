@@ -721,6 +721,56 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
+### [NOVOS — sessão 11/06 Sprint Clube P1 Fase 2 pós-fixes-P1 re-review APROVADO]
+
+#### D-novo-LEDGER-UNIQUE-CONSTRAINT — Endurecer idempotência no banco do CooperTokenLedger
+
+**Severidade:** P3.
+**Detectado em:** 2026-06-11 (F2 fixes P1 re-review financeiro-token APROVADO).
+**Onde:** `backend/prisma/schema.prisma` model `CooperTokenLedger` + `backend/src/cooper-token/cooper-token.service.ts:creditar :100-107`.
+
+A idempotência do `creditar()` é hoje **application-level** — `ledger.findFirst({where: {referenciaId, referenciaTabela, cooperadoId, cooperativaId}})` em :100 detecta duplicata antes de criar. Funciona, mas:
+
+1. Não há `@@unique` no banco. Se 2 chamadas concorrentes do `creditar()` chegarem ao `findFirst` ao mesmo tempo (race window de microssegundos antes do `tx.create`), ambas podem retornar null e criar 2 entries. **Não vimos isso acontecer** mas a janela existe.
+2. F2 fix do GAP 1 fechou a corrida no **`CooperTokenCompra`** via `@@unique([asaasId])` + compare-and-swap. O endurecimento equivalente no ledger seria `@@unique([referenciaId, referenciaTabela, cooperadoId])` (nullable, então PG aceita múltiplos NULL e não quebra entries sem referenciaId).
+3. Pré-existente — não introduzido pelo fix F2. Endurece **todos os callers** do `creditar()`: GERACAO_EXCEDENTE, COMPRA_PJ_COOPERADA, BENEFICIO_CONVENIO, SOCIAL, etc.
+
+**Resolução proposta:**
+- Schema delta aditivo: `@@unique([referenciaId, referenciaTabela, cooperadoId])` em `CooperTokenLedger`.
+- Auditar pré: contar registros com `referenciaId` + `referenciaTabela` + `cooperadoId` repetidos hoje (provavelmente 0; idempotência app-level já bloqueia há tempo).
+- Spec novo confirmando que tentativa concorrente de duplicar entry falha no banco (P2003 violação de constraint), e que `creditar()` continua devolvendo o entry existente mesmo em race.
+- Estimativa: ~1-2h Code.
+
+**Não bloqueia F2.** Defesa em profundidade futura — idempotência app-level cobre o caso normal; constraint endurece contra race window improvável.
+
+#### D-novo-CREDITO-PENDENTE-REPROCESSAMENTO — Cron/listener pra reprocessar PAGO_CREDITO_PENDENTE
+
+**Severidade:** P2.
+**Detectado em:** 2026-06-11 (F2 fixes P1 re-review financeiro-token APROVADO).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:processarPagamentoCompraPj` (evento `'cooper-token-compra-pj.credito-pendente'`) + `backend/src/cooper-token/` (sem listener registrado).
+
+O GAP 2 (alerta loud) emite o evento `'cooper-token-compra-pj.credito-pendente'` com payload completo (`{compraId, cooperativaId, compradorCooperadoId, quantidade, eventId}`) quando `creditar()` retorna null pós-PAGO. **Mas:**
+
+1. Não há listener registrado. O evento é emitido pro nada (sem efeito além do `logger.error`).
+2. Recuperação hoje é **manual**: admin precisa olhar dashboard, identificar `CooperTokenCompra` em status `PAGO_CREDITO_PENDENTE`, investigar causa raiz (cooperado status mudou? bug cross-tenant? race?), corrigir, e re-creditar via script.
+3. Cooperado-PJ que pagou fica com tokens **pendentes operacionais** até alguém ver.
+
+**Resolução proposta (futuro):**
+- **Listener** `cooper-token-credito-pendente.listener.ts` registrado em `CooperTokenModule.providers`. `@OnEvent('cooper-token-compra-pj.credito-pendente')` chama `cooperTokenService.tentarRecreditar(compraId)`.
+- **Service** `tentarRecreditar(compraId)`:
+  - Lê `CooperTokenCompra` em `PAGO_CREDITO_PENDENTE`.
+  - Re-chama `creditar()` com mesmos parâmetros (idempotência via `referenciaId+referenciaTabela` cobre se entry já existir).
+  - Se sucesso → updateMany `PAGO_CREDITO_PENDENTE` → `PAGO`.
+  - Se falha → mantém `PAGO_CREDITO_PENDENTE` + log persistente.
+- **Cron mensal** (`@Cron('0 4 1 * *')`, dia 1 às 4h, 1h depois da oxidação) varre tudo em `PAGO_CREDITO_PENDENTE` há mais de 24h e tenta de novo.
+- **Dashboard admin**: filtro pra status `PAGO_CREDITO_PENDENTE` com botão "Reprocessar" manual.
+- **Notificação WA/email** pro admin quando entrada nova surge em PAGO_CREDITO_PENDENTE.
+- Estimativa: ~3-5h Code + spec integração.
+
+**Não bloqueia F2.** Alerta loud + status especial já tornam o problema visível e recuperável manualmente. Listener fecha o loop de recuperação automática.
+
+---
+
 ### [NOVO — sessão 11/06 Sprint Clube P1 Fase 2 Fase 1 read-only F2] Reviewer financeiro-token
 
 #### D-novo-ASAAS-WEBHOOK-AUTH — Reconciliar token-estático vs HMAC-SHA256

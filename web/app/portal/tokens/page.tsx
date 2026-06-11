@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { QRCodeSVG } from 'qrcode.react';
-import { Coins, QrCode, Timer, Receipt, ArrowDownCircle } from 'lucide-react';
+import { Coins, QrCode, Timer, Receipt, ArrowDownCircle, ShoppingCart } from 'lucide-react';
 
 interface CobrancaPendente {
   id: string;
@@ -24,6 +25,9 @@ interface CobrancaPendente {
 export default function PortalTokensPage() {
   const [saldo, setSaldo] = useState<number>(0);
   const [carregando, setCarregando] = useState(true);
+  // Sprint Clube P1 — Fase 2 Bloco 4 (11/06/2026): link condicional pro
+  // /portal/comprar-tokens só renderiza pra empresa cooperada (PJ).
+  const [tipoPessoa, setTipoPessoa] = useState<string>('PF');
   const [quantidade, setQuantidade] = useState('');
   const [gerando, setGerando] = useState(false);
   const [qrToken, setQrToken] = useState('');
@@ -42,12 +46,17 @@ export default function PortalTokensPage() {
 
   const carregarDados = useCallback(async () => {
     try {
-      const [saldoRes, cobrancasRes] = await Promise.all([
+      const [saldoRes, cobrancasRes, meRes] = await Promise.all([
         api.get('/cooper-token/saldo'),
         api.get('/cooper-token/cobrancas-pendentes'),
+        // Sprint Clube P1 — Fase 2 Bloco 4: discrimina PJ pra link de compra.
+        api.get('/auth/me').catch(() => ({ data: null })),
       ]);
       setSaldo(Number(saldoRes.data.saldoDisponivel));
       setCobrancas(cobrancasRes.data);
+      if (meRes?.data?.tipoPessoa) {
+        setTipoPessoa(String(meRes.data.tipoPessoa).toUpperCase());
+      }
     } catch {
       // silently fail
     } finally {
@@ -189,6 +198,32 @@ export default function PortalTokensPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Sprint Clube P1 — Fase 2 Bloco 4 (11/06/2026): link de compra
+          condicional pra empresa cooperada (PJ). Cooperados PF recebem
+          tokens por outros caminhos (excedente, indicação, sobra). */}
+      {tipoPessoa === 'PJ' && (
+        <Card className="border-cyan-300 bg-cyan-50/40">
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-cyan-100 p-2.5">
+                <ShoppingCart className="h-5 w-5 text-cyan-700" />
+              </div>
+              <div>
+                <p className="font-semibold text-cyan-900">Comprar CooperTokens</p>
+                <p className="text-xs text-cyan-800">
+                  Empresa cooperada pode comprar tokens via PIX/boleto para distribuir ou usar em parceiros do Clube.
+                </p>
+              </div>
+            </div>
+            <Link href="/portal/comprar-tokens">
+              <Button size="sm" className="bg-cyan-700 hover:bg-cyan-800 shrink-0">
+                Comprar
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Seção: Usar tokens na fatura */}
       <Card>
