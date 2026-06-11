@@ -393,10 +393,14 @@ describe('EdpEsFaturaAdapter - faturas reais', () => {
 });
 
 describe('Esqueletos ELFSM + ENERGISA_TO', () => {
-  it('ElfsmFaturaAdapter retorna NAO_IMPLEMENTADO', () => {
+  // ElfsmFaturaAdapter foi implementado em C2.5 (calibrado com fatura real Guilherme
+  // Colatina/ES Jun/2026). Testes detalhados estao em elfsm.adapter.spec.ts.
+  // Aqui mantemos so um smoke negativo - input vazio dispara INPUT_INSUFICIENTE
+  // (nao mais NAO_IMPLEMENTADO).
+  it('ElfsmFaturaAdapter input vazio -> INPUT_INSUFICIENTE (esqueleto removido em C2.5)', () => {
     const r = new ElfsmFaturaAdapter().parsear({ rubricas: [] });
     expect(r.sucesso).toBe(false);
-    if (!r.sucesso) expect(r.motivo).toBe('NAO_IMPLEMENTADO');
+    if (!r.sucesso) expect(r.motivo).toBe('INPUT_INSUFICIENTE');
   });
 
   it('EnergisaToFaturaAdapter retorna NAO_IMPLEMENTADO com nota TO', () => {
@@ -431,7 +435,6 @@ describe('FaturaAdapterRegistry', () => {
     expect(a).not.toBeNull();
     expect(a?.distribuidora).toBe('ELFSM');
   });
-
   it('obterAdapter de distribuidora sem adapter registrado retorna null', () => {
     const a = registry.obterAdapter('CEMIG');
     expect(a).toBeNull();
