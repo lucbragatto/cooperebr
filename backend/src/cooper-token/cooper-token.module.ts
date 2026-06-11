@@ -15,9 +15,20 @@ import { EmailModule } from '../email/email.module';
 import { AsaasModule } from '../asaas/asaas.module';
 // Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): listener do webhook Asaas.
 import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
+// Sprint Clube P1 — F4 Bloco A (12/06/2026): PinCooperadoService pra
+// step-up de autorização em usarNaFatura (cooperado abate fatura via PIN).
+// CooperadosModule exporta PinCooperadoService — sem ciclo direto (Cooperados
+// importa Whatsapp via forwardRef; Whatsapp importa CooperToken via
+// forwardRef abaixo — então o caminho fecha sem precisar de forwardRef aqui).
+import { CooperadosModule } from '../cooperados/cooperados.module';
 
 @Module({
-  imports: [forwardRef(() => WhatsappModule), EmailModule, AsaasModule],
+  imports: [
+    forwardRef(() => WhatsappModule),
+    EmailModule,
+    AsaasModule,
+    CooperadosModule,
+  ],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [
     CooperTokenService,

@@ -20,6 +20,10 @@ import { isAmbienteReal } from '../common/safety/ambiente';
 // compra tokens.
 import { AsaasService } from '../asaas/asaas.service';
 import { isEmpresaCooperada } from '../cooperados/cooperado-tipo.helper';
+// Sprint Clube P1 — F4 Bloco A (12/06/2026): step-up via PIN em usarNaFatura.
+// Optional pra não quebrar specs antigos do CooperTokenService que instanciam
+// sem injetar tudo — F4 lança em runtime se faltar.
+import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -75,6 +79,10 @@ export class CooperTokenService {
     // Optional — testes unitarios passam undefined (specs antigos nao
     // dependem do Asaas). F2 chama via comprarTokensCooperado.
     private asaasService?: AsaasService,
+    // F4 Bloco A (12/06/2026) — optional pela mesma razão (specs antigos).
+    // usarNaFatura lança em runtime se PinCooperadoService não estiver
+    // disponível (ambiente real sempre injeta via CooperadosModule).
+    private pinCooperadoService?: PinCooperadoService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -246,6 +254,17 @@ export class CooperTokenService {
     return ledger;
   }
 
+  /**
+   * Débito genérico em transação própria (ReadCommitted default).
+   *
+   * ⚠ ESPELHADO INLINE em `usarNaFatura` (F4 Bloco A, 12/06/2026) — lá a
+   * lógica é inlinada dentro da tx Serializable pra evitar nested
+   * transaction. **Mudanças aqui (cálculo de novoSaldo, ledger fields,
+   * LancamentoCaixa PROVISIONAL) PRECISAM ser replicadas no inline do
+   * `usarNaFatura` pra não criar drift de comportamento.** Bloco B do
+   * F4 vai avaliar se vale extrair `_debitarTx(tx, params)` interno que
+   * sirva os dois caminhos sem nested-tx.
+   */
   async debitar(params: DebitarParams) {
     const { cooperadoId, cooperativaId, quantidade, referenciaId, descricao } =
       params;
@@ -1643,94 +1662,236 @@ export class CooperTokenService {
 
   // ── Cooperado: Usar tokens para abater fatura (ação manual) ──
 
+  /**
+   * Cooperado abate fatura com tokens.
+   *
+   * F4 Bloco A (12/06/2026) — blindagem de 3 camadas:
+   *  1. PIN obrigatório (6 dígitos) via `PinCooperadoService.validarPinComLockout`
+   *     (rate-limit 5 tentativas, lockout 30min, multi-tenant updateMany).
+   *  2. `$transaction` com `isolationLevel: Serializable` envolve ler-saldo +
+   *     debitar + atualizar cobrança — Postgres garante linearizabilidade,
+   *     duas chamadas concorrentes ou serializam ou uma aborta com `40001`.
+   *  3. `updateMany` da cobrança com status-guard `{ A_VENCER, VENCIDO }`:
+   *     se entre o read e o write a cobrança mudou (ex: pagamento Asaas
+   *     chegou via webhook), `count === 0` → BadRequestException, sem
+   *     overwrite silencioso de PAGA. Mata o D-novo-F4-RACE catalogado.
+   *
+   * Não usa `this.debitar()` (que abre própria $transaction sem isolationLevel)
+   * — em vez disso inlina a lógica de débito dentro da tx Serializable, pra
+   * garantir uma única unidade atômica. Bloco B (helper `criarTokenTransacao`
+   * + jti anti-replay) entra depois do schema delta de TokenTransacao.
+   */
   async usarNaFatura(params: {
     cooperadoId: string;
     cooperativaId: string;
     cobrancaId: string;
     quantidadeTokens: number;
+    /** F4 Bloco A — PIN 6 dígitos. DTO valida regex, service só repassa. */
+    pin: string;
   }) {
-    const { cooperadoId, cooperativaId, cobrancaId, quantidadeTokens } = params;
+    const { cooperadoId, cooperativaId, cobrancaId, quantidadeTokens, pin } = params;
 
     if (quantidadeTokens <= 0) {
       throw new BadRequestException('Quantidade de tokens deve ser maior que zero');
     }
-
-    // Buscar cobrança e validar ownership
-    const cobranca = await this.prisma.cobranca.findUnique({
-      where: { id: cobrancaId },
-      include: { contrato: { include: { plano: true } } },
-    });
-
-    if (!cobranca) {
-      throw new NotFoundException('Cobrança não encontrada');
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      throw new BadRequestException('PIN obrigatório (6 dígitos numéricos).');
+    }
+    if (!this.pinCooperadoService) {
+      // F4 Bloco A: optional injection — em prod sempre vem. Se faltar, é
+      // bug de wiring de módulo e não falha silenciosa.
+      throw new Error('PinCooperadoService não disponível (wiring do módulo).');
     }
 
-    if (cobranca.contrato?.cooperadoId !== cooperadoId) {
-      throw new BadRequestException('Cobrança não pertence ao cooperado autenticado');
-    }
-
-    const status = cobranca.status as string;
-    if (status !== 'A_VENCER' && status !== 'VENCIDO') {
-      throw new BadRequestException('Só é possível usar tokens em cobranças A_VENCER ou VENCIDO');
-    }
-
-    // Calcular desconto disponível
-    const plano = cobranca.contrato?.plano;
-    const valorCobranca = Number(cobranca.valorLiquido);
-    const desconto = await this.calcularDesconto({
+    // ── PIN FORA da tx ──
+    // Rate-limit/lockout não pode bloquear linha do saldo. Atualiza
+    // contadores em cooperado.pinTentativas/pinBloqueadoAte (linhas
+    // diferentes do saldo + cobrança da tx Serializable abaixo).
+    const pinResult = await this.pinCooperadoService.validarPinComLockout({
       cooperadoId,
-      valorCobranca,
-      plano: plano ?? { valorTokenReais: null, tokenDescontoMaxPerc: null },
-    });
-
-    // Limitar tokens ao necessário
-    const tokensEfetivos = Math.min(quantidadeTokens, desconto.tokensNecessarios);
-
-    if (tokensEfetivos <= 0) {
-      throw new BadRequestException('Saldo insuficiente ou desconto máximo já atingido');
-    }
-
-    const valorToken = Number(plano?.valorTokenReais ?? 0.45);
-    const descontoReais = Math.round(tokensEfetivos * valorToken * 100) / 100;
-    const novoValorLiquido = Math.round((valorCobranca - descontoReais) * 100) / 100;
-
-    // Debitar tokens
-    await this.debitar({
-      cooperadoId,
+      pin,
       cooperativaId,
-      quantidade: tokensEfetivos,
-      tipo: CooperTokenTipo.DESCONTO_FATURA,
-      referenciaId: cobrancaId,
-      descricao: 'Abatimento manual na fatura via CooperToken',
     });
+    if (!pinResult.ok) {
+      if (pinResult.motivo === 'PIN_NAO_DEFINIDO') {
+        throw new BadRequestException(
+          'PIN ainda não foi definido. Configure seu PIN no portal antes de operar.',
+        );
+      }
+      if (pinResult.motivo === 'PIN_BLOQUEADO') {
+        throw new ForbiddenException(
+          `PIN bloqueado por excesso de tentativas. Tente novamente após ${pinResult.desbloqueiaEm.toISOString()}.`,
+        );
+      }
+      throw new ForbiddenException('PIN incorreto.');
+    }
 
-    // Atualizar cobrança
-    const tokenDescontoQtAnterior = Number(cobranca.tokenDescontoQt ?? 0);
-    const tokenDescontoReaisAnterior = Number(cobranca.tokenDescontoReais ?? 0);
+    // ── Tx Serializable: ler cobrança/saldo + debitar + atualizar cobrança ──
+    const txResult = await this.prisma.$transaction(
+      async (tx) => {
+        // Re-buscar cobrança DENTRO da tx (snapshot consistente).
+        const cobranca = await tx.cobranca.findUnique({
+          where: { id: cobrancaId },
+          include: { contrato: { include: { plano: true } } },
+        });
+        if (!cobranca) {
+          throw new NotFoundException('Cobrança não encontrada');
+        }
+        if (cobranca.contrato?.cooperadoId !== cooperadoId) {
+          throw new BadRequestException('Cobrança não pertence ao cooperado autenticado');
+        }
+        const statusAtual = cobranca.status as string;
+        if (statusAtual !== 'A_VENCER' && statusAtual !== 'VENCIDO') {
+          throw new BadRequestException(
+            'Só é possível usar tokens em cobranças A_VENCER ou VENCIDO',
+          );
+        }
 
-    await this.prisma.cobranca.update({
-      where: { id: cobrancaId },
-      data: {
-        valorLiquido: novoValorLiquido,
-        tokenDescontoQt: Math.round((tokenDescontoQtAnterior + tokensEfetivos) * 10000) / 10000,
-        tokenDescontoReais: Math.round((tokenDescontoReaisAnterior + descontoReais) * 100) / 100,
+        const plano = cobranca.contrato?.plano;
+        const valorCobranca = Number(cobranca.valorLiquido);
+        const valorToken = Number(plano?.valorTokenReais ?? 0.45);
+        const maxPerc = Number(plano?.tokenDescontoMaxPerc ?? 30);
+
+        // Saldo + teto plano DENTRO da tx — clamp final sem race.
+        const saldo = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId },
+        });
+        const saldoDisponivel = Number(saldo?.saldoDisponivel ?? 0);
+
+        const descontoMaxReais = (valorCobranca * maxPerc) / 100;
+        const tetoTokensPlano = valorToken > 0 ? descontoMaxReais / valorToken : 0;
+        const tokensEfetivos = Math.round(
+          Math.min(quantidadeTokens, tetoTokensPlano, saldoDisponivel) * 10000,
+        ) / 10000;
+
+        if (tokensEfetivos <= 0) {
+          throw new BadRequestException(
+            'Saldo insuficiente ou desconto máximo já atingido',
+          );
+        }
+        // Defesa redundante (saldo já clampado, mas guard explícito).
+        if (!saldo || saldoDisponivel < tokensEfetivos) {
+          throw new BadRequestException(
+            `Saldo insuficiente. Disponível: ${saldoDisponivel}, solicitado: ${tokensEfetivos}`,
+          );
+        }
+
+        const descontoReais = Math.round(tokensEfetivos * valorToken * 100) / 100;
+        const novoValorLiquido = Math.round(
+          (valorCobranca - descontoReais) * 100,
+        ) / 100;
+        const novoSaldoDisponivel = Math.round(
+          (saldoDisponivel - tokensEfetivos) * 10000,
+        ) / 10000;
+
+        // ⚠ ESPELHO INLINE de `this.debitar()` (linhas ~260).
+        // Não dá pra chamar `debitar()` daqui porque ele abre uma
+        // `$transaction` própria — nested transactions em Prisma quebram
+        // o isolationLevel Serializable do tx externo. Manter os 2 lugares
+        // em sincronia: cálculo de novoSaldo, fields do ledger, e
+        // LancamentoCaixa PROVISIONAL idênticos. Bloco B do F4 avalia se
+        // vale extrair `_debitarTx(tx, ...)` interno.
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId },
+          data: {
+            saldoDisponivel: novoSaldoDisponivel,
+            totalResgatado: { increment: tokensEfetivos },
+          },
+        });
+
+        // Ledger de débito.
+        const ledger = await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId,
+            cooperativaId,
+            tipo: CooperTokenTipo.DESCONTO_FATURA,
+            operacao: CooperTokenOperacao.DEBITO,
+            quantidade: tokensEfetivos,
+            saldoApos: novoSaldoDisponivel,
+            referenciaId: cobrancaId,
+            descricao: 'Abatimento na fatura via CooperToken (F4 Bloco A)',
+          },
+        });
+
+        // Status-guard idempotente: updateMany só passa se cobrança ainda
+        // estiver A_VENCER/VENCIDO. Se webhook Asaas mudou pra PAGA entre
+        // o read e o write, count === 0 → tx aborta, débito faz rollback.
+        const tokenDescontoQtAnterior = Number(cobranca.tokenDescontoQt ?? 0);
+        const tokenDescontoReaisAnterior = Number(cobranca.tokenDescontoReais ?? 0);
+        const swap = await tx.cobranca.updateMany({
+          where: {
+            id: cobrancaId,
+            status: { in: ['A_VENCER', 'VENCIDO'] as any },
+          },
+          data: {
+            valorLiquido: novoValorLiquido,
+            tokenDescontoQt:
+              Math.round((tokenDescontoQtAnterior + tokensEfetivos) * 10000) / 10000,
+            tokenDescontoReais:
+              Math.round((tokenDescontoReaisAnterior + descontoReais) * 100) / 100,
+          },
+        });
+        if (swap.count === 0) {
+          throw new BadRequestException(
+            'Cobrança mudou de status durante a operação (provavelmente foi paga). Atualize a tela e tente novamente.',
+          );
+        }
+
+        // LancamentoCaixa PROVISIONAL — mesmo padrão de `debitar()` original
+        // (swallow erro pra não derrubar a tx por hint contábil). Roda dentro
+        // da tx pra consistência referencial com ledger.id.
+        try {
+          const competencia = new Date().toISOString().slice(0, 7);
+          const valorEstimado = Math.round(tokensEfetivos * 0.20 * 100) / 100;
+          await tx.lancamentoCaixa.create({
+            data: {
+              tipo: 'PROVISIONAL',
+              descricao: `Débito DESCONTO_FATURA: ${tokensEfetivos} tokens`,
+              valor: valorEstimado,
+              competencia,
+              status: 'PROVISIONAL',
+              naturezaClube: 'PROVISIONAL_TOKEN_ABATIMENTO',
+              cooperTokenLedgerId: ledger.id,
+              cooperadoId,
+              cooperativaId,
+            },
+          });
+        } catch (err) {
+          this.logger.warn(
+            `LancamentoCaixa PROVISIONAL débito falhou (não derruba tx): ${(err as Error).message}`,
+          );
+        }
+
+        return {
+          novoValorLiquido,
+          descontoReais,
+          tokensEfetivos,
+          ledgerId: ledger.id,
+        };
       },
-    });
-
-    this.logger.log(
-      `Cooperado ${cooperadoId} usou ${tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${descontoReais}`,
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    // Emitir evento para lançamento contábil
+    this.logger.log(
+      `[F4-A] Cooperado ${cooperadoId} usou ${txResult.tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${txResult.descontoReais} (ledger=${txResult.ledgerId})`,
+    );
+
+    // Eventos APÓS commit (fora da tx) — não bloqueiam pagamento.
     this.eventEmitter.emit(
       COOPER_TOKEN_EVENTS.RESGATADO,
-      new CooperTokenResgatadoEvent(cooperativaId, cooperadoId, cobrancaId, tokensEfetivos, descontoReais),
+      new CooperTokenResgatadoEvent(
+        cooperativaId,
+        cooperadoId,
+        cobrancaId,
+        txResult.tokensEfetivos,
+        txResult.descontoReais,
+      ),
     );
 
     return {
-      novoValor: novoValorLiquido,
-      desconto: descontoReais,
-      tokensUsados: tokensEfetivos,
+      novoValor: txResult.novoValorLiquido,
+      desconto: txResult.descontoReais,
+      tokensUsados: txResult.tokensEfetivos,
     };
   }
 

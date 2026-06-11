@@ -19,6 +19,8 @@ import { CooperTokenTipo } from '@prisma/client';
 import { UpsertCooperTokenConfigDto } from './dto/upsert-cooper-token-config.dto';
 // Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026): cooperado-PJ compra tokens.
 import { ComprarTokensCooperadoDto } from './dto/comprar-tokens-cooperado.dto';
+// Sprint Clube P1 — F4 Bloco A (12/06/2026): DTO formal com PIN obrigatório.
+import { UsarNaFaturaDto } from './dto/usar-na-fatura.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -270,12 +272,14 @@ export class CooperTokenController {
 
   // ── Cooperado: Usar tokens na fatura ──
 
+  /**
+   * F4 Bloco A (12/06/2026) — body migrado pra DTO formal com PIN obrigatório
+   * (6 dígitos numéricos) + class-validator. Substitui body inline antigo.
+   * cooperadoId e cooperativaId sempre do JWT (anti-IDOR).
+   */
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
   @Post('usar-na-fatura')
-  async usarNaFatura(
-    @Req() req: any,
-    @Body() body: { cobrancaId: string; quantidadeTokens: number },
-  ) {
+  async usarNaFatura(@Req() req: any, @Body() body: UsarNaFaturaDto) {
     const cooperadoId = req.user?.cooperadoId;
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperadoId) {
@@ -284,14 +288,12 @@ export class CooperTokenController {
     if (!cooperativaId) {
       throw new BadRequestException('Cooperativa não identificada');
     }
-    if (!body.cobrancaId || !body.quantidadeTokens || body.quantidadeTokens <= 0) {
-      throw new BadRequestException('cobrancaId e quantidadeTokens (> 0) são obrigatórios');
-    }
     return this.cooperTokenService.usarNaFatura({
       cooperadoId,
       cooperativaId,
       cobrancaId: body.cobrancaId,
       quantidadeTokens: body.quantidadeTokens,
+      pin: body.pin,
     });
   }
 

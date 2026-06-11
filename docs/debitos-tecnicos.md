@@ -797,6 +797,51 @@ A validação atual do webhook Asaas usa **token estático per-tenant** comparad
 
 ---
 
+### [NOVO — sessão 12/06 Sprint Clube P1 F4 Bloco A] usarNaFatura com PIN + Serializable + status-guard
+
+#### D-novo-F4-RACE — Cobrança podia ser sobrescrita por 2 cliques rápidos sem transação atômica ✅ RESOLVIDO
+
+**Severidade:** P1 (movimento financeiro com overwrite silencioso de cobrança paga).
+**Detectado em:** 2026-06-12 (F4 Bloco A Fase 1 read-only — Code mapeou o método).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:usarNaFatura` (linhas pré-Bloco A).
+
+`usarNaFatura` fazia `debitar()` + `cobranca.update()` em transações separadas, sem isolamento. Cenários quebrados:
+
+1. Dois cliques rápidos do mesmo cooperado podiam debitar 2× e atualizar a cobrança 2× (race entre read do saldo e update).
+2. Cobrança que mudou pra PAGA via webhook Asaas entre o `findUnique` e o `update` era sobrescrita silenciosamente — perda de status real.
+3. Sem `isolationLevel: Serializable`, leituras concorrentes do saldo retornavam o mesmo valor antes do debit.
+
+**Resolução (Bloco A 12/06/2026):**
+- Tx única `$transaction` com `isolationLevel: Prisma.TransactionIsolationLevel.Serializable` envolvendo ler-cobrança + ler-saldo + debitar + ledger + updateMany da cobrança.
+- Status-guard idempotente: `cobranca.updateMany({ where: { id, status: { in: ['A_VENCER', 'VENCIDO'] } } })`; se `count === 0`, tx aborta com BadRequest (cobrança virou PAGA → débito faz rollback).
+- Clamp triplo dentro da tx: quantidadePedida × tetoPlano(`descontoMaxPerc`) × `saldoDisponivel`.
+- Spec novo `cooper-token-f4-bloco-a.spec.ts` cobrindo 17 cenários (PIN ausente/inválido/bloqueado/incorreto/válido, status PAGA antes/durante, ownership cross-cooperado, clamp triplo, evento RESGATADO).
+- 123/123 specs cooper-token verdes (106 antigos preservados + 17 novos).
+
+#### D-novo-F4-PARCEIRO-TENANT-STEPUP — Endpoints parceiro-tenant sem PIN/OTP nem Serializable
+
+**Severidade:** P2.
+**Detectado em:** 2026-06-12 (F4 Fase 1 read-only — escopo cooperado-only aprovado; parceiro fica fora).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:transferirTokensParceiro` (linha ~1464) + `usarTokensEnergia` (~1401) + `processarQrParceiro` (~1590).
+
+Os 3 endpoints nível-tenant (ADMIN/OPERADOR/AGREGADOR movem `CooperTokenSaldoParceiro`) hoje rodam sem step-up de autorização e sem `isolationLevel: Serializable` (têm `$transaction` mas no default `ReadCommitted`). Não estão no escopo do F4 (escopo aprovado = lado COOPERADO: `usarNaFatura` + `processarPagamentoQr` + `enviarTokens`).
+
+Razão da exclusão do F4:
+1. Decisão de produto (Luciano 12/06): ADMIN/OPERADOR **não tem PIN** como cooperado tem. Criar `PinUsuarioService` seria código novo desnecessário pro escopo.
+2. Caminho legítimo proposto: tier ALTO força OTP via `otp-desafio.service.ts` (já pronto); BAIXO segue sessão autenticada.
+3. Bundling com **Sprint Hardening Multi-Tenant** (já enfileirado) faz sentido — ambos endurecem nível-tenant.
+
+**Resolução proposta (futuro — junto com Hardening P2):**
+- Adicionar `isolationLevel: Serializable` nas 3 `$transaction` (defesa contra race entre saldos cross-tenant).
+- Tier-based step-up: `valorReais = quantidade × valorTokenReais`; se > R$ 50, exigir OTP via email do ADMIN (`TokenNotificacaoService` já tem).
+- jti via `TokenTransacao` (após Bloco B do F4 entregar o helper + schema delta).
+- Specs novos cobrindo: race-free entre transferências paralelas, OTP exigido em ALTO, jti previne replay.
+- Estimativa: ~6-8h Code.
+
+**Não bloqueia F4 cooperado-only.** Sprint Hardening Multi-Tenant absorve o trabalho de blindagem nível-tenant.
+
+---
+
 ### [NOVOS — sessão 10/06 Sprint Clube P1 Fase 1.5 pós-review] Débitos catalogados pelos reviewers pesados
 
 #### D-novo-OXIDACAO-LEDGER-TIPO — Criar enum OXIDACAO em CooperTokenTipo + visibilidade no caixa
