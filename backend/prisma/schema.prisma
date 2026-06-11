@@ -3702,3 +3702,153 @@ model TokenTransacao {
   @@index([qrExpiresAt])
   @@map("token_transacoes")
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Sprint Concierge C1 (10/06/2026) — Auditor tributário de fatura de energia
+//
+// Objetivo: identificar indébito tributário (ICMS / PIS / COFINS) em
+// faturas de energia de clientes ES (CoopereBR, Sinergia, outros).
+//
+// 2 models novos:
+//   - ConfiguracaoTributariaConcessionaria: parâmetros por UF + concessionária
+//     (lei estadual de isenção GD, alíquotas, rubricas excluídas da isenção).
+//   - DiagnosticoIndebito: resultado de auditoria de UMA fatura, com indébito
+//     calculado, padrões detectados e teses aplicáveis ao perfil do cliente.
+//
+// Atenção: não confundir com `ConfiguracaoTributaria` (linha 3476), que é
+// configuração contábil interna da Cooperativa (PIS/COFINS/IRPJ/CSLL que ELA
+// paga). Aqui é sobre tributos que a CONCESSIONÁRIA cobra na fatura.
+// ════════════════════════════════════════════════════════════════════
+
+/// Parametrização tributária por UF + concessionária para o auditor de
+/// fatura do Concierge. Versionada por vigência — fatura de 2024 audita
+/// com os parâmetros que estavam vigentes em 2024.
+///
+/// Base regulatória:
+/// - ICMS: alíquota varia por estado (ES = 17% padrão energia).
+/// - PIS/COFINS: federal (regime cumulativo: 0,65% + 3% = 3,65%).
+/// - Lei estadual de isenção GD: ex. ES Lei 11.253/2021 (Programa GERAR).
+///   `rubricasExcluidasIsencao` lista rubricas que a lei NÃO isenta de ICMS
+///   (no caso ES: DEMANDA, DISPONIBILIDADE, ENCARGOS — argumento de
+///   inconstitucionalidade material catalogado como Tese 4 / Retaguarda
+///   no dossiê CoopereBR × EDP).
+model ConfiguracaoTributariaConcessionaria {
+  id                       String                @id @default(cuid())
+
+  /// UF + concessionária — combinação única por vigência.
+  /// Em ES, EDP_ES e ELFSM usam mesma config (Lei GERAR é estadual).
+  uf                       String                @db.VarChar(2)
+  distribuidora            DistribuidoraEnum
+
+  /// Referência textual da lei estadual de isenção GD.
+  /// Ex: "Lei 11.253/2021-ES (Programa GERAR)".
+  leiEstadualIsencaoGd     String?
+
+  /// Rubricas que a lei estadual EXCLUI da isenção (seguem com ICMS).
+  /// Lista de strings normalizadas: ["DEMANDA", "DISPONIBILIDADE", "ENCARGOS"].
+  /// Vazio = lei estadual isenta tudo (ou não há lei).
+  rubricasExcluidasIsencao Json                  @default("[]")
+
+  /// Alíquotas vigentes no período.
+  aliquotaIcms             Decimal               @db.Decimal(5, 4)
+  aliquotaPis              Decimal               @db.Decimal(5, 4)
+  aliquotaCofins           Decimal               @db.Decimal(5, 4)
+
+  /// Janela de vigência. Auditoria seleciona config onde a data da fatura
+  /// está entre vigenciaInicio e (vigenciaFim ou agora).
+  vigenciaInicio           DateTime
+  vigenciaFim              DateTime?
+
+  observacoes              String?               @db.Text
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+
+  diagnosticos             DiagnosticoIndebito[]
+
+  @@index([uf, distribuidora, vigenciaInicio])
+  @@map("configuracoes_tributarias_concessionaria")
+}
+
+/// Resultado da auditoria de UMA fatura: padrões detectados, indébito
+/// calculado e teses aplicáveis. Status workflow:
+///   PENDENTE_VALIDACAO → CONFIRMADO (admin valida) | REPROVADO
+///
+/// Padroes detectados (lista canônica em `padroesDetectados`):
+///   PIS_COFINS_BASE_ICMS         — Tema 69 STF (RE 574.706)
+///   ICMS_TUSD_GERACAO            — Tema 176 STF
+///   PIS_COFINS_SEM_DEDUCAO_INJ   — Lei 14.300/2022 + REN 1.059/2023
+///   ICMS_RUBRICAS_EXCLUIDAS_GERAR — Lei 11.253/2021-ES §3º art. 5-D (T4 retaguarda)
+///
+/// Teses aplicáveis (em `tesesAplicaveis`):
+///   T1_ATO_COOPERATIVO   — Art. 79 Lei 5.764/71 + Temas 536/323 STF
+///   T2_ICMS_TUSD         — Tema 176 STF
+///   T3_PIS_COFINS_ICMS   — Tema 69 STF
+///   T4_GERAR_RETAGUARDA  — Inconst. material §3º art. 5-D Lei 11.253/2021-ES
+///
+/// Classificador define quais teses aplicam por perfil (ver
+/// auditor-tributario.service.ts — classificarTesesAplicaveis).
+model DiagnosticoIndebito {
+  id                          String                                  @id @default(cuid())
+
+  /// Tenant — quando cliente é cooperado de uma cooperativa do SISGD.
+  /// NULL = lead anônimo (Concierge gerando proposta antes do cadastro).
+  cooperativaId               String?
+
+  /// Cooperado-alvo. NULL = lead pré-cadastro ou PF/PJ direto futuro.
+  cooperadoId                 String?
+
+  /// UC analisada. NULL = lead anônimo sem UC vinculada ainda.
+  ucId                        String?
+
+  /// Configuração tributária aplicada na auditoria (versionada por vigência).
+  configuracaoTributariaConcessionariaId String
+  configuracaoTributariaConcessionaria   ConfiguracaoTributariaConcessionaria @relation(fields: [configuracaoTributariaConcessionariaId], references: [id])
+
+  /// Distribuidora redundante (já está na config) — facilita queries.
+  distribuidora               DistribuidoraEnum
+
+  /// "YYYY-MM" — mês de competência da fatura auditada.
+  mesReferencia               String                                  @db.VarChar(7)
+
+  /// Snapshot do valor total da fatura no momento da auditoria.
+  valorTotalFatura            Decimal                                 @db.Decimal(12, 2)
+
+  /// Perfil do cliente — define quais teses aplicam.
+  /// Valores canônicos:
+  ///   COOPERADO_GD          — cooperado de cooperativa GD (CoopereBR, Sinergia)
+  ///   CONSORCIADO_GD        — consorciado de consórcio GD
+  ///   PF_USINA_PROPRIA      — PF dono de usina (autoconsumo remoto)
+  ///   PF_CATIVO             — PF consumidor cativo sem GD (não atendido no MVP)
+  ///   PROPRIETARIO_USINA    — terceiro arrendante de usina pra cooperativa
+  perfilCliente               String                                  @db.VarChar(40)
+
+  /// Lista de padrões detectados na fatura — ver doc do model.
+  /// Cada item: { codigo, valorIndebitoMensal, fundamento, detalhe }.
+  padroesDetectados           Json                                    @default("[]")
+
+  /// Lista de teses aplicáveis ao perfil — ver doc do model.
+  /// Cada item: "T1_ATO_COOPERATIVO" | "T2_ICMS_TUSD" | etc.
+  tesesAplicaveis             Json                                    @default("[]")
+
+  /// Soma dos padrões detectados — valor mensal.
+  indebitoMensal              Decimal                                 @default(0) @db.Decimal(12, 2)
+
+  /// Projeção 60 meses + SELIC (taxa aplicada em SELIC mensal acumulada).
+  indebito60mSelic            Decimal                                 @default(0) @db.Decimal(14, 2)
+
+  /// Workflow de validação.
+  /// PENDENTE_VALIDACAO — recém-gerado, aguarda admin conferir.
+  /// CONFIRMADO         — admin validou, libera geração de briefing.
+  /// REPROVADO          — admin marcou como inválido (OCR errado, etc).
+  status                      String                                  @default("PENDENTE_VALIDACAO") @db.VarChar(30)
+
+  observacoesAdmin            String?                                 @db.Text
+
+  createdAt                   DateTime                                @default(now())
+  updatedAt                   DateTime                                @updatedAt
+
+  @@index([cooperativaId, mesReferencia])
+  @@index([status])
+  @@index([perfilCliente])
+  @@map("diagnosticos_indebito")
+}
