@@ -95,11 +95,22 @@ export class CooperTokenService {
     // BUG-11-003: Só creditar tokens para cooperados com status ATIVO
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id: cooperadoId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, cooperativaId: true },
     });
 
     if (!cooperado) {
       this.logger.warn(`creditar: cooperado ${cooperadoId} não encontrado, crédito negado`);
+      return null;
+    }
+
+    // Fix pos-review F2 (11/06/2026) — defesa multi-tenant em profundidade:
+    // garante que o cooperado pertence ao tenant do creditante (mesmo padrao
+    // anti-IDOR D-novo-BQ.2). Sem isso, um caminho que confiasse no
+    // cooperadoId vindo de fora poderia creditar tokens cross-tenant.
+    if (cooperado.cooperativaId !== cooperativaId) {
+      this.logger.warn(
+        `creditar: cross-tenant bloqueado — cooperado ${cooperadoId} pertence a ${cooperado.cooperativaId} mas o credito veio com cooperativaId=${cooperativaId}. Credito NEGADO.`,
+      );
       return null;
     }
 
@@ -1838,13 +1849,19 @@ export class CooperTokenService {
       throw err;
     }
 
-    // 3. Linkar bidirecionalmente.
-    const compraAtualizada = await this.prisma.cooperTokenCompra.update({
-      where: { id: compra.id },
+    // 3. Linkar bidirecionalmente — defesa multi-tenant (fix pos-review
+    //    11/06/2026): updateMany com cooperativaId no where. Garante que
+    //    so atualiza se a compra continua no tenant (defesa contra race
+    //    entre tenants ou bug futuro de cross-tenant).
+    await this.prisma.cooperTokenCompra.updateMany({
+      where: { id: compra.id, cooperativaId },
       data: {
         asaasId: asaasCobranca.asaasId,
         asaasCobrancaId: asaasCobranca.id,
       },
+    });
+    const compraAtualizada = await this.prisma.cooperTokenCompra.findUnique({
+      where: { id: compra.id },
     });
 
     this.logger.log(
@@ -1852,7 +1869,7 @@ export class CooperTokenService {
     );
 
     return {
-      compraId: compraAtualizada.id,
+      compraId: compraAtualizada?.id ?? compra.id,
       quantidade,
       valorTokenReais,
       valorTotal,
@@ -1895,6 +1912,7 @@ export class CooperTokenService {
     skipped?: string;
     creditado?: boolean;
     quantidadeLiquida?: number;
+    alertaPendencia?: boolean;
   }> {
     const compra = await this.prisma.cooperTokenCompra.findUnique({
       where: { id: compraId },
@@ -1928,15 +1946,31 @@ export class CooperTokenService {
       return { skipped: 'compra-legada-tenant' };
     }
 
-    // 1. Update status PAGO + dataPagamento + ultimoWebhookEventId (atomico).
-    await this.prisma.cooperTokenCompra.update({
-      where: { id: compraId },
+    // 1. GAP 1 fix (11/06/2026): COMPARE-AND-SWAP atomico — substitui
+    //    update simples por updateMany {where: status=AGUARDANDO_PAGAMENTO}.
+    //    Se 2 webhooks concorrentes (CONFIRMED+RECEIVED do mesmo payment)
+    //    bate o where ao mesmo tempo, so 1 muda o status (count===1); o
+    //    outro retorna count===0 → skip. Race-free no banco. Tambem filtra
+    //    por cooperativaId (defesa em profundidade multi-tenant).
+    const swap = await this.prisma.cooperTokenCompra.updateMany({
+      where: {
+        id: compraId,
+        cooperativaId: compra.cooperativaId,
+        status: 'AGUARDANDO_PAGAMENTO',
+      },
       data: {
         status: 'PAGO',
         dataPagamento: new Date(),
         ultimoWebhookEventId: eventId,
       },
     });
+    if (swap.count === 0) {
+      // Outro webhook ja venceu a corrida OU status mudou desde o read.
+      this.logger.log(
+        `[compra-pj] compare-and-swap perdeu pra ${compraId} (eventId=${eventId}) — outro evento ja venceu, skip`,
+      );
+      return { skipped: 'corrida-perdida' };
+    }
 
     // 2. Creditar tokens no proprio cooperado-PJ via `creditar()`.
     //    Taxa F1.5 sai de graca (calcularTaxa('emissao') aplicada em :113-118).
@@ -1956,10 +1990,25 @@ export class CooperTokenService {
     });
 
     if (!ledgerEntry) {
-      this.logger.warn(
-        `[compra-pj] creditar retornou null pra compra ${compraId} cooperado ${compra.compradorCooperadoId} — possivel status invalido`,
+      // GAP 2 fix (11/06/2026): NAO deixar PAGO silencioso sem token.
+      // Atualiza status pra PAGO_CREDITO_PENDENTE + emite evento de
+      // pendencia operacional pra reprocessamento manual/cron futuro.
+      // Cooperativa fica visivel via status especial no painel admin.
+      await this.prisma.cooperTokenCompra.updateMany({
+        where: { id: compraId, cooperativaId: compra.cooperativaId, status: 'PAGO' },
+        data: { status: 'PAGO_CREDITO_PENDENTE' },
+      });
+      this.logger.error(
+        `[compra-pj] ALERTA: compra ${compraId} PAGA mas creditar() retornou null pra cooperado ${compra.compradorCooperadoId} (cooperativaId=${compra.cooperativaId}, qty=${compra.quantidade}). Status -> PAGO_CREDITO_PENDENTE. Acao operacional: reprocessar apos resolver causa (status do cooperado, tenant cross-cooperativa, etc).`,
       );
-      return { creditado: false };
+      this.eventEmitter.emit('cooper-token-compra-pj.credito-pendente', {
+        compraId,
+        cooperativaId: compra.cooperativaId,
+        compradorCooperadoId: compra.compradorCooperadoId,
+        quantidade: Number(compra.quantidade),
+        eventId,
+      });
+      return { creditado: false, alertaPendencia: true };
     }
 
     const quantidadeLiquida = Number((ledgerEntry as any).quantidade ?? 0);

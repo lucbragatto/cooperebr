@@ -28,11 +28,15 @@ function buildPrisma(opts: {
   cooperado?: any;
   saldoExistente?: any;
   ledgerJaCreditado?: any;
+  swapCount?: number; // GAP 1 fix: simula compare-and-swap count
 }) {
+  const swapCount = opts.swapCount ?? 1;
   return {
     cooperTokenCompra: {
       findUnique: jest.fn().mockResolvedValue(opts.compra ?? null),
       update: jest.fn().mockResolvedValue({}),
+      // GAP 1 fix: updateMany usado pra compare-and-swap.
+      updateMany: jest.fn().mockResolvedValue({ count: swapCount }),
     },
     cooperado: {
       findUnique: jest.fn().mockResolvedValue(opts.cooperado ?? null),
@@ -148,7 +152,7 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
   });
 
   describe('Happy path — webhook valido confirma compra PJ', () => {
-    it('PAYMENT_RECEIVED → update PAGO + dataPagamento + ultimoWebhookEventId + creditar() chamado', async () => {
+    it('PAYMENT_RECEIVED → compare-and-swap PAGO + dataPagamento + ultimoWebhookEventId + creditar() chamado', async () => {
       const prisma = buildPrisma({
         compra: {
           id: COMPRA_ID,
@@ -159,15 +163,20 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
           quantidade: 100,
           valorTokenReais: 0.45,
         },
-        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO' },
+        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO', cooperativaId: COOPERATIVA },
+        swapCount: 1, // venceu a corrida
       });
       const service = buildService(prisma);
 
       const r = await service.processarPagamentoCompraPj(COMPRA_ID, EVENT_ID);
 
-      // Update da CooperTokenCompra
-      expect(prisma.cooperTokenCompra.update).toHaveBeenCalledWith({
-        where: { id: COMPRA_ID },
+      // GAP 1 fix — updateMany compare-and-swap (where inclui status + cooperativaId)
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: COMPRA_ID,
+          cooperativaId: COOPERATIVA,
+          status: 'AGUARDANDO_PAGAMENTO',
+        },
         data: expect.objectContaining({
           status: 'PAGO',
           dataPagamento: expect.any(Date),
@@ -178,7 +187,7 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
       // creditar() foi chamado (via findUnique do cooperado + findFirst do ledger)
       expect(prisma.cooperado.findUnique).toHaveBeenCalledWith({
         where: { id: COMPRADOR_PJ },
-        select: { id: true, status: true },
+        select: { id: true, status: true, cooperativaId: true },
       });
       // Idempotencia camada 2 — ledger.findFirst com referencia
       expect(prisma.cooperTokenLedger.findFirst).toHaveBeenCalledWith({
@@ -205,26 +214,28 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
           quantidade: 100,
           valorTokenReais: 0.45,
         },
-        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO' },
+        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO', cooperativaId: COOPERATIVA },
         ledgerJaCreditado: {
           id: 'ledger-anterior',
           quantidade: 98,
         },
+        swapCount: 1,
       });
       const service = buildService(prisma);
 
       const r = await service.processarPagamentoCompraPj(COMPRA_ID, EVENT_ID);
 
-      // Update da compra acontece (idempotencia camada 1 OK)
-      expect(prisma.cooperTokenCompra.update).toHaveBeenCalled();
-      // Mas $transaction do creditar nao roda (ledger ja existe)
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      // creditar() retorna o ledger existente
       expect(r.creditado).toBe(true);
       expect(r.quantidadeLiquida).toBe(98);
     });
+  });
 
-    it('cooperado com status PENDENTE → creditar retorna null → creditado=false', async () => {
+  // ── Fixes pós-review (11/06/2026) ──────────────────────────────────
+
+  describe('GAP 1 — Compare-and-swap atomico (CONFIRMED + RECEIVED concorrentes)', () => {
+    it('swapCount=0 (outro evento ja venceu) → skipped="corrida-perdida" + creditar NUNCA roda', async () => {
       const prisma = buildPrisma({
         compra: {
           id: COMPRA_ID,
@@ -235,13 +246,152 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
           quantidade: 100,
           valorTokenReais: 0.45,
         },
-        cooperado: { id: COMPRADOR_PJ, status: 'PENDENTE' }, // bloqueado em creditar()
+        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO', cooperativaId: COOPERATIVA },
+        swapCount: 0, // outro webhook ja venceu
+      });
+      const service = buildService(prisma);
+
+      const r = await service.processarPagamentoCompraPj(COMPRA_ID, EVENT_ID);
+
+      // Compare-and-swap rodou
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: COMPRA_ID,
+          cooperativaId: COOPERATIVA,
+          status: 'AGUARDANDO_PAGAMENTO',
+        },
+        data: expect.any(Object),
+      });
+      // Mas creditar() NAO foi tocado (cooperado.findUnique nem chamado)
+      expect(prisma.cooperado.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(r.skipped).toBe('corrida-perdida');
+    });
+
+    it('dual-event CONFIRMED+RECEIVED do mesmo payment → so 1 vence (1o vez count=1; 2a vez count=0)', async () => {
+      // Simula 2 chamadas sequenciais como se 2 webhooks chegassem.
+      const compra = {
+        id: COMPRA_ID,
+        ultimoWebhookEventId: null,
+        status: 'AGUARDANDO_PAGAMENTO',
+        compradorCooperadoId: COMPRADOR_PJ,
+        cooperativaId: COOPERATIVA,
+        quantidade: 100,
+        valorTokenReais: 0.45,
+      };
+      let chamada = 0;
+      const prisma = {
+        cooperTokenCompra: {
+          findUnique: jest.fn().mockResolvedValue(compra),
+          update: jest.fn(),
+          updateMany: jest.fn(() => {
+            chamada += 1;
+            // 1a chamada: vence (count=1). 2a: ja era PAGO → count=0.
+            return Promise.resolve({ count: chamada === 1 ? 1 : 0 });
+          }),
+        },
+        cooperado: {
+          findUnique: jest.fn().mockResolvedValue({ id: COMPRADOR_PJ, status: 'ATIVO', cooperativaId: COOPERATIVA }),
+        },
+        cooperTokenLedger: {
+          findFirst: jest.fn().mockResolvedValue(null),
+        },
+        configCooperToken: { findUnique: jest.fn().mockResolvedValue(null) },
+        $transaction: jest.fn(async (cb: any) => {
+          const tx = {
+            cooperTokenSaldo: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockResolvedValue({}),
+              update: jest.fn(),
+            },
+            cooperTokenLedger: {
+              create: jest.fn().mockResolvedValue({ id: 'ledger-1', quantidade: 98, saldoApos: 98 }),
+            },
+          };
+          return cb(tx);
+        }),
+      } as any;
+      const service = buildService(prisma);
+
+      const r1 = await service.processarPagamentoCompraPj(COMPRA_ID, 'PAYMENT_CONFIRMED_pay');
+      const r2 = await service.processarPagamentoCompraPj(COMPRA_ID, 'PAYMENT_RECEIVED_pay');
+
+      // 1o evento ganhou: creditou
+      expect(r1.creditado).toBe(true);
+      // 2o evento perdeu corrida: skip
+      expect(r2.skipped).toBe('corrida-perdida');
+      // $transaction (creditar) so rodou 1 vez
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('GAP 2 — Pago sem token (alerta loud, NUNCA silencioso)', () => {
+    it('creditar() retorna null → status PAGO_CREDITO_PENDENTE + evento pendencia + alertaPendencia=true', async () => {
+      const prisma = buildPrisma({
+        compra: {
+          id: COMPRA_ID,
+          ultimoWebhookEventId: null,
+          status: 'AGUARDANDO_PAGAMENTO',
+          compradorCooperadoId: COMPRADOR_PJ,
+          cooperativaId: COOPERATIVA,
+          quantidade: 100,
+          valorTokenReais: 0.45,
+        },
+        // Cooperado PENDENTE em creditar() → retorna null.
+        cooperado: { id: COMPRADOR_PJ, status: 'PENDENTE', cooperativaId: COOPERATIVA },
+        swapCount: 1,
+      });
+      const eventMock = { emit: jest.fn() } as any;
+      const service = new CooperTokenService(prisma, eventMock);
+
+      const r = await service.processarPagamentoCompraPj(COMPRA_ID, EVENT_ID);
+
+      // Update compensatorio pra PAGO_CREDITO_PENDENTE (com cooperativaId)
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalledWith({
+        where: { id: COMPRA_ID, cooperativaId: COOPERATIVA, status: 'PAGO' },
+        data: { status: 'PAGO_CREDITO_PENDENTE' },
+      });
+
+      // Evento de pendencia emitido
+      expect(eventMock.emit).toHaveBeenCalledWith(
+        'cooper-token-compra-pj.credito-pendente',
+        expect.objectContaining({
+          compraId: COMPRA_ID,
+          cooperativaId: COOPERATIVA,
+          compradorCooperadoId: COMPRADOR_PJ,
+          quantidade: 100,
+          eventId: EVENT_ID,
+        }),
+      );
+
+      expect(r.creditado).toBe(false);
+      expect(r.alertaPendencia).toBe(true);
+    });
+  });
+
+  describe('Defesa multi-tenant em creditar (cross-tenant bloqueado)', () => {
+    it('cooperado.cooperativaId !== param.cooperativaId → creditar retorna null → status PAGO_CREDITO_PENDENTE', async () => {
+      const prisma = buildPrisma({
+        compra: {
+          id: COMPRA_ID,
+          ultimoWebhookEventId: null,
+          status: 'AGUARDANDO_PAGAMENTO',
+          compradorCooperadoId: COMPRADOR_PJ,
+          cooperativaId: COOPERATIVA, // tenant A
+          quantidade: 100,
+          valorTokenReais: 0.45,
+        },
+        // Cooperado existe MAS pertence a OUTRO tenant (cross-tenant attempt)
+        cooperado: { id: COMPRADOR_PJ, status: 'ATIVO', cooperativaId: 'tenant-OUTRO' },
+        swapCount: 1,
       });
       const service = buildService(prisma);
       const r = await service.processarPagamentoCompraPj(COMPRA_ID, EVENT_ID);
-      // Update da compra rolou; mas credito nao
-      expect(prisma.cooperTokenCompra.update).toHaveBeenCalled();
+      // Compare-and-swap rolou (camada 1 OK), mas creditar bloqueou cross-tenant
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalled();
+      // E o update compensatorio (PAGO_CREDITO_PENDENTE) tambem rolou
       expect(r.creditado).toBe(false);
+      expect(r.alertaPendencia).toBe(true);
     });
   });
 });

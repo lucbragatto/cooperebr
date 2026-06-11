@@ -36,7 +36,7 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
       };
       const prisma: any = {
         cooperado: {
-          findUnique: jest.fn().mockResolvedValue({ id: 'c1', status: 'ATIVO_RECEBENDO_CREDITOS' }),
+          findUnique: jest.fn().mockResolvedValue({ id: 'c1', status: 'ATIVO_RECEBENDO_CREDITOS', cooperativaId: 'coop-A' }),
         },
         cooperTokenLedger: { findFirst: jest.fn().mockResolvedValue(null) },
         configCooperToken: { findUnique: jest.fn() },

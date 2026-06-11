@@ -2854,7 +2854,11 @@ model CooperTokenCompra {
   valorTokenReais Decimal   @db.Decimal(10, 2)
   valorTotal      Decimal   @db.Decimal(10, 2)
   formaPagamento  String // PIX | BOLETO
-  status          String    @default("AGUARDANDO_PAGAMENTO") // AGUARDANDO_PAGAMENTO | PAGO | CANCELADO
+  // Sprint Clube P1 — Fase 2 fixes pos-review GAP 2 (11/06/2026): novo
+  // valor `PAGO_CREDITO_PENDENTE` quando webhook confirmou pagamento mas
+  // creditar() falhou (cooperado status invalido, etc) — alerta loud pra
+  // reprocessamento manual. NUNCA deixar PAGO silencioso sem token.
+  status          String    @default("AGUARDANDO_PAGAMENTO") // AGUARDANDO_PAGAMENTO | PAGO | PAGO_CREDITO_PENDENTE | CANCELADO
   dataPagamento   DateTime?
   asaasId         String?
 
@@ -2870,6 +2874,14 @@ model CooperTokenCompra {
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  // Sprint Clube P1 — Fase 2 fixes pos-review GAP 1 (11/06/2026):
+  // PG aceita multiplos NULL em unique (NULL != NULL), entao as 0 linhas
+  // existentes (asaasId nullable) nao conflitam. Garante 1 payment.id
+  // Asaas → no maximo 1 CooperTokenCompra (defesa contra bug futuro que
+  // tentasse duplicar via webhook ou bug de criacao concorrente).
+  @@unique([asaasId])
+  @@index([asaasId])
 
   @@map("cooper_token_compras")
 }

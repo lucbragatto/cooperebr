@@ -35,6 +35,16 @@ function buildPrisma(opts: {
     asaasCobrancaId: 'asaas-cobr-1',
   });
   // Quando o catch faz update pra CANCELADO, o `.catch(()=>undefined)` engole erro.
+  // Fix pos-review F2 (11/06/2026): link bidirecional usa updateMany +
+  // findUnique (defesa multi-tenant via cooperativaId no where).
+  const cooperTokenCompraUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const cooperTokenCompraFindUnique = jest.fn().mockResolvedValue({
+    id: 'compra-1',
+    cooperativaId: COOPERATIVA,
+    compradorCooperadoId: COOPERADO_PJ,
+    asaasId: 'asaas-pay-1',
+    asaasCobrancaId: 'asaas-cobr-1',
+  });
   return {
     cooperado: {
       findFirst: jest.fn().mockResolvedValue(opts.cooperado ?? null),
@@ -45,8 +55,10 @@ function buildPrisma(opts: {
     cooperTokenCompra: {
       create: cooperTokenCompraCreate,
       update: cooperTokenCompraUpdate,
+      updateMany: cooperTokenCompraUpdateMany,
+      findUnique: cooperTokenCompraFindUnique,
     },
-    __mocks: { cooperTokenCompraCreate, cooperTokenCompraUpdate },
+    __mocks: { cooperTokenCompraCreate, cooperTokenCompraUpdate, cooperTokenCompraUpdateMany },
   } as any;
 }
 
@@ -190,9 +202,9 @@ describe('CooperTokenService.comprarTokensCooperado — F2 Bloco 2', () => {
         }),
       );
 
-      // 3. Linka bidirecionalmente
-      expect(prisma.cooperTokenCompra.update).toHaveBeenCalledWith({
-        where: { id: 'compra-1' },
+      // 3. Linka bidirecionalmente (defesa multi-tenant via cooperativaId)
+      expect(prisma.cooperTokenCompra.updateMany).toHaveBeenCalledWith({
+        where: { id: 'compra-1', cooperativaId: COOPERATIVA },
         data: { asaasId: 'asaas-pay-1', asaasCobrancaId: 'asaas-cobr-1' },
       });
 
