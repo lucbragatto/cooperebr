@@ -536,20 +536,14 @@ export class AsaasService {
       (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') &&
       payment.id
     ) {
-      const compra = await this.prisma.cooperTokenCompra.findFirst({
+      const compraToken = await this.prisma.cooperTokenCompra.findFirst({
         where: { asaasId: payment.id },
-        select: { id: true },
       });
-      if (compra) {
-        this.eventEmitter.emit('asaas.cooper-token-compra-pj.pago', {
-          compraId: compra.id,
-          eventId: `${payment.id}-${event}`,
-        });
-      }
-    }
-  }
-}
-s.eventEmitter.emit('cooper-token-compra-pj.paga', {
+      if (compraToken) {
+        this.logger.log(
+          `[webhook→cooper-token] match CooperTokenCompra ${compraToken.id} via payment ${payment.id} — emite cooper-token-compra-pj.paga`,
+        );
+        this.eventEmitter.emit('cooper-token-compra-pj.paga', {
           compraId: compraToken.id,
           eventId,
           paymentId: payment.id,

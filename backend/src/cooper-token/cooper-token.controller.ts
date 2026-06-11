@@ -569,17 +569,11 @@ export class CooperTokenController {
     const remetenteCooperadoId = req.user?.cooperadoId;
     const perfil = req.user?.perfil;
 
- 
-    return this.cooperTokenService.enviarTokens({
-      remetenteCooperadoId,
-      destinatarioCooperadoId: body.cooperadoId,
-      cooperativaId,
-      quantidade: body.quantidade,
-      descricao: body.descricao,
-    });
-  }
-}
-xception('cooperadoId e quantidade (> 0) são obrigatórios');
+    if (!cooperativaId && perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    if (!body.cooperadoId || !body.quantidade || body.quantidade <= 0) {
+      throw new BadRequestException('cooperadoId e quantidade (> 0) são obrigatórios');
     }
 
     // ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR: crédito direto (envio do parceiro, sem débito pessoal)

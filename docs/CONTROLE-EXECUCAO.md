@@ -47,6 +47,51 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-11 (Cowork — Concierge C3 + C2.5 + C2.6 + MVP SaaS, paralelo ao M31 Code)
+
+**3 commits trabalho Cowork (claude.ai):**
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `332ec5b` | feat | **C3** — 3 detectores tributários (Tema 69 + Tese 3 SCEE + Tese 2 TUSD-G) + 16 specs verdes |
+| `d24104f` | feat | **C2.5** — Adapter ELFSM funcional (Guilherme Colatina) + correção PIS/COFINS líquido no Tese 3 + 12 specs ELFSM |
+| `2440f94` | feat | **MVP SaaS** — Schema delta `moduloConciergeAtivo` + service + controller + 7 endpoints + 3 telas web + script ativar CoopereBR + estratégia jurídica Justiça Federal |
+
+**Schema delta aplicado** (zero risco de perda, aditivo): `Cooperativa.moduloConciergeAtivo: Boolean @default(false)` + `conciergeAtivadoEm: DateTime?`. **CoopereBR ativada** via script idempotente (`ativar-concierge-cooperebr.ts`).
+
+**77/77 specs verdes** (37 EDP + 12 ELFSM + 16 detectores + 12 ConciergeService).
+
+**ACHADO ESTRATÉGICO CRÍTICO — ELFSM = prova cabal de descumprimento EDP**: Empresa Luz e Força Santa Maria (ES região serrana) aplica SCEE em AMBOS ICMS e PIS/COFINS — linha injeção com PIS/COFINS negativo cancelando o positivo do Consumo SCEE. EDP aplica só no ICMS. Sob mesma jurisdição ES + mesma legislação federal. **Não é mais "argumento por analogia" — é tratamento desigual sob mesma lei**. Inverte ônus argumentativo. Memória persistente `concierge_inconsistencia_icms_pis_edp_elfsm.md`.
+
+**Indébito mensal mapeado em 10 faturas auditadas (5 antigas + 3 novas hoje + 2 ELFSM):** R$ 14.075/mês total, **R$ 1.055.616 em 60m+SELIC**. Casos demolidores: LAURENTINO B1 GD (R$ 263,84 → R$ 136,93 correto = 48% sobrepreço); CHRISTIANE B3 GD (R$ 859,61 → R$ 462,61 correto = 46%); SINERGIA A4 usina (R$ 11.184 → R$ 9.409 correto = 16%).
+
+**Estratégia jurídica Justiça Federal entregue** (`docs/concierge/2026-06-11-estrategia-justica-federal.md`): NÃO atacar Lei GERAR-ES (favorável ao cooperado). Fundamento principal = Lei 14.300/2022 federal (SCEE textualmente = "empréstimo gratuito") + Tema 69 STF. Lei GERAR + fatura ELFSM viram precedente legislativo + prova documental de isonomia. **3 vias processuais**: (1) MS Coletivo CoopereBR contra Receita Federal, (2) Ação Ordinária Declaratória + Repetição Indébito, (3) Caminho administrativo via ANEEL/Lei 14.385/22. Réu = UNIÃO → Justiça Federal pelo Art. 109, I, CF.
+
+**Bloqueador resolvido na sessão**: `cooper-token.service.ts:2005` truncado reparado via heredoc. Outros 4 arquivos cooper-token + asaas truncados (controller :572 + module :20 + service + asaas.service) — catalogado como `D-novo-CODE-TRUNCAMENTO-M31` P0 pra Code restaurar. **CORREÇÃO DE ATRIBUIÇÃO (11/06 — sessão Code retomada pós-Cowork):** truncamento NÃO foi do Code M31 (commit `89bc531` íntegro 2400 linhas verificado via `git show 6897c62:`). Foi introduzido pela edição da sessão paralela Concierge (`2440f94`) + reparo parcial `e7d6ca7` que deixou pedaços de código órfãos. **RESOLVIDO** na sessão Code de hoje: restauração via `git checkout 6897c62 -- backend/src/cooper-token/{service,controller,module}.ts backend/src/asaas/asaas.service.ts`. TSC zero erros nos 4 arquivos + suite cooper-token 106/106 verde.
+
+**Frase de retomada Cowork:**
+
+```
+Continuar Concierge — Sprint C4: orquestrador + endpoint POST /concierge/diagnostico
++ persistência DiagnosticoIndebito + classificador teses por perfil. Build/PM2
+depende dos 4 arquivos cooper-token serem reparados pelo Code primeiro.
+```
+
+**Carry-overs Cowork (não-bloqueantes):**
+- D-novo-CONCIERGE-OCR-RUBRICAS-INDIVIDUAIS P2 (OCR atual agrega — detector precisa rubricas individuais pra rodar com dados reais)
+- D-novo-CONCIERGE-PLANO-PAGTO-AUDITORIA P3 (parcelamento "Prestações Plano Pagto N/M" pode embutir indébito antigo diluído)
+- D-novo-CONCIERGE-ELFSM-A4 P3 (calibrar layout comercial/industrial ELFSM quando aparecer fatura A4 deles)
+- D-novo-CONCIERGE-MUC-VS-OUC P2 (Sinergia mUC cancela PIS/COFINS naturalmente; outras EDPs oUC não — diferenciação no detector pode ser útil)
+- D-novo-CODE-TRUNCAMENTO-M31 ✅ **RESOLVIDO 11/06** — atribuição corrigida: truncamento NÃO foi do Code M31 (íntegro), foi da edição da sessão paralela Concierge (`2440f94` + reparo parcial `e7d6ca7`). Restauração feita via `git checkout 6897c62` dos 4 arquivos. TSC + 106 specs verde.
+
+**Documentos vivos novos:**
+- `docs/sessoes/2026-06-11-cowork-concierge-c3-c2-5.md` — fechamento sessão
+- `docs/concierge/2026-06-11-estrategia-justica-federal.md` — roteiro processual com 7 fontes (STF, STJ, SEFAZ-ES, Migalhas, Canal Solar)
+
+Detalhe: `docs/sessoes/2026-06-11-cowork-concierge-c3-c2-5.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-11 (Code — M31 Sprint Clube P1 Fase 2: Empresa-PJ compra tokens via Asaas SANDBOX)
 
 **6 commits trabalho** (+ 1 fechamento):
