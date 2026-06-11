@@ -65,48 +65,31 @@ export class ConciergeService {
     const cooperados = await this.prisma.cooperado.findMany({
       where: {
         cooperativaId,
-        ucs: {
-          some: {
-            faturasProcessadas: { some: {} },
-          },
-        },
+        faturasProcessadas: { some: {} },
       },
       select: {
         id: true,
-        nome: true,
+        nomeCompleto: true,
         email: true,
-        ucs: {
-          select: {
-            faturasProcessadas: {
-              select: { mesReferencia: true },
-              orderBy: { mesReferencia: 'desc' },
-              take: 1,
-            },
-            _count: { select: { faturasProcessadas: true } },
-          },
+        _count: { select: { faturasProcessadas: true } },
+        faturasProcessadas: {
+          select: { mesReferencia: true },
+          orderBy: { mesReferencia: 'desc' },
+          take: 1,
         },
       },
-      orderBy: { nome: 'asc' },
+      orderBy: { nomeCompleto: 'asc' },
     });
 
-    return cooperados.map((c) => {
-      const totalFaturas = c.ucs.reduce(
-        (acc, uc) => acc + uc._count.faturasProcessadas,
-        0,
-      );
-      const ultimoMes = c.ucs
-        .flatMap((uc) => uc.faturasProcessadas)
-        .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia))[0]
-        ?.mesReferencia ?? null;
-      return {
-        cooperadoId: c.id,
-        nome: c.nome,
-        email: c.email,
-        qtdFaturasProcessadas: totalFaturas,
-        ultimaFaturaMes: ultimoMes,
-      };
-    });
+    return cooperados.map((c) => ({
+      cooperadoId: c.id,
+      nome: c.nomeCompleto,
+      email: c.email,
+      qtdFaturasProcessadas: c._count.faturasProcessadas,
+      ultimaFaturaMes: c.faturasProcessadas[0]?.mesReferencia ?? null,
+    }));
   }
+
 
   /**
    * Preview do diagnostico de indebito (in-memory, nao persiste).
