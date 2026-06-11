@@ -66,6 +66,23 @@ function setup(opts: SetupOpts = {}) {
       create: jest.fn().mockResolvedValue({ id: 'ledger-1' }),
     },
     lancamentoCaixa: { create: jest.fn().mockResolvedValue({}) },
+    // F4 Bloco C — criarTokenTransacao chama tx.cooperado.findUnique (guard
+    // multi-tenant) + tx.tokenTransacao.count (motivoStepUp) + .create.
+    cooperado: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ id: cooperadoId, cooperativaId }),
+    },
+    tokenTransacao: {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockResolvedValue({
+        id: 'tt-1',
+        jti: 'jti-test-deterministic',
+        tier: 'BAIXO',
+        motivoStepUp: 'PRIMEIRO_USO',
+        status: 'CONFIRMADA',
+      }),
+    },
   };
 
   const transactionFn = jest.fn(async (cb: any, _opts?: any) => cb(tx));

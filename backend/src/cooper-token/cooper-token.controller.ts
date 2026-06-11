@@ -21,6 +21,9 @@ import { UpsertCooperTokenConfigDto } from './dto/upsert-cooper-token-config.dto
 import { ComprarTokensCooperadoDto } from './dto/comprar-tokens-cooperado.dto';
 // Sprint Clube P1 — F4 Bloco A (12/06/2026): DTO formal com PIN obrigatório.
 import { UsarNaFaturaDto } from './dto/usar-na-fatura.dto';
+// Sprint Clube P1 — F4 Bloco C (12/06/2026): DTOs com PIN/OTP.
+import { ProcessarPagamentoQrDto } from './dto/processar-pagamento-qr.dto';
+import { EnviarTokensDto } from './dto/enviar-tokens.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -245,11 +248,16 @@ export class CooperTokenController {
     });
   }
 
+  /**
+   * F4 Bloco C (12/06/2026) — body migrado pra DTO com PIN obrigatório do
+   * pagador. PIN validado contra `decoded.pagadorId` (extraído do QR JWT)
+   * dentro do service.
+   */
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
   @Post('processar-pagamento-qr')
   async processarPagamentoQr(
     @Req() req: any,
-    @Body() body: { qrToken: string },
+    @Body() body: ProcessarPagamentoQrDto,
   ) {
     const cooperadoId = req.user?.cooperadoId;
     const cooperativaId = req.user?.cooperativaId;
@@ -259,14 +267,11 @@ export class CooperTokenController {
     if (!cooperativaId) {
       throw new BadRequestException('Cooperativa não identificada');
     }
-    if (!body.qrToken) {
-      throw new BadRequestException('Token QR é obrigatório');
-    }
-
     return this.cooperTokenService.processarPagamentoQr({
       qrToken: body.qrToken,
       recebedorId: cooperadoId,
       recebedorCooperativaId: cooperativaId,
+      pin: body.pin,
     });
   }
 
@@ -556,17 +561,22 @@ export class CooperTokenController {
 
   // ── Enviar Tokens (parceiro → cooperado) ──
 
+  /**
+   * F4 Bloco C (12/06/2026) — bifurca em 2 caminhos:
+   *
+   *   COOPERADO→COOPERADO (remetenteCooperadoId presente):
+   *     - PIN obrigatório (validado contra Cooperado.pinHash do remetente)
+   *     - taxa F1.5 transferencia + jti via criarTokenTransacao
+   *     - tx Serializable
+   *
+   *   ADMIN crédito direto (req.user.cooperadoId ausente):
+   *     - tier BAIXO (≤R$50): segue sem OTP
+   *     - tier ALTO (>R$50): exige otpDesafioId + otpCodigo no body
+   *       (criar via /cooper-token/otp-step-up — endpoint stub deste bloco)
+   */
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
   @Post('parceiro/enviar')
-  async enviarTokens(
-    @Req() req: any,
-    @Body()
-    body: {
-      cooperadoId: string;
-      quantidade: number;
-      descricao?: string;
-    },
-  ) {
+  async enviarTokens(@Req() req: any, @Body() body: EnviarTokensDto) {
     const cooperativaId = req.user?.cooperativaId;
     const remetenteCooperadoId = req.user?.cooperadoId;
     const perfil = req.user?.perfil;
@@ -574,24 +584,27 @@ export class CooperTokenController {
     if (!cooperativaId && perfil !== SUPER_ADMIN) {
       throw new BadRequestException('Cooperativa não identificada');
     }
-    if (!body.cooperadoId || !body.quantidade || body.quantidade <= 0) {
-      throw new BadRequestException('cooperadoId e quantidade (> 0) são obrigatórios');
-    }
 
-    // ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR: crédito direto (envio do parceiro, sem débito pessoal)
+    // ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR crédito direto (sem cooperadoId próprio).
     if ([ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR].includes(perfil) && !remetenteCooperadoId) {
-      return this.cooperTokenService.creditar({
-        cooperadoId: body.cooperadoId,
+      return this.cooperTokenService.enviarTokensAdmin({
+        destinatarioCooperadoId: body.cooperadoId,
         cooperativaId,
-        tipo: CooperTokenTipo.BONUS_INDICACAO,
         quantidade: body.quantidade,
         descricao: body.descricao,
-      } as any);
+        otpDesafioId: body.otpDesafioId,
+        otpCodigo: body.otpCodigo,
+      });
     }
 
-    // AGREGADOR ou ADMIN que também é cooperado: transferência com débito
+    // AGREGADOR ou ADMIN que também é cooperado: transferência com débito.
     if (!remetenteCooperadoId) {
       throw new BadRequestException('Cooperado remetente não identificado no JWT');
+    }
+    if (!body.pin) {
+      throw new BadRequestException(
+        'PIN obrigatório no envio cooperado→cooperado.',
+      );
     }
 
     return this.cooperTokenService.enviarTokens({
@@ -600,6 +613,42 @@ export class CooperTokenController {
       cooperativaId,
       quantidade: body.quantidade,
       descricao: body.descricao,
+      pin: body.pin,
     });
+  }
+
+  /**
+   * F4 Bloco C (12/06/2026) — Endpoint stub pra solicitar desafio OTP de
+   * step-up. Usado pelo admin antes de chamar /parceiro/enviar em tier ALTO.
+   *
+   * MVP:
+   *  - Cria desafio via OtpDesafioService (motivo TOKEN_TRANSACAO_STEP_UP)
+   *  - Retorna { desafioId, expiresAt }
+   *  - Em ambiente NÃO-real (dev/sandbox/teste), retorna o `codigo` no body
+   *    pra agilizar smoke E2E (regra contatos de teste — Luciano 14/05).
+   *  - Em ambiente real, `codigo` NÃO sai do servidor — entrega via canal
+   *    (email/WA do admin) é carry-over Bloco D (TokenNotificacaoService já
+   *    tem enviarOtpAltoValor, falta wirar aqui).
+   */
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
+  @Post('otp-step-up')
+  async solicitarOtpStepUp(
+    @Req() req: any,
+    @Body() body: { telefoneDestino?: string },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const usuarioId = req.user?.sub ?? req.user?.userId ?? 'desconhecido';
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'Cooperativa não identificada — SUPER_ADMIN precisa impersonar tenant.',
+      );
+    }
+
+    const otp = await this.cooperTokenService.criarDesafioStepUp({
+      usuarioId,
+      cooperativaId,
+      telefoneDestino: body?.telefoneDestino,
+    });
+    return otp;
   }
 }

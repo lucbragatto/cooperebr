@@ -108,6 +108,26 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
           create: jest.fn().mockResolvedValue({}),
         },
         cooperTokenLedger: { create: txLedgerCreate },
+        // F4 Bloco C — processarPagamentoQr chama criarTokenTransacao
+        // (guard cooperado + count + create). Mocks neutros — não interferem
+        // nos asserts de descricao do ledger (G2).
+        cooperado: {
+          findUnique: jest.fn(({ where }: any) => {
+            if (where.id === 'pagador') return Promise.resolve({ id: 'pagador', cooperativaId: 'coop-A' });
+            if (where.id === 'recebedor') return Promise.resolve({ id: 'recebedor', cooperativaId: 'coop-A' });
+            return Promise.resolve(null);
+          }),
+        },
+        tokenTransacao: {
+          count: jest.fn().mockResolvedValue(0),
+          create: jest.fn().mockResolvedValue({
+            id: 'tt-f15',
+            jti: 'jti-f15-fixes',
+            tier: 'BAIXO',
+            motivoStepUp: 'PRIMEIRO_USO',
+            status: 'CONFIRMADA',
+          }),
+        },
       };
       const prisma: any = {
         configCooperToken: { findUnique: jest.fn().mockResolvedValue(null) },

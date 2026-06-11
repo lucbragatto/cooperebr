@@ -818,6 +818,27 @@ A validação atual do webhook Asaas usa **token estático per-tenant** comparad
 - Spec novo `cooper-token-f4-bloco-a.spec.ts` cobrindo 17 cenários (PIN ausente/inválido/bloqueado/incorreto/válido, status PAGA antes/durante, ownership cross-cooperado, clamp triplo, evento RESGATADO).
 - 123/123 specs cooper-token verdes (106 antigos preservados + 17 novos).
 
+#### D-novo-F4-OTP-CANAL-ENTREGA — OTP step-up admin não entrega código por WA/email em produção
+
+**Severidade:** P2.
+**Detectado em:** 2026-06-12 (F4 Bloco C — endpoint stub `/cooper-token/otp-step-up`).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:criarDesafioStepUp` + `backend/src/cooper-token/cooper-token.controller.ts:solicitarOtpStepUp`.
+
+O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioService.criarDesafio` e retorna `{ desafioId, expiresAt }`. Em ambiente NÃO-real (dev/sandbox/teste — `isAmbienteReal() === false`), retorna o `codigo` no body pra acelerar smoke E2E (regra contatos de teste 14/05).
+
+**Mas em ambiente real, o `codigo` NÃO sai do servidor.** Carry-over:
+
+1. Wirar `TokenNotificacaoService.enviarOtpAltoValor(email, codigo)` que já existe pra entregar via email pro admin autenticado (Usuario.email).
+2. Opcional: também via WA usando `req.user.telefone` se cadastrado.
+3. Refinar: telefone padrão pode vir do JWT do admin (cookies `req.user.telefone`) — hoje endpoint aceita `telefoneDestino` no body, mas semanticamente errado se admin tem telefone próprio.
+
+**Resolução proposta:**
+- Após validar tier ALTO, buscar `Usuario.email` do `req.user.sub` e chamar `tokenNotificacaoService.enviarOtpAltoValor(email, codigo)`.
+- Spec novo cobrindo: ambiente real NÃO retorna codigo + chama enviarOtpAltoValor; ambiente NÃO-real retorna codigo.
+- Estimativa: ~2-3h Code.
+
+**Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
+
 #### D-novo-F4-PARCEIRO-TENANT-STEPUP — Endpoints parceiro-tenant sem PIN/OTP nem Serializable
 
 **Severidade:** P2.

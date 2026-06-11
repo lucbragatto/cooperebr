@@ -24,6 +24,12 @@ import { isEmpresaCooperada } from '../cooperados/cooperado-tipo.helper';
 // Optional pra não quebrar specs antigos do CooperTokenService que instanciam
 // sem injetar tudo — F4 lança em runtime se faltar.
 import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
+// F4 Bloco B (12/06/2026): helper anti-replay TokenTransacao + tier/motivoStepUp.
+import { criarTokenTransacao, calcularTier } from './token-transacao.helper';
+// F4 Bloco C (12/06/2026): step-up OTP no caminho admin de enviarTokens
+// (crédito direto, tier ALTO). Reusa OtpDesafioService exportado pelo
+// CooperadosModule (motivo TOKEN_TRANSACAO_STEP_UP).
+import { OtpDesafioService } from '../common/security/otp-desafio.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -83,6 +89,9 @@ export class CooperTokenService {
     // usarNaFatura lança em runtime se PinCooperadoService não estiver
     // disponível (ambiente real sempre injeta via CooperadosModule).
     private pinCooperadoService?: PinCooperadoService,
+    // F4 Bloco C (12/06/2026) — step-up OTP no caminho admin de enviarTokens
+    // (tier ALTO). Optional pelas mesmas razões dos demais.
+    private otpDesafioService?: OtpDesafioService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -812,17 +821,42 @@ export class CooperTokenService {
 
   // ── Enviar Tokens (parceiro → cooperado) ──
 
+  /**
+   * Envio de tokens cooperado → cooperado (caminho com débito do remetente).
+   *
+   * F4 Bloco C (12/06/2026):
+   *  - `pin` obrigatório (PIN do remetente).
+   *  - `$transaction` com isolationLevel Serializable.
+   *  - `calcularTaxa('transferencia')` aplicado sobre o bruto. Default 0%
+   *    + 0 fixa = comportamento idêntico ao legado (Bloco C não muda valor
+   *    transferido na ausência de config); admin do tenant pode configurar
+   *    taxa via /cooper-token/admin/config (campos taxaTransferenciaPerc/Fixa).
+   *  - `criarTokenTransacao(tx, ...)` dentro da tx (tier baseado em valor R$;
+   *    motivoStepUp via histórico do par pagador→recebedor).
+   *
+   * Caminho ADMIN crédito direto (sem débito do remetente) NÃO usa este
+   * método — controller chama `enviarTokensAdmin` abaixo, que aplica
+   * step-up OTP em tier ALTO.
+   */
   async enviarTokens(params: {
     remetenteCooperadoId: string;
     destinatarioCooperadoId: string;
     cooperativaId: string;
     quantidade: number;
     descricao?: string;
+    /** F4 Bloco C — PIN 6 dígitos do REMETENTE. Obrigatório. */
+    pin: string;
   }) {
-    const { remetenteCooperadoId, destinatarioCooperadoId, cooperativaId, quantidade, descricao } = params;
+    const { remetenteCooperadoId, destinatarioCooperadoId, cooperativaId, quantidade, descricao, pin } = params;
 
     if (remetenteCooperadoId === destinatarioCooperadoId) {
       throw new BadRequestException('Remetente e destinatário não podem ser o mesmo');
+    }
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      throw new BadRequestException('PIN obrigatório (6 dígitos numéricos).');
+    }
+    if (!this.pinCooperadoService) {
+      throw new Error('PinCooperadoService não disponível (wiring do módulo).');
     }
 
     // Validar que destinatário pertence à mesma cooperativa
@@ -841,90 +875,283 @@ export class CooperTokenService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Debitar do remetente
-      const saldoRemetente = await tx.cooperTokenSaldo.findUnique({
-        where: { cooperadoId: remetenteCooperadoId },
-      });
-
-      if (!saldoRemetente || Number(saldoRemetente.saldoDisponivel) < quantidade) {
+    // PIN FORA da tx (mesmo padrão do usarNaFatura/processarPagamentoQr).
+    const pinResult = await this.pinCooperadoService.validarPinComLockout({
+      cooperadoId: remetenteCooperadoId,
+      cooperativaId,
+      pin,
+    });
+    if (!pinResult.ok) {
+      if (pinResult.motivo === 'PIN_NAO_DEFINIDO') {
         throw new BadRequestException(
-          `Saldo insuficiente. Disponível: ${Number(saldoRemetente?.saldoDisponivel ?? 0)}, solicitado: ${quantidade}`,
+          'PIN ainda não foi definido. Configure seu PIN no portal antes de operar.',
         );
       }
+      if (pinResult.motivo === 'PIN_BLOQUEADO') {
+        throw new ForbiddenException(
+          `PIN bloqueado por excesso de tentativas. Tente novamente após ${pinResult.desbloqueiaEm.toISOString()}.`,
+        );
+      }
+      throw new ForbiddenException('PIN incorreto.');
+    }
 
-      const novoSaldoRemetente = Number(saldoRemetente.saldoDisponivel) - quantidade;
+    // F4 Bloco C — taxa transferência (default 0% = behavior legado).
+    const configTransf = await this.getConfig(cooperativaId);
+    const { taxa, liquido: quantidadeLiquida } = calcularTaxa(
+      'transferencia',
+      quantidade,
+      configTransf,
+    );
 
-      // BUG-CT-003: Doação NÃO é resgate — não incrementar totalResgatado
-      await tx.cooperTokenSaldo.update({
-        where: { cooperadoId: remetenteCooperadoId },
-        data: {
-          saldoDisponivel: novoSaldoRemetente,
-        },
-      });
+    const valorTokenReais = Number(configTransf?.valorTokenReais ?? 0.45);
+    const valorReaisEstimado =
+      Math.round(quantidade * valorTokenReais * 100) / 100;
 
-      await tx.cooperTokenLedger.create({
-        data: {
-          cooperadoId: remetenteCooperadoId,
-          cooperativaId,
-          tipo: CooperTokenTipo.BONUS_INDICACAO,
-          operacao: CooperTokenOperacao.DOACAO_ENVIADA,
-          quantidade,
-          saldoApos: novoSaldoRemetente,
-          descricao: descricao ?? `Envio de ${quantidade} tokens para cooperado`,
-        },
-      });
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Debitar do remetente (quantidade BRUTA).
+        const saldoRemetente = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: remetenteCooperadoId },
+        });
 
-      // Creditar no destinatário (sem taxa)
-      let saldoDestinatario = await tx.cooperTokenSaldo.findUnique({
-        where: { cooperadoId: destinatarioCooperadoId },
-      });
+        if (!saldoRemetente || Number(saldoRemetente.saldoDisponivel) < quantidade) {
+          throw new BadRequestException(
+            `Saldo insuficiente. Disponível: ${Number(saldoRemetente?.saldoDisponivel ?? 0)}, solicitado: ${quantidade}`,
+          );
+        }
 
-      const novoSaldoDestinatario = Number(saldoDestinatario?.saldoDisponivel ?? 0) + quantidade;
-      const novoTotalEmitido = Number(saldoDestinatario?.totalEmitido ?? 0) + quantidade;
+        const novoSaldoRemetente = Math.round((Number(saldoRemetente.saldoDisponivel) - quantidade) * 10000) / 10000;
 
-      if (saldoDestinatario) {
+        // BUG-CT-003: Doação NÃO é resgate — não incrementar totalResgatado
         await tx.cooperTokenSaldo.update({
-          where: { cooperadoId: destinatarioCooperadoId },
+          where: { cooperadoId: remetenteCooperadoId },
           data: {
-            saldoDisponivel: novoSaldoDestinatario,
-            totalEmitido: novoTotalEmitido,
+            saldoDisponivel: novoSaldoRemetente,
           },
         });
-      } else {
-        saldoDestinatario = await tx.cooperTokenSaldo.create({
+
+        await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: remetenteCooperadoId,
+            cooperativaId,
+            tipo: CooperTokenTipo.BONUS_INDICACAO,
+            operacao: CooperTokenOperacao.DOACAO_ENVIADA,
+            quantidade,
+            saldoApos: novoSaldoRemetente,
+            descricao: descricao ?? `Envio de ${quantidade} tokens (líquido ${quantidadeLiquida}, taxa F1.5 transferencia: ${taxa})`,
+          },
+        });
+
+        // Creditar no destinatário (quantidade LÍQUIDA).
+        let saldoDestinatario = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: destinatarioCooperadoId },
+        });
+
+        const novoSaldoDestinatario = Math.round(
+          (Number(saldoDestinatario?.saldoDisponivel ?? 0) + quantidadeLiquida) * 10000,
+        ) / 10000;
+        const novoTotalEmitido = Math.round(
+          (Number(saldoDestinatario?.totalEmitido ?? 0) + quantidadeLiquida) * 10000,
+        ) / 10000;
+
+        if (saldoDestinatario) {
+          await tx.cooperTokenSaldo.update({
+            where: { cooperadoId: destinatarioCooperadoId },
+            data: {
+              saldoDisponivel: novoSaldoDestinatario,
+              totalEmitido: novoTotalEmitido,
+            },
+          });
+        } else {
+          saldoDestinatario = await tx.cooperTokenSaldo.create({
+            data: {
+              cooperadoId: destinatarioCooperadoId,
+              cooperativaId,
+              saldoDisponivel: quantidadeLiquida,
+              totalEmitido: quantidadeLiquida,
+            },
+          });
+        }
+
+        await tx.cooperTokenLedger.create({
           data: {
             cooperadoId: destinatarioCooperadoId,
             cooperativaId,
-            saldoDisponivel: quantidade,
-            totalEmitido: quantidade,
+            tipo: CooperTokenTipo.BONUS_INDICACAO,
+            operacao: CooperTokenOperacao.DOACAO_RECEBIDA,
+            quantidade: quantidadeLiquida,
+            saldoApos: novoSaldoDestinatario,
+            descricao: descricao ?? `Recebimento de ${quantidadeLiquida} tokens (líquido, taxa: ${taxa})`,
           },
         });
-      }
 
-      await tx.cooperTokenLedger.create({
-        data: {
-          cooperadoId: destinatarioCooperadoId,
-          cooperativaId,
-          tipo: CooperTokenTipo.BONUS_INDICACAO,
-          operacao: CooperTokenOperacao.DOACAO_RECEBIDA,
+        // F4 Bloco C — TokenTransacao paralela (audit + jti). Quantidade BRUTA
+        // (espelha o que SAIU do pagador). Helper trata histórico do par
+        // pagador→destinatário pra motivoStepUp.
+        const tokenTx = await criarTokenTransacao(tx, {
+          pagadorId: remetenteCooperadoId,
+          pagadorCooperativaId: cooperativaId,
+          recebedorId: destinatarioCooperadoId,
+          recebedorCooperativaId: cooperativaId,
+          quantidadeTokens: quantidade,
+          valorReaisEstimado,
+          tipoOperacao: 'TRANSFERENCIA',
+          status: 'CONFIRMADA',
+          pinValidadoEm: new Date(),
+          descricao:
+            descricao ??
+            `Transferência cooperado→cooperado (taxa F1.5 transferencia: ${taxa})`,
+        });
+
+        this.logger.log(
+          `[F4-C] Envio tokens: ${remetenteCooperadoId} → ${destinatarioCooperadoId}, bruto=${quantidade} liquido=${quantidadeLiquida} taxa=${taxa} jti=${tokenTx.jti} tier=${tokenTx.tier} motivo=${tokenTx.motivoStepUp ?? 'NONE'}`,
+        );
+
+        return {
+          sucesso: true,
           quantidade,
-          saldoApos: novoSaldoDestinatario,
-          descricao: descricao ?? `Recebimento de ${quantidade} tokens do parceiro`,
-        },
-      });
+          quantidadeLiquida,
+          taxa,
+          remetenteId: remetenteCooperadoId,
+          destinatarioId: destinatarioCooperadoId,
+          tokenTransacaoId: tokenTx.id,
+          tokenTransacaoJti: tokenTx.jti,
+          tier: tokenTx.tier,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
 
-      this.logger.log(
-        `Envio tokens: ${remetenteCooperadoId} → ${destinatarioCooperadoId}, ${quantidade} tokens (sem taxa)`,
+  /**
+   * F4 Bloco C (12/06/2026) — Solicita desafio OTP de step-up pra admin
+   * antes de chamar enviarTokensAdmin tier ALTO.
+   *
+   *  - Cria desafio via OtpDesafioService (motivo TOKEN_TRANSACAO_STEP_UP,
+   *    sujeito TOKEN_TRANSACAO + sujeitoId derivado do usuário admin).
+   *  - Em ambiente NÃO-real (`isAmbienteReal() === false`), retorna o
+   *    `codigo` na response pra facilitar smoke E2E (regra contatos de
+   *    teste — Luciano 14/05 — não envia SMS/WA em dev/sandbox/teste).
+   *  - Em ambiente real, response NÃO inclui o `codigo` (carry-over Bloco D
+   *    pra entrega via WA/email — `TokenNotificacaoService.enviarOtpAltoValor`).
+   *
+   * Multi-tenant: cooperativaId é passado pro OtpDesafio (defesa em
+   * profundidade — quando admin valida, OtpDesafioService.validar exige
+   * que cooperativaId bata).
+   */
+  async criarDesafioStepUp(params: {
+    usuarioId: string;
+    cooperativaId: string;
+    telefoneDestino?: string;
+  }) {
+    if (!this.otpDesafioService) {
+      throw new Error(
+        'OtpDesafioService não disponível (wiring do módulo). F4 Bloco C exige injeção via CooperadosModule.',
       );
-
-      return {
-        sucesso: true,
-        quantidade,
-        remetenteId: remetenteCooperadoId,
-        destinatarioId: destinatarioCooperadoId,
-      };
+    }
+    const desafio = await this.otpDesafioService.criarDesafio({
+      motivo: 'TOKEN_TRANSACAO_STEP_UP',
+      sujeitoTipo: 'TOKEN_TRANSACAO',
+      sujeitoId: params.usuarioId,
+      cooperativaId: params.cooperativaId,
+      telefoneDestino: params.telefoneDestino ?? '',
     });
+
+    // Em ambiente real, NÃO devolver código no response — entrega real
+    // fica a cargo do canal (carry-over Bloco D). Em sandbox/dev/teste,
+    // devolver pra acelerar smoke (regra contatos de teste 14/05).
+    if (isAmbienteReal()) {
+      return {
+        desafioId: desafio.desafioId,
+        expiresAt: desafio.expiresAt,
+        // Sem `codigo` em prod.
+      };
+    }
+    return desafio;
+  }
+
+  /**
+   * F4 Bloco C (12/06/2026) — Envio admin (crédito direto, sem débito).
+   *
+   * Caminho ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR do controller `parceiro/enviar`
+   * quando o user NÃO tem `cooperadoId` próprio (não pode debitar saldo
+   * pessoal). Substitui a chamada direta a `creditar()` do controller pra
+   * aplicar STEP-UP em tier ALTO:
+   *
+   *  - tier BAIXO (≤R$50): segue só com auth da sessão (sem OTP).
+   *  - tier ALTO (>R$50): exige `otpDesafioId` + `otpCodigo`. Validado
+   *    via `OtpDesafioService.validarOuLancar` (motivo TOKEN_TRANSACAO_STEP_UP,
+   *    cooperativaId-bound). OTP gerado previamente em fluxo separado
+   *    (`POST /cooper-token/otp-step-up` — endpoint stub no controller F4).
+   *
+   * Helper criarTokenTransacao NÃO é chamado aqui — caminho admin é crédito
+   * unilateral (creditar() já tem idempotência via ledger.findFirst). A
+   * audit fica no `CooperTokenLedger` que `creditar` produz; jti via
+   * TokenTransacao só pra paths com pagador real (cooperado→cooperado).
+   */
+  async enviarTokensAdmin(params: {
+    destinatarioCooperadoId: string;
+    cooperativaId: string;
+    quantidade: number;
+    descricao?: string;
+    otpDesafioId?: string;
+    otpCodigo?: string;
+  }) {
+    const { destinatarioCooperadoId, cooperativaId, quantidade, descricao, otpDesafioId, otpCodigo } = params;
+
+    if (quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser maior que zero');
+    }
+
+    // Calcular tier (mesma fórmula do helper — valorTokenReais da config).
+    const configTransf = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(configTransf?.valorTokenReais ?? 0.45);
+    const valorReaisEstimado =
+      Math.round(quantidade * valorTokenReais * 100) / 100;
+    const tier = calcularTier(valorReaisEstimado);
+
+    if (tier === 'ALTO') {
+      if (!otpDesafioId || !otpCodigo) {
+        throw new BadRequestException(
+          `Operação tier ALTO (>R$ 50): OTP obrigatório. Solicite OTP via /cooper-token/otp-step-up antes (informe otpDesafioId e otpCodigo).`,
+        );
+      }
+      if (!this.otpDesafioService) {
+        throw new Error(
+          'OtpDesafioService não disponível (wiring do módulo). F4 Bloco C exige injeção via CooperadosModule.',
+        );
+      }
+      // Lança HttpException se OTP inválido/expirado/bloqueado.
+      await this.otpDesafioService.validarOuLancar({
+        desafioId: otpDesafioId,
+        codigo: otpCodigo,
+        cooperativaId,
+      });
+    }
+
+    // Crédito direto via creditar() (idempotência app-level já presente).
+    const ledgerEntry = await this.creditar({
+      cooperadoId: destinatarioCooperadoId,
+      cooperativaId,
+      tipo: CooperTokenTipo.BONUS_INDICACAO,
+      quantidade,
+      descricao: descricao ?? `Envio admin tier ${tier}`,
+      // Bloco C — admin pode enviar pra qualquer status ATIVO ou
+      // ATIVO_RECEBENDO_CREDITOS (creditar() já gating); sem forcarDisponivel.
+    } as any);
+
+    this.logger.log(
+      `[F4-C admin] Envio admin tier=${tier} → ${destinatarioCooperadoId}: ${quantidade} tokens (valor R$ ${valorReaisEstimado})`,
+    );
+
+    return {
+      sucesso: true,
+      quantidade,
+      destinatarioId: destinatarioCooperadoId,
+      tier,
+      valorReaisEstimado,
+      ledgerCreditado: !!ledgerEntry,
+    };
   }
 
   // ── ConfigCooperToken ──
@@ -1217,12 +1444,33 @@ export class CooperTokenService {
     return { qrToken: token, expiresIn: 300 };
   }
 
+  /**
+   * Processa QR de pagamento cooperado→cooperado.
+   *
+   * F4 Bloco C (12/06/2026):
+   *  - `pin` opcional no service (caminho cooperado→cooperado via controller
+   *    exige; caminho `processarQrParceiro` que reusa este método NÃO passa
+   *    PIN porque o parceiro confia no QR JWT já assinado e o pagador não
+   *    está presente no fluxo do parceiro). Trade-off documentado.
+   *  - `$transaction` agora com `isolationLevel: Serializable` (era default
+   *    ReadCommitted). 2 escaneamentos paralelos do mesmo QR ou serializam
+   *    ou um aborta com 40001.
+   *  - `criarTokenTransacao(tx, ...)` dentro da tx (audit + jti anti-replay
+   *    + tier baseado em valorReais).
+   *
+   * F0 INTOCÁVEL (decisão Luciano 12/06): a TAXA do QR continua sendo
+   * cobrada UMA ÚNICA VEZ via `calcularTaxa('qr')` sobre o bruto, ANTES
+   * de abrir a tx. O helper criarTokenTransacao NÃO recalcula taxa —
+   * registra apenas quantidade bruta + valor R$.
+   */
   async processarPagamentoQr(params: {
     qrToken: string;
     recebedorId: string;
     recebedorCooperativaId: string;
+    /** F4 Bloco C — PIN do pagador. Opcional no service; controller exige. */
+    pin?: string;
   }) {
-    const { qrToken, recebedorId, recebedorCooperativaId } = params;
+    const { qrToken, recebedorId, recebedorCooperativaId, pin } = params;
 
     const secret = process.env.COOPERTOKEN_QR_SECRET;
     if (!secret || secret.length < 32) {
@@ -1256,6 +1504,41 @@ export class CooperTokenService {
       );
     }
 
+    // F4 Bloco C — PIN FORA da tx (mesmo padrão de usarNaFatura). Só valida
+    // se o caller passou `pin` — controller cooperado→cooperado exige; o
+    // caminho processarQrParceiro (parceiro recebe) reusa este método sem
+    // PIN, e a defesa é o JWT do QR + jti em criarTokenTransacao.
+    let pinValidadoEm: Date | null = null;
+    if (pin) {
+      if (!/^\d{6}$/.test(pin)) {
+        throw new BadRequestException('PIN deve ter 6 dígitos numéricos.');
+      }
+      if (!this.pinCooperadoService) {
+        throw new Error(
+          'PinCooperadoService não disponível (wiring do módulo).',
+        );
+      }
+      const pinResult = await this.pinCooperadoService.validarPinComLockout({
+        cooperadoId: decoded.pagadorId,
+        cooperativaId: decoded.cooperativaId,
+        pin,
+      });
+      if (!pinResult.ok) {
+        if (pinResult.motivo === 'PIN_NAO_DEFINIDO') {
+          throw new BadRequestException(
+            'PIN do pagador ainda não foi definido. Configure no portal antes de operar.',
+          );
+        }
+        if (pinResult.motivo === 'PIN_BLOQUEADO') {
+          throw new ForbiddenException(
+            `PIN do pagador bloqueado por excesso de tentativas. Tente novamente após ${pinResult.desbloqueiaEm.toISOString()}.`,
+          );
+        }
+        throw new ForbiddenException('PIN do pagador incorreto.');
+      }
+      pinValidadoEm = new Date();
+    }
+
     // F1.5 Bloco 2 — Taxa de QR agora vem da ConfigCooperToken do tenant
     // (campos taxaQrPerc + taxaQrFixa). Fallback: 1% + 0 quando config null
     // (preserva TAXA_QR antigo). Cobrada UMA UNICA VEZ sobre o bruto —
@@ -1267,6 +1550,12 @@ export class CooperTokenService {
       decoded.quantidade,
       configQr,
     );
+
+    // F4 Bloco C — valor R$ pra tier (usa valorTokenReais da config; fallback
+    // 0.45 igual aos demais paths). Calculado fora da tx (read-only).
+    const valorTokenReais = Number(configQr?.valorTokenReais ?? 0.45);
+    const valorReaisEstimado =
+      Math.round(decoded.quantidade * valorTokenReais * 100) / 100;
 
     return this.prisma.$transaction(async (tx) => {
       // Validate sender balance
@@ -1355,8 +1644,27 @@ export class CooperTokenService {
       // CooperTokenSaldoParceiro fica restrito aos paths legítimos
       // (confirmarCompraParceiro, resgate Clube, processarQrParceiro).
 
+      // F4 Bloco C (12/06/2026) — TokenTransacao paralela (audit + jti).
+      // Tipo PAGAMENTO; quantidade BRUTA (TokenTransacao reflete o valor
+      // que saiu do pagador, não o líquido que chegou no recebedor).
+      // Taxa F0 INTOCÁVEL — registramos em descricao mas helper não
+      // recalcula. qrExpiresAt=null porque o JWT do QR já foi consumido
+      // (não há expiração futura — a tx em si é a operação confirmada).
+      const tokenTx = await criarTokenTransacao(tx, {
+        pagadorId: decoded.pagadorId,
+        pagadorCooperativaId: decoded.cooperativaId,
+        recebedorId,
+        recebedorCooperativaId,
+        quantidadeTokens: decoded.quantidade,
+        valorReaisEstimado,
+        tipoOperacao: 'PAGAMENTO',
+        status: 'CONFIRMADA',
+        pinValidadoEm,
+        descricao: `Pagamento QR (taxa F1.5 qr: ${taxa})`,
+      });
+
       this.logger.log(
-        `Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa})`,
+        `[F4-C] Pagamento QR: ${decoded.pagadorId} → ${recebedorId}, ${decoded.quantidade} tokens (taxa: ${taxa} jti=${tokenTx.jti} tier=${tokenTx.tier} motivo=${tokenTx.motivoStepUp ?? 'NONE'})`,
       );
 
       // Sprint 9: emitir evento pra notificação WA
@@ -1376,8 +1684,11 @@ export class CooperTokenService {
         quantidadeLiquida,
         pagadorId: decoded.pagadorId,
         recebedorId,
+        tokenTransacaoId: tokenTx.id,
+        tokenTransacaoJti: tokenTx.jti,
+        tier: tokenTx.tier,
       };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   // ── Parceiro: Saldo ──
@@ -1866,18 +2177,37 @@ export class CooperTokenService {
           );
         }
 
+        // F4 Bloco C (12/06/2026) — TokenTransacao paralela pra audit/anti-replay.
+        // Sem recebedor (uso de fatura = consumo unilateral). Helper trata
+        // sem-recebedor sem disparar DESTINATARIO_NOVO. Tier baseado no valor
+        // R$ do desconto. PIN já validado fora da tx → marca pinValidadoEm.
+        // status CONFIRMADA porque a operação é síncrona (sem QR/OTP step).
+        const tokenTx = await criarTokenTransacao(tx, {
+          pagadorId: cooperadoId,
+          pagadorCooperativaId: cooperativaId,
+          quantidadeTokens: tokensEfetivos,
+          valorReaisEstimado: descontoReais,
+          tipoOperacao: 'USO_FATURA',
+          status: 'CONFIRMADA',
+          pinValidadoEm: new Date(),
+          descricao: `Abatimento de fatura ${cobrancaId}`,
+          referenciaExterna: cobrancaId,
+        });
+
         return {
           novoValorLiquido,
           descontoReais,
           tokensEfetivos,
           ledgerId: ledger.id,
+          tokenTransacaoId: tokenTx.id,
+          tokenTransacaoJti: tokenTx.jti,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
     this.logger.log(
-      `[F4-A] Cooperado ${cooperadoId} usou ${txResult.tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${txResult.descontoReais} (ledger=${txResult.ledgerId})`,
+      `[F4-C] Cooperado ${cooperadoId} usou ${txResult.tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${txResult.descontoReais} (ledger=${txResult.ledgerId} tokenTx=${txResult.tokenTransacaoId} jti=${txResult.tokenTransacaoJti})`,
     );
 
     // Eventos APÓS commit (fora da tx) — não bloqueiam pagamento.

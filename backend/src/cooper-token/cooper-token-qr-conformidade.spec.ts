@@ -60,6 +60,28 @@ const buildPrisma = (opts) => {
         saldoDisponivel: 0,
       }),
     },
+    // F4 Bloco C (12/06/2026) — processarPagamentoQr chama
+    // criarTokenTransacao(tx, ...) que requer tx.cooperado.findUnique +
+    // tx.tokenTransacao.count/create. Mocks neutros: tier=BAIXO,
+    // motivo=PRIMEIRO_USO, jti deterministico — não afeta conformidade F0
+    // (que valida taxa+valor, não jti).
+    cooperado: {
+      findUnique: jest.fn(({ where }: any) => {
+        if (where.id === 'pagador') return Promise.resolve({ id: 'pagador', cooperativaId: 'coop-A' });
+        if (where.id === 'recebedor') return Promise.resolve({ id: 'recebedor', cooperativaId: 'coop-A' });
+        return Promise.resolve(null);
+      }),
+    },
+    tokenTransacao: {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockResolvedValue({
+        id: 'tt-qr',
+        jti: 'jti-qr-conformidade',
+        tier: 'BAIXO',
+        motivoStepUp: 'PRIMEIRO_USO',
+        status: 'CONFIRMADA',
+      }),
+    },
   };
 
   const prisma = {
