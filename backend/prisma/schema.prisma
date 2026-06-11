@@ -513,6 +513,7 @@ enum DistribuidoraEnum {
   ENEL_SP
   LIGHT_RJ
   CELESC
+  ELFSM // Concierge C1 (10/06/2026) - Empresa Luz e Forca Santa Maria (ES, regiao serrana)
   OUTRAS
 }
 
@@ -2661,6 +2662,11 @@ enum CooperTokenTipo {
   PAGAMENTO_QR
   DESCONTO_FATURA
   BENEFICIO_CONVENIO
+  // Sprint Clube P1 — Fase 2 (11/06/2026): empresa cooperada PJ compra
+  // tokens via Asaas. Credito vai pro CooperTokenSaldo do proprio cooperado
+  // (nao saldoParceiro=tenant). Distinto de GERACAO_EXCEDENTE pra extrato
+  // + relatorios + futura segregacao contabil "rio token".
+  COMPRA_PJ_COOPERADA
 }
 
 enum CooperTokenOperacao {
@@ -2851,6 +2857,17 @@ model CooperTokenCompra {
   status          String    @default("AGUARDANDO_PAGAMENTO") // AGUARDANDO_PAGAMENTO | PAGO | CANCELADO
   dataPagamento   DateTime?
   asaasId         String?
+
+  // Sprint Clube P1 — Fase 2 (11/06/2026) — Empresa cooperada PJ compra
+  // tokens creditando no proprio cooperadoId (vs saldoParceiro tenant legado).
+  // Campos aditivos, todos nullable pra preservar 0 rows existentes
+  // e o caminho legado parceiro/comprar.
+  compradorCooperadoId  String?   // FK Cooperado (PJ que comprou) — null = compra legada/tenant
+  asaasCobrancaId       String?   // FK AsaasCobranca pra rastreio bidirecional
+  // Idempotencia do webhook Asaas (espelha AsaasCobranca.ultimoWebhookEventId).
+  // Webhook duplicado com mesmo `${event}_${payment.id}` eh skipado.
+  ultimoWebhookEventId  String?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

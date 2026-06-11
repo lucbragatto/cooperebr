@@ -721,6 +721,32 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
+### [NOVO — sessão 11/06 Sprint Clube P1 Fase 2 Fase 1 read-only F2] Reviewer financeiro-token
+
+#### D-novo-ASAAS-WEBHOOK-AUTH — Reconciliar token-estático vs HMAC-SHA256
+
+**Severidade:** P2.
+**Detectado em:** 2026-06-11 (Sprint Clube P1 F2 Fase 1 read-only — Code achou no mapa).
+**Onde:** `backend/src/asaas/asaas.service.ts:423-446` (`processarWebhook`).
+
+A validação atual do webhook Asaas usa **token estático per-tenant** comparado via `crypto.timingSafeEqual` contra `AsaasConfig.webhookToken`. Funciona como senha pré-acordada, mas:
+
+1. **Não é HMAC-SHA256 real** — não verifica integridade do payload nem assinatura derivada do conteúdo.
+2. Doc/spec do projeto menciona "webhook HMAC-SHA256" como padrão (CLAUDE.md, `.claude/CLAUDE.md` da arquitetura) — divergência implementação × spec.
+3. Token estático vaza se um config dump escapar (LGPD/segurança).
+4. Asaas suporta assinatura HMAC nativamente (header `asaas-access-token`); usar HMAC do payload é o caminho correto.
+
+**Resolução proposta (futuro):**
+- Migrar pra HMAC-SHA256 do `JSON.stringify(payload)` usando secret per-tenant.
+- Manter `crypto.timingSafeEqual` na comparação final.
+- Backward-compat: aceitar ambos os modos por flag/feature env durante migração.
+- Spec garantindo que webhook com HMAC inválido NÃO atualiza `CooperTokenCompra` nem `AsaasCobranca`.
+- Estimativa: ~3-4h Code + auditoria de webhook tokens existentes.
+
+**Não bloqueia F2.** A camada de defesa atual é razoável; F2 reusa o mesmo padrão. Ficar atento se aparecer relato de webhook spoofado em produção real.
+
+---
+
 ### [NOVOS — sessão 10/06 Sprint Clube P1 Fase 1.5 pós-review] Débitos catalogados pelos reviewers pesados
 
 #### D-novo-OXIDACAO-LEDGER-TIPO — Criar enum OXIDACAO em CooperTokenTipo + visibilidade no caixa
