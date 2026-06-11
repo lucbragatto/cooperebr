@@ -32,6 +32,14 @@ interface CreditarParams {
   referenciaId?: string;
   referenciaTabela?: string;
   expiracaoMeses?: number;
+  /**
+   * Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): forca credito direto
+   * no saldoDisponivel sem aguardar status ATIVO_RECEBENDO_CREDITOS.
+   * Usado pelo F2 (compra cooperado-PJ ja paga via Asaas) e admin manual.
+   * Documentado em :130 e lido via (params as any).forcarDisponivel desde
+   * antes — formalizando aqui no type pra build TS limpo.
+   */
+  forcarDisponivel?: boolean;
 }
 
 interface DebitarParams {
@@ -1857,6 +1865,108 @@ export class CooperTokenService {
       linhaDigitavel: asaasCobranca.linhaDigitavel ?? null,
       vencimento: vencimento.toISOString(),
     };
+  }
+
+  /**
+   * Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026).
+   *
+   * Processa o pagamento confirmado de uma CooperTokenCompra do tipo PJ
+   * (compradorCooperadoId nao-nulo). Invocado pelo
+   * `CooperTokenCompraPjListener` quando o webhook Asaas
+   * (`processarWebhook` em asaas.service.ts) detecta o pagamento via
+   * `payment.id` match `CooperTokenCompra.asaasId`.
+   *
+   * Idempotencia em 2 camadas:
+   *  1. `CooperTokenCompra.ultimoWebhookEventId === eventId` → skip
+   *     (mesmo padrao de AsaasCobranca:484).
+   *  2. `creditar()` linhas 100-107 detecta `referenciaId + referenciaTabela`
+   *     ja creditado → retorna entry existente sem duplicar.
+   *
+   * Status guard: so processa AGUARDANDO_PAGAMENTO. Reentrada apos PAGO
+   * eh skip silencioso.
+   *
+   * Taxa F1.5: `creditar()` ja aplica `calcularTaxa('emissao')` da
+   * ConfigCooperToken via :113-118 — F2 nao precisa fazer nada extra.
+   *
+   * Evento contabil: `creditar():193` emite COOPER_TOKEN_EVENTS.EMITIDO
+   * → FinanceiroTokenListener.handleEmitido lança "rio token" automatico.
+   */
+  async processarPagamentoCompraPj(compraId: string, eventId: string): Promise<{
+    skipped?: string;
+    creditado?: boolean;
+    quantidadeLiquida?: number;
+  }> {
+    const compra = await this.prisma.cooperTokenCompra.findUnique({
+      where: { id: compraId },
+    });
+    if (!compra) {
+      this.logger.warn(`[compra-pj] compra ${compraId} nao encontrada — skip`);
+      return { skipped: 'compra-nao-encontrada' };
+    }
+
+    // Camada 1 — idempotencia via ultimoWebhookEventId.
+    if (compra.ultimoWebhookEventId === eventId) {
+      this.logger.log(
+        `[compra-pj] webhook duplicado ${eventId} (compra ${compraId}) — skip`,
+      );
+      return { skipped: 'webhook-duplicado' };
+    }
+
+    // Guard status — so processa AGUARDANDO_PAGAMENTO.
+    if (compra.status !== 'AGUARDANDO_PAGAMENTO') {
+      this.logger.log(
+        `[compra-pj] compra ${compraId} status=${compra.status} — ja processada, skip`,
+      );
+      return { skipped: `status-${compra.status}` };
+    }
+
+    // Guard semantico — so caminho cooperado-PJ (compradorCooperadoId != null).
+    if (!compra.compradorCooperadoId) {
+      this.logger.warn(
+        `[compra-pj] compra ${compraId} sem compradorCooperadoId — caminho legado tenant, ignora aqui`,
+      );
+      return { skipped: 'compra-legada-tenant' };
+    }
+
+    // 1. Update status PAGO + dataPagamento + ultimoWebhookEventId (atomico).
+    await this.prisma.cooperTokenCompra.update({
+      where: { id: compraId },
+      data: {
+        status: 'PAGO',
+        dataPagamento: new Date(),
+        ultimoWebhookEventId: eventId,
+      },
+    });
+
+    // 2. Creditar tokens no proprio cooperado-PJ via `creditar()`.
+    //    Taxa F1.5 sai de graca (calcularTaxa('emissao') aplicada em :113-118).
+    //    forcarDisponivel=true porque o cooperado JA pagou — credito vai
+    //    direto pro saldoDisponivel (vs saldoPendente que so libera apos
+    //    ATIVO_RECEBENDO_CREDITOS).
+    //    Idempotencia adicional via referenciaId+referenciaTabela em :100-107.
+    const ledgerEntry = await this.creditar({
+      cooperadoId: compra.compradorCooperadoId,
+      cooperativaId: compra.cooperativaId,
+      tipo: 'COMPRA_PJ_COOPERADA' as any,
+      quantidade: Number(compra.quantidade),
+      valorEmissao: Number(compra.valorTokenReais),
+      referenciaId: compra.id,
+      referenciaTabela: 'CooperTokenCompra',
+      forcarDisponivel: true,
+    });
+
+    if (!ledgerEntry) {
+      this.logger.warn(
+        `[compra-pj] creditar retornou null pra compra ${compraId} cooperado ${compra.compradorCooperadoId} — possivel status invalido`,
+      );
+      return { creditado: false };
+    }
+
+    const quantidadeLiquida = Number((ledgerEntry as any).quantidade ?? 0);
+    this.logger.log(
+      `[compra-pj] compra ${compraId} → ${quantidadeLiquida} tokens creditados ao cooperado ${compra.compradorCooperadoId} (bruto ${compra.quantidade}, taxa via F1.5)`,
+    );
+    return { creditado: true, quantidadeLiquida };
   }
 
   // ── Parceiro: Comprar tokens ──

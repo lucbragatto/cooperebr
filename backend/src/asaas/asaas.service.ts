@@ -526,6 +526,31 @@ export class AsaasService {
       }
     }
 
+    // Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): roteamento de webhook pra
+    // CooperTokenCompra. Emite evento sem dependencia direta de CooperToken
+    // (evita ciclo Asaas↔CooperToken). Listener registrado em
+    // cooper-token-compra-pj.listener.ts processa o credito via creditar()
+    // com tipo COMPRA_PJ_COOPERADA + idempotencia 2 camadas
+    // (CooperTokenCompra.ultimoWebhookEventId + ledger.referenciaId).
+    if (
+      (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') &&
+      payment.id
+    ) {
+      const compraToken = await this.prisma.cooperTokenCompra.findFirst({
+        where: { asaasId: payment.id },
+      });
+      if (compraToken) {
+        this.logger.log(
+          `[webhook→cooper-token] match CooperTokenCompra ${compraToken.id} via payment ${payment.id} — emite cooper-token-compra-pj.paga`,
+        );
+        this.eventEmitter.emit('cooper-token-compra-pj.paga', {
+          compraId: compraToken.id,
+          eventId,
+          paymentId: payment.id,
+        });
+      }
+    }
+
     return { received: true };
   }
 

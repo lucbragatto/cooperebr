@@ -13,6 +13,8 @@ import { EmailModule } from '../email/email.module';
 // Sprint Clube P1 — Fase 2 Bloco 2 (11/06/2026): empresa-PJ-cooperada
 // compra tokens via Asaas. Service emite cobranca usando emitirCobranca.
 import { AsaasModule } from '../asaas/asaas.module';
+// Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): listener do webhook Asaas.
+import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
 
 @Module({
   imports: [forwardRef(() => WhatsappModule), EmailModule, AsaasModule],
@@ -23,6 +25,7 @@ import { AsaasModule } from '../asaas/asaas.module';
     LimiteTokenService,
     TokenNotificacaoService,
     PrismaService,
+    CooperTokenCompraPjListener,
   ],
   exports: [CooperTokenService, LimiteTokenService, TokenNotificacaoService],
 })
