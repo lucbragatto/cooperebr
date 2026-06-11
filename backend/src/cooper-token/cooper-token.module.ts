@@ -17,9 +17,13 @@ import { AsaasModule } from '../asaas/asaas.module';
 import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
 // Sprint Clube P1 — F4 Bloco A (12/06/2026): PinCooperadoService pra
 // step-up de autorização em usarNaFatura (cooperado abate fatura via PIN).
-// CooperadosModule exporta PinCooperadoService — sem ciclo direto (Cooperados
-// importa Whatsapp via forwardRef; Whatsapp importa CooperToken via
-// forwardRef abaixo — então o caminho fecha sem precisar de forwardRef aqui).
+// CooperadosModule exporta PinCooperadoService.
+//
+// F4 Bloco B (12/06/2026): forwardRef OBRIGATÓRIO. O caminho real é
+// CooperToken → Cooperados → Whatsapp → Faturas (cadeia profunda),
+// e há ramo Cooperados → ... → CooperToken no AppModule. Sem forwardRef,
+// Nest captura `CooperadosModule` como undefined em runtime (erro
+// UndefinedModuleException constatado no boot).
 import { CooperadosModule } from '../cooperados/cooperados.module';
 
 @Module({
@@ -27,7 +31,7 @@ import { CooperadosModule } from '../cooperados/cooperados.module';
     forwardRef(() => WhatsappModule),
     EmailModule,
     AsaasModule,
-    CooperadosModule,
+    forwardRef(() => CooperadosModule),
   ],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [

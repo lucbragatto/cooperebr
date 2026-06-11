@@ -3697,7 +3697,14 @@ model TokenTransacao {
   status                  String          @default("PENDENTE_QR")
 
   /// QR expira em 60s (Fase 3 spec).
-  qrExpiresAt             DateTime
+  ///
+  /// Sprint Clube P1 F4 Bloco B (12/06/2026): tornado nullable.
+  /// `null` = operação NÃO-QR (ex.: usarNaFatura, transferência direta) —
+  /// o jti no campo `jti` continua sendo a chave anti-replay; `qrExpiresAt`
+  /// só importa pra fluxos com QR Code real (Fase 3). Migration puramente
+  /// aditiva (RELAX), sem perda de dados — todas as linhas existentes
+  /// permanecem válidas.
+  qrExpiresAt             DateTime?
 
   pinValidadoEm           DateTime?
   /// FK opcional pro desafio OTP (quando tier=ALTO).

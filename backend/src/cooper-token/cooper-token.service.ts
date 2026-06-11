@@ -261,9 +261,13 @@ export class CooperTokenService {
    * lógica é inlinada dentro da tx Serializable pra evitar nested
    * transaction. **Mudanças aqui (cálculo de novoSaldo, ledger fields,
    * LancamentoCaixa PROVISIONAL) PRECISAM ser replicadas no inline do
-   * `usarNaFatura` pra não criar drift de comportamento.** Bloco B do
-   * F4 vai avaliar se vale extrair `_debitarTx(tx, params)` interno que
-   * sirva os dois caminhos sem nested-tx.
+   * `usarNaFatura` pra não criar drift de comportamento.**
+   *
+   * F4 Bloco B (12/06/2026): helper `criarTokenTransacao` (em
+   * token-transacao.helper.ts) entregue pra audit/anti-replay, MAS não
+   * substitui o débito do saldo — só registra a TokenTransacao paralela.
+   * Bloco C avalia se vale extrair `_debitarTx(tx, params)` interno que
+   * sirva debitar() + usarNaFatura sem nested-tx.
    */
   async debitar(params: DebitarParams) {
     const { cooperadoId, cooperativaId, quantidade, referenciaId, descricao } =
