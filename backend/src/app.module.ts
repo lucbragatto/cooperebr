@@ -154,7 +154,6 @@ import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
     // Sprint Portal Empresa 9.0 (04/06/2026) — opt-in via @PagadorCooperadoOnly().
     // Sem o decorator → passa direto (não-quebrante).
     { provide: APP_GUARD, useClass: PagadorCooperadoGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

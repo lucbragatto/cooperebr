@@ -17,16 +17,16 @@ import { AsaasModule } from '../asaas/asaas.module';
 import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
 
 @Module({
-  imports: [forwardRef(() => WhatsappModule), EmailModule, AsaasModule],
+  imports: [WhatsappModule, EmailModule, AsaasModule],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [
     CooperTokenService,
     CooperTokenJob,
+    PrismaService,
     LimiteTokenService,
     TokenNotificacaoService,
-    PrismaService,
     CooperTokenCompraPjListener,
   ],
-  exports: [CooperTokenService, LimiteTokenService, TokenNotificacaoService],
+  exports: [CooperTokenService, LimiteTokenService],
 })
 export class CooperTokenModule {}
