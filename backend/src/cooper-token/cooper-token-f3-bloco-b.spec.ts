@@ -91,7 +91,8 @@ function setup(opts: SetupOpts = {}) {
     motivoStepUp: 'PRIMEIRO_USO',
     status: 'CONFIRMADA',
   });
-  const txUpdateTokenTransacao = jest.fn().mockResolvedValue({});
+  // F3 C.1 GAP — service agora usa updateMany (filtro pagadorCooperativaId).
+  const txUpdateTokenTransacao = jest.fn().mockResolvedValue({ count: 1 });
 
   const tx: any = {
     cooperTokenSaldo: {
@@ -116,7 +117,7 @@ function setup(opts: SetupOpts = {}) {
     tokenTransacao: {
       count: jest.fn().mockResolvedValue(0),
       create: txCreateTokenTransacao,
-      update: txUpdateTokenTransacao,
+      updateMany: txUpdateTokenTransacao,
     },
   };
 

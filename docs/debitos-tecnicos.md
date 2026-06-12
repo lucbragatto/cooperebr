@@ -839,6 +839,35 @@ O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioServ
 
 **Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
 
+#### D-novo-F3-INCONSISTENCIA-BANCO — Spec de inconsistência de banco no preview da distribuição
+
+**Severidade:** P3 (cobertura de teste — cenário improvável mas vale fixar).
+**Detectado em:** 2026-06-12 (F3 Bloco C.1 review reviewers pesados — GAP-F3-1).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:distribuirTokens` callback `preview` + spec novo.
+
+**Cenário:** entre o `preview()` chamado pelo helper mass-write e o `commit()` dentro da tx Serializable, o estado do banco pode mudar:
+
+1. Saldo da empresa cai (outro lote concorrente, oxidação rodou, debit unrelated).
+2. Membro vira inativo (admin desligou, status mudou).
+3. Limite por transação foi reduzido.
+4. Config `valorTokenReais` mudou (parte coberta por GAP-F3-3, mas só pra CONFIRM).
+
+**O que JÁ está protegido:**
+- Saldo: re-snapshot DENTRO da tx Serializable + check "saldo < soma → throw" (linha :1524).
+- valorTokenReais: GAP-F3-3 (CONFIRM compara com config atual).
+- Race tx (Serializable aborta + retry idempotência): D-novo-F3-RACE-CONFIRMS-CONCORRENTES.
+
+**O que NÃO está coberto por spec hoje:**
+- Cenário onde `preview()` diz "OK, podeProsseguir=true" mas commit aborta — UI mostra preview verde, clica Confirmar, recebe BadRequest "saldo insuficiente DENTRO da tx".
+- A correção pra UX: mostrar mensagem clara "estado mudou entre prévia e confirmação — recarregue".
+
+**Resolução proposta (futuro):**
+- Spec novo simulando essa janela: 1ª chamada `preview` retorna OK; 2ª chamada `commit` (mesma tx) encontra saldo insuficiente; verificar que retorno é BadRequest e ZERO writes.
+- UI: já mostra mensagem genérica de erro hoje; refinar pra detectar "saldo insuficiente DENTRO da tx" e oferecer botão "Recarregar prévia".
+- Estimativa: ~30min Code + 1h UX refinement.
+
+**Não bloqueia F3.** O comportamento atual é seguro (rollback), só não é "pretty" na UX.
+
 #### D-novo-F3-RACE-CONFIRMS-CONCORRENTES — Validar com reviewers a contenção da empresa via Serializable + retry idempotente
 
 **Severidade:** P3 (raciocínio — validar; se reviewers ficarem em dúvida, promover ao D-novo-LEDGER-UNIQUE-CONSTRAINT já catalogado).

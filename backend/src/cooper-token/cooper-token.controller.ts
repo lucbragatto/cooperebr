@@ -701,6 +701,7 @@ export class CooperTokenController {
       naturezaDistribuicao: body.naturezaDistribuicao,
       empresaDeclaraTetoClt: body.empresaDeclaraTetoClt,
       descricao: body.descricao,
+      valorTokenEsperado: body.valorTokenEsperado,
       ip: req.ip ?? req.headers?.['x-forwarded-for'] ?? null,
       userAgent: req.headers?.['user-agent'] ?? null,
     });

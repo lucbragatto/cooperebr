@@ -1292,6 +1292,11 @@ export class CooperTokenService {
     naturezaDistribuicao: 'ORIGEM_REGULAMENTO' | 'VOLUNTARIA' | 'PREMIACAO';
     empresaDeclaraTetoClt?: boolean;
     descricao?: string;
+    /**
+     * F3 C.1 GAP-F3-3 — valor do token que a UI usou pra calcular o preview.
+     * No CONFIRM, service compara com o config atual. Divergiu → BadRequest.
+     */
+    valorTokenEsperado?: number;
     /** Pra AuditLog. Opcional. */
     ip?: string;
     userAgent?: string;
@@ -1388,13 +1393,46 @@ export class CooperTokenService {
     // ── Calcular totais + valor R$ ──
     const config = await this.getConfig(cooperativaId);
     const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
-    const somaQuantidade = distribuicoes.reduce((s, d) => s + d.quantidade, 0);
+    // F3 C.1 GAP-F3-2/5 (12/06/2026): round na soma das quantidades pra matar
+    // ruído IEEE 754 das somas float (ex: 0.1 + 0.2 != 0.3). Reflete em
+    // todas as comparações posteriores: saldo, assertLimite, ledger.saldoApos.
+    const somaQuantidade =
+      Math.round(distribuicoes.reduce((s, d) => s + d.quantidade, 0) * 10000) / 10000;
     const somaValorReais = Math.round(somaQuantidade * valorTokenReais * 100) / 100;
     const { taxa: taxaTransfer, liquido: somaLiquido } = calcularTaxa(
       'transferencia',
       somaQuantidade,
       config,
     );
+
+    // F3 C.1 GAP-F3-4 (12/06/2026) — taxa de transferência em LOTE fica
+    // BLOQUEADA até D-novo-TAXA-TRANSFER-DESTINO definir destino contábil
+    // (mesma filosofia do gate da oxidação F1.5). Distribuição é mass-write
+    // e taxa > 0 em massa precisa de decisão produto (queima? crédito
+    // emissora? fundo reserva?) antes de virar prática.
+    if (taxaTransfer > 0) {
+      throw new BadRequestException(
+        `Distribuição em lote está bloqueada enquanto a taxa de transferência > 0 (atual: ${taxaTransfer} tokens). ` +
+          `Definir destino contábil da taxa em distribuição massa exige decisão produto (ver D-novo-TAXA-TRANSFER-DESTINO P2). ` +
+          `Setar taxaTransferenciaPerc=0 em /cooper-token/admin/config até o gate ser definido.`,
+      );
+    }
+
+    // F3 C.1 GAP-F3-3 (12/06/2026) — preview === cobrança.
+    // No CONFIRM, UI envia valorTokenEsperado = valor que ela usou pra
+    // calcular o preview. Service compara com a config ATUAL; se divergiu,
+    // o saldo restante mostrado na UI virou ficção. Bloqueia + pede recarga.
+    if (modo === 'CONFIRM' && typeof params.valorTokenEsperado === 'number') {
+      const esperado = params.valorTokenEsperado;
+      // Tolerância centesimal — config armazena Decimal(10,4); UI envia número.
+      if (Math.abs(valorTokenReais - esperado) > 0.0001) {
+        throw new BadRequestException(
+          `Valor do token mudou entre a prévia e a confirmação ` +
+            `(prévia: R$ ${esperado.toFixed(4)}; atual: R$ ${valorTokenReais.toFixed(4)}). ` +
+            `Recarregue a tela e revise a prévia antes de confirmar.`,
+        );
+      }
+    }
 
     // ── Guard 5: assertLimite sobre TOTAL do lote (decisão Luciano ajuste 2) ──
     // A empresa é quem gasta — limite por transação dela vs soma total.
@@ -1406,6 +1444,8 @@ export class CooperTokenService {
     });
 
     // ── Guard 6: validar destinatários (MEMBRO_ATIVO + ativo + mesma cooperativa) ──
+    // F3 C.1 MT-A — filtro multi-tenant SQL explícito via relação `cooperado.is`
+    // (defense-in-depth — mesmo padrão dos guards do helper criarTokenTransacao).
     const destinatarioIds = distribuicoes.map((d) => d.destinatarioCooperadoId);
     const membros = await this.prisma.convenioCooperado.findMany({
       where: {
@@ -1413,6 +1453,7 @@ export class CooperTokenService {
         cooperadoId: { in: destinatarioIds },
         status: 'MEMBRO_ATIVO',
         ativo: true,
+        cooperado: { is: { cooperativaId } },
       },
       select: { cooperadoId: true, cooperado: { select: { status: true, cooperativaId: true, nomeCompleto: true } } },
     });
@@ -1546,15 +1587,11 @@ export class CooperTokenService {
       for (let i = 0; i < items.length; i++) {
         const { destinatarioCooperadoId, quantidade } = items[i];
 
-        // Débito da empresa (acumulado linha a linha).
+        // F3 C.1 GAP-F3-6 (12/06/2026) — antes: N updates do saldo da empresa
+        // (1 por linha). Agora: calcula saldoApos cumulativo pra cada ledger
+        // entry, mas o UPDATE real do saldo acontece UMA vez no fim do loop.
+        // Reduz ops de 2N+1 pra N+1 e simplifica o caminho crítico.
         saldoAtualEmpresa = Math.round((saldoAtualEmpresa - quantidade) * 10000) / 10000;
-        await tx.cooperTokenSaldo.update({
-          where: { cooperadoId: empresaCooperadoId },
-          data: {
-            saldoDisponivel: saldoAtualEmpresa,
-            totalResgatado: { increment: quantidade },
-          },
-        });
         const ledgerDebito = await tx.cooperTokenLedger.create({
           data: {
             cooperadoId: empresaCooperadoId,
@@ -1631,8 +1668,13 @@ export class CooperTokenService {
         // Persistir naturezaDistribuicao + empresaDeclaraTetoClt (Bloco A
         // schema delta) — não está no helper porque é F3-specific. Update
         // pós-create (criarTokenTransacao não tem esses campos no params).
-        await tx.tokenTransacao.update({
-          where: { id: tokenTx.id },
+        // F3 C.1 carona P3 — filtro multi-tenant também no update por id
+        // (Prisma não tem updateMany filtro composto leve aqui; mas garantir
+        // pagadorCooperativaId fechado defende contra row vazada caso o id
+        // viesse de input não confiável; aqui vem do create acima, então
+        // é segurança redundante mas barata).
+        await tx.tokenTransacao.updateMany({
+          where: { id: tokenTx.id, pagadorCooperativaId: cooperativaId },
           data: {
             naturezaDistribuicao,
             empresaDeclaraTetoClt:
@@ -1649,6 +1691,16 @@ export class CooperTokenService {
           jti: tokenTx.jti,
         });
       }
+
+      // F3 C.1 GAP-F3-6 — único update do saldo da empresa NO FIM com o total
+      // pré-calculado (soma — já com round). totalResgatado também consolidado.
+      await tx.cooperTokenSaldo.update({
+        where: { cooperadoId: empresaCooperadoId },
+        data: {
+          saldoDisponivel: saldoAtualEmpresa,
+          totalResgatado: { increment: somaQuantidade },
+        },
+      });
 
       this.logger.log(
         `[F3] Distribuição lote=${clientRequestId.slice(0, 8)}… empresa=${empresaCooperadoId} convênio=${convenioId} linhas=${linhas.length} soma=${somaQuantidade} natureza=${naturezaDistribuicao} saldoAntes=${saldoAntes} saldoDepois=${saldoAtualEmpresa}`,
@@ -1732,8 +1784,14 @@ export class CooperTokenService {
     });
 
     // Membros segregados por status.
+    // F3 C.1 MT-A — filtro multi-tenant SQL explícito via relação `cooperado.is`
+    // (defense-in-depth — convenioCooperado é filtrado por convenioId, mas o
+    // cooperado linked pode teoricamente estar em outra cooperativa por bug;
+    // SQL explícito barra de qualquer jeito).
+    // F3 C.1 MT-B — remover `cpf` e `telefone` do select (over-fetch de PII
+    // descartada — UI usa nome + email + matricula).
     const membros = await this.prisma.convenioCooperado.findMany({
-      where: { convenioId },
+      where: { convenioId, cooperado: { is: { cooperativaId } } },
       select: {
         id: true,
         cooperadoId: true,
@@ -1744,8 +1802,6 @@ export class CooperTokenService {
           select: {
             nomeCompleto: true,
             email: true,
-            telefone: true,
-            cpf: true,
             status: true,
           },
         },

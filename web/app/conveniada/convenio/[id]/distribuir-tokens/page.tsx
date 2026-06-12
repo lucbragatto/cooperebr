@@ -283,6 +283,10 @@ export default function DistribuirTokensPage() {
           quantidade: parseFloat(l.quantidade),
         })),
         naturezaDistribuicao: natureza,
+        // F3 C.1 GAP-F3-3 — envia o valor do token que a UI usou pra calcular
+        // o preview (saldo restante, total R$). Backend compara com config
+        // atual; divergiu → BadRequest pedindo recarga.
+        valorTokenEsperado: data?.config.valorTokenReais ?? 0.45,
         ...(natureza === 'VOLUNTARIA' ? { empresaDeclaraTetoClt: true } : {}),
         ...(natureza === 'PREMIACAO' ? { descricao: motivoPremiacao.trim() } : {}),
       });

@@ -95,4 +95,17 @@ export class DistribuirTokensDto {
   @IsOptional()
   @IsString()
   descricao?: string;
+
+  /**
+   * F3 C.1 GAP-F3-3 (12/06/2026) — valor do token (R$) que a UI usou pra
+   * calcular o preview (total R$, saldo restante). No CONFIRM, service
+   * compara com `getConfig().valorTokenReais` atual; se divergiu (admin
+   * mudou config entre prévia e clique), bloqueia com BadRequest pedindo
+   * recarga da prévia. Recomendado UI sempre enviar (a partir do GET
+   * /membros-disponiveis.config.valorTokenReais).
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  valorTokenEsperado?: number;
 }
