@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-12 — M32 Sprint Clube P1 F4 cooperado-only completo (Blocos A→D + C.1 + C.2)**. **8 commits trabalho** (`e73b64a..4a0ee87`): Bloco A `usarNaFatura` PIN + Serializable + status-guard idempotente · Bloco B schema `qrExpiresAt` nullable + helper `criarTokenTransacao` centralizado (jti + tier + motivoStepUp + guards multi-tenant em 3 camadas) · Bloco C helper consumido nos 3 endpoints + step-up admin OTP + endpoint stub `/otp-step-up` · carona auth cookie Secure por protocolo real · Bloco C.1 (3 P1 FIN-1/FIN-2/MT-1 + 4 P2 FIN-4/MT-2 + 4 caronas FIN-7/MT-3/MT-4/MT-5) · C.2 `clientRequestId` estável por sessão de confirmação no frontend admin · Bloco D `<PinInput>` wrapper de OtpInput + modal PIN 2 etapas em `/portal/tokens` + tratamento humano dos 4 erros + help inline · D carona helper `formatarTelefone` único + fix strip 55 prefix. **184/184 specs cooper-token verdes** (78 novos no F4). **2 rodadas reviewers pesados** (`financeiro-token` + `multitenant`): 1ª achou 3 P1+4 P2+caronas → Bloco C.1 fechou; 2ª aprovou tudo + flagou 1 P1 novo (breaking caller) → C.2 fechou. **Smoke E2E 8/8 PASS** real (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual): golden path R$ 4,50 desconto + TokenTransacao USO_FATURA tier=BAIXO motivo=PRIMEIRO_USO + PIN incorreto 403 + EXCEDE_LIMITE 400 + duplo-clique exatamente 1 sucesso + 1 falha (Serializable abortou 2ª) + ledger 1 entry só + idempotência admin app-level. **5 débitos novos** P2/P3 catalogados (UI cooperado→cooperado parcial decidido como (a) — superfícies WA-first Fase 3 reabrirá). Detalhe: `docs/sessoes/2026-06-12-f4-cooperado-only-completo.md`.
+> Última atualização: **2026-06-12 — M33 Sprint Clube P1 F3 Empresa distribui tokens em LOTE/INDIVIDUAL (Blocos A+B+C+C.1)**. **4 commits trabalho** (`4bb36aa..8425169`): Bloco A schema delta (`CooperTokenTipo += DISTRIBUICAO_CONVENIO` + 2 cols TokenTransacao `naturezaDistribuicao` + `empresaDeclaraTetoClt`) + helper `executarMassWrite` reusável (cap + PREVIEW/CONFIRM + idempotência por callback + AuditLog) com 20 specs verdes · Bloco B service `distribuirTokens` (6 guards: naturezas semânticas + empresa-PJ + convênio ownership conveniadoId + PIN fora tx + `assertLimite` sobre TOTAL ajuste Luciano + destinatários MEMBRO_ATIVO; loop linha-a-linha dentro tx Serializable; tipo DISTRIBUICAO_CONVENIO no ledger NÃO DOACAO; 1ª linha grava referência idempotência) + DTO class-validator + endpoint `POST /cooper-token/empresa/distribuir` (perfil COOPERADO + JWT sourcing) com 28 specs · Bloco C UI completa `/conveniada/convenio/[id]/distribuir-tokens` (2 etapas selecao+confirmacao + Iguais a X/Selecionar todos + card preview 4 stats + modal radio 3 naturezas + condicionais CLT checkbox/PREMIACAO textarea + PinInput F4 Bloco D reusado + tratamento humano dos 7 erros + clientRequestId useRef padrão C.2 + contador pendentes + help inline) + endpoint helper `GET /cooper-token/empresa/convenio/:id/membros-disponiveis` (agrega saldo+ativos+pendentes breakdown) + card de entrada na página do convênio · Bloco C.1 pós-reviewers 2 P1 (GAP-F3-2/5 round IEEE somaQuantidade + GAP-F3-3 valorTokenEsperado preview===cobrança) + 4 P2 (GAP-F3-4 guard taxa>0 até gate D-novo-TAXA-TRANSFER-DESTINO + MT-A cooperado.is.cooperativaId + MT-B remover PII cpf/telefone + GAP-F3-8 spec membros inválidos ZERO writes) + 3 caronas P3 (GAP-F3-6 N updates do saldo → 1 update final + pagadorCooperativaId no updateMany + GAP-F3-7 spec conservação linear) com 12 specs novos. **244/244 specs cooper-token + mass-write verdes** (60 novos no F3). **2 rodadas reviewers pesados** (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer`): 1ª achou 2 P1+4 P2+3 caronas+1 débito → C.1 fechou; 2ª aprovou pro smoke/push + 3 observações não-bloqueantes. **Pergunta da corrida CONFIRMs concorrentes VALIDADA** — Serializable (40001) + retry idempotência; D-novo-LEDGER-UNIQUE-CONSTRAINT fica P3 separado. **Smoke E2E 14/14 PASS real** (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual + convênio SMOKE-F3-AMAGES criado idempotente + João/Ana como MEMBRO_ATIVO): listar membros + MT-B sem PII + PREVIEW + CONFIRM + saldo debitado 1× + créditos individuais + ledger DISTRIBUICAO_CONVENIO 2N entries + 1ª linha com referência idempotência + TokenTransacao naturezaDistribuicao='ORIGEM_REGULAMENTO' + retry idempotente sem dupla distribuição + VOLUNTARIA s/ CLT 400 + extrato funcionário DISTRIBUICAO_CONVENIO (segregação Art. 87 validada). **3 débitos novos** catalogados (D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 validado raciocínio + D-novo-F3-INCONSISTENCIA-BANCO P3 + D-novo-TAXA-TRANSFER-DESTINO P2 ganhou gate explícito no service). Detalhe: `docs/sessoes/2026-06-12-f3-empresa-distribui-lote.md`.
+
+> Histórico: **2026-06-12 — M32 Sprint Clube P1 F4 cooperado-only completo (Blocos A→D + C.1 + C.2)**. **8 commits trabalho** (`e73b64a..4a0ee87`): Bloco A `usarNaFatura` PIN + Serializable + status-guard idempotente · Bloco B schema `qrExpiresAt` nullable + helper `criarTokenTransacao` centralizado (jti + tier + motivoStepUp + guards multi-tenant em 3 camadas) · Bloco C helper consumido nos 3 endpoints + step-up admin OTP + endpoint stub `/otp-step-up` · carona auth cookie Secure por protocolo real · Bloco C.1 (3 P1 FIN-1/FIN-2/MT-1 + 4 P2 FIN-4/MT-2 + 4 caronas FIN-7/MT-3/MT-4/MT-5) · C.2 `clientRequestId` estável por sessão de confirmação no frontend admin · Bloco D `<PinInput>` wrapper de OtpInput + modal PIN 2 etapas em `/portal/tokens` + tratamento humano dos 4 erros + help inline · D carona helper `formatarTelefone` único + fix strip 55 prefix. **184/184 specs cooper-token verdes** (78 novos no F4). **2 rodadas reviewers pesados** (`financeiro-token` + `multitenant`): 1ª achou 3 P1+4 P2+caronas → Bloco C.1 fechou; 2ª aprovou tudo + flagou 1 P1 novo (breaking caller) → C.2 fechou. **Smoke E2E 8/8 PASS** real (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual): golden path R$ 4,50 desconto + TokenTransacao USO_FATURA tier=BAIXO motivo=PRIMEIRO_USO + PIN incorreto 403 + EXCEDE_LIMITE 400 + duplo-clique exatamente 1 sucesso + 1 falha (Serializable abortou 2ª) + ledger 1 entry só + idempotência admin app-level. **5 débitos novos** P2/P3 catalogados (UI cooperado→cooperado parcial decidido como (a) — superfícies WA-first Fase 3 reabrirá). Detalhe: `docs/sessoes/2026-06-12-f4-cooperado-only-completo.md`.
 
 > Histórico: **2026-06-11 — M31 Sprint Clube P1 Fase 2: Empresa-PJ-cooperada compra tokens via Asaas SANDBOX + idempotência race-free + gancho contábil rio-token + UI portal dedicada + smoke E2E real**. **6 commits trabalho** (`826d4f1..d69ebf3`): Bloco 1 schema delta CooperTokenCompra (3 cols aditivas + COMPRA_PJ_COOPERADA + @@unique[asaasId]) · Bloco 2 service comprarTokensCooperado + DTO + endpoint /cooper-token/cooperado/comprar + Asaas SANDBOX + 10 specs · Bloco 3 webhook extension + EventEmitter (evita ciclo Asaas↔CooperToken) + listener + processarPagamentoCompraPj + idempotência 2 camadas + 8 specs · 5º commit fixes P1 pós-review (GAP 1 compare-and-swap atômico + GAP 2 status PAGO_CREDITO_PENDENTE + alerta loud + cross-tenant guard novo em creditar) + 4 specs · Bloco 4 UI /portal/comprar-tokens dedicada (padrão Tipo B com guard PJ + form + preview + Asaas link/QR/boleto) + link condicional /portal/tokens. 9 suites / 106 tests cooper-token verde. TSC web exit 0. **Reviewers cooperebr-financeiro-token-reviewer + cooperebr-multitenant-reviewer aprovaram zero P0/P1 em 2 rodadas**. **Smoke E2E real** com Santi PJ no Asaas SANDBOX: compra 100 PIX → cobrança real (pay_wrh5zqdifbcx33vb, QR 1144 chars base64) → dual-webhook CONFIRMED+RECEIVED → 5/5 asserts PASS (status PAGO + saldo +98 tokens + ledger 1 entry só compare-and-swap + tipo COMPRA_PJ_COOPERADA). **Gancho contábil rio-token automático** (2 LancamentoCaixa R$ 44,10 D Custo + C Passivo via FinanceiroTokenListener.handleEmitido). 4 débitos novos: D-novo-ASAAS-WEBHOOK-AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-CREDITO-PENDENTE-REPROCESSAMENTO P2. Detalhe: `docs/sessoes/2026-06-11-f2-compra-pj-cooperada.md`.
 
@@ -2275,16 +2277,157 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
 
 2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
-   Esperado pós-fechamento M32: working tree limpo (untracked carry-overs
-   catalogados); último commit é o de fechamento M32 (F4 cooperado-only
-   completo + smoke E2E 8/8 PASS).
+   Esperado pós-fechamento M33: working tree limpo (untracked carry-overs
+   catalogados + possíveis M de sessão paralela Cowork Concierge —
+   `backend/prisma/schema.prisma` LeadConcierge Sprint C8 + docs/concierge/
+   mockups são deles, NÃO tocar). Último commit é o de fechamento M33
+   (F3 empresa distribui lote + smoke E2E 14/14 PASS).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
    cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend é
    `next start` sob PM2 (NÃO `next dev`) — toda mudança em web/ exige
    `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante M32 → F3 (Empresa distribui tokens em LOTE/INDIVIDUAL):
+PASSO 1 — Frase comandante M33 → F6 (Estabelecimento resgata tokens em R$/PIX):
+
+Sessão 12/06 entregou M33 em 4 commits (4bb36aa..8425169): F3 Empresa
+distribui tokens em LOTE/INDIVIDUAL end-to-end (Blocos A+B+C+C.1).
+
+- 4bb36aa A: schema delta (enum CooperTokenTipo += DISTRIBUICAO_CONVENIO
+  + 2 cols TokenTransacao naturezaDistribuicao + empresaDeclaraTetoClt)
+  + helper executarMassWrite reusável (cap 200 + PREVIEW/CONFIRM +
+  idempotência por callback + AuditLog auditável após commit). 20 specs.
+- 3e40270 B: service distribuirTokens com 6 guards (naturezas + empresa
+  PJ + convênio ownership conveniadoId + PIN fora tx + assertLimite
+  sobre TOTAL ajuste Luciano + destinatários MEMBRO_ATIVO); loop linha-a-
+  linha dentro tx Serializable; tipo DISTRIBUICAO_CONVENIO no ledger
+  (NÃO DOACAO — segregação Art. 87); 1ª linha grava referência
+  idempotência. DTO class-validator + endpoint POST /cooper-token/
+  empresa/distribuir (perfil COOPERADO + JWT). 28 specs.
+- bbcc9c1 C: UI /conveniada/convenio/[id]/distribuir-tokens (selecao →
+  confirmação 2 etapas + Iguais a X/Selecionar todos + card preview 4
+  stats + modal radio 3 naturezas + condicionais CLT checkbox/PREMIACAO
+  textarea + PinInput F4 D reusado + tratamento humano dos 7 erros +
+  clientRequestId useRef padrão F4 C.2 + contador pendentes + help inline)
+  + endpoint helper GET membros-disponiveis + card de entrada na página
+  do convênio.
+- 8425169 C.1 pós-reviewers: 2 P1 (round IEEE somaQuantidade +
+  valorTokenEsperado preview===cobrança) + 4 P2 (guard taxa>0 até gate
+  D-novo-TAXA-TRANSFER-DESTINO + MT-A cooperado.is.cooperativaId + MT-B
+  remover PII + spec membros inválidos ZERO writes) + 3 caronas P3
+  (single saldo update + pagadorCooperativaId + conservação linear).
+  12 specs.
+
+244/244 specs cooper-token + mass-write verdes. 2 rodadas reviewers
+pesados aprovados. Pergunta CONFIRMs concorrentes VALIDADA (SSI 40001
++ retry idempotência). Smoke E2E 14/14 PASS real (AMAGES + 2 funcionários
++ convênio criado idempotente + golden + retry + VOLUNTARIA s/ CLT 400
++ extrato DISTRIBUICAO_CONVENIO segregação Art. 87).
+
+Decisões catalogadas:
+- Tipo DISTRIBUICAO_CONVENIO próprio (NÃO DOACAO_*) — ajuste 1 Luciano
+- assertLimite sobre TOTAL do lote (empresa gasta, não por linha) — ajuste 2
+- Helper mass-write disponível pra Sprint Hardening Mass-Write SUPER_ADMIN
+- 3 naturezas CLT (REGULAMENTO/VOLUNTARIA/PREMIACAO) com gates de DTO
+- Tudo-ou-nada (saldo pré-validado DENTRO tx Serializable; parcial quebra idempotência)
+
+═══ PRÓXIMO BLOCO: F6 — Estabelecimento resgata tokens (token → R$ via PIX) ═══
+
+Cooperado-estabelecimento converte tokens recebidos (via QR peer F4
+ou via parceiro) em R$ via PIX. MODELO: **RECIBO de resgate, NÃO recompra**
+(decisão circuito 04/06 catalogada em memória `decisao_modelo_token_
+voucher_sobra_resgate_2026_06_04.md`). Cooperativa tributa apenas o
+spread/queima; valor cheio é trânsito (Art. 79 + STF Tema 536).
+
+Pré-requisitos schema (Fase 1 read-only mapeará):
+- Cooperado.ehEstabelecimento Boolean @default(false) aditivo +
+  backfill false (todos cooperados atuais começam como NÃO
+  estabelecimento; admin opt-in via UI futura).
+- Decisão pendente: novo CooperTokenTipo='RESGATE_PIX' OU reusa existente?
+- Decisão pendente: novo modelo ResgateRecibo OU usar TokenTransacao
+  com tipoOperacao='RESGATE'?
+- Decisão pendente: integração Asaas PIX-out (transferência) ou outro
+  gateway? Quem fica com o débito do PIX (cooperativa intermedia, ou
+  estabelecimento tem chave PIX cadastrada)?
+- calcularTaxa('resgate') já existe no helper taxa-helper F1.5 (default
+  0%); D-novo-TAXA-RESGATE-DESTINO análogo ao de transferência precisa
+  decidir destino contábil antes de ligar.
+
+Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência Sistêmica):
+mapear Cooperado schema (campos similares pra flag), enum CooperTokenTipo,
+calcularTaxa('resgate'), AsaasService capacidade PIX-out, ResgateRecibo
+modelo (se existe), UI portal cooperado (/portal/tokens já tem secão
+"Pagar em parceiro do Clube" — adicionar "Resgatar em PIX" se for
+estabelecimento). MAPA DE IMPACTO 5 dimensões. PAUSAR pro OK Luciano
+antes de codar.
+
+Pré-requisitos leitura M33:
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo + esta frase).
+2. docs/sessoes/2026-06-12-f3-empresa-distribui-lote.md.
+3. docs/especificacao-circuito-cooper-token-convenio.md (modelo voucher/
+   sobra/resgate — F6 é a saída em R$).
+4. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/decisao_modelo_
+   token_voucher_sobra_resgate_2026_06_04.md (decisão central).
+5. docs/debitos-tecnicos.md seção F3 (D-novo-F3-* P3 + D-novo-TAXA-
+   TRANSFER-DESTINO P2).
+6. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md.
+7. CLAUDE.md + .claude/CLAUDE.md.
+
+DIRETRIZES PRESERVAR:
+- RECIBO de resgate, NÃO recompra (Art. 79 + STF Tema 536 — cooperativa
+  só tributa spread/queima).
+- jti gerado backend (helper criarTokenTransacao F4 B).
+- clientRequestId do cliente (UI gera UUID v4 useRef padrão C.2).
+- Multi-tenant: cooperativaId do JWT, nunca do body.
+- Helper executarMassWrite disponível se F6 virar mass-write (resgate em
+  lote? improvável v1 — cooperado-estabelecimento resgata 1 por vez).
+- Cross-tenant bloqueado por default em criarTokenTransacao (permitirCrossTenant=false).
+- F0 INTOCÁVEL: calcularTaxa('resgate') cobrada UMA vez sobre o bruto.
+- Specs verdes obrigatórias antes do commit.
+- Rebuild PM2 backend (stop → build → restart) em schema delta.
+- Rebuild web (npm run build → pm2 restart cooperebr-frontend) — HMR NÃO ROLA.
+- Regra contatos de teste: AMAGES + lucbragatto+amages@gmail.com pra smoke.
+
+CARRY-OVERS M33 (não-bloqueantes):
+- D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 validado raciocínio (SSI 40001
+  + retry idempotência). D-novo-LEDGER-UNIQUE-CONSTRAINT P3 disponível
+  se algum review futuro pedir endurecimento estrutural.
+- D-novo-F3-INCONSISTENCIA-BANCO P3 — spec dedicado + UX refinement
+  para janela preview→commit.
+- D-novo-TAXA-TRANSFER-DESTINO P2 ganhou GATE EXPLÍCITO no service
+  distribuirTokens (taxa > 0 → BadRequest); precisa decisão destino
+  contábil (queima/crédito emissora/fundo reserva) antes de ligar.
+- Sessão paralela Cowork adicionou model LeadConcierge ao schema sem
+  commitar (Sprint C8); Cowork commita separadamente (NÃO TOCAR).
+- Smoke F3 deixou rastros em AMAGES (saldo 135 + João 10 + Ana 5 +
+  convênio SMOKE-F3-AMAGES-* + ledger DISTRIBUICAO_CONVENIO + TokenTransacao);
+  todos ambienteTeste=true.
+- Scripts exploratórios (scripts/smoke-f3-find-amages.ts + smoke-f4-find-coop.ts)
+  podem ser removidos em Sprint Housekeeping.
+
+CARRY-OVERS HISTÓRICOS AINDA VIVOS (não-bloqueantes — ver doc-sessões
+M28/M29/M30/M31/M32): D-novo-F4-PARCEIRO-TENANT-STEPUP P2 (Sprint
+Hardening) + D-novo-F4-OTP-CANAL-ENTREGA P2 + D-novo-F4-UI-COOPERADO-PEER
+P2 (Token-WA Fase 3) + D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN P3 +
+D-novo-QR-PARCEIRO-PAPEL-DUAL P3 + D-novo-OXIDACAO-* P2/P3 + D-novo-
+WA-PHONE-NORMALIZE P2 + Fase 3 Token-WA pausa explícita + D-novo-ASAAS-
+WEBHOOK-AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-CREDITO-
+PENDENTE-REPROCESSAMENTO P2 + untracked acumulados pra Sprint Housekeeping.
+
+═══ FIM DA FRASE M33 ═══
+
+— BLOCO ARQUIVADO M32 (abaixo — atendido por M33) ——————————————————
+
+PASSO 0 — [arquivado M32]:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`. Esperado pós-fechamento M32.
+
+3. Rodar `pm2 list`. Esperado: 3000/3001/3002 LISTENING.
+
+PASSO 1 — [arquivado M32] Frase comandante M32 → F3 (Empresa distribui tokens em LOTE/INDIVIDUAL):
 
 Sessão 12/06 entregou M32 em 8 commits (`e73b64a..4a0ee87`):
 - e73b64a F4 Bloco A: usarNaFatura PIN + Serializable + status-guard
