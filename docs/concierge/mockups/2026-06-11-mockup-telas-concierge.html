@@ -153,15 +153,43 @@
     </div>
 
     <div class="bg-white rounded-lg shadow p-5 mt-4">
-      <h2 class="text-xl font-semibold text-gray-800 mb-2">📅 Projecao retroativa — escolha o cenario</h2>
-      <p class="text-sm text-gray-600 mb-4">Selecione o tempo em que sua UC esta no SCEE. Teto legal: 60 meses (CTN art. 168 — prescricao tributaria).</p>
+      <h2 class="text-xl font-semibold text-gray-800 mb-1">📅 Projeção retroativa — duas vias possíveis</h2>
+      <p class="text-sm text-gray-600 mb-4">Escolha a estratégia processual conforme orientação do advogado parceiro. Cada via tem prazo, foro e reparação diferentes.</p>
 
-      <div class="grid grid-cols-5 gap-3">
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 1.584</div><div class="text-xs text-gray-400 mt-1">Ate 1 ano</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 3.290</div><div class="text-xs text-gray-400 mt-1">2 anos</div></div>
-        <div class="cenario-card border-2 border-amber-400 bg-amber-50 rounded-lg p-3 text-center"><div class="text-xs text-amber-700 font-semibold">36m ★</div><div class="text-xl font-bold text-amber-900 mt-2">R$ 5.118</div><div class="text-xs text-amber-600 mt-1">3 anos</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">48m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 7.066</div><div class="text-xs text-gray-400 mt-1">4 anos</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 9.138</div><div class="text-xs text-red-500 mt-1">Teto legal</div></div>
+      <div class="border-l-4 border-blue-400 bg-blue-50 rounded-lg p-4 mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 1 — TRIBUTÁRIA</span>
+          <span class="text-xs text-blue-700 font-medium">5 anos · Justiça Federal · Tema 69 STF + CTN art. 168</span>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 1.584</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 3.290</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">36m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 5.118</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">48m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 7.066</div></div>
+          <div class="cenario-card border-2 border-blue-500 bg-blue-100 rounded-lg p-2 text-center"><div class="text-xs text-blue-800 font-semibold">60m ★</div><div class="text-lg font-bold text-blue-900 mt-1">R$ 9.138</div><div class="text-xs text-blue-700">Teto</div></div>
+        </div>
+      </div>
+
+      <div class="border-l-4 border-red-500 bg-gradient-to-br from-red-50 to-amber-50 rounded-lg p-4">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 2 — CONSUMERISTA</span>
+          <span class="bg-yellow-400 text-gray-900 text-xs px-2 py-0.5 rounded font-bold">⚖️ DECISÃO STF 2024</span>
+          <span class="text-xs text-red-800 font-medium">10 anos · Justiça Estadual · Lei 14.385/22 + CC 884 + CDC</span>
+        </div>
+        <p class="text-xs text-red-900 mb-3 leading-relaxed">
+          STF caracterizou como <strong>"enriquecimento sem causa"</strong> da concessionária. Prazo dobra de 5 → <strong>10 anos</strong>.
+          Se houver má-fé provada, reparação pode ser <strong>EM DOBRO</strong> (CDC art. 42 parágrafo único).
+        </p>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 9.138</div><div class="text-xs text-gray-400">5 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">84m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 12.793</div><div class="text-xs text-gray-400">7 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">108m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 16.448</div><div class="text-xs text-gray-400">9 anos</div></div>
+          <div class="cenario-card border-2 border-red-500 bg-red-100 rounded-lg p-2 text-center"><div class="text-xs text-red-800 font-semibold">120m ★</div><div class="text-lg font-bold text-red-900 mt-1">R$ 18.276</div><div class="text-xs text-red-700">Teto STF</div></div>
+          <div class="cenario-card border-2 border-red-700 bg-red-200 rounded-lg p-2 text-center"><div class="text-xs text-red-900 font-bold">120m × 2 🚨</div><div class="text-lg font-bold text-red-900 mt-1">R$ 36.552</div><div class="text-xs text-red-800">Dobro CDC</div></div>
+        </div>
+        <div class="mt-3 text-xs text-red-800 italic">
+          💡 Diferença prática: pela Via 2, com má-fé provada, você recupera <strong>4x mais</strong> que pela Via 1 (R$ 36.552 vs R$ 9.138).
+        </div>
       </div>
     </div>
 
@@ -175,25 +203,30 @@
           <tr class="border-t">
             <td class="p-2"><div class="font-semibold">Tema 69 STF stricto</div><div class="text-xs text-gray-500">RE 574.706</div></td>
             <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">SEM DIVERG.</span></td>
-            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-center text-gray-400">—</td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-center text-gray-400">—</td>
           </tr>
           <tr class="border-t bg-red-50">
             <td class="p-2"><div class="font-semibold text-red-900">Tese 3 — PIS/COFINS sobre SCEE</div><div class="text-xs text-red-700">Tema 69 STF analogia + Tema 986 STJ</div></td>
             <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-red-200 text-red-900 text-xs font-semibold">INDEBITO</span></td>
             <td class="p-2 text-right font-bold text-red-900">R$ 126,91</td>
-            <td class="p-2 text-right font-bold text-red-900">R$ 9.138</td>
+            <td class="p-2 text-right font-bold text-blue-900">R$ 9.138</td>
+            <td class="p-2 text-right font-bold text-red-900">R$ 18.276</td>
+            <td class="p-2 text-right font-bold text-red-900 bg-red-100">R$ 36.552</td>
             <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">MEDIO</span></td>
           </tr>
           <tr class="border-t">
             <td class="p-2"><div class="font-semibold">Tese 2 — ICMS sobre TUSD-G/Demanda</div><div class="text-xs text-gray-500">Tema 176 + Sumula 391 STJ</div></td>
             <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">N/A</span></td>
-            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td>
             <td class="p-2 text-center text-gray-400 text-xs">B1 sem demanda</td>
           </tr>
           <tr class="border-t bg-emerald-50 font-bold">
             <td class="p-2">TOTAL</td><td class="p-2"></td>
             <td class="p-2 text-right text-emerald-900">R$ 126,91</td>
-            <td class="p-2 text-right text-emerald-900">R$ 9.138</td><td class="p-2"></td>
+            <td class="p-2 text-right text-blue-900">R$ 9.138</td>
+            <td class="p-2 text-right text-red-900">R$ 18.276</td>
+            <td class="p-2 text-right text-red-900 bg-red-100">R$ 36.552</td>
+            <td class="p-2"></td>
           </tr>
         </tbody>
       </table>
@@ -255,15 +288,39 @@
     </div>
 
     <div class="bg-white rounded-lg shadow p-5 mt-4">
-      <h2 class="text-xl font-semibold text-gray-800 mb-2">📅 Projecao retroativa — usina geradora</h2>
-      <p class="text-sm text-gray-600 mb-4">Tese 2 conta a partir da <strong>contratacao de demanda de geracao</strong> com a EDP. Sinergia tem 600 kW contratados.</p>
+      <h2 class="text-xl font-semibold text-gray-800 mb-1">📅 Projeção retroativa — usina geradora · duas vias</h2>
+      <p class="text-sm text-gray-600 mb-4">Tese 2 conta a partir da <strong>contratação de demanda de geração</strong>. Via 2 incorpora prescrição decenal STF.</p>
 
-      <div class="grid grid-cols-5 gap-3">
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 22.156</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 45.985</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">36m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 71.495</div></div>
-        <div class="cenario-card border-2 border-amber-400 bg-amber-50 rounded-lg p-3 text-center"><div class="text-xs text-amber-700 font-semibold">48m ★</div><div class="text-xl font-bold text-amber-900 mt-2">R$ 98.682</div><div class="text-xs text-amber-600 mt-1">4 anos</div></div>
-        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 127.560</div><div class="text-xs text-red-500 mt-1">Teto legal</div></div>
+      <div class="border-l-4 border-blue-400 bg-blue-50 rounded-lg p-4 mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 1 — TRIBUTÁRIA</span>
+          <span class="text-xs text-blue-700 font-medium">5 anos · Justiça Federal · Súmula 391 STJ + CTN art. 168</span>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 22.156</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 45.985</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">36m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 71.495</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">48m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 98.682</div></div>
+          <div class="cenario-card border-2 border-blue-500 bg-blue-100 rounded-lg p-2 text-center"><div class="text-xs text-blue-800 font-semibold">60m ★</div><div class="text-base font-bold text-blue-900 mt-1">R$ 127.560</div><div class="text-xs text-blue-700">Teto</div></div>
+        </div>
+      </div>
+
+      <div class="border-l-4 border-red-500 bg-gradient-to-br from-red-50 to-amber-50 rounded-lg p-4">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 2 — CONSUMERISTA</span>
+          <span class="bg-yellow-400 text-gray-900 text-xs px-2 py-0.5 rounded font-bold">⚖️ DECISÃO STF 2024</span>
+          <span class="text-xs text-red-800 font-medium">10 anos · Justiça Estadual · Lei 14.385/22 + CC 884 + CDC</span>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 127.560</div><div class="text-xs text-gray-400">5 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">84m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 178.584</div><div class="text-xs text-gray-400">7 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">108m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 229.608</div><div class="text-xs text-gray-400">9 anos</div></div>
+          <div class="cenario-card border-2 border-red-500 bg-red-100 rounded-lg p-2 text-center"><div class="text-xs text-red-800 font-semibold">120m ★</div><div class="text-base font-bold text-red-900 mt-1">R$ 255.120</div><div class="text-xs text-red-700">Teto STF</div></div>
+          <div class="cenario-card border-2 border-red-700 bg-red-200 rounded-lg p-2 text-center"><div class="text-xs text-red-900 font-bold">120m × 2 🚨</div><div class="text-base font-bold text-red-900 mt-1">R$ 510.240</div><div class="text-xs text-red-800">Dobro CDC</div></div>
+        </div>
+        <div class="mt-3 text-xs text-red-800 italic">
+          💡 Para uma usina como Sinergia, a diferença entre as vias chega a <strong>R$ 382.680</strong>. Vale demais discutir com o advogado parceiro qual estratégia adotar.
+        </div>
       </div>
     </div>
 
