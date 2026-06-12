@@ -6,15 +6,10 @@ import { Sun, MessageCircle, Check, Loader2, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+// F4 Bloco D carona (12/06/2026) — helper único de telefone (fix strip 55).
+import { formatarTelefone } from '@/lib/formatar-telefone';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-
-function formatarTelefone(valor: string): string {
-  const nums = valor.replace(/\D/g, '').slice(0, 11);
-  if (nums.length <= 2) return nums;
-  if (nums.length <= 7) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
-  return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
-}
 
 function EntrarContent() {
   const searchParams = useSearchParams();

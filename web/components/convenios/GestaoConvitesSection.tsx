@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/table';
 import api from '@/lib/api';
 import { formatErroBackend } from '@/lib/utils';
+import { formatarTelefone, normalizarTelefone } from '@/lib/formatar-telefone';
 
 export type ConviteSource = 'admin' | 'empresa';
 
@@ -180,12 +181,8 @@ export function GestaoConvitesSection({
     // refreshKey no dep array — bump externo dispara re-fetch (Bug B 10/06/2026).
   }, [carregar, refreshKey]);
 
-  function formatarTelefone(valor: string): string {
-    const nums = valor.replace(/\D/g, '').slice(0, 11);
-    if (nums.length <= 2) return nums;
-    if (nums.length <= 7) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
-    return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
-  }
+  // F4 Bloco D carona (12/06/2026) — formatarTelefone agora vem de
+  // @/lib/formatar-telefone (helper único + fix strip 55).
 
   async function gerarConvite() {
     setCriarSubmitting(true);
@@ -193,7 +190,7 @@ export function GestaoConvitesSection({
     try {
       await api.post(endpointBase, {
         nomeConvidado: criarNome.trim(),
-        telefone: criarTelefone.replace(/\D/g, ''),
+        telefone: normalizarTelefone(criarTelefone),
       });
       setDialogCriarAberto(false);
       setCriarNome('');

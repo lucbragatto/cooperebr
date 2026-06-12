@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { getUsuario } from '@/lib/auth';
+// F4 Bloco D carona (12/06/2026) — helper único de telefone (fix strip 55).
+import { formatarTelefone as formatarTelefoneHelper } from '@/lib/formatar-telefone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -609,12 +611,8 @@ export default function IndicacoesPage() {
     return cooperativaUserNome;
   })();
 
-  function formatarTelefone(valor: string): string {
-    const n = valor.replace(/\D/g, '').slice(0, 11);
-    if (n.length <= 2) return n;
-    if (n.length <= 7) return `(${n.slice(0, 2)}) ${n.slice(2)}`;
-    return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
-  }
+  // F4 Bloco D carona (12/06/2026) — agora vem de @/lib/formatar-telefone.
+  const formatarTelefone = formatarTelefoneHelper;
 
   const carregarConfig = useCallback(async () => {
     try {

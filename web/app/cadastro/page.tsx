@@ -15,6 +15,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { mapearOcrParaInstalacao } from '@/lib/ocr-mapping';
+// F4 Bloco D carona (12/06/2026) — helper único de telefone (fix strip 55).
+import { formatarTelefone as formatarTelefoneHelper } from '@/lib/formatar-telefone';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -54,12 +56,9 @@ function formatarCPF(valor: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-function formatarTelefone(valor: string): string {
-  const nums = valor.replace(/\D/g, '').slice(0, 11);
-  if (nums.length <= 2) return nums;
-  if (nums.length <= 7) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
-  return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
-}
+// F4 Bloco D carona (12/06/2026) — agora vem de @/lib/formatar-telefone
+// (helper unico + fix strip 55 prefix).
+const formatarTelefone = formatarTelefoneHelper;
 
 function formatarCEP(valor: string): string {
   const nums = valor.replace(/\D/g, '').slice(0, 8);
