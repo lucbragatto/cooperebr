@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-12 — M33 Sprint Clube P1 F3 Empresa distribui tokens em LOTE/INDIVIDUAL (Blocos A+B+C+C.1)**. **4 commits trabalho** (`4bb36aa..8425169`): Bloco A schema delta (`CooperTokenTipo += DISTRIBUICAO_CONVENIO` + 2 cols TokenTransacao `naturezaDistribuicao` + `empresaDeclaraTetoClt`) + helper `executarMassWrite` reusável (cap + PREVIEW/CONFIRM + idempotência por callback + AuditLog) com 20 specs verdes · Bloco B service `distribuirTokens` (6 guards: naturezas semânticas + empresa-PJ + convênio ownership conveniadoId + PIN fora tx + `assertLimite` sobre TOTAL ajuste Luciano + destinatários MEMBRO_ATIVO; loop linha-a-linha dentro tx Serializable; tipo DISTRIBUICAO_CONVENIO no ledger NÃO DOACAO; 1ª linha grava referência idempotência) + DTO class-validator + endpoint `POST /cooper-token/empresa/distribuir` (perfil COOPERADO + JWT sourcing) com 28 specs · Bloco C UI completa `/conveniada/convenio/[id]/distribuir-tokens` (2 etapas selecao+confirmacao + Iguais a X/Selecionar todos + card preview 4 stats + modal radio 3 naturezas + condicionais CLT checkbox/PREMIACAO textarea + PinInput F4 Bloco D reusado + tratamento humano dos 7 erros + clientRequestId useRef padrão C.2 + contador pendentes + help inline) + endpoint helper `GET /cooper-token/empresa/convenio/:id/membros-disponiveis` (agrega saldo+ativos+pendentes breakdown) + card de entrada na página do convênio · Bloco C.1 pós-reviewers 2 P1 (GAP-F3-2/5 round IEEE somaQuantidade + GAP-F3-3 valorTokenEsperado preview===cobrança) + 4 P2 (GAP-F3-4 guard taxa>0 até gate D-novo-TAXA-TRANSFER-DESTINO + MT-A cooperado.is.cooperativaId + MT-B remover PII cpf/telefone + GAP-F3-8 spec membros inválidos ZERO writes) + 3 caronas P3 (GAP-F3-6 N updates do saldo → 1 update final + pagadorCooperativaId no updateMany + GAP-F3-7 spec conservação linear) com 12 specs novos. **244/244 specs cooper-token + mass-write verdes** (60 novos no F3). **2 rodadas reviewers pesados** (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer`): 1ª achou 2 P1+4 P2+3 caronas+1 débito → C.1 fechou; 2ª aprovou pro smoke/push + 3 observações não-bloqueantes. **Pergunta da corrida CONFIRMs concorrentes VALIDADA** — Serializable (40001) + retry idempotência; D-novo-LEDGER-UNIQUE-CONSTRAINT fica P3 separado. **Smoke E2E 14/14 PASS real** (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual + convênio SMOKE-F3-AMAGES criado idempotente + João/Ana como MEMBRO_ATIVO): listar membros + MT-B sem PII + PREVIEW + CONFIRM + saldo debitado 1× + créditos individuais + ledger DISTRIBUICAO_CONVENIO 2N entries + 1ª linha com referência idempotência + TokenTransacao naturezaDistribuicao='ORIGEM_REGULAMENTO' + retry idempotente sem dupla distribuição + VOLUNTARIA s/ CLT 400 + extrato funcionário DISTRIBUICAO_CONVENIO (segregação Art. 87 validada). **3 débitos novos** catalogados (D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 validado raciocínio + D-novo-F3-INCONSISTENCIA-BANCO P3 + D-novo-TAXA-TRANSFER-DESTINO P2 ganhou gate explícito no service). Detalhe: `docs/sessoes/2026-06-12-f3-empresa-distribui-lote.md`.
+> Última atualização: **2026-06-12 — M34 Sprint Clube P1 F6 Estabelecimento resgata tokens em R$ via PIX (Blocos A+B)**. **2 commits trabalho** (`c5eee91` + `b3251f5`) + 1 commit fechamento — **push segurado** até Bloco C + reviewers pesados + smoke E2E (instrução explícita Luciano: "Push segurado"). Bloco A: schema delta aditivo voucher (`Cooperado.ehEstabelecimento` + `CooperTokenSaldo.saldoBloqueadoResgate` + enum `CooperTokenTipo += RESGATE_PIX, ESTORNO_RESGATE_PIX` + 2 models novos `ResgateRecibo` + `ResgateReciboCounter` com 3 unique constraints) + helper `AsaasPixOutService` extraído de `pix-excedente.service.ts:132-157` (PIX-out tenant-aware via `getApiClient(cooperativaId)` + `isAmbienteReal()` retorna SIMULATED sem chamar Asaas + 18 specs). Bloco B: service `solicitarResgate`+`aprovarResgate`+`recusarResgate`+`cancelarResgate`+`processarWebhookResgate`+`estornarResgateInterno`(privado, NUNCA apaga)+`listarResgatesPendentes`+`gerarNumeroRecibo` (counter sequencial humano POR COOPERATIVA `RES-YYYY-NNNNN`) + 5 endpoints REST (`POST /empresa/resgatar`, `POST /empresa/resgates/:id/cancelar`, `GET /admin/resgates-pendentes`, `POST /admin/resgates/:id/aprovar`, `POST /admin/resgates/:id/recusar`) + DTOs `SolicitarResgateDto`+`RecusarResgateDto` + 34 specs verdes. **3 REFORÇOS Luciano materializados como centro do bloco**: (1) compare-and-swap em TODAS transições (5 pontos: aprovar/recusar/cancelar/webhook PAGO/webhook FAILED) via `updateMany({where:{id, cooperativaId, status:'esperado'}}) → count===1`; (2) estorno SEMPRE via nova entry ledger CREDITO `ESTORNO_RESGATE_PIX` (trilha auditável NUNCA apaga); (3) webhook idempotente via `ultimoWebhookEventId` checado antes do swap (duplicado retorna `{skipped:'webhook-duplicado'}`). Ordem do fluxo: PIN FORA da tx (`PinCooperadoService.validarPinComLockout` F2.3) + tier ALTO `valor>R$50` exige OTP (`OtpDesafioService.validarOuLancar` motivo `TOKEN_TRANSACAO_STEP_UP`) + `assertLimite` sobre TOTAL F2.5 + bloqueio do saldo DENTRO da tx Serializable (re-snapshot + conservação invariante `disp+bloq` constante) + `numeroRecibo` gerado na mesma tx via counter sequencial. Vocabulário inegociável "resgate"/"liquidação"/"recibo" em todas as strings (NUNCA "recompra"/"venda" — decisão circuito 04/06). **296/296 specs verdes** (18 suites cooper-token + mass-write + asaas-pix-out). Detalhe: `docs/sessoes/2026-06-12-m34-f6-blocos-ab.md`.
+
+> Histórico: **2026-06-12 — M33 Sprint Clube P1 F3 Empresa distribui tokens em LOTE/INDIVIDUAL (Blocos A+B+C+C.1)**. **4 commits trabalho** (`4bb36aa..8425169`): Bloco A schema delta (`CooperTokenTipo += DISTRIBUICAO_CONVENIO` + 2 cols TokenTransacao `naturezaDistribuicao` + `empresaDeclaraTetoClt`) + helper `executarMassWrite` reusável (cap + PREVIEW/CONFIRM + idempotência por callback + AuditLog) com 20 specs verdes · Bloco B service `distribuirTokens` (6 guards: naturezas semânticas + empresa-PJ + convênio ownership conveniadoId + PIN fora tx + `assertLimite` sobre TOTAL ajuste Luciano + destinatários MEMBRO_ATIVO; loop linha-a-linha dentro tx Serializable; tipo DISTRIBUICAO_CONVENIO no ledger NÃO DOACAO; 1ª linha grava referência idempotência) + DTO class-validator + endpoint `POST /cooper-token/empresa/distribuir` (perfil COOPERADO + JWT sourcing) com 28 specs · Bloco C UI completa `/conveniada/convenio/[id]/distribuir-tokens` (2 etapas selecao+confirmacao + Iguais a X/Selecionar todos + card preview 4 stats + modal radio 3 naturezas + condicionais CLT checkbox/PREMIACAO textarea + PinInput F4 Bloco D reusado + tratamento humano dos 7 erros + clientRequestId useRef padrão C.2 + contador pendentes + help inline) + endpoint helper `GET /cooper-token/empresa/convenio/:id/membros-disponiveis` (agrega saldo+ativos+pendentes breakdown) + card de entrada na página do convênio · Bloco C.1 pós-reviewers 2 P1 (GAP-F3-2/5 round IEEE somaQuantidade + GAP-F3-3 valorTokenEsperado preview===cobrança) + 4 P2 (GAP-F3-4 guard taxa>0 até gate D-novo-TAXA-TRANSFER-DESTINO + MT-A cooperado.is.cooperativaId + MT-B remover PII cpf/telefone + GAP-F3-8 spec membros inválidos ZERO writes) + 3 caronas P3 (GAP-F3-6 N updates do saldo → 1 update final + pagadorCooperativaId no updateMany + GAP-F3-7 spec conservação linear) com 12 specs novos. **244/244 specs cooper-token + mass-write verdes** (60 novos no F3). **2 rodadas reviewers pesados** (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer`): 1ª achou 2 P1+4 P2+3 caronas+1 débito → C.1 fechou; 2ª aprovou pro smoke/push + 3 observações não-bloqueantes. **Pergunta da corrida CONFIRMs concorrentes VALIDADA** — Serializable (40001) + retry idempotência; D-novo-LEDGER-UNIQUE-CONSTRAINT fica P3 separado. **Smoke E2E 14/14 PASS real** (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual + convênio SMOKE-F3-AMAGES criado idempotente + João/Ana como MEMBRO_ATIVO): listar membros + MT-B sem PII + PREVIEW + CONFIRM + saldo debitado 1× + créditos individuais + ledger DISTRIBUICAO_CONVENIO 2N entries + 1ª linha com referência idempotência + TokenTransacao naturezaDistribuicao='ORIGEM_REGULAMENTO' + retry idempotente sem dupla distribuição + VOLUNTARIA s/ CLT 400 + extrato funcionário DISTRIBUICAO_CONVENIO (segregação Art. 87 validada). **3 débitos novos** catalogados (D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 validado raciocínio + D-novo-F3-INCONSISTENCIA-BANCO P3 + D-novo-TAXA-TRANSFER-DESTINO P2 ganhou gate explícito no service). Detalhe: `docs/sessoes/2026-06-12-f3-empresa-distribui-lote.md`.
 
 > Histórico: **2026-06-12 — M32 Sprint Clube P1 F4 cooperado-only completo (Blocos A→D + C.1 + C.2)**. **8 commits trabalho** (`e73b64a..4a0ee87`): Bloco A `usarNaFatura` PIN + Serializable + status-guard idempotente · Bloco B schema `qrExpiresAt` nullable + helper `criarTokenTransacao` centralizado (jti + tier + motivoStepUp + guards multi-tenant em 3 camadas) · Bloco C helper consumido nos 3 endpoints + step-up admin OTP + endpoint stub `/otp-step-up` · carona auth cookie Secure por protocolo real · Bloco C.1 (3 P1 FIN-1/FIN-2/MT-1 + 4 P2 FIN-4/MT-2 + 4 caronas FIN-7/MT-3/MT-4/MT-5) · C.2 `clientRequestId` estável por sessão de confirmação no frontend admin · Bloco D `<PinInput>` wrapper de OtpInput + modal PIN 2 etapas em `/portal/tokens` + tratamento humano dos 4 erros + help inline · D carona helper `formatarTelefone` único + fix strip 55 prefix. **184/184 specs cooper-token verdes** (78 novos no F4). **2 rodadas reviewers pesados** (`financeiro-token` + `multitenant`): 1ª achou 3 P1+4 P2+caronas → Bloco C.1 fechou; 2ª aprovou tudo + flagou 1 P1 novo (breaking caller) → C.2 fechou. **Smoke E2E 8/8 PASS** real (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual): golden path R$ 4,50 desconto + TokenTransacao USO_FATURA tier=BAIXO motivo=PRIMEIRO_USO + PIN incorreto 403 + EXCEDE_LIMITE 400 + duplo-clique exatamente 1 sucesso + 1 falha (Serializable abortou 2ª) + ledger 1 entry só + idempotência admin app-level. **5 débitos novos** P2/P3 catalogados (UI cooperado→cooperado parcial decidido como (a) — superfícies WA-first Fase 3 reabrirá). Detalhe: `docs/sessoes/2026-06-12-f4-cooperado-only-completo.md`.
 
@@ -48,6 +50,93 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-12 (Code — M34 Sprint Clube P1 F6 Estabelecimento resgata tokens em R$ via PIX, Blocos A+B)
+
+**Sessão Code maratona pós-M33 (continuação da mesma janela).**
+
+**2 commits trabalho** (+ 1 fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `c5eee91` | feat | **F6 Bloco A** — schema delta voucher + `AsaasPixOutService` extraído + 18 specs |
+| `b3251f5` | feat | **F6 Bloco B** — service resgate + 5 endpoints + DTOs + 34 specs |
+| `<próximo>` | docs | fechamento M34 (esta sessão) |
+
+**Push segurado** — `git log origin/main..HEAD` mostra 3 commits ahead até o push final pós-Bloco C + reviewers pesados + smoke E2E (instrução explícita Luciano no prompt do Bloco B: "Push segurado").
+
+**Em curso:** —
+
+**Próximo passo único e claro:** **F6 Bloco C (UI portal estabelecimento + UI admin de aprovação).** Endpoints prontos no backend; falta camada de interface — provavelmente `/conveniada/cooper-token/resgatar` (cooperado-estabelecimento solicita) + tela admin em `/dashboard/cooper-token/resgates-pendentes` (admin aprova/recusa). Aplicar padrão UI Tipo B do portal (página dedicada com guard + form + preview + estado). Após Bloco C: **reviewers pesados UMA vez** (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer` — o mais rigoroso de todos, dinheiro saindo). Depois **smoke E2E** sandbox + AMAGES com `ehEstabelecimento=true` + pixChave whitelisted. **Só então push**.
+
+**3 REFORÇOS Luciano materializados (centro do Bloco B):**
+
+1. **Compare-and-swap em TODAS transições** (5 pontos): `updateMany({where:{id, cooperativaId, status:'esperado'}}) → count===1`
+   - aprovar: PENDENTE_APROVACAO_COOP → APROVADO_PIX_DISPARADO
+   - recusar: PENDENTE → RECUSADO
+   - cancelar: PENDENTE → CANCELADO
+   - webhook PAGO: APROVADO → PAGO_RECIBO_EMITIDO
+   - webhook FAILED: APROVADO → FALHA_PIX
+   - CAS perde em qualquer um → BadRequest claro (admin/cooperado) OU skip silencioso (webhook)
+
+2. **Estorno auditável NUNCA apaga** — `estornarResgateInterno` cria nova entry CREDITO `ESTORNO_RESGATE_PIX` no ledger preservando histórico; status pula pra RECUSADO/CANCELADO/FALHA_PIX. Tolera invariante reaplicada (log warn + skip se já estornado por outra via).
+
+3. **Webhook idempotente** — `ultimoWebhookEventId` checado antes da transição; duplicado retorna `{skipped:'webhook-duplicado'}` sem reprocessar; primeiro eventId gravado na própria operação de swap (atomicidade).
+
+**Ordem do fluxo respeitada:**
+- PIN validado FORA da tx (`PinCooperadoService.validarPinComLockout` F2.3, lockout 30min)
+- OTP cobrado só pra tier ALTO (valor>R$50, F4 — `OtpDesafioService.validarOuLancar` motivo `TOKEN_TRANSACAO_STEP_UP`)
+- `assertLimite` sobre TOTAL (F2.5 ajuste 2 Luciano)
+- Bloqueio do saldo DENTRO da tx Serializable (re-snapshot + conservação invariante disp+bloq constante)
+- `numeroRecibo` gerado na mesma tx via counter sequencial humano POR COOPERATIVA (RES-2026-NNNNN, decisão Q3)
+- Guard `ehEstabelecimento` + `pixChave` cadastrada ANTES de qualquer débito de bloqueio
+
+**Anti-IDOR:** `cooperativaId` + `cooperadoId` SEMPRE do JWT; cross-tenant em idempotência retorna NotFound genérica; cancelar de outro cooperado retorna NotFound; PIN/OTP NUNCA logados.
+
+**Endpoints expostos:**
+- `POST /cooper-token/empresa/resgatar` @COOPERADO
+- `POST /cooper-token/empresa/resgates/:id/cancelar` @COOPERADO
+- `GET /cooper-token/admin/resgates-pendentes` @ADMIN+SUPER_ADMIN
+- `POST /cooper-token/admin/resgates/:id/aprovar` @ADMIN+SUPER_ADMIN
+- `POST /cooper-token/admin/resgates/:id/recusar` @ADMIN+SUPER_ADMIN
+
+**Vocabulário inegociável** "resgate" / "liquidação" / "recibo" em todas as strings de log/mensagem/erro/UI (NUNCA "recompra" / "venda" — decisão circuito 04/06).
+
+**Specs (34 cenários verdes em `cooper-token-f6-bloco-b.spec.ts`):**
+
+- solicitarResgate guards (12)
+- solicitarResgate idempotência + commit (5)
+- aprovarResgate REFORÇO 3 (4)
+- recusarResgate + cancelarResgate + estorno auditável (6)
+- processarWebhookResgate REFORÇO 2 + REFORÇO 3 (5)
+- listarResgatesPendentes (2)
+
+**Regressão:** 296/296 verdes (18 suites cooper-token + mass-write + asaas-pix-out).
+
+**Decisões registradas narrativamente** (sem memória persistente nova nesta sessão — as 8 Q1-Q8 + 3 REFORÇOS Luciano já estavam catalogadas no fechamento M33):
+- Q1 idempotência `clientRequestId @unique` materializada em schema + guard solicitarResgate
+- Q3 sequencial humano por cooperativa materializado em `ResgateReciboCounter` + `gerarNumeroRecibo` na tx
+- Q6 cancelamento com compare-and-swap materializado em `cancelarResgate`
+- Q8 `AsaasPixOutService` extraído de `pix-excedente.service.ts:132-157`
+
+**Estado de fila (Decisão 24):**
+1. M30 ✅ — Sprint Clube Unificado P1 (Hub + F1.5 Economia + Polimento MLM)
+2. M31 ✅ — F2 Empresa-PJ compra tokens Asaas
+3. M32 ✅ — F4 Cooperado-only completo (Blocos A→D + C.1 + C.2)
+4. M33 ✅ — F3 Empresa distribui em LOTE/INDIVIDUAL (Blocos A+B+C+C.1)
+5. **M34 ✅ — F6 Estabelecimento resgata em R$ via PIX (Blocos A+B)**
+6. **PRÓXIMO: F6 Bloco C (UI portal + UI admin) → reviewers pesados → smoke E2E → push.**
+7. Após F6: revisitar carry-overs P2 acumulados + sprints enfileirados.
+
+**Carry-overs M34 (não-bloqueantes):**
+- Push de 3 commits locais (`c5eee91` + `b3251f5` + commit de fechamento) segurado conforme regra
+- Sessão paralela Cowork adicionou `LeadConcierge` + `DiagnosticoIndebito` ao schema sem commitar (Sprint C8/C4); Cowork commita separadamente — NÃO TOCAR
+- D-novo-TAXA-RESGATE-DESTINO P2 catalogado análogo ao D-novo-TAXA-TRANSFER-DESTINO — `calcularTaxa('resgate')` default 0%; precisa decisão destino contábil antes de ligar
+- Carry-overs históricos vivos (M28→M33) seguem abertos
+
+**Detalhe completo:** `docs/sessoes/2026-06-12-m34-f6-blocos-ab.md`.
 
 ---
 
@@ -2277,18 +2366,185 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
 
 2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
-   Esperado pós-fechamento M33: working tree limpo (untracked carry-overs
-   catalogados + possíveis M de sessão paralela Cowork Concierge —
-   `backend/prisma/schema.prisma` LeadConcierge Sprint C8 + docs/concierge/
-   mockups são deles, NÃO tocar). Último commit é o de fechamento M33
-   (F3 empresa distribui lote + smoke E2E 14/14 PASS).
+   Esperado pós-fechamento M34: working tree limpo (untracked carry-overs
+   catalogados + M de schema/docs concierge da sessão paralela Cowork —
+   `LeadConcierge` + `DiagnosticoIndebito` Sprint C8/C4 + docs/concierge/
+   mockups são deles, NÃO tocar). Último commit é o de fechamento M34.
+   Rodar `git log origin/main..HEAD --oneline` — deve mostrar 3 commits
+   ahead (c5eee91 Bloco A + b3251f5 Bloco B + fechamento M34); PUSH
+   SEGURADO até reviewers + smoke. NÃO PUSHAR antes da hora.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
    cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend é
    `next start` sob PM2 (NÃO `next dev`) — toda mudança em web/ exige
    `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante M33 → F6 (Estabelecimento resgata tokens em R$/PIX):
+PASSO 1 — Frase comandante M34 → F6 Bloco C (UI portal estabelecimento + UI admin):
+
+Sessão 12/06 entregou M34 em 2 commits (c5eee91..b3251f5): F6 Blocos A+B
+(Estabelecimento resgata tokens em R$ via PIX — schema delta voucher +
+helper PIX-out + service + 5 endpoints + DTOs + 34 specs).
+
+- c5eee91 A: schema delta aditivo (Cooperado.ehEstabelecimento +
+  CooperTokenSaldo.saldoBloqueadoResgate + enum CooperTokenTipo +=
+  RESGATE_PIX, ESTORNO_RESGATE_PIX + ResgateRecibo model com
+  3 unique constraints + ResgateReciboCounter sequencial por
+  cooperativa + ano) + AsaasPixOutService extraído de
+  pix-excedente.service.ts:132-157 (tenant-aware via getApiClient,
+  isAmbienteReal() retorna SIMULATED sem chamar Asaas, case-insensitive
+  pixTipo). 18 specs.
+- b3251f5 B: service solicitarResgate + aprovarResgate + recusarResgate
+  + cancelarResgate + processarWebhookResgate + estornarResgateInterno
+  (privado, NUNCA apaga) + listarResgatesPendentes + gerarNumeroRecibo
+  (RES-2026-NNNNN counter atômico). 5 endpoints REST + 2 DTOs
+  class-validator. 34 specs.
+
+296/296 specs verdes (18 suites cooper-token + mass-write + asaas-pix-out).
+
+3 REFORÇOS Luciano materializados como centro do bloco:
+- REFORÇO 1: estorno auditável NUNCA apaga — nova entry CREDITO
+  ESTORNO_RESGATE_PIX no ledger; status pula pra RECUSADO/CANCELADO/
+  FALHA_PIX preservando trilha histórica.
+- REFORÇO 2: webhook idempotente — ultimoWebhookEventId checado antes
+  da transição; duplicado retorna {skipped:'webhook-duplicado'}; primeiro
+  eventId gravado no swap (atomicidade).
+- REFORÇO 3: compare-and-swap em TODAS transições (5 pontos: aprovar/
+  recusar/cancelar/webhook PAGO/webhook FAILED) via updateMany({where:
+  {id, cooperativaId, status:'esperado'}}) → count===1.
+
+Ordem do fluxo: PIN FORA da tx (PinCooperadoService.validarPinComLockout
+F2.3) + tier ALTO valor>R$50 exige OTP (OtpDesafioService motivo
+TOKEN_TRANSACAO_STEP_UP) + assertLimite sobre TOTAL F2.5 + bloqueio do
+saldo DENTRO da tx Serializable (re-snapshot + conservação invariante
+disp+bloq constante) + numeroRecibo gerado na mesma tx.
+
+Vocabulário inegociável aplicado em todas as strings: "resgate" /
+"liquidação" / "recibo" — NUNCA "recompra" / "venda" (decisão circuito
+04/06 catalogada em memória decisao_modelo_token_voucher_sobra_resgate_
+2026_06_04.md).
+
+═══ PRÓXIMO BLOCO: F6 Bloco C (UI portal estabelecimento + UI admin) ═══
+
+Backend pronto (5 endpoints REST). Falta camada de interface:
+
+1. UI portal estabelecimento (cooperado solicita resgate):
+   - Página dedicada `/conveniada/cooper-token/resgatar` ou
+     `/portal/resgatar-tokens` (padrão UI Tipo B — definir na Fase 1).
+   - Guard: cooperado.ehEstabelecimento === true. Caso contrário, banner
+     amber CTA "Vincular como estabelecimento" (admin liberará via UI
+     futura — pra v1 basta o guard rejeitar).
+   - Guard: cooperado.pixChave + cooperado.pixTipo cadastrados em
+     /portal/seguranca. Caso contrário, banner CTA "Cadastrar PIX" →
+     /portal/seguranca.
+   - Form: quantidade tokens + PinInput (F4 Bloco D wrapper) +
+     observacao opcional + (condicional tier ALTO) OTP.
+   - Preview: valor bruto R$ + taxa F1.5 + líquido + chave PIX
+     destino (snapshot do cadastro).
+   - clientRequestId useRef padrão F4 C.2 (UUID v4 estável por sessão
+     de confirmação; regenera só em sucesso/cancelar).
+   - Tratamento humano dos 7 erros: PIN_NAO_DEFINIDO (CTA configurar) +
+     PIN_BLOQUEADO (ISO date até) + PIN_INCORRETO (retry) +
+     EXCEDE_LIMITE (detalhe) + OTP_REQUERIDO + OTP_INCORRETO +
+     SALDO_INSUFICIENTE (mostra disponível + bloqueado).
+   - Lista de resgates pendentes do cooperado (próprios) com botão
+     "Cancelar" enquanto status === PENDENTE_APROVACAO_COOP.
+   - Help inline azul ShieldCheck explicando: "tokens são vouchers de
+     circuito fechado da cooperativa; resgate = liquidação em R$ via
+     PIX na sua chave cadastrada; aprovação manual do admin pode levar
+     até X horas".
+
+2. UI admin (aprovar/recusar):
+   - Tela `/dashboard/cooper-token/resgates-pendentes` chamando GET
+     /admin/resgates-pendentes (filtros status default PENDENTE +
+     valor mín/máx + datas + paginação).
+   - Card por recibo: numeroRecibo, estabelecimento, valor bruto/
+     líquido R$, chave PIX, observacao, idade.
+   - 2 ações: "Aprovar" (POST /admin/resgates/:id/aprovar — dispara
+     PIX) + "Recusar" (POST /admin/resgates/:id/recusar — Dialog com
+     textarea motivoRecusa obrigatório).
+   - Banner amber se Asaas SANDBOX (isAmbienteReal() === false):
+     "Resgate em modo simulado — SANDBOX".
+   - Help inline: "aprovação dispara PIX-out via Asaas; falha do PIX
+     reverte tokens automaticamente; aprovação atômica via compare-
+     and-swap".
+
+3. Padrões a reusar (do M32/M33):
+   - <PinInput> wrapper de OtpInput (F4 Bloco D)
+   - clientRequestId useRef (F4 C.2)
+   - HelpBox component
+   - Tratamento humano dos 7 erros (mensagens mapeadas)
+   - Padrão UI Tipo B (página dedicada com guard + form + preview +
+     estado, sem Sheet drawer)
+
+Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência Sistêmica):
+- Mapear /portal/tokens atual (descobrir onde encaixar link condicional
+  pro novo /portal/resgatar-tokens — só se ehEstabelecimento).
+- Mapear /portal/seguranca (CTA cadastrar PIX — endpoint já existe?).
+- Mapear /dashboard/cooper-token/* (descobrir padrão de menu admin).
+- Mapear PinInput + HelpBox + ShieldCheck (componentes shared).
+- MAPA DE IMPACTO 5 dimensões. PAUSAR pro OK Luciano antes de codar.
+
+Após Bloco C aprovado:
+- reviewers pesados UMA vez (cooperebr-financeiro-token-reviewer +
+  cooperebr-multitenant-reviewer — o mais rigoroso de todos, dinheiro
+  saindo)
+- ajustes pós-review (Bloco C.1)
+- smoke E2E sandbox + AMAGES com ehEstabelecimento=true + pixChave
+  whitelisted (lucbragatto+amages@gmail.com / +5527981341348)
+- PUSH (até aqui os 3 commits do M34 estavam segurados)
+- fechamento M35
+
+Pré-requisitos leitura M34:
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo + esta frase).
+2. docs/sessoes/2026-06-12-m34-f6-blocos-ab.md.
+3. docs/especificacao-circuito-cooper-token-convenio.md (modelo voucher).
+4. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/decisao_modelo_
+   token_voucher_sobra_resgate_2026_06_04.md (vocabulário).
+5. backend/src/cooper-token/cooper-token.service.ts métodos
+   solicitarResgate/aprovarResgate/recusarResgate/cancelarResgate/
+   processarWebhookResgate/listarResgatesPendentes (referência UI).
+6. backend/src/cooper-token/cooper-token.controller.ts 5 endpoints
+   novos (contratos REST pra UI).
+7. backend/src/cooper-token/dto/solicitar-resgate.dto.ts campos do form.
+8. web/app/portal/tokens (referência padrão /portal).
+9. CLAUDE.md + .claude/CLAUDE.md.
+
+DIRETRIZES PRESERVAR:
+- RECIBO de resgate, NÃO recompra (Art. 79 + STF Tema 536).
+- jti via criarTokenTransacao (F4 Bloco B helper).
+- clientRequestId useRef padrão F4 C.2.
+- Multi-tenant: cooperativaId do JWT, nunca do body.
+- PIN/OTP NUNCA logados.
+- Specs verdes obrigatórias antes do commit.
+- Rebuild PM2 backend (stop → build → restart) em mudança backend.
+- Rebuild web (npm run build → pm2 restart cooperebr-frontend) — HMR
+  NÃO ROLA.
+- Regra contatos de teste: AMAGES + lucbragatto+amages@gmail.com.
+
+CARRY-OVERS M34 (não-bloqueantes):
+- Push de 3 commits locais (c5eee91 + b3251f5 + fechamento) SEGURADO
+  até reviewers + smoke. NÃO PUSHAR antes do Bloco C fechar.
+- D-novo-TAXA-RESGATE-DESTINO P2 — calcularTaxa('resgate') default 0%;
+  precisa decisão destino contábil antes de ligar.
+- Sessão paralela Cowork adicionou LeadConcierge + DiagnosticoIndebito
+  ao schema sem commitar; commita separadamente — NÃO TOCAR.
+
+CARRY-OVERS HISTÓRICOS AINDA VIVOS (não-bloqueantes — ver doc-sessões
+M28→M33): D-novo-F4-PARCEIRO-TENANT-STEPUP P2 (Sprint Hardening) +
+D-novo-F4-OTP-CANAL-ENTREGA P2 + D-novo-F4-UI-COOPERADO-PEER P2 (Token-
+WA Fase 3) + D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN P3 + D-novo-QR-
+PARCEIRO-PAPEL-DUAL P3 + D-novo-OXIDACAO-* P2/P3 + D-novo-WA-PHONE-
+NORMALIZE P2 + Fase 3 Token-WA pausa explícita + D-novo-ASAAS-WEBHOOK-
+AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-CREDITO-PENDENTE-
+REPROCESSAMENTO P2 + D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 + D-novo-
+F3-INCONSISTENCIA-BANCO P3 + D-novo-TAXA-TRANSFER-DESTINO P2 + untracked
+acumulados pra Sprint Housekeeping.
+
+═══ FIM DA FRASE M34 ═══
+
+— BLOCO ARQUIVADO M33 (abaixo — atendido por M34) ——————————————————
+
+PASSO 0 — [arquivado M33] Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 Sessão 12/06 entregou M33 em 4 commits (4bb36aa..8425169): F3 Empresa
 distribui tokens em LOTE/INDIVIDUAL end-to-end (Blocos A+B+C+C.1).
