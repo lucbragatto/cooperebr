@@ -2676,6 +2676,13 @@ enum CooperTokenTipo {
   // (nao saldoParceiro=tenant). Distinto de GERACAO_EXCEDENTE pra extrato
   // + relatorios + futura segregacao contabil "rio token".
   COMPRA_PJ_COOPERADA
+  // Sprint Clube P1 — F3 (12/06/2026): empresa cooperada PJ distribui
+  // tokens (comprados no F2) pra funcionarios = membros MEMBRO_ATIVO do
+  // convenio. Distinto de DOACAO_ENVIADA/RECEBIDA: doacao = peer-to-peer
+  // entre cooperados PF; distribuicao = beneficio da empresa pro
+  // funcionario via convenio. Segregacao Art. 87 (rio token do convenio)
+  // exige distinguir. Aditivo, mesmo padrao do COMPRA_PJ_COOPERADA.
+  DISTRIBUICAO_CONVENIO
 }
 
 enum CooperTokenOperacao {
@@ -3692,6 +3699,24 @@ model TokenTransacao {
 
   /// PRIMEIRO_USO | DESTINATARIO_NOVO | VALOR_ALTO | null (sem step-up)
   motivoStepUp            String?
+
+  // ── Sprint Clube P1 — F3 (12/06/2026) — distribuição empresa → funcionário ──
+  // Natureza jurídica da distribuição pra defesa CLT auditável (campo queryável,
+  // não JSON em descricao — admin filtra/relatório). Valores:
+  //   ORIGEM_REGULAMENTO: prevista no regulamento do plano/estatuto (não-salarial
+  //                       blindada — CLT Art. 458 §2º cumprido por regulamento).
+  //   VOLUNTARIA:         voluntária da empresa (CLT 458 §2º exige teto 50% remuneração;
+  //                       SISGD NÃO valida o teto — empresa declara via
+  //                       empresaDeclaraTetoClt=true).
+  //   PREMIACAO:          prêmio por desempenho/meta (CLT Art. 457 §2º — prêmio
+  //                       excluído da remuneração; base legal própria, sem teto 50%).
+  //                       Exige descricao com motivo/meta.
+  /// 'ORIGEM_REGULAMENTO' | 'VOLUNTARIA' | 'PREMIACAO' | null (operações não-distribuição)
+  naturezaDistribuicao    String?
+
+  /// Empresa declara que respeitou teto de 50% remuneração (CLT 458 §2º).
+  /// Obrigatório (true) quando naturezaDistribuicao=VOLUNTARIA; ignorado nas outras.
+  empresaDeclaraTetoClt   Boolean?
 
   /// Status da máquina (ver doc do model).
   status                  String          @default("PENDENTE_QR")
