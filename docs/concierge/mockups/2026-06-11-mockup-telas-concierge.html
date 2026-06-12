@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Mockup — Concierge Tributario SISGD</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #f3f4f6; }
+  .nav-tab { cursor: pointer; padding: 8px 14px; border-bottom: 2px solid transparent; font-size: 13px; }
+  .nav-tab.active { border-bottom-color: #059669; color: #059669; font-weight: 600; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .cenario-card { transition: all 0.2s; cursor: pointer; }
+  .cenario-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+</style>
+</head>
+<body>
+
+<div class="bg-white shadow sticky top-0 z-50 px-6 py-3">
+  <div class="flex items-center justify-between flex-wrap">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🛡️</span>
+      <span class="font-bold text-lg text-gray-800">Concierge Tributario — Mockup</span>
+    </div>
+    <div class="flex gap-1 text-sm flex-wrap">
+      <span class="nav-tab active" onclick="show(event,'lista')">1. Lista</span>
+      <span class="nav-tab" onclick="show(event,'laurentino')">2. Laurentino (Tese 3)</span>
+      <span class="nav-tab" onclick="show(event,'sinergia')">3. Sinergia (Tese 2)</span>
+      <span class="nav-tab" onclick="show(event,'guilherme')">4. Guilherme ELFSM</span>
+      <span class="nav-tab" onclick="show(event,'admin')">5. Super-admin</span>
+      <span class="nav-tab" onclick="show(event,'landing')">6. Landing publica</span>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 1 LISTA -->
+<div id="s-lista" class="screen active p-6">
+  <div class="max-w-5xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800">🛡️ Concierge Tributario</h1>
+    <p class="text-sm text-gray-500 mb-4">10 cooperado(s) com fatura processada elegivel para auditoria</p>
+
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex items-center gap-2 mb-4 border-b pb-3">
+        <span class="text-gray-400">🔍</span>
+        <input type="text" placeholder="Buscar por nome ou email..." class="flex-1 px-3 py-2 outline-none">
+      </div>
+
+      <div class="space-y-2">
+        <div class="p-4 border-2 border-emerald-300 bg-emerald-50 rounded-lg flex justify-between items-center cursor-pointer hover:shadow" onclick="show(event,'laurentino')">
+          <div>
+            <div class="font-semibold text-gray-800">LAURENTINO BICCAS NETO</div>
+            <div class="text-xs text-gray-500">CPF ***.343.787-** · UC 0.001.294.127.054-57 · EDP-ES B1 GD</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">12 faturas</div>
+            <div class="text-xs text-emerald-700 font-semibold">Indebito MENSAL: R$ 126,91 (Tese 3)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+          <div>
+            <div class="font-semibold text-gray-800">CHRISTIANE FONSECA DE MORAES</div>
+            <div class="text-xs text-gray-500">CPF ***.241.719-** · EDP-ES B3 comercial GD</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">8 faturas</div>
+            <div class="text-xs text-emerald-700 font-semibold">Indebito MENSAL: R$ 397,00 (Tese 3)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50" onclick="show(event,'sinergia')">
+          <div>
+            <div class="font-semibold text-gray-800">CONSORCIO SINERGIA AMBIENTAL</div>
+            <div class="text-xs text-gray-500">CNPJ 48.830.713/0001-09 · EDP-ES A4 USINA 600kW</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">12 faturas</div>
+            <div class="text-xs text-red-700 font-semibold">Indebito MENSAL: R$ 1.774,82 (Tese 2)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+          <div>
+            <div class="font-semibold text-gray-800">CUSD COOPEREBR I (USINA)</div>
+            <div class="text-xs text-gray-500">EDP-ES A4 INDUSTRIAL</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">24 faturas</div>
+            <div class="text-xs text-red-700 font-semibold">Indebito MENSAL: R$ 2.732,24 (Tese 2)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+          <div>
+            <div class="font-semibold text-gray-800">CUSD COOPEREBR II (USINA+UC)</div>
+            <div class="text-xs text-gray-500">EDP-ES A4 COMERCIAL</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">24 faturas</div>
+            <div class="text-xs text-red-700 font-semibold">Indebito MENSAL: R$ 2.868,00 (Tese 2)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+          <div>
+            <div class="font-semibold text-gray-800">EXFISHES TERMINAL PESQUEIRO SPE LTDA</div>
+            <div class="text-xs text-gray-500">CNPJ 46.416.512/0001-34 · EDP-ES B3 GDIII</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">14 faturas</div>
+            <div class="text-xs text-red-700 font-semibold">Indebito MENSAL: R$ 2.515 (Tese 3)</div>
+          </div>
+        </div>
+
+        <div class="p-4 border-2 border-cyan-300 bg-cyan-50 rounded-lg flex justify-between items-center cursor-pointer hover:shadow" onclick="show(event,'guilherme')">
+          <div>
+            <div class="font-semibold text-gray-800">GUILHERME ALVES DOS SANTOS</div>
+            <div class="text-xs text-gray-500">Colatina/ES · ELFSM B10 GD I · Cliente da concessionaria parceira</div>
+          </div>
+          <div class="text-right">
+            <div class="font-medium text-gray-700">12 faturas</div>
+            <div class="text-xs text-emerald-700 font-semibold">SEM INDEBITO (ELFSM aplica corretamente) ✓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 p-4 bg-cyan-50 border border-cyan-200 rounded-lg text-sm text-cyan-900">
+      💡 <strong>Insight estrategico:</strong> O cooperado GUILHERME nao tem indebito porque a ELFSM ja aplica SCEE no PIS/COFINS. Isso e <strong>prova cabal</strong> de que a EDP descumpre a lei — fatura dele vira peca documental nas acoes dos clientes EDP.
+    </div>
+  </div>
+</div>
+
+<!-- TELA 2 LAURENTINO -->
+<div id="s-laurentino" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'lista')">← Voltar a lista</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">🛡️ Auditoria Tributaria</h1>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4 grid grid-cols-2 gap-4">
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Cooperado</div><div class="font-semibold text-gray-800 mt-1">LAURENTINO BICCAS NETO</div><div class="text-xs text-gray-500">PF residencial</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">UC</div><div class="font-semibold text-gray-800 mt-1">0.001.294.127.054-57</div><div class="text-xs text-gray-500">EDP-ES · B1 RESIDENCIAL · GD I · Vitoria/ES</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Fatura</div><div class="font-semibold text-gray-800 mt-1">Abril/2026 — R$ 263,84</div><div class="text-xs text-gray-500">NF-e 053.980.864</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Concessionaria</div><div class="font-semibold text-gray-800 mt-1">EDP ES Distrib</div><div class="text-xs text-gray-500">EdpEsFaturaAdapter aplicado</div></div>
+    </div>
+
+    <div class="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-6 mt-4">
+      <div class="grid grid-cols-3 gap-6">
+        <div><div class="text-xs text-gray-600 uppercase font-semibold">Valor PAGO</div><div class="text-2xl font-bold text-gray-800 mt-1">R$ 263,84</div></div>
+        <div><div class="text-xs text-emerald-700 uppercase font-semibold">Valor CORRETO</div><div class="text-2xl font-bold text-emerald-700 mt-1">R$ 136,93</div></div>
+        <div><div class="text-xs text-red-600 uppercase font-semibold">Sobrepreco mensal</div><div class="text-2xl font-bold text-red-600 mt-1">R$ 126,91 <span class="text-base font-medium">(48%)</span></div></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-2">📅 Projecao retroativa — escolha o cenario</h2>
+      <p class="text-sm text-gray-600 mb-4">Selecione o tempo em que sua UC esta no SCEE. Teto legal: 60 meses (CTN art. 168 — prescricao tributaria).</p>
+
+      <div class="grid grid-cols-5 gap-3">
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 1.584</div><div class="text-xs text-gray-400 mt-1">Ate 1 ano</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 3.290</div><div class="text-xs text-gray-400 mt-1">2 anos</div></div>
+        <div class="cenario-card border-2 border-amber-400 bg-amber-50 rounded-lg p-3 text-center"><div class="text-xs text-amber-700 font-semibold">36m ★</div><div class="text-xl font-bold text-amber-900 mt-2">R$ 5.118</div><div class="text-xs text-amber-600 mt-1">3 anos</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">48m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 7.066</div><div class="text-xs text-gray-400 mt-1">4 anos</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 9.138</div><div class="text-xs text-red-500 mt-1">Teto legal</div></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">📋 Decomposicao por tese</h2>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr><th class="text-left p-2">Tese</th><th class="text-center p-2">Sinal</th><th class="text-right p-2">Mensal</th><th class="text-right p-2">60m+SELIC</th><th class="text-center p-2">Risco</th></tr>
+        </thead>
+        <tbody>
+          <tr class="border-t">
+            <td class="p-2"><div class="font-semibold">Tema 69 STF stricto</div><div class="text-xs text-gray-500">RE 574.706</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">SEM DIVERG.</span></td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-center text-gray-400">—</td>
+          </tr>
+          <tr class="border-t bg-red-50">
+            <td class="p-2"><div class="font-semibold text-red-900">Tese 3 — PIS/COFINS sobre SCEE</div><div class="text-xs text-red-700">Tema 69 STF analogia + Tema 986 STJ</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-red-200 text-red-900 text-xs font-semibold">INDEBITO</span></td>
+            <td class="p-2 text-right font-bold text-red-900">R$ 126,91</td>
+            <td class="p-2 text-right font-bold text-red-900">R$ 9.138</td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">MEDIO</span></td>
+          </tr>
+          <tr class="border-t">
+            <td class="p-2"><div class="font-semibold">Tese 2 — ICMS sobre TUSD-G/Demanda</div><div class="text-xs text-gray-500">Tema 176 + Sumula 391 STJ</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">N/A</span></td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td>
+            <td class="p-2 text-center text-gray-400 text-xs">B1 sem demanda</td>
+          </tr>
+          <tr class="border-t bg-emerald-50 font-bold">
+            <td class="p-2">TOTAL</td><td class="p-2"></td>
+            <td class="p-2 text-right text-emerald-900">R$ 126,91</td>
+            <td class="p-2 text-right text-emerald-900">R$ 9.138</td><td class="p-2"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">🔬 Metodologia do calculo — Tese 3 (auditavel)</h2>
+      <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm space-y-1">
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 1 — TUSD fornecida bruta</span><span></span><span class="text-right font-semibold">R$ 1.881,45</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 1 — TE fornecida bruta</span><span></span><span class="text-right font-semibold">R$ 1.287,46</span></div>
+        <div class="grid grid-cols-3 gap-2 border-t pt-1"><span class="text-gray-700 font-semibold">Total bruto energetico</span><span class="text-right text-gray-500">soma</span><span class="text-right font-bold">R$ 3.168,91</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 2 — Injecao SCEE total (4 linhas oUC)</span><span class="text-right text-gray-500">soma</span><span class="text-right font-semibold text-red-600">−R$ 2.934,58</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-cyan-100 -mx-2 px-2 py-1 rounded"><span class="text-cyan-900 font-bold">Passo 3 — Liquido pos-SCEE</span><span class="text-right text-cyan-700">3.168,91 − 2.934,58</span><span class="text-right font-bold text-cyan-900">R$ 234,33</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 4 — ICMS liquido</span><span class="text-right text-gray-500">cobrado − sobre injecao</span><span class="text-right font-semibold">R$ 17,07</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-emerald-100 -mx-2 px-2 py-1 rounded"><span class="text-emerald-900 font-bold">Passo 5 — Base CORRETA Tese 3</span><span class="text-right text-emerald-700">234,33 − 17,07</span><span class="text-right font-bold text-emerald-900">R$ 217,26</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 6 — Aliquota PIS+COFINS</span><span class="text-right text-gray-500">0,940% + 4,320%</span><span class="text-right font-semibold">5,260%</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 7 — PIS+COFINS LEGITIMO</span><span class="text-right text-gray-500">217,26 × 5,26%</span><span class="text-right font-semibold">R$ 11,43</span></div>
+        <div class="grid grid-cols-3 gap-2"><span class="text-gray-600">Passo 8 — PIS+COFINS COBRADO</span><span class="text-right text-gray-500">soma lateral</span><span class="text-right font-semibold">R$ 138,34</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-red-100 -mx-2 px-2 py-1 rounded border-t-2 border-red-300"><span class="text-red-900 font-bold">INDEBITO MENSAL</span><span class="text-right text-red-700">138,34 − 11,43</span><span class="text-right text-xl font-bold text-red-900">R$ 126,91</span></div>
+      </div>
+
+      <details class="mt-3">
+        <summary class="text-sm text-emerald-700 hover:underline cursor-pointer">⚖️ Ver ementa juridica e ratificacao ELFSM</summary>
+        <div class="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm leading-relaxed">
+          <strong>Fundamento:</strong> Tema 69 STF (RE 574.706) por analogia + Tema 986 STJ (REsp 1.677.524).<br><br>
+          <strong>PROVA CABAL DE DESCUMPRIMENTO:</strong> a propria EDP-ES reconhece a SCEE no ICMS (Lei GERAR 11.253/2021-ES) mas se recusa a fazer o mesmo no PIS/COFINS. A <strong>ELFSM</strong>, concessionaria sob a <strong>MESMA jurisdicao do ES</strong> e <strong>MESMA legislacao federal</strong>, aplica a SCEE em <strong>AMBOS</strong> os tributos.<br><br>
+          <strong>Nao e argumento por analogia</strong>: e tratamento desigual sob mesma lei. A EDP nao tem defesa de impossibilidade tecnica nem de ausencia de precedente operacional — ELFSM e precedente direto no ES. <strong>Inverte o onus argumentativo</strong>.
+        </div>
+      </details>
+    </div>
+
+    <div class="mt-4 flex gap-3 flex-wrap">
+      <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded font-semibold">📄 Gerar briefing PDF para advogado</button>
+      <button class="border border-emerald-600 text-emerald-700 hover:bg-emerald-50 px-5 py-2 rounded font-semibold">📊 Exportar XLSX com formulas</button>
+      <button class="border border-gray-300 text-gray-700 hover:bg-gray-50 px-5 py-2 rounded">📋 Imprimir relatorio</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 3 SINERGIA -->
+<div id="s-sinergia" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'lista')">← Voltar a lista</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">🛡️ Auditoria — Usina Geradora</h1>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4 grid grid-cols-2 gap-4">
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Cooperado</div><div class="font-semibold text-gray-800 mt-1">CONSORCIO SINERGIA AMBIENTAL</div><div class="text-xs text-gray-500">CNPJ 48.830.713/0001-09</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">UC + Demanda</div><div class="font-semibold text-gray-800 mt-1">0.002.287.455.054-02</div><div class="text-xs text-gray-500">A4 COMERCIAL VERDE · Demanda Geracao 600 kW · Ibiracu/ES</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Fatura</div><div class="font-semibold text-gray-800 mt-1">Maio/2026 — R$ 11.184,05</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Saldo SCEE</div><div class="font-semibold text-gray-800 mt-1">126.612 kWh FPonta</div><div class="text-xs text-gray-500">Usina gera muito mais que consome</div></div>
+    </div>
+
+    <div class="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-6 mt-4">
+      <div class="grid grid-cols-3 gap-6">
+        <div><div class="text-xs text-gray-600 uppercase font-semibold">Valor PAGO</div><div class="text-2xl font-bold text-gray-800 mt-1">R$ 11.184,05</div></div>
+        <div><div class="text-xs text-emerald-700 uppercase font-semibold">Valor CORRETO (Tese 2)</div><div class="text-2xl font-bold text-emerald-700 mt-1">R$ 9.409,23</div></div>
+        <div><div class="text-xs text-red-600 uppercase font-semibold">Sobrepreco mensal</div><div class="text-2xl font-bold text-red-600 mt-1">R$ 1.774,82 <span class="text-base font-medium">(16%)</span></div></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-2">📅 Projecao retroativa — usina geradora</h2>
+      <p class="text-sm text-gray-600 mb-4">Tese 2 conta a partir da <strong>contratacao de demanda de geracao</strong> com a EDP. Sinergia tem 600 kW contratados.</p>
+
+      <div class="grid grid-cols-5 gap-3">
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 22.156</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 45.985</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">36m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 71.495</div></div>
+        <div class="cenario-card border-2 border-amber-400 bg-amber-50 rounded-lg p-3 text-center"><div class="text-xs text-amber-700 font-semibold">48m ★</div><div class="text-xl font-bold text-amber-900 mt-2">R$ 98.682</div><div class="text-xs text-amber-600 mt-1">4 anos</div></div>
+        <div class="cenario-card border-2 border-gray-200 rounded-lg p-3 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-lg font-bold text-gray-800 mt-2">R$ 127.560</div><div class="text-xs text-red-500 mt-1">Teto legal</div></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">📋 Decomposicao por rubrica (Tese 2 — ICMS indevido)</h2>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr><th class="text-left p-2">Rubrica</th><th class="text-right p-2">Base R$</th><th class="text-right p-2">ICMS 17% indevido</th></tr>
+        </thead>
+        <tbody>
+          <tr class="border-t"><td class="p-2">Demanda Contratada (17,36 kW)</td><td class="p-2 text-right">692,19</td><td class="p-2 text-right text-red-700">R$ 117,67</td></tr>
+          <tr class="border-t bg-red-50"><td class="p-2 font-semibold">Demanda Geracao (570 kW) — PRINCIPAL</td><td class="p-2 text-right">8.762,28</td><td class="p-2 text-right font-bold text-red-900">R$ 1.489,59</td></tr>
+          <tr class="border-t"><td class="p-2">Ultrapassagem Geracao (25,52 kW)</td><td class="p-2 text-right">784,61</td><td class="p-2 text-right text-red-700">R$ 133,38</td></tr>
+          <tr class="border-t"><td class="p-2">DRE — Demanda Reativa Excedente</td><td class="p-2 text-right">31,89</td><td class="p-2 text-right text-red-700">R$ 5,42</td></tr>
+          <tr class="border-t"><td class="p-2">ERE — Energia Reativa Excedente</td><td class="p-2 text-right">169,15</td><td class="p-2 text-right text-red-700">R$ 28,76</td></tr>
+          <tr class="border-t bg-emerald-50 font-bold"><td class="p-2">TOTAL Tese 2 — ICMS indevido</td><td></td><td class="p-2 text-right text-emerald-900 text-lg">R$ 1.774,82/mes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4 text-sm leading-relaxed">
+      <strong>⚖️ Tese 2 — fundamento:</strong> Tema 176 STF + Sumula 391 STJ + Tese 4 retaguarda (Lei 11.253/2021-ES §3 art. 5-D). ICMS nao pode incidir sobre Demanda Geracao (TUSD-G), DRE nem ERE porque esses encargos <strong>nao constituem operacao mercantil</strong>. <strong>Risco BAIXO</strong>: jurisprudencia STJ consolidada via Sumula 391 — caso processualmente mais solido.
+    </div>
+  </div>
+</div>
+
+<!-- TELA 4 GUILHERME -->
+<div id="s-guilherme" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'lista')">← Voltar a lista</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">🛡️ Auditoria — Cliente ELFSM</h1>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4 grid grid-cols-2 gap-4">
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Cooperado</div><div class="font-semibold text-gray-800 mt-1">GUILHERME ALVES DOS SANTOS</div><div class="text-xs text-gray-500">PF residencial · Colatina/ES</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">UC</div><div class="font-semibold text-gray-800 mt-1">126.658 — ELFSM B10 GD I</div><div class="text-xs text-gray-500">Empresa Luz e Forca Santa Maria</div></div>
+    </div>
+
+    <div class="bg-gradient-to-br from-emerald-50 to-cyan-50 border-2 border-emerald-300 rounded-lg p-6 mt-4">
+      <div class="flex items-start gap-4">
+        <span class="text-5xl">✅</span>
+        <div class="flex-1">
+          <h2 class="text-xl font-bold text-emerald-900">Nenhum indebito detectado</h2>
+          <p class="text-emerald-800 mt-2 text-sm leading-relaxed">A concessionaria <strong>ELFSM</strong> aplica corretamente a SCEE em <strong>AMBOS</strong> os tributos (ICMS via Lei GERAR-ES + PIS/COFINS via interpretacao propria). A linha de injecao da sua fatura traz PIS/COFINS NEGATIVO cancelando o positivo do "Consumo SCEE" — comportamento <strong>legalmente conservador e favoravel ao cliente</strong>.</p>
+
+          <div class="mt-4 bg-white rounded p-3 border border-emerald-200 text-sm">
+            💡 <strong>Sua fatura e prova:</strong> mostrar que a ELFSM consegue aplicar corretamente vira argumento contra a EDP em acoes de outros clientes. Voce autoriza que sua fatura seja anexada como prova documental (anonimizada) em pecas processuais?
+            <div class="mt-3 flex gap-2">
+              <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs">Sim, autorizo</button>
+              <button class="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded text-xs">Nao, obrigado</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">🔬 Por que SEM indebito? Auditoria das somas</h2>
+      <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm space-y-1">
+        <div class="grid grid-cols-3 gap-2"><span>TUSD+TE fornecida (Consumo + Consumo SCEE)</span><span></span><span class="text-right">R$ 453,68</span></div>
+        <div class="grid grid-cols-3 gap-2"><span>Injecao SCEE (En.At.Inj.mUC.mPT GD I)</span><span class="text-right text-red-500">cancela</span><span class="text-right">−R$ 144,95</span></div>
+        <div class="grid grid-cols-3 gap-2 border-t pt-1"><span>Liquido energetico</span><span></span><span class="text-right font-bold">R$ 308,73</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-emerald-100 -mx-2 px-2 py-1"><span class="text-emerald-900 font-bold">PIS+COFINS liquido (com sinal)</span><span class="text-right text-emerald-700">15,27 + 9,15 − 9,15</span><span class="text-right font-bold text-emerald-900">R$ 15,27</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-emerald-100 -mx-2 px-2 py-1"><span class="text-emerald-900 font-bold">Base CORRETA Tese 3</span><span class="text-right text-emerald-700">308,73 − 73,37</span><span class="text-right font-bold text-emerald-900">R$ 235,36</span></div>
+        <div class="grid grid-cols-3 gap-2"><span>PIS+COFINS LEGITIMO (235,36 × 6,49%)</span><span></span><span class="text-right">R$ 15,28</span></div>
+        <div class="grid grid-cols-3 gap-2 bg-emerald-200 -mx-2 px-2 py-1 border-t-2 border-emerald-400"><span class="text-emerald-900 font-bold">DIFERENCA: 15,27 − 15,28 ≈ R$ 0</span><span class="text-right text-emerald-700">tolerancia R$ 0,50</span><span class="text-right text-xl font-bold text-emerald-900">SEM INDEBITO</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 5 SUPER-ADMIN -->
+<div id="s-admin" class="screen p-6">
+  <div class="max-w-5xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer">← Voltar ao Painel SISGD</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">🛡️ Concierge SaaS — Gestao por Parceiro</h1>
+    <p class="text-sm text-gray-500">Ative ou desative o modulo Concierge Tributario por cooperativa. Plano OURO incluira automaticamente (Sprint C7).</p>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <table class="w-full">
+        <tbody>
+          <tr class="border-b"><td class="py-3"><div class="font-medium">BR F0 B 1780232961152</div><div class="text-xs text-gray-500">Nao ativo</div></td><td class="py-3 text-right"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">INATIVO</span><button class="ml-3 bg-emerald-600 text-white px-4 py-2 rounded">⚡ Ativar</button></td></tr>
+          <tr class="border-b"><td class="py-3"><div class="font-medium">CoopereBR</div><div class="text-xs text-gray-500">Ativo desde 11/06/2026 · 10 cooperados sendo auditados</div></td><td class="py-3 text-right"><span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-semibold">ATIVO</span><button class="ml-3 border border-gray-300 text-gray-700 px-4 py-2 rounded">⚡ Desativar</button></td></tr>
+          <tr class="border-b"><td class="py-3"><div class="font-medium">CoopereBR Teste</div><div class="text-xs text-gray-500">Nao ativo</div></td><td class="py-3 text-right"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">INATIVO</span><button class="ml-3 bg-emerald-600 text-white px-4 py-2 rounded">⚡ Ativar</button></td></tr>
+          <tr class="border-b"><td class="py-3"><div class="font-medium">Sinergia (futura)</div><div class="text-xs text-gray-500">Plano OURO previsto · 1 usina A4 com indebito R$ 1.774/mes</div></td><td class="py-3 text-right"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">INATIVO</span><button class="ml-3 bg-emerald-600 text-white px-4 py-2 rounded">⚡ Ativar</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 6 LANDING -->
+<div id="s-landing" class="screen p-6">
+  <div class="max-w-4xl mx-auto">
+    <div class="bg-gradient-to-br from-emerald-600 to-cyan-600 rounded-lg p-8 text-white">
+      <div class="grid grid-cols-2 gap-8 items-center">
+        <div>
+          <span class="text-4xl">⚡</span>
+          <h1 class="text-3xl font-bold mt-2">Sua conta de luz esta te cobrando imposto a mais.</h1>
+          <p class="text-emerald-100 mt-3">Mande sua fatura e descubra em 1 minuto quanto voce pode recuperar na Justica. Auditoria <strong>gratis e automatica</strong>.</p>
+          <ul class="mt-4 space-y-1 text-sm">
+            <li>✅ Funciona com EDP-ES e ELFSM</li>
+            <li>✅ Sem cadastro, sem letra miuda</li>
+            <li>✅ Resposta no seu WhatsApp em 1 minuto</li>
+            <li>✅ Cooperativa CoopereBR + advogado parceiro</li>
+          </ul>
+        </div>
+        <div class="bg-white rounded-lg p-6 text-gray-800">
+          <h3 class="font-bold text-lg mb-3">Audite sua fatura</h3>
+          <label class="text-xs text-gray-600 font-semibold">📷 Tire foto ou faca upload da sua fatura</label>
+          <input type="file" class="block w-full mt-2 mb-3 text-sm">
+          <label class="text-xs text-gray-600 font-semibold">📱 Seu WhatsApp para receber o resultado</label>
+          <input type="text" placeholder="(27) 9 8134-1348" class="block w-full mt-2 mb-3 px-3 py-2 border rounded">
+          <label class="text-xs text-gray-600 font-semibold">🪪 Seu nome</label>
+          <input type="text" placeholder="Como voce gostaria de ser chamado" class="block w-full mt-2 mb-3 px-3 py-2 border rounded">
+          <label class="flex items-start gap-2 text-xs text-gray-600 my-3">
+            <input type="checkbox" class="mt-0.5">
+            Autorizo analise da minha fatura conforme a Politica de Privacidade (LGPD).
+          </label>
+          <button class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded font-semibold">🔍 Auditar gratis →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mt-6">
+      <div class="bg-white rounded-lg p-4 text-center"><div class="text-3xl">📄</div><h3 class="font-semibold mt-2">1. Envia a fatura</h3><p class="text-xs text-gray-500 mt-1">Foto ou PDF — qualquer um dos ultimos 5 anos</p></div>
+      <div class="bg-white rounded-lg p-4 text-center"><div class="text-3xl">🔬</div><h3 class="font-semibold mt-2">2. Auditoria automatica</h3><p class="text-xs text-gray-500 mt-1">3 teses tributarias rodando em segundos</p></div>
+      <div class="bg-white rounded-lg p-4 text-center"><div class="text-3xl">⚖️</div><h3 class="font-semibold mt-2">3. Recebe no WA</h3><p class="text-xs text-gray-500 mt-1">Cenarios de 12 a 60 meses + proximos passos</p></div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-6">
+      <h3 class="font-bold text-lg mb-3">📊 Casos reais auditados</h3>
+      <div class="text-sm space-y-2">
+        <div class="flex justify-between border-b pb-2"><span>👤 Cliente residencial (B1 GD) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 1.584 a R$ 9.138 recuperaveis</span></div>
+        <div class="flex justify-between border-b pb-2"><span>🏢 Cliente comercial (B3 GD) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 4.958 a R$ 28.598 recuperaveis</span></div>
+        <div class="flex justify-between"><span>🏭 Usina geradora (A4) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 22.156 a R$ 127.560 recuperaveis</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(ev, id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('s-' + id).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  if (ev && ev.target) ev.target.classList.add('active');
+  window.scrollTo(0, 0);
+}
+</script>
+
+</body>
+</html>
