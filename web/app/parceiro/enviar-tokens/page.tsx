@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,16 @@ export default function EnviarTokensPage() {
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
   const [confirmando, setConfirmando] = useState(false);
+
+  // F4 Bloco C.1 FIN-4 / C.2 (12/06/2026) — idempotency-key estavel por
+  // SESSAO DE CONFIRMACAO. Gerado quando o user clica "Enviar Tokens"
+  // (prepararEnvio passa pela validacao) e PRESERVADO durante toda a
+  // confirmacao: duplo-clique do botao "Confirmar" envia o MESMO UUID,
+  // backend detecta via referenciaId em creditar() e nao credita 2×.
+  // Regenerado APENAS em (a) sucesso da operacao ou (b) cancelar — a
+  // proxima sessao comeca limpa. Em ERRO transitorio (timeout, 5xx) o
+  // UUID se mantem pra retry idempotente proteger.
+  const clientRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     api.get('/cooper-token/saldo')
@@ -76,6 +86,12 @@ export default function EnviarTokensPage() {
       setErro('Selecione um cooperado');
       return;
     }
+    // F4 Bloco C.2 — gera UUID UMA VEZ por sessao de confirmacao. Se ja
+    // existir (user voltou pro form mas nao cancelou), preserva — protege
+    // contra duplo-clique no proximo Confirmar.
+    if (!clientRequestIdRef.current) {
+      clientRequestIdRef.current = crypto.randomUUID();
+    }
     setConfirmando(true);
   }
 
@@ -84,11 +100,21 @@ export default function EnviarTokensPage() {
     setEnviando(true);
     setErro('');
     setMensagem('');
+    // F4 Bloco C.2 — clientRequestId obrigatorio no caminho admin. Defensivo
+    // (deveria ja existir do prepararEnvio): gera aqui tambem caso fluxo
+    // alternativo pule prepararEnvio.
+    if (!clientRequestIdRef.current) {
+      clientRequestIdRef.current = crypto.randomUUID();
+    }
     try {
       await api.post('/cooper-token/parceiro/enviar', {
         cooperadoId: selecionado.id,
         quantidade: parseFloat(quantidade),
         descricao: descricao || undefined,
+        // F4 Bloco C.2 (12/06/2026) — MESMO UUID pra cada retry da sessao.
+        // Backend (enviarTokensAdmin) detecta duplicata via creditar()
+        // ledger.findFirst por referenciaId + referenciaTabela='ENVIO_ADMIN'.
+        clientRequestId: clientRequestIdRef.current,
       });
       setMensagem(
         `${parseFloat(quantidade).toFixed(4)} tokens enviados para ${selecionado.nomeCompleto} com sucesso!`,
@@ -98,9 +124,13 @@ export default function EnviarTokensPage() {
       setQuantidade('');
       setDescricao('');
       setConfirmando(false);
+      // Sucesso → proxima sessao comeca com UUID limpo.
+      clientRequestIdRef.current = null;
     } catch (err: any) {
       setErro(err.response?.data?.message ?? 'Erro ao enviar tokens');
       setConfirmando(false);
+      // ERRO transitorio: mantem o MESMO UUID — proximo Enviar reusa,
+      // proteção idempotente atravessa o retry. Sem regenerar.
     } finally {
       setEnviando(false);
     }
@@ -266,7 +296,11 @@ export default function EnviarTokensPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setConfirmando(false)}
+                    onClick={() => {
+                      setConfirmando(false);
+                      // F4 Bloco C.2 — cancelar = nova sessao se voltar a enviar.
+                      clientRequestIdRef.current = null;
+                    }}
                     disabled={enviando}
                   >
                     Cancelar

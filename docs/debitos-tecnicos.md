@@ -839,6 +839,35 @@ O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioServ
 
 **Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
 
+#### D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN — assertLimite no usarNaFatura usa 0.45 fixo como upper-bound do valor R$
+
+**Severidade:** P3 (polish; só pode bloquear A MAIS, nunca a menos — conservador).
+**Detectado em:** 2026-06-12 (F4 Bloco C.1 review reviewer financeiro-token).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:usarNaFatura` antes da tx Serializable.
+
+O `assertLimite` antes da tx do `usarNaFatura` calcula um upper-bound do valor R$ pra alimentar `LimiteTokenService.verificarValor`. Como o `valorToken` real do plano só fica disponível DENTRO da tx (lido do `cobranca.contrato.plano.valorTokenReais`), o fora-da-tx usa `0.45` (default da config) como upper-bound:
+
+```ts
+const valorPreLim = Math.min(
+  Number(cobrancaPreview.valorLiquido),
+  quantidadeTokens * 0.45, // upper bound usando default; clamp real dentro da tx
+);
+```
+
+**Direção do erro (conservadora):**
+- Plano com `valorTokenReais > 0.45` → upper-bound subestima → pode passar pelo limite e ser cortado pelo clamp triplo dentro da tx (sem dano operacional).
+- Plano com `valorTokenReais < 0.45` → upper-bound superestima → pode bloquear ANTES da tx por limite, sendo que o valor real seria menor (cooperado vê BadRequest indevido).
+
+Cenário ruim: cooperativa com `valorTokenReais = 0.20` (token barato). Cooperado pede 100 tokens → upper-bound 45 R$, mas valor real seria 20 R$. Se limite por transação for 30 R$, hoje bloqueia indevidamente.
+
+**Resolução proposta (polish):**
+- Ler `cobrancaPreview.contrato.plano.valorTokenReais` no select do preview (custo: 1 SELECT extra antes da tx).
+- Usar `Number(plano?.valorTokenReais ?? 0.45)` como multiplicador.
+- Spec novo: cooperado com plano `valorTokenReais=0.20`, limite=30, pedido=100 → segue (era erro indevido).
+- Estimativa: ~30min Code + spec.
+
+**Não bloqueia produção.** Direção do erro é conservadora pra cooperativas com plano padrão (0.45). Vira incidente UX só pra tenants com `valorTokenReais` diferente do default — investigar quando algum tenant relatar.
+
 #### D-novo-TAXA-TRANSFER-DESTINO — Definir destino contábil da taxa de transferência ANTES de ligar em produção
 
 **Severidade:** P2 (gate).
