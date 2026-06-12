@@ -109,6 +109,9 @@ model Cooperativa {
 
   aparelhosVinculados       AparelhoVinculado[]
   tokenTransacoesPagador    TokenTransacao[]                  @relation("TokenTransacaoPagadorCoop")
+  // F6 (12/06/2026) — resgates pra estabelecimentos do Clube + contador sequencial por ano.
+  resgatesRecibos           ResgateRecibo[]
+  resgateReciboCounters     ResgateReciboCounter[]
 
   // ── Sprint C8 (12/06/2026) — Concierge Captacao via WhatsApp ──
   // Leads captados via WA antes de virarem Cooperado. Funil 9 etapas:
@@ -240,6 +243,12 @@ model Cooperado {
   cobrancasGateway        CobrancaGateway[]
   pixChave                String?
   pixTipo                 String?
+  // Sprint Clube P1 — F6 (12/06/2026): flag de Estabelecimento do Clube.
+  // Cooperado PF/PJ que aceita CooperToken e resgata em R$ via PIX
+  // (modelo voucher/recibo — quita passivo, NÃO recompra). Admin opt-in
+  // via UI futura; default false preserva 100% dos cooperados atuais.
+  ehEstabelecimento       Boolean                    @default(false)
+  resgatesRecibos         ResgateRecibo[]            @relation("ResgateReciboEstabelecimento")
   // Indicações MLM
   codigoIndicacao         String                     @unique @default(cuid())
   cooperadoIndicadorId    String?
@@ -2688,6 +2697,19 @@ enum CooperTokenTipo {
   // funcionario via convenio. Segregacao Art. 87 (rio token do convenio)
   // exige distinguir. Aditivo, mesmo padrao do COMPRA_PJ_COOPERADA.
   DISTRIBUICAO_CONVENIO
+  // Sprint Clube P1 — F6 (12/06/2026): estabelecimento do Clube resgata
+  // tokens em R$ via PIX. RESGATE = LIQUIDACAO de voucher — cooperativa
+  // quita passivo proprio (token que emitiu); NAO eh recompra/venda.
+  // Recibo emitido (modelo ResgateRecibo). Tributo so no spread/queima,
+  // valor cheio eh transito (Art. 79 Lei 5.764/71 + STF Tema 536).
+  // Segregacao contabil rio-token: enquadra como QUITACAO_PASSIVO_TOKEN
+  // no LancamentoCaixa.naturezaClube (Bloco B engancha).
+  RESGATE_PIX
+  // F6 contrapartida do RESGATE_PIX: usado quando estabelecimento cancela
+  // a solicitacao OU admin recusa OU Asaas falha (FALHA_PIX). Devolve
+  // tokens bloqueados ao saldoDisponivel SEM apagar o registro original
+  // (trilha auditavel completa: bloqueio → estorno OU bloqueio → queima).
+  ESTORNO_RESGATE_PIX
 }
 
 enum CooperTokenOperacao {
@@ -2732,6 +2754,124 @@ model CooperTokenLedger {
   @@map("cooper_token_ledger")
 }
 
+// ════════════════════════════════════════════════════════════════════
+// F6 (12/06/2026) — Estabelecimento resgata tokens em R$ via PIX
+// ════════════════════════════════════════════════════════════════════
+//
+// MODELO: "Resgate/Liquidação de voucher" com RECIBO — cooperativa quita
+// passivo próprio (token que ela emitiu). NUNCA chamar de "recompra" ou
+// "venda" — vira erro de conformidade (vide
+// decisao_modelo_token_voucher_sobra_resgate_2026_06_04.md).
+//
+// Tributação: cooperativa tributa SÓ o spread/queima; valor cheio é
+// trânsito (Art. 79 Lei 5.764/71 + STF Tema 536).
+//
+// Estado da máquina:
+//   PENDENTE_APROVACAO_COOP → APROVADO_PIX_DISPARADO → PAGO_RECIBO_EMITIDO
+//                          → RECUSADO (motivo)
+//                          → CANCELADO (estabelecimento desistiu)
+//                          → FALHA_PIX (Asaas erro — estorno auto + retry)
+//
+// Idempotência:
+//   - @@unique([clientRequestId]) — duplo POST do estabelecimento = 1 só.
+//   - ultimoWebhookEventId — Asaas manda evento duplicado, processa 1×.
+//   - Aprovar/recusar/cancelar/processar webhook = compare-and-swap
+//     (updateMany com filtro de status na tx) — corrida resolve sem
+//     duplo débito.
+//
+// Trilha auditável: ledger entries (DEBITO RESGATE_PIX) ficam SEMPRE
+// no banco. Estorno = entrada NOVA (CREDITO ESTORNO_RESGATE_PIX),
+// nunca delete/zero.
+model ResgateRecibo {
+  id                            String      @id @default(cuid())
+
+  /// Sequencial humano por tenant+ano: "RES-2026-00001". Único por
+  /// cooperativaId (não vaza volume entre tenants — Decisão Luciano 12/06).
+  numeroRecibo                  String
+
+  cooperativaId                 String
+  cooperativa                   Cooperativa @relation(fields: [cooperativaId], references: [id])
+
+  cooperadoEstabelecimentoId    String
+  cooperadoEstabelecimento      Cooperado   @relation("ResgateReciboEstabelecimento", fields: [cooperadoEstabelecimentoId], references: [id])
+
+  /// Idempotência por solicitação (UUID v4 do cliente — padrão F2 C.2).
+  clientRequestId               String      @unique
+
+  // ── Valores (tokens — 4 casas) ──
+  valorBrutoTokens              Decimal     @db.Decimal(10, 4)
+  /// Taxa F1.5 calcularTaxa('resgate') — default 0% até gate
+  /// D-novo-TAXA-RESGATE-DESTINO definir destino contábil.
+  valorTaxaTokens               Decimal     @default(0) @db.Decimal(10, 4)
+  valorLiquidoTokens            Decimal     @db.Decimal(10, 4)
+
+  // ── Valores (R$ — 2 casas) ──
+  valorBrutoReais               Decimal     @db.Decimal(10, 2)
+  valorTaxaReais                Decimal     @default(0) @db.Decimal(10, 2)
+  valorLiquidoReais             Decimal     @db.Decimal(10, 2)
+
+  // ── PIX snapshot (no momento da solicitação) ──
+  /// Anti-fraude: chave PIX vem do `Cooperado.pixChave` cadastrado, NUNCA
+  /// do body do request. Snapshot aqui pra trilha caso admin altere depois.
+  pixChave                      String
+  /// CPF | CNPJ | EMAIL | TELEFONE | ALEATORIA
+  pixTipo                       String
+
+  // ── Estado da máquina ──
+  /// PENDENTE_APROVACAO_COOP | APROVADO_PIX_DISPARADO | PAGO_RECIBO_EMITIDO
+  /// | RECUSADO | CANCELADO | FALHA_PIX
+  status                        String
+
+  // ── Trilha de auditoria ──
+  aprovadoPorUserId             String?
+  aprovadoEm                    DateTime?
+  recusadoPorUserId             String?
+  recusadoEm                    DateTime?
+  motivoRecusa                  String?
+  canceladoEm                   DateTime?
+  pagoEm                        DateTime?
+  falhaEm                       DateTime?
+  motivoFalha                   String?
+
+  // ── Asaas ──
+  asaasTransferId               String?
+  /// F2 reforço (carona F6) — anti-replay de webhook duplicado.
+  /// Asaas envia o mesmo evento múltiplas vezes; primeiro processamento
+  /// grava `eventId` e o segundo vê e ignora.
+  ultimoWebhookEventId          String?
+
+  /// FK opcional pra TokenTransacao (audit jti — F4 Bloco B helper).
+  tokenTransacaoId              String?
+
+  observacao                    String?
+
+  createdAt                     DateTime    @default(now())
+  updatedAt                     DateTime    @updatedAt
+
+  @@unique([cooperativaId, numeroRecibo])
+  @@index([cooperativaId, status])
+  @@index([cooperadoEstabelecimentoId, createdAt])
+  @@index([asaasTransferId])
+  @@map("resgate_recibos")
+}
+
+/// Contador sequencial de recibos por tenant+ano.
+/// Geração dentro da tx Serializable: upsert + increment atômico.
+/// Multi-tenant: cada cooperativa tem sua sequência (não vaza volume
+/// entre tenants — Decisão Luciano Q3 do F6).
+model ResgateReciboCounter {
+  id              String      @id @default(cuid())
+  cooperativaId   String
+  cooperativa     Cooperativa @relation(fields: [cooperativaId], references: [id])
+  ano             Int
+  /// Próximo número a ser usado (após primeiro recibo = 2; etc).
+  proximoNumero   Int         @default(1)
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([cooperativaId, ano])
+  @@map("resgate_recibo_counters")
+}
+
 model CooperTokenSaldo {
   id              String    @id @default(cuid())
   cooperadoId     String    @unique
@@ -2742,6 +2882,16 @@ model CooperTokenSaldo {
   totalEmitido    Decimal   @default(0) @db.Decimal(10, 4)
   totalResgatado  Decimal   @default(0) @db.Decimal(10, 4)
   totalExpirado   Decimal   @default(0) @db.Decimal(10, 4)
+  // Sprint Clube P1 — F6 (12/06/2026): tokens BLOQUEADOS aguardando aprovação
+  // do admin da cooperativa (estabelecimento solicitou resgate em PIX —
+  // saí do saldoDisponivel mas ainda não virou R$). Invariante:
+  //   saldoDisponivel + saldoBloqueadoResgate = conservado em toda transição
+  //   (solicitar/aprovar/recusar/cancelar/falha).
+  // Aprovado + PIX OK → queima (subtrai de saldoBloqueadoResgate, vai pra
+  //   totalResgatado, registra ledger DISTRIBUICAO_CONVENIO RESGATE_PIX).
+  // Recusado/cancelado/FALHA_PIX → estorno (devolve saldoBloqueadoResgate
+  //   pra saldoDisponivel + lança ledger ESTORNO_RESGATE_PIX, NUNCA apaga).
+  saldoBloqueadoResgate Decimal @default(0) @db.Decimal(10, 4)
   updatedAt       DateTime  @updatedAt
 
   @@map("cooper_token_saldo")
