@@ -49,6 +49,78 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-12 (Cowork — Tese 6 ICMS sobre TUSD/TE em GD + Dossiê EXFISHES 14 faturas reais)
+
+**Sessão Cowork em paralelo ao Code que rodava M32 Sprint Clube.**
+
+**2 commits Cowork hoje:**
+- `92483e1` — fechamento noite 11/06 (mockup 10 telas + Tese 5 STF + WIP parser)
+- **`e85723d`** — **Tese 6 backend + dossiê EXFISHES 14 faturas + Tela 11 mockup**
+
+Ainda pendente commit: correção Tela 4 + doc-sessão + este update CONTROLE.
+
+**Entregas principais:**
+
+1. **Pesquisa estratégica ICMS sobre GD** — `docs/concierge/2026-06-12-tese-6-icms-tusd-te-gd-scee.md`. Fundamento em camadas:
+   - **PRIMÁRIO (cooperativa)**: Art. 79 Lei 5.764/71 — ato cooperativo, não implica operação de mercado, não há circulação jurídica de mercadoria entre cooperativa e cooperado
+   - Secundários: Lei 14.300/22 (SCEE empréstimo gratuito) + Conv CONFAZ 16/2015 + Lei GERAR-ES vigente + STJ Tema 986 ressalva GD + TJ-MT abr/2026 (afastou ICMS TUSD em GD) + TJ-RJ + STF ADIs 7.077/7.634/7.716 mar/2026 (energia bem essencial) + Súmula 391/STJ
+   - Lei GERAR-ES confirmada vigente por Luciano — mas independe da tese cooperativa
+
+2. **Detector Tese 6 backend** — `backend/src/concierge/detectores/detector-tese6-icms-scee.ts` (NOVO). 4 testes novos. Suite Concierge 69/69 verde. Tese 6 é 4× maior que Tese 3 em magnitude (alíquota ICMS 17% vs PIS+COFINS ~5%).
+
+3. **Parser EXFISHES v3 refinado** — usando `pdfplumber.extract_words(use_text_flow=True)` em vez de extract_text. 3 bugs resolvidos. Calibrado 100% contra ABR/2026.
+
+4. **Dossiê EXFISHES 14 faturas** — `docs/concierge/2026-06-12-relatorio-exfishes-14-faturas.md` + `EXFISHES-Analise-14-Faturas-2026-06-12.xlsx` (3 abas: Série, Projeções, Ressalvas) + `docs/concierge/wip/exfishes-serie-v3.json`.
+
+5. **Mockup HTML atualizado**:
+   - **Tela 11 NOVA** — Tese 6 + Dossiê EXFISHES (organograma, tabela 14 faturas, projeções)
+   - **Tela 4 CORRIGIDA** — narrativa GDIII reescrita com banner de correção
+
+**Números EXFISHES (14 faturas reais, FEV/2025 → MAI/2026):**
+
+| Métrica | Valor |
+|---|---|
+| Indébito Tese 3 médio | R$ 2.928/mês |
+| Indébito Tese 6 médio | R$ 11.860/mês |
+| COMBINADO médio | **R$ 14.788/mês** |
+| Total documentado observado | R$ 124.076 |
+| 60m + SELIC (Via Trib) | R$ 1.064.736 |
+| 120m + SELIC (Via Cons Tese 5) | R$ 2.484.384 |
+| **120m × dobro CDC** | **R$ 4.968.768** 🚨 |
+
+**Achados críticos:**
+
+- **Narrativa "transição GDIII mar/2026" estava INCORRETA** — SCEE ativo desde out/2024+. A mudança em mar→abr/2026 foi de regime de injeção (4.644 kWh → 73.400 kWh). Tela 4 corrigida.
+- **R$ 2.515,24 do mockup anterior estava errado tributariamente** — era "valor pago - valor correto", não indébito Tese 3 stricto sensu. Valor real Tese 3 ABR/2026 = R$ 1.509,73. O que faltava era ICMS Tese 6 (R$ 7.008,62).
+- **MAI/2026 é fatura de 6 dias** (período 25/04 → 30/04, fechamento extraordinário) + PDF contém 2 vias (pg 1 = MAI/2026 real, pg 3 = 2ª via ABR/2026).
+- **Tese 6 é HÍGIDA independente da Lei GERAR** — Art. 79 Lei 5.764/71 é fundamento primário cooperativo.
+
+**Débitos novos catalogados:**
+
+- `D-novo-CONCIERGE-INTEGRAR-TESE6-SERVICE` **P0** — integrar Tese 6 no `concierge.service.ts` (orquestrador)
+- `D-novo-CONCIERGE-MAPA-RISCO-UF-DETECTOR` **P1** — mapa de risco por UF
+- `D-novo-EXFISHES-MAR-MAI-2025-FATURAS` **P1** — Luciano puxar do portal EDP-ES
+- `D-novo-CONCIERGE-SELIC-MENSAL-BCB` **P3** — substituir fator linear por tabela SELIC BCB
+
+**Débitos resolvidos:**
+- `D-novo-EXFISHES-PARSER-BUGS` RESOLVIDO (parser v3 calibrado)
+- `D-novo-EXFISHES-NARRATIVA-GDIII-INCORRETA` RESOLVIDO (Tela 4 corrigida)
+- `D-novo-LEI-GERAR-VIGENCIA-ATUAL` CONFIRMADO vigente (mas não afeta tese cooperativa)
+
+**Doc-sessão completo:** `docs/sessoes/2026-06-12-cowork-tese-6-dossie-exfishes.md`
+
+**Frase de retomada Cowork (próxima sessão):**
+
+```
+Continuar Tese 6 — integrar DetectorTese6IcmsTusdTeSobreScee no orquestrador
+ConciergeService.previewDiagnostico (Sprint C4 acelerado). Adicionar campo
+mapaRiscoUf como input do detector. Recalcular Laurentino + Christiane +
+Sinergia no mockup com Tese 6. Pedir Luciano puxar MAR/2025 + MAI/2025
+do portal EDP-ES pra completar série.
+```
+
+---
+
 ## ONDE PARAMOS — 2026-06-11 NOITE (Cowork — Mockup 10 telas + Tese 5 STF + EXFISHES 14 faturas WIP)
 
 **Sessão Cowork longa noite, em paralelo ao Code que rodava M32 Sprint Clube P1 F4.**
