@@ -30,8 +30,9 @@
       <span class="nav-tab" onclick="show(event,'guilherme')">5. Guilherme ELFSM</span>
       <span class="nav-tab" onclick="show(event,'leads')">6. Leads recebidos</span>
       <span class="nav-tab" onclick="show(event,'upload')">7. Upload manual</span>
-      <span class="nav-tab" onclick="show(event,'admin')">8. Super-admin</span>
-      <span class="nav-tab" onclick="show(event,'landing')">9. Landing publica</span>
+      <span class="nav-tab" onclick="show(event,'fluxowa')">8. Fluxo WhatsApp</span>
+      <span class="nav-tab" onclick="show(event,'admin')">9. Super-admin</span>
+      <span class="nav-tab" onclick="show(event,'landing')">10. Landing publica</span>
     </div>
   </div>
 </div>
@@ -812,6 +813,267 @@
       <div class="mt-4 text-xs text-gray-500 text-center">
         Após o upload, o sistema executará: <strong>OCR Claude → identificação concessionária → adapter → 3 detectores → cenários 12-120m</strong>. Resultado aparece em "Leads recebidos" em até 2 minutos.
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 8 FLUXO WHATSAPP -->
+<div id="s-fluxowa" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-2">💬 Fluxo do Bot WhatsApp — Concierge Captação</h1>
+    <p class="text-sm text-gray-500">Organograma completo de como o bot conversa com o lead desde o primeiro contato até a adesão à CoopereBR.</p>
+
+    <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mt-4 text-sm text-cyan-900">
+      💡 <strong>Base técnica:</strong> reutiliza o motor WA do SISGD (state machine 51 estados + ModeloMensagem com {{variáveis}} + FluxoEtapa customizável + Coopere-AI Claude Haiku para fallback). Sprint C8 adiciona 4 estados novos exclusivos do Concierge.
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-4">📊 Organograma visual</h2>
+
+      <div class="space-y-2">
+        <!-- ETAPA 1 ENTRADA -->
+        <div class="border-l-4 border-emerald-500 bg-emerald-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 1</span>
+            <span class="font-bold text-emerald-900">CONCIERGE_INICIAL</span>
+            <span class="text-xs text-emerald-700">(gatilho: palavra "AUDITAR", "INDÉBITO", "imposto", ou clique no link wa.me da landing)</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-emerald-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia:</div>
+            <div class="text-gray-800 italic">"Olá {{nome}}! 👋 Sou o Coop, da CoopereBR. Vou te ajudar a descobrir quanto a sua conta de luz está cobrando a mais. Pode me enviar uma <strong>foto ou PDF</strong> da sua fatura mais recente?"</div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 2 -->
+        <div class="border-l-4 border-emerald-500 bg-emerald-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 2</span>
+            <span class="font-bold text-emerald-900">CONCIERGE_AGUARDANDO_FATURA</span>
+            <span class="text-xs text-emerald-700">(timeout 10min)</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-emerald-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📥 Lead envia:</div>
+            <div class="text-gray-800 italic">[anexa PDF ou imagem da fatura]</div>
+            <div class="font-semibold text-gray-700 mb-1 mt-2">📤 Bot responde:</div>
+            <div class="text-gray-800 italic">"Recebi! 🔍 Estou analisando agora, leva ~30 segundos..."</div>
+          </div>
+          <div class="text-xs text-emerald-700 mt-2">↪ Backend: cria <code class="bg-white px-1 rounded">LeadConcierge</code> + dispara job OCR Claude</div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 3 -->
+        <div class="border-l-4 border-blue-500 bg-blue-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 3</span>
+            <span class="font-bold text-blue-900">CONCIERGE_PROCESSANDO_OCR</span>
+            <span class="text-xs text-blue-700">(15-45s processamento)</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-blue-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">🤖 Backend executa:</div>
+            <ol class="list-decimal list-inside text-gray-700 text-xs space-y-0.5 ml-2">
+              <li>OCR Anthropic Claude → identifica CNPJ/concessionária</li>
+              <li>Adapter (EDP-ES, ELFSM, Energisa TO) → rubricas estruturadas</li>
+              <li>Detectores (Tema 69 + Tese 3 + Tese 2) → padrões + cenários</li>
+              <li>Salva <code class="bg-blue-100 px-1 rounded">DiagnosticoIndebito</code> com leadId</li>
+              <li>Atualiza Lead.status="DIAGNOSTICO_PRONTO"</li>
+            </ol>
+          </div>
+          <div class="text-xs text-blue-700 mt-2">↪ Se erro OCR: vai pra <strong>CONCIERGE_FALLBACK_HUMANO</strong> (admin assume)</div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 4 RESULTADO -->
+        <div class="border-l-4 border-red-500 bg-red-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 4</span>
+            <span class="font-bold text-red-900">CONCIERGE_DIAGNOSTICO_ENTREGUE</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-red-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia:</div>
+            <div class="text-gray-800 italic text-xs leading-relaxed">
+              "Pronto, {{nome}}! 📊<br><br>
+              <strong>Sua fatura de {{mes}} ({{distribuidora}}):</strong><br>
+              💰 Valor pago: R$ {{valor_pago}}<br>
+              ✅ Valor correto: R$ {{valor_correto}}<br>
+              🔴 <strong>Você paga R$ {{sobrepreco}}/mês a mais ({{percentual}}%)</strong><br><br>
+              <strong>Quanto você pode recuperar:</strong><br>
+              📅 Em 5 anos (Justiça Federal): R$ {{cenario_60m}}<br>
+              ⚖️ Em 10 anos (decisão STF 2024): R$ {{cenario_120m}}<br>
+              🚨 Com dobro CDC: R$ {{cenario_dobro}}<br><br>
+              Quer entender como a gente faz isso virar dinheiro no seu bolso? 💪<br>
+              <strong>1️⃣ Sim, me explica</strong><br>
+              <strong>2️⃣ Quero pensar primeiro</strong><br>
+              <strong>3️⃣ Tenho dúvidas técnicas</strong>"
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-center gap-8 text-2xl text-gray-400">
+          <span>⬇ opção 1</span><span>⬇ opção 2</span><span>⬇ opção 3</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <!-- 4A SIM ME EXPLICA -->
+          <div class="border-l-4 border-emerald-600 bg-emerald-50 rounded-lg p-3 text-xs">
+            <div class="font-bold text-emerald-900 mb-2">4A. INTERESSE_CONFIRMADO</div>
+            <div class="bg-white rounded p-2 border border-emerald-200 text-gray-700 italic">"Excelente decisão! 🚀 Para entrar com a ação, você precisa: 1️⃣ Aderir à CoopereBR (R$ {{taxa_adesao}}/mês). 2️⃣ Outorgar procuração ao advogado parceiro. 3️⃣ Pagar custas iniciais. Posso prosseguir com seu cadastro?"</div>
+            <div class="mt-2 text-emerald-700">↪ Próximo estado: <strong>CONCIERGE_AGUARDANDO_DADOS</strong></div>
+          </div>
+
+          <!-- 4B PENSAR -->
+          <div class="border-l-4 border-amber-500 bg-amber-50 rounded-lg p-3 text-xs">
+            <div class="font-bold text-amber-900 mb-2">4B. AGUARDANDO_DECISAO</div>
+            <div class="bg-white rounded p-2 border border-amber-200 text-gray-700 italic">"Tudo bem, {{nome}}! 🤝 Sem pressão. Vou te mandar um material sobre a decisão do STF e os casos reais que já recuperamos. Te chamo daqui a 2 dias. Ok?"</div>
+            <div class="mt-2 text-amber-700">↪ Cron agenda follow-up D+2 e D+7</div>
+          </div>
+
+          <!-- 4C DUVIDAS -->
+          <div class="border-l-4 border-cyan-500 bg-cyan-50 rounded-lg p-3 text-xs">
+            <div class="font-bold text-cyan-900 mb-2">4C. DUVIDAS_TECNICAS</div>
+            <div class="bg-white rounded p-2 border border-cyan-200 text-gray-700 italic">"Claro! O Coop-AI (nossa IA jurídica) pode te explicar. Mande sua pergunta — se ficar complexa, transfiro pro nosso atendente humano."</div>
+            <div class="mt-2 text-cyan-700">↪ Ativa <strong>Coopere-AI</strong> com prompt jurídico-tributário</div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400 mt-4">⬇ se confirmou interesse (4A)</div>
+
+        <!-- ETAPA 5 -->
+        <div class="border-l-4 border-purple-500 bg-purple-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 5</span>
+            <span class="font-bold text-purple-900">CONCIERGE_AGUARDANDO_DADOS</span>
+            <span class="text-xs text-purple-700">(reaproveita state existente AGUARDANDO_NOME → CPF → EMAIL → CEP → ENDERECO)</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-purple-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">🔄 Bot percorre:</div>
+            <div class="text-gray-700 text-xs">Nome completo → CPF/CNPJ → Email → CEP → Endereço (auto-preenchido via ViaCEP)</div>
+            <div class="text-xs text-purple-700 mt-2">↪ A cada dado o bot confirma: "Confere {{dado}}? [Sim] [Corrigir]"</div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 6 -->
+        <div class="border-l-4 border-orange-500 bg-orange-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-orange-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 6 (NOVO)</span>
+            <span class="font-bold text-orange-900">CONCIERGE_AGUARDANDO_RG_CNH</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-orange-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia:</div>
+            <div class="text-gray-800 italic text-xs">"Agora preciso de uma foto do seu <strong>RG (frente + verso)</strong> ou CNH. Vou usar para preparar sua procuração para o advogado. Pode enviar?"</div>
+            <div class="text-xs text-orange-700 mt-2">↪ OCR documento-identidade extrai: nome, RG/CNH, CPF, data nascimento, endereço</div>
+            <div class="text-xs text-orange-700">↪ Bot confirma: "Confere? Nome: X / RG: Y / CPF: Z [Sim] [Corrigir]"</div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 7 -->
+        <div class="border-l-4 border-violet-500 bg-violet-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-violet-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 7 (NOVO)</span>
+            <span class="font-bold text-violet-900">CONCIERGE_AGUARDANDO_ASSINATURA</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-violet-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia (2 PDFs):</div>
+            <div class="text-gray-700 text-xs">📄 PROCURACAO_AD_JUDICIA.pdf<br>📄 CONTRATO_HONORARIOS.pdf</div>
+            <div class="font-semibold text-gray-700 mb-1 mt-2">Mensagem:</div>
+            <div class="text-gray-800 italic text-xs">"Estou enviando 2 documentos para sua leitura. Após ler, responda <strong>CONFIRMO</strong>. Vou mandar um código por SMS para registrar sua assinatura digital."</div>
+            <div class="text-xs text-violet-700 mt-2">↪ OTP 6 dígitos via SMS Twilio → registra <code class="bg-white px-1 rounded">procuracaoAssinadaEm</code></div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 8 -->
+        <div class="border-l-4 border-rose-500 bg-rose-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-rose-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 8</span>
+            <span class="font-bold text-rose-900">CONCIERGE_AGUARDANDO_PAGAMENTO</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-rose-200 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia (2 links Asaas):</div>
+            <div class="text-gray-800 italic text-xs leading-relaxed">
+              "Para finalizar, pague:<br>
+              💳 Adesão CoopereBR: <strong>R$ {{taxa_adesao}}</strong> [link PIX/boleto]<br>
+              💳 Custas iniciais: <strong>R$ {{custas}}</strong> [link PIX/boleto]<br><br>
+              Honorários do advogado: <strong>só após você receber o valor da ação</strong> ({{percentual}}% sobre o êxito)."
+            </div>
+            <div class="text-xs text-rose-700 mt-2">↪ Webhook Asaas confirma pagamento → próximo estado</div>
+          </div>
+        </div>
+
+        <div class="flex justify-center text-2xl text-gray-400">⬇</div>
+
+        <!-- ETAPA 9 FINAL -->
+        <div class="border-l-4 border-emerald-600 bg-gradient-to-br from-emerald-50 to-cyan-50 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="bg-emerald-700 text-white text-xs px-2 py-0.5 rounded-full font-bold">ESTADO 9 (FINAL)</span>
+            <span class="font-bold text-emerald-900">CONCIERGE_PROCESSO_INICIADO</span>
+          </div>
+          <div class="bg-white rounded p-3 border border-emerald-300 text-sm">
+            <div class="font-semibold text-gray-700 mb-1">📤 Bot envia:</div>
+            <div class="text-gray-800 italic text-xs leading-relaxed">
+              "🎉 Tudo certo, {{nome}}! Bem-vindo à CoopereBR!<br><br>
+              ✅ Sua adesão foi confirmada<br>
+              ✅ Procuração e contrato registrados<br>
+              ✅ Custas pagas<br><br>
+              <strong>Próximos passos:</strong> nosso advogado parceiro vai protocolar a ação em até 7 dias. Você vai receber atualizações periódicas aqui mesmo no WhatsApp."
+            </div>
+            <div class="text-xs text-emerald-700 mt-2">↪ Backend: cria <code class="bg-emerald-100 px-1 rounded">Cooperado</code> + envia briefing pro advogado parceiro (email + WA)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">🔄 Estados auxiliares (saídas do fluxo principal)</h2>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="border-l-4 border-gray-400 bg-gray-50 rounded p-3">
+          <div class="font-bold text-gray-800">CONCIERGE_FALLBACK_HUMANO</div>
+          <div class="text-xs text-gray-600 mt-1">OCR falhou ou cliente pediu humano. Notifica admin no painel. Pausa bot.</div>
+        </div>
+        <div class="border-l-4 border-gray-400 bg-gray-50 rounded p-3">
+          <div class="font-bold text-gray-800">CONCIERGE_INELEGIVEL</div>
+          <div class="text-xs text-gray-600 mt-1">Concessionária fora do MVP (não-EDP/ELFSM/Energisa-TO). Avisa cliente, vira lead manual.</div>
+        </div>
+        <div class="border-l-4 border-gray-400 bg-gray-50 rounded p-3">
+          <div class="font-bold text-gray-800">CONCIERGE_SEM_INDEBITO</div>
+          <div class="text-xs text-gray-600 mt-1">Cliente é ELFSM ou outra que aplica corretamente. Mensagem honesta + convite para ser indicador.</div>
+        </div>
+        <div class="border-l-4 border-gray-400 bg-gray-50 rounded p-3">
+          <div class="font-bold text-gray-800">CONCIERGE_ABANDONO</div>
+          <div class="text-xs text-gray-600 mt-1">Lead parou de responder por 7 dias. Cron tenta re-engajar 1x, depois arquiva.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">📊 Estatísticas do fluxo (esperado)</h2>
+      <div class="grid grid-cols-4 gap-3 text-sm">
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
+          <div class="text-xs text-emerald-700 uppercase font-semibold">Taxa OCR sucesso</div>
+          <div class="text-2xl font-bold text-emerald-900 mt-1">~92%</div>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded p-3 text-center">
+          <div class="text-xs text-blue-700 uppercase font-semibold">Concluem cadastro</div>
+          <div class="text-2xl font-bold text-blue-900 mt-1">~45%</div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded p-3 text-center">
+          <div class="text-xs text-amber-700 uppercase font-semibold">Aderem CoopereBR</div>
+          <div class="text-2xl font-bold text-amber-900 mt-1">~25%</div>
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded p-3 text-center">
+          <div class="text-xs text-red-700 uppercase font-semibold">Pagam custas</div>
+          <div class="text-2xl font-bold text-red-900 mt-1">~20%</div>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mt-3">Estimativas a calibrar nos primeiros 100 leads piloto.</p>
     </div>
   </div>
 </div>
