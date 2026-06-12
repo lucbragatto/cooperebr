@@ -24,6 +24,8 @@ import { UsarNaFaturaDto } from './dto/usar-na-fatura.dto';
 // Sprint Clube P1 — F4 Bloco C (12/06/2026): DTOs com PIN/OTP.
 import { ProcessarPagamentoQrDto } from './dto/processar-pagamento-qr.dto';
 import { EnviarTokensDto } from './dto/enviar-tokens.dto';
+// Sprint Clube P1 — F3 Bloco B (12/06/2026): empresa-PJ distribui lote.
+import { DistribuirTokensDto } from './dto/distribuir-tokens.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -657,5 +659,49 @@ export class CooperTokenController {
       telefoneDestino: body?.telefoneDestino,
     });
     return otp;
+  }
+
+  /**
+   * Sprint Clube P1 — F3 Bloco B (12/06/2026).
+   *
+   * Empresa-PJ distribui tokens (LOTE ou INDIVIDUAL, IGUAIS ou DIFERENTES)
+   * pra funcionários = MEMBRO_ATIVO do convênio onde ela é conveniada.
+   *
+   * Multi-tenant: cooperadoId (empresa) e cooperativaId SEMPRE do JWT.
+   * Body declara apenas convenioId + destinatários + valores + PIN +
+   * natureza/CLT + clientRequestId (idempotência).
+   *
+   * Modos:
+   *  - PREVIEW: dry-run; retorna `{modo:'PREVIEW', preview, podeProsseguir}`.
+   *  - CONFIRM: grava em $transaction Serializable; retorna `{modo:'CONFIRM',
+   *    preview, resultado, idempotente?}`. Duplo-clique do MESMO
+   *    clientRequestId retorna `idempotente:true` + resultado anterior
+   *    (cooperTokenLedger.findFirst por referenciaTabela=MASS_WRITE_DISTRIBUICAO).
+   */
+  @Roles(COOPERADO)
+  @Post('empresa/distribuir')
+  async distribuirTokens(@Req() req: any, @Body() body: DistribuirTokensDto) {
+    const empresaCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!empresaCooperadoId) {
+      throw new BadRequestException('Cooperado (empresa) não identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada no contexto.');
+    }
+    return this.cooperTokenService.distribuirTokens({
+      empresaCooperadoId,
+      cooperativaId,
+      convenioId: body.convenioId,
+      clientRequestId: body.clientRequestId,
+      pin: body.pin,
+      modo: body.modo,
+      distribuicoes: body.distribuicoes,
+      naturezaDistribuicao: body.naturezaDistribuicao,
+      empresaDeclaraTetoClt: body.empresaDeclaraTetoClt,
+      descricao: body.descricao,
+      ip: req.ip ?? req.headers?.['x-forwarded-for'] ?? null,
+      userAgent: req.headers?.['user-agent'] ?? null,
+    });
   }
 }

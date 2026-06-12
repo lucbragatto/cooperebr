@@ -38,6 +38,11 @@ import { LimiteTokenService } from './limite-token.service';
 // F4 Bloco C.1 (12/06/2026) FIN-4: jti pra idempotência do caminho admin
 // (clientRequestId-based).
 import { gerarTokenHex } from '../common/security/otp-helper';
+// F3 Bloco B (12/06/2026): helper mass-write reusável.
+import {
+  executarMassWrite,
+  MassWriteAlerta,
+} from '../common/mass-write/mass-write.helper';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -1249,6 +1254,441 @@ export class CooperTokenService {
       clientRequestId,
       ledgerCreditado: true,
     };
+  }
+
+  /**
+   * Sprint Clube P1 — F3 Bloco B (12/06/2026).
+   *
+   * Empresa-PJ (cooperada PJ) distribui tokens já comprados (F2) para
+   * funcionários (MEMBRO_ATIVO do convênio onde ela é `conveniada`).
+   *
+   * Decisões Luciano travadas:
+   *  - Origem TRANSFERÊNCIA, não emissão: débito do saldo da empresa +
+   *    crédito do funcionário; sem `creditar()` nem `enviarTokens`.
+   *  - Tudo-ou-nada: saldo empresa ≥ soma validado DENTRO da tx Serializable.
+   *  - PIN da empresa FORA da tx (mesmo padrão F4).
+   *  - assertLimite sobre TOTAL do lote (somaValorReais) vs limite de
+   *    transação da empresa. Por linha mantém jti.
+   *  - Ledger por linha = `CooperTokenTipo.DISTRIBUICAO_CONVENIO`
+   *    (NÃO DOACAO_ENVIADA/RECEBIDA — segregação Art. 87).
+   *  - Idempotência por lote: 1ª linha do crédito grava
+   *    `referenciaTabela='MASS_WRITE_DISTRIBUICAO'` + `referenciaId=clientRequestId`.
+   *  - Naturezas:
+   *    - VOLUNTARIA exige `empresaDeclaraTetoClt=true` (CLT 458 §2º).
+   *    - PREMIACAO exige `descricao` com motivo/meta (CLT 457 §2º).
+   *    - ORIGEM_REGULAMENTO ignora o checkbox.
+   *  - Helper `executarMassWrite` (Bloco A) coordena cap + preview/confirm +
+   *    idempotência + AuditLog.
+   */
+  async distribuirTokens(params: {
+    /** Empresa-PJ (vem do JWT — NUNCA do body). */
+    empresaCooperadoId: string;
+    cooperativaId: string;
+    convenioId: string;
+    clientRequestId: string;
+    pin: string;
+    modo: 'PREVIEW' | 'CONFIRM';
+    distribuicoes: Array<{ destinatarioCooperadoId: string; quantidade: number }>;
+    naturezaDistribuicao: 'ORIGEM_REGULAMENTO' | 'VOLUNTARIA' | 'PREMIACAO';
+    empresaDeclaraTetoClt?: boolean;
+    descricao?: string;
+    /** Pra AuditLog. Opcional. */
+    ip?: string;
+    userAgent?: string;
+  }) {
+    const {
+      empresaCooperadoId,
+      cooperativaId,
+      convenioId,
+      clientRequestId,
+      pin,
+      modo,
+      distribuicoes,
+      naturezaDistribuicao,
+      empresaDeclaraTetoClt,
+      descricao,
+      ip,
+      userAgent,
+    } = params;
+
+    // ── Guard 1: validação semântica das naturezas ──
+    if (naturezaDistribuicao === 'VOLUNTARIA' && empresaDeclaraTetoClt !== true) {
+      throw new BadRequestException(
+        'Distribuição VOLUNTARIA exige declaração explícita de respeito ao teto de 50% da remuneração (CLT 458 §2º). Confirme empresaDeclaraTetoClt=true.',
+      );
+    }
+    if (naturezaDistribuicao === 'PREMIACAO' && (!descricao || descricao.trim().length < 3)) {
+      throw new BadRequestException(
+        'Distribuição PREMIACAO exige descricao com motivo/meta da premiação (CLT 457 §2º — prêmio excluído da remuneração desde que vinculado a desempenho).',
+      );
+    }
+
+    // ── Guard 2: empresa-PJ existe + é PJ + status válido ──
+    const empresa = await this.prisma.cooperado.findFirst({
+      where: { id: empresaCooperadoId, cooperativaId },
+      select: { id: true, tipoPessoa: true, status: true, nomeCompleto: true },
+    });
+    if (!empresa) {
+      throw new NotFoundException('Empresa cooperada não encontrada ou não pertence ao seu tenant.');
+    }
+    if (!isEmpresaCooperada(empresa)) {
+      throw new ForbiddenException(
+        'Distribuir tokens é operação exclusiva de empresas cooperadas (PJ). Pessoas físicas usam transferência cooperado→cooperado.',
+      );
+    }
+    if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(empresa.status)) {
+      throw new ForbiddenException(
+        `Status ${empresa.status} não permite distribuir tokens. Permitidos: ATIVO ou ATIVO_RECEBENDO_CREDITOS.`,
+      );
+    }
+
+    // ── Guard 3: convênio existe + empresa é a `conveniada` ──
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: { id: true, conveniadoId: true, status: true, empresaNome: true },
+    });
+    if (!convenio) {
+      throw new NotFoundException('Convênio não encontrado.');
+    }
+    if (convenio.status !== 'ATIVO') {
+      throw new BadRequestException(`Convênio status=${convenio.status}; só convênios ATIVO permitem distribuição.`);
+    }
+    if (convenio.conveniadoId !== empresaCooperadoId) {
+      throw new ForbiddenException(
+        'Apenas a empresa conveniada (representante) pode distribuir tokens nesse convênio.',
+      );
+    }
+
+    // ── Guard 4: PIN FORA da tx (mesmo padrão F4 — rate-limit/lockout não bloqueia row) ──
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      throw new BadRequestException('PIN obrigatório (6 dígitos numéricos).');
+    }
+    if (!this.pinCooperadoService) {
+      throw new Error('PinCooperadoService não disponível (wiring do módulo).');
+    }
+    const pinResult = await this.pinCooperadoService.validarPinComLockout({
+      cooperadoId: empresaCooperadoId,
+      cooperativaId,
+      pin,
+    });
+    if (!pinResult.ok) {
+      if (pinResult.motivo === 'PIN_NAO_DEFINIDO') {
+        throw new BadRequestException(
+          'PIN da empresa não foi definido. Configure no portal de segurança antes de distribuir.',
+        );
+      }
+      if (pinResult.motivo === 'PIN_BLOQUEADO') {
+        throw new ForbiddenException(
+          `PIN bloqueado por excesso de tentativas. Tente após ${pinResult.desbloqueiaEm.toISOString()}.`,
+        );
+      }
+      throw new ForbiddenException('PIN incorreto.');
+    }
+
+    // ── Calcular totais + valor R$ ──
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const somaQuantidade = distribuicoes.reduce((s, d) => s + d.quantidade, 0);
+    const somaValorReais = Math.round(somaQuantidade * valorTokenReais * 100) / 100;
+    const { taxa: taxaTransfer, liquido: somaLiquido } = calcularTaxa(
+      'transferencia',
+      somaQuantidade,
+      config,
+    );
+
+    // ── Guard 5: assertLimite sobre TOTAL do lote (decisão Luciano ajuste 2) ──
+    // A empresa é quem gasta — limite por transação dela vs soma total.
+    await this.assertLimite({
+      cooperadoId: empresaCooperadoId,
+      cooperativaId,
+      valorReais: somaValorReais,
+      origem: 'enviarTokens', // 'distribuirTokens' não existe no enum origem; alias semântico
+    });
+
+    // ── Guard 6: validar destinatários (MEMBRO_ATIVO + ativo + mesma cooperativa) ──
+    const destinatarioIds = distribuicoes.map((d) => d.destinatarioCooperadoId);
+    const membros = await this.prisma.convenioCooperado.findMany({
+      where: {
+        convenioId,
+        cooperadoId: { in: destinatarioIds },
+        status: 'MEMBRO_ATIVO',
+        ativo: true,
+      },
+      select: { cooperadoId: true, cooperado: { select: { status: true, cooperativaId: true, nomeCompleto: true } } },
+    });
+    const membrosValidosSet = new Set(
+      membros
+        .filter(
+          (m) =>
+            m.cooperado.cooperativaId === cooperativaId &&
+            CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(m.cooperado.status),
+        )
+        .map((m) => m.cooperadoId),
+    );
+    const invalidos = destinatarioIds.filter((id) => !membrosValidosSet.has(id));
+
+    // ── Tipo unificado de retorno (idempotência hit + commit fresco) ──
+    type DistribuirResultado = {
+      clientRequestId: string;
+      distribuidos: number;
+      somaQuantidade: number;
+      somaValorReais: number;
+      somaLiquido?: number;
+      taxaTransfer?: number;
+      saldoEmpresaAntes?: number;
+      saldoEmpresaDepois?: number;
+      naturezaDistribuicao?: typeof naturezaDistribuicao;
+      linhas?: Array<{
+        destinatarioCooperadoId: string;
+        quantidade: number;
+        ledgerDebitoId: string;
+        ledgerCreditoId: string;
+        tokenTransacaoId: string;
+        jti: string;
+      }>;
+      /** Presente apenas em idempotência hit. */
+      primeiroLedgerId?: string;
+      processadoEm?: Date;
+    };
+
+    // ── Idempotência callback (consumer do helper) ──
+    const verificarIdempotencia = async (): Promise<DistribuirResultado | null> => {
+      const ledgerExistente = await this.prisma.cooperTokenLedger.findFirst({
+        where: {
+          cooperativaId,
+          referenciaId: clientRequestId,
+          referenciaTabela: 'MASS_WRITE_DISTRIBUICAO',
+        },
+        select: { id: true, createdAt: true },
+      });
+      if (!ledgerExistente) return null;
+      // Retorno sintético — UI mostra "lote já processado em ...".
+      return {
+        clientRequestId,
+        distribuidos: distribuicoes.length,
+        somaQuantidade,
+        somaValorReais,
+        primeiroLedgerId: ledgerExistente.id,
+        processadoEm: ledgerExistente.createdAt,
+      };
+    };
+
+    // ── Preview callback ──
+    const previewCb = async (items: typeof distribuicoes) => {
+      const alertas: MassWriteAlerta[] = [];
+      // Saldo empresa (snapshot fora da tx — só pra alerta UI).
+      const saldoEmpresa = await this.prisma.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: empresaCooperadoId },
+        select: { saldoDisponivel: true },
+      });
+      const saldoDisponivel = Number(saldoEmpresa?.saldoDisponivel ?? 0);
+      if (saldoDisponivel < somaQuantidade) {
+        alertas.push({
+          codigo: 'SALDO_INSUFICIENTE',
+          mensagem: `Saldo da empresa (${saldoDisponivel} tokens) é menor que o total do lote (${somaQuantidade}). Compre mais tokens ou ajuste as quantidades.`,
+          severidade: 'bloqueante',
+        });
+      }
+      if (invalidos.length > 0) {
+        alertas.push({
+          codigo: 'MEMBROS_INVALIDOS',
+          mensagem: `${invalidos.length} destinatário(s) não são MEMBRO_ATIVO deste convênio ou estão inativos. Aprove ou remova antes de distribuir.`,
+          severidade: 'bloqueante',
+        });
+      }
+      return {
+        totalItens: items.length,
+        alertas,
+        resumo: {
+          convenioId,
+          somaQuantidade,
+          somaValorReais,
+          somaLiquido,
+          taxaTransfer,
+          saldoEmpresaAntes: saldoDisponivel,
+          saldoEmpresaDepois: saldoDisponivel - somaQuantidade,
+          membrosValidos: distribuicoes.length - invalidos.length,
+          membrosInvalidos: invalidos.length,
+          naturezaDistribuicao,
+        },
+      };
+    };
+
+    // ── Commit callback (Serializable) ──
+    const commitCb = async ({
+      tx,
+      items,
+    }: {
+      tx: Prisma.TransactionClient;
+      items: typeof distribuicoes;
+    }): Promise<DistribuirResultado> => {
+      // Re-snapshot saldo DENTRO da tx (tudo-ou-nada).
+      const saldoEmpresa = await tx.cooperTokenSaldo.findUnique({
+        where: { cooperadoId: empresaCooperadoId },
+      });
+      if (!saldoEmpresa || Number(saldoEmpresa.saldoDisponivel) < somaQuantidade) {
+        throw new BadRequestException(
+          `Saldo insuficiente DENTRO da tx (race com outro lote?). Disponível: ${Number(saldoEmpresa?.saldoDisponivel ?? 0)}, soma do lote: ${somaQuantidade}. Tente novamente.`,
+        );
+      }
+
+      const saldoAntes = Number(saldoEmpresa.saldoDisponivel);
+      let saldoAtualEmpresa = saldoAntes;
+      const linhas: Array<{
+        destinatarioCooperadoId: string;
+        quantidade: number;
+        ledgerDebitoId: string;
+        ledgerCreditoId: string;
+        tokenTransacaoId: string;
+        jti: string;
+      }> = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const { destinatarioCooperadoId, quantidade } = items[i];
+
+        // Débito da empresa (acumulado linha a linha).
+        saldoAtualEmpresa = Math.round((saldoAtualEmpresa - quantidade) * 10000) / 10000;
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: empresaCooperadoId },
+          data: {
+            saldoDisponivel: saldoAtualEmpresa,
+            totalResgatado: { increment: quantidade },
+          },
+        });
+        const ledgerDebito = await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: empresaCooperadoId,
+            cooperativaId,
+            tipo: CooperTokenTipo.DISTRIBUICAO_CONVENIO,
+            operacao: CooperTokenOperacao.DEBITO,
+            quantidade,
+            saldoApos: saldoAtualEmpresa,
+            descricao: `Distribuição p/ funcionário ${destinatarioCooperadoId} (lote ${clientRequestId.slice(0, 8)}…)`,
+            // Idempotência de lote: 1ª linha (i=0) grava a referência. Linhas
+            // seguintes ficam sem (já estão amarradas via mesma tx + auditLog).
+            ...(i === 0
+              ? { referenciaId: clientRequestId, referenciaTabela: 'MASS_WRITE_DISTRIBUICAO' }
+              : {}),
+          },
+        });
+
+        // Crédito ao destinatário.
+        const saldoDestExistente = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: destinatarioCooperadoId },
+        });
+        let novoSaldoDest: number;
+        if (saldoDestExistente) {
+          novoSaldoDest = Math.round(
+            (Number(saldoDestExistente.saldoDisponivel) + quantidade) * 10000,
+          ) / 10000;
+          await tx.cooperTokenSaldo.update({
+            where: { cooperadoId: destinatarioCooperadoId },
+            data: {
+              saldoDisponivel: novoSaldoDest,
+              totalEmitido: { increment: quantidade },
+            },
+          });
+        } else {
+          novoSaldoDest = quantidade;
+          await tx.cooperTokenSaldo.create({
+            data: {
+              cooperadoId: destinatarioCooperadoId,
+              cooperativaId,
+              saldoDisponivel: quantidade,
+              totalEmitido: quantidade,
+            },
+          });
+        }
+        const ledgerCredito = await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: destinatarioCooperadoId,
+            cooperativaId,
+            tipo: CooperTokenTipo.DISTRIBUICAO_CONVENIO,
+            operacao: CooperTokenOperacao.CREDITO,
+            quantidade,
+            saldoApos: novoSaldoDest,
+            descricao: `Recebimento de tokens distribuídos pela empresa ${empresa.nomeCompleto} (lote ${clientRequestId.slice(0, 8)}…)`,
+          },
+        });
+
+        // TokenTransacao paralela (jti anti-replay + tier + motivoStepUp +
+        // naturezaDistribuicao + empresaDeclaraTetoClt — defesa CLT auditável).
+        const valorReaisLinha = Math.round(quantidade * valorTokenReais * 100) / 100;
+        const tokenTx = await criarTokenTransacao(tx, {
+          pagadorId: empresaCooperadoId,
+          pagadorCooperativaId: cooperativaId,
+          recebedorId: destinatarioCooperadoId,
+          recebedorCooperativaId: cooperativaId,
+          quantidadeTokens: quantidade,
+          valorReaisEstimado: valorReaisLinha,
+          tipoOperacao: 'TRANSFERENCIA',
+          status: 'CONFIRMADA',
+          pinValidadoEm: new Date(),
+          descricao: descricao ?? `Distribuição ${naturezaDistribuicao} (convênio ${convenioId})`,
+          referenciaExterna: clientRequestId,
+        });
+
+        // Persistir naturezaDistribuicao + empresaDeclaraTetoClt (Bloco A
+        // schema delta) — não está no helper porque é F3-specific. Update
+        // pós-create (criarTokenTransacao não tem esses campos no params).
+        await tx.tokenTransacao.update({
+          where: { id: tokenTx.id },
+          data: {
+            naturezaDistribuicao,
+            empresaDeclaraTetoClt:
+              naturezaDistribuicao === 'VOLUNTARIA' ? !!empresaDeclaraTetoClt : null,
+          },
+        });
+
+        linhas.push({
+          destinatarioCooperadoId,
+          quantidade,
+          ledgerDebitoId: ledgerDebito.id,
+          ledgerCreditoId: ledgerCredito.id,
+          tokenTransacaoId: tokenTx.id,
+          jti: tokenTx.jti,
+        });
+      }
+
+      this.logger.log(
+        `[F3] Distribuição lote=${clientRequestId.slice(0, 8)}… empresa=${empresaCooperadoId} convênio=${convenioId} linhas=${linhas.length} soma=${somaQuantidade} natureza=${naturezaDistribuicao} saldoAntes=${saldoAntes} saldoDepois=${saldoAtualEmpresa}`,
+      );
+
+      return {
+        clientRequestId,
+        distribuidos: linhas.length,
+        somaQuantidade,
+        somaValorReais,
+        somaLiquido,
+        taxaTransfer,
+        saldoEmpresaAntes: saldoAntes,
+        saldoEmpresaDepois: saldoAtualEmpresa,
+        naturezaDistribuicao,
+        linhas,
+      };
+    };
+
+    // ── Executar via helper mass-write ──
+    return executarMassWrite(this.prisma, {
+      acao: 'MASS_WRITE_DISTRIBUICAO',
+      cooperativaId,
+      usuarioId: empresaCooperadoId, // empresa-PJ é o "usuário" da ação
+      clientRequestId,
+      items: distribuicoes,
+      mode: modo,
+      verificarIdempotencia,
+      preview: previewCb,
+      commit: commitCb,
+      logExtra: () => ({
+        convenioId,
+        somaQuantidade,
+        somaValorReais,
+        naturezaDistribuicao,
+        empresaDeclaraTetoClt: empresaDeclaraTetoClt ?? null,
+      }),
+      ip,
+      userAgent,
+    });
   }
 
   // ── ConfigCooperToken ──
