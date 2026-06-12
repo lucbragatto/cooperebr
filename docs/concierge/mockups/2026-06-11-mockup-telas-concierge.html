@@ -414,36 +414,24 @@
 <!-- TELA 6 LANDING -->
 <div id="s-landing" class="screen p-6">
   <div class="max-w-4xl mx-auto">
-    <div class="bg-gradient-to-br from-emerald-600 to-cyan-600 rounded-lg p-8 text-white">
-      <div class="grid grid-cols-2 gap-8 items-center">
-        <div>
-          <span class="text-4xl">⚡</span>
-          <h1 class="text-3xl font-bold mt-2">Sua conta de luz esta te cobrando imposto a mais.</h1>
-          <div class="inline-block mt-3 bg-yellow-400 text-gray-900 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">⚖️ STF: você pode pedir 10 anos retroativos</div>
-          <p class="text-emerald-100 mt-3">Mande sua fatura e descubra em 1 minuto quanto voce pode recuperar na Justica. Auditoria <strong>gratis e automatica</strong>.</p>
-          <ul class="mt-4 space-y-1 text-sm">
-            <li>✅ EDP-ES, ELFSM, Energisa Tocantins</li>
-            <li>✅ Outras concessionárias: análise manual em 48h</li>
-            <li>✅ Sem cadastro, sem letra miuda</li>
-            <li>✅ Resposta no seu WhatsApp em 1 minuto</li>
-            <li>✅ Cooperativa CoopereBR + advogado parceiro</li>
-          </ul>
-        </div>
-        <div class="bg-white rounded-lg p-6 text-gray-800">
-          <h3 class="font-bold text-lg mb-3">Audite sua fatura</h3>
-          <label class="text-xs text-gray-600 font-semibold">📷 Tire foto ou faca upload da sua fatura</label>
-          <input type="file" class="block w-full mt-2 mb-3 text-sm">
-          <label class="text-xs text-gray-600 font-semibold">📱 Seu WhatsApp para receber o resultado</label>
-          <input type="text" placeholder="(27) 9 8134-1348" class="block w-full mt-2 mb-3 px-3 py-2 border rounded">
-          <label class="text-xs text-gray-600 font-semibold">🪪 Seu nome</label>
-          <input type="text" placeholder="Como voce gostaria de ser chamado" class="block w-full mt-2 mb-3 px-3 py-2 border rounded">
-          <label class="flex items-start gap-2 text-xs text-gray-600 my-3">
-            <input type="checkbox" class="mt-0.5">
-            Autorizo analise da minha fatura conforme a Politica de Privacidade (LGPD).
-          </label>
-          <button class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded font-semibold">🔍 Auditar gratis →</button>
-        </div>
+    <div class="bg-gradient-to-br from-emerald-600 to-cyan-600 rounded-lg p-10 text-white text-center">
+      <span class="text-5xl">⚡</span>
+      <h1 class="text-4xl font-bold mt-3 max-w-3xl mx-auto leading-tight">Sua conta de luz está te cobrando imposto a mais.</h1>
+      <div class="inline-block mt-4 bg-yellow-400 text-gray-900 text-sm font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">⚖️ STF: você pode pedir até 10 ANOS retroativos</div>
+      <p class="text-emerald-50 mt-5 text-lg max-w-2xl mx-auto">
+        Descubra <strong>em 1 minuto</strong> quanto você pode recuperar na Justiça.
+        Auditoria <strong>grátis, automática e auditável</strong>.
+      </p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-7 max-w-3xl mx-auto text-sm">
+        <div class="bg-white/15 backdrop-blur rounded-lg px-3 py-2">✅ EDP-ES</div>
+        <div class="bg-white/15 backdrop-blur rounded-lg px-3 py-2">✅ ELFSM</div>
+        <div class="bg-white/15 backdrop-blur rounded-lg px-3 py-2">✅ Energisa TO</div>
+        <div class="bg-white/15 backdrop-blur rounded-lg px-3 py-2">✅ Outras: 48h</div>
+        <div class="bg-white/15 backdrop-blur rounded-lg px-3 py-2">✅ Sem cadastro</div>
       </div>
+      <a href="#simular" class="inline-block mt-7 bg-white text-emerald-700 hover:bg-emerald-50 px-6 py-3 rounded-full font-bold text-base shadow-lg">
+        👇 Veja como funciona e simule abaixo
+      </a>
     </div>
 
     <div class="grid grid-cols-3 gap-4 mt-6">
@@ -545,12 +533,109 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-5 mt-6">
-      <h3 class="font-bold text-lg mb-3">📊 Casos reais auditados</h3>
-      <div class="text-sm space-y-2">
-        <div class="flex justify-between border-b pb-2"><span>👤 Cliente residencial (B1 GD) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 1.584 a <strong class="text-red-700">R$ 18.276</strong> em 10 anos</span></div>
-        <div class="flex justify-between border-b pb-2"><span>🏢 Cliente comercial (B3 GD) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 4.958 a <strong class="text-red-700">R$ 57.196</strong> em 10 anos</span></div>
-        <div class="flex justify-between"><span>🏭 Usina geradora (A4) — EDP-ES</span><span class="font-semibold text-emerald-700">R$ 22.156 a <strong class="text-red-700">R$ 255.120</strong> em 10 anos</span></div>
+    <div class="bg-white rounded-lg shadow p-6 mt-6">
+      <h3 class="font-bold text-xl mb-4 text-center">📊 Quanto outros consumidores estão recuperando</h3>
+      <p class="text-sm text-gray-600 text-center mb-5">Cenários reais auditados pelo nosso sistema. Valores em 10 anos (Decisão STF).</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="border-2 border-emerald-200 rounded-lg p-5 bg-gradient-to-br from-emerald-50 to-white">
+          <div class="text-3xl mb-2">👤</div>
+          <div class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Residencial B1 GD</div>
+          <div class="text-sm text-gray-600 mt-1">Fatura média R$ 264/mês</div>
+          <div class="text-3xl font-bold text-emerald-900 mt-4">R$ 18.276</div>
+          <div class="text-xs text-gray-500 mt-1">recuperáveis em 10 anos</div>
+          <div class="mt-3 text-xs bg-amber-100 text-amber-900 rounded px-2 py-1 inline-block">+ Dobro CDC: R$ 36.552</div>
+        </div>
+
+        <div class="border-2 border-emerald-300 rounded-lg p-5 bg-gradient-to-br from-emerald-50 to-white shadow-md transform md:scale-105">
+          <div class="text-3xl mb-2">🏢</div>
+          <div class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Comercial B3 GD</div>
+          <div class="text-sm text-gray-600 mt-1">Fatura média R$ 860/mês</div>
+          <div class="text-3xl font-bold text-emerald-900 mt-4">R$ 57.196</div>
+          <div class="text-xs text-gray-500 mt-1">recuperáveis em 10 anos</div>
+          <div class="mt-3 text-xs bg-amber-100 text-amber-900 rounded px-2 py-1 inline-block">+ Dobro CDC: R$ 114.392</div>
+        </div>
+
+        <div class="border-2 border-emerald-200 rounded-lg p-5 bg-gradient-to-br from-emerald-50 to-white">
+          <div class="text-3xl mb-2">🏭</div>
+          <div class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Usina A4</div>
+          <div class="text-sm text-gray-600 mt-1">Fatura média R$ 11.184/mês</div>
+          <div class="text-3xl font-bold text-emerald-900 mt-4">R$ 255.120</div>
+          <div class="text-xs text-gray-500 mt-1">recuperáveis em 10 anos</div>
+          <div class="mt-3 text-xs bg-amber-100 text-amber-900 rounded px-2 py-1 inline-block">+ Dobro CDC: R$ 510.240</div>
+        </div>
+      </div>
+
+      <div class="mt-5 text-center text-sm text-gray-600">
+        <strong>E você?</strong> Audite agora abaixo e descubra seu valor exato em 1 minuto. 👇
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- BLOCO FINAL — FORMULARIO DESTACADO                          -->
+    <!-- ============================================================ -->
+    <div id="simular" class="mt-8 bg-gradient-to-br from-emerald-700 via-emerald-600 to-cyan-600 rounded-2xl shadow-2xl p-2">
+      <div class="bg-white rounded-2xl p-8">
+        <div class="text-center mb-6">
+          <div class="inline-block bg-yellow-400 text-gray-900 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">⚖️ Audite com base na decisão STF</div>
+          <h2 class="text-3xl font-bold text-gray-900 mt-3">Simule agora quanto você tem a recuperar</h2>
+          <p class="text-gray-600 mt-2">Envie sua fatura e em 1 minuto você recebe o resultado no seu WhatsApp.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-gray-700 font-semibold flex items-center gap-2">📷 Tire foto OU faça upload da fatura</label>
+              <div class="mt-2 border-2 border-dashed border-emerald-300 rounded-lg p-6 text-center bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition">
+                <div class="text-3xl">📄</div>
+                <div class="text-sm text-emerald-700 font-semibold mt-1">Clique para enviar ou arraste aqui</div>
+                <div class="text-xs text-gray-500 mt-1">PDF ou imagem · até 10 MB</div>
+                <input type="file" accept="image/*,application/pdf" class="hidden">
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Aceitamos qualquer fatura dos últimos 10 anos · EDP-ES, ELFSM, Energisa TO, ou outras (análise manual em 48h)</p>
+            </div>
+
+            <div>
+              <label class="text-sm text-gray-700 font-semibold">📱 Seu WhatsApp</label>
+              <input type="text" placeholder="(27) 9 8134-1348" class="block w-full mt-2 px-4 py-3 border-2 border-gray-200 focus:border-emerald-500 rounded-lg text-lg">
+              <p class="text-xs text-gray-500 mt-1">Vamos enviar a auditoria por aqui — completamente grátis.</p>
+            </div>
+
+            <div>
+              <label class="text-sm text-gray-700 font-semibold">🪪 Seu nome</label>
+              <input type="text" placeholder="Como você gostaria de ser chamado" class="block w-full mt-2 px-4 py-3 border-2 border-gray-200 focus:border-emerald-500 rounded-lg">
+            </div>
+
+            <label class="flex items-start gap-2 text-xs text-gray-600 mt-3">
+              <input type="checkbox" class="mt-0.5">
+              <span>Autorizo análise da minha fatura conforme a <a href="#" class="text-emerald-700 underline">Política de Privacidade</a> (LGPD).</span>
+            </label>
+
+            <button class="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white py-4 rounded-lg font-bold text-lg shadow-lg">
+              🔍 Auditar minha conta GRÁTIS →
+            </button>
+            <p class="text-xs text-center text-gray-500">Sem cadastro · Sem cartão · Sem letra miúda</p>
+          </div>
+
+          <div class="bg-gradient-to-br from-gray-50 to-emerald-50 rounded-lg p-5 border border-emerald-100">
+            <h3 class="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">🎯 O que você vai receber</h3>
+            <ul class="space-y-3 text-sm text-gray-700">
+              <li class="flex items-start gap-2"><span class="text-emerald-600 text-lg">✅</span><div><strong>Valor exato mensal</strong> que você está pagando a mais</div></li>
+              <li class="flex items-start gap-2"><span class="text-emerald-600 text-lg">✅</span><div><strong>Projeção em 5 e 10 anos</strong> (com a decisão STF)</div></li>
+              <li class="flex items-start gap-2"><span class="text-emerald-600 text-lg">✅</span><div><strong>Cenário com dobro CDC</strong> se for caracterizado má-fé da distribuidora</div></li>
+              <li class="flex items-start gap-2"><span class="text-emerald-600 text-lg">✅</span><div><strong>Fundamento jurídico completo</strong> auditável (Tema 69 STF, Lei 14.385/22, etc)</div></li>
+              <li class="flex items-start gap-2"><span class="text-emerald-600 text-lg">✅</span><div><strong>Próximos passos</strong> com advogado parceiro (sem obrigação)</div></li>
+            </ul>
+
+            <div class="mt-5 pt-5 border-t border-emerald-200">
+              <div class="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">🔒 Dados em segurança</div>
+              <p class="text-xs text-gray-600 leading-relaxed">
+                Sua fatura é processada por IA auditável. Não vendemos dados, não enviamos spam.
+                Você pode pedir exclusão a qualquer momento (LGPD).
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
