@@ -110,6 +110,11 @@ model Cooperativa {
   aparelhosVinculados       AparelhoVinculado[]
   tokenTransacoesPagador    TokenTransacao[]                  @relation("TokenTransacaoPagadorCoop")
 
+  // ── Sprint C8 (12/06/2026) — Concierge Captacao via WhatsApp ──
+  // Leads captados via WA antes de virarem Cooperado. Funil 9 etapas:
+  // RECEBIDO -> OCR_PROCESSANDO -> DIAGNOSTICO_PRONTO -> ... -> CONVERTIDO.
+  leadsConcierge            LeadConcierge[]
+
   // ── Sprint Concierge MVP (11/06/2026) — Modulo SaaS Concierge Tributario ──
   // Quando true, /dashboard/concierge fica acessivel ao admin + endpoints
   // /concierge/* funcionam pra essa cooperativa. Quando false, modulo bloqueado
@@ -3905,3 +3910,85 @@ model DiagnosticoIndebito {
   @@index([perfilCliente])
   @@map("diagnosticos_indebito")
 }
+
+// ─── Sprint C8 (12/06/2026) — Concierge WhatsApp ─────────────────────────────
+
+/// Lead captado via WhatsApp do Concierge antes de virar Cooperado.
+/// Funil 9 etapas: RECEBIDO -> OCR_PROCESSANDO -> DIAGNOSTICO_PRONTO ->
+/// INTERESSE_CONFIRMADO -> DADOS_COLETADOS -> DOCUMENTOS_COLETADOS ->
+/// PROCURACAO_ASSINADA -> PAGAMENTO_CONFIRMADO -> CONVERTIDO.
+///
+/// Status finais alternativos: ABANDONADO, INELEGIVEL, FALLBACK_HUMANO.
+/// Multi-tenant: SEMPRE filtrar por cooperativaId em queries.
+model LeadConcierge {
+  id                       String                 @id @default(uuid())
+
+  /// Tenant — cooperativa alvo da adesao (CoopereBR ou outra com modulo ativo).
+  cooperativaId            String
+  cooperativa              Cooperativa            @relation(fields: [cooperativaId], references: [id])
+
+  /// Telefone E.164 (ex: +5527981341348).
+  telefone                 String
+
+  nome                     String?
+  email                    String?
+  cpfCnpj                  String?
+  cidade                   String?
+  uf                       String?
+
+  /// EDP_ES, ELFSM, ENERGISA_TO etc. NULL ate OCR detectar.
+  concessionaria           String?
+
+  /// Path local/S3 do PDF da fatura recebida no WA.
+  faturaPdfPath            String?
+
+  statusLead               StatusLeadConcierge    @default(RECEBIDO)
+
+  /// FK opcional pro DiagnosticoIndebito (relacao nao forcada para evitar
+  /// ciclo de import; controlador da integridade fica no service).
+  diagnosticoIndebitoId    String?
+
+  /// FK opcional pro Cooperado quando o lead converte na ETAPA 9.
+  cooperadoId              String?
+
+  motivoAbandono           String?
+  procuracaoAssinadaEm     DateTime?
+  pagamentoConfirmadoEm    DateTime?
+
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  @@index([cooperativaId, telefone])
+  @@index([cooperativaId, statusLead])
+  @@map("leads_concierge")
+}
+
+/// Status do funil Concierge WA. Ordem nominal:
+/// RECEBIDO -> OCR_PROCESSANDO -> DIAGNOSTICO_PRONTO -> INTERESSE_CONFIRMADO
+/// -> DADOS_COLETADOS -> DOCUMENTOS_COLETADOS -> PROCURACAO_ASSINADA
+/// -> PAGAMENTO_CONFIRMADO -> CONVERTIDO.
+/// Status finais alternativos: ABANDONADO, INELEGIVEL, FALLBACK_HUMANO.
+enum StatusLeadConcierge {
+  RECEBIDO
+  OCR_PROCESSANDO
+  DIAGNOSTICO_PRONTO
+  INTERESSE_CONFIRMADO
+  DADOS_COLETADOS
+  DOCUMENTOS_COLETADOS
+  PROCURACAO_ASSINADA
+  PAGAMENTO_CONFIRMADO
+  CONVERTIDO
+  ABANDONADO
+  INELEGIVEL
+  FALLBACK_HUMANO
+}
+
+// Nota sobre estados WA novos (Sprint C8):
+// ConversaWhatsapp.estado eh `String`, nao enum (vide model linha 2215).
+// Os estados novos do funil Concierge sao constantes documentadas no service
+// ConciergeWaService (campos string), nao adicao de valores em enum Prisma.
+// Estados novos: CONCIERGE_INICIAL, CONCIERGE_AGUARDANDO_FATURA,
+//                CONCIERGE_PROCESSANDO_OCR, CONCIERGE_DIAGNOSTICO_ENTREGUE,
+//                CONCIERGE_AGUARDANDO_RG_CNH, CONCIERGE_AGUARDANDO_ASSINATURA,
+//                CONCIERGE_AGUARDANDO_PAGAMENTO, CONCIERGE_FALLBACK_HUMANO.
+
