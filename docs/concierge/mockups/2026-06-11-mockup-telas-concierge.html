@@ -26,9 +26,10 @@
       <span class="nav-tab active" onclick="show(event,'lista')">1. Lista</span>
       <span class="nav-tab" onclick="show(event,'laurentino')">2. Laurentino (Tese 3)</span>
       <span class="nav-tab" onclick="show(event,'sinergia')">3. Sinergia (Tese 2)</span>
-      <span class="nav-tab" onclick="show(event,'guilherme')">4. Guilherme ELFSM</span>
-      <span class="nav-tab" onclick="show(event,'admin')">5. Super-admin</span>
-      <span class="nav-tab" onclick="show(event,'landing')">6. Landing publica</span>
+      <span class="nav-tab" onclick="show(event,'exfishes')">4. EXFISHES (GDIII)</span>
+      <span class="nav-tab" onclick="show(event,'guilherme')">5. Guilherme ELFSM</span>
+      <span class="nav-tab" onclick="show(event,'admin')">6. Super-admin</span>
+      <span class="nav-tab" onclick="show(event,'landing')">7. Landing publica</span>
     </div>
   </div>
 </div>
@@ -101,14 +102,14 @@
           </div>
         </div>
 
-        <div class="p-4 border rounded-lg flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+        <div class="p-4 border-2 border-red-300 bg-red-50 rounded-lg flex justify-between items-center cursor-pointer hover:shadow" onclick="show(event,'exfishes')">
           <div>
             <div class="font-semibold text-gray-800">EXFISHES TERMINAL PESQUEIRO SPE LTDA</div>
-            <div class="text-xs text-gray-500">CNPJ 46.416.512/0001-34 · EDP-ES B3 GDIII</div>
+            <div class="text-xs text-gray-500">CNPJ 46.416.512/0001-34 · EDP-ES B3 GDIII · Compensação SCEE ativa</div>
           </div>
           <div class="text-right">
             <div class="font-medium text-gray-700">14 faturas</div>
-            <div class="text-xs text-red-700 font-semibold">Indebito MENSAL: R$ 2.515 (Tese 3)</div>
+            <div class="text-xs text-red-700 font-semibold">Indébito MENSAL: R$ 2.515 (Tese 3 PIS/COFINS)</div>
           </div>
         </div>
 
@@ -402,7 +403,152 @@
   </div>
 </div>
 
-<!-- TELA 4 GUILHERME -->
+<!-- TELA 4 EXFISHES (GDIII) -->
+<div id="s-exfishes" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'lista')">← Voltar a lista</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">🛡️ Auditoria — Cooperada GDIII</h1>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4 grid grid-cols-2 gap-4">
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Cooperado</div><div class="font-semibold text-gray-800 mt-1">EXFISHES TERMINAL PESQUEIRO SPE LTDA</div><div class="text-xs text-gray-500">PJ — CNPJ 46.416.512/0001-34 · Comércio B3</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">UC + Modelo</div><div class="font-semibold text-gray-800 mt-1">0.001.233.346.054-81</div><div class="text-xs text-gray-500">EDP-ES · B3 COMERCIAL · GDIII (compensação SCEE)</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Fatura</div><div class="font-semibold text-gray-800 mt-1">Abril/2026 — R$ 32.486,37</div><div class="text-xs text-gray-500">73.400 kWh fornecidos + 73.400 kWh injetados (SCEE GDIII)</div></div>
+      <div><div class="text-xs text-gray-500 uppercase font-semibold">Particularidade</div><div class="font-semibold text-orange-800 mt-1">⚡ Caso com transição GDIII documentada</div><div class="text-xs text-gray-500">Antes de virar GDIII: indébito R$ 3.611/mês (90% da conta!)</div></div>
+    </div>
+
+    <div class="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-6 mt-4">
+      <div class="grid grid-cols-3 gap-6">
+        <div><div class="text-xs text-gray-600 uppercase font-semibold">Valor PAGO</div><div class="text-2xl font-bold text-gray-800 mt-1">R$ 32.486,37</div></div>
+        <div><div class="text-xs text-emerald-700 uppercase font-semibold">Valor CORRETO (Tese 3)</div><div class="text-2xl font-bold text-emerald-700 mt-1">R$ 29.971,13</div></div>
+        <div><div class="text-xs text-red-600 uppercase font-semibold">Sobrepreço mensal</div><div class="text-2xl font-bold text-red-600 mt-1">R$ 2.515,24 <span class="text-base font-medium">(7,7%)</span></div></div>
+      </div>
+    </div>
+
+    <div class="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-4 mt-4">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl">📊</span>
+        <div class="flex-1">
+          <h3 class="font-bold text-amber-900">Caso EXFISHES — transição GDIII documentada</h3>
+          <p class="text-sm text-amber-800 mt-2 leading-relaxed">
+            EXFISHES virou cooperada GDIII em <strong>março/2026</strong>. Auditoria das faturas anterior/posterior à transição mostra que:
+          </p>
+          <table class="w-full text-sm mt-3 bg-white rounded border border-amber-200">
+            <thead class="bg-amber-100">
+              <tr><th class="text-left p-2">Período</th><th class="text-right p-2">Conta Total</th><th class="text-right p-2">Indébito Tese 3</th><th class="text-right p-2">% sobre conta</th></tr>
+            </thead>
+            <tbody>
+              <tr class="border-t"><td class="p-2 font-semibold">Mar/2026 — ANTES GDIII</td><td class="p-2 text-right">R$ 3.997</td><td class="p-2 text-right text-red-700 font-bold">R$ 3.611</td><td class="p-2 text-right text-red-900 font-bold">90% 🚨</td></tr>
+              <tr class="border-t bg-amber-50"><td class="p-2 font-semibold">Abr/2026 — DEPOIS GDIII</td><td class="p-2 text-right">R$ 32.486</td><td class="p-2 text-right text-red-700 font-bold">R$ 2.515</td><td class="p-2 text-right text-amber-900 font-semibold">7,7%</td></tr>
+            </tbody>
+          </table>
+          <p class="text-xs text-amber-700 mt-2 italic">
+            💡 Mesmo após GDIII (que reduz proporcionalmente o impacto), o indébito MENSAL permanece alto em valor absoluto (R$ 2.515) porque a EDP cobra PIS/COFINS sobre a base BRUTA energética (R$ 73.677), sem descontar a injeção SCEE.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-1">📅 Projeção retroativa — duas vias possíveis</h2>
+      <p class="text-sm text-gray-600 mb-4">EXFISHES tem indébito mensal de R$ 2.515,24 desde ANTES de virar GDIII (situação anterior em mar/26 era 12x maior em proporção).</p>
+
+      <div class="border-l-4 border-blue-400 bg-blue-50 rounded-lg p-4 mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 1 — TRIBUTÁRIA</span>
+          <span class="text-xs text-blue-700 font-medium">5 anos · Justiça Federal · Tema 69 STF + CTN art. 168</span>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">12m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 31.387</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">24m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 65.189</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">36m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 101.405</div></div>
+          <div class="cenario-card border border-blue-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">48m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 140.035</div></div>
+          <div class="cenario-card border-2 border-blue-500 bg-blue-100 rounded-lg p-2 text-center"><div class="text-xs text-blue-800 font-semibold">60m ★</div><div class="text-base font-bold text-blue-900 mt-1">R$ 181.080</div><div class="text-xs text-blue-700">Teto</div></div>
+        </div>
+      </div>
+
+      <div class="border-l-4 border-red-500 bg-gradient-to-br from-red-50 to-amber-50 rounded-lg p-4">
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="bg-red-600 text-white text-xs px-2 py-0.5 rounded font-bold">VIA 2 — CONSUMERISTA</span>
+          <span class="bg-yellow-400 text-gray-900 text-xs px-2 py-0.5 rounded font-bold">⚖️ DECISÃO STF 2024</span>
+          <span class="text-xs text-red-800 font-medium">10 anos · Justiça Estadual · Lei 14.385/22 + CC 884 + CDC</span>
+        </div>
+        <div class="grid grid-cols-5 gap-2">
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">60m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 181.080</div><div class="text-xs text-gray-400">5 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">84m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 253.512</div><div class="text-xs text-gray-400">7 anos</div></div>
+          <div class="cenario-card border border-red-200 bg-white rounded-lg p-2 text-center"><div class="text-xs text-gray-500 font-semibold">108m</div><div class="text-base font-bold text-gray-800 mt-1">R$ 325.944</div><div class="text-xs text-gray-400">9 anos</div></div>
+          <div class="cenario-card border-2 border-red-500 bg-red-100 rounded-lg p-2 text-center"><div class="text-xs text-red-800 font-semibold">120m ★</div><div class="text-base font-bold text-red-900 mt-1">R$ 362.160</div><div class="text-xs text-red-700">Teto STF</div></div>
+          <div class="cenario-card border-2 border-red-700 bg-red-200 rounded-lg p-2 text-center"><div class="text-xs text-red-900 font-bold">120m × 2 🚨</div><div class="text-base font-bold text-red-900 mt-1">R$ 724.320</div><div class="text-xs text-red-800">Dobro CDC</div></div>
+        </div>
+        <div class="mt-3 text-xs text-red-800 italic">
+          💡 Para EXFISHES, a diferença entre as vias chega a <strong>R$ 543.240</strong> (Via 2 dobro CDC menos Via 1 teto). Caso comercial com fluxo alto justifica investimento processual mais robusto.
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-1">📋 Decomposição por rubrica — Tese 3 PIS/COFINS sobre SCEE</h2>
+      <p class="text-sm text-gray-600 mb-3">EDP cobra PIS/COFINS sobre TUSD+TE FORNECIDA BRUTA, sem descontar a INJEÇÃO SCEE. A base CORRETA seria sobre o líquido pós-compensação.</p>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr><th class="text-left p-2">Rubrica</th><th class="text-right p-2">Valor R$</th><th class="text-right p-2 text-orange-700">PIS+COFINS cobrado</th><th class="text-right p-2 text-emerald-700">PIS+COFINS legítimo</th></tr>
+        </thead>
+        <tbody>
+          <tr class="border-t"><td class="p-2">TUSD — Energia Ativa Fornecida (73.400 kWh)</td><td class="p-2 text-right">+43.743,61</td><td class="p-2 text-right font-bold text-orange-900">R$ 1.909,76</td><td class="p-2 text-right text-gray-400">—</td></tr>
+          <tr class="border-t"><td class="p-2 text-gray-600">TUSD — Injetada GDIII (-73.400 kWh)</td><td class="p-2 text-right text-red-600">−17.917,63</td><td class="p-2 text-right text-gray-400">0,00</td><td class="p-2 text-right text-gray-400">—</td></tr>
+          <tr class="border-t"><td class="p-2">TE — Energia Ativa Fornecida (73.400 kWh)</td><td class="p-2 text-right">+29.933,42</td><td class="p-2 text-right font-bold text-orange-900">R$ 1.306,83</td><td class="p-2 text-right text-gray-400">—</td></tr>
+          <tr class="border-t"><td class="p-2 text-gray-600">TE — Injetada GDIII (-73.400 kWh)</td><td class="p-2 text-right text-red-600">−23.309,59</td><td class="p-2 text-right text-gray-400">0,00</td><td class="p-2 text-right text-gray-400">—</td></tr>
+          <tr class="border-t bg-cyan-50"><td class="p-2 font-bold">Líquido pós-SCEE (BASE CORRETA Tese 3)</td><td class="p-2 text-right font-bold">R$ 32.449,81</td><td class="p-2 text-right text-orange-900 font-bold">R$ 3.216,59</td><td class="p-2 text-right text-emerald-900 font-bold">R$ 701,35</td></tr>
+          <tr class="border-t bg-emerald-100 font-bold"><td class="p-2 text-base">INDÉBITO TESE 3 EXFISHES</td><td class="p-2 text-right text-gray-600">base = R$ 19.924,72</td><td class="p-2 text-right text-red-700">cobrado: R$ 3.216,59</td><td class="p-2 text-right text-emerald-900 text-base">−R$ 2.515,24/mês</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="text-xl font-semibold text-gray-800 mb-3">📊 Decomposição por tese (mensal × cenários)</h2>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr><th class="text-left p-2">Tese</th><th class="text-center p-2">Sinal</th><th class="text-right p-2">Mensal</th><th class="text-right p-2 text-blue-700">Via Trib (60m)</th><th class="text-right p-2 text-red-700">Via Cons (120m)</th><th class="text-right p-2 text-red-900">+ Dobro CDC</th><th class="text-center p-2">Risco</th></tr>
+        </thead>
+        <tbody>
+          <tr class="border-t">
+            <td class="p-2"><div class="font-semibold">Tema 69 STF stricto</div><div class="text-xs text-gray-500">RE 574.706</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">SEM DIVERG.</span></td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-center text-gray-400">—</td>
+          </tr>
+          <tr class="border-t bg-red-50">
+            <td class="p-2"><div class="font-bold text-red-900">Tese 3 — PIS/COFINS sobre SCEE</div><div class="text-xs text-red-700">Tema 69 analogia + Tema 986 STJ + ratificação ELFSM</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-red-200 text-red-900 text-xs font-semibold">INDÉBITO</span></td>
+            <td class="p-2 text-right font-bold text-red-900">R$ 2.515,24</td>
+            <td class="p-2 text-right font-bold text-blue-900">R$ 181.080</td>
+            <td class="p-2 text-right font-bold text-red-900">R$ 362.160</td>
+            <td class="p-2 text-right font-bold text-red-900 bg-red-100">R$ 724.320</td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">MÉDIO</span></td>
+          </tr>
+          <tr class="border-t">
+            <td class="p-2"><div class="font-semibold">Tese 2 — ICMS sobre TUSD-G/Demanda</div><div class="text-xs text-gray-500">Não há demanda contratada nesta UC</div></td>
+            <td class="p-2 text-center"><span class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs">N/A</span></td>
+            <td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td><td class="p-2 text-right text-gray-400">—</td>
+            <td class="p-2 text-center text-gray-400 text-xs">B3 sem demanda contratada</td>
+          </tr>
+          <tr class="border-t bg-emerald-100 font-bold">
+            <td class="p-2 text-lg">TOTAL EXFISHES</td><td class="p-2"></td>
+            <td class="p-2 text-right text-emerald-900 text-base">R$ 2.515,24</td>
+            <td class="p-2 text-right text-blue-900 text-base">R$ 181.080</td>
+            <td class="p-2 text-right text-red-900 text-base">R$ 362.160</td>
+            <td class="p-2 text-right text-red-900 bg-red-200 text-lg">R$ 724.320</td>
+            <td class="p-2"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mt-4 text-sm leading-relaxed">
+      <strong>⚖️ Tese 3 — Particularidade GDIII:</strong> EDP cobra PIS/COFINS sobre a base BRUTA (TUSD+TE fornecida de 73.400 kWh) sem desconto pela injeção SCEE de 73.400 kWh (cancelamento). Como a alíquota é 3,52%, o indébito mensal fica em R$ 2.515. <strong>Sob a Lei 14.300/2022 (Marco Legal GD)</strong>, a energia SCEE é "empréstimo gratuito" — não constitui receita da concessionária. <strong>Ratificação ELFSM</strong> prova que tecnicamente é possível aplicar correto (concessionária do mesmo ES aplica a SCEE em ambos os tributos).
+    </div>
+  </div>
+</div>
+
+<!-- TELA 5 GUILHERME ELFSM -->
 <div id="s-guilherme" class="screen p-6">
   <div class="max-w-6xl mx-auto">
     <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'lista')">← Voltar a lista</a>
