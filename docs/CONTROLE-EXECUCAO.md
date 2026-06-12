@@ -49,7 +49,69 @@
 
 ---
 
-## ONDE PARAMOS — 2026-06-11 (Cowork — Concierge C3 + C2.5 + C2.6 + MVP SaaS, paralelo ao M31 Code)
+## ONDE PARAMOS — 2026-06-11 NOITE (Cowork — Mockup 10 telas + Tese 5 STF + EXFISHES 14 faturas WIP)
+
+**Sessão Cowork longa noite, em paralelo ao Code que rodava M32 Sprint Clube P1 F4.**
+
+**Entregas principais:**
+
+1. **Mockup standalone HTML completo** — `docs/concierge/mockups/2026-06-11-mockup-telas-concierge.html` (1342 linhas, **10 telas**): Lista, 4 casos reais (Laurentino, Sinergia ICMS+PIS/COFINS, EXFISHES, Guilherme ELFSM), Leads recebidos, Upload manual admin, Super-admin com CoopereBR ativada, Landing pública com imprensa, **Fluxo WhatsApp** (organograma 9 estados + 4 auxiliares + estimativas de funil).
+
+2. **Tese 5 catalogada** — `docs/concierge/2026-06-11-tese-5-enriquecimento-sem-causa-decenal.md`: STF 2024 fixou **10 anos de prescrição** + **dobro CDC**. Multiplica valores recuperáveis 2-4×. Combinada com Tese 3 (PIS/COFINS sobre SCEE) e Tese 2 (ICMS sobre TUSD-G), os 4 casos do mockup chegam a R$ 1.724.927 no cenário máximo (120m + dobro CDC).
+
+3. **Correção SELIC linear** — substituído fator fixo 1,20 por `1 + meses/12 × 0.04` em todos os cenários. Versão 22:34 do mockup é a correta. Impacto: +16,7% no teto Via 2 do EXFISHES (R$ 362.160 → R$ 422.560).
+
+4. **Adendo cenários múltiplos** — `docs/concierge/2026-06-11-adendo-cenarios-multiplos-projecao.md`: substitui coleta de `dataInicioScee` por 5 colunas de projeção. Cancela `D-novo-LEAD-CONCIERGE-DATA-SCEE` e `D-novo-OCR-AUTO-DETECT-SCEE`.
+
+5. **Spec C8 captação WA** + **levantamento técnico bot** — `docs/concierge/2026-06-11-spec-c8-concierge-captacao-wa.md` + `docs/arquitetura/2026-06-11-levantamento-tecnico-bot-whatsapp.md`. Diagnóstico: 51 estados WA + 14 services + 4 modelos Prisma. Spec C8 adiciona 4 estados novos.
+
+**🚨 ACHADO CRÍTICO (EXFISHES 14 faturas reais) — narrativa do mockup INCORRETA:**
+
+Análise da 1ª fatura da série (FEV/2025) mostra `oUC oPT 01/2025` com 53.574 kWh injetados e Créditos Recebidos 53.574,3014 kWh. **EXFISHES já estava no SCEE desde out/2024 ou antes** — NÃO virou GDIII em mar/2026 como afirma a Tela 4 do mockup. A "fatura antes de GDIII" (R$ 3.997 mar/2026 com indébito 90%) provavelmente é fatura com saldo SCEE menor naquele mês, não pré-GDIII. **Tela 4 do mockup precisa ser corrigida ANTES de qualquer envio pro advogado parceiro.**
+
+**Inventário da série EXFISHES:**
+
+- **14 faturas únicas** (FEV/2025 → MAI/2026, com gaps MAR/2025 e MAI/2025)
+- **3 triplicatas confirmadas por MD5**: `#2 MAR2026 = #14 MAR2026 = MARÇO COOPEREBR 1`; `#15 ABR2026 = ABRIL COOPEREBR 2 = exfishes gdIII`
+- **Pedir pro Luciano amanhã**: puxar MAR/2025 e MAI/2025 do portal EDP-ES
+
+**Parser parcial (`backend/scripts/exfishes-parser-v1-WIP.py`) com 3 bugs identificados:**
+1. TOTAL truncado (perde decimais)
+2. TUSD/TE injetadas as vezes capturam R$ 200 (contrib ilum pública)
+3. Vários indébitos vieram negativos (erro de captura de base)
+
+JSON parcial preservado em `docs/concierge/wip/exfishes-series-v1-WIP.json`.
+
+**Débitos novos catalogados:**
+
+- `D-novo-EXFISHES-PARSER-BUGS` **P0** — refinar 3 regex + calibrar com ABR/2026 conhecido (R$ 2.515,24)
+- `D-novo-EXFISHES-NARRATIVA-GDIII-INCORRETA` **P0** — corrigir Tela 4 do mockup
+- `D-novo-EXFISHES-SERIE-INCOMPLETA` **P1** — puxar MAR/2025 e MAI/2025 do portal EDP
+- `D-novo-CONCIERGE-CENARIOS-MULTIPLOS-UI` **P1** — implementar tabela 5 colunas
+
+**Débitos resolvidos:**
+- `D-novo-LEAD-CONCIERGE-DATA-SCEE` CANCELADO (cenários múltiplos)
+- `D-novo-OCR-AUTO-DETECT-SCEE` CANCELADO (cenários múltiplos)
+- `D-novo-CONCIERGE-JANELA-EFETIVA` REBAIXADO P0→P2
+- `D-novo-SELIC-FATOR-FIXO-MOCKUP` RESOLVIDO
+
+**Doc-sessão completo:** `docs/sessoes/2026-06-11-cowork-concierge-mockup-completo-e-exfishes-16faturas.md`
+
+**Commit AINDA NÃO realizado** — Luciano fará via PowerShell em terminal separado do Code amanhã (instruções no doc-sessão).
+
+**Frase de retomada Cowork (próxima sessão):**
+
+```
+Continuar análise EXFISHES — refinar parser v1 (3 bugs documentados em
+backend/scripts/exfishes-parser-v1-WIP.py), calibrar com ABR/2026
+(R$ 2.515,24 esperado), rodar nas 14 faturas reais, identificar marco
+real do SCEE, corrigir Tela 4 do mockup, gerar dossiê EXFISHES + XLSX
+pro advogado parceiro.
+```
+
+---
+
+## ONDE PARAMOS — 2026-06-11 MANHÃ (Cowork — Concierge C3 + C2.5 + C2.6 + MVP SaaS, paralelo ao M31 Code)
 
 **3 commits trabalho Cowork (claude.ai):**
 
