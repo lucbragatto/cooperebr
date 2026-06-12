@@ -7,6 +7,7 @@ import type {
 import { DetectorTema69Stricto } from './detector-tema69-stricto';
 import { DetectorTese3PisCofinsSobreScee } from './detector-tese3-pis-sobre-scee';
 import { DetectorTese2IcmsTusdGeracao } from './detector-tese2-icms-tusd-g';
+import { DetectorTese6IcmsTusdTeSobreScee } from './detector-tese6-icms-scee';
 
 /**
  * Resultado consolidado de TODOS os detectores rodando sobre uma fatura.
@@ -28,8 +29,10 @@ export interface ResultadoConsolidadoDetectores {
 /**
  * Registry/factory dos detectores tributarios.
  *
- * Sprint C3 entrega 3 detectores. Sprint C8+ podera adicionar:
- *   - DetectorTese4InconstGerar - Lei GERAR §3 (risco alto, retaguarda)
+ * Sprint C3 entrega 3 detectores iniciais.
+ * Sprint C3.6 (12/06/2026) adiciona Tese 6 (ICMS sobre TUSD/TE em GD).
+ * Sprint C8+ podera adicionar:
+ *   - DetectorTese4InconstGerar - Lei GERAR par. 3 (risco alto, retaguarda)
  *   - DetectorTeseCdeEscassezHidrica - CDE escassez hidrica (sem precedente STF)
  *   - DetectorIcmsBaseGrossUp - assimetria gross-up calculo "por dentro"
  */
@@ -41,8 +44,9 @@ export class DetectoresRegistry {
     tema69: DetectorTema69Stricto,
     tese3: DetectorTese3PisCofinsSobreScee,
     tese2: DetectorTese2IcmsTusdGeracao,
+    tese6: DetectorTese6IcmsTusdTeSobreScee,
   ) {
-    this.detectores = [tema69, tese3, tese2];
+    this.detectores = [tema69, tese3, tese2, tese6];
   }
 
   /**

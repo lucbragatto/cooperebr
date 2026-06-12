@@ -33,6 +33,7 @@
       <span class="nav-tab" onclick="show(event,'fluxowa')">8. Fluxo WhatsApp</span>
       <span class="nav-tab" onclick="show(event,'admin')">9. Super-admin</span>
       <span class="nav-tab" onclick="show(event,'landing')">10. Landing publica</span>
+      <span class="nav-tab" onclick="show(event,'tese6')">⚖️ 11. Tese 6 + Dossie real EXFISHES</span>
     </div>
   </div>
 </div>
@@ -1337,6 +1338,141 @@ function show(ev, id) {
   window.scrollTo(0, 0);
 }
 </script>
+
+
+<!-- TELA 11 — TESE 6 + DOSSIE REAL EXFISHES -->
+<div id="s-tese6" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-2">⚖️ Tese 6 — ICMS sobre TUSD/TE em GD + Dossiê EXFISHES Real (14 faturas)</h1>
+    <p class="text-sm text-gray-500">Nova tese catalogada em 12/06/2026. Análise das 14 faturas EXFISHES (FEV/2025 → MAI/2026).</p>
+
+    <!-- ALERTA: Correção da Tela 4 -->
+    <div class="bg-amber-50 border-l-4 border-amber-500 rounded-lg p-4 mt-4">
+      <div class="font-bold text-amber-900">⚠️ Correção da narrativa anterior (Tela 4)</div>
+      <p class="text-sm text-amber-900 mt-1">A análise das 14 faturas reais mostra que EXFISHES <strong>já estava no SCEE desde FEV/2025</strong> (provavelmente out/2024). A "transição GDIII em mar/2026" não foi entrada no SCEE — foi mudança de regime de injeção (de saldo residual baixo pra 100% do consumo). Tela 4 vai ser corrigida em próxima iteração.</p>
+    </div>
+
+    <!-- Fundamento Tese 6 -->
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">📚 Fundamento jurídico em camadas</h2>
+      <div class="space-y-3 text-sm">
+        <div class="border-l-4 border-emerald-600 bg-emerald-50 p-3 rounded">
+          <div class="font-bold text-emerald-900">⭐ PRIMÁRIO — Art. 79 Lei 5.764/71 (Ato Cooperativo)</div>
+          <p class="text-gray-700 mt-1 text-xs">"Atos cooperativos NÃO implicam operação de mercado nem contrato de compra e venda". Cooperado cotiza custo da usina e recebe créditos compensatórios. <strong>Não há circulação jurídica de mercadoria</strong> — falta fato gerador do ICMS. Tese hígida mesmo se a Lei GERAR perdesse vigência.</p>
+        </div>
+        <div class="border-l-4 border-blue-500 bg-blue-50 p-3 rounded">
+          <div class="font-bold text-blue-900">📜 SECUNDÁRIOS (camadas de reforço)</div>
+          <ul class="text-gray-700 text-xs mt-1 list-disc list-inside space-y-1">
+            <li><strong>Lei 14.300/2022 art. 1º XIV:</strong> SCEE = "empréstimo gratuito" — federal</li>
+            <li><strong>Convênio CONFAZ 16/2015 + Lei GERAR-ES (renovada, vigente 2026):</strong> reforço local</li>
+            <li><strong>STJ Tema 986</strong> (mar/2024): TUSD/TUST integram ICMS — MAS não em GD</li>
+            <li><strong>TJ-MT abr/2026:</strong> afastou ICMS sobre TUSD em GD solar — precedente direto</li>
+            <li><strong>TJ-RJ:</strong> rejeita Tema 986 pra GD</li>
+            <li><strong>STF ADIs 7.077/7.634/7.716</strong> (mar/2026): energia = bem essencial</li>
+            <li><strong>Súmula 391/STJ</strong> (2009): ICMS só sobre demanda utilizada</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Série temporal EXFISHES -->
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">📊 Série mensal — 14 faturas analisadas (FEV/2025 → MAI/2026)</h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-xs">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="p-2 text-left">Mês</th>
+              <th class="p-2 text-right">Dias</th>
+              <th class="p-2 text-right">Total Pago</th>
+              <th class="p-2 text-right">kWh Inj</th>
+              <th class="p-2 text-right">Base Líq</th>
+              <th class="p-2 text-right text-red-700">Tese 3</th>
+              <th class="p-2 text-right text-red-700">Tese 6</th>
+              <th class="p-2 text-right font-bold text-red-800">Combinado</th>
+              <th class="p-2 text-right text-amber-700">Norm 30d</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr><td class="p-2 font-semibold">FEV/2025</td><td class="p-2 text-right">29</td><td class="p-2 text-right">R$ 18.730,78</td><td class="p-2 text-right">53.574</td><td class="p-2 text-right">17.812,10</td><td class="p-2 text-right">1.113,79</td><td class="p-2 text-right">7.554,16</td><td class="p-2 text-right font-bold">8.667,95</td><td class="p-2 text-right">8.667,95</td></tr>
+            <tr><td class="p-2 font-semibold">ABR/2025</td><td class="p-2 text-right">30</td><td class="p-2 text-right">R$ 2.650,44</td><td class="p-2 text-right">58.900</td><td class="p-2 text-right">2.615,37</td><td class="p-2 text-right">2.377,71</td><td class="p-2 text-right">8.345,36</td><td class="p-2 text-right font-bold">10.723,07</td><td class="p-2 text-right">10.723,07</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">JUN/2025 ⚠️</td><td class="p-2 text-right">8</td><td class="p-2 text-right">R$ 1.413,59</td><td class="p-2 text-right">46.239</td><td class="p-2 text-right">2.368,63</td><td class="p-2 text-right">1.156,42</td><td class="p-2 text-right">6.522,00</td><td class="p-2 text-right">7.678,42</td><td class="p-2 text-right font-bold text-amber-800">28.794,08</td></tr>
+            <tr><td class="p-2 font-semibold">JUL/2025</td><td class="p-2 text-right">30</td><td class="p-2 text-right">R$ 1.417,81</td><td class="p-2 text-right">48.700</td><td class="p-2 text-right">1.280,10</td><td class="p-2 text-right">1.230,90</td><td class="p-2 text-right">6.868,98</td><td class="p-2 text-right font-bold">8.099,88</td><td class="p-2 text-right">8.099,88</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">AGO/2025 ⚠️</td><td class="p-2 text-right">7</td><td class="p-2 text-right">R$ 2.572,23</td><td class="p-2 text-right">47.940</td><td class="p-2 text-right">2.315,73</td><td class="p-2 text-right">2.302,38</td><td class="p-2 text-right">7.422,04</td><td class="p-2 text-right">9.724,42</td><td class="p-2 text-right font-bold text-amber-800">41.676,09</td></tr>
+            <tr><td class="p-2 font-semibold">SET/2025</td><td class="p-2 text-right">29</td><td class="p-2 text-right">R$ 1.317,33</td><td class="p-2 text-right">49.660</td><td class="p-2 text-right">2.461,30</td><td class="p-2 text-right">2.461,47</td><td class="p-2 text-right">8.110,52</td><td class="p-2 text-right font-bold">10.571,99</td><td class="p-2 text-right">10.571,99</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">OUT/2025 ⚠️</td><td class="p-2 text-right">24</td><td class="p-2 text-right">R$ 3.613,79</td><td class="p-2 text-right">51.202</td><td class="p-2 text-right">4.100,74</td><td class="p-2 text-right">3.128,04</td><td class="p-2 text-right">8.387,54</td><td class="p-2 text-right">11.515,58</td><td class="p-2 text-right font-bold text-amber-800">14.394,48</td></tr>
+            <tr><td class="p-2 font-semibold">NOV/2025</td><td class="p-2 text-right">32</td><td class="p-2 text-right">R$ 3.323,53</td><td class="p-2 text-right">51.418</td><td class="p-2 text-right">9.796,63</td><td class="p-2 text-right">2.545,41</td><td class="p-2 text-right">8.403,42</td><td class="p-2 text-right font-bold">10.948,83</td><td class="p-2 text-right">10.948,83</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">DEZ/2025 ⚠️</td><td class="p-2 text-right">23</td><td class="p-2 text-right">R$ 2.290,14</td><td class="p-2 text-right">49.340</td><td class="p-2 text-right">2.106,61</td><td class="p-2 text-right">1.967,20</td><td class="p-2 text-right">8.046,47</td><td class="p-2 text-right">10.013,67</td><td class="p-2 text-right font-bold text-amber-800">13.061,30</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">JAN/2026 ⚠️</td><td class="p-2 text-right">23</td><td class="p-2 text-right">R$ 2.916,68</td><td class="p-2 text-right">57.134</td><td class="p-2 text-right">10.048,43</td><td class="p-2 text-right">2.268,57</td><td class="p-2 text-right">9.321,73</td><td class="p-2 text-right">11.590,30</td><td class="p-2 text-right font-bold text-amber-800">15.117,78</td></tr>
+            <tr><td class="p-2 font-semibold">FEV/2026</td><td class="p-2 text-right">31</td><td class="p-2 text-right">R$ 2.916,79</td><td class="p-2 text-right">46.260</td><td class="p-2 text-right">2.880,23</td><td class="p-2 text-right">2.580,27</td><td class="p-2 text-right">7.575,39</td><td class="p-2 text-right font-bold">10.155,66</td><td class="p-2 text-right">10.155,66</td></tr>
+            <tr><td class="p-2 font-semibold">MAR/2026</td><td class="p-2 text-right">29</td><td class="p-2 text-right">R$ 3.997,01</td><td class="p-2 text-right">4.644</td><td class="p-2 text-right">68.278,15</td><td class="p-2 text-right">0,00</td><td class="p-2 text-right">759,46</td><td class="p-2 text-right font-bold">759,46</td><td class="p-2 text-right">759,46</td></tr>
+            <tr><td class="p-2 font-semibold">ABR/2026</td><td class="p-2 text-right">31</td><td class="p-2 text-right">R$ 32.486,37</td><td class="p-2 text-right">73.400</td><td class="p-2 text-right">32.449,81</td><td class="p-2 text-right">1.509,73</td><td class="p-2 text-right">7.008,62</td><td class="p-2 text-right font-bold">8.518,35</td><td class="p-2 text-right">8.518,35</td></tr>
+            <tr class="bg-amber-50"><td class="p-2 font-semibold">MAI/2026 ⚠️</td><td class="p-2 text-right">6</td><td class="p-2 text-right">R$ 11.744,80</td><td class="p-2 text-right">38.020</td><td class="p-2 text-right">11.685,26</td><td class="p-2 text-right">707,57</td><td class="p-2 text-right">4.401,05</td><td class="p-2 text-right">5.108,62</td><td class="p-2 text-right font-bold text-amber-800">25.543,09</td></tr>
+            <tr class="bg-red-100 font-bold border-t-2 border-red-400">
+              <td class="p-2">TOTAL</td>
+              <td class="p-2"></td>
+              <td class="p-2"></td>
+              <td class="p-2"></td>
+              <td class="p-2"></td>
+              <td class="p-2 text-right">R$ 25.349</td>
+              <td class="p-2 text-right">R$ 98.727</td>
+              <td class="p-2 text-right">R$ 124.076</td>
+              <td class="p-2 text-right">R$ 207.032</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-amber-700 mt-2">⚠️ = fatura de período curto (&lt; 25 dias). "Norm 30d" projeta proporcionalmente pra base mensal justa.</p>
+    </div>
+
+    <!-- Projeções -->
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">📅 Projeção retroativa — Indébito médio R$ 14.788/mês (normalizado 30d)</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs text-emerald-700 uppercase font-semibold mb-1">VIA 1 — TRIBUTÁRIA (5 anos, J. Federal)</div>
+          <div class="border-l-4 border-emerald-600 bg-emerald-50 rounded p-3">
+            <div class="text-2xl font-bold text-emerald-900">R$ 1.064.736</div>
+            <div class="text-xs text-emerald-700">60 meses × SELIC 1,20 — Tema 69 STF + Tese 6</div>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-red-700 uppercase font-semibold mb-1">VIA 2 — CONSUMERISTA (10 anos, J. Estadual)</div>
+          <div class="border-l-4 border-red-600 bg-red-50 rounded p-3">
+            <div class="text-2xl font-bold text-red-900">R$ 2.484.384</div>
+            <div class="text-xs text-red-700">120 meses × SELIC 1,40 — Tese 5 STF decenal</div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-4 border-l-4 border-red-700 bg-red-100 rounded p-4">
+        <div class="text-xs uppercase font-bold text-red-800">🚨 CENÁRIO MÁXIMO — 120m × DOBRO CDC</div>
+        <div class="text-4xl font-bold text-red-900 mt-1">R$ 4.968.768</div>
+        <div class="text-xs text-red-800 mt-1">EXFISHES sozinha. Art. 79 Lei 5.764/71 (cooperativa) + Tese 3 + Tese 5 + Tese 6 + dobro CDC Art. 42 par. único.</div>
+      </div>
+    </div>
+
+    <!-- Comparativo Tese 3 vs Tese 6 -->
+    <div class="bg-white rounded-lg shadow p-5 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-3">⚖️ Tese 3 vs Tese 6 — magnitudes</h2>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100">
+          <tr><th class="p-2 text-left">Tese</th><th class="p-2 text-right">Indébito mensal médio</th><th class="p-2 text-right">60m + SELIC</th><th class="p-2 text-right">120m + SELIC</th><th class="p-2 text-right">120m × dobro CDC</th></tr>
+        </thead>
+        <tbody class="divide-y">
+          <tr><td class="p-2">Tese 3 — PIS+COFINS sobre SCEE</td><td class="p-2 text-right">R$ 2.928</td><td class="p-2 text-right">R$ 210.816</td><td class="p-2 text-right">R$ 491.904</td><td class="p-2 text-right">R$ 983.808</td></tr>
+          <tr class="bg-red-50"><td class="p-2 font-bold">Tese 6 — ICMS sobre TUSD/TE em GD ⭐ NOVA</td><td class="p-2 text-right font-bold">R$ 11.860</td><td class="p-2 text-right font-bold">R$ 853.920</td><td class="p-2 text-right font-bold">R$ 1.992.480</td><td class="p-2 text-right font-bold">R$ 3.984.960</td></tr>
+          <tr class="bg-red-100 font-bold border-t-2 border-red-400"><td class="p-2">COMBINADO</td><td class="p-2 text-right">R$ 14.788</td><td class="p-2 text-right">R$ 1.064.736</td><td class="p-2 text-right">R$ 2.484.384</td><td class="p-2 text-right">R$ 4.968.768</td></tr>
+        </tbody>
+      </table>
+      <p class="text-xs text-gray-500 mt-2">Tese 6 é 4× maior que Tese 3 — alíquota ICMS (17%) é maior que PIS+COFINS combinado (~5,3%).</p>
+    </div>
+
+    <!-- Footer -->
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-4">
+      <p class="text-xs text-gray-600">📁 Dossiê completo: <code>docs/concierge/2026-06-12-tese-6-icms-tusd-te-gd-scee.md</code> + <code>docs/concierge/2026-06-12-relatorio-exfishes-14-faturas.md</code> + <code>docs/concierge/EXFISHES-Analise-14-Faturas-2026-06-12.xlsx</code> (XLSX 3 abas)</p>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

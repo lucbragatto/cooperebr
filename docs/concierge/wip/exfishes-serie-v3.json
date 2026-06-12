@@ -1,0 +1,954 @@
+[
+  {
+    "arquivo": "EXFISHES _ 1 _ FEV2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 73000.0,
+        "tarifa": 0.47777918,
+        "valor_rs": 34877.88,
+        "pc_rs": 952.41,
+        "base_icms": 34877.88,
+        "aliq_icms": 17.0,
+        "icms_rs": 5929.24,
+        "tarifa_imune": 0.38351
+      },
+      "tusd_inj": {
+        "kwh": 53574.3014,
+        "tarifa": 0.46473252,
+        "valor_rs": 24897.72,
+        "pc_rs": 0.0,
+        "base_icms": 25596.69,
+        "aliq_icms": 17.0,
+        "icms_rs": 4351.44,
+        "tarifa_imune": 0.38351
+      },
+      "te_forn": {
+        "kwh": 73000.0,
+        "tarifa": 0.37493781,
+        "valor_rs": 27370.46,
+        "pc_rs": 747.4,
+        "base_icms": 27370.46,
+        "aliq_icms": 17.0,
+        "icms_rs": 4652.98,
+        "tarifa_imune": 0.30096
+      },
+      "te_inj": {
+        "kwh": 53574.3014,
+        "tarifa": 0.36469948,
+        "valor_rs": 19538.52,
+        "pc_rs": 0.0,
+        "base_icms": 20087.03,
+        "aliq_icms": 17.0,
+        "icms_rs": 3414.8,
+        "tarifa_imune": 0.30096
+      }
+    },
+    "pis_base": 51666.12,
+    "pis_aliq": 0.59,
+    "pis_valor": 304.83,
+    "cof_base": 51666.12,
+    "cof_aliq": 2.7,
+    "cof_valor": 1394.98,
+    "total_pago": 18730.78,
+    "pc_total": 1699.81,
+    "base_icms_total": 16564.62,
+    "icms_total": 2815.98,
+    "mes_ref": "2025-02",
+    "dias_periodo": 29,
+    "analise": {
+      "base_liquida": 17812.1,
+      "icms_cobrado_energ": 10582.22,
+      "icms_legitimo": 3028.06,
+      "indebito_tese3": 1113.79,
+      "indebito_tese6": 7554.16,
+      "indebito_tese3_norm30d": 1113.79,
+      "indebito_tese6_norm30d": 7554.16,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 53574.3014
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 3 _ ABR2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 59000.0,
+        "tarifa": 0.49103102,
+        "valor_rs": 28970.83,
+        "pc_rs": 1418.7,
+        "base_icms": 28970.83,
+        "aliq_icms": 17.0,
+        "icms_rs": 4925.04,
+        "tarifa_imune": 0.38351
+      },
+      "tusd_inj": {
+        "kwh": 58900.0,
+        "tarifa": 0.46698523,
+        "valor_rs": 27505.43,
+        "pc_rs": 0.0,
+        "base_icms": 28921.73,
+        "aliq_icms": 17.0,
+        "icms_rs": 4916.69,
+        "tarifa_imune": 0.38351
+      },
+      "te_forn": {
+        "kwh": 59000.0,
+        "tarifa": 0.38533712,
+        "valor_rs": 22734.89,
+        "pc_rs": 1113.32,
+        "base_icms": 22734.89,
+        "aliq_icms": 17.0,
+        "icms_rs": 3864.93,
+        "tarifa_imune": 0.30096
+      },
+      "te_inj": {
+        "kwh": 58900.0,
+        "tarifa": 0.36646723,
+        "valor_rs": 21584.92,
+        "pc_rs": 0.0,
+        "base_icms": 22696.36,
+        "aliq_icms": 17.0,
+        "icms_rs": 3858.38,
+        "tarifa_imune": 0.30096
+      }
+    },
+    "pis_base": 42915.75,
+    "pis_aliq": 1.05,
+    "pis_valor": 450.61,
+    "cof_base": 42915.75,
+    "cof_aliq": 4.85,
+    "cof_valor": 2081.41,
+    "total_pago": 2650.44,
+    "pc_total": 2532.02,
+    "base_icms_total": 87.63,
+    "icms_total": 14.9,
+    "mes_ref": "2025-04",
+    "dias_periodo": 30,
+    "analise": {
+      "base_liquida": 2615.37,
+      "icms_cobrado_energ": 8789.97,
+      "icms_legitimo": 444.61,
+      "indebito_tese3": 2377.71,
+      "indebito_tese6": 8345.36,
+      "indebito_tese3_norm30d": 2377.71,
+      "indebito_tese6_norm30d": 8345.36,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 58900.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 5 _ JUN2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 47680.0,
+        "tarifa": 0.4786703,
+        "valor_rs": 22823.0,
+        "pc_rs": 657.33,
+        "base_icms": 22823.0,
+        "aliq_icms": 17.0,
+        "icms_rs": 3879.91,
+        "tarifa_imune": 0.38351
+      },
+      "tusd_inj": {
+        "kwh": 46239.1694,
+        "tarifa": 0.46488378,
+        "valor_rs": 21495.84,
+        "pc_rs": 0.0,
+        "base_icms": 22133.31,
+        "aliq_icms": 17.0,
+        "icms_rs": 3762.66,
+        "tarifa_imune": 0.38351
+      },
+      "te_forn": {
+        "kwh": 47680.0,
+        "tarifa": 0.37563695,
+        "valor_rs": 17910.37,
+        "pc_rs": 515.84,
+        "base_icms": 17910.37,
+        "aliq_icms": 17.0,
+        "icms_rs": 3044.76,
+        "tarifa_imune": 0.30096
+      },
+      "te_inj": {
+        "kwh": 46239.1694,
+        "tarifa": 0.3648184,
+        "valor_rs": 16868.9,
+        "pc_rs": 0.0,
+        "base_icms": 17369.14,
+        "aliq_icms": 17.0,
+        "icms_rs": 2952.76,
+        "tarifa_imune": 0.30096
+      }
+    },
+    "pis_base": 35694.8,
+    "pis_aliq": 0.62,
+    "pis_valor": 221.31,
+    "cof_base": 35694.8,
+    "cof_aliq": 2.85,
+    "cof_valor": 1017.3,
+    "total_pago": 1413.59,
+    "pc_total": 1238.61,
+    "base_icms_total": 90.2,
+    "icms_total": 15.33,
+    "mes_ref": "2025-06",
+    "dias_periodo": 8,
+    "analise": {
+      "base_liquida": 2368.63,
+      "icms_cobrado_energ": 6924.67,
+      "icms_legitimo": 402.67,
+      "indebito_tese3": 1156.42,
+      "indebito_tese6": 6522.0,
+      "indebito_tese3_norm30d": 4336.57,
+      "indebito_tese6_norm30d": 24457.51,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 46239.1694
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 6 _ JUL2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 48800.0,
+        "tarifa": 0.47862049,
+        "valor_rs": 23356.68,
+        "pc_rs": 670.75,
+        "base_icms": 23356.68,
+        "aliq_icms": 17.0,
+        "icms_rs": 3970.64,
+        "tarifa_imune": 0.38351
+      },
+      "tusd_inj": {
+        "kwh": 48700.0,
+        "tarifa": 0.46487556,
+        "valor_rs": 22639.44,
+        "pc_rs": 0.0,
+        "base_icms": 23308.82,
+        "aliq_icms": 17.0,
+        "icms_rs": 3962.5,
+        "tarifa_imune": 0.38351
+      },
+      "te_forn": {
+        "kwh": 48800.0,
+        "tarifa": 0.37559816,
+        "valor_rs": 18329.19,
+        "pc_rs": 526.38,
+        "base_icms": 18329.19,
+        "aliq_icms": 17.0,
+        "icms_rs": 3115.96,
+        "tarifa_imune": 0.30096
+      },
+      "te_inj": {
+        "kwh": 48700.0,
+        "tarifa": 0.3648117,
+        "valor_rs": 17766.33,
+        "pc_rs": 0.0,
+        "base_icms": 18291.63,
+        "aliq_icms": 17.0,
+        "icms_rs": 3109.58,
+        "tarifa_imune": 0.30096
+      }
+    },
+    "pis_base": 36855.27,
+    "pis_aliq": 0.62,
+    "pis_valor": 228.5,
+    "cof_base": 36855.27,
+    "cof_aliq": 2.84,
+    "cof_valor": 1046.69,
+    "total_pago": 1417.81,
+    "pc_total": 1275.19,
+    "base_icms_total": 90.99,
+    "icms_total": 15.46,
+    "mes_ref": "2025-07",
+    "dias_periodo": 30,
+    "analise": {
+      "base_liquida": 1280.1,
+      "icms_cobrado_energ": 7086.6,
+      "icms_legitimo": 217.62,
+      "indebito_tese3": 1230.9,
+      "indebito_tese6": 6868.98,
+      "indebito_tese3_norm30d": 1230.9,
+      "indebito_tese6_norm30d": 6868.98,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 48700.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 7 _ AGO2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 48040.0,
+        "tarifa": 0.55666799,
+        "valor_rs": 26742.33,
+        "pc_rs": 1294.03,
+        "base_icms": 26742.33,
+        "aliq_icms": 17.0,
+        "icms_rs": 4546.2,
+        "tarifa_imune": 0.43509788
+      },
+      "tusd_inj": {
+        "kwh": 47940.0,
+        "tarifa": 0.52973133,
+        "valor_rs": 25395.32,
+        "pc_rs": 0.0,
+        "base_icms": 26686.66,
+        "aliq_icms": 17.0,
+        "icms_rs": 4536.73,
+        "tarifa_imune": 0.43509788
+      },
+      "te_forn": {
+        "kwh": 48040.0,
+        "tarifa": 0.40034159,
+        "valor_rs": 19232.41,
+        "pc_rs": 930.63,
+        "base_icms": 19232.41,
+        "aliq_icms": 17.0,
+        "icms_rs": 3269.51,
+        "tarifa_imune": 0.31291152
+      },
+      "te_inj": {
+        "kwh": 47940.0,
+        "tarifa": 0.38096975,
+        "valor_rs": 18263.69,
+        "pc_rs": 0.0,
+        "base_icms": 19192.39,
+        "aliq_icms": 17.0,
+        "icms_rs": 3262.71,
+        "tarifa_imune": 0.31291152
+      }
+    },
+    "pis_base": 41807.97,
+    "pis_aliq": 1.04,
+    "pis_valor": 434.8,
+    "cof_base": 41807.97,
+    "cof_aliq": 4.79,
+    "cof_valor": 2002.59,
+    "total_pago": 2572.23,
+    "pc_total": 2437.39,
+    "base_icms_total": 104.83,
+    "icms_total": 17.82,
+    "mes_ref": "2025-08",
+    "dias_periodo": 7,
+    "analise": {
+      "base_liquida": 2315.73,
+      "icms_cobrado_energ": 7815.71,
+      "icms_legitimo": 393.67,
+      "indebito_tese3": 2302.38,
+      "indebito_tese6": 7422.04,
+      "indebito_tese3_norm30d": 9867.36,
+      "indebito_tese6_norm30d": 31808.73,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 47940.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 8 _ SET2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 49760.0,
+        "tarifa": 0.59861596,
+        "valor_rs": 29787.13,
+        "pc_rs": 1404.29,
+        "base_icms": 29787.13,
+        "aliq_icms": 17.0,
+        "icms_rs": 5063.81,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 49660.0,
+        "tarifa": 0.57039489,
+        "valor_rs": 28325.81,
+        "pc_rs": 0.0,
+        "base_icms": 29727.27,
+        "aliq_icms": 17.0,
+        "icms_rs": 5053.64,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 49760.0,
+        "tarifa": 0.40962842,
+        "valor_rs": 20383.11,
+        "pc_rs": 960.94,
+        "base_icms": 20383.11,
+        "aliq_icms": 17.0,
+        "icms_rs": 3465.13,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 49660.0,
+        "tarifa": 0.39031675,
+        "valor_rs": 19383.13,
+        "pc_rs": 0.0,
+        "base_icms": 20342.14,
+        "aliq_icms": 17.0,
+        "icms_rs": 3458.16,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 45796.94,
+    "pis_aliq": 1.01,
+    "pis_valor": 462.55,
+    "cof_base": 45796.94,
+    "cof_aliq": 4.67,
+    "cof_valor": 2138.72,
+    "total_pago": 1317.33,
+    "pc_total": 2601.27,
+    "base_icms_total": 110.9,
+    "icms_total": 18.86,
+    "mes_ref": "2025-09",
+    "dias_periodo": 29,
+    "analise": {
+      "base_liquida": 2461.3,
+      "icms_cobrado_energ": 8528.94,
+      "icms_legitimo": 418.42,
+      "indebito_tese3": 2461.47,
+      "indebito_tese6": 8110.52,
+      "indebito_tese3_norm30d": 2461.47,
+      "indebito_tese6_norm30d": 8110.52,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 49660.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 9 _ OUT2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 52120.0,
+        "tarifa": 0.60874885,
+        "valor_rs": 31727.99,
+        "pc_rs": 1909.23,
+        "base_icms": 31727.99,
+        "aliq_icms": 17.0,
+        "icms_rs": 5393.76,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 51201.5393,
+        "tarifa": 0.57211737,
+        "valor_rs": 29293.29,
+        "pc_rs": 0.0,
+        "base_icms": 31168.88,
+        "aliq_icms": 17.0,
+        "icms_rs": 5298.71,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 52120.0,
+        "tarifa": 0.41656216,
+        "valor_rs": 21711.22,
+        "pc_rs": 1306.47,
+        "base_icms": 21711.22,
+        "aliq_icms": 17.0,
+        "icms_rs": 3690.91,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 51201.5393,
+        "tarifa": 0.39149565,
+        "valor_rs": 20045.18,
+        "pc_rs": 0.0,
+        "base_icms": 21328.63,
+        "aliq_icms": 17.0,
+        "icms_rs": 3625.87,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 47246.17,
+    "pis_aliq": 1.29,
+    "pis_valor": 609.47,
+    "cof_base": 47246.17,
+    "cof_aliq": 5.96,
+    "cof_valor": 2815.87,
+    "total_pago": 3613.79,
+    "pc_total": 3425.34,
+    "base_icms_total": 109.21,
+    "icms_total": 18.56,
+    "mes_ref": "2025-10",
+    "dias_periodo": 24,
+    "analise": {
+      "base_liquida": 4100.74,
+      "icms_cobrado_energ": 9084.67,
+      "icms_legitimo": 697.13,
+      "indebito_tese3": 3128.04,
+      "indebito_tese6": 8387.54,
+      "indebito_tese3_norm30d": 3910.05,
+      "indebito_tese6_norm30d": 10484.43,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 51201.5393
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 10 _ NOV2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 58520.0,
+        "tarifa": 0.60090943,
+        "valor_rs": 35165.22,
+        "pc_rs": 1762.9,
+        "base_icms": 35165.22,
+        "aliq_icms": 17.0,
+        "icms_rs": 5978.09,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 51418.2522,
+        "tarifa": 0.57078467,
+        "valor_rs": 29348.75,
+        "pc_rs": 0.0,
+        "base_icms": 30897.71,
+        "aliq_icms": 17.0,
+        "icms_rs": 5252.61,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 58520.0,
+        "tarifa": 0.41119771,
+        "valor_rs": 24063.29,
+        "pc_rs": 1206.34,
+        "base_icms": 24063.29,
+        "aliq_icms": 17.0,
+        "icms_rs": 4090.76,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 51418.2522,
+        "tarifa": 0.39058368,
+        "valor_rs": 20083.13,
+        "pc_rs": 0.0,
+        "base_icms": 21143.08,
+        "aliq_icms": 17.0,
+        "icms_rs": 3594.32,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 51939.3,
+    "pis_aliq": 1.08,
+    "pis_valor": 560.94,
+    "cof_base": 51939.3,
+    "cof_aliq": 4.96,
+    "cof_valor": 2576.19,
+    "total_pago": 3323.53,
+    "pc_total": 3137.13,
+    "base_icms_total": 106.93,
+    "icms_total": 18.18,
+    "mes_ref": "2025-11",
+    "dias_periodo": 32,
+    "analise": {
+      "base_liquida": 9796.63,
+      "icms_cobrado_energ": 10068.85,
+      "icms_legitimo": 1665.43,
+      "indebito_tese3": 2545.41,
+      "indebito_tese6": 8403.42,
+      "indebito_tese3_norm30d": 2545.41,
+      "indebito_tese6_norm30d": 8403.42,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 51418.2522
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 11 _ DEZ2025.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 49440.0,
+        "tarifa": 0.59370611,
+        "valor_rs": 29352.83,
+        "pc_rs": 1193.78,
+        "base_icms": 29352.83,
+        "aliq_icms": 17.0,
+        "icms_rs": 4989.98,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 49340.0,
+        "tarifa": 0.56955999,
+        "valor_rs": 28102.09,
+        "pc_rs": 0.0,
+        "base_icms": 29293.45,
+        "aliq_icms": 17.0,
+        "icms_rs": 4979.89,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 49440.0,
+        "tarifa": 0.40626861,
+        "valor_rs": 20085.92,
+        "pc_rs": 816.89,
+        "base_icms": 20085.92,
+        "aliq_icms": 17.0,
+        "icms_rs": 3414.61,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 49340.0,
+        "tarifa": 0.38974564,
+        "valor_rs": 19230.05,
+        "pc_rs": 0.0,
+        "base_icms": 20045.29,
+        "aliq_icms": 17.0,
+        "icms_rs": 3407.7,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 42253.46,
+    "pis_aliq": 0.87,
+    "pis_valor": 367.61,
+    "cof_base": 42253.46,
+    "cof_aliq": 4.03,
+    "cof_valor": 1702.81,
+    "total_pago": 2290.14,
+    "pc_total": 2070.42,
+    "base_icms_total": 103.0,
+    "icms_total": 17.51,
+    "mes_ref": "2025-12",
+    "dias_periodo": 23,
+    "analise": {
+      "base_liquida": 2106.61,
+      "icms_cobrado_energ": 8404.59,
+      "icms_legitimo": 358.12,
+      "indebito_tese3": 1967.2,
+      "indebito_tese6": 8046.47,
+      "indebito_tese3_norm30d": 2565.91,
+      "indebito_tese6_norm30d": 10495.39,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 49340.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 12 _ JAN2026.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 64720.0,
+        "tarifa": 0.59520813,
+        "valor_rs": 38521.87,
+        "pc_rs": 1643.42,
+        "base_icms": 38521.87,
+        "aliq_icms": 17.0,
+        "icms_rs": 6548.72,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 57134.1123,
+        "tarifa": 0.56981545,
+        "valor_rs": 32555.9,
+        "pc_rs": 0.0,
+        "base_icms": 34006.68,
+        "aliq_icms": 17.0,
+        "icms_rs": 5781.14,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 64720.0,
+        "tarifa": 0.40729651,
+        "valor_rs": 26360.23,
+        "pc_rs": 1124.58,
+        "base_icms": 26360.23,
+        "aliq_icms": 17.0,
+        "icms_rs": 4481.24,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 57134.1123,
+        "tarifa": 0.38992065,
+        "valor_rs": 22277.77,
+        "pc_rs": 0.0,
+        "base_icms": 23270.52,
+        "aliq_icms": 17.0,
+        "icms_rs": 3956.0,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 54184.03,
+    "pis_aliq": 0.92,
+    "pis_valor": 498.49,
+    "cof_base": 54184.03,
+    "cof_aliq": 4.22,
+    "cof_valor": 2286.57,
+    "total_pago": 2916.68,
+    "pc_total": 2785.06,
+    "base_icms_total": 100.85,
+    "icms_total": 17.15,
+    "mes_ref": "2026-01",
+    "dias_periodo": 23,
+    "analise": {
+      "base_liquida": 10048.43,
+      "icms_cobrado_energ": 11029.96,
+      "icms_legitimo": 1708.23,
+      "indebito_tese3": 2268.57,
+      "indebito_tese6": 9321.73,
+      "indebito_tese3_norm30d": 2959.01,
+      "indebito_tese6_norm30d": 12158.77,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 57134.1123
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 13 _ FEV2026.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 46360.0,
+        "tarifa": 0.60756967,
+        "valor_rs": 28166.93,
+        "pc_rs": 1652.86,
+        "base_icms": 28166.93,
+        "aliq_icms": 17.0,
+        "icms_rs": 4788.38,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 46260.0,
+        "tarifa": 0.57191677,
+        "valor_rs": 26456.87,
+        "pc_rs": 0.0,
+        "base_icms": 28106.17,
+        "aliq_icms": 17.0,
+        "icms_rs": 4778.05,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 46360.0,
+        "tarifa": 0.41575518,
+        "valor_rs": 19274.41,
+        "pc_rs": 1131.04,
+        "base_icms": 19274.41,
+        "aliq_icms": 17.0,
+        "icms_rs": 3276.65,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 46260.0,
+        "tarifa": 0.39135841,
+        "valor_rs": 18104.24,
+        "pc_rs": 0.0,
+        "base_icms": 19232.85,
+        "aliq_icms": 17.0,
+        "icms_rs": 3269.58,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 39376.31,
+    "pis_aliq": 1.26,
+    "pis_valor": 496.14,
+    "cof_base": 39376.31,
+    "cof_aliq": 5.81,
+    "cof_valor": 2287.76,
+    "total_pago": 2916.79,
+    "pc_total": 2783.9,
+    "base_icms_total": 102.32,
+    "icms_total": 17.4,
+    "mes_ref": "2026-02",
+    "dias_periodo": 31,
+    "analise": {
+      "base_liquida": 2880.23,
+      "icms_cobrado_energ": 8065.03,
+      "icms_legitimo": 489.64,
+      "indebito_tese3": 2580.27,
+      "indebito_tese6": 7575.39,
+      "indebito_tese3_norm30d": 2580.27,
+      "indebito_tese6_norm30d": 7575.39,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 46260.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 14 _ MAR2026.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 71600.0,
+        "tarifa": 0.60322053,
+        "valor_rs": 43190.59,
+        "pc_rs": 2294.28,
+        "base_icms": 43190.59,
+        "aliq_icms": 17.0,
+        "icms_rs": 7342.4,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 4643.769,
+        "tarifa": 0.57117829,
+        "valor_rs": 2652.42,
+        "pc_rs": 0.0,
+        "base_icms": 2801.22,
+        "aliq_icms": 17.0,
+        "icms_rs": 476.21,
+        "tarifa_imune": 0.46863
+      },
+      "te_forn": {
+        "kwh": 71600.0,
+        "tarifa": 0.41277933,
+        "valor_rs": 29555.0,
+        "pc_rs": 1569.96,
+        "base_icms": 29555.0,
+        "aliq_icms": 17.0,
+        "icms_rs": 5024.35,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 4643.769,
+        "tarifa": 0.39085062,
+        "valor_rs": 1815.02,
+        "pc_rs": 0.0,
+        "base_icms": 1916.85,
+        "aliq_icms": 17.0,
+        "icms_rs": 325.86,
+        "tarifa_imune": 0.32068
+      }
+    },
+    "pis_base": 60378.84,
+    "pis_aliq": 1.14,
+    "pis_valor": 688.32,
+    "cof_base": 60378.84,
+    "cof_aliq": 5.26,
+    "cof_valor": 3175.92,
+    "total_pago": 3997.01,
+    "pc_total": 3864.24,
+    "base_icms_total": 101.6,
+    "icms_total": 17.27,
+    "mes_ref": "2026-03",
+    "dias_periodo": 29,
+    "analise": {
+      "base_liquida": 68278.15,
+      "icms_cobrado_energ": 12366.75,
+      "icms_legitimo": 11607.29,
+      "indebito_tese3": 0,
+      "indebito_tese6": 759.46,
+      "indebito_tese3_norm30d": 0,
+      "indebito_tese6_norm30d": 759.46,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 4643.769
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 15 _ ABR2026.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 73400.0,
+        "tarifa": 0.59596199,
+        "valor_rs": 43743.61,
+        "pc_rs": 1909.76,
+        "base_icms": 43743.61,
+        "aliq_icms": 17.0,
+        "icms_rs": 7436.41,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 73400.0,
+        "tarifa": 0.24410937,
+        "valor_rs": 17917.63,
+        "pc_rs": 0.0,
+        "base_icms": 0.0,
+        "aliq_icms": 0.0,
+        "icms_rs": 0.0,
+        "tarifa_imune": 0.24410937
+      },
+      "te_forn": {
+        "kwh": 73400.0,
+        "tarifa": 0.40781226,
+        "valor_rs": 29933.42,
+        "pc_rs": 1306.83,
+        "base_icms": 29933.42,
+        "aliq_icms": 17.0,
+        "icms_rs": 5088.68,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 73400.0,
+        "tarifa": 0.3175694,
+        "valor_rs": 23309.59,
+        "pc_rs": 0.0,
+        "base_icms": 0.0,
+        "aliq_icms": 0.0,
+        "icms_rs": 0.0,
+        "tarifa_imune": 0.3175694
+      }
+    },
+    "pis_base": 61151.94,
+    "pis_aliq": 0.94,
+    "pis_valor": 574.83,
+    "cof_base": 61151.94,
+    "cof_aliq": 4.32,
+    "cof_valor": 2641.76,
+    "total_pago": 32486.37,
+    "pc_total": 3216.59,
+    "base_icms_total": 73677.03,
+    "icms_total": 12525.09,
+    "mes_ref": "2026-04",
+    "dias_periodo": 31,
+    "analise": {
+      "base_liquida": 32449.81,
+      "icms_cobrado_energ": 12525.09,
+      "icms_legitimo": 5516.47,
+      "indebito_tese3": 1509.73,
+      "indebito_tese6": 7008.62,
+      "indebito_tese3_norm30d": 1509.73,
+      "indebito_tese6_norm30d": 7008.62,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 73400.0
+    }
+  },
+  {
+    "arquivo": "EXFISHES _ 16 _ MAI2026.pdf",
+    "rubricas": {
+      "tusd_forn": {
+        "kwh": 38120.0,
+        "tarifa": 0.58521406,
+        "valor_rs": 22308.36,
+        "pc_rs": 651.76,
+        "base_icms": 22308.36,
+        "aliq_icms": 17.0,
+        "icms_rs": 3792.42,
+        "tarifa_imune": 0.46863
+      },
+      "tusd_inj": {
+        "kwh": 38020.0,
+        "tarifa": 0.29593188,
+        "valor_rs": 11251.33,
+        "pc_rs": 0.0,
+        "base_icms": 11589.94,
+        "aliq_icms": 17.0,
+        "icms_rs": 1970.29,
+        "tarifa_imune": 0.24410937
+      },
+      "te_forn": {
+        "kwh": 38120.0,
+        "tarifa": 0.40045724,
+        "valor_rs": 15265.43,
+        "pc_rs": 445.99,
+        "base_icms": 15265.43,
+        "aliq_icms": 17.0,
+        "icms_rs": 2595.12,
+        "tarifa_imune": 0.32068
+      },
+      "te_inj": {
+        "kwh": 38020.0,
+        "tarifa": 0.38498685,
+        "valor_rs": 14637.2,
+        "pc_rs": 0.0,
+        "base_icms": 15077.71,
+        "aliq_icms": 17.0,
+        "icms_rs": 2563.21,
+        "tarifa_imune": 0.3175694
+      }
+    },
+    "pis_base": 31786.88,
+    "pis_aliq": 0.63,
+    "pis_valor": 200.25,
+    "cof_base": 31786.88,
+    "cof_aliq": 2.89,
+    "cof_valor": 918.64,
+    "total_pago": 11744.8,
+    "pc_total": 1118.89,
+    "base_icms_total": 10908.03,
+    "icms_total": 1854.36,
+    "mes_ref": "2026-05",
+    "dias_periodo": 6,
+    "analise": {
+      "base_liquida": 11685.26,
+      "icms_cobrado_energ": 6387.54,
+      "icms_legitimo": 1986.49,
+      "indebito_tese3": 707.57,
+      "indebito_tese6": 4401.05,
+      "indebito_tese3_norm30d": 3537.86,
+      "indebito_tese6_norm30d": 22005.23,
+      "tem_scee": true,
+      "kwh_injetado_tusd": 38020.0
+    }
+  }
+]

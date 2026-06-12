@@ -12,7 +12,8 @@ export type CodigoPadrao =
   | 'TEMA_69_STRICTO_DIVERGENCIA'
   | 'TESE_3_PIS_COFINS_SOBRE_SCEE'
   | 'TESE_2_ICMS_TUSD_GERACAO'
-  | 'TESE_4_ICMS_RUBRICAS_EXCLUIDAS_GERAR';
+  | 'TESE_4_ICMS_RUBRICAS_EXCLUIDAS_GERAR'
+  | 'TESE_6_ICMS_TUSD_TE_SOBRE_SCEE';
 
 /**
  * Sinal do indebito encontrado pelo detector.

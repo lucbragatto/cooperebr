@@ -3,6 +3,7 @@ import type { FaturaRawInput, FaturaCanonica } from '../fatura-canonica/fatura-c
 import { DetectorTema69Stricto } from './detector-tema69-stricto';
 import { DetectorTese3PisCofinsSobreScee } from './detector-tese3-pis-sobre-scee';
 import { DetectorTese2IcmsTusdGeracao } from './detector-tese2-icms-tusd-g';
+import { DetectorTese6IcmsTusdTeSobreScee } from './detector-tese6-icms-scee';
 import { DetectoresRegistry } from './detectores.registry';
 import { projetar60mSelic } from './detectores.types';
 
@@ -326,6 +327,113 @@ describe('DetectorTese2IcmsTusdGeracao', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
+// DetectorTese6IcmsTusdTeSobreScee
+// ════════════════════════════════════════════════════════════════════════
+describe('DetectorTese6IcmsTusdTeSobreScee', () => {
+  const detector = new DetectorTese6IcmsTusdTeSobreScee();
+
+  it('EXFISHES ABR/2026 (EDP cobra ICMS sobre bruto): indebito ~R$ 7.008', () => {
+    // Base BRUTA = 43743.61 + 29933.42 = 73677.03
+    // Injecao SCEE = 17917.63 + 23309.59 = 41227.22
+    // Base LIQUIDA correta = 32449.81
+    // ICMS cobrado sobre fornecida = 7436.41 + 5088.68 = 12525.09
+    // ICMS legitimo = 32449.81 * 0.17 = 5516.47
+    // Indebito = 12525.09 - 5516.47 = 7008.62
+    const fatura = parsear({
+      metadados: {
+        mesReferencia: '2026-04',
+        classificacao: 'B - B3-COMERCIAL',
+        valorTotalFatura: 32486.37,
+        basePisCofinsDeclarada: 61151.94,
+        aliquotaPisDeclarada: 0.0094,
+        aliquotaCofinsDeclarada: 0.0432,
+      },
+      rubricas: [
+        { descricao: 'TUSD - Energia Ativa Fornecida', valorTotalReais: 43743.61, baseCalculoIcms: 43743.61, aliquotaIcms: 0.17, valorIcms: 7436.41, valorPisCofins: 1909.76 },
+        { descricao: 'TUSD - En. At. Inj. oUC oPT GDIII 03/2026', valorTotalReais: -17917.63, baseCalculoIcms: 0, aliquotaIcms: 0, valorIcms: 0, valorPisCofins: 0 },
+        { descricao: 'TE - Energia Ativa Fornecida', valorTotalReais: 29933.42, baseCalculoIcms: 29933.42, aliquotaIcms: 0.17, valorIcms: 5088.68, valorPisCofins: 1306.83 },
+        { descricao: 'TE - En. At. Inj. oUC oPT GDIII 03/2026', valorTotalReais: -23309.59, baseCalculoIcms: 0, aliquotaIcms: 0, valorIcms: 0, valorPisCofins: 0 },
+      ],
+    });
+    const r = detector.detectar(fatura);
+    expect(r.padrao).not.toBeNull();
+    expect(r.padrao?.sinal).toBe('INDEBITO_TRIBUTARIO');
+    expect(r.padrao?.valorIndebitoMensal).toBeCloseTo(7008.62, 1);
+    expect(r.padrao?.valorIndebito60mSelic).toBeCloseTo(525646.5, 0);
+    expect(r.padrao?.fundamento.classificacaoDossie).toBe('T3');
+    expect(r.padrao?.fundamento.risco).toBe('MEDIO');
+    expect(r.padrao?.fundamento.ementa).toContain('Art. 79 Lei 5.764/71');
+    expect(r.padrao?.fundamento.ementa).toContain('TJ-MT');
+    expect(r.padrao?.detalhe).toContain('Base ICMS LIQUIDA');
+  });
+
+  it('ELFSM-style (concessionaria que ja aplica ICMS negativo na injecao): sem indebito', () => {
+    // Simula uma fatura onde a concessionaria zera o ICMS no liquido
+    // (cobrando positivo sobre forn E negativo sobre inj) - cancela.
+    const fatura = parsear({
+      metadados: {
+        mesReferencia: '2026-04',
+        classificacao: 'B - B3-COMERCIAL',
+        valorTotalFatura: 5000,
+        basePisCofinsDeclarada: 4500,
+        aliquotaPisDeclarada: 0.0094,
+        aliquotaCofinsDeclarada: 0.0432,
+      },
+      rubricas: [
+        { descricao: 'TUSD - Energia Ativa Fornecida', valorTotalReais: 10000, baseCalculoIcms: 10000, aliquotaIcms: 0.17, valorIcms: 1700, valorPisCofins: 526 },
+        { descricao: 'TUSD - Injecao SCEE', valorTotalReais: -8000, baseCalculoIcms: -8000, aliquotaIcms: 0.17, valorIcms: -1360, valorPisCofins: -421 },
+        { descricao: 'TE - Energia Ativa Fornecida', valorTotalReais: 6000, baseCalculoIcms: 6000, aliquotaIcms: 0.17, valorIcms: 1020, valorPisCofins: 316 },
+        { descricao: 'TE - Injecao SCEE', valorTotalReais: -4000, baseCalculoIcms: -4000, aliquotaIcms: 0.17, valorIcms: -680, valorPisCofins: -210 },
+      ],
+    });
+    const r = detector.detectar(fatura);
+    // ICMS liquido = (1700 + 1020) - (1360 + 680) = 680
+    // Base liquida = (10000 + 6000) - (8000 + 4000) = 4000
+    // ICMS legitimo = 4000 * 0.17 = 680
+    // Indebito = 680 - 680 = 0 -> sem padrao
+    expect(r.padrao).toBeNull();
+  });
+
+  it('cativo sem GD: detector nao aplica', () => {
+    const fatura = parsear({
+      metadados: {
+        mesReferencia: '2026-04',
+        classificacao: 'B - B1-RESIDENCIAL',
+        valorTotalFatura: 570.56,
+        basePisCofinsDeclarada: 449.07,
+        aliquotaPisDeclarada: 0.0094,
+        aliquotaCofinsDeclarada: 0.0432,
+      },
+      rubricas: [
+        { descricao: 'TUSD - Consumo', valorTotalReais: 321.23, baseCalculoIcms: 321.23, aliquotaIcms: 0.17, valorIcms: 54.61, valorPisCofins: 14.03 },
+        { descricao: 'TE - Consumo', valorTotalReais: 219.82, baseCalculoIcms: 219.82, aliquotaIcms: 0.17, valorIcms: 37.37, valorPisCofins: 9.60 },
+      ],
+    });
+    const r = detector.detectar(fatura);
+    expect(r.padrao).toBeNull();
+  });
+
+  it('aliq ICMS zero: detector nao aplica', () => {
+    const fatura = parsear({
+      metadados: {
+        mesReferencia: '2026-04',
+        classificacao: 'B - B3-COMERCIAL',
+        valorTotalFatura: 100,
+        basePisCofinsDeclarada: 90,
+        aliquotaPisDeclarada: 0.0094,
+        aliquotaCofinsDeclarada: 0.0432,
+      },
+      rubricas: [
+        { descricao: 'TUSD - Energia Ativa Fornecida', valorTotalReais: 50, baseCalculoIcms: 50, aliquotaIcms: 0, valorIcms: 0, valorPisCofins: 4.4 },
+        { descricao: 'TUSD - Injecao SCEE', valorTotalReais: -10, baseCalculoIcms: 0, aliquotaIcms: 0, valorIcms: 0, valorPisCofins: 0 },
+      ],
+    });
+    const r = detector.detectar(fatura);
+    expect(r.padrao).toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
 // DetectoresRegistry
 // ════════════════════════════════════════════════════════════════════════
 describe('DetectoresRegistry - consolidacao', () => {
@@ -336,18 +444,20 @@ describe('DetectoresRegistry - consolidacao', () => {
       new DetectorTema69Stricto(),
       new DetectorTese3PisCofinsSobreScee(),
       new DetectorTese2IcmsTusdGeracao(),
+      new DetectorTese6IcmsTusdTeSobreScee(),
     );
   });
 
-  it('lista 3 detectores', () => {
+  it('lista 4 detectores', () => {
     const lista = registry.listarDetectores();
-    expect(lista).toHaveLength(3);
+    expect(lista).toHaveLength(4);
     expect(lista).toContain('TEMA_69_STRICTO_DIVERGENCIA');
     expect(lista).toContain('TESE_3_PIS_COFINS_SOBRE_SCEE');
     expect(lista).toContain('TESE_2_ICMS_TUSD_GERACAO');
+    expect(lista).toContain('TESE_6_ICMS_TUSD_TE_SOBRE_SCEE');
   });
 
-  it('CUSD I: roda 3 detectores - so Tese 2 retorna padrao significativo', () => {
+  it('CUSD I: roda 4 detectores - so Tese 2 retorna padrao significativo', () => {
     const fatura = parsear({
       metadados: {
         mesReferencia: '2026-04',
@@ -366,12 +476,15 @@ describe('DetectoresRegistry - consolidacao', () => {
     const consolidado = registry.detectarTodos(fatura);
     expect(consolidado.padroes.length).toBeGreaterThanOrEqual(1);
     expect(consolidado.indebitoMensalTotal).toBeGreaterThan(2700);
-    // Tese 2 sempre primeira (maior indebito)
     expect(consolidado.padroes[0].codigo).toBe('TESE_2_ICMS_TUSD_GERACAO');
   });
 
-  it('ordena padroes por valorIndebitoMensal desc', () => {
-    // EXFISHES ABR: Tese 3 ~2515 (alto), Tese 2 ~0 (sem demanda), Tema 69 0 (ok)
+  it('ordena padroes por valorIndebitoMensal desc - EXFISHES ABR Tese 6 maior que Tese 3', () => {
+    // EXFISHES ABR/2026 com os 4 detectores ativos:
+    // - Tese 6 (ICMS sobre TUSD/TE) ~ R$ 7.008/mes (maior) - aliq 17% > PIS+COFINS
+    // - Tese 3 (PIS+COFINS sobre SCEE) ~ R$ 1.500-2.500/mes
+    // - Tese 2 (ICMS TUSD-G) sem demanda contratada - null
+    // - Tema 69 ok - null
     const fatura = parsear({
       metadados: {
         mesReferencia: '2026-04',
@@ -389,7 +502,12 @@ describe('DetectoresRegistry - consolidacao', () => {
       ],
     });
     const c = registry.detectarTodos(fatura);
-    expect(c.padroes[0].codigo).toBe('TESE_3_PIS_COFINS_SOBRE_SCEE');
-    expect(c.indebito60mSelicTotal).toBeGreaterThan(180000);
+    // Tese 6 vira o primeiro (maior indebito ~R$ 7.008/mes)
+    expect(c.padroes[0].codigo).toBe('TESE_6_ICMS_TUSD_TE_SOBRE_SCEE');
+    expect(c.padroes[0].valorIndebitoMensal).toBeGreaterThan(6500);
+    // Tese 3 vem em seguida
+    expect(c.padroes[1]?.codigo).toBe('TESE_3_PIS_COFINS_SOBRE_SCEE');
+    // Combinado >= R$ 700k em 60m+SELIC (Tese 6 sozinha ja da ~525k)
+    expect(c.indebito60mSelicTotal).toBeGreaterThan(600000);
   });
 });
