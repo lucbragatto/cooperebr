@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-11 — M31 Sprint Clube P1 Fase 2: Empresa-PJ-cooperada compra tokens via Asaas SANDBOX + idempotência race-free + gancho contábil rio-token + UI portal dedicada + smoke E2E real**. **6 commits trabalho** (`826d4f1..d69ebf3`): Bloco 1 schema delta CooperTokenCompra (3 cols aditivas + COMPRA_PJ_COOPERADA + @@unique[asaasId]) · Bloco 2 service comprarTokensCooperado + DTO + endpoint /cooper-token/cooperado/comprar + Asaas SANDBOX + 10 specs · Bloco 3 webhook extension + EventEmitter (evita ciclo Asaas↔CooperToken) + listener + processarPagamentoCompraPj + idempotência 2 camadas + 8 specs · 5º commit fixes P1 pós-review (GAP 1 compare-and-swap atômico + GAP 2 status PAGO_CREDITO_PENDENTE + alerta loud + cross-tenant guard novo em creditar) + 4 specs · Bloco 4 UI /portal/comprar-tokens dedicada (padrão Tipo B com guard PJ + form + preview + Asaas link/QR/boleto) + link condicional /portal/tokens. 9 suites / 106 tests cooper-token verde. TSC web exit 0. **Reviewers cooperebr-financeiro-token-reviewer + cooperebr-multitenant-reviewer aprovaram zero P0/P1 em 2 rodadas**. **Smoke E2E real** com Santi PJ no Asaas SANDBOX: compra 100 PIX → cobrança real (pay_wrh5zqdifbcx33vb, QR 1144 chars base64) → dual-webhook CONFIRMED+RECEIVED → 5/5 asserts PASS (status PAGO + saldo +98 tokens + ledger 1 entry só compare-and-swap + tipo COMPRA_PJ_COOPERADA). **Gancho contábil rio-token automático** (2 LancamentoCaixa R$ 44,10 D Custo + C Passivo via FinanceiroTokenListener.handleEmitido). 4 débitos novos: D-novo-ASAAS-WEBHOOK-AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-CREDITO-PENDENTE-REPROCESSAMENTO P2. Detalhe: `docs/sessoes/2026-06-11-f2-compra-pj-cooperada.md`.
+> Última atualização: **2026-06-12 — M32 Sprint Clube P1 F4 cooperado-only completo (Blocos A→D + C.1 + C.2)**. **8 commits trabalho** (`e73b64a..4a0ee87`): Bloco A `usarNaFatura` PIN + Serializable + status-guard idempotente · Bloco B schema `qrExpiresAt` nullable + helper `criarTokenTransacao` centralizado (jti + tier + motivoStepUp + guards multi-tenant em 3 camadas) · Bloco C helper consumido nos 3 endpoints + step-up admin OTP + endpoint stub `/otp-step-up` · carona auth cookie Secure por protocolo real · Bloco C.1 (3 P1 FIN-1/FIN-2/MT-1 + 4 P2 FIN-4/MT-2 + 4 caronas FIN-7/MT-3/MT-4/MT-5) · C.2 `clientRequestId` estável por sessão de confirmação no frontend admin · Bloco D `<PinInput>` wrapper de OtpInput + modal PIN 2 etapas em `/portal/tokens` + tratamento humano dos 4 erros + help inline · D carona helper `formatarTelefone` único + fix strip 55 prefix. **184/184 specs cooper-token verdes** (78 novos no F4). **2 rodadas reviewers pesados** (`financeiro-token` + `multitenant`): 1ª achou 3 P1+4 P2+caronas → Bloco C.1 fechou; 2ª aprovou tudo + flagou 1 P1 novo (breaking caller) → C.2 fechou. **Smoke E2E 8/8 PASS** real (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual): golden path R$ 4,50 desconto + TokenTransacao USO_FATURA tier=BAIXO motivo=PRIMEIRO_USO + PIN incorreto 403 + EXCEDE_LIMITE 400 + duplo-clique exatamente 1 sucesso + 1 falha (Serializable abortou 2ª) + ledger 1 entry só + idempotência admin app-level. **5 débitos novos** P2/P3 catalogados (UI cooperado→cooperado parcial decidido como (a) — superfícies WA-first Fase 3 reabrirá). Detalhe: `docs/sessoes/2026-06-12-f4-cooperado-only-completo.md`.
+
+> Histórico: **2026-06-11 — M31 Sprint Clube P1 Fase 2: Empresa-PJ-cooperada compra tokens via Asaas SANDBOX + idempotência race-free + gancho contábil rio-token + UI portal dedicada + smoke E2E real**. **6 commits trabalho** (`826d4f1..d69ebf3`): Bloco 1 schema delta CooperTokenCompra (3 cols aditivas + COMPRA_PJ_COOPERADA + @@unique[asaasId]) · Bloco 2 service comprarTokensCooperado + DTO + endpoint /cooper-token/cooperado/comprar + Asaas SANDBOX + 10 specs · Bloco 3 webhook extension + EventEmitter (evita ciclo Asaas↔CooperToken) + listener + processarPagamentoCompraPj + idempotência 2 camadas + 8 specs · 5º commit fixes P1 pós-review (GAP 1 compare-and-swap atômico + GAP 2 status PAGO_CREDITO_PENDENTE + alerta loud + cross-tenant guard novo em creditar) + 4 specs · Bloco 4 UI /portal/comprar-tokens dedicada (padrão Tipo B com guard PJ + form + preview + Asaas link/QR/boleto) + link condicional /portal/tokens. 9 suites / 106 tests cooper-token verde. TSC web exit 0. **Reviewers cooperebr-financeiro-token-reviewer + cooperebr-multitenant-reviewer aprovaram zero P0/P1 em 2 rodadas**. **Smoke E2E real** com Santi PJ no Asaas SANDBOX: compra 100 PIX → cobrança real (pay_wrh5zqdifbcx33vb, QR 1144 chars base64) → dual-webhook CONFIRMED+RECEIVED → 5/5 asserts PASS (status PAGO + saldo +98 tokens + ledger 1 entry só compare-and-swap + tipo COMPRA_PJ_COOPERADA). **Gancho contábil rio-token automático** (2 LancamentoCaixa R$ 44,10 D Custo + C Passivo via FinanceiroTokenListener.handleEmitido). 4 débitos novos: D-novo-ASAAS-WEBHOOK-AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-CREDITO-PENDENTE-REPROCESSAMENTO P2. Detalhe: `docs/sessoes/2026-06-11-f2-compra-pj-cooperada.md`.
 
 > Histórico: **2026-06-10 — M30 Sprint Clube Unificado P1: Fase 1 HUB + Fase 1.5 ECONOMIA (4 blocos) + 5º commit fixes pós-review + Fase 1.1 POLIMENTO MLM**. **8 commits trabalho** (`e4d0976..ed33ffb`): Hub `/dashboard/clube` aglutina 6 itens espalhados em grid de cards + menu único + "Planos (Comercial)" desambiguado; F1.5 entrega 11 colunas aditivas em ConfigCooperToken (8 taxas per-operação + 3 oxidação + marco `oxidacaoAtivadaEm`), helper puro `calcularTaxa` substituindo constantes chumbadas (preserva 2%/1% via fallback), `aplicarOxidacao` prospectivo com 3 invariantes (marco + graça + piso) + cron mensal + gate técnico `OXIDACAO_PRODUCAO_LIBERADA`, UI dedicada `/dashboard/cooper-token/config` (banner âmbar gate jurídico + guard de UX) + link único em `/parceiro/configuracoes`; 5º commit fixes pós-review (G2 strings hardcoded + G3 gate duplicado + MT P2 cooperativaId obrigatório) aprovados pelos reviewers `cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer` (zero P0/P1); Fase 1.1 polimento (3 cards MLM no hub + botão "Voltar ao Clube" consistente em cooper-token/parceiro/financeiro). 85/85 specs Jest verde (7 suites cooper-token: taxa-helper + qr-conformidade + oxidacao + f15-fixes + idor-bq2 + limite-token + token-notificacao). TSC web exit 0. 3 débitos novos: D-novo-OXIDACAO-LEDGER-TIPO P2 (pre-requisito ligar oxidação em prod), D-novo-OXIDACAO-PRESERVADOS-DUPLA-CONTAGEM P3 (conservador), D-novo-OXIDACAO-SPECS P3. Detalhe: `docs/sessoes/2026-06-10-clube-hub-f15-fase11.md`.
 
@@ -2139,20 +2141,166 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
 
 2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
-   Esperado pós-fechamento: working tree limpo (untracked carry-overs
-   catalogados + `.claude/agents/wa-bot-agent.md` modificado é carry-over
-   órfão conhecido do M26 — Luciano avalia em Sprint Housekeeping); último
-   commit é o de fechamento M27 (revisão multi-tenant "qual cadastro?" +
-   skills Coop + F0 Fase 1 read-only CooperToken).
+   Esperado pós-fechamento M32: working tree limpo (untracked carry-overs
+   catalogados); último commit é o de fechamento M32 (F4 cooperado-only
+   completo + smoke E2E 8/8 PASS).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
-   cooperebr-whatsapp online (3000/3001/3002 LISTENING).
-   `cooperebr-edge-agent` stopped (projeto vizinho `cooperebr-monitoramento`,
-   crash loop não investigado, fora do escopo). Frontend é `next start`
-   sob PM2 (NÃO `next dev`) — toda mudança em web/ exige `cd web ;
-   npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
+   cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend é
+   `next start` sob PM2 (NÃO `next dev`) — toda mudança em web/ exige
+   `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
 
-PASSO 1 — Frase comandante (Luciano DECIDE entre 2 opções):
+PASSO 1 — Frase comandante M32 → F3 (Empresa distribui tokens em LOTE/INDIVIDUAL):
+
+Sessão 12/06 entregou M32 em 8 commits (`e73b64a..4a0ee87`):
+- e73b64a F4 Bloco A: usarNaFatura PIN + Serializable + status-guard
+  idempotente (mata D-novo-F4-RACE: overwrite silencioso de cobrança paga).
+- ccc84e9 F4 Bloco B: schema TokenTransacao.qrExpiresAt nullable + helper
+  criarTokenTransacao centralizado (jti via gerarTokenHex(16) + tier
+  BAIXO/ALTO limiar R$50 + motivoStepUp PRIMEIRO_USO/DESTINATARIO_NOVO/
+  VALOR_ALTO + guards multi-tenant em 3 camadas + cross-tenant bloqueado
+  por default).
+- 2e0f649 F4 Bloco C: helper consumido em usarNaFatura + processarPagamentoQr
+  (PIN opcional pra reuso processarQrParceiro; F0 INTOCÁVEL: taxa F1.5 qr
+  continua 1×) + enviarTokens cooperado→cooperado (PIN + calcularTaxa
+  transferencia default 0% + jti) + enviarTokensAdmin novo método (tier
+  BAIXO segue só com auth; tier ALTO exige OTP via OtpDesafioService) +
+  endpoint stub POST /otp-step-up.
+- b62535b carona auth: cookie Secure pelo protocolo real da janela
+  (window.location.protocol === 'https:'), não NODE_ENV — fix login
+  via IP da LAN.
+- 2937a2a F4 Bloco C.1 pós-reviewers (3 P1 + 4 P2 + 4 caronas): FIN-1
+  LimiteTokenService.verificarValor antes da tx nos 3 endpoints + FIN-2
+  cooperado status dentro da tx + MT-1 cobrança via findFirst com
+  contrato:{cooperadoId, cooperativaId} NotFound genérica + FIN-4
+  clientRequestId obrigatório no admin + MT-2 cooperativaId guard + FIN-7
+  0.20 chumbado → valorToken + MT-3 log G1 + MT-4 OtpDesafio rejeita null
+  cooperativaId + MT-5 saldo QR multi-tenant.
+- d61ff5d C.2 breaking caller: clientRequestId estável por sessão de
+  confirmação no frontend admin (useRef + regenera só em sucesso/cancelar,
+  erro transitório mantém UUID — retry idempotente protegido).
+- d136cf9 F4 Bloco D: <PinInput> wrapper minimal de OtpInput (M28/F2
+  convite-convênio) + modal PIN 2 etapas em /portal/tokens (form → pin)
+  + tratamento humano dos 4 motivos (PIN_NAO_DEFINIDO CTA configurar +
+  PIN_BLOQUEADO ISO date formatado + PIN_INCORRETO retry + EXCEDE_LIMITE
+  mensagem detalhada) + help inline azul ShieldCheck.
+- 4a0ee87 D carona: formatarTelefone helper único + 4 callers atualizados
+  + fix strip 55 prefix (copy-paste WhatsApp +5527981341348 agora vira
+  (27) 98134-1348, não (55) 27981-3413).
+
+184/184 specs cooper-token verdes (78 novos no F4). 2 rodadas reviewers
+pesados aprovados. Smoke E2E 8/8 PASS real (AMAGES ambienteTeste,
+JWT manual JWT_SECRET, HTTP backend :3000).
+
+Decisões catalogadas:
+- F4 cooperado-only — endpoints tenant-level (transferirTokensParceiro,
+  usarTokensEnergia, processarQrParceiro) ficam fora; Sprint Hardening
+  Multi-Tenant absorve via D-novo-F4-PARCEIRO-TENANT-STEPUP P2.
+- UI cooperado→cooperado decisão (a) — telas web não criadas (QR/P2P são
+  superfícies WA-first); D-novo-F4-UI-COOPERADO-PEER P2 reabrir quando
+  Token-WA Fase 3 voltar.
+- F0 INTOCÁVEL preservado: taxa F1.5 qr 1× sobre bruto antes da tx;
+  helper criarTokenTransacao NÃO recalcula taxa.
+- jti gerado backend (cooperado); clientRequestId vem do cliente (admin)
+  e vira referenciaId no creditar() — idempotência app-level.
+
+═══ PRÓXIMO BLOCO: F3 — Empresa distribui tokens em LOTE/INDIVIDUAL ═══
+
+Escopo: empresa cooperada PJ (Santi e futuras) distribui tokens já
+comprados pra funcionários da empresa, em LOTE (CSV/seleção múltipla)
+ou INDIVIDUAL (1-1).
+
+OPERAÇÃO MASS-WRITE — reusa controles do Sprint Hardening Mass-Write
+SUPER_ADMIN (P2 enfileirado, ativar aqui):
+- Preview obrigatório antes do envio (mostra N funcionários × N tokens
+  cada = total).
+- Dry-run flag pra simular sem commitar.
+- Cap de segurança (ex.: até X funcionários por lote — admin define).
+- Log auditável em cooperTokenLedger + TokenTransacao (jti por entrega).
+- Confirm explícito (Dialog de duas etapas: revisar + confirmar).
+- Idempotência via referenciaId estável (clientRequestId padrão C.1
+  adaptado pra lote).
+
+SALVAGUARDA CLT ART. 458 — BENEFÍCIO NÃO-SALARIAL ATÉ 50% REMUNERAÇÃO:
+- Token entregue ao funcionário pela empresa = benefício NÃO-salarial
+  desde que não exceda 50% da remuneração mensal (CLT Art. 458 §2º).
+- Gate de produto: empresa informa remuneração de cada funcionário OU
+  declara teto máximo de token por funcionário/mês.
+- UI mostra alerta amber quando entrega ultrapassa o piso configurado
+  (não bloqueia — empresa pode aceitar risco com confirm explícito).
+- D-novo-F3-CLT-458 catalogar caso decisão de produto definir piso
+  duro vs piso configurável.
+
+Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência Sistêmica):
+- Mapear endpoint admin existente (/cooper-token/parceiro/enviar com
+  enviarTokensAdmin do F4 Bloco C — base ideal pra estender pra LOTE).
+- Mapear se há entidade Funcionário já modelada OU se reusa Cooperado
+  com flag.
+- Mapear UI admin que dispararia o lote (/parceiro/distribuir-tokens?
+  /dashboard/clube/distribuir?).
+- Mapear log/auditoria existente (CooperTokenLedger + TokenTransacao
+  já criados pelo F4 — confirmar shape pra registro em massa).
+- MAPA DE IMPACTO 5 dimensões (schema delta? DTOs? UI? testes? docs?).
+- PAUSAR pro OK Luciano antes de codar.
+
+Pré-requisitos leitura M32:
+1. docs/CONTROLE-EXECUCAO.md (este arquivo — seção ## ONDE PARAMOS topo + esta frase).
+2. docs/sessoes/2026-06-12-f4-cooperado-only-completo.md (M32 — esta sessão).
+3. docs/especificacao-circuito-cooper-token-convenio.md (espinha do
+   circuito CooperToken — F3 toca distribuição da empresa pros funcionários).
+4. docs/debitos-tecnicos.md seção F4 (5 débitos novos M32) +
+   D-novo-TAXA-TRANSFER-DESTINO P2.
+5. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/MEMORY.md.
+6. CLAUDE.md + .claude/CLAUDE.md (regras + lição next start).
+
+DIRETRIZES PRESERVAR:
+- jti gerado backend (cooperado); clientRequestId vem do cliente (admin).
+- F0 INTOCÁVEL: taxa F1.5 qr 1× sobre bruto.
+- Cross-tenant bloqueado por default no helper criarTokenTransacao.
+- Multi-tenant: cooperativaId do JWT, nunca do body.
+- Mass-write em LOTE exige preview + cap + dry-run + log auditável + confirm.
+- CLT Art. 458 §2º: benefício não-salarial até 50% remuneração — gate de
+  produto a definir.
+- Specs verdes obrigatórias antes do commit.
+- Rebuild PM2 backend (stop → build → restart) em toda mudança backend.
+- Rebuild web (npm run build → pm2 restart cooperebr-frontend) em toda
+  mudança em web/ — NÃO há HMR.
+
+CARRY-OVERS M32 (não-bloqueantes):
+- D-novo-F4-PARCEIRO-TENANT-STEPUP P2 — Sprint Hardening Multi-Tenant.
+- D-novo-F4-OTP-CANAL-ENTREGA P2 — wirar TokenNotificacaoService no
+  /otp-step-up admin.
+- D-novo-F4-UI-COOPERADO-PEER P2 — reabrir quando Token-WA Fase 3 voltar.
+- D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN P3 — polish assertLimite usar
+  valorToken do plano em vez de 0.45 chumbado.
+- D-novo-TAXA-TRANSFER-DESTINO P2 — gate de destino contábil antes de
+  ligar taxaTransferenciaPerc>0 em prod.
+- D-novo-QR-PARCEIRO-PAPEL-DUAL P3 — JSDoc + guard explícito.
+- Smoke F4 deixou rastros em AMAGES (PIN '123456', saldo 150 limpos
+  ao final; cobrança R$ 979,20 voltou A_VENCER no estado original).
+
+CARRY-OVERS HISTÓRICOS AINDA VIVOS (não-bloqueantes — ver doc-sessões
+M28/M29/M30/M31): D-novo-OXIDACAO-LEDGER-TIPO P2 + D-novo-OXIDACAO-
+PRESERVADOS-DUPLA-CONTAGEM P3 + D-novo-OXIDACAO-SPECS P3 + D-novo-
+WA-PHONE-NORMALIZE P2 + Fase 3 Token-WA pausa explícita + D-novo-
+ASAAS-WEBHOOK-AUTH P2 + D-novo-LEDGER-UNIQUE-CONSTRAINT P3 + D-novo-
+CREDITO-PENDENTE-REPROCESSAMENTO P2 + untracked acumulados pra Sprint
+Housekeeping.
+
+═══ FIM DA FRASE M32 ═══
+
+— BLOCO ARQUIVADO M28 (abaixo — atendido por M29/M30/M31/M32) ——————————
+
+PASSO 0 — [arquivado] — pré-M32:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+
+2. Rodar `git status --short`.
+
+3. Rodar `pm2 list`.
+
+PASSO 1 — [arquivado] Frase comandante M28 (Luciano DECIDE entre 2 opções):
 
 Sessão 09/06 entregou M28 em 5 commits (`10a1de7..b5609e4`):
 - 10a1de7 F0 CooperToken Fase 2: remove crédito indevido saldoParceiro
