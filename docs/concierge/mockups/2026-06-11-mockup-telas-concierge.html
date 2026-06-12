@@ -28,8 +28,10 @@
       <span class="nav-tab" onclick="show(event,'sinergia')">3. Sinergia (Tese 2)</span>
       <span class="nav-tab" onclick="show(event,'exfishes')">4. EXFISHES (GDIII)</span>
       <span class="nav-tab" onclick="show(event,'guilherme')">5. Guilherme ELFSM</span>
-      <span class="nav-tab" onclick="show(event,'admin')">6. Super-admin</span>
-      <span class="nav-tab" onclick="show(event,'landing')">7. Landing publica</span>
+      <span class="nav-tab" onclick="show(event,'leads')">6. Leads recebidos</span>
+      <span class="nav-tab" onclick="show(event,'upload')">7. Upload manual</span>
+      <span class="nav-tab" onclick="show(event,'admin')">8. Super-admin</span>
+      <span class="nav-tab" onclick="show(event,'landing')">9. Landing publica</span>
     </div>
   </div>
 </div>
@@ -587,6 +589,228 @@
         <div class="grid grid-cols-3 gap-2 bg-emerald-100 -mx-2 px-2 py-1"><span class="text-emerald-900 font-bold">Base CORRETA Tese 3</span><span class="text-right text-emerald-700">308,73 − 73,37</span><span class="text-right font-bold text-emerald-900">R$ 235,36</span></div>
         <div class="grid grid-cols-3 gap-2"><span>PIS+COFINS LEGITIMO (235,36 × 6,49%)</span><span></span><span class="text-right">R$ 15,28</span></div>
         <div class="grid grid-cols-3 gap-2 bg-emerald-200 -mx-2 px-2 py-1 border-t-2 border-emerald-400"><span class="text-emerald-900 font-bold">DIFERENCA: 15,27 − 15,28 ≈ R$ 0</span><span class="text-right text-emerald-700">tolerancia R$ 0,50</span><span class="text-right text-xl font-bold text-emerald-900">SEM INDEBITO</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TELA 6 LEADS RECEBIDOS -->
+<div id="s-leads" class="screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-2">📥 Leads do Concierge</h1>
+        <p class="text-sm text-gray-500">Pessoas que enviaram fatura pela landing pública e aguardam atendimento</p>
+      </div>
+      <a class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-semibold text-sm" onclick="show(event,'upload')">+ Upload manual</a>
+    </div>
+
+    <div class="grid grid-cols-4 gap-3 mb-5">
+      <div class="bg-white border border-gray-200 rounded-lg p-3">
+        <div class="text-xs text-gray-500 uppercase font-semibold">Total recebidos</div>
+        <div class="text-2xl font-bold text-gray-800 mt-1">47</div>
+        <div class="text-xs text-gray-400">últimos 30 dias</div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div class="text-xs text-amber-700 uppercase font-semibold">Aguardando OCR</div>
+        <div class="text-2xl font-bold text-amber-900 mt-1">3</div>
+        <div class="text-xs text-amber-600">processando</div>
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <div class="text-xs text-emerald-700 uppercase font-semibold">Diagnóstico pronto</div>
+        <div class="text-2xl font-bold text-emerald-900 mt-1">28</div>
+        <div class="text-xs text-emerald-600">prontos para contato</div>
+      </div>
+      <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+        <div class="text-xs text-cyan-700 uppercase font-semibold">Convertidos</div>
+        <div class="text-2xl font-bold text-cyan-900 mt-1">12</div>
+        <div class="text-xs text-cyan-600">viraram cooperados</div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex items-center gap-2 mb-3 border-b pb-3">
+        <input type="text" placeholder="Buscar por nome, telefone ou status..." class="flex-1 px-3 py-2 border rounded-md text-sm">
+        <select class="px-3 py-2 border rounded-md text-sm">
+          <option>Todos status</option>
+          <option>Aguardando OCR</option>
+          <option>Diagnóstico pronto</option>
+          <option>Contato feito</option>
+          <option>Promovido cooperado</option>
+        </select>
+        <select class="px-3 py-2 border rounded-md text-sm">
+          <option>Todos canais</option>
+          <option>Landing pública</option>
+          <option>Upload manual</option>
+          <option>WhatsApp direto</option>
+        </select>
+      </div>
+
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="text-left p-2">Lead</th>
+            <th class="text-left p-2">Telefone</th>
+            <th class="text-center p-2">Canal</th>
+            <th class="text-center p-2">Status</th>
+            <th class="text-right p-2">Indébito 120m</th>
+            <th class="text-center p-2">Recebido em</th>
+            <th class="text-center p-2">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-t hover:bg-emerald-50">
+            <td class="p-2"><div class="font-semibold">Maria Silva</div><div class="text-xs text-gray-500">EDP-ES B1 GD</div></td>
+            <td class="p-2 text-xs">(27) 9 9876-5432</td>
+            <td class="p-2 text-center"><span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded">Landing</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Diagnóstico pronto</span></td>
+            <td class="p-2 text-right font-bold text-emerald-900">R$ 24.840</td>
+            <td class="p-2 text-center text-xs text-gray-500">há 2 horas</td>
+            <td class="p-2 text-center"><button class="text-xs text-emerald-700 hover:underline">Ver detalhe</button></td>
+          </tr>
+          <tr class="border-t hover:bg-emerald-50 bg-amber-50">
+            <td class="p-2"><div class="font-semibold">Roberto Almeida</div><div class="text-xs text-gray-500">EDP-ES B3 comercial</div></td>
+            <td class="p-2 text-xs">(27) 9 8123-4567</td>
+            <td class="p-2 text-center"><span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded">Landing</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded animate-pulse">⏳ Aguardando OCR</span></td>
+            <td class="p-2 text-right text-gray-400">processando...</td>
+            <td class="p-2 text-center text-xs text-gray-500">há 8 minutos</td>
+            <td class="p-2 text-center"><button class="text-xs text-gray-400">Aguardar</button></td>
+          </tr>
+          <tr class="border-t hover:bg-emerald-50">
+            <td class="p-2"><div class="font-semibold">Indústria Capixaba ME</div><div class="text-xs text-gray-500">EDP-ES A4 industrial · CNPJ</div></td>
+            <td class="p-2 text-xs">(27) 9 9555-1234</td>
+            <td class="p-2 text-center"><span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Upload manual</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">📞 Contato feito</span></td>
+            <td class="p-2 text-right font-bold text-emerald-900">R$ 287.450</td>
+            <td class="p-2 text-center text-xs text-gray-500">ontem</td>
+            <td class="p-2 text-center"><button class="text-xs text-emerald-700 hover:underline">Promover</button></td>
+          </tr>
+          <tr class="border-t hover:bg-emerald-50">
+            <td class="p-2"><div class="font-semibold">João Pedro Ferreira</div><div class="text-xs text-gray-500">ELFSM B10 GD I</div></td>
+            <td class="p-2 text-xs">(27) 9 9001-2233</td>
+            <td class="p-2 text-center"><span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">WhatsApp</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">Diagnóstico pronto</span></td>
+            <td class="p-2 text-right text-emerald-700">SEM INDÉBITO ✓</td>
+            <td class="p-2 text-center text-xs text-gray-500">há 3 dias</td>
+            <td class="p-2 text-center"><button class="text-xs text-emerald-700 hover:underline">Ver detalhe</button></td>
+          </tr>
+          <tr class="border-t hover:bg-emerald-50 bg-cyan-50">
+            <td class="p-2"><div class="font-semibold">Fazenda São Marcos</div><div class="text-xs text-gray-500">Energisa TO B2 rural</div></td>
+            <td class="p-2 text-xs">(63) 9 8456-7890</td>
+            <td class="p-2 text-center"><span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded">Landing</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-cyan-200 text-cyan-900 px-2 py-0.5 rounded">✅ Cooperado</span></td>
+            <td class="p-2 text-right font-bold text-emerald-900">R$ 156.320</td>
+            <td class="p-2 text-center text-xs text-gray-500">há 1 semana</td>
+            <td class="p-2 text-center"><button class="text-xs text-emerald-700 hover:underline">Ver ficha</button></td>
+          </tr>
+          <tr class="border-t hover:bg-emerald-50">
+            <td class="p-2"><div class="font-semibold">Carlos Mendes</div><div class="text-xs text-gray-500">EDP-ES B1 residencial sem GD</div></td>
+            <td class="p-2 text-xs">(27) 9 9876-1111</td>
+            <td class="p-2 text-center"><span class="text-xs bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded">Landing</span></td>
+            <td class="p-2 text-center"><span class="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">⊘ Sem indébito</span></td>
+            <td class="p-2 text-right text-gray-400">—</td>
+            <td class="p-2 text-center text-xs text-gray-500">há 2 dias</td>
+            <td class="p-2 text-center"><button class="text-xs text-gray-500 hover:underline">Arquivar</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bg-cyan-50 border border-cyan-200 rounded-lg p-4 mt-5 text-sm text-cyan-900">
+      💡 <strong>Como o lead chega aqui:</strong> Pessoa preenche formulário na landing pública (tela 9) → backend recebe PDF + WhatsApp → cria <code class="bg-cyan-100 px-1 rounded">LeadConcierge</code> com status <code class="bg-cyan-100 px-1 rounded">AGUARDANDO_OCR</code> → job assíncrono processa OCR + detectores → atualiza para <code class="bg-cyan-100 px-1 rounded">DIAGNOSTICO_PRONTO</code> → bot WA notifica lead com cenários de recuperação → admin entra em contato → quando aderir, promove a Cooperado.
+    </div>
+  </div>
+</div>
+
+<!-- TELA 7 UPLOAD MANUAL -->
+<div id="s-upload" class="screen p-6">
+  <div class="max-w-3xl mx-auto">
+    <a class="text-emerald-700 text-sm hover:underline cursor-pointer" onclick="show(event,'leads')">← Voltar para leads</a>
+    <h1 class="text-3xl font-bold text-gray-800 mt-2">📤 Upload Manual de Fatura</h1>
+    <p class="text-sm text-gray-500">Use quando o cliente prefere enviar fatura por WhatsApp direto, email ou balcão presencial.</p>
+
+    <div class="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-4 mt-4 text-sm">
+      <strong>⚠️ Atenção:</strong> Esse fluxo é para quando o cliente <strong>não consegue ou não quer usar a landing pública</strong>. O resultado da auditoria continua passando pelo mesmo pipeline (OCR Claude → adapter → 3 detectores → cenários) e cai na mesma fila de Leads.
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6 mt-4">
+      <h2 class="font-bold text-lg text-gray-800 mb-4">Dados do cliente</h2>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">Nome ou razão social</label>
+          <input type="text" placeholder="Como está na fatura" class="block w-full mt-1 px-3 py-2 border rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">CPF ou CNPJ (opcional)</label>
+          <input type="text" placeholder="Apenas números" class="block w-full mt-1 px-3 py-2 border rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">WhatsApp para resposta</label>
+          <input type="text" placeholder="(27) 9 8134-1348" class="block w-full mt-1 px-3 py-2 border rounded-lg">
+        </div>
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">Email (opcional)</label>
+          <input type="email" placeholder="cliente@email.com" class="block w-full mt-1 px-3 py-2 border rounded-lg">
+        </div>
+      </div>
+
+      <h2 class="font-bold text-lg text-gray-800 mt-6 mb-4">Fatura</h2>
+
+      <div class="border-2 border-dashed border-emerald-300 rounded-lg p-8 text-center bg-emerald-50 hover:bg-emerald-100 cursor-pointer transition">
+        <div class="text-4xl">📄</div>
+        <div class="text-sm text-emerald-700 font-semibold mt-2">Clique para enviar PDF ou imagem</div>
+        <div class="text-xs text-gray-500 mt-1">PDF, JPG, PNG · até 10 MB</div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">Concessionária</label>
+          <select class="block w-full mt-1 px-3 py-2 border rounded-lg">
+            <option>Detectar automaticamente</option>
+            <option>EDP-ES</option>
+            <option>ELFSM</option>
+            <option>Energisa Tocantins</option>
+            <option>Outra (análise manual)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm text-gray-700 font-semibold">Mês de referência</label>
+          <input type="month" class="block w-full mt-1 px-3 py-2 border rounded-lg">
+        </div>
+      </div>
+
+      <h2 class="font-bold text-lg text-gray-800 mt-6 mb-3">Origem do contato</h2>
+      <div class="grid grid-cols-3 gap-3">
+        <label class="flex items-center gap-2 border rounded-lg p-3 cursor-pointer hover:bg-emerald-50">
+          <input type="radio" name="origem"> <span class="text-sm">WhatsApp direto</span>
+        </label>
+        <label class="flex items-center gap-2 border rounded-lg p-3 cursor-pointer hover:bg-emerald-50">
+          <input type="radio" name="origem"> <span class="text-sm">Email/Atendimento</span>
+        </label>
+        <label class="flex items-center gap-2 border rounded-lg p-3 cursor-pointer hover:bg-emerald-50">
+          <input type="radio" name="origem"> <span class="text-sm">Balcão presencial</span>
+        </label>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-700 font-semibold mt-4 block">Observação interna (opcional)</label>
+        <textarea placeholder="Ex: cliente indicado pelo João, pediu retorno na sexta-feira..." class="block w-full mt-1 px-3 py-2 border rounded-lg" rows="2"></textarea>
+      </div>
+
+      <label class="flex items-start gap-2 text-xs text-gray-600 mt-4 border-t pt-4">
+        <input type="checkbox" class="mt-0.5">
+        <span>Confirmo que tenho consentimento do cliente para processar a fatura (LGPD). O cliente foi informado sobre Política de Privacidade da CoopereBR e autorizou a análise.</span>
+      </label>
+
+      <div class="flex gap-3 mt-6">
+        <button class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-bold">🔍 Processar e auditar</button>
+        <button class="border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg">Cancelar</button>
+      </div>
+
+      <div class="mt-4 text-xs text-gray-500 text-center">
+        Após o upload, o sistema executará: <strong>OCR Claude → identificação concessionária → adapter → 3 detectores → cenários 12-120m</strong>. Resultado aparece em "Leads recebidos" em até 2 minutos.
       </div>
     </div>
   </div>
