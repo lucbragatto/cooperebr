@@ -839,6 +839,26 @@ O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioServ
 
 **Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
 
+#### D-novo-F4-UI-COOPERADO-PEER — Telas cooperado→cooperado faltantes (processarPagamentoQr e enviarTokens)
+
+**Severidade:** P2.
+**Detectado em:** 2026-06-12 (F4 Bloco D — mapeamento de telas dos 3 endpoints cooperado-only).
+**Onde:** `web/app/portal/` (faltam `qr-receber/page.tsx` + `enviar-tokens/page.tsx` cooperado-side).
+
+Backend F4 expõe 3 endpoints cooperado-only blindados com PIN/Serializable/jti:
+
+1. `POST /cooper-token/usar-na-fatura` → tela cooperado: **EXISTE** `/portal/tokens` (Bloco D adicionou PIN).
+2. `POST /cooper-token/processar-pagamento-qr` → tela cooperado **NÃO EXISTE**. Hoje só tem `/parceiro/receber-tokens` que reusa via `processarQrParceiro`. Falta tela onde cooperado B escaneia/cola QR de cooperado A pra receber pagamento P2P.
+3. `POST /cooper-token/parceiro/enviar` cooperado→cooperado → tela cooperado **NÃO EXISTE**. Existe `/parceiro/enviar-tokens` mas é caminho admin (sem cooperado remetente).
+
+**Resolução proposta (próximo sprint UI cooperado):**
+- `web/app/portal/qr-receber/page.tsx` — paste/scan QR JWT + PIN modal + POST processarPagamentoQr. Reusa o componente `<PinInput>` do Bloco D.
+- `web/app/portal/transferir/page.tsx` — busca cooperado destinatário + quantidade + PIN modal + POST parceiro/enviar (cooperado remetente do JWT — backend bifurca).
+- Decisão produto: P2P cooperado→cooperado é caso de uso real? Hoje só faz sentido em cooperativas onde cooperados se conhecem (CoopereBR). Validar com Luciano antes de investir UI.
+- Estimativa: ~6-8h Code cada tela + smoke E2E.
+
+**Não bloqueia F4 backend.** Endpoints existem, testados, podem ser chamados via cURL/Postman/bot WhatsApp. Falta apenas a interface gráfica do portal cooperado.
+
 #### D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN — assertLimite no usarNaFatura usa 0.45 fixo como upper-bound do valor R$
 
 **Severidade:** P3 (polish; só pode bloquear A MAIS, nunca a menos — conservador).

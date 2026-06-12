@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PinInput } from '@/components/ui/pin-input';
 import { QRCodeSVG } from 'qrcode.react';
-import { Coins, QrCode, Timer, Receipt, ArrowDownCircle, ShoppingCart } from 'lucide-react';
+import { Coins, QrCode, Timer, Receipt, ArrowDownCircle, ShoppingCart, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface CobrancaPendente {
   id: string;
@@ -43,6 +44,17 @@ export default function PortalTokensPage() {
   const [aplicando, setAplicando] = useState(false);
   const [erroFatura, setErroFatura] = useState('');
   const [sucessoFatura, setSucessoFatura] = useState('');
+
+  // F4 Bloco D (12/06/2026) — etapa de PIN antes de confirmar `usarNaFatura`.
+  // Estado: 'form' (preenche quantidade) → 'pin' (PIN 6 dígitos) → POST.
+  type EtapaFatura = 'form' | 'pin';
+  const [etapaFatura, setEtapaFatura] = useState<EtapaFatura>('form');
+  const [pin, setPin] = useState('');
+  const [pinErro, setPinErro] = useState<{
+    motivo: 'PIN_NAO_DEFINIDO' | 'PIN_BLOQUEADO' | 'PIN_INCORRETO' | 'EXCEDE_LIMITE' | 'GENERICO';
+    mensagem: string;
+    desbloqueiaEm?: string;
+  } | null>(null);
 
   const carregarDados = useCallback(async () => {
     try {
@@ -126,10 +138,16 @@ export default function PortalTokensPage() {
     }
   }
 
-  async function handleUsarNaFatura() {
+  /**
+   * F4 Bloco D (12/06/2026) — Etapa 1: validação local + transição pra PIN.
+   * Validações que NÃO precisam de backend (quantidade, saldo). Se OK,
+   * abre a etapa de PIN. O POST com PIN vai em `confirmarComPin`.
+   */
+  function prepararUsarNaFatura() {
     if (!modalCobranca) return;
     setErroFatura('');
     setSucessoFatura('');
+    setPinErro(null);
 
     const qtd = parseFloat(tokensParaUsar);
     if (!qtd || qtd <= 0) {
@@ -140,25 +158,87 @@ export default function PortalTokensPage() {
       setErroFatura(`Saldo insuficiente. Disponível: ${saldo.toFixed(4)}`);
       return;
     }
+    setPin('');
+    setEtapaFatura('pin');
+  }
 
+  /**
+   * F4 Bloco D — Etapa 2: confirma com PIN. Traduz erros do backend pra
+   * mensagens humanas:
+   *  - 400 PIN_NAO_DEFINIDO → link pra /portal/seguranca/definir-pin
+   *  - 403 PIN_BLOQUEADO → mostra desbloqueiaEm formatado
+   *  - 403 PIN_INCORRETO → mensagem clara + permitir retry
+   *  - 400 EXCEDE_LIMITE_* → mensagem específica do limite
+   *  - Outros → mensagem genérica
+   */
+  async function confirmarComPin() {
+    if (!modalCobranca) return;
+    setPinErro(null);
+    if (!/^\d{6}$/.test(pin)) {
+      setPinErro({ motivo: 'PIN_INCORRETO', mensagem: 'Digite os 6 dígitos do PIN.' });
+      return;
+    }
+
+    const qtd = parseFloat(tokensParaUsar);
     setAplicando(true);
     try {
       const res = await api.post('/cooper-token/usar-na-fatura', {
         cobrancaId: modalCobranca.id,
         quantidadeTokens: qtd,
+        pin,
       });
       setSucessoFatura(
         `Desconto de R$ ${res.data.desconto.toFixed(2)} aplicado! Novo valor: R$ ${res.data.novoValor.toFixed(2)} (${res.data.tokensUsados.toFixed(4)} tokens usados)`,
       );
+      // Reset completo
       setModalCobranca(null);
       setTokensParaUsar('');
-      // Recarregar dados
+      setPin('');
+      setEtapaFatura('form');
       await carregarDados();
     } catch (err: any) {
-      setErroFatura(err.response?.data?.message ?? 'Erro ao aplicar tokens');
+      const msg: string = err.response?.data?.message ?? 'Erro ao aplicar tokens';
+      if (/PIN ainda não foi definido|PIN_NAO_DEFINIDO|defina .*PIN/i.test(msg)) {
+        setPinErro({
+          motivo: 'PIN_NAO_DEFINIDO',
+          mensagem: 'PIN ainda não foi configurado. Configure no portal de segurança antes de operar.',
+        });
+      } else if (/PIN bloqueado|PIN_BLOQUEADO/i.test(msg)) {
+        // Tenta extrair ISO date da mensagem ("PIN bloqueado ... após 2026-...T...")
+        const match = msg.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\d.Z+-:]*)/);
+        const desbloqueiaEm = match?.[1];
+        setPinErro({
+          motivo: 'PIN_BLOQUEADO',
+          mensagem: 'PIN bloqueado por excesso de tentativas.',
+          desbloqueiaEm,
+        });
+        setPin('');
+      } else if (/PIN incorreto|PIN_INCORRETO/i.test(msg)) {
+        setPinErro({
+          motivo: 'PIN_INCORRETO',
+          mensagem: 'PIN incorreto. Tente novamente.',
+        });
+        setPin('');
+      } else if (/excede o limite por transação|Limite diário|excede limite/i.test(msg)) {
+        setPinErro({
+          motivo: 'EXCEDE_LIMITE',
+          mensagem: msg, // mensagem do backend já é detalhada e humana
+        });
+      } else {
+        setPinErro({ motivo: 'GENERICO', mensagem: msg });
+      }
     } finally {
       setAplicando(false);
     }
+  }
+
+  function cancelarModal() {
+    setModalCobranca(null);
+    setTokensParaUsar('');
+    setPin('');
+    setEtapaFatura('form');
+    setErroFatura('');
+    setPinErro(null);
   }
 
   function formatTime(seconds: number) {
@@ -300,7 +380,7 @@ export default function PortalTokensPage() {
             </div>
           )}
 
-          {/* Modal inline de confirmação */}
+          {/* Modal inline de confirmação — F4 Bloco D: 2 etapas (form → pin) */}
           {modalCobranca && (
             <div className="mt-4 border-2 border-primary rounded-lg p-4 bg-primary/5">
               <h3 className="font-semibold mb-2">
@@ -313,36 +393,164 @@ export default function PortalTokensPage() {
                 {' | '}Saldo: <strong>{saldo.toFixed(4)} CooperTokens</strong>
               </p>
 
-              {erroFatura && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-3">
-                  {erroFatura}
-                </div>
+              {/* ───── ETAPA 1: form (quantidade) ───── */}
+              {etapaFatura === 'form' && (
+                <>
+                  {erroFatura && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm mb-3">
+                      {erroFatura}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 max-w-xs">
+                      <Label>Quantidade de tokens</Label>
+                      <Input
+                        type="number"
+                        min={0.0001}
+                        step={0.0001}
+                        max={saldo}
+                        value={tokensParaUsar}
+                        onChange={e => setTokensParaUsar(e.target.value)}
+                        placeholder="Ex: 5.0"
+                      />
+                    </div>
+                    <Button onClick={prepararUsarNaFatura}>
+                      Continuar
+                    </Button>
+                    <Button variant="ghost" onClick={cancelarModal}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
               )}
 
-              <div className="flex gap-2 items-end">
-                <div className="flex-1 max-w-xs">
-                  <Label>Quantidade de tokens</Label>
-                  <Input
-                    type="number"
-                    min={0.0001}
-                    step={0.0001}
-                    max={saldo}
-                    value={tokensParaUsar}
-                    onChange={e => setTokensParaUsar(e.target.value)}
-                    placeholder="Ex: 5.0"
-                  />
+              {/* ───── ETAPA 2: PIN ───── */}
+              {etapaFatura === 'pin' && (
+                <div className="space-y-4">
+                  {/* Help inline contextual (regra UX 19/05) */}
+                  <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-md p-3 text-xs space-y-1">
+                    <p className="font-medium flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Confirmação com PIN
+                    </p>
+                    <p>
+                      Para sua segurança, operações com tokens exigem o PIN de 6 dígitos. Esse PIN é diferente da sua senha.
+                    </p>
+                    <p>
+                      Ainda não tem PIN?{' '}
+                      <Link
+                        href="/portal/seguranca/definir-pin"
+                        className="underline font-medium"
+                      >
+                        Defina agora
+                      </Link>
+                      .
+                    </p>
+                  </div>
+
+                  <div className="text-sm">
+                    Você vai usar <strong>{parseFloat(tokensParaUsar || '0').toFixed(4)} CooperTokens</strong>{' '}
+                    para abater a fatura{' '}
+                    <strong>
+                      {String(modalCobranca.mesReferencia).padStart(2, '0')}/
+                      {modalCobranca.anoReferencia}
+                    </strong>
+                    .
+                  </div>
+
+                  <div>
+                    <Label className="block mb-2 text-sm">PIN de 6 dígitos</Label>
+                    <PinInput
+                      value={pin}
+                      onChange={(v) => {
+                        setPin(v);
+                        if (pinErro?.motivo === 'PIN_INCORRETO') setPinErro(null);
+                      }}
+                      erro={
+                        pinErro?.motivo === 'PIN_INCORRETO' ||
+                        pinErro?.motivo === 'PIN_BLOQUEADO' ||
+                        pinErro?.motivo === 'PIN_NAO_DEFINIDO'
+                      }
+                      disabled={aplicando || pinErro?.motivo === 'PIN_BLOQUEADO' || pinErro?.motivo === 'PIN_NAO_DEFINIDO'}
+                    />
+                  </div>
+
+                  {pinErro && (
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-3 text-sm space-y-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <div className="space-y-1 flex-1">
+                          <p className="font-medium">{pinErro.mensagem}</p>
+                          {pinErro.motivo === 'PIN_NAO_DEFINIDO' && (
+                            <Link
+                              href="/portal/seguranca/definir-pin"
+                              className="text-red-900 underline text-xs font-semibold inline-block"
+                            >
+                              Configurar PIN agora →
+                            </Link>
+                          )}
+                          {pinErro.motivo === 'PIN_BLOQUEADO' && pinErro.desbloqueiaEm && (
+                            <p className="text-xs">
+                              Tente novamente após{' '}
+                              <strong>
+                                {new Date(pinErro.desbloqueiaEm).toLocaleString('pt-BR', {
+                                  dateStyle: 'short',
+                                  timeStyle: 'short',
+                                })}
+                              </strong>
+                              .
+                            </p>
+                          )}
+                          {pinErro.motivo === 'EXCEDE_LIMITE' && (
+                            <p className="text-xs">
+                              Ajuste o limite em{' '}
+                              <Link
+                                href="/portal/seguranca"
+                                className="underline font-semibold"
+                              >
+                                /portal/seguranca
+                              </Link>{' '}
+                              ou peça ao admin pra elevar o teto.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={confirmarComPin}
+                      disabled={
+                        aplicando ||
+                        pin.length !== 6 ||
+                        pinErro?.motivo === 'PIN_BLOQUEADO' ||
+                        pinErro?.motivo === 'PIN_NAO_DEFINIDO'
+                      }
+                    >
+                      {aplicando ? 'Confirmando...' : 'Confirmar com PIN'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setEtapaFatura('form');
+                        setPin('');
+                        setPinErro(null);
+                      }}
+                      disabled={aplicando}
+                    >
+                      Voltar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={cancelarModal}
+                      disabled={aplicando}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
                 </div>
-                <Button onClick={handleUsarNaFatura} disabled={aplicando}>
-                  {aplicando ? 'Aplicando...' : 'Confirmar'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setModalCobranca(null)}
-                  disabled={aplicando}
-                >
-                  Cancelar
-                </Button>
-              </div>
+              )}
             </div>
           )}
         </CardContent>
