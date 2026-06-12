@@ -43,6 +43,8 @@ import {
   executarMassWrite,
   MassWriteAlerta,
 } from '../common/mass-write/mass-write.helper';
+// F6 Bloco B (12/06/2026): PIX-out helper pra resgate de voucher.
+import { AsaasPixOutService } from '../financeiro/asaas-pix-out.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -108,6 +110,9 @@ export class CooperTokenService {
     // F4 Bloco C.1 (12/06/2026) — limite por transação + diário. Optional
     // pelas mesmas razões; em prod sempre injetado via CooperTokenModule.providers.
     private limiteTokenService?: LimiteTokenService,
+    // F6 Bloco B (12/06/2026) — PIX-out pra resgate de voucher
+    // (estabelecimento → R$). Optional pelas mesmas razões dos demais.
+    private asaasPixOutService?: AsaasPixOutService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -1859,6 +1864,730 @@ export class CooperTokenService {
         inativosCount: inativos.length,
       },
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // F6 Bloco B (12/06/2026) — Estabelecimento resgata tokens em R$ via PIX
+  // ═══════════════════════════════════════════════════════════════════
+  //
+  // MODELO: "Resgate/Liquidação de voucher" com RECIBO — cooperativa quita
+  // passivo próprio (token que emitiu). NUNCA "recompra"/"venda" — vira
+  // erro de conformidade (decisao_modelo_token_voucher_sobra_resgate
+  // _2026_06_04.md).
+  //
+  // 3 REFORÇOS (Luciano 12/06):
+  //   1. Compare-and-swap em TODAS as transições de status (aprovar/recusar/
+  //      cancelar/webhook): updateMany({where:{id, cooperativaId, status:
+  //      esperado}}) + count===1. Dois admins/cancelar×aprovar/webhook
+  //      duplicado = sempre 1 vencedor.
+  //   2. Estorno auditável: FALHA_PIX/recusa/cancelamento → ledger
+  //      ESTORNO_RESGATE_PIX devolvendo ao saldoDisponivel — NUNCA apaga.
+  //      Invariante: saldoDisponivel + saldoBloqueadoResgate conservada em
+  //      TODA transição.
+  //   3. Webhook idempotente: ultimoWebhookEventId checado antes de
+  //      qualquer transição (Asaas envia eventos duplicados).
+
+  /**
+   * Helper interno: gera próximo número sequencial RES-{YYYY}-{NNNNN} por
+   * cooperativa+ano dentro da tx. Upsert atômico no ResgateReciboCounter
+   * + increment de `proximoNumero`. Multi-tenant: cada cooperativa tem
+   * sua sequência isolada (Decisão Q3 — não vaza volume).
+   */
+  private async gerarNumeroRecibo(
+    tx: Prisma.TransactionClient,
+    cooperativaId: string,
+  ): Promise<string> {
+    const ano = new Date().getFullYear();
+    // Upsert idempotente: cria contador se ano novo, ou reusa existente.
+    await tx.resgateReciboCounter.upsert({
+      where: { cooperativaId_ano: { cooperativaId, ano } },
+      create: { cooperativaId, ano, proximoNumero: 1 },
+      update: {},
+    });
+    // Increment atômico → retorna o número usado.
+    const atual = await tx.resgateReciboCounter.update({
+      where: { cooperativaId_ano: { cooperativaId, ano } },
+      data: { proximoNumero: { increment: 1 } },
+      select: { proximoNumero: true },
+    });
+    // proximoNumero APÓS increment; o número desta operação é o ANTERIOR.
+    const numero = atual.proximoNumero - 1;
+    return `RES-${ano}-${String(numero).padStart(5, '0')}`;
+  }
+
+  /**
+   * Estabelecimento solicita resgate de tokens em R$ via PIX.
+   *
+   * Fluxo:
+   *  1. Guards (FORA da tx): ehEstabelecimento + status + pixChave cadastrada
+   *     + PIN via PinCooperadoService.validarPinComLockout + tier ALTO OTP.
+   *  2. assertLimite sobre o valor R$ total (mesma fórmula F3).
+   *  3. Dentro da tx Serializable:
+   *     a. Re-snapshot saldo (defesa anti-race).
+   *     b. Gera numeroRecibo via counter (atômico).
+   *     c. Bloqueia saldo: saldoDisponivel -= qty, saldoBloqueadoResgate += qty.
+   *        SEM ledger ainda (token NÃO saiu — invariante conserva).
+   *     d. Cria ResgateRecibo status='PENDENTE_APROVACAO_COOP' + snapshot
+   *        pixChave/pixTipo (do Cooperado.pixChave, NUNCA do body).
+   *  4. Retorna {recibo, status, observacao "aguardando aprovação"}.
+   */
+  async solicitarResgate(params: {
+    estabelecimentoCooperadoId: string;
+    cooperativaId: string;
+    quantidade: number;
+    pin: string;
+    clientRequestId: string;
+    otpDesafioId?: string;
+    otpCodigo?: string;
+    observacao?: string;
+  }) {
+    const {
+      estabelecimentoCooperadoId,
+      cooperativaId,
+      quantidade,
+      pin,
+      clientRequestId,
+      otpDesafioId,
+      otpCodigo,
+      observacao,
+    } = params;
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      throw new BadRequestException('Quantidade deve ser positiva.');
+    }
+    if (!clientRequestId || clientRequestId.trim().length < 8) {
+      throw new BadRequestException(
+        'clientRequestId obrigatório (mínimo 8 chars; recomendado UUID v4). Idempotência: retry do mesmo ID = mesmo recibo.',
+      );
+    }
+
+    // ── Guard 1: estabelecimento existe + tenant + flag + pixChave cadastrada ──
+    const estabelecimento = await this.prisma.cooperado.findFirst({
+      where: { id: estabelecimentoCooperadoId, cooperativaId },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        status: true,
+        ehEstabelecimento: true,
+        pixChave: true,
+        pixTipo: true,
+      },
+    });
+    if (!estabelecimento) {
+      throw new NotFoundException('Cooperado não encontrado no seu tenant.');
+    }
+    if (!estabelecimento.ehEstabelecimento) {
+      throw new ForbiddenException(
+        'Resgate em PIX é exclusivo de cooperados-Estabelecimento do Clube. Solicite ao admin da cooperativa pra habilitar a flag ehEstabelecimento no seu cadastro.',
+      );
+    }
+    if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(estabelecimento.status)) {
+      throw new ForbiddenException(
+        `Status ${estabelecimento.status} não permite solicitar resgate. Permitidos: ATIVO ou ATIVO_RECEBENDO_CREDITOS.`,
+      );
+    }
+    if (!estabelecimento.pixChave || estabelecimento.pixChave.trim().length === 0) {
+      throw new BadRequestException(
+        'Chave PIX não cadastrada. Cadastre em /portal/seguranca/dados-bancarios antes de solicitar resgate (anti-fraude — chave nunca vem do body).',
+      );
+    }
+
+    // ── Guard 2: PIN FORA da tx (mesmo padrão F4) ──
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      throw new BadRequestException('PIN obrigatório (6 dígitos numéricos).');
+    }
+    if (!this.pinCooperadoService) {
+      throw new Error('PinCooperadoService não disponível (wiring do módulo).');
+    }
+    const pinResult = await this.pinCooperadoService.validarPinComLockout({
+      cooperadoId: estabelecimentoCooperadoId,
+      cooperativaId,
+      pin,
+    });
+    if (!pinResult.ok) {
+      if (pinResult.motivo === 'PIN_NAO_DEFINIDO') {
+        throw new BadRequestException(
+          'PIN do estabelecimento não foi definido. Configure no portal de segurança antes de solicitar resgate.',
+        );
+      }
+      if (pinResult.motivo === 'PIN_BLOQUEADO') {
+        throw new ForbiddenException(
+          `PIN bloqueado por excesso de tentativas. Tente após ${pinResult.desbloqueiaEm.toISOString()}.`,
+        );
+      }
+      throw new ForbiddenException('PIN incorreto.');
+    }
+
+    // ── Calcular valor R$ + tier ──
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const valorBrutoReais = Math.round(quantidade * valorTokenReais * 100) / 100;
+    const { taxa: taxaTokens, liquido: liquidoTokens } = calcularTaxa(
+      'resgate',
+      quantidade,
+      config,
+    );
+
+    // F6 Bloco B — guard taxa>0 análogo ao F3 GAP-F3-4: bloqueado até
+    // D-novo-TAXA-RESGATE-DESTINO definir destino contábil.
+    if (taxaTokens > 0) {
+      throw new BadRequestException(
+        `Resgate em PIX está bloqueado enquanto a taxa de resgate > 0 (atual: ${taxaTokens} tokens). ` +
+          `Definir destino contábil da taxa de resgate exige decisão produto (ver D-novo-TAXA-RESGATE-DESTINO P2 — análogo a D-novo-TAXA-TRANSFER-DESTINO). ` +
+          `Setar taxaResgatePerc=0 em /cooper-token/admin/config até o gate ser definido.`,
+      );
+    }
+    const valorTaxaReais = 0; // Por design v1 — taxa zero.
+    const valorLiquidoReais = valorBrutoReais;
+    const tier = calcularTier(valorBrutoReais);
+
+    // ── Guard 3: tier ALTO exige OTP step-up ──
+    if (tier === 'ALTO') {
+      if (!otpDesafioId || !otpCodigo) {
+        throw new BadRequestException(
+          `Resgate tier ALTO (>R$ 50): OTP obrigatório. Solicite OTP via /cooper-token/otp-step-up antes (informe otpDesafioId e otpCodigo).`,
+        );
+      }
+      if (!this.otpDesafioService) {
+        throw new Error(
+          'OtpDesafioService não disponível (wiring do módulo). F6 Bloco B exige injeção via CooperadosModule.',
+        );
+      }
+      await this.otpDesafioService.validarOuLancar({
+        desafioId: otpDesafioId,
+        codigo: otpCodigo,
+        cooperativaId,
+      });
+    }
+
+    // ── Guard 4: limite por transação + diário do estabelecimento ──
+    await this.assertLimite({
+      cooperadoId: estabelecimentoCooperadoId,
+      cooperativaId,
+      valorReais: valorBrutoReais,
+      origem: 'enviarTokens', // alias semântico
+    });
+
+    // ── Idempotência: clientRequestId duplicado retorna recibo existente ──
+    const reciboExistente = await this.prisma.resgateRecibo.findUnique({
+      where: { clientRequestId },
+    });
+    if (reciboExistente) {
+      if (reciboExistente.cooperativaId !== cooperativaId) {
+        // Anti-IDOR: pode existir noutro tenant (raríssimo). Retorna NotFound
+        // genérico em vez de revelar.
+        throw new NotFoundException('Solicitação não encontrada.');
+      }
+      this.logger.log(
+        `[F6] solicitarResgate idempotência hit — clientRequestId=${clientRequestId.slice(0, 8)}… retornando recibo ${reciboExistente.numeroRecibo}`,
+      );
+      return {
+        idempotente: true,
+        recibo: reciboExistente,
+      };
+    }
+
+    // ── Tx Serializable: re-snapshot saldo + gera numero + bloqueia + cria recibo ──
+    const recibo = await this.prisma.$transaction(
+      async (tx) => {
+        // Re-snapshot do saldo DENTRO da tx (tudo-ou-nada).
+        const saldo = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: estabelecimentoCooperadoId },
+        });
+        if (!saldo) {
+          throw new BadRequestException(
+            'Estabelecimento não tem saldo de tokens. Receba via QR (F4) ou comprado (F2) antes de solicitar resgate.',
+          );
+        }
+        const saldoDisp = Number(saldo.saldoDisponivel);
+        const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
+        if (saldoDisp < quantidade) {
+          throw new BadRequestException(
+            `Saldo insuficiente. Disponível: ${saldoDisp} tokens; solicitado: ${quantidade}. Saldo bloqueado (aguardando aprovação): ${saldoBloq}.`,
+          );
+        }
+
+        // Bloquear: -saldoDisponivel, +saldoBloqueadoResgate. Conserva soma.
+        const novoSaldoDisp = Math.round((saldoDisp - quantidade) * 10000) / 10000;
+        const novoSaldoBloq = Math.round((saldoBloq + quantidade) * 10000) / 10000;
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: estabelecimentoCooperadoId },
+          data: {
+            saldoDisponivel: novoSaldoDisp,
+            saldoBloqueadoResgate: novoSaldoBloq,
+          },
+        });
+
+        // Gera número do recibo via counter atômico (multi-tenant).
+        const numeroRecibo = await this.gerarNumeroRecibo(tx, cooperativaId);
+
+        // Cria ResgateRecibo PENDENTE_APROVACAO_COOP.
+        const created = await tx.resgateRecibo.create({
+          data: {
+            numeroRecibo,
+            cooperativaId,
+            cooperadoEstabelecimentoId: estabelecimentoCooperadoId,
+            clientRequestId,
+            valorBrutoTokens: quantidade,
+            valorTaxaTokens: taxaTokens,
+            valorLiquidoTokens: liquidoTokens,
+            valorBrutoReais,
+            valorTaxaReais,
+            valorLiquidoReais,
+            // Snapshot anti-fraude: chave do cadastro, NUNCA do body.
+            pixChave: estabelecimento.pixChave!,
+            pixTipo: estabelecimento.pixTipo ?? 'ALEATORIA',
+            status: 'PENDENTE_APROVACAO_COOP',
+            observacao: observacao ?? null,
+          },
+        });
+
+        return created;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    this.logger.log(
+      `[F6] solicitarResgate ${recibo.numeroRecibo} estabelecimento=${estabelecimentoCooperadoId} valor R$ ${valorLiquidoReais} status=PENDENTE_APROVACAO_COOP`,
+    );
+
+    return {
+      idempotente: false,
+      recibo,
+    };
+  }
+
+  /**
+   * Admin aprova resgate pendente e dispara PIX-out via Asaas.
+   *
+   * REFORÇO 3 (compare-and-swap): updateMany com filtro de status; só
+   * dispara o PIX se count===1. Dois admins clicando juntos = 1 PIX só.
+   *
+   * Em caso de erro Asaas: status=FALHA_PIX + estorno auditável imediato.
+   * (Se Asaas aceitou mas demorou, fica APROVADO_PIX_DISPARADO aguardando
+   * webhook PAGO ou FAILED.)
+   */
+  async aprovarResgate(params: {
+    reciboId: string;
+    cooperativaId: string;
+    aprovadoPorUserId: string;
+  }) {
+    const { reciboId, cooperativaId, aprovadoPorUserId } = params;
+    if (!this.asaasPixOutService) {
+      throw new Error('AsaasPixOutService não disponível (wiring do módulo).');
+    }
+
+    const recibo = await this.prisma.resgateRecibo.findFirst({
+      where: { id: reciboId, cooperativaId },
+    });
+    if (!recibo) {
+      throw new NotFoundException('Recibo de resgate não encontrado.');
+    }
+
+    // REFORÇO 3: compare-and-swap PENDENTE_APROVACAO_COOP → APROVADO_PIX_DISPARADO.
+    const swap = await this.prisma.resgateRecibo.updateMany({
+      where: {
+        id: reciboId,
+        cooperativaId,
+        status: 'PENDENTE_APROVACAO_COOP',
+      },
+      data: {
+        status: 'APROVADO_PIX_DISPARADO',
+        aprovadoPorUserId,
+        aprovadoEm: new Date(),
+      },
+    });
+    if (swap.count === 0) {
+      throw new BadRequestException(
+        `Não foi possível aprovar: o recibo já está em outro estado (status atual: ${recibo.status}). Recarregue a lista.`,
+      );
+    }
+
+    // PIX-out via helper (SIMULATED em ambiente NÃO-real).
+    const valorPix = Number(recibo.valorLiquidoReais);
+    const pixResult = await this.asaasPixOutService.transferir({
+      cooperativaId,
+      pixChave: recibo.pixChave,
+      pixTipo: recibo.pixTipo,
+      valor: valorPix,
+      descricao: `Resgate ${recibo.numeroRecibo} — liquidação de voucher CooperToken (cooperativa quita passivo). Recibo ref: ${recibo.numeroRecibo}.`,
+    });
+
+    if (pixResult.status === 'ERROR') {
+      // Asaas rejeitou — estorno imediato + status=FALHA_PIX.
+      await this.estornarResgateInterno({
+        recibo,
+        statusFinal: 'FALHA_PIX',
+        motivoFalha: `Asaas rejeitou: ${pixResult.erro ?? 'erro desconhecido'}`,
+      });
+      throw new BadRequestException(
+        `Asaas rejeitou a transferência: ${pixResult.erro}. Tokens devolvidos ao saldo disponível (lançamento de estorno). Recibo agora em FALHA_PIX — reprocessar PIX ou recusar.`,
+      );
+    }
+
+    // Asaas aceitou — guarda asaasTransferId. status fica APROVADO_PIX_DISPARADO
+    // até webhook PAGO/FAILED. (SIMULATED também segue esse caminho — listener
+    // simulado pode promover pra PAGO no smoke.)
+    await this.prisma.resgateRecibo.update({
+      where: { id: reciboId },
+      data: {
+        asaasTransferId: pixResult.asaasTransferId,
+      },
+    });
+
+    this.logger.log(
+      `[F6] aprovarResgate ${recibo.numeroRecibo} → APROVADO_PIX_DISPARADO asaasTransferId=${pixResult.asaasTransferId} status=${pixResult.status}`,
+    );
+
+    return {
+      sucesso: true,
+      reciboId,
+      asaasTransferId: pixResult.asaasTransferId,
+      asaasStatus: pixResult.status,
+    };
+  }
+
+  /**
+   * Admin recusa resgate pendente. Estorno auditável imediato.
+   * REFORÇO 3 — compare-and-swap PENDENTE_APROVACAO_COOP → RECUSADO.
+   */
+  async recusarResgate(params: {
+    reciboId: string;
+    cooperativaId: string;
+    recusadoPorUserId: string;
+    motivoRecusa: string;
+  }) {
+    const { reciboId, cooperativaId, recusadoPorUserId, motivoRecusa } = params;
+    if (!motivoRecusa || motivoRecusa.trim().length < 3) {
+      throw new BadRequestException('motivoRecusa obrigatório (mínimo 3 chars).');
+    }
+
+    const recibo = await this.prisma.resgateRecibo.findFirst({
+      where: { id: reciboId, cooperativaId },
+    });
+    if (!recibo) {
+      throw new NotFoundException('Recibo de resgate não encontrado.');
+    }
+
+    const swap = await this.prisma.resgateRecibo.updateMany({
+      where: { id: reciboId, cooperativaId, status: 'PENDENTE_APROVACAO_COOP' },
+      data: {
+        status: 'RECUSADO',
+        recusadoPorUserId,
+        recusadoEm: new Date(),
+        motivoRecusa: motivoRecusa.trim(),
+      },
+    });
+    if (swap.count === 0) {
+      throw new BadRequestException(
+        `Não foi possível recusar: o recibo já está em outro estado (status atual: ${recibo.status}).`,
+      );
+    }
+
+    await this.estornarResgateInterno({
+      recibo,
+      statusFinal: 'RECUSADO', // já gravamos via swap acima — função só faz o estorno
+      skipStatusUpdate: true,
+    });
+
+    this.logger.log(`[F6] recusarResgate ${recibo.numeroRecibo} → RECUSADO motivo="${motivoRecusa.slice(0, 60)}"`);
+
+    return { sucesso: true, reciboId };
+  }
+
+  /**
+   * Estabelecimento cancela própria solicitação pendente.
+   * REFORÇO 3 — compare-and-swap PENDENTE_APROVACAO_COOP → CANCELADO.
+   * Cobre a corrida admin-aprova × estabelecimento-cancela.
+   */
+  async cancelarResgate(params: {
+    reciboId: string;
+    cooperativaId: string;
+    estabelecimentoCooperadoId: string;
+  }) {
+    const { reciboId, cooperativaId, estabelecimentoCooperadoId } = params;
+
+    const recibo = await this.prisma.resgateRecibo.findFirst({
+      where: { id: reciboId, cooperativaId },
+    });
+    if (!recibo) {
+      throw new NotFoundException('Recibo de resgate não encontrado.');
+    }
+    // Anti-IDOR: estabelecimento só cancela próprios recibos.
+    if (recibo.cooperadoEstabelecimentoId !== estabelecimentoCooperadoId) {
+      throw new NotFoundException('Recibo de resgate não encontrado.');
+    }
+
+    const swap = await this.prisma.resgateRecibo.updateMany({
+      where: { id: reciboId, cooperativaId, status: 'PENDENTE_APROVACAO_COOP' },
+      data: {
+        status: 'CANCELADO',
+        canceladoEm: new Date(),
+      },
+    });
+    if (swap.count === 0) {
+      throw new BadRequestException(
+        `Não foi possível cancelar: o recibo já está em outro estado (status atual: ${recibo.status}). Provavelmente o admin já aprovou.`,
+      );
+    }
+
+    await this.estornarResgateInterno({
+      recibo,
+      statusFinal: 'CANCELADO',
+      skipStatusUpdate: true,
+    });
+
+    this.logger.log(`[F6] cancelarResgate ${recibo.numeroRecibo} → CANCELADO`);
+
+    return { sucesso: true, reciboId };
+  }
+
+  /**
+   * Processa webhook Asaas de transferência (PAYMENT_RECEIVED / FAILED).
+   *
+   * REFORÇO 2 (idempotência webhook): ultimoWebhookEventId checado ANTES
+   * de qualquer transição. Asaas reenvia o mesmo evento — sem isso, FAILED
+   * duplicado devolveria tokens 2×.
+   *
+   * REFORÇO 3 (compare-and-swap): só promove APROVADO_PIX_DISPARADO →
+   * PAGO_RECIBO_EMITIDO (count===1) ou → FALHA_PIX + estorno (count===1).
+   */
+  async processarWebhookResgate(params: {
+    asaasTransferId: string;
+    eventId: string;
+    sucesso: boolean;
+    motivoFalha?: string;
+  }) {
+    const { asaasTransferId, eventId, sucesso, motivoFalha } = params;
+
+    const recibo = await this.prisma.resgateRecibo.findFirst({
+      where: { asaasTransferId },
+    });
+    if (!recibo) {
+      this.logger.warn(
+        `[F6] webhook asaasTransferId=${asaasTransferId} — recibo não encontrado, ignorando`,
+      );
+      return { skipped: 'recibo-nao-encontrado' };
+    }
+
+    // REFORÇO 2: idempotência webhook.
+    if (recibo.ultimoWebhookEventId === eventId) {
+      this.logger.log(
+        `[F6] webhook duplicado eventId=${eventId} recibo=${recibo.numeroRecibo} — skip`,
+      );
+      return { skipped: 'webhook-duplicado', reciboId: recibo.id };
+    }
+
+    if (sucesso) {
+      // REFORÇO 3: APROVADO_PIX_DISPARADO → PAGO_RECIBO_EMITIDO + queima.
+      const swap = await this.prisma.resgateRecibo.updateMany({
+        where: {
+          id: recibo.id,
+          cooperativaId: recibo.cooperativaId,
+          status: 'APROVADO_PIX_DISPARADO',
+        },
+        data: {
+          status: 'PAGO_RECIBO_EMITIDO',
+          pagoEm: new Date(),
+          ultimoWebhookEventId: eventId,
+        },
+      });
+      if (swap.count === 0) {
+        this.logger.warn(
+          `[F6] webhook PAGO compare-and-swap perdeu — recibo ${recibo.numeroRecibo} já estava em outro estado (atual: ${recibo.status})`,
+        );
+        return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
+      }
+
+      // QUEIMA do saldo bloqueado + ledger DEBITO RESGATE_PIX.
+      await this.prisma.$transaction(
+        async (tx) => {
+          const saldo = await tx.cooperTokenSaldo.findUnique({
+            where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+          });
+          if (!saldo) throw new Error('Saldo do estabelecimento sumiu pré-queima');
+          const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
+          const quantidade = Number(recibo.valorBrutoTokens);
+          const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
+          if (novoSaldoBloq < 0) {
+            throw new Error(`Invariante violada: saldoBloqueadoResgate ficaria negativo (${novoSaldoBloq})`);
+          }
+          await tx.cooperTokenSaldo.update({
+            where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+            data: {
+              saldoBloqueadoResgate: novoSaldoBloq,
+              totalResgatado: { increment: quantidade },
+            },
+          });
+          await tx.cooperTokenLedger.create({
+            data: {
+              cooperadoId: recibo.cooperadoEstabelecimentoId,
+              cooperativaId: recibo.cooperativaId,
+              tipo: CooperTokenTipo.RESGATE_PIX,
+              operacao: CooperTokenOperacao.DEBITO,
+              quantidade,
+              saldoApos: Number(saldo.saldoDisponivel), // saldoDisponivel não muda
+              referenciaId: recibo.id,
+              referenciaTabela: 'ResgateRecibo',
+              descricao: `Liquidação de voucher CooperToken — Recibo ${recibo.numeroRecibo} (R$ ${Number(recibo.valorLiquidoReais).toFixed(2)} via PIX). Cooperativa quitou passivo.`,
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      this.logger.log(
+        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX`,
+      );
+      return { sucesso: true, reciboId: recibo.id };
+    }
+
+    // ── FAILED ──
+    const swap = await this.prisma.resgateRecibo.updateMany({
+      where: {
+        id: recibo.id,
+        cooperativaId: recibo.cooperativaId,
+        status: 'APROVADO_PIX_DISPARADO',
+      },
+      data: {
+        status: 'FALHA_PIX',
+        falhaEm: new Date(),
+        motivoFalha: motivoFalha ?? 'Asaas reportou falha',
+        ultimoWebhookEventId: eventId,
+      },
+    });
+    if (swap.count === 0) {
+      this.logger.warn(
+        `[F6] webhook FAILED compare-and-swap perdeu — recibo ${recibo.numeroRecibo}`,
+      );
+      return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
+    }
+
+    // Estorno auditável.
+    await this.estornarResgateInterno({
+      recibo,
+      statusFinal: 'FALHA_PIX',
+      skipStatusUpdate: true,
+    });
+
+    this.logger.warn(
+      `[F6] webhook FAILED recibo=${recibo.numeroRecibo} — estorno aplicado, motivo: ${motivoFalha}`,
+    );
+    return { sucesso: false, reciboId: recibo.id, motivoFalha };
+  }
+
+  /**
+   * Estorno auditável (interno) — devolve tokens bloqueados ao saldoDisponivel
+   * e cria ledger CREDITO ESTORNO_RESGATE_PIX. NUNCA apaga registros.
+   *
+   * Invariante: saldoDisponivel + saldoBloqueadoResgate conserva (saí de
+   * bloqueado, volta pra disponível — soma constante).
+   */
+  private async estornarResgateInterno(params: {
+    recibo: { id: string; cooperativaId: string; cooperadoEstabelecimentoId: string; valorBrutoTokens: any; numeroRecibo: string };
+    statusFinal: 'RECUSADO' | 'CANCELADO' | 'FALHA_PIX';
+    motivoFalha?: string;
+    skipStatusUpdate?: boolean;
+  }) {
+    const { recibo, statusFinal, motivoFalha, skipStatusUpdate } = params;
+    const quantidade = Number(recibo.valorBrutoTokens);
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        const saldo = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+        });
+        if (!saldo) {
+          throw new Error('Saldo do estabelecimento sumiu pré-estorno');
+        }
+        const saldoDisp = Number(saldo.saldoDisponivel);
+        const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
+        const novoSaldoDisp = Math.round((saldoDisp + quantidade) * 10000) / 10000;
+        const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
+        if (novoSaldoBloq < 0) {
+          // Tolera invariante (já estornado por outra via?) — log + skip.
+          this.logger.warn(
+            `[F6] estornar ${recibo.numeroRecibo} já aplicado (saldoBloqueado=${saldoBloq}, qtd=${quantidade}) — skip`,
+          );
+          return;
+        }
+        await tx.cooperTokenSaldo.update({
+          where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+          data: {
+            saldoDisponivel: novoSaldoDisp,
+            saldoBloqueadoResgate: novoSaldoBloq,
+          },
+        });
+        await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: recibo.cooperadoEstabelecimentoId,
+            cooperativaId: recibo.cooperativaId,
+            tipo: CooperTokenTipo.ESTORNO_RESGATE_PIX,
+            operacao: CooperTokenOperacao.CREDITO,
+            quantidade,
+            saldoApos: novoSaldoDisp,
+            referenciaId: recibo.id,
+            referenciaTabela: 'ResgateRecibo',
+            descricao: `Estorno de resgate ${recibo.numeroRecibo} (${statusFinal}). Tokens devolvidos ao saldo disponível.${motivoFalha ? ` Motivo: ${motivoFalha}` : ''}`,
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  /**
+   * Lista recibos PENDENTE_APROVACAO_COOP pra admin revisar.
+   * Filtros: status (default PENDENTE_APROVACAO_COOP), valor mín/máx, datas.
+   */
+  async listarResgatesPendentes(params: {
+    cooperativaId: string;
+    status?: string;
+    valorMin?: number;
+    valorMax?: number;
+    dataInicio?: Date;
+    dataFim?: Date;
+    page?: number;
+    limit?: number;
+  }) {
+    const { cooperativaId, status, valorMin, valorMax, dataInicio, dataFim } = params;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = { cooperativaId };
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = 'PENDENTE_APROVACAO_COOP';
+    }
+    if (valorMin !== undefined || valorMax !== undefined) {
+      where.valorBrutoReais = {};
+      if (valorMin !== undefined) where.valorBrutoReais.gte = valorMin;
+      if (valorMax !== undefined) where.valorBrutoReais.lte = valorMax;
+    }
+    if (dataInicio || dataFim) {
+      where.createdAt = {};
+      if (dataInicio) where.createdAt.gte = dataInicio;
+      if (dataFim) where.createdAt.lte = dataFim;
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.resgateRecibo.findMany({
+        where,
+        include: {
+          cooperadoEstabelecimento: {
+            select: { id: true, nomeCompleto: true, email: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.resgateRecibo.count({ where }),
+    ]);
+
+    return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
   // ── ConfigCooperToken ──

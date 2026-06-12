@@ -27,6 +27,8 @@ import { ProcessarPagamentoQrDto } from './dto/processar-pagamento-qr.dto';
 import { EnviarTokensDto } from './dto/enviar-tokens.dto';
 // Sprint Clube P1 — F3 Bloco B (12/06/2026): empresa-PJ distribui lote.
 import { DistribuirTokensDto } from './dto/distribuir-tokens.dto';
+// Sprint Clube P1 — F6 Bloco B (12/06/2026): estabelecimento resgata em PIX.
+import { RecusarResgateDto, SolicitarResgateDto } from './dto/solicitar-resgate.dto';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -733,6 +735,136 @@ export class CooperTokenController {
       empresaCooperadoId,
       cooperativaId,
       convenioId,
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // F6 Bloco B (12/06/2026) — Estabelecimento resgata em R$ via PIX
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Estabelecimento solicita liquidação de voucher (RESGATE em R$ via PIX).
+   * Multi-tenant: cooperado e cooperativa SEMPRE do JWT.
+   */
+  @Roles(COOPERADO)
+  @Post('empresa/resgatar')
+  async solicitarResgate(@Req() req: any, @Body() body: SolicitarResgateDto) {
+    const estabelecimentoCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!estabelecimentoCooperadoId) {
+      throw new BadRequestException('Cooperado (estabelecimento) não identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada no contexto.');
+    }
+    return this.cooperTokenService.solicitarResgate({
+      estabelecimentoCooperadoId,
+      cooperativaId,
+      quantidade: body.quantidade,
+      pin: body.pin,
+      clientRequestId: body.clientRequestId,
+      otpDesafioId: body.otpDesafioId,
+      otpCodigo: body.otpCodigo,
+      observacao: body.observacao,
+    });
+  }
+
+  /**
+   * Estabelecimento cancela própria solicitação pendente.
+   * Compare-and-swap protege contra corrida admin-aprova × estabelecimento-cancela.
+   */
+  @Roles(COOPERADO)
+  @Post('empresa/resgates/:id/cancelar')
+  async cancelarResgate(@Req() req: any, @Param('id') id: string) {
+    const estabelecimentoCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!estabelecimentoCooperadoId) {
+      throw new BadRequestException('Cooperado não identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada no contexto.');
+    }
+    return this.cooperTokenService.cancelarResgate({
+      reciboId: id,
+      cooperativaId,
+      estabelecimentoCooperadoId,
+    });
+  }
+
+  /**
+   * Admin lista resgates pendentes pra revisão. Paginação + filtros.
+   * Default status=PENDENTE_APROVACAO_COOP.
+   */
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/resgates-pendentes')
+  async listarResgatesPendentes(
+    @Req() req: any,
+    @Query('status') status?: string,
+    @Query('valorMin') valorMin?: string,
+    @Query('valorMax') valorMax?: string,
+    @Query('dataInicio') dataInicio?: string,
+    @Query('dataFim') dataFim?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório no contexto (SUPER_ADMIN deve impersonar tenant).',
+      );
+    }
+    return this.cooperTokenService.listarResgatesPendentes({
+      cooperativaId,
+      status,
+      valorMin: valorMin ? parseFloat(valorMin) : undefined,
+      valorMax: valorMax ? parseFloat(valorMax) : undefined,
+      dataInicio: dataInicio ? new Date(dataInicio) : undefined,
+      dataFim: dataFim ? new Date(dataFim) : undefined,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  /**
+   * Admin aprova resgate pendente. Dispara PIX-out via Asaas (SIMULATED
+   * em ambiente NÃO-real). Compare-and-swap protege contra 2 admins.
+   */
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Post('admin/resgates/:id/aprovar')
+  async aprovarResgate(@Req() req: any, @Param('id') id: string) {
+    const cooperativaId = req.user?.cooperativaId;
+    const aprovadoPorUserId = req.user?.sub ?? req.user?.userId ?? 'desconhecido';
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório no contexto.');
+    }
+    return this.cooperTokenService.aprovarResgate({
+      reciboId: id,
+      cooperativaId,
+      aprovadoPorUserId,
+    });
+  }
+
+  /**
+   * Admin recusa resgate pendente. Estorno auditável imediato.
+   * Compare-and-swap protege contra 2 admins.
+   */
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Post('admin/resgates/:id/recusar')
+  async recusarResgate(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: RecusarResgateDto,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const recusadoPorUserId = req.user?.sub ?? req.user?.userId ?? 'desconhecido';
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório no contexto.');
+    }
+    return this.cooperTokenService.recusarResgate({
+      reciboId: id,
+      cooperativaId,
+      recusadoPorUserId,
+      motivoRecusa: body.motivoRecusa,
     });
   }
 }

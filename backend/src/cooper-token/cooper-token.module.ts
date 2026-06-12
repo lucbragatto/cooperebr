@@ -25,6 +25,9 @@ import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
 // Nest captura `CooperadosModule` como undefined em runtime (erro
 // UndefinedModuleException constatado no boot).
 import { CooperadosModule } from '../cooperados/cooperados.module';
+// Sprint Clube P1 — F6 Bloco B (12/06/2026): consumer do AsaasPixOutService
+// pra resgate em R$ via PIX (estabelecimento → R$). FinanceiroModule exporta.
+import { FinanceiroModule } from '../financeiro/financeiro.module';
 
 @Module({
   imports: [
@@ -32,6 +35,7 @@ import { CooperadosModule } from '../cooperados/cooperados.module';
     EmailModule,
     AsaasModule,
     forwardRef(() => CooperadosModule),
+    FinanceiroModule,
   ],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [
