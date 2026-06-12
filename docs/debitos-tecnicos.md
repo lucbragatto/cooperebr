@@ -839,6 +839,35 @@ O endpoint `POST /cooper-token/otp-step-up` cria desafio OTP via `OtpDesafioServ
 
 **Não bloqueia F4 cooperado-only.** Endpoint admin tier ALTO ainda não tem caso de uso urgente em produção (sprint Hardening tenant é o consumer principal).
 
+#### D-novo-F3-RACE-CONFIRMS-CONCORRENTES — Validar com reviewers a contenção da empresa via Serializable + retry idempotente
+
+**Severidade:** P3 (raciocínio — validar; se reviewers ficarem em dúvida, promover ao D-novo-LEDGER-UNIQUE-CONSTRAINT já catalogado).
+**Detectado em:** 2026-06-12 (F3 Bloco C — pergunta explícita do Luciano pro review final).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts:distribuirTokens` + `common/mass-write/mass-write.helper.ts`.
+
+**Cenário:** dois POSTs CONFIRM concorrentes com o MESMO `clientRequestId` (duplo-clique no botão que escapou do `disabled`, retry de retry, race entre tab e webhook auto-retry, etc.).
+
+**Raciocínio do Luciano (precisa validação dos reviewers pesados):**
+
+1. **Idempotência por callback** (Bloco A linha 1ª do helper): consulta `cooperTokenLedger.findFirst({referenciaId, referenciaTabela: 'MASS_WRITE_DISTRIBUICAO'})`. Se a 1ª request já gravou, a 2ª acerta a checagem e retorna `idempotente:true`.
+
+2. **Race window**: se as 2 requests chegarem MUITO próximas, ambas passam pelo `verificarIdempotencia` antes da 1ª gravar a referência. Aí abrem 2 tx Serializable.
+
+3. **Proteção real (raciocínio do Luciano)**: dentro da tx Serializable, ambas tentam **debitar a mesma linha do `CooperTokenSaldo` da empresa**. PostgreSQL com isolationLevel Serializable detecta o conflito serialização e **aborta uma das tx com erro `40001` (serialization_failure)**. A request que vence grava o ledger com a referência; a request que perde recebe o erro 500 — e numa retentativa cliente-side (manual ou automática), a próxima tentativa entra pelo caminho da idempotência (a 1ª já gravou).
+
+4. **Solução estrutural complementar (se reviewers ficarem em dúvida)**: promover **D-novo-LEDGER-UNIQUE-CONSTRAINT P3** (já catalogado) — `@@unique([referenciaId, referenciaTabela, cooperadoId])` em `CooperTokenLedger`. Aí mesmo se as 2 tx passarem pela checagem de idempotência, o banco recusa a 2ª inserção com `P2002` independente do nível de isolamento. Endurece TODOS os consumers do helper, não só F3.
+
+**Validar com reviewers pesados:**
+- `cooperebr-financeiro-token-reviewer`: o caminho "Serializable aborta + retry cai na idempotência" é robusto na prática? Há cenário onde a 2ª request "vence" sem retry?
+- `cooperebr-multitenant-reviewer`: nenhum problema cross-tenant aqui — só intra-tenant. Mas vale confirmar que o `referenciaTabela='MASS_WRITE_DISTRIBUICAO'` é único por tenant naturalmente (porque `referenciaId=clientRequestId` é UUID v4).
+
+**Resolução proposta:**
+- **Se reviewers aprovarem o raciocínio**: nada a fazer; manter `D-novo-LEDGER-UNIQUE-CONSTRAINT P3` como dívida técnica genérica.
+- **Se reviewers ficarem em dúvida**: promover D-novo-LEDGER-UNIQUE-CONSTRAINT pra P2 e implementar no Bloco D do F3 ou commit dedicado pré-push (estimativa ~1-2h).
+- Spec novo cobrindo race programaticamente (`Promise.all` 2 POSTs CONFIRM mesmo `clientRequestId` → 1 sucesso + 1 erro OR 2 sucessos com `idempotente` flag).
+
+**Não bloqueia F3.** Defesa em camadas: (1) UI `disabled` no botão, (2) idempotência app-level, (3) tx Serializable. Se vier `40001`, retry humano cai na idempotência. Endurecer no banco é cinturão + suspensório.
+
 #### D-novo-F4-UI-COOPERADO-PEER — Telas cooperado→cooperado faltantes (processarPagamentoQr e enviarTokens)
 
 **Severidade:** P2.

@@ -38,6 +38,7 @@ import {
 import { HelpBox } from '@/components/ui/help-box';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -717,6 +718,34 @@ export default function ConveniadaConvenioDashboard() {
             refreshKey={refreshKey}
             onAcaoConcluida={carregarComBump}
           />
+        </CardContent>
+      </Card>
+
+      {/* 3.5 Distribuir tokens aos funcionários — F3 Bloco C (12/06/2026) */}
+      <Card className="border-amber-300 bg-amber-50/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-amber-800 flex items-center gap-2">
+            🪙 Distribuir tokens aos funcionários
+          </CardTitle>
+          <p className="text-xs text-slate-500">
+            Envie tokens (já comprados) pra seus funcionários ativos — eles usam pra
+            desconto na fatura ou em parceiros do Clube.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <HelpBox id="conveniada-distribuir-help" titulo="Quando e como distribuir">
+            Escolha funcionários ativos e quanto cada um recebe (igual a todos ou
+            diferenciado). Você confirma com PIN e declara a natureza jurídica
+            (regulamento, voluntária ou premiação) pra defesa CLT. Tokens saem do
+            seu saldo e vão pro saldo de cada funcionário.
+          </HelpBox>
+          <div className="mt-3">
+            <Link href={`/conveniada/convenio/${convenioId}/distribuir-tokens`}>
+              <Button className="bg-amber-700 hover:bg-amber-800">
+                Distribuir tokens →
+              </Button>
+            </Link>
+          </div>
         </CardContent>
       </Card>
 

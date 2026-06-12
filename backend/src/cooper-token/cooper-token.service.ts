@@ -1691,6 +1691,120 @@ export class CooperTokenService {
     });
   }
 
+  /**
+   * F3 Bloco C (12/06/2026) — Helper de UI: empresa-PJ consulta saldo +
+   * membros do convênio (segregados por status) num único request.
+   *
+   * Multi-tenant: valida que a empresa é a `conveniada` do convênio.
+   * Não toca dinheiro — só leitura.
+   */
+  async listarMembrosDisponiveisPraDistribuicao(params: {
+    empresaCooperadoId: string;
+    cooperativaId: string;
+    convenioId: string;
+  }) {
+    const { empresaCooperadoId, cooperativaId, convenioId } = params;
+
+    // Guard convênio + ownership (mesma regra do POST /distribuir).
+    const convenio = await this.prisma.contratoConvenio.findFirst({
+      where: { id: convenioId, cooperativaId },
+      select: {
+        id: true,
+        numero: true,
+        empresaNome: true,
+        conveniadoId: true,
+        status: true,
+      },
+    });
+    if (!convenio) {
+      throw new NotFoundException('Convênio não encontrado.');
+    }
+    if (convenio.conveniadoId !== empresaCooperadoId) {
+      throw new ForbiddenException(
+        'Apenas a empresa conveniada (representante) pode listar membros pra distribuição.',
+      );
+    }
+
+    // Saldo da empresa (pra UI mostrar quanto tem).
+    const saldoEmpresa = await this.prisma.cooperTokenSaldo.findUnique({
+      where: { cooperadoId: empresaCooperadoId },
+      select: { saldoDisponivel: true, totalEmitido: true, totalResgatado: true },
+    });
+
+    // Membros segregados por status.
+    const membros = await this.prisma.convenioCooperado.findMany({
+      where: { convenioId },
+      select: {
+        id: true,
+        cooperadoId: true,
+        status: true,
+        ativo: true,
+        matricula: true,
+        cooperado: {
+          select: {
+            nomeCompleto: true,
+            email: true,
+            telefone: true,
+            cpf: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const ativos = membros.filter(
+      (m) =>
+        m.ativo &&
+        m.status === 'MEMBRO_ATIVO' &&
+        CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(m.cooperado.status),
+    );
+    const pendentes = membros.filter((m) =>
+      m.status === 'PENDENTE_APROVACAO_EMPRESA' || m.status === 'PENDENTE_APROVACAO_ADMIN',
+    );
+    const inativos = membros.filter(
+      (m) =>
+        !ativos.includes(m) &&
+        !pendentes.includes(m),
+    );
+
+    // Config pro UI calcular valor R$ no front (sem bater no banco a cada digito).
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+
+    return {
+      convenio: {
+        id: convenio.id,
+        numero: convenio.numero,
+        empresaNome: convenio.empresaNome,
+        status: convenio.status,
+      },
+      saldoEmpresa: {
+        saldoDisponivel: Number(saldoEmpresa?.saldoDisponivel ?? 0),
+        totalEmitido: Number(saldoEmpresa?.totalEmitido ?? 0),
+        totalResgatado: Number(saldoEmpresa?.totalResgatado ?? 0),
+      },
+      config: { valorTokenReais },
+      membros: {
+        ativos: ativos.map((m) => ({
+          membroId: m.id,
+          cooperadoId: m.cooperadoId,
+          nomeCompleto: m.cooperado.nomeCompleto,
+          email: m.cooperado.email,
+          matricula: m.matricula,
+        })),
+        pendentes: {
+          total: pendentes.length,
+          breakdown: {
+            empresa: pendentes.filter((m) => m.status === 'PENDENTE_APROVACAO_EMPRESA').length,
+            admin: pendentes.filter((m) => m.status === 'PENDENTE_APROVACAO_ADMIN').length,
+          },
+        },
+        inativosCount: inativos.length,
+      },
+    };
+  }
+
   // ── ConfigCooperToken ──
 
   async getConfig(cooperativaId: string | undefined) {

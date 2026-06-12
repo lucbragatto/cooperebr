@@ -6,6 +6,7 @@ import {
   Body,
   Query,
   Req,
+  Param,
   BadRequestException,
   HttpException,
   HttpStatus,
@@ -702,6 +703,35 @@ export class CooperTokenController {
       descricao: body.descricao,
       ip: req.ip ?? req.headers?.['x-forwarded-for'] ?? null,
       userAgent: req.headers?.['user-agent'] ?? null,
+    });
+  }
+
+  /**
+   * F3 Bloco C (12/06/2026) — Endpoint auxiliar pra UI da distribuição.
+   * Empresa-PJ consulta saldo + membros do convênio (segregados por status)
+   * num único request, sem precisar bater em 2 controllers.
+   *
+   * Multi-tenant: cooperadoId+cooperativaId do JWT; valida que a empresa
+   * é a conveniada do convênio (mesma regra do POST /distribuir).
+   */
+  @Roles(COOPERADO)
+  @Get('empresa/convenio/:convenioId/membros-disponiveis')
+  async listarMembrosDisponiveis(
+    @Req() req: any,
+    @Param('convenioId') convenioId: string,
+  ) {
+    const empresaCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!empresaCooperadoId) {
+      throw new BadRequestException('Cooperado (empresa) não identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada no contexto.');
+    }
+    return this.cooperTokenService.listarMembrosDisponiveisPraDistribuicao({
+      empresaCooperadoId,
+      cooperativaId,
+      convenioId,
     });
   }
 }
