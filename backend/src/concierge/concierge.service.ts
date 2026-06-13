@@ -122,6 +122,19 @@ export class ConciergeService {
     }
 
     const resultado = this.detectoresRegistry.detectarTodos(resultadoAdapter.fatura);
+
+    // Auditabilidade: log das teses detectadas (sem PII, so codigos + valores)
+    if (resultado.padroes.length > 0) {
+      const teses = resultado.padroes.map((p) => p.codigo).join(', ');
+      this.logger.log(
+        `[concierge] previewDiagnostico - ${distribuidora}: ${resultado.padroes.length} tese(s) detectada(s) [${teses}] - indebito total R$ ${resultado.indebitoMensalTotal.toFixed(2)}/mes`,
+      );
+    } else {
+      this.logger.log(
+        `[concierge] previewDiagnostico - ${distribuidora}: sem indebito detectado`,
+      );
+    }
+
     return { fatura: resultadoAdapter.fatura, resultado };
   }
 
