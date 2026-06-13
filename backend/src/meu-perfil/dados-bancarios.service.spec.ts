@@ -30,17 +30,23 @@ const USR = 'usr-admin-1';
 function setup(opts: {
   cooperadoAtual?: any;
   pinResult?: any;
+  updateManyResult?: { count: number };
 } = {}) {
   const findFirst = jest.fn().mockResolvedValue(
     opts.cooperadoAtual === undefined
       ? { id: ESTAB, pixChave: null, pixTipo: null }
       : opts.cooperadoAtual,
   );
-  const update = jest.fn().mockResolvedValue({});
+  // F6 C.4 P0-A: update virou updateMany pra incluir cooperativaId no where
+  // (anti-IDOR de chave PIX — âncora financeira). Defesa em profundidade
+  // sobre o Guard 1; race cooperado-troca-tenant retorna count=0 → 404.
+  const updateMany = jest
+    .fn()
+    .mockResolvedValue(opts.updateManyResult ?? { count: 1 });
   const auditLog = jest.fn().mockResolvedValue(undefined);
 
   const prisma: any = {
-    cooperado: { findFirst, update },
+    cooperado: { findFirst, updateMany },
   };
   const pinSvc: any = {
     validarPinComLockout: jest
@@ -50,7 +56,16 @@ function setup(opts: {
   const auditSvc: any = { log: auditLog };
 
   const sut = new DadosBancariosService(prisma, pinSvc, auditSvc);
-  return { sut, prisma, pinSvc, auditSvc, findFirst, update, auditLog };
+  return {
+    sut,
+    prisma,
+    pinSvc,
+    auditSvc,
+    findFirst,
+    updateMany,
+    update: updateMany, // alias pros specs antigos que ainda chamam .update
+    auditLog,
+  };
 }
 
 const baseParams = (over: Partial<Parameters<DadosBancariosService['atualizar']>[0]> = {}) => ({
@@ -276,8 +291,9 @@ describe('DadosBancariosService.atualizar — happy path + AuditLog', () => {
     const r = await sut.atualizar(baseParams());
     expect(r.sucesso).toBe(true);
     expect(r.pixUltimaAlteracaoEm).toBeInstanceOf(Date);
+    // F6 C.4 P0-A: updateMany com cooperativaId no where (anti-IDOR)
     expect(update).toHaveBeenCalledWith({
-      where: { id: ESTAB },
+      where: { id: ESTAB, cooperativaId: COOP },
       data: expect.objectContaining({
         pixChave: '+5527981341348',
         pixTipo: PixTipoEnum.TELEFONE,
@@ -350,6 +366,36 @@ describe('DadosBancariosService.atualizar — happy path + AuditLog', () => {
       expect.objectContaining({
         data: expect.objectContaining({ pixChave: 'lucbragatto@gmail.com' }),
       }),
+    );
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// F6 C.4 P0-A — IDOR chave PIX (review pesada 13/06)
+// ═════════════════════════════════════════════════════════════════════
+
+describe('DadosBancariosService.atualizar — P0-A IDOR de chave PIX', () => {
+  it('updateMany inclui cooperativaId no where (anti-IDOR — defesa em profundidade)', async () => {
+    const { sut, updateMany } = setup();
+    await sut.atualizar(baseParams());
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: ESTAB, cooperativaId: COOP },
+      }),
+    );
+  });
+
+  it('count=0 (race: cooperado mudou de tenant entre read+write) → NotFound + NÃO grava AuditLog', async () => {
+    const { sut, auditLog } = setup({ updateManyResult: { count: 0 } });
+    await expect(sut.atualizar(baseParams())).rejects.toBeInstanceOf(NotFoundException);
+    expect(auditLog).not.toHaveBeenCalled();
+  });
+
+  it('count=1 (happy path) → grava AuditLog', async () => {
+    const { sut, auditLog } = setup({ updateManyResult: { count: 1 } });
+    await sut.atualizar(baseParams());
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ acao: 'cooperado.pix.atualizar' }),
     );
   });
 });

@@ -178,15 +178,29 @@ export class DadosBancariosService {
     }
 
     // ── Update + timestamp da alteração ──
+    //
+    // F6 Bloco C.4 P0-A (13/06/2026 — review pesada): updateMany com
+    // cooperativaId no where. O Guard 1 acima já validou multi-tenant via
+    // findFirst, mas se entre o read e o write o cooperado mudasse de
+    // tenant (raríssimo, exige race com admin de outro tenant), o update
+    // único por id viraria vetor de gravação cross-tenant numa coluna que
+    // é ÂNCORA FINANCEIRA do F6. updateMany + filtro de cooperativaId +
+    // count===1 fecha o vetor (mesmo padrão do PinCooperadoService).
     const agora = new Date();
-    await this.prisma.cooperado.update({
-      where: { id: cooperadoId },
+    const swap = await this.prisma.cooperado.updateMany({
+      where: { id: cooperadoId, cooperativaId },
       data: {
         pixChave: chaveLimpa,
         pixTipo,
         pixUltimaAlteracaoEm: agora,
       },
     });
+    if (swap.count !== 1) {
+      // Race detectada: cooperado mudou de tenant entre o Guard 1 e este
+      // update. NÃO grava AuditLog (operação não aconteceu). Retorna 404
+      // genérico pra não revelar internals.
+      throw new NotFoundException('Cooperado não encontrado no seu tenant.');
+    }
 
     // ── AuditLog com antes/depois mascarados (PII) ──
     await this.auditService.log({
