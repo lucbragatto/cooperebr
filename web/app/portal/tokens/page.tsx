@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PinInput } from '@/components/ui/pin-input';
 import { QRCodeSVG } from 'qrcode.react';
-import { Coins, QrCode, Timer, Receipt, ArrowDownCircle, ShoppingCart, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Coins, QrCode, Timer, Receipt, ArrowDownCircle, ShoppingCart, ShieldCheck, AlertCircle, Banknote, KeyRound } from 'lucide-react';
 
 interface CobrancaPendente {
   id: string;
@@ -29,6 +29,11 @@ export default function PortalTokensPage() {
   // Sprint Clube P1 — Fase 2 Bloco 4 (11/06/2026): link condicional pro
   // /portal/comprar-tokens só renderiza pra empresa cooperada (PJ).
   const [tipoPessoa, setTipoPessoa] = useState<string>('PF');
+  // F6 Bloco C.2 (13/06/2026): card condicional "Resgatar em R$ via PIX"
+  // só pra ehEstabelecimento. Lê de /cooperados/meu-perfil (já retorna
+  // ehEstabelecimento) + /meu-perfil/dados-bancarios (status pixChave).
+  const [ehEstabelecimento, setEhEstabelecimento] = useState(false);
+  const [pixCadastrado, setPixCadastrado] = useState(false);
   const [quantidade, setQuantidade] = useState('');
   const [gerando, setGerando] = useState(false);
   const [qrToken, setQrToken] = useState('');
@@ -58,16 +63,26 @@ export default function PortalTokensPage() {
 
   const carregarDados = useCallback(async () => {
     try {
-      const [saldoRes, cobrancasRes, meRes] = await Promise.all([
+      const [saldoRes, cobrancasRes, meRes, meuPerfilRes, pixStatusRes] = await Promise.all([
         api.get('/cooper-token/saldo'),
         api.get('/cooper-token/cobrancas-pendentes'),
         // Sprint Clube P1 — Fase 2 Bloco 4: discrimina PJ pra link de compra.
         api.get('/auth/me').catch(() => ({ data: null })),
+        // F6 Bloco C.2 (13/06/2026): ehEstabelecimento vem do perfil.
+        api.get('/cooperados/meu-perfil').catch(() => ({ data: null })),
+        // F6 Bloco C.2: status PIX pra decidir CTA do card resgate.
+        api.get('/meu-perfil/dados-bancarios').catch(() => ({ data: null })),
       ]);
       setSaldo(Number(saldoRes.data.saldoDisponivel));
       setCobrancas(cobrancasRes.data);
       if (meRes?.data?.tipoPessoa) {
         setTipoPessoa(String(meRes.data.tipoPessoa).toUpperCase());
+      }
+      if (meuPerfilRes?.data) {
+        setEhEstabelecimento(!!meuPerfilRes.data.ehEstabelecimento);
+      }
+      if (pixStatusRes?.data) {
+        setPixCadastrado(!!pixStatusRes.data.temPixCadastrado);
       }
     } catch {
       // silently fail
@@ -299,6 +314,47 @@ export default function PortalTokensPage() {
             <Link href="/portal/comprar-tokens">
               <Button size="sm" className="bg-cyan-700 hover:bg-cyan-800 shrink-0">
                 Comprar
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* F6 Bloco C.2 (13/06/2026): card condicional Estabelecimento.
+          Só renderiza se cooperado tem flag ehEstabelecimento=true. CTA
+          muda conforme tem ou não chave PIX cadastrada. */}
+      {ehEstabelecimento && (
+        <Card className={pixCadastrado ? 'border-green-300 bg-green-50/40' : 'border-amber-300 bg-amber-50/40'}>
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`rounded-lg p-2.5 ${pixCadastrado ? 'bg-green-100' : 'bg-amber-100'}`}>
+                {pixCadastrado ? (
+                  <Banknote className="h-5 w-5 text-green-700" />
+                ) : (
+                  <KeyRound className="h-5 w-5 text-amber-700" />
+                )}
+              </div>
+              <div>
+                <p className={`font-semibold ${pixCadastrado ? 'text-green-900' : 'text-amber-900'}`}>
+                  {pixCadastrado ? 'Resgatar em R$ via PIX' : 'Cadastre seu PIX para resgatar'}
+                </p>
+                <p className={`text-xs ${pixCadastrado ? 'text-green-800' : 'text-amber-800'}`}>
+                  {pixCadastrado
+                    ? 'Você é Estabelecimento do Clube. Solicite a liquidação dos tokens em R$ via PIX (recibo emitido pela cooperativa após aprovação).'
+                    : 'Você é Estabelecimento, mas ainda não cadastrou sua chave PIX — necessária pra receber resgates em R$.'}
+                </p>
+              </div>
+            </div>
+            <Link href={pixCadastrado ? '/portal/resgatar-tokens' : '/portal/seguranca/dados-bancarios'}>
+              <Button
+                size="sm"
+                className={
+                  pixCadastrado
+                    ? 'bg-green-700 hover:bg-green-800 shrink-0'
+                    : 'bg-amber-700 hover:bg-amber-800 shrink-0'
+                }
+              >
+                {pixCadastrado ? 'Resgatar' : 'Cadastrar PIX'}
               </Button>
             </Link>
           </CardContent>
