@@ -770,6 +770,35 @@ export class CooperTokenController {
   }
 
   /**
+   * F6 Bloco C.1 (13/06/2026) — Estabelecimento lista os PRÓPRIOS resgates.
+   * Anti-IDOR estrito: cooperadoId do JWT, NUNCA do query/body.
+   */
+  @Roles(COOPERADO)
+  @Get('empresa/meus-resgates')
+  async meusResgates(
+    @Req() req: any,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const estabelecimentoCooperadoId = req.user?.cooperadoId;
+    const cooperativaId = req.user?.cooperativaId;
+    if (!estabelecimentoCooperadoId) {
+      throw new BadRequestException('Cooperado não identificado no contexto.');
+    }
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada no contexto.');
+    }
+    return this.cooperTokenService.listarMeusResgates({
+      estabelecimentoCooperadoId,
+      cooperativaId,
+      status,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  /**
    * Estabelecimento cancela própria solicitação pendente.
    * Compare-and-swap protege contra corrida admin-aprova × estabelecimento-cancela.
    */

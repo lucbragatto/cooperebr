@@ -2590,6 +2590,47 @@ export class CooperTokenService {
     return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }
 
+  /**
+   * F6 Bloco C.1 (13/06/2026) — Lista resgates DO PRÓPRIO estabelecimento.
+   *
+   * Anti-IDOR estrito: filtra por `cooperadoEstabelecimentoId = req.user.
+   * cooperadoId` + `cooperativaId` do JWT. Cooperado NUNCA vê resgates de
+   * outro cooperado nem de outro tenant (espelha padrão F3 membros-
+   * disponiveis). Ordem decrescente por criação — usuário vê o mais
+   * recente em cima.
+   */
+  async listarMeusResgates(params: {
+    estabelecimentoCooperadoId: string;
+    cooperativaId: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { estabelecimentoCooperadoId, cooperativaId, status } = params;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      cooperadoEstabelecimentoId: estabelecimentoCooperadoId,
+      cooperativaId,
+    };
+    if (status) where.status = status;
+
+    const [items, total] = await Promise.all([
+      this.prisma.resgateRecibo.findMany({
+        where,
+        // Sem `include cooperadoEstabelecimento` aqui — é ele mesmo, redundante.
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.resgateRecibo.count({ where }),
+    ]);
+
+    return { items, total, page, limit, pages: Math.ceil(total / limit) };
+  }
+
   // ── ConfigCooperToken ──
 
   async getConfig(cooperativaId: string | undefined) {
