@@ -243,6 +243,12 @@ model Cooperado {
   cobrancasGateway        CobrancaGateway[]
   pixChave                String?
   pixTipo                 String?
+  // Sprint Clube P1 — F6 Bloco C.0 (13/06/2026): timestamp da última alteração
+  // da chave PIX. Usado no Dialog admin de aprovação (C.3) pra mostrar banner
+  // amber se chave foi alterada nas últimas 24h antes do resgate — fecha o
+  // vetor "sessão sequestrada → redireciona PIX → resgata". Default null
+  // (cooperados antigos não têm histórico — não dispara o banner).
+  pixUltimaAlteracaoEm    DateTime?
   // Sprint Clube P1 — F6 (12/06/2026): flag de Estabelecimento do Clube.
   // Cooperado PF/PJ que aceita CooperToken e resgata em R$ via PIX
   // (modelo voucher/recibo — quita passivo, NÃO recompra). Admin opt-in

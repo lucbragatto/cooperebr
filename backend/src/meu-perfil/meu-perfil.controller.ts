@@ -7,6 +7,8 @@ import {
   Get,
   HttpCode,
   Post,
+  Put,
+  Req,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -14,7 +16,10 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
 import { DefinirPinDto } from './dto/definir-pin.dto';
+import { UpdateDadosBancariosDto } from './dto/update-dados-bancarios.dto';
 import { isPinFraco } from './pin-fraco.helper';
+// Sprint Clube P1 — F6 Bloco C.0 (13/06/2026): cadastro PIX com PIN.
+import { DadosBancariosService } from './dados-bancarios.service';
 
 /**
  * F1 (09/06/2026) — Endpoints "meu" do cooperado autenticado.
@@ -27,7 +32,10 @@ import { isPinFraco } from './pin-fraco.helper';
 @Controller('meu-perfil')
 @Roles(PerfilUsuario.COOPERADO)
 export class MeuPerfilController {
-  constructor(private readonly pinCooperadoService: PinCooperadoService) {}
+  constructor(
+    private readonly pinCooperadoService: PinCooperadoService,
+    private readonly dadosBancariosService: DadosBancariosService,
+  ) {}
 
   @Get('pin-status')
   async pinStatus(@CurrentUser() usuario: any): Promise<{ temPin: boolean }> {
@@ -79,6 +87,45 @@ export class MeuPerfilController {
     });
 
     return { sucesso: true };
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // F6 Bloco C.0 (13/06/2026) — Cadastro/atualização da chave PIX
+  //
+  // REFORÇO ANTI-FRAUDE Luciano: trocar a chave PIX exige PIN — porque
+  // a chave É a âncora anti-fraude do resgate F6. Sessão sequestrada sem
+  // PIN ≠ chave alterada.
+  // ═════════════════════════════════════════════════════════════════════
+
+  @Get('dados-bancarios')
+  async getDadosBancarios(@CurrentUser() usuario: any) {
+    const { cooperadoId, cooperativaId } = this.exigirContextoCooperado(usuario);
+    return this.dadosBancariosService.getStatus({ cooperadoId, cooperativaId });
+  }
+
+  // Anti-enumeração/brute-force: cap apertado (5/min por IP). PIN tem
+  // lockout próprio no PinCooperadoService, mas Throttle adiciona camada
+  // antes de chegar lá.
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @HttpCode(200)
+  @Put('dados-bancarios')
+  async atualizarDadosBancarios(
+    @CurrentUser() usuario: any,
+    @Body() dto: UpdateDadosBancariosDto,
+    @Req() req: any,
+  ): Promise<{ sucesso: true; pixUltimaAlteracaoEm: Date }> {
+    const { cooperadoId, cooperativaId } = this.exigirContextoCooperado(usuario);
+    return this.dadosBancariosService.atualizar({
+      cooperadoId,
+      cooperativaId,
+      pin: dto.pin,
+      pixTipo: dto.pixTipo,
+      pixChave: dto.pixChave,
+      usuarioId: usuario?.id ?? usuario?.sub ?? 'desconhecido',
+      usuarioPerfil: usuario?.perfil ?? PerfilUsuario.COOPERADO,
+      ip: (req?.ip ?? req?.headers?.['x-forwarded-for'] ?? null) as string | null,
+      userAgent: (req?.headers?.['user-agent'] ?? null) as string | null,
+    });
   }
 
   private exigirContextoCooperado(usuario: any): {

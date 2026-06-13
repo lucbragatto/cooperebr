@@ -13,13 +13,19 @@ const fakePinSvc = {
   temPin: jest.fn(),
   definirPin: jest.fn(),
 };
+// F6 Bloco C.0 (13/06/2026): DadosBancariosService injetado no controller.
+// Mock vazio é OK aqui — F1 specs não tocam dados-bancarios.
+const fakeDadosBancariosSvc = {
+  getStatus: jest.fn(),
+  atualizar: jest.fn(),
+};
 
 describe('MeuPerfilController — F1 PIN inicial', () => {
   let ctl: MeuPerfilController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    ctl = new MeuPerfilController(fakePinSvc as any);
+    ctl = new MeuPerfilController(fakePinSvc as any, fakeDadosBancariosSvc as any);
   });
 
   describe('GET /pin-status', () => {
