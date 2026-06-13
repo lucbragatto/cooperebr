@@ -2572,12 +2572,20 @@ export class CooperTokenService {
       if (dataFim) where.createdAt.lte = dataFim;
     }
 
-    const [items, total] = await Promise.all([
+    const [itemsRaw, total] = await Promise.all([
       this.prisma.resgateRecibo.findMany({
         where,
         include: {
           cooperadoEstabelecimento: {
-            select: { id: true, nomeCompleto: true, email: true },
+            // F6 Bloco C.3 (13/06/2026): pixUltimaAlteracaoEm vem junto pra
+            // o admin ver banner amber "alterada <24h" no Dialog de
+            // aprovação (REFORÇO ANTI-FRAUDE Luciano). Single query, sem N+1.
+            select: {
+              id: true,
+              nomeCompleto: true,
+              email: true,
+              pixUltimaAlteracaoEm: true,
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -2586,6 +2594,18 @@ export class CooperTokenService {
       }),
       this.prisma.resgateRecibo.count({ where }),
     ]);
+
+    // Deriva `alteradaRecentemente` (chave alterada nas últimas 24h ANTES
+    // de o recibo ter sido criado — fecha vetor sessão-sequestrada).
+    const VINTE_QUATRO_H_MS = 24 * 60 * 60 * 1000;
+    const items = itemsRaw.map((r) => {
+      const alteradaEm = r.cooperadoEstabelecimento?.pixUltimaAlteracaoEm;
+      const alteradaRecentemente =
+        !!alteradaEm &&
+        r.createdAt.getTime() - alteradaEm.getTime() < VINTE_QUATRO_H_MS &&
+        r.createdAt.getTime() >= alteradaEm.getTime();
+      return { ...r, alteradaRecentemente };
+    });
 
     return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }

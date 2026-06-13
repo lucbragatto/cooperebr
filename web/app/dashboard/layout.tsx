@@ -46,6 +46,7 @@ import {
   FileSpreadsheet,
   CheckCheck,
   Library,
+  Banknote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTipoParceiro } from '@/hooks/useTipoParceiro';
@@ -125,6 +126,10 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         // antigas seguem vivas (deep-links + ConvenioCusteioBloco continuam
         // funcionando).
         { href: '/dashboard/clube', label: 'Clube', icon: Gift },
+        // Sprint Clube P1 — F6 Bloco C.3 (13/06/2026): aprovação de resgates
+        // em R$ via PIX dos cooperados-estabelecimento. Item visível pra ADMIN
+        // e SUPER_ADMIN (mesma família do Clube). Backend valida @Roles ainda.
+        { href: '/dashboard/cooper-token/resgates-pendentes', label: 'Resgates Pendentes', icon: Banknote },
         { href: '/dashboard/convenios', label: 'Convênios', icon: UserCheck },
         { href: '/dashboard/condominios', label: 'Condomínios', icon: Building2 },
         { href: '/dashboard/administradoras', label: 'Agregadores', icon: Building2 },
