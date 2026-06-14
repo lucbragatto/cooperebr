@@ -27,6 +27,7 @@ import {
   Users,
   Mail,
   UserPlus,
+  Send,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -119,6 +120,15 @@ const CARDS: ClubeCard[] = [
     descricao: 'Seu link pessoal de convite + métricas dos seus indicados.',
     icon: UserPlus,
     corIcone: 'text-purple-700',
+  },
+  // Sprint Higiene Bloco C (14/06/2026): op admin-token movida de
+  // /parceiro/enviar-tokens pra /dashboard/cooper-token/enviar.
+  {
+    href: '/dashboard/cooper-token/enviar',
+    titulo: 'Enviar Tokens',
+    descricao: 'Crédito manual de CooperTokens pra cooperado (operação admin).',
+    icon: Send,
+    corIcone: 'text-teal-700',
   },
 ];
 

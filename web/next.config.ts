@@ -68,6 +68,15 @@ const nextConfig: NextConfig = {
       { source: '/parceiro/agregadores', destination: '/dashboard/administradoras', permanent: true },
       { source: '/parceiro/agregadores/:path*', destination: '/dashboard/administradoras/:path*', permanent: true },
 
+      // Higiene Bloco B (14/06/2026 — D2): 3 telas de estabelecimento
+      // movidas pra área dedicada /estabelecimento/* (guard ehEstabelecimento).
+      { source: '/parceiro/receber-tokens', destination: '/estabelecimento/receber', permanent: true },
+      { source: '/parceiro/tokens-recebidos', destination: '/estabelecimento/recebimentos', permanent: true },
+      { source: '/parceiro/clube/validar', destination: '/estabelecimento/validar', permanent: true },
+
+      // Higiene Bloco C (14/06/2026): op admin-token movida pra /dashboard.
+      { source: '/parceiro/enviar-tokens', destination: '/dashboard/cooper-token/enviar', permanent: true },
+
       // Higiene: home /parceiro → /dashboard (rotaPorContexto.admin_parceiro também muda)
       { source: '/parceiro', destination: '/dashboard', permanent: true },
     ];

@@ -17,6 +17,7 @@ import {
   FileText,
   Search,
   PenTool,
+  Store,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,6 +35,9 @@ interface MeuPerfil {
   nomeCompleto: string;
   codigoIndicacao?: string;
   resumo: Resumo;
+  // Sprint Higiene Bloco B (14/06/2026 — D2): flag que habilita acesso
+  // ao "Balcão do Clube" (/estabelecimento). Vem de Cooperado.ehEstabelecimento.
+  ehEstabelecimento?: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -105,6 +109,29 @@ export default function PortalInicioPage() {
           <p className="text-sm text-gray-500 mt-1">Bem-vindo ao seu painel.</p>
         </CardContent>
       </Card>
+
+      {/* Sprint Higiene Bloco B (14/06/2026 — D2): entrada pro Balcão do
+          Clube só pra cooperado-estabelecimento. Card laranja distinto. */}
+      {perfil?.ehEstabelecimento && (
+        <Link href="/estabelecimento" className="block">
+          <Card className="border-orange-300 bg-gradient-to-r from-orange-50 to-amber-50 hover:shadow-md transition-shadow">
+            <CardContent className="pt-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-orange-100 p-2.5">
+                  <Store className="h-5 w-5 text-orange-700" />
+                </div>
+                <div>
+                  <p className="font-semibold text-orange-900">Entrar no Balcão do Clube</p>
+                  <p className="text-xs text-orange-800">
+                    Receber pagamentos em CooperToken, validar resgates e ver recebimentos.
+                  </p>
+                </div>
+              </div>
+              <span className="text-orange-700 text-sm font-medium shrink-0">→</span>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Banner de status do cadastro — aparece apenas quando status !== ATIVO */}
       {r?.statusConta && r.statusConta !== 'ATIVO' && r.statusConta !== 'ATIVO_RECEBENDO_CREDITOS' && (
