@@ -691,6 +691,22 @@ export class AuthService {
     } else if (contexto === 'cooperado') {
       cooperadoId = contextoValido.id;
       coopId = contextoValido.cooperativaId;
+    } else if (contexto === 'empresa_conveniada') {
+      // BUG CRÍTICO (blocker Santi, 14/06/2026) — sem esta branch, JWT
+      // saía com cooperadoId+cooperativaId undefined, quebrando todas
+      // as rotas /empresa/* (resgatar, distribuir, meus-resgates) que
+      // dependem de req.user.cooperadoId.
+      //
+      // Anti-spoofing: `contextoValido` veio de obterContextosUsuario,
+      // que monta a entrada empresa_conveniada SÓ se o usuário tem
+      // Cooperado pagador de convênio ATIVO (auth.service.ts:572-577).
+      // Não é possível trocar pra empresa de outro user.
+      //
+      // Mesma forma do caso 'cooperado': contextoValido.id é o
+      // Cooperado.id pagador (que identifica a empresa no portal) +
+      // contextoValido.cooperativaId é a cooperativa do convênio.
+      cooperadoId = contextoValido.id;
+      coopId = contextoValido.cooperativaId;
     } else if (contexto === 'admin_parceiro') {
       coopId = contextoValido.cooperativaId;
     } else if (contexto === 'admin_agregador') {

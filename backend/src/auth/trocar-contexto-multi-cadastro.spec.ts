@@ -188,6 +188,118 @@ describe('AuthService — "Qual cadastro?" (Fix 3+4)', () => {
     });
   });
 
+  // ═════════════════════════════════════════════════════════════════════
+  // BUG CRÍTICO FIX (14/06/2026 — blocker lançamento Santi).
+  //
+  // Antes do fix, trocarContexto não tinha branch pra contexto
+  // 'empresa_conveniada' — JWT saía com cooperadoId+cooperativaId
+  // undefined → todas as rotas /cooper-token/empresa/* (resgatar,
+  // distribuir, meus-resgates) retornavam BadRequest "cooperado não
+  // identificado no contexto".
+  //
+  // Fix: branch espelhando o caso 'cooperado' (contextoValido.id é o
+  // Cooperado.id pagador; cooperativaId vem do convênio ATIVO em
+  // obterContextosUsuario).
+  // ═════════════════════════════════════════════════════════════════════
+  describe('trocarContexto — empresa_conveniada (BUG CRÍTICO)', () => {
+    it('contexto empresa_conveniada → JWT com cooperadoId + cooperativaId corretos', async () => {
+      findManyCooperado.mockResolvedValueOnce([{
+        id: 'coop-pj-pagador',
+        nomeCompleto: 'Clinica Teste LTDA',
+        razaoSocial: 'CLINICA TESTE LTDA',
+        tipoPessoa: 'PJ',
+        cooperativaId: 'tenant-A',
+        cooperativa: { id: 'tenant-A', nome: 'CoopereBR' },
+      }]);
+      // Convênio ATIVO em que cooperado é pagador (dispara contexto).
+      findManyConvenios.mockResolvedValueOnce([{
+        id: 'conv-1',
+        empresaNome: 'Clinica Teste',
+        cooperativaId: 'tenant-A',
+      }]);
+      findUniqueCooperativa.mockResolvedValueOnce({ nome: 'CoopereBR' });
+
+      const r = await svc.trocarContexto(usuario, 'empresa_conveniada');
+
+      expect(r.cooperadoId).toBe('coop-pj-pagador');
+      expect(r.cooperativaId).toBe('tenant-A');
+      expect(r.contexto).toBe('empresa_conveniada');
+      expect(r.token).toBe('jwt-token-mock');
+
+      // Confirma payload assinado tem cooperadoId + cooperativaId.
+      expect(jwtSign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: 'u-luciano',
+          email: 'lucbragatto@gmail.com',
+          perfil: 'COOPERADO',
+          cooperadoId: 'coop-pj-pagador',
+          cooperativaId: 'tenant-A',
+        }),
+      );
+    });
+
+    it('contexto empresa_conveniada SEM convênio ATIVO → Forbidden (contexto não disponível)', async () => {
+      // Cooperado existe mas não é pagador de convênio ATIVO →
+      // obterContextosUsuario NÃO emite empresa_conveniada → trocarContexto
+      // falha no guard `if (!contextoValido)`.
+      findManyCooperado.mockResolvedValueOnce([{
+        id: 'coop-pj',
+        nomeCompleto: 'PJ',
+        razaoSocial: null,
+        tipoPessoa: 'PJ',
+        cooperativaId: 'tenant-A',
+        cooperativa: { id: 'tenant-A', nome: 'CoopereBR' },
+      }]);
+      findManyConvenios.mockResolvedValueOnce([]); // NÃO é pagador
+      await expect(
+        svc.trocarContexto(usuario, 'empresa_conveniada'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('ANTI-SPOOFING: usuário sem cooperado match → Forbidden (não pode trocar pra empresa de outro)', async () => {
+      // Usuario sem cooperado match (email não casa) → cooperados vazio
+      // → obterContextosUsuario nunca emite empresa_conveniada → guard
+      // bloqueia. Espelha proteção do caso 'cooperado'.
+      findManyCooperado.mockResolvedValueOnce([]);
+      findManyConvenios.mockResolvedValueOnce([]); // sem-effect (cooperado é null)
+      await expect(
+        svc.trocarContexto(usuario, 'empresa_conveniada'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('convênio SUSPENSO/RESCINDIDO → não emite contexto (filtro Prisma status:ATIVO)', async () => {
+      // P3 review (14/06): tornar explícito que filtro Prisma `status:'ATIVO'`
+      // exclui convênios suspensos. O mock simula a query já-filtrada
+      // retornando vazio (refletindo o que o banco devolveria).
+      findManyCooperado.mockResolvedValueOnce([{
+        id: 'coop-pj',
+        nomeCompleto: 'PJ',
+        razaoSocial: null,
+        tipoPessoa: 'PJ',
+        cooperativaId: 'tenant-A',
+        cooperativa: { id: 'tenant-A', nome: 'X' },
+      }]);
+      // Convênio existe no banco mas com status SUSPENSO — Prisma `where:
+      // {status:'ATIVO'}` filtra antes de retornar. Mock representa o
+      // resultado pós-filtro (vazio).
+      findManyConvenios.mockResolvedValueOnce([]);
+      await expect(
+        svc.trocarContexto(usuario, 'empresa_conveniada'),
+      ).rejects.toThrow(ForbiddenException);
+      // Confirma que a query usa filtro de status:
+      expect(findManyConvenios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'ATIVO' }),
+        }),
+      );
+    });
+
+    // (Cenário multi-convênio é coberto em obter-contextos-empresa.spec.ts —
+    // não duplicar aqui pra evitar state-leak de mocks entre testes
+    // sequenciais. O fix do bug C.4 é a branch nova em trocarContexto, não
+    // a lógica de obterContextosUsuario que já existia.)
+  });
+
   // Revisao multi-tenant 09/06/2026 — impersonate dev nao pode resolver cadastro inativo.
   describe('assinarTokenImpersonate — filtro de status', () => {
     it('findFirst aplica status IN STATUS_COOPERADO_ATIVOS', async () => {
