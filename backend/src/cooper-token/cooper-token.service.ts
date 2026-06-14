@@ -2528,42 +2528,149 @@ export class CooperTokenService {
     }
 
     // ── FAILED ──
-    const swap = await this.prisma.resgateRecibo.updateMany({
-      where: {
-        id: recibo.id,
-        cooperativaId: recibo.cooperativaId,
-        status: 'APROVADO_PIX_DISPARADO',
-      },
-      data: {
-        status: 'FALHA_PIX',
-        falhaEm: new Date(),
-        motivoFalha: motivoFalha ?? 'Asaas reportou falha',
-        ultimoWebhookEventId: eventId,
-      },
-    });
-    if (swap.count === 0) {
+    //
+    // F6 C.5 GAP-1 (14/06/2026 — re-review orquestrador): CAS de status +
+    // estorno (saldo + ledger) + gravação do ultimoWebhookEventId TUDO numa
+    // ÚNICA tx Serializable. Espelha o caminho de sucesso (F6-7). Crash
+    // entre os passos NÃO deixa mais o recibo em FALHA_PIX com tokens
+    // ainda bloqueados — tx Serializable rollback restaura estado anterior
+    // (status volta pra APROVADO_PIX_DISPARADO; Asaas re-envia webhook).
+    let failedResult: { swapCount: number; estornoAplicado: boolean };
+    try {
+      failedResult = await this.prisma.$transaction(
+        async (tx) => {
+          const swap = await tx.resgateRecibo.updateMany({
+            where: {
+              id: recibo.id,
+              cooperativaId: recibo.cooperativaId,
+              status: 'APROVADO_PIX_DISPARADO',
+            },
+            data: {
+              status: 'FALHA_PIX',
+              falhaEm: new Date(),
+              motivoFalha: motivoFalha ?? 'Asaas reportou falha',
+              ultimoWebhookEventId: eventId,
+            },
+          });
+          if (swap.count === 0) {
+            return { swapCount: 0, estornoAplicado: false };
+          }
+          const r = await this.aplicarEstornoEmTx(tx, {
+            recibo,
+            statusFinal: 'FALHA_PIX',
+            motivoFalha,
+          });
+          return { swapCount: 1, estornoAplicado: r.aplicado };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (err) {
+      this.logger.error(
+        `[F6] webhook FAILED tx falhou recibo=${recibo.numeroRecibo}: ${(err as Error).message}`,
+      );
+      throw err;
+    }
+
+    if (failedResult.swapCount === 0) {
       this.logger.warn(
         `[F6] webhook FAILED compare-and-swap perdeu — recibo ${recibo.numeroRecibo}`,
       );
       return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
     }
 
-    // Estorno auditável.
-    await this.estornarResgateInterno({
-      recibo,
-      statusFinal: 'FALHA_PIX',
-      skipStatusUpdate: true,
-    });
-
     this.logger.warn(
-      `[F6] webhook FAILED recibo=${recibo.numeroRecibo} — estorno aplicado, motivo: ${motivoFalha}`,
+      `[F6] webhook FAILED recibo=${recibo.numeroRecibo} — estorno ${failedResult.estornoAplicado ? 'aplicado' : 'skip (já estornado por outra via)'}, motivo: ${motivoFalha}`,
     );
     return { sucesso: false, reciboId: recibo.id, motivoFalha };
   }
 
   /**
+   * F6 C.5 GAP-1 (14/06/2026 — re-review orquestrador): helper extraído pra
+   * permitir que webhook FAILED faça CAS + estorno + gravação do eventId
+   * numa ÚNICA tx Serializable (espelha o caminho de sucesso/F6-7). Sem
+   * isso, crash entre o CAS de status e o estorno deixaria recibo em
+   * FALHA_PIX com tokens ainda bloqueados (saldoBloqueadoResgate preso).
+   *
+   * Executa só o que precisa estar dentro da tx (saldo + ledger). Caller
+   * é responsável por abrir a tx Serializable e gravar o status do recibo.
+   *
+   * Retorna `aplicado: false` se a invariante detectar que o estorno já
+   * aconteceu por outra via (saldoBloq < quantidade); caller decide
+   * continuar ou abortar.
+   */
+  private async aplicarEstornoEmTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      recibo: {
+        id: string;
+        cooperativaId: string;
+        cooperadoEstabelecimentoId: string;
+        valorBrutoTokens: any;
+        numeroRecibo: string;
+      };
+      statusFinal: 'RECUSADO' | 'CANCELADO' | 'FALHA_PIX';
+      motivoFalha?: string;
+    },
+  ): Promise<{ aplicado: boolean; saldoTotalApos: number | null }> {
+    const { recibo, statusFinal, motivoFalha } = params;
+    const quantidade = Number(recibo.valorBrutoTokens);
+
+    const saldo = await tx.cooperTokenSaldo.findUnique({
+      where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+    });
+    if (!saldo) {
+      throw new Error('Saldo do estabelecimento sumiu pré-estorno');
+    }
+    const saldoDisp = Number(saldo.saldoDisponivel);
+    const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
+    const novoSaldoDisp = Math.round((saldoDisp + quantidade) * 10000) / 10000;
+    const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
+    if (novoSaldoBloq < 0) {
+      // Invariante: estorno já aplicado por outra via — log + skip silencioso.
+      this.logger.warn(
+        `[F6] estornar ${recibo.numeroRecibo} já aplicado (saldoBloqueado=${saldoBloq}, qtd=${quantidade}) — skip`,
+      );
+      return { aplicado: false, saldoTotalApos: null };
+    }
+    // Multi-tenant: updateMany com tenant guard.
+    await tx.cooperTokenSaldo.updateMany({
+      where: {
+        cooperadoId: recibo.cooperadoEstabelecimentoId,
+        cooperativaId: recibo.cooperativaId,
+      },
+      data: {
+        saldoDisponivel: novoSaldoDisp,
+        saldoBloqueadoResgate: novoSaldoBloq,
+      },
+    });
+    // GAP-2 (C.5): saldoApos = total disp + bloq pós-operação (não só
+    // disp). Auditoria contábil vê o estado completo do saldo.
+    const saldoTotalApos =
+      Math.round((novoSaldoDisp + novoSaldoBloq) * 10000) / 10000;
+    await tx.cooperTokenLedger.create({
+      data: {
+        cooperadoId: recibo.cooperadoEstabelecimentoId,
+        cooperativaId: recibo.cooperativaId,
+        tipo: CooperTokenTipo.ESTORNO_RESGATE_PIX,
+        operacao: CooperTokenOperacao.CREDITO,
+        quantidade,
+        saldoApos: saldoTotalApos,
+        referenciaId: recibo.id,
+        referenciaTabela: 'ResgateRecibo',
+        descricao: `Estorno de resgate ${recibo.numeroRecibo} (${statusFinal}). Tokens devolvidos ao saldo disponível.${motivoFalha ? ` Motivo: ${motivoFalha}` : ''}`,
+      },
+    });
+    return { aplicado: true, saldoTotalApos };
+  }
+
+  /**
    * Estorno auditável (interno) — devolve tokens bloqueados ao saldoDisponivel
    * e cria ledger CREDITO ESTORNO_RESGATE_PIX. NUNCA apaga registros.
+   *
+   * Wrapper que abre tx Serializable própria. Usado por `recusarResgate` e
+   * `cancelarResgate` (que NÃO compartilham tx com nada externo). Webhook
+   * FAILED chama `aplicarEstornoEmTx` diretamente DENTRO da própria tx que
+   * faz o CAS de status (F6 C.5 GAP-1).
    *
    * Invariante: saldoDisponivel + saldoBloqueadoResgate conserva (saí de
    * bloqueado, volta pra disponível — soma constante).
@@ -2574,52 +2681,11 @@ export class CooperTokenService {
     motivoFalha?: string;
     skipStatusUpdate?: boolean;
   }) {
-    const { recibo, statusFinal, motivoFalha, skipStatusUpdate } = params;
-    const quantidade = Number(recibo.valorBrutoTokens);
+    const { recibo, statusFinal, motivoFalha } = params;
 
     await this.prisma.$transaction(
       async (tx) => {
-        const saldo = await tx.cooperTokenSaldo.findUnique({
-          where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
-        });
-        if (!saldo) {
-          throw new Error('Saldo do estabelecimento sumiu pré-estorno');
-        }
-        const saldoDisp = Number(saldo.saldoDisponivel);
-        const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
-        const novoSaldoDisp = Math.round((saldoDisp + quantidade) * 10000) / 10000;
-        const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
-        if (novoSaldoBloq < 0) {
-          // Tolera invariante (já estornado por outra via?) — log + skip.
-          this.logger.warn(
-            `[F6] estornar ${recibo.numeroRecibo} já aplicado (saldoBloqueado=${saldoBloq}, qtd=${quantidade}) — skip`,
-          );
-          return;
-        }
-        // F6 C.4 P2 (14/06/2026 — review pesada): updateMany com tenant.
-        await tx.cooperTokenSaldo.updateMany({
-          where: {
-            cooperadoId: recibo.cooperadoEstabelecimentoId,
-            cooperativaId: recibo.cooperativaId,
-          },
-          data: {
-            saldoDisponivel: novoSaldoDisp,
-            saldoBloqueadoResgate: novoSaldoBloq,
-          },
-        });
-        await tx.cooperTokenLedger.create({
-          data: {
-            cooperadoId: recibo.cooperadoEstabelecimentoId,
-            cooperativaId: recibo.cooperativaId,
-            tipo: CooperTokenTipo.ESTORNO_RESGATE_PIX,
-            operacao: CooperTokenOperacao.CREDITO,
-            quantidade,
-            saldoApos: novoSaldoDisp,
-            referenciaId: recibo.id,
-            referenciaTabela: 'ResgateRecibo',
-            descricao: `Estorno de resgate ${recibo.numeroRecibo} (${statusFinal}). Tokens devolvidos ao saldo disponível.${motivoFalha ? ` Motivo: ${motivoFalha}` : ''}`,
-          },
-        });
+        await this.aplicarEstornoEmTx(tx, { recibo, statusFinal, motivoFalha });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
