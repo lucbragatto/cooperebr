@@ -347,6 +347,28 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-EMAIL-IMAP-SSL-VERIFY — `tls.rejectUnauthorized:false` incondicional no IMAP (workaround Kaspersky no dev pode vazar pra produção)
+
+**Severidade:** P2 — risco MITM no pipeline IMAP se subir pra produção com a flag aberta. No dev é mitigação legítima (antivírus injeta cert intermediário), mas precisa ser gated por ambiente OU substituído por cert próprio antes de qualquer deploy real.
+
+**Detectado em:** 2026-06-14 (Sprint Higiene Rotas — orquestrador, ao mergeear `feature/higiene-rotas` no main carona o commit `be8e46e` do Cowork/M36 que introduziu o workaround).
+
+**Onde:** `backend/src/email-monitor/email-monitor.service.ts` — opção `tls.rejectUnauthorized: false` no client IMAP é setada incondicionalmente. Não há gate por `NODE_ENV` nem checagem de hostname.
+
+**Risco em produção:**
+- Atacante na rede entre o backend e o servidor IMAP da concessionária (qualquer hop) consegue interceptar/modificar emails sem o backend detectar — TLS deixa de validar a cadeia de certificados.
+- Pipeline IMAP→OCR é fonte de dados fiscais (faturas EDP), então a integridade dos emails entra no caminho crítico do faturamento.
+
+**Mitigação atual:**
+- Só ambiente dev do Luciano roda com Kaspersky (cert auto-assinado interceptando TLS). Backend de prod não terá o mesmo problema — mas a flag continua aberta no código.
+
+**Resolução proposta (ANTES de qualquer deploy de prod):**
+- **Opção A (preferida):** gate por env — `tls: { rejectUnauthorized: process.env.NODE_ENV !== 'production' }` ou flag explícita `IMAP_TLS_INSECURE=true` só no `.env.development`.
+- **Opção B:** importar o cert root do Kaspersky no Node TLS store local (não usar workaround no código). Documentar em `docs/operacao/setup-dev.md`.
+- **Opção C:** substituir IMAP service pelo Gmail API (OAuth, sem TLS custom) — escopo bem maior.
+
+**Responsabilidade:** carona do Cowork (M36) — investigação e correção saem do escopo da Sprint Higiene Rotas. Fica catalogado pra próxima sessão Cowork ou sprint dedicada antes do deploy.
+
 ### D-novo-WA-PHONE-NORMALIZE — telefones formatados não casam com matcher do bot (cooperados podem ficar inalcançáveis silenciosamente)
 
 **Severidade:** P2 — bot WA não responde a cooperado real com telefone mascarado (sem erro visível, falha silenciosa de UX)

@@ -251,6 +251,32 @@ SISGD atende 4 tipos de parceiro, cada um com nome próprio pra "membro":
 - Hangar Academia, AESMP, ASSEJUFES são **membros PJ da CoopereBR (cooperados)** — não são parceiros do SISGD.
 - Hook já adotado em 21 telas. Ainda há ~50 telas + 73 exceptions backend com termo hardcoded — débito P2 registrado em `docs/debitos-tecnicos.md` (commit `91652ae`). **Bloqueia onboarding produção de Consórcio/Associação/Condomínio**, não bloqueia desenvolvimento.
 
+## Arquitetura de rotas (Sprint Higiene 14/06/2026 — D-1171 fechado)
+
+Após Sprint Higiene de Rotas (Decisões D1+D2+D3+D4), o frontend tem **5 áreas
+canônicas por perfil** (mapeadas em `hooks/useContexto.ts:rotaPorContexto`):
+
+| Contexto JWT | Rota home | Quem usa |
+|---|---|---|
+| `super_admin` | `/dashboard` | Dono do SISGD — operação multi-tenant, "Gestão Global" visível |
+| `admin_parceiro` | `/dashboard` | Admin do tenant — MESMA área do super-admin, mas sem "Gestão Global"; sidebar mostra "Painel Administrativo — {nomeCooperativa}" |
+| `cooperado` | `/portal` | Cooperado regular — fatura, UCs, tokens, indicações |
+| `empresa_conveniada` | `/conveniada` | Empresa cooperada PJ — distribuir tokens em lote aos funcionários |
+| `proprietario_usina` | `/proprietario` | Dono de usina — produção, despesas, repasses |
+| `admin_agregador` | `/agregador` | Agregador externo |
+| `cooperado` + `ehEstabelecimento=true` | `/estabelecimento` | Cooperado-estabelecimento do Clube — recebe pagamento em CooperToken, valida resgates. Card de entrada visível em `/portal/page.tsx` |
+
+**Decisões consolidadas:**
+- D1: `/parceiro/*` DESCONTINUADO (todas as ~25 telas foram convergidas em `/dashboard/*`; 33 redirects 301 `permanent:true` em `next.config.ts` preservam deep-links legados).
+- D2: `/estabelecimento/*` é área NOVA (Sprint Higiene Bloco B), guard de `ehEstabelecimento` no layout reusa contexto `cooperado` (sem novo contexto JWT v1).
+- D3: ADMIN do parceiro vê `h1 "Painel Administrativo"` + `p "{nomeCooperativa}"` em `/dashboard/layout.tsx`. Super-admin vendo um tenant específico em `/dashboard/parceiros/[id]` vê `"Painel do Tenant — {nome}"`.
+- D4: `/portal/comprar-tokens` permanece canônica (PF+PJ); link adicional no `/conveniada/*` aponta pra lá quando aplicável (sem duplicação de rota).
+
+**Glossário travado (memória `modelo_portais_e_colisao_parceiro_14_06_2026.md`):**
+- **PARCEIRO** = tenant (a cooperativa/consórcio/associação/condomínio cadastrado no SISGD).
+- **ADMIN DO PARCEIRO** = pessoa que opera o tenant (perfil `ADMIN` no JWT).
+- **ESTABELECIMENTO** = loja/serviço que aceita CooperToken no Clube (cooperado PF/PJ com `ehEstabelecimento=true`).
+
 ## Convenções de código
 
 - Multi-tenant: toda query Prisma filtra por `cooperativaId`
@@ -309,7 +335,9 @@ Plano de finalização completo em **`docs/especificacao-circuito-cooper-token-c
 
 - **COOPERADO-ONLY:** só cooperado (PF ou PJ) participa do Clube ou faz convênio (já no
   estatuto) → tudo é ato cooperativo (Art. 79). "Parceiro do Clube" = cooperado PF/PJ
-  (NÃO confundir com `/parceiro/*` = o tenant/cooperativa).
+  (Sprint Higiene 14/06: agora chamado **"estabelecimento"** na UI, área dedicada
+  `/estabelecimento/*`; **`/parceiro/*` foi descontinuado** e convergido em `/dashboard/*` —
+  ver Sprint Higiene de Rotas abaixo).
 - **Dois rios:** ENERGIA→SOBRA (dinheiro, proporcional à energia, mensal) × TOKEN→
   BENEFÍCIO (circuito fechado; abate fatura/parceiros; sai por **resgate**). Sobra
   acompanha energia, NUNCA token.

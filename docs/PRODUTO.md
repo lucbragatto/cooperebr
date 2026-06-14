@@ -58,7 +58,7 @@ Você. Dono do SISGD. Vende plataforma pros parceiros. Cobra cada parceiro pelo 
 
 #### 2. Marcos — Admin do parceiro (ADMIN)
 
-Administrador da CoopereBR. Cadastra cooperados, gera cobranças, aprova faturas que chegam por email da EDP, cobra inadimplentes. **Não enxerga nenhum outro parceiro** (multi-tenant: cada admin vê só seu parceiro).
+Administrador da CoopereBR. Cadastra cooperados, gera cobranças, aprova faturas que chegam por email da EDP, cobra inadimplentes. **Não enxerga nenhum outro parceiro** (multi-tenant: cada admin vê só seu parceiro). Acessa `/dashboard` (Sprint Higiene 14/06 — antes era `/parceiro`; convergência D1) com título "Painel Administrativo — {nomeCooperativa}".
 
 #### 3. Pedro — Operador (OPERADOR)
 

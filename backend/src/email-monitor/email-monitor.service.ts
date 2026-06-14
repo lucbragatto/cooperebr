@@ -75,12 +75,16 @@ export class EmailMonitorService {
     const port = Number(portDb || '993');
     const pass = Buffer.from(passDb, 'base64').toString('utf-8');
 
+    // ⚠️ tls.rejectUnauthorized: false — workaround pra SSL inspection do Kaspersky
+    // local que injeta cert self-signed na cadeia TLS. Bloqueava CRON @6h ha semanas
+    // (so 9 cooperados auditados em 6 meses). TODO: remover ao migrar pra cloud.
     return new ImapFlow({
       host,
       port,
       secure: true,
       auth: { user: userDb, pass },
       logger: false,
+      tls: { rejectUnauthorized: false },
     });
   }
 

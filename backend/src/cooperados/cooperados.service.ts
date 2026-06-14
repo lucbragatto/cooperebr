@@ -37,14 +37,23 @@ export class CooperadosService {
     );
   }
 
-  async meuPerfil(usuario: { id: string; email: string; cpf?: string }) {
+  async meuPerfil(usuario: { id: string; email: string; cpf?: string; cooperativaId?: string }) {
     const where: any[] = [];
     if (usuario.email) where.push({ email: usuario.email });
     if (usuario.cpf) where.push({ cpf: usuario.cpf });
     if (where.length === 0) throw new NotFoundException('Cooperado não encontrado para este usuário');
 
+    // Multi-tenant: Sprint Higiene 14/06 P1 reviewer — `OR` por email/CPF pode
+    // resolver cooperado de OUTRO tenant em sistema multi-cooperativa. O campo
+    // `ehEstabelecimento` desse perfil arma o guard de /estabelecimento — se
+    // resolver errado, libera área errada. Filtra por cooperativaId quando JWT
+    // tem (rotas autenticadas sempre têm; só falta em fluxos públicos legados).
+    const filtroTenant = usuario.cooperativaId
+      ? { AND: [{ cooperativaId: usuario.cooperativaId }, { OR: where }] }
+      : { OR: where };
+
     const cooperado = await this.prisma.cooperado.findFirst({
-      where: { OR: where },
+      where: filtroTenant,
       include: {
         ucs: true,
         contratos: {

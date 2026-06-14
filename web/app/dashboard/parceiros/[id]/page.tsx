@@ -47,7 +47,12 @@ export default function ParceiroPainelPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar
         </Button>
-        <h2 className="text-2xl font-bold text-gray-800">Painel do Parceiro</h2>
+        {/* Sprint Higiene D3 (14/06/2026): super-admin vendo um tenant
+            específico — "Tenant" pra distinguir do "Painel Administrativo
+            — {nome}" que o ADMIN do próprio parceiro vê em /dashboard. */}
+        <h2 className="text-2xl font-bold text-gray-800">
+          Painel do Tenant — {cooperativa.nome}
+        </h2>
       </div>
 
       {/* Info do parceiro */}
