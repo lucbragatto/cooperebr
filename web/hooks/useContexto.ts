@@ -109,13 +109,20 @@ export function useContexto() {
   };
 }
 
-/** Retorna a rota home para cada tipo de contexto */
+/** Retorna a rota home para cada tipo de contexto.
+ *
+ * Sprint Higiene de Rotas (14/06/2026) — Decisão Luciano D1: convergir
+ * /parceiro → /dashboard. SUPER_ADMIN e ADMIN-do-parceiro agora usam
+ * a mesma área `/dashboard`. /dashboard/layout.tsx diferencia visual
+ * (título "Painel Administrativo — {nomeCooperativa}" pra admin_parceiro;
+ * seção "Gestão Global" só pra SUPER_ADMIN).
+ */
 export function rotaPorContexto(tipo: TipoContexto): string {
   switch (tipo) {
     case 'super_admin':
       return '/dashboard';
     case 'admin_parceiro':
-      return '/parceiro';
+      return '/dashboard';
     case 'cooperado':
       return '/portal';
     case 'proprietario_usina':

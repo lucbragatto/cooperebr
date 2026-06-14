@@ -343,19 +343,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
+        {/* Sprint Higiene de Rotas (14/06/2026 — Decisão Luciano D3):
+            ADMIN do parceiro vê "Painel Administrativo — {nomeCooperativa}";
+            SUPER_ADMIN (e perfis sem cooperativa associada) vê "SISGD". */}
         <div className="px-6 py-5 border-b">
-          <h1 className="text-xl font-bold text-green-700">SISGD</h1>
           {(() => {
             const cooperativaNome = meData?.contextos?.find(c => c.tipo === 'admin_parceiro')?.cooperativaNome;
             if (usuario?.perfil === 'ADMIN' && cooperativaNome) {
               return (
-                <p className="text-xs text-blue-600 mt-0.5 flex items-center gap-1">
-                  <Building2 className="w-3 h-3" />
-                  {cooperativaNome}
-                </p>
+                <>
+                  <h1 className="text-base font-bold text-gray-800">Painel Administrativo</h1>
+                  <p className="text-sm text-blue-600 mt-1 flex items-center gap-1 font-semibold">
+                    <Building2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{cooperativaNome}</span>
+                  </p>
+                </>
               );
             }
-            return <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>;
+            return (
+              <>
+                <h1 className="text-xl font-bold text-green-700">SISGD</h1>
+                <p className="text-xs text-gray-400 mt-0.5">Painel Administrativo</p>
+              </>
+            );
           })()}
         </div>
 
