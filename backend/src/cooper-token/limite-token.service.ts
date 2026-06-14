@@ -293,19 +293,22 @@ export class LimiteTokenService {
         },
         _sum: { valorReaisEstimado: true },
       }),
-      // F6-3: resgates do dia (estados que comprometem saldo).
+      // F6-3 + re-review (14/06): resgates que comprometem saldo. Janela
+      // dupla:
+      //  - PENDENTE_APROVACAO_COOP / APROVADO_PIX_DISPARADO: SEM filtro de
+      //    data (saldo ainda está bloqueado independente de quando foi
+      //    solicitado — fecha vetor "pendiu ontem 23h55, vai burlar dia
+      //    seguinte" apontado na re-review).
+      //  - PAGO_RECIBO_EMITIDO: só do dia atual (queimou, vira gasto do
+      //    dia em que foi pago).
       this.prisma.resgateRecibo.aggregate({
         where: {
           cooperadoEstabelecimentoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
-          status: {
-            in: [
-              'PENDENTE_APROVACAO_COOP',
-              'APROVADO_PIX_DISPARADO',
-              'PAGO_RECIBO_EMITIDO',
-            ],
-          },
-          createdAt: { gte: inicioHoje },
+          OR: [
+            { status: { in: ['PENDENTE_APROVACAO_COOP', 'APROVADO_PIX_DISPARADO'] } },
+            { status: 'PAGO_RECIBO_EMITIDO', pagoEm: { gte: inicioHoje } },
+          ],
         },
         _sum: { valorBrutoReais: true },
       }),

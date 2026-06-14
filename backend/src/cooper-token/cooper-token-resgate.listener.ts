@@ -36,11 +36,17 @@ export class CooperTokenResgateListener {
   @OnEvent('cooper-token-resgate.transfer')
   async handleTransfer(payload: CooperTokenResgateTransferPayload): Promise<void> {
     try {
+      // F6 C.4 re-review (14/06): passa cooperativaId pra service usar como
+      // double-check (defesa em profundidade). asaas.service.ts já validou
+      // tenant antes do emit (configCooperativaId === recibo.cooperativaId),
+      // mas o service refaz o cruzamento — se outros módulos emitirem o
+      // evento no futuro a defesa fica garantida no lugar certo.
       await this.cooperTokenService.processarWebhookResgate({
         asaasTransferId: payload.asaasTransferId,
         eventId: payload.eventId,
         sucesso: payload.sucesso,
         motivoFalha: payload.motivoFalha,
+        cooperativaIdEsperada: payload.cooperativaId,
       });
     } catch (err) {
       // Erro NÃO pode quebrar webhook — Asaas re-tenta em backoff. Loga

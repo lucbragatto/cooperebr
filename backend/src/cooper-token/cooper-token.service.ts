@@ -2392,8 +2392,17 @@ export class CooperTokenService {
     eventId: string;
     sucesso: boolean;
     motivoFalha?: string;
+    /**
+     * F6 C.4 re-review (14/06): tenant esperado vindo do listener/emit
+     * pra DOUBLE-CHECK anti-IDOR. asaas.service.ts já validou tenant via
+     * configCooperativaId === recibo.cooperativaId antes do emit, mas
+     * este service também valida — se outro emissor do evento for criado
+     * no futuro, a defesa fica no lugar certo. Opcional pra retrocompat
+     * com specs antigos que chamam direto sem passar.
+     */
+    cooperativaIdEsperada?: string;
   }) {
-    const { asaasTransferId, eventId, sucesso, motivoFalha } = params;
+    const { asaasTransferId, eventId, sucesso, motivoFalha, cooperativaIdEsperada } = params;
 
     const recibo = await this.prisma.resgateRecibo.findFirst({
       where: { asaasTransferId },
@@ -2403,6 +2412,14 @@ export class CooperTokenService {
         `[F6] webhook asaasTransferId=${asaasTransferId} — recibo não encontrado, ignorando`,
       );
       return { skipped: 'recibo-nao-encontrado' };
+    }
+
+    // Re-review (14/06): double-check tenant se passado pelo caller.
+    if (cooperativaIdEsperada && cooperativaIdEsperada !== recibo.cooperativaId) {
+      this.logger.error(
+        `[F6] webhook double-check tenant FALHOU: esperado=${cooperativaIdEsperada} recibo=${recibo.cooperativaId} (${recibo.numeroRecibo}) — rejeitando`,
+      );
+      return { skipped: 'tenant-mismatch', reciboId: recibo.id };
     }
 
     // REFORÇO 2: idempotência webhook.
@@ -2463,6 +2480,13 @@ export class CooperTokenService {
                 totalResgatado: { increment: quantidade },
               },
             });
+            // F6 C.4 re-review (14/06): `saldoApos` reflete o saldo TOTAL
+            // de tokens pós-operação (disp + bloq), não só o disponível —
+            // pra auditoria contábil ver o estado completo após a queima.
+            const saldoTotalApos =
+              Math.round(
+                (Number(saldo.saldoDisponivel) + novoSaldoBloq) * 10000,
+              ) / 10000;
             await tx.cooperTokenLedger.create({
               data: {
                 cooperadoId: recibo.cooperadoEstabelecimentoId,
@@ -2470,7 +2494,7 @@ export class CooperTokenService {
                 tipo: CooperTokenTipo.RESGATE_PIX,
                 operacao: CooperTokenOperacao.DEBITO,
                 quantidade,
-                saldoApos: Number(saldo.saldoDisponivel), // saldoDisponivel não muda
+                saldoApos: saldoTotalApos, // disp + bloq pós-queima
                 referenciaId: recibo.id,
                 referenciaTabela: 'ResgateRecibo',
                 descricao: `Liquidação de voucher CooperToken — Recibo ${recibo.numeroRecibo} (R$ ${Number(recibo.valorLiquidoReais).toFixed(2)} via PIX). Cooperativa quitou passivo.`,

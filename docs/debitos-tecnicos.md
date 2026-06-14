@@ -5575,6 +5575,54 @@ TypeError: Cannot read properties of undefined (reading 'findMany')
 
 ---
 
+### D-novo-F6-RECONCILIACAO-CRON — Cron periódico pra reconciliar resgates parados em APROVADO_PIX_DISPARADO (P2)
+
+**Origem:** review pesada F6 C.4 (13/06/2026).
+
+**Sintoma esperado:** Asaas pode falhar em entregar webhook TRANSFER_DONE/FAILED (network blip, fila travada, etc) e re-tenta em backoff. Se TODAS as tentativas falharem (rara mas possível), o `ResgateRecibo` fica preso em `APROVADO_PIX_DISPARADO` com `asaasTransferId` setado mas sem evento terminal — saldoBloqueadoResgate fica congelado, contabilidade desencontrada.
+
+**Fix proposto:** cron `apurar-resgates-parados.ts` rodando a cada 1h:
+1. Lista `ResgateRecibo` com `status='APROVADO_PIX_DISPARADO'` E `asaasTransferId NOT NULL` E `aprovadoEm < NOW() - 30min`.
+2. Pra cada um, chama `GET /transfers/:id` na API Asaas via `AsaasPixOutService.consultarStatus(cooperativaId, asaasTransferId)` (a criar).
+3. Mapeia status Asaas → `processarWebhookResgate({sucesso, motivoFalha})` simulando webhook.
+4. Cap de 50 por execução pra não derrubar Asaas.
+
+**Janela alvo:** P2 — não bloqueia onboarding 2º tenant porque webhook funciona em 99% dos casos. Implementar antes de volume real.
+
+**Status:** ABERTO.
+
+---
+
+### D-novo-MT-F2-F3-F4-LEGADO-UPDATE-COOPERADO — F2/F3/F4 usam `cooperTokenSaldo.update({cooperadoId})` sem `cooperativaId` no where (P2)
+
+**Origem:** re-review multi-tenant F6 C.4 (14/06/2026) detectou padrão LEGADO pré-existente.
+
+**Sintoma:** Os fluxos F2 (compra PJ), F3 (distribuir), F4 (usarNaFatura), expiração, oxidação e processarPagamentoQr usam `prisma.cooperTokenSaldo.update({where:{cooperadoId}, ...})` sem `cooperativaId` no where. O fix F6 C.4 P2 estabeleceu o padrão `updateMany({where:{cooperadoId, cooperativaId}})` em 3 pontos do F6, mas NÃO retroagiu pros legados.
+
+**Por que NÃO é IDOR ativo hoje:** `cooperadoId` é `@unique` no schema da `CooperTokenSaldo` — write por id único bate em exatamente 1 registro, e o controller pega cooperadoId do JWT, não do body. Mas é proteção "por acidente do schema", não por design explícito. Se algum dia `cooperadoId` deixar de ser único (e.g. shard ou migração), TODOS viram IDOR.
+
+**Pontos do code path detectados pela re-review (linhas aproximadas em cooper-token.service.ts):**
+- :237 — credita inicial
+- :355 — usarNaFatura desconto
+- :485 — processar pendente
+- :672 — expiração
+- :999 / :1031 — transferir entre cooperados
+- :1629 — distribuir destinatário
+- :1705 — distribuir empresa pagador
+- :2962 — expiração cron
+- :3172 / :3203 — processarPagamentoQr remetente/recebedor
+- :3745 — oxidação
+
+**getSaldo/getExtrato (rotas read):** mesma análise — `findUnique({where:{cooperadoId}})` é protegido por `@unique`, controller toma do JWT.
+
+**Fix proposto (sprint Hardening Mass-Write futuro):** migrar progressivamente pra `updateMany({where:{cooperadoId, cooperativaId}})` + `count===0 → throw`. Documentar no service como invariante.
+
+**Por que P2 e não P1:** Sem regressão imediata. Bloqueia onboarding 2º tenant SE schema do CooperTokenSaldo mudar antes — então tratar antes da Santi/Triad em produção SE houver mexida no schema. Caso contrário, aplicar de forma orgânica nos próximos refactors.
+
+**Status:** ABERTO. Pode entrar no Sprint Hardening Mass-Write SUPER_ADMIN P2 (já enfileirado em `sprint_hardening_mass_write_super_admin_10_06.md`).
+
+---
+
 ## Como remover item
 
 Quando débito for resolvido:
