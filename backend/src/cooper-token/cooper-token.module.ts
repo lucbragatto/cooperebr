@@ -15,6 +15,9 @@ import { EmailModule } from '../email/email.module';
 import { AsaasModule } from '../asaas/asaas.module';
 // Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): listener do webhook Asaas.
 import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
+// Sprint Clube P1 — F6 Bloco C.4 P0-B (14/06/2026): listener TRANSFER_* do
+// Asaas pra rota PIX-out → processarWebhookResgate.
+import { CooperTokenResgateListener } from './cooper-token-resgate.listener';
 // Sprint Clube P1 — F4 Bloco A (12/06/2026): PinCooperadoService pra
 // step-up de autorização em usarNaFatura (cooperado abate fatura via PIN).
 // CooperadosModule exporta PinCooperadoService.
@@ -45,6 +48,7 @@ import { FinanceiroModule } from '../financeiro/financeiro.module';
     TokenNotificacaoService,
     PrismaService,
     CooperTokenCompraPjListener,
+    CooperTokenResgateListener,
   ],
   exports: [CooperTokenService, LimiteTokenService, TokenNotificacaoService],
 })

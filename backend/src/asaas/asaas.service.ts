@@ -447,6 +447,21 @@ export class AsaasService {
 
     const event = payload.event;
     const payment = payload.payment;
+    // F6 Bloco C.4 P0-B (14/06/2026): TRANSFER_* = PIX-out (resgate F6).
+    const transfer = payload.transfer;
+
+    // Rota TRANSFER_* (PIX-out do F6) ANTES da rota PAYMENT_*. Resolve tenant
+    // via recibo + valida que o token do webhook bate com a cooperativa
+    // emissora — fecha de carona D-novo-ASAAS-WEBHOOK-AUTH (sem este
+    // cruzamento, token válido em tenant X poderia processar TRANSFER de
+    // tenant Y).
+    if (event && typeof event === 'string' && event.startsWith('TRANSFER_')) {
+      return this.processarWebhookTransfer({
+        event,
+        transfer,
+        configCooperativaId: config.cooperativaId,
+      });
+    }
 
     if (!payment?.id) {
       this.logger.warn('Webhook sem payment ID');
@@ -550,6 +565,100 @@ export class AsaasService {
         });
       }
     }
+
+    return { received: true };
+  }
+
+  /**
+   * F6 Bloco C.4 P0-B (14/06/2026) — Rota TRANSFER_* do webhook Asaas
+   * (PIX-out do resgate F6).
+   *
+   * Eventos Asaas considerados:
+   *  - TRANSFER_DONE / TRANSFER_CONFIRMED → sucesso (libera queima + ledger).
+   *  - TRANSFER_FAILED / TRANSFER_CANCELLED → falha (estorno auditável).
+   *  - TRANSFER_CREATED / TRANSFER_PENDING / outros → intermediário, ignora.
+   *
+   * Tenant via recibo (D-novo-ASAAS-WEBHOOK-AUTH fechado de carona):
+   *  - Recibo identifica a cooperativa emissora.
+   *  - Token do webhook foi validado contra alguma AsaasConfig — cruza
+   *    contra a cooperativa do recibo aqui. Token de tenant X NÃO pode
+   *    processar TRANSFER de tenant Y (anti-fraude cross-tenant via
+   *    webhook).
+   *
+   * Idempotência (REFORÇO 2) + compare-and-swap (REFORÇO 3) ficam no
+   * `CooperTokenService.processarWebhookResgate` — invocado via
+   * EventEmitter pra evitar ciclo Asaas↔CooperToken (mesmo padrão
+   * F2 compra-PJ).
+   */
+  private async processarWebhookTransfer(params: {
+    event: string;
+    transfer: any;
+    configCooperativaId: string;
+  }): Promise<{ received: true; skipped?: string }> {
+    const { event, transfer, configCooperativaId } = params;
+
+    if (!transfer?.id) {
+      this.logger.warn(`Webhook ${event} sem transfer.id — ignorando`);
+      return { received: true, skipped: 'sem-transfer-id' };
+    }
+
+    const eventId = `${event}_${transfer.id}`;
+    this.logger.log(`Webhook Asaas TRANSFER: ${event} para transfer ${transfer.id}`);
+
+    // Resolve recibo + cooperativa emissora.
+    const recibo = await this.prisma.resgateRecibo.findFirst({
+      where: { asaasTransferId: transfer.id },
+      select: { id: true, cooperativaId: true, numeroRecibo: true, status: true },
+    });
+    if (!recibo) {
+      this.logger.warn(
+        `[webhook→resgate] TRANSFER ${transfer.id} sem recibo correspondente — pode ser de outra origem ou janela de ${''
+        }race solicitar→aprovar; ignorando`,
+      );
+      return { received: true, skipped: 'recibo-nao-encontrado' };
+    }
+
+    // Auth cruzada: o token do webhook tem que pertencer ao MESMO tenant
+    // que emitiu o recibo. Token X processando TRANSFER de Y = anti-fraude.
+    if (configCooperativaId !== recibo.cooperativaId) {
+      this.logger.error(
+        `[webhook→resgate] CROSS-TENANT BLOQUEADO: token de cooperativa=${configCooperativaId} tentou processar recibo ${recibo.numeroRecibo} (cooperativa=${recibo.cooperativaId}) — rejeitando`,
+      );
+      throw new UnauthorizedException(
+        'Token de webhook não corresponde à cooperativa emissora do recibo.',
+      );
+    }
+
+    // Decide sucesso/falha.
+    let sucesso: boolean;
+    let motivoFalha: string | undefined;
+    if (event === 'TRANSFER_DONE' || event === 'TRANSFER_CONFIRMED') {
+      sucesso = true;
+    } else if (event === 'TRANSFER_FAILED' || event === 'TRANSFER_CANCELLED') {
+      sucesso = false;
+      // Asaas usa `failReason` em alguns eventos; fallback razoável.
+      motivoFalha =
+        transfer.failReason ||
+        transfer.statusReason ||
+        `Asaas reportou ${event}`;
+    } else {
+      // CREATED/PENDING e outros intermediários — recibo já está em
+      // APROVADO_PIX_DISPARADO; nada a fazer até confirmação final.
+      this.logger.log(
+        `[webhook→resgate] TRANSFER intermediário ${event} ignorado pra recibo ${recibo.numeroRecibo}`,
+      );
+      return { received: true, skipped: 'evento-intermediario' };
+    }
+
+    // Emit evento — listener (CooperTokenResgateListener) chama
+    // CooperTokenService.processarWebhookResgate com REFORÇOS 2+3.
+    this.eventEmitter.emit('cooper-token-resgate.transfer', {
+      asaasTransferId: transfer.id,
+      eventId,
+      sucesso,
+      motivoFalha,
+      cooperativaId: recibo.cooperativaId,
+    });
 
     return { received: true };
   }
