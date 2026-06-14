@@ -444,8 +444,14 @@ export default function ResgatesPendentesPage() {
                   </div>
                   <div className="col-span-2">
                     <p className="text-xs text-muted-foreground">Chave PIX destino</p>
+                    {/* F6 C.4 P2 (14/06): chave PIX MASCARADA por design
+                        anti-PII. Confirmação humana pelo TIPO + parcial. */}
                     <p className="font-mono">
                       {dialog.recibo.pixTipo}: {dialog.recibo.pixChave}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground italic mt-1">
+                      Chave parcial (anti-PII). Para confirmar a chave completa
+                      antes de aprovar, contate o estabelecimento por outro canal.
                     </p>
                   </div>
                 </div>

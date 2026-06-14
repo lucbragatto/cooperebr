@@ -118,6 +118,12 @@ function criarPrismaMock() {
         return { _sum: { valorReaisEstimado: filtradas.length === 0 ? null : total } };
       }),
     },
+    // F6 C.4 P1 F6-3 (14/06/2026): somarGastoHoje agora também soma
+    // ResgateRecibo do dia. Mock vazio default — specs específicas de
+    // resgate podem override via prismaMock.resgateRecibo.aggregate.
+    resgateRecibo: {
+      aggregate: jest.fn(async () => ({ _sum: { valorBrutoReais: null } })),
+    },
   };
 }
 

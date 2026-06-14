@@ -76,7 +76,11 @@ function setup(opts: SetupOpts = {}) {
   const tx: any = {
     cooperTokenSaldo: {
       findUnique: txFindSaldo,
+      // F6 C.4 P2 (14/06): update virou updateMany pra incluir cooperativaId
+      // no where (defesa em profundidade multi-tenant). Alias .update mantido
+      // pra retrocompat das specs antigas.
       update: txUpdateSaldo,
+      updateMany: txUpdateSaldo,
     },
     cooperTokenLedger: { create: txCreateLedger },
     resgateRecibo: {

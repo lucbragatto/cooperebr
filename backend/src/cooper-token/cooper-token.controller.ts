@@ -11,6 +11,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CooperTokenService } from './cooper-token.service';
 import { CooperTokenJob } from './cooper-token.job';
 import { Roles } from '../auth/roles.decorator';
@@ -747,6 +748,10 @@ export class CooperTokenController {
    * Multi-tenant: cooperado e cooperativa SEMPRE do JWT.
    */
   @Roles(COOPERADO)
+  // F6 C.4 P1 F6-5 (14/06/2026 — review pesada): rate-limit antes do PIN
+  // lockout. Mesmo padrão de /meu-perfil/dados-bancarios — 5/min por IP.
+  // Anti-enumeração e defesa contra spam pré-lockout.
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('empresa/resgatar')
   async solicitarResgate(@Req() req: any, @Body() body: SolicitarResgateDto) {
     const estabelecimentoCooperadoId = req.user?.cooperadoId;

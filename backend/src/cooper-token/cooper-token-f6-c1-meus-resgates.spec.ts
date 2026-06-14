@@ -92,11 +92,11 @@ describe('CooperTokenService.listarMeusResgates — F6 C.1', () => {
     );
   });
 
-  it('retorna shape paginado (items + total + page + limit + pages)', async () => {
+  it('retorna shape paginado (items + total + page + limit + pages, pixChave MASCARADA — F6 C.4 P2)', async () => {
     const { sut, findMany, count } = setup();
     findMany.mockResolvedValueOnce([
-      { id: 'r1', status: 'PENDENTE_APROVACAO_COOP', numeroRecibo: 'RES-2026-00001' },
-      { id: 'r2', status: 'PAGO_RECIBO_EMITIDO', numeroRecibo: 'RES-2026-00002' },
+      { id: 'r1', status: 'PENDENTE_APROVACAO_COOP', numeroRecibo: 'RES-2026-00001', pixChave: '+5527981341348' },
+      { id: 'r2', status: 'PAGO_RECIBO_EMITIDO', numeroRecibo: 'RES-2026-00002', pixChave: 'lucbragatto@gmail.com' },
     ]);
     count.mockResolvedValueOnce(7);
     const r = await sut.listarMeusResgates({
@@ -104,10 +104,11 @@ describe('CooperTokenService.listarMeusResgates — F6 C.1', () => {
       cooperativaId: COOP,
       limit: 5,
     });
+    // F6 C.4 P2 (14/06): pixChave MASCARADA na resposta (anti-PII).
     expect(r).toEqual({
       items: [
-        { id: 'r1', status: 'PENDENTE_APROVACAO_COOP', numeroRecibo: 'RES-2026-00001' },
-        { id: 'r2', status: 'PAGO_RECIBO_EMITIDO', numeroRecibo: 'RES-2026-00002' },
+        { id: 'r1', status: 'PENDENTE_APROVACAO_COOP', numeroRecibo: 'RES-2026-00001', pixChave: '+55***48' },
+        { id: 'r2', status: 'PAGO_RECIBO_EMITIDO', numeroRecibo: 'RES-2026-00002', pixChave: 'luc***om' },
       ],
       total: 7,
       page: 1,

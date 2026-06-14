@@ -260,13 +260,22 @@ export class LimiteTokenService {
   }
 
   /**
-   * Soma valor (R$) das TokenTransacao CONFIRMADAS hoje (00:00 local
-   * America/Sao_Paulo a now) onde o cooperado é pagador. Multi-tenant safe.
+   * Soma valor (R$) das TokenTransacao CONFIRMADAS + ResgateRecibo do
+   * dia (em fuso America/Sao_Paulo) onde o cooperado é pagador. Multi-
+   * tenant safe.
    *
    * F2.9 hardening (08/06/2026): cutoff de "hoje" usa fuso America/Sao_Paulo
    * em vez de fuso do servidor. Servidor em UTC fazia o ciclo virar 21h
    * BR (3h adiantado), permitindo gastar 2x o limite diário entre 21h-00h
    * BR. Cálculo correto: midnight BR convertido pra UTC.
+   *
+   * F6 C.4 P1 F6-3 (14/06/2026 — review pesada): inclui ResgateRecibo
+   * no gastoHoje. Sem isto, o limite diário era BURLÁVEL — estabelecimento
+   * solicitava R$ 1.999 em token (passa pelo limite porque verificarValor
+   * só olhava TokenTransacao) e depois solicitava resgate de R$ 1.999
+   * em PIX (passava porque resgate não criava TokenTransacao). Soma agora
+   * inclui PENDENTE_APROVACAO_COOP + APROVADO_PIX_DISPARADO + PAGO_RECIBO_
+   * EMITIDO (RECUSADO/CANCELADO/FALHA_PIX já estornaram, não contam).
    */
   private async somarGastoHoje(params: {
     cooperadoId: string;
@@ -274,17 +283,37 @@ export class LimiteTokenService {
   }): Promise<number> {
     const inicioHoje = inicioDoDiaEmSaoPaulo(new Date());
 
-    const agg = await this.prisma.tokenTransacao.aggregate({
-      where: {
-        pagadorId: params.cooperadoId,
-        pagadorCooperativaId: params.cooperativaId,
-        status: 'CONFIRMADA',
-        confirmadaEm: { gte: inicioHoje },
-      },
-      _sum: { valorReaisEstimado: true },
-    });
+    const [aggTokenTx, aggResgate] = await Promise.all([
+      this.prisma.tokenTransacao.aggregate({
+        where: {
+          pagadorId: params.cooperadoId,
+          pagadorCooperativaId: params.cooperativaId,
+          status: 'CONFIRMADA',
+          confirmadaEm: { gte: inicioHoje },
+        },
+        _sum: { valorReaisEstimado: true },
+      }),
+      // F6-3: resgates do dia (estados que comprometem saldo).
+      this.prisma.resgateRecibo.aggregate({
+        where: {
+          cooperadoEstabelecimentoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          status: {
+            in: [
+              'PENDENTE_APROVACAO_COOP',
+              'APROVADO_PIX_DISPARADO',
+              'PAGO_RECIBO_EMITIDO',
+            ],
+          },
+          createdAt: { gte: inicioHoje },
+        },
+        _sum: { valorBrutoReais: true },
+      }),
+    ]);
 
-    return toNumber(agg._sum.valorReaisEstimado) ?? 0;
+    const gastoTokenTx = toNumber(aggTokenTx._sum.valorReaisEstimado) ?? 0;
+    const gastoResgate = toNumber(aggResgate._sum.valorBrutoReais) ?? 0;
+    return gastoTokenTx + gastoResgate;
   }
 }
 

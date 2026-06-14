@@ -34,7 +34,10 @@ import { OtpDesafioService } from '../common/security/otp-desafio.service';
 // limite diário (LimiteTokenService — F2.5 Sprint Token-WA) ANTES da tx
 // dos 3 endpoints de movimento. SUSPENSO/limite estourado dispara erro
 // antes de bloquear linhas do saldo na tx Serializable.
-import { LimiteTokenService } from './limite-token.service';
+import { LimiteTokenService, inicioDoDiaEmSaoPaulo } from './limite-token.service';
+// F6 C.4 P2 (14/06/2026 — review pesada): mascaramento de pixChave em
+// listas (admin + cooperado). Helper estático — sem dep injection.
+import { DadosBancariosService } from '../meu-perfil/dados-bancarios.service';
 // F4 Bloco C.1 (12/06/2026) FIN-4: jti pra idempotência do caminho admin
 // (clientRequestId-based).
 import { gerarTokenHex } from '../common/security/otp-helper';
@@ -1897,7 +1900,12 @@ export class CooperTokenService {
     tx: Prisma.TransactionClient,
     cooperativaId: string,
   ): Promise<string> {
-    const ano = new Date().getFullYear();
+    // F6 C.4 P2 F6-8 (14/06/2026 — review pesada): ano derivado em fuso
+    // São Paulo, NÃO UTC. Servidor em UTC entre 21h e 00h BR fazia o
+    // contador pular pro ano seguinte 3h antes do real — recibos com
+    // ano errado em janelas de virada de ano.
+    const inicioHoje = inicioDoDiaEmSaoPaulo(new Date());
+    const ano = new Date(inicioHoje).getUTCFullYear();
     // Upsert idempotente: cria contador se ano novo, ou reusa existente.
     await tx.resgateReciboCounter.upsert({
       where: { cooperativaId_ano: { cooperativaId, ano } },
@@ -2110,8 +2118,12 @@ export class CooperTokenService {
         // Bloquear: -saldoDisponivel, +saldoBloqueadoResgate. Conserva soma.
         const novoSaldoDisp = Math.round((saldoDisp - quantidade) * 10000) / 10000;
         const novoSaldoBloq = Math.round((saldoBloq + quantidade) * 10000) / 10000;
-        await tx.cooperTokenSaldo.update({
-          where: { cooperadoId: estabelecimentoCooperadoId },
+        // F6 C.4 P2 (14/06/2026 — review pesada): updateMany com cooperativaId
+        // pra defesa em profundidade (cooperadoId é @unique, mas o filtro
+        // explícito documenta o invariante multi-tenant). count===0 não pode
+        // acontecer aqui — Guard 1 já confirmou cooperado no tenant.
+        await tx.cooperTokenSaldo.updateMany({
+          where: { cooperadoId: estabelecimentoCooperadoId, cooperativaId },
           data: {
             saldoDisponivel: novoSaldoDisp,
             saldoBloqueadoResgate: novoSaldoBloq,
@@ -2214,11 +2226,29 @@ export class CooperTokenService {
     });
 
     if (pixResult.status === 'ERROR') {
-      // Asaas rejeitou — estorno imediato + status=FALHA_PIX.
+      // F6 C.4 P1 F6-2 (14/06/2026 — review pesada): ANTES do estorno,
+      // CAS APROVADO_PIX_DISPARADO → FALHA_PIX. Status não pode mentir
+      // (estado anterior dizia "PIX em curso" e Asaas já rejeitou).
+      // Tx Serializable conserva ordem: troca status ANTES de devolver
+      // tokens (defesa contra UI ler "APROVADO" com saldo já estornado).
+      const motivoFalha = `Asaas rejeitou: ${pixResult.erro ?? 'erro desconhecido'}`;
+      const swapFalha = await this.prisma.resgateRecibo.updateMany({
+        where: { id: reciboId, cooperativaId, status: 'APROVADO_PIX_DISPARADO' },
+        data: { status: 'FALHA_PIX', motivoFalha, falhaEm: new Date() },
+      });
+      // count===0 → outro fluxo (cancelar?) já mexeu. Estorna mesmo assim
+      // pra invariante saldoDisp+saldoBloq seguir conservada — estorno é
+      // idempotente (tolera invariante reaplicada).
+      if (swapFalha.count === 0) {
+        this.logger.warn(
+          `[F6] Asaas ERROR mas status já mudou (recibo ${recibo.numeroRecibo}). Estornando mesmo assim pra conservar invariante.`,
+        );
+      }
       await this.estornarResgateInterno({
         recibo,
         statusFinal: 'FALHA_PIX',
-        motivoFalha: `Asaas rejeitou: ${pixResult.erro ?? 'erro desconhecido'}`,
+        motivoFalha,
+        skipStatusUpdate: true, // status já trocado acima
       });
       throw new BadRequestException(
         `Asaas rejeitou a transferência: ${pixResult.erro}. Tokens devolvidos ao saldo disponível (lançamento de estorno). Recibo agora em FALHA_PIX — reprocessar PIX ou recusar.`,
@@ -2228,8 +2258,13 @@ export class CooperTokenService {
     // Asaas aceitou — guarda asaasTransferId. status fica APROVADO_PIX_DISPARADO
     // até webhook PAGO/FAILED. (SIMULATED também segue esse caminho — listener
     // simulado pode promover pra PAGO no smoke.)
-    await this.prisma.resgateRecibo.update({
-      where: { id: reciboId },
+    //
+    // F6 C.4 P1 MT (14/06/2026): updateMany com cooperativaId no where
+    // (defesa em profundidade — recibo.cooperativaId já casou no Guard +
+    // CAS acima, mas o write isolado da transferId precisa do tenant
+    // explícito).
+    await this.prisma.resgateRecibo.updateMany({
+      where: { id: reciboId, cooperativaId },
       data: {
         asaasTransferId: pixResult.asaasTransferId,
       },
@@ -2379,65 +2414,91 @@ export class CooperTokenService {
     }
 
     if (sucesso) {
-      // REFORÇO 3: APROVADO_PIX_DISPARADO → PAGO_RECIBO_EMITIDO + queima.
-      const swap = await this.prisma.resgateRecibo.updateMany({
-        where: {
-          id: recibo.id,
-          cooperativaId: recibo.cooperativaId,
-          status: 'APROVADO_PIX_DISPARADO',
-        },
-        data: {
-          status: 'PAGO_RECIBO_EMITIDO',
-          pagoEm: new Date(),
-          ultimoWebhookEventId: eventId,
-        },
-      });
-      if (swap.count === 0) {
+      // F6 C.4 P2 F6-7 (14/06/2026 — review pesada): CAS + queima + ledger
+      // unidos numa ÚNICA tx Serializable. Antes: CAS fora da tx, queima
+      // numa tx separada — crash entre os 2 deixava recibo=PAGO_RECIBO_
+      // EMITIDO com tokens não-queimados (saldoBloqueadoResgate preso,
+      // contabilidade desencontrada). Agora tudo num bloco atômico.
+      let result: { swapCount: number; numeroRecibo: string };
+      try {
+        result = await this.prisma.$transaction(
+          async (tx) => {
+            // REFORÇO 3: CAS APROVADO_PIX_DISPARADO → PAGO_RECIBO_EMITIDO.
+            const swap = await tx.resgateRecibo.updateMany({
+              where: {
+                id: recibo.id,
+                cooperativaId: recibo.cooperativaId,
+                status: 'APROVADO_PIX_DISPARADO',
+              },
+              data: {
+                status: 'PAGO_RECIBO_EMITIDO',
+                pagoEm: new Date(),
+                ultimoWebhookEventId: eventId,
+              },
+            });
+            if (swap.count === 0) {
+              // CAS perdeu — sai da tx sem fazer nada (rollback implícito).
+              return { swapCount: 0, numeroRecibo: recibo.numeroRecibo };
+            }
+
+            // QUEIMA do saldo bloqueado + ledger DEBITO RESGATE_PIX.
+            const saldo = await tx.cooperTokenSaldo.findUnique({
+              where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+            });
+            if (!saldo) throw new Error('Saldo do estabelecimento sumiu pré-queima');
+            const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
+            const quantidade = Number(recibo.valorBrutoTokens);
+            const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
+            if (novoSaldoBloq < 0) {
+              throw new Error(`Invariante violada: saldoBloqueadoResgate ficaria negativo (${novoSaldoBloq})`);
+            }
+            // P2: updateMany com tenant.
+            await tx.cooperTokenSaldo.updateMany({
+              where: {
+                cooperadoId: recibo.cooperadoEstabelecimentoId,
+                cooperativaId: recibo.cooperativaId,
+              },
+              data: {
+                saldoBloqueadoResgate: novoSaldoBloq,
+                totalResgatado: { increment: quantidade },
+              },
+            });
+            await tx.cooperTokenLedger.create({
+              data: {
+                cooperadoId: recibo.cooperadoEstabelecimentoId,
+                cooperativaId: recibo.cooperativaId,
+                tipo: CooperTokenTipo.RESGATE_PIX,
+                operacao: CooperTokenOperacao.DEBITO,
+                quantidade,
+                saldoApos: Number(saldo.saldoDisponivel), // saldoDisponivel não muda
+                referenciaId: recibo.id,
+                referenciaTabela: 'ResgateRecibo',
+                descricao: `Liquidação de voucher CooperToken — Recibo ${recibo.numeroRecibo} (R$ ${Number(recibo.valorLiquidoReais).toFixed(2)} via PIX). Cooperativa quitou passivo.`,
+              },
+            });
+            return { swapCount: 1, numeroRecibo: recibo.numeroRecibo };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (err) {
+        // Erro na tx Serializable — tudo revertido. Loga + re-throw pro
+        // listener tratar (Asaas re-envia em backoff; cron de reconciliação
+        // D-novo-F6-RECONCILIACAO-CRON P2 cobre janela longa).
+        this.logger.error(
+          `[F6] webhook PAGO tx falhou recibo=${recibo.numeroRecibo}: ${(err as Error).message}`,
+        );
+        throw err;
+      }
+
+      if (result.swapCount === 0) {
         this.logger.warn(
           `[F6] webhook PAGO compare-and-swap perdeu — recibo ${recibo.numeroRecibo} já estava em outro estado (atual: ${recibo.status})`,
         );
         return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
       }
 
-      // QUEIMA do saldo bloqueado + ledger DEBITO RESGATE_PIX.
-      await this.prisma.$transaction(
-        async (tx) => {
-          const saldo = await tx.cooperTokenSaldo.findUnique({
-            where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
-          });
-          if (!saldo) throw new Error('Saldo do estabelecimento sumiu pré-queima');
-          const saldoBloq = Number(saldo.saldoBloqueadoResgate ?? 0);
-          const quantidade = Number(recibo.valorBrutoTokens);
-          const novoSaldoBloq = Math.round((saldoBloq - quantidade) * 10000) / 10000;
-          if (novoSaldoBloq < 0) {
-            throw new Error(`Invariante violada: saldoBloqueadoResgate ficaria negativo (${novoSaldoBloq})`);
-          }
-          await tx.cooperTokenSaldo.update({
-            where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
-            data: {
-              saldoBloqueadoResgate: novoSaldoBloq,
-              totalResgatado: { increment: quantidade },
-            },
-          });
-          await tx.cooperTokenLedger.create({
-            data: {
-              cooperadoId: recibo.cooperadoEstabelecimentoId,
-              cooperativaId: recibo.cooperativaId,
-              tipo: CooperTokenTipo.RESGATE_PIX,
-              operacao: CooperTokenOperacao.DEBITO,
-              quantidade,
-              saldoApos: Number(saldo.saldoDisponivel), // saldoDisponivel não muda
-              referenciaId: recibo.id,
-              referenciaTabela: 'ResgateRecibo',
-              descricao: `Liquidação de voucher CooperToken — Recibo ${recibo.numeroRecibo} (R$ ${Number(recibo.valorLiquidoReais).toFixed(2)} via PIX). Cooperativa quitou passivo.`,
-            },
-          });
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-
       this.logger.log(
-        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX`,
+        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX (tx Serializable única)`,
       );
       return { sucesso: true, reciboId: recibo.id };
     }
@@ -2511,8 +2572,12 @@ export class CooperTokenService {
           );
           return;
         }
-        await tx.cooperTokenSaldo.update({
-          where: { cooperadoId: recibo.cooperadoEstabelecimentoId },
+        // F6 C.4 P2 (14/06/2026 — review pesada): updateMany com tenant.
+        await tx.cooperTokenSaldo.updateMany({
+          where: {
+            cooperadoId: recibo.cooperadoEstabelecimentoId,
+            cooperativaId: recibo.cooperativaId,
+          },
           data: {
             saldoDisponivel: novoSaldoDisp,
             saldoBloqueadoResgate: novoSaldoBloq,
@@ -2604,7 +2669,16 @@ export class CooperTokenService {
         !!alteradaEm &&
         r.createdAt.getTime() - alteradaEm.getTime() < VINTE_QUATRO_H_MS &&
         r.createdAt.getTime() >= alteradaEm.getTime();
-      return { ...r, alteradaRecentemente };
+      // F6 C.4 P2 (14/06/2026 — review pesada): pixChave SEMPRE MASCARADA
+      // na resposta do admin. PII (chave PIX) não passa pela UI — o snapshot
+      // pro Asaas usa recibo.pixChave do banco direto (no aprovarResgate).
+      // Admin valida por OUTRO canal (telefone/email do estabelecimento) +
+      // o tipo (TELEFONE/EMAIL/CPF/...) já sinaliza se a chave esperada bate.
+      return {
+        ...r,
+        pixChave: DadosBancariosService.mascarar(r.pixChave),
+        alteradaRecentemente,
+      };
     });
 
     return { items, total, page, limit, pages: Math.ceil(total / limit) };
@@ -2637,7 +2711,7 @@ export class CooperTokenService {
     };
     if (status) where.status = status;
 
-    const [items, total] = await Promise.all([
+    const [itemsRaw, total] = await Promise.all([
       this.prisma.resgateRecibo.findMany({
         where,
         // Sem `include cooperadoEstabelecimento` aqui — é ele mesmo, redundante.
@@ -2647,6 +2721,15 @@ export class CooperTokenService {
       }),
       this.prisma.resgateRecibo.count({ where }),
     ]);
+
+    // F6 C.4 P2 (14/06/2026 — review pesada): pixChave MASCARADA mesmo
+    // na lista do próprio cooperado. Defense in depth contra shoulder
+    // surfing + console screenshots; cooperado já viu/digitou a chave em
+    // /portal/seguranca/dados-bancarios — não precisa ver de novo aqui.
+    const items = itemsRaw.map((r) => ({
+      ...r,
+      pixChave: DadosBancariosService.mascarar(r.pixChave),
+    }));
 
     return { items, total, page, limit, pages: Math.ceil(total / limit) };
   }
