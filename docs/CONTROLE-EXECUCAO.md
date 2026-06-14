@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-12 — M34 Sprint Clube P1 F6 Estabelecimento resgata tokens em R$ via PIX (Blocos A+B)**. **2 commits trabalho** (`c5eee91` + `b3251f5`) + 1 commit fechamento — **push segurado** até Bloco C + reviewers pesados + smoke E2E (instrução explícita Luciano: "Push segurado"). Bloco A: schema delta aditivo voucher (`Cooperado.ehEstabelecimento` + `CooperTokenSaldo.saldoBloqueadoResgate` + enum `CooperTokenTipo += RESGATE_PIX, ESTORNO_RESGATE_PIX` + 2 models novos `ResgateRecibo` + `ResgateReciboCounter` com 3 unique constraints) + helper `AsaasPixOutService` extraído de `pix-excedente.service.ts:132-157` (PIX-out tenant-aware via `getApiClient(cooperativaId)` + `isAmbienteReal()` retorna SIMULATED sem chamar Asaas + 18 specs). Bloco B: service `solicitarResgate`+`aprovarResgate`+`recusarResgate`+`cancelarResgate`+`processarWebhookResgate`+`estornarResgateInterno`(privado, NUNCA apaga)+`listarResgatesPendentes`+`gerarNumeroRecibo` (counter sequencial humano POR COOPERATIVA `RES-YYYY-NNNNN`) + 5 endpoints REST (`POST /empresa/resgatar`, `POST /empresa/resgates/:id/cancelar`, `GET /admin/resgates-pendentes`, `POST /admin/resgates/:id/aprovar`, `POST /admin/resgates/:id/recusar`) + DTOs `SolicitarResgateDto`+`RecusarResgateDto` + 34 specs verdes. **3 REFORÇOS Luciano materializados como centro do bloco**: (1) compare-and-swap em TODAS transições (5 pontos: aprovar/recusar/cancelar/webhook PAGO/webhook FAILED) via `updateMany({where:{id, cooperativaId, status:'esperado'}}) → count===1`; (2) estorno SEMPRE via nova entry ledger CREDITO `ESTORNO_RESGATE_PIX` (trilha auditável NUNCA apaga); (3) webhook idempotente via `ultimoWebhookEventId` checado antes do swap (duplicado retorna `{skipped:'webhook-duplicado'}`). Ordem do fluxo: PIN FORA da tx (`PinCooperadoService.validarPinComLockout` F2.3) + tier ALTO `valor>R$50` exige OTP (`OtpDesafioService.validarOuLancar` motivo `TOKEN_TRANSACAO_STEP_UP`) + `assertLimite` sobre TOTAL F2.5 + bloqueio do saldo DENTRO da tx Serializable (re-snapshot + conservação invariante `disp+bloq` constante) + `numeroRecibo` gerado na mesma tx via counter sequencial. Vocabulário inegociável "resgate"/"liquidação"/"recibo" em todas as strings (NUNCA "recompra"/"venda" — decisão circuito 04/06). **296/296 specs verdes** (18 suites cooper-token + mass-write + asaas-pix-out). Detalhe: `docs/sessoes/2026-06-12-m34-f6-blocos-ab.md`.
+> Última atualização: **2026-06-13/14 — M35 Sprint Clube P1 F6 Resgate em R$ via PIX COMPLETO (Bloco C + C.4 + C.5)**. **8 commits trabalho** (`27b5e24` C.0 + `eb94494` C.1 + `a23cb2f` C.2 + `335e7ff` C.3 + `b397b35` C.4 P0-A IDOR chave PIX [push isolado cirúrgico via hotfix branch] + `03c66ba` C.4 P0-B webhook TRANSFER_* + `5ab05fc` C.4 P1+P2 + `9372c89` C.4 pós-re-review + `2459245` C.5 GAP-1 tx Serializable única no FAILED). F6 fechado ponta-a-ponta: backend B+C.4 + frontend portal estabelecimento + frontend admin + sidebar + 2 rodadas reviewers pesados (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer`) acharam 2 P0 (IDOR chave PIX + webhook TRANSFER_* órfão) + 4 P1 (F6-2 status/F6-3 limite/F6-5 throttle/MT) + 4 P2 (mascarar/CAS tenant/tx Serializable PAGO/fuso SP) — TODOS RESOLVIDOS. Re-review independente do orquestrador pegou GAP-1 P1 (tx Serializable não-atômica no caminho FAILED — invisível ao smoke porque não simula crash) → C.5 fechou unindo CAS+estorno+eventId numa única tx (espelha F6-7 sucesso) + GAP-2 P3 saldoApos total. **Smoke E2E F6 C.4 com 5 cenários PASS 29/29** (Golden TRANSFER_DONE + Falha TRANSFER_FAILED + Idempotência webhook + Webhook forjado 401 + Limite diário F6-3 burlável fix). **Suite total 349/349 verdes** (24 suites cooper-token + meu-perfil + asaas + asaas-pix-out). **REFORÇO ANTI-FRAUDE Luciano materializado em duas camadas**: PIN obrigatório pra trocar chave PIX + banner amber se chave alterada <24h ANTES do recibo no Dialog admin de aprovação. **2 débitos catalogados**: D-novo-F6-RECONCILIACAO-CRON P2 + D-novo-MT-F2-F3-F4-LEGADO-UPDATE-COOPERADO P2. **4ª violação documentada de disciplina de push em sessões paralelas** — Cowork pushou meus commits C.1-C.4 segurados sem aprovação explícita Luciano, embarcados no commit dela `98dde72 inventario ANEEL`. **Decisão Luciano consequente: a partir da Fatia A (próxima sprint), segurar em `feature/<fatia>` desde o 1º commit** — fim do gate furado. Detalhe: `docs/sessoes/2026-06-13-f6-resgate-pix-completo.md`.
+
+> Histórico: **2026-06-12 — M34 Sprint Clube P1 F6 Estabelecimento resgata tokens em R$ via PIX (Blocos A+B)**. **2 commits trabalho** (`c5eee91` + `b3251f5`) + 1 commit fechamento — **push segurado** até Bloco C + reviewers pesados + smoke E2E (instrução explícita Luciano: "Push segurado"). Bloco A: schema delta aditivo voucher (`Cooperado.ehEstabelecimento` + `CooperTokenSaldo.saldoBloqueadoResgate` + enum `CooperTokenTipo += RESGATE_PIX, ESTORNO_RESGATE_PIX` + 2 models novos `ResgateRecibo` + `ResgateReciboCounter` com 3 unique constraints) + helper `AsaasPixOutService` extraído de `pix-excedente.service.ts:132-157` (PIX-out tenant-aware via `getApiClient(cooperativaId)` + `isAmbienteReal()` retorna SIMULATED sem chamar Asaas + 18 specs). Bloco B: service `solicitarResgate`+`aprovarResgate`+`recusarResgate`+`cancelarResgate`+`processarWebhookResgate`+`estornarResgateInterno`(privado, NUNCA apaga)+`listarResgatesPendentes`+`gerarNumeroRecibo` (counter sequencial humano POR COOPERATIVA `RES-YYYY-NNNNN`) + 5 endpoints REST (`POST /empresa/resgatar`, `POST /empresa/resgates/:id/cancelar`, `GET /admin/resgates-pendentes`, `POST /admin/resgates/:id/aprovar`, `POST /admin/resgates/:id/recusar`) + DTOs `SolicitarResgateDto`+`RecusarResgateDto` + 34 specs verdes. **3 REFORÇOS Luciano materializados como centro do bloco**: (1) compare-and-swap em TODAS transições (5 pontos: aprovar/recusar/cancelar/webhook PAGO/webhook FAILED) via `updateMany({where:{id, cooperativaId, status:'esperado'}}) → count===1`; (2) estorno SEMPRE via nova entry ledger CREDITO `ESTORNO_RESGATE_PIX` (trilha auditável NUNCA apaga); (3) webhook idempotente via `ultimoWebhookEventId` checado antes do swap (duplicado retorna `{skipped:'webhook-duplicado'}`). Ordem do fluxo: PIN FORA da tx (`PinCooperadoService.validarPinComLockout` F2.3) + tier ALTO `valor>R$50` exige OTP (`OtpDesafioService.validarOuLancar` motivo `TOKEN_TRANSACAO_STEP_UP`) + `assertLimite` sobre TOTAL F2.5 + bloqueio do saldo DENTRO da tx Serializable (re-snapshot + conservação invariante `disp+bloq` constante) + `numeroRecibo` gerado na mesma tx via counter sequencial. Vocabulário inegociável "resgate"/"liquidação"/"recibo" em todas as strings (NUNCA "recompra"/"venda" — decisão circuito 04/06). **296/296 specs verdes** (18 suites cooper-token + mass-write + asaas-pix-out). Detalhe: `docs/sessoes/2026-06-12-m34-f6-blocos-ab.md`.
 
 > Histórico: **2026-06-12 — M33 Sprint Clube P1 F3 Empresa distribui tokens em LOTE/INDIVIDUAL (Blocos A+B+C+C.1)**. **4 commits trabalho** (`4bb36aa..8425169`): Bloco A schema delta (`CooperTokenTipo += DISTRIBUICAO_CONVENIO` + 2 cols TokenTransacao `naturezaDistribuicao` + `empresaDeclaraTetoClt`) + helper `executarMassWrite` reusável (cap + PREVIEW/CONFIRM + idempotência por callback + AuditLog) com 20 specs verdes · Bloco B service `distribuirTokens` (6 guards: naturezas semânticas + empresa-PJ + convênio ownership conveniadoId + PIN fora tx + `assertLimite` sobre TOTAL ajuste Luciano + destinatários MEMBRO_ATIVO; loop linha-a-linha dentro tx Serializable; tipo DISTRIBUICAO_CONVENIO no ledger NÃO DOACAO; 1ª linha grava referência idempotência) + DTO class-validator + endpoint `POST /cooper-token/empresa/distribuir` (perfil COOPERADO + JWT sourcing) com 28 specs · Bloco C UI completa `/conveniada/convenio/[id]/distribuir-tokens` (2 etapas selecao+confirmacao + Iguais a X/Selecionar todos + card preview 4 stats + modal radio 3 naturezas + condicionais CLT checkbox/PREMIACAO textarea + PinInput F4 Bloco D reusado + tratamento humano dos 7 erros + clientRequestId useRef padrão C.2 + contador pendentes + help inline) + endpoint helper `GET /cooper-token/empresa/convenio/:id/membros-disponiveis` (agrega saldo+ativos+pendentes breakdown) + card de entrada na página do convênio · Bloco C.1 pós-reviewers 2 P1 (GAP-F3-2/5 round IEEE somaQuantidade + GAP-F3-3 valorTokenEsperado preview===cobrança) + 4 P2 (GAP-F3-4 guard taxa>0 até gate D-novo-TAXA-TRANSFER-DESTINO + MT-A cooperado.is.cooperativaId + MT-B remover PII cpf/telefone + GAP-F3-8 spec membros inválidos ZERO writes) + 3 caronas P3 (GAP-F3-6 N updates do saldo → 1 update final + pagadorCooperativaId no updateMany + GAP-F3-7 spec conservação linear) com 12 specs novos. **244/244 specs cooper-token + mass-write verdes** (60 novos no F3). **2 rodadas reviewers pesados** (`cooperebr-financeiro-token-reviewer` + `cooperebr-multitenant-reviewer`): 1ª achou 2 P1+4 P2+3 caronas+1 débito → C.1 fechou; 2ª aprovou pro smoke/push + 3 observações não-bloqueantes. **Pergunta da corrida CONFIRMs concorrentes VALIDADA** — Serializable (40001) + retry idempotência; D-novo-LEDGER-UNIQUE-CONSTRAINT fica P3 separado. **Smoke E2E 14/14 PASS real** (HTTP backend :3000 + AMAGES `ambienteTeste=true` + JWT manual + convênio SMOKE-F3-AMAGES criado idempotente + João/Ana como MEMBRO_ATIVO): listar membros + MT-B sem PII + PREVIEW + CONFIRM + saldo debitado 1× + créditos individuais + ledger DISTRIBUICAO_CONVENIO 2N entries + 1ª linha com referência idempotência + TokenTransacao naturezaDistribuicao='ORIGEM_REGULAMENTO' + retry idempotente sem dupla distribuição + VOLUNTARIA s/ CLT 400 + extrato funcionário DISTRIBUICAO_CONVENIO (segregação Art. 87 validada). **3 débitos novos** catalogados (D-novo-F3-RACE-CONFIRMS-CONCORRENTES P3 validado raciocínio + D-novo-F3-INCONSISTENCIA-BANCO P3 + D-novo-TAXA-TRANSFER-DESTINO P2 ganhou gate explícito no service). Detalhe: `docs/sessoes/2026-06-12-f3-empresa-distribui-lote.md`.
 
@@ -50,6 +52,58 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-13/14 (Code — M35 Sprint Clube P1 F6 Resgate em R$ via PIX COMPLETO: Bloco C + C.4 + C.5)
+
+**Sessão Code maratona 13/06 noite + 14/06 manhã.** F6 fechado ponta-a-ponta: backend C.4 + frontend portal estabelecimento + frontend admin + sidebar + 2 rodadas reviewers pesados + re-review independente do orquestrador + smoke E2E real com webhook ligado.
+
+**8 commits trabalho** (+ 1 commit fechamento):
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `27b5e24` | feat | **C.0** cadastro PIX com PIN (REFORÇO ANTI-FRAUDE) + AuditLog mascarado + tela `/portal/seguranca/dados-bancarios` |
+| `eb94494` | feat | **C.1** UI portal `/portal/resgatar-tokens` + `GET /cooper-token/empresa/meus-resgates` anti-IDOR |
+| `a23cb2f` | feat | **C.2** card condicional "Resgatar em R$ via PIX" em `/portal/tokens` (ehEstabelecimento) |
+| `335e7ff` | feat | **C.3** UI Admin `/dashboard/cooper-token/resgates-pendentes` + banner anti-fraude + sidebar |
+| `b397b35` | fix | **C.4 P0-A** IDOR chave PIX — `updateMany` + `cooperativaId` (push isolado cirúrgico via branch hotfix) |
+| `03c66ba` | feat | **C.4 P0-B** webhook TRANSFER_* + auth cross-tenant + listener `cooper-token-resgate.listener` |
+| `5ab05fc` | fix | **C.4 P1+P2** F6-2/F6-3/F6-5/MT + mascarar/CAS tenant/tx Serializable PAGO/fuso SP |
+| `9372c89` | fix | **C.4 pós-re-review** saldoApos + janela diária burlável + listener double-check tenant + 2 débitos catalogados |
+| `2459245` | fix | **C.5** GAP-1 webhook FAILED em tx Serializable única (re-review orquestrador) + GAP-2 saldoApos estorno total + smoke 29/29 PASS |
+| `<próximo>` | docs | fechamento M35 (esta sessão) |
+
+**Push status:** TODOS pushed em origin/main (alguns embarcaram via push da Cowork — 4ª violação de disciplina catalogada). Janela do P1 GAP-1 em produção fechada com push do C.5 (`2459245`).
+
+**Em curso:** —
+
+**Próximo passo único e claro:** **Sprint Clube P1 — Fatia A (CTK → CooperToken nomenclatura)** em **branch `feature/fatia-a` desde o 1º commit** (decisão Luciano 13/06 — fim do gate furado após 4 violações documentadas de push em sessões paralelas). Escopo: refator nomenclatura `CTK` → `CooperToken` em todas as superfícies UI (cards saldo, badges, tooltips, mensagens) + dois rios kWh×token visivelmente separados na UI (energia ≠ benefício). Sem mudança de schema — puro UI/labels. Fase 1 read-only mapeia `\bCTK\b` em `web/app/**/*.tsx` antes de tocar código.
+
+**3 REFORÇOS Luciano materializados no F6:**
+1. PIN obrigatório pra trocar chave PIX (`PinCooperadoService.validarPinComLockout` fora da tx) — chave é âncora financeira do resgate
+2. Banner amber no Dialog admin se `pixUltimaAlteracaoEm` < 24h ANTES do `createdAt` do recibo — fecha vetor sessão-sequestrada→redireciona-PIX
+3. Compare-and-swap em TODAS transições + estorno auditável NUNCA apaga + webhook idempotente
+
+**Suite final:** 349/349 verdes (24 suites cooper-token + meu-perfil + asaas + asaas-pix-out).
+
+**Smoke E2E F6 C.4 (29/29 PASS):**
+- Cenário 1 Golden TRANSFER_DONE → PAGO_RECIBO_EMITIDO + queima 10 tokens + ledger RESGATE_PIX + invariante conservada
+- Cenário 2 Falha TRANSFER_FAILED → FALHA_PIX + estorno + ledger ESTORNO_RESGATE_PIX (NUNCA apaga) + invariante conservada
+- Cenário 3 Idempotência webhook (eventId duplicado → skipped, sem duplicar)
+- Cenário 4 Webhook forjado (sem/com token errado → 401 UnauthorizedException)
+- Cenário 5 Limite diário (F6-3 inclui resgates no gasto — fix de burla 23h55→00h05)
+
+**4ª violação documentada de disciplina de push em sessões paralelas:** Cowork rodou `git push` levando junto TODOS os meus commits C.1-C.4 segurados (sem checar `git log origin/main..HEAD` antes). Mesmo padrão das 3 violações anteriores. Decisão consequente: a partir da Fatia A, `feature/<fatia>` desde o 1º commit.
+
+**Carry-overs M35 (não-bloqueantes):**
+- D-novo-F6-RECONCILIACAO-CRON P2 catalogado (cron varrendo recibos parados em APROVADO_PIX_DISPARADO >30min)
+- D-novo-MT-F2-F3-F4-LEGADO-UPDATE-COOPERADO P2 catalogado (12 pontos em F2/F3/F4 com update por cooperadoId sem tenant — não-IDOR ativo, mas "proteção por acidente do schema")
+- D-novo-F6-ADMIN-FLAG-ESTAB P2 (sem UI pra ativar `ehEstabelecimento` — hoje via script de smoke)
+- D-novo-ASAAS-WEBHOOK-AUTH ✅ RESOLVIDO de carona no C.4 P0-B
+- Cowork preservada integralmente neste fechamento: 5 commits embarcados em origin/main (esqueleto WA C8 + landing 2 funis + Tese 6 orquestrador + dossiê EXFISHES + inventario ANEEL). Working tree `concierge.service.spec.ts` M é território Cowork — NÃO INCLUÍDO neste commit.
+
+**Detalhe completo:** `docs/sessoes/2026-06-13-f6-resgate-pix-completo.md`.
 
 ---
 
@@ -137,6 +191,57 @@
 - Carry-overs históricos vivos (M28→M33) seguem abertos
 
 **Detalhe completo:** `docs/sessoes/2026-06-12-m34-f6-blocos-ab.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-13 (Cowork — Tese 6 no orquestrador + Landing 2 funis + Esqueleto WA C8)
+
+**Sessão Cowork seguinte, em paralelo ao Code que avançou Sprint Clube M33 (F3 Empresa distribui tokens) e M34 (F6 Estabelecimento resgata em PIX).**
+
+**3 commits Cowork hoje (todos pushed em `origin/main`):**
+
+| Hash | Tipo | Marco |
+|---|---|---|
+| `1405da5` | feat | **Esqueleto WA C8** (subagente): `LeadConcierge` model + enum `StatusLeadConcierge` (12 valores) + 8 estados WA `CONCIERGE_*` constants + `ConciergeWaService` (8 métodos esqueleto + multi-tenant guard) + templates de mensagem (13 constantes + helper) + 14 specs verdes |
+| `f94a05b` | docs | Landing pública com **2 funis** (GD + não-GD) + correções pontos cegos Luciano (CooperToken só opt-in, obrigação pagar créditos, "até 25%*", honorários condicionais Funil A) + Tela 1 com Tese 6 estimada + legenda |
+| `1f6fdb0` | feat | Integra Tese 6 no orquestrador `ConciergeService.previewDiagnostico` + log auditável + spec E2E (EXFISHES ABR/2026 retorna Tese 6 + Tese 3, ordenado por magnitude) |
+
+**Ajuste técnico final (esta sessão):**
+- `concierge.service.spec.ts` ganhou stub `jest.mock('@prisma/client')` expandido com `Prisma.defineExtension` — blinda contra cenário de prisma generated dessincronizado no sandbox/CI. **Suite Concierge: 96/96 verdes em 5 suites** (detectores 20 + service 13 + edp-es 32 + elfsm 17 + wa 14).
+
+**Falso alarme tratado e catalogado em memória:**
+- `Get-Content | Measure-Object -Line` (PowerShell) conta diferente de `git show` / `wc -l` por causa de CRLF/encoding. Reportei "5 arquivos truncados" no PC do Luciano — depois `git status -s` + `git diff --stat HEAD` retornaram vazio, confirmando que tudo está íntegro. Memória `feedback_diagnostico_truncamento_arquivo.md` evita repetir o erro.
+
+**Não foi tocado pela Cowork (esclarecimento):**
+- Code paralelo trabalhou intensamente M33+M34 (10 commits dele entre Cowork). Cowork mexeu APENAS em `backend/src/concierge/*` + `docs/concierge/*` + `backend/prisma/schema.prisma` (subagente, model LeadConcierge aditivo). Nenhum arquivo de `cooper-token`, `asaas`, `whatsapp` ou outros módulos do Code paralelo foi tocado.
+
+**Estado consolidado:**
+- **Backend Concierge DENTRO do SISGD**: 4 detectores (Tema 69+Tese 2+Tese 3+Tese 6) + registry + 3 adapters (EDP-ES, ELFSM, Energisa-TO esqueleto) + ConciergeService + Controller (7 endpoints REST) + ConciergeWaService esqueleto + LeadConcierge model + módulo NestJS plugado
+- **Frontend Concierge DENTRO**: 2 telas (`/dashboard/concierge` Lista + `/dashboard/concierge/cooperado/[id]` Detalhe)
+- **CoopereBR ativada** via script idempotente
+- **Suite Concierge 96/96 verdes** + TSC zero erros
+
+**O que está FORA do SISGD (mockup/docs, não em código):**
+- 9 das 11 telas do mockup HTML (Tela 3 Sinergia, 4 EXFISHES, 5 Guilherme ELFSM, 6 Leads recebidos, 7 Upload manual, 8 Fluxo WhatsApp, 9 Super-admin, 10 Landing pública, 11 Tese 6 + Dossiê)
+- Bot WA ponta-a-ponta (Spec C8 — só esqueleto service, sem integração no `whatsapp-fluxo-motor`)
+- Geração PDF procuração + OTP SMS Twilio + webhook captação landing
+- Modelo `DiagnosticoIndebito` persistido (preview ainda é in-memory)
+- Adapters de outras concessionárias além das 3 atuais
+- Cálculo SELIC real BCB (hoje usa fator linear aproximado)
+
+**Pendência operacional pendente do Luciano:**
+- Puxar MAR/2025 e MAI/2025 EXFISHES do portal EDP-ES (gap na série)
+- Validar Tese 6 com advogado parceiro (bloqueia decisões de produto e captação)
+- Decisão sobre baixar CSVs ANEEL (905 MB GD + SIGA) no PC e me passar via Downloads pra eu agregar usinas solar+hidráulica do ES dos últimos 5 anos
+
+**Frase de retomada Cowork (próxima sessão):**
+
+```
+Continuar Concierge — quando Luciano enviar CSVs ANEEL (GD + SIGA), filtrar UF=ES intervalo
+2021-2026, gerar XLSX consolidado por município/tipo/potência. Em paralelo: integrar
+ConciergeWaService no whatsapp-fluxo-motor (mapping 8 estados CONCIERGE_* pros handlers) +
+recalcular Laurentino e Christiane no mockup com Tese 6 confirmada após faturas reais.
+```
 
 ---
 
@@ -2360,6 +2465,136 @@ Cola direto no Claude Code (VS Code) quando voltar:
 
 ```
 PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
+
+1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
+   Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
+   Se não aparecer, parar e avisar (sessão não indexou subagent project-specific).
+
+2. Rodar `git status --short` (diretriz inegociável catalogada 18/05).
+   Esperado pós-fechamento M35: working tree limpo (untracked carry-overs
+   catalogados + M de `concierge.service.spec.ts` — território Cowork,
+   NÃO tocar). Último commit é o de fechamento M35.
+   Rodar `git log origin/main..HEAD --oneline` — deve mostrar VAZIO
+   (M35 foi pushed; Fatia A começa em branch nova `feature/fatia-a`,
+   nada de novo direto em main).
+
+3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend +
+   cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend é
+   `next start` sob PM2 (NÃO `next dev`) — toda mudança em web/ exige
+   `cd web ; npm run build ; pm2 restart cooperebr-frontend`. HMR NÃO ROLA.
+
+4. ⚠️ CRIAR BRANCH FEATURE COMO 1º COMANDO DA SESSÃO (decisão Luciano
+   13/06 — fim do gate furado após 4 violações documentadas de push
+   em sessões paralelas):
+     git checkout -b feature/fatia-a
+   Todos os commits da Fatia A ficam nessa branch. Merge→main só após
+   review OK + smoke + autorização explícita Luciano. NUNCA pushar
+   feature/fatia-a → main direto sem review/OK.
+
+PASSO 1 — Frase comandante M35 → Fatia A (CTK → CooperToken nomenclatura):
+
+Sessão 13-14/06 entregou M35 em 9 commits (27b5e24..2459245): F6
+Estabelecimento resgata tokens em R$ via PIX COMPLETO (Bloco C+C.4+C.5),
+2 rodadas reviewers pesados, re-review independente do orquestrador,
+smoke E2E 29/29 PASS com webhook TRANSFER_* ligado. Suite 349/349.
+
+Detalhes em docs/sessoes/2026-06-13-f6-resgate-pix-completo.md.
+
+═══ PRÓXIMO BLOCO: Fatia A — CTK → CooperToken nomenclatura UI ═══
+
+Escopo Fatia A (sprint_clube_unificado_cooper_token_10_06.md):
+- Refator nomenclatura `CTK` → `CooperToken` em TODAS as superfícies UI
+  (cards saldo, badges, tooltips, mensagens de erro, abreviações em
+  tabelas, breadcrumbs).
+- Dois rios kWh × token visivelmente separados na UI (energia ≠
+  benefício — decisão circuito 04/06 ainda vigente).
+- Sem mudança de schema — puro UI/labels. Tipos TS continuam usando
+  `CooperToken` (já é o nome canônico no backend; problema é só nas
+  STRINGS de display da UI que ainda têm "CTK").
+
+Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência Sistêmica):
+- Branch criada: `feature/fatia-a` (1º comando da sessão).
+- Grep amplo `\bCTK\b` em `web/app/**/*.tsx` + `web/components/**/*.tsx`
+  pra mapear superfícies (esperado: dezenas de ocorrências em cards
+  saldo + headers + tooltips).
+- Grep amplo `CTK\b` (sem word boundary inicial) em mensagens de erro
+  do backend que aparecem na UI (`throw new BadRequestException` com
+  "CTK" no texto).
+- Mapear o card de saldo principal — provavelmente em
+  `/portal/tokens/page.tsx` + `/dashboard/clube/page.tsx` +
+  `/conveniada/convenio/[id]/distribuir-tokens/page.tsx`.
+- Identificar onde está a separação atual kWh × token (pode ser que
+  já esteja separada visualmente em algumas telas mas confusa em
+  outras).
+- MAPA DE IMPACTO 5 dimensões + perguntas decisórias (se houver):
+  * Tooltip explicativo sobre "o que é CooperToken" — mantém ou
+    remove? Mensagem do help atual já cobre?
+  * Termo "saldo" — usar "saldo CooperToken" ou só "saldo" com
+    contexto?
+  * Plural — "1 CooperToken" / "2 CooperTokens"?
+- PAUSAR pro OK Luciano antes de codar.
+
+Após Fase 1 OK:
+- Implementação Fatia A em branch (commits incrementais por tela
+  ou por superfície).
+- TS check + lint web limpos.
+- Frontend build limpo (rota afetadas estáticas).
+- PR-like flow: reportar diff + reviewers pesados (não pesado,
+  cosmético — `code-reviewer` genérico cobre + revisão visual).
+- Smoke manual (Luciano abre 3-4 telas chave + valida nomenclatura).
+- Merge `feature/fatia-a` → `main` com autorização explícita.
+- Fechamento M36.
+
+Pré-requisitos leitura M35:
+1. docs/CONTROLE-EXECUCAO.md (## ONDE PARAMOS topo + esta frase).
+2. docs/sessoes/2026-06-13-f6-resgate-pix-completo.md.
+3. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/sprint_clube_
+   unificado_cooper_token_10_06.md (Fatia A escopo + 7 fases).
+4. ~/.claude/projects/C--Users-Luciano-cooperebr/memory/decisao_modelo_
+   token_voucher_sobra_resgate_2026_06_04.md (vocabulário inegociável:
+   voucher / liquidação / recibo — NUNCA recompra/venda).
+5. CLAUDE.md + .claude/CLAUDE.md.
+
+DIRETRIZES PRESERVAR:
+- Branch `feature/fatia-a` desde 1º commit — nunca direto em main.
+- Vocabulário inegociável: CooperToken / voucher / liquidação / recibo
+  / sobra. NUNCA: CTK (em UI) / recompra / venda.
+- Dois rios kWh × token visivelmente separados.
+- Multi-tenant: NÃO há mudança de backend nesta Fatia, mas se aparecer
+  cooperativaId em frontend, vem do JWT.
+- Rebuild web obrigatório: `cd web ; npm run build ; pm2 restart
+  cooperebr-frontend` — HMR NÃO ROLA.
+- Regra contatos de teste: AMAGES + lucbragatto+amages@gmail.com pra
+  smoke (se aplicável — Fatia A é cosmético, smoke é visual).
+
+CARRY-OVERS M35 (não-bloqueantes):
+- D-novo-F6-RECONCILIACAO-CRON P2 (cron varre recibos parados em
+  APROVADO_PIX_DISPARADO >30min — implementar antes de volume real).
+- D-novo-MT-F2-F3-F4-LEGADO-UPDATE-COOPERADO P2 (12 pontos em F2/F3/F4
+  com `update({cooperadoId})` sem tenant — não-IDOR ativo, mas pode
+  entrar no Sprint Hardening Mass-Write SUPER_ADMIN P2 já enfileirado).
+- D-novo-F6-ADMIN-FLAG-ESTAB P2 (sem UI pra ativar ehEstabelecimento).
+- Sessão paralela Cowork: 5 commits embarcados (esqueleto C8 + landing
+  2 funis + Tese 6 orquestrador + dossiê EXFISHES + inventario ANEEL).
+  Sem conflito com F6. Working tree pode ter `concierge.service.spec.ts`
+  M — NÃO TOCAR.
+
+CARRY-OVERS HISTÓRICOS AINDA VIVOS (não-bloqueantes — ver doc-sessões
+M28→M35): D-novo-F4-PARCEIRO-TENANT-STEPUP P2 (Sprint Hardening) +
+D-novo-F4-OTP-CANAL-ENTREGA P2 + D-novo-F4-UI-COOPERADO-PEER P2 (Token-
+WA Fase 3) + D-novo-F4-LIMITE-UPPERBOUND-VALORTOKEN P3 + D-novo-QR-
+PARCEIRO-PAPEL-DUAL P3 + D-novo-OXIDACAO-* P2/P3 + D-novo-WA-PHONE-
+NORMALIZE P2 + Fase 3 Token-WA pausa explícita + D-novo-LEDGER-UNIQUE-
+CONSTRAINT P3 + D-novo-CREDITO-PENDENTE-REPROCESSAMENTO P2 + D-novo-F3-
+RACE-CONFIRMS-CONCORRENTES P3 + D-novo-F3-INCONSISTENCIA-BANCO P3 +
+D-novo-TAXA-TRANSFER-DESTINO P2 + D-novo-TAXA-RESGATE-DESTINO P2 +
+untracked acumulados pra Sprint Housekeeping.
+
+═══ FIM DA FRASE M35 ═══
+
+— BLOCO ARQUIVADO M34 (abaixo — atendido por M35) ——————————————————
+
+PASSO 0 — [arquivado M34] Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela anterior).
    Verificar que subagent `cooperebr-qa-funcional` aparece na lista de agents.
