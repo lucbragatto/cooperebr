@@ -1,0 +1,38 @@
+{
+  "geradoEm": "2026-06-14T13:57:15.469Z",
+  "cooperativaNome": "CoopereBR",
+  "moduloConciergeAtivo": true,
+  "totais": {
+    "cooperadosAtivos": 309,
+    "cooperadosComFatura": 9,
+    "cooperadosSemFatura": 300,
+    "totalFaturasProcessadas": 10
+  },
+  "histogramaFaturasPorCooperado": {
+    "1": 9,
+    "2-3": 0,
+    "4-6": 0,
+    "7-12": 0,
+    "13+": 0
+  },
+  "estimativaCusto": {
+    "modelo": "claude-sonnet-4-20250514",
+    "custoPorFaturaUsd": 0.045,
+    "custoPorFaturaBrl": 0.252,
+    "cenarios": [
+      {
+        "nome": "Re-OCR todas faturas existentes (Caminho B, rubricas detalhadas)",
+        "qtd": 10
+      },
+      {
+        "nome": "Processar apenas cooperados SEM fatura (1 fatura/pessoa = regra Luciano)",
+        "qtd": 300
+      },
+      {
+        "nome": "Universo completo CoopereBR (re-OCR todos + cooperados novos)",
+        "qtd": 309
+      }
+    ]
+  },
+  "duracaoSegundos": "9.3"
+}
