@@ -59,13 +59,18 @@ export default function DashboardPage() {
   useEffect(() => {
     async function buscarDados() {
       try {
+        // Bug fix 15/06/2026 (relacionado ao blocker Santi 403): qualquer
+        // 403/500 num dos 5 endpoints derrubava o Promise.all inteiro e
+        // a UI ficava eterna em "Carregando...". /motor-proposta ja tinha
+        // .catch(); agora todos têm fallback individual — tela degrada
+        // graciosamente em vez de travar.
         const [cooperadosRes, cobrancasRes, ocorrenciasRes, usinasRes, contratosRes, propostasRes] =
           await Promise.all([
-            api.get('/cooperados'),
-            api.get('/cobrancas'),
-            api.get('/ocorrencias'),
-            api.get('/usinas'),
-            api.get('/contratos'),
+            api.get('/cooperados').catch(() => ({ data: [] as Cooperado[] })),
+            api.get('/cobrancas').catch(() => ({ data: [] as Cobranca[] })),
+            api.get('/ocorrencias').catch(() => ({ data: [] as Ocorrencia[] })),
+            api.get('/usinas').catch(() => ({ data: [] as Usina[] })),
+            api.get('/contratos').catch(() => ({ data: [] as Contrato[] })),
             api.get('/motor-proposta').catch(() => ({ data: { propostas: [] } })),
           ]);
 
