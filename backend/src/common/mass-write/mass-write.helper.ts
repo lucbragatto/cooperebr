@@ -253,7 +253,7 @@ export async function executarMassWrite<TItem, TCommitOut>(
     await prisma.auditLog.create({
       data: {
         usuarioId: options.usuarioId,
-        usuarioPerfil: 'COOPERADO',
+        usuarioPerfil: options.usuarioPerfil ?? 'COOPERADO',
         cooperativaId: options.cooperativaId,
         acao: options.acao,
         recurso: 'MassWrite',

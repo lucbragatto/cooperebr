@@ -5067,6 +5067,19 @@ export class CooperTokenService {
         entriesOriginais.reduce((s, e) => s + Math.abs(Number(e.valorReais ?? 0)), 0) * 100,
       ) / 100;
 
+    // P1-B fix re-review orquestrador 16/06: integridade dos entries originais.
+    // Se há tokens emitidos (somaQuantidade > 0) mas valorReais total é 0
+    // (todos os entries originais têm valorReais null), o estorno NÃO consegue
+    // calcular o valor contábil correto pra reversão. Em vez de pular o
+    // contábil silenciosamente (geraria divergência ledger↔contábil), bloqueia
+    // antes da tx — admin precisa investigar/reprocessar manualmente os
+    // entries originais antes de estornar.
+    if (somaQuantidade > 0 && valorTotalReais === 0) {
+      throw new BadRequestException(
+        `Entries originais do lote ${loteId} sem valorReais — integridade comprometida, estorno bloqueado. Verifique se os entries originais foram gravados corretamente (todos com valorReais != null) antes de tentar estornar.`,
+      );
+    }
+
     // Executar dentro de tx Serializable (atomicidade — ou tudo, ou nada)
     const resultado = await this.prisma.$transaction(
       async (tx) => {

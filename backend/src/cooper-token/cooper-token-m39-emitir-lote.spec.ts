@@ -525,6 +525,31 @@ describe('M39 estornarEmissaoLote — happy path', () => {
     );
   });
 
+  // P1-B fix re-review orquestrador 16/06: estorno bloqueia quando entries
+  // originais têm valorReais null (integridade comprometida — não pode
+  // calcular reversão contábil silenciosamente).
+  it('entries originais sem valorReais (null) → BadRequest ANTES da tx (integridade comprometida)', async () => {
+    const { service, ids, transactionFn, tokenContabilService } = setup({
+      configValorTokenReais: 0.45,
+      // Entries com valorReais NULL (cenário patológico — emissão antiga
+      // gravada antes do M39, ou bug que gravou sem valorReais).
+      entriesOriginaisLote: [
+        { cooperadoId: 'func-1', quantidade: 10, valorReais: null, cooperativaId: 'coop-A' },
+        { cooperadoId: 'func-2', quantidade: 20, valorReais: null, cooperativaId: 'coop-A' },
+      ],
+      saldosExistentes: new Map([
+        ['func-1', 10],
+        ['func-2', 20],
+      ]),
+    });
+    await expect(
+      service.estornarEmissaoLote(baseEstornar(ids)),
+    ).rejects.toThrow(/integridade comprometida|valorReais/i);
+    // CRÍTICO: nem entrou na tx (Serializable) nem chamou contábil
+    expect(transactionFn).not.toHaveBeenCalled();
+    expect(tokenContabilService.lancarEstornoEmissaoAdminLote).not.toHaveBeenCalled();
+  });
+
   // P1 fix reviewer financeiro 16/06: estorno usa valorReais HISTÓRICO
   // do ledger (imutável), NÃO recalcula com preço atual da config.
   it('preço do token mudou entre emissão e estorno → contábil usa valor HISTÓRICO (simetria D/C)', async () => {
