@@ -4697,6 +4697,8 @@ export class CooperTokenService {
     cooperativaId: string;
     /** Usuário admin que emite (vai pro AuditLog + observacoes). */
     usuarioId: string;
+    /** Perfil real do usuário (ADMIN/SUPER_ADMIN/OPERADOR) — vai pro AuditLog. */
+    usuarioPerfil?: string;
     /** Linhas do lote — cada uma é 1 destinatário + quantidade. */
     distribuicoes: Array<{ destinatarioCooperadoId: string; quantidade: number }>;
     /** Descrição livre do lote (vai pro ledger entry de cada destinatário). */
@@ -4717,6 +4719,7 @@ export class CooperTokenService {
     const {
       cooperativaId,
       usuarioId,
+      usuarioPerfil,
       distribuicoes,
       descricao,
       tipo,
@@ -4911,6 +4914,8 @@ export class CooperTokenService {
       acao: 'MASS_WRITE_EMISSAO_ADMIN',
       cooperativaId,
       usuarioId,
+      // P2 fix reviewer multitenant 16/06 — perfil real no AuditLog
+      usuarioPerfil,
       clientRequestId,
       items: distribuicoes,
       mode: modo,
@@ -4931,6 +4936,19 @@ export class CooperTokenService {
     // Bypass do COOPER_TOKEN_EVENTS.EMITIDO pra evitar template errado.
     // Chama o template novo lancarEmissaoAdminLote (D 5.1.03 / C 5.1.02).
     // Idempotente: só dispara em CONFIRM não-idempotente.
+    //
+    // P1 reviewer financeiro 16/06 — LancamentoCaixa.cooperadoId é null
+    // (lote AGREGADO 1× por design: schema é String? nullable). Reports
+    // por cooperado precisam reconstruir via ledger (referenciaTabela=
+    // 'EMISSAO_ADMIN_LOTE' + referenciaId=loteId casa entries N:1 com 1
+    // LancamentoCaixa). Rastreabilidade preservada via `observacoes`.
+    //
+    // P1 reviewer financeiro 16/06 — catch escalado de warn → error.
+    // Se contábil falha (ex: conta 5.1.03 não criada por bug futuro),
+    // saldo+ledger já commitaram → divergência ledger↔contábil. Hoje
+    // log.error sinaliza pra ops + AuditLog do mass-write já tem o
+    // payload. Próxima evolução: fila de reprocessamento (catalogado
+    // como follow-up no D-novo-EMISSAO-ADMIN-CONTABIL P2).
     if (
       resultado.modo === 'CONFIRM' &&
       !(resultado.resultado as any).idempotente &&
@@ -4946,8 +4964,8 @@ export class CooperTokenService {
           loteId: clientRequestId,
         });
       } catch (err) {
-        this.logger.warn(
-          `[M39 emitirLoteAdmin] Falha ao lançar contábil (não-bloqueante): ${(err as Error).message}`,
+        this.logger.error(
+          `[M39 emitirLoteAdmin] ⚠️ DIVERGÊNCIA LEDGER↔CONTÁBIL — falha ao lançar contábil pro lote ${clientRequestId} (cooperativa ${cooperativaId}, R$ ${valorTotalReais}). Saldo+ledger já commitaram. Erro: ${(err as Error).message}. Necessário reprocessamento manual.`,
         );
       }
     }
@@ -5039,9 +5057,15 @@ export class CooperTokenService {
 
     const somaQuantidade =
       Math.round(entriesOriginais.reduce((s, e) => s + Number(e.quantidade), 0) * 10000) / 10000;
-    const config = await this.getConfig(cooperativaId);
-    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
-    const valorTotalReais = Math.round(somaQuantidade * valorTokenReais * 100) / 100;
+    // P1 fix reviewer financeiro 16/06: usar o valorReais HISTÓRICO do
+    // ledger original (imutável desde a emissão), NÃO recalcular com o
+    // `valorTokenReais` atual da config. Sem isso, se admin mudou o preço
+    // do token entre a emissão e o estorno, o D/C do estorno não fecha
+    // com o D/C da emissão original (assimetria contábil silenciosa).
+    const valorTotalReais =
+      Math.round(
+        entriesOriginais.reduce((s, e) => s + Math.abs(Number(e.valorReais ?? 0)), 0) * 100,
+      ) / 100;
 
     // Executar dentro de tx Serializable (atomicidade — ou tudo, ou nada)
     const resultado = await this.prisma.$transaction(
@@ -5072,7 +5096,9 @@ export class CooperTokenService {
               operacao: CooperTokenOperacao.DEBITO,
               quantidade: -quantidade, // negativo pra distinguir do crédito original
               saldoApos: novoSaldo,
-              valorReais: -Math.round(quantidade * valorTokenReais * 100) / 100,
+              // P1 fix reviewer financeiro 16/06 — usar valorReais HISTÓRICO
+              // do entry original (imutável), não recalcular com preço atual.
+              valorReais: entry.valorReais != null ? -Math.abs(Number(entry.valorReais)) : null,
               referenciaId: loteId,
               referenciaTabela: 'ESTORNO_EMISSAO_ADMIN_LOTE',
               descricao: `Estorno lote ${loteId.slice(0, 8)} (admin ${usuarioId}): ${motivo}`,
@@ -5098,7 +5124,9 @@ export class CooperTokenService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    // Lançamento contábil de reversão (fora da tx).
+    // Lançamento contábil de reversão (fora da tx). Mesmo tratamento de
+    // erro do emitirLoteAdmin: log.error sinalizando divergência ledger↔
+    // contábil pra ops reprocessar manualmente.
     if (valorTotalReais > 0 && this.tokenContabilService) {
       try {
         await this.tokenContabilService.lancarEstornoEmissaoAdminLote({
@@ -5109,8 +5137,8 @@ export class CooperTokenService {
           loteId,
         });
       } catch (err) {
-        this.logger.warn(
-          `[M39 estornarEmissaoLote] Falha ao lançar contábil reversão (não-bloqueante): ${(err as Error).message}`,
+        this.logger.error(
+          `[M39 estornarEmissaoLote] ⚠️ DIVERGÊNCIA LEDGER↔CONTÁBIL — falha ao lançar contábil reversão pro lote ${loteId} (cooperativa ${cooperativaId}, R$ ${valorTotalReais}). Ledger ESTORNO já commitou. Erro: ${(err as Error).message}. Necessário reprocessamento manual.`,
         );
       }
     }

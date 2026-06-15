@@ -481,9 +481,11 @@ describe('M39 estornarEmissaoLote — happy path', () => {
   it('reverte saldo + cria entries ESTORNO_BONIFICACAO_ADMIN (quantidade NEGATIVA) + contábil reversão', async () => {
     const { service, ids, txCreateLedger, txUpdateSaldo, tokenContabilService } = setup({
       configValorTokenReais: 0.45,
+      // P1 fix reviewer 16/06: entries originais devem ter `valorReais`
+      // histórico (em produção, creditar/emitirLoteAdmin sempre seta).
       entriesOriginaisLote: [
-        { cooperadoId: 'func-1', quantidade: 10, cooperativaId: 'coop-A' },
-        { cooperadoId: 'func-2', quantidade: 20, cooperativaId: 'coop-A' },
+        { cooperadoId: 'func-1', quantidade: 10, valorReais: 4.5, cooperativaId: 'coop-A' },
+        { cooperadoId: 'func-2', quantidade: 20, valorReais: 9.0, cooperativaId: 'coop-A' },
       ],
       saldosExistentes: new Map([
         ['func-1', 10],
@@ -523,11 +525,35 @@ describe('M39 estornarEmissaoLote — happy path', () => {
     );
   });
 
+  // P1 fix reviewer financeiro 16/06: estorno usa valorReais HISTÓRICO
+  // do ledger (imutável), NÃO recalcula com preço atual da config.
+  it('preço do token mudou entre emissão e estorno → contábil usa valor HISTÓRICO (simetria D/C)', async () => {
+    const { service, ids, tokenContabilService } = setup({
+      // Config atual: R$0.50 (mudou desde a emissão)
+      configValorTokenReais: 0.50,
+      entriesOriginaisLote: [
+        // Entry original gravado com R$0.45 (preço da emissão)
+        { cooperadoId: 'func-1', quantidade: 10, valorReais: 4.5, cooperativaId: 'coop-A' },
+        { cooperadoId: 'func-2', quantidade: 20, valorReais: 9.0, cooperativaId: 'coop-A' },
+      ],
+      saldosExistentes: new Map([
+        ['func-1', 10],
+        ['func-2', 20],
+      ]),
+    });
+    const r: any = await service.estornarEmissaoLote(baseEstornar(ids));
+    // valorTotalReais = 4.5 + 9.0 = 13.5 (HISTÓRICO), NÃO 30 * 0.50 = 15.0 (atual)
+    expect(r.valorTotalReais).toBe(13.5);
+    expect(tokenContabilService.lancarEstornoEmissaoAdminLote).toHaveBeenCalledWith(
+      expect.objectContaining({ valor: 13.5 }),
+    );
+  });
+
   it('saldo guard non-negativo: cooperado já gastou parte → debita o que tem, registra estorno completo', async () => {
     const { service, ids, txCreateLedger, txUpdateSaldo } = setup({
       configValorTokenReais: 0.45,
       entriesOriginaisLote: [
-        { cooperadoId: 'func-1', quantidade: 10, cooperativaId: 'coop-A' },
+        { cooperadoId: 'func-1', quantidade: 10, valorReais: 4.5, cooperativaId: 'coop-A' },
       ],
       // Cooperado já gastou 7 dos 10 originalmente recebidos (saldo atual: 3)
       saldosExistentes: new Map([['func-1', 3]]),

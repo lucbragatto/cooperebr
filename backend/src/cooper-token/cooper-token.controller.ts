@@ -196,6 +196,11 @@ export class CooperTokenController {
     return this.cooperTokenService.emitirLoteAdmin({
       cooperativaId,
       usuarioId,
+      // P2 reviewer multitenant 16/06: AuditLog precisa do perfil REAL
+      // do caller (ADMIN/SUPER_ADMIN/OPERADOR), não o default 'COOPERADO'
+      // do helper. Sem isso, rastreabilidade de auditoria em operação de
+      // emissão de dinheiro fica errada.
+      usuarioPerfil: req.user?.perfil,
       distribuicoes: body.distribuicoes,
       descricao: body.descricao,
       otpDesafioId: body.otpDesafioId,
