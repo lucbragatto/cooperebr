@@ -79,7 +79,7 @@ export default function EnviarTokensPage() {
       return;
     }
     if (qtd > saldo) {
-      setErro(`Saldo insuficiente. Disponivel: ${saldo.toFixed(4)} CTK`);
+      setErro(`Saldo insuficiente. Disponível: ${saldo.toFixed(4)} CooperTokens`);
       return;
     }
     if (!selecionado) {
@@ -157,7 +157,7 @@ export default function EnviarTokensPage() {
             <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
           ) : (
             <p className="text-3xl font-bold text-green-600">
-              {saldo.toFixed(4)} CTK
+              {saldo.toFixed(4)} CooperTokens
             </p>
           )}
         </CardContent>
@@ -281,7 +281,7 @@ export default function EnviarTokensPage() {
               <div className="bg-amber-50 border border-amber-200 rounded-md p-4 space-y-3">
                 <p className="text-sm text-amber-800 font-medium">
                   Confirmar envio de{' '}
-                  <strong>{parseFloat(quantidade).toFixed(4)} CTK</strong> para{' '}
+                  <strong>{parseFloat(quantidade).toFixed(4)} CooperTokens</strong> para{' '}
                   <strong>{selecionado?.nomeCompleto}</strong>?
                 </p>
                 <div className="flex gap-2">

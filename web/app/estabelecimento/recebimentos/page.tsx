@@ -71,7 +71,7 @@ export default function TokensRecebidosPage() {
                       <th className="py-2 px-2">Data</th>
                       <th className="py-2 px-2">Tipo</th>
                       <th className="py-2 px-2">Operação</th>
-                      <th className="py-2 px-2 text-right">CTK</th>
+                      <th className="py-2 px-2 text-right">CooperTokens</th>
                       <th className="py-2 px-2 text-right">R$ est.</th>
                       <th className="py-2 px-2">Descrição</th>
                     </tr>

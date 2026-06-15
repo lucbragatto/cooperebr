@@ -380,7 +380,7 @@ export default function DistribuirTokensPage() {
               <p className="text-xs">Saldo da empresa</p>
               <p className="text-xl font-bold">
                 {data.saldoEmpresa.saldoDisponivel.toFixed(4)}{' '}
-                <span className="text-sm font-normal">CTK</span>
+                <span className="text-sm font-normal">CooperTokens</span>
               </p>
             </div>
           </div>
@@ -536,7 +536,7 @@ export default function DistribuirTokensPage() {
                         totaisLote.saldoRestante < 0 ? 'text-red-600' : 'text-green-700'
                       }`}
                     >
-                      {totaisLote.saldoRestante.toFixed(4)} CTK
+                      {totaisLote.saldoRestante.toFixed(4)} CooperTokens
                     </p>
                   </div>
                 </div>
@@ -612,7 +612,7 @@ export default function DistribuirTokensPage() {
                   </p>
                   <p>
                     Saldo da empresa após:{' '}
-                    <strong>{totaisLote.saldoRestante.toFixed(4)} CTK</strong>.
+                    <strong>{totaisLote.saldoRestante.toFixed(4)} CooperTokens</strong>.
                   </p>
                 </div>
 

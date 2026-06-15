@@ -114,7 +114,7 @@ export default function ValidarResgatePage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Tokens usados</p>
-                <p className="font-medium">{resultado.tokensUsados} CTK</p>
+                <p className="font-medium">{resultado.tokensUsados} CooperTokens</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Resgatado em</p>
