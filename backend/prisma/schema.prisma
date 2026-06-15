@@ -2723,6 +2723,17 @@ enum CooperTokenTipo {
   // tokens bloqueados ao saldoDisponivel SEM apagar o registro original
   // (trilha auditavel completa: bloqueio → estorno OU bloqueio → queima).
   ESTORNO_RESGATE_PIX
+  // M39 (16/06/2026) — Emissao Admin em Lote. Distinto de BONUS_INDICACAO
+  // (MLM, classificacao fiscal diferente). Admin/SUPER_ADMIN/OPERADOR
+  // emite tokens novos no ecossistema da cooperativa pra N destinatarios
+  // num unico lote. Contabil: D Despesa de Bonificacao / C Passivo Tokens
+  // (conta 5.1.03 nova, aditivo). Tag referenciaTabela=EMISSAO_ADMIN_LOTE
+  // pra reclassificacao em sprint contabil dedicada.
+  BONIFICACAO_ADMIN
+  // M39 (16/06/2026) — contrapartida do BONIFICACAO_ADMIN. Estorno do lote
+  // inteiro reverte saldo + lanca entry ESTORNO no ledger (NUNCA apaga
+  // registro original — trilha auditavel completa).
+  ESTORNO_BONIFICACAO_ADMIN
 }
 
 enum CooperTokenOperacao {
