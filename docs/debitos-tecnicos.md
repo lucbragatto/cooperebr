@@ -1581,11 +1581,18 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
-### D-novo-CONVENIO-CONVENIADO-LEGADO — `ContratoConvenio.conveniadoId` (+ 4 campos derivados) é pré-D-FISCAL-2.4.1, deprecar após audit
+### D-novo-CONVENIO-CONVENIADO-LEGADO — `ContratoConvenio.conveniadoId` (+ 4 campos derivados): NÃO totalmente deprecável (papel "representante MLM" segue válido); 2 usos como "empresa" foram corrigidos via OR em 15/06/2026
 
-**Severidade:** P3 — housekeeping. Não afeta funcionalidade (depois do fix de 15/06/2026, todos os guards corretos usam `pagadorCooperadoId`).
+**Severidade:** P3 — housekeeping conceitual. Funcionalidade restaurada (15/06/2026 — Tracks B + B.2).
 
-**Origem:** Bug Santi 403 (15/06/2026). Guards do `cooper-token.service.ts` (`distribuirTokens` :1369 e `listarMembrosDisponiveisPraDistribuicao` :1782) comparavam `convenio.conveniadoId` contra o `cooperadoId` do JWT empresa_conveniada — mas o JWT carrega `pagadorCooperadoId` (auth.service.ts:545-578). Causa raiz: `conveniadoId` é campo legado de "representante/contato", `pagadorCooperadoId` é o novo (D-FISCAL-2.4.1 Caso 1, 01/06/2026) FK pro Cooperado PJ pagador. Schema marca o legado mas mantém o campo (compat).
+**Origem:** Bug Santi 403 (15/06/2026). Guards do `cooper-token.service.ts` (`distribuirTokens` :1369 e `listarMembrosDisponiveisPraDistribuicao` :1782) comparavam `convenio.conveniadoId` contra o `cooperadoId` do JWT empresa_conveniada — mas o JWT carrega `pagadorCooperadoId` (auth.service.ts:545-578). Causa raiz: `conveniadoId` é campo legado de "representante/contato" (origem pré-Sprint 9B, expandido na Sprint 9B pra benefício progressivo MLM), `pagadorCooperadoId` é o novo (D-FISCAL-2.4.1 Caso 1, 01/06/2026) FK pro Cooperado PJ pagador. Schema mantém ambos — semânticas distintas.
+
+**Decisão arquitetural (15/06/2026 pós-audit):** o campo `conveniadoId` NÃO é totalmente deprecável. Ele tem **2 papéis semânticos que continuam válidos**:
+
+1. **"Representante histórico do convênio"** — pessoa-contato/representante responsável pelo convênio (pré-D-FISCAL-2.4.1). Atualmente quase sempre null em convênios novos (Caso 1 popula só `pagadorCooperadoId`), mas convênios legados podem ter o campo preenchido.
+2. **"Indicador MLM do convênio"** — quando `registrarComoIndicacao=true`, o representante vira o indicador MLM dos membros entrantes e recebe benefício progressivo por faixa (Sprint 9B). Esse papel é DISTINTO do "pagador" — empresa-PJ-pagadora conceitualmente não é indicadora.
+
+Os 2 papéis NÃO se sobrepõem necessariamente com o pagador. Por isso o fix do bug Santi foi cirúrgico: **corrigir só onde o campo era usado como "empresa logada"**, manter onde é "representante MLM".
 
 **Onde:** `backend/prisma/schema.prisma:1525-1535` (ContratoConvenio):
 - `conveniadoId` String?
@@ -1595,21 +1602,33 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 - `conveniadoTelefone` String?
 - relation `Cooperado.@relation("ConveniadoConvenio")`
 
-**Plano (após audit de uso real):**
-1. Grep amplo dos 5 campos em `backend/src/**` + `web/app/**` — listar usos.
-2. Pra cada uso: confirmar se é dado real (representante distinto do pagador) ou redundante com `pagadorCooperadoId`.
-3. Se zero usos reais: drop dos 5 campos via migration aditiva.
-4. Se houver usos reais (ex: cadastro mantém "contato administrativo" separado do pagador): renomear pra clarificar (`contatoAdminNome` etc.) e blindar com testes.
+**Audit completo dos 5 spots que usam `conveniadoId` em filtros (15/06/2026):**
 
-**Usos identificados (parciais, achados pelo multitenant-reviewer 15/06/2026):**
+| # | Arquivo:linha | Função | Conceito | Status pós-fix |
+|---|---|---|---|---|
+| A1 | `convenios.service.ts:511-518` | `meusConvenios` | Portal "lista convênios da empresa logada" | ✅ **RESOLVIDO** (Track B.2 commit) — OR `[{conveniadoId},{pagadorCooperadoId}]` |
+| A2 | `convenios.service.ts:521-538` | `dashboardConveniado` | Portal "dashboard do convênio da empresa logada" | ✅ **RESOLVIDO** (Track B.2 commit) — OR `[{conveniadoId},{pagadorCooperadoId}]` |
+| A3 | `configuracao-cobranca.service.ts:145-148` | `resolverDescontoConvenio` | "Desconto MLM progressivo do representante, acumula de todos convênios" | ⏸️ **MANTIDO INTENCIONALMENTE** — é benefício do representante MLM (Sprint 9B). Empresa-pagadora (Caso 1) tem `descontoKwhCusteio` próprio em rota fiscal diferente. Adicionar OR aqui dobraria desconto pra pagador que coincidentemente é representante. |
+| A4 | `publico.controller.ts:1256-1259` | Indicação MLM em `/publico/cadastro?ref=` | "Indicador é representante de algum convênio? Vincula novo cooperado ao convênio" | ⏸️ **MANTIDO INTENCIONALMENTE** — fluxo MLM. Empresa-pagadora conceitualmente não é indicadora; é entidade contábil de pagamento. Vincular convite ao convênio via pagador seria semanticamente errado. |
+| A5 | `convite-indicacao.service.ts:48-51` | Resolver `convenioId` do remetente de convite MLM | Idêntico A4 (fluxo MLM) | ⏸️ **MANTIDO INTENCIONALMENTE** — mesma razão de A4. |
 
-- **`backend/src/convenios/convenios.service.ts:511-518`** (`meusConvenios`) — filtra `where: { conveniadoId: cooperadoId, status: 'ATIVO' }`. Empresa_conveniada com `cooperadoId = pagadorCooperadoId` NUNCA encontra seus próprios convênios via esse endpoint (conveniadoId quase sempre null nos convênios D-FISCAL-2.4.1). **Falha-fechada** (esconde dados próprios), não IDOR. Inconsistência simétrica ao bug Santi 403 corrigido em 15/06.
-- **`backend/src/convenios/convenios.service.ts:521-538`** (`dashboardConveniado`) — `findFirst({ where: { id, conveniadoId: cooperadoId } })`. Mesmo problema.
-- **Outros usos legítimos** preservados intencionalmente: `handleConvenioBeneficioTokens` event handler (Sprint 9B emit pro "representante histórico" — fluxo diferente).
+**Usos legítimos NÃO ligados a "identificar quem é a empresa" (também NÃO mexer):**
 
-**Fix sugerido (sprint housekeeping):** trocar `conveniadoId: cooperadoId` → `pagadorCooperadoId: cooperadoId` OR/AND união `OR: [{conveniadoId: cooperadoId}, {pagadorCooperadoId: cooperadoId}]` se houver convênios legados realmente preenchidos. Depende do audit do passo 1.
+- `convenios.service.ts:60-117, 359` + `convenios.dto.ts:108, 268` — DTO de cadastro/update (admin escolhe representante).
+- `convenios-membros.service.ts:157, 275` — registra indicação MLM se há representante; skip natural se null.
+- `convenios-progressao.service.ts:107-130` — emit benefício progressivo pro representante (Sprint 9B).
+- `cooper-token.service.ts:569+587` — event handler `convenio.beneficio.tokens` consome o emit.
 
-**Status:** ABERTO. Audit + decisão de drop/renomear/migrar adiados pra sprint de housekeeping de schema (não-bloqueante — endpoints atingidos são portal de leitura, não escrita).
+**Plano futuro (sprint housekeeping de schema — quando produção tiver volume):**
+
+1. **Audit de produção** — quantos convênios ATIVOS têm `conveniadoId` NÃO-null + `pagadorCooperadoId` NULL? E o inverso?
+2. **Renomear campo pra clareza** — se quase só "representante MLM" no uso real, renomear `conveniadoId` → `representanteMlmCooperadoId` (e os 4 derivados). Esclarece schema.
+3. **Migration aditiva** — adicionar novos nomes mantendo os antigos como `@deprecated` por 1-2 sprints; depois drop.
+4. **NÃO drop sem renomear** — papel MLM segue válido.
+
+**Status:** 2/5 spots corrigidos cirurgicamente (A1+A2). 3/5 spots (A3+A4+A5) mantidos com justificativa documentada. Schema housekeeping ADIADO pra sprint dedicada (não-bloqueante — funcionalidade restaurada).
+
+**Débito derivado:** D-novo-CONVENIOS-PORTAL-SPECS P3 — pares `meusConvenios` + `dashboardConveniado` não têm cobertura unitária (`src/convenios/` tem 18 specs mas nenhum cobre esses 2 endpoints). Adicionar specs cobrindo: (a) JWT pagador encontra convênio caso 1; (b) JWT representante legado encontra convênio antigo; (c) cooperado aleatório NÃO encontra convênio de outro (isolamento).
 
 ### D-novo-CONVITE-ROTA-CONSOLIDAR — consolidar rotas /convite/[codigo] (MLM) + /convite-convenio/[token] (custeio)
 
