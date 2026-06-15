@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Search, Building2, Trash2 } from 'lucide-react';
+import { Plus, Search, Building2, Trash2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 interface Administradora {
@@ -54,6 +54,13 @@ export default function AdministradorasPage() {
 
   return (
     <div>
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block mb-2">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Agregadores</h2>
         <Link href="/dashboard/administradoras/novo">

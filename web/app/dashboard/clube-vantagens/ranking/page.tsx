@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Zap, Users } from 'lucide-react';
+import { Trophy, Zap, Users, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import BadgeNivelClube from '@/components/BadgeNivelClube';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -59,6 +61,13 @@ export default function RankingPage() {
 
   return (
     <div>
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block mb-2">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center gap-3 mb-6">
         <Trophy className="h-6 w-6 text-yellow-500" />
         <h2 className="text-2xl font-bold text-gray-800">Ranking de Indicadores</h2>

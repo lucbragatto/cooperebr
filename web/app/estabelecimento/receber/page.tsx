@@ -118,13 +118,13 @@ export default function ReceberTokensPage() {
                   <div>
                     <p className="font-semibold">Pagamento recebido!</p>
                     <p className="text-sm mt-1">
-                      Bruto: {resultado.quantidadeBruta?.toFixed(4)} CTK
+                      Bruto: {resultado.quantidadeBruta?.toFixed(4)} CooperTokens
                     </p>
                     <p className="text-sm">
-                      Taxa (1%): {resultado.taxa?.toFixed(4)} CTK
+                      Taxa (1%): {resultado.taxa?.toFixed(4)} CooperTokens
                     </p>
                     <p className="text-sm font-bold">
-                      Recebido: {resultado.quantidadeLiquida?.toFixed(4)} CTK
+                      Recebido: {resultado.quantidadeLiquida?.toFixed(4)} CooperTokens
                     </p>
                   </div>
                 </div>

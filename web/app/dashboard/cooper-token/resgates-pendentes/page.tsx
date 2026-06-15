@@ -42,7 +42,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Receipt,
+  ArrowLeft,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface ResgateRecibo {
   id: string;
@@ -216,6 +218,13 @@ export default function ResgatesPendentesPage() {
 
   return (
     <div className="space-y-4 max-w-6xl">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Banknote className="h-6 w-6 text-green-700" /> Resgates de CooperTokens (PIX)

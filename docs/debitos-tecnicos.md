@@ -1653,6 +1653,23 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
+### D-novo-CTK-VALOR-HARDCODE-EXTRATO — Extrato `/estabelecimento/recebimentos` calcula `R$ est.` com hardcode `* 0.20` em vez de ler `configCooperToken.valorTokenReais`
+
+**Severidade:** P3 — estimativa visual incorreta (40% do real). Não afeta cálculos reais (valores R$ canônicos vivem em `ResgateRecibo`/`LancamentoCaixa`/`Cobranca` no backend, todos corretos).
+
+**Origem:** Fase 1 read-only da Fatia A v1 (14/06/2026) sobre arquivo `parceiro/tokens-recebidos/page.tsx:92` — re-catalogado na Fatia A v2 (15/06/2026) porque o caminho mudou pós-Sprint Higiene de Rotas (M37). Débito existia no commit stale `52d9b38` (`feature/fatia-a` v1) mas não chegou ao main; arquivo foi movido em `f85483f`.
+
+**Onde:** `web/app/estabelecimento/recebimentos/page.tsx:92`
+```tsx
+<td className="py-2 px-2 text-right font-mono text-gray-500">{fmt(t.quantidade * 0.20)}</td>
+```
+
+O hardcode `0.20` é antigo (valor de cotação dos tokens em uma fase inicial). Valor canônico atual: `ConfigCooperToken.valorTokenReais` default `0.45`, configurável por cooperativa via `/dashboard/cooper-token/config`.
+
+**Fix proposto:** componente busca config em paralelo ao extrato e usa no cálculo da coluna. Não é one-liner — precisa novo `useEffect` + estado `valorTokenReais` + chamada `api.get('/cooper-token/admin/config')` OU o backend expor o valor no payload do extrato (preferível pra não dobrar request).
+
+**Status:** ABERTO. Commit separado fora da Fatia A v2 (escopo cosmético estrito). Tratar como polimento P3 oportunista quando alguém estiver na tela.
+
 ### D-novo-CONVENIO-CONVENIADO-LEGADO — `ContratoConvenio.conveniadoId` (+ 4 campos derivados): NÃO totalmente deprecável (papel "representante MLM" segue válido); 2 usos como "empresa" foram corrigidos via OR em 15/06/2026
 
 **Severidade:** P3 — housekeeping conceitual. Funcionalidade restaurada (15/06/2026 — Tracks B + B.2).

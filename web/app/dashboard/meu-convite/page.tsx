@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Gift } from 'lucide-react';
+import { Gift, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import ConviteCard from '@/components/ConviteCard';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 interface Indicacao {
   id: string;
@@ -28,6 +30,13 @@ export default function MeuConvitePage() {
 
   return (
     <div className="space-y-8">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
           <Gift className="h-6 w-6 text-green-600" />

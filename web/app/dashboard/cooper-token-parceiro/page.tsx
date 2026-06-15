@@ -201,7 +201,7 @@ export default function CooperTokenParceiroPage() {
           <Card className="border-green-200 bg-green-50">
             <CardContent className="pt-6">
               <p className="text-sm text-green-700 font-medium">Saldo Disponível</p>
-              <p className="text-2xl font-bold text-green-800">{fmtToken(Number(saldo.saldoDisponivel))} CTK</p>
+              <p className="text-2xl font-bold text-green-800">{fmtToken(Number(saldo.saldoDisponivel))} CooperTokens</p>
             </CardContent>
           </Card>
           <Card className="border-amber-200 bg-amber-50">
