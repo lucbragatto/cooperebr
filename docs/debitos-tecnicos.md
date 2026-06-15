@@ -1601,7 +1601,15 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 3. Se zero usos reais: drop dos 5 campos via migration aditiva.
 4. Se houver usos reais (ex: cadastro mantém "contato administrativo" separado do pagador): renomear pra clarificar (`contatoAdminNome` etc.) e blindar com testes.
 
-**Status:** ABERTO. Audit + decisão de drop/renomear adiados pra sprint de housekeeping de schema (não-bloqueante).
+**Usos identificados (parciais, achados pelo multitenant-reviewer 15/06/2026):**
+
+- **`backend/src/convenios/convenios.service.ts:511-518`** (`meusConvenios`) — filtra `where: { conveniadoId: cooperadoId, status: 'ATIVO' }`. Empresa_conveniada com `cooperadoId = pagadorCooperadoId` NUNCA encontra seus próprios convênios via esse endpoint (conveniadoId quase sempre null nos convênios D-FISCAL-2.4.1). **Falha-fechada** (esconde dados próprios), não IDOR. Inconsistência simétrica ao bug Santi 403 corrigido em 15/06.
+- **`backend/src/convenios/convenios.service.ts:521-538`** (`dashboardConveniado`) — `findFirst({ where: { id, conveniadoId: cooperadoId } })`. Mesmo problema.
+- **Outros usos legítimos** preservados intencionalmente: `handleConvenioBeneficioTokens` event handler (Sprint 9B emit pro "representante histórico" — fluxo diferente).
+
+**Fix sugerido (sprint housekeeping):** trocar `conveniadoId: cooperadoId` → `pagadorCooperadoId: cooperadoId` OR/AND união `OR: [{conveniadoId: cooperadoId}, {pagadorCooperadoId: cooperadoId}]` se houver convênios legados realmente preenchidos. Depende do audit do passo 1.
+
+**Status:** ABERTO. Audit + decisão de drop/renomear/migrar adiados pra sprint de housekeeping de schema (não-bloqueante — endpoints atingidos são portal de leitura, não escrita).
 
 ### D-novo-CONVITE-ROTA-CONSOLIDAR — consolidar rotas /convite/[codigo] (MLM) + /convite-convenio/[token] (custeio)
 
