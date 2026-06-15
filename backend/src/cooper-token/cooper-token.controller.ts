@@ -144,6 +144,126 @@ export class CooperTokenController {
     return result;
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  //  M39 (16/06/2026) — Emissão Admin em Lote (4 endpoints)
+  // ════════════════════════════════════════════════════════════════════
+  //
+  // Substitui `POST /cooper-token/parceiro/enviar` single-target quando
+  // chamado por admin (sem cooperadoId no JWT). enviarTokensAdmin é
+  // @deprecated APÓS Bloco 5 redirecionar o frontend.
+  //
+  // 4 endpoints:
+  //   POST   /cooper-token/admin/emitir-lote                — PREVIEW/CONFIRM
+  //   POST   /cooper-token/admin/emitir-lote/:loteId/estornar — Estorno
+  //   GET    /cooper-token/admin/lotes-emitidos             — Lista paginada
+  //   GET    /cooper-token/admin/lotes-emitidos/:loteId     — Detalhe (UI confirmação)
+  //
+  // Multi-tenant: cooperativaId + usuarioId do JWT (anti-IDOR). Servidor
+  // revalida cada cooperadoId.cooperativaId do lote (no service).
+  // ════════════════════════════════════════════════════════════════════
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR)
+  @Post('admin/emitir-lote')
+  async emitirLoteAdmin(
+    @Req() req: any,
+    @Body() body: {
+      distribuicoes: Array<{ destinatarioCooperadoId: string; quantidade: number }>;
+      descricao?: string;
+      otpDesafioId?: string;
+      otpCodigo?: string;
+      clientRequestId: string;
+      modo: 'PREVIEW' | 'CONFIRM';
+    },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const usuarioId = req.user?.sub ?? req.user?.id;
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'Cooperativa não identificada. SUPER_ADMIN puro deve impersonar uma cooperativa.',
+      );
+    }
+    if (!usuarioId) {
+      throw new BadRequestException('Usuário não identificado no JWT.');
+    }
+    if (!body.clientRequestId) {
+      throw new BadRequestException(
+        'clientRequestId obrigatório (UUID v4 recomendado). Garante idempotência: retry do mesmo lote não emite 2×.',
+      );
+    }
+    if (!body.modo || !['PREVIEW', 'CONFIRM'].includes(body.modo)) {
+      throw new BadRequestException('modo obrigatório: PREVIEW ou CONFIRM.');
+    }
+    return this.cooperTokenService.emitirLoteAdmin({
+      cooperativaId,
+      usuarioId,
+      // P2 reviewer multitenant 16/06: AuditLog precisa do perfil REAL
+      // do caller (ADMIN/SUPER_ADMIN/OPERADOR), não o default 'COOPERADO'
+      // do helper. Sem isso, rastreabilidade de auditoria em operação de
+      // emissão de dinheiro fica errada.
+      usuarioPerfil: req.user?.perfil,
+      distribuicoes: body.distribuicoes,
+      descricao: body.descricao,
+      otpDesafioId: body.otpDesafioId,
+      otpCodigo: body.otpCodigo,
+      clientRequestId: body.clientRequestId,
+      modo: body.modo,
+      ip: req.ip ?? req.headers?.['x-forwarded-for'] ?? null,
+      userAgent: req.headers?.['user-agent'] ?? null,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR)
+  @Post('admin/emitir-lote/:loteId/estornar')
+  async estornarEmissaoLote(
+    @Req() req: any,
+    @Param('loteId') loteId: string,
+    @Body() body: { motivo: string; confirmado: boolean },
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    const usuarioId = req.user?.sub ?? req.user?.id;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada.');
+    }
+    if (!usuarioId) {
+      throw new BadRequestException('Usuário não identificado no JWT.');
+    }
+    return this.cooperTokenService.estornarEmissaoLote({
+      cooperativaId,
+      loteId,
+      usuarioId,
+      motivo: body.motivo,
+      confirmado: body.confirmado === true,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR)
+  @Get('admin/lotes-emitidos')
+  async listarLotesEmitidos(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada.');
+    }
+    return this.cooperTokenService.listarLotesEmitidos({
+      cooperativaId,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  @Roles(ADMIN, SUPER_ADMIN, OPERADOR)
+  @Get('admin/lotes-emitidos/:loteId')
+  async getLoteEmitido(@Req() req: any, @Param('loteId') loteId: string) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new BadRequestException('Cooperativa não identificada.');
+    }
+    return this.cooperTokenService.getLoteEmitido({ cooperativaId, loteId });
+  }
+
   @Roles(ADMIN, SUPER_ADMIN)
   @Get('admin/ledger')
   async getLedger(
@@ -583,6 +703,12 @@ export class CooperTokenController {
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
   @Post('parceiro/enviar')
   async enviarTokens(@Req() req: any, @Body() body: EnviarTokensDto) {
+    // M39 (16/06/2026): o RAMO admin deste endpoint chama
+    // enviarTokensAdmin (@deprecated). UI já redirecionada pro novo
+    // POST /cooper-token/admin/emitir-lote (Bloco 5 M39). Endpoint
+    // mantido por COMPAT do caminho cooperado→cooperado (com PIN) e
+    // de eventuais callers externos legados. Avaliar remoção do ramo
+    // admin quando logs ENVIO_ADMIN ficarem 30 dias sem nova entry.
     const cooperativaId = req.user?.cooperativaId;
     const remetenteCooperadoId = req.user?.cooperadoId;
     const perfil = req.user?.perfil;

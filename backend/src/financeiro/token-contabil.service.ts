@@ -6,7 +6,16 @@ import { PrismaService } from '../prisma.service';
  *
  * Contas utilizadas (criadas automaticamente se não existirem):
  * - 5.1.01 Custo Desconto Concedido (DESPESA)
- * - 5.1.02 Passivo Tokens a Resgatar (DESPESA — contrapartida de passivo)
+ * - 5.1.02 Passivo Tokens a Resgatar (DESPESA — ⚠️ tipo deveria PASSIVO;
+ *           bug pré-existente; corrigir em sprint contábil dedicada,
+ *           D-novo-EMISSAO-ADMIN-CONTABIL P2)
+ * - 5.1.03 Despesa de Bonificação CooperToken (DESPESA) — M39 (16/06):
+ *          contrapartida da emissão admin em lote (`BONIFICACAO_ADMIN`).
+ *          Cooperativa BONIFICA → cria passivo SEM receber dinheiro em
+ *          troca (distinto de F2 compra paga = `D Caixa / C Passivo`,
+ *          distinto de F1 desconto não-aplicado = template atual errado).
+ *          Sprint contábil dedicada vai reclassificar via
+ *          `referenciaTabela='EMISSAO_ADMIN_LOTE'`.
  * - 1.2.01 Receita Venda Tokens (RECEITA)
  * - 1.2.02 Receita Tokens Expirados (RECEITA)
  */
@@ -23,6 +32,10 @@ interface LancamentoTokenParams {
 const CONTAS_TOKEN = [
   { codigo: '5.1.01', nome: 'Custo Desconto Concedido', tipo: 'DESPESA', grupo: 'TOKENS' },
   { codigo: '5.1.02', nome: 'Passivo Tokens a Resgatar', tipo: 'DESPESA', grupo: 'TOKENS' },
+  // M39 (16/06/2026): conta nova, aditiva. Débito da emissão admin em lote
+  // (`BONIFICACAO_ADMIN`) — cooperativa bonifica criando passivo sem entrada
+  // de caixa. Distinto de 5.1.01 (desconto concedido a faturas já emitidas).
+  { codigo: '5.1.03', nome: 'Despesa de Bonificação CooperToken', tipo: 'DESPESA', grupo: 'TOKENS' },
   { codigo: '1.2.01', nome: 'Receita Venda Tokens', tipo: 'RECEITA', grupo: 'TOKENS' },
   { codigo: '1.2.02', nome: 'Receita Tokens Expirados', tipo: 'RECEITA', grupo: 'TOKENS' },
 ] as const;
@@ -201,5 +214,119 @@ export class TokenContabilService {
 
     this.logger.log(`Lançamento contábil expiração: R$ ${valor} (${params.cooperativaId})`);
     return { baixaPassivo, receita };
+  }
+
+  /**
+   * 5. M39 (16/06/2026) — Emissão Admin em Lote (BONIFICACAO_ADMIN)
+   *
+   * Admin/SUPER_ADMIN/OPERADOR emite tokens novos no ecossistema da
+   * cooperativa pra N destinatários — cria passivo SEM entrada de caixa
+   * (bonificação concedida pela coop).
+   *
+   * D: Despesa de Bonificação CooperToken (5.1.03)  ← NOVA, aditiva
+   * C: Passivo Tokens a Resgatar (5.1.02)
+   *
+   * `referenciaTabela='EMISSAO_ADMIN_LOTE'` permite à sprint contábil
+   * dedicada localizar e reclassificar TODOS de uma vez quando a conta
+   * 5.1.02 for tipada corretamente (DESPESA → PASSIVO).
+   *
+   * Distinto:
+   *  - `lancarEmissaoFaturaCheia` (5.1.01) — desconto NÃO-aplicado.
+   *  - `lancarCompraParceiroPago` — F2 compra paga (D Caixa / C Receita).
+   *  - Bonificação admin não tem contrapartida de caixa nem receita.
+   */
+  async lancarEmissaoAdminLote(params: LancamentoTokenParams & { loteId: string }) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+
+    const [debito, credito] = await Promise.all([
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'DESPESA',
+          descricao: `[Token] D: Despesa de Bonificação — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get('5.1.03'),
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: `Emissão admin lote ${params.loteId} (BONIFICACAO_ADMIN)`,
+        },
+      }),
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `[Token] C: Passivo Tokens a Resgatar — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get('5.1.02'),
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: `Emissão admin lote ${params.loteId} (passivo)`,
+        },
+      }),
+    ]);
+
+    this.logger.log(
+      `Lançamento contábil emissão admin lote=${params.loteId}: R$ ${valor} (${params.cooperativaId})`,
+    );
+    return { debito, credito };
+  }
+
+  /**
+   * 6. M39 (16/06/2026) — Estorno de Emissão Admin em Lote (ESTORNO_BONIFICACAO_ADMIN)
+   *
+   * Reversa o lançamento contábil da emissão original — espelha o par
+   * D/C invertido. NUNCA apaga o lançamento original (trilha auditável).
+   *
+   * D: Passivo Tokens a Resgatar (5.1.02)         ← baixa passivo
+   * C: Despesa de Bonificação CooperToken (5.1.03) ← reversão da despesa
+   *
+   * `referenciaTabela='ESTORNO_EMISSAO_ADMIN_LOTE'` pra rastreabilidade.
+   */
+  async lancarEstornoEmissaoAdminLote(params: LancamentoTokenParams & { loteId: string }) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+
+    const [baixaPassivo, reversaoDespesa] = await Promise.all([
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'DESPESA',
+          descricao: `[Token] D: Baixa Passivo (estorno) — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get('5.1.02'),
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: `Estorno emissão admin lote ${params.loteId} (baixa passivo)`,
+        },
+      }),
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `[Token] C: Reversão Despesa Bonificação — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get('5.1.03'),
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: `Estorno emissão admin lote ${params.loteId} (reversão despesa)`,
+        },
+      }),
+    ]);
+
+    this.logger.log(
+      `Lançamento contábil estorno admin lote=${params.loteId}: R$ ${valor} (${params.cooperativaId})`,
+    );
+    return { baixaPassivo, reversaoDespesa };
   }
 }

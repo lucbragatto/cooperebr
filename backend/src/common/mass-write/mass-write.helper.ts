@@ -95,6 +95,14 @@ export interface MassWriteOptions<TItem, TCommitOut> {
   /** IP / userAgent do request (opcionais, vão pro AuditLog). */
   ip?: string;
   userAgent?: string;
+  /**
+   * Perfil do usuário que disparou (vai pro AuditLog.usuarioPerfil). Default
+   * 'COOPERADO' por compat com F3 distribuir (primeiro consumer). M39 admin
+   * passa 'ADMIN'/'SUPER_ADMIN'/'OPERADOR' do `req.user.perfil`. P2 reviewer
+   * multitenant 16/06: sem isso, AuditLog grava perfil errado em operação
+   * de emissão de dinheiro (rastreabilidade comprometida).
+   */
+  usuarioPerfil?: string;
 }
 
 export interface MassWritePreviewResult {
@@ -179,7 +187,7 @@ export async function executarMassWrite<TItem, TCommitOut>(
         await prisma.auditLog.create({
           data: {
             usuarioId: options.usuarioId,
-            usuarioPerfil: 'COOPERADO',
+            usuarioPerfil: options.usuarioPerfil ?? 'COOPERADO',
             cooperativaId: options.cooperativaId,
             acao: `${options.acao}.IDEMPOTENT_RETRY`,
             recurso: 'MassWrite',
@@ -245,7 +253,7 @@ export async function executarMassWrite<TItem, TCommitOut>(
     await prisma.auditLog.create({
       data: {
         usuarioId: options.usuarioId,
-        usuarioPerfil: 'COOPERADO',
+        usuarioPerfil: options.usuarioPerfil ?? 'COOPERADO',
         cooperativaId: options.cooperativaId,
         acao: options.acao,
         recurso: 'MassWrite',

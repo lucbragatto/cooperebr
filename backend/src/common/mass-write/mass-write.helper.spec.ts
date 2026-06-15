@@ -389,3 +389,90 @@ describe('MassWrite helper — CONFIRM mode', () => {
     expect(log.userAgent).toBe('smoke/1.0');
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// P3 re-review orquestrador 16/06/2026 — usuarioPerfil real no AuditLog
+// ════════════════════════════════════════════════════════════════════
+//
+// Antes (M39 v1): helper gravava `usuarioPerfil: 'COOPERADO'` chumbado em
+// AMBOS os caminhos do AuditLog (idempotência-hit em :190 + commit
+// finalizado em :256). Operação ADMIN gravava perfil errado → rastreabilidade
+// comprometida em emissão de dinheiro.
+//
+// Fix M39 v2: `MassWriteOptions.usuarioPerfil?: string` + helper usa
+// `options.usuarioPerfil ?? 'COOPERADO'` em AMBOS os spots.
+//
+// Specs prevenirão regressão (chumbado não voltar).
+// ════════════════════════════════════════════════════════════════════
+
+describe('MassWrite helper — usuarioPerfil no AuditLog (P3 re-review orquestrador 16/06)', () => {
+  it('CONFIRM com usuarioPerfil=ADMIN → AuditLog grava ADMIN (não COOPERADO chumbado)', async () => {
+    const s = setup();
+    await executarMassWrite(s.prisma, {
+      ...baseOpts({ usuarioPerfil: 'ADMIN' }),
+      items: s.items,
+      verificarIdempotencia: s.verificarIdempotencia,
+      preview: s.previewFn,
+      commit: s.commitFn,
+    });
+    expect(s.auditLogCreate).toHaveBeenCalledTimes(1);
+    const log = s.auditLogCreate.mock.calls[0][0].data;
+    expect(log.usuarioPerfil).toBe('ADMIN');
+  });
+
+  it('CONFIRM com usuarioPerfil=SUPER_ADMIN → AuditLog grava SUPER_ADMIN', async () => {
+    const s = setup();
+    await executarMassWrite(s.prisma, {
+      ...baseOpts({ usuarioPerfil: 'SUPER_ADMIN' }),
+      items: s.items,
+      verificarIdempotencia: s.verificarIdempotencia,
+      preview: s.previewFn,
+      commit: s.commitFn,
+    });
+    const log = s.auditLogCreate.mock.calls[0][0].data;
+    expect(log.usuarioPerfil).toBe('SUPER_ADMIN');
+  });
+
+  it('CONFIRM com usuarioPerfil=OPERADOR → AuditLog grava OPERADOR', async () => {
+    const s = setup();
+    await executarMassWrite(s.prisma, {
+      ...baseOpts({ usuarioPerfil: 'OPERADOR' }),
+      items: s.items,
+      verificarIdempotencia: s.verificarIdempotencia,
+      preview: s.previewFn,
+      commit: s.commitFn,
+    });
+    const log = s.auditLogCreate.mock.calls[0][0].data;
+    expect(log.usuarioPerfil).toBe('OPERADOR');
+  });
+
+  it('CONFIRM SEM usuarioPerfil → default COOPERADO (compat F3 distribuir, primeiro consumer)', async () => {
+    const s = setup();
+    await executarMassWrite(s.prisma, {
+      ...baseOpts(), // sem usuarioPerfil
+      items: s.items,
+      verificarIdempotencia: s.verificarIdempotencia,
+      preview: s.previewFn,
+      commit: s.commitFn,
+    });
+    const log = s.auditLogCreate.mock.calls[0][0].data;
+    expect(log.usuarioPerfil).toBe('COOPERADO');
+  });
+
+  it('Idempotência-hit com usuarioPerfil=ADMIN → AuditLog *.IDEMPOTENT_RETRY também grava ADMIN', async () => {
+    const s = setup({
+      idempotenciaRetorna: { commitId: 'cmt-anterior', n: 3 },
+    });
+    await executarMassWrite(s.prisma, {
+      ...baseOpts({ usuarioPerfil: 'ADMIN' }),
+      items: s.items,
+      verificarIdempotencia: s.verificarIdempotencia,
+      preview: s.previewFn,
+      commit: s.commitFn,
+    });
+    expect(s.auditLogCreate).toHaveBeenCalledTimes(1);
+    const log = s.auditLogCreate.mock.calls[0][0].data;
+    expect(log.acao).toMatch(/IDEMPOTENT_RETRY/);
+    expect(log.usuarioPerfil).toBe('ADMIN'); // NÃO COOPERADO chumbado
+  });
+});

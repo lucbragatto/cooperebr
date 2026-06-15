@@ -347,6 +347,44 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-EMISSAO-ADMIN-CONTABIL — Conta `5.1.02` tipada DESPESA (deveria PASSIVO) + template F2 errado + F3/F6/clube sem `LancamentoCaixa` (sprint contábil dedicada, depende de D3 Modelo C)
+
+**Severidade:** P2 — token-passivo MAL escriturado na contabilidade preparatória. Não afeta funcionalidade nem cálculos reais (valores R$ canônicos vivem em `ResgateRecibo`/`LancamentoCaixa`/`Cobranca`), mas **bate no item 3 do alvo do Modelo C** ("escriturar token como passivo" — relatório FLUXO-EMISSAO-TOKEN-CONVENIO 15/06/2026). Balanço fica errado em 4 pernas distintas.
+
+**Origem:** Achados consolidados pelos relatórios da sessão paralela 15/06/2026 (`docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md`, `docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md`, `docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md`) + Sprint M39 (16/06/2026) que precisou contornar parcialmente pra não corromper mais.
+
+**4 problemas distintos no token-contábil (todos pré-existentes):**
+
+1. **Conta `5.1.02 "Passivo Tokens a Resgatar"` tipada DESPESA** (`backend/src/financeiro/token-contabil.service.ts:25`). Deveria ser PASSIVO. Sem corrigir, qualquer C nessa conta fica escriturado como receita, distorcendo o balanço da cooperativa.
+
+2. **Template `lancarEmissaoFaturaCheia` errado pra F2 (compra paga)** — `token-contabil.service.ts:77-114` faz `D Custo Desconto Concedido (5.1.01) / C Passivo Tokens (5.1.02)`. Esse template foi feito pra desconto NÃO-aplicado (F1), não pra entrada de caixa (F2 deveria ser `D Caixa / C Passivo` — relatório FLUXO §2.5).
+
+3. **F3 distribuição NÃO lança** `LancamentoCaixa`. Empresa-PJ distribui tokens em lote pra membros (já está no `CooperTokenLedger` desde Sprint Clube P1 12/06/2026), mas a contabilidade preparatória nunca registra. Reflexo: o token sai do saldo da empresa-PJ mas o passivo cooperativa-emissora não migra de "passivo flutuante na empresa" pra "passivo agregado por membro".
+
+4. **F6 resgate PIX NÃO lança** `LancamentoCaixa`. Cooperativa quita passivo (paga R$ via PIX ao estabelecimento) e a contabilidade preparatória não reflete. Mesmo problema com clube `resgatarOferta` (entry PROVISIONAL placeholder, nunca vira passivo próprio).
+
+**O que M39 NÃO consertou (intencional, fora de escopo):**
+
+A Sprint M39 (16/06/2026, blocker prod redesenho `/dashboard/cooper-token/enviar`) precisou criar um template MÍNIMO contornando o gap, mas SEM mexer no que está errado:
+
+- Criou conta `5.1.03 "Despesa de Bonificação CooperToken"` (DESPESA) — aditiva.
+- Criou template `lancarEmissaoAdminLote`: `D 5.1.03 / C 5.1.02` — semanticamente correto pra emissão admin (cooperativa BONIFICA criando passivo SEM receber dinheiro em troca). Mas a conta `5.1.02` continua tipada DESPESA (não-bloqueante porque é forward-compatible: quando a sprint contábil corrigir o tipo da 5.1.02, todos os lançamentos M39 escriturados como `D 5.1.03 / C 5.1.02` se acertam sozinhos no balanço).
+- Tag `referenciaTabela = 'EMISSAO_ADMIN_LOTE'` em cada entry pra reclassificação em massa quando a sprint contábil rodar.
+
+**Plano da sprint contábil dedicada:**
+
+1. **Corrigir tipo da conta `5.1.02`** DESPESA → PASSIVO no `CONTAS_TOKEN` array. Migration aditiva: criar conta `5.1.02b` tipo PASSIVO, redirecionar `garantirContas`, marcar a antiga como inativa. Audit pré-cutover: validar zero impacto em reports.
+2. **Corrigir template F2** (compra paga) — novo método `lancarCompraPaga` (`D Caixa / C Passivo Tokens`) em vez de reusar `lancarEmissaoFaturaCheia`. Mudar emitter no `processarPagamentoCompraPj`.
+3. **F3 distribuição** — emit listener contábil que lança o passivo "deslocando-se" da empresa-PJ pra agregação por membro.
+4. **F6 resgate PIX** — lançar `D Passivo Tokens / C Caixa` no `processarWebhookResgate` (TRANSFER_DONE).
+5. **Resgate clube** — substituir entry PROVISIONAL por passivo próprio (`naturezaClube='QUITACAO_PASSIVO_TOKEN'`).
+6. **Cron de transição** `PROVISIONAL → CONFIRMADO` (relatório GAP-MAP item 9).
+7. **Reclassificar todas as entries M39** com tag `EMISSAO_ADMIN_LOTE` (audit + migration de dados).
+
+**Bloqueio temporal:** sprint depende de **D3 Modelo C** (preço de custo × venda do token) — se cooperativa tiver 2 preços distintos, o template F2 (compra paga) precisa saber qual usar pra D Caixa. Sem D3 resolvido, qualquer correção F2 é parcial.
+
+**Status:** ABERTO. Catalogado pela Sprint M39 conforme spec aprovada Luciano 16/06. Tratamento conjunto na sprint contábil dedicada futura.
+
 ### D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE — `convenios.service.ts:307` (update) e `:425` (remove) chamam `findOne(id)` sem `cooperativaId` — IDOR cross-tenant write/delete por admin
 
 **Severidade:** P2 — bloqueia onboarding da 2ª cooperativa real. Em sistema mono-tenant atual (CoopereBR) o risco é teórico (admin só consegue manipular IDs que vê na própria UI). Quando entrar 2ª coop (Sinergia ou outra), admin de A pode adivinhar `convenioId` de B (UUID ou número sequencial `CV-YYYY-NNNN`) e bater no endpoint admin de update/remove → muda/encerra convênio de outro tenant.
