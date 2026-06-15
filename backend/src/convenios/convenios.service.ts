@@ -508,8 +508,20 @@ export class ConveniosService {
   // ─── Portal do Conveniado ─────────────────────────────────────────────────
 
   async meusConvenios(cooperadoId: string) {
+    // Bug fix 15/06/2026 (Track B.2): cooperadoId vem do JWT do portal.
+    // Pode ser tanto o REPRESENTANTE legado (`conveniadoId`) quanto a
+    // EMPRESA-PJ-PAGADORA novo (`pagadorCooperadoId`, D-FISCAL-2.4.1 Caso 1).
+    // OR cobre ambos sem quebrar convênios legados (representante PF antigo).
+    // Limita-se ao status ATIVO; demais filtros multi-tenant ficam a cargo
+    // do `cooperativaId` do JWT (controllers passam o filtro).
     return this.prisma.contratoConvenio.findMany({
-      where: { conveniadoId: cooperadoId, status: 'ATIVO' },
+      where: {
+        OR: [
+          { conveniadoId: cooperadoId },
+          { pagadorCooperadoId: cooperadoId },
+        ],
+        status: 'ATIVO',
+      },
       include: {
         _count: { select: { cooperados: { where: { ativo: true } } } },
       },
@@ -518,8 +530,16 @@ export class ConveniosService {
   }
 
   async dashboardConveniado(convenioId: string, cooperadoId: string) {
+    // Bug fix 15/06/2026 (Track B.2): mesmo padrão do meusConvenios — aceita
+    // pagador OU representante (cooperadoId do JWT pode ser qualquer um).
     const convenio = await this.prisma.contratoConvenio.findFirst({
-      where: { id: convenioId, conveniadoId: cooperadoId },
+      where: {
+        id: convenioId,
+        OR: [
+          { conveniadoId: cooperadoId },
+          { pagadorCooperadoId: cooperadoId },
+        ],
+      },
       include: {
         cooperados: {
           where: { ativo: true },
