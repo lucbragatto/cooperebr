@@ -698,6 +698,12 @@ export class CooperTokenController {
   @Roles(ADMIN, SUPER_ADMIN, OPERADOR, AGREGADOR)
   @Post('parceiro/enviar')
   async enviarTokens(@Req() req: any, @Body() body: EnviarTokensDto) {
+    // M39 (16/06/2026): o RAMO admin deste endpoint chama
+    // enviarTokensAdmin (@deprecated). UI já redirecionada pro novo
+    // POST /cooper-token/admin/emitir-lote (Bloco 5 M39). Endpoint
+    // mantido por COMPAT do caminho cooperado→cooperado (com PIN) e
+    // de eventuais callers externos legados. Avaliar remoção do ramo
+    // admin quando logs ENVIO_ADMIN ficarem 30 dias sem nova entry.
     const cooperativaId = req.user?.cooperativaId;
     const remetenteCooperadoId = req.user?.cooperadoId;
     const perfil = req.user?.perfil;

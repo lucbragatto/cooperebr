@@ -1157,6 +1157,26 @@ export class CooperTokenService {
   /**
    * F4 Bloco C (12/06/2026) — Envio admin (crédito direto, sem débito).
    *
+   * @deprecated M39 (16/06/2026) — substituído por `emitirLoteAdmin` (POST
+   *   /cooper-token/admin/emitir-lote). Razões:
+   *   1. Single-target → "1 por 1" inviável pra emissão em lote real.
+   *   2. Reusa `creditar()` que dispara COOPER_TOKEN_EVENTS.EMITIDO →
+   *      handleEmitido → `lancarEmissaoFaturaCheia` (template contábil
+   *      ERRADO — "D Custo Desconto Concedido" em vez de "D Despesa de
+   *      Bonificação"). `emitirLoteAdmin` bypassa o evento e chama
+   *      `lancarEmissaoAdminLote` direto (D 5.1.03 / C 5.1.02).
+   *   3. Tipo fixo `BONUS_INDICACAO` (MLM — classificação fiscal errada).
+   *      `emitirLoteAdmin` usa `BONIFICACAO_ADMIN` semanticamente correto.
+   *
+   * Endpoint `POST /cooper-token/parceiro/enviar` ainda existe pra COMPAT
+   * porque também roteia pro caminho cooperado→cooperado (`enviarTokens`
+   * com PIN). Mas o ramo admin desse endpoint (que chega aqui) é
+   * @deprecated — UI já redirecionada (Bloco 5 M39).
+   *
+   * NÃO REMOVER ainda. Specs F4-C/C1 continuam testando este método em
+   * isolamento. Remoção quando confirmado zero callers de produção
+   * (logs ENVIO_ADMIN sem nova entry por 30 dias).
+   *
    * Caminho ADMIN/OPERADOR/SUPER_ADMIN/AGREGADOR do controller `parceiro/enviar`
    * quando o user NÃO tem `cooperadoId` próprio (não pode debitar saldo
    * pessoal). Substitui a chamada direta a `creditar()` do controller pra
@@ -1173,6 +1193,7 @@ export class CooperTokenService {
    * audit fica no `CooperTokenLedger` que `creditar` produz; jti via
    * TokenTransacao só pra paths com pagador real (cooperado→cooperado).
    */
+  /** @deprecated M39 — usar emitirLoteAdmin. Ver JSDoc acima. */
   async enviarTokensAdmin(params: {
     destinatarioCooperadoId: string;
     cooperativaId: string;
