@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Coins, Search, Send, Loader2 } from 'lucide-react';
+import { Coins, Search, Send, Loader2, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 interface Cooperado {
   id: string;
@@ -138,6 +139,15 @@ export default function EnviarTokensPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube.
+          Card faltante achado pelo Luciano pós-commit (sprint Higiene moveu
+          a tela de /parceiro/enviar-tokens e o original não tinha o botão). */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Enviar Tokens</h1>
         <p className="text-sm text-gray-500 mt-1">
