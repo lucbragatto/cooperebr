@@ -10,12 +10,15 @@ export class ConveniosPortalController {
   @Roles(PerfilUsuario.COOPERADO, PerfilUsuario.ADMIN, PerfilUsuario.SUPER_ADMIN)
   @Get('meus')
   meusConvenios(@Req() req: any) {
-    return this.conveniosService.meusConvenios(req.user.cooperadoId);
+    // Bug fix 15/06/2026 (Track B.2 — reviewer P1): passar `cooperativaId`
+    // explícito pro service isolar cross-tenant. SUPER_ADMIN puro tem
+    // cooperativaId=null e o service retorna [] defensivamente.
+    return this.conveniosService.meusConvenios(req.user.cooperadoId, req.user.cooperativaId ?? null);
   }
 
   @Roles(PerfilUsuario.COOPERADO, PerfilUsuario.ADMIN, PerfilUsuario.SUPER_ADMIN)
   @Get('meus/:id/dashboard')
   dashboardConveniado(@Param('id') id: string, @Req() req: any) {
-    return this.conveniosService.dashboardConveniado(id, req.user.cooperadoId);
+    return this.conveniosService.dashboardConveniado(id, req.user.cooperadoId, req.user.cooperativaId ?? null);
   }
 }

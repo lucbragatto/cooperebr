@@ -507,15 +507,24 @@ export class ConveniosService {
 
   // ─── Portal do Conveniado ─────────────────────────────────────────────────
 
-  async meusConvenios(cooperadoId: string) {
+  async meusConvenios(cooperadoId: string, cooperativaId: string | null) {
     // Bug fix 15/06/2026 (Track B.2): cooperadoId vem do JWT do portal.
     // Pode ser tanto o REPRESENTANTE legado (`conveniadoId`) quanto a
     // EMPRESA-PJ-PAGADORA novo (`pagadorCooperadoId`, D-FISCAL-2.4.1 Caso 1).
     // OR cobre ambos sem quebrar convênios legados (representante PF antigo).
-    // Limita-se ao status ATIVO; demais filtros multi-tenant ficam a cargo
-    // do `cooperativaId` do JWT (controllers passam o filtro).
+    //
+    // Reviewer P1 (15/06/2026 Track B.2): `cooperativaId` precisa entrar
+    // explicitamente no where pra isolar cross-tenant — em particular o
+    // SUPER_ADMIN tem `cooperativaId=null` no JWT e a query sem filtro
+    // devolveria convênios de todos os tenants. Quando `cooperativaId`
+    // é null (super-admin puro), o caller é responsável por validar acesso
+    // ou o método retorna `[]` defensivamente.
+    if (!cooperativaId) {
+      return [];
+    }
     return this.prisma.contratoConvenio.findMany({
       where: {
+        cooperativaId,
         OR: [
           { conveniadoId: cooperadoId },
           { pagadorCooperadoId: cooperadoId },
@@ -529,12 +538,17 @@ export class ConveniosService {
     });
   }
 
-  async dashboardConveniado(convenioId: string, cooperadoId: string) {
+  async dashboardConveniado(convenioId: string, cooperadoId: string, cooperativaId: string | null) {
     // Bug fix 15/06/2026 (Track B.2): mesmo padrão do meusConvenios — aceita
-    // pagador OU representante (cooperadoId do JWT pode ser qualquer um).
+    // pagador OU representante (cooperadoId do JWT pode ser qualquer um) +
+    // filtro `cooperativaId` explícito anti-IDOR cross-tenant (reviewer P1).
+    if (!cooperativaId) {
+      throw new NotFoundException('Convênio não encontrado ou você não é o conveniado');
+    }
     const convenio = await this.prisma.contratoConvenio.findFirst({
       where: {
         id: convenioId,
+        cooperativaId,
         OR: [
           { conveniadoId: cooperadoId },
           { pagadorCooperadoId: cooperadoId },
