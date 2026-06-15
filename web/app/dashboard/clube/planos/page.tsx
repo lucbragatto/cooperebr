@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Gift, Plus, Edit2, AlertCircle } from 'lucide-react';
+import { Gift, Plus, Edit2, AlertCircle, ArrowLeft } from 'lucide-react';
 import api from '@/lib/api';
 
 interface PlanoClube {
@@ -47,6 +47,13 @@ export default function PlanosClubePage() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">

@@ -16,8 +16,9 @@ import {
 } from '@/components/ui/dialog';
 import {
   Gift, Users, Settings, BarChart3, Plus, Trash2, Download, Loader2, ChevronRight,
-  Send, AlertTriangle, CheckCircle, UserPlus,
+  Send, AlertTriangle, CheckCircle, UserPlus, ArrowLeft,
 } from 'lucide-react';
+import Link from 'next/link';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -680,6 +681,13 @@ export default function IndicacoesPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block mb-2">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
         <div className="flex items-center gap-3">
           <Gift className="h-6 w-6 text-green-600" />

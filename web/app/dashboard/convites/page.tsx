@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import {
-  UserPlus, Clock, CheckCircle, XCircle, Send, Settings, Loader2, ChevronLeft, ChevronRight,
+  UserPlus, Clock, CheckCircle, XCircle, Send, Settings, Loader2, ChevronLeft, ChevronRight, ArrowLeft,
 } from 'lucide-react';
+import Link from 'next/link';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -136,6 +137,13 @@ export default function ConvitesDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Sprint Clube P1 — Fatia A v2 polish (15/06/2026): Voltar ao Clube. */}
+      <Link href="/dashboard/clube" className="inline-block">
+        <Button variant="ghost" size="sm">
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar ao Clube
+        </Button>
+      </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Convites de Indicacao</h1>
         <Button
