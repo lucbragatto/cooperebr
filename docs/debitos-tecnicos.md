@@ -347,6 +347,78 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE — `convenios.service.ts:307` (update) e `:425` (remove) chamam `findOne(id)` sem `cooperativaId` — IDOR cross-tenant write/delete por admin
+
+**Severidade:** P2 — bloqueia onboarding da 2ª cooperativa real. Em sistema mono-tenant atual (CoopereBR) o risco é teórico (admin só consegue manipular IDs que vê na própria UI). Quando entrar 2ª coop (Sinergia ou outra), admin de A pode adivinhar `convenioId` de B (UUID ou número sequencial `CV-YYYY-NNNN`) e bater no endpoint admin de update/remove → muda/encerra convênio de outro tenant.
+
+**Origem:** Achado do `cooperebr-multitenant-reviewer` durante Track B.2 (15/06/2026) — flagado como **P2 colateral pré-existente**, fora do escopo do fix Santi. Confirma o R2 da análise de IDOR sistêmico de 15/06.
+
+**Onde (confirmado via leitura direta):**
+
+- **`backend/src/convenios/convenios.service.ts:307-403`** (`update(id: string, dto: UpdateConvenioDto)`):
+  - Linha 308: `const convenio = await this.findOne(id);` — `findOne` busca por `where: { id }` sem cooperativaId (line 285).
+  - Linha 400-403: `prisma.contratoConvenio.update({ where: { id }, data })` — update direto por ID sem filtro tenant.
+- **`backend/src/convenios/convenios.service.ts:425-438`** (`remove(id: string)`):
+  - Linha 426: `await this.findOne(id)` — mesmo padrão.
+  - Linha 427-434: `convenioCooperado.updateMany({ where: { convenioId: id, ativo: true } })` — desliga membros sem checar tenant.
+  - Linha 435-438: `prisma.contratoConvenio.update({ where: { id }, data: { status: 'ENCERRADO' } })` — encerra convênio sem filtro tenant.
+
+**Controllers expostos:**
+- `PATCH /convenios/:id` (assumido — verificar `convenios.controller.ts`).
+- `DELETE /convenios/:id` (idem).
+- Roles permitidas: `ADMIN`, `SUPER_ADMIN`.
+
+**Cenário de ataque (multi-tenant):**
+1. Admin de tenant A obtém ID de convênio de tenant B (UUID via vazamento, número sequencial adivinhado, ou exfiltração via D-FISCAL análise externa).
+2. `PATCH /convenios/{convenioId-tenant-B}` com body modificando `status: 'ENCERRADO'` ou alterando `descontoMembrosAtual: 0`.
+3. Backend não valida tenant — aplica a mudança no convênio de B.
+4. Membros do convênio B são desligados / desconto deles é zerado.
+
+**Mitigação atual (parcial):**
+- `cooperativaId` está no JWT mas é IGNORADO pelos métodos.
+- `cooperativaId` está disponível no controller via `req.user.cooperativaId` mas NÃO é passado pro service.
+- Sistema é mono-tenant em produção (só CoopereBR ativa) → admin de A não consegue ver IDs de B (não há B).
+
+**Fix proposto (sprint Hardening Mass-Write — junto com M1-M5):**
+
+Espelhar padrão Track B.2 — service recebe `cooperativaId` como parâmetro adicional, controller passa do JWT:
+
+```ts
+// service
+async update(id: string, cooperativaId: string, dto: UpdateConvenioDto) {
+  const convenio = await this.findOne(id, cooperativaId);  // findOne já filtra
+  // ... validações ...
+  return this.prisma.contratoConvenio.update({
+    where: { id, cooperativaId },  // Prisma updateMany ou where compound
+    data,
+  });
+}
+
+async remove(id: string, cooperativaId: string) {
+  await this.findOne(id, cooperativaId);
+  // updateMany já é seguro com cooperativaId
+  await this.prisma.convenioCooperado.updateMany({
+    where: { convenioId: id, ativo: true, convenio: { cooperativaId } },
+    // ...
+  });
+  // Pra update single-row com filtro composto, usar updateMany
+  await this.prisma.contratoConvenio.updateMany({
+    where: { id, cooperativaId },
+    data: { status: 'ENCERRADO' },
+  });
+}
+```
+
+Atenção: `prisma.update({ where })` exige unique constraint — usar `updateMany` quando o where é composto (id + cooperativaId).
+
+Também: ampliar `findOne` pra aceitar `cooperativaId` (atualmente em :285 não filtra) — provavelmente afeta outros callers.
+
+**Gate temporal:** corrigir ANTES do onboarding da 2ª cooperativa real. Entra no **Sprint Hardening Mass-Write SUPER_ADMIN P2** já enfileirado (carry-over M35), junto com os M1-M5 catalogados.
+
+**Estimativa:** ~2-3h (service + controller + ajustes em findOne + specs novos).
+
+**Status:** ABERTO. Pré-requisito Sinergia (2ª coop). Não-bloqueante pra produção mono-tenant.
+
 ### D-novo-EMAIL-IMAP-SSL-VERIFY — `tls.rejectUnauthorized:false` incondicional no IMAP (workaround Kaspersky no dev pode vazar pra produção)
 
 **Severidade:** P2 — risco MITM no pipeline IMAP se subir pra produção com a flag aberta. No dev é mitigação legítima (antivírus injeta cert intermediário), mas precisa ser gated por ambiente OU substituído por cert próprio antes de qualquer deploy real.
