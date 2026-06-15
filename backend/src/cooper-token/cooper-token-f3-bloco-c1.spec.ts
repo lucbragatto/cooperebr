@@ -84,7 +84,10 @@ function setup(opts: {
     contratoConvenio: {
       findFirst: jest.fn().mockResolvedValue({
         id: CONV,
-        conveniadoId: EMPRESA,
+        // Bug fix 15/06/2026 (blocker Santi) — alinhado ao novo guard:
+        // service compara contra pagadorCooperadoId (D-FISCAL-2.4.1),
+        // não conveniadoId (legado representante).
+        pagadorCooperadoId: EMPRESA,
         status: 'ATIVO',
         empresaNome: 'Santi',
       }),

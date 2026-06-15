@@ -1581,6 +1581,36 @@ Subpastas detectadas: agregadores, clube, clube-vantagens, cobrancas, condominio
 
 ## P3 — Cosmético / quality-of-life
 
+### D-novo-CONVENIO-CONVENIADO-LEGADO — `ContratoConvenio.conveniadoId` (+ 4 campos derivados) é pré-D-FISCAL-2.4.1, deprecar após audit
+
+**Severidade:** P3 — housekeeping. Não afeta funcionalidade (depois do fix de 15/06/2026, todos os guards corretos usam `pagadorCooperadoId`).
+
+**Origem:** Bug Santi 403 (15/06/2026). Guards do `cooper-token.service.ts` (`distribuirTokens` :1369 e `listarMembrosDisponiveisPraDistribuicao` :1782) comparavam `convenio.conveniadoId` contra o `cooperadoId` do JWT empresa_conveniada — mas o JWT carrega `pagadorCooperadoId` (auth.service.ts:545-578). Causa raiz: `conveniadoId` é campo legado de "representante/contato", `pagadorCooperadoId` é o novo (D-FISCAL-2.4.1 Caso 1, 01/06/2026) FK pro Cooperado PJ pagador. Schema marca o legado mas mantém o campo (compat).
+
+**Onde:** `backend/prisma/schema.prisma:1525-1535` (ContratoConvenio):
+- `conveniadoId` String?
+- `conveniadoNome` String?
+- `conveniadoCpf` String?
+- `conveniadoEmail` String?
+- `conveniadoTelefone` String?
+- relation `Cooperado.@relation("ConveniadoConvenio")`
+
+**Plano (após audit de uso real):**
+1. Grep amplo dos 5 campos em `backend/src/**` + `web/app/**` — listar usos.
+2. Pra cada uso: confirmar se é dado real (representante distinto do pagador) ou redundante com `pagadorCooperadoId`.
+3. Se zero usos reais: drop dos 5 campos via migration aditiva.
+4. Se houver usos reais (ex: cadastro mantém "contato administrativo" separado do pagador): renomear pra clarificar (`contatoAdminNome` etc.) e blindar com testes.
+
+**Usos identificados (parciais, achados pelo multitenant-reviewer 15/06/2026):**
+
+- **`backend/src/convenios/convenios.service.ts:511-518`** (`meusConvenios`) — filtra `where: { conveniadoId: cooperadoId, status: 'ATIVO' }`. Empresa_conveniada com `cooperadoId = pagadorCooperadoId` NUNCA encontra seus próprios convênios via esse endpoint (conveniadoId quase sempre null nos convênios D-FISCAL-2.4.1). **Falha-fechada** (esconde dados próprios), não IDOR. Inconsistência simétrica ao bug Santi 403 corrigido em 15/06.
+- **`backend/src/convenios/convenios.service.ts:521-538`** (`dashboardConveniado`) — `findFirst({ where: { id, conveniadoId: cooperadoId } })`. Mesmo problema.
+- **Outros usos legítimos** preservados intencionalmente: `handleConvenioBeneficioTokens` event handler (Sprint 9B emit pro "representante histórico" — fluxo diferente).
+
+**Fix sugerido (sprint housekeeping):** trocar `conveniadoId: cooperadoId` → `pagadorCooperadoId: cooperadoId` OR/AND união `OR: [{conveniadoId: cooperadoId}, {pagadorCooperadoId: cooperadoId}]` se houver convênios legados realmente preenchidos. Depende do audit do passo 1.
+
+**Status:** ABERTO. Audit + decisão de drop/renomear/migrar adiados pra sprint de housekeeping de schema (não-bloqueante — endpoints atingidos são portal de leitura, não escrita).
+
 ### D-novo-CONVITE-ROTA-CONSOLIDAR — consolidar rotas /convite/[codigo] (MLM) + /convite-convenio/[token] (custeio)
 
 **Severidade:** P3 (UX — usuário lê o link sem perceber a diferença; não-bloqueante)
