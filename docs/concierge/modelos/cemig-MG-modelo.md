@@ -111,14 +111,40 @@ Sem DRE/ERE em Grupo B.
 
 ## 3. Estado das teses tributárias em CEMIG/MG (jun/2026)
 
-**CEMIG aparenta estar conforme com as 3 principais teses majoritárias modernas:**
+**CEMIG está conforme com as 3 principais teses majoritárias modernas:**
 - ✅ Tema 69 — exclui ICMS da base PIS/COFINS
 - ✅ Tese 3 — não tributa federal sobre energia compensada SCEE
 - ✅ Tese 6 — não cobra ICMS sobre TUSD/TE na compensação SCEE
 
-**Comparação com EDP_ES** (caso Concierge CoopereBR):
-- EDP_ES aparentemente cobra → indébito alto
-- CEMIG não cobra → indébito baixo
+**Reanálise 14/06/2026 noite — sob o prisma do patch Tese 3:**
+
+Após descobrir que o detector original tinha bug (não pegava PIS/COFINS
+cobrado agregado na lateral "Reservado ao Fisco" sem distribuição por
+rubrica), refizemos o teste em CEMIG.
+
+**Resultado matemático:**
+- PIS+COFINS cobrado: R$ 6,52
+- Base correta (líquido SCEE − ICMS): R$ 93,29
+- PIS+COFINS legítimo: 93,29 × 7,07% ≈ R$ 6,60
+- **Indébito: R$ −0,08 (NEGATIVO) → CONFORME** ✓
+
+A CEMIG usa técnica diferente da ELFSM mas com mesmo efeito:
+- **ELFSM:** linha de injeção com PIS/COFINS NEGATIVO cancelando o positivo
+- **CEMIG:** par "Energia SCEE Isenta" (base 0) + "Energia compensada GD" (valor negativo)
+- **Efeito final em ambas:** PIS/COFINS só incide sobre kWh efetivamente vendidos
+
+**Argumento jurídico fortalecido em 14/06:** dois precedentes operacionais
+diferentes (ELFSM/ES e CEMIG/MG) demonstram que a aplicação correta da
+Tese 3 é tecnicamente viável e operacionalmente comum. EDP_ES está
+ISOLADA cobrando PIS/COFINS sobre fornecida bruta.
+
+**Comparação Concierge:**
+
+| Cliente | Distribuidora | Indébito Tese 3 | Concierge atrativo? |
+|---|---|---:|---|
+| Marco Aurelio | CEMIG | R$ 0,00 | ❌ |
+| Luciano | EDP_ES | **R$ 57,99/mês** | ✅ |
+| (futuro) | ELFSM | R$ 0,00 | ❌ |
 
 ## 4. Onde olhar pra achar indébito em CEMIG
 

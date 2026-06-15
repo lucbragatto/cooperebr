@@ -51,6 +51,19 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
       }
     }
 
+    // Patch 14/06/2026 noite — Pergunta destravadora do Luciano:
+    // EDP_ES NAO distribui PIS/COFINS por rubrica (cobra agregado na
+    // lateral "Reservado ao Fisco"). Se as rubricas vierem com PIS/COFINS=0
+    // mas a fatura declarar `basePisCofinsDeclarada > 0`, usar a base
+    // declarada x aliquota como proxy do que EDP esta efetivamente cobrando.
+    // Isso pega o cenario EDP_ES sem alterar o cenario ELFSM (que distribui).
+    let metodoDeteccao: 'rubricas-distribuidas' | 'base-declarada-fallback' =
+      'rubricas-distribuidas';
+    if (pisCofinsCobradoEnergetico <= 0 && t.basePisCofinsDeclarada > 0) {
+      pisCofinsCobradoEnergetico = t.basePisCofinsDeclarada * aliqTotal;
+      metodoDeteccao = 'base-declarada-fallback';
+    }
+
     if (pisCofinsCobradoEnergetico <= 0) {
       return { detector: this.codigo, padrao: null };
     }
@@ -96,13 +109,14 @@ export class DetectorTese3PisCofinsSobreScee implements DetectorPadraoTributario
           risco: 'MEDIO',
         },
         detalhe:
+          `Metodo deteccao: ${metodoDeteccao} | ` +
           `Valor energetico bruto (TUSD+TE fornecida): R$ ${this.somarRubricas(fatura, 'TUSD', 'TE').toFixed(2)} | ` +
           `Valor energetico liquido pos-SCEE: R$ ${valorEnergeticoLiquido.toFixed(2)} | ` +
           `ICMS sobre liquido: R$ ${icmsEnergeticoLiquido.toFixed(2)} | ` +
           `Base correta (liquido sem ICMS): R$ ${baseCorreta.toFixed(2)} | ` +
           `Aliq PIS+COFINS: ${(aliqTotal * 100).toFixed(2)}% | ` +
           `PIS+COFINS legitimo: R$ ${pisCofinsLegitimo.toFixed(2)} | ` +
-          `PIS+COFINS cobrado sobre energetico (liquido): R$ ${pisCofinsCobradoEnergetico.toFixed(2)} | ` +
+          `PIS+COFINS cobrado (efetivo): R$ ${pisCofinsCobradoEnergetico.toFixed(2)} | ` +
           `Indebito mensal: R$ ${indebito.toFixed(2)} | ` +
           `RATIFICACAO ELFSM: concessionaria sob mesma lei ES aplica SCEE em PIS/COFINS - ` +
           `EDP nao tem defesa de impossibilidade tecnica. Inversao de onus argumentativo.`,

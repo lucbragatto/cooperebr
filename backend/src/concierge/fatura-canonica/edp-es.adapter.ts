@@ -100,6 +100,34 @@ const PADROES_EDP_ES: PadraoRubrica[] = [
     tipo: 'CONTRIB_ILUM_PUBLICA',
   },
 
+  // ─── Patches 14/06/2026 noite — Fase 2 Concierge: 4 categorias de rubricas
+  //     que apareceram nas faturas EDP_ES reais e nao estavam no regex original.
+  //     Todas viram OUTROS (nao-energeticas, nao entram no detector Tese 3/6).
+
+  // Multa por atraso (Multa Ref.: Mar/25, Multa 2%, etc)
+  {
+    regex: /^Multa\b|Multa\s+Ref\b/i,
+    tipo: 'OUTROS',
+  },
+
+  // Juros de mora por atraso (Juros de Mora Ref.: Abr/25)
+  {
+    regex: /^Juros\b|Juros\s+de\s+Mora/i,
+    tipo: 'OUTROS',
+  },
+
+  // DIC - Duracao de Interrupcao Continua (compensacao ANEEL por qualidade)
+  {
+    regex: /^DIC\b|Dura[cç][aã]o\s+de\s+Interrup/i,
+    tipo: 'OUTROS',
+  },
+
+  // Linhas literais PIS / COFINS direto na tabela (algumas faturas)
+  {
+    regex: /^PIS\s*$|^COFINS\s*$|PIS\s*[\/|]\s*COFINS/i,
+    tipo: 'OUTROS',
+  },
+
   // ─── TUSD fornecida (mais generico - precisa vir depois de TUSD_G, Inj) ───
   {
     regex: /^TUSD\b/i,

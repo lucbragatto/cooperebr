@@ -69,6 +69,27 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-14 noite (Cowork — M36 completo: Pipeline OCR + Bug Tese 3 + 3 detectores novos + R$ 636k mapeado)
+
+**Sessão Cowork maratona ~7h (manhã+tarde+noite).** Entregou:
+- Pipeline IMAP→OCR destravado (Kaspersky/SSL workaround) — universo 9→48
+- **Bug P1 detector Tese 3** descoberto via pergunta do Luciano ("e a cobrança de PIS/COFINS sobre energia compensada?") e corrigido com patch `base-declarada-fallback` em `detector-tese3-pis-sobre-scee.ts` — caso Luciano R$ 0 → **R$ 57,98/mês**
+- **3 detectores novos** (Tese 4 GERAR + CDE Escassez Hídrica + ICMS Gross-Up) + refinamento Luciano filtrando Tese 4 só pra UCs geradoras (TUSD_G presente)
+- **47 PDFs processados** (pasta ex_clientes + atuais): **R$ 5.959/mês = R$ 446.933 em 60m+SELIC**. Top: boa praça R$ 2.541, LOJA 09 R$ 744, LOJA 10 R$ 692. **Ex-clientes valem 4× mais que atuais.**
+- 6 faturas analisadas individualmente: Consorcio Sinergia Ambiental (parceiro CoopereBR + cliente SISGD) com R$ 1.669/mês = R$ 125k em 60m
+- Modelo CEMIG/MG catalogado (conformidade)
+- Bug cadastro detectado: Leonardo Capucho com fatura EXFISHES (R$ 2.077/mês)
+
+**TOTAL CATALOGADO: ~R$ 8.485/mês = R$ 636.369 em 60m+SELIC.**
+
+**Frase de retomada COMANDANTE pra próximo Code:**
+
+> "Próximo passo: Multi-adapter no script `processar-pasta-pdfs-concierge.ts` — substituir `EdpEsFaturaAdapter` por `FaturaAdapterRegistry.resolver(distribuidora)` pra destravar os 17 parse-falhou da pasta (principalmente ELFSM — instalações 590xxx/ESCE_BT). Pode destravar R$ 100-200k de indébito adicional. Em paralelo: implementar `detector-demanda-nao-utilizada.ts` (vista no Consorcio Sinergia: R$ 418,33 PIS/COFINS sobre Demanda Não Utilizada com base ICMS=0 — jurisprudência ANEEL/STJ favorável). Smoke E2E: rodar `processar-pasta-pdfs-concierge.ts --pasta=...` novamente, esperar todos 47 OK com indébito total > R$ 7k/mês."
+
+**Histórico de sessões Cowork anteriores:**
+
+---
+
 ## ONDE PARAMOS — 2026-06-14 tarde (Cowork — M36 Pipeline IMAP→OCR DESTRAVADO + Caso Luciano Concierge EDP_ES + Modelo CEMIG/MG)
 
 **Sessão Cowork maratona ~5h tarde.** Destravou pipeline IMAP→OCR (parado 6 meses), processou 37 novas FaturaProcessada (universo 9→48), identificou Luciano como cooperado real com indébito estimado ~R$ 154/mês (~R$ 11.340 em 60m+SELIC), catalogou modelo CEMIG/MG (conformidade), revelou 5 débitos técnicos.

@@ -8,6 +8,9 @@ import { DetectorTema69Stricto } from './detector-tema69-stricto';
 import { DetectorTese3PisCofinsSobreScee } from './detector-tese3-pis-sobre-scee';
 import { DetectorTese2IcmsTusdGeracao } from './detector-tese2-icms-tusd-g';
 import { DetectorTese6IcmsTusdTeSobreScee } from './detector-tese6-icms-scee';
+import { DetectorTese4Gerar } from './detector-tese4-gerar';
+import { DetectorCdeEscassezHidrica } from './detector-cde-escassez-hidrica';
+import { DetectorIcmsGrossUp } from './detector-icms-gross-up';
 
 /**
  * Resultado consolidado de TODOS os detectores rodando sobre uma fatura.
@@ -45,8 +48,11 @@ export class DetectoresRegistry {
     tese3: DetectorTese3PisCofinsSobreScee,
     tese2: DetectorTese2IcmsTusdGeracao,
     tese6: DetectorTese6IcmsTusdTeSobreScee,
+    tese4: DetectorTese4Gerar,
+    cde: DetectorCdeEscassezHidrica,
+    grossUp: DetectorIcmsGrossUp,
   ) {
-    this.detectores = [tema69, tese3, tese2, tese6];
+    this.detectores = [tema69, tese3, tese2, tese6, tese4, cde, grossUp];
   }
 
   /**

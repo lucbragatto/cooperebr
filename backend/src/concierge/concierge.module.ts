@@ -10,6 +10,9 @@ import { DetectorTema69Stricto } from './detectores/detector-tema69-stricto';
 import { DetectorTese3PisCofinsSobreScee } from './detectores/detector-tese3-pis-sobre-scee';
 import { DetectorTese2IcmsTusdGeracao } from './detectores/detector-tese2-icms-tusd-g';
 import { DetectorTese6IcmsTusdTeSobreScee } from './detectores/detector-tese6-icms-scee';
+import { DetectorTese4Gerar } from './detectores/detector-tese4-gerar';
+import { DetectorCdeEscassezHidrica } from './detectores/detector-cde-escassez-hidrica';
+import { DetectorIcmsGrossUp } from './detectores/detector-icms-gross-up';
 import { DetectoresRegistry } from './detectores/detectores.registry';
 
 /**
@@ -36,6 +39,9 @@ import { DetectoresRegistry } from './detectores/detectores.registry';
     DetectorTese3PisCofinsSobreScee,
     DetectorTese2IcmsTusdGeracao,
     DetectorTese6IcmsTusdTeSobreScee,
+    DetectorTese4Gerar,
+    DetectorCdeEscassezHidrica,
+    DetectorIcmsGrossUp,
     DetectoresRegistry,
   ],
   controllers: [ConciergeController],
