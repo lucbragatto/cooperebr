@@ -1521,7 +1521,14 @@ model ContratoConvenio {
   administradoraId String?
   administradora   Administradora? @relation(fields: [administradoraId], references: [id])
 
-  // ── Novos campos: Conveniado (representante) ──
+  // ── Conveniado (representante) — LEGADO ──
+  // ⚠️ Pré-D-FISCAL-2.4.1. Conceito legado de "representante/contato" do
+  // convênio. Raramente preenchido na prática. NÃO usar como guard de
+  // identidade de pagador — use `pagadorCooperadoId` abaixo (introduzido
+  // 01/06/2026 pelo Caso 1, semanticamente correto pra "empresa que paga").
+  // Bug fix 15/06/2026 (Santi 403): guards do cooper-token.service.ts
+  // confundiam os 2 campos. Débito de housekeeping P3: deprecar/remover
+  // após audit de uso real. Ver D-novo-CONVENIO-CONVENIADO-LEGADO.
   conveniadoId       String?
   conveniado         Cooperado? @relation("ConveniadoConvenio", fields: [conveniadoId], references: [id])
   conveniadoNome     String?

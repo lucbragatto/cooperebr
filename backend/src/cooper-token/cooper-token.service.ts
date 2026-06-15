@@ -1355,10 +1355,17 @@ export class CooperTokenService {
       );
     }
 
-    // ── Guard 3: convênio existe + empresa é a `conveniada` ──
+    // ── Guard 3: convênio existe + empresa é a pagadora ──
+    // Bug fix 15/06/2026 (blocker Santi): JWT empresa_conveniada injeta
+    // `cooperadoId = pagadorCooperadoId` (auth.service.ts:545-578). O guard
+    // antes comparava contra `convenio.conveniadoId` (campo legado
+    // "representante" — schema.prisma:1525, opcional, raramente preenchido).
+    // Caso 1 D-FISCAL-2.4.1 (01/06/2026) introduziu `pagadorCooperadoId`
+    // como a FK pro Cooperado PJ que paga — esse é o campo correto pro
+    // guard. `conveniadoId` permanece como débito P3 de housekeeping.
     const convenio = await this.prisma.contratoConvenio.findFirst({
       where: { id: convenioId, cooperativaId },
-      select: { id: true, conveniadoId: true, status: true, empresaNome: true },
+      select: { id: true, pagadorCooperadoId: true, status: true, empresaNome: true },
     });
     if (!convenio) {
       throw new NotFoundException('Convênio não encontrado.');
@@ -1366,9 +1373,9 @@ export class CooperTokenService {
     if (convenio.status !== 'ATIVO') {
       throw new BadRequestException(`Convênio status=${convenio.status}; só convênios ATIVO permitem distribuição.`);
     }
-    if (convenio.conveniadoId !== empresaCooperadoId) {
+    if (convenio.pagadorCooperadoId !== empresaCooperadoId) {
       throw new ForbiddenException(
-        'Apenas a empresa conveniada (representante) pode distribuir tokens nesse convênio.',
+        'Apenas a empresa pagadora do convênio pode distribuir tokens.',
       );
     }
 
@@ -1772,16 +1779,21 @@ export class CooperTokenService {
         id: true,
         numero: true,
         empresaNome: true,
-        conveniadoId: true,
+        // Bug fix 15/06/2026 (blocker Santi): trocado `conveniadoId` (legado
+        // representante) por `pagadorCooperadoId` (D-FISCAL-2.4.1, Caso 1 —
+        // FK Cooperado PJ pagador). JWT empresa_conveniada injeta
+        // pagadorCooperadoId como cooperadoId. Ver guard idêntico em
+        // distribuirTokens (linha ~1366).
+        pagadorCooperadoId: true,
         status: true,
       },
     });
     if (!convenio) {
       throw new NotFoundException('Convênio não encontrado.');
     }
-    if (convenio.conveniadoId !== empresaCooperadoId) {
+    if (convenio.pagadorCooperadoId !== empresaCooperadoId) {
       throw new ForbiddenException(
-        'Apenas a empresa conveniada (representante) pode listar membros pra distribuição.',
+        'Apenas a empresa pagadora do convênio pode listar membros pra distribuição.',
       );
     }
 

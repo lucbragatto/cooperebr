@@ -71,7 +71,10 @@ function setup(opts: SetupOpts = {}) {
 
   const convenio = opts.convenio ?? {
     id: CONVENIO_ID,
-    conveniadoId: EMPRESA_ID,
+    // Bug fix 15/06/2026 (blocker Santi) — guards do service agora usam
+    // pagadorCooperadoId (D-FISCAL-2.4.1, Caso 1) em vez do conveniadoId
+    // legado. Mock alinhado ao novo contrato.
+    pagadorCooperadoId: EMPRESA_ID,
     status: 'ATIVO',
     empresaNome: 'Santi',
   };
@@ -292,16 +295,20 @@ describe('F3 Bloco B — guards', () => {
 
   it('Convênio não-ATIVO → BadRequest', async () => {
     const { service, ids } = setup({
-      convenio: { id: 'conv-1', conveniadoId: 'empresa-pj-1', status: 'INATIVO', empresaNome: 'X' },
+      convenio: { id: 'conv-1', pagadorCooperadoId: 'empresa-pj-1', status: 'INATIVO', empresaNome: 'X' },
     });
     await expect(
       service.distribuirTokens(basePayload(ids)),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('Empresa não é a conveniada do convênio → Forbidden', async () => {
+  // Bug fix 15/06/2026 (blocker Santi) — isolamento entre empresas-pagadoras:
+  // se o JWT da empresa A tenta distribuir num convênio cujo pagadorCooperadoId
+  // é a empresa B, guard deve barrar com Forbidden. Reescrito (antes mockava
+  // conveniadoId — campo legado errado).
+  it('Empresa não é a pagadora do convênio (isolamento cross-empresa) → Forbidden', async () => {
     const { service, ids } = setup({
-      convenio: { id: 'conv-1', conveniadoId: 'OUTRA-EMPRESA', status: 'ATIVO', empresaNome: 'X' },
+      convenio: { id: 'conv-1', pagadorCooperadoId: 'OUTRA-EMPRESA-PAGADORA', status: 'ATIVO', empresaNome: 'X' },
     });
     await expect(
       service.distribuirTokens(basePayload(ids)),
