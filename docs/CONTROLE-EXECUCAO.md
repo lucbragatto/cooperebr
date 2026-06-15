@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-15 — M38 Fatia A v2 (CTK→CooperTokens + Voltar ao Clube) + Fix Santi 403 (Track B) + Portal Conveniada (Track B.2)**. **11 commits trabalho + 3 merges --no-ff no main** (`821a9dd..87ae6f7`). Fatia A v2 fechou nomenclatura em 12 spots + botão "Voltar ao Clube" em 11 telas do hub (Fatia A v1 stale descartada). Track B corrigiu bug crítico empresa_conveniada distribuir tokens (guard usava `conveniadoId` legado em vez de `pagadorCooperadoId`) — desbloqueio Santi em produção. Track B.2 corrigiu portal `meusConvenios + dashboardConveniado` (OR cobre legado+novo + `cooperativaId` explícito anti-IDOR). 2 rodadas do `multitenant-reviewer` no Track B + 2 no Track B.2 (1 bloqueio P1 fechado pré-merge). Smoke E2E real Santi 2/2 (distribuir) + 3/3 (portal) PASS. 3 débitos novos catalogados (D-novo-CONVENIO-CONVENIADO-LEGADO P3 expandido com audit dos 5 spots + D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE P2 + D-novo-CONVENIOS-PORTAL-SPECS P3). Sessão Cowork paralela: 3 relatórios novos (`ANALISE-CONVENIO-TOKEN-CLUBE`, `GAP-MAP-CONVENIO-MODELO-C`, `FLUXO-EMISSAO-TOKEN-CONVENIO`) — pré-requisito leitura próxima sessão. Detalhe: `docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md`.
+> Última atualização: **2026-06-16 — M39 Emissão Admin em Lote + Estorno COMPLETO** (Sprint Clube Unificado P1). **12 commits trabalho + 1 merge --no-ff** no main (`db3c545..d1f6a6d`). Substitui caminho admin single-target de `enviarTokensAdmin` (@deprecated, mantido por COMPAT do ramo cooperado→cooperado) por novo endpoint `POST /cooper-token/admin/emitir-lote` em lote via helper `executarMassWrite`. Schema delta aditivo: 2 enums novos (`BONIFICACAO_ADMIN` + `ESTORNO_BONIFICACAO_ADMIN`) + conta contábil `5.1.03 "Despesa de Bonificação CooperToken"`. 2 templates contábeis novos com **bypass intencional do `COOPER_TOKEN_EVENTS.EMITIDO`** pra não disparar o template errado da F1 lancarEmissaoFaturaCheia. Frontend `/dashboard/cooper-token/enviar` REDESENHADO em 2 etapas (seleção + confirmação) com filtro opcional por convênio + tabela editável + prévia COMPLETA antes do OTP. Tela nova `/dashboard/cooper-token/lotes-emitidos` com modal de estorno (confirmação dupla + motivo ≥10 chars + reversão atômica saldo+contábil+ledger ESTORNO). **2 rodadas de reviewers pesados** (financeiro-token bloqueou com 3 P1 + multitenant aprovou com 1 P2 → todos fixados pré-smoke). **Re-review do orquestrador pegou 2 P1 RESIDUAIS** (helper `:256` chumbado escapou do replace_all + guard de integridade ausente no estorno) → fixados antes de push. Smoke E2E real **PASS 6/6** com gate inegociável respeitado (1 token + estorno imediato, NUNCA emissão real Santi). Suite **311/311 verde** (cooper-token 286 + mass-write 25). **D-novo-EMISSAO-ADMIN-CONTABIL P2** catalogado pra sprint contábil dedicada futura (4 problemas pré-existentes no token-contábil: tipo conta `5.1.02` DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem `LancamentoCaixa`, depende de D3 Modelo C preço custo×venda). Detalhe: `docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md`.
+
+> Histórico: **2026-06-15 — M38 Fatia A v2 (CTK→CooperTokens + Voltar ao Clube) + Fix Santi 403 (Track B) + Portal Conveniada (Track B.2)**. **11 commits trabalho + 3 merges --no-ff no main** (`821a9dd..87ae6f7`). Fatia A v2 fechou nomenclatura em 12 spots + botão "Voltar ao Clube" em 11 telas do hub (Fatia A v1 stale descartada). Track B corrigiu bug crítico empresa_conveniada distribuir tokens (guard usava `conveniadoId` legado em vez de `pagadorCooperadoId`) — desbloqueio Santi em produção. Track B.2 corrigiu portal `meusConvenios + dashboardConveniado` (OR cobre legado+novo + `cooperativaId` explícito anti-IDOR). 2 rodadas do `multitenant-reviewer` no Track B + 2 no Track B.2 (1 bloqueio P1 fechado pré-merge). Smoke E2E real Santi 2/2 (distribuir) + 3/3 (portal) PASS. 3 débitos novos catalogados (D-novo-CONVENIO-CONVENIADO-LEGADO P3 expandido com audit dos 5 spots + D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE P2 + D-novo-CONVENIOS-PORTAL-SPECS P3). Sessão Cowork paralela: 3 relatórios novos (`ANALISE-CONVENIO-TOKEN-CLUBE`, `GAP-MAP-CONVENIO-MODELO-C`, `FLUXO-EMISSAO-TOKEN-CONVENIO`) — pré-requisito leitura próxima sessão. Detalhe: `docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md`.
 
 > Histórico: **2026-06-14 noite — M37 Sprint Higiene de Rotas COMPLETO (D-1171 fechado) + carona M36 mergeada**. Sessão Code maratona fechou Blocos A+B+C+D+E ponta-a-ponta em 4 commits trabalho + 1 commit débito + 1 merge `--no-ff` (`f85483f` no main): convergência `/parceiro/*` → `/dashboard/*` finalizada (19 telas-fantasma deletadas + 33 redirects 301 `permanent:true`), área nova `/estabelecimento/*` com guard `ehEstabelecimento` (3 telas movidas + layout próprio laranja + card de entrada em `/portal`), op admin "Enviar Tokens" reposicionada em `/dashboard/cooper-token/enviar` (card no hub `/dashboard/clube`), header renomeado pra distinguir `"Painel do Tenant — {nome}"` (super-admin) de `"Painel Administrativo — {nome}"` (admin do parceiro). P1 anti-IDOR aplicado em `cooperados.service.ts:46` (`meuPerfil` agora filtra `cooperativaId` no `OR email/CPF` — campo `ehEstabelecimento` lido desse perfil arma guard de `/estabelecimento`, não pode resolver tenant errado). `cooperebr-multitenant-reviewer` rodou em 2 rodadas (Bloco A + Bloco B+C+D); smoke validou os 7 redirects relevantes (308 = permanent equivalent) e a permissão de admin_parceiro (sidebar sem "Gestão Global", header correto). **D-1171 FECHADO.** Sessão paralela Cowork/M36 (pipeline IMAP→OCR destravado + caso Luciano Concierge EDP_ES + modelo CEMIG/MG) mergeada junto como carona — ressalva **D-novo-EMAIL-IMAP-SSL-VERIFY P2** catalogada antes do merge (`tls.rejectUnauthorized:false` incondicional em `email-monitor.service.ts` precisa ser gated por env OU substituído por cert próprio ANTES de qualquer deploy de produção, risco MITM no IMAP). Detalhe: `docs/sessoes/2026-06-14-higiene-rotas-blocos-B-E.md` + carona Cowork em `docs/sessoes/2026-06-14-pipeline-ocr-destravado-e-caso-luciano.md`.
 
@@ -58,6 +60,26 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-16 (Code — M39 Emissão Admin em Lote + Estorno COMPLETO)
+
+**Sessão Code maratona.** Sprint M39 entregue ponta-a-ponta em 12 commits + 1 merge `--no-ff` no main (`d1f6a6d`):
+
+1. **Backend (Blocos 1-3)** — schema delta aditivo (2 enums + conta `5.1.03`) + 4 métodos service (`emitirLoteAdmin`, `estornarEmissaoLote`, `listarLotesEmitidos`, `getLoteEmitido`) + 2 templates contábeis (`lancarEmissaoAdminLote` / `lancarEstornoEmissaoAdminLote`) com **bypass do evento contábil errado**. Anti-IDOR via re-validação server-side de cada `cooperadoId.cooperativaId`. Idempotência via helper `executarMassWrite` + tier ALTO sobre TOTAL com 1 OTP único. 4 endpoints REST.
+2. **Specs (Bloco 4)** — 20 specs M39 + 5 specs P3 anti-regressão + 1 spec P1-B guard de integridade = **311/311 verde** (cooper-token 286 + mass-write 25, zero regressão).
+3. **Frontend (Blocos 5-6)** — `/dashboard/cooper-token/enviar` redesenhado (2 etapas + filtro convênio + sem GET saldo + prévia COMPLETA antes do OTP) + tela nova `/dashboard/cooper-token/lotes-emitidos` (modal estorno + confirmação dupla + motivo ≥10 chars).
+4. **Bloco 7** — `@deprecated` em `enviarTokensAdmin` (mantido por COMPAT do ramo cooperado→cooperado).
+5. **Bloco 8** — D-novo-EMISSAO-ADMIN-CONTABIL P2 catalogado + MAPA-INTEGRIDADE atualizado.
+6. **Bloco 9** — 2 rodadas reviewers pesados + re-review orquestrador (2 P1 residuais fechados) + smoke E2E real PASS 6/6 (1 token + estorno imediato, NUNCA emissão real Santi — saldo retornou EXATAMENTE 1.96 → 1.96).
+
+**Próximo passo único e claro:** a definir pelo Luciano — opções consideradas:
+1. **Sprint contábil dedicada** (resolve D-novo-EMISSAO-ADMIN-CONTABIL P2) — depende de D3 Modelo C.
+2. **Decisões D1-D4 Modelo C** (relatórios 15/06: D1 arrendamento / D2 cash-out / D3 preço custo×venda / D4 validade token).
+3. **Sprint Hardening Mass-Write SUPER_ADMIN P2** (enfileirado M35) — reusa helper executarMassWrite (M39 é precedente arquitetural).
+
+**Detalhe:** `docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md`.
 
 ---
 
@@ -2533,11 +2555,11 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M38: working
+2. Rodar `git status --short`. Esperado pós-fechamento M39: working
    tree limpo (untracked carry-overs catalogados + M de
    `backend/package.json` + `package-lock.json` + `concierge.service.
    spec.ts` — território Cowork, NÃO tocar). Último commit é o de
-   fechamento M38. Rodar `git log origin/main..HEAD --oneline` —
+   fechamento M39. Rodar `git log origin/main..HEAD --oneline` —
    deve mostrar VAZIO se Code já fez push de fechamento.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
@@ -2546,159 +2568,125 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`.
    HMR NÃO ROLA.
 
-4. ⚠️ BRANCH `feature/admin-emitir-lote` JÁ EXISTE (criada na M38).
-   Conferir com `git branch --show-current` se já estiver nela; senão
-   `git checkout feature/admin-emitir-lote`. NÃO criar branch nova.
-   Decisão Luciano 13/06: branch dedicada por sprint, mergear na hora
-   OU rebasear antes que envelheça.
+4. ⚠️ M39 FECHADO no main (commit `d1f6a6d`). Branch
+   `feature/admin-emitir-lote` deletada. Próxima sprint cria branch
+   nova (`feature/<nome>`) como 1º comando — Decisão Luciano 13/06
+   (branch dedicada por sprint, mergear na hora OU rebasear antes
+   que envelheça).
 
-PASSO 1 — Frase comandante M38 → Redesenho /dashboard/cooper-token/enviar (admin emite tokens em lote):
+PASSO 1 — Frase comandante M39 → próximo bloco a definir:
 
-Sessão 15/06 entregou M38 em 11 commits trabalho + 3 merges no main
-(821a9dd..87ae6f7): Fatia A v2 (CTK→CooperTokens nomenclatura em 12
-spots + botão "Voltar ao Clube" em 11 telas) + Track B (Fix Santi 403
-crítico — guard distribuição usa pagadorCooperadoId, não conveniadoId
-legado) + Track B.2 (portal meusConvenios/dashboardConveniado aceita
-OR pagador+representante + cooperativaId explícito anti-IDOR). 2
-rodadas reviewer multitenant + smoke E2E real Santi 2/2 + 3/3 PASS.
+Sessão 16/06 entregou M39 em 12 commits trabalho + 1 merge --no-ff
+no main (db3c545..d1f6a6d): Emissão Admin em Lote + Estorno.
+Schema delta aditivo (2 enums + conta 5.1.03) + 4 métodos service
++ 2 templates contábeis (bypass do evento errado) + 4 endpoints REST
++ frontend redesenhado (2 etapas + filtro convênio + prévia COMPLETA
+antes do OTP) + tela nova lotes-emitidos com modal estorno. 2 rodadas
+reviewers pesados + re-review orquestrador (2 P1 residuais fechados)
++ smoke E2E PASS 6/6. 311/311 specs verde. D-novo-EMISSAO-ADMIN-
+CONTABIL P2 catalogado pra sprint contábil dedicada.
 
-Detalhes em docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-
-portal.md.
+Detalhes em docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md.
 
-═══ PRÓXIMO BLOCO: Redesenho /dashboard/cooper-token/enviar ═══
+═══ PRÓXIMO BLOCO: a definir ═══
 
-PROBLEMAS APONTADOS PELO LUCIANO (não cosmético — esta sprint resolve
-todos):
-1. Tela atual envia 1 destinatário por request — "1 por 1" inviável
-   pra admin emitir lote (cooperativa cria tokens novos no ecossistema).
-2. UI não diz "quem→quem" — admin vê "Seu Saldo" (conceitualmente
-   ERRADO, admin emite não debita).
-3. GET /cooper-token/saldo retorna 400 pra admin (sem cooperadoId
-   no JWT) — origem do erro visual "Saldo: 0".
-4. Sem botão Voltar (✅ já resolvido na Fatia A v2 — 8973cff).
+3 opções consideradas no fechamento M39:
 
-PRÉ-REQUISITOS LEITURA (CRÍTICO antes de qualquer decisão):
-1. docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md (sessão paralela —
+1. SPRINT CONTÁBIL DEDICADA — resolve D-novo-EMISSAO-ADMIN-CONTABIL
+   P2 + 4 problemas pré-existentes:
+   - Conta 5.1.02 "Passivo Tokens a Resgatar" DESPESA → PASSIVO
+   - Template F2 (compra paga) errado: D Custo Desconto → D Caixa
+   - F3 distribuição NÃO lança LancamentoCaixa
+   - F6 resgate PIX + clube NÃO lançam (PROVISIONAL órfão)
+   - Cron PROVISIONAL → CONFIRMADO
+   - Reclassificar entries M39 com tag EMISSAO_ADMIN_LOTE
+   DEPENDE: D3 Modelo C (preço custo × venda do token).
+
+2. DECISÕES D1-D4 MODELO C (relatórios 15/06):
+   - D1 arrendamento proporcional (empresa custeia cota da usina)
+   - D2 cash-out colaborador comum (extensão F6 sem ehEstabelecimento)
+   - D3 preço de custo × venda do token
+   - D4 validade do token (oxidação/expiração/nenhuma)
+   Cada uma é sprint própria pequena (~6-10h).
+
+3. SPRINT HARDENING MASS-WRITE SUPER_ADMIN P2 (enfileirado M35):
+   Reusa helper executarMassWrite com callbacks próprios pra ops
+   admin em massa (mudança de status em lote, recálculo em lote,
+   etc.). M39 é precedente arquitetural — agora o helper tem 2
+   consumers (F3 + M39) cobrindo write distribuído e write
+   centralizado.
+
+PRÉ-REQUISITOS LEITURA (a depender do bloco escolhido):
+1. docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md (esta sessão).
+2. docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md.
+3. docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md (sessão paralela —
    contábil-token MAL ESCRITURADO: F2 reusa template "D Custo/C
-   Passivo" em vez de "D Caixa/C Passivo"; conta "Passivo Tokens a
-   Resgatar" tipada DESPESA em token-contabil.service.ts:25).
-2. docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md (sessão paralela —
+   Passivo" em vez de "D Caixa/C Passivo"; conta 5.1.02 tipada
+   DESPESA em token-contabil.service.ts:25).
+4. docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md (sessão paralela —
    item 9: F3/F6/clube SEM LancamentoCaixa; PROVISIONAL órfão).
-3. docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md (sessão paralela
+5. docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md (sessão paralela
    — visão × realidade dos 5 passos da visão Modelo C).
-4. docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md
-   (esta sessão).
+6. docs/debitos-tecnicos.md seção P2 (D-novo-EMISSAO-ADMIN-CONTABIL
+   detalhado).
 
-ESCOPO DO REDESENHO:
-- Backend: novo método `emitirLoteAdmin` em cooper-token.service.ts
-  reusando `executarMassWrite` (helper genérico, F3 é primeiro
-  consumer; comentário do helper aponta "Sprint Hardening Mass-Write
-  SUPER_ADMIN P2 reusa" — é este caso). Novo endpoint POST
-  /cooper-token/admin/emitir-lote (ADMIN/SUPER_ADMIN/OPERADOR).
-  Tier ALTO sobre o TOTAL do lote (1 step-up OTP único, não per linha).
-- Frontend: redesign /dashboard/cooper-token/enviar com 2 etapas
-  (seleção+confirmação) espelhando estrutura distribuir-tokens, mas
-  SEM as naturezas trabalhistas CLT (admin emite, não pagamento PJ).
-  Remove "Seu Saldo" (errado), substitui por banner "Emissão admin —
-  cria CooperTokens novos no ecossistema da cooperativa".
-- Contábil: ATENÇÃO — emissão admin DEVE escriturar token como
-  passivo (D Despesa de bonificação / C Passivo Tokens) E a conta
-  precisa estar tipada PASSIVO, não DESPESA. Decisão (c) abaixo
-  amarra isso.
+PROTOCOLO PRÓXIMA SPRINT (independente do bloco escolhido):
+- Branch nova `feature/<nome-bloco>` como 1º comando.
+- Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência
+  Sistêmica) com MAPA DE IMPACTO 5 dimensões + perguntas decisórias
+  → PAUSAR pro OK Luciano antes de codar.
+- Implementação em commits incrementais.
+- Reviewer(s) pesado(s) ANTES de smoke (financeiro-token + multi
+  tenant pra op com dinheiro; só multitenant pra op sem dinheiro;
+  code-reviewer genérico pra cosmético).
+- Smoke E2E real com gate inegociável (NUNCA emissão real em
+  produção pra colaboradores reais — usar 1 unidade + estorno
+  quando aplicável).
+- Re-review do orquestrador após fixes pra pegar P1 residuais
+  (padrão M39 confirmou utilidade).
+- Mergear LOGO após OK Luciano + OK orquestrador final.
 
-3 DECISÕES LUCIANO antes de codar (pausa obrigatória):
-- (a) Destinatários filtráveis por convênio? UI permite filtrar a
-   tabela de cooperados por convênio (lista só membros de um conv X)
-   além da busca por nome/email? Útil pra admin emitir token "pra
-   colaboradores do convênio Y" sem precisar selecionar 1 a 1.
-- (b) Quantidade igual+ajuste individual? Espelha o "Iguais a X" da
-   distribuir-tokens (input numérico aplica em todos selecionados +
-   coluna editável por linha pra ajuste pontual). OU mantém só
-   coluna individual por linha (mais simples, menos flexível)?
-- (c) Confirmar contabilidade: emissão admin = cria token→passivo
-   (não transferência de saldo). Hoje creditar() emite
-   COOPER_TOKEN_EVENTS.EMITIDO que vai pra lancarEmissaoFaturaCheia
-   (template ERRADO conforme FLUXO-EMISSAO-TOKEN-CONVENIO). Esta
-   sprint corrige? OU deixa pra sprint contábil dedicada (depende
-   também das D1/D3/D4 do Modelo C)?
-
-═══ NÃO ENTRAR EM SCOPE DESTA SPRINT ═══
-- D1 Modelo C (arrendamento proporcional) — sprint próprio.
-- D3 (preço de custo × venda) — sprint próprio.
-- D4 (validade do token) — sprint próprio.
-- F2 template contábil errado — depende de D3 do Modelo C.
-- F3/F6/clube sem LancamentoCaixa — sprint contábil dedicada.
-
-Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência
-Sistêmica):
-- Branch criada: `feature/fatia-a-v2` (1º comando da sessão).
-- **Usar `git show feature/fatia-a -- '*.tsx'` como REFERÊNCIA EXATA
-  das substituições** — as strings que ela trocou em 52d9b38
-  (CTK → CooperTokens) são as MESMAS que precisam ser trocadas
-  agora; só os arquivos mudaram de caminho.
-- Estado atual mapeado no fechamento M37 — **12 ocorrências de
-  `\bCTK\b` em 6 arquivos no main:**
-  * `web/app/conveniada/convenio/[id]/distribuir-tokens/page.tsx` (3)
-  * `web/app/estabelecimento/receber/page.tsx` (3)
-  * `web/app/estabelecimento/recebimentos/page.tsx` (1)
-  * `web/app/estabelecimento/validar/page.tsx` (1)
-  * `web/app/dashboard/cooper-token/enviar/page.tsx` (3)
-  * `web/app/dashboard/cooper-token-parceiro/page.tsx` (1)
-- Re-grep `\bCTK\b` em `web/components/**/*.tsx` (Fatia A v1 não
-  varreu — completar mapa).
-- Grep `CTK\b` em mensagens de erro do backend que aparecem na UI
-  (`throw new BadRequestException` com "CTK" no texto).
-- **Botões "Voltar ao Clube" (84021b7) — refazer SÓ nas telas que
-  sobreviveram à Higiene** (conferir cada uma das 10 da Fatia A v1
-  — algumas foram movidas pra `/estabelecimento/*` ou
-  Sistêmica) — Code já mapeou no fechamento M38 (PASSO 1 desta
-  frase). Continuar/refinar:
-- Backend enviarTokensAdmin (cooper-token.service.ts:1165) +
-  helper executarMassWrite (common/mass-write) + UI espelho
-  /conveniada/.../distribuir-tokens (807 linhas, padrão 2 etapas).
-- Confirmar GET /cooper-token/saldo:46-48 lança 400 quando admin
-  sem cooperadoId — origem do erro visual.
-- Cruzar contábil com FLUXO-EMISSAO-TOKEN-CONVENIO: template
-  errado de F2 + conta tipada DESPESA.
-- MAPA DE IMPACTO 5 dimensões + apresentar 3 decisões (a/b/c)
-  ao Luciano.
-- PAUSAR pro OK Luciano nas 3 decisões.
-
-Após Fase 1 OK:
-- Implementação em commits incrementais (1 backend service +
-  endpoint; 2 specs; 3 frontend redesign; 4 docs).
-- multitenant-reviewer ANTES de merge.
-- Smoke E2E real com JWT admin + AMAGES (regra contatos teste).
-- Mergear LOGO após OK.
+CARRY-OVERS M39 (não-bloqueantes):
+- D-novo-EMISSAO-ADMIN-CONTABIL P2 (NOVO 16/06) — 4 problemas
+  pré-existentes no token-contábil consolidados: tipo conta 5.1.02
+  DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem
+  LancamentoCaixa. Sprint contábil dedicada futura (depende de D3
+  Modelo C preço custo×venda).
+- enviarTokensAdmin @deprecated (endpoint /parceiro/enviar mantido
+  por COMPAT do ramo cooperado→cooperado). Avaliar remoção após
+  30 dias de logs ENVIO_ADMIN zerados.
 
 DIRETRIZES PRESERVAR:
-- Branch `feature/admin-emitir-lote` desde 1º commit.
+- Branch dedicada por sprint desde 1º commit (Decisão Luciano 13/06).
 - Vocabulário inegociável: CooperToken / voucher / liquidação /
-  recibo. Esta sprint introduz "emissão admin" — NÃO confundir
-  com transferência de saldo nem com compra (F2).
-- Multi-tenant: cooperativaId do JWT (não body).
-- Rebuild web/backend obrigatório (PM2).
+  recibo / sobra / bonificação admin (NOVO M39). NUNCA: CTK em UI
+  (Fatia A v2) / recompra / venda.
+- Multi-tenant: cooperativaId do JWT (NÃO body). Servidor revalida
+  cada cooperadoId.cooperativaId em ops com lista (padrão M39).
+- Rebuild web/backend obrigatório (PM2 cycle stop → build → restart).
 - Regra contatos teste: AMAGES + lucbragatto+amages@gmail.com.
+- Reviewers pesados ANTES de smoke (financeiro-token + multitenant
+  no caso de op com dinheiro). Re-review do orquestrador após
+  fixes — padrão M39 (pegou 2 P1 residuais).
+- Smoke E2E real com gate inegociável (NUNCA emissão real em
+  produção pra colaboradores reais — usar 1 unidade + estorno).
 
-CARRY-OVERS M38 (não-bloqueantes):
+CARRY-OVERS M38 (ainda vivos):
 - D-novo-EMAIL-IMAP-SSL-VERIFY P2 (gate `tls.rejectUnauthorized:
   false` por env ANTES de deploy prod, Cowork).
 - D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE P2 (corrigir antes
   do onboarding 2ª cooperativa real — entra Sprint Hardening
   Mass-Write SUPER_ADMIN).
-- D-novo-CONVENIO-CONVENIADO-LEGADO P3 (audit completo + renomear
-  campo pra `representanteMlmCooperadoId` em sprint housekeeping).
-- D-novo-CONVENIOS-PORTAL-SPECS P3 (meusConvenios + dashboard
-  conveniado sem cobertura unitária).
+- D-novo-CONVENIO-CONVENIADO-LEGADO P3 (audit + renomear campo).
+- D-novo-CONVENIOS-PORTAL-SPECS P3 (cobertura unitária).
 - D-novo-CTK-VALOR-HARDCODE-EXTRATO P3 (hardcode *0.20 em
   estabelecimento/recebimentos:92).
 - Sessão Cowork em curso: 3 M (backend/package.json + lock +
   concierge.service.spec.ts) + 8+ untracked + 3 relatórios novos
   (ANALISE-/GAP-MAP-/FLUXO-CONVENIO-TOKEN-CLUBE-2026-06-15) —
-  NÃO TOCAR. Próxima sessão Cowork precisa criar doc-sessão do
-  commit 55e768d (regra bilateral 13/05).
+  NÃO TOCAR.
 
-CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M37, não-bloqueantes):
+CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M38, não-bloqueantes):
 - D-novo-F6-RECONCILIACAO-CRON P2 + D-novo-MT-F2-F3-F4-LEGADO-
   UPDATE-COOPERADO P2 + D-novo-F6-ADMIN-FLAG-ESTAB P2 (Sprint
   Hardening Mass-Write SUPER_ADMIN enfileirado).
@@ -2715,10 +2703,10 @@ CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M37, não-bloqueantes):
   + D-novo-F6-LANCAMENTO-AUSENTE P2 + D-novo-COMPRA-LANCAMENTO-
   CAIXA-TEMPLATE P2 + D-novo-WEBHOOK-RECOVERY-CRON P2 (achados
   dos relatórios 15/06 — sprint contábil dedicada).
-- Decisões D1/D3/D4 Modelo C — sprints próprios.
+- Decisões D1/D2/D3/D4 Modelo C — sprints próprios.
 - Untracked acumulados pra Sprint Housekeeping.
 
-═══ FIM DA FRASE M38 ═══
+═══ FIM DA FRASE M39 ═══
 ```
 
 — BLOCO ARQUIVADO M34 (abaixo — atendido por M37) ——————————————————
