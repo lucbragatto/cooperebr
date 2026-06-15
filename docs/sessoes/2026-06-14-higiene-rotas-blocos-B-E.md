@@ -122,7 +122,24 @@ Nenhuma decisão nova catalogada nesta sessão — D1+D2+D3+D4 já estavam conso
 
 ## Próximo passo
 
-**Fatia A — CTK → CooperToken nomenclatura UI** (sprint enfileirado em `~/.claude/projects/.../memory/sprint_clube_unificado_cooper_token_10_06.md`, próximo Code).
+**Fatia A v2 — CTK → CooperToken nomenclatura UI** em branch NOVA `feature/fatia-a-v2`.
+
+**Correção pós-fechamento (orquestrador):** existe `feature/fatia-a` antiga (commits `52d9b38` nomenclatura + `84021b7` botões Voltar ao Clube em 10 telas) feita ANTES desta sessão de Higiene. Como a Higiene moveu/deletou os arquivos que ela editou, a branch ficou **STALE — não mergeável**:
+- `git diff main..feature/fatia-a --stat` mostra 76 arquivos em modify/delete; mergear ressuscitaria `web/app/parceiro/layout.tsx` + `parceiro/page.tsx` + 20 sub-rotas como **zumbis**.
+- Os 12 `\bCTK\b` que ela tinha eliminado **voltaram pro main** em 6 arquivos: `web/app/conveniada/convenio/[id]/distribuir-tokens/page.tsx` (3) + `estabelecimento/receber/page.tsx` (3) + `estabelecimento/recebimentos/page.tsx` (1) + `estabelecimento/validar/page.tsx` (1) + `dashboard/cooper-token/enviar/page.tsx` (3) + `dashboard/cooper-token-parceiro/page.tsx` (1) — confirmado via grep no fechamento.
+
+**Plano Fatia A v2:**
+1. Branch nova `feature/fatia-a-v2` como 1º comando.
+2. Usar `git show feature/fatia-a -- '*.tsx'` como **referência exata das substituições** — mesmas strings, arquivos novos.
+3. Aplicar nos 6 arquivos atuais (12 ocorrências mapeadas).
+4. Refazer botões "Voltar ao Clube" SÓ nas telas que sobreviveram à Higiene (conferir cada uma das 10 de `84021b7` — algumas mudaram de caminho ou foram deletadas).
+5. Re-catalogar **D-novo-CTK-VALOR-HARDCODE-EXTRATO P3** em `docs/debitos-tecnicos.md` (existe no commit stale `52d9b38`, não está no main).
+6. TS check + lint + build limpos.
+7. Smoke Luciano.
+8. **Mergear LOGO após OK** — não repetir o erro de deixar parado.
+9. `git branch -D feature/fatia-a` (descarta a stale).
+
+**Lição (catalogada como diretriz da Fatia A v2):** não deixar branch pronta parada atravessando refactor estrutural. Mergear na hora OU rebasear antes que envelheça. Fatia A v1 parou 14h e ficou inutilizável.
 
 ## Pré-requisitos leitura próxima sessão
 

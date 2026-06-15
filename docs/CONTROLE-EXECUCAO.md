@@ -63,7 +63,7 @@
 
 **Sessão Code maratona.** Sprint Higiene de Rotas fechado ponta-a-ponta em 4 commits trabalho + 1 commit débito + 1 merge `--no-ff` (`f85483f`). Convergência `/parceiro` → `/dashboard` finalizada (19 telas-fantasma deletadas + 33 redirects 301), área `/estabelecimento` criada com guard `ehEstabelecimento`, op admin "Enviar Tokens" reposicionada no hub Clube, labels renomeados pra distinguir super-admin vs admin do parceiro. P1 anti-IDOR fixado em `meuPerfil`. Smoke 7 redirects + permissões admin_parceiro validadas. Carona M36 Cowork (pipeline IMAP/OCR + Concierge EDP_ES/CEMIG) mergeada junto, ressalva SSL catalogada. **D-1171 FECHADO.**
 
-**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE RETOMADA — próxima sessão Code` no fim deste documento (linha ~2476). Aponta pra **Fatia A — CTK → CooperToken nomenclatura UI**.
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE RETOMADA — próxima sessão Code` no fim deste documento (linha ~2476). Aponta pra **Fatia A v2 — CTK → CooperToken nomenclatura UI** (re-feita em branch nova `feature/fatia-a-v2`; a antiga `feature/fatia-a` ficou STALE atravessando a Sprint Higiene que moveu/deletou os arquivos, NÃO MERGEAR — ressuscita zumbis `/parceiro/*`). **12 ocorrências de `\bCTK\b` em 6 arquivos** mapeadas no main pós-Higiene: `conveniada/.../distribuir-tokens` (3), `estabelecimento/{receber,recebimentos,validar}` (5), `dashboard/cooper-token/enviar` (3), `dashboard/cooper-token-parceiro` (1). **Lição catalogada:** não deixar branch pronta parada atravessando refactor estrutural — mergear na hora OU rebasear antes que envelheça.
 
 **Detalhe:** `docs/sessoes/2026-06-14-higiene-rotas-blocos-B-E.md`.
 
@@ -2511,11 +2511,23 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`.
    HMR NÃO ROLA.
 
-4. ⚠️ CRIAR BRANCH FEATURE COMO 1º COMANDO DA SESSÃO (decisão Luciano
-   13/06):
-     git checkout -b feature/fatia-a
-   Todos os commits da Fatia A ficam nessa branch. Merge→main só
-   após review OK + smoke + autorização explícita Luciano.
+4. ⚠️ CRIAR BRANCH NOVA `feature/fatia-a-v2` COMO 1º COMANDO DA SESSÃO
+   (decisão Luciano 13/06 — branch dedicada por sprint):
+     git checkout -b feature/fatia-a-v2
+
+   NÃO usar `feature/fatia-a` antiga — está STALE (52d9b38 + 84021b7
+   feitos ANTES da Sprint Higiene de Rotas que moveu/deletou os
+   arquivos). Mergear ela RESSUSCITARIA `/parceiro/*` como zumbi
+   (76 arquivos em conflito modify/delete: layout.tsx + page.tsx +
+   20 sub-rotas reaparecem). Verificado pelo orquestrador no
+   fechamento M37.
+
+   ⚠️ LIÇÃO ATIVA: não deixar branch pronta parada atravessando
+   refactor estrutural. Mergear na hora OU rebasear antes que
+   envelheça. Branch fatia-a parou 14h e ficou inutilizável.
+
+   Ao terminar Fatia A v2 + merge → deletar branch antiga:
+     git branch -D feature/fatia-a
 
 PASSO 1 — Frase comandante M37 → Fatia A (CTK → CooperToken nomenclatura UI):
 
@@ -2549,15 +2561,28 @@ Escopo Fatia A (sprint_clube_unificado_cooper_token_10_06.md):
 
 Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência
 Sistêmica):
-- Branch criada: `feature/fatia-a` (1º comando da sessão).
-- Grep amplo `\bCTK\b` em `web/app/**/*.tsx` + `web/components/**
-  /*.tsx` pra mapear superfícies.
-- Grep amplo `CTK\b` em mensagens de erro do backend que aparecem
-  na UI (`throw new BadRequestException` com "CTK" no texto).
-- Mapear o card de saldo principal — provavelmente em
-  `/portal/tokens/page.tsx` + `/dashboard/clube/page.tsx` +
-  `/conveniada/convenio/[id]/distribuir-tokens/page.tsx`.
-- Identificar onde está a separação atual kWh × token.
+- Branch criada: `feature/fatia-a-v2` (1º comando da sessão).
+- **Usar `git show feature/fatia-a -- '*.tsx'` como REFERÊNCIA EXATA
+  das substituições** — as strings que ela trocou em 52d9b38
+  (CTK → CooperTokens) são as MESMAS que precisam ser trocadas
+  agora; só os arquivos mudaram de caminho.
+- Estado atual mapeado no fechamento M37 — **12 ocorrências de
+  `\bCTK\b` em 6 arquivos no main:**
+  * `web/app/conveniada/convenio/[id]/distribuir-tokens/page.tsx` (3)
+  * `web/app/estabelecimento/receber/page.tsx` (3)
+  * `web/app/estabelecimento/recebimentos/page.tsx` (1)
+  * `web/app/estabelecimento/validar/page.tsx` (1)
+  * `web/app/dashboard/cooper-token/enviar/page.tsx` (3)
+  * `web/app/dashboard/cooper-token-parceiro/page.tsx` (1)
+- Re-grep `\bCTK\b` em `web/components/**/*.tsx` (Fatia A v1 não
+  varreu — completar mapa).
+- Grep `CTK\b` em mensagens de erro do backend que aparecem na UI
+  (`throw new BadRequestException` com "CTK" no texto).
+- **Botões "Voltar ao Clube" (84021b7) — refazer SÓ nas telas que
+  sobreviveram à Higiene** (conferir cada uma das 10 da Fatia A v1
+  — algumas foram movidas pra `/estabelecimento/*` ou
+  `/dashboard/cooper-token/enviar` e podem ter outro caminho de
+  volta correto agora).
 - MAPA DE IMPACTO 5 dimensões + perguntas decisórias (se houver):
   * Tooltip explicativo sobre "o que é CooperToken" — manter ou
     remover?
@@ -2567,13 +2592,19 @@ Sistêmica):
 - PAUSAR pro OK Luciano antes de codar.
 
 Após Fase 1 OK:
-- Implementação Fatia A em branch (commits incrementais por
+- Implementação Fatia A v2 em branch (commits incrementais por
   tela/superfície).
+- **Re-catalogar D-novo-CTK-VALOR-HARDCODE-EXTRATO P3** (ficou no
+  branch stale 52d9b38, NÃO está no main — `docs/debitos-tecnicos.md`
+  precisa do entry).
 - TS check + lint web limpos.
-- Frontend build limpo.
+- Frontend build limpo (`cd web ; npm run build ; pm2 restart
+  cooperebr-frontend`).
 - Reviewer cosmético + revisão visual Luciano.
 - Smoke manual (Luciano abre 3-4 telas chave + valida nomenclatura).
-- Merge `feature/fatia-a` → `main` com autorização explícita.
+- **Mergear LOGO após OK** — não deixar parado de novo (lição M37).
+- Merge `feature/fatia-a-v2` → `main` com autorização explícita.
+- `git branch -D feature/fatia-a` (descarta stale após v2 mergeada).
 - Fechamento M38.
 
 Pré-requisitos leitura M37:
@@ -2590,7 +2621,9 @@ Pré-requisitos leitura M37:
 6. .claude/CLAUDE.md.
 
 DIRETRIZES PRESERVAR:
-- Branch `feature/fatia-a` desde 1º commit — nunca direto em main.
+- Branch `feature/fatia-a-v2` desde 1º commit — nunca direto em main.
+- **Mergear logo após OK Luciano** (lição M37 — não deixar branch
+  envelhecer atravessando refactor estrutural).
 - Vocabulário inegociável: CooperToken / voucher / liquidação /
   recibo / sobra. NUNCA: CTK (em UI) / recompra / venda.
 - Dois rios kWh × token visivelmente separados.
@@ -2605,6 +2638,13 @@ CARRY-OVERS M37 (não-bloqueantes):
 - D-novo-EMAIL-IMAP-SSL-VERIFY P2 (NOVO 14/06) — gate
   `tls.rejectUnauthorized:false` por env ANTES de deploy prod;
   commit Cowork `be8e46e` carona no merge `f85483f`.
+- **`feature/fatia-a` STALE (NÃO MERGEAR)** — Fatia A v1
+  (52d9b38 + 84021b7) feita antes da Higiene; ressuscita zumbis
+  `/parceiro/*`. Usar como REFERÊNCIA de strings em
+  `feature/fatia-a-v2`, depois `git branch -D`.
+- **D-novo-CTK-VALOR-HARDCODE-EXTRATO P3** existe SÓ no branch
+  stale (52d9b38) — re-catalogar em `docs/debitos-tecnicos.md`
+  durante a Fatia A v2.
 - D-1171 FECHADO — não há mais convergência /parceiro vs /dashboard
   pendente.
 - Sessão Cowork em curso pode ter `backend/package.json` +
