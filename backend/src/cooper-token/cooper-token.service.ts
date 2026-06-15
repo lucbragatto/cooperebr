@@ -48,6 +48,11 @@ import {
 } from '../common/mass-write/mass-write.helper';
 // F6 Bloco B (12/06/2026): PIX-out helper pra resgate de voucher.
 import { AsaasPixOutService } from '../financeiro/asaas-pix-out.service';
+// M39 (16/06/2026) — Emissao Admin em Lote: template contabil dedicado
+// (D Despesa de Bonificacao / C Passivo Tokens). NAO reusar o evento
+// COOPER_TOKEN_EVENTS.EMITIDO porque ele dispara lancarEmissaoFaturaCheia
+// (template errado de "Custo Desconto Concedido").
+import { TokenContabilService } from '../financeiro/token-contabil.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -116,6 +121,12 @@ export class CooperTokenService {
     // F6 Bloco B (12/06/2026) — PIX-out pra resgate de voucher
     // (estabelecimento → R$). Optional pelas mesmas razões dos demais.
     private asaasPixOutService?: AsaasPixOutService,
+    // M39 (16/06/2026) — Emissão Admin em Lote: chama
+    // lancarEmissaoAdminLote diretamente (bypass do event emitter pra
+    // evitar template contábil errado da F1 lancarEmissaoFaturaCheia).
+    // Optional pelas mesmas razões dos demais (specs antigos passam
+    // undefined). Em prod sempre injetado via FinanceiroModule export.
+    private tokenContabilService?: TokenContabilService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -4632,5 +4643,579 @@ export class CooperTokenService {
         economiaReais: Math.round(tokensUsados * valorToken * 100) / 100,
       };
     });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  M39 (16/06/2026) — Emissão Admin em Lote
+  // ════════════════════════════════════════════════════════════════════
+  //
+  // Admin/SUPER_ADMIN/OPERADOR emite CooperTokens novos no ecossistema
+  // da cooperativa pra N destinatários num único lote. Substitui
+  // `enviarTokensAdmin` single-target (que fica @deprecated).
+  //
+  // Substituicao SEMÂNTICA crítica: NÃO reusar `creditar()` cru.
+  // creditar() emite COOPER_TOKEN_EVENTS.EMITIDO → handleEmitido →
+  // lancarEmissaoFaturaCheia (D Custo Desconto / C Passivo) — template
+  // ERRADO pra bonificação admin. Em vez disso, fazemos write self-
+  // contained (saldo + ledger) DENTRO da tx + chamamos o template
+  // novo `lancarEmissaoAdminLote` (D Despesa de Bonificação / C
+  // Passivo Tokens) APÓS commit, agregado 1× pelo lote inteiro.
+  //
+  // Multi-tenant: servidor REVALIDA cada cooperadoId.cooperativaId
+  // no DB (anti-IDOR). Nunca confiar na lista vinda do cliente.
+  //
+  // Idempotência: clientRequestId → referenciaTabela='EMISSAO_ADMIN_
+  // LOTE' + referenciaId=clientRequestId. Helper executarMassWrite
+  // checa via verificarIdempotencia (ledger.findFirst com mesma chave).
+  //
+  // Tier ALTO sobre TOTAL: 1 OTP único, não per-linha. assertLimite
+  // sobre soma (mesma fórmula F3 distribuir).
+  // ════════════════════════════════════════════════════════════════════
+
+  async emitirLoteAdmin(params: {
+    cooperativaId: string;
+    /** Usuário admin que emite (vai pro AuditLog + observacoes). */
+    usuarioId: string;
+    /** Linhas do lote — cada uma é 1 destinatário + quantidade. */
+    distribuicoes: Array<{ destinatarioCooperadoId: string; quantidade: number }>;
+    /** Descrição livre do lote (vai pro ledger entry de cada destinatário). */
+    descricao?: string;
+    /** Tipo de bonificação semântico (default BONIFICACAO_ADMIN). */
+    tipo?: CooperTokenTipo;
+    /** OTP step-up — exigido em tier ALTO (>R$50 no total). */
+    otpDesafioId?: string;
+    otpCodigo?: string;
+    /** Idempotency-key estável (UUID v4 recomendado, mínimo 8 chars). */
+    clientRequestId: string;
+    /** PREVIEW = dry-run; CONFIRM = grava em tx Serializable. */
+    modo: 'PREVIEW' | 'CONFIRM';
+    /** Audit trail (vem do controller via req.ip + headers). */
+    ip?: string;
+    userAgent?: string;
+  }) {
+    const {
+      cooperativaId,
+      usuarioId,
+      distribuicoes,
+      descricao,
+      tipo,
+      otpDesafioId,
+      otpCodigo,
+      clientRequestId,
+      modo,
+      ip,
+      userAgent,
+    } = params;
+
+    // ── Guards universais ──
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório no caminho admin. SUPER_ADMIN deve impersonar uma cooperativa antes de emitir lote.',
+      );
+    }
+    if (!distribuicoes || distribuicoes.length === 0) {
+      throw new BadRequestException('Lote vazio — informe ao menos 1 destinatário.');
+    }
+    if (distribuicoes.some((d) => !d.destinatarioCooperadoId || d.quantidade <= 0)) {
+      throw new BadRequestException('Cada linha precisa ter destinatarioCooperadoId + quantidade > 0.');
+    }
+
+    // ── Anti-IDOR: re-validar cada cooperadoId.cooperativaId ──
+    // Nunca confiar na lista vinda do cliente. Buscar TODOS os cooperados
+    // do lote num único query filtrando por cooperativaId + STATUS_PERMITIDOS_CREDITO.
+    const destinatariosIds = [...new Set(distribuicoes.map((d) => d.destinatarioCooperadoId))];
+    const cooperadosValidos = await this.prisma.cooperado.findMany({
+      where: {
+        id: { in: destinatariosIds },
+        cooperativaId,
+        status: { in: CooperTokenService.STATUS_PERMITIDOS_CREDITO as any[] },
+      },
+      select: { id: true, nomeCompleto: true, status: true },
+    });
+    const idsValidos = new Set(cooperadosValidos.map((c) => c.id));
+    const idsInvalidos = destinatariosIds.filter((id) => !idsValidos.has(id));
+
+    // ── Calcular totais (round 4 decimais — mata ruído IEEE) ──
+    const somaQuantidade =
+      Math.round(distribuicoes.reduce((s, d) => s + d.quantidade, 0) * 10000) / 10000;
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const valorTotalReais = Math.round(somaQuantidade * valorTokenReais * 100) / 100;
+    const tier = calcularTier(valorTotalReais);
+
+    // ── Tier ALTO: OTP único sobre o TOTAL ──
+    if (modo === 'CONFIRM' && tier === 'ALTO') {
+      if (!otpDesafioId || !otpCodigo) {
+        throw new BadRequestException(
+          `Lote tier ALTO (valor total R$ ${valorTotalReais.toFixed(2)} > R$ 50): OTP obrigatório. Solicite via /cooper-token/otp-step-up antes do CONFIRM.`,
+        );
+      }
+      if (!this.otpDesafioService) {
+        throw new Error('OtpDesafioService não disponível (wiring do módulo).');
+      }
+      await this.otpDesafioService.validarOuLancar({
+        desafioId: otpDesafioId,
+        codigo: otpCodigo,
+        cooperativaId,
+      });
+    }
+
+    // ── Idempotência callback ──
+    type LoteResult = {
+      loteId: string;
+      idempotente: boolean;
+      totalEmitido: number;
+      valorTotalReais: number;
+      tier?: string;
+      destinatarios: Array<{ cooperadoId: string; nomeCompleto: string; quantidade: number; ledgerId: string }>;
+    };
+    const verificarIdempotencia = async (): Promise<LoteResult | null> => {
+      const jaProcessado = await this.prisma.cooperTokenLedger.findFirst({
+        where: {
+          referenciaId: clientRequestId,
+          referenciaTabela: 'EMISSAO_ADMIN_LOTE',
+          cooperativaId,
+        },
+        select: { id: true, referenciaId: true, createdAt: true },
+      });
+      if (!jaProcessado) return null;
+      this.logger.log(
+        `[M39 emitirLoteAdmin] idempotência hit — clientRequestId=${clientRequestId} já processado em ${jaProcessado.createdAt.toISOString()}`,
+      );
+      return {
+        loteId: clientRequestId,
+        idempotente: true,
+        totalEmitido: somaQuantidade,
+        valorTotalReais,
+        destinatarios: [],
+      };
+    };
+
+    // ── Preview callback ──
+    const preview = async (items: typeof distribuicoes) => {
+      const alertas: MassWriteAlerta[] = [];
+      if (idsInvalidos.length > 0) {
+        alertas.push({
+          codigo: 'DESTINATARIOS_INVALIDOS',
+          mensagem: `${idsInvalidos.length} destinatário(s) não encontrado(s) ou inativos no tenant: ${idsInvalidos.slice(0, 3).join(', ')}${idsInvalidos.length > 3 ? '...' : ''}.`,
+          severidade: 'bloqueante',
+        });
+      }
+      return {
+        totalItens: items.length,
+        alertas,
+        resumo: {
+          somaQuantidade,
+          valorTokenReais,
+          valorTotalReais,
+          tier,
+          destinatariosValidos: cooperadosValidos.length,
+          destinatariosInvalidos: idsInvalidos.length,
+        },
+      };
+    };
+
+    // ── Commit callback ──
+    const commit = async (ctx: { tx: Prisma.TransactionClient; items: typeof distribuicoes }): Promise<LoteResult> => {
+      const { tx, items } = ctx;
+      const tipoFinal = tipo ?? CooperTokenTipo.BONIFICACAO_ADMIN;
+      const descricaoFinal = descricao ?? `Emissão admin lote ${clientRequestId.slice(0, 8)}`;
+      const ledgerEntries: LoteResult['destinatarios'] = [];
+
+      for (const linha of items) {
+        const { destinatarioCooperadoId, quantidade } = linha;
+        // saldo (criar se não existir)
+        let saldo = await tx.cooperTokenSaldo.findUnique({
+          where: { cooperadoId: destinatarioCooperadoId },
+        });
+        const novoSaldoDisponivel = Number(saldo?.saldoDisponivel ?? 0) + quantidade;
+        const novoTotalEmitido = Number(saldo?.totalEmitido ?? 0) + quantidade;
+        if (saldo) {
+          await tx.cooperTokenSaldo.update({
+            where: { cooperadoId: destinatarioCooperadoId },
+            data: {
+              saldoDisponivel: novoSaldoDisponivel,
+              totalEmitido: novoTotalEmitido,
+            },
+          });
+        } else {
+          await tx.cooperTokenSaldo.create({
+            data: {
+              cooperadoId: destinatarioCooperadoId,
+              cooperativaId,
+              saldoDisponivel: quantidade,
+              totalEmitido: quantidade,
+            },
+          });
+        }
+
+        const expiracaoEm = new Date();
+        expiracaoEm.setMonth(expiracaoEm.getMonth() + 12);
+        const entry = await tx.cooperTokenLedger.create({
+          data: {
+            cooperadoId: destinatarioCooperadoId,
+            cooperativaId,
+            tipo: tipoFinal,
+            operacao: CooperTokenOperacao.CREDITO,
+            quantidade,
+            saldoApos: novoSaldoDisponivel,
+            valorReais: Math.round(quantidade * valorTokenReais * 100) / 100,
+            // Tag pra reclassificação contábil futura.
+            referenciaId: clientRequestId,
+            referenciaTabela: 'EMISSAO_ADMIN_LOTE',
+            expiracaoEm,
+            descricao: `${descricaoFinal} (admin ${usuarioId})`,
+          },
+        });
+        ledgerEntries.push({
+          cooperadoId: destinatarioCooperadoId,
+          nomeCompleto: cooperadosValidos.find((c) => c.id === destinatarioCooperadoId)?.nomeCompleto ?? '?',
+          quantidade,
+          ledgerId: entry.id,
+        });
+      }
+
+      return {
+        loteId: clientRequestId,
+        idempotente: false,
+        totalEmitido: somaQuantidade,
+        valorTotalReais,
+        tier,
+        destinatarios: ledgerEntries,
+      };
+    };
+
+    // ── Executar via helper ──
+    const resultado = await executarMassWrite(this.prisma, {
+      acao: 'MASS_WRITE_EMISSAO_ADMIN',
+      cooperativaId,
+      usuarioId,
+      clientRequestId,
+      items: distribuicoes,
+      mode: modo,
+      verificarIdempotencia,
+      preview,
+      commit,
+      logExtra: () => ({
+        somaQuantidade,
+        valorTotalReais,
+        tier,
+        destinatariosCount: distribuicoes.length,
+      }),
+      ip,
+      userAgent,
+    });
+
+    // ── Lançamento contábil agregado (APÓS commit, fora da tx) ──
+    // Bypass do COOPER_TOKEN_EVENTS.EMITIDO pra evitar template errado.
+    // Chama o template novo lancarEmissaoAdminLote (D 5.1.03 / C 5.1.02).
+    // Idempotente: só dispara em CONFIRM não-idempotente.
+    if (
+      resultado.modo === 'CONFIRM' &&
+      !(resultado.resultado as any).idempotente &&
+      valorTotalReais > 0 &&
+      this.tokenContabilService
+    ) {
+      try {
+        await this.tokenContabilService.lancarEmissaoAdminLote({
+          cooperativaId,
+          valor: valorTotalReais,
+          competencia: new Date().toISOString().slice(0, 7),
+          descricao: descricao ?? `Emissão admin lote ${clientRequestId.slice(0, 8)}`,
+          loteId: clientRequestId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[M39 emitirLoteAdmin] Falha ao lançar contábil (não-bloqueante): ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return resultado;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  M39 (16/06/2026) — Estorno de Emissão Admin em Lote
+  // ════════════════════════════════════════════════════════════════════
+  //
+  // Reverte o lote INTEIRO: debita saldo de volta + cria entries
+  // ESTORNO_BONIFICACAO_ADMIN no ledger (NUNCA apaga registro original).
+  // Dispara lancarEstornoEmissaoAdminLote (D 5.1.02 / C 5.1.03) agregado.
+  //
+  // Confirmação explícita: admin precisa passar `confirmado: true` no
+  // payload (UI mostra lista + total ANTES de chamar este método).
+  //
+  // Multi-tenant: filtro por cooperativaId em todas as queries.
+  //
+  // Idempotência: estornar 2× o mesmo lote retorna `idempotente: true`
+  // (procura entries ESTORNO já criadas com referencia ao loteId).
+  // ════════════════════════════════════════════════════════════════════
+
+  async estornarEmissaoLote(params: {
+    cooperativaId: string;
+    /** loteId = clientRequestId da emissão original. */
+    loteId: string;
+    /** Admin que estorna (vai pro ledger + AuditLog). */
+    usuarioId: string;
+    /** Razão do estorno (mín 10 chars — admin precisa justificar). */
+    motivo: string;
+    /** UI obrigatoriamente preenche após mostrar lista + total ao admin. */
+    confirmado: boolean;
+  }) {
+    const { cooperativaId, loteId, usuarioId, motivo, confirmado } = params;
+
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório.');
+    }
+    if (!loteId || loteId.trim().length < 8) {
+      throw new BadRequestException('loteId obrigatório (UUID da emissão original).');
+    }
+    if (!motivo || motivo.trim().length < 10) {
+      throw new BadRequestException(
+        'Motivo do estorno obrigatório (mínimo 10 chars). Admin precisa justificar a reversão de passivo.',
+      );
+    }
+    if (!confirmado) {
+      throw new BadRequestException(
+        'Confirmação explícita obrigatória. A UI deve apresentar a lista de destinatários + total ao admin ANTES de chamar este endpoint com confirmado=true.',
+      );
+    }
+
+    // Buscar todas as entries da emissão original (referenciaTabela='EMISSAO_ADMIN_LOTE')
+    const entriesOriginais = await this.prisma.cooperTokenLedger.findMany({
+      where: {
+        referenciaId: loteId,
+        referenciaTabela: 'EMISSAO_ADMIN_LOTE',
+        cooperativaId, // multi-tenant explícito
+      },
+    });
+    if (entriesOriginais.length === 0) {
+      throw new NotFoundException(
+        `Lote ${loteId} não encontrado nesta cooperativa (ou já foi totalmente estornado).`,
+      );
+    }
+
+    // Idempotência: se já existe estorno do mesmo lote, retorna idempotente
+    const estornosExistentes = await this.prisma.cooperTokenLedger.findFirst({
+      where: {
+        referenciaId: loteId,
+        referenciaTabela: 'ESTORNO_EMISSAO_ADMIN_LOTE',
+        cooperativaId,
+      },
+      select: { id: true, createdAt: true },
+    });
+    if (estornosExistentes) {
+      this.logger.log(
+        `[M39 estornarEmissaoLote] idempotência hit — lote ${loteId} já estornado em ${estornosExistentes.createdAt.toISOString()}`,
+      );
+      return {
+        loteId,
+        idempotente: true,
+        totalEstornado: 0,
+        destinatarios: [],
+      };
+    }
+
+    const somaQuantidade =
+      Math.round(entriesOriginais.reduce((s, e) => s + Number(e.quantidade), 0) * 10000) / 10000;
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+    const valorTotalReais = Math.round(somaQuantidade * valorTokenReais * 100) / 100;
+
+    // Executar dentro de tx Serializable (atomicidade — ou tudo, ou nada)
+    const resultado = await this.prisma.$transaction(
+      async (tx) => {
+        const ledgerEstornos: any[] = [];
+        for (const entry of entriesOriginais) {
+          // Debitar saldo de volta (com guard de não-negativo)
+          const saldo = await tx.cooperTokenSaldo.findUnique({
+            where: { cooperadoId: entry.cooperadoId },
+          });
+          const saldoAtual = Number(saldo?.saldoDisponivel ?? 0);
+          const quantidade = Number(entry.quantidade);
+          // Se cooperado já gastou parte/tudo dos tokens (saldo < quantidade
+          // original), debita o que tem (mas SEMPRE registra o estorno
+          // completo no ledger pra rastreabilidade).
+          const debitarReal = Math.min(saldoAtual, quantidade);
+          const novoSaldo = Math.round((saldoAtual - debitarReal) * 10000) / 10000;
+          await tx.cooperTokenSaldo.update({
+            where: { cooperadoId: entry.cooperadoId },
+            data: { saldoDisponivel: novoSaldo },
+          });
+
+          const estornoEntry = await tx.cooperTokenLedger.create({
+            data: {
+              cooperadoId: entry.cooperadoId,
+              cooperativaId,
+              tipo: CooperTokenTipo.ESTORNO_BONIFICACAO_ADMIN,
+              operacao: CooperTokenOperacao.DEBITO,
+              quantidade: -quantidade, // negativo pra distinguir do crédito original
+              saldoApos: novoSaldo,
+              valorReais: -Math.round(quantidade * valorTokenReais * 100) / 100,
+              referenciaId: loteId,
+              referenciaTabela: 'ESTORNO_EMISSAO_ADMIN_LOTE',
+              descricao: `Estorno lote ${loteId.slice(0, 8)} (admin ${usuarioId}): ${motivo}`,
+            },
+          });
+          ledgerEstornos.push({
+            cooperadoId: entry.cooperadoId,
+            quantidadeOriginal: quantidade,
+            quantidadeDebitada: debitarReal,
+            saldoFinal: novoSaldo,
+            estornoLedgerId: estornoEntry.id,
+          });
+        }
+
+        return {
+          loteId,
+          idempotente: false,
+          totalEstornado: somaQuantidade,
+          valorTotalReais,
+          destinatarios: ledgerEstornos,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    // Lançamento contábil de reversão (fora da tx).
+    if (valorTotalReais > 0 && this.tokenContabilService) {
+      try {
+        await this.tokenContabilService.lancarEstornoEmissaoAdminLote({
+          cooperativaId,
+          valor: valorTotalReais,
+          competencia: new Date().toISOString().slice(0, 7),
+          descricao: `Estorno lote ${loteId.slice(0, 8)}: ${motivo}`,
+          loteId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[M39 estornarEmissaoLote] Falha ao lançar contábil reversão (não-bloqueante): ${(err as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `[M39 estornarEmissaoLote] lote ${loteId} estornado por admin ${usuarioId}: ${somaQuantidade} tokens, R$ ${valorTotalReais.toFixed(2)}, ${resultado.destinatarios.length} destinatário(s)`,
+    );
+
+    return resultado;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  M39 — Listar lotes emitidos (UI estorno)
+  // ════════════════════════════════════════════════════════════════════
+  //
+  // Lista lotes (groupBy referenciaId) emitidos pela cooperativa.
+  // Cada lote = N entries no ledger com mesmo `referenciaId` +
+  // `referenciaTabela='EMISSAO_ADMIN_LOTE'`. Inclui flag `estornado`
+  // (true se já há entry ESTORNO_EMISSAO_ADMIN_LOTE pro mesmo loteId).
+  // ════════════════════════════════════════════════════════════════════
+
+  async listarLotesEmitidos(params: {
+    cooperativaId: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { cooperativaId, page = 1, limit = 20 } = params;
+
+    const lotesAgg = await this.prisma.cooperTokenLedger.groupBy({
+      by: ['referenciaId'],
+      where: {
+        cooperativaId,
+        referenciaTabela: 'EMISSAO_ADMIN_LOTE',
+      },
+      _sum: { quantidade: true },
+      _count: { id: true },
+      _min: { createdAt: true },
+      orderBy: { _min: { createdAt: 'desc' } },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    // Pra cada lote, checar se já foi estornado
+    const loteIds = lotesAgg.map((l) => l.referenciaId).filter((id): id is string => !!id);
+    const estornados = await this.prisma.cooperTokenLedger.findMany({
+      where: {
+        cooperativaId,
+        referenciaTabela: 'ESTORNO_EMISSAO_ADMIN_LOTE',
+        referenciaId: { in: loteIds },
+      },
+      select: { referenciaId: true, createdAt: true },
+      distinct: ['referenciaId'],
+    });
+    const estornadosMap = new Map(estornados.map((e) => [e.referenciaId, e.createdAt]));
+
+    return {
+      items: lotesAgg.map((l) => ({
+        loteId: l.referenciaId,
+        totalDestinatarios: l._count.id,
+        somaQuantidade: Number(l._sum.quantidade ?? 0),
+        emitidoEm: l._min.createdAt,
+        estornado: estornadosMap.has(l.referenciaId ?? ''),
+        estornadoEm: estornadosMap.get(l.referenciaId ?? '') ?? null,
+      })),
+      page,
+      limit,
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  M39 — Detalhe de 1 lote (UI estorno — confirmação)
+  // ════════════════════════════════════════════════════════════════════
+
+  async getLoteEmitido(params: { cooperativaId: string; loteId: string }) {
+    const { cooperativaId, loteId } = params;
+
+    const entries = await this.prisma.cooperTokenLedger.findMany({
+      where: {
+        cooperativaId,
+        referenciaId: loteId,
+        referenciaTabela: 'EMISSAO_ADMIN_LOTE',
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (entries.length === 0) {
+      throw new NotFoundException(`Lote ${loteId} não encontrado nesta cooperativa.`);
+    }
+
+    const cooperadoIds = [...new Set(entries.map((e) => e.cooperadoId))];
+    const cooperados = await this.prisma.cooperado.findMany({
+      where: { id: { in: cooperadoIds }, cooperativaId },
+      select: { id: true, nomeCompleto: true, email: true },
+    });
+    const cooperadoMap = new Map(cooperados.map((c) => [c.id, c]));
+
+    const estorno = await this.prisma.cooperTokenLedger.findFirst({
+      where: {
+        cooperativaId,
+        referenciaId: loteId,
+        referenciaTabela: 'ESTORNO_EMISSAO_ADMIN_LOTE',
+      },
+      select: { id: true, createdAt: true, descricao: true },
+    });
+
+    const somaQuantidade =
+      Math.round(entries.reduce((s, e) => s + Number(e.quantidade), 0) * 10000) / 10000;
+    const config = await this.getConfig(cooperativaId);
+    const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+
+    return {
+      loteId,
+      totalDestinatarios: entries.length,
+      somaQuantidade,
+      valorTotalReais: Math.round(somaQuantidade * valorTokenReais * 100) / 100,
+      valorTokenReais,
+      emitidoEm: entries[0].createdAt,
+      estornado: !!estorno,
+      estornadoEm: estorno?.createdAt ?? null,
+      estornoDescricao: estorno?.descricao ?? null,
+      destinatarios: entries.map((e) => ({
+        cooperadoId: e.cooperadoId,
+        nomeCompleto: cooperadoMap.get(e.cooperadoId)?.nomeCompleto ?? '?',
+        email: cooperadoMap.get(e.cooperadoId)?.email ?? null,
+        quantidade: Number(e.quantidade),
+        ledgerId: e.id,
+      })),
+    };
   }
 }
