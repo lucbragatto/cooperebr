@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { isAmbienteReal } from '../common/safety/ambiente';
 import { PrismaService } from '../prisma.service';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -250,5 +251,81 @@ export class SaasService {
       status: 'CRIADA',
       faturaId: fatura.id,
     };
+  }
+
+  // ─── Sprint D2 (16/06/2026) — Saque PIX Colaborador Comum ──
+  //
+  // GET retorna o estado atual da flag + se o env de produção está liberado
+  // (front decide se mostra banner âmbar "exige parecer analista-conformidade
+  // ANTES de ligar em produção" e se o toggle ON tem efeito real).
+  async getSaqueColaboradorStatus(cooperativaId: string) {
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: {
+        id: true,
+        nome: true,
+        saqueColaboradorAtivo: true,
+        saqueColaboradorAtivadoEm: true,
+      },
+    });
+    if (!coop) {
+      throw new NotFoundException(`Cooperativa ${cooperativaId} nao encontrada.`);
+    }
+    const ambienteReal = isAmbienteReal();
+    const envLiberado =
+      !ambienteReal ||
+      process.env.SAQUE_COLABORADOR_PRODUCAO_LIBERADO === 'true';
+    return {
+      id: coop.id,
+      nome: coop.nome,
+      saqueColaboradorAtivo: coop.saqueColaboradorAtivo,
+      saqueColaboradorAtivadoEm: coop.saqueColaboradorAtivadoEm,
+      ambienteReal,
+      envProducaoLiberado: envLiberado,
+      gateProducaoEfetivo: coop.saqueColaboradorAtivo && envLiberado,
+    };
+  }
+
+  async toggleSaqueColaborador(cooperativaId: string, ativo: boolean) {
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: cooperativaId },
+      select: {
+        id: true,
+        saqueColaboradorAtivo: true,
+        saqueColaboradorAtivadoEm: true,
+      },
+    });
+    if (!coop) {
+      throw new NotFoundException(`Cooperativa ${cooperativaId} nao encontrada.`);
+    }
+    // No-op idempotente.
+    if (coop.saqueColaboradorAtivo === ativo) {
+      this.logger.log(
+        `[saque-colaborador] no-op: cooperativaId=${cooperativaId.slice(0, 8)}... ja em saqueColaboradorAtivo=${ativo}`,
+      );
+      return {
+        id: coop.id,
+        saqueColaboradorAtivo: coop.saqueColaboradorAtivo,
+        saqueColaboradorAtivadoEm: coop.saqueColaboradorAtivadoEm,
+        alterado: false,
+      };
+    }
+    const updated = await this.prisma.cooperativa.update({
+      where: { id: cooperativaId },
+      data: {
+        saqueColaboradorAtivo: ativo,
+        saqueColaboradorAtivadoEm: ativo ? new Date() : null,
+      },
+      select: {
+        id: true,
+        saqueColaboradorAtivo: true,
+        saqueColaboradorAtivadoEm: true,
+      },
+    });
+    this.logger.log(
+      `[saque-colaborador] cooperativaId=${cooperativaId.slice(0, 8)}... ` +
+        `saqueColaboradorAtivo: ${coop.saqueColaboradorAtivo} -> ${updated.saqueColaboradorAtivo}`,
+    );
+    return { ...updated, alterado: true };
   }
 }

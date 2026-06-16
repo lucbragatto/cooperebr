@@ -2013,7 +2013,16 @@ export class CooperTokenService {
       );
     }
 
-    // ── Guard 1: estabelecimento existe + tenant + flag + pixChave cadastrada ──
+    // ── Guard 1: cooperado existe + tenant + autorizado a resgatar ──
+    //
+    // Sprint D2 (16/06/2026) — Gate dual pra Saque PIX Colaborador Comum:
+    //   (A) estabelecimento (ehEstabelecimento=true) → SEMPRE autorizado.
+    //   (B) cooperado comum (não-estab) → autorizado SE:
+    //       (B.1) flag tenant Cooperativa.saqueColaboradorAtivo=true (SUPER_ADMIN liga); E
+    //       (B.2) gate produção: !isAmbienteReal() OU
+    //             env SAQUE_COLABORADOR_PRODUCAO_LIBERADO='true' (Luciano libera
+    //             após parecer escrito do cooperebr-analista-conformidade).
+    // Espelha exatamente o gate da oxidação (OXIDACAO_PRODUCAO_LIBERADA).
     const estabelecimento = await this.prisma.cooperado.findFirst({
       where: { id: estabelecimentoCooperadoId, cooperativaId },
       select: {
@@ -2029,8 +2038,25 @@ export class CooperTokenService {
       throw new NotFoundException('Cooperado não encontrado no seu tenant.');
     }
     if (!estabelecimento.ehEstabelecimento) {
-      throw new ForbiddenException(
-        'Resgate em PIX é exclusivo de cooperados-Estabelecimento do Clube. Solicite ao admin da cooperativa pra habilitar a flag ehEstabelecimento no seu cadastro.',
+      // Fallback Sprint D2: tenta liberar pelo gate Saque Colaborador.
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: { saqueColaboradorAtivo: true },
+      });
+      const flagTenant = coop?.saqueColaboradorAtivo === true;
+      const gateProducaoLiberado =
+        !isAmbienteReal() ||
+        process.env.SAQUE_COLABORADOR_PRODUCAO_LIBERADO === 'true';
+      const saqueColabPermitido = flagTenant && gateProducaoLiberado;
+      if (!saqueColabPermitido) {
+        // Mensagem informativa SEM revelar o gate de produção (anti-enumeração):
+        // o cooperado vê a mesma mensagem se a flag está OFF ou o env está OFF.
+        throw new ForbiddenException(
+          'Resgate em PIX bloqueado pra este cooperado. Disponível pra cooperados-Estabelecimento do Clube ou cooperados de cooperativa com saque-colaborador habilitado pelo admin SISGD (exige parecer do analista-conformidade).',
+        );
+      }
+      this.logger.log(
+        `[F6 D2] Saque Colaborador autorizado: cooperado=${estabelecimentoCooperadoId.slice(0, 8)}… (não-estab) tenant=${cooperativaId.slice(0, 8)}… flag=ON env-prod-gate=${gateProducaoLiberado}`,
       );
     }
     if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(estabelecimento.status)) {

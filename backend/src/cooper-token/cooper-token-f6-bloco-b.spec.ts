@@ -43,6 +43,8 @@ interface SetupOpts {
   limiteResult?: any;
   otpValidarLanca?: Error;
   reciboParaUpdate?: any;
+  /** Sprint D2 (16/06/2026) — flag Cooperativa.saqueColaboradorAtivo. */
+  cooperativaSaqueColaborador?: boolean;
 }
 
 function setup(opts: SetupOpts = {}) {
@@ -122,6 +124,17 @@ function setup(opts: SetupOpts = {}) {
         opts.configValorTokenReais !== undefined
           ? { taxaResgatePerc: 0, taxaResgateFixa: 0, valorTokenReais: opts.configValorTokenReais }
           : null,
+      ),
+    },
+    // Sprint D2 (16/06/2026) — gate Saque Colaborador. Default flag OFF:
+    // sem este mock os testes do guard ehEstabelecimento=false ainda passam
+    // (flag OFF → Forbidden, mesmo path). Specs D2 que precisam flag ON
+    // sobrescrevem via opts.cooperativaSaqueColaborador.
+    cooperativa: {
+      findUnique: jest.fn().mockResolvedValue(
+        opts.cooperativaSaqueColaborador !== undefined
+          ? { saqueColaboradorAtivo: opts.cooperativaSaqueColaborador }
+          : { saqueColaboradorAtivo: false },
       ),
     },
   };
@@ -211,7 +224,7 @@ describe('F6 Bloco B — solicitarResgate guards', () => {
     });
     await expect(
       service.solicitarResgate(baseSolicitar()),
-    ).rejects.toThrow(/exclusivo de cooperados-Estabelecimento/);
+    ).rejects.toThrow(/Resgate em PIX bloqueado.+Estabelecimento/);
   });
 
   it('estabelecimento SUSPENSO → Forbidden', async () => {
