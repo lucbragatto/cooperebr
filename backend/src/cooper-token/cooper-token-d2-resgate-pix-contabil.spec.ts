@@ -174,7 +174,92 @@ describe('D2 Bloco (c) — D-RESGATE-PIX-SEM-CAIXA contábil pós-tx', () => {
   });
 
   // ───────────────────────────────────────────────────────────────────
-  // 4. CAS perde (recibo já em outro estado) → contábil NÃO chamado
+  // 4. Re-review orquestrador (16/06): contábil falha → ALÉM de degradar
+  //    status, emite evento 'cooper-token-resgate.credito-pendente' pra
+  //    admin ver pendência. Princípio "nenhuma saída de caixa silenciosa".
+  // ───────────────────────────────────────────────────────────────────
+  it('contábil falha → emite evento credito-pendente pra alerta admin (espelha F2)', async () => {
+    const lancarMock = jest
+      .fn()
+      .mockRejectedValue(new Error('plano contas 5.1.02 ausente'));
+    const updateManyStatusFn = jest.fn().mockResolvedValue({ count: 1 });
+
+    // Setup com captura do eventEmitter (instalado no service via construtor).
+    const recibo = {
+      id: 'recibo-1',
+      numeroRecibo: 'RES-2026-00001',
+      status: 'APROVADO_PIX_DISPARADO',
+      cooperativaId: COOP,
+      cooperadoEstabelecimentoId: EMPRESA,
+      valorBrutoTokens: 10,
+      valorLiquidoTokens: 10,
+      valorBrutoReais: 4.5,
+      valorLiquidoReais: 4.5,
+      pixChave: '+5527981341348',
+      pixTipo: 'TELEFONE',
+      asaasTransferId: 'asaas-tx-1',
+      ultimoWebhookEventId: null,
+    };
+    const tx: any = {
+      cooperTokenSaldo: {
+        findUnique: jest.fn().mockResolvedValue({
+          cooperadoId: EMPRESA,
+          saldoDisponivel: 90,
+          saldoBloqueadoResgate: 10,
+        }),
+        updateMany: jest.fn().mockResolvedValue({}),
+      },
+      cooperTokenLedger: { create: jest.fn().mockResolvedValue({ id: 'ledger-1' }) },
+      resgateRecibo: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const prisma: any = {
+      $transaction: jest.fn(async (cb: any) => cb(tx)),
+      resgateRecibo: {
+        findFirst: jest.fn().mockResolvedValue(recibo),
+        updateMany: updateManyStatusFn,
+      },
+    };
+    const tokenContabil = { lancarResgatePix: lancarMock };
+    const emit = jest.fn();
+    const eventEmitter = { emit };
+
+    const service = new CooperTokenService(
+      prisma,
+      eventEmitter as any,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      tokenContabil as any,
+    );
+    const r: any = await service.processarWebhookResgate({
+      asaasTransferId: 'asaas-tx-1',
+      eventId: 'evt-alerta',
+      sucesso: true,
+      cooperativaIdEsperada: COOP,
+    });
+    expect(r.sucesso).toBe(true);
+    // ★ Evento alerta emitido com payload completo pra admin/cron consumir.
+    const eventoEmitido = emit.mock.calls.find(
+      ([nome]: any[]) => nome === 'cooper-token-resgate.credito-pendente',
+    );
+    expect(eventoEmitido).toBeDefined();
+    const payload = eventoEmitido![1];
+    expect(payload).toMatchObject({
+      reciboId: 'recibo-1',
+      cooperativaId: COOP,
+      cooperadoEstabelecimentoId: EMPRESA,
+      numeroRecibo: 'RES-2026-00001',
+      valorLiquidoReais: 4.5,
+      asaasTransferId: 'asaas-tx-1',
+      eventId: 'evt-alerta',
+    });
+    expect(payload.motivoContabil).toContain('5.1.02');
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // 5. CAS perde (recibo já em outro estado) → contábil NÃO chamado
   // ───────────────────────────────────────────────────────────────────
   it('CAS swap perde → contábil NÃO é chamado', async () => {
     const lancarMock = jest.fn();

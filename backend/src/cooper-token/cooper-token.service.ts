@@ -2667,6 +2667,22 @@ export class CooperTokenService {
           this.logger.warn(
             `[F6 D2] recibo=${recibo.numeroRecibo} marcado PAGO_CREDITO_PENDENTE — admin revisar + cron reconciliação re-tenta.`,
           );
+          // Re-review orquestrador Sprint D2 (16/06): espelha F2 (compra-pj
+          // credito-pendente) — emite evento pra admin ver pendência no
+          // painel, não só no log. Princípio "nenhuma saída de caixa
+          // silenciosa". Cron de reconciliação (D-novo-RECONCILIACAO-
+          // CONTABIL-CRON P2) re-tenta o lançamento contábil + zera o
+          // alerta quando sucesso.
+          this.eventEmitter.emit('cooper-token-resgate.credito-pendente', {
+            reciboId: recibo.id,
+            cooperativaId: recibo.cooperativaId,
+            cooperadoEstabelecimentoId: recibo.cooperadoEstabelecimentoId,
+            numeroRecibo: recibo.numeroRecibo,
+            valorLiquidoReais: Number(recibo.valorLiquidoReais),
+            asaasTransferId: recibo.asaasTransferId,
+            motivoContabil: msgContabil.slice(0, 400),
+            eventId,
+          });
         } catch (errStatus) {
           // Não conseguiu nem mudar status — caso extremo, loga pra investigação.
           this.logger.error(

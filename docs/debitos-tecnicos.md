@@ -518,6 +518,21 @@ Também: ampliar `findOne` pra aceitar `cooperativaId` (atualmente em :285 não 
 
 ---
 
+### D-novo-RECONCILIACAO-CONTABIL-CRON — Cron de reconciliação de resgates `PAGO_CREDITO_PENDENTE` (Sprint D2)
+
+**Severidade:** P2 — não-bloqueante de produção (gate dual + parecer mantém saque colaborador OFF por enquanto), mas obrigatório ANTES do primeiro `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` real em produção.
+**Detectado em:** 2026-06-16 — Sprint D2 Bloco (c) D-RESGATE-PIX-SEM-CAIXA fix + re-review orquestrador.
+**Onde:** novo cron no `cooper-token/` ou `financeiro/` que rode periodicamente (15min? 1h?) buscando:
+```typescript
+ResgateRecibo.findMany({ where: { status: 'PAGO_CREDITO_PENDENTE' } })
+```
+**O que faz:** pra cada recibo, re-tenta `tokenContabilService.lancarResgatePix({ ..., referenciaId, referenciaTabela: 'ResgateRecibo' })` (idempotente pelo guard `findFirst` interno já adicionado no Bloco P1 fix). Se sucesso: muda status `PAGO_CREDITO_PENDENTE` → `PAGO_RECIBO_EMITIDO`. Se falhar persistentemente N vezes: marca pra revisão manual (campo `motivoFalha` já existe; adicionar contador `tentativasReconciliacao`).
+**Por que existe:** webhook PAGO da Asaas chega → tx Serializable commita saldo+ledger → contábil `lancarResgatePix` falha (caso raro: BD indisponível, plano contas migrado, etc) → status degrada pra `PAGO_CREDITO_PENDENTE` + evento `cooper-token-resgate.credito-pendente` emitido pra alerta admin (Sprint D2 Bloco re-review espelha F2 `cooper-token-compra-pj.credito-pendente`). Sem o cron, recibo fica permanentemente `PAGO_CREDITO_PENDENTE` → passivo contábil 5.1.02 inflado vs saldo real.
+**Convive com:** D-novo-F6-RECONCILIACAO-CRON P2 (catalogado M35 — mais amplo, cobre estados ↔ Asaas). Esse aqui é específico do contábil pós-tx.
+**Fix paralelo recomendado:** endpoint admin `GET /cooper-token/admin/resgates-pendentes-contabil` pra listar `PAGO_CREDITO_PENDENTE` + botão "Re-tentar" manualmente enquanto o cron não roda.
+
+---
+
 ### [NOVOS — sessão 16/06] Bloco "Circuito de Emissão de Token" — 7 P2 + 1 P3 (achados Cowork+claude.ai 15/06)
 
 **Origem:** análise read-only de 4 agentes Cowork/claude.ai 15/06 (`docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md`, `docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md`, `docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md`). Os 2 itens mais críticos viraram P1 catalogados acima (D-novo-COMPRA-PJ-TEMPLATE-CONTABIL + D-novo-RESGATE-PIX-SEM-CAIXA). Os 8 abaixo são P2/P3 do mesmo circuito.
