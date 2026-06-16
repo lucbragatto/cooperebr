@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 import { AuditLog } from '../audit/audit-log.decorator';
+import { ToggleSaqueColaboradorDto } from './dto/toggle-saque-colaborador.dto';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -115,5 +116,43 @@ export class SaasController {
   @Post('faturas/gerar')
   gerarFaturas() {
     return this.saasService.gerarFaturasMensal();
+  }
+
+  // ─── Sprint D2 (16/06/2026) — Saque PIX Colaborador Comum ──
+  //
+  // Toggle por tenant da flag Cooperativa.saqueColaboradorAtivo. Quando
+  // ON, cooperados NÃO-Estabelecimento da cooperativa podem solicitar
+  // resgate em R$ via PIX (espelha F6 do estabelecimento, sem o guard
+  // ehEstabelecimento). Em produção real exige ALÉM env
+  // SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true (espelha OXIDACAO_PRODUCAO_
+  // LIBERADA). Ligar exige parecer escrito do cooperebr-analista-
+  // conformidade — toggle nasce OFF.
+
+  @Roles(SUPER_ADMIN)
+  @Get('cooperativas/:id/saque-colaborador')
+  getSaqueColaboradorStatus(@Param('id') id: string, @Request() req: any) {
+    // P2 reviewer multi-tenant (16/06): defesa em profundidade — mesmo
+    // rota SUPER_ADMIN-only, aplicar assertSameTenantOrSuperAdmin segue
+    // o padrão do projeto (mesmo controller linha 35 getSaudeParceiro).
+    // Bloqueia se a gate @Roles for removida ou rota duplicada pra ADMIN
+    // no futuro.
+    assertSameTenantOrSuperAdmin(req.user, id);
+    return this.saasService.getSaqueColaboradorStatus(id);
+  }
+
+  @Roles(SUPER_ADMIN)
+  @AuditLog({
+    acao: 'saas.saque-colaborador.toggle',
+    recurso: 'Cooperativa',
+    recursoIdParam: 'id',
+  })
+  @Patch('cooperativas/:id/saque-colaborador')
+  toggleSaqueColaborador(
+    @Param('id') id: string,
+    @Body() body: ToggleSaqueColaboradorDto,
+    @Request() req: any,
+  ) {
+    assertSameTenantOrSuperAdmin(req.user, id);
+    return this.saasService.toggleSaqueColaborador(id, body.ativo);
   }
 }

@@ -2013,7 +2013,16 @@ export class CooperTokenService {
       );
     }
 
-    // ── Guard 1: estabelecimento existe + tenant + flag + pixChave cadastrada ──
+    // ── Guard 1: cooperado existe + tenant + autorizado a resgatar ──
+    //
+    // Sprint D2 (16/06/2026) — Gate dual pra Saque PIX Colaborador Comum:
+    //   (A) estabelecimento (ehEstabelecimento=true) → SEMPRE autorizado.
+    //   (B) cooperado comum (não-estab) → autorizado SE:
+    //       (B.1) flag tenant Cooperativa.saqueColaboradorAtivo=true (SUPER_ADMIN liga); E
+    //       (B.2) gate produção: !isAmbienteReal() OU
+    //             env SAQUE_COLABORADOR_PRODUCAO_LIBERADO='true' (Luciano libera
+    //             após parecer escrito do cooperebr-analista-conformidade).
+    // Espelha exatamente o gate da oxidação (OXIDACAO_PRODUCAO_LIBERADA).
     const estabelecimento = await this.prisma.cooperado.findFirst({
       where: { id: estabelecimentoCooperadoId, cooperativaId },
       select: {
@@ -2029,8 +2038,25 @@ export class CooperTokenService {
       throw new NotFoundException('Cooperado não encontrado no seu tenant.');
     }
     if (!estabelecimento.ehEstabelecimento) {
-      throw new ForbiddenException(
-        'Resgate em PIX é exclusivo de cooperados-Estabelecimento do Clube. Solicite ao admin da cooperativa pra habilitar a flag ehEstabelecimento no seu cadastro.',
+      // Fallback Sprint D2: tenta liberar pelo gate Saque Colaborador.
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaId },
+        select: { saqueColaboradorAtivo: true },
+      });
+      const flagTenant = coop?.saqueColaboradorAtivo === true;
+      const gateProducaoLiberado =
+        !isAmbienteReal() ||
+        process.env.SAQUE_COLABORADOR_PRODUCAO_LIBERADO === 'true';
+      const saqueColabPermitido = flagTenant && gateProducaoLiberado;
+      if (!saqueColabPermitido) {
+        // Mensagem informativa SEM revelar o gate de produção (anti-enumeração):
+        // o cooperado vê a mesma mensagem se a flag está OFF ou o env está OFF.
+        throw new ForbiddenException(
+          'Resgate em PIX bloqueado pra este cooperado. Disponível pra cooperados-Estabelecimento do Clube ou cooperados de cooperativa com saque-colaborador habilitado pelo admin SISGD (exige parecer do analista-conformidade).',
+        );
+      }
+      this.logger.log(
+        `[F6 D2] Saque Colaborador autorizado: cooperado=${estabelecimentoCooperadoId.slice(0, 8)}… (não-estab) tenant=${cooperativaId.slice(0, 8)}… flag=ON env-prod-gate=${gateProducaoLiberado}`,
       );
     }
     if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(estabelecimento.status)) {
@@ -2441,25 +2467,38 @@ export class CooperTokenService {
      * pra DOUBLE-CHECK anti-IDOR. asaas.service.ts já validou tenant via
      * configCooperativaId === recibo.cooperativaId antes do emit, mas
      * este service também valida — se outro emissor do evento for criado
-     * no futuro, a defesa fica no lugar certo. Opcional pra retrocompat
-     * com specs antigos que chamam direto sem passar.
+     * no futuro, a defesa fica no lugar certo.
+     *
+     * P2 reviewer multi-tenant Sprint D2 (16/06): tornado OBRIGATÓRIO
+     * pra fechar a janela "findFirst sem cooperativaId no where +
+     * cooperativaIdEsperada opcional pulado = colisão de asaasTransferId
+     * cross-tenant processaria recibo do tenant errado". Specs antigos
+     * que chamavam sem passar agora precisam passar o cooperativaId
+     * (o caller listener sempre passa).
      */
-    cooperativaIdEsperada?: string;
+    cooperativaIdEsperada: string;
   }) {
     const { asaasTransferId, eventId, sucesso, motivoFalha, cooperativaIdEsperada } = params;
 
+    if (!cooperativaIdEsperada) {
+      this.logger.error(
+        `[F6] webhook chamado SEM cooperativaIdEsperada — bug de wiring (Sprint D2 P2 fix). asaasTransferId=${asaasTransferId}`,
+      );
+      throw new Error('cooperativaIdEsperada obrigatório (anti-IDOR cross-tenant).');
+    }
+
     const recibo = await this.prisma.resgateRecibo.findFirst({
-      where: { asaasTransferId },
+      where: { asaasTransferId, cooperativaId: cooperativaIdEsperada },
     });
     if (!recibo) {
       this.logger.warn(
-        `[F6] webhook asaasTransferId=${asaasTransferId} — recibo não encontrado, ignorando`,
+        `[F6] webhook asaasTransferId=${asaasTransferId} cooperativaId=${cooperativaIdEsperada} — recibo não encontrado, ignorando`,
       );
       return { skipped: 'recibo-nao-encontrado' };
     }
 
-    // Re-review (14/06): double-check tenant se passado pelo caller.
-    if (cooperativaIdEsperada && cooperativaIdEsperada !== recibo.cooperativaId) {
+    // Defense in depth — recibo.cooperativaId vem do banco; igual ao where.
+    if (cooperativaIdEsperada !== recibo.cooperativaId) {
       this.logger.error(
         `[F6] webhook double-check tenant FALHOU: esperado=${cooperativaIdEsperada} recibo=${recibo.cooperativaId} (${recibo.numeroRecibo}) — rejeitando`,
       );
@@ -2475,11 +2514,33 @@ export class CooperTokenService {
     }
 
     if (sucesso) {
+      // Sprint D2 (16/06/2026) — D-novo-RESGATE-PIX-SEM-CAIXA P1:
+      // tokenContabilService é OBRIGATÓRIO no caminho de webhook PAGO. Em
+      // produção sempre está injetado via FinanceiroModule.export; specs
+      // antigos que passam undefined falham aqui (fail-fast antes da tx).
+      // Asaas re-envia eventId em backoff se a tx Serializable abaixo falhar
+      // ou se este throw acontecer.
+      if (!this.tokenContabilService) {
+        this.logger.error(
+          `[F6 D2] tokenContabilService AUSENTE no webhook PAGO — bug de wiring? recibo=${recibo.numeroRecibo} tenant=${recibo.cooperativaId}`,
+        );
+        throw new Error(
+          'tokenContabilService obrigatório no webhook PAGO (D-RESGATE-PIX-SEM-CAIXA P1) — verifique injeção via FinanceiroModule.',
+        );
+      }
+
       // F6 C.4 P2 F6-7 (14/06/2026 — review pesada): CAS + queima + ledger
       // unidos numa ÚNICA tx Serializable. Antes: CAS fora da tx, queima
       // numa tx separada — crash entre os 2 deixava recibo=PAGO_RECIBO_
       // EMITIDO com tokens não-queimados (saldoBloqueadoResgate preso,
       // contabilidade desencontrada). Agora tudo num bloco atômico.
+      //
+      // Sprint D2 (16/06/2026): contábil (lancarResgatePix) NÃO entra dentro
+      // da tx Serializable. Razão: queremos commit garantido de saldo+ledger
+      // mesmo se contábil falhar (PIX já saiu de fato em Asaas). Estratégia:
+      // tx commita saldo+ledger; APÓS commit, tenta contábil; se falhar, marca
+      // recibo PAGO_CREDITO_PENDENTE em tx separada pra alerta admin (nunca
+      // perde o lançamento — cron de reconciliação re-tenta).
       let result: { swapCount: number; numeroRecibo: string };
       try {
         result = await this.prisma.$transaction(
@@ -2565,8 +2626,73 @@ export class CooperTokenService {
         return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
       }
 
+      // Sprint D2 (16/06/2026) — Bloco (c) D-RESGATE-PIX-SEM-CAIXA P1:
+      // contábil pós-tx. PIX já saiu (TRANSFER_DONE), saldo+ledger
+      // commitados na tx acima. Tenta lançar D Passivo / C Caixa.
+      // Falha aqui NÃO faz throw (PIX é irreversível); degrada status pra
+      // PAGO_CREDITO_PENDENTE pra alerta admin (cron reconciliação re-tenta).
+      try {
+        // P1 reviewers (16/06): assinatura sem `tx` (método é fora da tx
+        // Serializable por design — usa this.prisma); referenciaId + Tabela
+        // obrigatórios pra idempotência da cron de reconciliação; valor
+        // arredondado no ponto de origem (defesa Decimal→Number float).
+        // recibo.cooperativaId vem do banco (findFirst sem JWT inject —
+        // confiável por origem, igualdade com params.cooperativaId implícita).
+        await this.tokenContabilService.lancarResgatePix({
+          cooperativaId: recibo.cooperativaId,
+          cooperadoId: recibo.cooperadoEstabelecimentoId,
+          valor: Math.round(Number(recibo.valorLiquidoReais) * 100) / 100,
+          descricao: `Resgate ${recibo.numeroRecibo}`,
+          observacoes: `Recibo ${recibo.numeroRecibo} — liquidação voucher CooperToken (PIX-out Asaas ${recibo.asaasTransferId ?? '?'})`,
+          referenciaId: recibo.id,
+          referenciaTabela: 'ResgateRecibo',
+        });
+        this.logger.log(
+          `[F6 D2] LancamentoCaixa D Passivo/C Caixa emitido pra recibo=${recibo.numeroRecibo} valor=R$ ${Number(recibo.valorLiquidoReais).toFixed(2)}`,
+        );
+      } catch (errContabil) {
+        const msgContabil =
+          errContabil instanceof Error ? errContabil.message : 'erro desconhecido';
+        this.logger.error(
+          `[F6 D2] CONTABIL FALHOU pós-saída-de-caixa recibo=${recibo.numeroRecibo} — degradando pra PAGO_CREDITO_PENDENTE. Motivo: ${msgContabil}`,
+        );
+        try {
+          await this.prisma.resgateRecibo.updateMany({
+            where: { id: recibo.id, cooperativaId: recibo.cooperativaId, status: 'PAGO_RECIBO_EMITIDO' },
+            data: {
+              status: 'PAGO_CREDITO_PENDENTE',
+              motivoFalha: `Contábil pendente: ${msgContabil.slice(0, 400)}`,
+            },
+          });
+          this.logger.warn(
+            `[F6 D2] recibo=${recibo.numeroRecibo} marcado PAGO_CREDITO_PENDENTE — admin revisar + cron reconciliação re-tenta.`,
+          );
+          // Re-review orquestrador Sprint D2 (16/06): espelha F2 (compra-pj
+          // credito-pendente) — emite evento pra admin ver pendência no
+          // painel, não só no log. Princípio "nenhuma saída de caixa
+          // silenciosa". Cron de reconciliação (D-novo-RECONCILIACAO-
+          // CONTABIL-CRON P2) re-tenta o lançamento contábil + zera o
+          // alerta quando sucesso.
+          this.eventEmitter.emit('cooper-token-resgate.credito-pendente', {
+            reciboId: recibo.id,
+            cooperativaId: recibo.cooperativaId,
+            cooperadoEstabelecimentoId: recibo.cooperadoEstabelecimentoId,
+            numeroRecibo: recibo.numeroRecibo,
+            valorLiquidoReais: Number(recibo.valorLiquidoReais),
+            asaasTransferId: recibo.asaasTransferId,
+            motivoContabil: msgContabil.slice(0, 400),
+            eventId,
+          });
+        } catch (errStatus) {
+          // Não conseguiu nem mudar status — caso extremo, loga pra investigação.
+          this.logger.error(
+            `[F6 D2] FALHA EXTREMA: recibo=${recibo.numeroRecibo} contábil falhou E status update falhou. Investigar manualmente. Motivo status: ${(errStatus as Error).message}`,
+          );
+        }
+      }
+
       this.logger.log(
-        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX (tx Serializable única)`,
+        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX (tx Serializable única) + LancamentoCaixa (Sprint D2)`,
       );
       return { sucesso: true, reciboId: recibo.id };
     }

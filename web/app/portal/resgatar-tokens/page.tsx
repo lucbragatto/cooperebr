@@ -48,6 +48,8 @@ import {
 interface MeResponse {
   id: string;
   ehEstabelecimento: boolean;
+  // Sprint D2 (16/06/2026): flag tenant pra saque colaborador comum.
+  saqueColaboradorAtivo: boolean;
   status: string;
 }
 
@@ -160,6 +162,8 @@ export default function ResgatarTokensPage() {
       setMe({
         id: meR.data.id,
         ehEstabelecimento: !!meR.data.ehEstabelecimento,
+        // Sprint D2 (16/06/2026): flag tenant pra saque colaborador.
+        saqueColaboradorAtivo: !!meR.data.saqueColaboradorAtivo,
         status: meR.data.status ?? 'ATIVO',
       });
       setPixStatus(pixR.data);
@@ -314,7 +318,10 @@ export default function ResgatarTokensPage() {
   }
 
   // ─── Guards ───────────────────────────────────────────────────────────
-  if (me && !me.ehEstabelecimento) {
+  // Sprint D2 (16/06/2026): libera tela se cooperado é Estabelecimento OU
+  // se a cooperativa habilitou saqueColaboradorAtivo (flag tenant).
+  // Server-side, solicitarResgate revalida o gate dual (flag + env produção).
+  if (me && !me.ehEstabelecimento && !me.saqueColaboradorAtivo) {
     return (
       <div className="space-y-4">
         <Link
@@ -329,15 +336,15 @@ export default function ResgatarTokensPage() {
               <AlertCircle className="h-6 w-6 text-amber-700 shrink-0 mt-0.5" />
               <div className="space-y-2">
                 <p className="font-semibold text-amber-900">
-                  Você ainda não é Estabelecimento do Clube
+                  Resgate em R$ via PIX bloqueado
                 </p>
                 <p className="text-sm text-amber-900">
-                  Resgate de tokens em R$ via PIX é exclusivo de cooperados-Estabelecimento
-                  do Clube (que aceitam CooperToken como meio de pagamento dos parceiros do
-                  Clube e cooperados).
+                  Disponível pra cooperados-Estabelecimento do Clube ou pra
+                  cooperados de cooperativas que habilitaram saque de tokens
+                  em R$ pra colaboradores (com parecer de conformidade).
                 </p>
                 <p className="text-sm text-amber-900">
-                  Fale com o admin da cooperativa pra habilitar essa função no seu cadastro.
+                  Fale com o admin da cooperativa pra habilitar essa função.
                 </p>
               </div>
             </div>

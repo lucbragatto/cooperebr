@@ -43,6 +43,8 @@ interface SetupOpts {
   limiteResult?: any;
   otpValidarLanca?: Error;
   reciboParaUpdate?: any;
+  /** Sprint D2 (16/06/2026) — flag Cooperativa.saqueColaboradorAtivo. */
+  cooperativaSaqueColaborador?: boolean;
 }
 
 function setup(opts: SetupOpts = {}) {
@@ -124,6 +126,17 @@ function setup(opts: SetupOpts = {}) {
           : null,
       ),
     },
+    // Sprint D2 (16/06/2026) — gate Saque Colaborador. Default flag OFF:
+    // sem este mock os testes do guard ehEstabelecimento=false ainda passam
+    // (flag OFF → Forbidden, mesmo path). Specs D2 que precisam flag ON
+    // sobrescrevem via opts.cooperativaSaqueColaborador.
+    cooperativa: {
+      findUnique: jest.fn().mockResolvedValue(
+        opts.cooperativaSaqueColaborador !== undefined
+          ? { saqueColaboradorAtivo: opts.cooperativaSaqueColaborador }
+          : { saqueColaboradorAtivo: false },
+      ),
+    },
   };
 
   const pin = {
@@ -145,6 +158,13 @@ function setup(opts: SetupOpts = {}) {
     ),
   };
 
+  // Sprint D2 (16/06/2026) — webhook PAGO agora EXIGE tokenContabilService
+  // pra emitir LancamentoCaixa D Passivo/C Caixa (D-RESGATE-PIX-SEM-CAIXA P1).
+  // Mock retorna sucesso por default; specs específicos podem sobrescrever.
+  const tokenContabil = {
+    lancarResgatePix: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
+  };
+
   const service = new CooperTokenService(
     prisma,
     { emit: jest.fn() } as any,
@@ -153,6 +173,7 @@ function setup(opts: SetupOpts = {}) {
     otp as any,
     limite as any,
     pixOut as any,
+    tokenContabil as any,
   );
 
   return {
@@ -167,6 +188,7 @@ function setup(opts: SetupOpts = {}) {
     txCreateRecibo,
     txUpdateSaldo,
     txCreateLedger,
+    tokenContabil,
   };
 }
 
@@ -211,7 +233,7 @@ describe('F6 Bloco B — solicitarResgate guards', () => {
     });
     await expect(
       service.solicitarResgate(baseSolicitar()),
-    ).rejects.toThrow(/exclusivo de cooperados-Estabelecimento/);
+    ).rejects.toThrow(/Resgate em PIX bloqueado.+Estabelecimento/);
   });
 
   it('estabelecimento SUSPENSO → Forbidden', async () => {
@@ -598,6 +620,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'tx-ghost',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('recibo-nao-encontrado');
   });
@@ -608,6 +631,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-MESMO',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('webhook-duplicado');
   });
@@ -618,6 +642,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.sucesso).toBe(true);
     expect(
@@ -639,6 +664,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('compare-and-swap-perdeu');
   });
@@ -650,6 +676,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       eventId: 'evt-1',
       sucesso: false,
       motivoFalha: 'Insufficient funds on Asaas',
+      cooperativaIdEsperada: COOP,
     });
     expect(r.sucesso).toBe(false);
     expect(r.motivoFalha).toBe('Insufficient funds on Asaas');

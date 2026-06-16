@@ -207,6 +207,8 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/super-admin/parceiros', label: 'Parceiros', icon: Building2 },
         { href: '/dashboard/super-admin/solicitacoes', label: 'Solicitações de Contrato', icon: ClipboardList },
         { href: '/dashboard/super-admin/confirmacoes-pagamento', label: 'Confirmações de Pagamento', icon: ClipboardList },
+        // Sprint D2 (16/06/2026) — toggle Saque PIX Colaborador por cooperativa.
+        { href: '/dashboard/super-admin/saque-colaborador', label: 'Saque PIX Colaborador', icon: Banknote },
         { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
         { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
       ],

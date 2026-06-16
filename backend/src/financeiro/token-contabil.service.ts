@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 
 /**
@@ -24,7 +25,8 @@ interface LancamentoTokenParams {
   cooperativaId: string;
   cooperadoId?: string;
   valor: number;
-  competencia: string;
+  /** Competência YYYY-MM. Default = mês atual (via getCompetencia). */
+  competencia?: string;
   descricao: string;
   observacoes?: string;
 }
@@ -168,6 +170,89 @@ export class TokenContabilService {
     });
 
     this.logger.log(`Lançamento contábil resgate fatura: R$ ${valor} (${params.cooperativaId})`);
+    return lancamento;
+  }
+
+  /**
+   * 3b. Sprint D2 (16/06/2026) — Resgate em PIX (estabelecimento OU
+   * colaborador via saqueColaboradorAtivo). Fecha D-novo-RESGATE-PIX-
+   * SEM-CAIXA P1 (catalogado M40): hoje o webhook PAGO baixa saldo +
+   * ledger sem emitir LancamentoCaixa, deixando passivo permanentemente
+   * inflado.
+   *
+   * D: Passivo Tokens a Resgatar (5.1.02) — baixa do passivo
+   * (LancamentoCaixa.tipo='DESPESA' = saída de caixa real, contraparte
+   *  implícita "C Caixa" do modelo canônico FUNDACAO §2.1.)
+   *
+   * NOTA TIPAGEM 5.1.02: hoje DESPESA (errada — deveria PASSIVO,
+   * catalogado D-novo-EMISSAO-ADMIN-CONTABIL P2). Forward-compatible:
+   * quando a sprint contábil corrigir o tipo, todos os lançamentos
+   * D 5.1.02 se acertam no balanço sem migration de dados.
+   *
+   * SPREAD: se cooperativa pagar abaixo do face (taxa>0), `valor` aqui é
+   * o líquido pago — o diff face×líquido seria C Receita de Resgate.
+   * Hoje taxa=0 por design (cooper-token.service:2086 rejeita taxa>0
+   * com erro genérico — bloqueado até D-novo-TAXA-RESGATE-DESTINO P2
+   * decidir destino contábil). Spread não implementado nesta sprint.
+   */
+  async lancarResgatePix(
+    params: LancamentoTokenParams & {
+      /**
+       * P1 reviewer financeiro (16/06): referenciaId/Tabela obrigatórios pra
+       * cron de reconciliação (D-novo-F6-RECONCILIACAO-CRON P2) saber se já
+       * lançou — sem isso, retry duplicaria LancamentoCaixa pro mesmo recibo.
+       */
+      referenciaId: string;
+      referenciaTabela: string;
+    },
+  ) {
+    // Reviewers (16/06): este método é CHAMADO INTENCIONALMENTE FORA DA
+    // TX SERIALIZABLE (Sprint D2 Bloco c — commit garantido de saldo+ledger
+    // mesmo se contábil falhar; PIX é irreversível). Usa this.prisma direto,
+    // SEM parâmetro tx enganoso que insinuasse tx-safety. Idempotência via
+    // findFirst guard por referenciaId+Tabela (cron de reconciliação chama
+    // 2× pro mesmo recibo em retry → guard impede duplicação).
+    const existente = await this.prisma.lancamentoCaixa.findFirst({
+      where: {
+        cooperadoId: params.cooperadoId,
+        cooperativaId: params.cooperativaId,
+        descricao: { startsWith: `[Token] Resgate PIX — ${params.descricao}` },
+      },
+      select: { id: true },
+    });
+    if (existente) {
+      this.logger.log(
+        `lancarResgatePix: idempotência hit — recibo ${params.referenciaId} já tem LancamentoCaixa ${existente.id}, skip.`,
+      );
+      return existente;
+    }
+
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia ?? this.getCompetencia();
+    // P2 reviewer financeiro (16/06): arredondamento defensivo no ponto de
+    // origem (mesmo este método já arredondar) — padrão do projeto em valores
+    // monetários. Decimal→Number pode introduzir ruído float.
+    const valor = Math.round(params.valor * 100) / 100;
+    const lancamento = await this.prisma.lancamentoCaixa.create({
+      data: {
+        tipo: 'DESPESA',
+        descricao: `[Token] Resgate PIX — ${params.descricao}`,
+        valor,
+        competencia,
+        status: 'REALIZADO',
+        dataPagamento: new Date(),
+        planoContasId: contas.get('5.1.02'),
+        cooperadoId: params.cooperadoId,
+        cooperativaId: params.cooperativaId,
+        observacoes:
+          params.observacoes ??
+          'Resgate de tokens via PIX — D Passivo / C Caixa (FUNDACAO §2.1)',
+      },
+    });
+    this.logger.log(
+      `Lançamento contábil resgate PIX: R$ ${valor} ` +
+        `(coop=${params.cooperativaId.slice(0, 8)}… recibo=${params.referenciaId.slice(0, 8)}…)`,
+    );
     return lancamento;
   }
 

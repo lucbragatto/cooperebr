@@ -80,6 +80,13 @@ export class CooperadosService {
           where: { status: 'APLICADO' },
           select: { valorCalculado: true },
         },
+        // Sprint D2 (16/06/2026) — expõe flag saqueColaboradorAtivo da
+        // cooperativa pra o portal mostrar card condicional em
+        // /portal/tokens (ehEstabelecimento OR saqueColaboradorAtivo) sem
+        // precisar de endpoint extra.
+        cooperativa: {
+          select: { saqueColaboradorAtivo: true },
+        },
       },
     });
     if (!cooperado) throw new NotFoundException('Cooperado não encontrado para este usuário');
@@ -93,6 +100,10 @@ export class CooperadosService {
 
     return {
       ...cooperado,
+      // Sprint D2 (16/06/2026) — expõe flag NO ROOT pra o front consumir
+      // direto sem aprofundar em `.cooperativa.saqueColaboradorAtivo`
+      // (espelha padrão `ehEstabelecimento` que também é root).
+      saqueColaboradorAtivo: c.cooperativa?.saqueColaboradorAtivo === true,
       resumo: {
         descontoAtual: contratoAtivo ? Number(contratoAtivo.percentualDesconto) : null,
         proximoVencimento: proximaCobranca?.dataVencimento ?? null,
