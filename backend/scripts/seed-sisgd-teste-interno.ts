@@ -112,15 +112,22 @@ async function main(): Promise<void> {
   }
 
   // Update minimo: garante campos essenciais SEM mexer em nome/cpf/razaoSocial.
-  const cooperadoOK = await prisma.cooperado.update({
-    where: { id: cooperado.id },
+  // P3 reviewer (16/06): updateMany + filtro cooperativaId pra defense in depth —
+  // bloqueia qualquer cooperado de OUTRO tenant casualmente com mesmo cpf/email.
+  const r1 = await prisma.cooperado.updateMany({
+    where: { id: cooperado.id, cooperativaId: COOPEREBR_ID },
     data: {
       status: 'ATIVO',
       ambienteTeste: true,
-      cooperativaId: COOPEREBR_ID,
       tipoCooperado: cooperado.tipoCooperado ?? 'SEM_UC',
     },
   });
+  if (r1.count !== 1) {
+    console.error(`[seed-sisgd] FALHA: updateMany count=${r1.count} (esperado 1) — cooperativaId nao bateu.`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+  const cooperadoOK = await prisma.cooperado.findUniqueOrThrow({ where: { id: cooperado.id } });
   console.log(`  ✅ Cooperado convergido id=${cooperadoOK.id}`);
   console.log(`     nomeCompleto: ${cooperadoOK.nomeCompleto}  (preservado, NAO alterado)`);
   console.log(`     cpf: ${cooperadoOK.cpf}  email: ${cooperadoOK.email}`);
@@ -211,16 +218,24 @@ async function main(): Promise<void> {
   }
 
   // Update minimo: garante essenciais sem mexer em nome/cnpj/tipoBeneficio.
-  const convenioOK = await prisma.contratoConvenio.update({
-    where: { id: convenio.id },
+  // P3 reviewer (16/06): updateMany + cooperativaId no where pra defense in depth.
+  // numero @unique global ja resolve 1 registro, mas guard duplo previne acidente
+  // se schema mudar pra @@unique([numero, cooperativaId]) no futuro.
+  const r3 = await prisma.contratoConvenio.updateMany({
+    where: { id: convenio.id, cooperativaId: COOPEREBR_ID },
     data: {
       status: 'ATIVO',
       statusAprovacao: 'APROVADO',
       pagador: 'EMPRESA',
-      pagadorCooperadoId: cooperadoOK.id, // garante apontamento correto
-      cooperativaId: COOPEREBR_ID,
+      pagadorCooperadoId: cooperadoOK.id,
     },
   });
+  if (r3.count !== 1) {
+    console.error(`[seed-sisgd] FALHA: contratoConvenio updateMany count=${r3.count} — cooperativaId nao bateu.`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+  const convenioOK = await prisma.contratoConvenio.findUniqueOrThrow({ where: { id: convenio.id } });
   console.log(`  ✅ ContratoConvenio convergido id=${convenioOK.id}`);
   console.log(`     numero: ${convenioOK.numero}`);
   console.log(`     empresaNome: ${convenioOK.empresaNome}  (preservado)`);

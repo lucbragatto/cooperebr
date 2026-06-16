@@ -175,16 +175,33 @@ async function main(): Promise<void> {
       `  Encontrado Cooperado antigo: id=${antigo.id}  nome="${antigo.nomeCompleto}"  contratos=${antigo._count.contratos}  ucs=${antigo._count.ucs}  propostas=${antigo._count.propostas}  progressao=${progAntiga ? 1 : 0}`,
     );
     await prisma.$transaction(async (tx) => {
-      // ordem importa pra FKs
+      // P3 reviewer (16/06): defense in depth — onde o model tem
+      // cooperativaId nativo (Contrato/PropostaCooperado/Uc/Cooperado),
+      // filtramos por ele tambem. ConvenioCooperado/ProgressaoClube/
+      // AprovacaoConvenioMembro NAO tem cooperativaId direto — o filtro
+      // por cooperadoId basta (cooperado ja localizado por email unique
+      // dentro do tenant). Ordem importa pra FKs.
       await tx.aprovacaoConvenioMembro.deleteMany({
         where: { membro: { cooperadoId: antigo.id } },
       });
       await tx.convenioCooperado.deleteMany({ where: { cooperadoId: antigo.id } });
       await tx.progressaoClube.deleteMany({ where: { cooperadoId: antigo.id } });
-      await tx.contrato.deleteMany({ where: { cooperadoId: antigo.id } });
-      await tx.propostaCooperado.deleteMany({ where: { cooperadoId: antigo.id } });
-      await tx.uc.deleteMany({ where: { cooperadoId: antigo.id } });
-      await tx.cooperado.delete({ where: { id: antigo.id } });
+      await tx.contrato.deleteMany({
+        where: { cooperadoId: antigo.id, cooperativaId: COOPEREBR_ID },
+      });
+      await tx.propostaCooperado.deleteMany({
+        where: { cooperadoId: antigo.id, cooperativaId: COOPEREBR_ID },
+      });
+      await tx.uc.deleteMany({
+        where: { cooperadoId: antigo.id, cooperativaId: COOPEREBR_ID },
+      });
+      // delete cooperado: filtro tenant duplo (cooperado.email e unique global)
+      const delOk = await tx.cooperado.deleteMany({
+        where: { id: antigo.id, cooperativaId: COOPEREBR_ID },
+      });
+      if (delOk.count !== 1) {
+        throw new Error(`Cleanup cooperado: deleteMany count=${delOk.count} (esperado 1)`);
+      }
     });
     console.log(`  🧹 Cooperado antigo + dependências removidos`);
   } else {
@@ -397,6 +414,12 @@ async function main(): Promise<void> {
     console.error(`❌ Usuario empresa ${EMPRESA_USUARIO_EMAIL} não encontrado (rode o seed)`);
     process.exit(1);
   }
+  // P3 reviewer (16/06): NAO incluir cooperadoId no payload do JWT empresa.
+  // O PagadorCooperadoGuard resolve via Cooperado.email == Usuario.email
+  // (linhas 71-97 do guard). Se o smoke incluir cooperadoId, mascara
+  // regressao futura caso algum endpoint passe a confiar no campo do JWT
+  // em vez do email-match. EMPRESA_COOPERADO_ID fica como constante de
+  // documentacao + asserts read-only, NAO entra no token.
   const empresaJwt = jwt.sign(
     {
       sub: empresaUsuario.id,
@@ -405,7 +428,6 @@ async function main(): Promise<void> {
       email: empresaUsuario.email,
       perfil: empresaUsuario.perfil,
       cooperativaId: COOPEREBR_ID,
-      cooperadoId: EMPRESA_COOPERADO_ID,
     },
     JWT_SECRET,
     { expiresIn: '15m' },
