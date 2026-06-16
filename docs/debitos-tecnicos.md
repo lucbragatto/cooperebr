@@ -111,6 +111,30 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 
 ## P1 — Bloqueia entrada de parceiro real
 
+### D-novo-COMPRA-PJ-TEMPLATE-CONTABIL — Compra paga pelo conveniado lança "desconto concedido" em vez de receita de venda
+
+**Severidade:** P1 — receita some + passivo infla; bloqueia DRE válida no Modelo C.
+**Detectado em:** 2026-06-15 (análise read-only Cowork/claude.ai, 4 agentes 5283L).
+**Onde:** `backend/src/cooper-token/cooper-token.service.ts` no `processarPagamentoCompraPj` — emite evento que dispara `lancarEmissaoFaturaCheia` (template `D Custo Desconto Concedido 5.1.01 / C Passivo Tokens 5.1.02`). Esse template foi feito pra F1 (desconto NÃO-aplicado), não pra F2 (entrada de caixa pago pelo conveniado).
+**Correto:** `D Caixa / C Passivo Tokens 5.1.02` (entrada de caixa real, gera passivo). Método existe (`lancarCompraParceiroPago`) mas **não é chamado** — emitter usa o template errado.
+**Impacto:** toda compra paga por empresa conveniada some da receita e infla "desconto concedido" no DRE. Distorce análise de margem.
+**Fontes:** `docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md` §2.5 + `docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md` item P1#1.
+**Resolução:** sprint "Circuito de Emissão Completo" (4 fases). Fase 1 contábil. Convive com D-novo-EMISSAO-ADMIN-CONTABIL (catalogado 16/06) — mesma família.
+
+---
+
+### D-novo-RESGATE-PIX-SEM-CAIXA — F6 resgate PIX-out real sem `LancamentoCaixa`; passivo não baixa
+
+**Severidade:** P1 — passivo de tokens fica permanentemente inflado mesmo quando cooperativa paga em R$.
+**Detectado em:** 2026-06-15 (análise Cowork/claude.ai).
+**Onde:** `backend/src/cooper-token/cooper-token-resgate.listener.ts` no `processarWebhookResgate` (TRANSFER_DONE) — dá baixa no `ResgateRecibo` mas **não emite `LancamentoCaixa`**.
+**Correto:** quando webhook TRANSFER_DONE chega, lançar `D Passivo Tokens 5.1.02 / C Caixa`. Sem isso o passivo nunca baixa contabilmente; só "some" pelo flip de status do recibo.
+**Impacto:** balanço da cooperativa cresce um passivo fantasma cada vez que tokens são resgatados. Em escala, distorce sustentabilidade percebida.
+**Fontes:** mesmas (FLUXO §3.4 + GAP-MAP item P1#2).
+**Resolução:** sprint "Circuito de Emissão Completo" Fase 1 contábil (junto com D-novo-COMPRA-PJ-TEMPLATE-CONTABIL).
+
+---
+
 ### D-novo-CONVITE-FRONTEND-URL — `FRONTEND_URL` precisa ser pública antes do piloto Sinergia/qualquer envio real
 
 **Severidade:** P1 — bloqueia smoke E2E real e qualquer envio de convite via WhatsApp em produção
@@ -478,6 +502,83 @@ Também: ampliar `findOne` pra aceitar `cooperativaId` (atualmente em :285 não 
 - **Opção C:** substituir IMAP service pelo Gmail API (OAuth, sem TLS custom) — escopo bem maior.
 
 **Responsabilidade:** carona do Cowork (M36) — investigação e correção saem do escopo da Sprint Higiene Rotas. Fica catalogado pra próxima sessão Cowork ou sprint dedicada antes do deploy.
+
+### [NOVOS — sessão 16/06] Bloco "Circuito de Emissão de Token" — 7 P2 + 1 P3 (achados Cowork+claude.ai 15/06)
+
+**Origem:** análise read-only de 4 agentes Cowork/claude.ai 15/06 (`docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md`, `docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md`, `docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md`). Os 2 itens mais críticos viraram P1 catalogados acima (D-novo-COMPRA-PJ-TEMPLATE-CONTABIL + D-novo-RESGATE-PIX-SEM-CAIXA). Os 8 abaixo são P2/P3 do mesmo circuito.
+
+**Resolução comum:** entram na futura **Sprint "Circuito de Emissão Completo"** (4 fases: contábil → notificações → emissão unificada quem/custo → compra conveniado + auto-distribuição). Sprint enfileirada DEPOIS de Sprint D2 (Saque PIX colaborador comum) + Sprint Decaimento Qualificação.
+
+---
+
+#### D-novo-DISTRIBUICAO-SEM-CONTABIL — F3 distribuição empresa→colaborador sem `LancamentoCaixa`
+
+**Severidade:** P2 — passivo migra entre "saldo empresa" e "saldo membro" no ledger mas a contabilidade preparatória nunca registra. Convive com D-novo-EMISSAO-ADMIN-CONTABIL item #3 — pode ser resolvido junto.
+**Onde:** `cooper-token.service.ts:distribuirTokensLote` + listener `distribuir-lote-handler.listener`.
+**Correto:** ao distribuir, emitir `D Passivo Empresa-PJ / C Passivo Membro` (movimentação intra-passivo). Hoje só atualiza saldos sem trilha contábil.
+**Bloqueio adicional:** taxa de transferência catalogada em D-novo-TAXA-TRANSFER-DESTINO permanece travada por isso.
+**Fontes:** GAP-MAP item #4.
+
+---
+
+#### D-novo-OXIDACAO-SEM-CONTABIL — quebra de oxidação não reconhece receita
+
+**Severidade:** P2 — `aplicarOxidacao` (`cooper-token.service.ts:3006`) reduz saldos via cron `OXIDACAO_PRODUCAO_LIBERADA` mas não emite `LancamentoCaixa` reconhecendo receita de quebra. Passivo cai (correto) sem receita compensatória (errado contábilmente).
+**Correto:** ao aplicar oxidação, lançar `D Passivo Tokens 5.1.02 / C Receita Quebra Token` (conta nova a definir).
+**Diferenciação:** ≠ D-novo-OXIDACAO-LEDGER-TIPO (catalogado P3) que pede enum `OXIDACAO` em `CooperTokenTipo`. Esse aqui é o lado contábil; o enum é o lado ledger.
+**Fontes:** GAP-MAP item #5.
+
+---
+
+#### D-novo-TOKEN-NOTIFICACOES-ORFAS — 0/8 passos do circuito disparam email/WA
+
+**Severidade:** P2 — `TokenNotificacaoService` existe (testado em specs) mas está desconectado dos emitters do ledger. Evento de QR criado sem listener. UX silenciosa: cooperado recebe token sem aviso, compra empresa fica sem confirmação.
+**Onde:** `backend/src/cooper-token/notificacao/token-notificacao.service.ts` (existe) + `cooper-token.service.ts` (emite eventos ledger mas listener de notificação nunca foi ligado).
+**Resolução:** conectar listeners aos 8 passos do circuito (emissão admin, compra paga, distribuição, resgate clube, resgate PIX, transferência peer, oxidação, expiração). Sprint Fase 2 do Circuito de Emissão.
+**Fontes:** ANALISE §3 + GAP-MAP item #6.
+
+---
+
+#### D-novo-CONVENIADO-COMPRA-UI-AUSENTE — `/portal/comprar-tokens` 404 (3 links quebrados)
+
+**Severidade:** P2 — backend de compra empresa-PJ está PRONTO e robusto (`processarPagamentoCompraPj`, webhook Asaas, ledger, validações). Mas a UI `/portal/comprar-tokens` retorna 404. 3 links no portal apontam pra lá. Empresa não consegue iniciar compra.
+**Onde:** `web/app/portal/comprar-tokens/page.tsx` não existe (referenciada por links em `/portal/page.tsx`, `/conveniada/convenio/[id]/page.tsx`, e card de saldo).
+**Resolução:** criar a tela com fluxo Asaas (link de pagamento PIX) + spinner aguardando webhook. Backend não muda. Sprint Fase 4.
+**Fontes:** GAP-MAP item #7.
+
+---
+
+#### D-novo-PERMISSAO-CONVENIADO-EMISSAO — portão admin ausente em emitir-lote (admin pode emitir sem confirmação de tier ALTO)
+
+**Severidade:** P2 — sprint M39 implementou `emitirLoteAdmin` com tier `ALTO` + 1 OTP único, mas a UI `/dashboard/cooper-token/enviar` NÃO valida explicitamente que o usuário tem perfil admin antes de mostrar a tela. Hoje só `@Roles(ADMIN, SUPER_ADMIN, OPERADOR)` no controller filtra; UI não tem guard visual.
+**Resolução:** adicionar guard de perfil + redirect se não-admin no layout `/dashboard`. Sprint Fase 3.
+**Fontes:** ANALISE §1.2.
+
+---
+
+#### D-novo-EMISSAO-SELETOR-QUEM-CUSTO — tela emite sem perguntar "quem custeia" (admin/empresa/auto-distribuição)
+
+**Severidade:** P2 — `/dashboard/cooper-token/enviar` (redesenhado M39) tem 2 etapas (preview→OTP) mas NÃO pergunta a fonte do custeio. Hoje sempre é bonificação admin (template `D 5.1.03 / C 5.1.02`). Empresa-PJ que quer "comprar e distribuir" precisa entrar por outra UI (a tela `/portal/comprar-tokens` ausente).
+**Resolução:** unificar fluxo de emissão na mesma tela com seletor "Custeio: Admin bonifica | Empresa paga | Auto-distribuir após pagamento". Sprint Fase 3.
+**Fontes:** GAP-MAP item #8.
+
+---
+
+#### D-novo-PRE-CONFIG-DISTRIBUICAO — sem auto-distribuir no pagamento da empresa
+
+**Severidade:** P2 — quando empresa-PJ paga compra (via `/portal/comprar-tokens` futura), tokens caem no saldo da empresa. Não há configuração "ao pagar, distribuir automaticamente entre membros X/Y/Z na proporção W". Empresa precisa fazer F3 manual depois.
+**Resolução:** modelo `ConfigDistribuicaoEmpresa` + listener no `processarPagamentoCompraPj` que dispara F3 automático se config ativa. Sprint Fase 4 (junto com `/portal/comprar-tokens`).
+**Fontes:** GAP-MAP item #9.
+
+---
+
+#### D-novo-COMPRA-SEM-CONVENIOID — `CooperTokenLedger` da compra paga não grava `convenioId`
+
+**Severidade:** P3 — quando empresa-PJ paga compra, a entry do ledger marca `cooperado=empresa, tipo=BONIFICACAO_COMPRA` mas não preserva `convenioId`. Dificulta rastreamento "qual convênio originou esse passivo" pra relatórios.
+**Resolução:** adicionar `convenioId String?` em `CooperTokenLedger` (migration aditiva) + popular em `processarPagamentoCompraPj`. Pode entrar avulso em qualquer sprint contábil.
+**Fontes:** GAP-MAP item #10.
+
+---
 
 ### D-novo-WA-PHONE-NORMALIZE — telefones formatados não casam com matcher do bot (cooperados podem ficar inalcançáveis silenciosamente)
 

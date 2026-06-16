@@ -63,6 +63,20 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-16 (Code — M40 Abrir Cadastros SISGD + análise circuito emissão token)
+
+**Sessão Code de dia inteiro.** 2 eixos paralelos:
+
+1. **Sprint "Abrir Cadastros — Teste SISGD" ENTREGUE** em 4 commits + 1 merge `--no-ff` no main (`1634c11`). Convênio `CV-SISGD-TESTE-001` pronto pra turma de teste interna validar onboarding antes da Santi/Triad. Smoke E2E 10/10 verde (convite OTP → cadastro → empresa aprova → admin aprova → MEMBRO_ATIVO). Convergiu pro convênio pré-existente (08/06) — não criou duplicata; órfãos da v1 desativados (status=ENCERRADO, NUNCA deletados). `cooperebr-multitenant-reviewer`: 0 P0/P1 + 4 P3 aplicados (defense in depth). Bloco (b)/(c) cancelados durante Fase 1: `MembrosPendentesSection` já estava plugado em ambas detail pages desde 03/06.
+
+2. **Análise read-only circuito emissão token** (4 agentes Cowork+claude.ai 15/06, 5283L) captura no main (`0371185` — `ANALISE-/FLUXO-/GAP-MAP-`). **4 decisões de produto fechadas:** D1 arrendamento ✅ Opção A nada a construir; **D2 saque PIX colaborador → CONSTRUIR com toggle** (reusa F6 ~70% pronto); **D3 decaimento qualificação → CONSTRUIR** (espelha oxidação); D4 oxidação ✅ JÁ EXISTENTE (`aplicarOxidacao:3006` + cron + gate). **10 débitos novos catalogados** (2 P1 + 7 P2 + 1 P3). Correções de percepção: telas de aprovação existem; tier do convênio valida; reavaliação existe (só não rebaixava — D3 resolve).
+
+**Próximo passo único e claro:** **Sprint D2 — Saque PIX colaborador comum** (~6-10h, reusa F6 do M34/M35), em paralelo/depois **Sprint Decaimento Qualificação** (D3, ~6-10h). DEPOIS dos 2: **Sprint "Circuito de Emissão Completo" (4 fases — contábil → notificações → emissão unificada → compra conveniado + auto-distribuição)**.
+
+**Detalhe:** `docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-17 (Code — Fase 1 read-only Sprint "Abrir Cadastros — Teste SISGD")
 
 **Sessão Code curta de planejamento (sem implementação).** Entregou em paralelo:
@@ -2572,13 +2586,13 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento sessão 17/06:
+2. Rodar `git status --short`. Esperado pós-fechamento M40 (16/06):
    8 arquivos `M` em backend/src/concierge/* + backend/package.json +
    backend/package-lock.json + backend/src/concierge/concierge.service.
    spec.ts — TUDO TERRITÓRIO COWORK, Code NÃO TOCA, próximo fechamento
-   Cowork limpa. Último commit é o de fechamento desta sessão (17/06
-   — Fase 1 Sprint Abrir Cadastros). Rodar `git log origin/main..HEAD
-   --oneline` — deve mostrar VAZIO se push do fechamento concluído.
+   Cowork limpa. Último commit é o de fechamento M40. Rodar
+   `git log origin/main..HEAD --oneline` — deve mostrar VAZIO se push
+   do fechamento concluído.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
@@ -2586,99 +2600,105 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`.
    HMR NÃO ROLA.
 
-4. ⚠️ Branch `feature/abrir-cadastros-sisgd-teste` JÁ EXISTE (criada
-   17/06 na sessão de Fase 1) e está VAZIA (zero commits). Próxima
-   sessão arranca nessa branch — fazer `git checkout
-   feature/abrir-cadastros-sisgd-teste` como 1º comando (NÃO criar
-   nova).
+4. ⚠️ M40 FECHADO no main (commit `1634c11` merge). Branch
+   `feature/abrir-cadastros-sisgd-teste` permanece no remote pra
+   histórico (mergeada via --no-ff, NÃO deletada). Próxima sprint
+   cria branch nova `feature/saque-pix-colaborador` como 1º comando
+   (Decisão Luciano 13/06: branch dedicada por sprint, mergear na
+   hora OU rebasear antes que envelheça).
 
-PASSO 1 — Frase comandante Fase 2 Sprint "Abrir Cadastros — Teste SISGD":
+PASSO 1 — Frase comandante Sprint D2 (Saque PIX Colaborador Comum):
 
-Sessão 17/06 entregou Fase 1 read-only do Sprint "Abrir Cadastros —
-Teste SISGD" (sem implementação): confirmou que onboarding está ~85%
-pronto (wizard /cadastro + convite OTP + state machine PENDENTE_
-APROVACAO_EMPRESA→ADMIN→MEMBRO_ATIVO + MembroBuilder + Santi seedada
-em CV-SANTI-001 + magic link público da empresa em
-web/app/aprovacao-membro/[token]/). Identificou 3 gaps reais: (1)
-seed scripts/seed-sisgd-teste-interno.ts; (2) tela /conveniada/
-convenio/[id]/membros; (3) tela /dashboard/convenios/[id]/membros-
-pendentes. Branch feature/abrir-cadastros-sisgd-teste criada vazia.
+M40 (16/06) ENTREGOU 2 eixos paralelos em 4 commits + 1 merge --no-ff
+no main (1634c11):
 
-Em paralelo, sessão entregou Fase 1.5 read-only do Concierge × Rotinas
-Decisórias Aprendidas (chat) — território Cowork, não persistido no
-projeto.
+EIXO 1 — Sprint "Abrir Cadastros — Teste SISGD" COMPLETO. Convergiu
+pro CV-SISGD-TESTE-001 pré-existente (não duplicou). Smoke E2E 10/10
+verde (convite OTP → cadastro → empresa aprova → admin aprova →
+MEMBRO_ATIVO). 0 P0/P1 multi-tenant + 4 P3 aplicados. Bloco (b)/(c)
+cancelados na Fase 1: MembrosPendentesSection já estava plugado em
+ambas detail pages desde 03/06.
 
-Detalhes em docs/sessoes/2026-06-17-fase1-abrir-cadastros-sisgd-teste.md.
+EIXO 2 — análise read-only do circuito emissão token (4 agentes
+Cowork+claude.ai 15/06, 5283L em docs/ANALISE-/FLUXO-/GAP-MAP-)
+capturada no main em 0371185. 4 decisões fechadas: D1 arrendamento
+RESOLVIDA (opção A); D2 saque PIX colaborador CONSTRUIR com toggle;
+D3 decaimento qualificação CONSTRUIR; D4 oxidação JÁ EXISTENTE
+(aplicarOxidacao:3006 + cron + gate). 10 débitos novos catalogados
+(2 P1 + 7 P2 + 1 P3).
 
-═══ AÇÃO PRÓXIMA SESSÃO — RESPONDER 4 PERGUNTAS + FASE 2 ═══
+Detalhes em docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md.
 
-Antes de codar a Fase 2, Luciano precisa decidir:
+═══ PRÓXIMO BLOCO: Sprint D2 — Saque PIX Colaborador Comum ═══
 
-Q1. Pagador SISGD — modo de criação:
-    (A) seed direto estilo Santi (mais previsível) ou
-    (B) via CooperadoInstitucionalService.garantirInstitucional
-        (reusa código mas email = institucional+<id>@sisgd.invalid).
-    Sugestão Code: (A).
+ESCOPO: extensão F6 (resgate PIX existente do M34/M35) sem o guard
+ehEstabelecimento + toggle de config liga/desliga por cooperativa.
+Reusa ~70% do código F6 já testado em produção. Cooperado comum
+(não-estabelecimento) ganha botão "Resgatar em R$ via PIX" em
+/portal/tokens quando config ativa.
 
-Q2. Senha do Usuario Supabase do pagador SISGD:
-    (A) fixo "SISGD@2026" estilo Santi@2026 ou
-    (B) random + log.
-    Sugestão Code: (A).
+ESTIMATIVA: 6-10h em 3-4 blocos:
+- (a) Schema: flag Cooperativa.saqueColaboradorAtivo (default false).
+- (b) Service: remover/gate ehEstabelecimento no solicitarResgate
+      condicionado à flag. Specs novas (~5-8 specs).
+- (c) UI: card condicional em /portal/tokens (ehEstabelecimento OR
+      saqueColaboradorAtivo). UI admin em /dashboard/configuracoes
+      pra ligar/desligar.
+- (d) Smoke E2E: cooperado comum (não-estabelecimento) solicita +
+      admin aprova + PIX-out + webhook + saldo bloqueado→liquidado.
 
-Q3. Tela admin — escopo da rota:
-    (A) subtela /dashboard/convenios/[id]/membros-pendentes (por
-        convênio, simetria com /conveniada) ou
-    (B) rota global /dashboard/membros-pendentes (todos convênios).
-    Sugestão Code: (A).
-
-Q4. UX do botão "solicitar documento" — `SolicitarDocumentacaoDto.tipos[]`:
-    (A) chips multi-select com tipos canônicos do schema ou
-    (B) input livre.
-    Sugestão Code: (A). Code confirma tipos na Fase 2 lendo DTO.
-
-Após OK das 4: Fase 2 ~9-12h em 4 blocos:
-- (a) backend/scripts/seed-sisgd-teste-interno.ts (~150L, ~1h)
-- (b) web/app/conveniada/convenio/[id]/membros/page.tsx (~350L, ~3-4h)
-- (c) web/app/dashboard/convenios/[id]/membros-pendentes/page.tsx
-      (~350L, ~3-4h)
-- (d) backend/scripts/smoke-cadastro-sisgd-teste.ts (~200L, ~1-2h)
-- Build/test/PM2 cycle (~30min)
+PROTOCOLO:
+- Branch nova feature/saque-pix-colaborador como 1º comando.
+- Fase 1 read-only OBRIGATÓRIA mapeando F6 + identificando pontos
+  de toggle. Pausa pro OK antes de codar.
+- cooperebr-financeiro-token-reviewer + cooperebr-multitenant-
+  reviewer + security-reviewer (toca dinheiro). Re-review do
+  orquestrador após fixes.
+- Smoke E2E real com contatos whitelist + 1 token apenas + estorno
+  imediato (gate inegociável — NUNCA emissão real pra colaborador
+  real). Padrão M34/M35.
 
 PRÉ-REQUISITOS LEITURA:
-1. docs/sessoes/2026-06-17-fase1-abrir-cadastros-sisgd-teste.md (esta
-   sessão — mapa de impacto 5 dimensões + escopo Fase 2).
-2. backend/scripts/seed-santi-conveniada.ts (molde, 253L, idempotente).
-3. backend/src/convenios/convenios.controller.ts:478-631 (endpoints
-   aprovação admin — TODOS PRONTOS).
-4. backend/src/convenios/convenios-aprovacao.service.ts (state machine).
-5. backend/src/publico/publico.controller.ts:440-481 (magic link
-   empresa — UI pública já existe em web/app/aprovacao-membro/[token]/).
-6. web/app/conveniada/convenio/[id]/page.tsx (866L — onde encaixar
-   card "Aprovações pendentes" com contador).
-7. CLAUDE.md "Cooperados institucionais — SALVAGUARDA" (RFC 2606).
+1. docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md (esta
+   sessão).
+2. docs/sessoes/2026-06-13-14-m35-sprint-clube-p1-f6-resgate-completo.md
+   (F6 entregue — molde do código a reusar).
+3. backend/src/cooper-token/cooper-token.service.ts:solicitarResgate
+   (gate ehEstabelecimento atual).
+4. backend/src/cooper-token/cooper-token-resgate.listener.ts (webhook
+   TRANSFER_DONE — D-novo-RESGATE-PIX-SEM-CAIXA bloqueado AQUI).
+5. web/app/portal/resgatar-tokens/page.tsx + /portal/tokens/page.tsx
+   (cards condicionais ehEstabelecimento).
+6. CLAUDE.md regras (rebuild PM2 + contatos teste + isAmbienteReal).
 
-PROTOCOLO FASE 2 (Sprint Abrir Cadastros):
-- Checkout `feature/abrir-cadastros-sisgd-teste` (não criar nova).
-- Implementação em commits incrementais por bloco (a→b→c→d).
-- Reviewers ANTES do smoke: cooperebr-multitenant-reviewer
-  obrigatório (telas com cooperativaId derivado do JWT) +
-  typescript-reviewer + code-reviewer.
-- Smoke E2E real com contatos whitelist (27981341348 +
-  lucbragatto+sisgd@gmail.com) + ambienteTeste=true. NUNCA contato
-  real nesta sprint.
-- PM2 cycle obrigatório após cada mudança em web/ (stop → build →
-  restart, HMR não rola).
-- Mergear LOGO após OK Luciano + OK reviewers (decisão 13/06).
+CARRY-OVERS M40 (não-bloqueantes — pos D2):
 
-CARRY-OVERS SESSÃO 17/06 (não-bloqueantes):
-- Concierge × Rotinas Decisórias (Fase 1.5): território Cowork —
-  Luciano + Cowork retomam quando convier. 8 M working tree do
-  Cowork seguem selados.
-- 3 opções pós-M39 (Sprint Contábil / Decisões D1-D4 Modelo C /
-  Sprint Hardening Mass-Write) ficam ENFILEIRADAS após este sprint.
-- D-novo-EMISSAO-ADMIN-CONTABIL P2 (catalogado 16/06) segue aberto.
-- enviarTokensAdmin @deprecated (remover após 30 dias de logs
-  ENVIO_ADMIN zerados — observação M39).
+PRÓXIMA SPRINT DEPOIS DE D2:
+- Sprint Decaimento Qualificação (D3) — nível cai com inatividade,
+  espelha oxidação token, métrica uso+indicações, admin pondera.
+
+DEPOIS DAS DUAS ACIMA:
+- Sprint Circuito de Emissão Completo (4 fases): contábil →
+  notificações → emissão unificada quem/custo → compra conveniado +
+  auto-distribuição. Resolve 2 P1 + 7 P2 catalogados M40.
+
+ENFILEIRADAS (sem ordem definida):
+- D-novo-EMISSAO-ADMIN-CONTABIL P2 (16/06) — fecha junto com Fase 1
+  contábil do Circuito Emissão Completo.
+- D-novo-ADMIN-FILA-APROVACAO-GLOBAL P2 (sidebar admin "Aprovações
+  pendentes" global agregada — discoverability operacional).
+- Sprint Hardening Mass-Write SUPER_ADMIN P2 (enfileirada M35).
+- 8 M working tree do Cowork (backend/src/concierge/* + package.json/
+  lock + spec) — território Cowork, próximo fechamento Cowork limpa.
+
+DIRETRIZES PRESERVAR:
+- enviarTokensAdmin @deprecated (M39): avaliar remoção após 30
+  dias de logs ENVIO_ADMIN zerados.
+- Vocabulário inegociável: CooperToken / voucher / liquidação /
+  recibo / sobra / bonificação admin (M39). NUNCA: CTK em UI /
+  recompra / venda.
+- Multi-tenant: cooperativaId do JWT (NÃO body). Servidor revalida
+  cada cooperadoId.cooperativaId em ops com lista (padrão M39).
 
 DIRETRIZES PRESERVAR:
 - Branch dedicada por sprint desde 1º commit (Decisão Luciano 13/06).
@@ -2730,7 +2750,7 @@ CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M38, não-bloqueantes):
 - Decisões D1/D2/D3/D4 Modelo C — sprints próprios.
 - Untracked acumulados pra Sprint Housekeeping.
 
-═══ FIM DA FRASE ABRIR-CADASTROS (sessão 17/06) ═══
+═══ FIM DA FRASE M40 (sessão 16/06) ═══
 ```
 
 — BLOCO ARQUIVADO M34 (abaixo — atendido por M37) ——————————————————
