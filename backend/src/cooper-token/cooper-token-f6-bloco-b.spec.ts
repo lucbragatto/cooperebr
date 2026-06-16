@@ -620,6 +620,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'tx-ghost',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('recibo-nao-encontrado');
   });
@@ -630,6 +631,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-MESMO',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('webhook-duplicado');
   });
@@ -640,6 +642,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.sucesso).toBe(true);
     expect(
@@ -661,6 +664,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       asaasTransferId: 'asaas-tx-1',
       eventId: 'evt-1',
       sucesso: true,
+      cooperativaIdEsperada: COOP,
     });
     expect(r.skipped).toBe('compare-and-swap-perdeu');
   });
@@ -672,6 +676,7 @@ describe('F6 Bloco B — processarWebhookResgate (REFORÇO 2 idempotência + REF
       eventId: 'evt-1',
       sucesso: false,
       motivoFalha: 'Insufficient funds on Asaas',
+      cooperativaIdEsperada: COOP,
     });
     expect(r.sucesso).toBe(false);
     expect(r.motivoFalha).toBe('Insufficient funds on Asaas');

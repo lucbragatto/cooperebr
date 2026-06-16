@@ -2467,25 +2467,38 @@ export class CooperTokenService {
      * pra DOUBLE-CHECK anti-IDOR. asaas.service.ts já validou tenant via
      * configCooperativaId === recibo.cooperativaId antes do emit, mas
      * este service também valida — se outro emissor do evento for criado
-     * no futuro, a defesa fica no lugar certo. Opcional pra retrocompat
-     * com specs antigos que chamam direto sem passar.
+     * no futuro, a defesa fica no lugar certo.
+     *
+     * P2 reviewer multi-tenant Sprint D2 (16/06): tornado OBRIGATÓRIO
+     * pra fechar a janela "findFirst sem cooperativaId no where +
+     * cooperativaIdEsperada opcional pulado = colisão de asaasTransferId
+     * cross-tenant processaria recibo do tenant errado". Specs antigos
+     * que chamavam sem passar agora precisam passar o cooperativaId
+     * (o caller listener sempre passa).
      */
-    cooperativaIdEsperada?: string;
+    cooperativaIdEsperada: string;
   }) {
     const { asaasTransferId, eventId, sucesso, motivoFalha, cooperativaIdEsperada } = params;
 
+    if (!cooperativaIdEsperada) {
+      this.logger.error(
+        `[F6] webhook chamado SEM cooperativaIdEsperada — bug de wiring (Sprint D2 P2 fix). asaasTransferId=${asaasTransferId}`,
+      );
+      throw new Error('cooperativaIdEsperada obrigatório (anti-IDOR cross-tenant).');
+    }
+
     const recibo = await this.prisma.resgateRecibo.findFirst({
-      where: { asaasTransferId },
+      where: { asaasTransferId, cooperativaId: cooperativaIdEsperada },
     });
     if (!recibo) {
       this.logger.warn(
-        `[F6] webhook asaasTransferId=${asaasTransferId} — recibo não encontrado, ignorando`,
+        `[F6] webhook asaasTransferId=${asaasTransferId} cooperativaId=${cooperativaIdEsperada} — recibo não encontrado, ignorando`,
       );
       return { skipped: 'recibo-nao-encontrado' };
     }
 
-    // Re-review (14/06): double-check tenant se passado pelo caller.
-    if (cooperativaIdEsperada && cooperativaIdEsperada !== recibo.cooperativaId) {
+    // Defense in depth — recibo.cooperativaId vem do banco; igual ao where.
+    if (cooperativaIdEsperada !== recibo.cooperativaId) {
       this.logger.error(
         `[F6] webhook double-check tenant FALHOU: esperado=${cooperativaIdEsperada} recibo=${recibo.cooperativaId} (${recibo.numeroRecibo}) — rejeitando`,
       );
@@ -2619,12 +2632,20 @@ export class CooperTokenService {
       // Falha aqui NÃO faz throw (PIX é irreversível); degrada status pra
       // PAGO_CREDITO_PENDENTE pra alerta admin (cron reconciliação re-tenta).
       try {
-        await this.tokenContabilService.lancarResgatePix(this.prisma, {
+        // P1 reviewers (16/06): assinatura sem `tx` (método é fora da tx
+        // Serializable por design — usa this.prisma); referenciaId + Tabela
+        // obrigatórios pra idempotência da cron de reconciliação; valor
+        // arredondado no ponto de origem (defesa Decimal→Number float).
+        // recibo.cooperativaId vem do banco (findFirst sem JWT inject —
+        // confiável por origem, igualdade com params.cooperativaId implícita).
+        await this.tokenContabilService.lancarResgatePix({
           cooperativaId: recibo.cooperativaId,
           cooperadoId: recibo.cooperadoEstabelecimentoId,
-          valor: Number(recibo.valorLiquidoReais),
+          valor: Math.round(Number(recibo.valorLiquidoReais) * 100) / 100,
           descricao: `Resgate ${recibo.numeroRecibo}`,
           observacoes: `Recibo ${recibo.numeroRecibo} — liquidação voucher CooperToken (PIX-out Asaas ${recibo.asaasTransferId ?? '?'})`,
+          referenciaId: recibo.id,
+          referenciaTabela: 'ResgateRecibo',
         });
         this.logger.log(
           `[F6 D2] LancamentoCaixa D Passivo/C Caixa emitido pra recibo=${recibo.numeroRecibo} valor=R$ ${Number(recibo.valorLiquidoReais).toFixed(2)}`,

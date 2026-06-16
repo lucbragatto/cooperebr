@@ -2856,6 +2856,12 @@ model ResgateRecibo {
   // ── Estado da máquina ──
   /// PENDENTE_APROVACAO_COOP | APROVADO_PIX_DISPARADO | PAGO_RECIBO_EMITIDO
   /// | RECUSADO | CANCELADO | FALHA_PIX
+  ///
+  /// Sprint D2 (16/06/2026): + PAGO_CREDITO_PENDENTE — usado pelo path
+  /// `processarWebhookResgate` quando o PIX-out já foi disparado e
+  /// confirmado (TRANSFER_DONE) MAS o lançamento contábil pós-tx
+  /// (lancarResgatePix) falhou. Sinaliza alerta admin (cron de
+  /// reconciliação D-novo-F6-RECONCILIACAO-CRON P2 re-tenta).
   status                        String
 
   // ── Trilha de auditoria ──

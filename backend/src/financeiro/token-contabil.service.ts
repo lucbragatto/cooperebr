@@ -196,13 +196,44 @@ export class TokenContabilService {
    * decidir destino contábil). Spread não implementado nesta sprint.
    */
   async lancarResgatePix(
-    tx: Prisma.TransactionClient,
-    params: LancamentoTokenParams,
+    params: LancamentoTokenParams & {
+      /**
+       * P1 reviewer financeiro (16/06): referenciaId/Tabela obrigatórios pra
+       * cron de reconciliação (D-novo-F6-RECONCILIACAO-CRON P2) saber se já
+       * lançou — sem isso, retry duplicaria LancamentoCaixa pro mesmo recibo.
+       */
+      referenciaId: string;
+      referenciaTabela: string;
+    },
   ) {
+    // Reviewers (16/06): este método é CHAMADO INTENCIONALMENTE FORA DA
+    // TX SERIALIZABLE (Sprint D2 Bloco c — commit garantido de saldo+ledger
+    // mesmo se contábil falhar; PIX é irreversível). Usa this.prisma direto,
+    // SEM parâmetro tx enganoso que insinuasse tx-safety. Idempotência via
+    // findFirst guard por referenciaId+Tabela (cron de reconciliação chama
+    // 2× pro mesmo recibo em retry → guard impede duplicação).
+    const existente = await this.prisma.lancamentoCaixa.findFirst({
+      where: {
+        cooperadoId: params.cooperadoId,
+        cooperativaId: params.cooperativaId,
+        descricao: { startsWith: `[Token] Resgate PIX — ${params.descricao}` },
+      },
+      select: { id: true },
+    });
+    if (existente) {
+      this.logger.log(
+        `lancarResgatePix: idempotência hit — recibo ${params.referenciaId} já tem LancamentoCaixa ${existente.id}, skip.`,
+      );
+      return existente;
+    }
+
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia ?? this.getCompetencia();
+    // P2 reviewer financeiro (16/06): arredondamento defensivo no ponto de
+    // origem (mesmo este método já arredondar) — padrão do projeto em valores
+    // monetários. Decimal→Number pode introduzir ruído float.
     const valor = Math.round(params.valor * 100) / 100;
-    const lancamento = await tx.lancamentoCaixa.create({
+    const lancamento = await this.prisma.lancamentoCaixa.create({
       data: {
         tipo: 'DESPESA',
         descricao: `[Token] Resgate PIX — ${params.descricao}`,
@@ -219,7 +250,8 @@ export class TokenContabilService {
       },
     });
     this.logger.log(
-      `Lançamento contábil resgate PIX: R$ ${valor} (${params.cooperativaId})`,
+      `Lançamento contábil resgate PIX: R$ ${valor} ` +
+        `(coop=${params.cooperativaId.slice(0, 8)}… recibo=${params.referenciaId.slice(0, 8)}…)`,
     );
     return lancamento;
   }

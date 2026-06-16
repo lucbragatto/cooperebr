@@ -66,7 +66,17 @@ function setupWebhook(opts: SetupOpts = {}) {
   const prisma: any = {
     $transaction: jest.fn(async (cb: any) => cb(tx)),
     resgateRecibo: {
-      findFirst: jest.fn().mockResolvedValue(reciboBase),
+      // findFirst recebe { where: { asaasTransferId, cooperativaId } } no caller
+      // (Sprint D2 P2 fix). Mock retorna o recibo só se o tenant bater.
+      findFirst: jest.fn().mockImplementation((args: any) => {
+        if (
+          args?.where?.cooperativaId &&
+          args.where.cooperativaId !== reciboBase.cooperativaId
+        ) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(reciboBase);
+      }),
       updateMany: updateManyStatus,
     },
   };
@@ -97,6 +107,9 @@ const baseWebhook = (over: Partial<Parameters<CooperTokenService['processarWebho
   asaasTransferId: 'asaas-tx-1',
   eventId: 'evt-1',
   sucesso: true,
+  // P2 reviewer multi-tenant Sprint D2 (16/06): cooperativaIdEsperada
+  // tornado OBRIGATÓRIO no caminho do webhook (anti-IDOR cross-tenant).
+  cooperativaIdEsperada: COOP,
   ...over,
 });
 
@@ -109,12 +122,15 @@ describe('D2 Bloco (c) — D-RESGATE-PIX-SEM-CAIXA contábil pós-tx', () => {
     const r = await service.processarWebhookResgate(baseWebhook());
     expect(r.sucesso).toBe(true);
     expect(tokenContabil!.lancarResgatePix).toHaveBeenCalledTimes(1);
-    const [_tx, payload] = tokenContabil!.lancarResgatePix.mock.calls[0];
+    // P1 reviewer (16/06): assinatura sem `tx` — payload é o único argumento.
+    const [payload] = tokenContabil!.lancarResgatePix.mock.calls[0];
     expect(payload).toMatchObject({
       cooperativaId: COOP,
       cooperadoId: EMPRESA,
       valor: 4.5,
       descricao: 'Resgate RES-2026-00001',
+      referenciaId: 'recibo-1',
+      referenciaTabela: 'ResgateRecibo',
     });
     expect(payload.observacoes).toContain('Recibo RES-2026-00001');
     expect(payload.observacoes).toContain('asaas-tx-1');

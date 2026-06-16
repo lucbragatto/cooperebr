@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 import { AuditLog } from '../audit/audit-log.decorator';
+import { ToggleSaqueColaboradorDto } from './dto/toggle-saque-colaborador.dto';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -129,7 +130,13 @@ export class SaasController {
 
   @Roles(SUPER_ADMIN)
   @Get('cooperativas/:id/saque-colaborador')
-  getSaqueColaboradorStatus(@Param('id') id: string) {
+  getSaqueColaboradorStatus(@Param('id') id: string, @Request() req: any) {
+    // P2 reviewer multi-tenant (16/06): defesa em profundidade — mesmo
+    // rota SUPER_ADMIN-only, aplicar assertSameTenantOrSuperAdmin segue
+    // o padrão do projeto (mesmo controller linha 35 getSaudeParceiro).
+    // Bloqueia se a gate @Roles for removida ou rota duplicada pra ADMIN
+    // no futuro.
+    assertSameTenantOrSuperAdmin(req.user, id);
     return this.saasService.getSaqueColaboradorStatus(id);
   }
 
@@ -142,8 +149,10 @@ export class SaasController {
   @Patch('cooperativas/:id/saque-colaborador')
   toggleSaqueColaborador(
     @Param('id') id: string,
-    @Body() body: { ativo: boolean },
+    @Body() body: ToggleSaqueColaboradorDto,
+    @Request() req: any,
   ) {
-    return this.saasService.toggleSaqueColaborador(id, body.ativo === true);
+    assertSameTenantOrSuperAdmin(req.user, id);
+    return this.saasService.toggleSaqueColaborador(id, body.ativo);
   }
 }
