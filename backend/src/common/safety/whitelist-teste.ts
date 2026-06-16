@@ -44,6 +44,10 @@ export const WHITELIST_EMAILS_TESTE: string[] = [
   // Sub-Fase 1 Fase 4 (M12, 18/05/2026) — Listas Concessionária
   'lucbragatto+fase4envio@gmail.com',
   'lucbragatto+homologado@gmail.com',
+  // Sprint Abrir Cadastros — Teste SISGD (17/06/2026): smoke E2E
+  // cadastra 1 cooperado per run no CV-SISGD-TESTE-001 pra validar
+  // onboarding ponta a ponta antes da Santi/Triad.
+  'lucbragatto+sisgd-teste@gmail.com',
 ];
 
 function normalizarTelefone(tel: string): string {
