@@ -63,6 +63,23 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-17 (Code — Fase 1 read-only Sprint "Abrir Cadastros — Teste SISGD")
+
+**Sessão Code curta de planejamento (sem implementação).** Entregou em paralelo:
+
+1. **Fase 1.5 read-only — Concierge × Rotinas Decisórias Aprendidas** (relatório no chat, território Cowork não tocado). Cruzou 8 detectores + funil WA + schema Prisma + memórias 12.r19a. Achados: `ConciergeWaService` está desplugado em runtime (não está em `concierge.module.ts` providers); bot WA principal não conhece Concierge; `cooperebr-orquestrador.md` ainda não foi atualizado pra consultar rotinas; conflito C7 PlanoSaas×Concierge à la carte segue aberto. 3 rotinas-candidatas priorizadas (Tese 3 PIS/COFINS-SCEE, Conformidade Segregada, Validação Convênio Token Voucher).
+2. **Fase 1 read-only — Sprint "Abrir Cadastros — Teste SISGD"**. Confirmou que onboarding está ~85% pronto (wizard `/cadastro` + convite OTP + state machine `PENDENTE_APROVACAO_EMPRESA→ADMIN→MEMBRO_ATIVO` + MembroBuilder + Santi seedada). Identificou 3 gaps reais: (i) seed `scripts/seed-sisgd-teste-interno.ts` (não existe), (ii) tela `/conveniada/convenio/[id]/membros` (não existe), (iii) tela `/dashboard/convenios/[id]/membros-pendentes` (não existe). Descoberta: `web/app/aprovacao-membro/[token]/` já existe (UI pública magic link da empresa pronta — não refazer).
+
+**Branch `feature/abrir-cadastros-sisgd-teste`** criada vazia, aguardando OK em 4 perguntas decisórias antes da Fase 2 (~9-12h).
+
+**Working tree:** 8 M selados do Cowork (`backend/src/concierge/*` + `package.json/lock` + `concierge.service.spec.ts`) — território Cowork, Code NÃO toca, próximo fechamento Cowork limpa.
+
+**Próximo passo único e claro:** **Fase 2 do Sprint "Abrir Cadastros — Teste SISGD"** após Luciano responder as 4 perguntas decisórias listadas na frase de retomada (modo criação pagador SISGD, senha Supabase, rota da tela admin, UX do "solicitar documento").
+
+**Detalhe:** `docs/sessoes/2026-06-17-fase1-abrir-cadastros-sisgd-teste.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-16 (Code — M39 Emissão Admin em Lote + Estorno COMPLETO)
 
 **Sessão Code maratona.** Sprint M39 entregue ponta-a-ponta em 12 commits + 1 merge `--no-ff` no main (`d1f6a6d`):
@@ -2555,12 +2572,13 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M39: working
-   tree limpo (untracked carry-overs catalogados + M de
-   `backend/package.json` + `package-lock.json` + `concierge.service.
-   spec.ts` — território Cowork, NÃO tocar). Último commit é o de
-   fechamento M39. Rodar `git log origin/main..HEAD --oneline` —
-   deve mostrar VAZIO se Code já fez push de fechamento.
+2. Rodar `git status --short`. Esperado pós-fechamento sessão 17/06:
+   8 arquivos `M` em backend/src/concierge/* + backend/package.json +
+   backend/package-lock.json + backend/src/concierge/concierge.service.
+   spec.ts — TUDO TERRITÓRIO COWORK, Code NÃO TOCA, próximo fechamento
+   Cowork limpa. Último commit é o de fechamento desta sessão (17/06
+   — Fase 1 Sprint Abrir Cadastros). Rodar `git log origin/main..HEAD
+   --oneline` — deve mostrar VAZIO se push do fechamento concluído.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
@@ -2568,93 +2586,99 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`.
    HMR NÃO ROLA.
 
-4. ⚠️ M39 FECHADO no main (commit `d1f6a6d`). Branch
-   `feature/admin-emitir-lote` deletada. Próxima sprint cria branch
-   nova (`feature/<nome>`) como 1º comando — Decisão Luciano 13/06
-   (branch dedicada por sprint, mergear na hora OU rebasear antes
-   que envelheça).
+4. ⚠️ Branch `feature/abrir-cadastros-sisgd-teste` JÁ EXISTE (criada
+   17/06 na sessão de Fase 1) e está VAZIA (zero commits). Próxima
+   sessão arranca nessa branch — fazer `git checkout
+   feature/abrir-cadastros-sisgd-teste` como 1º comando (NÃO criar
+   nova).
 
-PASSO 1 — Frase comandante M39 → próximo bloco a definir:
+PASSO 1 — Frase comandante Fase 2 Sprint "Abrir Cadastros — Teste SISGD":
 
-Sessão 16/06 entregou M39 em 12 commits trabalho + 1 merge --no-ff
-no main (db3c545..d1f6a6d): Emissão Admin em Lote + Estorno.
-Schema delta aditivo (2 enums + conta 5.1.03) + 4 métodos service
-+ 2 templates contábeis (bypass do evento errado) + 4 endpoints REST
-+ frontend redesenhado (2 etapas + filtro convênio + prévia COMPLETA
-antes do OTP) + tela nova lotes-emitidos com modal estorno. 2 rodadas
-reviewers pesados + re-review orquestrador (2 P1 residuais fechados)
-+ smoke E2E PASS 6/6. 311/311 specs verde. D-novo-EMISSAO-ADMIN-
-CONTABIL P2 catalogado pra sprint contábil dedicada.
+Sessão 17/06 entregou Fase 1 read-only do Sprint "Abrir Cadastros —
+Teste SISGD" (sem implementação): confirmou que onboarding está ~85%
+pronto (wizard /cadastro + convite OTP + state machine PENDENTE_
+APROVACAO_EMPRESA→ADMIN→MEMBRO_ATIVO + MembroBuilder + Santi seedada
+em CV-SANTI-001 + magic link público da empresa em
+web/app/aprovacao-membro/[token]/). Identificou 3 gaps reais: (1)
+seed scripts/seed-sisgd-teste-interno.ts; (2) tela /conveniada/
+convenio/[id]/membros; (3) tela /dashboard/convenios/[id]/membros-
+pendentes. Branch feature/abrir-cadastros-sisgd-teste criada vazia.
 
-Detalhes em docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md.
+Em paralelo, sessão entregou Fase 1.5 read-only do Concierge × Rotinas
+Decisórias Aprendidas (chat) — território Cowork, não persistido no
+projeto.
 
-═══ PRÓXIMO BLOCO: a definir ═══
+Detalhes em docs/sessoes/2026-06-17-fase1-abrir-cadastros-sisgd-teste.md.
 
-3 opções consideradas no fechamento M39:
+═══ AÇÃO PRÓXIMA SESSÃO — RESPONDER 4 PERGUNTAS + FASE 2 ═══
 
-1. SPRINT CONTÁBIL DEDICADA — resolve D-novo-EMISSAO-ADMIN-CONTABIL
-   P2 + 4 problemas pré-existentes:
-   - Conta 5.1.02 "Passivo Tokens a Resgatar" DESPESA → PASSIVO
-   - Template F2 (compra paga) errado: D Custo Desconto → D Caixa
-   - F3 distribuição NÃO lança LancamentoCaixa
-   - F6 resgate PIX + clube NÃO lançam (PROVISIONAL órfão)
-   - Cron PROVISIONAL → CONFIRMADO
-   - Reclassificar entries M39 com tag EMISSAO_ADMIN_LOTE
-   DEPENDE: D3 Modelo C (preço custo × venda do token).
+Antes de codar a Fase 2, Luciano precisa decidir:
 
-2. DECISÕES D1-D4 MODELO C (relatórios 15/06):
-   - D1 arrendamento proporcional (empresa custeia cota da usina)
-   - D2 cash-out colaborador comum (extensão F6 sem ehEstabelecimento)
-   - D3 preço de custo × venda do token
-   - D4 validade do token (oxidação/expiração/nenhuma)
-   Cada uma é sprint própria pequena (~6-10h).
+Q1. Pagador SISGD — modo de criação:
+    (A) seed direto estilo Santi (mais previsível) ou
+    (B) via CooperadoInstitucionalService.garantirInstitucional
+        (reusa código mas email = institucional+<id>@sisgd.invalid).
+    Sugestão Code: (A).
 
-3. SPRINT HARDENING MASS-WRITE SUPER_ADMIN P2 (enfileirado M35):
-   Reusa helper executarMassWrite com callbacks próprios pra ops
-   admin em massa (mudança de status em lote, recálculo em lote,
-   etc.). M39 é precedente arquitetural — agora o helper tem 2
-   consumers (F3 + M39) cobrindo write distribuído e write
-   centralizado.
+Q2. Senha do Usuario Supabase do pagador SISGD:
+    (A) fixo "SISGD@2026" estilo Santi@2026 ou
+    (B) random + log.
+    Sugestão Code: (A).
 
-PRÉ-REQUISITOS LEITURA (a depender do bloco escolhido):
-1. docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md (esta sessão).
-2. docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md.
-3. docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md (sessão paralela —
-   contábil-token MAL ESCRITURADO: F2 reusa template "D Custo/C
-   Passivo" em vez de "D Caixa/C Passivo"; conta 5.1.02 tipada
-   DESPESA em token-contabil.service.ts:25).
-4. docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md (sessão paralela —
-   item 9: F3/F6/clube SEM LancamentoCaixa; PROVISIONAL órfão).
-5. docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md (sessão paralela
-   — visão × realidade dos 5 passos da visão Modelo C).
-6. docs/debitos-tecnicos.md seção P2 (D-novo-EMISSAO-ADMIN-CONTABIL
-   detalhado).
+Q3. Tela admin — escopo da rota:
+    (A) subtela /dashboard/convenios/[id]/membros-pendentes (por
+        convênio, simetria com /conveniada) ou
+    (B) rota global /dashboard/membros-pendentes (todos convênios).
+    Sugestão Code: (A).
 
-PROTOCOLO PRÓXIMA SPRINT (independente do bloco escolhido):
-- Branch nova `feature/<nome-bloco>` como 1º comando.
-- Fase 1 read-only OBRIGATÓRIA (Decisão 23 + Regra de Coerência
-  Sistêmica) com MAPA DE IMPACTO 5 dimensões + perguntas decisórias
-  → PAUSAR pro OK Luciano antes de codar.
-- Implementação em commits incrementais.
-- Reviewer(s) pesado(s) ANTES de smoke (financeiro-token + multi
-  tenant pra op com dinheiro; só multitenant pra op sem dinheiro;
-  code-reviewer genérico pra cosmético).
-- Smoke E2E real com gate inegociável (NUNCA emissão real em
-  produção pra colaboradores reais — usar 1 unidade + estorno
-  quando aplicável).
-- Re-review do orquestrador após fixes pra pegar P1 residuais
-  (padrão M39 confirmou utilidade).
-- Mergear LOGO após OK Luciano + OK orquestrador final.
+Q4. UX do botão "solicitar documento" — `SolicitarDocumentacaoDto.tipos[]`:
+    (A) chips multi-select com tipos canônicos do schema ou
+    (B) input livre.
+    Sugestão Code: (A). Code confirma tipos na Fase 2 lendo DTO.
 
-CARRY-OVERS M39 (não-bloqueantes):
-- D-novo-EMISSAO-ADMIN-CONTABIL P2 (NOVO 16/06) — 4 problemas
-  pré-existentes no token-contábil consolidados: tipo conta 5.1.02
-  DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem
-  LancamentoCaixa. Sprint contábil dedicada futura (depende de D3
-  Modelo C preço custo×venda).
-- enviarTokensAdmin @deprecated (endpoint /parceiro/enviar mantido
-  por COMPAT do ramo cooperado→cooperado). Avaliar remoção após
-  30 dias de logs ENVIO_ADMIN zerados.
+Após OK das 4: Fase 2 ~9-12h em 4 blocos:
+- (a) backend/scripts/seed-sisgd-teste-interno.ts (~150L, ~1h)
+- (b) web/app/conveniada/convenio/[id]/membros/page.tsx (~350L, ~3-4h)
+- (c) web/app/dashboard/convenios/[id]/membros-pendentes/page.tsx
+      (~350L, ~3-4h)
+- (d) backend/scripts/smoke-cadastro-sisgd-teste.ts (~200L, ~1-2h)
+- Build/test/PM2 cycle (~30min)
+
+PRÉ-REQUISITOS LEITURA:
+1. docs/sessoes/2026-06-17-fase1-abrir-cadastros-sisgd-teste.md (esta
+   sessão — mapa de impacto 5 dimensões + escopo Fase 2).
+2. backend/scripts/seed-santi-conveniada.ts (molde, 253L, idempotente).
+3. backend/src/convenios/convenios.controller.ts:478-631 (endpoints
+   aprovação admin — TODOS PRONTOS).
+4. backend/src/convenios/convenios-aprovacao.service.ts (state machine).
+5. backend/src/publico/publico.controller.ts:440-481 (magic link
+   empresa — UI pública já existe em web/app/aprovacao-membro/[token]/).
+6. web/app/conveniada/convenio/[id]/page.tsx (866L — onde encaixar
+   card "Aprovações pendentes" com contador).
+7. CLAUDE.md "Cooperados institucionais — SALVAGUARDA" (RFC 2606).
+
+PROTOCOLO FASE 2 (Sprint Abrir Cadastros):
+- Checkout `feature/abrir-cadastros-sisgd-teste` (não criar nova).
+- Implementação em commits incrementais por bloco (a→b→c→d).
+- Reviewers ANTES do smoke: cooperebr-multitenant-reviewer
+  obrigatório (telas com cooperativaId derivado do JWT) +
+  typescript-reviewer + code-reviewer.
+- Smoke E2E real com contatos whitelist (27981341348 +
+  lucbragatto+sisgd@gmail.com) + ambienteTeste=true. NUNCA contato
+  real nesta sprint.
+- PM2 cycle obrigatório após cada mudança em web/ (stop → build →
+  restart, HMR não rola).
+- Mergear LOGO após OK Luciano + OK reviewers (decisão 13/06).
+
+CARRY-OVERS SESSÃO 17/06 (não-bloqueantes):
+- Concierge × Rotinas Decisórias (Fase 1.5): território Cowork —
+  Luciano + Cowork retomam quando convier. 8 M working tree do
+  Cowork seguem selados.
+- 3 opções pós-M39 (Sprint Contábil / Decisões D1-D4 Modelo C /
+  Sprint Hardening Mass-Write) ficam ENFILEIRADAS após este sprint.
+- D-novo-EMISSAO-ADMIN-CONTABIL P2 (catalogado 16/06) segue aberto.
+- enviarTokensAdmin @deprecated (remover após 30 dias de logs
+  ENVIO_ADMIN zerados — observação M39).
 
 DIRETRIZES PRESERVAR:
 - Branch dedicada por sprint desde 1º commit (Decisão Luciano 13/06).
@@ -2706,7 +2730,7 @@ CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M38, não-bloqueantes):
 - Decisões D1/D2/D3/D4 Modelo C — sprints próprios.
 - Untracked acumulados pra Sprint Housekeeping.
 
-═══ FIM DA FRASE M39 ═══
+═══ FIM DA FRASE ABRIR-CADASTROS (sessão 17/06) ═══
 ```
 
 — BLOCO ARQUIVADO M34 (abaixo — atendido por M37) ——————————————————
