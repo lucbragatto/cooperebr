@@ -2501,11 +2501,33 @@ export class CooperTokenService {
     }
 
     if (sucesso) {
+      // Sprint D2 (16/06/2026) — D-novo-RESGATE-PIX-SEM-CAIXA P1:
+      // tokenContabilService é OBRIGATÓRIO no caminho de webhook PAGO. Em
+      // produção sempre está injetado via FinanceiroModule.export; specs
+      // antigos que passam undefined falham aqui (fail-fast antes da tx).
+      // Asaas re-envia eventId em backoff se a tx Serializable abaixo falhar
+      // ou se este throw acontecer.
+      if (!this.tokenContabilService) {
+        this.logger.error(
+          `[F6 D2] tokenContabilService AUSENTE no webhook PAGO — bug de wiring? recibo=${recibo.numeroRecibo} tenant=${recibo.cooperativaId}`,
+        );
+        throw new Error(
+          'tokenContabilService obrigatório no webhook PAGO (D-RESGATE-PIX-SEM-CAIXA P1) — verifique injeção via FinanceiroModule.',
+        );
+      }
+
       // F6 C.4 P2 F6-7 (14/06/2026 — review pesada): CAS + queima + ledger
       // unidos numa ÚNICA tx Serializable. Antes: CAS fora da tx, queima
       // numa tx separada — crash entre os 2 deixava recibo=PAGO_RECIBO_
       // EMITIDO com tokens não-queimados (saldoBloqueadoResgate preso,
       // contabilidade desencontrada). Agora tudo num bloco atômico.
+      //
+      // Sprint D2 (16/06/2026): contábil (lancarResgatePix) NÃO entra dentro
+      // da tx Serializable. Razão: queremos commit garantido de saldo+ledger
+      // mesmo se contábil falhar (PIX já saiu de fato em Asaas). Estratégia:
+      // tx commita saldo+ledger; APÓS commit, tenta contábil; se falhar, marca
+      // recibo PAGO_CREDITO_PENDENTE em tx separada pra alerta admin (nunca
+      // perde o lançamento — cron de reconciliação re-tenta).
       let result: { swapCount: number; numeroRecibo: string };
       try {
         result = await this.prisma.$transaction(
@@ -2591,8 +2613,49 @@ export class CooperTokenService {
         return { skipped: 'compare-and-swap-perdeu', reciboId: recibo.id };
       }
 
+      // Sprint D2 (16/06/2026) — Bloco (c) D-RESGATE-PIX-SEM-CAIXA P1:
+      // contábil pós-tx. PIX já saiu (TRANSFER_DONE), saldo+ledger
+      // commitados na tx acima. Tenta lançar D Passivo / C Caixa.
+      // Falha aqui NÃO faz throw (PIX é irreversível); degrada status pra
+      // PAGO_CREDITO_PENDENTE pra alerta admin (cron reconciliação re-tenta).
+      try {
+        await this.tokenContabilService.lancarResgatePix(this.prisma, {
+          cooperativaId: recibo.cooperativaId,
+          cooperadoId: recibo.cooperadoEstabelecimentoId,
+          valor: Number(recibo.valorLiquidoReais),
+          descricao: `Resgate ${recibo.numeroRecibo}`,
+          observacoes: `Recibo ${recibo.numeroRecibo} — liquidação voucher CooperToken (PIX-out Asaas ${recibo.asaasTransferId ?? '?'})`,
+        });
+        this.logger.log(
+          `[F6 D2] LancamentoCaixa D Passivo/C Caixa emitido pra recibo=${recibo.numeroRecibo} valor=R$ ${Number(recibo.valorLiquidoReais).toFixed(2)}`,
+        );
+      } catch (errContabil) {
+        const msgContabil =
+          errContabil instanceof Error ? errContabil.message : 'erro desconhecido';
+        this.logger.error(
+          `[F6 D2] CONTABIL FALHOU pós-saída-de-caixa recibo=${recibo.numeroRecibo} — degradando pra PAGO_CREDITO_PENDENTE. Motivo: ${msgContabil}`,
+        );
+        try {
+          await this.prisma.resgateRecibo.updateMany({
+            where: { id: recibo.id, cooperativaId: recibo.cooperativaId, status: 'PAGO_RECIBO_EMITIDO' },
+            data: {
+              status: 'PAGO_CREDITO_PENDENTE',
+              motivoFalha: `Contábil pendente: ${msgContabil.slice(0, 400)}`,
+            },
+          });
+          this.logger.warn(
+            `[F6 D2] recibo=${recibo.numeroRecibo} marcado PAGO_CREDITO_PENDENTE — admin revisar + cron reconciliação re-tenta.`,
+          );
+        } catch (errStatus) {
+          // Não conseguiu nem mudar status — caso extremo, loga pra investigação.
+          this.logger.error(
+            `[F6 D2] FALHA EXTREMA: recibo=${recibo.numeroRecibo} contábil falhou E status update falhou. Investigar manualmente. Motivo status: ${(errStatus as Error).message}`,
+          );
+        }
+      }
+
       this.logger.log(
-        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX (tx Serializable única)`,
+        `[F6] webhook PAGO recibo=${recibo.numeroRecibo} — queima de ${Number(recibo.valorBrutoTokens)} tokens + ledger RESGATE_PIX (tx Serializable única) + LancamentoCaixa (Sprint D2)`,
       );
       return { sucesso: true, reciboId: recibo.id };
     }

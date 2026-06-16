@@ -158,6 +158,13 @@ function setup(opts: SetupOpts = {}) {
     ),
   };
 
+  // Sprint D2 (16/06/2026) — webhook PAGO agora EXIGE tokenContabilService
+  // pra emitir LancamentoCaixa D Passivo/C Caixa (D-RESGATE-PIX-SEM-CAIXA P1).
+  // Mock retorna sucesso por default; specs específicos podem sobrescrever.
+  const tokenContabil = {
+    lancarResgatePix: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
+  };
+
   const service = new CooperTokenService(
     prisma,
     { emit: jest.fn() } as any,
@@ -166,6 +173,7 @@ function setup(opts: SetupOpts = {}) {
     otp as any,
     limite as any,
     pixOut as any,
+    tokenContabil as any,
   );
 
   return {
@@ -180,6 +188,7 @@ function setup(opts: SetupOpts = {}) {
     txCreateRecibo,
     txUpdateSaldo,
     txCreateLedger,
+    tokenContabil,
   };
 }
 

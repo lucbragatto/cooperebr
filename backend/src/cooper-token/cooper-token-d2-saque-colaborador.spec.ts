@@ -111,6 +111,10 @@ function setupD2(opts: SetupD2Opts = {}) {
       .mockResolvedValue({ asaasTransferId: 'asaas-tx-1', status: 'PENDING', raw: null }),
   };
 
+  const tokenContabil = {
+    lancarResgatePix: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
+  };
+
   const service = new CooperTokenService(
     prisma,
     { emit: jest.fn() } as any,
@@ -119,9 +123,10 @@ function setupD2(opts: SetupD2Opts = {}) {
     otp as any,
     limite as any,
     pixOut as any,
+    tokenContabil as any,
   );
 
-  return { service, prisma };
+  return { service, prisma, tokenContabil };
 }
 
 const baseInput = {
