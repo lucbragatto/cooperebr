@@ -14,6 +14,7 @@
  * do Cooperado.pixChave cadastrado em /portal/seguranca (anti-fraude).
  */
 import {
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -68,6 +69,23 @@ export class SolicitarResgateDto {
   @IsOptional()
   @IsString()
   observacao?: string;
+
+  // ── Sprint D2.1 (16/06/2026) — Salvaguarda 5 do parecer de conformidade ──
+  //
+  // Aceite OBRIGATÓRIO pra colaborador comum (não-Estab). Estabelecimento
+  // bypassa via flag ehEstabelecimento — service ignora estes campos.
+  // Versão validada server-side contra CooperTokenService.DISCLAIMER_
+  // VERSAO_ATUAL (bump de texto força re-aceite).
+
+  /** True = li e aceito o termo de saque (Salvaguarda 5). */
+  @IsOptional()
+  @IsBoolean()
+  disclaimerAceito?: boolean;
+
+  /** Versão do texto aceito (ex.: 'v1-2026-06-16'). Bump invalida aceites antigos. */
+  @IsOptional()
+  @IsString()
+  disclaimerVersao?: string;
 }
 
 export class RecusarResgateDto {

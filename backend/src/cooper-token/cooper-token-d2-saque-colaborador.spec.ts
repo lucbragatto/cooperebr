@@ -89,6 +89,16 @@ function setupD2(opts: SetupD2Opts = {}) {
         .mockResolvedValue({ saqueColaboradorAtivo: flagSaqueColab }),
     },
     cooperTokenSaldo: { findUnique: txFindSaldo },
+    // Sprint D2.1 (16/06/2026) — composicaoOrigemSaldo lê ledger pra
+    // filtro de origem. Specs D2 originais não exercem origem (testam
+    // só o gate dual flag+env), mas o helper precisa de mock retornando
+    // entries permitidas (DESCONTO_FATURA suficiente pro cooperado
+    // sacar a quantidade configurada). Estabelecimento bypassa filtro.
+    cooperTokenLedger: {
+      findMany: jest.fn().mockResolvedValue([
+        { tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 },
+      ]),
+    },
     resgateRecibo: {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -135,6 +145,12 @@ const baseInput = {
   quantidade: 10,
   pin: '123456',
   clientRequestId: 'uuid-d2-12345678-test-1234-9999-aaaabbbbcccc',
+  // Sprint D2.1 (16/06/2026) — disclaimer obrigatório pra colaborador
+  // comum (specs originais D2 testam o gate dual; aqui já passamos
+  // aceite válido pra não falhar no Guard 1.6 — testes específicos
+  // de disclaimer ficam no spec D2.1 dedicado).
+  disclaimerAceito: true,
+  disclaimerVersao: 'v1-2026-06-16',
 };
 
 describe('D2 — Saque PIX Colaborador (gate dual flag tenant + env produção)', () => {

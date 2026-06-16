@@ -888,6 +888,15 @@ export class CooperTokenController {
     if (!cooperativaId) {
       throw new BadRequestException('Cooperativa não identificada no contexto.');
     }
+    // Sprint D2.1 (16/06/2026) — captura ip + UA pra Salvaguarda 5
+    // (aceite forense). Apenas usado pra colaborador comum (service
+    // ignora pra estabelecimento via bypass).
+    const aceiteIp =
+      (req.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      undefined;
+    const aceiteUserAgent = req.headers?.['user-agent'] as string | undefined;
     return this.cooperTokenService.solicitarResgate({
       estabelecimentoCooperadoId,
       cooperativaId,
@@ -897,6 +906,10 @@ export class CooperTokenController {
       otpDesafioId: body.otpDesafioId,
       otpCodigo: body.otpCodigo,
       observacao: body.observacao,
+      disclaimerAceito: body.disclaimerAceito,
+      disclaimerVersao: body.disclaimerVersao,
+      aceiteIp,
+      aceiteUserAgent,
     });
   }
 
