@@ -503,6 +503,21 @@ Também: ampliar `findOne` pra aceitar `cooperativaId` (atualmente em :285 não 
 
 **Responsabilidade:** carona do Cowork (M36) — investigação e correção saem do escopo da Sprint Higiene Rotas. Fica catalogado pra próxima sessão Cowork ou sprint dedicada antes do deploy.
 
+### D-QUALIF-DECAY — Decaimento da qualificação (espelha oxidação do token)
+
+**Severidade:** P2 — bloqueia "use ou perde" do lado da qualificação; reavaliação existe (`backend/src/clube-vantagens/`) mas só promove, nunca rebaixa.
+**Detectado em:** 2026-06-16 (análise read-only Cowork/claude.ai do circuito emissão token).
+**Modelo canônico:** nível da qualificação cai com inatividade prolongada (sem indicações ativas, sem uso de tokens). Métrica = uso + indicações; admin pondera os pesos por cooperativa. Espelha a `aplicarOxidacao` do token (decay temporal com graça + piso + prospectivo).
+**Resolução:** Sprint "Decaimento Qualificação" — dedicada, ~6-10h. Estrutura:
+- Schema delta aditivo: campos de inatividade em `ProgressaoClube` (lastAcaoEm, periodoGraca, mesesPraDecair, piso) + `ConfigClube` (pesos uso/indicações).
+- Service `aplicarDecaimentoClube` espelhando `aplicarOxidacao` (cron mensal + gate `DECAIMENTO_QUALIFICACAO_LIBERADO`).
+- UI admin pra configurar pesos + simulação preview.
+- Smoke: cooperado inativo N meses → nível cai do BRONZE pra (piso) sem cair abaixo.
+**Histórico:** rotulado D3 por engano no fechamento M40 inicial (16/06 manhã). Corrigido pra D-QUALIF-DECAY 16/06 noite. D3 oficial = preço custo×venda do token (continua ABERTA).
+**Sprint:** entra DEPOIS do Sprint D2 (Saque PIX Colaborador) e ANTES do Sprint Circuito de Emissão Completo.
+
+---
+
 ### [NOVOS — sessão 16/06] Bloco "Circuito de Emissão de Token" — 7 P2 + 1 P3 (achados Cowork+claude.ai 15/06)
 
 **Origem:** análise read-only de 4 agentes Cowork/claude.ai 15/06 (`docs/ANALISE-CONVENIO-TOKEN-CLUBE-2026-06-15.md`, `docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md`, `docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md`). Os 2 itens mais críticos viraram P1 catalogados acima (D-novo-COMPRA-PJ-TEMPLATE-CONTABIL + D-novo-RESGATE-PIX-SEM-CAIXA). Os 8 abaixo são P2/P3 do mesmo circuito.

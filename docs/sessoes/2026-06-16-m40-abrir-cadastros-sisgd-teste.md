@@ -74,13 +74,14 @@ Bloco (b) — tela `/conveniada/convenio/[id]/membros` e Bloco (c) — tela `/da
 - **`docs/FLUXO-EMISSAO-TOKEN-CONVENIO-2026-06-15.md`** (105L) — fluxograma técnico passo 0 (admin emite/empresa compra) → passo 10 (resgate PIX/fatura) + lançamentos contábeis esperados.
 - **`docs/GAP-MAP-CONVENIO-MODELO-C-2026-06-15.md`** (111L) — tabela de débitos por passo com severidades.
 
-### 4 decisões de produto fechadas
+### 3 decisões de produto fechadas + 1 nova rotulação (correção 16/06 noite)
 
 | # | Decisão | Resolução |
 |---|---|---|
 | **D1** | Arrendamento empresa→cooperativa→dono usina | **RESOLVIDA** — opção A (empresa paga cooperativa, cooperativa paga aluguel ao dono). Nada a construir. |
-| **D2** | Saque do colaborador em PIX | **CONSTRUIR com toggle** (config liga/desliga; reusa F6 ~70% pronto, tira guard `ehEstabelecimento`). Vira Sprint dedicada antes do Circuito de Emissão. |
-| **D3** | Decaimento da qualificação | **CONSTRUIR** — nível cai com inatividade (espelha oxidação do token); métrica = uso + indicações; admin pondera. Resolve "use ou perde" do lado da qualificação. Sprint dedicada. |
+| **D2** | Saque do colaborador em PIX | **CONSTRUIR com toggle** (config liga/desliga; reusa F6 ~70% pronto, tira guard `ehEstabelecimento`). Vira Sprint dedicada antes do Circuito de Emissão. **Carona:** fecha D-novo-RESGATE-PIX-SEM-CAIXA implementando `D Passivo / C Caixa` conforme FUNDACAO §2.1. |
+| **D3 (oficial)** | **Preço de custo × venda do token** | **CONTINUA ABERTA.** Bloqueia Fase 1 contábil do Sprint Circuito de Emissão Completo (D-novo-EMISSAO-ADMIN-CONTABIL P2 + D-novo-COMPRA-PJ-TEMPLATE-CONTABIL P1 dependem desse preço pra decidir o lançamento F2 correto). |
+| **D-QUALIF-DECAY** | Decaimento da qualificação | **CONSTRUIR** — nível cai com inatividade (espelha oxidação do token); métrica = uso + indicações; admin pondera. Resolve "use ou perde" do lado da qualificação. Sprint dedicada. **Rotulado D3 por engano no fechamento inicial M40** — corrigido pra D-QUALIF-DECAY 16/06 noite. |
 | **D4** | Oxidação do token | **CONFIRMADA EXISTENTE** — `aplicarOxidacao` em `cooper-token.service.ts:3006` + cron + gate `OXIDACAO_PRODUCAO_LIBERADA`. Resolve D4 como decay, não expiração seca. Nada a construir. |
 
 ### 10 débitos novos catalogados em `debitos-tecnicos.md`
@@ -114,15 +115,24 @@ A análise paralela detectou que diversos achados "ausentes" na Fase 1 da sessã
 
 - **Telas de aprovação** EXISTEM (`MembrosPendentesSection` em ambas detail pages desde 03/06).
 - **Tier do convênio valida** corretamente (não há gap aqui).
-- **Reavaliação de qualificação** EXISTE — só não rebaixava (motivo do D3 ser sprint nova: implementar rebaixamento).
+- **Reavaliação de qualificação** EXISTE — só não rebaixava (motivo da D-QUALIF-DECAY ser sprint nova: implementar rebaixamento).
 
 ## Próximo passo
 
 **Sprint D2 — Saque PIX colaborador comum** (extensão F6 sem `ehEstabelecimento`, com toggle config liga/desliga). ~6-10h. Reusa F6 do M34/M35 (~70% pronto).
 
-Em paralelo / depois: **Sprint Decaimento Qualificação** (D3, ~6-10h).
+Em paralelo / depois: **Sprint Decaimento Qualificação** (D-QUALIF-DECAY, ~6-10h).
 
-DEPOIS dos 2: **Sprint "Circuito de Emissão Completo"** (4 fases — contábil → notificações → emissão unificada quem/custo → compra conveniado + auto-distribuição). Resolve os 2 P1 + 7 P2 do bloco catalogado hoje.
+DEPOIS dos 2: **Sprint "Circuito de Emissão Completo"** (4 fases — contábil → notificações → emissão unificada quem/custo → compra conveniado + auto-distribuição). Resolve os 2 P1 + 7 P2 do bloco catalogado hoje. **Bloqueada por D3 oficial (preço custo×venda do token)** — decisão produto pendente.
+
+## Correção pós-fechamento (16/06 noite)
+
+3 ajustes catalogados em commit único após fechamento original M40:
+
+1. **Disciplina de análise** adicionada ao CLAUDE.md — modelo canônico (4 lentes) primeiro, antes de propor qualquer mudança que toque dinheiro/contabilidade/regra econômica.
+2. **`docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md`** commitado no main (artefato vivo do orquestrador, 4 leitores profundos sobre 5283L do `cooper-token.service.ts`). Pré-requisito de leitura pra qualquer sprint que toque token.
+3. **Correção D3:** Sprint Decaimento Qualificação rotulada D3 por engano. **D3 oficial = preço custo×venda do token (continua ABERTA, bloqueia Fase 1 contábil)**. Decaimento da qualificação renomeado pra **D-QUALIF-DECAY**.
+4. **Escopo Sprint D2 ampliado:** fecha D-novo-RESGATE-PIX-SEM-CAIXA de carona (mexe nos mesmos arquivos: solicitarResgate + listener). Implementa `D Passivo / C Caixa` conforme FUNDACAO §2.1.
 
 ## Pré-requisitos leitura próxima sessão
 

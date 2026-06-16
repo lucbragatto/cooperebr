@@ -69,9 +69,9 @@
 
 1. **Sprint "Abrir Cadastros — Teste SISGD" ENTREGUE** em 4 commits + 1 merge `--no-ff` no main (`1634c11`). Convênio `CV-SISGD-TESTE-001` pronto pra turma de teste interna validar onboarding antes da Santi/Triad. Smoke E2E 10/10 verde (convite OTP → cadastro → empresa aprova → admin aprova → MEMBRO_ATIVO). Convergiu pro convênio pré-existente (08/06) — não criou duplicata; órfãos da v1 desativados (status=ENCERRADO, NUNCA deletados). `cooperebr-multitenant-reviewer`: 0 P0/P1 + 4 P3 aplicados (defense in depth). Bloco (b)/(c) cancelados durante Fase 1: `MembrosPendentesSection` já estava plugado em ambas detail pages desde 03/06.
 
-2. **Análise read-only circuito emissão token** (4 agentes Cowork+claude.ai 15/06, 5283L) captura no main (`0371185` — `ANALISE-/FLUXO-/GAP-MAP-`). **4 decisões de produto fechadas:** D1 arrendamento ✅ Opção A nada a construir; **D2 saque PIX colaborador → CONSTRUIR com toggle** (reusa F6 ~70% pronto); **D3 decaimento qualificação → CONSTRUIR** (espelha oxidação); D4 oxidação ✅ JÁ EXISTENTE (`aplicarOxidacao:3006` + cron + gate). **10 débitos novos catalogados** (2 P1 + 7 P2 + 1 P3). Correções de percepção: telas de aprovação existem; tier do convênio valida; reavaliação existe (só não rebaixava — D3 resolve).
+2. **Análise read-only circuito emissão token** (4 agentes Cowork+claude.ai 15/06, 5283L) captura no main (`0371185` — `ANALISE-/FLUXO-/GAP-MAP-`). **3 decisões de produto FECHADAS + 1 nova rotulação:** D1 arrendamento ✅ Opção A nada a construir; **D2 saque PIX colaborador → CONSTRUIR com toggle** (reusa F6 ~70% pronto); **D-QUALIF-DECAY decaimento da qualificação → CONSTRUIR** (espelha oxidação do token — rotulado D3 no fechamento M40 por engano; D3 oficial = preço custo×venda do token continua **ABERTA**, bloqueia Fase 1 contábil do Circuito de Emissão Completo); D4 oxidação ✅ JÁ EXISTENTE (`aplicarOxidacao:3006` + cron + gate). **10 débitos novos catalogados** (2 P1 + 7 P2 + 1 P3). Correções de percepção: telas de aprovação existem; tier do convênio valida; reavaliação existe (só não rebaixava — D-QUALIF-DECAY resolve). **Disciplina de análise catalogada no CLAUDE.md** + `docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md` vira pré-requisito de leitura pra qualquer sprint que toque token.
 
-**Próximo passo único e claro:** **Sprint D2 — Saque PIX colaborador comum** (~6-10h, reusa F6 do M34/M35), em paralelo/depois **Sprint Decaimento Qualificação** (D3, ~6-10h). DEPOIS dos 2: **Sprint "Circuito de Emissão Completo" (4 fases — contábil → notificações → emissão unificada → compra conveniado + auto-distribuição)**.
+**Próximo passo único e claro:** **Sprint D2 — Saque PIX colaborador comum** (~6-10h, reusa F6 do M34/M35) **+ fechar de carona D-novo-RESGATE-PIX-SEM-CAIXA** (P1 catalogado M40 — implementar `D Passivo / C Caixa` conforme FUNDACAO §2.1). Em paralelo/depois **Sprint Decaimento Qualificação** (D-QUALIF-DECAY, ~6-10h). DEPOIS dos 2: **Sprint "Circuito de Emissão Completo" (4 fases — contábil → notificações → emissão unificada → compra conveniado + auto-distribuição)**.
 
 **Detalhe:** `docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md`.
 
@@ -2621,15 +2621,22 @@ ambas detail pages desde 03/06.
 
 EIXO 2 — análise read-only do circuito emissão token (4 agentes
 Cowork+claude.ai 15/06, 5283L em docs/ANALISE-/FLUXO-/GAP-MAP-)
-capturada no main em 0371185. 4 decisões fechadas: D1 arrendamento
-RESOLVIDA (opção A); D2 saque PIX colaborador CONSTRUIR com toggle;
-D3 decaimento qualificação CONSTRUIR; D4 oxidação JÁ EXISTENTE
-(aplicarOxidacao:3006 + cron + gate). 10 débitos novos catalogados
-(2 P1 + 7 P2 + 1 P3).
+capturada no main em 0371185. 3 decisões fechadas + 1 rotulação
+nova: D1 arrendamento RESOLVIDA (opção A); D2 saque PIX colaborador
+CONSTRUIR com toggle; D-QUALIF-DECAY decaimento da qualificação
+CONSTRUIR (espelha oxidação token — rotulado D3 por engano no
+fechamento M40, D3 oficial = preço custo×venda CONTINUA ABERTA);
+D4 oxidação JÁ EXISTENTE (aplicarOxidacao:3006 + cron + gate).
+10 débitos novos catalogados (2 P1 + 7 P2 + 1 P3).
+
+Disciplina de análise (16/06): docs/FUNDACAO-COOPERTOKEN-MODELO-
+CANONICO.md fixa o modelo canônico (4 lentes: contador/sistemas/DBA/
+negócios) — pré-requisito de leitura pra qualquer sprint que toque
+token. Bloco catalogado no CLAUDE.md.
 
 Detalhes em docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md.
 
-═══ PRÓXIMO BLOCO: Sprint D2 — Saque PIX Colaborador Comum ═══
+═══ PRÓXIMO BLOCO: Sprint D2 — Saque PIX Colaborador Comum (+ carona D-RESGATE-PIX-SEM-CAIXA) ═══
 
 ESCOPO: extensão F6 (resgate PIX existente do M34/M35) sem o guard
 ehEstabelecimento + toggle de config liga/desliga por cooperativa.
@@ -2637,15 +2644,28 @@ Reusa ~70% do código F6 já testado em produção. Cooperado comum
 (não-estabelecimento) ganha botão "Resgatar em R$ via PIX" em
 /portal/tokens quando config ativa.
 
-ESTIMATIVA: 6-10h em 3-4 blocos:
+CARONA OBRIGATÓRIA: como o sprint mexe no caminho do resgate
+(solicitarResgate + cooper-token-resgate.listener), FECHA o
+D-novo-RESGATE-PIX-SEM-CAIXA P1 (catalogado M40) implementando o
+lançamento contábil canônico no processarWebhookResgate
+(TRANSFER_DONE): D Passivo Tokens 5.1.02 / C Caixa, conforme
+FUNDACAO-COOPERTOKEN §2.1 tabela "Resgate via PIX". Sem isso o
+sprint deixa P1 aberto.
+
+ESTIMATIVA: 8-12h em 4-5 blocos:
 - (a) Schema: flag Cooperativa.saqueColaboradorAtivo (default false).
 - (b) Service: remover/gate ehEstabelecimento no solicitarResgate
       condicionado à flag. Specs novas (~5-8 specs).
-- (c) UI: card condicional em /portal/tokens (ehEstabelecimento OR
+- (c) Contábil (D-RESGATE-PIX-SEM-CAIXA): emitir LancamentoCaixa
+      D Passivo / C Caixa no listener TRANSFER_DONE. Spread (se
+      pagar abaixo do face) vai pra C Receita de Resgate. Specs
+      cobrindo TRANSFER_DONE + TRANSFER_FAILED (reversão).
+- (d) UI: card condicional em /portal/tokens (ehEstabelecimento OR
       saqueColaboradorAtivo). UI admin em /dashboard/configuracoes
       pra ligar/desligar.
-- (d) Smoke E2E: cooperado comum (não-estabelecimento) solicita +
-      admin aprova + PIX-out + webhook + saldo bloqueado→liquidado.
+- (e) Smoke E2E: cooperado comum (não-estabelecimento) solicita +
+      admin aprova + PIX-out + webhook + saldo bloqueado→liquidado
+      + LancamentoCaixa criado.
 
 PROTOCOLO:
 - Branch nova feature/saque-pix-colaborador como 1º comando.
@@ -2659,23 +2679,33 @@ PROTOCOLO:
   real). Padrão M34/M35.
 
 PRÉ-REQUISITOS LEITURA:
-1. docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md (esta
+1. **docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md (16/06)** —
+   modelo canônico em 4 lentes; §2.1 tabela contábil pro resgate
+   PIX (D Passivo / C Caixa + spread). LER ANTES DE TUDO.
+2. docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md (esta
    sessão).
-2. docs/sessoes/2026-06-13-14-m35-sprint-clube-p1-f6-resgate-completo.md
+3. docs/sessoes/2026-06-13-14-m35-sprint-clube-p1-f6-resgate-completo.md
    (F6 entregue — molde do código a reusar).
-3. backend/src/cooper-token/cooper-token.service.ts:solicitarResgate
-   (gate ehEstabelecimento atual).
-4. backend/src/cooper-token/cooper-token-resgate.listener.ts (webhook
-   TRANSFER_DONE — D-novo-RESGATE-PIX-SEM-CAIXA bloqueado AQUI).
-5. web/app/portal/resgatar-tokens/page.tsx + /portal/tokens/page.tsx
+4. backend/src/cooper-token/cooper-token.service.ts:1986
+   solicitarResgate (guard ehEstabelecimento ~:2031 atual) + :2226
+   aprovarResgate.
+5. backend/src/cooper-token/cooper-token-resgate.listener.ts
+   (processarWebhookResgate TRANSFER_DONE — D-novo-RESGATE-PIX-
+   SEM-CAIXA bloqueado AQUI; fecha de carona).
+6. backend/src/financeiro/token-contabil.service.ts (templates
+   contábeis existentes; lancarResgateFatura como referência).
+7. web/app/portal/resgatar-tokens/page.tsx + /portal/tokens/page.tsx
    (cards condicionais ehEstabelecimento).
-6. CLAUDE.md regras (rebuild PM2 + contatos teste + isAmbienteReal).
+8. CLAUDE.md regras (rebuild PM2 + contatos teste + isAmbienteReal
+   + Disciplina de análise modelo canônico primeiro).
 
 CARRY-OVERS M40 (não-bloqueantes — pos D2):
 
 PRÓXIMA SPRINT DEPOIS DE D2:
-- Sprint Decaimento Qualificação (D3) — nível cai com inatividade,
-  espelha oxidação token, métrica uso+indicações, admin pondera.
+- Sprint Decaimento Qualificação (D-QUALIF-DECAY) — nível cai com
+  inatividade, espelha oxidação token, métrica uso+indicações,
+  admin pondera. (Rotulado D3 por engano no fechamento M40 — D3
+  oficial = preço custo×venda do token continua ABERTA.)
 
 DEPOIS DAS DUAS ACIMA:
 - Sprint Circuito de Emissão Completo (4 fases): contábil →

@@ -183,6 +183,10 @@ sistêmica depende dessa disciplina.
 
 **Origem:** sessões claude.ai 30/04 (Decisão 14), 01/05 (Decisão 15), 02/05 (Decisão 20).
 
+## Disciplina de análise — modelo canônico primeiro (16/06/2026)
+
+Antes de analisar/propor qualquer coisa que toque dinheiro, contabilidade, modelo de dados ou regra econômica, derivar PRIMEIRO o modelo canônico ("como deveria ser") com as 4 lentes — contador/financista, engenheiro de sistemas, DBA sênior, negócios — e medir o código contra ele. Desvios viram débitos com o carimbo certo. Não rotular gaps reativamente. Artefato vivo do token: `docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md`.
+
 ## Cooperados institucionais — SALVAGUARDA (Fatia F-G1, 05/06/2026)
 
 Cada cooperativa pode ter um **cooperado fantasma** com nome
