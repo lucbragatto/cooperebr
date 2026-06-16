@@ -30,9 +30,15 @@ export default function PortalTokensPage() {
   // /portal/comprar-tokens só renderiza pra empresa cooperada (PJ).
   const [tipoPessoa, setTipoPessoa] = useState<string>('PF');
   // F6 Bloco C.2 (13/06/2026): card condicional "Resgatar em R$ via PIX"
-  // só pra ehEstabelecimento. Lê de /cooperados/meu-perfil (já retorna
+  // pra ehEstabelecimento. Lê de /cooperados/meu-perfil (já retorna
   // ehEstabelecimento) + /meu-perfil/dados-bancarios (status pixChave).
+  //
+  // Sprint D2 (16/06/2026): card também aparece pra cooperado comum quando
+  // a flag tenant Cooperativa.saqueColaboradorAtivo está ON
+  // (saqueColaboradorAtivo no perfil; flag dual com env SAQUE_COLABORADOR_
+  // PRODUCAO_LIBERADO validado server-side no solicitarResgate).
   const [ehEstabelecimento, setEhEstabelecimento] = useState(false);
+  const [saqueColaboradorAtivo, setSaqueColaboradorAtivo] = useState(false);
   const [pixCadastrado, setPixCadastrado] = useState(false);
   const [quantidade, setQuantidade] = useState('');
   const [gerando, setGerando] = useState(false);
@@ -80,6 +86,8 @@ export default function PortalTokensPage() {
       }
       if (meuPerfilRes?.data) {
         setEhEstabelecimento(!!meuPerfilRes.data.ehEstabelecimento);
+        // Sprint D2 (16/06/2026): flag tenant pra saque colaborador comum.
+        setSaqueColaboradorAtivo(!!meuPerfilRes.data.saqueColaboradorAtivo);
       }
       if (pixStatusRes?.data) {
         setPixCadastrado(!!pixStatusRes.data.temPixCadastrado);
@@ -321,9 +329,10 @@ export default function PortalTokensPage() {
       )}
 
       {/* F6 Bloco C.2 (13/06/2026): card condicional Estabelecimento.
-          Só renderiza se cooperado tem flag ehEstabelecimento=true. CTA
-          muda conforme tem ou não chave PIX cadastrada. */}
-      {ehEstabelecimento && (
+          Sprint D2 (16/06/2026): card também aparece pra cooperado comum
+          quando saqueColaboradorAtivo=true (flag tenant). Server-side, o
+          solicitarResgate revalida o gate dual (flag + env produção). */}
+      {(ehEstabelecimento || saqueColaboradorAtivo) && (
         <Card className={pixCadastrado ? 'border-green-300 bg-green-50/40' : 'border-amber-300 bg-amber-50/40'}>
           <CardContent className="p-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -340,8 +349,10 @@ export default function PortalTokensPage() {
                 </p>
                 <p className={`text-xs ${pixCadastrado ? 'text-green-800' : 'text-amber-800'}`}>
                   {pixCadastrado
-                    ? 'Você é Estabelecimento do Clube. Solicite a liquidação dos tokens em R$ via PIX (recibo emitido pela cooperativa após aprovação).'
-                    : 'Você é Estabelecimento, mas ainda não cadastrou sua chave PIX — necessária pra receber resgates em R$.'}
+                    ? ehEstabelecimento
+                      ? 'Você é Estabelecimento do Clube. Solicite a liquidação dos tokens em R$ via PIX (recibo emitido pela cooperativa após aprovação).'
+                      : 'Sua cooperativa habilitou saque de tokens em R$ via PIX. Solicite a liquidação (recibo emitido após aprovação).'
+                    : 'Cadastre sua chave PIX — necessária pra receber resgates em R$.'}
                 </p>
               </div>
             </div>

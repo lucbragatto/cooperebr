@@ -289,6 +289,10 @@ export class MetricasSaasService {
           taxaInadimplencia,
         },
         criadoEm: p.createdAt,
+        // Sprint D2 (16/06/2026) — flag tenant saque colaborador comum
+        // (toggle SUPER_ADMIN no painel super-admin). Default false.
+        saqueColaboradorAtivo: p.saqueColaboradorAtivo,
+        saqueColaboradorAtivadoEm: p.saqueColaboradorAtivadoEm,
       };
     });
   }
