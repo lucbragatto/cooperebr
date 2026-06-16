@@ -63,6 +63,32 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-16 (Code — M41 Saque PIX Colaborador Comum + D-RESGATE-PIX-SEM-CAIXA P1 fechado)
+
+**Sessão Code maratona.** Sprint D2 entregue ponta-a-ponta em 7 commits + 1 merge `--no-ff` no main (`b622a87`):
+
+1. **Schema (a)** delta aditivo `Cooperativa.saqueColaboradorAtivo Boolean @default(false)` + `saqueColaboradorAtivadoEm`.
+2. **Backend (b)** gate dual em `solicitarResgate:2031` (flag tenant `Cooperativa.saqueColaboradorAtivo` + env `SAQUE_COLABORADOR_PRODUCAO_LIBERADO`, espelha gate oxidação) + endpoints SUPER_ADMIN `/saas/cooperativas/:id/saque-colaborador` (GET status + PATCH toggle idempotente com AuditLog) + 15 specs.
+3. **Contábil (c) — FECHA D-novo-RESGATE-PIX-SEM-CAIXA P1** catalogado M40: novo `lancarResgatePix` em `token-contabil.service.ts` cria `LancamentoCaixa D Passivo (5.1.02) / C Caixa` pós-tx Serializable conforme FUNDACAO §2.1. Idempotente via `findFirst` guard. Falha contábil → status `PAGO_CREDITO_PENDENTE` + evento `cooper-token-resgate.credito-pendente` (espelha F2 `compra-pj.credito-pendente` — princípio "nenhuma saída de caixa silenciosa", re-review orquestrador).
+4. **Frontend (d)** `/cooperados/meu-perfil` estendido + cards condicionais em `/portal/tokens` e `/portal/resgatar-tokens` (`ehEstabelecimento OR saqueColaboradorAtivo`) + UI super-admin `/dashboard/super-admin/saque-colaborador` com banner âmbar + link sidebar.
+5. **Smoke (e) PASS 16/16** contra `localhost:3000` — colaborador comum solicita → admin aprova → SIMULATED PIX-out → webhook TRANSFER_DONE → ★ LancamentoCaixa D Passivo/C Caixa criado ★, cleanup idempotente.
+6. **3 reviewers pesados (financeiro-token + multitenant + security)** → 0 P0/P1 abertos, **4 P1 + 5 P2 aplicados** (DTO @IsBoolean, referenciaId obrigatório, removido tx enganoso, schema doc PAGO_CREDITO_PENDENTE, assertSameTenantOrSuperAdmin, cooperativaIdEsperada obrigatório, arredondamento monetário, `.env.example` documentado).
+7. **Re-review orquestrador**: 1 P1 residual fechado (alerta evento `credito-pendente` espelha F2) + **D-novo-RECONCILIACAO-CONTABIL-CRON P2 catalogado** (re-tenta resgates `PAGO_CREDITO_PENDENTE`).
+
+**Total: 60/60 specs verde + smoke E2E 16/16 PASS + build NestJS/Next.js verde.**
+
+**Invariante FUNDACAO §4#1** (Passivo == Σ saldos × face):
+- ✅ Caminho feliz: atômico observável.
+- ⚠️ Falha contábil rara: degradado e CONSULTÁVEL via `PAGO_CREDITO_PENDENTE` + evento alerta. Auto-heal pendente do cron catalogado.
+
+**Próximo passo único e claro:** **Sprint D-QUALIF-DECAY** (Decaimento da Qualificação — espelha oxidação do token; rebaixamento por inatividade; métrica uso+indicações; admin pondera). ~6-10h. Catalogado em `debitos-tecnicos.md`.
+
+**Carry-over crítico pra ativação produção D2:** D-novo-RECONCILIACAO-CONTABIL-CRON P2 + parecer escrito do `cooperebr-analista-conformidade` antes de setar `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true`.
+
+**Detalhe:** `docs/sessoes/2026-06-16-m41-saque-pix-colaborador.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-16 (Code — M40 Abrir Cadastros SISGD + análise circuito emissão token)
 
 **Sessão Code de dia inteiro.** 2 eixos paralelos:
@@ -2586,11 +2612,11 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M40 (16/06):
+2. Rodar `git status --short`. Esperado pós-fechamento M41 (16/06):
    8 arquivos `M` em backend/src/concierge/* + backend/package.json +
    backend/package-lock.json + backend/src/concierge/concierge.service.
    spec.ts — TUDO TERRITÓRIO COWORK, Code NÃO TOCA, próximo fechamento
-   Cowork limpa. Último commit é o de fechamento M40. Rodar
+   Cowork limpa. Último commit é o de fechamento M41. Rodar
    `git log origin/main..HEAD --oneline` — deve mostrar VAZIO se push
    do fechamento concluído.
 
@@ -2600,43 +2626,89 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    exige `cd web ; npm run build ; pm2 restart cooperebr-frontend`.
    HMR NÃO ROLA.
 
-4. ⚠️ M40 FECHADO no main (commit `1634c11` merge). Branch
-   `feature/abrir-cadastros-sisgd-teste` permanece no remote pra
-   histórico (mergeada via --no-ff, NÃO deletada). Próxima sprint
-   cria branch nova `feature/saque-pix-colaborador` como 1º comando
-   (Decisão Luciano 13/06: branch dedicada por sprint, mergear na
-   hora OU rebasear antes que envelheça).
+4. ⚠️ M41 FECHADO no main (commit `b622a87` merge Sprint D2 saque
+   PIX colaborador). Branch `feature/saque-pix-colaborador` permanece
+   no remote pra histórico (mergeada via --no-ff, NÃO deletada).
+   Próxima sprint cria branch nova `feature/qualif-decay` como 1º
+   comando (Decisão Luciano 13/06: branch dedicada por sprint).
 
-PASSO 1 — Frase comandante Sprint D2 (Saque PIX Colaborador Comum):
+PASSO 1 — Frase comandante Sprint D-QUALIF-DECAY (Decaimento Qualificação):
 
-M40 (16/06) ENTREGOU 2 eixos paralelos em 4 commits + 1 merge --no-ff
-no main (1634c11):
+M41 (16/06) ENTREGOU Sprint D2 Saque PIX Colaborador Comum em 7 commits
++ 1 merge --no-ff no main (b622a87) + FECHOU D-novo-RESGATE-PIX-SEM-
+CAIXA P1 catalogado em M40.
 
-EIXO 1 — Sprint "Abrir Cadastros — Teste SISGD" COMPLETO. Convergiu
-pro CV-SISGD-TESTE-001 pré-existente (não duplicou). Smoke E2E 10/10
-verde (convite OTP → cadastro → empresa aprova → admin aprova →
-MEMBRO_ATIVO). 0 P0/P1 multi-tenant + 4 P3 aplicados. Bloco (b)/(c)
-cancelados na Fase 1: MembrosPendentesSection já estava plugado em
-ambas detail pages desde 03/06.
+Cooperado COMUM (não-Estabelecimento) agora pode solicitar resgate de
+tokens em R$ via PIX sob gate dual: flag tenant Cooperativa.
+saqueColaboradorAtivo (SUPER_ADMIN liga) + env SAQUE_COLABORADOR_
+PRODUCAO_LIBERADO='true' (Luciano libera após parecer escrito do
+cooperebr-analista-conformidade). Espelha exatamente OXIDACAO_PRODUCAO_
+LIBERADA. Toggle nasce OFF. Mensagem genérica anti-enumeração.
 
-EIXO 2 — análise read-only do circuito emissão token (4 agentes
-Cowork+claude.ai 15/06, 5283L em docs/ANALISE-/FLUXO-/GAP-MAP-)
-capturada no main em 0371185. 3 decisões fechadas + 1 rotulação
-nova: D1 arrendamento RESOLVIDA (opção A); D2 saque PIX colaborador
-CONSTRUIR com toggle; D-QUALIF-DECAY decaimento da qualificação
-CONSTRUIR (espelha oxidação token — rotulado D3 por engano no
-fechamento M40, D3 oficial = preço custo×venda CONTINUA ABERTA);
-D4 oxidação JÁ EXISTENTE (aplicarOxidacao:3006 + cron + gate).
-10 débitos novos catalogados (2 P1 + 7 P2 + 1 P3).
+Contábil (D-RESGATE-PIX-SEM-CAIXA fechado): novo lancarResgatePix em
+token-contabil.service cria LancamentoCaixa D Passivo (5.1.02) / C
+Caixa pós-tx Serializable (FUNDACAO §2.1). Idempotente via findFirst
+guard. Falha rara → status PAGO_CREDITO_PENDENTE + evento cooper-token-
+resgate.credito-pendente (espelha F2, princípio "nenhuma saída de caixa
+silenciosa").
 
-Disciplina de análise (16/06): docs/FUNDACAO-COOPERTOKEN-MODELO-
-CANONICO.md fixa o modelo canônico (4 lentes: contador/sistemas/DBA/
-negócios) — pré-requisito de leitura pra qualquer sprint que toque
-token. Bloco catalogado no CLAUDE.md.
+UI super-admin /dashboard/super-admin/saque-colaborador com banner âmbar
+quando env produção bloqueado. Portal cards condicionais agora aparecem
+pra (ehEstabelecimento OR saqueColaboradorAtivo).
 
-Detalhes em docs/sessoes/2026-06-16-m40-abrir-cadastros-sisgd-teste.md.
+3 reviewers pesados (financeiro-token + multitenant + security) + re-
+review orquestrador: 0 P0/P1 abertos no merge. 4 P1 + 5 P2 aplicados.
 
-═══ PRÓXIMO BLOCO: Sprint D2 — Saque PIX Colaborador Comum (+ carona D-RESGATE-PIX-SEM-CAIXA) ═══
+60/60 specs verde + smoke E2E PASS 16/16 + build NestJS/Next.js verde.
+
+⚠️ INVARIANTE FUNDACAO §4#1 (Passivo == Σ saldos × face):
+- Caminho feliz: ATÔMICO observável.
+- Falha contábil rara: DEGRADADO + CONSULTÁVEL via PAGO_CREDITO_
+  PENDENTE + evento alerta. Auto-heal pendente do D-novo-RECONCILIACAO-
+  CONTABIL-CRON P2 (catalogado hoje). Princípio "observável e re-
+  tentável", não "atômico no pior caso".
+
+CARRY-OVER CRÍTICO pra ativação produção D2:
+1. Implementar D-novo-RECONCILIACAO-CONTABIL-CRON P2 (cron re-tenta
+   PAGO_CREDITO_PENDENTE).
+2. Solicitar parecer escrito ao cooperebr-analista-conformidade.
+3. Setar SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true após parecer.
+
+Detalhes em docs/sessoes/2026-06-16-m41-saque-pix-colaborador.md.
+
+═══ PRÓXIMO BLOCO: Sprint D-QUALIF-DECAY — Decaimento da Qualificação ═══
+
+ESCOPO: nível da qualificação no Clube cai com inatividade prolongada
+(espelha aplicarOxidacao do token). Métrica = uso + indicações; admin
+pondera pesos. Resolve "use ou perde" do lado da qualificação.
+Reavaliação JÁ EXISTE em backend/src/clube-vantagens/ (só PROMOVE
+hoje, nunca REBAIXA).
+
+ESTIMATIVA: 6-10h em ~4 blocos:
+- (a) Schema delta aditivo em ProgressaoClube (lastAcaoEm, periodoGraca,
+      mesesPraDecair, piso) + ConfigClube (pesos uso/indicações).
+- (b) Service aplicarDecaimentoClube espelhando aplicarOxidacao
+      (cron mensal + gate DECAIMENTO_QUALIFICACAO_LIBERADO).
+- (c) UI admin pra configurar pesos + simulação preview.
+- (d) Smoke: cooperado inativo N meses → nível cai do BRONZE pra (piso)
+      sem ultrapassar.
+
+PROTOCOLO:
+- Branch nova feature/qualif-decay como 1º comando.
+- Fase 1 read-only OBRIGATÓRIA (Decisão 23) — mapear estrutura
+  ProgressaoClube atual + reavaliação existente. Pausa pro OK.
+- Reviewers: code-reviewer + typescript-reviewer + cooperebr-
+  multitenant-reviewer (não toca dinheiro direto, mas toca contabilidade
+  de qualificação cross-cooperativa).
+- Toggle nasce OFF. Espelha gate da oxidação.
+
+═══ HISTÓRICO REMOVIDO — bloco antigo Sprint D2 (que veio a ser este M41) ═══
+
+(O conteúdo abaixo, do antigo "ESCOPO: extensão F6..." até o
+"═══ FIM DA FRASE M40", representava a frase de retomada do M40 que
+projetava Sprint D2. Esse projeto agora é M41 entregue. Bloco mantido
+como artefato histórico até a próxima sessão limpar — não consultar
+pra orientação operacional.)
 
 ESCOPO: extensão F6 (resgate PIX existente do M34/M35) sem o guard
 ehEstabelecimento + toggle de config liga/desliga por cooperativa.
@@ -2780,7 +2852,7 @@ CARRY-OVERS HISTÓRICOS AINDA VIVOS (M28→M38, não-bloqueantes):
 - Decisões D1/D2/D3/D4 Modelo C — sprints próprios.
 - Untracked acumulados pra Sprint Housekeeping.
 
-═══ FIM DA FRASE M40 (sessão 16/06) ═══
+═══ FIM DA FRASE M41 (sessão 16/06 — Sprint D2 saque PIX colaborador entregue + D-RESGATE-PIX-SEM-CAIXA fechado) ═══
 ```
 
 — BLOCO ARQUIVADO M34 (abaixo — atendido por M37) ——————————————————
