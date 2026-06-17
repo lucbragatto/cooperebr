@@ -63,6 +63,96 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-17 (Code — M42 Filtro de Origem + Disclaimer Versionado FECHADO + merge na main)
+
+**Sessão Code dedicada — M42 entregue ponta-a-ponta.** Salvaguardas 1
+(filtro de origem) + 5 (disclaimer versionado) do parecer
+`docs/relatorios/analise-conformidade-2026-06-16-saque-colaborador-d2.md`
+implementadas + mergeadas na main (`b65bcb3` merge `--no-ff`). A pausa
+do dia 16/06 (Blocos 1-5 entregues mas sem smoke + reviewers + merge)
+foi destravada hoje: rodaram 3 reviewers pesados + fixes + smoke E2E
+8 passos + re-review do orquestrador + merge.
+
+5 commits na feature branch `feature/d2-salvaguardas-origem` (branch
+preservada no origin — NÃO deletada, padrão M39/M41):
+
+1. **Schema (a)** `37069d5` — campos de aceite em `ResgateRecibo` (v1
+   hardcoded).
+2. **Backend (b)** `a6fb0ee` — Guards 1.5/1.6 + 14 specs v1.
+3. **Refactor v2** `c3e14fb` — disclaimer virou ENTIDADE
+   (`DisclaimerSaque` global default + override tenant + histórico
+   imutável + FK no recibo) + 6 endpoints + Guard 1.6 FK-based +
+   3 telas + 15 specs novos.
+4. **Fixes reviewers** `4d39599` — aplicação de 8 P1 + 7 P2 sensatos
+   dos 3 reviewers pesados (financeiro-token + multitenant + security)
+   + smoke E2E `smoke-d2-1-disclaimer-versionado.ts` 23/23 PASS contra
+   `localhost:3000` com 3 papéis reais (SUPER + ADMIN CoopereBR +
+   COOPERADO SISGDSOLAR).
+5. **Merge** `b65bcb3` — `--no-ff` na main.
+
+**Salvaguardas 1 + 5 implementadas:**
+
+- **Filtro de Origem (Salvaguarda 1)**: cooperado comum (não-Estab)
+  só pode sacar tokens cujo `CooperTokenLedger.tipo` esteja em
+  `{DESCONTO_FATURA, FATURA_CHEIA, GERACAO_EXCEDENTE}`. Outros tipos
+  (BONIFICACAO_ADMIN, DISTRIBUICAO_CONVENIO, BONUS_INDICACAO, etc.)
+  ficam bloqueados (CLT Art. 458 — risco trabalhista P0). Mensagem
+  anti-enumeração. Estabelecimento bypassa (parecer §3#6 — risco zero).
+- **Disclaimer Versionado (Salvaguarda 5)**: entidade `DisclaimerSaque`
+  com global default + override por tenant + histórico imutável + FK
+  no recibo (rastro jurídico recuperável mesmo após edições futuras).
+  Anti-staleness reage à edição do admin entre GET e POST.
+
+**Reviewers pesados** (0 P0, 9 P1, 14 P2, 8 P3 únicos):
+- `cooperebr-financeiro-token-reviewer`: 3 P1 + 4 P2 + 2 P3.
+- `cooperebr-multitenant-reviewer`: 3 P1 + 4 P2 + 3 P3.
+- `security-reviewer`: 3 P1 + 6 P2 + 3 P3.
+- Re-review do `cooperebr-orquestrador` APROVOU (confirmou P1.A
+  `Math.abs` + asserção FUNDACAO §4#1 e P1.J `updateMany` com
+  cooperativaId + count guard no código + smoke 23 PASS).
+
+8 P1 + 7 P2 sensatos APLICADOS. P3s catalogados como sugestões.
+
+**Specs**: 333/333 PASS em 22 suites (+6 novos cobrindo ESTORNO
+negativo, perfil SUPER preservado, buscarPorId obrigatório,
+HTML entity bypass, javascript:, on*= handlers).
+
+**Smoke E2E** verde nos 8 passos: SUPER cria global v2 → cooperado
+aceita FK + saque → recibo grava FK+versão+IP → ADMIN cria override
+tenant-v1 → cooperado vê tenant-v1/TENANT → SUPER cria global v3 →
+cooperado AINDA em tenant-v1 (override prevalece) → ADMIN desativa
+override → cooperado volta a v3/GLOBAL + tenant-v1 ativo=false com
+texto íntegro → FK STALE → BadRequest → recibo etapa 2 recupera
+TEXTO EXATO da v2 via FK (rastro jurídico imutável).
+
+**Carry-overs catalogados:**
+
+- **D-novo-THROTTLER-APP-GUARD P1 NOVO** (sistêmico, fora escopo
+  D2.1): `ThrottlerGuard` não em APP_GUARD do AppModule. Mitigação
+  imediata no D2.1 via `@Throttle` por endpoint sensível. Fix global
+  em sprint hardening. Catalogado em `docs/debitos-tecnicos.md` na
+  seção P1.
+- **D-novo-RECONCILIACAO-CONTABIL-CRON P2** (M41) — continua aberto
+  pós-M42; cron re-tenta `PAGO_CREDITO_PENDENTE`.
+- **Caminho de ativação produção do saque colaborador comum**:
+  ✅ parecer (16/06); ✅ Salvaguarda 1 (D2.1); ✅ Salvaguarda 5 (D2.1);
+  ⏳ Salvaguardas 2+3+4 (D2.2/D2.3); ⏳ D-novo-RECONCILIACAO-CONTABIL-
+  CRON P2; ⏳ D-novo-THROTTLER-APP-GUARD P1; ⏳ parecer escrito
+  confirmando + `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true`.
+
+**Próximo passo único e claro:** Luciano decide — D-QUALIF-DECAY
+(decaimento qualificação, ~6-10h, próxima da fila padrão) OU
+D2.2/D2.3 (Salvaguardas 2+3+4 antes de ativar saque colaborador em
+prod) OU sprint hardening de segurança (D-novo-THROTTLER-APP-GUARD
++ reconciliação cron).
+
+**Frase de retomada COMANDANTE** ver `## FRASE DE RETOMADA — próxima
+sessão Code` no fim deste documento.
+
+Detalhe: `docs/sessoes/2026-06-17-m42-d2.1-filtro-origem-disclaimer-versionado.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-16 (Code — D2.1 EM PROGRESSO, sessão PAUSADA — Salvaguardas 1+5 com disclaimer VERSIONADO; falta Bloco 6 + reviewers + merge M42)
 
 **Sessão Code dedicada — D2.1 NÃO É MARCO (incompleta).** Salvaguardas 1
@@ -2676,136 +2766,145 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento 16/06 noite
-   (D2.1 EM PROGRESSO, sessão pausada): main com 8 arquivos `M` em
-   backend/src/concierge/* + backend/package.json + backend/package-
-   lock.json — TERRITÓRIO COWORK, NÃO TOCAR. Último commit em main é
-   o de fechamento desta sessão (`docs(sessao): pausa D2.1 — Blocos
-   1-5 v2 entregues...`). `git log origin/main..HEAD --oneline` deve
-   estar VAZIO. Rodar `git branch -a | grep d2-salvaguardas` —
-   confirmar que `feature/d2-salvaguardas-origem` existe localmente
-   E em `origin/` (WIP backup, último commit `c3e14fb`).
+2. Rodar `git status --short`. Esperado pós-fechamento 17/06
+   (M42 fechado): main com 8 arquivos `M` em backend/src/concierge/*
+   + backend/package.json + backend/package-lock.json — TERRITÓRIO
+   COWORK, NÃO TOCAR. Último commit em main é o de fechamento desta
+   sessão (`docs(sessao): fechamento M42 — D2.1 Filtro Origem +
+   Disclaimer Versionado`). `git log origin/main..HEAD --oneline`
+   deve estar VAZIO. Branch `feature/d2-salvaguardas-origem`
+   preservada no origin (--no-ff merge `b65bcb3`, NÃO deletar).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
    é `next start` sob PM2 — toda mudança em web/ exige rebuild +
-   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. ⚠️ ESTAMOS EM
-   MAIN; ao retomar D2.1 vou pra branch feature — schema WIP
-   (`DisclaimerSaque` + FK em `ResgateRecibo`) JÁ APLICADO no banco
-   dev — NÃO RODAR `prisma db push` novamente.
+   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Schema do
+   `DisclaimerSaque` + FK em `ResgateRecibo` JÁ APLICADO no banco
+   dev — NÃO RODAR `prisma db push` na próxima sprint a menos que
+   tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: Retomar D2.1 (Filtro Origem + Disclaimer Versionado)
+PASSO 1 — Frase COMANDANTE: Luciano decide a próxima sprint
 
-Retomar D2.1 — git checkout feature/d2-salvaguardas-origem; rodar
-Bloco (6) smoke versionado + 3 reviewers (financeiro-token +
-multitenant + security); reportar pro re-review do orquestrador;
-depois push/merge/fechamento M42.
+M42 (17/06) FECHADO no main (merge --no-ff b65bcb3 + push). Salvaguarda
+1 (filtro de origem) + Salvaguarda 5 (disclaimer versionado) do parecer
+de conformidade entregues. 5 commits na feature branch (37069d5 →
+4d39599), 333/333 specs verde, smoke E2E 23/23 PASS com 3 papéis reais.
+3 reviewers pesados (0 P0, 9 P1, 14 P2, 8 P3): 8 P1 + 7 P2 sensatos
+aplicados. Re-review do orquestrador aprovou (P1.A Math.abs + P1.J
+updateMany com cooperativaId + count guard confirmados no código).
 
-Trabalho feito na sessão de 16/06 (último commit na feature branch:
-`c3e14fb` "feat(disclaimer-saque): D2.1 v2 WIP — entidade versionada
-+ telas (Blocos 1-5)"):
+⚠️ Próxima sprint a Luciano definir. 3 candidatos na fila:
 
-- Schema (Bloco 1): model `DisclaimerSaque` (global default +
-  override tenant + histórico imutável) + FK `disclaimerSaqueId` em
-  `ResgateRecibo`. `prisma db push` aplicado.
-- Service + Module (Bloco 2): `DisclaimerSaqueService` com seed
-  idempotente v1 + getAtivo(cooperativaId) (override > global) +
-  criarGlobal/criarTenantOverride em tx Serializable + desativar-
-  OverrideTenant (NUNCA deleta) + buscarPorId multi-tenant safe +
-  validarTexto (50-5000 chars + anti-XSS HTML). Importado por
-  AppModule + CooperTokenModule.
-- Endpoints + Guard 1.6 (Bloco 3): 6 rotas — /portal/disclaimer-
-  saque, /saas/disclaimer-saque/global/{ativo,historico,POST},
-  /cooperativa/disclaimer-saque/{ativo,historico,POST,DELETE}.
-  cooperativaId SEMPRE do JWT, mutações com AuditLog. Guard 1.6
-  refactor: valida FK `disclaimerSaqueId === getAtivo().id` com
-  anti-staleness. Recibo grava FK + snapshot da versão via
-  tx.disclaimerSaque.findUnique.
-- Specs (Bloco 4): 327/327 pass em 22 suites (refactor D2.1 + D2
-  antigos + 15 novos `disclaimer-saque.service.spec.ts`).
-- Frontend (Bloco 5): `/portal/resgatar-tokens` com texto dinâmico
-  (whitespace-pre-line + checkbox + FK no POST + retry anti-
-  staleness; estabelecimento bypassa); `/dashboard/super-admin/
-  disclaimer-saque` (SUPER global editor + histórico); `/dashboard/
-  configuracoes/disclaimer-saque` (ADMIN tenant editor + desativar
-  override + histórico). Sidebar wiring 2 itens novos.
+OPÇÃO A — Sprint D-QUALIF-DECAY (próxima por padrão, ~6-10h)
+  Decaimento da qualificação no Clube com inatividade prolongada
+  (espelha aplicarOxidacao do token). Resolve "use ou perde" do
+  lado da qualificação. Catalogado desde M40 em debitos-tecnicos.md.
+  Reviewers: code-reviewer + typescript-reviewer + cooperebr-
+  multitenant-reviewer (toca contabilidade de qualificação, não
+  dinheiro direto).
 
-Bug operacional catalogado: NestJS DI fallback no inline type-only
-import — `private x?: import('...').X` faz TS erasar e Nest receber
-`Object` como token (UnknownDependenciesException no boot). Fix:
-top-level import. Aplicado.
+OPÇÃO B — Sprint D2.2/D2.3 — Salvaguardas restantes do parecer
+  Necessárias ANTES de SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true.
+  Salvaguarda 2 (limite de valor por saque/dia), Salvaguarda 3
+  (cooldown entre saques), Salvaguarda 4 (anti-burst). Sem isso o
+  saque colaborador comum NÃO PODE ser ativado em prod.
 
-═══ PRÓXIMO BLOCO: D2.1 Bloco (6) smoke versionado + reviewers + merge M42 ═══
+OPÇÃO C — Sprint Hardening de Segurança
+  Fecha 2 carry-overs cruciais pra ativação produção do D2:
+    - D-novo-THROTTLER-APP-GUARD P1 NOVO (sistêmico, catalogado
+      pelo security-reviewer no M42) — ThrottlerGuard não em
+      APP_GUARD do AppModule.
+    - D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M41) — cron re-tenta
+      PAGO_CREDITO_PENDENTE.
 
-ESCOPO BLOCO (6) — Smoke E2E versionado (8 passos roteirizados):
-1. SUPER_ADMIN POST cria global v2.
-2. Cooperado-comum (SISGD-TESTE, não-Estab) GET /portal/disclaimer-
-   saque retorna v2 → aceita + solicita saque → recibo grava FK v2.
-3. ADMIN tenant POST cria override tenant-v1.
-4. Cooperado-comum recarrega → GET retorna tenant-v1.
-5. SUPER_ADMIN cria global v3 → cooperado do tenant com override
-   NÃO afetado (override prevalece).
-6. ADMIN desativa override → cooperado volta a ver global v3.
-7. Tentativa de aceite com FK stale (id antigo) → BadRequest "Termo
-   de saque desatualizado".
-8. Lookup do recibo da etapa 2 → texto exato da v2 recuperado via
-   FK (mesmo com global e tenant tendo evoluído depois).
+ENTREGA M42:
 
-USE: contatos teste whitelist (27981341348 + lucbragatto+sisgdteste@
-gmail.com). Quantidade mínima de tokens. Cleanup idempotente.
+- Schema: model DisclaimerSaque (cooperativaId String? null=global,
+  valor=override) + FK disclaimerSaqueId em ResgateRecibo +
+  back-relation Cooperativa.disclaimersSaque. Histórico imutável:
+  ativo=false, NUNCA delete.
+- DisclaimerSaqueService: seed v1 idempotente + getAtivo (override
+  > global) + getAtivoGlobal (P1 fix — sem string mágica) +
+  criarGlobal/criarTenantOverride em tx Serializable +
+  desativarOverrideTenant com updateMany + cooperativaId + count
+  guard (P1 fix) + buscarPorId com cooperativaIdEsperado obrigatório
+  (P2 fix) + validarTexto rejeita HTML/entities/javascript:/on*=
+  (P2 fix) + listarHistorico paginado (P2 fix).
+- 7 endpoints (5 mutações com @AuditLog + @Throttle): /portal/
+  disclaimer-saque (COOPERADO+ADMIN+SUPER), /saas/disclaimer-saque/
+  global/{ativo,historico,POST} (SUPER), /saas/disclaimer-saque/
+  tenant/:cooperativaId/historico (SUPER NOVO P1 fix — sem
+  impersonation), /cooperativa/disclaimer-saque/{ativo,historico,
+  POST,DELETE} (ADMIN+SUPER, cooperativaId SEMPRE do JWT,
+  criadoPorPerfil do JWT P2 fix).
+- Guard 1.5 (filtro origem) em solicitarResgate: composicaoOrigem-
+  Saldo com Math.abs em DEBITO (P1 fix anti-ESTORNO negativo do
+  M39) + comparação estrita sem tolerância +0.0001 (P2 fix).
+- Guard 1.6 (disclaimer) refactor: valida FK fora da tx (anti-
+  staleness) + re-valida ativo + cooperativaId DENTRO da tx
+  Serializable + throw explícito sem fallback silencioso (P2 fixes).
+- Frontend: 3 telas. /portal/resgatar-tokens com texto dinâmico
+  (whitespace-pre-line + sem dangerouslySetInnerHTML) + checkbox +
+  FK no POST + retry anti-staleness; shape flat corrigido (P1 fix
+  da Salvaguarda 5 silenciosa). /dashboard/super-admin/disclaimer-
+  saque (editor global + histórico). /dashboard/configuracoes/
+  disclaimer-saque (editor tenant + desativar override + histórico).
+  Sidebar wiring 2 itens.
+- DTO solicitar-resgate @ValidateIf coerência: disclaimerAceito=true
+  exige disclaimerSaqueId (P2 fix).
+- POST /cooper-token/empresa/resgatar ganhou @AuditLog (P1 fix).
+- Specs 333/333 verde (22 suites). Smoke smoke-d2-1-disclaimer-
+  versionado.ts 23/23 PASS com 3 papéis reais (SUPER + ADMIN
+  CoopereBR + COOPERADO SISGDSOLAR) — 8 passos do roteiro.
 
-3 REVIEWERS PESADOS pré-push:
-- cooperebr-financeiro-token-reviewer: invariantes do circuito token
-  + Guard 1.5 filtro origem + FK no recibo + lookup contábil.
-- cooperebr-multitenant-reviewer: cooperativaId SEMPRE do JWT em
-  criarTenantOverride/desativarOverrideTenant; listarHistorico +
-  buscarPorId não vazam entre tenants; queries em getAtivo corretas;
-  cooperativaId NUNCA do body.
-- security-reviewer: anti-XSS no texto (plain text + whitespace-pre-
-  line, sem dangerouslySetInnerHTML), anti-IDOR no FK lookup,
-  AuditLog cobrindo todas as mutações.
+CARRY-OVERS catalogados:
 
-RE-REVIEW: cooperebr-orquestrador valida cadeia final + autoriza
-merge. Padrão M39/M41 (orquestrador pegou P1 residuais).
+- D-novo-THROTTLER-APP-GUARD P1 NOVO (catalogado 17/06 pelo
+  security-reviewer) — sistêmico, fora escopo D2.1. ThrottlerGuard
+  não em APP_GUARD do AppModule. Mitigação local com @Throttle por
+  endpoint. Bloqueia ativação produção do D2.
+- D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M41) continua aberto —
+  cron re-tenta resgates PAGO_CREDITO_PENDENTE. Bloqueia ativação
+  produção do D2.
+- Caminho de ativação produção do saque colaborador comum:
+  ✅ parecer (16/06); ✅ Salvaguarda 1 (D2.1); ✅ Salvaguarda 5
+  (D2.1); ⏳ Salvaguardas 2+3+4 (D2.2/D2.3); ⏳ D-novo-THROTTLER-
+  APP-GUARD P1; ⏳ D-novo-RECONCILIACAO-CONTABIL-CRON P2; ⏳ parecer
+  escrito do cooperebr-analista-conformidade confirmando +
+  SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true.
 
-MERGE: após zero P0/P1 abertos + smoke verde, `git checkout main` +
-`git merge --no-ff feature/d2-salvaguardas-origem` + push +
-fechamento canônico M42 (doc-sessão + CONTROLE-EXECUCAO + frase
-nova apontando pro próximo bloco — D-QUALIF-DECAY ou outro
-priorizado pelo Luciano).
+PROTOCOLO próxima sprint (independente de qual Luciano escolha):
+
+- Branch dedicada como 1º comando (Decisão Luciano 13/06).
+- Fase 1 read-only OBRIGATÓRIA (Decisão 23). Pausa pro OK antes de
+  Fase 2.
+- Reviewers pesados ANTES do smoke (padrão M39/M41/M42).
+- Re-review do orquestrador depois das fixes.
+- Smoke E2E real com contatos whitelist (27981341348 + lucbragatto+
+  <suffix>@gmail.com).
+- Merge --no-ff preservando feature branch no origin.
 
 PRÉ-REQUISITOS LEITURA:
-1. `docs/relatorios/analise-conformidade-2026-06-16-saque-
-   colaborador-d2.md` (parecer fonte das 5 salvaguardas; D2.1 cobre
-   1+5; restantes ficam pro D2.2/D2.3).
-2. `docs/sessoes/2026-06-16-d2.1-em-progresso.md` (esta sessão —
-   detalhamento dos 5 blocos entregues).
-3. `docs/sessoes/2026-06-16-m41-saque-pix-colaborador.md` (M41 —
-   gate dual + lancarResgatePix, base do D2.1).
-4. `docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md` — modelo canônico,
-   §2.1 contábil.
-5. Code: `backend/src/disclaimer-saque/*` (novo módulo), Guard 1.6
-   em `backend/src/cooper-token/cooper-token.service.ts:2241+`
-   (procurar bloco "Sprint D2.1 v2"), specs em `disclaimer-saque/
-   disclaimer-saque.service.spec.ts` + `cooper-token/cooper-token-
-   d2-1-filtro-origem-disclaimer.spec.ts` (refactor v2).
-6. CLAUDE.md regras (rebuild PM2 + contatos teste + isAmbienteReal
-   + Disciplina de análise modelo canônico primeiro + Disclaimer
+1. docs/sessoes/2026-06-17-m42-d2.1-filtro-origem-disclaimer-
+   versionado.md (esta sessão — detalhamento completo + reviewers
+   + fixes + smoke).
+2. docs/sessoes/2026-06-16-d2.1-em-progresso.md (pausa que precedeu
+   o M42 — entrega da v2 Blocos 1-5).
+3. docs/sessoes/2026-06-16-m41-saque-pix-colaborador.md (M41 base —
+   gate dual + lancarResgatePix).
+4. docs/relatorios/analise-conformidade-2026-06-16-saque-colaborador-
+   d2.md (parecer fonte das 5 salvaguardas).
+5. docs/debitos-tecnicos.md — D-novo-THROTTLER-APP-GUARD P1 (NOVO),
+   D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M41).
+6. docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md — §2.1 contábil,
+   §4#1 invariante (Passivo == Σ saldos × face).
+7. CLAUDE.md regras (rebuild PM2 + contatos teste + isAmbienteReal +
+   disciplina de análise modelo canônico primeiro + disclaimer
    versionado).
 
-CARRY-OVER nesta sessão (NÃO bloqueante mas relembrar):
-- D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M41) — cron re-tenta
-  PAGO_CREDITO_PENDENTE. Continua aberto após M42.
-- Após M42: solicitar parecer escrito do cooperebr-analista-
-  conformidade pro env SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true em
-  prod.
+═══ FIM DA FRASE M42 (sessão 17/06 — Sprint D2.1 v2 entregue + merge na main) ═══
 
-═══ FRASE M42 DERIVADA (a usar pós-fechamento M42, NÃO ainda) ═══
-
-(Pós-M42 fechado, Luciano define se próxima sprint é Sprint
-D-QUALIF-DECAY ou outro priorizado. Frase antiga M41 abaixo
-arquivada — Sprint D-QUALIF-DECAY continua sendo a próxima na
-fila padrão.)
+═══ FRASE ARQUIVADA M41+pausa-D2.1 (16/06 dia+noite) ═══
 
 ═══ FRASE ARQUIVADA M41 (16/06 dia — Sprint D2 entregue) ═══
 

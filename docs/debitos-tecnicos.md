@@ -111,6 +111,16 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 
 ## P1 — Bloqueia entrada de parceiro real
 
+### D-novo-THROTTLER-APP-GUARD — `ThrottlerGuard` não está em APP_GUARD global do AppModule
+
+**Severidade:** P1 — sistêmico, afeta TODO o app (não só D2.1). Atacante autenticado consegue burlar `@Throttle()` por endpoint dependendo da versão do `@nestjs/throttler`. Cooperebr-backend hoje só aplica throttle nos endpoints com decorator explícito — mas se o guard global não está registrado, depende da versão do pacote pra honrar o decorator. Risco real de DoS / spam (ex: SUPER_ADMIN autenticado criando 10.000 versões de disclaimer; cooperado spammando solicitação de saque pré-lockout PIN).
+**Detectado em:** 2026-06-17 (review security-reviewer no Sprint M42 D2.1 v2).
+**Onde:** `backend/src/app.module.ts:147-159` lista 5 guards em `APP_GUARD` (`JwtAuthGuard`, `RolesGuard`, `ModuloGuard`, `TenantOwnershipGuard`, `PagadorCooperadoGuard`) mas SEM `ThrottlerGuard`. `ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])` está importado mas o guard não é aplicado globalmente.
+**Mitigação atual:** `@Throttle({ ttl: 60000, limit: N })` por endpoint sensível (5/min em `/empresa/resgatar`, 10/min nos POSTs do disclaimer, etc). Sem o guard global, depende de versão do pacote.
+**Fix:** adicionar `{ provide: APP_GUARD, useClass: ThrottlerGuard }` em `app.module.ts` antes dos outros guards. Validar com smoke E2E que `@Throttle` por endpoint continua passando + ataque burst em endpoint sem decorator (ex: GET /cooperados) cai no limite global de 100/min.
+**Tempo estimado:** 2-3h Code (guard + smoke + revalidar 60+ endpoints) — sprint hardening de segurança dedicada.
+**Quando atacar:** **antes de SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true** (Caminho de ativação produção do D2). Também antes do 2º parceiro real entrar em produção.
+
 ### D-novo-COMPRA-PJ-TEMPLATE-CONTABIL — Compra paga pelo conveniado lança "desconto concedido" em vez de receita de venda
 
 **Severidade:** P1 — receita some + passivo infla; bloqueia DRE válida no Modelo C.
