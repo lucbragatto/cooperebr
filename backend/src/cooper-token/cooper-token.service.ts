@@ -2934,11 +2934,23 @@ export class CooperTokenService {
           `[F6 D2] CONTABIL FALHOU pós-saída-de-caixa recibo=${recibo.numeroRecibo} — degradando pra PAGO_CREDITO_PENDENTE. Motivo: ${msgContabil}`,
         );
         try {
+          // Sprint C Hardening (17/06/2026) — primeira tentativa em
+          // 5min (backoff inicial). Cron */15 vai pegar nas próximas
+          // 15min. Campos reconciliacao* armam o estado pro cron.
+          // P1 review financeiro (17/06): `reconciliacaoUltimaEm` setado
+          // já no webhook (esta é tecnicamente a 1ª tentativa que falhou)
+          // — sem isso, admin vê tentativas=0 + ultimaEm=null e não sabe
+          // se webhook nunca rodou ou se recibo é novo.
+          const proximaEm = new Date(Date.now() + 5 * 60 * 1000);
           await this.prisma.resgateRecibo.updateMany({
             where: { id: recibo.id, cooperativaId: recibo.cooperativaId, status: 'PAGO_RECIBO_EMITIDO' },
             data: {
               status: 'PAGO_CREDITO_PENDENTE',
               motivoFalha: `Contábil pendente: ${msgContabil.slice(0, 400)}`,
+              reconciliacaoTentativas: 0,
+              reconciliacaoUltimaEm: new Date(),
+              reconciliacaoProximaEm: proximaEm,
+              reconciliacaoDesistido: false,
             },
           });
           this.logger.warn(

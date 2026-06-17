@@ -79,7 +79,20 @@ import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    // Sprint C Hardening (17/06/2026) — 2 tiers:
+    //  - `default`: 100 req/min por IP (global). Aplica a TODO endpoint
+    //    via APP_GUARD abaixo, exceto quem opta por outro tier ou
+    //    @SkipThrottle.
+    //  - `webhook`: 600 req/min — teto ALTO pra webhooks de integração
+    //    (Asaas / BB / Sicoob / WhatsApp Baileys) absorverem burst em
+    //    hora de pico (apuração massa, broadcast Baileys etc) SEM
+    //    skip-total. Mantém backstop anti-runaway. Idempotência
+    //    cobre 429→retry do remetente (Asaas + bancos retentam com
+    //    backoff próprio; Baileys re-fila localmente).
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60000, limit: 100 },
+      { name: 'webhook', ttl: 60000, limit: 600 },
+    ]),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     CooperadosModule,
@@ -147,6 +160,18 @@ import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
   providers: [
     AppService,
     PrismaService,
+    // Sprint C Hardening (17/06/2026) — D-novo-THROTTLER-APP-GUARD P1
+    // (catalogado pelo security-reviewer no M42). Sem este registro
+    // global, os @Throttle por endpoint dependiam de versão do
+    // @nestjs/throttler pra serem honrados. Agora SEMPRE aplica:
+    //  - default 100/min em qualquer endpoint sem @Throttle/@SkipThrottle
+    //  - tier `webhook` 600/min nos 4 endpoints de integração marcados
+    //    com @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
+    //  - @SkipThrottle pontual em casos extremos (atualmente nenhum)
+    // ORDEM IMPORTA: ThrottlerGuard antes do JwtAuthGuard pra rate-
+    // limitar mesmo requests não-autenticados (anti-burst de força
+    // bruta em /auth/login etc).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ModuloGuard },

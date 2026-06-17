@@ -1,4 +1,6 @@
 import { Controller, Get, Post, Patch, Param, Body, Query, Headers, UnauthorizedException, Logger, Req, BadRequestException, ForbiddenException } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { IntegracaoBancariaService } from './integracao-bancaria.service';
 import { Roles } from '../auth/roles.decorator';
 import { TenantResource } from '../auth/tenant-resource.decorator';
@@ -19,7 +21,12 @@ export class IntegracaoBancariaController {
       this.logger.error('WEBHOOK_BANCO_TOKEN não configurado — rejeitando webhook');
       throw new UnauthorizedException('Webhook não configurado');
     }
-    if (token !== expectedToken) {
+    // P3 review security Sprint C (17/06): timingSafeEqual constant-time
+    // pra eliminar vetor de timing attack (canal lateral). Buffers
+    // precisam ter mesmo length antes do compare.
+    const got = Buffer.from(token ?? '');
+    const exp = Buffer.from(expectedToken);
+    if (got.length !== exp.length || !crypto.timingSafeEqual(got, exp)) {
       throw new UnauthorizedException('Token de webhook inválido');
     }
   }
@@ -90,8 +97,18 @@ export class IntegracaoBancariaController {
   }
 
   // ── Webhooks (públicos — banco envia sem auth JWT) ────────
+  //
+  // Sprint C Hardening (17/06/2026) — tier `webhook` 600/min.
+  // SkipThrottle({default:true}) desativa o tier default 100/min
+  // (mais restritivo) — restam só o tier `webhook` 600/min.
+  // Bancos podem mandar burst em conciliação massa de cobranças
+  // PIX/boleto. Auth via `x-webhook-token` validado em
+  // validateWebhookToken. 429 absorvido por retry+backoff do
+  // banco + idempotência do service.
 
   @Public()
+  @SkipThrottle({ default: true })
+  @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook/bb')
   webhookBB(
     @Body() payload: any,
@@ -104,6 +121,8 @@ export class IntegracaoBancariaController {
   }
 
   @Public()
+  @SkipThrottle({ default: true })
+  @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook/sicoob')
   webhookSicoob(
     @Body() payload: any,

@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException, ForbiddenException } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import * as crypto from 'crypto';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
 import { WhatsappCobrancaService } from './whatsapp-cobranca.service';
@@ -39,7 +40,16 @@ export class WhatsappFaturaController {
   }
 
   // Webhook para mensagens recebidas do Baileys
+  //
+  // Sprint C Hardening (17/06/2026) — tier `webhook` 600/min.
+  // SkipThrottle({default:true}) desativa o tier default 100/min.
+  // Baileys pode mandar burst em broadcast/lista de transmissão
+  // (cooperebr é dono do Baileys — não há atacante externo
+  // legítimo neste endpoint). Auth via secret query validado
+  // abaixo.
   @Public()
+  @SkipThrottle({ default: true })
+  @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook-incoming')
   async webhookIncoming(
     @Query('secret') secret: string,
@@ -54,7 +64,14 @@ export class WhatsappFaturaController {
     },
   ) {
     const expectedSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
-    if (!expectedSecret || secret !== expectedSecret) {
+    if (!expectedSecret) {
+      throw new UnauthorizedException('Webhook secret não configurado');
+    }
+    // P3 review security Sprint C (17/06): timingSafeEqual constant-time
+    // pra eliminar vetor de timing attack mesmo em endpoint interno.
+    const got = Buffer.from(secret ?? '');
+    const exp = Buffer.from(expectedSecret);
+    if (got.length !== exp.length || !crypto.timingSafeEqual(got, exp)) {
       throw new UnauthorizedException('Webhook secret inválido');
     }
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);

@@ -111,15 +111,11 @@ Em maio/2026, alguém (admin do parceiro) realizou **realocação cega** de Exfi
 
 ## P1 — Bloqueia entrada de parceiro real
 
-### D-novo-THROTTLER-APP-GUARD — `ThrottlerGuard` não está em APP_GUARD global do AppModule
+### ~~D-novo-THROTTLER-APP-GUARD~~ — RESOLVIDO ✅ Sprint C Hardening (17/06/2026)
 
-**Severidade:** P1 — sistêmico, afeta TODO o app (não só D2.1). Atacante autenticado consegue burlar `@Throttle()` por endpoint dependendo da versão do `@nestjs/throttler`. Cooperebr-backend hoje só aplica throttle nos endpoints com decorator explícito — mas se o guard global não está registrado, depende da versão do pacote pra honrar o decorator. Risco real de DoS / spam (ex: SUPER_ADMIN autenticado criando 10.000 versões de disclaimer; cooperado spammando solicitação de saque pré-lockout PIN).
-**Detectado em:** 2026-06-17 (review security-reviewer no Sprint M42 D2.1 v2).
-**Onde:** `backend/src/app.module.ts:147-159` lista 5 guards em `APP_GUARD` (`JwtAuthGuard`, `RolesGuard`, `ModuloGuard`, `TenantOwnershipGuard`, `PagadorCooperadoGuard`) mas SEM `ThrottlerGuard`. `ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])` está importado mas o guard não é aplicado globalmente.
-**Mitigação atual:** `@Throttle({ ttl: 60000, limit: N })` por endpoint sensível (5/min em `/empresa/resgatar`, 10/min nos POSTs do disclaimer, etc). Sem o guard global, depende de versão do pacote.
-**Fix:** adicionar `{ provide: APP_GUARD, useClass: ThrottlerGuard }` em `app.module.ts` antes dos outros guards. Validar com smoke E2E que `@Throttle` por endpoint continua passando + ataque burst em endpoint sem decorator (ex: GET /cooperados) cai no limite global de 100/min.
-**Tempo estimado:** 2-3h Code (guard + smoke + revalidar 60+ endpoints) — sprint hardening de segurança dedicada.
-**Quando atacar:** **antes de SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true** (Caminho de ativação produção do D2). Também antes do 2º parceiro real entrar em produção.
+**Status:** ✅ Fechado pelo Sprint C Bloco 1 — `ThrottlerGuard` registrado em `APP_GUARD` do `app.module.ts` ANTES do JwtAuthGuard (anti-burst em /auth/login). 2 tiers em `ThrottlerModule.forRoot`: `default` 100/min global + `webhook` 600/min pra absorver burst de pagamento. 4 webhooks com `@SkipThrottle({default:true})` + `@Throttle({webhook:{limit:600,ttl:60000}})`: `POST /asaas/webhook`, `POST /integracao-bancaria/webhook/bb`, `POST /integracao-bancaria/webhook/sicoob`, `POST /whatsapp/webhook-incoming`. Smoke E2E 5/5 PASS (`smoke-c1-throttler-burst.ts`): default tier 429 no #101; 4 webhooks absorvem 200 burst sem 429.
+
+**Detalhe original (preservado pra histórico):** Catalogado em 17/06 pelo security-reviewer no Sprint M42. Resolvido em 17/06 Sprint C.
 
 ### D-novo-COMPRA-PJ-TEMPLATE-CONTABIL — Compra paga pelo conveniado lança "desconto concedido" em vez de receita de venda
 
@@ -528,18 +524,44 @@ Também: ampliar `findOne` pra aceitar `cooperativaId` (atualmente em :285 não 
 
 ---
 
-### D-novo-RECONCILIACAO-CONTABIL-CRON — Cron de reconciliação de resgates `PAGO_CREDITO_PENDENTE` (Sprint D2)
+### ~~D-novo-RECONCILIACAO-CONTABIL-CRON~~ — RESOLVIDO ✅ Sprint C Hardening (17/06/2026)
 
-**Severidade:** P2 — não-bloqueante de produção (gate dual + parecer mantém saque colaborador OFF por enquanto), mas obrigatório ANTES do primeiro `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` real em produção.
-**Detectado em:** 2026-06-16 — Sprint D2 Bloco (c) D-RESGATE-PIX-SEM-CAIXA fix + re-review orquestrador.
-**Onde:** novo cron no `cooper-token/` ou `financeiro/` que rode periodicamente (15min? 1h?) buscando:
-```typescript
-ResgateRecibo.findMany({ where: { status: 'PAGO_CREDITO_PENDENTE' } })
-```
-**O que faz:** pra cada recibo, re-tenta `tokenContabilService.lancarResgatePix({ ..., referenciaId, referenciaTabela: 'ResgateRecibo' })` (idempotente pelo guard `findFirst` interno já adicionado no Bloco P1 fix). Se sucesso: muda status `PAGO_CREDITO_PENDENTE` → `PAGO_RECIBO_EMITIDO`. Se falhar persistentemente N vezes: marca pra revisão manual (campo `motivoFalha` já existe; adicionar contador `tentativasReconciliacao`).
-**Por que existe:** webhook PAGO da Asaas chega → tx Serializable commita saldo+ledger → contábil `lancarResgatePix` falha (caso raro: BD indisponível, plano contas migrado, etc) → status degrada pra `PAGO_CREDITO_PENDENTE` + evento `cooper-token-resgate.credito-pendente` emitido pra alerta admin (Sprint D2 Bloco re-review espelha F2 `cooper-token-compra-pj.credito-pendente`). Sem o cron, recibo fica permanentemente `PAGO_CREDITO_PENDENTE` → passivo contábil 5.1.02 inflado vs saldo real.
-**Convive com:** D-novo-F6-RECONCILIACAO-CRON P2 (catalogado M35 — mais amplo, cobre estados ↔ Asaas). Esse aqui é específico do contábil pós-tx.
-**Fix paralelo recomendado:** endpoint admin `GET /cooper-token/admin/resgates-pendentes-contabil` pra listar `PAGO_CREDITO_PENDENTE` + botão "Re-tentar" manualmente enquanto o cron não roda.
+**Status:** ✅ Fechado pelo Sprint C Bloco 2 — `cooper-token.job.ts:reconciliarContabilPendentes()` cron `*/15` com backoff exponencial `[5min, 30min, 2h, 12h, 24h]` + desistido após 5 tentativas + AuditLog forense + evento `cooper-token-resgate.reconciliacao-desistido`. Schema delta aditivo em `ResgateRecibo` com 4 campos novos (`reconciliacaoTentativas`, `reconciliacaoUltimaEm`, `reconciliacaoProximaEm`, `reconciliacaoDesistido`). Endpoint admin trigger manual `POST /cooper-token/admin/reconciliacao/trigger` (SUPER_ADMIN-only, throttled 3/min, AuditLog). 11/11 specs unit + smoke E2E 12/12 PASS.
+
+**Detalhe original (preservado pra histórico):** Catalogado em 16/06 Sprint D2 Bloco (c) + re-review orquestrador. Resolvido em 17/06 Sprint C.
+
+---
+
+### D-novo-RECONCILIACAO-DESISTIDO-LISTENER — Listener do evento `cooper-token-resgate.reconciliacao-desistido` (Sprint C)
+
+**Severidade:** P2 — sem listener, alerta admin via painel depende exclusivamente do AuditLog forense (admin precisa abrir tela de auditoria pra ver desistência). Evento é emitido pelo cron mas ninguém consome.
+**Detectado em:** 2026-06-17 — Sprint C Hardening, review security-reviewer.
+**Onde:** evento emitido em `backend/src/cooper-token/cooper-token.job.ts:~410` (`this.eventEmitter.emit('cooper-token-resgate.reconciliacao-desistido', {...})`). Nenhum `@OnEvent('cooper-token-resgate.reconciliacao-desistido')` no codebase.
+**O que precisa:** listener mínimo (provavelmente em `NotificacoesProativasModule` ou `CooperTokenModule`) que cria `NotificacaoProativa` ou similar pros admins do tenant. Payload tem `cooperativaId, cooperadoEstabelecimentoId, numeroRecibo, tentativas, ultimoMotivo, valor`. **OBRIGATÓRIO**: escopo de tenant SEMPRE via `payload.cooperativaId`, NUNCA `req.user.cooperativaId` (cron não tem req).
+**Mitigação atual:** AuditLog forense gravado com `acao='cooper-token.reconciliacao.desistido'` permite consulta retroativa. Log `[ERR] DESISTIDO` em PM2 logs.
+**Quando atacar:** antes do primeiro `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` em produção. Razoável catalogar junto com sprint Notificações Proativas dedicado.
+
+---
+
+### D-novo-RECONCILIACAO-RESETAR-ADMIN — Endpoint admin pra resetar `reconciliacaoDesistido` em recibo (Sprint C)
+
+**Severidade:** P2 — sem endpoint, admin precisa rodar SQL direto no banco pra retomar reconciliação de recibo desistido (após resolver causa raiz).
+**Detectado em:** 2026-06-17 — Sprint C Hardening, review financeiro-token.
+**Onde:** novo endpoint `POST /cooper-token/admin/reconciliacao/:reciboId/resetar` em `cooper-token.controller.ts`. `@Roles(SUPER_ADMIN)` + `@AuditLog` + `@Throttle(10/min)`. Reset: `reconciliacaoDesistido=false, reconciliacaoProximaEm=now+5min, reconciliacaoTentativas=0, motivoFalha=null` (defense in depth — updateMany com `cooperativaId+id+status`).
+**O que precisa:** ~30min Code (endpoint + 1 spec + 1 caso no smoke).
+**Mitigação atual:** SQL manual via Prisma Studio ou psql. Smoke E2E faz reset via `prisma.resgateRecibo.update` direto (linha ~232 do smoke C2).
+**Quando atacar:** quando o primeiro recibo real em produção desistir. Razoável catalogar como sprint operacional pequeno.
+
+---
+
+### D-novo-F2-RECONCILIACAO-CRON — Cron de reconciliação de compras PJ `PAGO_CREDITO_PENDENTE` (F2 compra conveniado)
+
+**Severidade:** P2 — análogo ao D-novo-RECONCILIACAO-CONTABIL-CRON (D2 resgate) já resolvido, mas pro caminho F2 (compra PJ).
+**Detectado em:** 2026-06-17 — Sprint C Hardening Fase 1 read-only, escopo explicitamente deixado pra depois (decisão Luciano Q2: foco em ResgateRecibo no Sprint C).
+**Onde:** `cooper-token.service.ts:~4665` — quando `processarPagamentoCompraPj` chama `creditar()` e este retorna `null`, status vira `CooperTokenCompra.status='PAGO_CREDITO_PENDENTE'` + evento `cooper-token-compra-pj.credito-pendente`. Sem cron, compra fica em estado degradado indefinidamente.
+**O que precisa:** schema delta análogo (4 campos `reconciliacao*` em `CooperTokenCompra`) + novo cron `*/15` em `cooper-token.job.ts` (pode reusar a constante `BACKOFF_MINUTOS` do Sprint C) + endpoint admin trigger manual.
+**Convive com:** D-novo-RECONCILIACAO-CONTABIL-CRON ✅ (Sprint C — molde de implementação pronto).
+**Quando atacar:** se o caminho F2 começar a falhar com frequência observável em produção, OU como item de uma sprint contábil dedicada. Hoje F2 cooperado→cooperado tem baixa volumetria; não é bloqueador imediato.
 
 ---
 

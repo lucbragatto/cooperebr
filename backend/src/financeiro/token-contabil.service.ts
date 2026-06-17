@@ -209,51 +209,68 @@ export class TokenContabilService {
     // Reviewers (16/06): este método é CHAMADO INTENCIONALMENTE FORA DA
     // TX SERIALIZABLE (Sprint D2 Bloco c — commit garantido de saldo+ledger
     // mesmo se contábil falhar; PIX é irreversível). Usa this.prisma direto,
-    // SEM parâmetro tx enganoso que insinuasse tx-safety. Idempotência via
-    // findFirst guard por referenciaId+Tabela (cron de reconciliação chama
-    // 2× pro mesmo recibo em retry → guard impede duplicação).
-    const existente = await this.prisma.lancamentoCaixa.findFirst({
-      where: {
-        cooperadoId: params.cooperadoId,
-        cooperativaId: params.cooperativaId,
-        descricao: { startsWith: `[Token] Resgate PIX — ${params.descricao}` },
-      },
-      select: { id: true },
-    });
-    if (existente) {
-      this.logger.log(
-        `lancarResgatePix: idempotência hit — recibo ${params.referenciaId} já tem LancamentoCaixa ${existente.id}, skip.`,
-      );
-      return existente;
-    }
-
+    // SEM parâmetro tx enganoso que insinuasse tx-safety.
+    //
+    // P1 review Sprint C (financeiro + security + multitenant) 17/06:
+    // Idempotência ANTES era guard soft via `findFirst` + `descricao
+    // startsWith` — janela de race entre webhook replay (Asaas re-entrega
+    // até 3×) e cron `*/15` podia criar 2 LancamentoCaixa (read-then-act
+    // sem unicidade de banco). Fix definitivo: preencher `origemTipo='
+    // TOKEN_TRANSACAO' + origemId=referenciaId` e deixar o constraint
+    // `@@unique([origemTipo, origemId])` do schema garantir atomicidade.
+    // P2002 → idempotência hit (busca o existente e retorna).
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia ?? this.getCompetencia();
-    // P2 reviewer financeiro (16/06): arredondamento defensivo no ponto de
-    // origem (mesmo este método já arredondar) — padrão do projeto em valores
-    // monetários. Decimal→Number pode introduzir ruído float.
     const valor = Math.round(params.valor * 100) / 100;
-    const lancamento = await this.prisma.lancamentoCaixa.create({
-      data: {
-        tipo: 'DESPESA',
-        descricao: `[Token] Resgate PIX — ${params.descricao}`,
-        valor,
-        competencia,
-        status: 'REALIZADO',
-        dataPagamento: new Date(),
-        planoContasId: contas.get('5.1.02'),
-        cooperadoId: params.cooperadoId,
-        cooperativaId: params.cooperativaId,
-        observacoes:
-          params.observacoes ??
-          'Resgate de tokens via PIX — D Passivo / C Caixa (FUNDACAO §2.1)',
-      },
-    });
-    this.logger.log(
-      `Lançamento contábil resgate PIX: R$ ${valor} ` +
-        `(coop=${params.cooperativaId.slice(0, 8)}… recibo=${params.referenciaId.slice(0, 8)}…)`,
-    );
-    return lancamento;
+    try {
+      const lancamento = await this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'DESPESA',
+          descricao: `[Token] Resgate PIX — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get('5.1.02'),
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          // P1 idempotência via banco — substitui findFirst soft guard.
+          origemTipo: 'TOKEN_TRANSACAO',
+          origemId: params.referenciaId,
+          observacoes:
+            params.observacoes ??
+            'Resgate de tokens via PIX — D Passivo / C Caixa (FUNDACAO §2.1)',
+        },
+      });
+      this.logger.log(
+        `Lançamento contábil resgate PIX: R$ ${valor} ` +
+          `(coop=${params.cooperativaId.slice(0, 8)}… recibo=${params.referenciaId.slice(0, 8)}…)`,
+      );
+      return lancamento;
+    } catch (err) {
+      // P2002 (unique constraint) → idempotência hit. Busca o existente
+      // pela mesma chave e retorna (caller espera receber o lançamento).
+      const isUniqueViolation =
+        typeof err === 'object' &&
+        err !== null &&
+        (err as { code?: string }).code === 'P2002';
+      if (isUniqueViolation) {
+        const existente = await this.prisma.lancamentoCaixa.findFirst({
+          where: {
+            origemTipo: 'TOKEN_TRANSACAO',
+            origemId: params.referenciaId,
+          },
+          select: { id: true },
+        });
+        if (existente) {
+          this.logger.log(
+            `lancarResgatePix: idempotência hit via @@unique(origemTipo,origemId) — recibo ${params.referenciaId.slice(0, 8)}… LancamentoCaixa ${existente.id.slice(0, 8)}…, skip.`,
+          );
+          return existente;
+        }
+      }
+      throw err;
+    }
   }
 
   /**

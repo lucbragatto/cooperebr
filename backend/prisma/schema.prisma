@@ -2910,6 +2910,31 @@ model ResgateRecibo {
   disclaimerSaqueId             String?
   disclaimerSaque               DisclaimerSaque? @relation(fields: [disclaimerSaqueId], references: [id])
 
+  // ── Sprint C Hardening (17/06/2026) — D-novo-RECONCILIACAO-CONTABIL-CRON ──
+  //
+  // Controle de retry da reconciliação contábil pra recibos em status
+  // `PAGO_CREDITO_PENDENTE` (caminho do M41/D2 quando lancarResgatePix
+  // falha pós-saída de caixa). Cron */15 varre + re-tenta + agenda
+  // próxima via backoff exponencial.
+  //
+  // Vida-ciclo:
+  //  - Webhook PAGO + contábil OK → status `PAGO_RECIBO_EMITIDO` (estes
+  //    campos ficam null, sem retry pendente).
+  //  - Webhook PAGO + contábil FALHA → status `PAGO_CREDITO_PENDENTE` +
+  //    `reconciliacaoTentativas=0` + `reconciliacaoProximaEm=now+5min`.
+  //  - Cron tenta → sucesso → status volta `PAGO_RECIBO_EMITIDO` +
+  //    zera `motivoFalha` + zera tentativas + null em proximaEm.
+  //  - Cron tenta → falha → `reconciliacaoTentativas++` + atualiza
+  //    `motivoFalha` + `reconciliacaoUltimaEm=now` + agenda próxima via
+  //    backoff [5min, 30min, 2h, 12h, 24h].
+  //  - Após 5 tentativas falhadas → `reconciliacaoDesistido=true` +
+  //    AuditLog forte + evento `cooper-token-resgate.reconciliacao-
+  //    desistido` (alerta admin pra ação manual). Cron deixa de tentar.
+  reconciliacaoTentativas       Int         @default(0)
+  reconciliacaoUltimaEm         DateTime?
+  reconciliacaoProximaEm        DateTime?
+  reconciliacaoDesistido        Boolean     @default(false)
+
   createdAt                     DateTime    @default(now())
   updatedAt                     DateTime    @updatedAt
 
@@ -2917,6 +2942,8 @@ model ResgateRecibo {
   @@index([cooperativaId, status])
   @@index([cooperadoEstabelecimentoId, createdAt])
   @@index([asaasTransferId])
+  // Sprint C — caça eficiente dos recibos elegíveis pelo cron */15.
+  @@index([status, reconciliacaoDesistido, reconciliacaoProximaEm])
   @@map("resgate_recibos")
 }
 
