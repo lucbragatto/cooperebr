@@ -14,11 +14,14 @@
  * do Cooperado.pixChave cadastrado em /portal/seguranca (anti-fraude).
  */
 import {
+  IsBoolean,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Matches,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class SolicitarResgateDto {
@@ -68,6 +71,31 @@ export class SolicitarResgateDto {
   @IsOptional()
   @IsString()
   observacao?: string;
+
+  // ── Sprint D2.1 v2 (16/06/2026) — Salvaguarda 5 versionada ──
+  //
+  // Aceite OBRIGATÓRIO pra colaborador comum (não-Estab). Estabelecimento
+  // bypassa via flag ehEstabelecimento — service ignora estes campos.
+  //
+  // O cliente envia `disclaimerSaqueId` (FK pro DisclaimerSaque que estava
+  // ativo no momento do aceite). Service revalida `id === getAtivo(
+  // cooperativaId).id` no Guard 1.6 (anti-staleness: se ADMIN/SUPER_ADMIN
+  // editar entre o GET do front e o POST do cooperado, cliente recarrega).
+
+  /** True = li e aceito o termo de saque (Salvaguarda 5). */
+  @IsOptional()
+  @IsBoolean()
+  disclaimerAceito?: boolean;
+
+  /** FK pro DisclaimerSaque ativo aceito (cuid).
+   *
+   * P2 review security (16/06): coerência por camada — se `disclaimerAceito`
+   * é true, `disclaimerSaqueId` é obrigatório (validação no DTO antes do
+   * service). Estabelecimento bypassa ambos (envia undefined nos dois). */
+  @ValidateIf((o) => o.disclaimerAceito === true)
+  @IsString()
+  @IsNotEmpty()
+  disclaimerSaqueId?: string;
 }
 
 export class RecusarResgateDto {

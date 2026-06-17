@@ -69,6 +69,18 @@ function setupD2(opts: SetupD2Opts = {}) {
       upsert: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({ proximoNumero: 2 }),
     },
+    // Sprint D2.1 v2 — service lê versão do disclaimer ativo dentro da tx
+    // pra gravar `disclaimerVersao` no recibo (snapshot histórico).
+    // P2 reviews (16/06): valida ativo + cooperativaId DENTRO da tx (defense
+    // in depth) — mock estende com `ativo: true` + `cooperativaId: null` (global).
+    disclaimerSaque: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'disclaimer-ativo-1',
+        versao: 'v1-2026-06-17',
+        ativo: true,
+        cooperativaId: null,
+      }),
+    },
   };
 
   const prisma: any = {
@@ -89,6 +101,16 @@ function setupD2(opts: SetupD2Opts = {}) {
         .mockResolvedValue({ saqueColaboradorAtivo: flagSaqueColab }),
     },
     cooperTokenSaldo: { findUnique: txFindSaldo },
+    // Sprint D2.1 (16/06/2026) — composicaoOrigemSaldo lê ledger pra
+    // filtro de origem. Specs D2 originais não exercem origem (testam
+    // só o gate dual flag+env), mas o helper precisa de mock retornando
+    // entries permitidas (DESCONTO_FATURA suficiente pro cooperado
+    // sacar a quantidade configurada). Estabelecimento bypassa filtro.
+    cooperTokenLedger: {
+      findMany: jest.fn().mockResolvedValue([
+        { tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 },
+      ]),
+    },
     resgateRecibo: {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -115,6 +137,19 @@ function setupD2(opts: SetupD2Opts = {}) {
     lancarResgatePix: jest.fn().mockResolvedValue({ id: 'lanc-1' }),
   };
 
+  // Sprint D2.1 v2 (16/06/2026) — DisclaimerSaqueService injetado pra Guard 1.6.
+  // Mock retorna sempre o mesmo id que o baseInput envia (cenário "aceite ok").
+  // Specs D2 NÃO testam disclaimer (responsabilidade do spec D2.1 dedicado).
+  const disclaimerSaque = {
+    getAtivo: jest.fn().mockResolvedValue({
+      id: 'disclaimer-ativo-1',
+      versao: 'v1-2026-06-17',
+      texto: 'texto disclaimer v1',
+      cooperativaId: null,
+      ativo: true,
+    }),
+  };
+
   const service = new CooperTokenService(
     prisma,
     { emit: jest.fn() } as any,
@@ -124,6 +159,7 @@ function setupD2(opts: SetupD2Opts = {}) {
     limite as any,
     pixOut as any,
     tokenContabil as any,
+    disclaimerSaque as any,
   );
 
   return { service, prisma, tokenContabil };
@@ -135,6 +171,11 @@ const baseInput = {
   quantidade: 10,
   pin: '123456',
   clientRequestId: 'uuid-d2-12345678-test-1234-9999-aaaabbbbcccc',
+  // Sprint D2.1 v2 (16/06/2026) — FK do disclaimer ativo (não mais versão).
+  // Specs D2 passam aceite válido só pra não falhar no Guard 1.6 — testes
+  // específicos de disclaimer ficam no spec D2.1 dedicado.
+  disclaimerAceito: true,
+  disclaimerSaqueId: 'disclaimer-ativo-1',
 };
 
 describe('D2 — Saque PIX Colaborador (gate dual flag tenant + env produção)', () => {

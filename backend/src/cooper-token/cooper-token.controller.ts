@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { CooperTokenService } from './cooper-token.service';
 import { CooperTokenJob } from './cooper-token.job';
 import { Roles } from '../auth/roles.decorator';
@@ -878,6 +879,12 @@ export class CooperTokenController {
   // lockout. Mesmo padrão de /meu-perfil/dados-bancarios — 5/min por IP.
   // Anti-enumeração e defesa contra spam pré-lockout.
   @Throttle({ default: { ttl: 60000, limit: 5 } })
+  // P1 review security (16/06): operação financeira mais sensível do
+  // sprint — solicitação de saque PIX. AuditLog rastreável no banco.
+  @AuditLog({
+    acao: 'cooper-token.resgate.solicitar',
+    recurso: 'ResgateRecibo',
+  })
   @Post('empresa/resgatar')
   async solicitarResgate(@Req() req: any, @Body() body: SolicitarResgateDto) {
     const estabelecimentoCooperadoId = req.user?.cooperadoId;
@@ -888,6 +895,15 @@ export class CooperTokenController {
     if (!cooperativaId) {
       throw new BadRequestException('Cooperativa não identificada no contexto.');
     }
+    // Sprint D2.1 (16/06/2026) — captura ip + UA pra Salvaguarda 5
+    // (aceite forense). Apenas usado pra colaborador comum (service
+    // ignora pra estabelecimento via bypass).
+    const aceiteIp =
+      (req.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      undefined;
+    const aceiteUserAgent = req.headers?.['user-agent'] as string | undefined;
     return this.cooperTokenService.solicitarResgate({
       estabelecimentoCooperadoId,
       cooperativaId,
@@ -897,6 +913,10 @@ export class CooperTokenController {
       otpDesafioId: body.otpDesafioId,
       otpCodigo: body.otpCodigo,
       observacao: body.observacao,
+      disclaimerAceito: body.disclaimerAceito,
+      disclaimerSaqueId: body.disclaimerSaqueId,
+      aceiteIp,
+      aceiteUserAgent,
     });
   }
 

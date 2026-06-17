@@ -53,6 +53,9 @@ import { AsaasPixOutService } from '../financeiro/asaas-pix-out.service';
 // COOPER_TOKEN_EVENTS.EMITIDO porque ele dispara lancarEmissaoFaturaCheia
 // (template errado de "Custo Desconto Concedido").
 import { TokenContabilService } from '../financeiro/token-contabil.service';
+// Sprint D2.1 v2 (16/06/2026) — disclaimer versionado (entidade global
+// default + override tenant). Service exportado pelo DisclaimerSaqueModule.
+import { DisclaimerSaqueService } from '../disclaimer-saque/disclaimer-saque.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -127,10 +130,159 @@ export class CooperTokenService {
     // Optional pelas mesmas razões dos demais (specs antigos passam
     // undefined). Em prod sempre injetado via FinanceiroModule export.
     private tokenContabilService?: TokenContabilService,
+    // Sprint D2.1 v2 (16/06/2026) — disclaimer versionado pra Guard 1.6.
+    // Optional pelas mesmas razões. Em prod sempre injetado via
+    // DisclaimerSaqueModule (export). Specs antigos do F6 que NÃO exercem
+    // colaborador comum não dependem (estab bypassa Guard 1.6).
+    private disclaimerSaqueService?: DisclaimerSaqueService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
   private static readonly STATUS_PERMITIDOS_CREDITO = ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'];
+
+  // ── Sprint D2.1 (16/06/2026) — Salvaguarda 1 do parecer de conformidade ──
+  //
+  // Filtro de ORIGEM no saque PIX do colaborador comum (não-Estab). Parecer
+  // §3 trabalhista: token de empresa→funcionário convertido em R$ = risco
+  // P0 (CLT Art. 458 salário in natura). Bloqueia até parecer trabalhista
+  // externo + ata assembleia (para BONIFICACAO_ADMIN).
+  //
+  // PERMITIDOS = origens "BAIXO risco" do parecer (cooperado recebe sem
+  // empregador envolvido).
+  // BLOQUEADOS = origens "MÉDIO/ALTO risco" (bonificação gratuita, convênio
+  // empresa→funcionário, MLM cascata, QR — origem complexa do pagador).
+  //
+  // Estabelecimento BYPASSA filtro (parecer §3#6: liquidação comercial,
+  // risco zero — PJ não tem empregado-relação trabalhista no fluxo).
+  private static readonly TIPOS_PERMITIDOS_SAQUE = new Set<string>([
+    'DESCONTO_FATURA',
+    'FATURA_CHEIA',
+    'GERACAO_EXCEDENTE',
+  ]);
+  // BLOQUEADOS (não usados na lógica — qualquer tipo NÃO PERMITIDO conta
+  // como bloqueado, mas listamos pra docs:
+  //   BONIFICACAO_ADMIN, DISTRIBUICAO_CONVENIO, BONUS_INDICACAO,
+  //   PAGAMENTO_QR, BENEFICIO_CONVENIO, COMPRA_PJ_COOPERADA.
+
+  // Sprint D2.1 v2 (16/06/2026): a constante DISCLAIMER_VERSAO_ATUAL foi
+  // removida — versão é dinâmica e por tenant, lida via
+  // DisclaimerSaqueService.getAtivo(cooperativaId). FK no recibo
+  // (disclaimerSaqueId) é o vínculo autoritativo do aceite.
+
+  /**
+   * Sprint D2.1 Bloco (b) — Composição de origem do saldo (Salvaguarda 1).
+   *
+   * Calcula o saldoSacavel (= máximo que o colaborador comum pode tentar
+   * sacar via PIX) usando agregado conservador da Decisão Luciano:
+   *
+   *   saldoSacavel = clamp(
+   *     Σ CREDITO permitidos − Σ todas reduções − saldoBloqueadoResgate,
+   *     0,
+   *     saldoDisponivel
+   *   )
+   *
+   * Onde:
+   * - Σ CREDITO permitidos = ledger entries CREDITO de tipos em
+   *   TIPOS_PERMITIDOS_SAQUE.
+   * - Σ todas reduções = ledger entries DEBITO (todas — uso na fatura,
+   *   transferência QR, resgate PIX queimado). Estornos NÃO entram aqui
+   *   (são operações CREDITO).
+   * - saldoBloqueadoResgate = tokens já travados num resgate pendente
+   *   (Luciano: evitar saque duplo da mesma origem permitida).
+   * - clamp pelo saldoDisponivel = defesa em profundidade (saldoSacavel
+   *   nunca excede o saldo real do cooperado).
+   *
+   * Invariante asserção: saldoSacavel ≤ Σ CREDITO permitidos sempre.
+   * Se violada → throw genérico (bug catastrófico no ledger; melhor
+   * bloquear o saque que liberar token arriscado).
+   *
+   * Performance: 1 query no ledger + 1 no saldo. Em escala grande (>10k
+   * entries por cooperado), considerar cache em CooperTokenSaldo numa
+   * coluna persistente.
+   */
+  private async composicaoOrigemSaldo(params: {
+    cooperadoId: string;
+    cooperativaId: string;
+  }): Promise<{
+    saldoSacavel: number;
+    saldoDisponivel: number;
+    saldoBloqueadoResgate: number;
+    totalCreditoPermitido: number;
+    totalReducoes: number;
+  }> {
+    const { cooperadoId, cooperativaId } = params;
+
+    const [ledger, saldo] = await Promise.all([
+      this.prisma.cooperTokenLedger.findMany({
+        where: { cooperadoId, cooperativaId },
+        select: { tipo: true, operacao: true, quantidade: true },
+      }),
+      this.prisma.cooperTokenSaldo.findUnique({
+        where: { cooperadoId },
+        select: { saldoDisponivel: true, saldoBloqueadoResgate: true },
+      }),
+    ]);
+
+    let totalCreditoPermitido = 0;
+    let totalReducoes = 0;
+    for (const entry of ledger) {
+      const q = Number(entry.quantidade);
+      if (entry.operacao === 'CREDITO') {
+        if (CooperTokenService.TIPOS_PERMITIDOS_SAQUE.has(entry.tipo)) {
+          totalCreditoPermitido += q;
+        }
+        // Tipos bloqueados (BONIFICACAO_ADMIN, DISTRIBUICAO_CONVENIO,
+        // BONUS_INDICACAO, PAGAMENTO_QR, BENEFICIO_CONVENIO,
+        // COMPRA_PJ_COOPERADA) NÃO acumulam em totalCreditoPermitido.
+      } else if (entry.operacao === 'DEBITO') {
+        // Σ todas reduções (qualquer DEBITO — uso, transferência, resgate).
+        // P1 review financeiro-token (16/06): M39 grava ESTORNO_BONIFICACAO_ADMIN
+        // com operacao=DEBITO + quantidade NEGATIVA. Somar `q` cru faria
+        // totalReducoes cair (q negativo), inflando saldoSacavel
+        // artificialmente. Tratar DEBITO sempre como magnitude (|q|) garante
+        // que ESTORNOs não envenenam a composição.
+        totalReducoes += Math.abs(q);
+      }
+    }
+    // Arredondamento defensivo (Decimal→Number pode introduzir float).
+    totalCreditoPermitido = Math.round(totalCreditoPermitido * 10000) / 10000;
+    totalReducoes = Math.round(totalReducoes * 10000) / 10000;
+
+    const saldoDisponivel = Number(saldo?.saldoDisponivel ?? 0);
+    const saldoBloqueadoResgate = Number(saldo?.saldoBloqueadoResgate ?? 0);
+
+    // saldoSacavel = clamp(Σ CREDITO permitidos − Σ todas reduções −
+    // saldoBloqueado, 0, saldoDisponivel).
+    const saldoSacavelBruto =
+      totalCreditoPermitido - totalReducoes - saldoBloqueadoResgate;
+    let saldoSacavel = Math.max(0, saldoSacavelBruto);
+    saldoSacavel = Math.min(saldoSacavel, saldoDisponivel);
+    saldoSacavel = Math.round(saldoSacavel * 10000) / 10000;
+
+    // Asserção invariante (defense in depth):
+    // saldoSacavel deve ser ≤ Σ CREDITO permitidos SEMPRE. Se violar, há
+    // bug catastrófico no ledger (CREDITO retroativo, race na escrita,
+    // etc) — bloqueia o saque por segurança.
+    if (saldoSacavel > totalCreditoPermitido + 0.0001) {
+      this.logger.error(
+        `[D2.1] INVARIANTE VIOLADA: saldoSacavel=${saldoSacavel} > totalCreditoPermitido=${totalCreditoPermitido}. ` +
+          `cooperadoId=${cooperadoId.slice(0, 8)}… cooperativaId=${cooperativaId.slice(0, 8)}… ` +
+          `saldoDisp=${saldoDisponivel} saldoBloq=${saldoBloqueadoResgate} reducoes=${totalReducoes}. ` +
+          `Bloqueando saque por segurança.`,
+      );
+      throw new Error(
+        'Invariante de composição de saldo violada — saque bloqueado por segurança.',
+      );
+    }
+
+    return {
+      saldoSacavel,
+      saldoDisponivel,
+      saldoBloqueadoResgate,
+      totalCreditoPermitido,
+      totalReducoes,
+    };
+  }
 
   /**
    * F4 Bloco C.1 FIN-1 (12/06/2026) — guard de limite por transação + diário
@@ -1992,6 +2144,18 @@ export class CooperTokenService {
     otpDesafioId?: string;
     otpCodigo?: string;
     observacao?: string;
+    // ── Sprint D2.1 v2 (16/06/2026) — Salvaguarda 5 versionada ──
+    // Aceite do disclaimer obrigatório para colaborador comum (não-Estab).
+    // Estabelecimento NÃO precisa (parecer §3#6 — bypass via flag).
+    // O cliente envia `disclaimerSaqueId` (FK pro DisclaimerSaque ativo)
+    // — id é o vínculo autoritativo (Decisão Luciano Q1). Service
+    // re-valida `id === getAtivo(cooperativaId).id` no Guard 1.6.
+    disclaimerAceito?: boolean;
+    disclaimerSaqueId?: string;
+    // IP + UserAgent capturados pelo controller (req.ip/headers) e
+    // gravados no recibo pra trilha forense (defesa documental).
+    aceiteIp?: string;
+    aceiteUserAgent?: string;
   }) {
     const {
       estabelecimentoCooperadoId,
@@ -2002,6 +2166,10 @@ export class CooperTokenService {
       otpDesafioId,
       otpCodigo,
       observacao,
+      disclaimerAceito,
+      disclaimerSaqueId,
+      aceiteIp,
+      aceiteUserAgent,
     } = params;
 
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
@@ -2068,6 +2236,69 @@ export class CooperTokenService {
       throw new BadRequestException(
         'Chave PIX não cadastrada. Cadastre em /portal/seguranca/dados-bancarios antes de solicitar resgate (anti-fraude — chave nunca vem do body).',
       );
+    }
+
+    // ── Guards Sprint D2.1 (16/06/2026) — Salvaguardas 1 + 5 ──
+    //
+    // Aplicam APENAS para colaborador comum (não-Estab). Estabelecimento
+    // bypassa ambos: parecer §3#6 (risco zero — liquidação comercial PJ
+    // sem relação trabalhista).
+    if (!estabelecimento.ehEstabelecimento) {
+      // ── Guard 1.5: Filtro de ORIGEM (Salvaguarda 1) ──
+      // Bloqueia se a `quantidade` solicitada exceder o `saldoSacavel`
+      // computado pela composição agregada conservadora do helper.
+      const composicao = await this.composicaoOrigemSaldo({
+        cooperadoId: estabelecimentoCooperadoId,
+        cooperativaId,
+      });
+      if (quantidade > composicao.saldoSacavel) {
+        // P2 review financeiro-token (16/06): a tolerância +0.0001 anterior
+        // abria janela de sobre-saque de até 0.0001 token. Como `quantidade`
+        // (DTO @Min 0.0001) e `saldoSacavel` (arredondado 4 casas) já vêm em
+        // 4 decimais sem drift, comparação estrita é segura e preserva o
+        // invariante FUNDACAO §4#1 (Passivo == Σ saldos × face).
+        // Mensagem genérica anti-enumeração: atacante não deve distinguir
+        // "tem saldo mas não é elegível" (Salvaguarda 1) de
+        // "saldo bruto insuficiente". Loga detalhe pro admin investigar.
+        this.logger.warn(
+          `[D2.1] Saque bloqueado pelo filtro de origem: cooperado=${estabelecimentoCooperadoId.slice(0, 8)}… ` +
+            `solicitado=${quantidade} saldoSacavel=${composicao.saldoSacavel} ` +
+            `(disp=${composicao.saldoDisponivel} bloq=${composicao.saldoBloqueadoResgate} ` +
+            `permitido=${composicao.totalCreditoPermitido} reducoes=${composicao.totalReducoes})`,
+        );
+        throw new ForbiddenException(
+          'Saldo elegível para saque insuficiente. Saques em R$ são limitados a tokens de origem específica (desconto da sua fatura própria) — fale com o admin da cooperativa pra entender quais dos seus tokens são elegíveis.',
+        );
+      }
+
+      // ── Guard 1.6: Aceite do disclaimer (Salvaguarda 5 versionado) ──
+      // Sprint D2.1 v2 (16/06/2026): cliente envia `disclaimerSaqueId` =
+      // FK pro DisclaimerSaque que estava ativo no momento. Service
+      // resolve o ativo pelo TENANT (override > global) e re-valida
+      // `disclaimerSaqueId === ativo.id`. Anti-staleness: se ADMIN ou
+      // SUPER_ADMIN editar entre o GET do front e o POST do cooperado,
+      // o id deixou de ser ativo → BadRequest. Cliente recarrega.
+      if (disclaimerAceito !== true) {
+        throw new BadRequestException(
+          'Aceite do termo de saque obrigatório. Leia o aviso e confirme antes de prosseguir.',
+        );
+      }
+      if (!disclaimerSaqueId) {
+        throw new BadRequestException(
+          'Identificador do termo aceito ausente. Recarregue a página.',
+        );
+      }
+      if (!this.disclaimerSaqueService) {
+        throw new Error(
+          'DisclaimerSaqueService não disponível (wiring do módulo) — bug operacional.',
+        );
+      }
+      const ativo = await this.disclaimerSaqueService.getAtivo(cooperativaId);
+      if (disclaimerSaqueId !== ativo.id) {
+        throw new BadRequestException(
+          'Termo de saque desatualizado. Recarregue a página e aceite a versão atual.',
+        );
+      }
     }
 
     // ── Guard 2: PIN FORA da tx (mesmo padrão F4) ──
@@ -2204,6 +2435,51 @@ export class CooperTokenService {
         const numeroRecibo = await this.gerarNumeroRecibo(tx, cooperativaId);
 
         // Cria ResgateRecibo PENDENTE_APROVACAO_COOP.
+        // Sprint D2.1 v2 (16/06/2026) Bloco (3): grava aceite do disclaimer
+        // se cooperado COMUM (estab passou no bypass, campos ficam null).
+        // disclaimerSaqueId é FK autoritativa pra recuperar texto exato
+        // depois (mesmo após edições). disclaimerVersao copiado pra
+        // display rápido (evita JOIN nas listagens admin).
+        let aceiteData: Record<string, unknown> = {};
+        if (!estabelecimento.ehEstabelecimento) {
+          // P2 reviews multitenant + financeiro-token + security (16/06):
+          // re-busca DENTRO da tx Serializable + revalida (a) ainda ativo,
+          // (b) cooperativaId casa com o tenant do JWT (defense in depth
+          // mesmo Guard 1.6 fora da tx já tendo validado), (c) NUNCA
+          // fallback silencioso pro id do body — failure explícito.
+          const disclaimerAtivo = await tx.disclaimerSaque.findUnique({
+            where: { id: disclaimerSaqueId! },
+            select: { id: true, versao: true, ativo: true, cooperativaId: true },
+          });
+          if (!disclaimerAtivo) {
+            throw new BadRequestException(
+              'Termo de saque não encontrado. Recarregue a página.',
+            );
+          }
+          if (!disclaimerAtivo.ativo) {
+            throw new BadRequestException(
+              'Termo de saque foi atualizado. Recarregue a página e aceite a versão atual.',
+            );
+          }
+          if (
+            disclaimerAtivo.cooperativaId !== null &&
+            disclaimerAtivo.cooperativaId !== cooperativaId
+          ) {
+            // Cross-tenant impossible por design (Guard 1.6 já filtrou),
+            // mas defense in depth: NUNCA gravar FK de outro tenant.
+            throw new BadRequestException(
+              'Termo de saque inválido pro seu tenant — recarregue.',
+            );
+          }
+          aceiteData = {
+            disclaimerSaqueId: disclaimerAtivo.id,
+            disclaimerVersao: disclaimerAtivo.versao,
+            disclaimerAceitoEm: new Date(),
+            disclaimerAceiteIp: aceiteIp ?? null,
+            disclaimerAceiteUserAgent: aceiteUserAgent ?? null,
+          };
+        }
+
         const created = await tx.resgateRecibo.create({
           data: {
             numeroRecibo,
@@ -2221,6 +2497,7 @@ export class CooperTokenService {
             pixTipo: estabelecimento.pixTipo ?? 'ALEATORIA',
             status: 'PENDENTE_APROVACAO_COOP',
             observacao: observacao ?? null,
+            ...aceiteData,
           },
         });
 

@@ -139,6 +139,9 @@ model Cooperativa {
   saqueColaboradorAtivo     Boolean                           @default(false)
   saqueColaboradorAtivadoEm DateTime?
 
+  // Sprint D2.1 v2 (16/06/2026) — overrides do disclaimer de saque por tenant.
+  disclaimersSaque          DisclaimerSaque[]
+
   @@map("cooperativas")
 }
 
@@ -2887,6 +2890,26 @@ model ResgateRecibo {
 
   observacao                    String?
 
+  // ── Sprint D2.1 (16/06/2026) — Salvaguarda 5 do parecer de conformidade ──
+  //
+  // Aceite do disclaimer registrado pelo cooperado COMUM (não-Estabelecimento)
+  // antes de solicitar resgate em R$ via PIX. Estabelecimento NÃO aceita
+  // (parecer §3#6: liquidação comercial, risco zero). Versionado: mudança
+  // de texto bumpa DISCLAIMER_VERSAO e aceites antigos não valem mais.
+  // IP + UserAgent gravados pra trilha forense (espelha padrão do
+  // webhook Asaas em processarWebhookResgate).
+  disclaimerAceitoEm            DateTime?
+  disclaimerVersao              String?
+  disclaimerAceiteIp            String?
+  disclaimerAceiteUserAgent     String?
+  /// Sprint D2.1 v2 (16/06/2026) — FK autoritativa pro DisclaimerSaque
+  /// efetivamente aceito. O cooperado envia o id do disclaimer ativo no
+  /// momento do POST; service valida `id === getAtivo(cooperativaId).id`.
+  /// Permite recuperar o TEXTO EXATO aceito mesmo após edições futuras
+  /// (entry no banco fica ativo=false mas nunca deletada — rastro jurídico).
+  disclaimerSaqueId             String?
+  disclaimerSaque               DisclaimerSaque? @relation(fields: [disclaimerSaqueId], references: [id])
+
   createdAt                     DateTime    @default(now())
   updatedAt                     DateTime    @updatedAt
 
@@ -2895,6 +2918,49 @@ model ResgateRecibo {
   @@index([cooperadoEstabelecimentoId, createdAt])
   @@index([asaasTransferId])
   @@map("resgate_recibos")
+}
+
+/// Sprint D2.1 v2 (16/06/2026) — Entidade versionada do disclaimer de
+/// saque PIX do colaborador comum (Salvaguarda 5 do parecer de
+/// conformidade analise-conformidade-2026-06-16-saque-colaborador-d2).
+///
+/// **Resolução por tenant:** override do tenant > default global SISGD.
+///
+/// - `cooperativaId == null` → DEFAULT GLOBAL SISGD (editado por SUPER_ADMIN).
+/// - `cooperativaId != null` → OVERRIDE do tenant (editado por ADMIN do tenant).
+///
+/// **Histórico inviolável:** mutações NUNCA deletam linhas — só marcam
+/// `ativo=false`. Versões antigas ficam preservadas pra rastreabilidade
+/// jurídica (qual texto cada cooperado aceitou, recuperável via FK no
+/// ResgateRecibo).
+///
+/// **Versão auto-gerada server-side** no formato `v{seq}-{YYYY-MM-DD}`
+/// pra global ou `tenant-{N}-{YYYY-MM-DD}` pra override. Cliente NUNCA
+/// escolhe versão — elimina colisão NULL no @@unique e validação manual.
+model DisclaimerSaque {
+  id                  String         @id @default(cuid())
+  /// null = default global SISGD. != null = override do tenant.
+  cooperativaId       String?
+  cooperativa         Cooperativa?   @relation(fields: [cooperativaId], references: [id])
+  /// Auto-gerada server-side ('v1-2026-06-16', 'v2-2026-07-01', etc).
+  /// Distinção tenant via prefix 'tenant-' (ou similar) na geração.
+  versao              String
+  /// Plain text + quebras de linha (sem markdown — anti-XSS no v1).
+  texto               String         @db.Text
+  /// Apenas 1 entry ativo por escopo (tenant ou global). Mudança = cria
+  /// nova ativa + zera ativa anterior em tx atômica.
+  ativo               Boolean        @default(true)
+  /// Trilha de autoria pra defesa jurídica.
+  criadoPorUsuarioId  String
+  /// SUPER_ADMIN (criou global) | ADMIN (criou override do tenant).
+  criadoPorPerfil     String
+  createdAt           DateTime       @default(now())
+
+  resgateRecibos      ResgateRecibo[]
+
+  @@index([cooperativaId, ativo])
+  @@index([cooperativaId, createdAt])
+  @@map("disclaimers_saque")
 }
 
 /// Contador sequencial de recibos por tenant+ano.
