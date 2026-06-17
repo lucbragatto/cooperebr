@@ -193,6 +193,8 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/configuracoes/email-faturas', label: 'Email de Faturas', icon: Mail },
         { href: '/dashboard/configuracoes/portal-proprietario', label: 'Portal Proprietário', icon: Sun },
         { href: '/dashboard/configuracoes/seguranca', label: 'Segurança', icon: Shield },
+        // Sprint D2.1 v2 (16/06/2026) — override do disclaimer de saque do tenant.
+        { href: '/dashboard/configuracoes/disclaimer-saque', label: 'Disclaimer de Saque', icon: FileText },
       ],
     },
   ];
@@ -209,6 +211,8 @@ function getNavSections(perfil: string, devCredenciaisTeste: boolean = false): N
         { href: '/dashboard/super-admin/confirmacoes-pagamento', label: 'Confirmações de Pagamento', icon: ClipboardList },
         // Sprint D2 (16/06/2026) — toggle Saque PIX Colaborador por cooperativa.
         { href: '/dashboard/super-admin/saque-colaborador', label: 'Saque PIX Colaborador', icon: Banknote },
+        // Sprint D2.1 v2 (16/06/2026) — edição do disclaimer de saque global SISGD.
+        { href: '/dashboard/super-admin/disclaimer-saque', label: 'Disclaimer Saque (Global)', icon: FileText },
         { href: '/dashboard/saas/planos', label: 'Planos SaaS', icon: Tag },
         { href: '/dashboard/saas/faturas', label: 'Faturas SaaS', icon: CreditCard },
       ],

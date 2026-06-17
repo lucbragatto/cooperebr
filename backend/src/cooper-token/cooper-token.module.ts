@@ -31,6 +31,8 @@ import { CooperadosModule } from '../cooperados/cooperados.module';
 // Sprint Clube P1 — F6 Bloco B (12/06/2026): consumer do AsaasPixOutService
 // pra resgate em R$ via PIX (estabelecimento → R$). FinanceiroModule exporta.
 import { FinanceiroModule } from '../financeiro/financeiro.module';
+// Sprint D2.1 v2 (16/06/2026) — disclaimer versionado no Guard 1.6.
+import { DisclaimerSaqueModule } from '../disclaimer-saque/disclaimer-saque.module';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { FinanceiroModule } from '../financeiro/financeiro.module';
     AsaasModule,
     forwardRef(() => CooperadosModule),
     FinanceiroModule,
+    DisclaimerSaqueModule,
   ],
   controllers: [CooperTokenController, ContabilidadeClubeController],
   providers: [

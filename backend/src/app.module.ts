@@ -32,6 +32,7 @@ import { CooperativasModule } from './cooperativas/cooperativas.module';
 import { AsaasModule } from './asaas/asaas.module';
 import { SaasModule } from './saas/saas.module';
 import { ConciergeModule } from './concierge/concierge.module';
+import { DisclaimerSaqueModule } from './disclaimer-saque/disclaimer-saque.module';
 import { IndicacoesModule } from './indicacoes/indicacoes.module';
 import { ModelosMensagemModule } from './modelos-mensagem/modelos-mensagem.module';
 import { FluxoEtapasModule } from './fluxo-etapas/fluxo-etapas.module';
@@ -107,6 +108,7 @@ import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
     AsaasModule,
     SaasModule,
     ConciergeModule,
+    DisclaimerSaqueModule,
     IndicacoesModule,
     ModelosMensagemModule,
     FluxoEtapasModule,

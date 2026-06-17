@@ -53,6 +53,16 @@ interface MeResponse {
   status: string;
 }
 
+// Sprint D2.1 v2 (16/06/2026) — disclaimer versionado por tenant
+// (override > global). Apenas cooperado COMUM precisa aceitar.
+interface DisclaimerAtivo {
+  id: string;
+  versao: string;
+  texto: string;
+  cooperativaId: string | null;
+  origem: 'TENANT' | 'GLOBAL';
+}
+
 interface DadosBancariosStatus {
   temPixCadastrado: boolean;
   pixChaveMascarada: string | null;
@@ -146,6 +156,9 @@ export default function ResgatarTokensPage() {
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState('');
   const [erro, setErro] = useState<ErroState | null>(null);
+  // Sprint D2.1 v2 — disclaimer versionado pra colaborador comum.
+  const [disclaimer, setDisclaimer] = useState<DisclaimerAtivo | null>(null);
+  const [disclaimerAceito, setDisclaimerAceito] = useState(false);
 
   // F6 C.1 — idempotency-key padrão F4 C.2: estável por sessão de
   // confirmação. Regenera só em sucesso ou cancelar (retry idempotente).
@@ -159,13 +172,14 @@ export default function ResgatarTokensPage() {
         api.get('/cooper-token/saldo'),
         api.get('/cooper-token/empresa/meus-resgates?limit=10'),
       ]);
-      setMe({
+      const meData = {
         id: meR.data.id,
         ehEstabelecimento: !!meR.data.ehEstabelecimento,
         // Sprint D2 (16/06/2026): flag tenant pra saque colaborador.
         saqueColaboradorAtivo: !!meR.data.saqueColaboradorAtivo,
         status: meR.data.status ?? 'ATIVO',
-      });
+      };
+      setMe(meData);
       setPixStatus(pixR.data);
       setSaldo(saldoR.data);
       // valorTokenReais vem no payload do saldo quando config existe
@@ -175,6 +189,25 @@ export default function ResgatarTokensPage() {
         setConfig({ valorTokenReais: 0.45 });
       }
       setLista(listaR.data);
+      // Sprint D2.1 v2: disclaimer dinâmico — só pra colaborador comum
+      // (estabelecimento bypassa Guard 1.6). Carrega em paralelo só se
+      // não-Estab pra evitar request desnecessário.
+      if (!meData.ehEstabelecimento && meData.saqueColaboradorAtivo) {
+        try {
+          const disclaimerR = await api.get('/portal/disclaimer-saque');
+          setDisclaimer({
+            id: disclaimerR.data.disclaimer.id,
+            versao: disclaimerR.data.disclaimer.versao,
+            texto: disclaimerR.data.disclaimer.texto,
+            cooperativaId: disclaimerR.data.disclaimer.cooperativaId,
+            origem: disclaimerR.data.origem,
+          });
+        } catch {
+          // Sem disclaimer ativo é bug operacional do tenant. Service
+          // backend recusa o saque com mensagem clara — tela só não mostra
+          // bloco de aceite (botão "Continuar" valida server-side).
+        }
+      }
     } catch {
       // tela mostra empty-state genérico
     } finally {
@@ -206,6 +239,25 @@ export default function ResgatarTokensPage() {
         mensagem: `Saldo insuficiente. Disponível: ${num(saldo.saldoDisponivel)} tokens.`,
       });
       return;
+    }
+    // Sprint D2.1 v2 — disclaimer obrigatório pra colaborador comum
+    // (estabelecimento bypassa). Bloqueia avanço pro PIN sem aceite.
+    if (me && !me.ehEstabelecimento) {
+      if (!disclaimer) {
+        setErro({
+          motivo: 'GENERICO',
+          mensagem:
+            'Termo de saque ainda não carregou. Recarregue a página e tente de novo.',
+        });
+        return;
+      }
+      if (!disclaimerAceito) {
+        setErro({
+          motivo: 'GENERICO',
+          mensagem: 'Você precisa ler e aceitar o termo de saque antes de continuar.',
+        });
+        return;
+      }
     }
     if (!clientRequestIdRef.current) {
       clientRequestIdRef.current = crypto.randomUUID();
@@ -240,11 +292,17 @@ export default function ResgatarTokensPage() {
 
     setEnviando(true);
     try {
+      // Sprint D2.1 v2 — envia FK pro DisclaimerSaque ativo aceito.
+      // Estabelecimento bypassa (manda undefined em ambos). Service revalida
+      // FK contra getAtivo(cooperativaId) no Guard 1.6.
+      const ehEstab = me?.ehEstabelecimento === true;
       const r = await api.post('/cooper-token/empresa/resgatar', {
         quantidade: totaisCalc.q,
         pin,
         clientRequestId: clientRequestIdRef.current,
         observacao: observacao.trim() || undefined,
+        disclaimerAceito: ehEstab ? undefined : true,
+        disclaimerSaqueId: ehEstab ? undefined : disclaimer?.id,
       });
       const idempotente = r.data?.idempotente === true;
       setSucesso(
@@ -257,6 +315,8 @@ export default function ResgatarTokensPage() {
       setPin('');
       setQuantidade('');
       setObservacao('');
+      // Reset aceite — nova sessão exige re-leitura do disclaimer atual.
+      setDisclaimerAceito(false);
       setEtapa('form');
       await carregarTudo();
     } catch (err: any) {
@@ -286,6 +346,17 @@ export default function ResgatarTokensPage() {
           motivo: 'OTP_REQUERIDO',
           mensagem:
             'Resgates acima de R$ 50 exigem confirmação por OTP (em breve). Por ora, divida em valores menores.',
+        });
+      } else if (/Termo de saque desatualizado|Recarregue a página/i.test(msg)) {
+        // Sprint D2.1 v2 — admin trocou disclaimer entre o GET e o POST.
+        // Limpa aceite, recarrega versão atual e força nova leitura.
+        setDisclaimerAceito(false);
+        setEtapa('form');
+        await carregarTudo();
+        setErro({
+          motivo: 'GENERICO',
+          mensagem:
+            'O termo de saque foi atualizado pelo admin. Releia o termo abaixo e marque o aceite de novo antes de continuar.',
         });
       } else {
         setErro({ motivo: 'GENERICO', mensagem: msg });
@@ -532,6 +603,39 @@ export default function ResgatarTokensPage() {
                 </div>
               )}
 
+              {/* Sprint D2.1 v2 — disclaimer obrigatório pra colaborador
+                  comum (Salvaguarda 5 do parecer de conformidade). Texto
+                  vem dinâmico do tenant (override > global SISGD). */}
+              {me && !me.ehEstabelecimento && disclaimer && (
+                <div className="bg-amber-50 border border-amber-300 rounded-md p-3 space-y-2 text-sm">
+                  <p className="font-semibold text-amber-900 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    Termo de saque — leia antes de aceitar
+                    <span className="text-xs font-normal text-amber-700 ml-auto">
+                      versão {disclaimer.versao}
+                      {disclaimer.origem === 'TENANT' ? ' · cooperativa' : ' · SISGD'}
+                    </span>
+                  </p>
+                  <div className="text-amber-900 whitespace-pre-line max-h-48 overflow-y-auto pr-2 leading-relaxed">
+                    {disclaimer.texto}
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer pt-1 border-t border-amber-200">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={disclaimerAceito}
+                      onChange={(e) => {
+                        setDisclaimerAceito(e.target.checked);
+                        if (e.target.checked && erro?.motivo === 'GENERICO') setErro(null);
+                      }}
+                    />
+                    <span className="text-amber-900 font-medium">
+                      Li o termo acima e aceito.
+                    </span>
+                  </label>
+                </div>
+              )}
+
               {erro && (
                 <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-3 text-sm flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -540,7 +644,15 @@ export default function ResgatarTokensPage() {
               )}
 
               <div className="flex gap-2 justify-end">
-                <Button onClick={abrirPin} disabled={!totaisCalc.q || totaisCalc.q <= 0}>
+                <Button
+                  onClick={abrirPin}
+                  disabled={
+                    !totaisCalc.q ||
+                    totaisCalc.q <= 0 ||
+                    // Colaborador comum bloqueia até aceitar disclaimer.
+                    (!!me && !me.ehEstabelecimento && (!disclaimer || !disclaimerAceito))
+                  }
+                >
                   Continuar →
                 </Button>
               </div>

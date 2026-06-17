@@ -907,7 +907,7 @@ export class CooperTokenController {
       otpCodigo: body.otpCodigo,
       observacao: body.observacao,
       disclaimerAceito: body.disclaimerAceito,
-      disclaimerVersao: body.disclaimerVersao,
+      disclaimerSaqueId: body.disclaimerSaqueId,
       aceiteIp,
       aceiteUserAgent,
     });

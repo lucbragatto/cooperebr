@@ -53,6 +53,9 @@ import { AsaasPixOutService } from '../financeiro/asaas-pix-out.service';
 // COOPER_TOKEN_EVENTS.EMITIDO porque ele dispara lancarEmissaoFaturaCheia
 // (template errado de "Custo Desconto Concedido").
 import { TokenContabilService } from '../financeiro/token-contabil.service';
+// Sprint D2.1 v2 (16/06/2026) — disclaimer versionado (entidade global
+// default + override tenant). Service exportado pelo DisclaimerSaqueModule.
+import { DisclaimerSaqueService } from '../disclaimer-saque/disclaimer-saque.service';
 import * as jwt from 'jsonwebtoken';import { AsPlatform } from '../common/tenant-context';
 
 
@@ -127,6 +130,11 @@ export class CooperTokenService {
     // Optional pelas mesmas razões dos demais (specs antigos passam
     // undefined). Em prod sempre injetado via FinanceiroModule export.
     private tokenContabilService?: TokenContabilService,
+    // Sprint D2.1 v2 (16/06/2026) — disclaimer versionado pra Guard 1.6.
+    // Optional pelas mesmas razões. Em prod sempre injetado via
+    // DisclaimerSaqueModule (export). Specs antigos do F6 que NÃO exercem
+    // colaborador comum não dependem (estab bypassa Guard 1.6).
+    private disclaimerSaqueService?: DisclaimerSaqueService,
   ) {}
 
   /** Status permitidos para receber crédito de tokens */
@@ -156,8 +164,10 @@ export class CooperTokenService {
   //   BONIFICACAO_ADMIN, DISTRIBUICAO_CONVENIO, BONUS_INDICACAO,
   //   PAGAMENTO_QR, BENEFICIO_CONVENIO, COMPRA_PJ_COOPERADA.
 
-  /** Versão atual do disclaimer (Salvaguarda 5). Bump força re-aceite. */
-  static readonly DISCLAIMER_VERSAO_ATUAL = 'v1-2026-06-16';
+  // Sprint D2.1 v2 (16/06/2026): a constante DISCLAIMER_VERSAO_ATUAL foi
+  // removida — versão é dinâmica e por tenant, lida via
+  // DisclaimerSaqueService.getAtivo(cooperativaId). FK no recibo
+  // (disclaimerSaqueId) é o vínculo autoritativo do aceite.
 
   /**
    * Sprint D2.1 Bloco (b) — Composição de origem do saldo (Salvaguarda 1).
@@ -2129,11 +2139,14 @@ export class CooperTokenService {
     otpDesafioId?: string;
     otpCodigo?: string;
     observacao?: string;
-    // ── Sprint D2.1 (16/06/2026) — Salvaguarda 5 do parecer ──
+    // ── Sprint D2.1 v2 (16/06/2026) — Salvaguarda 5 versionada ──
     // Aceite do disclaimer obrigatório para colaborador comum (não-Estab).
     // Estabelecimento NÃO precisa (parecer §3#6 — bypass via flag).
+    // O cliente envia `disclaimerSaqueId` (FK pro DisclaimerSaque ativo)
+    // — id é o vínculo autoritativo (Decisão Luciano Q1). Service
+    // re-valida `id === getAtivo(cooperativaId).id` no Guard 1.6.
     disclaimerAceito?: boolean;
-    disclaimerVersao?: string;
+    disclaimerSaqueId?: string;
     // IP + UserAgent capturados pelo controller (req.ip/headers) e
     // gravados no recibo pra trilha forense (defesa documental).
     aceiteIp?: string;
@@ -2149,7 +2162,7 @@ export class CooperTokenService {
       otpCodigo,
       observacao,
       disclaimerAceito,
-      disclaimerVersao,
+      disclaimerSaqueId,
       aceiteIp,
       aceiteUserAgent,
     } = params;
@@ -2248,17 +2261,32 @@ export class CooperTokenService {
         );
       }
 
-      // ── Guard 1.6: Aceite do disclaimer (Salvaguarda 5) ──
-      // Versão atual = DISCLAIMER_VERSAO_ATUAL. Bump força re-aceite —
-      // aceites de versão antiga NÃO valem (texto pode ter mudado).
+      // ── Guard 1.6: Aceite do disclaimer (Salvaguarda 5 versionado) ──
+      // Sprint D2.1 v2 (16/06/2026): cliente envia `disclaimerSaqueId` =
+      // FK pro DisclaimerSaque que estava ativo no momento. Service
+      // resolve o ativo pelo TENANT (override > global) e re-valida
+      // `disclaimerSaqueId === ativo.id`. Anti-staleness: se ADMIN ou
+      // SUPER_ADMIN editar entre o GET do front e o POST do cooperado,
+      // o id deixou de ser ativo → BadRequest. Cliente recarrega.
       if (disclaimerAceito !== true) {
         throw new BadRequestException(
           'Aceite do termo de saque obrigatório. Leia o aviso e confirme antes de prosseguir.',
         );
       }
-      if (disclaimerVersao !== CooperTokenService.DISCLAIMER_VERSAO_ATUAL) {
+      if (!disclaimerSaqueId) {
         throw new BadRequestException(
-          `Termo de saque desatualizado. Recarregue a página e aceite a versão atual (${CooperTokenService.DISCLAIMER_VERSAO_ATUAL}).`,
+          'Identificador do termo aceito ausente. Recarregue a página.',
+        );
+      }
+      if (!this.disclaimerSaqueService) {
+        throw new Error(
+          'DisclaimerSaqueService não disponível (wiring do módulo) — bug operacional.',
+        );
+      }
+      const ativo = await this.disclaimerSaqueService.getAtivo(cooperativaId);
+      if (disclaimerSaqueId !== ativo.id) {
+        throw new BadRequestException(
+          'Termo de saque desatualizado. Recarregue a página e aceite a versão atual.',
         );
       }
     }
@@ -2397,16 +2425,27 @@ export class CooperTokenService {
         const numeroRecibo = await this.gerarNumeroRecibo(tx, cooperativaId);
 
         // Cria ResgateRecibo PENDENTE_APROVACAO_COOP.
-        // Sprint D2.1 (16/06/2026) Bloco (b): grava aceite do disclaimer
+        // Sprint D2.1 v2 (16/06/2026) Bloco (3): grava aceite do disclaimer
         // se cooperado COMUM (estab passou no bypass, campos ficam null).
-        const aceiteData = !estabelecimento.ehEstabelecimento
-          ? {
-              disclaimerAceitoEm: new Date(),
-              disclaimerVersao: disclaimerVersao!, // já validado no Guard 1.6
-              disclaimerAceiteIp: aceiteIp ?? null,
-              disclaimerAceiteUserAgent: aceiteUserAgent ?? null,
-            }
-          : {};
+        // disclaimerSaqueId é FK autoritativa pra recuperar texto exato
+        // depois (mesmo após edições). disclaimerVersao copiado pra
+        // display rápido (evita JOIN nas listagens admin).
+        let aceiteData: Record<string, unknown> = {};
+        if (!estabelecimento.ehEstabelecimento) {
+          // Re-busca o ativo dentro da tx pra grudar versão correspondente
+          // (Guard 1.6 fora da tx já validou que disclaimerSaqueId é o ativo).
+          const disclaimerAtivo = await tx.disclaimerSaque.findUnique({
+            where: { id: disclaimerSaqueId! },
+            select: { id: true, versao: true },
+          });
+          aceiteData = {
+            disclaimerSaqueId: disclaimerAtivo?.id ?? disclaimerSaqueId,
+            disclaimerVersao: disclaimerAtivo?.versao ?? null,
+            disclaimerAceitoEm: new Date(),
+            disclaimerAceiteIp: aceiteIp ?? null,
+            disclaimerAceiteUserAgent: aceiteUserAgent ?? null,
+          };
+        }
 
         const created = await tx.resgateRecibo.create({
           data: {

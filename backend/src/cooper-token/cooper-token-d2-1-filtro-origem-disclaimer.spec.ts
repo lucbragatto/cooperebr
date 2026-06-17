@@ -1,31 +1,30 @@
 /**
- * Sprint D2.1 (16/06/2026) — Filtro de Origem + Disclaimer (Salvaguardas
- * 1 + 5 do parecer de conformidade analise-conformidade-2026-06-16-
- * saque-colaborador-d2.md).
+ * Sprint D2.1 v2 (16/06/2026) — Filtro de Origem + Disclaimer VERSIONADO
+ * (Salvaguardas 1 + 5 do parecer de conformidade analise-conformidade-
+ * 2026-06-16-saque-colaborador-d2.md).
+ *
+ * Mudança v2: disclaimer deixou de ser constante DISCLAIMER_VERSAO_ATUAL e
+ * virou entidade editável `DisclaimerSaque` (global default + override por
+ * tenant, histórico imutável). Guard 1.6 valida FK
+ * (`disclaimerSaqueId === getAtivo(cooperativaId).id`) ao invés de string.
  *
  * Cenários cobertos:
  *
- * COMPOSIÇÃO (helper privado composicaoOrigemSaldo — exposto via solicitarResgate):
+ * COMPOSIÇÃO + Filtro de origem (Guard 1.5 — Salvaguarda 1):
  *  1. Cooperado com só DESCONTO_FATURA → saldoSacavel = totalCredito.
- *  2. Cooperado com DISTRIBUICAO_CONVENIO + DESCONTO_FATURA → saldoSacavel
- *     reflete só permitido.
+ *  2. Cooperado com só DISTRIBUICAO_CONVENIO → saldoSacavel = 0.
  *  3. Cooperado com só BONIFICACAO_ADMIN → saldoSacavel = 0.
- *  4. Cooperado com mix + débitos → saldoSacavel = clamp(permitido − reduções
- *     − bloqueado, 0, saldoDisp).
- *  5. saldoBloqueadoResgate considerado (anti saque-duplo da mesma origem).
- *  6. Invariante violada (totalCreditoPermitido < saldoSacavel) → throw.
+ *  4. Mix permitido + bloqueado: saldoSacavel = só permitido.
+ *  5. Mix com débito: reduções abatem.
+ *  6. saldoBloqueadoResgate considerado (anti saque-duplo).
+ *  7. Clamp pelo saldoDisponivel real (defense in depth).
+ *  8. Estabelecimento BYPASSA Guard 1.5 (parecer §3#6).
  *
- * GUARD 1.5 (Filtro de origem em solicitarResgate):
- *  7. Cooperado COMUM solicita > saldoSacavel → Forbidden (mensagem
- *     anti-enumeração).
- *  8. Cooperado COMUM solicita ≤ saldoSacavel → segue pro PIN.
- *  9. Estabelecimento bypassa filtro (parecer §3#6).
- *
- * GUARD 1.6 (Disclaimer):
- * 10. Cooperado COMUM sem disclaimerAceito → BadRequest.
- * 11. Cooperado COMUM com versão antiga → BadRequest.
+ * GUARD 1.6 (Disclaimer versionado — Salvaguarda 5):
+ *  9. Cooperado COMUM sem disclaimerAceito → BadRequest.
+ * 10. Cooperado COMUM com FK stale (≠ id do ativo) → BadRequest.
+ * 11. Cooperado COMUM aceite válido → grava recibo com FK + versão snapshot.
  * 12. Estabelecimento NÃO precisa disclaimer (bypass).
- * 13. Aceite gravado no recibo (Em/Versao/Ip/UA).
  */
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CooperTokenService } from './cooper-token.service';
@@ -62,6 +61,7 @@ function setup(opts: SetupOpts = {}) {
     pixTipo: args.data.pixTipo,
     disclaimerAceitoEm: args.data.disclaimerAceitoEm ?? null,
     disclaimerVersao: args.data.disclaimerVersao ?? null,
+    disclaimerSaqueId: args.data.disclaimerSaqueId ?? null,
     disclaimerAceiteIp: args.data.disclaimerAceiteIp ?? null,
     disclaimerAceiteUserAgent: args.data.disclaimerAceiteUserAgent ?? null,
   }));
@@ -82,6 +82,14 @@ function setup(opts: SetupOpts = {}) {
     resgateReciboCounter: {
       upsert: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({ proximoNumero: 2 }),
+    },
+    // v2 — service grava `disclaimerVersao` no recibo (snapshot) via lookup
+    // do DisclaimerSaque ativo dentro da tx (FK é a verdade, versão é cópia).
+    disclaimerSaque: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'disclaimer-ativo-1',
+        versao: 'v1-2026-06-17',
+      }),
     },
   };
 
@@ -134,6 +142,17 @@ function setup(opts: SetupOpts = {}) {
     transferir: jest.fn().mockResolvedValue({ asaasTransferId: 'asaas-tx-1', status: 'PENDING', raw: null }),
   };
   const tokenContabil = { lancarResgatePix: jest.fn().mockResolvedValue({ id: 'lanc-1' }) };
+  // v2 — DisclaimerSaqueService injetado. getAtivo retorna o id `disclaimer-
+  // ativo-1` por default; specs específicos podem sobrescrever.
+  const disclaimerSaque = {
+    getAtivo: jest.fn().mockResolvedValue({
+      id: 'disclaimer-ativo-1',
+      versao: 'v1-2026-06-17',
+      texto: 'texto disclaimer v1',
+      cooperativaId: null,
+      ativo: true,
+    }),
+  };
 
   const service = new CooperTokenService(
     prisma,
@@ -144,9 +163,10 @@ function setup(opts: SetupOpts = {}) {
     limite as any,
     pixOut as any,
     tokenContabil as any,
+    disclaimerSaque as any,
   );
 
-  return { service, prisma, tx, txCreateRecibo };
+  return { service, prisma, tx, txCreateRecibo, disclaimerSaque };
 }
 
 const baseInput = (over: any = {}) => ({
@@ -156,7 +176,7 @@ const baseInput = (over: any = {}) => ({
   pin: '123456',
   clientRequestId: 'uuid-d2-1-12345678-test-1234-9999-aaaabbbbcccc',
   disclaimerAceito: true,
-  disclaimerVersao: 'v1-2026-06-16',
+  disclaimerSaqueId: 'disclaimer-ativo-1',
   aceiteIp: '127.0.0.1',
   aceiteUserAgent: 'jest-test',
   ...over,
@@ -293,7 +313,7 @@ describe('D2.1 — Filtro de origem (Salvaguarda 1)', () => {
     });
     const r = await service.solicitarResgate(
       // Estabelecimento NÃO envia disclaimer (também bypassa).
-      baseInput({ quantidade: 10, disclaimerAceito: undefined, disclaimerVersao: undefined }),
+      baseInput({ quantidade: 10, disclaimerAceito: undefined, disclaimerSaqueId: undefined }),
     );
     expect(r.recibo).toBeDefined();
   });
@@ -314,17 +334,17 @@ describe('D2.1 — Disclaimer obrigatório (Salvaguarda 5)', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('cooperado COMUM com disclaimerAceito mas versão errada → BadRequest', async () => {
+  it('cooperado COMUM com disclaimerSaqueId STALE (≠ id ativo) → BadRequest', async () => {
     const { service } = setup({
       saldoDisp: 100,
       ledger: [{ tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 }],
     });
     await expect(
-      service.solicitarResgate(baseInput({ disclaimerVersao: 'v0-OBSOLETA' })),
+      service.solicitarResgate(baseInput({ disclaimerSaqueId: 'disclaimer-OBSOLETO' })),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('cooperado COMUM aceite + versão atual → grava no recibo (Em/Versao/Ip/UA)', async () => {
+  it('cooperado COMUM aceite válido → grava FK + versão snapshot + Em/Ip/UA', async () => {
     const { service, txCreateRecibo } = setup({
       saldoDisp: 100,
       ledger: [{ tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 }],
@@ -336,12 +356,12 @@ describe('D2.1 — Disclaimer obrigatório (Salvaguarda 5)', () => {
       }),
     );
     expect(r.recibo).toBeDefined();
-    // Recibo gravado com aceite:
     const callArgs = txCreateRecibo.mock.calls[0][0];
     expect(callArgs.data.disclaimerAceitoEm).toBeInstanceOf(Date);
-    expect(callArgs.data.disclaimerVersao).toBe(
-      CooperTokenService.DISCLAIMER_VERSAO_ATUAL,
-    );
+    // FK é a verdade — vínculo autoritativo do aceite ao DisclaimerSaque ativo.
+    expect(callArgs.data.disclaimerSaqueId).toBe('disclaimer-ativo-1');
+    // Versão é snapshot (cópia denormalizada pra leitura rápida do recibo).
+    expect(callArgs.data.disclaimerVersao).toBe('v1-2026-06-17');
     expect(callArgs.data.disclaimerAceiteIp).toBe('203.0.113.42');
     expect(callArgs.data.disclaimerAceiteUserAgent).toBe('Mozilla/5.0 (Test)');
   });
@@ -353,22 +373,46 @@ describe('D2.1 — Disclaimer obrigatório (Salvaguarda 5)', () => {
       ledger: [{ tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 }],
     });
     const r = await service.solicitarResgate(
-      baseInput({ quantidade: 10, disclaimerAceito: undefined, disclaimerVersao: undefined }),
+      baseInput({ quantidade: 10, disclaimerAceito: undefined, disclaimerSaqueId: undefined }),
     );
     expect(r.recibo).toBeDefined();
     const callArgs = txCreateRecibo.mock.calls[0][0];
     expect(callArgs.data.disclaimerAceitoEm).toBeUndefined();
+    expect(callArgs.data.disclaimerSaqueId).toBeUndefined();
     expect(callArgs.data.disclaimerVersao).toBeUndefined();
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════
-// Asserção de invariante (defense in depth)
+// Integração com DisclaimerSaqueService (v2 — disclaimer versionado)
 // ═════════════════════════════════════════════════════════════════════
 
-describe('D2.1 — Invariante de composição', () => {
-  it('versão atual exposta como constante estática DISCLAIMER_VERSAO_ATUAL', () => {
-    expect(typeof CooperTokenService.DISCLAIMER_VERSAO_ATUAL).toBe('string');
-    expect(CooperTokenService.DISCLAIMER_VERSAO_ATUAL).toMatch(/^v\d+-/);
+describe('D2.1 v2 — Resolução de disclaimer ativo (override > global)', () => {
+  it('Guard 1.6 consulta getAtivo(cooperativaId) — passa cooperativaId do JWT', async () => {
+    const { service, disclaimerSaque } = setup({
+      saldoDisp: 100,
+      ledger: [{ tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 }],
+    });
+    await service.solicitarResgate(baseInput({ quantidade: 10 }));
+    expect(disclaimerSaque.getAtivo).toHaveBeenCalledWith(COOP);
+  });
+
+  it('Guard 1.6 rejeita aceite quando getAtivo retorna outro id (admin trocou disclaimer)', async () => {
+    const { service, disclaimerSaque } = setup({
+      saldoDisp: 100,
+      ledger: [{ tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 100 }],
+    });
+    // Admin editou disclaimer entre o GET do front e o POST do cooperado.
+    disclaimerSaque.getAtivo.mockResolvedValue({
+      id: 'disclaimer-NOVO-ativo-2',
+      versao: 'v2-2026-06-17',
+      texto: 'texto novo',
+      cooperativaId: null,
+      ativo: true,
+    });
+    // Cooperado mandou o id antigo (já invalidado) — deve cair no anti-staleness.
+    await expect(
+      service.solicitarResgate(baseInput({ disclaimerSaqueId: 'disclaimer-ativo-1' })),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
