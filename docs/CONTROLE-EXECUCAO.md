@@ -134,17 +134,26 @@ TEXTO EXATO da v2 via FK (rastro jurídico imutável).
   seção P1.
 - **D-novo-RECONCILIACAO-CONTABIL-CRON P2** (M41) — continua aberto
   pós-M42; cron re-tenta `PAGO_CREDITO_PENDENTE`.
-- **Caminho de ativação produção do saque colaborador comum**:
-  ✅ parecer (16/06); ✅ Salvaguarda 1 (D2.1); ✅ Salvaguarda 5 (D2.1);
-  ⏳ Salvaguardas 2+3+4 (D2.2/D2.3); ⏳ D-novo-RECONCILIACAO-CONTABIL-
-  CRON P2; ⏳ D-novo-THROTTLER-APP-GUARD P1; ⏳ parecer escrito
-  confirmando + `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true`.
+- **Caminho de ativação produção do saque colaborador comum**
+  (DESCONTO_FATURA apenas):
+  ✅ parecer (16/06); ✅ Salvaguarda 1 (M42 — filtro origem);
+  ✅ Salvaguarda 4 (M41 — `PENDENTE_APROVACAO_COOP` obrigatório);
+  ✅ Salvaguarda 5 (M42 — disclaimer versionado);
+  ⏳ D-novo-THROTTLER-APP-GUARD P1; ⏳ D-novo-RECONCILIACAO-
+  CONTABIL-CRON P2; ⏳ parecer escrito do
+  `cooperebr-analista-conformidade` confirmando +
+  `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true`.
+  S2 (ata assembleia) + S3 (parecer trabalhista) são **ações
+  legais do Luciano**, NÃO sprint de código — só viram código
+  futuro se Luciano expandir a whitelist do filtro pra incluir
+  BONIFICACAO_ADMIN (após ata) ou tokens de empresa conveniada
+  (após parecer trabalhista).
 
 **Próximo passo único e claro:** Luciano decide — D-QUALIF-DECAY
 (decaimento qualificação, ~6-10h, próxima da fila padrão) OU
-D2.2/D2.3 (Salvaguardas 2+3+4 antes de ativar saque colaborador em
-prod) OU sprint hardening de segurança (D-novo-THROTTLER-APP-GUARD
-+ reconciliação cron).
+sprint hardening de segurança (D-novo-THROTTLER-APP-GUARD +
+D-novo-RECONCILIACAO-CONTABIL-CRON) — destrava ativação produção
+do saque DESCONTO_FATURA.
 
 **Frase de retomada COMANDANTE** ver `## FRASE DE RETOMADA — próxima
 sessão Code` no fim deste documento.
@@ -2803,11 +2812,16 @@ OPÇÃO A — Sprint D-QUALIF-DECAY (próxima por padrão, ~6-10h)
   multitenant-reviewer (toca contabilidade de qualificação, não
   dinheiro direto).
 
-OPÇÃO B — Sprint D2.2/D2.3 — Salvaguardas restantes do parecer
-  Necessárias ANTES de SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true.
-  Salvaguarda 2 (limite de valor por saque/dia), Salvaguarda 3
-  (cooldown entre saques), Salvaguarda 4 (anti-burst). Sem isso o
-  saque colaborador comum NÃO PODE ser ativado em prod.
+OPÇÃO B — N/A
+  Não existe sprint de código pra Salvaguardas 2/3/4. Conferência
+  pós-M42 com o parecer: S2 = ATA DE ASSEMBLEIA (ação legal Luciano,
+  só pra HABILITAR BONIFICACAO_ADMIN); S3 = PARECER ADVOGADO
+  TRABALHISTA (ação legal Luciano, só pra HABILITAR tokens de
+  empresa conveniada); S4 = PENDENTE_APROVACAO_COOP obrigatório, JÁ
+  IMPLEMENTADO desde M41/F6 (cooperado comum nunca tem auto-
+  aprovação). Pra ativar saque restrito a DESCONTO_FATURA em prod
+  bastam OPÇÃO C + parecer escrito + flag — S2/S3 só viram código
+  futuro se Luciano expandir a whitelist do filtro de origem.
 
 OPÇÃO C — Sprint Hardening de Segurança
   Fecha 2 carry-overs cruciais pra ativação produção do D2:
@@ -2866,12 +2880,20 @@ CARRY-OVERS catalogados:
 - D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M41) continua aberto —
   cron re-tenta resgates PAGO_CREDITO_PENDENTE. Bloqueia ativação
   produção do D2.
-- Caminho de ativação produção do saque colaborador comum:
-  ✅ parecer (16/06); ✅ Salvaguarda 1 (D2.1); ✅ Salvaguarda 5
-  (D2.1); ⏳ Salvaguardas 2+3+4 (D2.2/D2.3); ⏳ D-novo-THROTTLER-
-  APP-GUARD P1; ⏳ D-novo-RECONCILIACAO-CONTABIL-CRON P2; ⏳ parecer
-  escrito do cooperebr-analista-conformidade confirmando +
+- Caminho de ativação produção do saque colaborador comum
+  (restrito a DESCONTO_FATURA):
+  ✅ parecer (16/06); ✅ Salvaguarda 1 (M42 — filtro origem);
+  ✅ Salvaguarda 4 (M41 — PENDENTE_APROVACAO_COOP obrigatório);
+  ✅ Salvaguarda 5 (M42 — disclaimer versionado);
+  ⏳ D-novo-THROTTLER-APP-GUARD P1; ⏳ D-novo-RECONCILIACAO-
+  CONTABIL-CRON P2; ⏳ parecer escrito do
+  cooperebr-analista-conformidade confirmando +
   SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true.
+  S2 (ata assembleia) + S3 (parecer trabalhista) NÃO são sprint
+  de código — são ações legais do Luciano que só viram código
+  futuro se a whitelist do filtro expandir pra BONIFICACAO_ADMIN
+  (após ata) ou tokens de empresa conveniada (após parecer
+  trabalhista).
 
 PROTOCOLO próxima sprint (independente de qual Luciano escolha):
 
