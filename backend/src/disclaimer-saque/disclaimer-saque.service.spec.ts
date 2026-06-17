@@ -122,6 +122,26 @@ function setup() {
         Object.assign(row, args.data);
         return row;
       }),
+      // P1 review multitenant (16/06): desativarOverrideTenant agora usa
+      // updateMany com `where: {id, cooperativaId, ativo}` pra evitar
+      // race entre findFirst e write.
+      updateMany: jest.fn(async (args: any) => {
+        const where = args.where ?? {};
+        let count = 0;
+        for (const row of state.values()) {
+          const matchId = where.id === undefined || row.id === where.id;
+          const matchCoop =
+            where.cooperativaId === undefined ||
+            row.cooperativaId === where.cooperativaId;
+          const matchAtivo =
+            where.ativo === undefined || row.ativo === where.ativo;
+          if (matchId && matchCoop && matchAtivo) {
+            Object.assign(row, args.data);
+            count++;
+          }
+        }
+        return { count };
+      }),
     },
     usuario: {
       findFirst: jest.fn().mockResolvedValue({ id: SUPER_ID }),
@@ -273,10 +293,25 @@ describe('DisclaimerSaqueService — mutação + histórico imutável', () => {
       cooperativaId: TENANT_A,
       texto: TEXTO_VALIDO,
       criadoPorUsuarioId: ADMIN_A_ID,
+      criadoPorPerfil: 'ADMIN',
     });
     expect(nova.cooperativaId).toBe(TENANT_A);
     expect(nova.criadoPorPerfil).toBe('ADMIN');
     expect(state.get(nova.id).cooperativaId).toBe(TENANT_A);
+  });
+
+  it('7.1 criarTenantOverride: SUPER_ADMIN impersonando grava perfil REAL', async () => {
+    // P2 review multitenant (16/06) — perfil real ao invés de 'ADMIN'
+    // hardcoded preserva trilha forense quando SUPER_ADMIN cria override
+    // de um tenant.
+    const { service } = setup();
+    const nova = await service.criarTenantOverride({
+      cooperativaId: TENANT_A,
+      texto: TEXTO_VALIDO,
+      criadoPorUsuarioId: SUPER_ID,
+      criadoPorPerfil: 'SUPER_ADMIN',
+    });
+    expect(nova.criadoPorPerfil).toBe('SUPER_ADMIN');
   });
 
   it('8. criarTenantOverride: 2 tenants distintos NÃO se sobrescrevem', async () => {
@@ -285,11 +320,13 @@ describe('DisclaimerSaqueService — mutação + histórico imutável', () => {
       cooperativaId: TENANT_A,
       texto: TEXTO_VALIDO,
       criadoPorUsuarioId: ADMIN_A_ID,
+      criadoPorPerfil: 'ADMIN',
     });
     await service.criarTenantOverride({
       cooperativaId: TENANT_B,
       texto: TEXTO_VALIDO,
       criadoPorUsuarioId: 'admin-B-id',
+      criadoPorPerfil: 'ADMIN',
     });
     const ativoA = await service.getAtivo(TENANT_A);
     const ativoB = await service.getAtivo(TENANT_B);
@@ -426,6 +463,15 @@ describe('DisclaimerSaqueService — isolamento + desativação', () => {
     });
     expect(found).toBeNull();
   });
+
+  it('13.1 buscarPorId EXIGE cooperativaIdEsperado (P2 review)', async () => {
+    // P2 review (16/06) — caller que omite cooperativaIdEsperado não pode
+    // mais bypassar a defesa multi-tenant silenciosamente.
+    const { service } = setup();
+    await expect(
+      service.buscarPorId({ id: 'qualquer', cooperativaIdEsperado: '' as any }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════
@@ -446,6 +492,39 @@ describe('DisclaimerSaqueService — validação de texto', () => {
       service.criarGlobal({
         texto:
           TEXTO_VALIDO + ' <script>alert("xss")</script> tentativa de injeção',
+        criadoPorUsuarioId: SUPER_ID,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('16. rejeita HTML entities (&lt; &gt; &#x3C;) — anti-XSS entity-encoded', async () => {
+    // P2 review security (16/06) — defense in depth contra payload
+    // entity-encoded inocente no regex anterior mas perigoso em
+    // contextos futuros de renderização (PDF, email com Handlebars).
+    const { service } = setup();
+    await expect(
+      service.criarGlobal({
+        texto: TEXTO_VALIDO + ' &lt;script&gt;alert(1)&lt;/script&gt;',
+        criadoPorUsuarioId: SUPER_ID,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('17. rejeita javascript: e data: URL schemes', async () => {
+    const { service } = setup();
+    await expect(
+      service.criarGlobal({
+        texto: TEXTO_VALIDO + ' javascript:alert(1) link malicioso',
+        criadoPorUsuarioId: SUPER_ID,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('18. rejeita event handlers HTML (onclick=, onload=, etc.)', async () => {
+    const { service } = setup();
+    await expect(
+      service.criarGlobal({
+        texto: TEXTO_VALIDO + ' onclick= alert do evento perigoso aqui',
         criadoPorUsuarioId: SUPER_ID,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

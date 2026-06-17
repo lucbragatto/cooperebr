@@ -194,12 +194,15 @@ export default function ResgatarTokensPage() {
       // não-Estab pra evitar request desnecessário.
       if (!meData.ehEstabelecimento && meData.saqueColaboradorAtivo) {
         try {
+          // P1 review financeiro-token (16/06): controller retorna shape
+          // flat `{id, versao, texto, origem}` — leitura `data.disclaimer.id`
+          // anterior estourava undefined silenciosa e matava Salvaguarda 5.
           const disclaimerR = await api.get('/portal/disclaimer-saque');
           setDisclaimer({
-            id: disclaimerR.data.disclaimer.id,
-            versao: disclaimerR.data.disclaimer.versao,
-            texto: disclaimerR.data.disclaimer.texto,
-            cooperativaId: disclaimerR.data.disclaimer.cooperativaId,
+            id: disclaimerR.data.id,
+            versao: disclaimerR.data.versao,
+            texto: disclaimerR.data.texto,
+            cooperativaId: disclaimerR.data.cooperativaId ?? null,
             origem: disclaimerR.data.origem,
           });
         } catch {

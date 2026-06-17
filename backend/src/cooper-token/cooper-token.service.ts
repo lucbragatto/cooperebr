@@ -236,7 +236,12 @@ export class CooperTokenService {
         // COMPRA_PJ_COOPERADA) NÃO acumulam em totalCreditoPermitido.
       } else if (entry.operacao === 'DEBITO') {
         // Σ todas reduções (qualquer DEBITO — uso, transferência, resgate).
-        totalReducoes += q;
+        // P1 review financeiro-token (16/06): M39 grava ESTORNO_BONIFICACAO_ADMIN
+        // com operacao=DEBITO + quantidade NEGATIVA. Somar `q` cru faria
+        // totalReducoes cair (q negativo), inflando saldoSacavel
+        // artificialmente. Tratar DEBITO sempre como magnitude (|q|) garante
+        // que ESTORNOs não envenenam a composição.
+        totalReducoes += Math.abs(q);
       }
     }
     // Arredondamento defensivo (Decimal→Number pode introduzir float).
@@ -2246,7 +2251,12 @@ export class CooperTokenService {
         cooperadoId: estabelecimentoCooperadoId,
         cooperativaId,
       });
-      if (quantidade > composicao.saldoSacavel + 0.0001) {
+      if (quantidade > composicao.saldoSacavel) {
+        // P2 review financeiro-token (16/06): a tolerância +0.0001 anterior
+        // abria janela de sobre-saque de até 0.0001 token. Como `quantidade`
+        // (DTO @Min 0.0001) e `saldoSacavel` (arredondado 4 casas) já vêm em
+        // 4 decimais sem drift, comparação estrita é segura e preserva o
+        // invariante FUNDACAO §4#1 (Passivo == Σ saldos × face).
         // Mensagem genérica anti-enumeração: atacante não deve distinguir
         // "tem saldo mas não é elegível" (Salvaguarda 1) de
         // "saldo bruto insuficiente". Loga detalhe pro admin investigar.
@@ -2432,15 +2442,38 @@ export class CooperTokenService {
         // display rápido (evita JOIN nas listagens admin).
         let aceiteData: Record<string, unknown> = {};
         if (!estabelecimento.ehEstabelecimento) {
-          // Re-busca o ativo dentro da tx pra grudar versão correspondente
-          // (Guard 1.6 fora da tx já validou que disclaimerSaqueId é o ativo).
+          // P2 reviews multitenant + financeiro-token + security (16/06):
+          // re-busca DENTRO da tx Serializable + revalida (a) ainda ativo,
+          // (b) cooperativaId casa com o tenant do JWT (defense in depth
+          // mesmo Guard 1.6 fora da tx já tendo validado), (c) NUNCA
+          // fallback silencioso pro id do body — failure explícito.
           const disclaimerAtivo = await tx.disclaimerSaque.findUnique({
             where: { id: disclaimerSaqueId! },
-            select: { id: true, versao: true },
+            select: { id: true, versao: true, ativo: true, cooperativaId: true },
           });
+          if (!disclaimerAtivo) {
+            throw new BadRequestException(
+              'Termo de saque não encontrado. Recarregue a página.',
+            );
+          }
+          if (!disclaimerAtivo.ativo) {
+            throw new BadRequestException(
+              'Termo de saque foi atualizado. Recarregue a página e aceite a versão atual.',
+            );
+          }
+          if (
+            disclaimerAtivo.cooperativaId !== null &&
+            disclaimerAtivo.cooperativaId !== cooperativaId
+          ) {
+            // Cross-tenant impossible por design (Guard 1.6 já filtrou),
+            // mas defense in depth: NUNCA gravar FK de outro tenant.
+            throw new BadRequestException(
+              'Termo de saque inválido pro seu tenant — recarregue.',
+            );
+          }
           aceiteData = {
-            disclaimerSaqueId: disclaimerAtivo?.id ?? disclaimerSaqueId,
-            disclaimerVersao: disclaimerAtivo?.versao ?? null,
+            disclaimerSaqueId: disclaimerAtivo.id,
+            disclaimerVersao: disclaimerAtivo.versao,
             disclaimerAceitoEm: new Date(),
             disclaimerAceiteIp: aceiteIp ?? null,
             disclaimerAceiteUserAgent: aceiteUserAgent ?? null,

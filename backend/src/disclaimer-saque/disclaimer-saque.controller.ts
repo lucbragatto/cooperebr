@@ -5,9 +5,12 @@ import {
   Delete,
   Get,
   HttpCode,
+  Param,
   Post,
+  Query,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuditLog } from '../audit/audit-log.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { Roles } from '../auth/roles.decorator';
@@ -67,24 +70,42 @@ export class DisclaimerSaqueController {
   // ─── SUPER_ADMIN — GLOBAL ────────────────────────────────────
 
   @Roles(SUPER_ADMIN)
+  // P1 review security (16/06): leitura SUPER de dados sensíveis também
+  // auditada (quem leu o histórico/ativo global e quando).
+  @AuditLog({
+    acao: 'saas.disclaimer-saque.global.listar-historico',
+    recurso: 'DisclaimerSaque',
+  })
   @Get('saas/disclaimer-saque/global/historico')
-  async listarHistoricoGlobal() {
-    const lista = await this.service.listarHistorico(null);
+  async listarHistoricoGlobal(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const lista = await this.service.listarHistorico(null, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
     return { items: lista, total: lista.length };
   }
 
   @Roles(SUPER_ADMIN)
+  @AuditLog({
+    acao: 'saas.disclaimer-saque.global.ler-ativo',
+    recurso: 'DisclaimerSaque',
+  })
   @Get('saas/disclaimer-saque/global/ativo')
   async getAtivoGlobal() {
-    // Resolução com cooperativaId fake (string vazia não tem override
-    // → cai pro global). Mas pra ser explícito, busca direto.
-    const { disclaimer } = await this.service.getAtivoComOrigem(
-      '___SUPER_ADMIN_GLOBAL_VIEW___', // qualquer string sem override existente
-    );
-    return disclaimer;
+    // P1 review financeiro-token + multitenant (16/06): leitor direto do
+    // GLOBAL ativo (sem string mágica `___SUPER_ADMIN_GLOBAL_VIEW___`
+    // que era frágil e podia colidir com tenant fantasma).
+    return this.service.getAtivoGlobal();
   }
 
   @Roles(SUPER_ADMIN)
+  // P1 review security (16/06): rate-limit explícito por endpoint (Throttler
+  // global ainda não está em APP_GUARD — débito catalogado D-novo-THROTTLER-
+  // APP-GUARD). 10/min de publicação suficiente pra SUPER_ADMIN, evita DoS.
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @AuditLog({
     acao: 'saas.disclaimer-saque.global.criar',
     recurso: 'DisclaimerSaque',
@@ -102,18 +123,50 @@ export class DisclaimerSaqueController {
     });
   }
 
+  // P1 review multitenant (16/06): SUPER_ADMIN inspeciona override de um
+  // tenant específico SEM precisar impersonar — `:cooperativaId` vem do
+  // path (não do JWT). Necessário pra gestão centralizada do SaaS sem
+  // depender de impersonation, que mascarava trilha forense.
+  @Roles(SUPER_ADMIN)
+  @AuditLog({
+    acao: 'saas.disclaimer-saque.tenant.listar-historico',
+    recurso: 'DisclaimerSaque',
+  })
+  @Get('saas/disclaimer-saque/tenant/:cooperativaId/historico')
+  async listarHistoricoTenantPeloSuper(
+    @Param('cooperativaId') cooperativaId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!cooperativaId) {
+      throw new BadRequestException('cooperativaId obrigatório.');
+    }
+    const lista = await this.service.listarHistorico(cooperativaId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+    return { items: lista, total: lista.length, cooperativaId };
+  }
+
   // ─── ADMIN — OVERRIDE do TENANT ──────────────────────────────
 
   @Roles(ADMIN, SUPER_ADMIN)
   @Get('cooperativa/disclaimer-saque/historico')
-  async listarHistoricoTenant(@Request() req: any) {
+  async listarHistoricoTenant(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     const cooperativaId = req.user?.cooperativaId;
     if (!cooperativaId) {
       throw new BadRequestException(
         'Cooperativa não identificada no contexto.',
       );
     }
-    const lista = await this.service.listarHistorico(cooperativaId);
+    const lista = await this.service.listarHistorico(cooperativaId, {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
     return { items: lista, total: lista.length };
   }
 
@@ -132,6 +185,9 @@ export class DisclaimerSaqueController {
   }
 
   @Roles(ADMIN, SUPER_ADMIN)
+  // P1 review security (16/06): rate-limit explícito por endpoint (vide
+  // débito D-novo-THROTTLER-APP-GUARD).
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @AuditLog({
     acao: 'cooperativa.disclaimer-saque.criar',
     recurso: 'DisclaimerSaque',
@@ -141,6 +197,10 @@ export class DisclaimerSaqueController {
   async criarTenant(@Body() body: CriarDisclaimerDto, @Request() req: any) {
     const cooperativaId = req.user?.cooperativaId;
     const criadoPorUsuarioId = req.user?.id ?? req.user?.userId;
+    // P2 review multitenant (16/06): perfil REAL (ADMIN ou SUPER_ADMIN
+    // se este impersona um tenant) — passar pro service grava trilha
+    // forense correta em vez de hardcoded 'ADMIN' que mascarava SUPER.
+    const criadoPorPerfil = req.user?.perfil ?? 'ADMIN';
     if (!cooperativaId) {
       throw new BadRequestException(
         'Cooperativa não identificada (ADMIN nunca edita global).',
@@ -153,6 +213,7 @@ export class DisclaimerSaqueController {
       cooperativaId,
       texto: body.texto,
       criadoPorUsuarioId,
+      criadoPorPerfil,
     });
   }
 

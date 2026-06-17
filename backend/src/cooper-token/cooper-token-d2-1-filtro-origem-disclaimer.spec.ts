@@ -85,10 +85,14 @@ function setup(opts: SetupOpts = {}) {
     },
     // v2 — service grava `disclaimerVersao` no recibo (snapshot) via lookup
     // do DisclaimerSaque ativo dentro da tx (FK é a verdade, versão é cópia).
+    // P2 reviews (16/06): valida ativo + cooperativaId DENTRO da tx (defense
+    // in depth) — mock estende com `ativo: true` + `cooperativaId: null` (global).
     disclaimerSaque: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'disclaimer-ativo-1',
         versao: 'v1-2026-06-17',
+        ativo: true,
+        cooperativaId: null,
       }),
     },
   };
@@ -282,6 +286,29 @@ describe('D2.1 — Filtro de origem (Salvaguarda 1)', () => {
     // solicita 80 → passa (extrai o restante).
     const r80 = await service.solicitarResgate(baseInput({ quantidade: 80 }));
     expect(r80.recibo).toBeDefined();
+  });
+
+  it('DEBITO com quantidade NEGATIVA (ESTORNO_BONIFICACAO_ADMIN M39) NÃO infla saldoSacavel', async () => {
+    // P1 review financeiro-token (16/06): M39 grava ESTORNO_BONIFICACAO_ADMIN
+    // com operacao=DEBITO + quantidade NEGATIVA. Helper precisa tratar
+    // DEBITO sempre como MAGNITUDE pra não inflar saldoSacavel. saldoDisp=40
+    // (real após estorno), ledger 50 CREDITO + 10 DEBITO uso + 20 DEBITO
+    // ESTORNO negativo. Sem fix: totalReducoes=10+(-20)=-10 → saldoSacavel
+    // inflado pra 60. Com Math.abs: totalReducoes=10+20=30 → saldoSacavel
+    // = clamp(50-30-0, 0, 40) = 20.
+    const { service } = setup({
+      saldoDisp: 40,
+      ledger: [
+        { tipo: 'DESCONTO_FATURA', operacao: 'CREDITO', quantidade: 50 },
+        { tipo: 'DESCONTO_FATURA', operacao: 'DEBITO', quantidade: 10 },
+        { tipo: 'ESTORNO_BONIFICACAO_ADMIN', operacao: 'DEBITO', quantidade: -20 },
+      ],
+    });
+    await expect(service.solicitarResgate(baseInput({ quantidade: 21 }))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    const r20 = await service.solicitarResgate(baseInput({ quantidade: 20 }));
+    expect(r20.recibo).toBeDefined();
   });
 
   it('clamp pelo saldoDisponivel real (defesa em profundidade contra ledger inflado)', async () => {

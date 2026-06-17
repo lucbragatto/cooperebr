@@ -71,10 +71,14 @@ function setupD2(opts: SetupD2Opts = {}) {
     },
     // Sprint D2.1 v2 — service lê versão do disclaimer ativo dentro da tx
     // pra gravar `disclaimerVersao` no recibo (snapshot histórico).
+    // P2 reviews (16/06): valida ativo + cooperativaId DENTRO da tx (defense
+    // in depth) — mock estende com `ativo: true` + `cooperativaId: null` (global).
     disclaimerSaque: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'disclaimer-ativo-1',
         versao: 'v1-2026-06-17',
+        ativo: true,
+        cooperativaId: null,
       }),
     },
   };

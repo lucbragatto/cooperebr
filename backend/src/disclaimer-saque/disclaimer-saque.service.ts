@@ -91,12 +91,22 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
       where: { cooperativaId, ativo: true },
     });
     if (override) return override;
+    return this.getAtivoGlobal();
+  }
+
+  /**
+   * P1 review (16/06) — leitor direto do GLOBAL ativo, sem string mágica.
+   * SUPER_ADMIN consulta esse pra ver o default vigente do SISGD.
+   * Fonte única usada por `getAtivo` (fallback) e pelo endpoint
+   * `GET /saas/disclaimer-saque/global/ativo`.
+   */
+  async getAtivoGlobal(): Promise<DisclaimerSaque> {
     const global = await this.prisma.disclaimerSaque.findFirst({
       where: { cooperativaId: null, ativo: true },
     });
     if (!global) {
       throw new NotFoundException(
-        'Nenhum disclaimer ativo configurado — bug operacional (seed não rodou?).',
+        'Nenhum disclaimer global ativo — bug operacional (seed não rodou?).',
       );
     }
     return global;
@@ -127,13 +137,22 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
   /**
    * Histórico completo de um escopo (global OU tenant específico).
    * NUNCA vaza entre tenants. NUNCA lista entries de OUTRO tenant.
+   *
+   * P2 review security (16/06): paginação default `take: 50` previne
+   * payload crescente sem limite (admin que edita muito gera resposta
+   * de MBs). Cap 100 por página.
    */
   async listarHistorico(
     cooperativaId: string | null,
+    opts: { page?: number; limit?: number } = {},
   ): Promise<DisclaimerSaque[]> {
+    const page = Math.max(1, opts.page ?? 1);
+    const limit = Math.min(100, Math.max(1, opts.limit ?? 50));
     return this.prisma.disclaimerSaque.findMany({
       where: { cooperativaId },
       orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
   }
 
@@ -188,6 +207,7 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
     cooperativaId: string;
     texto: string;
     criadoPorUsuarioId: string;
+    criadoPorPerfil: string;
   }): Promise<DisclaimerSaque> {
     this.validarTexto(input.texto);
     if (!input.cooperativaId) {
@@ -213,11 +233,14 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
           texto: input.texto.trim(),
           ativo: true,
           criadoPorUsuarioId: input.criadoPorUsuarioId,
-          criadoPorPerfil: 'ADMIN',
+          // P2 review multitenant (16/06): perfil real (ADMIN ou SUPER_ADMIN
+          // se este impersona o tenant) — não mais hardcoded 'ADMIN' que
+          // mascarava trilha forense de quem fez a edição.
+          criadoPorPerfil: input.criadoPorPerfil,
         },
       });
       this.logger.log(
-        `[criar-tenant] cooperativaId=${input.cooperativaId.slice(0, 8)}… versao=${nova.versao}`,
+        `[criar-tenant] cooperativaId=${input.cooperativaId.slice(0, 8)}… versao=${nova.versao} autorPerfil=${nova.criadoPorPerfil}`,
       );
       return nova;
     });
@@ -242,10 +265,20 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
         'Tenant não tem override ativo — já está usando o global SISGD.',
       );
     }
-    await this.prisma.disclaimerSaque.update({
-      where: { id: override.id },
+    // P1 review multitenant (16/06): updateMany com `cooperativaId` no where
+    // (defense in depth — `rules/multi-tenant.md` exige cooperativaId em
+    // UPDATE/DELETE por id). Race entre o findFirst e o update fica blindada:
+    // se outro processo desativou + reativou um id homonimo de outro tenant
+    // entre as 2 queries, o updateMany não casa (count=0) → throw.
+    const result = await this.prisma.disclaimerSaque.updateMany({
+      where: { id: override.id, cooperativaId: input.cooperativaId, ativo: true },
       data: { ativo: false },
     });
+    if (result.count === 0) {
+      throw new NotFoundException(
+        'Override desapareceu entre o read e o write — retry.',
+      );
+    }
     this.logger.log(
       `[desativar-tenant] cooperativaId=${input.cooperativaId.slice(0, 8)}… ` +
         `versao=${override.versao} desativadoPor=${input.desativadoPorUsuarioId}`,
@@ -256,26 +289,33 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
   /**
    * Recupera entry por id (pra recibo antigo conseguir mostrar texto
    * exato aceito — mesmo se ativo=false). Multi-tenant: filtra por
-   * cooperativaId esperado (do escopo do consumidor).
+   * `cooperativaIdEsperado` (do escopo do consumidor — SEMPRE do JWT).
+   *
+   * P2 reviews multitenant + security + financeiro-token (16/06):
+   * `cooperativaIdEsperado` é OBRIGATÓRIO (era `?`). Bypass por omissão
+   * (caller passa undefined) vazava cross-tenant — defensiva quebrada.
+   * Entry global (cooperativaId=null) é válido pra qualquer tenant
+   * (cooperado aceitou global ativo na época do recibo). Entry de
+   * OUTRO tenant nunca vaza.
    */
   async buscarPorId(input: {
     id: string;
-    cooperativaIdEsperado?: string | null;
+    cooperativaIdEsperado: string;
   }): Promise<DisclaimerSaque | null> {
+    if (!input.cooperativaIdEsperado) {
+      throw new BadRequestException(
+        'cooperativaIdEsperado obrigatório (defesa multi-tenant).',
+      );
+    }
     const found = await this.prisma.disclaimerSaque.findUnique({
       where: { id: input.id },
     });
     if (!found) return null;
-    // Defesa multi-tenant: se cooperativaIdEsperado foi passado, valida.
-    // null === null (global) e tenantId === tenantId. Cooperado lendo
-    // recibo do seu tenant → cooperativaIdEsperado = JWT.cooperativaId,
-    // entry pode ser desse tenant OU global (ambos válidos pra cooperado).
+    // Global (null) passa pra qualquer tenant. Tenant entry só pra dono.
     if (
-      input.cooperativaIdEsperado !== undefined &&
       found.cooperativaId !== null &&
       found.cooperativaId !== input.cooperativaIdEsperado
     ) {
-      // Entry de OUTRO tenant — não vaza.
       return null;
     }
     return found;
@@ -295,11 +335,30 @@ Ao continuar, você confirma que entende a natureza desta operação e que a res
         'Texto do disclaimer não pode passar de 5000 caracteres.',
       );
     }
-    // Anti-XSS no v1: rejeita HTML tags (plain text + quebras de linha).
-    // UI renderiza com whitespace-pre-line (não dangerouslySetInnerHTML).
-    if (/<[^>]+>/.test(trimmed)) {
+    // P2 review security (16/06): defense-in-depth ampliado pra
+    // entity-encoded XSS (`&lt;`/`&gt;`/`&#x3C;`), URL schemes perigosos
+    // (`javascript:`/`data:`) e event handlers (`on*=`). React no front
+    // já escapa interpolações JSX (sem dangerouslySetInnerHTML), mas
+    // o texto vai pro recibo + audit log + eventual PDF/email futuro —
+    // bloquear no banco evita propagar payload entity-encoded inocente.
+    if (/<[^>]+>/i.test(trimmed)) {
       throw new BadRequestException(
         'Texto plain text apenas — HTML tags não são permitidas (anti-XSS).',
+      );
+    }
+    if (/&lt;|&gt;|&#x?[0-9a-f]+;/i.test(trimmed)) {
+      throw new BadRequestException(
+        'Texto plain text apenas — HTML entities não são permitidas (anti-XSS).',
+      );
+    }
+    if (/javascript\s*:|data\s*:/i.test(trimmed)) {
+      throw new BadRequestException(
+        'Texto plain text apenas — URL schemes inseguros bloqueados (anti-XSS).',
+      );
+    }
+    if (/\son\w+\s*=/i.test(trimmed)) {
+      throw new BadRequestException(
+        'Texto plain text apenas — event handlers HTML bloqueados (anti-XSS).',
       );
     }
   }

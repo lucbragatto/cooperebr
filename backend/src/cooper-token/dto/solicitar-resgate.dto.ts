@@ -15,11 +15,13 @@
  */
 import {
   IsBoolean,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Matches,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class SolicitarResgateDto {
@@ -85,9 +87,14 @@ export class SolicitarResgateDto {
   @IsBoolean()
   disclaimerAceito?: boolean;
 
-  /** FK pro DisclaimerSaque ativo aceito (cuid). */
-  @IsOptional()
+  /** FK pro DisclaimerSaque ativo aceito (cuid).
+   *
+   * P2 review security (16/06): coerência por camada — se `disclaimerAceito`
+   * é true, `disclaimerSaqueId` é obrigatório (validação no DTO antes do
+   * service). Estabelecimento bypassa ambos (envia undefined nos dois). */
+  @ValidateIf((o) => o.disclaimerAceito === true)
   @IsString()
+  @IsNotEmpty()
   disclaimerSaqueId?: string;
 }
 

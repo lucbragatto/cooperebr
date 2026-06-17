@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { AuditLog } from '../audit/audit-log.decorator';
 import { CooperTokenService } from './cooper-token.service';
 import { CooperTokenJob } from './cooper-token.job';
 import { Roles } from '../auth/roles.decorator';
@@ -878,6 +879,12 @@ export class CooperTokenController {
   // lockout. Mesmo padrão de /meu-perfil/dados-bancarios — 5/min por IP.
   // Anti-enumeração e defesa contra spam pré-lockout.
   @Throttle({ default: { ttl: 60000, limit: 5 } })
+  // P1 review security (16/06): operação financeira mais sensível do
+  // sprint — solicitação de saque PIX. AuditLog rastreável no banco.
+  @AuditLog({
+    acao: 'cooper-token.resgate.solicitar',
+    recurso: 'ResgateRecibo',
+  })
   @Post('empresa/resgatar')
   async solicitarResgate(@Req() req: any, @Body() body: SolicitarResgateDto) {
     const estabelecimentoCooperadoId = req.user?.cooperadoId;
