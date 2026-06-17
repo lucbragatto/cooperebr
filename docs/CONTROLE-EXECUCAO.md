@@ -63,6 +63,124 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-17 (Code — M43 Sprint C Hardening: Throttler + Reconciliação Contábil FECHADO + merge na main)
+
+**Sessão Code dedicada — M43 entregue ponta-a-ponta.** Sprint C
+Hardening fecha 2 carry-overs catalogados: `D-novo-THROTTLER-APP-GUARD
+P1` (catalogado M42 pelo security-reviewer) + `D-novo-RECONCILIACAO-
+CONTABIL-CRON P2` (catalogado M41 no re-review do orquestrador).
+Mergeado na main (`beb125c` merge `--no-ff`).
+
+2 commits na feature branch `feature/hardening-throttler-reconciliacao`
+(branch preservada no origin — NÃO deletada, padrão M39/M41/M42):
+
+1. **Sprint C completo** `2b2af66` — Throttler global em APP_GUARD +
+   tier `webhook` 600/min nos 4 webhooks (Asaas, BB, Sicoob, WA) +
+   cron `*/15` de reconciliação contábil com backoff `[5min, 30min,
+   2h, 12h, 24h]` + desistido após 5 falhas + AuditLog forense +
+   evento `reconciliacao-desistido` + endpoint admin trigger manual
+   SUPER_ADMIN + 3 P1 + 5 P2 + 4 P3 sensatos APLICADOS dos 3
+   reviewers pesados.
+2. **Merge** `beb125c` — `--no-ff` na main.
+
+**Bloco 1 — ThrottlerGuard global** (D-novo-THROTTLER-APP-GUARD P1):
+- 2 tiers em `ThrottlerModule.forRoot`: `default` 100/min + `webhook`
+  600/min.
+- `ThrottlerGuard` em APP_GUARD ANTES do JwtAuthGuard (anti-burst em
+  rotas não-autenticadas).
+- 4 webhooks com `@SkipThrottle({default:true}) +
+  @Throttle({webhook:{limit:600,ttl:60000}})`: Asaas, BB, Sicoob,
+  WhatsApp.
+- Decisão Luciano Fase 1 Q1: teto ALTO (600/min) ao invés de
+  SkipThrottle total — mantém backstop anti-runaway sem quebrar
+  pagamento; 429 absorvido por retry+backoff do remetente.
+
+**Bloco 2 — Reconciliação contábil cron** (D-novo-RECONCILIACAO-
+CONTABIL-CRON P2):
+- Schema delta aditivo em ResgateRecibo (4 campos retry +
+  índice composto).
+- Cron `@Cron('*/15')` re-tenta `lancarResgatePix` em recibos
+  `PAGO_CREDITO_PENDENTE`.
+- Idempotência via `@@unique([origemTipo,origemId])` do
+  LancamentoCaixa (P1 fix Sprint C — substituiu `findFirst` soft
+  guard, fecha race window cron×webhook replay).
+- Backoff `[5min, 30min, 2h, 12h, 24h]` → desistido após 5 falhas.
+- Desistido dispara AuditLog forense + evento `cooper-token-resgate.
+  reconciliacao-desistido`.
+- Endpoint admin trigger manual `POST /cooper-token/admin/
+  reconciliacao/trigger` (SUPER_ADMIN, @AuditLog, @Throttle 3/min).
+- Decisão Luciano Fase 1 Q4: SEMPRE LIGADO em prod (sem gate
+  RECONCILIACAO_PRODUCAO_LIBERADO).
+- Escopo Sprint C (Q2): apenas ResgateRecibo. F2 catalogado
+  separado.
+
+**3 reviewers pesados** (0 P0, 5 P1, 17 P2, 11 P3 únicos):
+- `security-reviewer`: 0 P0, 2 P1, 9 P2, 5 P3.
+- `cooperebr-financeiro-token-reviewer`: 0 P0, 3 P1, 5 P2, 2 P3.
+- `cooperebr-multitenant-reviewer`: 0 P0, 0 P1, 3 P2, 4 P3.
+- Re-review do `cooperebr-orquestrador` APROVOU (P1.2 `@@unique` +
+  Throttler em APP_GUARD com webhooks tier 600 confirmados no
+  código; smoke C1+C2 verde).
+
+**3 P1 + 5 P2 + 4 P3 APLICADOS:**
+- P1.1 Backoff off-by-one (`BACKOFF_MINUTOS[novaTentativa-1]`; 1ª
+  falha agora 5min, era 30min — divergia da decisão Luciano).
+- P1.2 Idempotência via `@@unique([origemTipo,origemId])` do banco
+  (fecha race window cron×webhook replay).
+- P1.3 `reconciliacaoUltimaEm` setado no webhook (trilha auditável).
+- P2/P3: token webhook só por header (Asaas); `timingSafeEqual` em
+  BB/Sicoob/WA; valor arredondado no AuditLog metadata;
+  `asaasTransferId` truncado (LGPD); env guard prod no smoke C2;
+  emojis → tags nos logs; warn em PROD se TokenContabilService
+  faltar; warn em race detectada; +3 specs novos (10b, 10c, 12).
+
+**Specs**: 365/365 PASS em 24 suites (+3 novos cobrindo defense in
+depth e LGPD).
+
+**Smoke E2E** verde:
+- Smoke C1 throttler burst 5/5 PASS (default 429 no #101 + 4 webhooks
+  absorvem 200 burst).
+- Smoke C2 reconciliação 12/12 PASS (sucesso 1ª tentativa +
+  idempotência via @@unique + proximaEm futura skip + desistido skip
+  + AuditLog gravado).
+
+**3 débitos novos catalogados em `docs/debitos-tecnicos.md`** (todos
+P2, não-bloqueantes):
+- `D-novo-F2-RECONCILIACAO-CRON P2` (análogo F2 compra PJ).
+- `D-novo-RECONCILIACAO-DESISTIDO-LISTENER P2` (consumer do evento
+  `reconciliacao-desistido` → cria NotificacaoProativa).
+- `D-novo-RECONCILIACAO-RESETAR-ADMIN P2` (endpoint admin reset).
+
+**Caminho de ativação produção do saque colaborador comum (restrito a
+DESCONTO_FATURA) — AGORA COMPLETO em código:**
+- ✅ parecer (M40, 16/06).
+- ✅ Salvaguarda 1 (M42 — filtro origem).
+- ✅ Salvaguarda 4 (M41 — `PENDENTE_APROVACAO_COOP` obrigatório).
+- ✅ Salvaguarda 5 (M42 — disclaimer versionado).
+- ✅ D-novo-THROTTLER-APP-GUARD P1 (M43 — Sprint C Bloco 1).
+- ✅ D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M43 — Sprint C Bloco 2).
+- ⏳ parecer escrito do `cooperebr-analista-conformidade` confirmando.
+- ⏳ flag `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` em `.env` prod.
+
+S2 (ata assembleia) + S3 (parecer trabalhista) são **ações legais do
+Luciano** fora do path da ativação restrita.
+
+**Próximo passo único e claro:** Luciano decide — Sprint
+D-QUALIF-DECAY (próxima por padrão da fila, ~6-10h) OU Sprint
+Notificações Proativas (fecha D-novo-RECONCILIACAO-DESISTIDO-LISTENER
++ outros débitos antigos) OU Sprint Circuito de Emissão Completo
+(4 fases, resolve 2 P1 + 7 P2 catalogados M40) OU **iniciar processo
+de ativação produção do saque colaborador comum** (parecer escrito do
+analista-conformidade + flag em .env prod — nenhum código novo
+necessário).
+
+**Frase de retomada COMANDANTE** ver `## FRASE DE RETOMADA — próxima
+sessão Code` no fim deste documento.
+
+Detalhe: `docs/sessoes/2026-06-17-m43-sprint-c-hardening.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-17 (Code — M42 Filtro de Origem + Disclaimer Versionado FECHADO + merge na main)
 
 **Sessão Code dedicada — M42 entregue ponta-a-ponta.** Salvaguardas 1
@@ -2776,23 +2894,163 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    na lista de agents. Se não aparecer, parar e avisar.
 
 2. Rodar `git status --short`. Esperado pós-fechamento 17/06
-   (M42 fechado): main com 8 arquivos `M` em backend/src/concierge/*
+   (M43 fechado): main com 8 arquivos `M` em backend/src/concierge/*
    + backend/package.json + backend/package-lock.json — TERRITÓRIO
    COWORK, NÃO TOCAR. Último commit em main é o de fechamento desta
-   sessão (`docs(sessao): fechamento M42 — D2.1 Filtro Origem +
-   Disclaimer Versionado`). `git log origin/main..HEAD --oneline`
-   deve estar VAZIO. Branch `feature/d2-salvaguardas-origem`
-   preservada no origin (--no-ff merge `b65bcb3`, NÃO deletar).
+   sessão (`docs(sessao): fechamento M43 — Sprint C Hardening:
+   Throttler + Reconciliação Contábil`). `git log origin/main..HEAD
+   --oneline` deve estar VAZIO. Branches preservadas no origin (NÃO
+   deletar): `feature/d2-salvaguardas-origem` (M42, merge `b65bcb3`),
+   `feature/hardening-throttler-reconciliacao` (M43, merge `beb125c`).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
    é `next start` sob PM2 — toda mudança em web/ exige rebuild +
-   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Schema do
-   `DisclaimerSaque` + FK em `ResgateRecibo` JÁ APLICADO no banco
-   dev — NÃO RODAR `prisma db push` na próxima sprint a menos que
-   tenha schema delta novo.
+   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Schema delta M43
+   (4 campos `reconciliacao*` em `ResgateRecibo` + índice composto)
+   JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` na próxima
+   sprint a menos que tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: Luciano decide a próxima sprint
+PASSO 1 — Frase COMANDANTE: Luciano decide a próxima sprint (path da
+ativação produção do saque colaborador comum agora COMPLETO em código)
+
+M43 (17/06) FECHADO no main (merge --no-ff beb125c + push). Sprint C
+Hardening de Segurança entregue ponta-a-ponta: ThrottlerGuard global
+em APP_GUARD com 2 tiers (default 100/min + webhook 600/min nos 4
+webhooks Asaas/BB/Sicoob/WhatsApp) + cron */15 de reconciliação
+contábil pra recibos PAGO_CREDITO_PENDENTE com backoff [5min, 30min,
+2h, 12h, 24h] + desistido após 5 falhas + AuditLog forense + evento
+emitido + endpoint admin trigger manual. 2 commits na feature branch
+(2b2af66 + beb125c merge). 365/365 specs verde (+3 novos), smoke C1
+throttler burst 5/5 + smoke C2 reconciliação 12/12 PASS.
+
+3 reviewers pesados (0 P0, 5 P1, 17 P2, 11 P3 únicos): 3 P1 + 5 P2 +
+4 P3 sensatos aplicados. Re-review do orquestrador APROVOU (P1.2
+@@unique([origemTipo,origemId]) idempotência via banco + ThrottlerGuard
+em APP_GUARD com webhooks tier 600 confirmados).
+
+⚠️ Próxima sprint a Luciano definir. 4 candidatos na fila:
+
+OPÇÃO A — Iniciar processo de ativação produção do saque colaborador
+  comum (DESCONTO_FATURA apenas)
+  Path agora COMPLETO em código (✅ S1 M42, ✅ S4 M41, ✅ S5 M42,
+  ✅ Throttler M43, ✅ Reconciliação cron M43). Falta apenas:
+    1. Solicitar parecer escrito do cooperebr-analista-conformidade
+       confirmando as 4 salvaguardas + 2 hardenings implementadas.
+    2. Setar SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true em .env prod.
+  ZERO código novo necessário. Sessão de produto + 1 deploy.
+
+OPÇÃO B — Sprint D-QUALIF-DECAY (próxima por padrão da fila, ~6-10h)
+  Decaimento da qualificação no Clube com inatividade prolongada
+  (espelha aplicarOxidacao do token). Catalogado desde M40.
+
+OPÇÃO C — Sprint Notificações Proativas
+  Fecha D-novo-RECONCILIACAO-DESISTIDO-LISTENER P2 (consumer do
+  evento `cooper-token-resgate.reconciliacao-desistido` criando
+  NotificacaoProativa) + outros débitos antigos de notificação.
+
+OPÇÃO D — Sprint Circuito de Emissão Completo (4 fases: contábil →
+  notificações → emissão unificada → compra conveniado + auto-
+  distribuição). Resolve 2 P1 + 7 P2 catalogados M40.
+
+ENTREGA M43:
+
+- Bloco 1 ThrottlerGuard:
+  - 2 tiers em ThrottlerModule.forRoot ([default:100/min,
+    webhook:600/min]).
+  - ThrottlerGuard em APP_GUARD ANTES do JwtAuthGuard (anti-burst
+    em /auth/login).
+  - 4 webhooks com @SkipThrottle({default:true}) +
+    @Throttle({webhook:{limit:600,ttl:60000}}): Asaas, BB, Sicoob,
+    WhatsApp.
+  - Decisão Luciano Fase 1 Q1: teto ALTO sem skip total — backstop
+    anti-runaway.
+- Bloco 2 Reconciliação:
+  - Schema delta aditivo em ResgateRecibo (4 campos retry + índice
+    composto) — `prisma db push` aplicado.
+  - Cron @Cron('*/15') reconciliarContabilPendentes — busca,
+    re-tenta lancarResgatePix, atualiza estado.
+  - Backoff [5min, 30min, 2h, 12h, 24h] → desistido após 5 falhas.
+  - Desistido: AuditLog forense (usuarioId='SYSTEM_CRON',
+    usuarioPerfil='SYSTEM') + emit evento `cooper-token-resgate.
+    reconciliacao-desistido`.
+  - Endpoint admin trigger manual POST /cooper-token/admin/
+    reconciliacao/trigger (SUPER_ADMIN, @AuditLog, @Throttle 3/min).
+  - Decisão Luciano Q4: SEMPRE LIGADO em prod (sem gate
+    RECONCILIACAO_PRODUCAO_LIBERADO).
+  - Escopo Q2: apenas ResgateRecibo. F2 catalogado separado.
+- Webhook PAGO_CREDITO_PENDENTE: agora seta os 4 campos retry ao
+  virar PENDENTE (cooper-token.service.ts:~2945).
+- Idempotência via @@unique([origemTipo,origemId]) do LancamentoCaixa
+  (P1.2 fix — substituiu findFirst soft guard).
+
+3 P1 + 5 P2 + 4 P3 sensatos aplicados (dos 5 P1, 17 P2, 11 P3
+únicos consolidados dos 3 reviewers):
+- P1.1 Backoff off-by-one (BACKOFF[novaTentativa-1]; 1ª falha 5min).
+- P1.2 Idempotência via @@unique de banco (fecha race cron×webhook).
+- P1.3 reconciliacaoUltimaEm setado no webhook (trilha auditável).
+- P2: token webhook só por header (Asaas); timingSafeEqual
+  (BB/Sicoob/WA); valor arredondado AuditLog; asaasTransferId
+  truncado (LGPD); env guard prod no smoke C2.
+- P3: emojis → [OK]/[WARN]/[ERR] (parseável); warn em PROD se
+  TokenContabilService faltar; warn em race detectada; +3 specs
+  novos (10b/10c/12).
+
+CARRY-OVERS catalogados:
+
+3 débitos novos do Sprint C (todos P2, não-bloqueantes):
+- D-novo-F2-RECONCILIACAO-CRON P2 (análogo F2 compra PJ).
+- D-novo-RECONCILIACAO-DESISTIDO-LISTENER P2 (consumer do evento;
+  AuditLog v1 cobre alerta; listener entra sprint Notificações
+  Proativas).
+- D-novo-RECONCILIACAO-RESETAR-ADMIN P2 (endpoint admin pra resetar
+  reconciliacaoDesistido em recibo curado; ~30min Code).
+
+Caminho de ativação produção do saque colaborador comum (restrito a
+DESCONTO_FATURA) — TODOS os hardenings de código implementados:
+  ✅ parecer (16/06); ✅ Salvaguarda 1 (M42 — filtro origem);
+  ✅ Salvaguarda 4 (M41 — PENDENTE_APROVACAO_COOP obrigatório);
+  ✅ Salvaguarda 5 (M42 — disclaimer versionado);
+  ✅ D-novo-THROTTLER-APP-GUARD P1 (M43);
+  ✅ D-novo-RECONCILIACAO-CONTABIL-CRON P2 (M43);
+  ⏳ parecer escrito do cooperebr-analista-conformidade confirmando;
+  ⏳ SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true em .env prod.
+
+S2 (ata assembleia) + S3 (parecer trabalhista) NÃO são sprint de
+código — são ações legais do Luciano fora do path da ativação
+restrita.
+
+PROTOCOLO próxima sprint (independente de qual Luciano escolha):
+
+- Branch dedicada como 1º comando (Decisão Luciano 13/06).
+- Fase 1 read-only OBRIGATÓRIA (Decisão 23). Pausa pro OK antes de
+  Fase 2.
+- Reviewers pesados ANTES do smoke (padrão M39/M41/M42/M43).
+- Re-review do orquestrador após fixes.
+- Smoke E2E real com contatos whitelist.
+- Merge --no-ff preservando feature branch no origin.
+
+PRÉ-REQUISITOS LEITURA:
+1. docs/sessoes/2026-06-17-m43-sprint-c-hardening.md (esta sessão).
+2. docs/sessoes/2026-06-17-m42-d2.1-filtro-origem-disclaimer-
+   versionado.md (M42).
+3. docs/sessoes/2026-06-16-m41-saque-pix-colaborador.md (M41 base).
+4. docs/relatorios/analise-conformidade-2026-06-16-saque-colaborador-
+   d2.md (parecer fonte das 5 salvaguardas).
+5. docs/debitos-tecnicos.md — 3 débitos novos do Sprint C +
+   D-novo-RECONCILIACAO-CONTABIL-CRON e D-novo-THROTTLER-APP-GUARD
+   marcados ✅ RESOLVIDOS Sprint C.
+6. docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md (§4#1 invariante
+   Passivo == Σ saldos × face — Sprint C aceita janela de degradação
+   temporária com cura via cron).
+7. CLAUDE.md (regras + disciplina de análise modelo canônico primeiro
+   + disclaimer versionado).
+
+═══ FIM DA FRASE M43 (sessão 17/06 — Sprint C Hardening entregue + merge na main) ═══
+
+═══ FRASE ARQUIVADA M42 (17/06 dia — Sprint D2.1 v2 entregue) ═══
+
+PASSO 1 OBSOLETO — Frase COMANDANTE M42: Luciano decide a próxima sprint
 
 M42 (17/06) FECHADO no main (merge --no-ff b65bcb3 + push). Salvaguarda
 1 (filtro de origem) + Salvaguarda 5 (disclaimer versionado) do parecer
