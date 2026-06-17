@@ -10,6 +10,7 @@ import {
   HttpCode,
   BadRequestException,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { AsaasService } from './asaas.service';
 import { Roles } from '../auth/roles.decorator';
 import { TenantResource } from '../auth/tenant-resource.decorator';
@@ -138,15 +139,28 @@ export class AsaasController {
 
   // ─── Webhook (público — sem JWT) ─────────────────────────
 
+  // Sprint C Hardening (17/06/2026) — tier `webhook` 600/min.
+  // SkipThrottle({default:true}) desativa o tier default 100/min
+  // (que se aplicaria automaticamente como o mais restritivo).
+  // Restam só o tier `webhook` 600/min do forRoot — Asaas pode
+  // mandar burst em apuração massa de pagamentos (centenas de
+  // eventos quando cobranças em lote são pagas).
+  // Auth via `asaas-access-token` header validada dentro do
+  // service. 429 absorvido pelo retry+backoff do Asaas +
+  // idempotência do processarWebhook (eventId UNIQUE no DB).
   @Public()
+  @SkipThrottle({ default: true })
+  @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook')
   @HttpCode(200)
   processarWebhook(
     @Body() payload: any,
     @Headers('asaas-access-token') headerToken: string,
-    @Body('token') bodyToken: string,
   ) {
-    const token = headerToken || bodyToken || '';
-    return this.asaasService.processarWebhook(payload, token);
+    // P2 review security Sprint C (17/06): token aceito SOMENTE no header
+    // `asaas-access-token`. Removido fallback `@Body('token')` — Asaas
+    // envia exclusivamente via header; aceitar body abria risco de log
+    // de body capturar token + superfície de injeção via parser.
+    return this.asaasService.processarWebhook(payload, headerToken ?? '');
   }
 }

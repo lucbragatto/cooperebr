@@ -350,6 +350,27 @@ export class CooperTokenController {
     return { message: 'Apuração de excedentes executada com sucesso' };
   }
 
+  // Sprint C Hardening (17/06/2026) — D-novo-RECONCILIACAO-CONTABIL-CRON.
+  // Trigger manual do cron de reconciliação. Útil pra:
+  //  - Ops: SUPER_ADMIN força reconciliação imediata em emergência sem
+  //    esperar o próximo ciclo de 15min.
+  //  - Smoke E2E: prova que recibos PAGO_CREDITO_PENDENTE são
+  //    re-processados corretamente.
+  //
+  // SUPER_ADMIN-only (operação cross-tenant pra cura). @AuditLog
+  // rastreável. @Throttle agressivo (3/min) pra evitar abuso.
+  @Roles(SUPER_ADMIN)
+  @AuditLog({
+    acao: 'cooper-token.reconciliacao.trigger-manual',
+    recurso: 'ResgateRecibo',
+  })
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @Post('admin/reconciliacao/trigger')
+  async triggerReconciliacao() {
+    await this.cooperTokenJob.reconciliarContabilPendentes();
+    return { message: 'Ciclo de reconciliação contábil disparado.' };
+  }
+
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
   @Post('gerar-qr-pagamento')
   async gerarQrPagamento(
