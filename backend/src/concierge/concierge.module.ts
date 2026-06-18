@@ -13,6 +13,7 @@ import { DetectorTese6IcmsTusdTeSobreScee } from './detectores/detector-tese6-ic
 import { DetectorTese4Gerar } from './detectores/detector-tese4-gerar';
 import { DetectorCdeEscassezHidrica } from './detectores/detector-cde-escassez-hidrica';
 import { DetectorIcmsGrossUp } from './detectores/detector-icms-gross-up';
+import { DetectorDemandaNaoUtilizada } from './detectores/detector-demanda-nao-utilizada';
 import { DetectoresRegistry } from './detectores/detectores.registry';
 
 /**
@@ -42,6 +43,7 @@ import { DetectoresRegistry } from './detectores/detectores.registry';
     DetectorTese4Gerar,
     DetectorCdeEscassezHidrica,
     DetectorIcmsGrossUp,
+    DetectorDemandaNaoUtilizada,
     DetectoresRegistry,
   ],
   controllers: [ConciergeController],

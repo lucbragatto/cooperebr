@@ -88,6 +88,15 @@ const PADROES_EDP_ES: PadraoRubrica[] = [
     tipo: 'DEMANDA_ULTRAPASSAGEM',
   },
 
+  // ─── Demanda Nao Utilizada (15/06/2026 - antes do regex generico) ───
+  // Aparece em Grupo A modalidade Verde/Azul quando demanda medida < contratada.
+  // Cobrada com PIS/COFINS mas SEM ICMS (a propria EDP reconhece ausencia de
+  // fato gerador). Caso visto: Consorcio Sinergia Ambiental 12,64 kW R$ 418,33.
+  {
+    regex: /Demanda\s+N[aã]o\s+Utilizada/i,
+    tipo: 'DEMANDA_NAO_UTILIZADA',
+  },
+
   // ─── Demanda contratada ───
   {
     regex: /^Demanda\b/i,

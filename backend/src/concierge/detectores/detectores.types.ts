@@ -15,7 +15,8 @@ export type CodigoPadrao =
   | 'TESE_4_ICMS_RUBRICAS_EXCLUIDAS_GERAR'
   | 'TESE_6_ICMS_TUSD_TE_SOBRE_SCEE'
   | 'TESE_CDE_ESCASSEZ_HIDRICA'
-  | 'TESE_ICMS_GROSS_UP';
+  | 'TESE_ICMS_GROSS_UP'
+  | 'TESE_DEMANDA_NAO_UTILIZADA';
 
 /**
  * Sinal do indebito encontrado pelo detector.

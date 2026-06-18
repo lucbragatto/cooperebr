@@ -445,6 +445,36 @@ Detalhe: `docs/sessoes/2026-06-16-d2.1-em-progresso.md`.
 
 ---
 
+## ONDE PARAMOS — 2026-06-15 noite (Cowork — M37: Parecer Jurídico Tributário + Teses 9 e 10 + Detector DNU + Seções IX e X)
+
+**Sessão Cowork maratona ~10h.** Entregou pacote técnico-jurídico massivo:
+
+- **Detector Demanda Não Utilizada (DNU)** implementado no Concierge (8 detectores ativos)
+- **Refinamento Tese 4 GERAR** (filtro `ehUsina` exigindo rubrica TUSD_G — só geradoras)
+- **11 faturas validadas** (Sinergia + CUSDs CoopereBR I+II + EXFISHES + 7 outras): R$ 25.122/mês = **R$ 1.884.153 em 60m+SELIC** mapeados
+- **Parecer jurídico-tributário formal** (16k palavras) em `docs/concierge/pareceres/2026-06-15-parecer-tecnico-tributario-completo.md`
+- **Descoberta crítica do Luciano** via 4 faturas suas: alíquotas PIS/COFINS variando mês-a-mês (DEZ/25: 4,90% → FEV/26: 7,07% → MAR/26: 6,40% → ABR/26: 5,26%) — provoca DUAS teses novas
+- **Tese 9 (anti-isonomia inter-cliente)** + **Tese 10 (variabilidade temporal)** catalogadas
+- **Adendo extenso ao parecer** (~20k palavras) em `docs/concierge/pareceres/2026-06-15-adendo-tese9-aliquotas-pis-cofins.md` com:
+  - Seções I-VI: Tese 9
+  - Seção VII-bis: Unificação UCs Geradoras como Bloco
+  - Seção VII-ter: Tese 10 (variabilidade temporal)
+  - Seção IX: Cumulatividade + 3 cenários (PF / Lucro Presumido / Lucro Real)
+  - Seção X: Legitimidade ativa individualizada por tese + estratégia 5 ações
+- **Insight estratégico decisivo**: Cliente Lucro Real (EXFISHES, Sinergia provável) pode PERDER ganhando Tese 3 (estorno de crédito 9,25%) — análise EFD-Contribuições obrigatória antes de ajuizar
+- **Configuração processual ótima** definida: 5 ações (2 estaduais ICMS + 2 federais PIS/COFINS + 1 coletiva)
+- **Recuperação esperada**: R$ 297k (PF/LP — limpa) até R$ 822k (contingente LR após auditoria)
+
+**6 decisões D15/06-1..6 catalogadas.**
+
+**Frase de retomada COMANDANTE pra próxima Code/Cowork:**
+
+> "Próximo passo: implementar Tese 9 e Tese 10 como detectores algorítmicos no `DetectoresRegistry`. Criar `backend/src/concierge/detectores/detector-tese9-anti-isonomia.ts` (compara alíquota da fatura vs mediana do grupo tarifário/distribuidora — gatilho desvio > 0,5%) e `detector-tese10-variabilidade-temporal.ts` (compara série histórica de alíquotas do mesmo cooperado — dispara se variação > 0,5% entre meses consecutivos sem alteração legislativa). Adicionar códigos `TESE_9_ANTI_ISONOMIA_PIS_COFINS` e `TESE_10_VARIABILIDADE_TEMPORAL` em `detectores.types.ts`. Registrar no module + registry. Em paralelo: solicitar EFD-Contribuições da EXFISHES e Sinergia pra determinar regime (LR ou LP) — pode anular Tese 3 R$ 711k da EXFISHES se confirmado creditamento integral. Multi-adapter ainda pendente do dia 14 (17 ELFSM parse falhou em `processar-pasta-pdfs-concierge.ts`). Gerar DOCX consolidado parecer+adendo via skill `docx`."
+
+**Histórico de sessões Cowork anteriores:**
+
+---
+
 ## ONDE PARAMOS — 2026-06-14 noite (Cowork — M36 completo: Pipeline OCR + Bug Tese 3 + 3 detectores novos + R$ 636k mapeado)
 
 **Sessão Cowork maratona ~7h (manhã+tarde+noite).** Entregou:

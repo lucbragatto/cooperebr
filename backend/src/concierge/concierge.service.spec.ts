@@ -1,3 +1,27 @@
+/**
+ * Stub do @prisma/client antes de qualquer import que dependa dele.
+ *
+ * Justificativa: o cliente Prisma gerado em `node_modules/.prisma/client/`
+ * pode ficar dessincronizado com o schema (ex.: esqueleto C8 adicionou
+ * model LeadConcierge mas `prisma generate` nao foi rodado ainda neste
+ * sandbox). Como esses specs sao puramente unitarios e mockam `prisma`
+ * via Jest, o cliente gerado nao precisa estar saudavel para os testes
+ * exercitarem a logica do service. O stub abaixo evita que ts-jest tente
+ * carregar o arquivo gerado.
+ */
+jest.mock('@prisma/client', () => ({
+  PrismaClient: class MockPrismaClient {
+    $extends(): unknown { return this; }
+    async $connect(): Promise<void> {}
+    async $disconnect(): Promise<void> {}
+  },
+  Prisma: {
+    defineExtension: (ext: unknown): unknown => ext,
+    sql: (..._args: unknown[]): unknown => ({}),
+    raw: (s: unknown): unknown => s,
+  },
+}));
+
 import { ConciergeService } from './concierge.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EdpEsFaturaAdapter } from './fatura-canonica/edp-es.adapter';

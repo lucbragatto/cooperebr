@@ -11,6 +11,7 @@ import { DetectorTese6IcmsTusdTeSobreScee } from './detector-tese6-icms-scee';
 import { DetectorTese4Gerar } from './detector-tese4-gerar';
 import { DetectorCdeEscassezHidrica } from './detector-cde-escassez-hidrica';
 import { DetectorIcmsGrossUp } from './detector-icms-gross-up';
+import { DetectorDemandaNaoUtilizada } from './detector-demanda-nao-utilizada';
 
 /**
  * Resultado consolidado de TODOS os detectores rodando sobre uma fatura.
@@ -51,8 +52,9 @@ export class DetectoresRegistry {
     tese4: DetectorTese4Gerar,
     cde: DetectorCdeEscassezHidrica,
     grossUp: DetectorIcmsGrossUp,
+    demandaNaoUtil: DetectorDemandaNaoUtilizada,
   ) {
-    this.detectores = [tema69, tese3, tese2, tese6, tese4, cde, grossUp];
+    this.detectores = [tema69, tese3, tese2, tese6, tese4, cde, grossUp, demandaNaoUtil];
   }
 
   /**

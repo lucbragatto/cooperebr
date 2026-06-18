@@ -17,6 +17,11 @@ import type { DistribuidoraEnum } from '@prisma/client';
  * TE                    - Tarifa de Energia (consumo)
  * TUSD_G                - TUSD na geracao (Demanda Geracao) - Tema 176 STF
  * DEMANDA_CONTRATADA    - Demanda contratada normal (Tese 4 GERAR)
+ * DEMANDA_NAO_UTILIZADA - Demanda contratada nao medida. Cobrada com
+ *                         PIS/COFINS mas sem ICMS (a propria fatura
+ *                         reconhece que nao houve fato gerador completo).
+ *                         Catalogada em 15/06/2026 apos auditoria do
+ *                         Consorcio Sinergia Ambiental (Tese Demanda Nao Utilizada).
  * DEMANDA_ULTRAPASSAGEM - Ultrapassagem de demanda (Tese 4 GERAR)
  * DEMANDA_REATIVA_EXC   - Demanda Reativa Excedente (DRE) - Tese 4 GERAR
  * ENERGIA_REATIVA_EXC   - Energia Reativa Excedente (ERE) - Tese 4 GERAR
@@ -30,6 +35,7 @@ export type TipoRubricaCanonica =
   | 'TE'
   | 'TUSD_G'
   | 'DEMANDA_CONTRATADA'
+  | 'DEMANDA_NAO_UTILIZADA'
   | 'DEMANDA_ULTRAPASSAGEM'
   | 'DEMANDA_REATIVA_EXC'
   | 'ENERGIA_REATIVA_EXC'
