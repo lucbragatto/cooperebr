@@ -445,6 +445,29 @@ Detalhe: `docs/sessoes/2026-06-16-d2.1-em-progresso.md`.
 
 ---
 
+## ONDE PARAMOS — 2026-06-18 (Cowork — M38: Finalização Parecer Concierge + DOCX/PDF + Versão Anonimizada LGPD)
+
+**Sessão Cowork de empacotamento e entrega final.** Entregou:
+
+- **Sumário Executivo** (3 pp) — `docs/concierge/pareceres/2026-06-18-sumario-executivo.md`
+- **Versão IDENTIFICADA** consolidada — `PARECER-CONCIERGE-COOPEREBR-FINAL.docx/.pdf` (88 pp, 50k palavras, capa + sumário + 4 partes) no OneDrive
+- **Versão ANONIMIZADA LGPD** — `PARECER-CONCIERGE-ANONIMIZADO-LGPD.docx/.pdf` (92 pp com Aviso LGPD formal de 2 pp + 15 categorias de dados anonimizados) no OneDrive
+- **Fonte MD anonimizada** commitada (reproduzível) — `docs/concierge/pareceres/2026-06-18-parecer-anonimizado-lgpd.md`
+- Pipeline: Markdown master → Pandoc DOCX → LibreOffice PDF; anonimização via script Python com 80+ regex em 3 passes; reconciliação zero ocorrências residuais de nomes/CPFs/CNPJs/endereços/emails
+
+**3 decisões D18/06-1..3 catalogadas:**
+1. Estratégia de 2 pareceres em paralelo (identificada + anonimizada)
+2. Binários DOCX/PDF ficam no OneDrive, fonte MD no Git
+3. Anonimização preserva cidade/UF/concessionária (necessários à jurisdição/info pública)
+
+**Frase de retomada COMANDANTE pra próxima Code/Cowork:**
+
+> "Encaminhar `PARECER-CONCIERGE-COOPEREBR-FINAL.docx` (versão identificada) ao advogado tributarista parceiro com cover letter + NDA. Em paralelo, retomar a implementação dos detectores Tese 9 e Tese 10 no `DetectoresRegistry` (frase COMANDANTE original do 15/06): criar `backend/src/concierge/detectores/detector-tese9-anti-isonomia.ts` e `detector-tese10-variabilidade-temporal.ts`. Solicitar EFD-Contribuições dos clientes Lucro Real (provável [Cliente E] e [Parceiro F]) — pode anular Tese 3 em milhões. Multi-adapter pendente do 14/06 (17 ELFSM parse falhou)."
+
+**Histórico de sessões Cowork anteriores:**
+
+---
+
 ## ONDE PARAMOS — 2026-06-15 noite (Cowork — M37: Parecer Jurídico Tributário + Teses 9 e 10 + Detector DNU + Seções IX e X)
 
 **Sessão Cowork maratona ~10h.** Entregou pacote técnico-jurídico massivo:
