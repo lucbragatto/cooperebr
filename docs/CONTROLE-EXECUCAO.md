@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-16 — M39 Emissão Admin em Lote + Estorno COMPLETO** (Sprint Clube Unificado P1). **12 commits trabalho + 1 merge --no-ff** no main (`db3c545..d1f6a6d`). Substitui caminho admin single-target de `enviarTokensAdmin` (@deprecated, mantido por COMPAT do ramo cooperado→cooperado) por novo endpoint `POST /cooper-token/admin/emitir-lote` em lote via helper `executarMassWrite`. Schema delta aditivo: 2 enums novos (`BONIFICACAO_ADMIN` + `ESTORNO_BONIFICACAO_ADMIN`) + conta contábil `5.1.03 "Despesa de Bonificação CooperToken"`. 2 templates contábeis novos com **bypass intencional do `COOPER_TOKEN_EVENTS.EMITIDO`** pra não disparar o template errado da F1 lancarEmissaoFaturaCheia. Frontend `/dashboard/cooper-token/enviar` REDESENHADO em 2 etapas (seleção + confirmação) com filtro opcional por convênio + tabela editável + prévia COMPLETA antes do OTP. Tela nova `/dashboard/cooper-token/lotes-emitidos` com modal de estorno (confirmação dupla + motivo ≥10 chars + reversão atômica saldo+contábil+ledger ESTORNO). **2 rodadas de reviewers pesados** (financeiro-token bloqueou com 3 P1 + multitenant aprovou com 1 P2 → todos fixados pré-smoke). **Re-review do orquestrador pegou 2 P1 RESIDUAIS** (helper `:256` chumbado escapou do replace_all + guard de integridade ausente no estorno) → fixados antes de push. Smoke E2E real **PASS 6/6** com gate inegociável respeitado (1 token + estorno imediato, NUNCA emissão real Santi). Suite **311/311 verde** (cooper-token 286 + mass-write 25). **D-novo-EMISSAO-ADMIN-CONTABIL P2** catalogado pra sprint contábil dedicada futura (4 problemas pré-existentes no token-contábil: tipo conta `5.1.02` DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem `LancamentoCaixa`, depende de D3 Modelo C preço custo×venda). Detalhe: `docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md`.
+> Última atualização: **2026-06-18 noite (Cowork) — M39 Concierge: Refutação Relatório Externo + Parecer V2 + Sumário Executivo V2**. Sessão de análise crítica disparada por relatório externo "SISGD-Concierge v1.1" que propunha recalibração radical do parecer 15/06. Análise ponto a ponto identificou **6 contribuições válidas INCORPORADAS** (ADI 7.195/DF rebaixando Teses 2 e 6 pra Médio-Alto; ADIs FCP 7.077/7.634/7.716 como reforço sistêmico não fundamento direto; segregação Tese 6 por perfil geradoras×consumidores; Tema 986/STJ como "distinguishing consolidado" não "ressalva expressa"; alerta Lucro Real reforçado; checklist procedimental) e **6 proposições excessivas REFUTADAS** (extinção das Teses 9/10 confunde planos da incidência — CTN art. 97 IV; substituição das teses tributárias por duplo custeio regulatório ignora planos distintos cumulativos; expurgo de CDE e Gross-Up renuncia pedidos subsidiários; afastamento da Tese 6 das piloto perde R$ 525k do [Cliente E]; cálculo "-3,99% prejuízo líquido cash" matematicamente incorreto — cliente LR credita 9,25% sobre VALOR PAGO não sobre o que EDP recolheu; auto-titulação como v1.1 factualmente incorreta — oficial é v1.0). Portfólio MANTIDO em 10 teses tributárias + **Tese 11 (Duplo Custeio Regulatório TUSD-G + Fio B) ACRESCIDA** em PARALELO via consulta ANEEL. Magnitude econômica preservada: R$ 1.344.522 em 60m+SELIC. Recuperação realista recalibrada: **R$ 350.000–R$ 460.320** (de R$ 460.320 original). 3 NOVOS documentos emitidos preservando antigos: `docs/concierge/pareceres/2026-06-18-refutacao-relatorio-sisgd-v1-1.md` + `docs/concierge/pareceres/2026-06-18-parecer-v2-patches-incorporacao.md` + `docs/concierge/pareceres/2026-06-18-sumario-executivo-v2.md`. 5 decisões D18/06-4..8 catalogadas (rejeição substituição radical; incorporação 6 patches; refutação matemática "-3,99%"; catalogação Tese 11 regulatória; preservação obrigatória versões antigas). Detalhe: `docs/sessoes/2026-06-18-noite-refutacao-relatorio-externo-parecer-v2.md`.
+
+> Histórico: **2026-06-16 — M39 Emissão Admin em Lote + Estorno COMPLETO** (Sprint Clube Unificado P1). **12 commits trabalho + 1 merge --no-ff** no main (`db3c545..d1f6a6d`). Substitui caminho admin single-target de `enviarTokensAdmin` (@deprecated, mantido por COMPAT do ramo cooperado→cooperado) por novo endpoint `POST /cooper-token/admin/emitir-lote` em lote via helper `executarMassWrite`. Schema delta aditivo: 2 enums novos (`BONIFICACAO_ADMIN` + `ESTORNO_BONIFICACAO_ADMIN`) + conta contábil `5.1.03 "Despesa de Bonificação CooperToken"`. 2 templates contábeis novos com **bypass intencional do `COOPER_TOKEN_EVENTS.EMITIDO`** pra não disparar o template errado da F1 lancarEmissaoFaturaCheia. Frontend `/dashboard/cooper-token/enviar` REDESENHADO em 2 etapas (seleção + confirmação) com filtro opcional por convênio + tabela editável + prévia COMPLETA antes do OTP. Tela nova `/dashboard/cooper-token/lotes-emitidos` com modal de estorno (confirmação dupla + motivo ≥10 chars + reversão atômica saldo+contábil+ledger ESTORNO). **2 rodadas de reviewers pesados** (financeiro-token bloqueou com 3 P1 + multitenant aprovou com 1 P2 → todos fixados pré-smoke). **Re-review do orquestrador pegou 2 P1 RESIDUAIS** (helper `:256` chumbado escapou do replace_all + guard de integridade ausente no estorno) → fixados antes de push. Smoke E2E real **PASS 6/6** com gate inegociável respeitado (1 token + estorno imediato, NUNCA emissão real Santi). Suite **311/311 verde** (cooper-token 286 + mass-write 25). **D-novo-EMISSAO-ADMIN-CONTABIL P2** catalogado pra sprint contábil dedicada futura (4 problemas pré-existentes no token-contábil: tipo conta `5.1.02` DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem `LancamentoCaixa`, depende de D3 Modelo C preço custo×venda). Detalhe: `docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md`.
 
 > Histórico: **2026-06-15 — M38 Fatia A v2 (CTK→CooperTokens + Voltar ao Clube) + Fix Santi 403 (Track B) + Portal Conveniada (Track B.2)**. **11 commits trabalho + 3 merges --no-ff no main** (`821a9dd..87ae6f7`). Fatia A v2 fechou nomenclatura em 12 spots + botão "Voltar ao Clube" em 11 telas do hub (Fatia A v1 stale descartada). Track B corrigiu bug crítico empresa_conveniada distribuir tokens (guard usava `conveniadoId` legado em vez de `pagadorCooperadoId`) — desbloqueio Santi em produção. Track B.2 corrigiu portal `meusConvenios + dashboardConveniado` (OR cobre legado+novo + `cooperativaId` explícito anti-IDOR). 2 rodadas do `multitenant-reviewer` no Track B + 2 no Track B.2 (1 bloqueio P1 fechado pré-merge). Smoke E2E real Santi 2/2 (distribuir) + 3/3 (portal) PASS. 3 débitos novos catalogados (D-novo-CONVENIO-CONVENIADO-LEGADO P3 expandido com audit dos 5 spots + D-novo-CONVENIO-ADMIN-IDOR-UPDATE-REMOVE P2 + D-novo-CONVENIOS-PORTAL-SPECS P3). Sessão Cowork paralela: 3 relatórios novos (`ANALISE-CONVENIO-TOKEN-CLUBE`, `GAP-MAP-CONVENIO-MODELO-C`, `FLUXO-EMISSAO-TOKEN-CONVENIO`) — pré-requisito leitura próxima sessão. Detalhe: `docs/sessoes/2026-06-15-m38-fatia-a-v2-fix-santi-403-e-portal.md`.
 
@@ -442,6 +444,64 @@ Detalhe: `docs/sessoes/2026-06-16-d2.1-em-progresso.md`.
 **Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE RETOMADA — próxima sessão Code` no fim deste documento (linha ~2476). Aponta pra **Fatia A v2 — CTK → CooperToken nomenclatura UI** (re-feita em branch nova `feature/fatia-a-v2`; a antiga `feature/fatia-a` ficou STALE atravessando a Sprint Higiene que moveu/deletou os arquivos, NÃO MERGEAR — ressuscita zumbis `/parceiro/*`). **12 ocorrências de `\bCTK\b` em 6 arquivos** mapeadas no main pós-Higiene: `conveniada/.../distribuir-tokens` (3), `estabelecimento/{receber,recebimentos,validar}` (5), `dashboard/cooper-token/enviar` (3), `dashboard/cooper-token-parceiro` (1). **Lição catalogada:** não deixar branch pronta parada atravessando refactor estrutural — mergear na hora OU rebasear antes que envelheça.
 
 **Detalhe:** `docs/sessoes/2026-06-14-higiene-rotas-blocos-B-E.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-18 noite (Cowork — M39: Refutação Relatório Externo + Parecer V2 + Sumário V2)
+
+**Sessão Cowork crítica de análise e contra-argumentação.** Disparada quando Luciano recebeu relatório externo "SISGD-Concierge v1.1" propondo recalibração radical do parecer 15/06 — reduzindo portfólio a 1 tese tributária (Tese 2) + 1 tese regulatória (duplo custeio) + alertas Lucro Real, com perda potencial de R$ 596k em 60m+SELIC mapeado.
+
+**Análise sistemática em 3 blocos**:
+
+- **Bloco A — 6 contribuições válidas INCORPORADAS via patches P-01..P-06**:
+  - P-01: ADI 7.195/DF (suspensão liminar LC 87/96 art. 3º X) rebaixa Teses 2 e 6 pra **Médio-Alto** (de Sólido)
+  - P-02: ADIs FCP 7.077/7.634/7.716 como **reforço sistêmico**, não fundamento direto (modulação pro-Fisco 1º.01.2027)
+  - P-03: Tese 6 **segregada por perfil**: geradoras (ato cooperativo + Lei GERAR) × consumidores (distinguishing Tema 986)
+  - P-04: Tema 986/STJ tratado como **distinguishing técnico-fático consolidado** (TJ-MT, TJ-RJ, TJ-SP), não "ressalva expressa do dispositivo"
+  - P-05: **Tese 11 (Duplo Custeio Regulatório TUSD-G + Fio B na GD III)** ACRESCIDA em PARALELO via consulta ANEEL → ACP federal
+  - P-06: **Anexo Procedimental I** (Checklist de Validação Prévia) consolidado
+
+- **Bloco B — 6 proposições excessivas REFUTADAS**:
+  - B.1: Teses 9 e 10 NÃO são "artefato aritmético do gross-up descartável" — confusão entre plano da contabilidade interna (não-cumulatividade) × plano da incidência (CTN art. 97 IV exige LEI para alíquota repassada; STJ Tema 537 inverte ônus em favor do consumidor)
+  - B.2: Duplo custeio NÃO substitui Teses 2/4/6 — planos distintos CUMULATIVOS (regulatório vs tributário)
+  - B.3: CDE e Gross-Up NÃO são "expurgáveis" — são pedidos subsidiários (CPC art. 326)
+  - B.4: Tese 6 NÃO pode ser afastada das ações-piloto — R$ 525.646 do [Cliente E] em 60m+SELIC = 39,3% do indébito mapeado
+  - B.5: Fórmula "-3,99% prejuízo líquido cash" do Lucro Real DOGMATICAMENTE INCORRETA — cliente LR credita 9,25% sobre VALOR PAGO da fatura (insumo), não sobre o que EDP recolheu (5,26% após créditos internos); são operações INDEPENDENTES em planos distintos
+  - B.6: Auto-titulação "SISGD v1.1" factualmente incorreta — plataforma oficial está em v1.0
+
+- **Bloco C — Análise das motivações implícitas**: relatório direciona produto para 1-2 teses simplificadas (favorece codificação técnica simples + foco ANEEL fora do tributário + mitigação reputacional excessiva), mas a custo de R$ 596k de magnitude econômica do produto comercial.
+
+**3 documentos NOVOS emitidos, todos preservando arquivos antigos intactos**:
+- `docs/concierge/pareceres/2026-06-18-refutacao-relatorio-sisgd-v1-1.md` (Refutação ponto a ponto)
+- `docs/concierge/pareceres/2026-06-18-parecer-v2-patches-incorporacao.md` (Parecer v2 com 6 patches SUBSTITUIR/POR formais + Tese 11 completa)
+- `docs/concierge/pareceres/2026-06-18-sumario-executivo-v2.md` (Sumário recalibrado)
+
+**Documentos antigos PRESERVADOS**:
+- Parecer 15/06 ✓ intacto
+- Adendo Teses 9/10 + IX e X ✓ intacto
+- Anexo Contábil ✓ intacto
+- Sumário Executivo v1 (18/06 manhã) ✓ intacto
+- Versão anonimizada LGPD ✓ intacto
+- DOCX/PDF em OneDrive (88 pp + 92 pp) ✓ intactos
+
+**Recalibração econômica final**:
+- Indébito mensal: **R$ 17.923,94** (mantido + Tese 11 a apurar)
+- 60m+SELIC: **R$ 1.344.522** (mantido)
+- Recuperação realista: **R$ 350.000 — R$ 460.320** (recalibrada de R$ 460.320 por causa da ADI 7.195/DF)
+- Portfólio: 10 teses tributárias + Tese 11 regulatória = **11 teses total**
+
+**5 decisões D18/06-4..8 catalogadas**:
+4. REJEIÇÃO substituição radical proposta pelo relatório externo
+5. INCORPORAÇÃO dos 6 patches válidos
+6. REFUTAÇÃO matemática da fórmula "-3,99%" do Lucro Real
+7. Catalogação da Tese 11 (Duplo Custeio Regulatório) — natureza regulatória/civil, paralela às tributárias
+8. PRESERVAÇÃO obrigatória das versões antigas em toda atualização incremental
+
+**Frase de retomada COMANDANTE pra próxima Code/Cowork:**
+
+> "Encaminhar pacote consolidado (parecer 15/06 + Refutação 18/06 noite + Parecer V2 18/06 noite + Sumário V2 18/06 noite + versão anonimizada LGPD) ao advogado tributarista parceiro com NDA assinada, solicitando manifestação técnica formal antes do ajuizamento. Em paralelo, apurar magnitude financeira efetiva da Tese 11 (Duplo Custeio Regulatório) cruzando faturas das CUSDs I+II com faturas dos cooperados associados. Em paralelo, implementar Tese 9 e Tese 10 como detectores algorítmicos: criar `backend/src/concierge/detectores/detector-tese9-anti-isonomia.ts` e `detector-tese10-variabilidade-temporal.ts`. Solicitar EFD-Contribuições de [Cliente E] EXFISHES e [Parceiro F] — pode anular Tese 3 em milhões. Multi-adapter pendente do 14/06 (17 ELFSM parse falhou)."
+
+**Detalhe**: `docs/sessoes/2026-06-18-noite-refutacao-relatorio-externo-parecer-v2.md`
 
 ---
 
