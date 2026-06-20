@@ -65,6 +65,34 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-20 (Code/Orquestrador — fechamento retroativo: DESIGN Convênio-Token-Cooperado 19/06)
+
+**Sessão de DESIGN do orquestrador (zero código de feature).** A sessão de
+design 19/06 (modelo de convênio cooperativizado + token isento + energia
+flexível + vínculo familiar) ficou sem ritual de fechamento; persistido e
+commitado em 20/06. O Code estava com erro de auth (401 `/login`), então o
+orquestrador fechou direto no main (trabalho 100% documental).
+
+**3 artefatos persistidos:**
+- `docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md` — modelo ponta-a-ponta + gap map + edge cases + fasing + 6 decisões.
+- `docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md` — parecer 4 lentes; 6 salvaguardas; 3 P0.
+- `docs/sessoes/2026-06-19-design-convenio-token-cooperado-familia.md` — doc-sessão.
+
+**Veredito de conformidade:** pode seguir, com 6 salvaguardas + validação
+externa (3 frentes). 3 P0: trabalhista AGRAVADO (token paga conta de luz),
+substância cooperativa real, STF Tema 536 (isenção como flag).
+
+**Veredito de completude:** "NÃO pegamos tudo" — trilho clássico do token
+~85% pronto, mas a camada nova (família/migração/ciclo-de-vida) está quase
+toda por construir. 8 débitos catalogados (`D-novo-CONVENIO-*`), sendo
+E1 (P1 🔴 bloqueador) + ORIGEM-LEDGER (P1) + FASE0-JURIDICO (P0).
+
+**6 decisões de produto pendentes do Luciano** (ver doc-sessão / frase de
+retomada). Próximo passo: slice decision-independent (marcar recebe-créditos
+GD como DADO + origemConvenioId) via Fase 1 read-only.
+
+---
+
 ## ONDE PARAMOS — 2026-06-17 (Code — M43 Sprint C Hardening: Throttler + Reconciliação Contábil FECHADO + merge na main)
 
 **Sessão Code dedicada — M43 entregue ponta-a-ponta.** Sprint C
@@ -3006,15 +3034,20 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento 17/06
-   (M43 fechado): main com 8 arquivos `M` em backend/src/concierge/*
-   + backend/package.json + backend/package-lock.json — TERRITÓRIO
-   COWORK, NÃO TOCAR. Último commit em main é o de fechamento desta
-   sessão (`docs(sessao): fechamento M43 — Sprint C Hardening:
-   Throttler + Reconciliação Contábil`). `git log origin/main..HEAD
-   --oneline` deve estar VAZIO. Branches preservadas no origin (NÃO
-   deletar): `feature/d2-salvaguardas-origem` (M42, merge `b65bcb3`),
+2. Rodar `git status --short`. Esperado pós-fechamento design convênio
+   (20/06): working tree com `backend/package.json` +
+   `backend/package-lock.json` MODIFICADOS (TERRITÓRIO COWORK, NÃO
+   TOCAR) + vários untracked que NÃO são nossos (`.claude/agents/*`,
+   `backend/src/agents/`, `*.mjs`, `ponte-wa-telegram-leve/`,
+   `scripts/*`, `.agent/memory/*`) — NUNCA `git add .` / `-A`. Último
+   commit em main é o de fechamento do design do convênio
+   (`docs(sessao): fechamento design convênio-token-cooperado 19/06`).
+   `git log origin/main..HEAD --oneline` deve estar VAZIO (pushado).
+   Branches preservadas no origin (NÃO deletar):
+   `feature/d2-salvaguardas-origem` (M42, merge `b65bcb3`),
    `feature/hardening-throttler-reconciliacao` (M43, merge `beb125c`).
+   Pode existir nova branch `feature/convenio-origem-dado` (slice em
+   andamento).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
@@ -3024,47 +3057,48 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` na próxima
    sprint a menos que tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: Luciano decide a próxima sprint (path da
-ativação produção do saque colaborador comum agora COMPLETO em código)
+PASSO 1 — Frase COMANDANTE: iniciar Fase 1 read-only do slice
+"Convênio: marcar recebe-créditos-GD como DADO (não bloqueia) +
+origemConvenioId no ledger" — o único slice decision-independent que o
+Luciano já definiu em palavras ("por agora, vamos colocar apenas a
+necessidade dele marcar que recebe créditos"). Luciano priorizou este
+slice (20/06) sobre as outras opções da fila.
 
-M43 (17/06) FECHADO no main (merge --no-ff beb125c + push). Sprint C
-Hardening de Segurança entregue ponta-a-ponta: ThrottlerGuard global
-em APP_GUARD com 2 tiers (default 100/min + webhook 600/min nos 4
-webhooks Asaas/BB/Sicoob/WhatsApp) + cron */15 de reconciliação
-contábil pra recibos PAGO_CREDITO_PENDENTE com backoff [5min, 30min,
-2h, 12h, 24h] + desistido após 5 falhas + AuditLog forense + evento
-emitido + endpoint admin trigger manual. 2 commits na feature branch
-(2b2af66 + beb125c merge). 365/365 specs verde (+3 novos), smoke C1
-throttler burst 5/5 + smoke C2 reconciliação 12/12 PASS.
+CONTEXTO: o design do convênio (19/06) foi fechado em 20/06 — ver
+docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md + parecer
+docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-
+cooperado-token.md + doc-sessão 2026-06-19. Parecer: pode seguir com
+6 salvaguardas + 3 P0 (trabalhista/substância/STF536). Completude:
+"NÃO pegamos tudo" — camada família/migração/ciclo-de-vida por
+construir (8 débitos D-novo-CONVENIO-*).
 
-3 reviewers pesados (0 P0, 5 P1, 17 P2, 11 P3 únicos): 3 P1 + 5 P2 +
-4 P3 sensatos aplicados. Re-review do orquestrador APROVOU (P1.2
-@@unique([origemTipo,origemId]) idempotência via banco + ThrottlerGuard
-em APP_GUARD com webhooks tier 600 confirmados).
+1º comando: git checkout -b feature/convenio-origem-dado
 
-⚠️ Próxima sprint a Luciano definir. 4 candidatos na fila:
+Fase 1 read-only OBRIGATÓRIA (Decisão 23) — investigar + reportar ao
+orquestrador, SEM tocar código:
+ (a) Onde o cadastro V2 (/cadastro público + wizard admin) detecta/usa
+     "já recebe créditos GD" hoje? Existe campo no schema Cooperado?
+     Bloqueia ou só registra? (grep amplo: recebeCreditos, creditoGd,
+     jaRecebe, GD; DTOs de publico; web/app/cadastro).
+ (b) O ledger de token tem como rastrear origem de convênio? Onde
+     entraria origemConvenioId? (schema CooperTokenCompra +
+     cooper-token.service comprarTokensCooperado / processarPagamento
+     CompraPj — achar as linhas ATUAIS, NÃO confiar em nº de linha de
+     memória).
+ (c) ConvenioCooperado já amarra empresa↔funcionário? O token
+     distribuído sabe de qual convênio veio?
+Reportar achados + premissa validada/refutada. PAUSAR pro OK do
+orquestrador antes da Fase 2.
 
-OPÇÃO A — Iniciar processo de ativação produção do saque colaborador
-  comum (DESCONTO_FATURA apenas)
-  Path agora COMPLETO em código (✅ S1 M42, ✅ S4 M41, ✅ S5 M42,
-  ✅ Throttler M43, ✅ Reconciliação cron M43). Falta apenas:
-    1. Solicitar parecer escrito do cooperebr-analista-conformidade
-       confirmando as 4 salvaguardas + 2 hardenings implementadas.
-    2. Setar SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true em .env prod.
-  ZERO código novo necessário. Sessão de produto + 1 deploy.
+NÃO iniciar família (G1) nem migração (G2) — Fase 2/3, dependem da
+decisão de escopo do piloto + Fase 0 jurídico.
 
-OPÇÃO B — Sprint D-QUALIF-DECAY (próxima por padrão da fila, ~6-10h)
-  Decaimento da qualificação no Clube com inatividade prolongada
-  (espelha aplicarOxidacao do token). Catalogado desde M40.
-
-OPÇÃO C — Sprint Notificações Proativas
-  Fecha D-novo-RECONCILIACAO-DESISTIDO-LISTENER P2 (consumer do
-  evento `cooper-token-resgate.reconciliacao-desistido` criando
-  NotificacaoProativa) + outros débitos antigos de notificação.
-
-OPÇÃO D — Sprint Circuito de Emissão Completo (4 fases: contábil →
-  notificações → emissão unificada → compra conveniado + auto-
-  distribuição). Resolve 2 P1 + 7 P2 catalogados M40.
+Outras opções da fila seguem catalogadas (não perder): OPÇÃO B Sprint
+D-QUALIF-DECAY (~6-10h); OPÇÃO C Notificações Proativas
+(D-novo-RECONCILIACAO-DESISTIDO-LISTENER); OPÇÃO D Circuito de Emissão
+Completo (2 P1 + 7 P2 M40); e ativação produção saque colaborador
+DESCONTO_FATURA (path completo em código, falta parecer escrito +
+flag .env prod).
 
 ENTREGA M43:
 

@@ -5984,6 +5984,40 @@ TypeError: Cannot read properties of undefined (reading 'findMany')
 
 ---
 
+### D-novo-CONVENIO-E1-FUNCIONARIO-SAI-TOKENS-ORFAOS — Funcionário sai da empresa → tokens distribuídos ficam órfãos no saldo pessoal, sem decisão (P1 🔴 BLOQUEADOR de produto)
+
+Ao desligar membro de convênio, `removerMembro` não toca o saldo de token. Tokens já distribuídos pela empresa ficam no saldo pessoal pra sempre. Falta DECISÃO de produto: ficam com ele / são recomprados / expiram. Bloqueia piloto que inclua ciclo de vida de funcionário. Origem: design 19/06 (`docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md` §7 E1). **Status:** ABERTO.
+
+### D-novo-CONVENIO-ORIGEM-LEDGER — Falta origemConvenioId no ledger de token (P1)
+
+`CooperTokenCompra`/movimentos não rastreiam de qual convênio o token veio. É a defesa documental mais barata (separa token-de-empregador de token-próprio → defesa trabalhista + tributária). Salvaguarda 4 do parecer 19/06. Additivo, sem risco. Decision-independent — pode entrar na Fase 1 do convênio. **Status:** ABERTO.
+
+### D-novo-CONVENIO-FASE0-JURIDICO — Pré-requisito jurídico NÃO-código antes de empresa real (P0 ativação real)
+
+Antes de QUALQUER empresa conveniada real: (1) parecer de advogado trabalhista (token pagando conta de luz = risco salário in natura CLT 458, AGRAVADO); (2) substância cooperativa real (matrícula+capital+assembleia+ata, não casca fiscal — CTN 149 VII); (3) estatuto v3/AGE 17/06 registrados na JUCEES; (4) isenção PIS/COFINS como flag configurável (STF Tema 536 em julgamento). Detalhe no `docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md`. **Status:** ABERTO (bloqueia ativação, não desenvolvimento).
+
+### D-novo-CONVENIO-G1-VINCULO-FAMILIAR — Token de um cooperado abate fatura de outro NÃO EXISTE (P2, Fase 2)
+
+Esposa SEM UC → fatura do marido com UC. `usarNaFatura` é self-only (trava "fatura tem que ser sua"); sem flag "familiar" na `Indicacao`; sem confirmação bilateral; precisa guard multi-tenant `A.cooperativaId == B.cooperativaId` ao amarrar. Origem: design 19/06 §4/§6/§7. **Status:** ABERTO.
+
+### D-novo-CONVENIO-G4-CONSUMO-DECLARADO-TOKEN — Conversão consumo declarado (kWh) → token NÃO EXISTE (P2, Fase 2)
+
+Cooperado SEM UC declara consumo, mas só há conversão kWh→R$ (`conversao-credito`). Falta a perna kWh→token pro membro sem fatura própria (edge case E4: SEM UC sem familiar não tem saída útil pro token). **Status:** ABERTO.
+
+### D-novo-CONVENIO-G2-ESTADOS-MIGRACAO — Estados PENDENTE_MIGRACAO/DESLIGADO + rastreio do concorrente NÃO EXISTEM (P2, Fase 3)
+
+`StatusCooperado` não tem os estados de transição; `MigracaoUsina` é intra-coop; billing só liga "de raspão" (roda em ATIVO). Necessário pro cenário "cliente migra energia do concorrente pra nós" sem double-count SCEE. **Status:** ABERTO.
+
+### D-novo-CONVENIO-E2-MIGRACAO-FALHA-SEM-ROLLBACK — Migração do concorrente falha → membro em limbo (P2, Fase 3)
+
+Sem timeout, sem alerta, sem rollback. Edge case E3 relacionado: oxidação cega ao estado de transição (token "recebe e segura" não tem suporte — `creditar` exige ATIVO). **Status:** ABERTO.
+
+### D-novo-CONVENIO-G5-DOC-DESLIGAMENTO — Documento "desligamento do concorrente" NÃO EXISTE (P3, Fase 3)
+
+`ModeloDocumento` só tem CONTRATO/PROCURACAO. Falta o termo de desligamento da distribuidora/cooperativa concorrente no fluxo de migração. **Status:** ABERTO.
+
+---
+
 ## Como remover item
 
 Quando débito for resolvido:
