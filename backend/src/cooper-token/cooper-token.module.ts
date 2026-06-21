@@ -18,6 +18,10 @@ import { CooperTokenCompraPjListener } from './cooper-token-compra-pj.listener';
 // Sprint Clube P1 — F6 Bloco C.4 P0-B (14/06/2026): listener TRANSFER_* do
 // Asaas pra rota PIX-out → processarWebhookResgate.
 import { CooperTokenResgateListener } from './cooper-token-resgate.listener';
+// Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring: listener único que
+// consome RESGATADO + DISTRIBUIDO_CONVENIO e dispara WA via
+// TokenNotificacaoService. Idempotente via lookup em MensagemWhatsapp.
+import { CooperTokenNotificacaoListener } from './cooper-token-notificacao.listener';
 // Sprint Clube P1 — F4 Bloco A (12/06/2026): PinCooperadoService pra
 // step-up de autorização em usarNaFatura (cooperado abate fatura via PIN).
 // CooperadosModule exporta PinCooperadoService.
@@ -52,6 +56,7 @@ import { DisclaimerSaqueModule } from '../disclaimer-saque/disclaimer-saque.modu
     PrismaService,
     CooperTokenCompraPjListener,
     CooperTokenResgateListener,
+    CooperTokenNotificacaoListener,
   ],
   exports: [CooperTokenService, LimiteTokenService, TokenNotificacaoService],
 })

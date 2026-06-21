@@ -47,6 +47,42 @@ export interface NotificacaoRecebedorParams {
   confirmadaEm: Date;
 }
 
+/**
+ * Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring.
+ * Notificação ao destinatário quando empresa-PJ distribui tokens via convênio
+ * (mass-write de `distribuirTokens`). Consumido pelo
+ * CooperTokenNotificacaoListener via evento DISTRIBUIDO_CONVENIO.
+ */
+export interface NotificacaoDistribuicaoConvenioParams {
+  telefoneDestinatario: string;
+  nomeDestinatario: string;
+  destinatarioCooperadoId: string;
+  cooperativaId: string;
+  nomeEmpresa: string;
+  quantidadeTokens: number;
+  valorReais: number;
+  /** Pra dedup idempotente — disparoId no MensagemWhatsapp. */
+  transacaoId: string;
+}
+
+/**
+ * Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring.
+ * Notificação ao cooperado quando seus tokens abatem uma fatura
+ * (`usarNaFatura`). Consumido pelo CooperTokenNotificacaoListener via evento
+ * RESGATADO (fatura-only — QR/PIX usam evento separado).
+ */
+export interface NotificacaoAbateFaturaParams {
+  telefoneCooperado: string;
+  nomeCooperado: string;
+  cooperadoId: string;
+  cooperativaId: string;
+  cobrancaId: string;
+  quantidadeTokens: number;
+  valorReais: number;
+  /** Pra dedup idempotente — disparoId no MensagemWhatsapp. */
+  transacaoId: string;
+}
+
 export interface OtpAltoValorPorEmailParams {
   emailDestino: string;
   nomeCooperado: string;
@@ -132,6 +168,66 @@ export class TokenNotificacaoService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `[token-notif] Falha ao notificar recebedor transacaoId=${params.transacaoId} erro=${msg}`,
+      );
+    }
+  }
+
+  /**
+   * Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring.
+   * Notifica destinatário (funcionário) que recebeu tokens distribuídos pela
+   * empresa-PJ via convênio. Best-effort (não lança).
+   */
+  async notificarDistribuicaoConvenio(params: NotificacaoDistribuicaoConvenioParams): Promise<void> {
+    const texto =
+      `💰 Você recebeu CooperTokens\n\n` +
+      `Olá, ${params.nomeDestinatario}!\n\n` +
+      `A empresa ${params.nomeEmpresa} distribuiu ` +
+      `${fmtTokens(params.quantidadeTokens)} CooperTokens ` +
+      `(${fmtReais(params.valorReais)}) pra você através do convênio.\n\n` +
+      `Use no app da cooperativa pra abater sua fatura ou pagar em ` +
+      `estabelecimentos parceiros do Clube.\n\n` +
+      `Comprovante: ${params.transacaoId}`;
+
+    try {
+      await this.waSender.enviarMensagem(params.telefoneDestinatario, texto, {
+        tipoDisparo: 'TOKEN_DISTRIBUICAO_CONVENIO_RECEBIDA',
+        disparoId: params.transacaoId,
+        cooperadoId: params.destinatarioCooperadoId,
+        cooperativaId: params.cooperativaId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[token-notif] Falha ao notificar destinatário de distribuição transacaoId=${params.transacaoId} erro=${msg}`,
+      );
+    }
+  }
+
+  /**
+   * Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring.
+   * Notifica cooperado que sua fatura foi abatida com tokens (`usarNaFatura`).
+   * Best-effort (não lança).
+   */
+  async notificarAbateFatura(params: NotificacaoAbateFaturaParams): Promise<void> {
+    const texto =
+      `✅ Fatura abatida com CooperTokens\n\n` +
+      `Olá, ${params.nomeCooperado}!\n\n` +
+      `Você usou ${fmtTokens(params.quantidadeTokens)} CooperTokens ` +
+      `(${fmtReais(params.valorReais)}) pra abater sua fatura.\n\n` +
+      `Comprovante: ${params.transacaoId}\n\n` +
+      `Se não foi você, responda *NÃO FUI EU* pra abrir contestação.`;
+
+    try {
+      await this.waSender.enviarMensagem(params.telefoneCooperado, texto, {
+        tipoDisparo: 'TOKEN_ABATE_FATURA',
+        disparoId: params.transacaoId,
+        cooperadoId: params.cooperadoId,
+        cooperativaId: params.cooperativaId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[token-notif] Falha ao notificar abate de fatura transacaoId=${params.transacaoId} erro=${msg}`,
       );
     }
   }

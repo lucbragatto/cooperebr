@@ -9,6 +9,7 @@ import {
   CooperTokenResgatadoEvent,
   CooperTokenExpiradoEvent,
   CooperTokenCompraParceiroPagoEvent,
+  CooperTokenDistribuidoConvenioEvent,
 } from './cooper-token.events';
 // Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): helper de Taxa de Operacao.
 import { calcularTaxa } from './taxa-helper';
@@ -1920,7 +1921,7 @@ export class CooperTokenService {
     };
 
     // ── Executar via helper mass-write ──
-    return executarMassWrite(this.prisma, {
+    const resultado = await executarMassWrite(this.prisma, {
       acao: 'MASS_WRITE_DISTRIBUICAO',
       cooperativaId,
       usuarioId: empresaCooperadoId, // empresa-PJ é o "usuário" da ação
@@ -1940,6 +1941,35 @@ export class CooperTokenService {
       ip,
       userAgent,
     });
+
+    // Sprint Convênio FUNDAÇÃO (21/06/2026) — E8 wiring.
+    // Emit APÓS commit (não dentro da tx) para notificar destinatários. 1 por
+    // linha. Sequencial (cuidado throttle WA — sem fila ainda; se piloto Santi
+    // mostrar burst grande, catalogar débito). Best-effort: falha no listener
+    // não derruba a distribuição (já commitada). Skip se idempotência detectada
+    // (reenvio de mesmo clientRequestId — eventos NÃO duplicam).
+    if (resultado.modo === 'CONFIRM' && !resultado.idempotente && resultado.resultado.linhas) {
+      const valorTokenReaisAtual = Number(config?.valorTokenReais ?? 0.45);
+      for (const linha of resultado.resultado.linhas) {
+        const valorReaisLinha =
+          Math.round(linha.quantidade * valorTokenReaisAtual * 100) / 100;
+        this.eventEmitter.emit(
+          COOPER_TOKEN_EVENTS.DISTRIBUIDO_CONVENIO,
+          new CooperTokenDistribuidoConvenioEvent(
+            cooperativaId,
+            empresaCooperadoId,
+            empresa.nomeCompleto,
+            linha.destinatarioCooperadoId,
+            convenioId,
+            linha.quantidade,
+            valorReaisLinha,
+            linha.tokenTransacaoId,
+          ),
+        );
+      }
+    }
+
+    return resultado;
   }
 
   /**
