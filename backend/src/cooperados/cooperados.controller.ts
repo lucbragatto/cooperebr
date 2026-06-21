@@ -132,11 +132,39 @@ export class CooperadosController {
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, AGREGADOR)
   @AuditLog({ acao: 'cooperado.criar', recurso: 'Cooperado' })
   @Post()
-  create(@Body() body: CreateCooperadoDto, @Req() req: any) {
-    const { termoAdesaoAceitoEm, cooperativaId, ...rest } = body;
+  async create(@Body() body: CreateCooperadoDto, @Req() req: any) {
+    // Sprint Hardening Tenant-Spoof (20/06/2026) — D-novo-COOPERADOS-
+    // CONTROLLER-TENANT-SPOOF P0. Descartamos body.cooperativaId
+    // sempre. Tenant vem do JWT; SUPER_ADMIN pode operar cross-tenant
+    // via body.cooperativaIdAlvo (campo explícito + DTO @Matches CUID +
+    // validação Cooperativa.ativo neste controller — P1 reviewers 20/06).
+    const { termoAdesaoAceitoEm, cooperativaId: _ignorado, cooperativaIdAlvo, ...rest } = body;
+
+    let cooperativaId: string | undefined =
+      req.user?.cooperativaId ?? undefined;
+
+    if (req.user?.perfil === SUPER_ADMIN && cooperativaIdAlvo) {
+      const coopAlvo = await this.prisma.cooperativa.findUnique({
+        where: { id: cooperativaIdAlvo },
+        select: { id: true, ativo: true },
+      });
+      if (!coopAlvo || !coopAlvo.ativo) {
+        throw new BadRequestException(
+          'cooperativaIdAlvo: cooperativa não encontrada ou inativa.',
+        );
+      }
+      cooperativaId = coopAlvo.id;
+    }
+
+    if (!cooperativaId) {
+      throw new ForbiddenException(
+        'cooperativaId obrigatório — derivado do JWT, ou `cooperativaIdAlvo` se SUPER_ADMIN',
+      );
+    }
+
     return this.cooperadosService.create({
       ...rest,
-      cooperativaId: cooperativaId || req.user?.cooperativaId || undefined,
+      cooperativaId,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
       ...(req.user?.perfil === AGREGADOR && req.user.administradoraId
         ? { administradoraId: req.user.administradoraId }

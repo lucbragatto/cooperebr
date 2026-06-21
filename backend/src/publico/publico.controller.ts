@@ -88,14 +88,25 @@ export class PublicoController {
   // Retorna SÓ id + empresaNome (nada sensível: sem CNPJ, sem desconto, sem regras MLM).
   // Usado pelo /cadastro público pra montar o select "Sou custeado por uma empresa cooperada".
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Get('convenios-pagador-empresa')
   async listarConveniosPagadorEmpresa(@Query('tenant') tenant?: string) {
+    // Sprint Hardening Tenant-Spoof (20/06/2026) — validação de existência
+    // do tenant antes da query. Sem validação, ?tenant=<id-fake> retornava
+    // [] silencioso (vazamento por enumeração / probe).
     if (!tenant) {
-      throw new BadRequestException('Query param ?tenant= é obrigatório');
+      throw new BadRequestException('Query param ?tenant=<cooperativaId> é obrigatório');
+    }
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: tenant },
+      select: { id: true, ativo: true },
+    });
+    if (!coop || !coop.ativo) {
+      throw new NotFoundException('Cooperativa não encontrada ou inativa.');
     }
     const convenios = await this.prisma.contratoConvenio.findMany({
       where: {
-        cooperativaId: tenant,
+        cooperativaId: coop.id,
         status: 'ATIVO',
         pagador: 'EMPRESA',
       },
@@ -246,12 +257,17 @@ export class PublicoController {
     // Feature toggle: v2 cria Cooperado + UC + Proposta real; legado cria LeadWhatsapp
     const v2Ativo = process.env.CADASTRO_V2_ATIVO === 'true';
     if (v2Ativo) {
-      let cooperativaId = body.cooperativaId ?? tenantParam;
+      // Sprint Hardening Tenant-Spoof (20/06/2026) —
+      // D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1. Tenant resolvido por
+      // ordem de confiança: (1) convite público — token sobrepõe tudo;
+      // (2) ?tenant=<id> validado contra Cooperativa ativa.
+      // body.cooperativaId é DESCARTADO (compat-only, ignorado).
+      let cooperativaId: string | null = null;
 
       // Convergência Fatia 2 (05/06/2026) — quando o cadastro vem via convite
       // público (?conv=<token>), deriva cooperativaId do convênio do convite
       // server-side. Espelha o padrão anti-spoof de /auto-inscrever (linha 568):
-      // tenant DO CONVITE sobrepõe qualquer cooperativaId/?tenant= do client.
+      // tenant DO CONVITE sobrepõe qualquer ?tenant= do client.
       // Validação completa do convite (OTP/expiração/consume-once) fica dentro
       // do cadastroWebV2 quando origem=CONVITE_PUBLICO.
       const conviteTokenHint = (body as { token?: string }).token;
@@ -260,19 +276,27 @@ export class PublicoController {
           where: { token: conviteTokenHint },
           select: { cooperativaId: true },
         });
-        if (convite?.cooperativaId) {
-          cooperativaId = convite.cooperativaId;
-        } else {
+        if (!convite?.cooperativaId) {
           // Token presente mas não resolve = convite inexistente, expirado ou
           // revogado. Mensagem específica em vez do genérico "cooperativaId
           // obrigatório" pra não confundir admin durante smoke.
           throw new BadRequestException('Convite inválido ou expirado.');
         }
+        cooperativaId = convite.cooperativaId;
+      } else {
+        if (!tenantParam) {
+          throw new BadRequestException('Query param ?tenant=<cooperativaId> é obrigatório no modo v2');
+        }
+        const coop = await this.prisma.cooperativa.findUnique({
+          where: { id: tenantParam },
+          select: { id: true, ativo: true },
+        });
+        if (!coop || !coop.ativo) {
+          throw new NotFoundException('Cooperativa não encontrada ou inativa.');
+        }
+        cooperativaId = coop.id;
       }
 
-      if (!cooperativaId) {
-        throw new BadRequestException('cooperativaId ou query param ?tenant= é obrigatório no modo v2');
-      }
       return this.cadastroWebV2(body as Parameters<PublicoController['cadastroWebV2']>[0], cooperativaId);
     }
 
@@ -1619,10 +1643,21 @@ export class PublicoController {
     },
     @Query('tenant') tenantParam?: string,
   ) {
-    const cooperativaId = body.cooperativaId ?? tenantParam;
-    if (!cooperativaId) {
-      throw new BadRequestException('cooperativaId ou query param ?tenant= é obrigatório');
+    // Sprint Hardening Tenant-Spoof (20/06/2026) —
+    // D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1. Tenant vem SÓ de
+    // ?tenant=<cooperativaId> validado contra Cooperativa ativa.
+    // body.cooperativaId é DESCARTADO (compat-only, ignorado).
+    if (!tenantParam) {
+      throw new BadRequestException('Query param ?tenant=<cooperativaId> é obrigatório');
     }
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: tenantParam },
+      select: { id: true, ativo: true },
+    });
+    if (!coop || !coop.ativo) {
+      throw new NotFoundException('Cooperativa não encontrada ou inativa.');
+    }
+    const cooperativaId = coop.id;
     if (!body.nome || !body.cpf || !body.email) {
       throw new BadRequestException('Nome, CPF/CNPJ e email são obrigatórios');
     }

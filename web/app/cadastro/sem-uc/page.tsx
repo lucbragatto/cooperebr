@@ -160,7 +160,7 @@ function CadastroSemUcContent() {
       <main className="flex-1 flex items-start justify-center px-4 pb-12">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <Link href={tenantParam ? `/cadastro?tenant=${tenantParam}${codigoRef ? `&ref=${codigoRef}` : ''}` : '/cadastro'} className="inline-flex items-center text-xs text-gray-500 hover:text-gray-700 mb-2">
+            <Link href={tenantParam ? `/cadastro?tenant=${encodeURIComponent(tenantParam)}${codigoRef ? `&ref=${encodeURIComponent(codigoRef)}` : ''}` : '/cadastro'} className="inline-flex items-center text-xs text-gray-500 hover:text-gray-700 mb-2">
               <ArrowLeft className="w-3 h-3 mr-1" /> Voltar pro cadastro completo
             </Link>
             <CardTitle className="text-xl text-green-800">Cadastro Indicador Puro</CardTitle>
@@ -172,7 +172,7 @@ function CadastroSemUcContent() {
               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <div>
                 Se você <strong>tem uma conta de luz</strong> e quer economizar nela,
-                <Link href={tenantParam ? `/cadastro?tenant=${tenantParam}${codigoRef ? `&ref=${codigoRef}` : ''}` : '/cadastro'} className="underline ml-1">use o cadastro completo</Link>.
+                <Link href={tenantParam ? `/cadastro?tenant=${encodeURIComponent(tenantParam)}${codigoRef ? `&ref=${encodeURIComponent(codigoRef)}` : ''}` : '/cadastro'} className="underline ml-1">use o cadastro completo</Link>.
                 Este formulário é só pra quem quer participar como indicador (MLM) e/ou Clube de Tokens.
               </div>
             </div>

@@ -709,7 +709,10 @@ function CadastroPageInner() {
         payload.faturaTipo = faturaArquivo.type;
       }
 
-      const res = await fetch(`${API_URL}/publico/cadastro-web`, {
+      // Sprint Hardening Tenant-Spoof (20/06/2026) — tenant via query param
+      // sempre. Backend valida existência + ativo + descarta body.cooperativaId.
+      const tenantQs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
+      const res = await fetch(`${API_URL}/publico/cadastro-web${tenantQs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -731,6 +734,8 @@ function CadastroPageInner() {
     setErro('');
 
     try {
+      // Sprint Hardening Tenant-Spoof (20/06/2026) — tenant via query param.
+      const tenant = searchParams.get('tenant') ?? process.env.NEXT_PUBLIC_COOPERATIVA_ID;
       const payload: Record<string, unknown> = {
         nome: pessoais.nome.trim() || 'Não informado',
         cpf: pessoais.cpf || '00000000000',
@@ -779,7 +784,8 @@ function CadastroPageInner() {
         payload.codigoRef = refCode;
       }
 
-      const res = await fetch(`${API_URL}/publico/cadastro-web`, {
+      const tenantQs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
+      const res = await fetch(`${API_URL}/publico/cadastro-web${tenantQs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -799,7 +805,10 @@ function CadastroPageInner() {
 
   async function marcarPendenciaDocumentos() {
     try {
-      await fetch(`${API_URL}/publico/cadastro-web`, {
+      // Sprint Hardening Tenant-Spoof (20/06/2026) — tenant via query param.
+      const tenant = searchParams.get('tenant') ?? process.env.NEXT_PUBLIC_COOPERATIVA_ID;
+      const tenantQs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : '';
+      await fetch(`${API_URL}/publico/cadastro-web${tenantQs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -825,7 +834,7 @@ function CadastroPageInner() {
   function renderStep0() {
     const tenantParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tenant') : null;
     const refParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null;
-    const semUcHref = `/cadastro/sem-uc${tenantParam ? `?tenant=${tenantParam}${refParam ? `&ref=${refParam}` : ''}` : ''}`;
+    const semUcHref = `/cadastro/sem-uc${tenantParam ? `?tenant=${encodeURIComponent(tenantParam)}${refParam ? `&ref=${encodeURIComponent(refParam)}` : ''}` : ''}`;
     return (
       <div className="space-y-4">
         {/* Banner Bloco C — link pro cadastro SEM_UC */}
