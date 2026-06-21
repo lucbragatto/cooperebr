@@ -428,6 +428,17 @@ enum StatusCooperado {
   ATIVO_RECEBENDO_CREDITOS
   SUSPENSO
   ENCERRADO
+  // Sprint Convênio MIGRAÇÃO M47 (21/06/2026) — Fase 3.
+  // Cooperado migrando de distribuidora/cooperativa concorrente — saldo de
+  // token CONGELA (creditar + aplicarOxidacao + usarNaFatura já filtram por
+  // STATUS_PERMITIDOS_CREDITO = [ATIVO, ATIVO_RECEBENDO_CREDITOS]). Não entra
+  // em billing (cobrancas.service.create + convenios-custeio.gerarCobranca
+  // Consolidada filtram). Bot WA matcher INCLUI (cooperado continua recebendo
+  // mensagens). Timeout 30d → alerta admin.
+  PENDENTE_MIGRACAO
+  // Terminal: desligamento definitivo (migração rejeitada OU saída voluntária
+  // pós-E1 desligamento de convênio). Saldo congela. Bot WA matcher EXCLUI.
+  DESLIGADO
 }
 
 enum TipoCooperado {
@@ -2630,20 +2641,39 @@ model MigracaoUsina {
   cooperadoId        String
   cooperado          Cooperado    @relation(fields: [cooperadoId], references: [id])
   usinaOrigemId      String?
-  usinaDestinoId     String
-  contratoAntigoId   String
-  contratoNovoId     String
-  kwhAnterior        Float
-  percentualAnterior Float
-  kwhNovo            Float
-  percentualNovo     Float
+  usinaDestinoId     String?
+  contratoAntigoId   String?
+  contratoNovoId     String?
+  kwhAnterior        Float?
+  percentualAnterior Float?
+  kwhNovo            Float?
+  percentualNovo     Float?
   motivo             String?
+  // M47 (21/06/2026): tipo "DISTRIBUIDORA_EXTERNA" reusa pattern do
+  // MigracaoUsina intra-coop. Quando tipo=DISTRIBUIDORA_EXTERNA, os campos
+  // usina*/contrato*/kwh*/percentual* ficam nullable (cooperado está em
+  // PENDENTE_MIGRACAO sem usina/contrato SISGD AINDA — só ganha quando admin
+  // chama /migrar/concluir).
   tipo               String       @default("MUDANCA_USINA")
   realizadoPorId     String
   cooperativaId      String?
   cooperativa        Cooperativa? @relation(fields: [cooperativaId], references: [id])
   criadoEm           DateTime     @default(now())
 
+  // Sprint MIGRAÇÃO M47 (21/06/2026) — campos pra migração externa
+  // (distribuidora/cooperativa CONCORRENTE → SISGD). Todos opcionais
+  // (aditivo — não quebra migrações intra-coop existentes).
+  distribuidoraOrigem    String?
+  numeroUcOrigem         String?
+  dataInicioMigracao     DateTime?
+  dataDesligamentoEfetivo DateTime?
+  // statusMigracao: String livre, mas validado por const array no service
+  // (PENDENTE | CONCLUIDA | REJEITADA | TIMEOUT_ADMIN_DECIDE).
+  // Sem enum delta — flexível pra futuros estados sem migration.
+  statusMigracao         String?
+
+  @@index([cooperativaId, statusMigracao])
+  @@index([statusMigracao, dataInicioMigracao])
   @@map("migracoes_usina")
 }
 

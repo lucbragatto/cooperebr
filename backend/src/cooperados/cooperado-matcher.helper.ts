@@ -16,12 +16,18 @@
 
 import type { PrismaClient } from '@prisma/client';
 
-/** Status que contam como "cooperado utilizável" no bot WA + portal cooperado. */
+/** Status que contam como "cooperado utilizável" no bot WA + portal cooperado.
+ *
+ * Sprint M47 (21/06/2026) — PENDENTE_MIGRACAO incluído: cooperado em migração
+ * externa ainda recebe mensagens informativas do bot (saldo congelado, status
+ * da migração). DESLIGADO NÃO entra — terminal definitivo.
+ */
 export const STATUS_COOPERADO_ATIVOS = [
   'ATIVO',
   'AGUARDANDO_CONCESSIONARIA',
   'PENDENTE_DOCUMENTOS',
   'ATIVO_RECEBENDO_CREDITOS',
+  'PENDENTE_MIGRACAO',
 ] as const;
 
 export interface CandidatoCooperado {

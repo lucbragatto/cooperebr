@@ -66,6 +66,44 @@ function extrairVariaveis(texto: string): string[] {
   return unique;
 }
 
+// Sprint M47 (21/06/2026) — termo de desligamento da distribuidora/
+// cooperativa concorrente. TENANT-AGNÓSTICO: variáveis {{provedora.*}} em
+// branco (princípio multi-tenant de templates, regra inegociável 17/05).
+// Admin de cada parceiro preenche {{provedora.nome}}, {{provedora.cnpj}} etc
+// na primeira customização (ou via Sprint Módulo Documentos futura).
+const DESLIGAMENTO_CONCORRENTE_PADRAO = `TERMO DE DESLIGAMENTO DE FORNECEDOR DE GERAÇÃO DISTRIBUÍDA
+
+DECLARANTE: {{NOME_COOPERADO}}, inscrito(a) no CPF/CNPJ sob o nº {{CPF_CNPJ}}, residente e domiciliado(a) em {{ENDERECO_COOPERADO}}, {{CIDADE_COOPERADO}}/{{ESTADO_COOPERADO}}, titular da Unidade Consumidora nº {{UC}} junto à concessionária {{DISTRIBUIDORA}}.
+
+FORNECEDOR ANTERIOR: {{FORNECEDOR_GD_ANTERIOR}}, do qual o(a) DECLARANTE recebia créditos de Geração Distribuída no Sistema de Compensação de Energia Elétrica (SCEE), nos termos da Lei 14.300/2022 e da Resolução Normativa ANEEL nº 1.000/2021.
+
+NOVO PROVEDOR DE GD: {{provedora.nome}}, inscrita no CNPJ sob o nº {{provedora.cnpj}}, com sede em {{provedora.endereco}}, {{provedora.cidade}}/{{provedora.estado}}, representada por {{provedora.representanteLegal}}.
+
+CLÁUSULA 1ª – DO OBJETO
+O presente termo formaliza o desligamento voluntário do(a) DECLARANTE do sistema de Geração Distribuída fornecido por {{FORNECEDOR_GD_ANTERIOR}}, com migração da Unidade Consumidora nº {{UC}} para o sistema operado por {{provedora.nome}}.
+
+CLÁUSULA 2ª – DA RESPONSABILIDADE PELO PROCESSO JUNTO À CONCESSIONÁRIA
+O(A) DECLARANTE autoriza {{provedora.nome}} a representá-lo(a) junto à concessionária {{DISTRIBUIDORA}} para todos os atos necessários ao desligamento do fornecedor anterior e habilitação da nova alocação SCEE, incluindo retirada da UC da lista de rateio de {{FORNECEDOR_GD_ANTERIOR}}.
+
+CLÁUSULA 3ª – DA NÃO-DUPLICIDADE DE ALOCAÇÃO
+O(A) DECLARANTE declara, sob as penas da lei, que durante o período de transição NÃO permanecerá alocado(a) simultaneamente em dois sistemas de Geração Distribuída, em conformidade com o art. 14 da Lei 14.300/2022.
+
+CLÁUSULA 4ª – DA AUSÊNCIA DE PENDÊNCIAS
+O(A) DECLARANTE confirma estar adimplente com {{FORNECEDOR_GD_ANTERIOR}} até a data deste termo e assume responsabilidade por eventuais obrigações financeiras remanescentes com o fornecedor anterior.
+
+CLÁUSULA 5ª – DA VIGÊNCIA
+Este termo tem efeito a partir de {{DATA_DESLIGAMENTO}} e perdura até a confirmação formal do desligamento por {{FORNECEDOR_GD_ANTERIOR}} e da entrada do(a) DECLARANTE no sistema de {{provedora.nome}}.
+
+{{CIDADE_COOPERADO}}, {{DATA}}.
+
+_______________________________
+{{NOME_COOPERADO}}
+CPF/CNPJ: {{CPF_CNPJ}}
+
+_______________________________
+{{provedora.nome}}
+CNPJ: {{provedora.cnpj}}`;
+
 async function main() {
   console.log('Seeding modelos de documento padrão...');
 
@@ -103,9 +141,29 @@ async function main() {
     },
   });
 
+  // Sprint M47 (21/06/2026) — tipo DESLIGAMENTO_CONCORRENTE pra fluxo de
+  // migração externa. Tenant-agnóstico ({{provedora.*}} em branco).
+  const desligamentoPadrao = await prisma.modeloDocumento.upsert({
+    where: { id: 'modelo-desligamento-concorrente-padrao' },
+    update: {
+      conteudo: DESLIGAMENTO_CONCORRENTE_PADRAO,
+      variaveis: extrairVariaveis(DESLIGAMENTO_CONCORRENTE_PADRAO),
+    },
+    create: {
+      id: 'modelo-desligamento-concorrente-padrao',
+      tipo: 'DESLIGAMENTO_CONCORRENTE',
+      nome: 'Termo de Desligamento de Fornecedor GD (padrão)',
+      conteudo: DESLIGAMENTO_CONCORRENTE_PADRAO,
+      variaveis: extrairVariaveis(DESLIGAMENTO_CONCORRENTE_PADRAO),
+      isPadrao: true,
+      ativo: true,
+    },
+  });
+
   console.log('Modelos criados:', {
     contrato: contratoPadrao.id,
     procuracao: procuracaoPadrao.id,
+    desligamento: desligamentoPadrao.id,
   });
 }
 

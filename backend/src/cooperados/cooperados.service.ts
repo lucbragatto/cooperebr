@@ -1544,6 +1544,20 @@ export class CooperadosService {
   }
 
   async alterarStatusLote(dto: { cooperadoIds: string[]; status: string }, cooperativaId?: string, usuarioId?: string) {
+    // Sprint M47 (21/06/2026) — P1 code-reviewer: bloqueia PENDENTE_MIGRACAO
+    // e DESLIGADO via endpoint de lote. Esses estados são operacionalmente
+    // significativos (saldo congela + billing bloqueado) e só podem ser
+    // setados via /cooperados/:id/migrar* (que cria MigracaoUsina associada).
+    // Caso contrário, invariante "Cooperado.status=PENDENTE_MIGRACAO ↔
+    // MigracaoUsina pendente existir" quebra.
+    if (['PENDENTE_MIGRACAO', 'DESLIGADO'].includes(dto.status)) {
+      throw new BadRequestException(
+        `Status '${dto.status}' não é permitido via /alterar-status-lote. ` +
+        `Use POST /cooperados/:id/migrar (iniciar migração externa) que cria ` +
+        `MigracaoUsina associada e garante o invariante operacional.`,
+      );
+    }
+
     // Buscar status anterior de cada cooperado para histórico e churn
     const cooperados = await this.prisma.cooperado.findMany({
       where: {

@@ -183,6 +183,21 @@ export class CobrancasService {
       );
     }
 
+    // Sprint MIGRAÇÃO M47 (21/06/2026) — GUARD MUST-FIX: bloquear cobrança
+    // para cooperado em PENDENTE_MIGRACAO ou DESLIGADO. Risco de
+    // double-charge durante transição (cooperado ainda recebe da
+    // distribuidora/cooperativa concorrente E receberia cobrança SISGD ao
+    // mesmo tempo). Status_PERMITIDOS_CREDITO no cooper-token já bloqueia,
+    // mas billing é fluxo separado — guard aqui é defesa em camada.
+    const statusBloqueadoBilling: string[] = ['PENDENTE_MIGRACAO', 'DESLIGADO'];
+    if (contrato?.cooperado?.status && statusBloqueadoBilling.includes(contrato.cooperado.status)) {
+      throw new BadRequestException(
+        `Cobrança bloqueada — cooperado em status '${contrato.cooperado.status}'. ` +
+        `Durante migração/desligamento o cooperado não entra em billing pra evitar double-charge. ` +
+        `Conclua a migração (/cooperados/:id/migrar/concluir) antes de gerar cobranças.`,
+      );
+    }
+
     // Resolver cooperativaId: parâmetro > contrato
     const resolvedCoopId = cooperativaId || contrato?.cooperativaId || undefined;
 
