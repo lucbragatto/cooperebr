@@ -14,6 +14,9 @@ import { PrismaService } from '../prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { UsinasModule } from '../usinas/usinas.module';
 import { UcsModule } from '../ucs/ucs.module';
+// Sprint M47 (21/06/2026): controller dos cooperados expõe /migrar/* que delega
+// pro MigracaoExternaService exportado por MigracoesUsinaModule.
+import { MigracoesUsinaModule } from '../migracoes-usina/migracoes-usina.module';
 // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — WhatsappModule importa CooperadosModule
 // (PinCooperadoService no motor de fluxo), entao reverso vira forwardRef.
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
@@ -32,6 +35,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     EmailModule,
     FaturasModule,
     forwardRef(() => MotorPropostaModule),
+    forwardRef(() => MigracoesUsinaModule),
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [CooperadosController],

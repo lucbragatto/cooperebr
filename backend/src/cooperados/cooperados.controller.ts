@@ -15,6 +15,8 @@ import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
 import { UcsService } from '../ucs/ucs.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
+// Sprint M47 (21/06/2026) — 3 endpoints de migração externa (concorrente → SISGD).
+import { MigracaoExternaService } from '../migracoes-usina/migracao-externa.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -28,6 +30,7 @@ export class CooperadosController {
     private readonly faturasService: FaturasService,
     private readonly ucsService: UcsService,
     private readonly motorProposta: MotorPropostaService,
+    private readonly migracaoExternaService: MigracaoExternaService,
   ) {}
 
   /**
@@ -177,6 +180,99 @@ export class CooperadosController {
   @Post('cadastro-completo')
   cadastroCompleto(@Body() body: CadastroCompletoDto, @Req() req: any) {
     return this.cooperadosService.cadastroCompleto(body, req.user?.cooperativaId);
+  }
+
+  // ─── Migração externa (concorrente → SISGD) — Sprint M47 (21/06/2026) ────
+  //
+  // 3 endpoints admin pra mecânica de migração:
+  //  - POST /cooperados/:id/migrar          (iniciar — PENDENTE_MIGRACAO)
+  //  - POST /cooperados/:id/migrar/concluir (ATIVO + statusMigracao CONCLUIDA)
+  //  - POST /cooperados/:id/migrar/rejeitar (DESLIGADO + REJEITADA)
+  //
+  // cooperativaId SEMPRE do JWT (lição M45 — NUNCA do body). SUPER_ADMIN
+  // sem cooperativaId é rejeitado: pra migrar, precisa estar no contexto
+  // de um tenant específico (via impersonate ou login direto).
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.migrar.iniciar', recurso: 'Cooperado', recursoIdParam: 'id' })
+  @Post(':id/migrar')
+  async iniciarMigracao(
+    @Param('id') id: string,
+    @Body() body: {
+      distribuidoraOrigem: string;
+      numeroUcOrigem?: string;
+      motivo?: string;
+    },
+    @Req() req: any,
+  ) {
+    const cooperativaId: string | undefined = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException(
+        'cooperativaId obrigatório no JWT pra operação de migração externa.',
+      );
+    }
+    const realizadoPorId: string | undefined =
+      req.user?.id ?? req.user?.userId ?? req.user?.sub;
+    if (!realizadoPorId) {
+      throw new ForbiddenException('Token sem id do usuário — auditoria bloqueada.');
+    }
+    return this.migracaoExternaService.iniciar({
+      cooperadoId: id,
+      cooperativaId,
+      realizadoPorId,
+      distribuidoraOrigem: body.distribuidoraOrigem,
+      numeroUcOrigem: body.numeroUcOrigem,
+      motivo: body.motivo,
+    });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.migrar.concluir', recurso: 'Cooperado', recursoIdParam: 'id' })
+  @Post(':id/migrar/concluir')
+  async concluirMigracao(@Param('id') id: string, @Req() req: any) {
+    const cooperativaId: string | undefined = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException(
+        'cooperativaId obrigatório no JWT pra operação de migração externa.',
+      );
+    }
+    const realizadoPorId: string | undefined =
+      req.user?.id ?? req.user?.userId ?? req.user?.sub;
+    if (!realizadoPorId) {
+      throw new ForbiddenException('Token sem id do usuário — auditoria bloqueada.');
+    }
+    return this.migracaoExternaService.concluir({
+      cooperadoId: id,
+      cooperativaId,
+      realizadoPorId,
+    });
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @AuditLog({ acao: 'cooperado.migrar.rejeitar', recurso: 'Cooperado', recursoIdParam: 'id' })
+  @Post(':id/migrar/rejeitar')
+  async rejeitarMigracao(
+    @Param('id') id: string,
+    @Body() body: { motivo: string },
+    @Req() req: any,
+  ) {
+    const cooperativaId: string | undefined = req.user?.cooperativaId;
+    if (!cooperativaId) {
+      throw new ForbiddenException(
+        'cooperativaId obrigatório no JWT pra operação de migração externa.',
+      );
+    }
+    const realizadoPorId: string | undefined =
+      req.user?.id ?? req.user?.userId ?? req.user?.sub;
+    if (!realizadoPorId) {
+      throw new ForbiddenException('Token sem id do usuário — auditoria bloqueada.');
+    }
+    return this.migracaoExternaService.rejeitar({
+      cooperadoId: id,
+      cooperativaId,
+      realizadoPorId,
+      motivo: body.motivo,
+    });
   }
 
   @Roles(COOPERADO)

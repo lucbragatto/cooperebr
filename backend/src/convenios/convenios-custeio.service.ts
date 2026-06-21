@@ -270,9 +270,19 @@ export class ConveniosCusteioService {
         ? Math.round(convenio.kwhAlocadoMensal * 100) / 100
         : null;
 
-    // Carrega membros ativos + UCs (single source)
+    // Carrega membros ativos + UCs (single source).
+    // Sprint MIGRAÇÃO M47 (21/06/2026) — MUST-FIX double-charge: exclui
+    // cooperados em PENDENTE_MIGRACAO ou DESLIGADO. Membro em migração
+    // ainda recebe créditos da distribuidora/cooperativa concorrente até a
+    // efetivação; entrar na consolidada SISGD nessa janela = double-charge
+    // + dupla alocação SCEE. Após /migrar/concluir, volta a ATIVO → entra
+    // automaticamente na consolidada do próximo ciclo.
     const membros = await this.prisma.convenioCooperado.findMany({
-      where: { convenioId, ativo: true },
+      where: {
+        convenioId,
+        ativo: true,
+        cooperado: { status: { notIn: ['PENDENTE_MIGRACAO', 'DESLIGADO'] } },
+      },
       include: {
         cooperado: {
           select: {
@@ -912,8 +922,13 @@ export class ConveniosCusteioService {
       }));
 
     // Conta membros pra cálculo do clube (apenas length é necessário).
+    // M47: mesmo filtro de status do previewKwhConsolidado pra paridade.
     const membrosCount = await this.prisma.convenioCooperado.count({
-      where: { convenioId: convenio.id, ativo: true },
+      where: {
+        convenioId: convenio.id,
+        ativo: true,
+        cooperado: { status: { notIn: ['PENDENTE_MIGRACAO', 'DESLIGADO'] } },
+      },
     });
 
     // 6. Resolver tarifa + calcular valores via helper compartilhado
