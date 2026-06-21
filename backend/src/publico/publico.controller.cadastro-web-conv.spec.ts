@@ -29,6 +29,9 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
     conviteConvenioMembro: {
       findUnique: jest.Mock;
     };
+    cooperativa: {
+      findUnique: jest.Mock;
+    };
   };
   let cadastroWebV2Mock: jest.Mock;
   const originalEnv = process.env.CADASTRO_V2_ATIVO;
@@ -40,7 +43,12 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
       conviteConvenioMembro: {
         findUnique: jest.fn(),
       },
-    };
+      // Sprint Hardening Tenant-Spoof (20/06/2026) — cadastroWeb agora valida
+      // tenant contra Cooperativa antes de aceitar ?tenant=<id>.
+      cooperativa: {
+        findUnique: jest.fn(),
+      },
+    } as any;
 
     controller = Object.create(PublicoController.prototype);
     (controller as any).prisma = prismaMock;
@@ -140,19 +148,28 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
 
     await expect(
       controller.cadastroWeb(body as any, undefined),
-    ).rejects.toThrow('cooperativaId ou query param ?tenant= é obrigatório no modo v2');
+    ).rejects.toThrow('Query param ?tenant=<cooperativaId> é obrigatório no modo v2');
 
     expect(prismaMock.conviteConvenioMembro.findUnique).not.toHaveBeenCalled();
     expect(cadastroWebV2Mock).not.toHaveBeenCalled();
   });
 
   // ─── Bônus: sem token mas com ?tenant= → caminho legado funciona ─
-  it('bônus) sem token mas com ?tenant= → usa tenantParam, não consulta convite', async () => {
+  it('bônus) sem token mas com ?tenant= válido → valida cooperativa + segue (NÃO consulta convite)', async () => {
+    prismaMock.cooperativa.findUnique.mockResolvedValue({
+      id: 'tenant-via-query',
+      ativo: true,
+    });
+
     const body = bodyBase();
 
     await controller.cadastroWeb(body as any, 'tenant-via-query');
 
     expect(prismaMock.conviteConvenioMembro.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.cooperativa.findUnique).toHaveBeenCalledWith({
+      where: { id: 'tenant-via-query' },
+      select: { id: true, ativo: true },
+    });
     expect(cadastroWebV2Mock).toHaveBeenCalledWith(body, 'tenant-via-query');
   });
 });
