@@ -5990,11 +5990,15 @@ Ao desligar membro de convênio, `removerMembro` não toca o saldo de token. Tok
 
 ### D-novo-CADASTRO-PUBLICO-TENANT-SPOOF — Endpoints @Public aceitam body.cooperativaId sobrescrevendo ?tenant= (P1 IDOR cross-tenant)
 
-**Pré-existente, descoberto no review multitenant do slice convênio-origem-dado 20/06.** Os endpoints públicos `POST /publico/cadastro-web` (`cadastroWebV2`:249) e `POST /publico/cadastro-sem-uc` (~1622) resolvem cooperativaId via `body.cooperativaId ?? tenantParam` — body precede query param. Atacante anônimo pode enviar `{cooperativaId: '<id-de-outro-tenant>', nome:..., cpf:...}` e criar cooperado spam em cooperativa-alvo. **Amplificado** pelo slice (campos `jaRecebeCreditosGd`/`fornecedorGdAtual` aparecem em tenant que nunca consentiu), mas vetor NÃO foi introduzido pelo slice. Mitigação no `cadastroWebV2`: quando vem `?conv=<token>`, o tenant é resolvido server-side via convite (linhas 253-267) — anti-spoof correto NESSE caminho específico. Fix: remover `body.cooperativaId` de ambos endpoints; aceitar tenant exclusivamente via `?tenant=` ou token. **Status:** ABERTO. Bloqueia onboarding de 2º parceiro real.
+**Status:** ✅ RESOLVIDO Sprint Hardening Tenant-Spoof (M45 — 2026-06-21).
+
+`publico.controller.ts` (cadastroWeb v2 + cadastroSemUc) agora exige `?tenant=<cooperativaId>` validado contra `Cooperativa.findUnique({where:{id}, select:{id,ativo}})` — `NotFoundException` se inexistente ou inativa. `body.cooperativaId` é DESCARTADO server-side. Path convite público (`?conv=<token>`) preservado intacto (tenant vem do token, modelo canônico). Bonus: `convenios-pagador-empresa` ganhou validação anti-enumeração silenciosa + `@Throttle 30/min`. Frontend (`web/app/cadastro/page.tsx`) propaga `?tenant=` com `encodeURIComponent` em 4 fetches + 3 links internos. Specs Jest 9/9 verde + smoke E2E real 5/5 PASS. Commit `5cd46ba`.
 
 ### D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF — `POST /cooperados` (admin) aceita body.cooperativaId sobrescrevendo JWT (P0 IDOR cross-tenant admin)
 
-**Pré-existente, descoberto no review multitenant do slice convênio-origem-dado 20/06.** `cooperados.controller.ts:139` resolve `cooperativaId: cooperativaId || req.user?.cooperativaId || undefined` — body precede JWT. ADMIN autenticado no tenant A pode enviar `{cooperativaId: 'tenant-B', ...}` e criar cooperado no tenant B. `CreateCooperadoDto:54` expõe o campo como `@IsOptional @IsString`. Fix: `cooperativaId: req.user?.cooperativaId ?? undefined` (remover do DTO ou ignorar do body); SUPER_ADMIN que precisa criar cross-tenant usa rota dedicada com path-param. **Status:** ABERTO. P0 BLOQUEADOR de produção real.
+**Status:** ✅ RESOLVIDO Sprint Hardening Tenant-Spoof (M45 — 2026-06-21).
+
+`cooperados.controller.ts:132-167` agora descarta `body.cooperativaId` via destructure; tenant vem SÓ do JWT (`req.user.cooperativaId`); SUPER_ADMIN escala cross-tenant via campo explícito `cooperativaIdAlvo` validado por DTO `@Matches(/^c[a-z0-9]{24}$/)` (CUID) + `Cooperativa.findUnique` (ativo=true) no controller. AGREGADOR preservado pelo JWT pré-populado (`auth.service.ts:713` carrega `cooperativaId` da `Administradora`). Specs Jest 9/9 verde + smoke E2E real (ADMIN spoof descartado + SA cross-tenant via cooperativaIdAlvo). Commit `5cd46ba`.
 
 ### D-novo-COOPERADO-UPDATE-SEM-COOPID — `cooperado.update({where:{id}})` sem cooperativaId no DML (P2 defense in depth)
 
@@ -6052,6 +6056,58 @@ Sem timeout, sem alerta, sem rollback. Edge case E3 relacionado: oxidação cega
 ### D-novo-CONVENIO-G5-DOC-DESLIGAMENTO — Documento "desligamento do concorrente" NÃO EXISTE (P3, Fase 3)
 
 `ModeloDocumento` só tem CONTRATO/PROCURACAO. Falta o termo de desligamento da distribuidora/cooperativa concorrente no fluxo de migração. **Status:** ABERTO.
+
+---
+
+## Débitos catalogados Sprint Hardening Tenant-Spoof (M45 — 21/06/2026)
+
+Reviewers (multitenant + security) mapearam o universo completo de tenant-spoof.
+M45 fechou o subconjunto **anônimo** (P0/P1 + bônus). O restante fica catalogado.
+
+### D-novo-CADASTRO-COMPLETO-TENANT-SPOOF — `POST /cooperados/cadastro-completo` aceita body.cooperativaId sobrescrevendo JWT (P1 IDOR autenticado)
+
+`cooperados.service.ts:495` (+ 3 outros pontos em 517 UC / 656 Contrato / 679 ListaEspera) aplica padrão `dto.cooperativaId || cooperativaId` onde `dto` vem do body. `CadastroCompletoDto` precisa ser auditado: se permitir `cooperativaId`, ADMIN autenticado pode forjar tenant alheio na rota `/cadastro-completo`. **Status:** ABERTO. Mesmo padrão de fix do M45 (destructure-discard). Não bloqueia piloto Santi (1 só admin); bloqueia onboarding multi-parceiro real.
+
+### D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT — `motor-proposta.aceitar()` aceita planoId cross-tenant sem validar ownership (P1 IDOR autenticado)
+
+`motor-proposta.service.ts:584,598-610` usa `dto.planoId` direto + `plano.findUnique({where:{id:planoIdResolvido}})` sem filtro `cooperativaId`. Cliente envia UUID de plano de outro tenant → contrato gerado referencia plano cruzado. Fallback (linha 590) tem filtro tenant correto. Fix: assert `plano.cooperativaId === dono.cooperativaId || plano.cooperativaId === null` (planos globais legítimos). **Status:** ABERTO. Conecta com IDOR sistêmico inventário SISGD.
+
+### D-novo-AUDITLOG-TENANT-ALVO-SA — AuditLog não captura `cooperativaIdAlvo` quando SUPER_ADMIN escala cross-tenant (P1 logging/auditoria)
+
+`audit-log.interceptor.ts:41-42` captura `cooperativaId` exclusivamente do JWT (`user.cooperativaId ?? null`). Para SUPER_ADMIN sem tenant no JWT, fica `null`; o `cooperativaIdAlvo` resolvido no controller (M45 fatia A) NÃO chega ao interceptor. Resultado: AuditLog de `cooperado.criar` por SA aparece com `cooperativaId=null` sem registro de qual tenant recebeu. Auditoria por tenant ("ações do SA no tenant X") fica cega. Fix: adicionar `req['auditTenantAlvoId'] = cooperativaId` no controller + interceptor ler `metadata`. Alternativa: campo `tenantAlvoId` no model `AuditLog`. **Status:** ABERTO. P1 governance.
+
+### D-novo-HARDENING-CONTROLLERS-LATERAIS — 3 controllers laterais com mesmo padrão de spoof autenticado (P1 IDOR autenticado)
+
+3 controllers identificados pelo security-reviewer (item "i" regressão lateral):
+- `backend/src/asaas/asaas.controller.ts:37` — `req.user?.cooperativaId || body.cooperativaId` sem validar existência (autenticado; webhook real é HMAC e fica separado).
+- `backend/src/condominios/condominios.controller.ts:26` — `body.cooperativaId ?? jwtCoop` para SUPER_ADMIN.
+- `backend/src/convite-indicacao/convite-indicacao.controller.ts:62` — `cooperativaId = body.cooperativaId` para SUPER_ADMIN sem validação.
+
+Caminho SA-only (não anônimo), mas mesmo padrão de spoof. Fix: aplicar destructure-discard + `cooperativaIdAlvo` validado (mesmo padrão M45). **Status:** ABERTO. Sprint Hardening Lateral (fast-follow autenticado, ~6-8h Code).
+
+### D-novo-USINA-PROPRIA-CROSS-TENANT — `cooperados.service.create` aceita `usinaPropriaId` cross-tenant sem validar (P2 IDOR autenticado)
+
+`cooperados.service.ts:443` aceita `usinaPropriaId` direto no `data` + envia pro `prisma.cooperado.create`. Não há `Usina.findUnique({where:{id, cooperativaId}})` antes. OPERADOR pode enviar UUID de usina de outro tenant → cooperado com FK cross-tenant. **Status:** ABERTO. Mesmo gap em `cadastroCompleto` linhas 607-610 com `planoId` (P2 separado).
+
+### D-novo-SERVICE-LAYER-UPDATE-DELETE-AUDIT — Auditoria sistemática 6 controllers × UPDATE/DELETE pra confirmar `where: {id, cooperativaId}` (P2)
+
+Sample em `cooperados.service.ts:1031, 736` mostra ternário `cooperativaId ? {id, cooperativaId} : {id}` frágil. Padrão precisa ser auditado em 6 controllers principais (cooperados, contratos, usinas, ucs, cobrancas, faturas). Conecta com **IDOR sistêmico** catalogado no inventário SISGD (~20 endpoints sem multi-tenant em UPDATE/DELETE/relações). Estimativa: 4-6h Code dedicada. **Status:** ABERTO.
+
+### D-novo-USINAS-CREATE-TENANT-IMPLICITO — `POST /usinas` sem tenant explícito no handler (P2 ambíguo)
+
+`usinas.controller.ts:74-77` não passa `cooperativaId` ao service. Service decide via quê? Precisa audit (pode estar lendo `req.user` por baixo dos panos, ou aceitando body, ou esperando service-side). **Status:** ABERTO. Mapeamento read-only antes de fix.
+
+### D-novo-COOPERADO-OWNERSHIP-SEM-COOPID — `assertCooperadoOwnership` sem `cooperativaId` no lookup (P3 isolamento leve)
+
+`cooperados.controller.ts:37-49` faz `findFirst({where:{id, OR:[{email},{cpf}]}})` sem `cooperativaId`. Se 2 tenants têm cooperados com mesmo CPF (raro mas possível em dados de teste), pode resolver cooperado do tenant errado e conceder acesso. Função usada só pra perfil COOPERADO em `GET /cooperados/:id`. Fix: adicionar `cooperativaId: user.cooperativaId` no where. **Status:** ABERTO. Baixo impacto (read-only).
+
+### D-novo-TERNARIO-COOPID-FALSY — `? {id, cooperativaId} : {id}` ternário falsy frágil (P3 robustez)
+
+`cooperados.service.ts:1031 (remove), :736 (update)` e similares em outros services usam `cooperativaId ? {id, cooperativaId} : {id}`. Intencional pra SUPER_ADMIN (cooperativaId=undefined), mas se vier string vazia `''` por JWT malformado, o filtro some. Fix: `cooperativaId !== undefined && cooperativaId !== null`. Pattern espalhado — Sprint Padronização Multi-Tenant futura. **Status:** ABERTO.
+
+### D-novo-PUBLICO-400-404-ORACULO — 400 vs 404 distinguíveis em endpoints públicos sem auth (P3 enumeração teórica)
+
+Cadastros públicos retornam 400 `BadRequestException` se `?tenant=` ausente e 404 `NotFoundException` se tenant inexistente/inativo. Probe pode distinguir os 2 casos. **Rebaixado pra P3** — IDs CUID-25 (10^25 combinações) tornam enumeração por força bruta infactível. DX (cliente legítimo precisa do feedback claro) justifica diferenciação. **Status:** ABERTO. Eventual normalização pra 400 genérico.
 
 ---
 
