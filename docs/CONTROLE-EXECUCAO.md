@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-21 (Code) — M46 Sprint Convênio FUNDAÇÃO FECHADO — E1 tokens ficam + E8 notificações wiradas + smoke E2E real**. Sprint pequena (~3h) que finaliza a fundação do ciclo de vida + notificações do convênio cooperativizado (design 19/06). E1 (decisão Luciano: tokens FICAM com funcionário no desligamento) validado na Fase 1 read-only — `removerMembro` já não tocava saldo — + ampliado com notificação WA inline ("seus N tokens continuam seus, R$ Y" calculado via `ConfigCooperToken` do tenant). E8 (`TokenNotificacaoService` órfão desde Sprint Token-WA Fase 2) wirado via novo `CooperTokenNotificacaoListener` único consumindo `RESGATADO` (fatura abatida — usarNaFatura-only) + `DISTRIBUIDO_CONVENIO` (novo, empresa-PJ → funcionário). 22 specs Jest verde + **smoke E2E REAL passou** (cooperado-teste whitelist 27981341348 → MensagemWhatsapp.status='ENVIADA' real; D-novo-WA-DEV-FALSE-OK descartado). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (3 fixes pré-merge: hardcode 0.45 → ConfigCooperToken; idempotência cooperativaId defense-in-depth; spec assertion). Commits: `79e5f1f` (feat) + `950d2c1` (merge --no-ff). Feature branch `feature/convenio-fundacao-lifecycle` PRESERVADA. Próximo: **#3 Sprint Convênio MIGRAÇÃO (Fase 3 — G2 estados + G5 doc desligamento + rollback) — legalmente SEGURA**. FAMÍLIA (Fase 2 G1) aguarda parecer trabalhista. **Observação:** IDOR sistêmico ACUMULANDO (M45 lateral + 3 D-novo-CONVENIO-*-SEM-COOPID novos + inventário SISGD) — candidato a Sprint Hardening Lateral próximo. Detalhe: `docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md`.
+> Última atualização: **2026-06-21 (Code) — M47 Sprint Convênio MIGRAÇÃO FECHADO — G2 estados + G5 doc + ciclo admin-manual + smoke real**. Sprint Fase 3 do design 19/06 que FINALIZA o **convênio cooperativizado COMPLETO** (M44 + M46 + M47). Mecânica admin-manual de migração de cooperado de distribuidora/cooperativa CONCORRENTE → SISGD. **Sem roteador A/B/C** (deferido como Sprint Roteador+Funil — aguarda spec do orquestrador + decisão de produto Luciano). Schema delta aditivo (StatusCooperado += PENDENTE_MIGRACAO + DESLIGADO; MigracaoUsina += 5 campos opcionais + 2 indexes), 3 endpoints admin sob `/cooperados/:id/migrar*` com `cooperativaId` SEMPRE do JWT (lição M45), 2 guards billing MUST-FIX (cobrancas + convenios-custeio), cron timeout 30d + AuditLog + WA admin, seed ModeloDocumento DESLIGAMENTO_CONCORRENTE tenant-agnóstico (`{{provedora.*}}` em branco — princípio multi-tenant 17/05). E3 confirmado: cooperado em PENDENTE_MIGRACAO tem saldo CONGELADO via STATUS_PERMITIDOS_CREDITO (7 pontos do circuito). 30 specs Jest + smoke E2E REAL (2 WAs reais ENVIADA pro whitelist 27981341348). Reviewers multitenant + financeiro-token + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (fixes pré-merge aplicados). Commits: `5ee0aff` (feat) + `f36782b` (merge --no-ff). Feature branch `feature/convenio-migracao` PRESERVADA. **Convênio cooperativizado COMPLETO. Família (Fase 2 G1) DEFERIDA até parecer trabalhista.** Próximo: **Sprint ROTEADOR + FUNIL** (depende formalização da spec + decisão produto Luciano sobre vitrine SISGD marketplace). **2 débitos DESTACADOS pra fechar antes de escalar pra 2º parceiro real**: D-novo-M47-DESLIGADO-SALDO-RESIDUAL P2 (inconsistência E1 — tokens travados no DESLIGADO) + D-novo-M47-MSG-MULTI-TENANT-PARCEIRO P2 (mensagens WA hardcodam "CoopereBR" — bloqueia onboarding Consórcio/Associação/Condomínio). Detalhe: `docs/sessoes/2026-06-21-m47-sprint-convenio-migracao.md`.
+
+> Histórico: **2026-06-21 (Code) — M46 Sprint Convênio FUNDAÇÃO FECHADO — E1 tokens ficam + E8 notificações wiradas + smoke E2E real**. Sprint pequena (~3h) que finaliza a fundação do ciclo de vida + notificações do convênio cooperativizado (design 19/06). E1 (decisão Luciano: tokens FICAM com funcionário no desligamento) validado na Fase 1 read-only — `removerMembro` já não tocava saldo — + ampliado com notificação WA inline ("seus N tokens continuam seus, R$ Y" calculado via `ConfigCooperToken` do tenant). E8 (`TokenNotificacaoService` órfão desde Sprint Token-WA Fase 2) wirado via novo `CooperTokenNotificacaoListener` único consumindo `RESGATADO` (fatura abatida — usarNaFatura-only) + `DISTRIBUIDO_CONVENIO` (novo, empresa-PJ → funcionário). 22 specs Jest verde + **smoke E2E REAL passou** (cooperado-teste whitelist 27981341348 → MensagemWhatsapp.status='ENVIADA' real; D-novo-WA-DEV-FALSE-OK descartado). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (3 fixes pré-merge: hardcode 0.45 → ConfigCooperToken; idempotência cooperativaId defense-in-depth; spec assertion). Commits: `79e5f1f` (feat) + `950d2c1` (merge --no-ff). Feature branch `feature/convenio-fundacao-lifecycle` PRESERVADA. Próximo: **#3 Sprint Convênio MIGRAÇÃO (Fase 3 — G2 estados + G5 doc desligamento + rollback) — legalmente SEGURA**. FAMÍLIA (Fase 2 G1) aguarda parecer trabalhista. **Observação:** IDOR sistêmico ACUMULANDO (M45 lateral + 3 D-novo-CONVENIO-*-SEM-COOPID novos + inventário SISGD) — candidato a Sprint Hardening Lateral próximo. Detalhe: `docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md`.
 
 > Histórico: **2026-06-21 (Code) — M45 Sprint Hardening Tenant-Spoof FECHADO — bloqueia exposição ANÔNIMA do /cadastro**. Fecha 2 débitos descobertos na investigação M44: `D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF` P0 + `D-novo-CADASTRO-PUBLICO-TENANT-SPOOF` P1 + bônus `convenios-pagador-empresa` validação anti-enumeração. POST `/cooperados` descarta `body.cooperativaId` (destructure-discard); tenant vem SÓ do JWT; SUPER_ADMIN escala via `cooperativaIdAlvo` validado (DTO `@Matches` CUID + `Cooperativa.findUnique` ativo). Cadastros públicos exigem `?tenant=<id>` validado → 404 se inexistente/inativa. Path convite (`?conv=<token>`) preservado intacto. Frontend: 4 fetches + 3 links com `encodeURIComponent`. **HONESTO:** sprint NÃO fecha spoofs AUTENTICADOS (cadastroCompleto, motor-proposta, 3 controllers laterais asaas/condominios/convite-indicacao) — catalogados como 4 débitos P1 da próxima Sprint Hardening Lateral. NÃO bloqueia piloto Santi. Reviewers multitenant + security APROVARAM com ressalvas (P0+P1+P2+P3 fixes aplicados pré-merge). 32 specs Jest + smoke E2E real 5/5 PASS. Commits: `9403095` (feat) + `5cd46ba` (merge --no-ff). Feature branch `feature/hardening-tenant-spoof` PRESERVADA. Próximo: decisão Luciano #2 Convênio Fase 2 (escopo piloto) OU default fast-follow Sprint Hardening Lateral. Detalhe: `docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md`.
 
@@ -68,6 +70,96 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-21 (Code — M47 Sprint Convênio MIGRAÇÃO: G2 estados + G5 doc + ciclo admin-manual + smoke E2E real + merge na main)
+
+**Sessão Code dedicada — M47 entregue ponta-a-ponta com smoke E2E REAL.**
+Sprint Fase 3 do design 19/06 que finaliza o **convênio cooperativizado
+COMPLETO** (M44 origem-dado + M46 fundação + **M47 migração**). Mecânica
+admin-manual de migração de cooperado de distribuidora/cooperativa CONCORRENTE
+→ SISGD. Roteador A/B/C deferido como Sprint Roteador+Funil própria
+(aguarda spec do orquestrador + decisão produto Luciano).
+
+**ENTREGAS:**
+- **Fatia A** — Schema delta aditivo: StatusCooperado += PENDENTE_MIGRACAO +
+  DESLIGADO; MigracaoUsina += 5 campos opcionais (distribuidoraOrigem,
+  numeroUcOrigem, dataInicioMigracao, dataDesligamentoEfetivo, statusMigracao)
+  + 2 indexes compostos.
+- **Fatia B** — Guards billing MUST-FIX double-charge: cobrancas.service.create
+  + convenios-custeio.gerarCobrancaConsolidada filtram cooperados em
+  PENDENTE_MIGRACAO/DESLIGADO.
+- **Fatia C** — MigracaoExternaService + 3 endpoints admin
+  (`POST /cooperados/:id/migrar` + `/migrar/concluir` + `/migrar/rejeitar`)
+  com `cooperativaId` SEMPRE do JWT (lição M45). Multi-tenant
+  defense-in-depth em todos os 6 UPDATEs. AuditLog forense quando DESLIGADO
+  com saldo residual. Guard `alterarStatusLote` rejeita
+  PENDENTE_MIGRACAO/DESLIGADO via lote.
+- **Fatia D** — Cron `@Cron('0 7 * * *')` timeout 30d: emit evento + AuditLog
+  forense + WA admin (orderBy createdAt asc determinístico). SEM rollback
+  automático (admin decide).
+- **Fatia E** — Seed ModeloDocumento `DESLIGAMENTO_CONCORRENTE`
+  tenant-agnóstico (`{{provedora.*}}` em branco). Matcher bot WA inclui
+  PENDENTE_MIGRACAO (DESLIGADO fica fora).
+- **30 specs Jest verde** + **smoke E2E REAL passou** (cooperado-teste
+  whitelist 27981341348 → /migrar → /migrar/concluir + 2 WAs reais ENVIADA;
+  D-novo-WA-DEV-FALSE-OK descartado).
+
+**REVIEWERS** (3 paralelos + re-review):
+- multitenant-reviewer: APROVADO COM RESSALVAS (P1 6 UPDATEs sem cooperativaId
+  FIXED + P2 cooperativaId no WA metadata FIXED + 2 P3 documentação FIXED).
+- financeiro-token-reviewer: APROVADO COM RESSALVAS (FUNDACAO §4#1 preservada;
+  E3 confirmado em 7 pontos do circuito; P3 orderBy determinístico FIXED;
+  P2 AuditLog saldo residual FIXED).
+- code-reviewer: WARNING (4 P1) → 3 FIXED (STATUS_MIGRACAO_VALIDOS comentário +
+  alterarStatusLote guard + spec assert cooperativaId) + 1 catalogado (DTOs
+  class-validator).
+- Re-review orquestrador: **APROVADO** — "Smoke real cumpriu exigência."
+
+**O QUE FECHOU (✅) — DÉBITOS DO DESIGN 19/06:**
+- `D-novo-CONVENIO-G2-ESTADOS-MIGRACAO` P2 → ✅ RESOLVIDO.
+- `D-novo-CONVENIO-G5-DOC-DESLIGAMENTO` P3 → ✅ RESOLVIDO.
+- `D-novo-CONVENIO-E2-MIGRACAO-FALHA-SEM-ROLLBACK` P2 → ✅ MITIGADO (cron +
+  admin manual).
+
+**🔴 DESTAQUES — "OK pro piloto Santi, FECHAR ANTES de escalar":**
+- `D-novo-M47-DESLIGADO-SALDO-RESIDUAL` P2 — DESLIGADO com tokens fica congelado
+  inacessível. AuditLog mitiga, mas viola promessa E1 do M46 ("seus tokens
+  continuam seus"). Precisa rota de uso/devolução antes de confiar no DESLIGADO
+  com saldo > 0.
+- `D-novo-M47-MSG-MULTI-TENANT-PARCEIRO` P2 — mensagens WA hardcodam
+  "CoopereBR". Correto pro piloto Santi mas BLOQUEIA onboarding
+  Consórcio/Associação/Condomínio.
+
+**Outros débitos novos M47** catalogados (~11): RACE-CONSOLIDADA P2,
+DTOS-INICIAR-REJEITAR P2, CRON-IDEMPOTENCIA P2, HELPER-TENANT-CTX P3,
+CONCLUIDO-REJEITADO-POR-ID P3, CRON-TIMEZONE P3, STATUS-NULLABLE-CONSTRAINT P3,
+TOM-MSG-DESLIGADO P3, SPECS-FRAGEIS P3, SMOKE-POLLING P3,
+NOTIF-FAIL-LOG-MIGRACAO-ID P3.
+
+**Commits:** `5ee0aff` (feat) + `f36782b` (merge --no-ff). Feature branch
+`feature/convenio-migracao` PRESERVADA no origin.
+
+**Próximo bloco** (escopo COMPLETO Luciano):
+- **#1 M45 Hardening Tenant-Spoof** — ✅ FECHADO
+- **#2 M46 Convênio FUNDAÇÃO** — ✅ FECHADO
+- **#3 M47 Convênio MIGRAÇÃO** — ✅ FECHADO NESTA SESSÃO
+- **Sprint ROTEADOR + FUNIL DE AQUISIÇÃO** — próximo na fila do convênio
+  multi-parceiro. DEPENDE de: orquestrador formalizar spec completa + Luciano
+  decidir critério de atribuição lead→parceiro (região / escolha usuário /
+  capacidade parceiro / placement-pago). 8 débitos pré-catalogados na Fase 1
+  ampliada M47.
+- **Sprint Convênio FAMÍLIA (Fase 2 — G1)** — DEFERIDA até parecer trabalhista
+  (token paga conta de luz = risco salário in natura agravado CLT 458 quando
+  expandido pra família).
+- **Sprint Hardening Lateral / IDOR sistêmico** — segue catalogado.
+- **Sprint OPÇÃO A D-QUALIF-DECAY** + **OPÇÃO C Notificações Proativas** —
+  seguem catalogados.
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE RETOMADA —
+próxima sessão Code` no fim deste documento (M47 atualizada, M46 arquivada).
+Detalhe: `docs/sessoes/2026-06-21-m47-sprint-convenio-migracao.md`.
 
 ---
 
@@ -3242,27 +3334,118 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M46 (21/06):
+2. Rodar `git status --short`. Esperado pós-fechamento M47 (21/06):
    working tree com `backend/package.json` +
    `backend/package-lock.json` MODIFICADOS (TERRITÓRIO COWORK, NÃO
    TOCAR) + untracked não-meus (`.claude/agents/*`, `*.mjs`,
    `scripts/*`, `.agent/memory/*`) — NUNCA `git add .` / `-A`. Último
-   commit em main é o fechamento M46 (`docs(sessao): fechamento M46
+   commit em main é o fechamento M47 (`docs(sessao): fechamento M47
    ...`). `git log origin/main..HEAD --oneline` deve estar VAZIO.
    Branches preservadas no origin (NÃO deletar):
    `feature/d2-salvaguardas-origem` (b65bcb3),
    `feature/hardening-throttler-reconciliacao` (beb125c),
    `feature/convenio-origem-dado` (6847e5a),
    `feature/hardening-tenant-spoof` (5cd46ba),
-   `feature/convenio-fundacao-lifecycle` (M46 merge `950d2c1`).
+   `feature/convenio-fundacao-lifecycle` (M46 merge `950d2c1`),
+   `feature/convenio-migracao` (M47 merge `f36782b`).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   + cooperebr-whatsapp online (3000/3001/3002 LISTENING). NÃO RODAR
-   `prisma db push` (M46 não tocou schema; só código).
+   + cooperebr-whatsapp online. Schema delta M47 (StatusCooperado += 2
+   valores + MigracaoUsina += 5 campos + 2 indexes) JÁ APLICADO no
+   banco dev — NÃO RODAR `prisma db push` a menos que tenha schema
+   delta novo na próxima sprint.
 
-PASSO 1 — Frase COMANDANTE: Luciano decidiu fazer TODAS as 4 sprints
-do escopo COMPLETO em sequência. **#1 (M45 Hardening Tenant-Spoof)
-FECHADO**. **#2 (M46 Convênio FUNDAÇÃO — E1 + E8 + smoke real) FECHADO**.
+PASSO 1 — Frase COMANDANTE: **CONVÊNIO COOPERATIVIZADO COMPLETO** —
+M44 (origem-dado) ✅ + M46 (fundação E1+E8) ✅ + **M47 (migração G2+G5)
+✅ FECHADO NESTA SESSÃO**.
+
+Próximo: **Sprint ROTEADOR + FUNIL DE AQUISIÇÃO** — fecha o convênio
+multi-parceiro com detector A/B/C central + vitrine SISGD marketplace +
+funil em 2 vozes ("Venha pra X" parceiro + "Consulte parceiros do
+SISGD" plataforma). **BLOQUEIA até:**
+
+(a) Orquestrador formalizar a **spec completa** do roteador + funil.
+(b) Luciano decidir **critério de atribuição lead → parceiro**: região
+    (CEP do lead vs raio de atuação do parceiro) / escolha explícita do
+    usuário (lead escolhe entre parceiros próximos) / capacidade do
+    parceiro (slots disponíveis) / placement-pago (parceiros que pagam
+    posição premium na vitrine).
+
+NÃO ARRANCAR a Sprint Roteador+Funil sem (a) + (b). Construir um
+roteador sem critério de atribuição → dependência circular + retrabalho.
+
+Enquanto NÃO houver spec + decisão de atribuição, candidatas
+decision-independent (catalogadas):
+
+**Sprint Hardening Lateral** (~6-8h) — IDOR sistêmico ACUMULANDO:
+- 4 P1 M45 (CADASTRO-COMPLETO + MOTOR-PROPOSTA-PLANO + AUDITLOG-TENANT-ALVO-SA
+  + HARDENING-CONTROLLERS-LATERAIS).
+- 2 P2 M46 (CONVENIO-UPDATE-SEM-COOPID + CONVENIO-LISTAR-MEMBROS-SEM-COOPID).
+- Inventário SISGD ~20 endpoints sem multi-tenant em UPDATE/DELETE.
+
+**M47 DESTAQUES — fechar antes de 2º parceiro real:**
+- `D-novo-M47-DESLIGADO-SALDO-RESIDUAL` P2 — DESLIGADO via /rejeitar fica
+  com tokens congelados inacessíveis. AuditLog mitiga, viola promessa E1
+  do M46. Precisa rota de uso/devolução (PIX out / migrar pra indicador /
+  liquidação contábil).
+- `D-novo-M47-MSG-MULTI-TENANT-PARCEIRO` P2 — mensagens WA hardcodam
+  "CoopereBR" em `migracao-externa.service.ts:notificarInicio/Conclusao/
+  Rejeicao` + job:processarTimeout. Bloqueia onboarding Consórcio/
+  Associação/Condomínio.
+
+**FAMÍLIA (Fase 2 — G1)** DEFERIDA até parecer trabalhista (token paga
+conta de luz = salário in natura agravado CLT 458 quando expandido pra
+família — esposa SEM UC abate fatura do marido COM UC).
+
+**OPÇÃO A D-QUALIF-DECAY** (~6-10h) + **OPÇÃO C Notificações Proativas**
+seguem catalogadas.
+
+Caminho ativação produção saque colaborador DESCONTO_FATURA: ✅ parecer +
+✅ Salvaguardas 1/4/5 + ✅ Throttler+Reconciliação + ⏳ parecer escrito +
+⏳ flag `.env` prod.
+
+VISÃO FUNIL DE AQUISIÇÃO (registrar pra Sprint Roteador+Funil):
+- Caso C (sem GD) vira CAPTADOR DE CLIENTE nas telas de cadastro público
+  + admin ao subir fatura com crédito.
+- Tela dedicada técnica do roteador A/B/C.
+- Publicidade em 2 VOZES no funil:
+  - Nível parceiro: "Venha pra {{cooperativa.nome}} e melhore sua economia".
+  - Nível plataforma: "Consulte os parceiros do SISGD e melhore sua
+    economia" (marketplace multi-tenant).
+- 8 débitos pré-catalogados na Fase 1 ampliada M47 (`docs/debitos-
+  tecnicos.md`): ROTEADOR-CADASTRO-CENTRAL P1, LEAD-EXPANSAO-CONVERTER P1,
+  JA-RECEBE-CREDITOS-GD-PASSIVO P2, ADAPTER-EXTRAI-CNPJ-GERADOR P2,
+  FATURA-PROCESSADA-CLASSIFICACAO-SCEE P2, LISTA-ALIASES-PARCEIROS-SISGD
+  P2, LEAD-WHATSAPP-VS-EXPANSAO-CONFUSAO P3, CROSS-TENANT-NOTIFICATION P3.
+
+ENTREGA M47 (referência):
+- Schema delta aditivo: StatusCooperado += PENDENTE_MIGRACAO + DESLIGADO;
+  MigracaoUsina += 5 campos opcionais + 2 indexes.
+- 2 guards billing MUST-FIX (cobrancas + convenios-custeio) contra
+  double-charge SCEE.
+- MigracaoExternaService + 3 endpoints admin (`/cooperados/:id/migrar*`)
+  com cooperativaId SEMPRE do JWT (lição M45) + multi-tenant
+  defense-in-depth + AuditLog forense saldo residual.
+- Cron `@Cron('0 7 * * *')` timeout 30d + WA admin determinístico.
+- Seed ModeloDocumento DESLIGAMENTO_CONCORRENTE tenant-agnóstico.
+- Matcher bot WA inclui PENDENTE_MIGRACAO (exclui DESLIGADO).
+- E3 confirmado: STATUS_PERMITIDOS_CREDITO bloqueia em 7 pontos.
+- 30 specs Jest + smoke E2E REAL passou (2 WAs reais ENVIADA pro
+  whitelist).
+- Reviewers multitenant + financeiro-token + code-reviewer + re-review
+  orquestrador APROVADOS COM RESSALVAS (fixes pré-merge aplicados).
+- Commits: `5ee0aff` (feat) + `f36782b` (merge --no-ff).
+
+ENTREGA M46 (referência — sprint anterior):
+- TokenNotificacaoService + 2 métodos (notificarDistribuicaoConvenio +
+  notificarAbateFatura). CooperTokenNotificacaoListener único consumindo
+  RESGATADO + DISTRIBUIDO_CONVENIO com idempotência multi-tenant.
+- E1 inline em removerMembro com ConfigCooperToken.valorTokenReais por
+  tenant.
+- 22 specs + smoke E2E real (whitelist).
+- Commits: `79e5f1f` (feat) + `950d2c1` (merge --no-ff).
+
+═══ (BLOCO LEGADO — referência ENTREGA design 19/06) ═══
 
 Próximo: **#3 — Sprint Convênio MIGRAÇÃO (Fase 3 — G2 + G5 + rollback)**
 — legalmente SEGURA (não exige parecer trabalhista). Aborda os débitos
@@ -3444,22 +3627,24 @@ PROTOCOLO próxima sprint (independente de qual):
 - Merge --no-ff preservando feature branch no origin.
 
 PRÉ-REQUISITOS LEITURA:
-1. docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md (esta sessão).
-2. docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md (M45).
-3. docs/sessoes/2026-06-19-design-convenio-token-cooperado-familia.md
-   (design fonte do convênio — G2/G5/rollback referenciados pra #3 MIGRAÇÃO).
-4. docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md (modelo + gap map).
-5. docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md
-   (parecer 4 lentes — confirma que MIGRAÇÃO é Fase 3 legalmente segura).
-6. docs/debitos-tecnicos.md — E1 RESOLVIDO M46 + 6 débitos novos M46 + carry de
-   M44/M45 + débitos design 19/06 ainda abertos.
-7. backend/src/migracoes-usina/ (modelo `MigracaoUsina` existente intra-coop;
-   referência pra Sprint MIGRAÇÃO).
-8. backend/src/cooper-token/cooper-token-notificacao.listener.ts (pattern do
-   listener-based event reusável).
-9. CLAUDE.md (regras + multi-tenant + disciplina análise modelo canônico).
+1. docs/sessoes/2026-06-21-m47-sprint-convenio-migracao.md (esta sessão).
+2. docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md (M46 — E1+E8).
+3. docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md (M45).
+4. docs/sessoes/2026-06-19-design-convenio-token-cooperado-familia.md
+   (design fonte do convênio).
+5. docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md (modelo + gap map).
+6. docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md
+   (parecer 4 lentes).
+7. docs/debitos-tecnicos.md — 3 débitos design 19/06 marcados ✅
+   (G2+G5+E2 RESOLVIDOS/MITIGADOS M47) + 13 débitos novos M47 (2
+   DESTAQUES P2 + 11 outros).
+8. backend/src/migracoes-usina/ (MigracaoExternaService + cron + 18 specs —
+   pattern do listener-based + cron ready pra reusar).
+9. CLAUDE.md (regras + multi-tenant + lição M45 cooperativaId do JWT).
 
-═══ FIM DA FRASE M46 (sessão 21/06 — Sprint Convênio FUNDAÇÃO entregue + smoke E2E real + merge na main) ═══
+═══ FIM DA FRASE M47 (sessão 21/06 — Sprint Convênio MIGRAÇÃO entregue + smoke E2E real + merge na main) ═══
+
+═══ FRASE ARQUIVADA M46 (21/06 — Sprint Convênio FUNDAÇÃO) — referência ═══
 
 ═══ FRASE ARQUIVADA M45 (21/06 — Sprint Hardening Tenant-Spoof) — referência ═══
 

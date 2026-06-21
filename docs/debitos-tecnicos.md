@@ -6049,15 +6049,21 @@ Cooperado SEM UC declara consumo, mas só há conversão kWh→R$ (`conversao-cr
 
 ### D-novo-CONVENIO-G2-ESTADOS-MIGRACAO — Estados PENDENTE_MIGRACAO/DESLIGADO + rastreio do concorrente NÃO EXISTEM (P2, Fase 3)
 
-`StatusCooperado` não tem os estados de transição; `MigracaoUsina` é intra-coop; billing só liga "de raspão" (roda em ATIVO). Necessário pro cenário "cliente migra energia do concorrente pra nós" sem double-count SCEE. **Status:** ABERTO.
+**Status:** ✅ RESOLVIDO Sprint Convênio MIGRAÇÃO (M47 — 2026-06-21).
+
+`StatusCooperado` += `PENDENTE_MIGRACAO` + `DESLIGADO`. `MigracaoUsina` ampliado com `tipo='DISTRIBUIDORA_EXTERNA'` + 5 campos opcionais (distribuidoraOrigem, numeroUcOrigem, dataInicioMigracao, dataDesligamentoEfetivo, statusMigracao). Billing guards em 2 lugares evitam double-count SCEE. Edge case E3 confirmado: cooperado em PENDENTE_MIGRACAO tem saldo CONGELADO via STATUS_PERMITIDOS_CREDITO em 7 pontos do circuito (creditar + distribuirTokens + usarNaFatura + transferir + resgatar + oxidação). Commit `f36782b`.
 
 ### D-novo-CONVENIO-E2-MIGRACAO-FALHA-SEM-ROLLBACK — Migração do concorrente falha → membro em limbo (P2, Fase 3)
 
-Sem timeout, sem alerta, sem rollback. Edge case E3 relacionado: oxidação cega ao estado de transição (token "recebe e segura" não tem suporte — `creditar` exige ATIVO). **Status:** ABERTO.
+**Status:** ✅ MITIGADO Sprint Convênio MIGRAÇÃO (M47 — 2026-06-21).
+
+Cron diário `verificarMigracoesPendentes` (`migracao-externa.job.ts` `@Cron('0 7 * * *')`) detecta MigracaoUsina PENDENTE > 30 dias → emit `MigracaoPendenteTimeoutEvent` + AuditLog forense (`usuarioId='SYSTEM_CRON'`) + WA admin do tenant (orderBy createdAt asc determinístico). **Sem rollback automático por design** (sensível demais) — admin decide manual via `/migrar/concluir` (ATIVO) ou `/migrar/rejeitar` (DESLIGADO). Commit `f36782b`.
 
 ### D-novo-CONVENIO-G5-DOC-DESLIGAMENTO — Documento "desligamento do concorrente" NÃO EXISTE (P3, Fase 3)
 
-`ModeloDocumento` só tem CONTRATO/PROCURACAO. Falta o termo de desligamento da distribuidora/cooperativa concorrente no fluxo de migração. **Status:** ABERTO.
+**Status:** ✅ RESOLVIDO Sprint Convênio MIGRAÇÃO (M47 — 2026-06-21).
+
+Seed `prisma/seed-modelos.ts` ampliado com template `DESLIGAMENTO_CONCORRENTE` tenant-agnóstico (`{{provedora.*}}` em branco — princípio multi-tenant templates 17/05). Cláusulas: objeto, responsabilidade pela representação junto à concessionária, não-duplicidade Lei 14.300/2022 Art. 14, ausência de pendências, vigência. Referencia REN ANEEL 1.000/2021 SCEE + Lei 14.300/2022 MMGD. Cada parceiro preenche dados do `{{provedora.*}}` na primeira customização. Commit `f36782b`.
 
 ---
 
@@ -6138,6 +6144,66 @@ Listener `CooperTokenNotificacaoListener` + `notificarDesligamentoE1` fazem skip
 ### D-novo-WA-FILA-DEDICADA — Sem fila WA pra burst grande de distribuição mass-write (P3 ops)
 
 `distribuirTokens` emite N eventos `DISTRIBUIDO_CONVENIO` sequenciais (1 por destinatário). `WhatsappSenderService` é síncrono (`fetch` direto). Lote grande (centenas de funcionários) pode estourar limite do WA. Pro piloto Santi (poucos funcionários) sem problema. Catalogar se piloto mostrar erro. Fix futuro: enfileirar via BullMQ ou throttle interno. Cuidado A do orquestrador 21/06. **Status:** ABERTO.
+
+---
+
+## Débitos catalogados Sprint Convênio MIGRAÇÃO (M47 — 21/06/2026)
+
+### 🔴 DESTAQUES — "OK pro piloto Santi, FECHAR ANTES de escalar"
+
+#### D-novo-M47-DESLIGADO-SALDO-RESIDUAL — Cooperado DESLIGADO via /rejeitar fica com tokens congelados sem rota de saída (P2 conflito E1)
+
+`migracao-externa.service.ts:rejeitar` deixa cooperado em `Cooperado.status='DESLIGADO'` com saldo CongerlTokenSaldo positivo. `STATUS_PERMITIDOS_CREDITO` bloqueia uso (gasto + crédito + transferência + resgate) + `aplicarOxidacao` filtra → tokens ficam permanentemente travados. AuditLog forense (`acao='migracao.rejeitar.saldo-residual'`) **mitiga rastreabilidade** mas NÃO resolve. **Inconsistência crítica com a promessa E1 do M46** ("seus tokens continuam seus" no desligamento de convênio). Aqui, DESLIGADO trava tudo. **BLOQUEIA confiança em DESLIGADO com saldo > 0**. Opções pra próxima sprint: (a) endpoint admin `POST /cooperados/:id/resgatar-saldo-residual` (PIX out); (b) migrar saldo pra indicador (MLM); (c) liquidação contábil via voucher cooperativa (FUNDACAO §4#1 ajuste). **Status:** ABERTO. **Fechar antes de qualquer DESLIGADO real em produção.**
+
+#### D-novo-M47-MSG-MULTI-TENANT-PARCEIRO — Mensagens WA hardcodam "CoopereBR" (P2 bloqueador multi-tipo)
+
+`migracao-externa.service.ts:notificarInicio/Conclusao/Rejeicao` + `migracao-externa.job.ts:processarTimeout` hardcodam strings "CoopereBR" / "pra CoopereBR" / etc nos 4 templates de mensagem. **Correto pro piloto Santi** (a conveniada é da CoopereBR), MAS **viola regra de vocabulário multi-tipo CLAUDE.md** (`Cooperativa.tipoParceiro` × 4: COOPERATIVA/CONSORCIO/ASSOCIACAO/CONDOMINIO) + **BLOQUEIA onboarding de Consórcio/Associação/Condomínio**. Fix obrigatório: trocar literais por `cooperativa.nome` dinâmico (busca prévia via `cooperativaId` do contexto OU parameterizar nos métodos). **Status:** ABERTO. **Fix obrigatório ANTES de qualquer 2º parceiro real do SISGD.**
+
+### Outros débitos M47
+
+#### D-novo-M47-RACE-CONSOLIDADA — Race entre SELECT membros e INSERT cobrança consolidada (P2)
+
+`convenios-custeio.service.ts:gerarCobrancaConsolidada` chama `previewKwhConsolidadoSemValor` (linha 871) que carrega membros com filtro de status. Se entre o SELECT e o INSERT da cobrança o status do cooperado X mudar pra PENDENTE_MIGRACAO em outra transação, X entra no valor cobrado. Janela estreita admin-driven (não automatizado), baixa frequência real. Fix: re-validar status dos membros DENTRO da transação antes de persistir. **Status:** ABERTO.
+
+#### D-novo-M47-DTOS-INICIAR-REJEITAR — 3 endpoints de migração sem DTO class-validator (P2)
+
+`cooperados.controller.ts:iniciarMigracao/concluirMigracao/rejeitarMigracao` usam `@Body() body: { ... }` inline em vez de DTO decorado com `class-validator`. Validação está no service (`!params.distribuidoraOrigem?.trim()` etc). Inconsistente com padrão do projeto (`CreateCooperadoDto` etc). Risco: se `ValidationPipe` global mudar pra `forbidNonWhitelisted: true`, campos extras passam silencioso. Fix: criar `IniciarMigracaoDto` + `RejeitarMigracaoDto` com `@IsString @IsNotEmpty @IsOptional`. **Status:** ABERTO.
+
+#### D-novo-M47-CRON-IDEMPOTENCIA — Cron sem guard contra dupla execução (P2)
+
+`migracao-externa.job.ts:verificarMigracoesPendentes` não tem filtro "notificação já enviada hoje". Single-node hoje sem risco; ambiente futuro multi-nó pode enviar WAs duplicados ao admin. Fix: adicionar `dataUltimoAlertaAdmin DateTime?` em MigracaoUsina e filtrar `< 24h atrás`. **Status:** ABERTO.
+
+#### D-novo-M47-HELPER-TENANT-CTX — Duplicação de validação cooperativaId+realizadoPorId nos 3 endpoints (P3)
+
+`cooperados.controller.ts` repete 8 linhas idênticas nos 3 endpoints de migração. Fix: extrair `private assertMigracaoContext(req): { cooperativaId, realizadoPorId }`. **Status:** ABERTO.
+
+#### D-novo-M47-CONCLUIDO-REJEITADO-POR-ID — MigracaoUsina não rastreia quem concluiu/rejeitou (P3)
+
+Campo `realizadoPorId` só é gravado em `iniciar` (NOT NULL no schema). `concluir` e `rejeitar` updates NÃO gravam quem fez a ação — AuditLog do controller decorator cobre indiretamente. Fix opcional: adicionar `concluidoPorId String?` + `rejeitadoPorId String?` opcionais em MigracaoUsina. **Status:** ABERTO.
+
+#### D-novo-M47-CRON-TIMEZONE — Cron 7h sem timezone explícito (P3)
+
+`@Cron('0 7 * * *')` roda no timezone do servidor. Se UTC, 4h BRT — confuso pra suporte. Fix: usar `@Cron(..., { timeZone: 'America/Sao_Paulo' })`. **Status:** ABERTO.
+
+#### D-novo-M47-STATUS-NULLABLE-CONSTRAINT — MigracaoUsina.statusMigracao nullable sem check constraint (P3)
+
+Campo é `String?` nullable pra retro-compat com `MUDANCA_USINA` intra-coop existente. Cria inconsistência teórica: `DISTRIBUIDORA_EXTERNA` sem `statusMigracao` seria inválido. Service sempre grava, então risco real é baixo. Fix futuro: check constraint `statusMigracao IS NOT NULL WHERE tipo = 'DISTRIBUIDORA_EXTERNA'` (Prisma não suporta — exige migration SQL raw). **Status:** ABERTO.
+
+#### D-novo-M47-TOM-MSG-DESLIGADO — Texto WA de rejeição usa "ℹ️ Migração não concluída" mas efeito é DESLIGADO (P3 UX)
+
+`migracao-externa.service.ts:notificarRejeicao` mostra "Se quiser retomar no futuro, fale com nossa equipe" — pode criar expectativa de reativação enquanto status real é DESLIGADO (terminal). Decisão de produto. **Status:** ABERTO.
+
+#### D-novo-M47-SPECS-FRAGEIS — Specs cobrancas-m47/convenios-custeio-m47 testam objeto literal contra si (P3)
+
+`convenios-custeio-m47-billing-guard.spec.ts` testes 1 e 2 verificam `WHERE_MEMBROS_ESPERADO` contra cópia literal — não testa o service. Test 3 é o único útil. `cobrancas-m47-billing-guard.spec.ts` teste 1 usa `rejects.not.toThrow` que passa mesmo com outro erro. Fix: instanciar service real com prisma mock + spy na chamada. **Status:** ABERTO.
+
+#### D-novo-M47-SMOKE-POLLING — Smoke E2E usa setTimeout 4000ms em vez de polling (P3)
+
+`scripts/smoke-m47-migracao.ts` espera 4s pra `registrarMensagem` async completar. Em CI lento pode falhar; em ambiente idle desperdiça 4s. Fix: `while tentativas < 10: sleep 500ms, query, break se encontrado`. **Status:** ABERTO.
+
+#### D-novo-M47-NOTIF-FAIL-LOG-MIGRACAO-ID — Log de falha de WA sem migracaoId (P3)
+
+`migracao-externa.service.ts` os 3 logs `notif * falhou: ${err.message}` não incluem `migracaoId` — log do service principal logo antes tem o contexto adjacente via timestamp, mas correlação direta seria melhor. **Status:** ABERTO.
 
 ---
 
