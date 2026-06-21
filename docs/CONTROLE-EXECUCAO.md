@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-18 noite (Cowork) — M39 Concierge: Refutação Relatório Externo + Parecer V2 + Sumário Executivo V2**. Sessão de análise crítica disparada por relatório externo "SISGD-Concierge v1.1" que propunha recalibração radical do parecer 15/06. Análise ponto a ponto identificou **6 contribuições válidas INCORPORADAS** (ADI 7.195/DF rebaixando Teses 2 e 6 pra Médio-Alto; ADIs FCP 7.077/7.634/7.716 como reforço sistêmico não fundamento direto; segregação Tese 6 por perfil geradoras×consumidores; Tema 986/STJ como "distinguishing consolidado" não "ressalva expressa"; alerta Lucro Real reforçado; checklist procedimental) e **6 proposições excessivas REFUTADAS** (extinção das Teses 9/10 confunde planos da incidência — CTN art. 97 IV; substituição das teses tributárias por duplo custeio regulatório ignora planos distintos cumulativos; expurgo de CDE e Gross-Up renuncia pedidos subsidiários; afastamento da Tese 6 das piloto perde R$ 525k do [Cliente E]; cálculo "-3,99% prejuízo líquido cash" matematicamente incorreto — cliente LR credita 9,25% sobre VALOR PAGO não sobre o que EDP recolheu; auto-titulação como v1.1 factualmente incorreta — oficial é v1.0). Portfólio MANTIDO em 10 teses tributárias + **Tese 11 (Duplo Custeio Regulatório TUSD-G + Fio B) ACRESCIDA** em PARALELO via consulta ANEEL. Magnitude econômica preservada: R$ 1.344.522 em 60m+SELIC. Recuperação realista recalibrada: **R$ 350.000–R$ 460.320** (de R$ 460.320 original). 3 NOVOS documentos emitidos preservando antigos: `docs/concierge/pareceres/2026-06-18-refutacao-relatorio-sisgd-v1-1.md` + `docs/concierge/pareceres/2026-06-18-parecer-v2-patches-incorporacao.md` + `docs/concierge/pareceres/2026-06-18-sumario-executivo-v2.md`. 5 decisões D18/06-4..8 catalogadas (rejeição substituição radical; incorporação 6 patches; refutação matemática "-3,99%"; catalogação Tese 11 regulatória; preservação obrigatória versões antigas). Detalhe: `docs/sessoes/2026-06-18-noite-refutacao-relatorio-externo-parecer-v2.md`.
+> Última atualização: **2026-06-20 (Code) — M44 Slice Convênio Origem-Dado FECHADO**. Cadastro V2 (4 telas: público com/sem UC + wizard admin com/sem UC) agora **registra como DADO** se cooperado já recebe créditos GD de outro fornecedor + `CooperTokenCompra.convenioId` opcional com guard multi-tenant obrigatório. Schema delta aditivo (2 campos GD em `Cooperado` + `convenioId` em `CooperTokenCompra` + FK `onDelete:SetNull` + 3 índices + back-relation `ContratoConvenio.cooperTokenCompras`). 6 specs Jest verde + smoke E2E 5 casos. Reviewers multitenant + financeiro-token + re-review orquestrador APROVADOS. FUNDACAO §4#1 preservada. Commits: `2af634a` (feat) + `6847e5a` (merge --no-ff). Feature branch `feature/convenio-origem-dado` PRESERVADA. 4 débitos pré-existentes descobertos na investigação (D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF P0 + D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1 + 2 polimento) + `D-novo-CONVENIO-ORIGEM-LEDGER` rebaixado P1→P2. Próximo: **Sprint Hardening Tenant-Spoof** como BLOQUEADOR de exposição antes de tunelar `/cadastro` público. Detalhe: `docs/sessoes/2026-06-20-m44-convenio-origem-dado.md`.
+
+> Histórico: **2026-06-18 noite (Cowork) — M39 Concierge: Refutação Relatório Externo + Parecer V2 + Sumário Executivo V2**. Sessão de análise crítica disparada por relatório externo "SISGD-Concierge v1.1" que propunha recalibração radical do parecer 15/06. Análise ponto a ponto identificou **6 contribuições válidas INCORPORADAS** (ADI 7.195/DF rebaixando Teses 2 e 6 pra Médio-Alto; ADIs FCP 7.077/7.634/7.716 como reforço sistêmico não fundamento direto; segregação Tese 6 por perfil geradoras×consumidores; Tema 986/STJ como "distinguishing consolidado" não "ressalva expressa"; alerta Lucro Real reforçado; checklist procedimental) e **6 proposições excessivas REFUTADAS** (extinção das Teses 9/10 confunde planos da incidência — CTN art. 97 IV; substituição das teses tributárias por duplo custeio regulatório ignora planos distintos cumulativos; expurgo de CDE e Gross-Up renuncia pedidos subsidiários; afastamento da Tese 6 das piloto perde R$ 525k do [Cliente E]; cálculo "-3,99% prejuízo líquido cash" matematicamente incorreto — cliente LR credita 9,25% sobre VALOR PAGO não sobre o que EDP recolheu; auto-titulação como v1.1 factualmente incorreta — oficial é v1.0). Portfólio MANTIDO em 10 teses tributárias + **Tese 11 (Duplo Custeio Regulatório TUSD-G + Fio B) ACRESCIDA** em PARALELO via consulta ANEEL. Magnitude econômica preservada: R$ 1.344.522 em 60m+SELIC. Recuperação realista recalibrada: **R$ 350.000–R$ 460.320** (de R$ 460.320 original). 3 NOVOS documentos emitidos preservando antigos: `docs/concierge/pareceres/2026-06-18-refutacao-relatorio-sisgd-v1-1.md` + `docs/concierge/pareceres/2026-06-18-parecer-v2-patches-incorporacao.md` + `docs/concierge/pareceres/2026-06-18-sumario-executivo-v2.md`. 5 decisões D18/06-4..8 catalogadas (rejeição substituição radical; incorporação 6 patches; refutação matemática "-3,99%"; catalogação Tese 11 regulatória; preservação obrigatória versões antigas). Detalhe: `docs/sessoes/2026-06-18-noite-refutacao-relatorio-externo-parecer-v2.md`.
 
 > Histórico: **2026-06-16 — M39 Emissão Admin em Lote + Estorno COMPLETO** (Sprint Clube Unificado P1). **12 commits trabalho + 1 merge --no-ff** no main (`db3c545..d1f6a6d`). Substitui caminho admin single-target de `enviarTokensAdmin` (@deprecated, mantido por COMPAT do ramo cooperado→cooperado) por novo endpoint `POST /cooper-token/admin/emitir-lote` em lote via helper `executarMassWrite`. Schema delta aditivo: 2 enums novos (`BONIFICACAO_ADMIN` + `ESTORNO_BONIFICACAO_ADMIN`) + conta contábil `5.1.03 "Despesa de Bonificação CooperToken"`. 2 templates contábeis novos com **bypass intencional do `COOPER_TOKEN_EVENTS.EMITIDO`** pra não disparar o template errado da F1 lancarEmissaoFaturaCheia. Frontend `/dashboard/cooper-token/enviar` REDESENHADO em 2 etapas (seleção + confirmação) com filtro opcional por convênio + tabela editável + prévia COMPLETA antes do OTP. Tela nova `/dashboard/cooper-token/lotes-emitidos` com modal de estorno (confirmação dupla + motivo ≥10 chars + reversão atômica saldo+contábil+ledger ESTORNO). **2 rodadas de reviewers pesados** (financeiro-token bloqueou com 3 P1 + multitenant aprovou com 1 P2 → todos fixados pré-smoke). **Re-review do orquestrador pegou 2 P1 RESIDUAIS** (helper `:256` chumbado escapou do replace_all + guard de integridade ausente no estorno) → fixados antes de push. Smoke E2E real **PASS 6/6** com gate inegociável respeitado (1 token + estorno imediato, NUNCA emissão real Santi). Suite **311/311 verde** (cooper-token 286 + mass-write 25). **D-novo-EMISSAO-ADMIN-CONTABIL P2** catalogado pra sprint contábil dedicada futura (4 problemas pré-existentes no token-contábil: tipo conta `5.1.02` DESPESA→PASSIVO + template F2 errado + F3/F6/clube sem `LancamentoCaixa`, depende de D3 Modelo C preço custo×venda). Detalhe: `docs/sessoes/2026-06-16-m39-emissao-admin-em-lote.md`.
 
@@ -62,6 +64,59 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-20 (Code — M44 Slice Convênio Origem-Dado: recebe-créditos-GD como DADO + convenioId no CooperTokenCompra FECHADO + merge na main)
+
+**Sessão Code dedicada — M44 entregue ponta-a-ponta.** Slice
+decision-independent do design do convênio cooperativizado (19/06):
+cadastro V2 (público com/sem UC + wizard admin com/sem UC) agora
+**registra como DADO** se o cooperado já recebe créditos GD de outro
+fornecedor + nome do fornecedor (zero bloqueio: sinaliza, não barra).
+Em paralelo, `CooperTokenCompra` ganhou FK opcional `convenioId` com
+**guard multi-tenant obrigatório** (`cooperativaId` do JWT, nunca do
+body) — rastreabilidade indireta da origem de convênio no ledger via
+`Ledger.referenciaId → CooperTokenCompra.convenioId`.
+
+**ENTREGAS:**
+- Schema delta aditivo (`db push` aplicado dev):
+  - `Cooperado.jaRecebeCreditosGd Boolean @default(false)` + `Cooperado.fornecedorGdAtual String?`
+  - `CooperTokenCompra.convenioId String?` + FK `onDelete:SetNull`
+  - 3 índices novos (`CooperTokenCompra[convenioId]`, `[cooperativaId,convenioId]`, `CooperTokenLedger[referenciaTabela,referenciaId]`)
+  - `ContratoConvenio.cooperTokenCompras` back-relation
+- Backend: `comprarTokensCooperado()` param novo + guard `findFirst{id,cooperativaId}` ANTES do create; controller propaga `body.convenioId`; DTO com `@Matches` CUID; `cooperados.service` + `create-cooperado.dto` + `publico.controller` (cadastroWebV2 + cadastroSemUc) propagam GD fields.
+- Frontend (4 cadastros rebuildados + PM2 restart): `/cadastro`, `/cadastro/sem-uc`, `/dashboard/cooperados/novo` (Step2Dados), `/dashboard/cooperados/novo-sem-uc`.
+- Testes: 6 specs Jest + smoke E2E 5 casos com `SMOKE_INICIO` cleanup.
+
+**REVIEWERS:** multitenant OK + financeiro-token OK + re-review
+orquestrador APROVADO (schema delta + guard linha 1550 + back-relation
+linha 1678 + `onDelete:SetNull` linha 3221 verificados). FUNDACAO §4#1
+preservada.
+
+**DÉBITOS PRÉ-EXISTENTES descobertos pela investigação (NÃO bloqueiam M44):**
+- `D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF` **P0** — endpoints aceitam `cooperativaId` no body em alguns paths.
+- `D-novo-CADASTRO-PUBLICO-TENANT-SPOOF` **P1** — `publico.controller` aceita `cooperativaId` no body sem validação rígida.
+- `D-novo-COOPERADO-UPDATE-SEM-COOPID` P2 — `update` não revalida tenant do registro alvo.
+- `D-novo-UPDATE-COOPERADO-DTO-GD-FIELDS` P3 — falta DTO de update pros 2 campos GD novos.
+
+**REESCOPO:** `D-novo-CONVENIO-ORIGEM-LEDGER` P1→P2 — rastreabilidade
+indireta via FK + índice composto suficiente; ledger explícito vira polimento.
+
+**Commits:** `2af634a` (feat) + `6847e5a` (merge --no-ff). Feature branch
+`feature/convenio-origem-dado` PRESERVADA no origin (padrão M39/M41/M42/M43).
+Push main ✅. Rebuild frontend ✅.
+
+**Próximo bloco:** Sprint Hardening Tenant-Spoof
+(`feature/hardening-tenant-spoof`) — resolver P0 + P1 pré-existentes
+como **BLOQUEADOR DE EXPOSIÇÃO** antes de tunelar `/cadastro` público
+(ngrok/Cloudflare). Fase 1 read-only OBRIGATÓRIA mapeando **todas** as
+fontes de `cooperativaId` (body/query/params/headers/JWT) por endpoint,
+preservando path legítimo de `SUPER_ADMIN` cross-tenant.
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE
+RETOMADA — próxima sessão Code` no fim deste documento (M44 atualizada,
+M43 arquivada). Detalhe completo: `docs/sessoes/2026-06-20-m44-convenio-origem-dado.md`.
 
 ---
 
@@ -3034,73 +3089,149 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento design convênio
-   (20/06): working tree com `backend/package.json` +
+2. Rodar `git status --short`. Esperado pós-fechamento M44 (20/06):
+   working tree com `backend/package.json` +
    `backend/package-lock.json` MODIFICADOS (TERRITÓRIO COWORK, NÃO
    TOCAR) + vários untracked que NÃO são nossos (`.claude/agents/*`,
    `backend/src/agents/`, `*.mjs`, `ponte-wa-telegram-leve/`,
    `scripts/*`, `.agent/memory/*`) — NUNCA `git add .` / `-A`. Último
-   commit em main é o de fechamento do design do convênio
-   (`docs(sessao): fechamento design convênio-token-cooperado 19/06`).
-   `git log origin/main..HEAD --oneline` deve estar VAZIO (pushado).
-   Branches preservadas no origin (NÃO deletar):
-   `feature/d2-salvaguardas-origem` (M42, merge `b65bcb3`),
-   `feature/hardening-throttler-reconciliacao` (M43, merge `beb125c`).
-   Pode existir nova branch `feature/convenio-origem-dado` (slice em
-   andamento).
+   commit em main é o fechamento M44
+   (`docs(sessao): fechamento M44 ...`). `git log
+   origin/main..HEAD --oneline` deve estar VAZIO (pushado). Branches
+   preservadas no origin (NÃO deletar): `feature/d2-salvaguardas-origem`
+   (M42 merge `b65bcb3`), `feature/hardening-throttler-reconciliacao`
+   (M43 merge `beb125c`), `feature/convenio-origem-dado` (M44 merge
+   `6847e5a`).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
    é `next start` sob PM2 — toda mudança em web/ exige rebuild +
-   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Schema delta M43
-   (4 campos `reconciliacao*` em `ResgateRecibo` + índice composto)
-   JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` na próxima
-   sprint a menos que tenha schema delta novo.
+   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. Schema delta M44
+   (2 campos GD em `Cooperado` + `convenioId` em `CooperTokenCompra` +
+   3 índices novos) JÁ APLICADO no banco dev — NÃO RODAR `prisma db
+   push` na próxima sprint a menos que tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: iniciar Fase 1 read-only do slice
-"Convênio: marcar recebe-créditos-GD como DADO (não bloqueia) +
-origemConvenioId no ledger" — o único slice decision-independent que o
-Luciano já definiu em palavras ("por agora, vamos colocar apenas a
-necessidade dele marcar que recebe créditos"). Luciano priorizou este
-slice (20/06) sobre as outras opções da fila.
+PASSO 1 — Frase COMANDANTE: iniciar Sprint Hardening Tenant-Spoof —
+**BLOQUEADOR DE EXPOSIÇÃO** antes de tunelar `/cadastro` público
+(ngrok/Cloudflare Tunnel pra teste real com Asaas sandbox). Resolve 2
+débitos pré-existentes descobertos pela investigação M44:
+- `D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF` **P0** — endpoints aceitam
+  `cooperativaId` no body em alguns paths (não força `req.user.cooperativaId`).
+- `D-novo-CADASTRO-PUBLICO-TENANT-SPOOF` **P1** — `publico.controller.ts`
+  aceita `cooperativaId` no body sem validação rígida (deveria vir do
+  contexto do convite/slug público).
 
-CONTEXTO: o design do convênio (19/06) foi fechado em 20/06 — ver
-docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md + parecer
-docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-
-cooperado-token.md + doc-sessão 2026-06-19. Parecer: pode seguir com
-6 salvaguardas + 3 P0 (trabalhista/substância/STF536). Completude:
-"NÃO pegamos tudo" — camada família/migração/ciclo-de-vida por
-construir (8 débitos D-novo-CONVENIO-*).
+CONTEXTO: M44 (20/06) entregou o slice convênio-origem-dado
+(`recebe-créditos-GD` como DADO em 4 cadastros + `convenioId` no
+`CooperTokenCompra` com guard multi-tenant). Ver
+docs/sessoes/2026-06-20-m44-convenio-origem-dado.md. Durante a
+investigação read-only achamos 4 débitos pré-existentes (2 P0/P1
+bloqueantes + 2 P2/P3 polimento). O slice M44 fechou o P1
+`D-novo-CONVENIO-ORIGEM-LEDGER` (reescopado P1→P2). Agora há que
+resolver os 2 bloqueantes ANTES de expor cadastro público real.
 
-1º comando: git checkout -b feature/convenio-origem-dado
+1º comando: git checkout -b feature/hardening-tenant-spoof
 
 Fase 1 read-only OBRIGATÓRIA (Decisão 23) — investigar + reportar ao
 orquestrador, SEM tocar código:
- (a) Onde o cadastro V2 (/cadastro público + wizard admin) detecta/usa
-     "já recebe créditos GD" hoje? Existe campo no schema Cooperado?
-     Bloqueia ou só registra? (grep amplo: recebeCreditos, creditoGd,
-     jaRecebe, GD; DTOs de publico; web/app/cadastro).
- (b) O ledger de token tem como rastrear origem de convênio? Onde
-     entraria origemConvenioId? (schema CooperTokenCompra +
-     cooper-token.service comprarTokensCooperado / processarPagamento
-     CompraPj — achar as linhas ATUAIS, NÃO confiar em nº de linha de
-     memória).
- (c) ConvenioCooperado já amarra empresa↔funcionário? O token
-     distribuído sabe de qual convênio veio?
-Reportar achados + premissa validada/refutada. PAUSAR pro OK do
+ (a) Mapear **todas** as fontes de `cooperativaId` na request por
+     endpoint (body, query, params, headers, JWT) em
+     `cooperados.controller.ts`, `publico.controller.ts`,
+     `convenios.controller.ts`, `cooper-token.controller.ts`,
+     `contratos.controller.ts`, `usinas.controller.ts`. Grep amplo:
+     `cooperativaId`, `req.user.cooperativaId`, `@Body()`, `@Query()`,
+     `@Param()`.
+ (b) Identificar **path legítimo SUPER_ADMIN cross-tenant**
+     (impersonate / comoTenant / X-Tenant-Id header) e PRESERVAR — o
+     hardening NÃO pode quebrar a operação multi-tenant do dono do
+     SISGD.
+ (c) Validar se `ValidationPipe` global tem
+     `whitelist: true, forbidNonWhitelisted: true` — se não tem,
+     decisão pendente Luciano (impacto em todos os DTOs).
+ (d) `publico.controller.ts`: como o tenant DEVERIA ser resolvido?
+     `slugPublico` da cooperativa? `conviteId` que carrega o tenant?
+     Mapear o que existe hoje vs o que deveria existir.
+
+Reportar achados + premissa validada/refutada + opção de design (forçar
+`req.user.cooperativaId` em 100% dos endpoints autenticados + resolver
+tenant por `slug`/`convite` no público) + estimativa. PAUSAR pro OK do
 orquestrador antes da Fase 2.
 
-NÃO iniciar família (G1) nem migração (G2) — Fase 2/3, dependem da
-decisão de escopo do piloto + Fase 0 jurídico.
+NÃO iniciar Sprint Família (G1) nem Migração (G2) — Fase 2/3 do design
+de convênio, dependem da decisão de escopo do piloto + Fase 0 jurídico.
 
-Outras opções da fila seguem catalogadas (não perder): OPÇÃO B Sprint
-D-QUALIF-DECAY (~6-10h); OPÇÃO C Notificações Proativas
-(D-novo-RECONCILIACAO-DESISTIDO-LISTENER); OPÇÃO D Circuito de Emissão
-Completo (2 P1 + 7 P2 M40); e ativação produção saque colaborador
-DESCONTO_FATURA (path completo em código, falta parecer escrito +
-flag .env prod).
+CARRY-OVERS pós M44 (catalogados):
+- `D-novo-COOPERADO-UPDATE-SEM-COOPID` P2 — `update` sem revalidar tenant
+  do registro alvo (entra na mesma Sprint Hardening como bônus, ~1h).
+- `D-novo-UPDATE-COOPERADO-DTO-GD-FIELDS` P3 — DTO de update faltando
+  pros 2 campos GD novos.
+- `D-novo-CONVENIO-ORIGEM-LEDGER` P2 (rebaixado de P1 em M44 — polimento).
+- 7 débitos `D-novo-CONVENIO-*` ainda abertos do design (E1 P1 +
+  FASE0-JURIDICO P0 + 5 outros).
+- 6 decisões de produto pendentes do design 19/06 (família / migração /
+  ciclo-de-vida).
+- OPÇÃO A Sprint D-QUALIF-DECAY (~6-10h) catalogado.
+- OPÇÃO C Notificações Proativas
+  (D-novo-RECONCILIACAO-DESISTIDO-LISTENER) catalogado.
+- Caminho ativação produção saque colaborador DESCONTO_FATURA — todos
+  hardenings de código implementados (M41/M42/M43), falta parecer
+  escrito + flag `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` em .env prod.
 
-ENTREGA M43:
+ENTREGA M44:
+
+- Schema delta aditivo (db push aplicado):
+  - `Cooperado.jaRecebeCreditosGd Boolean @default(false)` +
+    `Cooperado.fornecedorGdAtual String?`
+  - `CooperTokenCompra.convenioId String?` + FK `onDelete:SetNull`
+  - 3 índices novos
+    (`CooperTokenCompra[convenioId]`,
+     `[cooperativaId,convenioId]`,
+     `CooperTokenLedger[referenciaTabela,referenciaId]`)
+  - `ContratoConvenio.cooperTokenCompras` back-relation
+- Backend: `comprarTokensCooperado()` param novo `convenioId` + guard
+  multi-tenant ANTES do create
+  (`findFirst { id, cooperativaId }` → `NotFoundException`); controller
+  propaga `body.convenioId`; DTO com `@Matches` CUID;
+  `cooperados.service` + `create-cooperado.dto` + `publico.controller`
+  (cadastroWebV2 + cadastroSemUc) propagam GD fields.
+- Frontend (4 cadastros): `/cadastro`, `/cadastro/sem-uc`,
+  `/dashboard/cooperados/novo` (Step2Dados),
+  `/dashboard/cooperados/novo-sem-uc`. Build + PM2 restart confirmado.
+- Testes: 6 specs Jest + smoke E2E 5 casos com `SMOKE_INICIO` cleanup.
+- REVIEWERS: multitenant OK + financeiro-token OK + re-review
+  orquestrador APROVADO. FUNDACAO §4#1 preservada.
+- Commits: `2af634a` (feat) + `6847e5a` (merge --no-ff).
+
+PROTOCOLO próxima sprint (independente de qual):
+
+- Branch dedicada como 1º comando (Decisão Luciano 13/06).
+- Fase 1 read-only OBRIGATÓRIA (Decisão 23). Pausa pro OK antes de
+  Fase 2.
+- Reviewers pesados ANTES do smoke (padrão M39/M41/M42/M43/M44).
+- Re-review do orquestrador após fixes.
+- Smoke E2E real com contatos whitelist
+  (`27981341348` + `lucbragatto+*@gmail.com`).
+- Merge --no-ff preservando feature branch no origin.
+
+PRÉ-REQUISITOS LEITURA:
+1. docs/sessoes/2026-06-20-m44-convenio-origem-dado.md (esta sessão).
+2. docs/sessoes/2026-06-19-design-convenio-token-cooperado-familia.md
+   (design fonte).
+3. docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md (modelo + gap map).
+4. docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md
+   (parecer 4 lentes).
+5. docs/debitos-tecnicos.md — 4 débitos pré-existentes catalogados em
+   M44 + `D-novo-CONVENIO-ORIGEM-LEDGER` rebaixado P1→P2.
+6. docs/FUNDACAO-COOPERTOKEN-MODELO-CANONICO.md (§4#1 invariante
+   preservada).
+7. CLAUDE.md (regras + multi-tenant + disciplina análise modelo
+   canônico).
+
+═══ FIM DA FRASE M44 (sessão 20/06 — slice convênio-origem-dado entregue + merge na main) ═══
+
+═══ FRASE ARQUIVADA M43 (17/06 — Sprint C Hardening Throttler+Reconciliação) ═══
+
+ENTREGA M43 (referência histórica — não copiar como prompt):
 
 - Bloco 1 ThrottlerGuard:
   - 2 tiers em ThrottlerModule.forRoot ([default:100/min,
