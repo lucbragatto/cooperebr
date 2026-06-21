@@ -3,6 +3,10 @@ import { Prisma, AdmissionOrigem, StatusMembroConvenio } from '@prisma/client';
 import * as crypto from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { ConveniosProgressaoService } from './convenios-progressao.service';
+// Sprint Convênio FUNDAÇÃO (21/06/2026) — E1: tokens FICAM com funcionário no
+// desligamento. removerMembro NÃO toca saldo; só notifica o cooperado pra
+// reforçar que os tokens continuam dele (transparência + UX).
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 
 // Sprint Convite-Convênio Fatia 2 (03/06/2026) — TTL do magic link de aprovação
 // da empresa (alinhado com ConviteProprietarioService M31).
@@ -15,6 +19,7 @@ export class ConveniosMembrosService {
   constructor(
     private prisma: PrismaService,
     private progressaoService: ConveniosProgressaoService,
+    private waSender: WhatsappSenderService,
   ) {}
 
   /**
@@ -186,7 +191,86 @@ export class ConveniosMembrosService {
     // Recalcular faixa
     await this.progressaoService.recalcularFaixa(convenioId, 'MEMBRO_DESLIGADO');
 
+    // Sprint Convênio FUNDAÇÃO (21/06/2026) — E1: tokens FICAM com o
+    // funcionário no desligamento (decisão Luciano). removerMembro NÃO
+    // toca saldo de token, ledger, qualificação Clube ou TokenTransacao.
+    // Notifica o cooperado pra reforçar transparência + UX. Best-effort:
+    // falha de WA não derruba o desligamento (já commitado). Sem telefone =
+    // skip + log warn (D-novo-NOTIF-EMAIL-FALLBACK P3 catalogado).
+    await this.notificarDesligamentoE1(convenioId, cooperadoId);
+
     return updated;
+  }
+
+  /**
+   * Sprint Convênio FUNDAÇÃO (21/06/2026) — E1 inline.
+   * Notifica cooperado desligado de convênio que tokens continuam com ele.
+   * Best-effort: erros logados, nunca propagados (desligamento já commitado).
+   */
+  private async notificarDesligamentoE1(convenioId: string, cooperadoId: string): Promise<void> {
+    try {
+      const convenio = await this.prisma.contratoConvenio.findUnique({
+        where: { id: convenioId },
+        select: { cooperativaId: true, empresaNome: true },
+      });
+      if (!convenio) {
+        this.logger.warn(`[E1] convênio ${convenioId} não encontrado pós-remoção`);
+        return;
+      }
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: { id: cooperadoId, cooperativaId: convenio.cooperativaId },
+        select: { telefone: true, nomeCompleto: true },
+      });
+      if (!cooperado?.telefone) {
+        this.logger.warn(
+          `[E1] cooperado ${cooperadoId} sem telefone — notificação pulada (D-novo-NOTIF-EMAIL-FALLBACK)`,
+        );
+        return;
+      }
+      const cooperativaId = convenio.cooperativaId;
+      if (!cooperativaId) {
+        // Defesa — todos os ContratoConvenio reais têm cooperativaId.
+        this.logger.warn(`[E1] convênio ${convenioId} sem cooperativaId — pulado`);
+        return;
+      }
+      const [saldo, config] = await Promise.all([
+        this.prisma.cooperTokenSaldo.findUnique({
+          where: { cooperadoId },
+          select: { saldoDisponivel: true },
+        }),
+        this.prisma.configCooperToken.findUnique({
+          where: { cooperativaId },
+          select: { valorTokenReais: true },
+        }),
+      ]);
+      const tokens = Number(saldo?.saldoDisponivel ?? 0);
+      const valorTokenReais = Number(config?.valorTokenReais ?? 0.45);
+      const valorReais = Math.round(tokens * valorTokenReais * 100) / 100;
+
+      const linhaTokens = tokens > 0
+        ? `Você ainda tem ${tokens.toLocaleString('pt-BR', { maximumFractionDigits: 4 })} CooperTokens ` +
+          `(aprox. ${valorReais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}). ` +
+          `Eles CONTINUAM SEUS — use no app pra abater sua própria fatura ou pagar em estabelecimentos do Clube.`
+        : `Caso receba tokens no futuro, eles serão seus.`;
+
+      const texto =
+        `ℹ️ Desligamento do convênio\n\n` +
+        `Olá, ${cooperado.nomeCompleto}!\n\n` +
+        `Você foi desligado do convênio com ${convenio.empresaNome}.\n\n` +
+        `${linhaTokens}`;
+
+      await this.waSender.enviarMensagem(cooperado.telefone, texto, {
+        tipoDisparo: 'CONVENIO_DESLIGAMENTO_E1',
+        disparoId: `${convenioId}:${cooperadoId}`,
+        cooperadoId,
+        cooperativaId: convenio.cooperativaId ?? undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[E1] Falha ao notificar desligamento cooperado=${cooperadoId} convenio=${convenioId}: ${msg}`,
+      );
+    }
   }
 
   async updateMembro(convenioId: string, cooperadoId: string, data: { descontoOverride?: number | null; matricula?: string }) {
