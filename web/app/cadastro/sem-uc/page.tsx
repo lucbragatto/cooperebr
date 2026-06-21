@@ -48,6 +48,11 @@ function CadastroSemUcContent() {
     representanteLegalNome: '',
     representanteLegalCpf: '',
     representanteLegalCargo: '',
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+    // GD como DADO". Caminho SEM_UC é o cenário mais relevante: cliente que
+    // veio de outra cooperativa concorrente e quer só fazer parte do clube.
+    jaRecebeCreditosGd: false,
+    fornecedorGdAtual: '',
   });
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
@@ -83,6 +88,13 @@ function CadastroSemUcContent() {
         if (form.representanteLegalNome) payload.representanteLegalNome = form.representanteLegalNome;
         if (form.representanteLegalCpf) payload.representanteLegalCpf = form.representanteLegalCpf.replace(/\D/g, '');
         if (form.representanteLegalCargo) payload.representanteLegalCargo = form.representanteLegalCargo;
+      }
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+      if (form.jaRecebeCreditosGd) {
+        payload.jaRecebeCreditosGd = true;
+        if (form.fornecedorGdAtual.trim()) {
+          payload.fornecedorGdAtual = form.fornecedorGdAtual.trim();
+        }
       }
       const res = await fetch(url.toString(), {
         method: 'POST',
@@ -231,6 +243,39 @@ function CadastroSemUcContent() {
                 <Label htmlFor="codigoRef">Código de indicação (se foi indicado)</Label>
                 <Input id="codigoRef" value={form.codigoRef} onChange={(e) => set('codigoRef', e.target.value)} placeholder="opcional" />
               </div>
+
+              {/* Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe
+                  créditos GD como DADO". NÃO bloqueia o cadastro. Útil pra
+                  futuro fluxo de migração de cooperativa concorrente. */}
+              <hr className="my-2" />
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.jaRecebeCreditosGd}
+                  onChange={(e) => set('jaRecebeCreditosGd', e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
+                />
+                <span className="text-sm text-gray-700 leading-relaxed">
+                  ⚡ Já recebo créditos de energia (geração distribuída) de
+                  outra cooperativa, usina ou gerador.
+                  <span className="block text-xs text-gray-500 mt-1">
+                    Ex.: já participo de outra cooperativa/usina de energia.
+                    Isso <strong>não bloqueia</strong> seu cadastro — é só
+                    pra registro.
+                  </span>
+                </span>
+              </label>
+              {form.jaRecebeCreditosGd && (
+                <div className="ml-7">
+                  <Label className="text-xs">De qual cooperativa/usina (opcional)?</Label>
+                  <Input
+                    value={form.fornecedorGdAtual}
+                    onChange={(e) => set('fornecedorGdAtual', e.target.value)}
+                    maxLength={200}
+                    placeholder="Ex.: Cooperativa Solar Verde / Usina Sertão"
+                  />
+                </div>
+              )}
 
               {erro && <p className="text-sm text-red-600">{erro}</p>}
 

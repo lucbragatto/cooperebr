@@ -591,6 +591,9 @@ export class CooperTokenController {
       cooperativaId,
       quantidade: body.quantidade,
       formaPagamento: body.formaPagamento,
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — opcional. Service
+      // valida cross-tenant (cooperativaId == convenio.cooperativaId).
+      convenioId: body.convenioId,
     });
   }
 

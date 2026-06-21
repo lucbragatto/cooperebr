@@ -360,6 +360,24 @@ model Cooperado {
   tokenTransacoesPagador  TokenTransacao[]           @relation("TokenTransacaoPagador")
   tokenTransacoesRecebedor TokenTransacao[]          @relation("TokenTransacaoRecebedor")
 
+  // ── Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos GD como DADO" ──
+  //
+  // Cliente declara/admin marca que já recebe créditos de geração distribuída
+  // de outra cooperativa, gerador próprio ou consórcio. NÃO bloqueia o cadastro
+  // — é DADO defensivo anti-double-count SCEE + insumo pra futuro fluxo de
+  // migração (Fase 3 do convênio). Aditivo nullable; default `false` em rows
+  // existentes (membros CoopereBR históricos não recebem de concorrente).
+  //
+  // Decisão Luciano 19/06 (ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19):
+  // "por agora, vamos colocar apenas a necessidade dele marcar que recebe créditos".
+  // SEM alerta/notificação na v1 — só dado.
+  jaRecebeCreditosGd      Boolean                    @default(false)
+  // Texto livre opcional com nome da cooperativa/distribuidora/gerador atual
+  // do cliente. v1 sem lista controlada (universo de concorrentes desconhecido);
+  // se piloto pedir, vira select. Útil pra suporte + futuro fluxo de
+  // desligamento da concessionária concorrente.
+  fornecedorGdAtual       String?
+
   @@map("cooperados")
 }
 
@@ -1653,6 +1671,11 @@ model ContratoConvenio {
   historicoFaixas HistoricoFaixaConvenio[]
   ofertasClube    OfertaClube[]
   convites        ConviteIndicacao[]
+  // Sprint Convênio-Token-Cooperado (20/06/2026) — back-relation pro
+  // CooperTokenCompra.convenioId. Empresa cooperada PJ pode comprar tokens
+  // vinculados ao convênio (rastreio anti-confusão token-de-empregador vs
+  // token-próprio — Salvaguarda 4 parecer 19/06).
+  cooperTokenCompras CooperTokenCompra[]
 
   @@index([cooperativaId])
   @@index([cooperativaId, status])
@@ -2790,6 +2813,12 @@ model CooperTokenLedger {
   @@index([cooperativaId])
   @@index([expiracaoEm])
   @@index([parceiroId])
+  // P2 review financeiro-token Sprint slice (20/06): acelera o lookup
+  // Salvaguarda 4 (parecer 19/06) — "tokens originados do convênio X
+  // chegaram via qual rota (F3 BENEFICIO_CONVENIO direto / F2 COMPRA_PJ
+  // → CooperTokenCompra → convenio)". Combinado com @@index(convenioId)
+  // em CooperTokenCompra cobre as 2 pernas do join.
+  @@index([referenciaTabela, referenciaId])
   @@map("cooper_token_ledger")
 }
 
@@ -3178,6 +3207,19 @@ model CooperTokenCompra {
   // Webhook duplicado com mesmo `${event}_${payment.id}` eh skipado.
   ultimoWebhookEventId  String?
 
+  // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "origemConvenioId no
+  // ledger". Empresa cooperada PJ pode comprar tokens vinculados a um convênio
+  // específico (Salvaguarda 4 do parecer 19/06: rastreio anti-confusão
+  // token-de-empregador vs token-próprio). Aditivo nullable — compras
+  // tenant-legacy e PJ-genéricas continuam null. Guard multi-tenant aplicado
+  // no service (cooperativaId == convenio.cooperativaId).
+  // P2 review financeiro-token (20/06): onDelete: SetNull — se admin
+  // excluir convênio (futuro, hoje não acontece), compra fica órfã
+  // rastreável (convenioId=null) em vez de bloquear o delete por
+  // Restrict implícito do Prisma.
+  convenioId            String?
+  convenio              ContratoConvenio? @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -3188,6 +3230,13 @@ model CooperTokenCompra {
   // tentasse duplicar via webhook ou bug de criacao concorrente).
   @@unique([asaasId])
   @@index([asaasId])
+  // P2 review financeiro-token Sprint slice (20/06): lookup de rastreio
+  // Salvaguarda 4 do parecer 19/06 ("todos tokens originados do convênio X
+  // comprados pelo cooperado Y"). Sem isso, seq-scan oneroso com volume.
+  // Cobre também P3 multitenant (constraint cross-tenant documentada
+  // por acesso esperado via índice composto).
+  @@index([convenioId])
+  @@index([cooperativaId, convenioId])
 
   @@map("cooper_token_compras")
 }

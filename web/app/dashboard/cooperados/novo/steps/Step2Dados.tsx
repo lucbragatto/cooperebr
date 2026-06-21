@@ -23,6 +23,12 @@ export interface Step2Data {
   codigoIndicacao: string;
   cooperadoId: string;
   ucId: string;
+  // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+  // GD como DADO". Admin marca quando cliente já participa de outra
+  // cooperativa/usina. NÃO bloqueia o cadastro — é dado defensivo
+  // anti-double-count SCEE + insumo pro futuro fluxo de migração.
+  jaRecebeCreditosGd?: boolean;
+  fornecedorGdAtual?: string;
 }
 
 interface Step2Props {
@@ -310,6 +316,41 @@ export default function Step2Dados({ data, faturaData, onChange, tipoMembro, mod
           <option value="CONSIGNADO">Consignado</option>
         </select>
       </Campo>
+
+      {/* Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+          GD como DADO". NÃO bloqueia o cadastro — insumo defensivo
+          anti-double-count SCEE + futuro fluxo migração concorrente. */}
+      <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={data.jaRecebeCreditosGd ?? false}
+            onChange={e => onChange({ jaRecebeCreditosGd: e.target.checked })}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
+          />
+          <span className="text-sm text-gray-700 leading-relaxed">
+            ⚡ Cliente já recebe créditos de geração distribuída (GD) de
+            outra cooperativa, usina ou gerador.
+            <span className="block text-xs text-gray-500 mt-1">
+              Não bloqueia o cadastro — é dado defensivo (anti double-count
+              SCEE) + insumo pro futuro fluxo de migração de concorrente.
+            </span>
+          </span>
+        </label>
+        {data.jaRecebeCreditosGd && (
+          <div className="mt-2 ml-7">
+            <Campo label="Cooperativa/usina/gerador atual (opcional)">
+              <input
+                className={cls}
+                value={data.fornecedorGdAtual ?? ''}
+                onChange={e => onChange({ fornecedorGdAtual: e.target.value })}
+                maxLength={200}
+                placeholder="Ex.: Cooperativa Solar Verde / Usina Sertão"
+              />
+            </Campo>
+          </div>
+        )}
+      </div>
 
       {/* Código de indicação */}
       <div className="border border-green-200 rounded-lg p-4 bg-green-50/50">

@@ -5988,9 +5988,46 @@ TypeError: Cannot read properties of undefined (reading 'findMany')
 
 Ao desligar membro de convênio, `removerMembro` não toca o saldo de token. Tokens já distribuídos pela empresa ficam no saldo pessoal pra sempre. Falta DECISÃO de produto: ficam com ele / são recomprados / expiram. Bloqueia piloto que inclua ciclo de vida de funcionário. Origem: design 19/06 (`docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md` §7 E1). **Status:** ABERTO.
 
-### D-novo-CONVENIO-ORIGEM-LEDGER — Falta origemConvenioId no ledger de token (P1)
+### D-novo-CADASTRO-PUBLICO-TENANT-SPOOF — Endpoints @Public aceitam body.cooperativaId sobrescrevendo ?tenant= (P1 IDOR cross-tenant)
 
-`CooperTokenCompra`/movimentos não rastreiam de qual convênio o token veio. É a defesa documental mais barata (separa token-de-empregador de token-próprio → defesa trabalhista + tributária). Salvaguarda 4 do parecer 19/06. Additivo, sem risco. Decision-independent — pode entrar na Fase 1 do convênio. **Status:** ABERTO.
+**Pré-existente, descoberto no review multitenant do slice convênio-origem-dado 20/06.** Os endpoints públicos `POST /publico/cadastro-web` (`cadastroWebV2`:249) e `POST /publico/cadastro-sem-uc` (~1622) resolvem cooperativaId via `body.cooperativaId ?? tenantParam` — body precede query param. Atacante anônimo pode enviar `{cooperativaId: '<id-de-outro-tenant>', nome:..., cpf:...}` e criar cooperado spam em cooperativa-alvo. **Amplificado** pelo slice (campos `jaRecebeCreditosGd`/`fornecedorGdAtual` aparecem em tenant que nunca consentiu), mas vetor NÃO foi introduzido pelo slice. Mitigação no `cadastroWebV2`: quando vem `?conv=<token>`, o tenant é resolvido server-side via convite (linhas 253-267) — anti-spoof correto NESSE caminho específico. Fix: remover `body.cooperativaId` de ambos endpoints; aceitar tenant exclusivamente via `?tenant=` ou token. **Status:** ABERTO. Bloqueia onboarding de 2º parceiro real.
+
+### D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF — `POST /cooperados` (admin) aceita body.cooperativaId sobrescrevendo JWT (P0 IDOR cross-tenant admin)
+
+**Pré-existente, descoberto no review multitenant do slice convênio-origem-dado 20/06.** `cooperados.controller.ts:139` resolve `cooperativaId: cooperativaId || req.user?.cooperativaId || undefined` — body precede JWT. ADMIN autenticado no tenant A pode enviar `{cooperativaId: 'tenant-B', ...}` e criar cooperado no tenant B. `CreateCooperadoDto:54` expõe o campo como `@IsOptional @IsString`. Fix: `cooperativaId: req.user?.cooperativaId ?? undefined` (remover do DTO ou ignorar do body); SUPER_ADMIN que precisa criar cross-tenant usa rota dedicada com path-param. **Status:** ABERTO. P0 BLOQUEADOR de produção real.
+
+### D-novo-COOPERADO-UPDATE-SEM-COOPID — `cooperado.update({where:{id}})` sem cooperativaId no DML (P2 defense in depth)
+
+**Pré-existente, descoberto no review multitenant do slice convênio-origem-dado 20/06.** `cooperados.service.ts:771` (`update`) e `:908` (`aprovarConcessionaria`) fazem `findFirst` com tenant guard mas depois `update({where:{id}})` sem cooperativaId — janela TOCTOU teórica. Padrão `rules/multi-tenant.md` exige `where: {id, cooperativaId}` em UPDATE/DELETE por id. Fix: `where: {id, cooperativaId: cooperado.cooperativaId}`. **Status:** ABERTO. Risco baixo (Cooperado não migra entre tenants), mas inconsistente com padrão do projeto.
+
+### D-novo-UPDATE-COOPERADO-DTO-GD-FIELDS — `UpdateCooperadoDto` sem campos GD (P3 lacuna de produto)
+
+**Introduzido pelo slice convênio-origem-dado 20/06 (já catalogado pre-merge).** Após o cadastro, admin não tem como corrigir `jaRecebeCreditosGd` ou `fornecedorGdAtual` via API (UpdateCooperadoDto não os inclui). Workaround: SQL direto. Fix: adicionar `@IsOptional @IsBoolean / @IsString @MaxLength(200)` em `UpdateCooperadoDto`. **Status:** ABERTO. Não-bloqueante v1.
+
+### D-novo-CONVENIO-ORIGEM-LEDGER — Falta origemConvenioId no ledger de token (P1 → reescopado P2 após Fase 1 read-only 20/06)
+
+**Status:** ⚙️ PARCIALMENTE RESOLVIDO — slice "convênio-origem-dado" (20/06) endereça o gap principal em `CooperTokenCompra` (F2 compra empresa-PJ); rastreabilidade do movimento atômico (Ledger) JÁ EXISTE indireta via `referenciaId+referenciaTabela`.
+
+**Reescopo após Fase 1 read-only (20/06):**
+
+A Fase 1 read-only do slice mostrou que o ledger atômico (`CooperTokenLedger`) **JÁ rastreia o convênio indiretamente** via `referenciaId` + `referenciaTabela='ContratoConvenio'` nos tipos `BENEFICIO_CONVENIO` / `DISTRIBUICAO_CONVENIO` (F3 `distribuirTokens` + `handleConvenioBeneficioTokens`). Funciona como defesa documental — só não tem índice composto dedicado.
+
+**Gap real era em `CooperTokenCompra`** (F2 — empresa cooperada PJ compra tokens via Asaas): zero menção a convênio. Quando empresa PJ comprava tokens pra distribuir num convênio específico, o trilho se perdia.
+
+**Slice 20/06 entregou:**
+- Campo aditivo `CooperTokenCompra.convenioId String?` + relation `convenio ContratoConvenio?` (schema delta + `prisma db push` aplicado).
+- Back-relation `ContratoConvenio.cooperTokenCompras CooperTokenCompra[]`.
+- Wiring em `cooper-token.service.ts:comprarTokensCooperado` com guard multi-tenant (defense in depth: `cooperativaId == convenio.cooperativaId`).
+- `processarPagamentoCompraPj` log estruturado de sucesso inclui convenioId truncado.
+- 6 specs novos (sem/com convenioId, inexistente, cross-tenant blocked, sem compra órfã, ordem dos guards preservada).
+- Lookup completo: `Ledger.referenciaId` → `CooperTokenCompra.convenioId`.
+
+**O que ainda falta (rebaixa P1→P2):**
+- Índice composto em `CooperTokenLedger(referenciaTabela, referenciaId)` pra acelerar lookup de "todos tokens originados do convênio X no cooperado Y".
+- Endpoint admin "listar tokens por convênio" pra relatório de defesa documental.
+- Catalogação se SCEE/contábil precisa de campo dedicado `convenioId` direto no Ledger (vs join atual).
+
+**Commit:** slice na branch `feature/convenio-origem-dado` (pendente merge — reviewers em curso 20/06).
 
 ### D-novo-CONVENIO-FASE0-JURIDICO — Pré-requisito jurídico NÃO-código antes de empresa real (P0 ativação real)
 
