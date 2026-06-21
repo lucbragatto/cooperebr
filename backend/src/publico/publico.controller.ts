@@ -236,6 +236,10 @@ export class PublicoController {
       // pelo step "Tipo de cobrança" no /cadastro público. Vivendo em
       // memória até motorProposta.aceitar (não persistido na Proposta).
       convenioCusteioId?: string;
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+      // GD como DADO". Propagado pro cadastroWebV2 → Cooperado.create.
+      jaRecebeCreditosGd?: boolean;
+      fornecedorGdAtual?: string;
     },
     @Query('tenant') tenantParam?: string,
   ) {
@@ -908,6 +912,13 @@ export class PublicoController {
       //  (c) gravar Cooperado.consentimentoDocsAceito quando consentimentoDocs=true.
       token?: string;
       consentimentoDocs?: boolean;
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+      // GD como DADO". Cliente declara que já recebe créditos de geração
+      // distribuída (outra cooperativa/gerador). Aditivo, opcional, default
+      // false. NÃO bloqueia o cadastro — é dado defensivo anti-double-count
+      // SCEE + insumo pra futuro fluxo de migração (Fase 3 do convênio).
+      jaRecebeCreditosGd?: boolean;
+      fornecedorGdAtual?: string;
     },
     cooperativaId: string,
   ) {
@@ -1018,6 +1029,16 @@ export class PublicoController {
                   consentimentoDocsAceito: true,
                   consentimentoDocsAceitoEm: new Date(),
                 }
+              : {}),
+            // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe
+            // créditos GD como DADO". Persiste declaração do cliente quando
+            // vem do frontend. Schema tem default(false), então só set
+            // explícito se body trouxe; idem fornecedor (String? nullable).
+            ...(body.jaRecebeCreditosGd === true
+              ? { jaRecebeCreditosGd: true }
+              : {}),
+            ...(body.fornecedorGdAtual && body.fornecedorGdAtual.trim()
+              ? { fornecedorGdAtual: body.fornecedorGdAtual.trim() }
               : {}),
           },
         });
@@ -1589,6 +1610,12 @@ export class PublicoController {
       representanteLegalNome?: string;
       representanteLegalCpf?: string;
       representanteLegalCargo?: string;
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+      // GD como DADO". Caminho SEM_UC é especialmente relevante pro cenário do
+      // parecer 19/06 "cliente migra de cooperativa concorrente" — esses
+      // chegam frequentemente já recebendo créditos GD.
+      jaRecebeCreditosGd?: boolean;
+      fornecedorGdAtual?: string;
     },
     @Query('tenant') tenantParam?: string,
   ) {
@@ -1622,6 +1649,13 @@ export class PublicoController {
             ? body.representanteLegalCpf.replace(/\D/g, '')
             : null,
           representanteLegalCargo: body.representanteLegalCargo ?? null,
+          // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+          ...(body.jaRecebeCreditosGd === true
+            ? { jaRecebeCreditosGd: true }
+            : {}),
+          ...(body.fornecedorGdAtual && body.fornecedorGdAtual.trim()
+            ? { fornecedorGdAtual: body.fornecedorGdAtual.trim() }
+            : {}),
         },
         select: { id: true, nomeCompleto: true, tipoCooperado: true, status: true, codigoIndicacao: true },
       });

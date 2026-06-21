@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean, IsNumber, Min, Max } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean, IsNumber, MaxLength, Min, Max } from 'class-validator';
 import { StatusCooperado, TipoCooperado } from '@prisma/client';
 
 export class CreateCooperadoDto {
@@ -80,4 +80,20 @@ export class CreateCooperadoDto {
   @IsOptional()
   @IsBoolean()
   ambienteTeste?: boolean;
+
+  /**
+   * Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos GD
+   * como DADO". Cliente declara/admin marca que já recebe créditos de
+   * geração distribuída (outra cooperativa/usina/gerador). NÃO bloqueia
+   * cadastro — é dado defensivo anti-double-count SCEE + insumo pro futuro
+   * fluxo de migração (Fase 3 do convênio).
+   */
+  @IsOptional()
+  @IsBoolean()
+  jaRecebeCreditosGd?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  fornecedorGdAtual?: string;
 }

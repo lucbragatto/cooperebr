@@ -444,6 +444,10 @@ export class CooperadosService {
     percentualRepasse?: number;
     // D-novo-CAD-CUSTEADO-FATURA (02/06/2026)
     ambienteTeste?: boolean;
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos
+    // GD como DADO". Aditivo, opcional. NÃO bloqueia cadastro.
+    jaRecebeCreditosGd?: boolean;
+    fornecedorGdAtual?: string;
   }) {
     let cooperado;
     try {

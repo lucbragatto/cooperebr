@@ -214,6 +214,12 @@ function CadastroPageInner() {
   const [otpErro, setOtpErro] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [consentimentoDocs, setConsentimentoDocs] = useState(false);
+  // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe créditos GD
+  // como DADO". Cliente declara se já recebe créditos de outra cooperativa/
+  // gerador. NÃO bloqueia o cadastro — é DADO defensivo anti-double-count
+  // SCEE + insumo pro futuro fluxo de migração (Fase 3 do convênio).
+  const [jaRecebeCreditosGd, setJaRecebeCreditosGd] = useState(false);
+  const [fornecedorGdAtual, setFornecedorGdAtual] = useState('');
   // Uploads opcionais via /publico/cadastro/upload-doc (Fatia 1 endpoint)
   type TipoUploadConvite = 'RG_FRENTE' | 'RG_VERSO' | 'CNH_FRENTE' | 'CNH_VERSO' | 'SELFIE';
   const [uploadsConvite, setUploadsConvite] = useState<Partial<Record<TipoUploadConvite, { ref: string; publicUrl: string }>>>({});
@@ -663,6 +669,14 @@ function CadastroPageInner() {
       }
       if (consentimentoDocs) {
         payload.consentimentoDocs = true;
+      }
+
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+      if (jaRecebeCreditosGd) {
+        payload.jaRecebeCreditosGd = true;
+        if (fornecedorGdAtual.trim()) {
+          payload.fornecedorGdAtual = fornecedorGdAtual.trim();
+        }
       }
 
       // No fluxo ?conv= NÃO há indicador MLM (decisão Luciano: convite custeio
@@ -1502,6 +1516,41 @@ function CadastroPageInner() {
                 a qualquer momento.
               </span>
             </label>
+          )}
+
+          {/* Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe
+              créditos GD como DADO". NÃO bloqueia o cadastro — só registra.
+              Useful pra futuro fluxo de migração de cooperativa concorrente. */}
+          <label className="flex items-start gap-3 p-4 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={jaRecebeCreditosGd}
+              onChange={(e) => setJaRecebeCreditosGd(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
+            />
+            <span className="text-sm text-gray-700 leading-relaxed">
+              ⚡ Já recebo créditos de energia (geração distribuída) de outra
+              cooperativa, usina ou gerador. <span className="block text-xs text-gray-500 mt-1">
+                Ex.: já participo de outra cooperativa/usina de energia. Isso{' '}
+                <strong>não bloqueia</strong> seu cadastro — é só pra registro
+                e pra te ajudar caso precise migrar depois.
+              </span>
+            </span>
+          </label>
+          {jaRecebeCreditosGd && (
+            <div className="ml-7 -mt-2">
+              <label className="block text-xs text-gray-600 mb-1">
+                De qual cooperativa/usina (opcional)?
+              </label>
+              <input
+                type="text"
+                value={fornecedorGdAtual}
+                onChange={(e) => setFornecedorGdAtual(e.target.value)}
+                maxLength={200}
+                placeholder="Ex.: Cooperativa Solar Verde / Usina Sertão"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              />
+            </div>
           )}
         </div>
 

@@ -108,6 +108,9 @@ export default function NovoMembroWizard() {
     codigoIndicacao: '',
     cooperadoId: '',
     ucId: '',
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+    jaRecebeCreditosGd: false,
+    fornecedorGdAtual: '',
   });
 
   const [step3, setStep3] = useState<Step3Data>({

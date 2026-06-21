@@ -48,6 +48,9 @@ export default function NovoCooperadoSemUcPage() {
     representanteLegalNome: '',
     representanteLegalCpf: '',
     representanteLegalCargo: '',
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+    jaRecebeCreditosGd: false,
+    fornecedorGdAtual: '',
   });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -90,6 +93,13 @@ export default function NovoCooperadoSemUcPage() {
         if (form.representanteLegalNome) payload.representanteLegalNome = form.representanteLegalNome;
         if (form.representanteLegalCpf) payload.representanteLegalCpf = form.representanteLegalCpf.replace(/\D/g, '');
         if (form.representanteLegalCargo) payload.representanteLegalCargo = form.representanteLegalCargo;
+      }
+      // Sprint Convênio-Token-Cooperado (20/06/2026) — slice GD como DADO.
+      if (form.jaRecebeCreditosGd) {
+        payload.jaRecebeCreditosGd = true;
+        if (form.fornecedorGdAtual.trim()) {
+          payload.fornecedorGdAtual = form.fornecedorGdAtual.trim();
+        }
       }
       const res = await api.post<{ id: string }>('/cooperados', payload);
       const novoId = res.data?.id;
@@ -247,6 +257,39 @@ export default function NovoCooperadoSemUcPage() {
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Sprint Convênio-Token-Cooperado (20/06/2026) — slice "recebe
+                créditos GD como DADO". NÃO bloqueia o cadastro — insumo
+                defensivo anti-double-count SCEE + fluxo migração concorrente. */}
+            <hr className="my-2" />
+            <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.jaRecebeCreditosGd}
+                onChange={(e) => set('jaRecebeCreditosGd', e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-slate-600 focus:ring-slate-500"
+              />
+              <span className="text-sm text-gray-700 leading-relaxed">
+                ⚡ Cliente já recebe créditos de geração distribuída (GD) de
+                outra cooperativa, usina ou gerador.
+                <span className="block text-xs text-gray-500 mt-1">
+                  Não bloqueia o cadastro — é dado defensivo (anti
+                  double-count SCEE) + insumo pro futuro fluxo de migração
+                  de concorrente.
+                </span>
+              </span>
+            </label>
+            {form.jaRecebeCreditosGd && (
+              <div className="ml-7">
+                <Label className="text-xs">Cooperativa/usina/gerador atual (opcional)</Label>
+                <Input
+                  value={form.fornecedorGdAtual}
+                  onChange={(e) => set('fornecedorGdAtual', e.target.value)}
+                  maxLength={200}
+                  placeholder="Ex.: Cooperativa Solar Verde / Usina Sertão"
+                />
+              </div>
             )}
 
             {erro && <p className="text-sm text-red-600">{erro}</p>}

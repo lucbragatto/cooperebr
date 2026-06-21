@@ -4447,8 +4447,13 @@ export class CooperTokenService {
     cooperativaId: string;
     quantidade: number;
     formaPagamento: 'PIX' | 'BOLETO';
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — slice "origemConvenioId
+    // no ledger". Empresa cooperada PJ pode comprar tokens vinculados a um
+    // convênio específico (Salvaguarda 4 do parecer 19/06). Opcional;
+    // quando preenchido, validado contra tenant (defense in depth).
+    convenioId?: string;
   }) {
-    const { compradorCooperadoId, cooperativaId, quantidade, formaPagamento } = params;
+    const { compradorCooperadoId, cooperativaId, quantidade, formaPagamento, convenioId } = params;
 
     if (quantidade <= 0) {
       throw new BadRequestException('Quantidade deve ser maior que zero');
@@ -4478,6 +4483,22 @@ export class CooperTokenService {
       );
     }
 
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — guard multi-tenant do
+    // convênio: quando vier preenchido, valida que pertence ao MESMO tenant
+    // (defense in depth — Prisma já força a FK existir, mas não filtra
+    // cross-tenant). Decisão Luciano: validar agora, NÃO deferir.
+    if (convenioId) {
+      const convenio = await this.prisma.contratoConvenio.findFirst({
+        where: { id: convenioId, cooperativaId },
+        select: { id: true },
+      });
+      if (!convenio) {
+        throw new NotFoundException(
+          'Convênio não encontrado ou não pertence ao seu tenant.',
+        );
+      }
+    }
+
     // Buscar config para valor do token.
     const config = await this.prisma.configCooperToken.findUnique({
       where: { cooperativaId },
@@ -4495,6 +4516,11 @@ export class CooperTokenService {
         valorTotal,
         formaPagamento,
         status: 'AGUARDANDO_PAGAMENTO',
+        // Sprint Convênio-Token-Cooperado (20/06/2026) — vincula compra ao
+        // convênio (Salvaguarda 4 parecer 19/06: rastreio anti-confusão
+        // token-de-empregador vs token-próprio). null = compra PJ-genérica
+        // sem programa de benefício específico.
+        ...(convenioId ? { convenioId } : {}),
       },
     });
 
@@ -4695,8 +4721,17 @@ export class CooperTokenService {
     }
 
     const quantidadeLiquida = Number((ledgerEntry as any).quantidade ?? 0);
+    // Sprint Convênio-Token-Cooperado (20/06/2026) — log inclui convenioId
+    // quando preenchido (Salvaguarda 4 do parecer 19/06: rastreio
+    // anti-confusão token-de-empregador). Lookup completo via
+    // CooperTokenLedger.referenciaId → CooperTokenCompra → convenioId.
+    // P2 review financeiro-token (20/06): cast `as any` removido — Prisma
+    // client regenerado pós-db push reconhece o campo nativamente.
+    const convenioLog = compra.convenioId
+      ? ` convenio=${compra.convenioId.slice(0, 8)}…`
+      : '';
     this.logger.log(
-      `[compra-pj] compra ${compraId} → ${quantidadeLiquida} tokens creditados ao cooperado ${compra.compradorCooperadoId} (bruto ${compra.quantidade}, taxa via F1.5)`,
+      `[compra-pj] compra ${compraId} → ${quantidadeLiquida} tokens creditados ao cooperado ${compra.compradorCooperadoId} (bruto ${compra.quantidade}, taxa via F1.5)${convenioLog}`,
     );
     return { creditado: true, quantidadeLiquida };
   }
