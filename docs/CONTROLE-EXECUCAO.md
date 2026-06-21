@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-21 (Code) — M45 Sprint Hardening Tenant-Spoof FECHADO — bloqueia exposição ANÔNIMA do /cadastro**. Fecha 2 débitos descobertos na investigação M44: `D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF` P0 + `D-novo-CADASTRO-PUBLICO-TENANT-SPOOF` P1 + bônus `convenios-pagador-empresa` validação anti-enumeração. POST `/cooperados` descarta `body.cooperativaId` (destructure-discard); tenant vem SÓ do JWT; SUPER_ADMIN escala via `cooperativaIdAlvo` validado (DTO `@Matches` CUID + `Cooperativa.findUnique` ativo). Cadastros públicos exigem `?tenant=<id>` validado → 404 se inexistente/inativa. Path convite (`?conv=<token>`) preservado intacto. Frontend: 4 fetches + 3 links com `encodeURIComponent`. **HONESTO:** sprint NÃO fecha spoofs AUTENTICADOS (cadastroCompleto, motor-proposta, 3 controllers laterais asaas/condominios/convite-indicacao) — catalogados como 4 débitos P1 da próxima Sprint Hardening Lateral. NÃO bloqueia piloto Santi. Reviewers multitenant + security APROVARAM com ressalvas (P0+P1+P2+P3 fixes aplicados pré-merge). 32 specs Jest + smoke E2E real 5/5 PASS. Commits: `9403095` (feat) + `5cd46ba` (merge --no-ff). Feature branch `feature/hardening-tenant-spoof` PRESERVADA. Próximo: decisão Luciano #2 Convênio Fase 2 (escopo piloto) OU default fast-follow Sprint Hardening Lateral. Detalhe: `docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md`.
+> Última atualização: **2026-06-21 (Code) — M46 Sprint Convênio FUNDAÇÃO FECHADO — E1 tokens ficam + E8 notificações wiradas + smoke E2E real**. Sprint pequena (~3h) que finaliza a fundação do ciclo de vida + notificações do convênio cooperativizado (design 19/06). E1 (decisão Luciano: tokens FICAM com funcionário no desligamento) validado na Fase 1 read-only — `removerMembro` já não tocava saldo — + ampliado com notificação WA inline ("seus N tokens continuam seus, R$ Y" calculado via `ConfigCooperToken` do tenant). E8 (`TokenNotificacaoService` órfão desde Sprint Token-WA Fase 2) wirado via novo `CooperTokenNotificacaoListener` único consumindo `RESGATADO` (fatura abatida — usarNaFatura-only) + `DISTRIBUIDO_CONVENIO` (novo, empresa-PJ → funcionário). 22 specs Jest verde + **smoke E2E REAL passou** (cooperado-teste whitelist 27981341348 → MensagemWhatsapp.status='ENVIADA' real; D-novo-WA-DEV-FALSE-OK descartado). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (3 fixes pré-merge: hardcode 0.45 → ConfigCooperToken; idempotência cooperativaId defense-in-depth; spec assertion). Commits: `79e5f1f` (feat) + `950d2c1` (merge --no-ff). Feature branch `feature/convenio-fundacao-lifecycle` PRESERVADA. Próximo: **#3 Sprint Convênio MIGRAÇÃO (Fase 3 — G2 estados + G5 doc desligamento + rollback) — legalmente SEGURA**. FAMÍLIA (Fase 2 G1) aguarda parecer trabalhista. **Observação:** IDOR sistêmico ACUMULANDO (M45 lateral + 3 D-novo-CONVENIO-*-SEM-COOPID novos + inventário SISGD) — candidato a Sprint Hardening Lateral próximo. Detalhe: `docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md`.
+
+> Histórico: **2026-06-21 (Code) — M45 Sprint Hardening Tenant-Spoof FECHADO — bloqueia exposição ANÔNIMA do /cadastro**. Fecha 2 débitos descobertos na investigação M44: `D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF` P0 + `D-novo-CADASTRO-PUBLICO-TENANT-SPOOF` P1 + bônus `convenios-pagador-empresa` validação anti-enumeração. POST `/cooperados` descarta `body.cooperativaId` (destructure-discard); tenant vem SÓ do JWT; SUPER_ADMIN escala via `cooperativaIdAlvo` validado (DTO `@Matches` CUID + `Cooperativa.findUnique` ativo). Cadastros públicos exigem `?tenant=<id>` validado → 404 se inexistente/inativa. Path convite (`?conv=<token>`) preservado intacto. Frontend: 4 fetches + 3 links com `encodeURIComponent`. **HONESTO:** sprint NÃO fecha spoofs AUTENTICADOS (cadastroCompleto, motor-proposta, 3 controllers laterais asaas/condominios/convite-indicacao) — catalogados como 4 débitos P1 da próxima Sprint Hardening Lateral. NÃO bloqueia piloto Santi. Reviewers multitenant + security APROVARAM com ressalvas (P0+P1+P2+P3 fixes aplicados pré-merge). 32 specs Jest + smoke E2E real 5/5 PASS. Commits: `9403095` (feat) + `5cd46ba` (merge --no-ff). Feature branch `feature/hardening-tenant-spoof` PRESERVADA. Próximo: decisão Luciano #2 Convênio Fase 2 (escopo piloto) OU default fast-follow Sprint Hardening Lateral. Detalhe: `docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md`.
 
 > Histórico: **2026-06-20 (Code) — M44 Slice Convênio Origem-Dado FECHADO**. Cadastro V2 (4 telas: público com/sem UC + wizard admin com/sem UC) agora **registra como DADO** se cooperado já recebe créditos GD de outro fornecedor + `CooperTokenCompra.convenioId` opcional com guard multi-tenant obrigatório. Schema delta aditivo (2 campos GD em `Cooperado` + `convenioId` em `CooperTokenCompra` + FK `onDelete:SetNull` + 3 índices + back-relation `ContratoConvenio.cooperTokenCompras`). 6 specs Jest verde + smoke E2E 5 casos. Reviewers multitenant + financeiro-token + re-review orquestrador APROVADOS. FUNDACAO §4#1 preservada. Commits: `2af634a` (feat) + `6847e5a` (merge --no-ff). Feature branch `feature/convenio-origem-dado` PRESERVADA. 4 débitos pré-existentes descobertos na investigação (D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF P0 + D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1 + 2 polimento) + `D-novo-CONVENIO-ORIGEM-LEDGER` rebaixado P1→P2. Próximo: **Sprint Hardening Tenant-Spoof** como BLOQUEADOR de exposição antes de tunelar `/cadastro` público. Detalhe: `docs/sessoes/2026-06-20-m44-convenio-origem-dado.md`.
 
@@ -66,6 +68,86 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-06-21 (Code — M46 Sprint Convênio FUNDAÇÃO: E1 tokens ficam + E8 notificações wiradas + smoke E2E REAL passou + merge na main)
+
+**Sessão Code dedicada — M46 entregue ponta-a-ponta + smoke E2E REAL.**
+Sprint pequena (~3h) que finaliza a **fundação do ciclo de vida + notificações**
+do convênio cooperativizado. E1 (decisão Luciano: tokens FICAM com funcionário
+desligado) validado e wirado com notif inline. E8 (`TokenNotificacaoService`
+órfão) wirado via listener único.
+
+**ENTREGAS:**
+- **Fatia A** — TokenNotificacaoService 2 métodos novos
+  (`notificarDistribuicaoConvenio` + `notificarAbateFatura`); não tocar
+  `notificarRecebedor` original.
+- **Fatia B** — Evento `CooperTokenDistribuidoConvenioEvent` + emit em
+  `distribuirTokens` APÓS commit mass-write (1 por linha, sequencial
+  best-effort; guard `!resultado.idempotente`).
+- **Fatia C** — `CooperTokenNotificacaoListener` único: consome RESGATADO +
+  DISTRIBUIDO_CONVENIO; idempotência via `MensagemWhatsapp.findFirst(
+  {tipoDisparo, disparoId, status:'ENVIADA', cooperativaId})` (defense-in-depth);
+  sem telefone → skip + log warn.
+- **Fatia D** — E1 inline em `removerMembro`: busca `ConfigCooperToken.valorTokenReais`
+  do tenant (P1-A reviewer — NÃO hardcode 0.45) + `CooperTokenSaldo` +
+  `Cooperado(telefone, nome)` filtrado por `cooperativaId`. Texto: "Você foi
+  desligado... Você ainda tem N CooperTokens (R$ Y). **Eles CONTINUAM SEUS**...".
+- **22 specs Jest verde** (10 listener + 12 E1).
+- **Smoke E2E REAL** (exigência re-review): cooperado-teste whitelist
+  27981341348 + vínculo ATIVO em Convênio "Condomínio Moradas da Enseada" →
+  `removerMembro` real → `MensagemWhatsapp.status='ENVIADA'` ✅, telefone ✅,
+  texto E1 com R$ 22,50 (50 tokens × 0.45 do tenant) ✅. WA REAL CONFIRMADO
+  (D-novo-WA-DEV-FALSE-OK descartado).
+
+**REVIEWERS** (2 paralelos + re-review):
+- `cooperebr-multitenant-reviewer`: APROVADO COM RESSALVAS (P2-A hardcode FIX +
+  P3-A cooperativaId no dedup FIX).
+- `code-reviewer`: WARNING (P1-A hardcode = mesmo achado FIX + P1-B spec
+  assertion FIX). 2 P2 + 3 P3.
+- Re-review orquestrador: **APROVADO** com exigência smoke real (cumprida).
+
+**O QUE FECHOU (✅):**
+- `D-novo-CONVENIO-E1-FUNCIONARIO-SAI-TOKENS-ORFAOS` P1 → RESOLVIDO (E1).
+- `E8` TokenNotificacaoService órfão → WIRADO via listener.
+
+**DÉBITOS NOVOS catalogados:**
+- `D-novo-NOTIF-EMAIL-FALLBACK` P3 — email fallback pra cooperado sem telefone.
+- `D-novo-E1-DISPARO-READMISSAO` P3 — `disparoId` composto colidiria em 2º
+  desligamento pós-readmissão; comportamento atual aceitável (waSender sem dedup).
+- `D-novo-CONVENIO-UPDATE-SEM-COOPID` P2 — removerMembro/updateMembro UPDATE
+  sem cooperativaId. Pré-existente IDOR sistêmico.
+- `D-novo-CONVENIO-LISTAR-MEMBROS-SEM-COOPID` P2 — listarMembros sem filtro.
+  Pré-existente.
+- `D-novo-UPDATEMEMBRO-ANY` P3 — `updateData: any`. Pré-existente.
+- `D-novo-WA-FILA-DEDICADA` P3 — sem fila WA pra burst grande. Catalogar se
+  Santi mostrar problema (cuidado A orquestrador).
+
+**Observação:** IDOR sistêmico ACUMULANDO — M45 Hardening Lateral (asaas +
+condominios + convite-indicacao) + 3 D-novo-CONVENIO-*-SEM-COOPID novos +
+inventário SISGD (~20 endpoints). Candidato a Sprint Hardening Lateral
+próximo (re-review orquestrador 21/06).
+
+**Commits:** `79e5f1f` (feat) + `950d2c1` (merge --no-ff). Feature branch
+`feature/convenio-fundacao-lifecycle` PRESERVADA. Zero schema delta.
+
+**Próximo bloco** (Luciano decidiu fazer TODAS as 4 sprints da fila em sequência):
+
+- **#1 M45 Sprint Hardening Tenant-Spoof** — ✅ FECHADO
+- **#2 M46 Sprint Convênio FUNDAÇÃO** — ✅ FECHADO NESTA SESSÃO
+- **#3 — Sprint Convênio MIGRAÇÃO (Fase 3)** — próximo na fila: G2 estados
+  PENDENTE_MIGRACAO/DESLIGADO + G5 doc desligamento + rollback. **Legalmente
+  SEGURA** (não exige parecer trabalhista).
+- **Sprint Convênio FAMÍLIA (Fase 2 — G1)** — DEFERIDA até parecer trabalhista
+  do Luciano (token paga conta de luz = risco salário in natura agravado CLT 458).
+- **Sprint Hardening Lateral / IDOR sistêmico** — segue candidato.
+- **#3 OPÇÃO A D-QUALIF-DECAY** + **#4 OPÇÃO C Notificações Proativas** —
+  seguem catalogados.
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE RETOMADA —
+próxima sessão Code` no fim deste documento (M46 atualizada, M45 arquivada).
+Detalhe: `docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md`.
 
 ---
 
@@ -3160,109 +3242,144 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M45 (21/06):
+2. Rodar `git status --short`. Esperado pós-fechamento M46 (21/06):
    working tree com `backend/package.json` +
    `backend/package-lock.json` MODIFICADOS (TERRITÓRIO COWORK, NÃO
-   TOCAR) + vários untracked que NÃO são nossos (`.claude/agents/*`,
-   `backend/src/agents/`, `*.mjs`, `ponte-wa-telegram-leve/`,
+   TOCAR) + untracked não-meus (`.claude/agents/*`, `*.mjs`,
    `scripts/*`, `.agent/memory/*`) — NUNCA `git add .` / `-A`. Último
-   commit em main é o fechamento M45
-   (`docs(sessao): fechamento M45 ...`). `git log
-   origin/main..HEAD --oneline` deve estar VAZIO (pushado). Branches
-   preservadas no origin (NÃO deletar): `feature/d2-salvaguardas-origem`
-   (M42 merge `b65bcb3`), `feature/hardening-throttler-reconciliacao`
-   (M43 merge `beb125c`), `feature/convenio-origem-dado` (M44 merge
-   `6847e5a`), `feature/hardening-tenant-spoof` (M45 merge `5cd46ba`).
+   commit em main é o fechamento M46 (`docs(sessao): fechamento M46
+   ...`). `git log origin/main..HEAD --oneline` deve estar VAZIO.
+   Branches preservadas no origin (NÃO deletar):
+   `feature/d2-salvaguardas-origem` (b65bcb3),
+   `feature/hardening-throttler-reconciliacao` (beb125c),
+   `feature/convenio-origem-dado` (6847e5a),
+   `feature/hardening-tenant-spoof` (5cd46ba),
+   `feature/convenio-fundacao-lifecycle` (M46 merge `950d2c1`).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   + cooperebr-whatsapp online (3000/3001/3002 LISTENING). Frontend
-   é `next start` sob PM2 — toda mudança em web/ exige rebuild +
-   `pm2 restart cooperebr-frontend`. HMR NÃO ROLA. NÃO RODAR `prisma
-   db push` (M45 não tocou schema; só código).
+   + cooperebr-whatsapp online (3000/3001/3002 LISTENING). NÃO RODAR
+   `prisma db push` (M46 não tocou schema; só código).
 
-PASSO 1 — Frase COMANDANTE: Luciano definiu fazer TODAS as 4 sprints
-da fila em sequência. **#1 (M45 Sprint Hardening Tenant-Spoof)
-FECHADO** — exposição ANÔNIMA do /cadastro blindada.
+PASSO 1 — Frase COMANDANTE: Luciano decidiu fazer TODAS as 4 sprints
+do escopo COMPLETO em sequência. **#1 (M45 Hardening Tenant-Spoof)
+FECHADO**. **#2 (M46 Convênio FUNDAÇÃO — E1 + E8 + smoke real) FECHADO**.
 
-**#2 — Sprint Convênio Fase 2 (família + migração + ciclo-de-vida)**
-DEPENDE de decisão de escopo do Luciano. Responder:
-(Q1) Piloto inclui família (G1 — token de A abate fatura de B familiar)?
-(Q2) Piloto inclui migração de cooperativa concorrente (G2)?
-(Q3) Fase 0 jurídica antes (parecer trabalhista + estatuto v3/AGE 17/06
-     na JUCEES + isenção PIS/COFINS como flag)?
-Sem essas respostas, #2 BLOQUEIA.
+Próximo: **#3 — Sprint Convênio MIGRAÇÃO (Fase 3 — G2 + G5 + rollback)**
+— legalmente SEGURA (não exige parecer trabalhista). Aborda os débitos
+do design 19/06:
 
-**DEFAULT (decision-independent) ENQUANTO #2 NÃO VEM:** iniciar Sprint
-**Hardening Lateral** (fast-follow autenticado, ~6-8h Code) que fecha
-os 4 débitos P1 autenticados descobertos pelos reviewers M45 (mesmo
-padrão já aplicado — destructure-discard + `cooperativaIdAlvo`
-validado + Cooperativa.findUnique):
+- `D-novo-CONVENIO-G2-ESTADOS-MIGRACAO` P2 (Fase 3) — `StatusCooperado`
+  não tem `PENDENTE_MIGRACAO`/`DESLIGADO`; `MigracaoUsina` é intra-coop;
+  billing roda só em ATIVO sem distinguir estado de transição.
+- `D-novo-CONVENIO-E2-MIGRACAO-FALHA-SEM-ROLLBACK` P2 (Fase 3) — sem
+  timeout/alerta/rollback se migração da distribuidora concorrente
+  falhar. Edge case E3 (oxidação cega ao estado de transição — `creditar`
+  exige ATIVO).
+- `D-novo-CONVENIO-G5-DOC-DESLIGAMENTO` P3 (Fase 3) — `ModeloDocumento`
+  só tem CONTRATO/PROCURACAO; falta termo de desligamento da
+  distribuidora/cooperativa concorrente.
 
-- `D-novo-CADASTRO-COMPLETO-TENANT-SPOOF` P1 — `cooperados.service.ts:495`
-  + 3 outros pontos `dto.cooperativaId || cooperativaId`.
-- `D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT` P1 — `motor-proposta.service.ts:584`
-  aceita `planoId` cross-tenant sem validar ownership.
-- `D-novo-AUDITLOG-TENANT-ALVO-SA` P1 — `audit-log.interceptor.ts:41-42`
-  não captura `cooperativaIdAlvo` quando SA escala (auditoria por tenant
-  fica cega). Implica adicionar `req['auditTenantAlvoId']` no controller
-  + leitura no interceptor.
-- `D-novo-HARDENING-CONTROLLERS-LATERAIS` P1 — 3 controllers laterais
-  (asaas.controller.ts:37, condominios.controller.ts:26,
-  convite-indicacao.controller.ts:62) com mesmo spoof autenticado SA-only.
+**FAMÍLIA (Fase 2 — G1)** está DEFERIDA até parecer trabalhista do
+Luciano (token paga conta de luz = risco salário in natura agravado
+CLT 458). Token de A abata fatura de B familiar exige confirmação
+bilateral + flag "familiar" na `Indicacao` + guard multi-tenant
+`A.cooperativaId == B.cooperativaId`.
 
-Encerra o tema tenant-spoof completo antes de escalar pra múltiplos
-parceiros-admin reais. NÃO bloqueia piloto Santi.
-
-LUCIANO: RESPONDER Q1/Q2/Q3 do #2 OU AUTORIZAR fast-follow lateral.
-Se nenhum dos dois, **DEFAULT = Sprint Hardening Lateral**.
-
-1º comando (se default = lateral): git checkout -b feature/hardening-lateral
+1º comando: git checkout -b feature/convenio-migracao
 
 Fase 1 read-only OBRIGATÓRIA (Decisão 23) — investigar + reportar ao
 orquestrador, SEM tocar código:
- (a) `cadastroCompleto` — mapear `CadastroCompletoDto` (tem campo
-     `cooperativaId`?) + os 4 pontos `dto.cooperativaId || cooperativaId`
-     no service. Como aplicar padrão M45 sem quebrar contrato.
- (b) `motor-proposta.aceitar` — `planoId` cross-tenant: confirmar gap +
-     desenho do guard (assert `plano.cooperativaId === dono.cooperativaId ||
-     plano.cooperativaId === null` pra planos globais).
- (c) `audit-log.interceptor.ts` — opção minimal (`req['auditTenantAlvoId']`)
-     vs opção limpa (campo `tenantAlvoId` no model `AuditLog`). Decidir.
- (d) 3 controllers laterais — confirmar role-set + se já estão restritos
-     a SA (security-reviewer afirmou que sim) + desenho do fix idêntico
-     ao M45.
+ (a) Mapear `StatusCooperado` atual + onde é setado/lido. Quais
+     billing/cron/qualificação dependem dele? Adicionar
+     `PENDENTE_MIGRACAO`/`DESLIGADO` (ou similar) quebra algo?
+ (b) `MigracaoUsina` (`backend/src/migracoes-usina/`) — modelo existente
+     intra-coop; pode ser estendido pra distribuidora externa OU virar
+     novo modelo `MigracaoDistribuidora`. Decidir.
+ (c) Pontos de oxidação (`expirarTokens` linha 872), `creditar`
+     (linha 456), `usarNaFatura` (linha 4141) — todos exigem
+     `STATUS_PERMITIDOS_CREDITO` (`ATIVO` / `ATIVO_RECEBENDO_CREDITOS`).
+     Edge case E3: cooperado em PENDENTE_MIGRACAO recebe tokens? Bloqueia?
+     Acumula sem oxidar? Decidir.
+ (d) `ModeloDocumento` — adicionar TIPO_DOCUMENTO `DESLIGAMENTO_CONCORRENTE`
+     com template variável + assinatura digital (Assinafy futuro).
+ (e) Estimativa real (design 19/06 estimou Fase 3 em 8-15d Code).
 
-Reportar achados + estimativa + PAUSAR pro OK do orquestrador antes da
-Fase 2. Reviewers pesados (multitenant + security) ANTES do smoke.
+Reportar achados + premissa validada + opção de design + PAUSAR pro OK
+do orquestrador antes da Fase 2. Reviewers pesados antes do smoke.
 
-CARRY-OVERS pós M45 (catalogados):
-- `D-novo-USINA-PROPRIA-CROSS-TENANT` P2 — `cooperados.service.create`
-  sem validar `usinaPropriaId` cross-tenant.
-- `D-novo-SERVICE-LAYER-UPDATE-DELETE-AUDIT` P2 — auditoria sistemática
-  6 controllers × UPDATE/DELETE pra confirmar `where:{id,cooperativaId}`.
-  Conecta com IDOR sistêmico catalogado no inventário SISGD.
-- `D-novo-USINAS-CREATE-TENANT-IMPLICITO` P2 — POST /usinas sem tenant
-  explícito no handler (service decide via quê?).
-- `D-novo-COOPERADO-OWNERSHIP-SEM-COOPID` P3 — `assertCooperadoOwnership`
-  sem filtro `cooperativaId` no lookup.
-- `D-novo-TERNARIO-COOPID-FALSY` P3 — `?{id,cooperativaId}:{id}` ternário
-  falsy frágil (string vazia some o filtro).
-- `D-novo-PUBLICO-400-404-ORACULO` P3 — 400 vs 404 distinguíveis (rebaixado).
-- `D-novo-COOPERADO-UPDATE-SEM-COOPID` P2 (carry de M44) — `update` sem
-  revalidar tenant do alvo (entra na Sprint Hardening Lateral como bônus).
-- `D-novo-UPDATE-COOPERADO-DTO-GD-FIELDS` P3 (carry de M44).
-- `D-novo-CONVENIO-ORIGEM-LEDGER` P2 (rebaixado em M44 — polimento).
-- 7 débitos `D-novo-CONVENIO-*` abertos do design 19/06 (E1 P1 +
-  FASE0-JURIDICO P0 + 5 outros).
-- 6 decisões de produto pendentes do design 19/06.
+ALTERNATIVAS (decision-independent enquanto Luciano define escopo #3):
+
+**Sprint Hardening Lateral** — IDOR sistêmico ACUMULANDO (M45 lateral +
+3 D-novo-CONVENIO-*-SEM-COOPID novos do M46 + inventário SISGD ~20
+endpoints). Re-review orquestrador 21/06 sinalizou como candidato. Mesmo
+padrão M45 (destructure-discard + cooperativaIdAlvo validado). Estimativa
+~6-8h. Fecha:
+
+- `D-novo-CADASTRO-COMPLETO-TENANT-SPOOF` P1 (M45) — `cooperados.service.ts:495`.
+- `D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT` P1 (M45) — `motor-proposta.service.ts:584`.
+- `D-novo-AUDITLOG-TENANT-ALVO-SA` P1 (M45) — interceptor não captura
+  `cooperativaIdAlvo` quando SA escala.
+- `D-novo-HARDENING-CONTROLLERS-LATERAIS` P1 (M45) — asaas + condominios +
+  convite-indicacao.
+- `D-novo-CONVENIO-UPDATE-SEM-COOPID` P2 (M46) — removerMembro/updateMembro
+  UPDATE sem cooperativaId.
+- `D-novo-CONVENIO-LISTAR-MEMBROS-SEM-COOPID` P2 (M46) — listarMembros sem
+  filtro tenant.
+
+Catalogar débitos P2/P3 carry-over (não fechar agora):
+
+CARRY-OVERS pós M46 (catalogados):
+- M46 novos:
+  - `D-novo-NOTIF-EMAIL-FALLBACK` P3 — email fallback pra cooperado sem telefone.
+  - `D-novo-E1-DISPARO-READMISSAO` P3 — disparoId composto colidiria em 2º
+    desligamento pós-readmissão (comportamento atual OK — waSender sem dedup).
+  - `D-novo-UPDATEMEMBRO-ANY` P3 — `updateData: any` em updateMembro.
+  - `D-novo-WA-FILA-DEDICADA` P3 — sem fila WA pra burst grande de distribuição.
+- M45 carry:
+  - `D-novo-USINA-PROPRIA-CROSS-TENANT` P2.
+  - `D-novo-SERVICE-LAYER-UPDATE-DELETE-AUDIT` P2 (audit sistemático IDOR).
+  - `D-novo-USINAS-CREATE-TENANT-IMPLICITO` P2.
+  - `D-novo-COOPERADO-OWNERSHIP-SEM-COOPID` P3.
+  - `D-novo-TERNARIO-COOPID-FALSY` P3.
+  - `D-novo-PUBLICO-400-404-ORACULO` P3.
+- M44 carry:
+  - `D-novo-COOPERADO-UPDATE-SEM-COOPID` P2.
+  - `D-novo-UPDATE-COOPERADO-DTO-GD-FIELDS` P3.
+  - `D-novo-CONVENIO-ORIGEM-LEDGER` P2.
+- Design 19/06:
+  - `D-novo-CONVENIO-E1-FUNCIONARIO-SAI-TOKENS-ORFAOS` P1 → ✅ RESOLVIDO M46.
+  - `D-novo-CONVENIO-FASE0-JURIDICO` P0 (bloqueia ativação real).
+  - `D-novo-CONVENIO-G1-VINCULO-FAMILIAR` P2 (Fase 2 — DEFERIDA).
+  - `D-novo-CONVENIO-G4-CONSUMO-DECLARADO-TOKEN` P2 (Fase 2).
+  - `D-novo-CONVENIO-G2-ESTADOS-MIGRACAO` P2 (Fase 3 — NESTE PRÓXIMO SPRINT).
+  - `D-novo-CONVENIO-E2-MIGRACAO-FALHA-SEM-ROLLBACK` P2 (Fase 3 — IDEM).
+  - `D-novo-CONVENIO-G5-DOC-DESLIGAMENTO` P3 (Fase 3 — IDEM).
 - **#3** OPÇÃO A Sprint D-QUALIF-DECAY (~6-10h) catalogado.
-- **#4** OPÇÃO C Notificações Proativas
-  (D-novo-RECONCILIACAO-DESISTIDO-LISTENER) catalogado.
+- **#4** OPÇÃO C Notificações Proativas catalogado.
 - Caminho ativação produção saque colaborador DESCONTO_FATURA — todos
-  hardenings de código implementados (M41/M42/M43), falta parecer
-  escrito + flag `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` em .env prod.
+  hardenings de código implementados (M41/M42/M43), falta parecer escrito +
+  flag `SAQUE_COLABORADOR_PRODUCAO_LIBERADO=true` em .env prod.
 
-ENTREGA M45:
+ENTREGA M46:
+
+- Fatia A — TokenNotificacaoService 2 métodos novos
+  (`notificarDistribuicaoConvenio` + `notificarAbateFatura`). Não tocar
+  `notificarRecebedor` original.
+- Fatia B — Evento `DISTRIBUIDO_CONVENIO` + emit em `distribuirTokens`
+  APÓS commit mass-write (sequencial best-effort).
+- Fatia C — `CooperTokenNotificacaoListener` único: consome RESGATADO +
+  DISTRIBUIDO_CONVENIO; idempotência via `MensagemWhatsapp(tipoDisparo,
+  disparoId, status, cooperativaId)`; sem telefone → skip + log warn.
+- Fatia D — E1 inline em `removerMembro`: busca `ConfigCooperToken.valorTokenReais`
+  do tenant (P1-A reviewers — não hardcode); texto "seus N tokens
+  continuam seus, R$ Y". Best-effort.
+- 22 specs Jest verde + smoke E2E REAL passou (cooperado-teste whitelist
+  27981341348 → MensagemWhatsapp.status='ENVIADA' real).
+- Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS
+  COM RESSALVAS (3 fixes pré-merge).
+- Commits: `79e5f1f` (feat) + `950d2c1` (merge --no-ff).
+
+ENTREGA M45 (referência — sprint anterior):
 
 - Fatia A — POST /cooperados (P0 D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF):
   * Controller async + destructure-discard body.cooperativaId
@@ -3327,23 +3444,24 @@ PROTOCOLO próxima sprint (independente de qual):
 - Merge --no-ff preservando feature branch no origin.
 
 PRÉ-REQUISITOS LEITURA:
-1. docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md (esta sessão).
-2. docs/sessoes/2026-06-20-m44-convenio-origem-dado.md (slice M44 que
-   descobriu os 2 spoofs P0/P1 fechados em M45).
+1. docs/sessoes/2026-06-21-m46-sprint-convenio-fundacao.md (esta sessão).
+2. docs/sessoes/2026-06-21-m45-sprint-hardening-tenant-spoof.md (M45).
 3. docs/sessoes/2026-06-19-design-convenio-token-cooperado-familia.md
-   (design fonte do #2 Convênio Fase 2).
-4. docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md (modelo + gap map
-   do #2).
+   (design fonte do convênio — G2/G5/rollback referenciados pra #3 MIGRAÇÃO).
+4. docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md (modelo + gap map).
 5. docs/relatorios/analise-conformidade-2026-06-19-modelo-convenio-cooperado-token.md
-   (parecer 4 lentes do #2).
-6. docs/debitos-tecnicos.md — 2 débitos M44 marcados ✅ RESOLVIDOS +
-   10 novos catalogados pela Sprint M45 (4 P1 da Sprint Hardening
-   Lateral + 6 P2/P3).
-7. backend/src/auth/tenant-guard.helper.ts (`assertSameTenantOrSuperAdmin`
-   — helper canônico reusado pela M45 e pela Sprint Hardening Lateral).
-8. CLAUDE.md (regras + multi-tenant + disciplina análise modelo canônico).
+   (parecer 4 lentes — confirma que MIGRAÇÃO é Fase 3 legalmente segura).
+6. docs/debitos-tecnicos.md — E1 RESOLVIDO M46 + 6 débitos novos M46 + carry de
+   M44/M45 + débitos design 19/06 ainda abertos.
+7. backend/src/migracoes-usina/ (modelo `MigracaoUsina` existente intra-coop;
+   referência pra Sprint MIGRAÇÃO).
+8. backend/src/cooper-token/cooper-token-notificacao.listener.ts (pattern do
+   listener-based event reusável).
+9. CLAUDE.md (regras + multi-tenant + disciplina análise modelo canônico).
 
-═══ FIM DA FRASE M45 (sessão 21/06 — Sprint Hardening Tenant-Spoof entregue + merge na main) ═══
+═══ FIM DA FRASE M46 (sessão 21/06 — Sprint Convênio FUNDAÇÃO entregue + smoke E2E real + merge na main) ═══
+
+═══ FRASE ARQUIVADA M45 (21/06 — Sprint Hardening Tenant-Spoof) — referência ═══
 
 ═══ FRASE ARQUIVADA M44 (20/06 — Slice convênio-origem-dado) — referência ═══
 

@@ -5986,7 +5986,9 @@ TypeError: Cannot read properties of undefined (reading 'findMany')
 
 ### D-novo-CONVENIO-E1-FUNCIONARIO-SAI-TOKENS-ORFAOS — Funcionário sai da empresa → tokens distribuídos ficam órfãos no saldo pessoal, sem decisão (P1 🔴 BLOQUEADOR de produto)
 
-Ao desligar membro de convênio, `removerMembro` não toca o saldo de token. Tokens já distribuídos pela empresa ficam no saldo pessoal pra sempre. Falta DECISÃO de produto: ficam com ele / são recomprados / expiram. Bloqueia piloto que inclua ciclo de vida de funcionário. Origem: design 19/06 (`docs/ESPEC-CONVENIO-TOKEN-COOPERADO-2026-06-19.md` §7 E1). **Status:** ABERTO.
+**Status:** ✅ RESOLVIDO Sprint Convênio FUNDAÇÃO (M46 — 2026-06-21).
+
+Decisão Luciano: tokens **FICAM** com o funcionário no desligamento. Premissa validada na Fase 1 (`removerMembro` já não tocava saldo, ledger, qualificação Clube ou TokenTransacao). Implementação: notificação WA inline em `convenios-membros.service.ts:removerMembro` ("Você ainda tem N CooperTokens — eles CONTINUAM SEUS"). Best-effort, busca `ConfigCooperToken.valorTokenReais` do tenant. Smoke E2E real validado pelo orquestrador (`scripts/smoke-e1-desligamento.ts` — MensagemWhatsapp.status='ENVIADA' pra whitelist 27981341348). Commit `950d2c1`.
 
 ### D-novo-CADASTRO-PUBLICO-TENANT-SPOOF — Endpoints @Public aceitam body.cooperativaId sobrescrevendo ?tenant= (P1 IDOR cross-tenant)
 
@@ -6108,6 +6110,34 @@ Sample em `cooperados.service.ts:1031, 736` mostra ternário `cooperativaId ? {i
 ### D-novo-PUBLICO-400-404-ORACULO — 400 vs 404 distinguíveis em endpoints públicos sem auth (P3 enumeração teórica)
 
 Cadastros públicos retornam 400 `BadRequestException` se `?tenant=` ausente e 404 `NotFoundException` se tenant inexistente/inativo. Probe pode distinguir os 2 casos. **Rebaixado pra P3** — IDs CUID-25 (10^25 combinações) tornam enumeração por força bruta infactível. DX (cliente legítimo precisa do feedback claro) justifica diferenciação. **Status:** ABERTO. Eventual normalização pra 400 genérico.
+
+---
+
+## Débitos catalogados Sprint Convênio FUNDAÇÃO (M46 — 21/06/2026)
+
+### D-novo-NOTIF-EMAIL-FALLBACK — Cooperado sem telefone pula notificação WA sem fallback de email (P3)
+
+Listener `CooperTokenNotificacaoListener` + `notificarDesligamentoE1` fazem skip + log warn quando `Cooperado.telefone === null`. Mensagens importantes ("seus tokens continuam seus", "fatura abatida", "tokens recebidos") deveriam ter fallback de email. `TokenNotificacaoService` já tem `enviarOtpAltoValorPorEmail` como modelo — replicar pra mensagens informativas com template HTML inline simples. Catalogado durante M46 mas baixa prioridade: cooperados sem telefone são minoria absoluta + a operação principal (desligamento, distribuição, abate) acontece de qualquer forma. **Status:** ABERTO.
+
+### D-novo-E1-DISPARO-READMISSAO — `disparoId='convenioId:cooperadoId'` colidiria em desligamento APÓS readmissão (P3)
+
+`notificarDesligamentoE1` usa `disparoId = ${convenioId}:${cooperadoId}` (composto, não TokenTransacao.id como nos outros). Se cooperado for readmitido (`adicionarMembro` linha 107-123 reativa) e desligado de novo, mesmo `disparoId`. **MAS:** o `WhatsappSenderService` não tem dedup interno por `disparoId` (só registra `MensagemWhatsapp`). Logo o 2º envio FUNCIONA — texto é o mesmo do 1º, cooperado recebe novamente. Comportamento atual aceitável. **Risco real:** apenas se algum dia adicionarmos dedup no sender. Fix: usar `${convenioId}:${cooperadoId}:${dataDesligamento.toISOString()}` ou `${convenioId}:${cooperadoId}:${vinculo.id}`. **Status:** ABERTO.
+
+### D-novo-CONVENIO-UPDATE-SEM-COOPID — `removerMembro` + `updateMembro` UPDATE sem cooperativaId no where (P2 IDOR autenticado)
+
+`convenios-membros.service.ts:182` (`removerMembro`) e `:273` (`updateMembro`) fazem `convenioCooperado.update({where:{id:vinculo.id}})` sem `cooperativaId`. Controller já valida via `conveniosService.findOne(id, cooperativaId)` antes (linhas 140, 165), mas defense-in-depth recomendado (padrão IDOR sistêmico inventário SISGD). **Status:** ABERTO. Entra na Sprint Hardening Lateral / audit IDOR sistêmico.
+
+### D-novo-CONVENIO-LISTAR-MEMBROS-SEM-COOPID — `listarMembros({convenioId})` sem filtro cooperativaId (P2 IDOR autenticado)
+
+`convenios-membros.service.ts:280` faz `findMany({where:{convenioId}})` sem filtro tenant. Controller valida ANTES via `conveniosService.findOne(id, cooperativaId)` mas o padrão IDOR sistêmico exige filtro na query. Fix: receber `cooperativaId` + filtrar via `cooperado:{is:{cooperativaId}}`. **Status:** ABERTO.
+
+### D-novo-UPDATEMEMBRO-ANY — `updateMembro` usa `updateData: any` (P3 type safety)
+
+`convenios-membros.service.ts:269`: `const updateData: any = {}`. Único uso de `any` explícito no module. Tipo correto: `Prisma.ConvenioCooperadoUpdateInput`. **Status:** ABERTO.
+
+### D-novo-WA-FILA-DEDICADA — Sem fila WA pra burst grande de distribuição mass-write (P3 ops)
+
+`distribuirTokens` emite N eventos `DISTRIBUIDO_CONVENIO` sequenciais (1 por destinatário). `WhatsappSenderService` é síncrono (`fetch` direto). Lote grande (centenas de funcionários) pode estourar limite do WA. Pro piloto Santi (poucos funcionários) sem problema. Catalogar se piloto mostrar erro. Fix futuro: enfileirar via BullMQ ou throttle interno. Cuidado A do orquestrador 21/06. **Status:** ABERTO.
 
 ---
 
