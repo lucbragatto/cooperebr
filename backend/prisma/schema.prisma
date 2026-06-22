@@ -142,6 +142,10 @@ model Cooperativa {
   // Sprint D2.1 v2 (16/06/2026) — overrides do disclaimer de saque por tenant.
   disclaimersSaque          DisclaimerSaque[]
 
+  // Sprint Funil M48 (22/06/2026) — aliases que cruzam com Cooperado.
+  // fornecedorGdAtual (texto livre) no roteamento A/B/C.
+  aliasesParceiro           AliasParceiroSisgd[]
+
   @@map("cooperativas")
 }
 
@@ -378,7 +382,55 @@ model Cooperado {
   // desligamento da concessionária concorrente.
   fornecedorGdAtual       String?
 
+  // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C.
+  // ADVISORY only: gravado pelo RoteamentoCadastroService no momento do
+  // cadastro. NÃO bloqueia / NÃO dispara migração automática (Camadas 2/3
+  // fazem enforcement). 4 campos aditivos pra metadata + auditoria.
+  // roteamentoCaminho: 'C_NOVO' | 'A_MIGRACAO' | 'B_REDIRECT_PARCEIRO' |
+  //                    'AMBIGUO_ADMIN' (validado service-side por const array).
+  // roteamentoTenantAlvo: cooperativaId do parceiro SISGD vencedor do match
+  //                      (só preenchido em caminho B; null nos demais).
+  // roteamentoRazao: motivo humano-legível ("alias 'CoopereBR' bate com
+  //                  Cooperativa cnpj 12.345/0001-67").
+  // roteamentoDecididoEm: timestamp da decisão (auditoria + reprocessamento).
+  roteamentoCaminho       String?
+  roteamentoTenantAlvo    String?
+  roteamentoRazao         String?
+  roteamentoDecididoEm    DateTime?
+
   @@map("cooperados")
+}
+
+// ─── Funil de Aquisição — Camada 1 (Sprint M48, 22/06/2026) ───
+//
+// Aliases que cruzam o `Cooperado.fornecedorGdAtual` (texto livre) com
+// Cooperativas SISGD pra distinguir caminho A (concorrente fora-SISGD) vs
+// B (parceiro SISGD, anti-canibalização). Matcher: CNPJ direto (14 dígitos)
+// ou alias ILIKE case-insensitive substring.
+//
+// Tenant-aware: cada parceiro SISGD cadastra seus próprios aliases via
+// onboarding (catalogado D-novo-M48-UI-ADMIN-ALIASES P2 pra futura UI).
+// Cross-tenant lookup intencional: motor precisa achar qual parceiro tem
+// o alias; retorna SÓ tenantAlvo+razao (não vaza dados do tenant alheio —
+// confirmado pelo multitenant-reviewer).
+//
+// Seed inicial: CoopereBR (5-10 aliases comuns) em prisma/seed-aliases.ts.
+model AliasParceiroSisgd {
+  id            String      @id @default(cuid())
+  cooperativaId String
+  cooperativa   Cooperativa @relation(fields: [cooperativaId], references: [id])
+  // alias normalizado (lowercase + sem pontuação) pra match rápido.
+  // O service normaliza no insert + na query.
+  alias         String
+  // tipo: 'NOME_CURTO' | 'MARCA_COMERCIAL' | 'SLUG_HISTORICO' | 'CNPJ_SECUNDARIO'
+  // String livre validado por const array no service (sem enum delta).
+  tipo          String
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  @@index([alias, ativo])
+  @@index([cooperativaId, ativo])
+  @@map("aliases_parceiro_sisgd")
 }
 
 model DocumentoCooperado {
@@ -1098,6 +1150,15 @@ model FaturaProcessada {
   tarifaSemImpostos  Decimal?     @db.Decimal(10, 5)
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+
+  // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C.
+  // Aditivo: campo preenchido por HOOK FUTURO (catalogado
+  // D-novo-M48-HOOK-CLASSIFICACAO-SCEE P2 — Sprint Pipeline OCR + Concierge
+  // Integration). Quando o adapter canônico (concierge) ganhar bridge com
+  // Claude OCR output, esse campo é populado e o roteador ganha 3ª dimensão
+  // ('NAO_GD'=C; 'GD_I/II/III'=A ou B). MVP do roteador opera sem ele.
+  // Valores esperados: 'NAO_GD' | 'GD_I' | 'GD_II' | 'GD_III' | 'INDEFINIDO'.
+  classificacaoScee  String?
 
   @@map("faturas_processadas")
 }

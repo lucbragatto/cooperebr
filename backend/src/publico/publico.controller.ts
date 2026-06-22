@@ -21,6 +21,8 @@ import { ValidarOtpConviteDto } from './dto/validar-otp-convite.dto';
 import { isAmbienteReal } from '../common/safety/ambiente';
 import { validarENormalizarCadastro } from '../common/safety/cadastro-validacao';
 import { CadastroUploadService } from './cadastro-upload.service';
+// Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
+import { RoteamentoCadastroService } from '../roteamento-cadastro/roteamento-cadastro.service';
 
 /**
  * Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026).
@@ -69,6 +71,8 @@ export class PublicoController {
     private convenioAprovacao: ConvenioAprovacaoService,
     // Convergência convite custeio Fatia 1 (04/06/2026) — upload pré-cadastro
     private cadastroUpload: CadastroUploadService,
+    // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
+    private roteamentoCadastroService: RoteamentoCadastroService,
   ) {}
 
   @Public()
@@ -297,7 +301,21 @@ export class PublicoController {
         cooperativaId = coop.id;
       }
 
-      return this.cadastroWebV2(body as Parameters<PublicoController['cadastroWebV2']>[0], cooperativaId);
+      // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C.
+      // ADVISORY only: decide o caminho ANTES de chamar cadastroWebV2 (fora
+      // da tx, sem queries aninhadas). Resultado gravado em 4 campos do
+      // Cooperado pelo cadastroWebV2. NÃO bloqueia cadastro.
+      const roteamento = await this.roteamentoCadastroService.decidirCaminho({
+        jaRecebeCreditosGd: (body as any).jaRecebeCreditosGd ?? null,
+        fornecedorGdAtual: (body as any).fornecedorGdAtual ?? null,
+        cooperativaIdSugerida: cooperativaId,
+      });
+
+      return this.cadastroWebV2(
+        body as Parameters<PublicoController['cadastroWebV2']>[0],
+        cooperativaId,
+        roteamento,
+      );
     }
 
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
@@ -790,6 +808,14 @@ export class PublicoController {
     try {
       const resultadoTx = await this.prisma.$transaction(
         async (tx) => {
+          // TODO M48-Camada2 (D-novo-M48-AUTO-INSCREVER-SEM-ROTEADOR P3):
+          // este path (convite público auto-inscrever) NÃO chama o roteador
+          // A/B/C — Cooperado é criado sem campos `roteamento*`. Decisão de
+          // produto se: (a) opcional pq convite implica intenção explícita;
+          // (b) deveria rodar mesmo assim pra detectar caminho B (cliente
+          // de outro parceiro SISGD chega via convite). Catalogado pra
+          // avaliação na Camada 2 (vitrine).
+          //
           // (9) Consume-once atômico DENTRO do tx. P2025 = outro POST consumiu
           // antes (race) → 409 genérico. Em Serializable, dois POSTs concorrentes
           // serializam ou um deles aborta com erro 40001 (Prisma traduz pra
@@ -945,6 +971,14 @@ export class PublicoController {
       fornecedorGdAtual?: string;
     },
     cooperativaId: string,
+    // Sprint Funil M48 (22/06/2026) — resultado advisory do roteador A/B/C
+    // decidido pelo caller (cadastroWeb). Persistido em 4 campos aditivos no
+    // Cooperado.create. Opcional pra retro-compat com callers internos.
+    roteamento?: {
+      caminho: string;
+      tenantAlvo?: string;
+      razao: string;
+    },
   ) {
     // Convergência Fatia 1 — gate UNIFICADO via isAmbienteReal() em vez do
     // CADASTRO_VALIDACOES_ATIVAS legado. Fecha D-novo-CAD-UC-FALSA +
@@ -1063,6 +1097,16 @@ export class PublicoController {
               : {}),
             ...(body.fornecedorGdAtual && body.fornecedorGdAtual.trim()
               ? { fornecedorGdAtual: body.fornecedorGdAtual.trim() }
+              : {}),
+            // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C
+            // (advisory). 4 campos persistidos quando o caller passou.
+            ...(roteamento
+              ? {
+                  roteamentoCaminho: roteamento.caminho,
+                  roteamentoTenantAlvo: roteamento.tenantAlvo ?? null,
+                  roteamentoRazao: roteamento.razao,
+                  roteamentoDecididoEm: new Date(),
+                }
               : {}),
           },
         });

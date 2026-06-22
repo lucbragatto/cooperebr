@@ -17,6 +17,8 @@ import { UcsService } from '../ucs/ucs.service';
 import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 // Sprint M47 (21/06/2026) — 3 endpoints de migração externa (concorrente → SISGD).
 import { MigracaoExternaService } from '../migracoes-usina/migracao-externa.service';
+// Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
+import { RoteamentoCadastroService } from '../roteamento-cadastro/roteamento-cadastro.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -31,6 +33,7 @@ export class CooperadosController {
     private readonly ucsService: UcsService,
     private readonly motorProposta: MotorPropostaService,
     private readonly migracaoExternaService: MigracaoExternaService,
+    private readonly roteamentoCadastroService: RoteamentoCadastroService,
   ) {}
 
   /**
@@ -165,10 +168,23 @@ export class CooperadosController {
       );
     }
 
+    // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C.
+    // ADVISORY only: decide o caminho + grava metadata em 4 campos do
+    // Cooperado. NÃO bloqueia o cadastro (Camadas 2/3 fazem enforcement).
+    const roteamento = await this.roteamentoCadastroService.decidirCaminho({
+      jaRecebeCreditosGd: rest.jaRecebeCreditosGd ?? null,
+      fornecedorGdAtual: rest.fornecedorGdAtual ?? null,
+      cooperativaIdSugerida: cooperativaId,
+    });
+
     return this.cooperadosService.create({
       ...rest,
       cooperativaId,
       termoAdesaoAceitoEm: termoAdesaoAceitoEm ? new Date(termoAdesaoAceitoEm) : undefined,
+      roteamentoCaminho: roteamento.caminho,
+      roteamentoTenantAlvo: roteamento.tenantAlvo ?? null,
+      roteamentoRazao: roteamento.razao,
+      roteamentoDecididoEm: new Date(),
       ...(req.user?.perfil === AGREGADOR && req.user.administradoraId
         ? { administradoraId: req.user.administradoraId }
         : {}),
