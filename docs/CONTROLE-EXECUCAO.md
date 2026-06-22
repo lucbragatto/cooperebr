@@ -141,10 +141,21 @@ OFF, abate-só por padrão).
   real) — gate F3 saque familiar hoje só vê saldo bruto; precisa
   segmentar origem dos tokens (rio convênio ≠ rio desconto-fatura)
   no pattern D2.1 Salvaguarda 1.
+- `D-novo-M49-SMOKE-SEED-TESTE` **P2 ELEVADO** (pré-requisito próximo smoke real) —
+  re-review orquestrador 22/06 elevou pra P2. Seedar 2 cooperados ATIVO
+  frescos + contrato + cobrança A_VENCER em **CoopereBR Teste**.
+  **LIÇÃO FIRME:** NUNCA usar cooperado pré-existente (AMAGES/CAROLINA/
+  qualquer) em smoke. Smoke M49 deixou 2 DEBITO órfãos no ledger da
+  CAROLINA (cleanup removeu setup CREDITO mas preservou DEBITO de
+  abate). Corrigido com UPDATE cirúrgico pós-verificação.
+- `D-novo-FUNDACAO-DELTA-COOPEREBR` **P2 PRÉ-EXISTENTE NÃO-M49** —
+  verificação pós-cleanup mediu delta -729.86 no tenant CoopereBR
+  (Σ saldos 1127.46 vs Σ ledger 1857.32). Não causado pelo M49
+  (isolado: M49 contribuiu temporariamente +20, corrigido). Provável
+  débito histórico de sprints anteriores (seed/migração/ledger sem
+  update de saldo). Bloqueia ativação saque PIX em produção.
 - `D-novo-M49-CLEANUP-SMOKE-PROD` P3 — cleanup script não é idempotente
   por AuditLog acumulado em re-rodadas; mitigação manual no re-run.
-- `D-novo-M49-SMOKE-SEED-TESTE` P3 — pra rodar smoke em CoopereBR Teste
-  (default), seedar 2 cooperados + contrato + cobrança A_VENCER.
 - `D-novo-M49-COOPER-TOKEN-SALDO-COOPID` P3 (deferido) —
   cooperTokenSaldo.update sem `cooperativaId` no where (refactor
   cross-cutting).

@@ -6287,9 +6287,26 @@ Cada parceiro novo precisa cadastrar seus aliases. Hoje só seed (CoopereBR). On
 
 `backend/scripts/cleanup-m49-smoke.ts` calcula tokens a reverter via soma dos AuditLogs do M49. Re-rodadas seguidas sobre o mesmo banco somam abates anteriores (já revertidos). Mitigado manualmente no re-run com reset cobrança AMAGES `valorLiquido=979.20`. Pra próximos smokes: rodar 1× ou usar tenant CoopereBR Teste (default). **Status:** ABERTO. **Mitigação:** documentação no script + cleanup só 1× por smoke.
 
-#### D-novo-M49-SMOKE-SEED-TESTE — Seed CoopereBR Teste pra smoke E2E (P3)
+#### D-novo-M49-SMOKE-SEED-TESTE — Seed CoopereBR Teste pra smoke E2E (P2 — PRÉ-REQUISITO próximo smoke)
 
-`scripts/smoke-m49-familia-e2e.ts` default agora aponta pra `CoopereBR Teste` (re-review orquestrador 22/06). Mas a tenant Teste não tem cooperados ATIVOS com contrato+cobrança A_VENCER. Script lança erro orientado. Seed pendente: 2 cooperados ATIVO + 1 contrato + 1 cobrança A_VENCER. Override via env vars `SMOKE_M49_TENANT/PAGADORA/TITULAR` pra rodar em tenant real com whitelist enquanto seed não existe. **Status:** ABERTO. **Bloqueia:** automação smoke em CI puro.
+`scripts/smoke-m49-familia-e2e.ts` default agora aponta pra `CoopereBR Teste`. Mas a tenant Teste não tem cooperados ATIVOS com contrato+cobrança A_VENCER. Script lança erro orientado. Seed pendente: 2 cooperados ATIVO frescos (sem rastro de sprint anterior) + 1 contrato + 1 cobrança A_VENCER. Override via env vars `SMOKE_M49_TENANT/PAGADORA/TITULAR` continua disponível mas **NÃO deve mais ser usado em tenant real**.
+
+**LIÇÃO firme (re-review orquestrador 22/06):** **NUNCA usar cooperado pré-existente** (AMAGES/CAROLINA/qualquer outro) em smoke. O smoke M49 deixou 2 DEBITO órfãos no ledger da CAROLINA (cleanup removeu setup CREDITO mas preservou DEBITO de abate — quebra parcial do invariante FUNDACAO §4#1). Foi corrigido com UPDATE cirúrgico (delete dos 2 DEBITO órfãos pós-cleanup), mas a lição é: smoke real NÃO deve tocar dados pré-existentes.
+
+**Severidade elevada P3 → P2** (re-review 22/06). **Status:** ABERTO. **Bloqueia:** próximo smoke real do M49 e quaisquer smokes futuros sobre tenant CoopereBR.
+
+#### D-novo-FUNDACAO-DELTA-COOPEREBR — Tenant CoopereBR com delta -729.86 no invariante FUNDACAO §4#1 (P2 pré-existente, não-M49)
+
+Verificação pós-cleanup M49 (re-review orquestrador 22/06) mediu invariante no tenant inteiro:
+- Σ saldos (saldoDisponivel + saldoBloqueadoResgate) = 1127.46
+- Σ ledger (CREDITO − DEBITO) = 1857.32
+- **Delta = −729.86** (ledger maior que saldo)
+
+Isolando CAROLINA (impactada pelo M49 pré-correção), o delta pré-existente era exatamente os mesmos −729.86. O M49 contribuiu temporariamente +20 (corrigido). **NÃO foi causado por nenhuma sprint atual** — provavelmente débito histórico de sprints anteriores (seed, migração, ou ledger sem update de saldo correspondente).
+
+**Investigação pendente**: cross-check entre saldos × ledgers por cooperado pra localizar os ~700 tokens órfãos no ledger. Provavelmente concentrados em poucos cooperados.
+
+**Status:** ABERTO. **Não bloqueia:** desenvolvimento. **Bloqueia:** acuracidade contábil dos relatórios FUNDACAO + ativação do saque PIX em produção (saldo sacável depende do invariante íntegro).
 
 #### D-novo-M49-COOPER-TOKEN-SALDO-COOPID — `cooperTokenSaldo.update.where` sem `cooperativaId` (P3 deferido)
 

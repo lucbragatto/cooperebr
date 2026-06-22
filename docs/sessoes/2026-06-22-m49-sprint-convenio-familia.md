@@ -178,18 +178,51 @@ CoopereBR Teste de 2 cooperados ATIVO + contrato + cobrança A_VENCER.
   fatura próprio do cooperado) seguindo o pattern D2.1 Salvaguarda 1.
   Não bloqueia desenvolvimento; **bloqueia onboarding de 2ª empresa
   cooperada PJ real**. (Q1 orquestrador 22/06 — MVP saldo total fica.)
-- **D-novo-M49-CLEANUP-SMOKE-PROD** P3 — script de cleanup ficou idempotente
-  por AuditLog (re-rodadas somam abates). Mitigação adicionada manualmente
-  no re-run: reset cobrança AMAGES valorLiquido pro original 979.20. Para
-  próximos smokes: rodar 1× ou usar tenant Teste (default).
-- **D-novo-M49-SMOKE-SEED-TESTE** P3 — pra rodar smoke em `CoopereBR Teste`
-  (default), criar seed de 2 cooperados ATIVO + contrato + cobrança
-  A_VENCER. Sem seed, script lança erro orientado.
+- **D-novo-M49-SMOKE-SEED-TESTE** **P2 ELEVADO** (re-review orquestrador
+  22/06) — pré-requisito obrigatório do próximo smoke M49. Seedar
+  CoopereBR Teste com 2 cooperados ATIVO FRESCOS (sem rastro de outras
+  sprints) + 1 contrato + 1 cobrança A_VENCER. **LIÇÃO FIRME**: NUNCA
+  usar cooperado pré-existente em smoke (CAROLINA/AMAGES/qualquer).
+  Smoke M49 deixou 2 DEBITO órfãos no ledger da CAROLINA (cleanup
+  removeu setup CREDITO mas preservou DEBITO de abate); corrigido com
+  UPDATE cirúrgico pós-verificação.
+- **D-novo-FUNDACAO-DELTA-COOPEREBR** **P2 PRÉ-EXISTENTE NÃO-M49** —
+  verificação pós-cleanup mediu delta −729.86 no tenant CoopereBR
+  (Σ saldos 1127.46 vs Σ ledger 1857.32). Não causado pelo M49
+  (isolando CAROLINA: pré-existente igual ao total). Provável débito
+  histórico de sprints anteriores. Bloqueia ativação saque PIX em
+  produção.
+- **D-novo-M49-CLEANUP-SMOKE-PROD** P3 — cleanup não é idempotente por
+  AuditLog acumulado em re-rodadas; mitigação manual no re-run.
 - **D-novo-M49-COOPER-TOKEN-SALDO-COOPID** P3 (deferido) — `cooperTokenSaldo.
   update.where` em `usarNaFatura` usa só `cooperadoId` (`@unique`). Schema
   não tem `cooperativaId` no model. Adicionar campo + filtro é refactor
   cross-cutting (afeta vários callers). Não crítico — cooperadoId é
   globalmente único.
+
+## Verificação pós-cleanup (re-review orquestrador 22/06)
+
+3 checks executados a pedido do orquestrador após cleanup do smoke.
+
+**Check 1 — Cobrança AMAGES**: ✅
+- `tokenDescontoQt = 0`, `tokenDescontoReais = 0`, `valorLiquido = 979.20`
+  (= valorBruto 1194.14 − valorDesconto 214.94). Pré-smoke íntegro.
+
+**Check 2 — Saldo + ledger PAGADORA (CAROLINA)**:
+- Pré-correção: `saldoDisponivel=0`; ledger Σ=−20 (2 DEBITO órfãos de
+  abate preservados após cleanup remover os CREDITO setup).
+- **Correção cirúrgica**: deletados 2 ledgers DEBITO órfãos (ids
+  `cmqpccufv0007va94bmpvyl57` + `cmqpdm6e00007vag8gru6nizi`, q=10
+  cada). AuditLog/MensagemWhatsapp/TokenTransacao preservados como
+  rastro forense imutável.
+- Pós-correção: ✅ `saldoDisponivel=0`, ledgers=0, delta CAROLINA=0.
+
+**Check 3 — Invariante FUNDACAO §4#1 tenant inteiro**:
+- Pré-correção delta: **−709.86** (pré-existente −729.86 + M49 +20).
+- Pós-correção delta: **−729.86 — pré-existente não-M49**.
+- O M49 não contribuiu para nenhum desvio remanescente da invariante.
+- Catalogado como D-novo-FUNDACAO-DELTA-COOPEREBR P2 pra investigação
+  separada.
 
 ## Decisões estratégicas catalogadas
 
