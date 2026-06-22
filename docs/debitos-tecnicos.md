@@ -6257,6 +6257,46 @@ Cada parceiro novo precisa cadastrar seus aliases. Hoje só seed (CoopereBR). On
 
 ---
 
+## Débitos catalogados Sprint Convênio FAMÍLIA (M49 — 22/06/2026)
+
+### ⚠ "Antes de 2ª empresa-cooperada PJ real" (NÃO bloqueia desenvolvimento)
+
+#### D-novo-M49-SAQUE-FAMILIAR-SEGMENTACAO-ORIGEM — Gate F3 do saque familiar (3ª via D2) hoje só vê saldo bruto (P2)
+
+`backend/src/cooper-token/cooper-token.service.ts:solicitarResgate` adicionou (M49 Fatia F) 3ª via paralela ao D2 — `Cooperativa.tokenFamiliarSacavel=true` + cooperada é PAGADORA em autorização ativa libera resgate PIX. **Hoje confere apenas saldo bruto do CooperTokenSaldo**, não segmenta origem (rio convênio empresa-funcionário ≠ rio desconto-fatura próprio). Pra **2ª empresa-cooperada PJ real** (Santi ou próxima), precisa adotar o pattern D2.1 Salvaguarda 1 (`composicaoOrigemSaldo` com filtro origem). Q1 do orquestrador 22/06 decidiu: MVP saldo total fica pra primeira empresa (CoopereBR-Hangar); segmentação vira pré-requisito de onboarding da 2ª. **Status:** ABERTO. **Bloqueia:** onboarding 2ª empresa-cooperada PJ real. **NÃO bloqueia:** desenvolvimento atual nem CoopereBR-Hangar.
+
+### ✅ DÉBITOS RESOLVIDOS nesta sprint
+
+| Débito | Origem | Como resolvido |
+|---|---|---|
+| Bug `totalTokensAbatidos` permanece null | Re-review orquestrador | Schema `Decimal @default(0)` + UPDATE prévio das rows existentes |
+| HTTP `usarNaFatura` familiar inacessível | code-reviewer + financeiro + mtenant convergiram | `UsarNaFaturaDto.titularCooperadoId?` opcional + controller passa |
+| `findUnique` idempotência cross-tenant | mtenant P1 | findUnique retorna `cooperativaId` + verifica → `CrossTenantError` |
+| `update.where` recriar sem cooperativaId | mtenant P1 | adicionado `where: {id, cooperativaId}` |
+| `confirmarTitular` `findUnique` titular cross-tenant | mtenant P1 | `findFirst({id, cooperativaId})` |
+| `cobranca.updateMany` tx sem `contrato.cooperativaId` | financeiro P2 / mtenant P2 | adicionado contrato.cooperativaId no where |
+| `primeiraUtilizacaoEm` race-condition | financeiro P2 | 2º updateMany separado com filter `primeiraUtilizacaoEm: null` |
+| `PrismaService` direto no controller | code P2 | wrapper `service.sizing()` move pra service |
+| Sizing fallback frágil (compara valores) | financeiro/code P3 | `buscarTarifaPorDistribuidora` retorna `isFallback` additive |
+| Spec PIN_BLOQUEADO confirmar ausente | code P3 | spec adicionada |
+| Spec falha AuditLog best-effort ausente | code P3 | spec adicionada |
+
+### Débitos novos M49
+
+#### D-novo-M49-CLEANUP-SMOKE-PROD — Script de cleanup não é idempotente por AuditLog acumulado (P3)
+
+`backend/scripts/cleanup-m49-smoke.ts` calcula tokens a reverter via soma dos AuditLogs do M49. Re-rodadas seguidas sobre o mesmo banco somam abates anteriores (já revertidos). Mitigado manualmente no re-run com reset cobrança AMAGES `valorLiquido=979.20`. Pra próximos smokes: rodar 1× ou usar tenant CoopereBR Teste (default). **Status:** ABERTO. **Mitigação:** documentação no script + cleanup só 1× por smoke.
+
+#### D-novo-M49-SMOKE-SEED-TESTE — Seed CoopereBR Teste pra smoke E2E (P3)
+
+`scripts/smoke-m49-familia-e2e.ts` default agora aponta pra `CoopereBR Teste` (re-review orquestrador 22/06). Mas a tenant Teste não tem cooperados ATIVOS com contrato+cobrança A_VENCER. Script lança erro orientado. Seed pendente: 2 cooperados ATIVO + 1 contrato + 1 cobrança A_VENCER. Override via env vars `SMOKE_M49_TENANT/PAGADORA/TITULAR` pra rodar em tenant real com whitelist enquanto seed não existe. **Status:** ABERTO. **Bloqueia:** automação smoke em CI puro.
+
+#### D-novo-M49-COOPER-TOKEN-SALDO-COOPID — `cooperTokenSaldo.update.where` sem `cooperativaId` (P3 deferido)
+
+`cooperTokenSaldo` model tem só `cooperadoId @unique`. `update.where` em `usarNaFatura` usa só `cooperadoId`. Pattern multi-tenant do projeto exigiria `cooperativaId` no where (defense-in-depth — lição M45). Schema não tem o campo, então adicionar é refactor cross-cutting (afeta vários callers de saldo). **Status:** ABERTO. **Decisão:** não fix nesta sprint, registrado pra Sprint Hardening ou Saldo Refactor futura. **NÃO crítico:** cooperadoId é CUID globalmente único, sem colisão estrutural.
+
+---
+
 ## Como remover item
 
 Quando débito for resolvido:
