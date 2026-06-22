@@ -23,9 +23,16 @@ export type TarifaInfo = {
   tusd: number;
   te: number;
   tarifaKwh: number;
+  /**
+   * M49 P3 (22/06/2026) — discriminador explícito de origem da tarifa,
+   * pra callers não inferirem fallback por igualdade de valores frágil
+   * (sizing.helper). True = retornou FALLBACK_LEGADO (tarifa não encontrada
+   * + opts.throwIfNotFound=false). False = veio de TarifaConcessionaria real.
+   */
+  isFallback: boolean;
 };
 
-const FALLBACK_LEGADO: TarifaInfo = { tusd: 0.3, te: 0.2, tarifaKwh: 0.5 };
+const FALLBACK_LEGADO: TarifaInfo = { tusd: 0.3, te: 0.2, tarifaKwh: 0.5, isFallback: true };
 
 // Combining diacritical marks U+0300..U+036F — remoção de acentos pós NFD.
 const DIACRITICAL_RE = /[̀-ͯ]/g;
@@ -51,7 +58,7 @@ export async function buscarTarifaPorDistribuidora(
     if (tarifa) {
       const tusd = Number(tarifa.tusdNova);
       const te = Number(tarifa.teNova);
-      return { tusd, te, tarifaKwh: tusd + te };
+      return { tusd, te, tarifaKwh: tusd + te, isFallback: false };
     }
   }
 
@@ -62,7 +69,7 @@ export async function buscarTarifaPorDistribuidora(
   if (tarifa) {
     const tusd = Number(tarifa.tusdNova);
     const te = Number(tarifa.teNova);
-    return { tusd, te, tarifaKwh: tusd + te };
+    return { tusd, te, tarifaKwh: tusd + te, isFallback: false };
   }
 
   if (opts.throwIfNotFound) {

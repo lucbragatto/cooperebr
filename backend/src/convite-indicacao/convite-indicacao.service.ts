@@ -273,6 +273,10 @@ export class ConviteIndicacaoService {
             cooperadoIndicadoId: cooperadoIndicadoId,
             nivel: 1,
             status: 'PENDENTE',
+            // Sprint Família M49 (22/06/2026) — propaga flag familiar do
+            // convite. indicacoes.service.processarPrimeiraFaturaPaga
+            // detecta + skipa BeneficioIndicacao + tokens MLM.
+            familiar: convite.familiar === true,
           },
         });
 

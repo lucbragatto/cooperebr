@@ -429,6 +429,11 @@ export class CooperTokenController {
    * F4 Bloco A (12/06/2026) — body migrado pra DTO formal com PIN obrigatório
    * (6 dígitos numéricos) + class-validator. Substitui body inline antigo.
    * cooperadoId e cooperativaId sempre do JWT (anti-IDOR).
+   *
+   * M49 Fatia D (22/06/2026) — opcional `titularCooperadoId` no body abre o
+   * caminho FAMILIAR (saldo/PIN/limite da PAGADORA=JWT abatem fatura do
+   * TITULAR). Service valida AutorizacaoTokenFamiliar ativa entre os 2.
+   * cooperadoId e cooperativaId continuam do JWT (lição M45 inegociável).
    */
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)
   @Post('usar-na-fatura')
@@ -447,6 +452,7 @@ export class CooperTokenController {
       cobrancaId: body.cobrancaId,
       quantidadeTokens: body.quantidadeTokens,
       pin: body.pin,
+      titularCooperadoId: body.titularCooperadoId,
     });
   }
 

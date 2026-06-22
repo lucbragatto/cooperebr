@@ -34,6 +34,7 @@ import {
   COOPER_TOKEN_EVENTS,
   CooperTokenResgatadoEvent,
   CooperTokenDistribuidoConvenioEvent,
+  CooperTokenResgatadoFamiliarEvent,
 } from './cooper-token.events';
 
 @Injectable()
@@ -115,6 +116,106 @@ export class CooperTokenNotificacaoListener {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(
         `[notif-listener] Erro ao processar RESGATADO cooperado=${evt.cooperadoId} cobranca=${evt.cobrancaId}: ${msg}`,
+      );
+    }
+  }
+
+  /**
+   * Sprint Família M49 (22/06/2026) — abate familiar.
+   *
+   * 2 envios WA por evento (pagador + titular), com idempotência separada
+   * por tipoDisparo (TOKEN_ABATE_FATURA_PAGADOR_FAMILIAR e
+   * TOKEN_ABATE_FATURA_TITULAR_FAMILIAR). Sem telefone num dos lados:
+   * envia só o outro + log warn. Best-effort — não derruba fluxo.
+   */
+  @OnEvent(COOPER_TOKEN_EVENTS.RESGATADO_FAMILIAR)
+  async handleResgatadoFamiliar(evt: CooperTokenResgatadoFamiliarEvent): Promise<void> {
+    try {
+      const tokenTx = await this.prisma.tokenTransacao.findFirst({
+        where: {
+          pagadorCooperativaId: evt.cooperativaId,
+          pagadorId: evt.cooperadoPagadorId,
+          tipoOperacao: 'USO_FATURA',
+          referenciaExterna: evt.cobrancaId,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (!tokenTx) {
+        this.logger.warn(
+          `[notif-listener] RESGATADO_FAMILIAR: TokenTransacao não encontrada pagador=${evt.cooperadoPagadorId} titular=${evt.cooperadoTitularId} cobranca=${evt.cobrancaId}`,
+        );
+        return;
+      }
+
+      const [pagador, titular] = await Promise.all([
+        this.prisma.cooperado.findFirst({
+          where: { id: evt.cooperadoPagadorId, cooperativaId: evt.cooperativaId },
+          select: { telefone: true, nomeCompleto: true },
+        }),
+        this.prisma.cooperado.findFirst({
+          where: { id: evt.cooperadoTitularId, cooperativaId: evt.cooperativaId },
+          select: { telefone: true, nomeCompleto: true },
+        }),
+      ]);
+
+      // PAGADOR
+      if (
+        !(await this.jaEnviada(
+          'TOKEN_ABATE_FATURA_PAGADOR_FAMILIAR',
+          tokenTx.id,
+          evt.cooperativaId,
+        ))
+      ) {
+        if (pagador?.telefone && titular) {
+          await this.notif.notificarAbateFaturaPagadorFamiliar({
+            telefonePagador: pagador.telefone,
+            nomePagador: pagador.nomeCompleto,
+            cooperadoPagadorId: evt.cooperadoPagadorId,
+            cooperativaId: evt.cooperativaId,
+            cobrancaId: evt.cobrancaId,
+            nomeTitular: titular.nomeCompleto,
+            quantidadeTokens: evt.quantidade,
+            valorReais: evt.valorReais,
+            transacaoId: tokenTx.id,
+          });
+        } else {
+          this.logger.warn(
+            `[notif-listener] RESGATADO_FAMILIAR: pagador sem telefone ou titular não encontrado pagador=${evt.cooperadoPagadorId}`,
+          );
+        }
+      }
+
+      // TITULAR
+      if (
+        !(await this.jaEnviada(
+          'TOKEN_ABATE_FATURA_TITULAR_FAMILIAR',
+          tokenTx.id,
+          evt.cooperativaId,
+        ))
+      ) {
+        if (titular?.telefone && pagador) {
+          await this.notif.notificarAbateFaturaTitularFamiliar({
+            telefoneTitular: titular.telefone,
+            nomeTitular: titular.nomeCompleto,
+            cooperadoTitularId: evt.cooperadoTitularId,
+            cooperativaId: evt.cooperativaId,
+            cobrancaId: evt.cobrancaId,
+            nomePagador: pagador.nomeCompleto,
+            quantidadeTokens: evt.quantidade,
+            valorReais: evt.valorReais,
+            transacaoId: tokenTx.id,
+          });
+        } else {
+          this.logger.warn(
+            `[notif-listener] RESGATADO_FAMILIAR: titular sem telefone ou pagador não encontrado titular=${evt.cooperadoTitularId}`,
+          );
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `[notif-listener] Erro ao processar RESGATADO_FAMILIAR pagador=${evt.cooperadoPagadorId} titular=${evt.cooperadoTitularId} cobranca=${evt.cobrancaId}: ${msg}`,
       );
     }
   }

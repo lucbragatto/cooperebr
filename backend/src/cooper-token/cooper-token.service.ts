@@ -10,6 +10,7 @@ import {
   CooperTokenExpiradoEvent,
   CooperTokenCompraParceiroPagoEvent,
   CooperTokenDistribuidoConvenioEvent,
+  CooperTokenResgatadoFamiliarEvent,
 } from './cooper-token.events';
 // Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): helper de Taxa de Operacao.
 import { calcularTaxa } from './taxa-helper';
@@ -2239,23 +2240,48 @@ export class CooperTokenService {
       // Fallback Sprint D2: tenta liberar pelo gate Saque Colaborador.
       const coop = await this.prisma.cooperativa.findUnique({
         where: { id: cooperativaId },
-        select: { saqueColaboradorAtivo: true },
+        select: { saqueColaboradorAtivo: true, tokenFamiliarSacavel: true },
       });
       const flagTenant = coop?.saqueColaboradorAtivo === true;
       const gateProducaoLiberado =
         !isAmbienteReal() ||
         process.env.SAQUE_COLABORADOR_PRODUCAO_LIBERADO === 'true';
       const saqueColabPermitido = flagTenant && gateProducaoLiberado;
-      if (!saqueColabPermitido) {
-        // Mensagem informativa SEM revelar o gate de produção (anti-enumeração):
-        // o cooperado vê a mesma mensagem se a flag está OFF ou o env está OFF.
+
+      // Sprint Família M49 (22/06/2026) — 3ª via: cooperada SEM UC PAGADORA
+      // numa AutorizacaoTokenFamiliar ATIVA, com `tokenFamiliarSacavel=true`
+      // no tenant + mesmo gate de produção (paridade D2).
+      const familiarFlagTenant = coop?.tokenFamiliarSacavel === true;
+      let saqueFamiliarPermitido = false;
+      if (familiarFlagTenant && gateProducaoLiberado) {
+        const ehPagadoraAtiva = await this.prisma.autorizacaoTokenFamiliar.findFirst({
+          where: {
+            cooperadoPagadorId: estabelecimentoCooperadoId,
+            cooperativaId,
+            ativo: true,
+          },
+          select: { id: true },
+        });
+        saqueFamiliarPermitido = !!ehPagadoraAtiva;
+      }
+
+      if (!saqueColabPermitido && !saqueFamiliarPermitido) {
+        // Mensagem informativa SEM revelar o gate de produção nem o gate
+        // familiar (anti-enumeração): vê a mesma mensagem se qualquer flag
+        // está OFF, env está OFF, ou não é pagadora ativa.
         throw new ForbiddenException(
-          'Resgate em PIX bloqueado pra este cooperado. Disponível pra cooperados-Estabelecimento do Clube ou cooperados de cooperativa com saque-colaborador habilitado pelo admin SISGD (exige parecer do analista-conformidade).',
+          'Resgate em PIX bloqueado pra este cooperado. Disponível pra cooperados-Estabelecimento do Clube, cooperados de cooperativa com saque-colaborador habilitado, ou pagadoras com autorização familiar ativa em cooperativa que liberou token-familiar-sacável (exige parecer do analista-conformidade).',
         );
       }
-      this.logger.log(
-        `[F6 D2] Saque Colaborador autorizado: cooperado=${estabelecimentoCooperadoId.slice(0, 8)}… (não-estab) tenant=${cooperativaId.slice(0, 8)}… flag=ON env-prod-gate=${gateProducaoLiberado}`,
-      );
+      if (saqueFamiliarPermitido) {
+        this.logger.log(
+          `[F6 M49] Saque Familiar autorizado: pagadora=${estabelecimentoCooperadoId.slice(0, 8)}… tenant=${cooperativaId.slice(0, 8)}… flag-familiar=ON env-prod-gate=${gateProducaoLiberado}`,
+        );
+      } else {
+        this.logger.log(
+          `[F6 D2] Saque Colaborador autorizado: cooperado=${estabelecimentoCooperadoId.slice(0, 8)}… (não-estab) tenant=${cooperativaId.slice(0, 8)}… flag=ON env-prod-gate=${gateProducaoLiberado}`,
+        );
+      }
     }
     if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(estabelecimento.status)) {
       throw new ForbiddenException(
@@ -4169,14 +4195,53 @@ export class CooperTokenService {
    * + jti anti-replay) entra depois do schema delta de TokenTransacao.
    */
   async usarNaFatura(params: {
+    /** PAGADOR — quem cede tokens. JWT.cooperadoId. */
     cooperadoId: string;
     cooperativaId: string;
     cobrancaId: string;
     quantidadeTokens: number;
     /** F4 Bloco A — PIN 6 dígitos. DTO valida regex, service só repassa. */
     pin: string;
+    /**
+     * Sprint Família M49 (22/06/2026) — quando preenchido, abate a fatura do
+     * TITULAR usando tokens da PAGADORA. Exige AutorizacaoTokenFamiliar
+     * ativa entre os 2 cooperados no MESMO tenant. Saldo/PIN/limite são SEMPRE
+     * do pagador (lição decisão orquestrador 22/06). NÃO confundir com self
+     * (passar undefined ou igual ao cooperadoId rejeita).
+     */
+    titularCooperadoId?: string;
   }) {
-    const { cooperadoId, cooperativaId, cobrancaId, quantidadeTokens, pin } = params;
+    const { cooperadoId, cooperativaId, cobrancaId, quantidadeTokens, pin, titularCooperadoId } = params;
+    const isFamiliar = !!titularCooperadoId && titularCooperadoId !== cooperadoId;
+    if (titularCooperadoId && titularCooperadoId === cooperadoId) {
+      throw new BadRequestException(
+        'titularCooperadoId não pode ser igual ao próprio cooperadoId — use sem o param pra self.',
+      );
+    }
+    // Sprint Família M49 — quando familiar, valida autorização ANTES de PIN
+    // (defesa em camada — sem autorização nem PIN é tentado).
+    let autorizacao: { id: string; totalAbatesCount: number } | null = null;
+    if (isFamiliar) {
+      const aut = await this.prisma.autorizacaoTokenFamiliar.findFirst({
+        where: {
+          cooperadoPagadorId: cooperadoId,
+          cooperadoTitularId: titularCooperadoId!,
+          cooperativaId,
+          ativo: true,
+        },
+        select: { id: true, totalAbatesCount: true },
+      });
+      if (!aut) {
+        throw new ForbiddenException(
+          'Sem autorização ativa pra abater fatura familiar deste titular.',
+        );
+      }
+      autorizacao = aut;
+    }
+    /**
+     * Alvo da cobrança: titular (familiar) OU pagador (self).
+     */
+    const cooperadoIdAlvoCobranca = isFamiliar ? titularCooperadoId! : cooperadoId;
 
     if (quantidadeTokens <= 0) {
       throw new BadRequestException('Quantidade de tokens deve ser maior que zero');
@@ -4220,8 +4285,10 @@ export class CooperTokenService {
     // o teto (mais conservador — se o usuário pediu R$ 100 e o limite é R$ 50,
     // bloqueamos mesmo que o clamp fosse aplicar só R$ 40).
     // Pré-leitura read-only fora da tx só pra obter valorLiquido pro guard.
+    // Sprint Família M49 — cobrança é do TITULAR quando familiar (alvo);
+    // do próprio pagador quando self. Multi-tenant preservado em ambos.
     const cobrancaPreview = await this.prisma.cobranca.findFirst({
-      where: { id: cobrancaId, contrato: { cooperadoId, cooperativaId } },
+      where: { id: cobrancaId, contrato: { cooperadoId: cooperadoIdAlvoCobranca, cooperativaId } },
       select: { valorLiquido: true },
     });
     if (cobrancaPreview) {
@@ -4244,10 +4311,12 @@ export class CooperTokenService {
         // tem cooperativaId? nullable; usamos contrato.{cooperadoId,
         // cooperativaId} como fonte de verdade). NotFound genérica não
         // revela existência de cobrança em outro tenant.
+        // Sprint Família M49 — cobrança DENTRO da tx também usa
+        // cooperadoIdAlvoCobranca (titular em familiar; self em legado).
         const cobranca = await tx.cobranca.findFirst({
           where: {
             id: cobrancaId,
-            contrato: { cooperadoId, cooperativaId },
+            contrato: { cooperadoId: cooperadoIdAlvoCobranca, cooperativaId },
           },
           include: { contrato: { include: { plano: true } } },
         });
@@ -4346,12 +4415,21 @@ export class CooperTokenService {
         // Status-guard idempotente: updateMany só passa se cobrança ainda
         // estiver A_VENCER/VENCIDO. Se webhook Asaas mudou pra PAGA entre
         // o read e o write, count === 0 → tx aborta, débito faz rollback.
+        //
+        // P2-mtenant reviewer 22/06 — adiciona `contrato.cooperativaId` no
+        // where (defense-in-depth — paridade com leitura na linha 4317).
+        // Cobranca.cooperativaId é nullable no schema (legado), então usar
+        // contrato.cooperativaId é o filtro autoritativo.
         const tokenDescontoQtAnterior = Number(cobranca.tokenDescontoQt ?? 0);
         const tokenDescontoReaisAnterior = Number(cobranca.tokenDescontoReais ?? 0);
         const swap = await tx.cobranca.updateMany({
           where: {
             id: cobrancaId,
             status: { in: ['A_VENCER', 'VENCIDO'] as any },
+            contrato: {
+              cooperadoId: cooperadoIdAlvoCobranca,
+              cooperativaId,
+            },
           },
           data: {
             valorLiquido: novoValorLiquido,
@@ -4425,20 +4503,102 @@ export class CooperTokenService {
     );
 
     this.logger.log(
-      `[F4-C] Cooperado ${cooperadoId} usou ${txResult.tokensEfetivos} tokens na fatura ${cobrancaId}: desconto R$ ${txResult.descontoReais} (ledger=${txResult.ledgerId} tokenTx=${txResult.tokenTransacaoId} jti=${txResult.tokenTransacaoJti})`,
+      `[F4-C] Cooperado ${cooperadoId} usou ${txResult.tokensEfetivos} tokens na fatura ${cobrancaId}` +
+        (isFamiliar ? ` (FAMILIAR titular=${titularCooperadoId})` : '') +
+        `: desconto R$ ${txResult.descontoReais} (ledger=${txResult.ledgerId} tokenTx=${txResult.tokenTransacaoId} jti=${txResult.tokenTransacaoJti})`,
     );
 
+    // Sprint Família M49 (22/06/2026) — pós-commit familiar: atualiza
+    // contadores da autorização + AuditLog forense + evento dedicado.
+    // Best-effort (não derruba pagamento já commitado). Multi-tenant no
+    // update.where (defense-in-depth — lição M45).
+    if (isFamiliar && autorizacao) {
+      try {
+        // updateMany com cooperativaId no where (defense-in-depth multi-tenant —
+        // lição M45). update direto com id é safe estruturalmente (cuid global),
+        // mas o pattern multi-tenant do projeto exige cooperativaId no where.
+        //
+        // P2-fin reviewer 22/06 — totalAbatesCount + totalTokensAbatidos
+        // sempre incrementam (operação aditiva, sem race).
+        const agoraPos = new Date();
+        await this.prisma.autorizacaoTokenFamiliar.updateMany({
+          where: { id: autorizacao.id, cooperativaId },
+          data: {
+            ultimoUsoEm: agoraPos,
+            totalAbatesCount: { increment: 1 },
+            totalTokensAbatidos: { increment: txResult.tokensEfetivos },
+          },
+        });
+        // primeiraUtilizacaoEm em update separado, where filtra null — sob
+        // concorrência só a primeira escrita vence (race-proof). Best-effort.
+        if (autorizacao.totalAbatesCount === 0) {
+          await this.prisma.autorizacaoTokenFamiliar.updateMany({
+            where: { id: autorizacao.id, cooperativaId, primeiraUtilizacaoEm: null },
+            data: { primeiraUtilizacaoEm: agoraPos },
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `[m49] Update contadores AutorizacaoTokenFamiliar falhou autorizacaoId=${autorizacao.id} erro=${msg}`,
+        );
+      }
+
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            cooperativaId,
+            usuarioId: cooperadoId,
+            usuarioPerfil: 'COOPERADO',
+            acao: 'token.usar-na-fatura.familiar',
+            recurso: 'Cobranca',
+            recursoId: cobrancaId,
+            metadata: {
+              pagadorCooperadoId: cooperadoId,
+              titularCooperadoId,
+              autorizacaoId: autorizacao.id,
+              tokensAbatidos: txResult.tokensEfetivos,
+              valorReais: txResult.descontoReais,
+              ledgerId: txResult.ledgerId,
+              tokenTransacaoId: txResult.tokenTransacaoId,
+            } as any,
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `[m49] AuditLog familiar falhou cobranca=${cobrancaId} erro=${msg}`,
+        );
+      }
+    }
+
     // Eventos APÓS commit (fora da tx) — não bloqueiam pagamento.
-    this.eventEmitter.emit(
-      COOPER_TOKEN_EVENTS.RESGATADO,
-      new CooperTokenResgatadoEvent(
-        cooperativaId,
-        cooperadoId,
-        cobrancaId,
-        txResult.tokensEfetivos,
-        txResult.descontoReais,
-      ),
-    );
+    // Familiar usa evento dedicado (2 lados notificados); self mantém o legado.
+    if (isFamiliar && autorizacao) {
+      this.eventEmitter.emit(
+        COOPER_TOKEN_EVENTS.RESGATADO_FAMILIAR,
+        new CooperTokenResgatadoFamiliarEvent(
+          cooperativaId,
+          cooperadoId, // pagador
+          titularCooperadoId!,
+          autorizacao.id,
+          cobrancaId,
+          txResult.tokensEfetivos,
+          txResult.descontoReais,
+        ),
+      );
+    } else {
+      this.eventEmitter.emit(
+        COOPER_TOKEN_EVENTS.RESGATADO,
+        new CooperTokenResgatadoEvent(
+          cooperativaId,
+          cooperadoId,
+          cobrancaId,
+          txResult.tokensEfetivos,
+          txResult.descontoReais,
+        ),
+      );
+    }
 
     return {
       novoValor: txResult.novoValorLiquido,

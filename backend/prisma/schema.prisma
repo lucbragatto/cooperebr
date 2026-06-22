@@ -139,12 +139,23 @@ model Cooperativa {
   saqueColaboradorAtivo     Boolean                           @default(false)
   saqueColaboradorAtivadoEm DateTime?
 
+  // Sprint Família M49 (22/06/2026) — gate de saque familiar (3ª condição).
+  // Quando true + cooperado é pagador em alguma AutorizacaoTokenFamiliar
+  // ativa, libera solicitarResgate via gate C (espelha o pattern do
+  // saqueColaboradorAtivo). Default OFF — ligar exige decisão da cooperativa.
+  // Segmentação por origem do token (D-novo-SAQUE-FAMILIAR-SEGMENTACAO-ORIGEM
+  // P2 destaque) é refinamento obrigatório ANTES de ligar pra valer.
+  tokenFamiliarSacavel      Boolean                           @default(false)
+
   // Sprint D2.1 v2 (16/06/2026) — overrides do disclaimer de saque por tenant.
   disclaimersSaque          DisclaimerSaque[]
 
   // Sprint Funil M48 (22/06/2026) — aliases que cruzam com Cooperado.
   // fornecedorGdAtual (texto livre) no roteamento A/B/C.
   aliasesParceiro           AliasParceiroSisgd[]
+
+  // Sprint Família M49 (22/06/2026) — autorizações de token familiar do tenant.
+  autorizacoesTokenFamiliar AutorizacaoTokenFamiliar[]
 
   @@map("cooperativas")
 }
@@ -397,6 +408,13 @@ model Cooperado {
   roteamentoTenantAlvo    String?
   roteamentoRazao         String?
   roteamentoDecididoEm    DateTime?
+
+  // Sprint Família M49 (22/06/2026) — autorizações de token familiar.
+  // Cooperado pode ser PAGADOR (cede tokens) E/OU TITULAR (aceita abate)
+  // — 1:1 v1 com @@unique no AutorizacaoTokenFamiliar; multi (E5/E6)
+  // fica pra sprint futura.
+  autorizacoesComoPagador AutorizacaoTokenFamiliar[] @relation("AutorizacaoTokenPagador")
+  autorizacoesComoTitular AutorizacaoTokenFamiliar[] @relation("AutorizacaoTokenTitular")
 
   @@map("cooperados")
 }
@@ -2231,6 +2249,13 @@ model Indicacao {
   conviteOrigem        ConviteIndicacao?
   membroConvenio       ConvenioCooperado?
 
+  // Sprint Família M49 (22/06/2026) — Indicação familiar SKIP de bônus MLM
+  // (pattern reusado de institucional, indicacoes.service.ts:317). Quando
+  // familiar=true, processarPrimeiraFaturaPaga NÃO cria BeneficioIndicacao
+  // nem emite CooperToken — vínculo de família NÃO gera benefício de cascata.
+  // Propagado de ConviteIndicacao.familiar na criação.
+  familiar             Boolean              @default(false)
+
   @@map("indicacoes")
 }
 
@@ -3186,6 +3211,10 @@ model ConviteIndicacao {
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
+  // Sprint Família M49 (22/06/2026) — convite familiar (sem bônus MLM).
+  // Propagado pra Indicacao quando aceito.
+  familiar             Boolean       @default(false)
+
   @@unique([cooperadoIndicadorId, telefoneConvidado])
   @@index([cooperativaId, status])
   @@index([convenioId])
@@ -3256,6 +3285,59 @@ model ConfigCooperToken {
   updatedAt         DateTime    @updatedAt
 
   @@map("config_cooper_token")
+}
+
+// ─── Sprint Família M49 (22/06/2026) ───
+//
+// AutorizacaoTokenFamiliar — consentimento bilateral entre cooperado PAGADOR
+// (ex: esposa SEM UC que recebe tokens via convênio empresa) e cooperado
+// TITULAR (ex: marido COM UC titular da fatura). Permite `usarNaFatura`
+// abater a fatura do titular usando tokens da pagadora.
+//
+// Multi-tenant: pagador.cooperativaId == titular.cooperativaId (validado
+// service-side no criar). Cooperativa = inegociável (lição M45).
+//
+// Cardinalidade v1: 1:1 via @@unique. Múltiplos pagadores num titular
+// ou múltiplos titulares num pagador = sprint futura (E5/E6).
+//
+// Saldo/PIN/limite são SEMPRE do PAGADOR no usarNaFatura familiar
+// (ela cede tokens dela). Autorização é o GATE; cobrança é do titular.
+// PIN do pagador re-validado a CADA débito (não só no setup).
+//
+// Revogação unilateral: pagador OU titular pode revogar sem PIN do outro
+// (registra revogadoPorCooperadoId + motivo opcional). Tokens já usados
+// NÃO voltam (queimaram — alinhado com regra E1 M46).
+model AutorizacaoTokenFamiliar {
+  id                     String   @id @default(cuid())
+  cooperativaId          String
+  cooperativa            Cooperativa @relation(fields: [cooperativaId], references: [id])
+  cooperadoPagadorId     String
+  cooperadoPagador       Cooperado @relation("AutorizacaoTokenPagador", fields: [cooperadoPagadorId], references: [id])
+  cooperadoTitularId     String
+  cooperadoTitular       Cooperado @relation("AutorizacaoTokenTitular", fields: [cooperadoTitularId], references: [id])
+  confirmadoPagadorEm    DateTime?
+  confirmadoTitularEm    DateTime?
+  ativo                  Boolean  @default(false)   // true só com os 2 confirmados E sem revogadoEm
+  createdAt              DateTime @default(now())
+
+  // Revogação unilateral (Q3 orquestrador 22/06).
+  revogadoEm             DateTime?
+  revogadoPorCooperadoId String?
+  motivoRevogacao        String?
+
+  // Contadores pra dashboard + auditoria de uso (D-novo-M49-DASHBOARD-AUTORIZACAO P3).
+  primeiraUtilizacaoEm   DateTime?
+  ultimoUsoEm            DateTime?
+  totalAbatesCount       Int      @default(0)
+  // M49 re-review fix (22/06/2026) — era `Decimal?` (null) e `increment`
+  // sobre null permanece null (semântica Prisma). Métrica de dashboard nunca
+  // materializava. Default 0 + NOT NULL preserva soma agregada.
+  totalTokensAbatidos    Decimal  @default(0) @db.Decimal(15, 4)
+
+  @@unique([cooperadoPagadorId, cooperadoTitularId])    // 1:1 v1
+  @@index([cooperativaId, ativo])
+  @@index([cooperadoTitularId, ativo])                  // usarNaFatura busca por titular
+  @@map("autorizacoes_token_familiar")
 }
 
 model CooperTokenSaldoParceiro {
