@@ -1,6 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
+/**
+ * Sprint Funil M48 (22/06/2026) — H1 code-reviewer 22/06.
+ * Classes de erro tipadas pra LeadExpansaoService.converter — controller
+ * mapeia por instanceof, sem fragilidade de substring match.
+ */
+export class LeadNaoEncontradoError extends Error {
+  readonly code = 'LEAD_NOT_FOUND';
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'LeadNaoEncontradoError';
+  }
+}
+
+export class LeadJaConvertidoError extends Error {
+  readonly code = 'LEAD_ALREADY_CONVERTED';
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'LeadJaConvertidoError';
+  }
+}
+
 @Injectable()
 export class LeadExpansaoService {
   constructor(private prisma: PrismaService) {}
@@ -132,6 +153,67 @@ export class LeadExpansaoService {
     const totalReceitaLatente = resumo.reduce((s, r) => s + r.receitaLatenteAnual, 0);
 
     return { resumo, totalReceitaLatente };
+  }
+
+  /**
+   * Sprint Funil M48 (22/06/2026) — Camada 1 Fatia E.
+   *
+   * Converte LeadExpansao em Cooperado cadastrado:
+   *  - Multi-tenant: lead.cooperativaId DEVE bater com cooperativaId do JWT
+   *    (controller passa direto, sem fallback).
+   *  - Cria Cooperado no tenant atual com dados mínimos do lead + dados extras
+   *    do admin (DTO).
+   *  - Atualiza LeadExpansao.status='CONVERTIDO' (estado terminal).
+   *  - Idempotente: rejeita se lead já está CONVERTIDO.
+   *
+   * Erros tipados (H1 code-reviewer 22/06): controller pega por instanceof,
+   * não por substring de message.
+   */
+  async converter(
+    leadId: string,
+    cooperativaId: string,
+    dadosCooperado: {
+      nomeCompleto: string;
+      cpf: string;
+      email: string;
+      telefone?: string;
+      status?: string;
+    },
+  ): Promise<{ cooperadoId: string; leadId: string }> {
+    const lead = await this.prisma.leadExpansao.findFirst({
+      where: { id: leadId, cooperativaId },
+      select: { id: true, telefone: true, status: true, distribuidora: true },
+    });
+    if (!lead) {
+      throw new LeadNaoEncontradoError('LeadExpansao não encontrado neste tenant');
+    }
+    if (lead.status === 'CONVERTIDO') {
+      throw new LeadJaConvertidoError('Lead já foi convertido');
+    }
+
+    // Cria Cooperado + atualiza lead atomicamente.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const cooperado = await tx.cooperado.create({
+        data: {
+          nomeCompleto: dadosCooperado.nomeCompleto.trim(),
+          cpf: dadosCooperado.cpf.replace(/\D/g, ''),
+          email: dadosCooperado.email.trim().toLowerCase(),
+          telefone: dadosCooperado.telefone?.replace(/\D/g, '') ?? lead.telefone,
+          status: (dadosCooperado.status ?? 'PENDENTE') as any,
+          cooperativaId,
+          tipoCooperado: 'COM_UC' as any,
+        },
+      });
+      // P2 multitenant 22/06: defense-in-depth — update inclui cooperativaId
+      // no where (findFirst acima já validou posse).
+      await tx.leadExpansao.update({
+        where: { id: leadId, cooperativaId },
+        data: { status: 'CONVERTIDO' },
+      });
+      return cooperado;
+    });
+
+    return { cooperadoId: result.id, leadId };
   }
 
   async notificarLeadsPorDistribuidora(distribuidora: string, cooperativaId?: string) {

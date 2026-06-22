@@ -12,6 +12,8 @@ import { UcsModule } from '../ucs/ucs.module';
 import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
 import { IndicacoesModule } from '../indicacoes/indicacoes.module';
 import { ConveniosModule } from '../convenios/convenios.module';
+// Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
+import { RoteamentoCadastroModule } from '../roteamento-cadastro/roteamento-cadastro.module';
 
 const multerLib = require('multer') as { memoryStorage: () => object };
 
@@ -25,6 +27,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     forwardRef(() => MotorPropostaModule),
     IndicacoesModule,
     ConveniosModule,
+    RoteamentoCadastroModule,
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [PublicoController],

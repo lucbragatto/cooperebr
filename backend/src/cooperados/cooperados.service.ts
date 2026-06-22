@@ -303,6 +303,12 @@ export class CooperadosService {
       orderBy: { createdAt: 'desc' },
       take: limit ? Number(limit) : undefined,
       skip: offset ? Number(offset) : undefined,
+      // Sprint Funil M48 (22/06/2026) — P2 multitenant 22/06: o
+      // roteamentoTenantAlvo é o cooperativaId de OUTRO parceiro SISGD
+      // (caminho B). Esconder da API listar/findOne pra evitar
+      // enumeração de parceiros por admin do tenant atual. O caminho +
+      // razão ficam visíveis (metadata do PRÓPRIO cadastro).
+      omit: { roteamentoTenantAlvo: true },
       include: {
         cooperativa: cooperativaId ? false : { select: { nome: true, tipoParceiro: true } },
         contratos: {
@@ -404,6 +410,10 @@ export class CooperadosService {
   async findOne(id: string, cooperativaId?: string) {
     const cooperado = await this.prisma.cooperado.findUnique({
       where: { id },
+      // Sprint Funil M48 (22/06/2026) — P2 multitenant 22/06: esconder
+      // roteamentoTenantAlvo (cooperativaId de outro parceiro SISGD) da
+      // API. Caminho + razão ficam visíveis.
+      omit: { roteamentoTenantAlvo: true },
       include: {
         ucs: true,
         contratos: {
@@ -448,6 +458,12 @@ export class CooperadosService {
     // GD como DADO". Aditivo, opcional. NÃO bloqueia cadastro.
     jaRecebeCreditosGd?: boolean;
     fornecedorGdAtual?: string;
+    // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
+    // 4 campos aditivos preenchidos pelo controller após decidirCaminho.
+    roteamentoCaminho?: string;
+    roteamentoTenantAlvo?: string | null;
+    roteamentoRazao?: string;
+    roteamentoDecididoEm?: Date;
   }) {
     let cooperado;
     try {

@@ -17,6 +17,9 @@ import { UcsModule } from '../ucs/ucs.module';
 // Sprint M47 (21/06/2026): controller dos cooperados expõe /migrar/* que delega
 // pro MigracaoExternaService exportado por MigracoesUsinaModule.
 import { MigracoesUsinaModule } from '../migracoes-usina/migracoes-usina.module';
+// Sprint M48 (22/06/2026) — Camada 1 Funil: controller chama
+// RoteamentoCadastroService.decidirCaminho no create (advisory).
+import { RoteamentoCadastroModule } from '../roteamento-cadastro/roteamento-cadastro.module';
 // Sprint Token-WA Fase 2 F2.8 (07/06/2026) — WhatsappModule importa CooperadosModule
 // (PinCooperadoService no motor de fluxo), entao reverso vira forwardRef.
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
@@ -36,6 +39,7 @@ const multerLib = require('multer') as { memoryStorage: () => object };
     FaturasModule,
     forwardRef(() => MotorPropostaModule),
     forwardRef(() => MigracoesUsinaModule),
+    RoteamentoCadastroModule,
     MulterModule.register({ storage: multerLib.memoryStorage() }),
   ],
   controllers: [CooperadosController],
