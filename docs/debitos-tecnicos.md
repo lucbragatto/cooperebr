@@ -6207,6 +6207,56 @@ Campo é `String?` nullable pra retro-compat com `MUDANCA_USINA` intra-coop exis
 
 ---
 
+## Débitos catalogados Sprint Funil Camada 1 MOTOR (M48 — 22/06/2026)
+
+### 🔴 BLOQUEADOR DE EXPOSIÇÃO da Camada 3 (vitrine pública)
+
+#### D-novo-LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF — `POST /lead-expansao` @Public aceita body.cooperativaId (P1 — 3ª ocorrência mesmo spoof M45)
+
+`backend/src/lead-expansao/lead-expansao.controller.ts:35-48` é `@Public()` e aceita `cooperativaId?: string` no body sem validação. **Mesmo padrão D-novo-CADASTRO-PUBLICO-TENANT-SPOOF M45** (que fechamos em M45 nos cadastros). 3ª ocorrência confirmada. Pré-existente, descoberto na review M48 — NÃO introduzido nesta sprint. Fix obrigatório como parte da **Sprint Hardening Lateral PRE-CAMADA 3** (junto com os 4 P1 M45 e 2 P2 M46). **A vitrine pública SISGD NÃO arranca sem isso.** **Status:** ABERTO.
+
+### ✅ DÉBITOS RESOLVIDOS nesta sprint
+
+| Débito | Origem | Como resolvido |
+|---|---|---|
+| `D-novo-ROTEADOR-CADASTRO-CENTRAL` P1 | Fase 1 ampliada M47 | `RoteamentoCadastroService.decidirCaminho` |
+| `D-novo-LEAD-EXPANSAO-CONVERTER` P1 | Fase 1 ampliada M47 | endpoint admin `POST /lead-expansao/:id/converter` + typed errors |
+| `D-novo-JA-RECEBE-CREDITOS-GD-PASSIVO` P2 | M44 → M47 → M48 | wiring no cadastro chama roteador (agora ATIVO, não-passivo) |
+| `D-novo-LISTA-ALIASES-PARCEIROS-SISGD` P2 | Fase 1 ampliada M47 | model `AliasParceiroSisgd` tenant-aware + 6 aliases CoopereBR seedados |
+
+### Débitos novos M48
+
+#### D-novo-M48-HOOK-CLASSIFICACAO-SCEE — Hook entre Claude OCR DadosExtraidos e FaturaCanonica (concierge) (P2)
+
+Campo `FaturaProcessada.classificacaoScee String?` adicionado aditivamente na M48. Hook real (que preenche o campo) DEFERIDO pra Sprint própria "Pipeline OCR + Concierge Integration": precisa de bridge entre `DadosExtraidos` (output Claude OCR genérico) → `FaturaRawInput` (input estruturado do adapter canônico). Sem o hook, motor opera com 2 sinais (jaRecebeCreditosGd + fornecedorGdAtual). **Status:** ABERTO.
+
+#### D-novo-M48-UI-ADMIN-ALIASES — UI admin pra cadastrar AliasParceiroSisgd por tenant (P2)
+
+Cada parceiro novo precisa cadastrar seus aliases. Hoje só seed (CoopereBR). Onboarding de 2º parceiro real exige UI admin OU script CLI pra alimentar. Schema + service prontos; falta endpoint CRUD + tela. **Status:** ABERTO.
+
+#### D-novo-M48-TIPO-ALIAS-VALIDACAO — Validação runtime do const array TIPOS_ALIAS_VALIDOS (P3)
+
+`RoteamentoCadastroService.TIPOS_ALIAS_VALIDOS` exporta 4 valores válidos pra `AliasParceiroSisgd.tipo`. Hoje seed usa literais OK; futura UI admin (D-novo-M48-UI-ADMIN-ALIASES) DEVE validar contra o array antes de inserir no banco (schema `String` sem enum). **Status:** ABERTO.
+
+#### D-novo-M48-AUTO-INSCREVER-SEM-ROTEADOR — Path `auto-inscrever` (convite público) bypassa o roteador (P3, decisão produto Camada 2)
+
+`publico.controller.ts:auto-inscrever` (~linha 810) cria Cooperado dentro de `$transaction` SEM chamar `decidirCaminho`. TODO inline catalogado. Decisão produto: (a) opcional pq convite implica intenção explícita; (b) deveria rodar mesmo assim pra detectar caminho B. Avaliar na Camada 2 (vitrine). **Status:** ABERTO.
+
+#### D-novo-M48-ALIAS-FTS — Full-text search se AliasParceiroSisgd crescer > 500 (P3)
+
+`findAliasContidoEm` (substring inverso) usa `findMany` com `take: 500` + warn se atingir limite. Aceitável pro MVP (poucos parceiros × ~5-10 aliases = ~50). Se SISGD escalar pra 100+ parceiros (500+ aliases), virar full-text search Postgres OU índice trigram. **Status:** ABERTO.
+
+### Débitos da Sprint Roteador ainda abertos (pra Camadas 2/3)
+
+| Débito | Severidade | Onde fechar |
+|---|---|---|
+| `D-novo-ADAPTER-EXTRAI-CNPJ-GERADOR` P2 | adapter concierge extrair CNPJ do gerador GD na fatura | Pipeline OCR sprint |
+| `D-novo-FATURA-PROCESSADA-CLASSIFICACAO-SCEE` P2 | campo adicionado (M48), hook OCR ausente | Pipeline OCR sprint |
+| `D-novo-LEAD-WHATSAPP-VS-EXPANSAO-CONFUSAO` P3 | 2 modelos quase iguais (investidor vs cliente) | Camada 2 ou consolidação |
+| `D-novo-CROSS-TENANT-NOTIFICATION` P3 | caminho B precisa email + WA cross-tenant pra alertar parceiro X | Camada 2/3 |
+
+---
+
 ## Como remover item
 
 Quando débito for resolvido:
