@@ -17,6 +17,13 @@ export const COOPER_TOKEN_EVENTS = {
    * Consumido pelo CooperTokenNotificacaoListener.
    */
   DISTRIBUIDO_CONVENIO: 'cooper-token.distribuido-convenio',
+  /**
+   * Sprint Família M49 (22/06/2026) — abate familiar.
+   * Cooperada PAGADORA cedeu tokens dela pra abater fatura do cooperado
+   * TITULAR (`usarNaFatura` com titularCooperadoId). 2 lados notificados.
+   * Emitido APÓS commit no lugar do RESGATADO padrão pra evitar copy errada.
+   */
+  RESGATADO_FAMILIAR: 'cooper-token.resgatado-familiar',
 } as const;
 
 export class CooperTokenEmitidoEvent {
@@ -73,5 +80,24 @@ export class CooperTokenDistribuidoConvenioEvent {
     public readonly valorReais: number,
     /** Pra dedup idempotente — disparoId no MensagemWhatsapp. */
     public readonly transacaoId: string,
+  ) {}
+}
+
+/**
+ * Sprint Família M49 (22/06/2026) — abate familiar.
+ * Substitui RESGATADO quando há `titularCooperadoId` no `usarNaFatura`.
+ * Listener notifica AMBOS os lados (pagador + titular), cada um com texto
+ * apropriado (PAGADOR vê "você abateu fatura de {titular}"; TITULAR vê
+ * "{pagador} cedeu N tokens pra abater sua fatura").
+ */
+export class CooperTokenResgatadoFamiliarEvent {
+  constructor(
+    public readonly cooperativaId: string,
+    public readonly cooperadoPagadorId: string,
+    public readonly cooperadoTitularId: string,
+    public readonly autorizacaoId: string,
+    public readonly cobrancaId: string,
+    public readonly quantidade: number,
+    public readonly valorReais: number,
   ) {}
 }

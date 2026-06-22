@@ -7,7 +7,7 @@
  *
  * cooperadoId e cooperativaId vêm SEMPRE do JWT, nunca do body (anti-IDOR).
  */
-import { IsNumber, IsString, Matches, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 export class UsarNaFaturaDto {
   /** ID da cobrança que receberá o abatimento. Tenant é validado no service. */
@@ -31,4 +31,19 @@ export class UsarNaFaturaDto {
   @IsString()
   @Matches(/^\d{6}$/, { message: 'PIN deve ter exatamente 6 dígitos numéricos.' })
   pin: string;
+
+  /**
+   * Sprint Convênio FAMÍLIA M49 (22/06/2026) — Fatia D.
+   *
+   * Quando preenchido, o abate acontece na fatura do TITULAR usando tokens
+   * da PAGADORA (que é o `cooperadoId` do JWT). Requer AutorizacaoTokenFamiliar
+   * ativa entre os 2 cooperados no MESMO tenant — service valida.
+   *
+   * Saldo, PIN e limites são SEMPRE do PAGADOR (JWT). NUNCA passar id do
+   * pagador aqui: service rejeita `titularCooperadoId === cooperadoId` com
+   * BadRequest (não-self).
+   */
+  @IsOptional()
+  @IsString()
+  titularCooperadoId?: string;
 }

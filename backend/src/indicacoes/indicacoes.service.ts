@@ -328,6 +328,18 @@ export class IndicacoesService {
         continue;
       }
 
+      // Sprint Família M49 (22/06/2026) — skip de bônus quando indicação=familiar.
+      // Vínculo familiar (cônjuge/parente conviva) NÃO gera benefício de cascata MLM
+      // — é vínculo de COMPARTILHAMENTO (usarNaFatura familiar), não captação.
+      // Pattern reusado do institucional acima. `Indicacao.familiar` é propagado
+      // de `ConviteIndicacao.familiar` na criação (convite-indicacao.service).
+      if (indicacao.familiar === true) {
+        this.logger.log(
+          `[indicacao ${indicacao.id}] indicador=${indicacao.cooperadoIndicadorId} → indicação FAMILIAR — skip BeneficioIndicacao + CooperToken (M49)`,
+        );
+        continue;
+      }
+
       const nivelConfig = niveisConfig.find((n: any) => n.nivel === indicacao.nivel);
       if (!nivelConfig) continue;
 

@@ -42,6 +42,8 @@ import { CondominiosModule } from './condominios/condominios.module';
 import { AdministradorasModule } from './administradoras/administradoras.module';
 import { ObservadorModule } from './observador/observador.module';
 import { MigracoesUsinaModule } from './migracoes-usina/migracoes-usina.module';
+// Sprint Família M49 (22/06/2026) — autorização bilateral token familiar.
+import { AutorizacaoTokenFamiliarModule } from './autorizacao-token-familiar/autorizacao-token-familiar.module';
 import { EnvioListaConcessionariaModule } from './envio-lista-concessionaria/envio-lista-concessionaria.module';
 import { AlocacaoModule } from './alocacao/alocacao.module';
 import { EmailModule } from './email/email.module';
@@ -131,6 +133,7 @@ import { MeuPerfilModule } from './meu-perfil/meu-perfil.module';
     AdministradorasModule,
     ObservadorModule,
     MigracoesUsinaModule,
+    AutorizacaoTokenFamiliarModule,
     EnvioListaConcessionariaModule,
     AlocacaoModule,
     EmailModule,

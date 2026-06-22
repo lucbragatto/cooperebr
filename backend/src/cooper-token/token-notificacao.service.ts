@@ -83,6 +83,40 @@ export interface NotificacaoAbateFaturaParams {
   transacaoId: string;
 }
 
+/**
+ * Sprint Família M49 (22/06/2026) — abate familiar.
+ * Notificação ao PAGADOR (quem cedeu tokens) — texto distingue do self.
+ */
+export interface NotificacaoAbateFaturaPagadorFamiliarParams {
+  telefonePagador: string;
+  nomePagador: string;
+  cooperadoPagadorId: string;
+  cooperativaId: string;
+  cobrancaId: string;
+  /** Nome do titular pra contexto humano. */
+  nomeTitular: string;
+  quantidadeTokens: number;
+  valorReais: number;
+  transacaoId: string;
+}
+
+/**
+ * Sprint Família M49 (22/06/2026) — abate familiar.
+ * Notificação ao TITULAR (dono da fatura) — texto informa quem cedeu.
+ */
+export interface NotificacaoAbateFaturaTitularFamiliarParams {
+  telefoneTitular: string;
+  nomeTitular: string;
+  cooperadoTitularId: string;
+  cooperativaId: string;
+  cobrancaId: string;
+  /** Nome da pagadora pra contexto humano. */
+  nomePagador: string;
+  quantidadeTokens: number;
+  valorReais: number;
+  transacaoId: string;
+}
+
 export interface OtpAltoValorPorEmailParams {
   emailDestino: string;
   nomeCooperado: string;
@@ -228,6 +262,70 @@ export class TokenNotificacaoService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `[token-notif] Falha ao notificar abate de fatura transacaoId=${params.transacaoId} erro=${msg}`,
+      );
+    }
+  }
+
+  /**
+   * Sprint Família M49 (22/06/2026) — abate familiar (lado PAGADOR).
+   * Texto distingue do self: deixa claro que abateu a fatura DO TITULAR
+   * (consentimento bilateral já capturado na AutorizacaoTokenFamiliar).
+   * Best-effort (não lança). Idempotência por (tipoDisparo, disparoId,
+   * cooperativaId) no listener.
+   */
+  async notificarAbateFaturaPagadorFamiliar(
+    params: NotificacaoAbateFaturaPagadorFamiliarParams,
+  ): Promise<void> {
+    const texto =
+      `✅ Fatura familiar abatida com CooperTokens\n\n` +
+      `Olá, ${params.nomePagador}!\n\n` +
+      `Você cedeu ${fmtTokens(params.quantidadeTokens)} CooperTokens ` +
+      `(${fmtReais(params.valorReais)}) pra abater a fatura de ${params.nomeTitular}.\n\n` +
+      `Comprovante: ${params.transacaoId}\n\n` +
+      `Se não foi você, responda *NÃO FUI EU* pra abrir contestação.`;
+
+    try {
+      await this.waSender.enviarMensagem(params.telefonePagador, texto, {
+        tipoDisparo: 'TOKEN_ABATE_FATURA_PAGADOR_FAMILIAR',
+        disparoId: params.transacaoId,
+        cooperadoId: params.cooperadoPagadorId,
+        cooperativaId: params.cooperativaId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[token-notif] Falha ao notificar abate familiar (pagador) transacaoId=${params.transacaoId} erro=${msg}`,
+      );
+    }
+  }
+
+  /**
+   * Sprint Família M49 (22/06/2026) — abate familiar (lado TITULAR).
+   * Avisa o dono da fatura que foi abatida com tokens cedidos pela pagadora.
+   * Best-effort (não lança).
+   */
+  async notificarAbateFaturaTitularFamiliar(
+    params: NotificacaoAbateFaturaTitularFamiliarParams,
+  ): Promise<void> {
+    const texto =
+      `✅ Sua fatura foi abatida com CooperTokens familiares\n\n` +
+      `Olá, ${params.nomeTitular}!\n\n` +
+      `${params.nomePagador} cedeu ${fmtTokens(params.quantidadeTokens)} CooperTokens ` +
+      `(${fmtReais(params.valorReais)}) pra abater sua fatura.\n\n` +
+      `Comprovante: ${params.transacaoId}\n\n` +
+      `Se você não autorizou esta ligação, responda *REVOGAR AUTORIZAÇÃO* no app.`;
+
+    try {
+      await this.waSender.enviarMensagem(params.telefoneTitular, texto, {
+        tipoDisparo: 'TOKEN_ABATE_FATURA_TITULAR_FAMILIAR',
+        disparoId: params.transacaoId,
+        cooperadoId: params.cooperadoTitularId,
+        cooperativaId: params.cooperativaId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[token-notif] Falha ao notificar abate familiar (titular) transacaoId=${params.transacaoId} erro=${msg}`,
       );
     }
   }

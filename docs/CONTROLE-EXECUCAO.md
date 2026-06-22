@@ -75,6 +75,100 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-22 (Code — M49 Sprint Convênio FAMÍLIA: vínculo + autorização bilateral + abate familiar + sizing + saque gated — smoke E2E real + merge na main)
+
+**Sessão Code dedicada — M49 entregue ponta-a-ponta com smoke E2E REAL
+5/5 + 2 WhatsApps `ENVIADA` whitelist.** Fecha o ciclo COOPERATIVIZADO
+do convênio: M44 (origem) + M46 (fundação) + M47 (migração) + M48
+(funil motor) + **M49 (família)**.
+
+**MODELO DE USO:** esposa cooperada SEM UC recebe tokens do convênio
+da empresa → autoriza bilateralmente o marido (cooperado COM UC) → ela
+usa os tokens dela pra abater a fatura dele. Energia continua no nome
+do marido; benefício (token) é dela; a casa economiza. Conversibilidade
+configurável por tenant (`Cooperativa.tokenFamiliarSacavel`; default
+OFF, abate-só por padrão).
+
+**ENTREGAS (8 fatias A–I):**
+- **A** Schema delta aditivo: `AutorizacaoTokenFamiliar` (cooperativaId
+  + pagadorId + titularId + ativo + contadores incluindo
+  `totalTokensAbatidos Decimal default 0` após fix re-review + revogacao
+  tracking + @@unique[pagador,titular] v1 + 2 indexes multi-tenant);
+  `Cooperativa.tokenFamiliarSacavel`; `Indicacao/Convite.familiar`.
+- **B** Trava MLM família (`indicacoes.service:336` skip BeneficioIndicacao
+  + tokens MLM; `convite-indicacao.service:279` propaga flag).
+- **C** AutorizacaoTokenFamiliarService + 3 endpoints (criar/confirmar/
+  revogar) + GET /sizing. Multi-tenant inegociável + typed errors +
+  notif WA bilaterais best-effort.
+- **D** `usarNaFatura` familiar — `titularCooperadoId?` no DTO; saldo/PIN/
+  limite SEMPRE da PAGADORA (lição orquestrador 22/06); cobrança do
+  TITULAR; pós-commit updateMany contadores + updateMany race-proof
+  primeiraUtilizacaoEm + AuditLog forense + evento RESGATADO_FAMILIAR
+  → handler envia 2 WAs idempotência separada por tipoDisparo.
+- **E** G4 sizing kWh→token display-only — helper puro
+  `estimarTokensPorConsumo` + endpoint GET via `service.sizing()`.
+  Tarifa-helper retorna `isFallback` additive (não quebra outros callers).
+- **F** Gate saque familiar 3ª via paralela ao D2 — `tokenFamiliarSacavel`
+  + pagadora ativa + mesmo gate-produção. Mensagem genérica
+  anti-enumeração; estabelecimento bypassa; D2 path legado preservado.
+- **H** 3 reviewers paralelos (financeiro-token + multitenant + code)
+  + 14 fixes (4 P1 + 6 P2 + 3 P3). Convergência forte em P1-A (HTTP
+  gap titularCooperadoId).
+- **G** Smoke E2E REAL 5/5 PASS — CoopereBR tenant + cooperados whitelist
+  (carolina+amages) + 2 WAs ENVIADA + AuditLog criado + saldo PAGADORA
+  debitado + cobrança TITULAR abatida + contadores autorização OK.
+- **I (fechamento)** Doc-sessão + débitos + CONTROLE + merge + push.
+
+**REVIEWERS** (3 paralelos + re-review):
+- financeiro-token-reviewer: aprovado com ressalvas (invariantes
+  FUNDACAO confirmados; P1-A HTTP gap + P2 race + P2 cobranca.updateMany
+  aplicados).
+- multitenant-reviewer: aprovado com ressalvas (4 P1 mtenant fixed; 2 P2
+  deferidos justificados).
+- code-reviewer: aprovado com ressalvas (P1-A + P1-B as any tipificado;
+  P2-A PrismaService removido do controller; forwardRef mantido justificado).
+- Re-review orquestrador: **APROVADO** com 2 ajustes (bug
+  totalTokensAbatidos schema + cleanup smoke) — TODOS aplicados +
+  re-smoke confirmou.
+
+**✅ DÉBITOS RESOLVIDOS nesta sprint:**
+- Spec Família (G1 + G4) implementada.
+- Conversibilidade configurável por tenant pronta.
+- Multi-tenant inegociável (M45) preservado em todos os pontos novos.
+
+**🔴 DÉBITOS NOVOS catalogados:**
+- `D-novo-M49-SAQUE-FAMILIAR-SEGMENTACAO-ORIGEM` P2 (antes de 2ª empresa
+  real) — gate F3 saque familiar hoje só vê saldo bruto; precisa
+  segmentar origem dos tokens (rio convênio ≠ rio desconto-fatura)
+  no pattern D2.1 Salvaguarda 1.
+- `D-novo-M49-CLEANUP-SMOKE-PROD` P3 — cleanup script não é idempotente
+  por AuditLog acumulado em re-rodadas; mitigação manual no re-run.
+- `D-novo-M49-SMOKE-SEED-TESTE` P3 — pra rodar smoke em CoopereBR Teste
+  (default), seedar 2 cooperados + contrato + cobrança A_VENCER.
+- `D-novo-M49-COOPER-TOKEN-SALDO-COOPID` P3 (deferido) —
+  cooperTokenSaldo.update sem `cooperativaId` no where (refactor
+  cross-cutting).
+
+**Commit M49:** `1422a9b` (feat) + merge `--no-ff` (preserva
+`feature/convenio-familia`). Zero regressão (91/91 specs M49+F4+D2+
+sizing+listener+autorizacao+gate; 87/87 specs convenios-custeio).
+
+**Próximo bloco:**
+
+- **Sprint HARDENING LATERAL** (~10-14h) — pré-requisito da Camada 3
+  do funil E de escalar pro 2º parceiro real. Fecha 4 P1 M45 + 2 P2 M46
+  + 2 P2 M47 + 1 P1 M48 (lead-expansao spoof anônimo 3ª ocorrência)
+  + IDORs do inventário.
+- **Depois disso:** Camadas 2/3 do Funil (vitrines parceiro + SISGD
+  marketplace) — DESBLOQUEADAS.
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE
+RETOMADA — próxima sessão Code` no fim deste documento (M49 atualizada,
+M48 arquivada).
+Detalhe: `docs/sessoes/2026-06-22-m49-sprint-convenio-familia.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-22 (Code — M48 Sprint Funil Camada 1 MOTOR: Roteador A/B/C advisory + AliasParceiroSisgd + LeadExpansao.converter + smoke E2E real + merge na main)
 
 **Sessão Code dedicada — M48 entregue ponta-a-ponta com smoke E2E REAL 3/3.**
@@ -3432,51 +3526,53 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M48 (22/06):
-   working tree com Cowork package.json/lock + untracked não-meus —
-   NUNCA `git add .` / `-A`. Último commit em main é o fechamento M48
-   (`docs(sessao): fechamento M48 ...`). `git log origin/main..HEAD
-   --oneline` deve estar VAZIO. Branches preservadas no origin:
-   `feature/d2-salvaguardas-origem` (b65bcb3),
-   `feature/hardening-throttler-reconciliacao` (beb125c),
-   `feature/convenio-origem-dado` (6847e5a),
-   `feature/hardening-tenant-spoof` (5cd46ba),
-   `feature/convenio-fundacao-lifecycle` (M46 merge `950d2c1`),
-   `feature/convenio-migracao` (M47 merge `f36782b`),
-   `feature/funil-roteador-engine` (M48 merge `e9db14b`).
+2. Rodar `git status --short`. Esperado pós-fechamento M49 (22/06):
+   working tree limpo (exceto carry-over package.json/lock stashed +
+   untracked .claude/.agent não-meus) — NUNCA `git add .` / `-A`.
+   Último commit em main é o fechamento M49 (`docs(sessao): fechamento
+   M49 ...`). `git log origin/main..HEAD --oneline` deve estar VAZIO.
+   Branches preservadas no origin (cumulativas):
+   `feature/d2-salvaguardas-origem`, `feature/hardening-throttler-
+   reconciliacao`, `feature/convenio-origem-dado`, `feature/hardening-
+   tenant-spoof`, `feature/convenio-fundacao-lifecycle` (M46),
+   `feature/convenio-migracao` (M47), `feature/funil-roteador-engine`
+   (M48 merge `e9db14b`), `feature/convenio-familia` (M49).
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   + cooperebr-whatsapp online. Schema delta M48 (model
-   AliasParceiroSisgd + 4 campos roteamento* em Cooperado + 1 campo
-   classificacaoScee em FaturaProcessada + 2 indexes) JÁ APLICADO no
-   banco dev — NÃO RODAR `prisma db push` a menos que próxima sprint
-   tenha schema delta novo.
+   + cooperebr-whatsapp online. Schema delta M49 (model
+   AutorizacaoTokenFamiliar + Cooperativa.tokenFamiliarSacavel +
+   Indicacao/ConviteIndicacao.familiar + totalTokensAbatidos default 0)
+   JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` a menos que
+   próxima sprint tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: **CONVÊNIO COOPERATIVIZADO COMPLETO** ✅:
+PASSO 1 — Frase COMANDANTE: **CONVÊNIO COOPERATIVIZADO
+FUNCIONALMENTE COMPLETO** ✅:
 - M44 (origem-dado) ✅
 - M46 (fundação E1+E8) ✅
 - M47 (migração G2+G5) ✅
-- **M48 (funil motor) ✅ FECHADO NESTA SESSÃO**
+- M48 (funil motor advisory) ✅
+- **M49 (família — vínculo + autorização bilateral + abate familiar +
+  sizing + saque gated) ✅ FECHADO NESTA SESSÃO**
 
-Próximo: **Sprint Convênio FAMÍLIA (Fase 2 — G1 vínculo familiar +
-G4 consumo declarado → token)** com **conversibilidade do token
-CONFIGURÁVEL** (decisão Luciano: default abate-fatura não-conversível +
-opcional saque gated reusa infra D2 saque colaborador M41 com flag
-`.env` por tenant). **BLOQUEIA até:**
+PRÓXIMO = **Sprint HARDENING LATERAL (~10-14h)** — pré-requisito da
+Camada 3 do funil (vitrine pública) E de escalar pro 2º parceiro real.
+Fecha:
+- 4 P1 lateral M45 (CADASTRO-COMPLETO + MOTOR-PROPOSTA-PLANO +
+  AUDITLOG-TENANT-ALVO-SA + HARDENING-CONTROLLERS-LATERAIS).
+- 2 P2 M46 (CONVENIO-UPDATE-SEM-COOPID + LISTAR-MEMBROS-SEM-COOPID).
+- 2 P2 M47 (DESLIGADO-SALDO-RESIDUAL + MSG-MULTI-TENANT-PARCEIRO).
+- **1 P1 M48** LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF (3ª ocorrência do
+  spoof anônimo M45).
+- IDORs do inventário M48.
 
-(a) Orquestrador formalizar a **spec completa da família** (G1 amarra
-    empresa↔familiar; G4 mecânica de conversão consumo declarado kWh →
-    tokens pra cooperado SEM UC; flag de conversibilidade por tenant;
-    parecer trabalhista pra liberar produção — token paga conta de luz
-    de familiar = risco salário in natura agravado CLT 458).
-(b) Parecer trabalhista do Luciano (mesmo bloqueio que adiou Família
-    da fila do convênio completo).
+Itens **"antes de empresa-cooperada PJ real"** acumulados (NÃO bloqueiam
+desenvolvimento, BLOQUEIAM onboarding 2ª empresa): M47 DESLIGADO-SALDO
++ M47 hardcode-CoopereBR + M49 SAQUE-FAMILIAR-SEGMENTACAO-ORIGEM P2.
 
-NÃO ARRANCAR a Sprint Família sem (a) + (b). Risco trabalhista real;
-sprint Fase 2 = expansão simbólica da promessa do token.
+**DEPOIS** do Hardening Lateral: **Camadas 2/3 do Funil** (vitrines
+parceiro + SISGD marketplace) — DESBLOQUEADAS.
 
-Enquanto NÃO houver spec da Família (a) + parecer trabalhista (b),
-candidatas decision-independent:
+Candidatas decision-independent paralelas:
 
 **🔴 Sprint Hardening Lateral** (~10-14h) — **PRE-REQUISITO OBRIGATÓRIO
 da Camada 3 do Funil (vitrine pública)**. IDOR sistêmico acumulando:

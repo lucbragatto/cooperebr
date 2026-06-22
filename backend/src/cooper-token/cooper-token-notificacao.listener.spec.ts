@@ -12,6 +12,7 @@ import { CooperTokenNotificacaoListener } from './cooper-token-notificacao.liste
 import {
   CooperTokenResgatadoEvent,
   CooperTokenDistribuidoConvenioEvent,
+  CooperTokenResgatadoFamiliarEvent,
 } from './cooper-token.events';
 
 describe('CooperTokenNotificacaoListener — Sprint Convênio FUNDAÇÃO (E8 wiring)', () => {
@@ -20,6 +21,8 @@ describe('CooperTokenNotificacaoListener — Sprint Convênio FUNDAÇÃO (E8 wir
   const cooperadoFindFirst = jest.fn();
   const notificarAbateFatura = jest.fn();
   const notificarDistribuicaoConvenio = jest.fn();
+  const notificarAbateFaturaPagadorFamiliar = jest.fn();
+  const notificarAbateFaturaTitularFamiliar = jest.fn();
 
   const prismaMock = {
     mensagemWhatsapp: { findFirst: mensagemFindFirst },
@@ -30,6 +33,8 @@ describe('CooperTokenNotificacaoListener — Sprint Convênio FUNDAÇÃO (E8 wir
   const notifMock = {
     notificarAbateFatura,
     notificarDistribuicaoConvenio,
+    notificarAbateFaturaPagadorFamiliar,
+    notificarAbateFaturaTitularFamiliar,
   } as any;
 
   const listener = new CooperTokenNotificacaoListener(prismaMock, notifMock);
@@ -220,6 +225,130 @@ describe('CooperTokenNotificacaoListener — Sprint Convênio FUNDAÇÃO (E8 wir
       mensagemFindFirst.mockRejectedValue(new Error('boom'));
 
       await expect(listener.handleDistribuidoConvenio(evt)).resolves.toBeUndefined();
+    });
+  });
+
+  // ═══ RESGATADO_FAMILIAR (M49 — abate familiar 2 lados) ═════════════
+  describe('handleResgatadoFamiliar (cooper-token.resgatado-familiar)', () => {
+    const evtFamiliar = new CooperTokenResgatadoFamiliarEvent(
+      'tenant-A',
+      'coop-pagador',
+      'coop-titular',
+      'aut-1',
+      'cobranca-1',
+      100,
+      45.0,
+    );
+
+    it('caminho feliz: notifica PAGADOR + TITULAR (2 envios separados)', async () => {
+      tokenTxFindFirst.mockResolvedValue({ id: 'tx-abate-1' });
+      mensagemFindFirst.mockResolvedValue(null); // nem pagador nem titular têm dedup hit
+      // 2 chamadas Promise.all → pagador primeiro, titular depois
+      cooperadoFindFirst
+        .mockResolvedValueOnce({ telefone: '5527981341348', nomeCompleto: 'Pagadora' })
+        .mockResolvedValueOnce({ telefone: '5527999998888', nomeCompleto: 'Titular' });
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(notificarAbateFaturaPagadorFamiliar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          telefonePagador: '5527981341348',
+          nomePagador: 'Pagadora',
+          cooperadoPagadorId: 'coop-pagador',
+          cooperativaId: 'tenant-A',
+          cobrancaId: 'cobranca-1',
+          nomeTitular: 'Titular',
+          quantidadeTokens: 100,
+          valorReais: 45,
+          transacaoId: 'tx-abate-1',
+        }),
+      );
+      expect(notificarAbateFaturaTitularFamiliar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          telefoneTitular: '5527999998888',
+          nomeTitular: 'Titular',
+          cooperadoTitularId: 'coop-titular',
+          cooperativaId: 'tenant-A',
+          nomePagador: 'Pagadora',
+          transacaoId: 'tx-abate-1',
+        }),
+      );
+    });
+
+    it('idempotência separada por tipoDisparo (PAGADOR já enviada → só titular dispara)', async () => {
+      tokenTxFindFirst.mockResolvedValue({ id: 'tx-abate-1' });
+      // 1ª chamada (pagador): já enviada; 2ª (titular): null
+      mensagemFindFirst
+        .mockResolvedValueOnce({ id: 'msg-anterior' })
+        .mockResolvedValueOnce(null);
+      cooperadoFindFirst
+        .mockResolvedValueOnce({ telefone: '5527981341348', nomeCompleto: 'Pagadora' })
+        .mockResolvedValueOnce({ telefone: '5527999998888', nomeCompleto: 'Titular' });
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(notificarAbateFaturaPagadorFamiliar).not.toHaveBeenCalled();
+      expect(notificarAbateFaturaTitularFamiliar).toHaveBeenCalled();
+    });
+
+    it('TokenTransacao não encontrada → skip silencioso (sem chamada de WA)', async () => {
+      tokenTxFindFirst.mockResolvedValue(null);
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(notificarAbateFaturaPagadorFamiliar).not.toHaveBeenCalled();
+      expect(notificarAbateFaturaTitularFamiliar).not.toHaveBeenCalled();
+    });
+
+    it('pagador sem telefone → só titular notifica + log warn', async () => {
+      tokenTxFindFirst.mockResolvedValue({ id: 'tx-abate-1' });
+      mensagemFindFirst.mockResolvedValue(null);
+      cooperadoFindFirst
+        .mockResolvedValueOnce({ telefone: null, nomeCompleto: 'Pagadora' })
+        .mockResolvedValueOnce({ telefone: '5527999998888', nomeCompleto: 'Titular' });
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(notificarAbateFaturaPagadorFamiliar).not.toHaveBeenCalled();
+      expect(notificarAbateFaturaTitularFamiliar).toHaveBeenCalled();
+    });
+
+    it('titular sem telefone → só pagador notifica + log warn', async () => {
+      tokenTxFindFirst.mockResolvedValue({ id: 'tx-abate-1' });
+      mensagemFindFirst.mockResolvedValue(null);
+      cooperadoFindFirst
+        .mockResolvedValueOnce({ telefone: '5527981341348', nomeCompleto: 'Pagadora' })
+        .mockResolvedValueOnce({ telefone: null, nomeCompleto: 'Titular' });
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(notificarAbateFaturaPagadorFamiliar).toHaveBeenCalled();
+      expect(notificarAbateFaturaTitularFamiliar).not.toHaveBeenCalled();
+    });
+
+    it('erro na busca TokenTransacao não propaga (best-effort)', async () => {
+      tokenTxFindFirst.mockRejectedValue(new Error('boom'));
+
+      await expect(listener.handleResgatadoFamiliar(evtFamiliar)).resolves.toBeUndefined();
+    });
+
+    it('lookup TokenTransacao usa pagadorCooperativaId + pagadorId (não titular)', async () => {
+      tokenTxFindFirst.mockResolvedValue({ id: 'tx-abate-1' });
+      mensagemFindFirst.mockResolvedValue(null);
+      cooperadoFindFirst.mockResolvedValue({ telefone: null, nomeCompleto: 'X' });
+
+      await listener.handleResgatadoFamiliar(evtFamiliar);
+
+      expect(tokenTxFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            pagadorCooperativaId: 'tenant-A',
+            pagadorId: 'coop-pagador',
+            tipoOperacao: 'USO_FATURA',
+            referenciaExterna: 'cobranca-1',
+          }),
+        }),
+      );
     });
   });
 });
