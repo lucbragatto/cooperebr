@@ -105,3 +105,31 @@ saldo 5.442 kWh, participação 0,150% num rateio GD).
 - OCR que classifica SCEE (desconectado do funil): `concierge/fatura-canonica/edp-es.adapter.ts:270`
 - Fatura GD usada: `backend/test/fixtures/faturas/edp-luciano-gd.pdf`
 - Check-in de integração token/clube relacionado: `docs/relatorios/checkin-integracao-token-clube-2026-06-22.md`
+
+---
+
+## 7. PARKED — teste integral E2E pelas páginas (retomar DEPOIS do M52b)
+
+> **Decisão Luciano 23/06:** concluir primeiro o **M52b** (Faxina — melt + resíduo R$ 858).
+> Este teste fica **parado**; voltamos pra testar **integralmente, passando pelas páginas reais**
+> (não em isolamento como foi o teste do §4).
+
+Quando voltar, testar o fluxo REAL ponta-a-ponta:
+1. **Tela admin** (wizard `/dashboard/cooperados/novo`) — upload do PDF da fatura → confirmar no banco
+   que o cooperado nasce com `roteamentoCaminho` gravado.
+2. **Tela de cadastro público** (`/cadastro`) — idem pela rota pública (`?tenant=<slug>`).
+3. **Tela de perfil** — upload de fatura no perfil do cooperado.
+4. **Tela "cadastro SEM UC"** — caso da **esposa que se cadastra sem UC própria**: essa tela será usada
+   pra **fazer upload da fatura em nome do marido / de terceira pessoa** (decisão de produto Luciano
+   23/06 — conecta com o **convênio família** / compartilhamento de tokens entre membros). Validar que
+   o upload em nome de terceiro funciona e amarra corretamente.
+
+### Subagente que automatiza isso — SIM, existe
+- **`e2e-runner`** (agent Playwright) — roda **página-por-página**, preenche formulários e **faz upload
+  de arquivo** (`setInputFiles`). É o caminho pra "pegar o PDF e fazer upload na tela do admin / cadastro
+  / perfil" de forma automatizada **+ assertar o resultado no banco**. Melhor opção pra teste repetível.
+- Alternativas: **Chrome MCP** (`mcp__Claude_in_Chrome__*`, driva o Chrome real, tem `file_upload`) pra
+  condução visual/interativa; **computer-use** (nível pixel) como último recurso.
+- **Cuidados:** cria dado real → contatos whitelist `27981341348` + `lucbragatto+...@gmail.com`; limpar
+  depois; frontend tem que estar no ar (está, PID 33856 pós-conserto do órfão).
+
