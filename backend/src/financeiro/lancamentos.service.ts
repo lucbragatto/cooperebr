@@ -123,9 +123,13 @@ export class LancamentosService {
     let totalReceitas = new Decimal(0);
     let totalDespesas = new Decimal(0);
 
+    // Sprint M52a v2 (23/06/2026) — financeiro-token P1: MUTACAO_PASSIVO /
+    // MUTACAO_DESPESA são movimentos de BALANÇO (não DRE). Ficam fora dos
+    // totalizadores de resultado pra não inflar totalDespesas.
     for (const l of lancamentos) {
       if (l.tipo === 'RECEITA') totalReceitas = totalReceitas.add(l.valor);
-      else totalDespesas = totalDespesas.add(l.valor);
+      else if (l.tipo === 'DESPESA') totalDespesas = totalDespesas.add(l.valor);
+      // MUTACAO_PASSIVO / MUTACAO_DESPESA → mutação de balanço, fora do DRE.
     }
 
     return {
@@ -192,10 +196,12 @@ export class LancamentosService {
       if (l.tipo === 'RECEITA') {
         totalReceitas += item.valor;
         entradas.push(item);
-      } else {
+      } else if (l.tipo === 'DESPESA') {
         totalDespesas += item.valor;
         saidas.push(item);
       }
+      // Sprint M52a v2: MUTACAO_PASSIVO / MUTACAO_DESPESA fora do livro
+      // caixa (são movimentos de balanço, não fluxo financeiro).
     }
 
     // Entradas combinadas: lançamentos receita + Asaas
@@ -227,8 +233,10 @@ export class LancamentosService {
       let rec = 0;
       let desp = 0;
       for (const l of lancs) {
+        // Sprint M52a v2: MUTACAO_PASSIVO / MUTACAO_DESPESA fora do histórico
+        // P&L (são movimentos de balanço).
         if (l.tipo === 'RECEITA') rec += Number(l.valor);
-        else desp += Number(l.valor);
+        else if (l.tipo === 'DESPESA') desp += Number(l.valor);
       }
       historico.push({ competencia: comp, receitas: rec, despesas: desp, saldo: rec - desp });
     }
@@ -270,8 +278,10 @@ export class LancamentosService {
         valor,
       });
 
+      // Sprint M52a v2: MUTACAO_PASSIVO / MUTACAO_DESPESA fora do DRE
+      // (são movimentos de balanço patrimonial, não resultado).
       if (l.tipo === 'RECEITA') totalReceitas += valor;
-      else totalDespesas += valor;
+      else if (l.tipo === 'DESPESA') totalDespesas += valor;
     }
 
     return {

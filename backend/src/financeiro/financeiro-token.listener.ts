@@ -43,13 +43,18 @@ export class FinanceiroTokenListener {
         );
         return;
       }
+      // Sprint M52a Bloco C (23/06/2026) — prefere naturezaAto resolvida
+      // pelo service (override SA → convenio → default helper). Fallback
+      // pro default da helper quando o evento não traz (compat com
+      // emissores antigos / specs que constroem o evento manualmente).
+      const naturezaAto = event.naturezaAto ?? classificacao.naturezaAtoSugerida;
       const params = {
         cooperativaId: event.cooperativaId,
         cooperadoId: event.cooperadoId,
         valor: event.valorReais,
         competencia: new Date().toISOString().slice(0, 7),
         descricao: `Emissão ${event.quantidade} tokens (${event.tipo})`,
-        naturezaAto: classificacao.naturezaAtoSugerida,
+        naturezaAto,
       };
       if (classificacao.categoria === 'BONIFICACAO_DESCONTO') {
         await this.tokenContabil.lancarEmissaoFaturaCheia(params);

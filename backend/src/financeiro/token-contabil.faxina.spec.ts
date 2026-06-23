@@ -38,9 +38,17 @@ function setup() {
   }));
   const lancamentoCaixaFindFirst = jest.fn().mockResolvedValue(null);
 
+  // Sprint M52a v2 (23/06/2026) — Bloco G migrou 5 métodos pra
+  // `prisma.$transaction([...])` (batch). Mock devolve os resultados em
+  // ordem, simulando o behavior do Prisma batch transaction.
+  const $transaction = jest.fn().mockImplementation(async (operacoes: any[]) => {
+    return Promise.all(operacoes);
+  });
+
   const prisma = {
     planoContas: { findFirst: planoContasFindFirst, create: planoContasCreate },
     lancamentoCaixa: { create: lancamentoCaixaCreate, findFirst: lancamentoCaixaFindFirst },
+    $transaction,
   } as any;
 
   const service = new TokenContabilService(prisma);
@@ -189,7 +197,8 @@ describe('Faxina Contábil — TokenContabilService', () => {
       const data = lancamentoCaixaCreate.mock.calls[0][0].data;
       expect(data.planoContasId).toBe(contasMap.get(CONTA_PASSIVO_TOKEN)?.id);
       expect(data.descricao).toMatch(/D: Baixa Passivo/);
-      expect(data.tipo).toBe('DESPESA');
+      // M52a v2 (23/06/2026): movimento em conta de passivo NÃO é despesa.
+      expect(data.tipo).toBe('MUTACAO_PASSIVO');
     });
 
     it('com origemId, grava origemTipo=COBRANCA_ABATE_FATURA (idempotência)', async () => {

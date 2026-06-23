@@ -313,6 +313,20 @@ export class CooperTokenController {
     );
   }
 
+  // Sprint M52a Bloco E (23/06/2026) — D-novo-FAXINA-PASSIVO-VISIBILIDADE.
+  // Decomposição do passivo 2.3.01 (face × valorToken) + forecast de
+  // expiração (30/60/90/365 dias) + top 10 cooperados em concentração.
+  // Cooperativa do JWT (SUPER_ADMIN sem cooperativaId → cross-tenant).
+  @Roles(ADMIN, SUPER_ADMIN)
+  @Get('admin/passivo-detalhado')
+  async getPassivoDetalhado(@Req() req: any) {
+    const cooperativaId = req.user?.cooperativaId;
+    if (!cooperativaId && req.user?.perfil !== SUPER_ADMIN) {
+      throw new BadRequestException('Cooperativa não identificada');
+    }
+    return this.cooperTokenService.getPassivoDetalhado(cooperativaId);
+  }
+
   @Roles(ADMIN, SUPER_ADMIN)
   @Get('admin/fluxo-caixa')
   async getFluxoCaixa(@Req() req: any) {
@@ -369,6 +383,25 @@ export class CooperTokenController {
   async triggerReconciliacao() {
     await this.cooperTokenJob.reconciliarContabilPendentes();
     return { message: 'Ciclo de reconciliação contábil disparado.' };
+  }
+
+  // Sprint M52a Bloco D (23/06/2026) — D-novo-FAXINA-DELTA-COOPEREBR.
+  // Trigger admin pro cron diário 04:30 reconciliarInvariantesSaldo.
+  // Ancorado em saldoDisponivel (decisão orquestrador 23/06).
+  // SUPER_ADMIN-only — operação cross-tenant. Retorna síncrono pro painel.
+  @Roles(SUPER_ADMIN)
+  @AuditLog({
+    acao: 'cooper-token.invariante.trigger-manual',
+    recurso: 'CooperTokenLedger',
+  })
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @Post('admin/reconciliacao/invariantes-trigger')
+  async triggerInvariantes() {
+    const resumo = await this.cooperTokenJob.reconciliarInvariantesSaldo();
+    return {
+      message: 'Varredura de invariantes saldo × ledger concluída.',
+      resumo,
+    };
   }
 
   @Roles(COOPERADO, ADMIN, SUPER_ADMIN, OPERADOR)

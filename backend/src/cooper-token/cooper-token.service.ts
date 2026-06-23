@@ -81,6 +81,21 @@ interface CreditarParams {
    * antes — formalizando aqui no type pra build TS limpo.
    */
   forcarDisponivel?: boolean;
+  /**
+   * Sprint M52a Bloco C (23/06/2026) — wire de naturezaAto contábil.
+   * Quando informado, o listener resolve `naturezaAto` a partir de
+   * `ContratoConvenio.naturezaAtoCooperativo` (Art. 79/88 — PROPRIO/
+   * AUXILIAR/NAO_COOPERATIVO). Senão usa o default da helper.
+   */
+  convenioId?: string;
+  /**
+   * Sprint M52a Bloco C (23/06/2026) — override pra SUPER_ADMIN.
+   * Força a classificação contábil do ingresso/emissão (PROPRIO/AUXILIAR/
+   * NAO_COOPERATIVO). Caso de uso principal: SOCIAL pra destinatário
+   * não-cooperado (admin assume risco fiscal Art. 86-87 explicitamente).
+   * Sem override, SOCIAL fica PROPRIO (cooperado-only, conservador).
+   */
+  naturezaAtoOverride?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
 }
 
 interface DebitarParams {
@@ -322,6 +337,33 @@ export class CooperTokenService {
     );
   }
 
+  /**
+   * Sprint M52a Bloco C (23/06/2026) — resolve naturezaAto contábil pro
+   * lançamento de ingresso/emissão. Ordem de precedência:
+   *  1. override explícito (SUPER_ADMIN force — caso SOCIAL não-cooperado).
+   *  2. convenioId → ContratoConvenio.naturezaAtoCooperativo (Art. 79/88).
+   *  3. default sugerido pela classificacao-contabil.helper.
+   * Cross-tenant guard no convênio: defense-in-depth padrão M45.
+   */
+  private async resolverNaturezaAto(args: {
+    override?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
+    convenioId?: string;
+    cooperativaId: string;
+    defaultSugerido: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
+  }): Promise<'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO'> {
+    if (args.override) return args.override;
+    if (args.convenioId) {
+      const convenio = await this.prisma.contratoConvenio.findFirst({
+        where: { id: args.convenioId, cooperativaId: args.cooperativaId },
+        select: { naturezaAtoCooperativo: true },
+      });
+      if (convenio?.naturezaAtoCooperativo) {
+        return convenio.naturezaAtoCooperativo as 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
+      }
+    }
+    return args.defaultSugerido;
+  }
+
   async creditar(params: CreditarParams) {
     const {
       cooperadoId,
@@ -333,6 +375,17 @@ export class CooperTokenService {
       referenciaTabela,
       expiracaoMeses = 12,
     } = params;
+
+    // Sprint Faxina C-G (23/06/2026) — Fix estrutural pós-root-cause D-novo-
+    // FAXINA-DELTA-COOPEREBR. Direção SEMPRE via CooperTokenOperacao
+    // (CREDITO/DEBITO); `quantidade` sempre POSITIVA. Antes: TESTE E2E
+    // tinha ESTORNO_BONIFICACAO_ADMIN gravado com `quantidade=-1` em
+    // operacao=DEBITO — agregação CREDITO−DEBITO corrompia.
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      throw new BadRequestException(
+        `creditar: quantidade deve ser número finito > 0 (recebido ${quantidade}). Direção via operacao=CREDITO/DEBITO, nunca via sinal.`,
+      );
+    }
 
     // BUG-11-003: Só creditar tokens para cooperados com status ATIVO
     const cooperado = await this.prisma.cooperado.findUnique({
@@ -388,7 +441,7 @@ export class CooperTokenService {
     // Sprint 8A: tokens ficam pendentes até cooperado cumprir 3 condições:
     // 1. Cadastro completo, 2. ATIVO_RECEBENDO_CREDITOS, 3. Primeira fatura paga.
     // forcarDisponivel=true pula esse check (ex: admin creditando manualmente).
-    const forcarDisponivel = (params as any).forcarDisponivel === true;
+    const forcarDisponivel = params.forcarDisponivel === true;
     const deveSerDisponivel = forcarDisponivel || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS';
 
     const ledger = await this.prisma.$transaction(async (tx) => {
@@ -463,7 +516,32 @@ export class CooperTokenService {
     const valorReais = valorEmissao != null
       ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100
       : 0;
-    const classificacao = classificarTipo(tipo as any);
+    const classificacao = classificarTipo(tipo);
+
+    // Sprint M52a Bloco C (23/06/2026) — resolve naturezaAto.
+    // Ordem (do mais específico pro default):
+    //   1. naturezaAtoOverride (SA force — caso uso principal: SOCIAL não-cooperado).
+    //   2. convenioId → ContratoConvenio.naturezaAtoCooperativo (Art. 79/88).
+    //   3. classificacao.naturezaAtoSugerida (default da helper — PROPRIO conservador).
+    // Guard SOCIAL: o creditar() já só aceita cooperados ATIVOS no MESMO tenant
+    // (cross-tenant bloqueado em :363, status checked em :370). Logo qualquer SOCIAL
+    // que passe por aqui já é cooperado-only. O override 'NAO_COOPERATIVO' é a
+    // saída de escape pra premiação social a NÃO-cooperado (caso raro, com risco
+    // fiscal Art. 86-87 — admin assume conscientemente via AuditLog).
+    const naturezaAto = await this.resolverNaturezaAto({
+      override: params.naturezaAtoOverride,
+      convenioId: params.convenioId,
+      cooperativaId,
+      defaultSugerido: classificacao.naturezaAtoSugerida,
+    });
+
+    // Auditoria pra SOCIAL com override NAO_COOPERATIVO (risco fiscal explicitado).
+    if (tipo === 'SOCIAL' && naturezaAto === 'NAO_COOPERATIVO') {
+      this.logger.warn(
+        `[SOCIAL] cooperado=${cooperadoId} qty=${quantidadeLiquida} natureza=NAO_COOPERATIVO (override SA) — tributação plena PIS/COFINS+IRPJ Art. 86-87. Audit recomendado.`,
+      );
+    }
+
     if (classificacao.categoria === 'INGRESSO_PAGO') {
       this.eventEmitter.emit(
         COOPER_TOKEN_EVENTS.INGRESSO_EMISSAO_PAGA,
@@ -473,14 +551,14 @@ export class CooperTokenService {
           tipo,
           quantidadeLiquida,
           valorReais,
-          classificacao.naturezaAtoSugerida,
+          naturezaAto,
         ),
       );
     } else if (classificacao.categoria !== 'TRANSFERENCIA_INTERNA') {
       // BONIFICACAO_DESCONTO + BONIFICACAO_ADMIN + USO → EMITIDO (handler escolhe conta)
       this.eventEmitter.emit(
         COOPER_TOKEN_EVENTS.EMITIDO,
-        new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais),
+        new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais, naturezaAto),
       );
     }
 
@@ -528,10 +606,28 @@ export class CooperTokenService {
     const { cooperadoId, cooperativaId, quantidade, referenciaId, descricao } =
       params;
 
+    // Sprint Faxina C-G (23/06/2026) — Fix estrutural pós-root-cause D-novo-
+    // FAXINA-DELTA-COOPEREBR (caso TESTE E2E: q=-1 em DEBITO). Direção
+    // sempre via operacao=DEBITO; quantidade sempre POSITIVA.
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      throw new BadRequestException(
+        `debitar: quantidade deve ser número finito > 0 (recebido ${quantidade}). Direção via operacao=DEBITO.`,
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
       });
+
+      // Re-review orquestrador 23/06 (code MEDIUM): defense-in-depth M45 —
+      // espelha creditar() :405. Cooperado.id é globally unique (CUID) mas
+      // blindar contra futuro refactor que receba cooperativaId inconsistente.
+      if (saldo && saldo.cooperativaId !== cooperativaId) {
+        throw new BadRequestException(
+          `debitar: cooperado ${cooperadoId} pertence a outro tenant — cross-tenant bloqueado.`,
+        );
+      }
 
       if (!saldo || Number(saldo.saldoDisponivel) < quantidade) {
         throw new BadRequestException(
@@ -5227,6 +5323,143 @@ export class CooperTokenService {
       periodo: periodo ?? 'mes',
       ano: anoRef,
       mes: mesRef,
+    };
+  }
+
+  // ── Sprint M52a Bloco E (23/06/2026) — Passivo detalhado + forecast ──
+  //
+  // D-novo-FAXINA-PASSIVO-VISIBILIDADE: o painel atual mostra apenas
+  // `passivoTotal = saldoDisponivel × valorToken`, sem decomposição por
+  // estado (DISPONIVEL/PENDENTE/BLOQUEADO_RESGATE) nem forecast de expiração
+  // (que vira receita 1.2.02 quando token caduca).
+  //
+  // Esse método produz a visão de Gestão do Passivo 2.3.01:
+  //   - decomposição por estado do saldo (face × valorToken);
+  //   - forecast de expiração nos próximos 30/60/90/365 dias;
+  //   - top 10 cooperados com maior saldo (concentração de risco).
+  //
+  // SUPER_ADMIN sem cooperativaId → varre todos os tenants.
+  async getPassivoDetalhado(cooperativaId: string | undefined) {
+    const whereCoopId = cooperativaId ? { cooperativaId } : {};
+
+    // Re-review orquestrador 23/06 (code HIGH): SUPER_ADMIN cross-tenant
+    // não pode usar `findFirst` arbitrário (pegava o primeiro plano do
+    // banco, misturando valorToken entre tenants). Pra tenant-único, faz
+    // findFirst escopado; pra cross-tenant (SA com cooperativaId vazio),
+    // retorna `valorTokenReais=null` e um sentinela `precisaoCrossTenant`
+    // pra deixar o caller saber que a soma R$ é aproximada.
+    let valorToken: number | null = null;
+    if (cooperativaId) {
+      const plano = await this.prisma.plano.findFirst({
+        where: { cooperativaId, cooperTokenAtivo: true },
+        select: { valorTokenReais: true },
+      });
+      valorToken = plano?.valorTokenReais != null ? Number(plano.valorTokenReais) : 0.45;
+    }
+    // Quando valorToken === null (SUPER_ADMIN cross-tenant), todos os campos
+    // R$ retornam null no payload — frontend mostra só `face`.
+
+    const saldosAgg = await this.prisma.cooperTokenSaldo.aggregate({
+      where: whereCoopId,
+      _sum: {
+        saldoDisponivel: true,
+        saldoPendente: true,
+        saldoBloqueadoResgate: true,
+      },
+    });
+
+    const disponivel = Number(saldosAgg._sum.saldoDisponivel ?? 0);
+    const pendente = Number(saldosAgg._sum.saldoPendente ?? 0);
+    const bloqueado = Number(saldosAgg._sum.saldoBloqueadoResgate ?? 0);
+    const totalFace = disponivel + pendente + bloqueado;
+
+    const agora = new Date();
+    const janelas = [
+      { rotulo: '30 dias', deltaDias: 30 },
+      { rotulo: '60 dias', deltaDias: 60 },
+      { rotulo: '90 dias', deltaDias: 90 },
+      { rotulo: '365 dias', deltaDias: 365 },
+    ];
+
+    const forecast = await Promise.all(
+      janelas.map(async (j) => {
+        const limite = new Date(agora);
+        limite.setDate(limite.getDate() + j.deltaDias);
+        const r = await this.prisma.cooperTokenLedger.aggregate({
+          where: {
+            ...whereCoopId,
+            operacao: CooperTokenOperacao.CREDITO,
+            expiracaoEm: { gte: agora, lte: limite },
+          },
+          _sum: { quantidade: true },
+        });
+        const qty = Number(r._sum.quantidade ?? 0);
+        return {
+          janela: j.rotulo,
+          tokensAExpirar: qty,
+          valorReais: valorToken !== null ? Math.round(qty * valorToken * 100) / 100 : null,
+        };
+      }),
+    );
+
+    const topSaldos = await this.prisma.cooperTokenSaldo.findMany({
+      where: whereCoopId,
+      orderBy: { saldoDisponivel: 'desc' },
+      take: 10,
+      select: {
+        cooperadoId: true,
+        saldoDisponivel: true,
+        saldoPendente: true,
+        saldoBloqueadoResgate: true,
+        cooperado: { select: { nomeCompleto: true, email: true } },
+      },
+    });
+
+    const reaisOrNull = (face: number): number | null =>
+      valorToken !== null ? Math.round(face * valorToken * 100) / 100 : null;
+
+    const topCooperados = topSaldos.map((s) => {
+      const face =
+        Number(s.saldoDisponivel) +
+        Number(s.saldoPendente) +
+        Number(s.saldoBloqueadoResgate);
+      return {
+        cooperadoId: s.cooperadoId,
+        nomeCompleto: s.cooperado?.nomeCompleto ?? '—',
+        email: s.cooperado?.email ?? '—',
+        saldoDisponivel: Number(s.saldoDisponivel),
+        saldoPendente: Number(s.saldoPendente),
+        saldoBloqueadoResgate: Number(s.saldoBloqueadoResgate),
+        faceTotal: face,
+        valorReais: reaisOrNull(face),
+      };
+    });
+
+    return {
+      // null em cenário SUPER_ADMIN cross-tenant pra não retornar valor
+      // arbitrário do primeiro plano encontrado (fix code HIGH 23/06).
+      valorTokenReais: valorToken,
+      precisaoCrossTenant: valorToken === null
+        ? 'agregado face apenas — valorToken varia entre tenants'
+        : null,
+      passivoTotalFace: totalFace,
+      passivoTotalReais: reaisOrNull(totalFace),
+      decomposicao: {
+        disponivel: {
+          face: disponivel,
+          reais: reaisOrNull(disponivel),
+        },
+        pendente: {
+          face: pendente,
+          reais: reaisOrNull(pendente),
+        },
+        bloqueadoResgate: {
+          face: bloqueado,
+          reais: reaisOrNull(bloqueado),
+        },
+      },
+      forecastExpiracao: forecast,
+      topCooperados,
     };
   }
 
