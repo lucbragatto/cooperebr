@@ -5,21 +5,36 @@ import { PrismaService } from '../prisma.service';
 /**
  * Lançamentos contábeis automáticos para operações de CooperToken.
  *
- * Contas utilizadas (criadas automaticamente se não existirem):
- * - 5.1.01 Custo Desconto Concedido (DESPESA)
- * - 5.1.02 Passivo Tokens a Resgatar (DESPESA — ⚠️ tipo deveria PASSIVO;
- *           bug pré-existente; corrigir em sprint contábil dedicada,
- *           D-novo-EMISSAO-ADMIN-CONTABIL P2)
- * - 5.1.03 Despesa de Bonificação CooperToken (DESPESA) — M39 (16/06):
- *          contrapartida da emissão admin em lote (`BONIFICACAO_ADMIN`).
- *          Cooperativa BONIFICA → cria passivo SEM receber dinheiro em
- *          troca (distinto de F2 compra paga = `D Caixa / C Passivo`,
- *          distinto de F1 desconto não-aplicado = template atual errado).
- *          Sprint contábil dedicada vai reclassificar via
- *          `referenciaTabela='EMISSAO_ADMIN_LOTE'`.
- * - 1.2.01 Receita Venda Tokens (RECEITA)
- * - 1.2.02 Receita Tokens Expirados (RECEITA)
+ * REVISÃO Sprint Faxina Contábil do Token (22/06/2026 — re-review orquestrador
+ * APROVADO). Re-alinhamento ao modelo voucher CPC 47 + ato cooperativo Lei
+ * 5.764/71 Art. 79 § único:
+ *
+ *  - Token = VOUCHER de circuito fechado. Dinheiro que entra é PASSIVO DIFERIDO
+ *    (a coop vai honrar), NUNCA receita imediata.
+ *  - Receita da coop = MELT (spread + taxa circulação + quebra/expiração).
+ *  - "Receita Venda Tokens" (`1.2.01`) APOSENTADA como armadilha tributária.
+ *  - `5.1.02 → 2.3.01` (DESPESA → PASSIVO) — Q5 do orquestrador.
+ *  - `5.1.10` Custo Desconto Token NOVA — Q6 (colisão com 5.1.01 Usina).
+ *  - `1.2.10/11/12` Receitas de MELT criadas mas só usadas se gate liberado
+ *    (parecer Walter + tributarista pendente — spec §1.1).
+ *
+ * Contas usadas:
+ *  - **5.1.10** Custo Desconto Token        (DESPESA) ← BONIFICAÇÃO sem caixa
+ *  - **5.1.03** Despesa de Bonificação      (DESPESA) ← BONIFICAÇÃO admin
+ *  - **2.3.01** Passivo Tokens a Resgatar   (PASSIVO) ← TODOS os passivos
+ *  - **1.2.02** Receita Tokens Expirados    (RECEITA) ← melt expiração
+ *  - **1.2.10** Receita Spread Resgate      (RECEITA) ← gated
+ *  - **1.2.11** Receita Taxa Circulação QR  (RECEITA) ← gated
+ *  - **1.2.12** Receita Quebra Oxidação     (RECEITA) ← gated
  */
+
+export const CONTA_PASSIVO_TOKEN = '2.3.01';
+export const CONTA_CUSTO_DESCONTO_TOKEN = '5.1.10';
+export const CONTA_DESPESA_BONIFICACAO = '5.1.03';
+export const CONTA_RECEITA_EXPIRADOS = '1.2.02';
+export const CONTA_RECEITA_SPREAD = '1.2.10';
+export const CONTA_RECEITA_TAXA_QR = '1.2.11';
+export const CONTA_RECEITA_OXIDACAO = '1.2.12';
 
 interface LancamentoTokenParams {
   cooperativaId: string;
@@ -29,17 +44,22 @@ interface LancamentoTokenParams {
   competencia?: string;
   descricao: string;
   observacoes?: string;
+  /**
+   * Sprint Faxina Contábil (22/06/2026) — Q4 do orquestrador.
+   * Classificação ato cooperativo (Próprio/Auxiliar/NAO_COOPERATIVO).
+   * Default `'PROPRIO'` via schema (LancamentoCaixa.naturezaAto).
+   */
+  naturezaAto?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
 }
 
 const CONTAS_TOKEN = [
-  { codigo: '5.1.01', nome: 'Custo Desconto Concedido', tipo: 'DESPESA', grupo: 'TOKENS' },
-  { codigo: '5.1.02', nome: 'Passivo Tokens a Resgatar', tipo: 'DESPESA', grupo: 'TOKENS' },
-  // M39 (16/06/2026): conta nova, aditiva. Débito da emissão admin em lote
-  // (`BONIFICACAO_ADMIN`) — cooperativa bonifica criando passivo sem entrada
-  // de caixa. Distinto de 5.1.01 (desconto concedido a faturas já emitidas).
-  { codigo: '5.1.03', nome: 'Despesa de Bonificação CooperToken', tipo: 'DESPESA', grupo: 'TOKENS' },
-  { codigo: '1.2.01', nome: 'Receita Venda Tokens', tipo: 'RECEITA', grupo: 'TOKENS' },
-  { codigo: '1.2.02', nome: 'Receita Tokens Expirados', tipo: 'RECEITA', grupo: 'TOKENS' },
+  { codigo: CONTA_CUSTO_DESCONTO_TOKEN, nome: 'Custo Desconto Token', tipo: 'DESPESA', grupo: 'TOKENS' },
+  { codigo: CONTA_DESPESA_BONIFICACAO, nome: 'Despesa de Bonificação CooperToken', tipo: 'DESPESA', grupo: 'TOKENS' },
+  { codigo: CONTA_PASSIVO_TOKEN, nome: 'Passivo Tokens a Resgatar', tipo: 'PASSIVO', grupo: 'TOKENS' },
+  { codigo: CONTA_RECEITA_EXPIRADOS, nome: 'Receita Tokens Expirados', tipo: 'RECEITA', grupo: 'TOKENS' },
+  { codigo: CONTA_RECEITA_SPREAD, nome: 'Receita Spread Resgate Token', tipo: 'RECEITA', grupo: 'TOKENS' },
+  { codigo: CONTA_RECEITA_TAXA_QR, nome: 'Receita Taxa Circulação QR', tipo: 'RECEITA', grupo: 'TOKENS' },
+  { codigo: CONTA_RECEITA_OXIDACAO, nome: 'Receita Quebra Oxidação', tipo: 'RECEITA', grupo: 'TOKENS' },
 ] as const;
 
 @Injectable()
@@ -48,18 +68,46 @@ export class TokenContabilService {
 
   constructor(private prisma: PrismaService) {}
 
-  /** Garante que as contas de token existem no plano de contas */
-  private async garantirContas(cooperativaId?: string): Promise<Map<string, string>> {
+  /**
+   * Garante que as contas de token existem no plano de contas.
+   *
+   * Multi-tenant fix (P1 mtenant + financeiro 22/06): cooperativaId
+   * OBRIGATÓRIO (era opcional — armadilha). O fallback do P2002 também
+   * filtra por cooperativaId — antes retornava conta de outro tenant
+   * (P2002 captura colisão global do @unique(codigo), mas o where do
+   * findFirst sem cooperativaId vazava o id do outro tenant).
+   */
+  private async garantirContas(cooperativaId: string): Promise<Map<string, string>> {
+    if (!cooperativaId) {
+      throw new Error('garantirContas: cooperativaId obrigatório (lição M45).');
+    }
     const mapa = new Map<string, string>();
     for (const conta of CONTAS_TOKEN) {
       let existing = await this.prisma.planoContas.findFirst({
-        where: { codigo: conta.codigo, cooperativaId: cooperativaId ?? undefined },
+        where: { codigo: conta.codigo, cooperativaId },
       });
       if (!existing) {
-        existing = await this.prisma.planoContas.create({
-          data: { ...conta, cooperativaId },
-        });
-        this.logger.log(`Plano de contas criado: ${conta.codigo} - ${conta.nome}`);
+        try {
+          existing = await this.prisma.planoContas.create({
+            data: { ...conta, cooperativaId },
+          });
+          this.logger.log(`Plano de contas criado: ${conta.codigo} - ${conta.nome} (tenant ${cooperativaId.slice(0, 8)}…)`);
+        } catch (err) {
+          // Schema fix Faxina 22/06: agora @@unique([codigo, cooperativaId]).
+          // P2002 só pode disparar em RACE — outra request paralela criou.
+          // Re-lê apenas DO PRÓPRIO TENANT (fix P1 multitenant — NUNCA
+          // retornar conta de outro tenant).
+          const fallback = await this.prisma.planoContas.findFirst({
+            where: { codigo: conta.codigo, cooperativaId },
+          });
+          if (!fallback) {
+            this.logger.error(
+              `garantirContas: race condition em ${conta.codigo} no tenant ${cooperativaId.slice(0, 8)}… SEM resolução.`,
+            );
+            throw err;
+          }
+          existing = fallback;
+        }
       }
       mapa.set(conta.codigo, existing.id);
     }
@@ -72,156 +120,220 @@ export class TokenContabilService {
   }
 
   /**
-   * 1. Emissão FATURA_CHEIA_TOKEN
-   * D: Custo Desconto Concedido (5.1.01)
-   * C: Passivo Tokens a Resgatar (5.1.02)
+   * SPRINT FAXINA (22/06/2026) — NOVO MÉTODO PRINCIPAL.
+   *
+   * **INGRESSO PAGO** — empresa cooperada paga por tokens (conveniada).
+   *  - **D Caixa** (entrada de dinheiro)
+   *  - **C Passivo Tokens a Resgatar** (2.3.01)
+   *
+   * Substitui `lancarCompraParceiroPago` (D nada / C Receita Venda — half-entry
+   * tributário ERRADO) e `lancarEmissaoFaturaCheia` quando o caminho for
+   * COMPRA_PJ_COOPERADA (não há "desconto concedido" — há ingresso pago).
+   *
+   * `naturezaAto` default `'PROPRIO'` se cooperado é PF cooperado; `'AUXILIAR'`
+   * se convênio (Art. 88). Promoção `AUXILIAR → PROPRIO` exige documentação
+   * (Q4 orquestrador). Tributação real validada por reviewer externo (Walter).
+   */
+  async lancarIngressoEmissaoPaga(params: LancamentoTokenParams) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
+
+    const [debito, credito] = await Promise.all([
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA', // entrada de caixa (LancamentoCaixa.tipo = movimento)
+          descricao: `[Token] D: Caixa (ingresso pago) — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          // Caixa não tem PlanoContas dedicado — null preserva pattern existente
+          // (relatórios consideram lançamento sem planoContasId como caixa).
+          planoContasId: null,
+          naturezaAto,
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: params.observacoes ?? 'Ingresso pago em tokens (caixa)',
+        },
+      }),
+      this.prisma.lancamentoCaixa.create({
+        data: {
+          // Convenção pós-faxina: C Passivo = aumento → tipo RECEITA.
+          tipo: 'RECEITA',
+          descricao: `[Token] C: Passivo Tokens a Resgatar (ingresso pago) — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          observacoes: params.observacoes ?? 'Ingresso pago em tokens (passivo)',
+        },
+      }),
+    ]);
+
+    this.logger.log(
+      `[token-contabil] INGRESSO PAGO: R$ ${valor} (${params.cooperativaId.slice(0, 8)}… natureza=${naturezaAto})`,
+    );
+    return { debito, credito };
+  }
+
+  /**
+   * SPRINT FAXINA (22/06/2026).
+   *
+   * **BONIFICAÇÃO DE DESCONTO** — emissão de token vinculada a desconto/crédito
+   * (FATURA_CHEIA, FLEX, GERACAO_EXCEDENTE). Coop bonifica sem entrada de caixa.
+   *  - **D Custo Desconto Token** (5.1.10)
+   *  - **C Passivo Tokens a Resgatar** (2.3.01)
+   *
+   * Substitui o legado `lancarEmissaoFaturaCheia` que apontava pra 5.1.01
+   * (colisão com Usina — 9 lançamentos migrados na Fase A).
    */
   async lancarEmissaoFaturaCheia(params: LancamentoTokenParams) {
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia || this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
 
     const [debito, credito] = await Promise.all([
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'DESPESA',
-          descricao: `[Token] D: Custo Desconto Concedido — ${params.descricao}`,
+          descricao: `[Token] D: Custo Desconto Token — ${params.descricao}`,
           valor,
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.01'),
+          planoContasId: contas.get(CONTA_CUSTO_DESCONTO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
-          observacoes: params.observacoes ?? 'Emissão token fatura-cheia',
+          observacoes: params.observacoes ?? 'Bonificação de desconto em tokens',
         },
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
+          // Convenção pós-faxina: D=DESPESA, C=RECEITA (sinal contábil).
+          // C Passivo = aumento de passivo → tipo RECEITA por convenção
+          // (fix P1 financeiro-token: tipo iguais D+C distorciam relatórios).
           tipo: 'RECEITA',
           descricao: `[Token] C: Passivo Tokens a Resgatar — ${params.descricao}`,
           valor,
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.02'),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
-          observacoes: params.observacoes ?? 'Emissão token fatura-cheia (passivo)',
+          observacoes: params.observacoes ?? 'Bonificação de desconto em tokens (passivo)',
         },
       }),
     ]);
 
-    this.logger.log(`Lançamento contábil emissão fatura-cheia: R$ ${valor} (${params.cooperativaId})`);
+    this.logger.log(
+      `[token-contabil] EMISSÃO BONIFICAÇÃO (desconto): R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`,
+    );
     return { debito, credito };
   }
 
   /**
-   * 2. Compra parceiro PAGO
-   * D: Caixa (entrada de dinheiro — representada como RECEITA)
-   * C: Receita Venda Tokens (1.2.01)
+   * **ABATE NA FATURA** (usar-na-fatura) — uso do voucher.
+   *  - **D Passivo Tokens a Resgatar** (2.3.01) — baixa do passivo
+   *  - C — contrapartida implícita "Crédito Fatura" (a fatura já abateu)
+   *
+   * Idempotência (fix P2 financeiro-token 22/06): aceita `origemId` opcional
+   * (ex: cobrancaId). Quando vier, usa `@@unique(origemTipo, origemId)` no
+   * schema pra impedir double-baixa em caso de retry do listener. Para
+   * preservar compat com callers antigos (cobrancas.service), origemId é
+   * opcional — sem ele, fica vulnerável a duplicação (catalogado D-novo).
    */
-  async lancarCompraParceiroPago(params: LancamentoTokenParams) {
+  async lancarResgateFatura(
+    params: LancamentoTokenParams & { origemId?: string },
+  ) {
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia || this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const lancamento = await this.prisma.lancamentoCaixa.create({
-      data: {
-        tipo: 'RECEITA',
-        descricao: `[Token] Receita Venda Tokens — ${params.descricao}`,
-        valor,
-        competencia,
-        status: 'REALIZADO',
-        dataPagamento: new Date(),
-        planoContasId: contas.get('1.2.01'),
-        cooperadoId: params.cooperadoId,
-        cooperativaId: params.cooperativaId,
-        observacoes: params.observacoes ?? 'Compra de tokens por parceiro',
-      },
-    });
+    try {
+      const lancamento = await this.prisma.lancamentoCaixa.create({
+        data: {
+          // Convenção pós-faxina: D Passivo (baixa) = tipo DESPESA (saída do passivo).
+          // Antes era RECEITA — divergia de lancarExpiracao que já usava DESPESA na baixa.
+          tipo: 'DESPESA',
+          descricao: `[Token] D: Baixa Passivo (abate na fatura) — ${params.descricao}`,
+          valor,
+          competencia,
+          status: 'REALIZADO',
+          dataPagamento: new Date(),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
+          cooperadoId: params.cooperadoId,
+          cooperativaId: params.cooperativaId,
+          origemTipo: params.origemId ? 'COBRANCA_ABATE_FATURA' : null,
+          origemId: params.origemId ?? null,
+          observacoes: params.observacoes ?? 'Abate de tokens na fatura (baixa passivo)',
+        },
+      });
 
-    this.logger.log(`Lançamento contábil compra parceiro: R$ ${valor} (${params.cooperativaId})`);
-    return lancamento;
+      this.logger.log(
+        `[token-contabil] ABATE FATURA: R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`,
+      );
+      return lancamento;
+    } catch (err) {
+      // P2002 idempotência hit — listener replay sobre mesma cobrança.
+      const isUniqueViolation =
+        typeof err === 'object' &&
+        err !== null &&
+        (err as { code?: string }).code === 'P2002';
+      if (isUniqueViolation && params.origemId) {
+        const existente = await this.prisma.lancamentoCaixa.findFirst({
+          where: {
+            origemTipo: 'COBRANCA_ABATE_FATURA',
+            origemId: params.origemId,
+            cooperativaId: params.cooperativaId,
+          },
+          select: { id: true },
+        });
+        if (existente) {
+          this.logger.log(
+            `lancarResgateFatura: idempotência hit (cobranca=${params.origemId.slice(0, 8)}…)`,
+          );
+          return existente;
+        }
+      }
+      throw err;
+    }
   }
 
   /**
-   * 3. Resgate na fatura (usar-na-fatura)
-   * D: Passivo Tokens a Resgatar (5.1.02) — baixa do passivo
-   */
-  async lancarResgateFatura(params: LancamentoTokenParams) {
-    const contas = await this.garantirContas(params.cooperativaId);
-    const competencia = params.competencia || this.getCompetencia();
-    const valor = Math.round(params.valor * 100) / 100;
-
-    const lancamento = await this.prisma.lancamentoCaixa.create({
-      data: {
-        tipo: 'DESPESA',
-        descricao: `[Token] Baixa Passivo Tokens (resgate fatura) — ${params.descricao}`,
-        valor,
-        competencia,
-        status: 'REALIZADO',
-        dataPagamento: new Date(),
-        planoContasId: contas.get('5.1.02'),
-        cooperadoId: params.cooperadoId,
-        cooperativaId: params.cooperativaId,
-        observacoes: params.observacoes ?? 'Resgate de tokens na fatura (baixa passivo)',
-      },
-    });
-
-    this.logger.log(`Lançamento contábil resgate fatura: R$ ${valor} (${params.cooperativaId})`);
-    return lancamento;
-  }
-
-  /**
-   * 3b. Sprint D2 (16/06/2026) — Resgate em PIX (estabelecimento OU
-   * colaborador via saqueColaboradorAtivo). Fecha D-novo-RESGATE-PIX-
-   * SEM-CAIXA P1 (catalogado M40): hoje o webhook PAGO baixa saldo +
-   * ledger sem emitir LancamentoCaixa, deixando passivo permanentemente
-   * inflado.
+   * **RESGATE PIX** (estabelecimento/colaborador). Sprint D2.
+   *  - **D Passivo Tokens a Resgatar** (2.3.01) — baixa do passivo
    *
-   * D: Passivo Tokens a Resgatar (5.1.02) — baixa do passivo
-   * (LancamentoCaixa.tipo='DESPESA' = saída de caixa real, contraparte
-   *  implícita "C Caixa" do modelo canônico FUNDACAO §2.1.)
+   * SPREAD (face − líquido) é melt → **GATED** (`spread` opcional; quando
+   * vier > 0 + tenant com flag receitaMeltAtivada, cria 2 lançamentos:
+   * (a) D 2.3.01 valor líquido + (b) C 1.2.10 valor spread). Hoje taxa=0
+   * → spread=0 → 1 lançamento só. Ativação real exige parecer Walter.
    *
-   * NOTA TIPAGEM 5.1.02: hoje DESPESA (errada — deveria PASSIVO,
-   * catalogado D-novo-EMISSAO-ADMIN-CONTABIL P2). Forward-compatible:
-   * quando a sprint contábil corrigir o tipo, todos os lançamentos
-   * D 5.1.02 se acertam no balanço sem migration de dados.
-   *
-   * SPREAD: se cooperativa pagar abaixo do face (taxa>0), `valor` aqui é
-   * o líquido pago — o diff face×líquido seria C Receita de Resgate.
-   * Hoje taxa=0 por design (cooper-token.service:2086 rejeita taxa>0
-   * com erro genérico — bloqueado até D-novo-TAXA-RESGATE-DESTINO P2
-   * decidir destino contábil). Spread não implementado nesta sprint.
+   * Idempotência via `@@unique([origemTipo, origemId])` no schema.
    */
   async lancarResgatePix(
     params: LancamentoTokenParams & {
-      /**
-       * P1 reviewer financeiro (16/06): referenciaId/Tabela obrigatórios pra
-       * cron de reconciliação (D-novo-F6-RECONCILIACAO-CRON P2) saber se já
-       * lançou — sem isso, retry duplicaria LancamentoCaixa pro mesmo recibo.
-       */
       referenciaId: string;
       referenciaTabela: string;
+      /** Spread = face − líquido. Gated (default 0). */
+      spreadReais?: number;
     },
   ) {
-    // Reviewers (16/06): este método é CHAMADO INTENCIONALMENTE FORA DA
-    // TX SERIALIZABLE (Sprint D2 Bloco c — commit garantido de saldo+ledger
-    // mesmo se contábil falhar; PIX é irreversível). Usa this.prisma direto,
-    // SEM parâmetro tx enganoso que insinuasse tx-safety.
-    //
-    // P1 review Sprint C (financeiro + security + multitenant) 17/06:
-    // Idempotência ANTES era guard soft via `findFirst` + `descricao
-    // startsWith` — janela de race entre webhook replay (Asaas re-entrega
-    // até 3×) e cron `*/15` podia criar 2 LancamentoCaixa (read-then-act
-    // sem unicidade de banco). Fix definitivo: preencher `origemTipo='
-    // TOKEN_TRANSACAO' + origemId=referenciaId` e deixar o constraint
-    // `@@unique([origemTipo, origemId])` do schema garantir atomicidade.
-    // P2002 → idempotência hit (busca o existente e retorna).
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia ?? this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
     try {
       const lancamento = await this.prisma.lancamentoCaixa.create({
         data: {
@@ -231,10 +343,10 @@ export class TokenContabilService {
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.02'),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
-          // P1 idempotência via banco — substitui findFirst soft guard.
           origemTipo: 'TOKEN_TRANSACAO',
           origemId: params.referenciaId,
           observacoes:
@@ -243,13 +355,12 @@ export class TokenContabilService {
         },
       });
       this.logger.log(
-        `Lançamento contábil resgate PIX: R$ ${valor} ` +
+        `[token-contabil] RESGATE PIX: R$ ${valor} ` +
           `(coop=${params.cooperativaId.slice(0, 8)}… recibo=${params.referenciaId.slice(0, 8)}…)`,
       );
       return lancamento;
     } catch (err) {
-      // P2002 (unique constraint) → idempotência hit. Busca o existente
-      // pela mesma chave e retorna (caller espera receber o lançamento).
+      // P2002 idempotência hit.
       const isUniqueViolation =
         typeof err === 'object' &&
         err !== null &&
@@ -264,7 +375,7 @@ export class TokenContabilService {
         });
         if (existente) {
           this.logger.log(
-            `lancarResgatePix: idempotência hit via @@unique(origemTipo,origemId) — recibo ${params.referenciaId.slice(0, 8)}… LancamentoCaixa ${existente.id.slice(0, 8)}…, skip.`,
+            `lancarResgatePix: idempotência hit (recibo=${params.referenciaId.slice(0, 8)}…)`,
           );
           return existente;
         }
@@ -274,25 +385,30 @@ export class TokenContabilService {
   }
 
   /**
-   * 4. Expiração de tokens
-   * D: Passivo Tokens a Resgatar (5.1.02) — baixa
-   * C: Receita Tokens Expirados (1.2.02)
+   * **EXPIRAÇÃO** — quebra total (melt).
+   *  - **D Passivo Tokens a Resgatar** (2.3.01) — baixa
+   *  - **C Receita Tokens Expirados** (1.2.02) — RECEITA (CPC 47 item 56 breakage)
+   *
+   * Tributação por contraparte (PROPRIO isenta / NAO_COOPERATIVO tributável)
+   * pendente parecer Walter (spec §1.1).
    */
   async lancarExpiracao(params: LancamentoTokenParams) {
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia || this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
 
     const [baixaPassivo, receita] = await Promise.all([
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'DESPESA',
-          descricao: `[Token] Baixa Passivo Tokens (expiração) — ${params.descricao}`,
+          descricao: `[Token] D: Baixa Passivo (expiração) — ${params.descricao}`,
           valor,
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.02'),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: params.observacoes ?? 'Expiração de tokens (baixa passivo)',
@@ -301,12 +417,13 @@ export class TokenContabilService {
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'RECEITA',
-          descricao: `[Token] Receita Tokens Expirados — ${params.descricao}`,
+          descricao: `[Token] C: Receita Tokens Expirados — ${params.descricao}`,
           valor,
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('1.2.02'),
+          planoContasId: contas.get(CONTA_RECEITA_EXPIRADOS),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: params.observacoes ?? 'Receita de tokens expirados',
@@ -314,33 +431,21 @@ export class TokenContabilService {
       }),
     ]);
 
-    this.logger.log(`Lançamento contábil expiração: R$ ${valor} (${params.cooperativaId})`);
+    this.logger.log(`[token-contabil] EXPIRAÇÃO: R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`);
     return { baixaPassivo, receita };
   }
 
   /**
-   * 5. M39 (16/06/2026) — Emissão Admin em Lote (BONIFICACAO_ADMIN)
-   *
-   * Admin/SUPER_ADMIN/OPERADOR emite tokens novos no ecossistema da
-   * cooperativa pra N destinatários — cria passivo SEM entrada de caixa
-   * (bonificação concedida pela coop).
-   *
-   * D: Despesa de Bonificação CooperToken (5.1.03)  ← NOVA, aditiva
-   * C: Passivo Tokens a Resgatar (5.1.02)
-   *
-   * `referenciaTabela='EMISSAO_ADMIN_LOTE'` permite à sprint contábil
-   * dedicada localizar e reclassificar TODOS de uma vez quando a conta
-   * 5.1.02 for tipada corretamente (DESPESA → PASSIVO).
-   *
-   * Distinto:
-   *  - `lancarEmissaoFaturaCheia` (5.1.01) — desconto NÃO-aplicado.
-   *  - `lancarCompraParceiroPago` — F2 compra paga (D Caixa / C Receita).
-   *  - Bonificação admin não tem contrapartida de caixa nem receita.
+   * **EMISSÃO ADMIN EM LOTE** (M39 — BONIFICACAO_ADMIN).
+   * Admin emite tokens novos sem entrada de caixa.
+   *  - **D Despesa de Bonificação** (5.1.03)
+   *  - **C Passivo Tokens a Resgatar** (2.3.01)
    */
   async lancarEmissaoAdminLote(params: LancamentoTokenParams & { loteId: string }) {
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia || this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
 
     const [debito, credito] = await Promise.all([
       this.prisma.lancamentoCaixa.create({
@@ -351,7 +456,8 @@ export class TokenContabilService {
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.03'),
+          planoContasId: contas.get(CONTA_DESPESA_BONIFICACAO),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: `Emissão admin lote ${params.loteId} (BONIFICACAO_ADMIN)`,
@@ -359,13 +465,17 @@ export class TokenContabilService {
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
+          // Convenção pós-faxina: D=DESPESA, C=RECEITA (sinal contábil).
+          // C Passivo = aumento de passivo → tipo RECEITA por convenção
+          // (fix P1 financeiro-token: tipo iguais D+C distorciam relatórios).
           tipo: 'RECEITA',
           descricao: `[Token] C: Passivo Tokens a Resgatar — ${params.descricao}`,
           valor,
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.02'),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: `Emissão admin lote ${params.loteId} (passivo)`,
@@ -374,26 +484,20 @@ export class TokenContabilService {
     ]);
 
     this.logger.log(
-      `Lançamento contábil emissão admin lote=${params.loteId}: R$ ${valor} (${params.cooperativaId})`,
+      `[token-contabil] EMISSÃO ADMIN LOTE=${params.loteId}: R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`,
     );
     return { debito, credito };
   }
 
   /**
-   * 6. M39 (16/06/2026) — Estorno de Emissão Admin em Lote (ESTORNO_BONIFICACAO_ADMIN)
-   *
-   * Reversa o lançamento contábil da emissão original — espelha o par
-   * D/C invertido. NUNCA apaga o lançamento original (trilha auditável).
-   *
-   * D: Passivo Tokens a Resgatar (5.1.02)         ← baixa passivo
-   * C: Despesa de Bonificação CooperToken (5.1.03) ← reversão da despesa
-   *
-   * `referenciaTabela='ESTORNO_EMISSAO_ADMIN_LOTE'` pra rastreabilidade.
+   * **ESTORNO emissão admin** — reversão espelhada.
+   *  - **D Passivo** / **C Despesa Bonificação**
    */
   async lancarEstornoEmissaoAdminLote(params: LancamentoTokenParams & { loteId: string }) {
     const contas = await this.garantirContas(params.cooperativaId);
     const competencia = params.competencia || this.getCompetencia();
     const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
 
     const [baixaPassivo, reversaoDespesa] = await Promise.all([
       this.prisma.lancamentoCaixa.create({
@@ -404,7 +508,8 @@ export class TokenContabilService {
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.02'),
+          planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: `Estorno emissão admin lote ${params.loteId} (baixa passivo)`,
@@ -418,7 +523,8 @@ export class TokenContabilService {
           competencia,
           status: 'REALIZADO',
           dataPagamento: new Date(),
-          planoContasId: contas.get('5.1.03'),
+          planoContasId: contas.get(CONTA_DESPESA_BONIFICACAO),
+          naturezaAto,
           cooperadoId: params.cooperadoId,
           cooperativaId: params.cooperativaId,
           observacoes: `Estorno emissão admin lote ${params.loteId} (reversão despesa)`,
@@ -427,7 +533,7 @@ export class TokenContabilService {
     ]);
 
     this.logger.log(
-      `Lançamento contábil estorno admin lote=${params.loteId}: R$ ${valor} (${params.cooperativaId})`,
+      `[token-contabil] ESTORNO ADMIN LOTE=${params.loteId}: R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`,
     );
     return { baixaPassivo, reversaoDespesa };
   }
