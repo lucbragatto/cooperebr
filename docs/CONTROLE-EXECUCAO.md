@@ -75,6 +75,27 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-23 (Orquestrador — M52a Faxina Contábil Fases C-G: integridade + reconciliação v2 + painel passivo — merge na main; fechamento via git por 500 do Code)
+
+**Marco M52a entregue.** Integridade contábil do token (Fases G+D+C+E). Merge `83a507c` (feat `b57246a`).
+Branch `feature/faxina-contabil-fase-c-g` preservada. **Fechamento feito pelo ORQUESTRADOR via git** (Code
+teve API 500 persistente no passo de merge; a sprint inteira estava não-commitada — orquestrador landou pra
+não perder). Código 100% re-revisado + 4 reviewers aprovaram antes do merge.
+- **Reconciliação (saga):** o "furo de ~730" era 95% falso-positivo de bug de cálculo (comparava contra
+  saldoDisponivel, ignorando pendente/bloqueado). v1 CORROMPIDA (aplicou DEBITOs errados em AGOSTINHO+LEONARDO
+  que estavam CERTOS) → REVERTIDA (orquestrador verificou: 0 RECONCILIACAO no banco) → 3 bugs corrigidos
+  (total-balance + switch exaustivo sem else cego + perna C Passivo vira MUTACAO_PASSIVO, fora da DRE) → v2
+  CORRETA aplicada (só LUCIANO +49 + AMAGES +210; orquestrador derivou de 1os princípios e bateu 100%).
+  Invariante ledger↔saldo = 0.
+- **Entregas:** G atomicidade ($transaction nos pares D+C); D reconciliação + cron diário + trigger admin;
+  C classificação ato-cooperativo (Próprio/Auxiliar) no contábil + SOCIAL guard; E painel Passivo & Forecast;
+  fix estrutural quantidade>0.
+- **Próximo = M52b** (Bloco F melt) + follow-ups (Art 79/88→Walter, soft-delete, D-novo-FAXINA-CONTABIL-LEDGER-
+  ALIGN, N+1 cron). Detalhe: `docs/sessoes/2026-06-23-m52a-faxina-contabil-c-g.md`.
+- ⚠️ Code voltando da 500: M52a JÁ está mergeado (`83a507c`) — NÃO re-aplicar; só `pm2 list` + sanity.
+
+---
+
 ## ONDE PARAMOS — 2026-06-23 (Code — M51 Sprint Hardening Lateral: anti tenant-spoof + IDOR autenticados + ATESTADO @Public 40/40 — smoke E2E real + merge na main)
 
 **Sessão Code dedicada — M51 entregue ponta-a-ponta com smoke E2E REAL
@@ -3736,14 +3757,25 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **HARDENING LATERAL FECHADO** — TÚNEL PRONTO PRA ABRIR CADASTRO PÚBLICO.
+🟢 **M52a FAXINA CONTÁBIL C-G FECHADO** (integridade + reconciliação v2 + painel
+passivo). Merge `83a507c` — JÁ NA MAIN, NÃO RE-APLICAR. Invariante ledger↔saldo=0.
 
-Atestado @Public 40/40 endpoints classificados, **0 PRECISA-FIX**.
-Auth (7) + read-only (5) + token-based (14) + webhook-assinado (5) +
-cadastro-fechado-M45 (2) + fixado-M51 (2) + safe-sem-cooperativaId (5).
+Convênio cooperativizado COMPLETO (M44+M46+M47+M48+M49) + Faxina A/B (M50) +
+Hardening Lateral (M51, túnel tenant-safe) + Faxina C-G integridade (M52a). ✅
 
-Convênio cooperativizado FUNCIONALMENTE COMPLETO (M44+M46+M47+M48+M49) +
-Faxina Contábil Fase A/B (M50) + Hardening Lateral (M51). ✅
+⚠️ CORREÇÃO da frase do M51: o "TÚNEL PRONTO" cobre SÓ o tenant-spoof. As **3 PORTAS
+DE CONFIG** seguem ABERTAS e são o ÚNICO bloqueador de exposição: (1) `AMBIENTE_REAL=true`
+(desliga impersonate — verificado 23/06 que NÃO está setado → impersonate ATIVO); (2)
+`SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. São ações de CONFIG do
+Luciano, não sprint. NÃO subir túnel antes.
+
+PRÓXIMO = **ESCOLHA DO ORQUESTRADOR/LUCIANO** entre:
+- **M52b** = Bloco F (melt: oxidação→quebra + QR→taxa + resgate→spread) + follow-ups
+  (Art 79/88 default→Walter, soft-delete contábil, D-novo-FAXINA-CONTABIL-LEDGER-ALIGN,
+  N+1 cron). Melt CONSTRÓI + fica pronto; taxa é config que o Luciano liga (contábil
+  favorável per Luciano 23/06; parecer Walter vai em docs/conformidade/).
+- **As 3 portas de config** (pra efetivamente abrir o cadastro público / onboarding Santi).
+- **Vitrines do funil** (Camadas 2/3 — desbloqueadas pelo M51).
 
 PRÓXIMO = **ESCOLHA DO ORQUESTRADOR** entre:
 
