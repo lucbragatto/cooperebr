@@ -1,5 +1,6 @@
 /// <reference types="multer" />
-import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFile, UseInterceptors, ForbiddenException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Req, Query, UploadedFile, UseInterceptors, ForbiddenException, BadRequestException, ConflictException, NotFoundException, Logger } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CooperadosService } from './cooperados.service';
 import { Roles } from '../auth/roles.decorator';
@@ -19,6 +20,8 @@ import { MotorPropostaService } from '../motor-proposta/motor-proposta.service';
 import { MigracaoExternaService } from '../migracoes-usina/migracao-externa.service';
 // Sprint Funil M48 (22/06/2026) — Camada 1 Motor Roteador A/B/C (advisory).
 import { RoteamentoCadastroService } from '../roteamento-cadastro/roteamento-cadastro.service';
+// Sprint Hardening Lateral (23/06/2026) — guard helper canônico.
+import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO, AGREGADOR } = PerfilUsuario;
 
@@ -59,20 +62,56 @@ export class CooperadosController {
 
   // ─── Cadastro por Proxy (rotas públicas) ────────────────────────────────────
 
+  // Sprint Hardening Lateral (23/06/2026) — fix
+  // D-novo-PRE-CADASTRO-PROXY-PUBLIC-TENANT-SPOOF P1 (4ª ocorrência do
+  // padrão M45 — descoberto na varredura @Public da sprint):
+  //
+  //  - `cooperativaId` NUNCA vem do body (descartado).
+  //  - `?tenant=<id>` é obrigatório aqui: pre-cadastro proxy é vinculado a
+  //    UM indicador (cooperado existente da cooperativa). Sem tenant, não
+  //    sabemos onde criar. `findUnique({id, ativo:true})` valida.
+  //  - 404 em tenant inexistente/inativo (anti-enumeração).
+  //
+  // Fix P2 security 23/06: @Throttle 10/min — antes só herdava global 100/min.
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('pre-cadastro-proxy')
-  preCadastroProxy(@Body() body: {
-    nomeCompleto: string;
-    telefone: string;
-    numeroUC?: string;
-    distribuidora?: string;
-    cidade?: string;
-    estado?: string;
-    economiaEstimada?: number;
-    indicadorId: string;
-    cooperativaId: string;
-  }) {
-    return this.cooperadosService.preCadastroProxy(body);
+  async preCadastroProxy(
+    @Body() body: {
+      nomeCompleto: string;
+      telefone: string;
+      numeroUC?: string;
+      distribuidora?: string;
+      cidade?: string;
+      estado?: string;
+      economiaEstimada?: number;
+      indicadorId: string;
+      // Aceito no shape pra compat, sempre DESCARTADO (Hardening Lateral 23/06).
+      cooperativaId?: string;
+    },
+    @Query('tenant') tenantParam?: string,
+  ) {
+    const {
+      cooperativaId: _ignored,
+      ...safeBody
+    } = body;
+
+    if (!tenantParam) {
+      throw new BadRequestException(
+        'Query param ?tenant=<cooperativaId> é obrigatório (pré-cadastro proxy precisa do tenant alvo).',
+      );
+    }
+    const coop = await this.prisma.cooperativa.findUnique({
+      where: { id: tenantParam },
+      select: { id: true, ativo: true },
+    });
+    if (!coop || !coop.ativo) {
+      throw new NotFoundException('Cooperativa não encontrada ou inativa.');
+    }
+    return this.cooperadosService.preCadastroProxy({
+      ...safeBody,
+      cooperativaId: coop.id,
+    });
   }
 
   @Public()
@@ -191,11 +230,38 @@ export class CooperadosController {
     });
   }
 
+  // Sprint Hardening Lateral (23/06/2026) — fix
+  // D-novo-CADASTRO-COMPLETO-TENANT-SPOOF P1.
+  //
+  // Comportamento ANTES (vulnerável): `dto.cooperativaId || cooperativaIdJwt`
+  // permitia ADMIN passar `dto.cooperativaId=OUTRO_TENANT` e o `||` IGNORAVA
+  // a checagem (jwt vence só quando dto vazio).
+  //
+  // Agora: `assertSameTenantOrSuperAdmin(req.user, alvo)` é chamado quando
+  // `dto.cooperativaId` é passado. SA passa livre; ADMIN só passa o próprio.
+  // Quando dto vazio, usa o JWT. SA sem JWT cooperativaId + sem dto → 400.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
-  @AuditLog({ acao: 'cooperado.cadastro-completo', recurso: 'Cooperado' })
+  @AuditLog({ acao: 'cooperado.cadastro-completo', recurso: 'Cooperado', cooperativaIdSource: 'body:cooperativaId' })
   @Post('cadastro-completo')
   cadastroCompleto(@Body() body: CadastroCompletoDto, @Req() req: any) {
-    return this.cooperadosService.cadastroCompleto(body, req.user?.cooperativaId);
+    const cooperativaIdJwt: string | undefined = req.user?.cooperativaId;
+    const cooperativaIdAlvo = body.cooperativaId ?? cooperativaIdJwt;
+    if (!cooperativaIdAlvo) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório (no JWT ou no body — SA precisa passar via body).',
+      );
+    }
+    // Fix P2 security 23/06 — OPERADOR ∈ @Roles também passa body cooperativaId
+    // (era inconsistente: guard bloqueava OPERADOR mesmo na própria coop).
+    // Só chamamos assert quando body.cooperativaId DIVERGE do JWT — caso
+    // mesmo tenant, qualquer perfil autorizado pode passar. SA sem JWT
+    // sempre pode passar (já é o caso esperado).
+    if (body.cooperativaId && body.cooperativaId !== cooperativaIdJwt) {
+      // assertSameTenantOrSuperAdmin: SA livre; ADMIN só própria (bloqueado se
+      // diferente do JWT — barra spoof); OPERADOR/COOPERADO/AGREGADOR bloqueados.
+      assertSameTenantOrSuperAdmin(req.user, body.cooperativaId);
+    }
+    return this.cooperadosService.cadastroCompleto(body, cooperativaIdAlvo);
   }
 
   // ─── Migração externa (concorrente → SISGD) — Sprint M47 (21/06/2026) ────
@@ -360,10 +426,23 @@ export class CooperadosController {
     const consumo = dadosOcr.consumoAtualKwh ?? ultimo?.consumoKwh ?? 0;
     const valor = dadosOcr.totalAPagar ?? ultimo?.valorRS ?? 0;
 
-    const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+    // Fix P2 multitenant 23/06 — fallback plano por tenant do cooperado +
+    // globais. Antes: findFirst({ativo: true}) sem cooperativaId — qualquer
+    // tenant podia retornar primeiro.
+    const primPlano = await this.prisma.plano.findFirst({
+      where: {
+        ativo: true,
+        OR: [
+          { cooperativaId: cooperado.cooperativaId },
+          { cooperativaId: null },
+        ],
+      },
+    });
     const planoIdResolvido = planoId || primPlano?.id || '';
 
-    // 4. Validar motor ANTES de criar UC (evita UC órfã)
+    // 4. Validar motor ANTES de criar UC (evita UC órfã).
+    // Fix P2 multitenant 23/06 — passa cooperado.cooperativaId pra service
+    // filtrar plano (antes COOPERADO podia spoofar planoId de outro tenant).
     const resultado = await this.motorProposta.calcular({
       cooperadoId: cooperado.id,
       planoId: planoIdResolvido,
@@ -377,7 +456,7 @@ export class CooperadosController {
       kwhMesRecente: consumo,
       valorMesRecente: valor,
       mesReferencia: ultimo?.mesAno ?? new Date().toISOString().slice(0, 7),
-    });
+    }, cooperado.cooperativaId ?? undefined);
 
     const outlierDetectado = resultado.outlierDetectado && !!resultado.aguardandoEscolha;
     let simulacao: Record<string, unknown> | null = null;
@@ -484,7 +563,17 @@ export class CooperadosController {
       }
     }
 
-    const primPlano = await this.prisma.plano.findFirst({ where: { ativo: true } });
+    // Fix P2 multitenant 23/06 — fallback plano filtrado por tenant do
+    // cooperado + globais (igual ao novaUcComFatura).
+    const primPlano = await this.prisma.plano.findFirst({
+      where: {
+        ativo: true,
+        OR: [
+          { cooperativaId: cooperado.cooperativaId },
+          { cooperativaId: null },
+        ],
+      },
+    });
     const planoId = body.planoId || primPlano?.id || '';
 
     const resultado = await this.motorProposta.calcular({
@@ -494,7 +583,7 @@ export class CooperadosController {
       kwhMesRecente: consumo,
       valorMesRecente: valor,
       mesReferencia: mesRef,
-    });
+    }, cooperado.cooperativaId ?? undefined);
 
     if (!resultado.resultado) {
       throw new BadRequestException('Não foi possível calcular a proposta. Verifique se a tarifa da distribuidora está cadastrada.');

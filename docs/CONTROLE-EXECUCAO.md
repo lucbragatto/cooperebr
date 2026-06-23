@@ -75,6 +75,81 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-23 (Code — M51 Sprint Hardening Lateral: anti tenant-spoof + IDOR autenticados + ATESTADO @Public 40/40 — smoke E2E real + merge na main)
+
+**Sessão Code dedicada — M51 entregue ponta-a-ponta com smoke E2E REAL
+8/8 verde + ATESTADO @Public completo (40 endpoints, 0 PRECISA-FIX).**
+🟢 **TÚNEL PRONTO PRA ABRIR CADASTRO PÚBLICO** + Camada 3 + 2º parceiro real.
+
+**RESOLVIDO** (8 débitos):
+- LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF P1 (3ª ocorrência M45)
+- PRE-CADASTRO-PROXY-PUBLIC-TENANT-SPOOF P1 (4ª, descoberto pela varredura)
+- CADASTRO-COMPLETO-TENANT-SPOOF P1 (M45 lateral)
+- MOTOR-PROPOSTA-PLANO-CROSS-TENANT P1 (M45 lateral)
+- AUDITLOG-TENANT-ALVO-SA P1 (M45 lateral)
+- HARDENING-CONTROLLERS-LATERAIS P1 asaas (M45 lateral)
+- CONVENIO-UPDATE-SEM-COOPID P2 (M46)
+- CONVENIO-LISTAR-MEMBROS-SEM-COOPID P2 (M46)
+
+**ENTREGAS (7 blocos A → G):**
+- **0 Varredura @Public**: descobriu 4ª ocorrência M45 em pre-cadastro-proxy
+- **A** lead-expansao + pre-cadastro-proxy: padrão M45 (?tenant= validado + body DESCARTADO + 404 anti-enumeração + Throttle 10/min)
+- **B** cadastroCompleto + motor-proposta: assertSameTenantOrSuperAdmin + plano findFirst com cooperativaId
+- **C** AUDITLOG: cooperativaIdSource decorator + função pura resolveCooperativaIdAlvoAudit
+- **D** asaas: assertSameTenantOrSuperAdmin explícito + null guard testarConexao
+- **E** convênio update + listarMembros + remove: DiD com cooperativaIdJwt
+- **F** specs + smoke + reviewers
+- **G** fixes pós-reviewers (10 aplicados)
+
+**REVIEWERS (3 paralelos + re-review)**:
+- multitenant-reviewer: APROVADO com 4 P2 + 1 P3
+- security-reviewer: WARNING → APROVADO (6 fixes)
+- code-reviewer: WARNING → APROVADO (5 fixes)
+- **Re-review orquestrador**: APROVADO com 2 CONDIÇÕES extras aplicadas:
+  - **C1**: F2 indicadorId service-side validation (fechou agora, não follow-up)
+  - **C2**: ATESTADO @Public completo (40/40 classificados, 0 PRECISA-FIX)
+
+**ATESTADO @PUBLIC (Condição 2):**
+| Categoria | Qtde |
+|---|---|
+| auth-sem-write-tenant | 7 |
+| read-only | 5 |
+| token-based (single-use) | 14 |
+| webhook-assinado | 5 |
+| cadastro-fechado-M45 (anteriores) | 2 |
+| **fixado-nesta-sprint** | **2** |
+| safe (sem cooperativaId no schema) | 5 |
+| 🔴 PRECISA-FIX | **0** |
+
+**🔴 DÉBITOS NOVOS catalogados (5):**
+- `D-novo-AUDITLOG-FAILURE-PATH` P2 (interceptor tap só dispara em sucesso)
+- `D-novo-AUDIT-CooperativaIdSource-TYPE-STRENGTHENING` P3 (template literal)
+- `D-novo-CUID-FORMAT-VALIDATION-PUBLIC` P3 (defense-in-depth)
+- `D-novo-CONVENIO-REMOVE-TOCTOU` P3 (transaction wrap)
+- `D-novo-AUDITLOG-50-ENDPOINTS-RETROATIVO` P3 (cooperativaIdSource retroativo)
+
+**Verificação:**
+- Specs novas (3 suites): 24/24 ✅
+- Regressão (11 suites M50/M49/F4/D2/etc): 120/120 ✅
+- Total 123/123 ✅; 0 erros TS novos
+- **Smoke E2E REAL 8/8**: 4 lead-expansao + 4 pre-cadastro-proxy (inclui novo caso F2: indicadorId cross-tenant → 404). Cleanup OK.
+
+**Commits M51:** `<feat-sha>` (feat) + `<docs-sha>` (docs) + merge `--no-ff`
+(preserva `feature/hardening-lateral`). Zero regressão.
+
+**Próximo bloco — escolha do orquestrador:**
+
+(A) Camadas 2/3 do Funil (vitrines parceiro + SISGD marketplace) — desbloqueadas
+(B) Sprint FAXINA Fases C-G (melt/painel/reconciliação — gated Walter)
+(C) Onboarding 2º parceiro real (Santi etc)
+(D) Sprint Pipeline OCR + Concierge (hook classificacaoScee M48 deferido)
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE
+RETOMADA — próxima sessão Code` no fim deste documento.
+Detalhe: `docs/sessoes/2026-06-23-m51-sprint-hardening-lateral.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-22 (Code — M50 Sprint Faxina Contábil do Token Fase A/B: modelo voucher + ato cooperativo — smoke E2E real + merge na main)
 
 **Sessão Code dedicada — M50 entregue ponta-a-ponta com smoke E2E REAL
@@ -3661,27 +3736,20 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase COMANDANTE:
 
-**FAXINA CONTÁBIL DO TOKEN — Fase A/B FECHADA** (risco fiscal IMEDIATO
-neutralizado). Token = VOUCHER de circuito fechado (CPC 47) emitido por
-COOPERATIVA + ato cooperativo Lei 5.764/71 Art. 79 § único (ISENTO).
-`Receita Venda Tokens 1.2.01` APOSENTADA; ingresso pago vira **D Caixa /
-C Passivo Tokens a Resgatar 2.3.01**. Validado pelo
-`cooperebr-analista-conformidade`.
+🟢 **HARDENING LATERAL FECHADO** — TÚNEL PRONTO PRA ABRIR CADASTRO PÚBLICO.
+
+Atestado @Public 40/40 endpoints classificados, **0 PRECISA-FIX**.
+Auth (7) + read-only (5) + token-based (14) + webhook-assinado (5) +
+cadastro-fechado-M45 (2) + fixado-M51 (2) + safe-sem-cooperativaId (5).
 
 Convênio cooperativizado FUNCIONALMENTE COMPLETO (M44+M46+M47+M48+M49) +
-**M50 faxina contábil ✅ FECHADA NESTA SESSÃO**.
+Faxina Contábil Fase A/B (M50) + Hardening Lateral (M51). ✅
 
 PRÓXIMO = **ESCOLHA DO ORQUESTRADOR** entre:
 
-**(A) Sprint HARDENING LATERAL (~10-14h)** — pré-requisito da Camada 3
-do funil (vitrine pública) E de escalar pro 2º parceiro real. Fecha:
-- 4 P1 lateral M45 (CADASTRO-COMPLETO + MOTOR-PROPOSTA-PLANO +
-  AUDITLOG-TENANT-ALVO-SA + HARDENING-CONTROLLERS-LATERAIS).
-- 2 P2 M46 (CONVENIO-UPDATE-SEM-COOPID + LISTAR-MEMBROS-SEM-COOPID).
-- 2 P2 M47 (DESLIGADO-SALDO-RESIDUAL + MSG-MULTI-TENANT-PARCEIRO).
-- **1 P1 M48** LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF (3ª ocorrência do
-  spoof anônimo M45).
-- IDORs do inventário M48.
+**(A) Camadas 2/3 do Funil — vitrines parceiro + SISGD marketplace**
+(BLOQUEADAS estavam pelo Hardening Lateral; agora desbloqueadas pelo M51).
+Spec do orquestrador necessária. Camada 1 (motor advisory M48) já roteia.
 
 **(B) Sprint FAXINA FASES C-G (~12-18h)** — melt/painel/reconciliação:
 - C: ligar `Convenio.naturezaAtoCooperativo` ao `LancamentoCaixa.naturezaAto`

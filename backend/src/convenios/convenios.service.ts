@@ -304,8 +304,14 @@ export class ConveniosService {
     return convenio;
   }
 
-  async update(id: string, dto: UpdateConvenioDto) {
-    const convenio = await this.findOne(id);
+  async update(id: string, dto: UpdateConvenioDto, cooperativaIdJwt?: string) {
+    // Sprint Hardening Lateral (23/06/2026) — fix
+    // D-novo-CONVENIO-UPDATE-SEM-COOPID P2 (defense-in-depth). Antes:
+    // findOne(id) sem cooperativaId — pre-check do controller protege ADMIN
+    // cross-tenant, mas o service ficava vulnerável a chamadores futuros.
+    // Agora aceita cooperativaIdJwt opcional (controller passa); findOne()
+    // interno usa pra reaffirmar isolamento.
+    const convenio = await this.findOne(id, cooperativaIdJwt);
 
     if (dto.configBeneficio?.faixas) {
       this.validarFaixas(dto.configBeneficio.faixas);
@@ -422,8 +428,10 @@ export class ConveniosService {
     return updated;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, cooperativaIdJwt?: string) {
+    // Hardening Lateral 23/06 — fix P2 multitenant + security reviewers
+    // (asymmetric com update que foi hardened). DiD: findOne com cooperativaId.
+    await this.findOne(id, cooperativaIdJwt);
     await this.prisma.convenioCooperado.updateMany({
       where: { convenioId: id, ativo: true },
       data: {

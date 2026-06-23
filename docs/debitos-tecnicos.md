@@ -6257,6 +6257,49 @@ Cada parceiro novo precisa cadastrar seus aliases. Hoje só seed (CoopereBR). On
 
 ---
 
+## Débitos catalogados Sprint Hardening Lateral (M51 — 23/06/2026)
+
+### ✅ DÉBITOS RESOLVIDOS nesta sprint
+
+| Débito | Como resolvido |
+|---|---|
+| `D-novo-LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF` P1 | Padrão M45 — body.cooperativaId DESCARTADO; ?tenant= opcional validado |
+| `D-novo-PRE-CADASTRO-PROXY-PUBLIC-TENANT-SPOOF` P1 (descoberto pela varredura, 4ª ocorrência M45) | Padrão M45 + ?tenant= obrigatório + indicadorId service-side validation (Condição 1 re-review) |
+| `D-novo-CADASTRO-COMPLETO-TENANT-SPOOF` P1 (M45) | assertSameTenantOrSuperAdmin + cooperativaIdAlvo no service |
+| `D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT` P1 (M45) | findFirst({id, ativo, OR: [{cooperativaId}, {null}]}) nas 3 buscas + filter na média cobrança |
+| `D-novo-AUDITLOG-TENANT-ALVO-SA` P1 (M45) | Decorator cooperativaIdSource + função pura resolveCooperativaIdAlvoAudit |
+| `D-novo-HARDENING-CONTROLLERS-LATERAIS` P1 (M45, asaas) | assertSameTenantOrSuperAdmin nos 3 endpoints + null guard testarConexao |
+| `D-novo-CONVENIO-UPDATE-SEM-COOPID` P2 (M46) | DiD findOne(id, jwt) interno + remove() simetricamente |
+| `D-novo-CONVENIO-LISTAR-MEMBROS-SEM-COOPID` P2 (M46) | DiD filter convenio.cooperativaId no findMany |
+
+### Atestado @Public (Condição 2 re-review orquestrador)
+
+40 endpoints @Public em 10 controllers (auth:7 / publico:15 / motor-proposta:5 / cooperados:3 / whatsapp-fatura:3 / integracao-bancaria:2 / proprietario:2 / asaas:1 / lead-expansao:1 / planos:1) — **TODOS classificados como tenant-safe. 0 🔴 PRECISA-FIX**. Túnel pronto pra abertura Camada 3 + 2º parceiro real.
+
+### Débitos novos M51 (follow-up, não bloqueiam)
+
+#### D-novo-AUDITLOG-FAILURE-PATH — interceptor não loga em handler que falha (P2)
+
+`audit-log.interceptor.ts` usa `tap()` que SÓ dispara em next bem-sucedido. SA fazendo write cross-tenant que lança exception → ZERO trail no AuditLog. Não é anônimo (gated por JWT SA), então não bloqueia onboarding 2º parceiro. **Fix**: usar `tap({next, error})` com handler de erro que loga `acao + cooperativaId + error.message`. **Status:** ABERTO. **Fecha em:** sprint follow-up "AuditLog Failure Path".
+
+#### D-novo-AUDIT-CooperativaIdSource-TYPE-STRENGTHENING — tipo string fraco no decorator (P3)
+
+`cooperativaIdSource?: string` permite valores malformados (`'malformado'` sem `:`). Função pura retorna null nesse caso (não quebra), mas catcharia ao compile-time com template literal type: `\`param:${string}\` | \`body:${string}\` | \`query:${string}\` | \`response:${string}\``. Cosmético. **Status:** ABERTO.
+
+#### D-novo-CUID-FORMAT-VALIDATION-PUBLIC — tenantParam chega ao Prisma sem format guard (P3)
+
+`?tenant=<id>` nos @Public lead-expansao/pre-cadastro-proxy chega ao Prisma sem validação `/^c[a-z0-9]{24}$/` antes do `findUnique`. Defense-in-depth; Prisma já parametriza com segurança. **Fix opcional**: throw BadRequest se formato inválido (evita DB round-trip pra garbage). **Status:** ABERTO.
+
+#### D-novo-CONVENIO-REMOVE-TOCTOU — race entre findOne e 2 updates (P3)
+
+`convenios.service.ts:remove` faz `findOne` + `updateMany` (membros) + `update` (convênio) em operações não-atômicas. Low-prob sem connection pool externo; relevante se forem paralelizadas. **Fix**: envolver em `$transaction`. **Status:** ABERTO.
+
+#### D-novo-AUDITLOG-50-ENDPOINTS-RETROATIVO — aplicar cooperativaIdSource retroativo (P3)
+
+50+ endpoints com `@AuditLog` existente NÃO recebem o novo `cooperativaIdSource`. Auditoria SA cross-tenant fica null nesses. Catalogado pelo orquestrador como follow-up (não retroativo nesta sprint). **Status:** ABERTO. **Escopo**: passada catalográfica para identificar quais endpoints SA opera cross-tenant.
+
+---
+
 ## Débitos catalogados Sprint Faxina Contábil do Token (M50 — 22/06/2026)
 
 ### ✅ DÉBITOS RESOLVIDOS nesta sprint

@@ -491,7 +491,15 @@ export class CooperadosService {
    * Cadastro completo atômico: cooperado + UC + contrato (ou lista de espera)
    * em uma única transação Prisma. Rollback automático se qualquer etapa falhar.
    */
-  async cadastroCompleto(dto: CadastroCompletoDto, cooperativaId?: string) {
+  async cadastroCompleto(dto: CadastroCompletoDto, cooperativaIdAlvo: string) {
+    // Sprint Hardening Lateral (23/06/2026) — fix
+    // D-novo-CADASTRO-COMPLETO-TENANT-SPOOF P1.
+    //
+    // Antes: `dto.cooperativaId || cooperativaId` (jwt) — ADMIN podia spoofar
+    // passando outro tenant. Agora o controller resolve via
+    // `assertSameTenantOrSuperAdmin` e passa SÓ o tenant alvo validado.
+    // `dto.cooperativaId` no DTO é IGNORADO no service (validação está no
+    // controller); todos os FK usam `cooperativaIdAlvo`.
     const SERIALIZABLE_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -508,7 +516,7 @@ export class CooperadosService {
           representanteLegalNome: dto.representanteLegalNome,
           representanteLegalCpf: dto.representanteLegalCpf,
           representanteLegalCargo: dto.representanteLegalCargo,
-          cooperativaId: dto.cooperativaId || cooperativaId,
+          cooperativaId: cooperativaIdAlvo,
           preferenciaCobranca: dto.preferenciaCobranca,
           cotaKwhMensal: dto.cotaKwhMensal ?? undefined,
         },
@@ -530,7 +538,7 @@ export class CooperadosService {
             classificacao: dto.uc.classificacao,
             codigoMedidor: dto.uc.codigoMedidor,
             cooperadoId: cooperado.id,
-            cooperativaId: dto.cooperativaId || cooperativaId,
+            cooperativaId: cooperativaIdAlvo,
           },
         });
       }
@@ -544,7 +552,7 @@ export class CooperadosService {
         // D-48.3: isolamento multi-tenant — usina deve ser da mesma cooperativa.
         if (usinaId) {
           const usina = await tx.usina.findUnique({
-            where: { id: usinaId, cooperativaId: dto.cooperativaId ?? cooperativaId },
+            where: { id: usinaId, cooperativaId: cooperativaIdAlvo },
             select: { distribuidora: true },
           });
           if (uc.distribuidora && usina?.distribuidora) {
@@ -573,7 +581,7 @@ export class CooperadosService {
         let percentualUsina: number | undefined;
         if (usinaId && anual) {
           const usina = await tx.usina.findUnique({
-            where: { id: usinaId, cooperativaId: dto.cooperativaId ?? cooperativaId },
+            where: { id: usinaId, cooperativaId: cooperativaIdAlvo },
           });
           if (usina?.capacidadeKwh && Number(usina.capacidadeKwh) > 0) {
             const capacidadeAnual = Number(usina.capacidadeKwh);
@@ -669,7 +677,7 @@ export class CooperadosService {
             kwhContratoAnual: anual,
             kwhContratoMensal: mensal,
             percentualUsina,
-            cooperativaId: dto.cooperativaId || cooperativaId,
+            cooperativaId: cooperativaIdAlvo,
             ...(tarifaContratualSnap !== null ? { tarifaContratual: tarifaContratualSnap } : {}),
             ...(valorContratoSnap !== null ? { valorContrato: valorContratoSnap } : {}),
             ...(baseCalculoSnap ? { baseCalculoAplicado: baseCalculoSnap } : {}),
@@ -684,7 +692,7 @@ export class CooperadosService {
       let listaEspera: any = null;
       if (dto.listaEspera && !dto.contrato) {
         const posicaoAtual = await tx.listaEspera.count({
-          where: { status: 'AGUARDANDO', ...(cooperativaId ? { cooperativaId } : {}) },
+          where: { status: 'AGUARDANDO', cooperativaId: cooperativaIdAlvo },
         });
         listaEspera = await tx.listaEspera.create({
           data: {
@@ -692,7 +700,7 @@ export class CooperadosService {
             kwhNecessario: dto.cotaKwhMensal ?? 0,
             posicao: posicaoAtual + 1,
             status: 'AGUARDANDO',
-            cooperativaId: cooperativaId || dto.cooperativaId,
+            cooperativaId: cooperativaIdAlvo,
           },
         });
       }
@@ -1653,6 +1661,20 @@ export class CooperadosService {
     indicadorId: string;
     cooperativaId: string;
   }) {
+    // Sprint Hardening Lateral (23/06/2026) — Condição 1 do re-review.
+    // Endpoint é @Public (anônimo). cooperativaId já está protegido pelo
+    // ?tenant= do controller (M45). Mas indicadorId poderia referenciar
+    // cooperado de OUTRO tenant. Validamos service-side que o indicador
+    // pertence ao mesmo tenant resolvido. NotFound (anti-enumeração — não
+    // diferenciar "não existe" de "outro tenant").
+    const indicador = await this.prisma.cooperado.findFirst({
+      where: { id: data.indicadorId, cooperativaId: data.cooperativaId },
+      select: { id: true },
+    });
+    if (!indicador) {
+      throw new NotFoundException('Indicador não encontrado neste tenant.');
+    }
+
     const cooperado = await this.prisma.cooperado.create({
       data: {
         nomeCompleto: data.nomeCompleto,

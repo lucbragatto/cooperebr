@@ -17,6 +17,8 @@ import { TenantResource } from '../auth/tenant-resource.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { AuditLog } from '../audit/audit-log.decorator';
+// Sprint Hardening Lateral (23/06/2026) — guard explicit no body.cooperativaId.
+import { assertSameTenantOrSuperAdmin } from '../auth/tenant-guard.helper';
 
 const { SUPER_ADMIN, ADMIN } = PerfilUsuario;
 
@@ -27,16 +29,24 @@ export class AsaasController {
   // ─── Config ──────────────────────────────────────────────
 
   @Roles(SUPER_ADMIN, ADMIN)
-  @AuditLog({ acao: 'asaas.config.salvar', recurso: 'AsaasConfig' })
+  @AuditLog({ acao: 'asaas.config.salvar', recurso: 'AsaasConfig', cooperativaIdSource: 'body:cooperativaId' })
   @Post('config')
   salvarConfig(
     @Req() req: any,
     @Body() body: { apiKey: string; ambiente: string; webhookToken?: string; cooperativaId?: string },
   ) {
-    // SUPER_ADMIN não tem cooperativaId no JWT — aceita do body
-    const cooperativaId = req.user?.cooperativaId || body.cooperativaId;
+    // Sprint Hardening Lateral (23/06/2026) — fix
+    // D-novo-HARDENING-CONTROLLERS-LATERAIS P1. Antes: `req.user?.cooperativaId ||
+    // body.cooperativaId` silenciava body quando JWT tinha — ADMIN não conseguia
+    // spoofar mas tampouco era barrado explicitamente. Agora `assertSameTenantOrSuperAdmin`
+    // valida quando body veio (SA livre; ADMIN só própria).
+    const cooperativaIdJwt = req.user?.cooperativaId;
+    const cooperativaId = body.cooperativaId ?? cooperativaIdJwt;
     if (!cooperativaId) {
       throw new BadRequestException('Cooperativa não identificada. SUPER_ADMIN: envie cooperativaId no body.');
+    }
+    if (body.cooperativaId) {
+      assertSameTenantOrSuperAdmin(req.user, body.cooperativaId);
     }
     return this.asaasService.salvarConfig(cooperativaId, body);
   }
@@ -44,9 +54,12 @@ export class AsaasController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('config')
   async getConfig(@Req() req: any, @Query('cooperativaId') queryCoopId?: string) {
-    // SUPER_ADMIN não tem cooperativaId no JWT — aceita da query
-    const cooperativaId = req.user?.cooperativaId || queryCoopId;
+    const cooperativaIdJwt = req.user?.cooperativaId;
+    const cooperativaId = queryCoopId ?? cooperativaIdJwt;
     if (!cooperativaId) return null;
+    if (queryCoopId) {
+      assertSameTenantOrSuperAdmin(req.user, queryCoopId);
+    }
     const config = await this.asaasService.getConfigMasked(cooperativaId);
     if (!config) return null;
     return { ...config, apiKeyDefinida: !!config.apiKey };
@@ -55,7 +68,19 @@ export class AsaasController {
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('testar-conexao')
   testarConexao(@Req() req: any, @Query('cooperativaId') queryCoopId?: string) {
-    const cooperativaId = req.user?.cooperativaId || queryCoopId;
+    const cooperativaIdJwt = req.user?.cooperativaId;
+    const cooperativaId = queryCoopId ?? cooperativaIdJwt;
+    // Fix P1 reviewer 23/06: sem cooperativaId, Prisma findFirst(undefined)
+    // ignoraria o filtro e retornaria qualquer AsaasConfig — SA sem
+    // ?cooperativaId= testaria conexão cross-tenant inadvertido.
+    if (!cooperativaId) {
+      throw new BadRequestException(
+        'cooperativaId obrigatório (no JWT do ADMIN ou ?cooperativaId= do SA).',
+      );
+    }
+    if (queryCoopId) {
+      assertSameTenantOrSuperAdmin(req.user, queryCoopId);
+    }
     return this.asaasService.testarConexao(cooperativaId);
   }
 
