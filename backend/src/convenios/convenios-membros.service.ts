@@ -289,9 +289,19 @@ export class ConveniosMembrosService {
     });
   }
 
-  async listarMembros(convenioId: string) {
+  async listarMembros(convenioId: string, cooperativaIdJwt?: string) {
+    // Sprint Hardening Lateral (23/06/2026) — fix
+    // D-novo-CONVENIO-LISTAR-MEMBROS-SEM-COOPID P2 (defense-in-depth).
+    // Antes: where: {convenioId} sem filtro tenant. Pre-check do controller
+    // protege ADMIN; reafirmamos via `convenio.cooperativaId` no where
+    // pra resistir a chamadores futuros sem pre-check.
     return this.prisma.convenioCooperado.findMany({
-      where: { convenioId },
+      where: {
+        convenioId,
+        ...(cooperativaIdJwt
+          ? { convenio: { cooperativaId: cooperativaIdJwt } }
+          : {}),
+      },
       include: {
         cooperado: {
           select: { id: true, nomeCompleto: true, cpf: true, email: true, telefone: true, tipoCooperado: true },

@@ -32,19 +32,24 @@ export class MotorPropostaController {
     return this.service.dashboardStats(req.user?.cooperativaId);
   }
 
+  // Sprint Hardening Lateral (23/06/2026) — fix
+  // D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT P1: os 3 endpoints abaixo
+  // chamam plano.findUnique({id}) no service SEM filtrar cooperativaId,
+  // permitindo ADMIN do tenant A calcular usando plano do tenant B. Passa
+  // cooperativaId do JWT pra service barrar via where. SA segue cross-tenant.
   @Post('calcular')
-  calcular(@Body() dto: CalcularPropostaDto) {
-    return this.service.calcular(dto);
+  calcular(@Body() dto: CalcularPropostaDto, @Req() req: any) {
+    return this.service.calcular(dto, req.user?.cooperativaId);
   }
 
   @Post('confirmar-opcao')
-  confirmarOpcao(@Body() dto: CalcularPropostaDto) {
-    return this.service.confirmarOpcao(dto);
+  confirmarOpcao(@Body() dto: CalcularPropostaDto, @Req() req: any) {
+    return this.service.confirmarOpcao(dto, req.user?.cooperativaId);
   }
 
   @Post('calcular-com-plano')
-  calcularComPlano(@Body() body: any) {
-    return this.service.calcularComPlano(body);
+  calcularComPlano(@Body() body: any, @Req() req: any) {
+    return this.service.calcularComPlano(body, req.user?.cooperativaId);
   }
 
   // T3 PARTE 4: restringido a ADMIN/SUPER_ADMIN (OPERADOR removido para reduzir superfície).

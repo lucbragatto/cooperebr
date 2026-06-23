@@ -98,14 +98,17 @@ export class ConveniosController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateConvenioDto, @Req() req: any) {
     await this.conveniosService.findOne(id, req.user.cooperativaId);
-    return this.conveniosService.update(id, dto);
+    // Hardening Lateral 23/06 — defense-in-depth: passa cooperativaIdJwt
+    // pro service revalidar internamente (findOne com filtro).
+    return this.conveniosService.update(id, dto, req.user.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)
   @Delete(':id')
   async remove(@Param('id') id: string, @Req() req: any) {
     await this.conveniosService.findOne(id, req.user.cooperativaId);
-    return this.conveniosService.remove(id);
+    // Hardening Lateral 23/06 — passa cooperativaId pro service DiD.
+    return this.conveniosService.remove(id, req.user.cooperativaId);
   }
 
   // ─── Membros ────────────────────────────────────────────────────────────
@@ -114,7 +117,8 @@ export class ConveniosController {
   @Get(':id/membros')
   async listarMembros(@Param('id') id: string, @Req() req: any) {
     await this.conveniosService.findOne(id, req.user.cooperativaId);
-    return this.membrosService.listarMembros(id);
+    // Hardening Lateral 23/06 — DiD: passa cooperativaIdJwt pro service.
+    return this.membrosService.listarMembros(id, req.user.cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)

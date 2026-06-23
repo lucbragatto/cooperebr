@@ -1,9 +1,11 @@
 import { Controller, Get, Post, Body, Param, Query, Req, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   LeadExpansaoService,
   LeadNaoEncontradoError,
   LeadJaConvertidoError,
 } from './lead-expansao.service';
+import { PrismaService } from '../prisma.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
@@ -13,7 +15,10 @@ const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
 @Controller('lead-expansao')
 export class LeadExpansaoController {
-  constructor(private readonly service: LeadExpansaoService) {}
+  constructor(
+    private readonly service: LeadExpansaoService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // GET filtrado por tenant: ADMIN vê só os leads da sua cooperativa
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
@@ -35,22 +40,59 @@ export class LeadExpansaoController {
     });
   }
 
-  // POST público — criado pelo bot ao receber fatura fora da área (sem autenticação)
+  // POST público — criado pelo bot ao receber fatura fora da área (sem autenticação).
+  //
+  // Sprint Hardening Lateral (23/06/2026) — fix
+  // D-novo-LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF P1 (3ª ocorrência do padrão M45):
+  //
+  //  - `cooperativaId` NUNCA vem do body (descartado via destructure).
+  //  - `?tenant=<id>` é OPCIONAL: se vier, valida `findUnique({id, ativo:true})`;
+  //    se NÃO vier, lead fica como ÓRFÃO (cooperativaId=null) e o funil/admin
+  //    roteia depois. Preserva o fluxo do bot WA que captura sem saber o tenant.
+  //  - 404 em `?tenant=` inexistente/inativo (anti-enumeração).
+  //
+  // Fix P2 security 23/06: @Throttle explícito 10/min — antes só herdava global
+  // 100/min (apropriado pra auth API, não pra POST público anônimo).
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post()
-  create(@Body() body: {
-    telefone: string;
-    nomeCompleto?: string;
-    distribuidora: string;
-    cidade?: string;
-    estado?: string;
-    numeroUC?: string;
-    valorFatura?: number;
-    economiaEstimada?: number;
-    intencaoConfirmada?: boolean;
-    cooperativaId?: string;
-  }) {
-    return this.service.create(body);
+  async create(
+    @Body() body: {
+      telefone: string;
+      nomeCompleto?: string;
+      distribuidora: string;
+      cidade?: string;
+      estado?: string;
+      numeroUC?: string;
+      valorFatura?: number;
+      economiaEstimada?: number;
+      intencaoConfirmada?: boolean;
+      // Aceito no shape pra compat com clientes antigos, mas SEMPRE descartado
+      // (não propaga pro service). Hardening Lateral 23/06/2026.
+      cooperativaId?: string;
+    },
+    @Query('tenant') tenantParam?: string,
+  ) {
+    // Sprint Hardening Lateral 23/06/2026 — descarta cooperativaId do body
+    // explicitamente (destructure-discard pattern M45).
+    const {
+      cooperativaId: _ignored,
+      ...safeBody
+    } = body;
+
+    let cooperativaId: string | null = null;
+    if (tenantParam) {
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: tenantParam },
+        select: { id: true, ativo: true },
+      });
+      if (!coop || !coop.ativo) {
+        throw new NotFoundException('Cooperativa não encontrada ou inativa.');
+      }
+      cooperativaId = coop.id;
+    }
+    // Sem ?tenant= → cooperativaId=null (lead órfão; admin/funil roteia depois).
+    return this.service.create({ ...safeBody, cooperativaId: cooperativaId ?? undefined });
   }
 
   // Resumo para investidores — apenas ADMIN/SUPER_ADMIN

@@ -89,7 +89,10 @@ export class MotorPropostaService {
     return this.prisma.configuracaoMotor.update({ where: { id: config.id }, data: dto as any });
   }
 
-  async calcular(dto: CalcularPropostaDto): Promise<ResultadoCalculo> {
+  async calcular(dto: CalcularPropostaDto, cooperativaIdJwt?: string): Promise<ResultadoCalculo> {
+    // Sprint Hardening Lateral (23/06/2026) — fix
+    // D-novo-MOTOR-PROPOSTA-PLANO-CROSS-TENANT P1: plano deve ser do MESMO
+    // tenant do caller (jwt). SA recebe undefined → segue cross-tenant.
     const config = await this.getConfiguracao();
 
     // Tarifa mais recente — filtrar por distribuidora do cooperado
@@ -118,9 +121,18 @@ export class MotorPropostaService {
     const te = tarifa ? Number(tarifa.teNova) : 0.2;
     const tarifaUnitSemTrib = tusd + te;
 
-    // Média cooperativa: média do (valorLiquido / kwhContrato) das cobranças de contratos ativos
+    // Média cooperativa: média do (valorLiquido / kwhContrato) das cobranças de contratos ativos.
+    // Fix P2 multitenant 23/06 — antes: where sem cooperativaId misturava
+    // cobranças de TODOS os tenants, vazando estatística cross-tenant na
+    // precificação. Agora filtra por jwt (SA undefined → cross-tenant).
     const cobrancasAtivas = await this.prisma.cobranca.findMany({
-      where: { contrato: { status: 'ATIVO' }, status: { not: 'CANCELADO' } },
+      where: {
+        contrato: {
+          status: 'ATIVO',
+          ...(cooperativaIdJwt ? { cooperativaId: cooperativaIdJwt } : {}),
+        },
+        status: { not: 'CANCELADO' },
+      },
       select: { valorLiquido: true, contrato: { select: { kwhContrato: true } } },
     });
     const taxas = cobrancasAtivas
@@ -158,9 +170,18 @@ export class MotorPropostaService {
     const threshold = Number(config.thresholdOutlier);
     const outlierDetectado = kwhMesRecente > kwhMedio12m * threshold;
 
-    // Buscar plano (obrigatório — desconto vem exclusivamente do plano)
+    // Buscar plano (obrigatório — desconto vem exclusivamente do plano).
+    // Hardening Lateral 23/06: filtra por cooperativaId quando vem (jwt).
+    // Planos globais (cooperativaId=null) acessíveis a todos; SA undefined
+    // segue cross-tenant.
     const plano = await this.prisma.plano.findFirst({
-      where: { id: dto.planoId, ativo: true },
+      where: {
+        id: dto.planoId,
+        ativo: true,
+        ...(cooperativaIdJwt
+          ? { OR: [{ cooperativaId: cooperativaIdJwt }, { cooperativaId: null }] }
+          : {}),
+      },
       select: { descontoBase: true },
     });
     if (!plano) {
@@ -266,27 +287,38 @@ export class MotorPropostaService {
     };
   }
 
-  async confirmarOpcao(dto: CalcularPropostaDto) {
-    return this.calcular(dto);
+  async confirmarOpcao(dto: CalcularPropostaDto, cooperativaIdJwt?: string) {
+    return this.calcular(dto, cooperativaIdJwt);
   }
 
   /**
    * Calcula proposta usando a configuração de base de cálculo do Plano.
    * Usado quando há dados OCR de fatura (upload) com componentes discriminados.
    */
-  async calcularComPlano(dados: {
-    planoId: string;
-    consumoKwh: number;
-    totalSemGD: number;
-    tusd: number;
-    te: number;
-    pisCofins: number;
-    cip: number;
-    icms?: number;
-    historico: Array<{ mes: string; kwh: number; valor: number }>;
-  }) {
-    const plano = await this.prisma.plano.findUnique({
-      where: { id: dados.planoId },
+  async calcularComPlano(
+    dados: {
+      planoId: string;
+      consumoKwh: number;
+      totalSemGD: number;
+      tusd: number;
+      te: number;
+      pisCofins: number;
+      cip: number;
+      icms?: number;
+      historico: Array<{ mes: string; kwh: number; valor: number }>;
+    },
+    cooperativaIdJwt?: string,
+  ) {
+    // Hardening Lateral 23/06 — filtra plano por tenant + globais (null).
+    // Fix P3 reviewer (consistência): adicionado `ativo:true` (calcular já tinha).
+    const plano = await this.prisma.plano.findFirst({
+      where: {
+        id: dados.planoId,
+        ativo: true,
+        ...(cooperativaIdJwt
+          ? { OR: [{ cooperativaId: cooperativaIdJwt }, { cooperativaId: null }] }
+          : {}),
+      },
       select: {
         descontoBase: true,
         baseCalculo: true,
@@ -595,9 +627,18 @@ export class MotorPropostaService {
     }
 
     // Plano pode ser null (seed sem plano ativo) — nesse caso snapshots ficam com default do schema.
+    // Hardening Lateral 23/06: findFirst com filtro por tenant do dono +
+    // globais (cooperativaId=null). Defense-in-depth: o planoIdResolvido
+    // vem da query anterior já filtrada por dono.cooperativaId, mas o
+    // pattern multi-tenant exige reafirmar (dono.cooperativaId é a coop do
+    // cooperado dono da proposta, NÃO o JWT do caller — SA pode estar em
+    // operação cross-tenant legítima).
     const planoSnapshot = planoIdResolvido
-      ? await this.prisma.plano.findUnique({
-          where: { id: planoIdResolvido },
+      ? await this.prisma.plano.findFirst({
+          where: {
+            id: planoIdResolvido,
+            OR: [{ cooperativaId: dono.cooperativaId }, { cooperativaId: null }],
+          },
           select: {
             modeloCobranca: true,
             nome: true,
