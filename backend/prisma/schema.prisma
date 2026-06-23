@@ -1512,7 +1512,12 @@ model UsinaAlerta {
 
 model PlanoContas {
   id            String            @id @default(cuid())
-  codigo        String            @unique
+  // Sprint Faxina Contábil (22/06/2026) — fix P1 multitenant-reviewer:
+  // codigo era @unique GLOBAL → impedia mesma conta em 2 tenants. Agora
+  // composto [codigo, cooperativaId] pra multi-tenant correto. Contas
+  // globais (cooperativaId=null) continuam exclusivas porque (null, codigo)
+  // gera apenas 1 tupla — Postgres trata null como distinto.
+  codigo        String
   nome          String
   tipo          String
   grupo         String
@@ -1522,6 +1527,8 @@ model PlanoContas {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   lancamentos   LancamentoCaixa[]
+
+  @@unique([codigo, cooperativaId], map: "plano_contas_codigo_cooperativa_unique")
 
   // ── Sprint CT.1 (31/05/2026) — segregação cooperativa ──
   /// Natureza contábil estruturada (substitui o `tipo` String livre legado).
@@ -1548,6 +1555,10 @@ enum OrigemLancamento {
   MANUAL       // lançamento manual via UI (sem idempotência cruzada)
   CONVENIO     // CT.9 (01/06/2026) — movimento manual de Convênio (Art. 88 Auxiliar)
   TOKEN_TRANSACAO // F2/F3 (08/06/2026) — hook TokenTransacao com impacto em R$ (compra de token, resgate/PIX, taxa/MDR)
+  // Sprint Faxina Contábil (22/06/2026) — fix P2 financeiro-token-reviewer:
+  // idempotência do D Passivo no abate de fatura. origemId = cobrancaId.
+  // Impede double-baixa em retry do listener.
+  COBRANCA_ABATE_FATURA
 }
 
 model LancamentoCaixa {

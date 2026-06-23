@@ -306,19 +306,11 @@ export class CobrancasService {
             this.logger.log(
               `CooperToken FATURA_CHEIA: ${valorDescontoEmTokens} tokens creditados ao cooperado ${contrato.cooperadoId} (cobrança ${cobranca.id})`,
             );
-
-            // Lançamento contábil: emissão fatura-cheia
-            try {
-              await this.tokenContabil.lancarEmissaoFaturaCheia({
-                cooperativaId: resolvedCoopId,
-                cooperadoId: contrato.cooperadoId,
-                valor: valorDescontoEmReais,
-                competencia: new Date().toISOString().slice(0, 7),
-                descricao: `Fatura-cheia ${valorDescontoEmTokens} tokens (cobrança ${cobranca.id})`,
-              });
-            } catch (err) {
-              this.logger.warn(`Falha ao lançar contábil fatura-cheia: ${(err as Error).message}`);
-            }
+            // Sprint Faxina Contábil (22/06/2026) — fix P1 financeiro-token-reviewer:
+            // a chamada direta a `lancarEmissaoFaturaCheia` DUPLICAVA o lançamento
+            // (creditar() já emite EMITIDO → handleEmitido → lancarEmissaoFaturaCheia).
+            // Passivo 2.3.01 inflado 2× a cada FATURA_CHEIA_TOKEN. Removido — o evento
+            // pós-commit é canônico.
           }
         } else if (Number(plano.tokenDescontoMaxPerc ?? 0) > 0) {
           // Modo DESCONTO_DIRETO: desconto automático na fatura

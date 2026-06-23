@@ -11,7 +11,10 @@ import {
   CooperTokenCompraParceiroPagoEvent,
   CooperTokenDistribuidoConvenioEvent,
   CooperTokenResgatadoFamiliarEvent,
+  CooperTokenIngressoEmissaoPagaEvent,
 } from './cooper-token.events';
+// Sprint Faxina Contábil do Token (22/06/2026) — classificação canônica.
+import { classificarTipo } from './classificacao-contabil.helper';
 // Sprint Clube P1 — Fase 1.5 Bloco 2 (10/06/2026): helper de Taxa de Operacao.
 import { calcularTaxa } from './taxa-helper';
 // Sprint Clube P1 — Fase 1.5 G3 (10/06/2026): gate juridico tambem dentro
@@ -451,14 +454,35 @@ export class CooperTokenService {
       return entry;
     });
 
-    // Emitir evento para lançamento contábil
+    // Emitir evento para lançamento contábil — Sprint Faxina (22/06/2026).
+    // Classificação canônica decide qual evento emitir:
+    //  - INGRESSO_PAGO        → INGRESSO_EMISSAO_PAGA → D Caixa / C Passivo
+    //  - BONIFICACAO_DESCONTO → EMITIDO              → D 5.1.10 / C Passivo
+    //  - BONIFICACAO_ADMIN    → EMITIDO              → D 5.1.03 / C Passivo (via listener decide)
+    //  - TRANSFERENCIA_INTERNA → nada (passivo só muda titular)
     const valorReais = valorEmissao != null
       ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100
       : 0;
-    this.eventEmitter.emit(
-      COOPER_TOKEN_EVENTS.EMITIDO,
-      new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais),
-    );
+    const classificacao = classificarTipo(tipo as any);
+    if (classificacao.categoria === 'INGRESSO_PAGO') {
+      this.eventEmitter.emit(
+        COOPER_TOKEN_EVENTS.INGRESSO_EMISSAO_PAGA,
+        new CooperTokenIngressoEmissaoPagaEvent(
+          cooperativaId,
+          cooperadoId,
+          tipo,
+          quantidadeLiquida,
+          valorReais,
+          classificacao.naturezaAtoSugerida,
+        ),
+      );
+    } else if (classificacao.categoria !== 'TRANSFERENCIA_INTERNA') {
+      // BONIFICACAO_DESCONTO + BONIFICACAO_ADMIN + USO → EMITIDO (handler escolhe conta)
+      this.eventEmitter.emit(
+        COOPER_TOKEN_EVENTS.EMITIDO,
+        new CooperTokenEmitidoEvent(cooperativaId, cooperadoId, tipo, quantidadeLiquida, valorReais),
+      );
+    }
 
     // Sprint 9: contabilidade preparatória — LancamentoCaixa PROVISIONAL
     if (valorReais > 0) {
@@ -5012,7 +5036,11 @@ export class CooperTokenService {
       `Compra ${compraId} confirmada: ${compra.quantidade} tokens creditados ao parceiro ${compra.cooperativaId}`,
     );
 
-    // Emitir evento para lançamento contábil
+    // Sprint Faxina Contábil (22/06/2026) — caminho legado tenant
+    // (parceiro = saldo do TENANT, não cooperado individual). Mantém evento
+    // COMPRA_PARCEIRO_PAGO pra compat, MAS o listener agora roteia pra
+    // lancarIngressoEmissaoPaga (D Caixa / C Passivo 2.3.01) — NÃO mais
+    // lancarCompraParceiroPago (Receita Venda 1.2.01 APOSENTADA).
     this.eventEmitter.emit(
       COOPER_TOKEN_EVENTS.COMPRA_PARCEIRO_PAGO,
       new CooperTokenCompraParceiroPagoEvent(

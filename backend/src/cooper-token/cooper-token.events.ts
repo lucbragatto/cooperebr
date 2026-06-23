@@ -24,6 +24,15 @@ export const COOPER_TOKEN_EVENTS = {
    * Emitido APÓS commit no lugar do RESGATADO padrão pra evitar copy errada.
    */
   RESGATADO_FAMILIAR: 'cooper-token.resgatado-familiar',
+  /**
+   * Sprint Faxina Contábil do Token (22/06/2026) — modelo voucher CPC 47.
+   * Substituto canônico para emissões PAGAS (BENEFICIO_CONVENIO +
+   * COMPRA_PJ_COOPERADA). Listener contábil emite **D Caixa / C Passivo
+   * Tokens a Resgatar (2.3.01)** — NÃO mais Receita Venda 1.2.01 (aposentada).
+   * Evento dedicado pra diferenciar de EMITIDO (que vira bonificação =
+   * D Custo/Despesa Bonificação / C Passivo, sem caixa).
+   */
+  INGRESSO_EMISSAO_PAGA: 'cooper-token.ingresso-emissao-paga',
 } as const;
 
 export class CooperTokenEmitidoEvent {
@@ -90,6 +99,23 @@ export class CooperTokenDistribuidoConvenioEvent {
  * apropriado (PAGADOR vê "você abateu fatura de {titular}"; TITULAR vê
  * "{pagador} cedeu N tokens pra abater sua fatura").
  */
+/**
+ * Sprint Faxina Contábil do Token (22/06/2026).
+ * Empresa cooperada PJ pagou por tokens (BENEFICIO_CONVENIO / COMPRA_PJ_COOPERADA).
+ * `naturezaAto` = 'PROPRIO' se cooperado é PF cooperado; 'AUXILIAR' se convênio
+ * (Art. 88). Promoção AUXILIAR→PROPRIO é documental (Q4 orquestrador).
+ */
+export class CooperTokenIngressoEmissaoPagaEvent {
+  constructor(
+    public readonly cooperativaId: string,
+    public readonly cooperadoId: string,
+    public readonly tipo: string,
+    public readonly quantidade: number,
+    public readonly valorReais: number,
+    public readonly naturezaAto: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO',
+  ) {}
+}
+
 export class CooperTokenResgatadoFamiliarEvent {
   constructor(
     public readonly cooperativaId: string,
