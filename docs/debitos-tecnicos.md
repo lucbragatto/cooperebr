@@ -6257,6 +6257,56 @@ Cada parceiro novo precisa cadastrar seus aliases. Hoje só seed (CoopereBR). On
 
 ---
 
+## Débitos catalogados Sprint Faxina Contábil do Token (M50 — 22/06/2026)
+
+### ✅ DÉBITOS RESOLVIDOS nesta sprint
+
+| Débito | Origem | Como resolvido |
+|---|---|---|
+| `1.2.01 Receita Venda Tokens` armadilha tributária | spec §1 | APOSENTADA (ativo=false); ingresso pago vai pra D Caixa / C Passivo |
+| `5.1.02` tipo DESPESA (deveria PASSIVO) | spec §2 E | Recodificada `2.3.01 PASSIVO` — 13 lançamentos via FK preservados |
+| Colisão `5.1.01` Usina × Custo Desconto Token | descoberta Fase 1 | Nova `5.1.10` + 9 lançamentos `[Token]` migrados; 3 usina REAL intactos |
+| `confirmarCompraParceiro` half-entry C Receita Venda | spec §2 A | Listener roteia pra `lancarIngressoEmissaoPaga` |
+| `processarPagamentoCompraPj` debita Custo (era Caixa) | spec §2 B | `creditar` com COMPRA_PJ → INGRESSO_EMISSAO_PAGA |
+| RESGATADO_FAMILIAR sem handler contábil | M49 gap detectado pelo reviewer | `handleResgatadoFamiliar` adicionado — invariante M49 restaurado |
+| `garantirContas` fallback cross-tenant | review multitenant | Schema `@@unique([codigo,cooperativaId])` + fallback estrito |
+| Double-call FATURA_CHEIA_TOKEN (cobrancas+listener) | review financeiro | Chamada direta em `cobrancas.service:312` removida |
+| Tipos D+C iguais em pares dupla-partida | review financeiro | Convenção D=DESPESA / C=RECEITA uniforme |
+| ESTORNO_* caem no default BONIFICACAO_ADMIN | review code | Cases USO explícitos |
+| `lancarResgateFatura` sem idempotência | review financeiro | `origemId` + `OrigemLancamento.COBRANCA_ABATE_FATURA` |
+
+### Débitos novos M50
+
+#### D-novo-FAXINA-BENEFICIO-CONVENIO-NATUREZA — `BENEFICIO_CONVENIO` hardcoda AUXILIAR (P1)
+
+`backend/src/cooper-token/classificacao-contabil.helper.ts:55` retorna `AUXILIAR` estático pra `BENEFICIO_CONVENIO`. Lei 5.764/71 Art. 79 vs Art. 88 distingue pelo pagador: se cooperado PJ → ato PROPRIO; se terceiro não-cooperado necessário → AUXILIAR. O helper não consulta `Convenio.naturezaAtoCooperativo` pra decidir. Fecha em: Faxina Fase C (ligar classificação ato-cooperativo). Apontado pelo `cooperebr-analista-conformidade` 22/06. **Status:** ABERTO. **Não bloqueia Fase A/B** — default conservador.
+
+#### D-novo-FAXINA-SOCIAL-DESTINATARIO — `SOCIAL` sem validação cooperado-only (P2)
+
+`SOCIAL` aceita qualquer destinatário. Se aplicado a NÃO-cooperado vira `NAO_COOPERATIVO Art. 86-87` (tributação plena PIS/COFINS+IRPJ). Hoje só rótulo sem lógica de negócio própria (`check-in §4`). Apontado pelo analista-conformidade. **Status:** ABERTO. **Fecha em:** Faxina Fase C (controller guard exigindo destinatário cooperado).
+
+#### D-novo-FAXINA-PARTIDAS-NAO-ATOMICAS — `Promise.all` sem `$transaction` nos pares D+C (P2 ELEVADO)
+
+Re-review orquestrador 22/06 elevou P3→P2: par contábil D+C TEM que ser atômico (half-entry contábil = livro desbalanceado se uma perna falha). `token-contabil.service.ts` usa `Promise.all` nos pares `lancarIngressoEmissaoPaga` / `lancarEmissaoFaturaCheia` / `lancarEmissaoAdminLote` / `lancarEstornoEmissaoAdminLote` / `lancarExpiracao`. Risco baixo (DB local + retry idempotente) mas conceitualmente errado. **Status:** ABERTO. **Fecha em:** Faxina Fase G (reconciliação detecta + `$transaction` envolvendo os 2 creates).
+
+#### D-novo-FAXINA-PROVISIONAL-VS-REALIZADO — PROVISIONAL inline + REALIZADO via listener coexistem (P2)
+
+`cooper-token.service.ts:creditar()` cria `LancamentoCaixa PROVISIONAL` inline (Sprint 9 legado) E o listener cria `REALIZADO` canônico depois. 2 lançamentos pro mesmo ato. Relatórios que somam `2.3.01` sem filtrar `status != PROVISIONAL` contam em dobro. **Status:** ABERTO. **Fecha em:** Faxina Fase E (painel) ou remover PROVISIONAL após canônico criar com sucesso.
+
+#### D-novo-FAXINA-MELT-GATED — Receita de melt OFF até parecer Walter + tributarista (P1 estratégico)
+
+Contas `1.2.10/11/12` criadas, métodos preparados, mas **disparo de receita real OFF**. Spread (taxa resgate), Taxa Circulação QR (transferência peer-to-peer), Quebra Oxidação (decay). Confirmado pelo analista-conformidade 22/06: tributação por contraparte (cooperado=isenta vs não-cooperado=tributável) exige parecer externo. **Status:** CATALOGADO COMO BLOQUEADOR PRÉ-PRODUÇÃO. **Fecha em:** Faxina Fase F + parecer Walter + flag config tenant + env gate.
+
+#### D-novo-FAXINA-DELTA-COOPEREBR — Delta −729.86 pré-existente (P2)
+
+Renomeação de `D-novo-FUNDACAO-DELTA-COOPEREBR` (M49 verificação). Tenant CoopereBR Σ saldos=1127.46 vs Σ ledger=1857.32 (delta=−729.86). Não causado por M49 nem M50. **Status:** ABERTO. **Fecha em:** Faxina Fase D (reconciliação + investigar fonte cron). **Bloqueia:** ativação saque PIX em produção.
+
+#### D-novo-PLANOCONTAS-CODIGO-NAO-MULTITENANT — RESOLVIDO no M50
+
+Era P1 catalogado. Resolvido nesta sprint via schema delta `@@unique([codigo, cooperativaId])` + auditoria prévia 0 duplicatas. Fix definitivo.
+
+---
+
 ## Débitos catalogados Sprint Convênio FAMÍLIA (M49 — 22/06/2026)
 
 ### ⚠ "Antes de 2ª empresa-cooperada PJ real" (NÃO bloqueia desenvolvimento)

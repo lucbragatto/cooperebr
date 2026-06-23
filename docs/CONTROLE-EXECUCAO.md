@@ -75,6 +75,109 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-22 (Code — M50 Sprint Faxina Contábil do Token Fase A/B: modelo voucher + ato cooperativo — smoke E2E real + merge na main)
+
+**Sessão Code dedicada — M50 entregue ponta-a-ponta com smoke E2E REAL
+no CoopereBR Teste (cooperado FRESCO criado e deletado conforme lição
+re-review M49).** Risco fiscal IMEDIATO neutralizado.
+
+**MODELO**: token = VOUCHER de circuito fechado (CPC 47) emitido por
+COOPERATIVA. Dinheiro que entra = PASSIVO DIFERIDO (ato cooperativo Lei
+5.764/71 Art. 79 § único — ISENTO). Receita só no MELT (taxa+spread+
+quebra), nunca na emissão. Validado pelo `cooperebr-analista-conformidade`.
+
+**ENTREGAS Fase A/B (8 grupos):**
+- **A** PlanoContas: criadas 5.1.10 Custo Desconto Token (DESPESA) +
+  1.2.10/11/12 (Receitas de melt — gated); aposentada 1.2.01 Receita
+  Venda Tokens (armadilha tributária); recodificada 5.1.02→2.3.01
+  PASSIVO (13 lançamentos via FK preservados).
+- **B** Migração de dados: 9 lançamentos `[Token]` da colisão 5.1.01-Usina
+  → 5.1.10. 3 lançamentos USINA REAL preservados.
+- **C** Schema deltas aditivos: `OrigemLancamento += COBRANCA_ABATE_FATURA`;
+  `PlanoContas.codigo @unique` global → `@@unique([codigo, cooperativaId])`
+  (fix multitenant — 0 duplicatas).
+- **D** Refactor token-contabil.service: novo `lancarIngressoEmissaoPaga`
+  (D Caixa / C Passivo 2.3.01); legados repointados; `lancarCompraParceiroPago`
+  DELETADO; convenção D=DESPESA/C=RECEITA uniforme; idempotência via
+  origemId.
+- **E** Helper `classificacao-contabil.helper.ts` (NOVO) — 14 tipos em 5
+  categorias canônicas (INGRESSO_PAGO/BONIFICACAO_DESCONTO/_ADMIN/
+  TRANSFERENCIA_INTERNA/USO). **Validado pelo analista-conformidade.**
+- **F** Eventos + listener: novo `INGRESSO_EMISSAO_PAGA`; `creditar` roteia
+  por categoria; `handleEmitido` roteia por classificação; `handleResgatadoFamiliar`
+  ADICIONADO (fix M49 gap — passivo agora baixa no abate familiar).
+- **G** `cobrancas.service.ts:312`: chamada direta removida (double-call
+  FATURA_CHEIA_TOKEN era passivo 2× inflado).
+
+**REVIEWERS (4 paralelos + re-review):**
+- analista-conformidade: APROVADO com 2 ressalvas (BENEFICIO_CONVENIO
+  AUXILIAR/PROPRIO depende do pagador + SOCIAL sem validação destinatário
+  → catalogados pra Fase C).
+- financeiro-token: APROVADO com 9 achados (5 P1 + 4 P2; aplicados ou
+  catalogados).
+- multitenant: APROVADO com 4 achados (P1 garantirContas + P2 idempotência
+  + P2 cooperativaId obrigatório aplicados).
+- code-reviewer: APROVADO com 2 P1 + 4 P2 + 4 P3 (P1 estornos + P1
+  garantirContas aplicados; demais catalogados).
+- Re-review orquestrador: **APROVADO** com 3 ajustes (typo 91→13,
+  elevar P3→P2 Promise.all, confirmar analista validou classificação).
+
+**✅ DÉBITOS RESOLVIDOS nesta sprint:**
+- `1.2.01 Receita Venda Tokens` armadilha tributária (APOSENTADA)
+- `5.1.02 DESPESA → 2.3.01 PASSIVO` (recodificada + tipo corrigido)
+- Colisão `5.1.01` Usina × Custo Desconto Token (5.1.10 nova + migração)
+- `confirmarCompraParceiro` + `processarPagamentoCompraPj` half-entries
+  errados (rota canônica D Caixa / C Passivo)
+- `RESGATADO_FAMILIAR` sem handler contábil (M49 gap fechado)
+- `garantirContas` cross-tenant + double-call FATURA_CHEIA_TOKEN +
+  ESTORNOS no default errado + tipos D+C iguais nos pares
+- `lancarResgateFatura` sem idempotência
+- `D-novo-PLANOCONTAS-CODIGO-NAO-MULTITENANT` (fix definitivo via schema)
+
+**🔴 DÉBITOS NOVOS catalogados (6):**
+- `D-novo-FAXINA-BENEFICIO-CONVENIO-NATUREZA` P1 (fecha em Fase C)
+- `D-novo-FAXINA-SOCIAL-DESTINATARIO` P2 (Fase C)
+- `D-novo-FAXINA-PARTIDAS-NAO-ATOMICAS` **P2 ELEVADO** (re-review:
+  half-entry contábil é P2, não P3 — fecha em Fase G)
+- `D-novo-FAXINA-PROVISIONAL-VS-REALIZADO` P2 (Fase E)
+- `D-novo-FAXINA-MELT-GATED` **P1 estratégico** (BLOQUEADOR PRÉ-PRODUÇÃO
+  — receita de melt OFF até parecer Walter + tributarista)
+- `D-novo-FAXINA-DELTA-COOPEREBR` P2 (renomeação delta −729.86; Fase D)
+
+**Verificação:** 124/124 specs verde em 9 suites; 0 erros TS novos;
+smoke E2E REAL CoopereBR Teste com cooperado FRESCO criado e deletado
+(D-novo-M49-SMOKE-SEED-TESTE respeitado).
+
+**Smoke asserts (todos verde):**
+- INGRESSO_PAGO → D Caixa(null/RECEITA) + C 2.3.01(RECEITA) PROPRIO ✅
+- BONIFICACAO_DESCONTO → D 5.1.10(DESPESA) + C 2.3.01(RECEITA) ✅
+- BONIFICACAO_ADMIN → D 5.1.03 + C 2.3.01 ✅
+- ABATE idempotência (2 chamadas mesmo origemId → 1 lançamento) ✅
+- Invariante FUNDACAO §4#1: saldo=166.6 == ledger=166.6 delta=0 ✅
+
+**Commits M50:** `<feat-sha>` (feat) + `<docs-sha>` (docs) + merge
+`--no-ff` (preserva `feature/faxina-contabil-token`). Zero regressão.
+
+**Próximo bloco** (escolha do orquestrador):
+
+(A) **Sprint HARDENING LATERAL** (~10-14h) — pré-requisito Camada 3
+funil + 2º parceiro real. Fecha 4 P1 M45 + 2 P2 M46 + 2 P2 M47 + 1 P1
+M48 (lead-expansao spoof) + IDORs do inventário.
+
+(B) **Sprint FAXINA FASES C-G** (~12-18h) — melt/painel/reconciliação.
+   C: ligar `Convenio.naturezaAtoCooperativo` ao contábil
+   D: investigar delta −729.86 + reconciliação
+   E: painel admin Passivo/Forecast
+   F: receita de melt (taxa QR + spread + quebra) — **GATED parecer Walter**
+   G: `$transaction` nos pares D+C (D-novo-FAXINA-PARTIDAS-NAO-ATOMICAS)
+
+**Frase de retomada COMANDANTE pra próximo Code:** ver `## FRASE DE
+RETOMADA — próxima sessão Code` no fim deste documento (M50 atualizada,
+M49 arquivada).
+Detalhe: `docs/sessoes/2026-06-22-m50-sprint-faxina-contabil-token.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-22 (Code — M49 Sprint Convênio FAMÍLIA: vínculo + autorização bilateral + abate familiar + sizing + saque gated — smoke E2E real + merge na main)
 
 **Sessão Code dedicada — M49 entregue ponta-a-ponta com smoke E2E REAL
@@ -3556,18 +3659,22 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` a menos que
    próxima sprint tenha schema delta novo.
 
-PASSO 1 — Frase COMANDANTE: **CONVÊNIO COOPERATIVIZADO
-FUNCIONALMENTE COMPLETO** ✅:
-- M44 (origem-dado) ✅
-- M46 (fundação E1+E8) ✅
-- M47 (migração G2+G5) ✅
-- M48 (funil motor advisory) ✅
-- **M49 (família — vínculo + autorização bilateral + abate familiar +
-  sizing + saque gated) ✅ FECHADO NESTA SESSÃO**
+PASSO 1 — Frase COMANDANTE:
 
-PRÓXIMO = **Sprint HARDENING LATERAL (~10-14h)** — pré-requisito da
-Camada 3 do funil (vitrine pública) E de escalar pro 2º parceiro real.
-Fecha:
+**FAXINA CONTÁBIL DO TOKEN — Fase A/B FECHADA** (risco fiscal IMEDIATO
+neutralizado). Token = VOUCHER de circuito fechado (CPC 47) emitido por
+COOPERATIVA + ato cooperativo Lei 5.764/71 Art. 79 § único (ISENTO).
+`Receita Venda Tokens 1.2.01` APOSENTADA; ingresso pago vira **D Caixa /
+C Passivo Tokens a Resgatar 2.3.01**. Validado pelo
+`cooperebr-analista-conformidade`.
+
+Convênio cooperativizado FUNCIONALMENTE COMPLETO (M44+M46+M47+M48+M49) +
+**M50 faxina contábil ✅ FECHADA NESTA SESSÃO**.
+
+PRÓXIMO = **ESCOLHA DO ORQUESTRADOR** entre:
+
+**(A) Sprint HARDENING LATERAL (~10-14h)** — pré-requisito da Camada 3
+do funil (vitrine pública) E de escalar pro 2º parceiro real. Fecha:
 - 4 P1 lateral M45 (CADASTRO-COMPLETO + MOTOR-PROPOSTA-PLANO +
   AUDITLOG-TENANT-ALVO-SA + HARDENING-CONTROLLERS-LATERAIS).
 - 2 P2 M46 (CONVENIO-UPDATE-SEM-COOPID + LISTAR-MEMBROS-SEM-COOPID).
@@ -3575,6 +3682,20 @@ Fecha:
 - **1 P1 M48** LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF (3ª ocorrência do
   spoof anônimo M45).
 - IDORs do inventário M48.
+
+**(B) Sprint FAXINA FASES C-G (~12-18h)** — melt/painel/reconciliação:
+- C: ligar `Convenio.naturezaAtoCooperativo` ao `LancamentoCaixa.naturezaAto`
+  (fecha D-novo-FAXINA-BENEFICIO-CONVENIO-NATUREZA P1 +
+  D-novo-FAXINA-SOCIAL-DESTINATARIO P2)
+- D: investigar delta -729.86 + cron reconciliação
+- E: painel admin Passivo/Forecast (estender cooper-token-financeiro)
+- F: receita de melt (taxa QR + spread + quebra) — **ATIVAÇÃO REAL gated
+  parecer Walter + tributarista** (estrutura pronta, OFF até lá)
+- G: `$transaction` nos pares D+C (fix D-novo-FAXINA-PARTIDAS-NAO-ATOMICAS P2)
+
+**Bloqueador inegociável** (confirmado analista-conformidade 22/06):
+ativação de receita de melt em produção exige parecer Walter +
+tributarista cooperativo.
 
 Itens **"antes de empresa-cooperada PJ real"** acumulados (NÃO bloqueiam
 desenvolvimento, BLOQUEIAM onboarding 2ª empresa): M47 DESLIGADO-SALDO
