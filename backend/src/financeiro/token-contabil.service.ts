@@ -36,6 +36,21 @@ export const CONTA_RECEITA_SPREAD = '1.2.10';
 export const CONTA_RECEITA_TAXA_QR = '1.2.11';
 export const CONTA_RECEITA_OXIDACAO = '1.2.12';
 
+/**
+ * Sprint M52a v2 (23/06/2026) — conformidade P1: tipo do LancamentoCaixa
+ * é String no schema (pré-existe 58 lançamentos legados). Pra dar
+ * type-safety ao caller sem migration disruptiva, exportamos union
+ * literal. Apuração tributária / DRE / livro caixa filtram em RECEITA
+ * vs DESPESA — MUTACAO_PASSIVO e MUTACAO_DESPESA são movimentos de
+ * BALANÇO (não DRE), portanto ficam fora dos totalizadores P&L.
+ */
+export type LancamentoCaixaTipo =
+  | 'RECEITA'
+  | 'DESPESA'
+  | 'MUTACAO_PASSIVO'
+  | 'MUTACAO_DESPESA'
+  | 'PROVISIONAL';
+
 interface LancamentoTokenParams {
   cooperativaId: string;
   cooperadoId?: string;
@@ -140,7 +155,10 @@ export class TokenContabilService {
     const valor = Math.round(params.valor * 100) / 100;
     const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const [debito, credito] = await Promise.all([
+    // Sprint Faxina C-G (23/06/2026) — Bloco G fix
+    // D-novo-FAXINA-PARTIDAS-NAO-ATOMICAS P2: par dupla-partida em
+    // $transaction. Se uma perna falhar, ambas revertem (livro balanceado).
+    const [debito, credito] = await this.prisma.$transaction([
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'RECEITA', // entrada de caixa (LancamentoCaixa.tipo = movimento)
@@ -160,8 +178,11 @@ export class TokenContabilService {
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
-          // Convenção pós-faxina: C Passivo = aumento → tipo RECEITA.
-          tipo: 'RECEITA',
+          // Re-review orquestrador 23/06: aumento de passivo NÃO é receita
+          // (viola NBC TG 1000 item 12.1). Convenção MUTACAO_PASSIVO pra
+          // movimentação na conta 2.3.01 — apuração tributária + DRE
+          // excluem este tipo do totalReceitas.
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] C: Passivo Tokens a Resgatar (ingresso pago) — ${params.descricao}`,
           valor,
           competencia,
@@ -199,7 +220,8 @@ export class TokenContabilService {
     const valor = Math.round(params.valor * 100) / 100;
     const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const [debito, credito] = await Promise.all([
+    // Bloco G fix (23/06/2026) — par dupla-partida atomic via $transaction.
+    const [debito, credito] = await this.prisma.$transaction([
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'DESPESA',
@@ -217,10 +239,10 @@ export class TokenContabilService {
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
-          // Convenção pós-faxina: D=DESPESA, C=RECEITA (sinal contábil).
-          // C Passivo = aumento de passivo → tipo RECEITA por convenção
-          // (fix P1 financeiro-token: tipo iguais D+C distorciam relatórios).
-          tipo: 'RECEITA',
+          // Re-review orquestrador 23/06: aumento de passivo NÃO é receita
+          // (NBC TG 1000 item 12.1). MUTACAO_PASSIVO em conta 2.3.01 é o
+          // tipo correto pra apuração tributária + DRE.
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] C: Passivo Tokens a Resgatar — ${params.descricao}`,
           valor,
           competencia,
@@ -263,9 +285,10 @@ export class TokenContabilService {
     try {
       const lancamento = await this.prisma.lancamentoCaixa.create({
         data: {
-          // Convenção pós-faxina: D Passivo (baixa) = tipo DESPESA (saída do passivo).
-          // Antes era RECEITA — divergia de lancarExpiracao que já usava DESPESA na baixa.
-          tipo: 'DESPESA',
+          // Re-review orquestrador 23/06: baixa de passivo NÃO é despesa
+          // (NBC TG 1000). MUTACAO_PASSIVO substitui DESPESA pra não distorcer
+          // apuração tributária (apuração.service filtra por tipo).
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] D: Baixa Passivo (abate na fatura) — ${params.descricao}`,
           valor,
           competencia,
@@ -337,7 +360,10 @@ export class TokenContabilService {
     try {
       const lancamento = await this.prisma.lancamentoCaixa.create({
         data: {
-          tipo: 'DESPESA',
+          // Re-review orquestrador 23/06: D Passivo (2.3.01) NÃO é despesa.
+          // MUTACAO_PASSIVO substitui DESPESA — saída de caixa do PIX entra
+          // em outra perna (não modelada aqui, lançamento atual é só perna D).
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] Resgate PIX — ${params.descricao}`,
           valor,
           competencia,
@@ -366,10 +392,14 @@ export class TokenContabilService {
         err !== null &&
         (err as { code?: string }).code === 'P2002';
       if (isUniqueViolation) {
+        // Re-review orquestrador 23/06 (P1 mt + code + financeiro):
+        // cooperativaId defense-in-depth no fallback de idempotência —
+        // alinha com lancarResgateFatura :299-306 (que estava correto).
         const existente = await this.prisma.lancamentoCaixa.findFirst({
           where: {
             origemTipo: 'TOKEN_TRANSACAO',
             origemId: params.referenciaId,
+            cooperativaId: params.cooperativaId,
           },
           select: { id: true },
         });
@@ -398,10 +428,13 @@ export class TokenContabilService {
     const valor = Math.round(params.valor * 100) / 100;
     const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const [baixaPassivo, receita] = await Promise.all([
+    // Bloco G fix (23/06/2026) — par dupla-partida atomic.
+    const [baixaPassivo, receita] = await this.prisma.$transaction([
       this.prisma.lancamentoCaixa.create({
         data: {
-          tipo: 'DESPESA',
+          // Re-review orquestrador 23/06: baixa de passivo NÃO é despesa.
+          // MUTACAO_PASSIVO substitui DESPESA.
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] D: Baixa Passivo (expiração) — ${params.descricao}`,
           valor,
           competencia,
@@ -447,7 +480,8 @@ export class TokenContabilService {
     const valor = Math.round(params.valor * 100) / 100;
     const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const [debito, credito] = await Promise.all([
+    // Bloco G fix (23/06/2026) — par dupla-partida atomic.
+    const [debito, credito] = await this.prisma.$transaction([
       this.prisma.lancamentoCaixa.create({
         data: {
           tipo: 'DESPESA',
@@ -465,10 +499,9 @@ export class TokenContabilService {
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
-          // Convenção pós-faxina: D=DESPESA, C=RECEITA (sinal contábil).
-          // C Passivo = aumento de passivo → tipo RECEITA por convenção
-          // (fix P1 financeiro-token: tipo iguais D+C distorciam relatórios).
-          tipo: 'RECEITA',
+          // Re-review orquestrador 23/06: aumento de passivo NÃO é receita
+          // (NBC TG 1000 item 12.1). MUTACAO_PASSIVO em conta 2.3.01.
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] C: Passivo Tokens a Resgatar — ${params.descricao}`,
           valor,
           competencia,
@@ -499,10 +532,13 @@ export class TokenContabilService {
     const valor = Math.round(params.valor * 100) / 100;
     const naturezaAto = params.naturezaAto || 'PROPRIO';
 
-    const [baixaPassivo, reversaoDespesa] = await Promise.all([
+    // Bloco G fix (23/06/2026) — par dupla-partida atomic.
+    const [baixaPassivo, reversaoDespesa] = await this.prisma.$transaction([
       this.prisma.lancamentoCaixa.create({
         data: {
-          tipo: 'DESPESA',
+          // Re-review orquestrador 23/06: baixa de passivo NÃO é despesa.
+          // MUTACAO_PASSIVO substitui DESPESA na conta 2.3.01.
+          tipo: 'MUTACAO_PASSIVO',
           descricao: `[Token] D: Baixa Passivo (estorno) — ${params.descricao}`,
           valor,
           competencia,
@@ -517,7 +553,11 @@ export class TokenContabilService {
       }),
       this.prisma.lancamentoCaixa.create({
         data: {
-          tipo: 'RECEITA',
+          // Re-review orquestrador 23/06: reversão de despesa NÃO é receita
+          // (cancela despesa anterior, não gera ingresso). MUTACAO_DESPESA
+          // mantém o lançamento espelhado da despesa original sem inflar
+          // apuração tributária com receita fantasma.
+          tipo: 'MUTACAO_DESPESA',
           descricao: `[Token] C: Reversão Despesa Bonificação — ${params.descricao}`,
           valor,
           competencia,

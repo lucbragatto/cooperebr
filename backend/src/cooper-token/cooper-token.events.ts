@@ -42,6 +42,12 @@ export class CooperTokenEmitidoEvent {
     public readonly tipo: string,
     public readonly quantidade: number,
     public readonly valorReais: number,
+    /**
+     * Sprint M52a Bloco C (23/06/2026) — naturezaAto resolvida pelo
+     * service em creditar() (override SA → convenioId → default helper).
+     * Quando undefined, o listener cai no default da helper (PROPRIO).
+     */
+    public readonly naturezaAto?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO',
   ) {}
 }
 

@@ -3,8 +3,12 @@ import { Cron } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenService } from './cooper-token.service';
-import { CooperTokenTipo } from '@prisma/client';
+import { CooperTokenTipo, Prisma } from '@prisma/client';
 import { AsPlatform } from '../common/tenant-context';
+// Sprint M52a v2 (23/06/2026) — re-review code (a)+(b): helper extraída
+// pra arquivo dedicado sem dependência NestJS, importável por scripts e
+// specs sem carregar a classe Job inteira.
+import { sinalDaOperacao } from './cooper-token.ledger-utils';
 // Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026): gate juridico da oxidacao.
 import { isAmbienteReal } from '../common/safety/ambiente';
 // Sprint C Hardening (17/06/2026) — D-novo-RECONCILIACAO-CONTABIL-CRON P2.
@@ -473,4 +477,212 @@ export class CooperTokenJob {
       `[reconciliacao] Ciclo concluído em ${duracaoMs}ms — ${sucesso} sucesso, ${falha} falha, ${desistido} desistido (${pendentes.length} processado(s))`,
     );
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Sprint M52a Bloco D (23/06/2026) — D-novo-FAXINA-DELTA-COOPEREBR.
+  //
+  //  Cron diário 04:30 — varre TODOS os tenants e mede o invariante
+  //  por cooperado.
+  //
+  //  INVARIANTE MESTRE (re-review orquestrador 23/06):
+  //    saldoTotal == Σ(ledger)
+  //    onde saldoTotal = saldoDisponivel + saldoPendente + saldoBloqueadoResgate
+  //    e Σ(ledger) = Σ(creditos) − Σ(debitos) classificados explicitamente
+  //                  por CooperTokenOperacao (switch exaustivo — sem `else`
+  //                  cego que subtraía COMPRA_PARCEIRO/DOACAO_RECEBIDA).
+  //
+  //  Porque TOTAL e não saldoDisponivel: pendente e bloqueado SÃO passivo
+  //  da coop. Versão anterior comparava só disponível e gerava falso-positivo
+  //  em qualquer cooperado com pendente>0 ou bloqueado>0 (root-cause da
+  //  reconciliação corrompida 23/06 que tocou AGOSTINHO/LEONARDO sem motivo).
+  //
+  //  Tolerância: 0.0001 (precisão Decimal(10,4)).
+  //
+  //  Não é cron de cura — só DIAGNÓSTICO. Detecta delta, emite alerta
+  //  (AuditLog + evento) pra admin atuar manualmente via script
+  //  reconciliacao-historica-faxina-d.ts (APPEND-ONLY, NUNCA tocar
+  //  saldoDisponivel/Pendente/Bloqueado). Cron de cura criaria entradas sem
+  //  revisão contábil — vetado.
+  //
+  //  Cron diário (não 30min) — invariante é lento; scan
+  //  CooperTokenLedger inteiro é pesado. Diário cobre o ciclo
+  //  de detecção sem custo. Trigger admin on-demand disponível.
+  // ════════════════════════════════════════════════════════════════════
+  @Cron('30 4 * * *')
+  @AsPlatform()
+  async reconciliarInvariantesSaldo(): Promise<ReconciliacaoInvarianteResultado> {
+    const inicio = Date.now();
+    this.logger.log('[invariante] Iniciando varredura saldoTotal × Σ ledger...');
+
+    const tenants = await this.prisma.cooperativa.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true },
+    });
+
+    const tolerancia = new Prisma.Decimal('0.0001');
+
+    const resumo: ReconciliacaoInvarianteResultado = {
+      cooperativasVarridas: tenants.length,
+      cooperadosAnomalos: 0,
+      somaAbsDelta: 0,
+      anomaliasPorTenant: [],
+    };
+
+    for (const tenant of tenants) {
+      try {
+        const saldos = await this.prisma.cooperTokenSaldo.findMany({
+          where: { cooperativaId: tenant.id },
+          select: {
+            cooperadoId: true,
+            saldoDisponivel: true,
+            saldoPendente: true,
+            saldoBloqueadoResgate: true,
+          },
+        });
+
+        const cooperadosAnomalosTenant: ReconciliacaoInvarianteAnomalia[] = [];
+        let somaAbsTenant = new Prisma.Decimal(0);
+
+        for (const s of saldos) {
+          // Fix re-review orquestrador 23/06: TOTAL (disponível + pendente +
+          // bloqueado) — pendente/bloqueado também são passivo do cooperado.
+          const saldoTotal = new Prisma.Decimal(s.saldoDisponivel)
+            .plus(s.saldoPendente)
+            .plus(s.saldoBloqueadoResgate);
+          const somaLedger = await this.somarLedgerPorCooperado(
+            s.cooperadoId,
+            tenant.id,
+          );
+          const delta = saldoTotal.minus(somaLedger);
+
+          if (delta.abs().lessThan(tolerancia)) continue;
+
+          cooperadosAnomalosTenant.push({
+            cooperadoId: s.cooperadoId,
+            saldoDisponivel: saldoTotal.toFixed(4),
+            somaLedger: somaLedger.toFixed(4),
+            delta: delta.toFixed(4),
+          });
+          somaAbsTenant = somaAbsTenant.plus(delta.abs());
+        }
+
+        if (cooperadosAnomalosTenant.length === 0) continue;
+
+        resumo.cooperadosAnomalos += cooperadosAnomalosTenant.length;
+        resumo.somaAbsDelta += Number(somaAbsTenant);
+        resumo.anomaliasPorTenant.push({
+          cooperativaId: tenant.id,
+          cooperativaNome: tenant.nome,
+          cooperadosAnomalos: cooperadosAnomalosTenant.length,
+          somaAbsDelta: somaAbsTenant.toFixed(4),
+          topAnomalias: [...cooperadosAnomalosTenant]
+            .sort((a, b) =>
+              new Prisma.Decimal(b.delta).abs().comparedTo(new Prisma.Decimal(a.delta).abs()),
+            )
+            .slice(0, 5),
+        });
+
+        this.logger.warn(
+          `[invariante] ${tenant.nome}: ${cooperadosAnomalosTenant.length} cooperado(s) com delta — Σ|delta|=${somaAbsTenant.toFixed(4)}`,
+        );
+
+        // AuditLog forense por tenant (cron não tem req — usar tabela direto).
+        try {
+          await this.prisma.auditLog.create({
+            data: {
+              cooperativaId: tenant.id,
+              acao: 'cooper-token.invariante.delta-detectado',
+              recurso: 'CooperTokenLedger',
+              usuarioId: 'SYSTEM_CRON',
+              usuarioPerfil: 'SYSTEM',
+              metadata: {
+                cooperadosAnomalos: cooperadosAnomalosTenant.length,
+                somaAbsDelta: somaAbsTenant.toFixed(4),
+                topAnomalias: cooperadosAnomalosTenant.slice(0, 10),
+              } as any,
+            },
+          });
+        } catch (errAudit) {
+          this.logger.error(
+            `[invariante] AuditLog falhou pra ${tenant.nome}: ${(errAudit as Error).message}`,
+          );
+        }
+
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('cooper-token.invariante-quebrado', {
+            cooperativaId: tenant.id,
+            cooperativaNome: tenant.nome,
+            cooperadosAnomalos: cooperadosAnomalosTenant.length,
+            somaAbsDelta: Number(somaAbsTenant),
+          });
+        }
+      } catch (err) {
+        this.logger.error(
+          `[invariante] Falha em ${tenant.nome}: ${err instanceof Error ? err.message : 'erro desconhecido'}`,
+        );
+      }
+    }
+
+    const duracaoMs = Date.now() - inicio;
+    this.logger.log(
+      `[invariante] Varredura concluída em ${duracaoMs}ms — ${resumo.cooperativasVarridas} tenants, ${resumo.cooperadosAnomalos} cooperado(s) anômalo(s), Σ|delta|=${resumo.somaAbsDelta.toFixed(4)}`,
+    );
+    return resumo;
+  }
+
+  // Fix re-review orquestrador 23/06 — financeiro-token P1 + code HIGH:
+  // switch EXAUSTIVO sobre CooperTokenOperacao. Versão anterior tinha `else`
+  // cego que subtraía cegamente operações de CRÉDITO (COMPRA_PARCEIRO,
+  // DOACAO_RECEBIDA fora do `if`) — corrompia o invariante.
+  //
+  // Classificação canônica (sinal sobre o saldo do cooperado/parceiro):
+  //   ENTRA (+): CREDITO, DOACAO_RECEBIDA, COMPRA_PARCEIRO
+  //   SAI   (−): DEBITO, EXPIRACAO, DOACAO_ENVIADA, ABATIMENTO_ENERGIA,
+  //               TRANSFERENCIA_PARCEIRO, RESGATE_CLUBE, OXIDACAO
+  //
+  // `quantidade` é SEMPRE positiva (fix estrutural M52a creditar/debitar
+  // guard); a direção vem 100% da operacao via este switch.
+  //
+  // `cooperativaId` adicionado como parâmetro pra defense-in-depth M45
+  // (não-functional necessário porque cooperadoId é globally unique CUID,
+  // mas blinda refactors futuros que chamem isoladamente).
+  private async somarLedgerPorCooperado(
+    cooperadoId: string,
+    cooperativaId: string,
+  ): Promise<Prisma.Decimal> {
+    const ledgers = await this.prisma.cooperTokenLedger.findMany({
+      where: { cooperadoId, cooperativaId },
+      select: { operacao: true, quantidade: true },
+    });
+
+    let total = new Prisma.Decimal(0);
+    for (const l of ledgers) {
+      const q = new Prisma.Decimal(l.quantidade).abs();
+      const sinal = sinalDaOperacao(l.operacao);
+      total = sinal === 1 ? total.plus(q) : total.minus(q);
+    }
+    return total;
+  }
+}
+
+export interface ReconciliacaoInvarianteAnomalia {
+  cooperadoId: string;
+  saldoDisponivel: string;
+  somaLedger: string;
+  delta: string;
+}
+
+export interface ReconciliacaoInvarianteTenant {
+  cooperativaId: string;
+  cooperativaNome: string;
+  cooperadosAnomalos: number;
+  somaAbsDelta: string;
+  topAnomalias: ReconciliacaoInvarianteAnomalia[];
+}
+
+export interface ReconciliacaoInvarianteResultado {
+  cooperativasVarridas: number;
+  cooperadosAnomalos: number;
+  somaAbsDelta: number;
+  anomaliasPorTenant: ReconciliacaoInvarianteTenant[];
 }
