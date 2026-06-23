@@ -40,9 +40,15 @@ entregamos o **painel de passivo** (o admin agora vê quanto a cooperativa deve 
 ## Débitos novos / follow-ups (M52b ou Walter)
 - **D-novo-FAXINA-MELT-F** P1 — Bloco F (melt: oxidação→quebra, QR→taxa, resgate→spread) é o M52b.
 - **D-novo-FAXINA-BENEFICIO-CONVENIO-ART79-88** P1 — default AUXILIAR vs PRÓPRIO precisa parecer Walter.
-- **D-novo-FAXINA-CONTABIL-LEDGER-ALIGN** P1 (levantado pelo orquestrador) — a reconciliação foi LEDGER-only;
-  confirmar se o Passivo contábil 2.3.01 alinha com o saldo (FUNDACAO §4#1 é contábil↔saldo) ou se há resíduo;
-  o cron deve monitorar AMBOS (ledger↔saldo E contábil↔saldo).
+- **D-novo-FAXINA-CONTABIL-LEDGER-ALIGN** P1 — **CONFIRMADO via `scripts/check-invariante-contabil-tenant.ts`**
+  (CoopereBR, 23/06 pós-merge): Passivo contábil 2.3.01 = R$ 93,10 (13 lançamentos ativos: 11 créditos R$ 93,55
+  − 2 débitos R$ 0,45). Passivo ESPERADO = 2114,32 tokens × R$ 0,45 = **R$ 951,44**. **Resíduo contábil↔saldo
+  = R$ 858,34** (≈ 90% do passivo esperado fora do 2.3.01). Causa-raiz: (a) reconciliação Bloco D foi
+  LEDGER-only (sem espelho contábil dos +259 tokens); (b) emissões de tokens pré-M50 não passaram pelo
+  `lancarEmissao*` (criadas via `creditar()` direto, sem listener contábil). M52b deve: (i) ampliar o cron
+  pra monitorar AMBOS os invariantes (ledger↔saldo E contábil↔saldo); (ii) criar espelho contábil das 2
+  entradas de reconciliação v2 (LUCIANO +49 + AMAGES +210 — `lancarBonificacaoAdminReconciliacao` ou similar);
+  (iii) decidir com Walter como tratar o passivo histórico não-escriturado (~R$ 836 do pré-M50).
 - **D-novo-FAXINA-SOFT-DELETE** P1 mod — reversão usou DELETE físico; contábil deveria ser soft-delete
   (auditoria) → M52b (exige schema).
 - P2/P3: N+1 no cron (307 findMany); PROVISIONAL fora da $transaction; arredondamento Decimal(10,4);

@@ -92,6 +92,11 @@ não perder). Código 100% re-revisado + 4 reviewers aprovaram antes do merge.
   fix estrutural quantidade>0.
 - **Próximo = M52b** (Bloco F melt) + follow-ups (Art 79/88→Walter, soft-delete, D-novo-FAXINA-CONTABIL-LEDGER-
   ALIGN, N+1 cron). Detalhe: `docs/sessoes/2026-06-23-m52a-faxina-contabil-c-g.md`.
+- **D-novo-FAXINA-CONTABIL-LEDGER-ALIGN — medição confirmada pós-merge (23/06):** invariante ledger↔saldo=0 ✅
+  mas invariante CONTÁBIL↔SALDO (FUNDACAO §4#1) tem **resíduo R$ 858,34** (Passivo 2.3.01 contábil=R$ 93,10
+  vs esperado 2114,32 tokens × R$ 0,45 = R$ 951,44). Causa: reconciliação foi ledger-only + emissões pré-M50
+  sem espelho contábil. M52b inclui (i) cron monitorando AMBOS invariantes; (ii) espelho contábil dos +259
+  da reconciliação v2; (iii) decisão Walter sobre passivo histórico não-escriturado.
 - ⚠️ Code voltando da 500: M52a JÁ está mergeado (`83a507c`) — NÃO re-aplicar; só `pm2 list` + sanity.
 
 ---
