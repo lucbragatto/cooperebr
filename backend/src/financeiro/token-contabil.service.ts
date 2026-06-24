@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, OrigemLancamento } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { isAmbienteReal } from '../common/safety/ambiente';
 
 /**
  * Lançamentos contábeis automáticos para operações de CooperToken.
@@ -50,6 +51,34 @@ export type LancamentoCaixaTipo =
   | 'MUTACAO_PASSIVO'
   | 'MUTACAO_DESPESA'
   | 'PROVISIONAL';
+
+/**
+ * Sprint M52b (23/06/2026) — Gate dual MELT.
+ *
+ * Retorna `true` apenas quando AMBOS:
+ *  (1) env `MELT_PRODUCAO_LIBERADA=true` (gate operacional Luciano)
+ *  (2) `ConfigCooperToken.meltAtivado=true` (gate por tenant)
+ *
+ * Em DEV (`isAmbienteReal()=false`), o env é dispensado — facilita smokes.
+ * Em PROD, AMBOS são obrigatórios. Default tudo OFF.
+ *
+ * Quando OFF:
+ *  - oxidação: cron já gated por OXIDACAO_PRODUCAO_LIBERADA (mantém)
+ *  - taxa QR: `processarPagamentoQr` força liquido=bruto (mata o leak)
+ *  - spread resgate: `solicitarResgate` libera valor cheio (sem bloqueio)
+ *
+ * Quando ON:
+ *  - cobra pela `ConfigCooperToken.taxa*Perc`
+ *  - dispara `lancarMelt*` correspondente (D 2.3.01 / C 1.2.1x)
+ *
+ * Sem dependência NestJS — importável por service + cron + scripts.
+ */
+export function isMeltAtivado(config: { meltAtivado?: boolean | null } | null | undefined): boolean {
+  const tenantOn = config?.meltAtivado === true;
+  if (!tenantOn) return false;
+  if (!isAmbienteReal()) return true; // DEV smokes — gate só pela config
+  return process.env.MELT_PRODUCAO_LIBERADA === 'true';
+}
 
 interface LancamentoTokenParams {
   cooperativaId: string;
@@ -576,5 +605,375 @@ export class TokenContabilService {
       `[token-contabil] ESTORNO ADMIN LOTE=${params.loteId}: R$ ${valor} (${params.cooperativaId.slice(0, 8)}…)`,
     );
     return { baixaPassivo, reversaoDespesa };
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Sprint M52b Bloco F MELT (23/06/2026) — D-novo-FAXINA-MELT-F.
+  //
+  //  3 métodos contábeis pro circuito de RECEITA do token:
+  //    - lancarMeltOxidacao    → D 2.3.01 / C 1.2.12 (Receita Quebra)
+  //    - lancarMeltTaxaQR      → D 2.3.01 / C 1.2.11 (Receita Taxa QR)
+  //    - lancarMeltSpreadResgate → D 2.3.01 / C 1.2.10 (Receita Spread)
+  //
+  //  TODOS atomic via $transaction + idempotentes via
+  //  `@@unique(origemTipo, origemId)` no LancamentoCaixa.
+  //
+  //  CALLER deve verificar `isMeltAtivado(config)` ANTES de chamar — esses
+  //  métodos NÃO checam o gate (responsabilidade do caller pra simplificar
+  //  fluxo: gate OFF nem entra na perna contábil, gate ON cobra E lança).
+  //
+  //  Receita = tributação por contraparte (Walter pendente):
+  //    - PROPRIO Art. 79: isento PIS/COFINS+IRPJ (cooperado típico).
+  //    - AUXILIAR Art. 88: incide sobre spread se convênio.
+  //    - NAO_COOPERATIVO Art. 86-87: tributação plena.
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * MELT por OXIDAÇÃO (decay mensal). Caller: `aplicarOxidacao` (cron).
+   *  - D Passivo 2.3.01 (baixa)
+   *  - C Receita Quebra Oxidação 1.2.12
+   *
+   * Idempotência via `origemTipo='LEDGER_OXIDACAO' + origemId=ledgerId`
+   * (cada ledger OXIDACAO gera no máximo 1 par contábil).
+   */
+  async lancarMeltOxidacao(
+    params: LancamentoTokenParams & { ledgerOxidacaoId: string },
+  ) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
+    try {
+      const [baixaPassivo, receita] = await this.prisma.$transaction([
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'MUTACAO_PASSIVO',
+            descricao: `[Token] D: Baixa Passivo (oxidação) — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'LEDGER_OXIDACAO',
+            origemId: params.ledgerOxidacaoId,
+            observacoes: params.observacoes ?? 'Melt oxidação — baixa passivo',
+          },
+        }),
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'RECEITA',
+            descricao: `[Token] C: Receita Quebra Oxidação — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_RECEITA_OXIDACAO),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'LEDGER_OXIDACAO_RECEITA',
+            origemId: params.ledgerOxidacaoId,
+            observacoes: params.observacoes ?? 'Melt oxidação — receita quebra',
+          },
+        }),
+      ]);
+      this.logger.log(
+        `[token-contabil] MELT OXIDAÇÃO: R$ ${valor} (${params.cooperativaId.slice(0, 8)}… ledger=${params.ledgerOxidacaoId.slice(0, 8)}…)`,
+      );
+      return { baixaPassivo, receita };
+    } catch (err) {
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.LEDGER_OXIDACAO,
+        OrigemLancamento.LEDGER_OXIDACAO_RECEITA,
+        params.ledgerOxidacaoId,
+        'lancarMeltOxidacao',
+      );
+    }
+  }
+
+  /**
+   * MELT por TAXA QR (P2P circulação). Caller: `processarPagamentoQr`.
+   *  - D Passivo 2.3.01 (a taxa "sai" do passivo total — o pagador debitou
+   *    bruto, recebedor recebe líquido; a taxa que sumia agora vira receita)
+   *  - C Receita Taxa Circulação QR 1.2.11
+   *
+   * Idempotência: `origemTipo='TOKEN_TRANSACAO_TAXA' + origemId=tokenTransacao.id`
+   * (jti único pelo helper criarTokenTransacao).
+   */
+  async lancarMeltTaxaQR(
+    params: LancamentoTokenParams & { tokenTransacaoId: string },
+  ) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
+    if (valor <= 0) {
+      // Taxa zero é caminho normal (gate OFF). Nenhum lançamento.
+      return null;
+    }
+    try {
+      const [baixaPassivo, receita] = await this.prisma.$transaction([
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'MUTACAO_PASSIVO',
+            descricao: `[Token] D: Baixa Passivo (taxa QR) — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'TOKEN_TRANSACAO_TAXA',
+            origemId: params.tokenTransacaoId,
+            observacoes: params.observacoes ?? 'Melt taxa QR — baixa passivo',
+          },
+        }),
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'RECEITA',
+            descricao: `[Token] C: Receita Taxa Circulação QR — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_RECEITA_TAXA_QR),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'TOKEN_TRANSACAO_TAXA_RECEITA',
+            origemId: params.tokenTransacaoId,
+            observacoes: params.observacoes ?? 'Melt taxa QR — receita',
+          },
+        }),
+      ]);
+      this.logger.log(
+        `[token-contabil] MELT TAXA QR: R$ ${valor} (${params.cooperativaId.slice(0, 8)}… tx=${params.tokenTransacaoId.slice(0, 8)}…)`,
+      );
+      return { baixaPassivo, receita };
+    } catch (err) {
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.TOKEN_TRANSACAO_TAXA,
+        OrigemLancamento.TOKEN_TRANSACAO_TAXA_RECEITA,
+        params.tokenTransacaoId,
+        'lancarMeltTaxaQR',
+      );
+    }
+  }
+
+  /**
+   * MELT por SPREAD RESGATE (haircut na saída via PIX). Caller:
+   * `cooper-token.service.ts:processarWebhookResgate` ou wire equivalente
+   * que confirma o PIX e tem o spread em R$ (face × valorToken − líquido).
+   *  - D Passivo 2.3.01 (a parcela do haircut)
+   *  - C Receita Spread Resgate 1.2.10
+   *
+   * Idempotência: `origemTipo='RESGATE_RECIBO_SPREAD' + origemId=resgateRecibo.id`.
+   */
+  async lancarMeltSpreadResgate(
+    params: LancamentoTokenParams & { resgateReciboId: string },
+  ) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
+    if (valor <= 0) {
+      return null;
+    }
+    try {
+      const [baixaPassivo, receita] = await this.prisma.$transaction([
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'MUTACAO_PASSIVO',
+            descricao: `[Token] D: Baixa Passivo (spread resgate) — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'RESGATE_RECIBO_SPREAD',
+            origemId: params.resgateReciboId,
+            observacoes: params.observacoes ?? 'Melt spread resgate — baixa passivo',
+          },
+        }),
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'RECEITA',
+            descricao: `[Token] C: Receita Spread Resgate — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_RECEITA_SPREAD),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'RESGATE_RECIBO_SPREAD_RECEITA',
+            origemId: params.resgateReciboId,
+            observacoes: params.observacoes ?? 'Melt spread resgate — receita',
+          },
+        }),
+      ]);
+      this.logger.log(
+        `[token-contabil] MELT SPREAD RESGATE: R$ ${valor} (${params.cooperativaId.slice(0, 8)}… recibo=${params.resgateReciboId.slice(0, 8)}…)`,
+      );
+      return { baixaPassivo, receita };
+    } catch (err) {
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.RESGATE_RECIBO_SPREAD,
+        OrigemLancamento.RESGATE_RECIBO_SPREAD_RECEITA,
+        params.resgateReciboId,
+        'lancarMeltSpreadResgate',
+      );
+    }
+  }
+
+  /**
+   * Sprint M52b Fatia 2 (23/06/2026) — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+   *
+   * Espelho contábil de uma entrada de ledger de RECONCILIACAO_HISTORICA
+   * (ajuste APPEND-ONLY do script faxina-d). Cria o par D+C que faltou
+   * (ledger v2 criou só CooperTokenLedger; o passivo 2.3.01 não foi
+   * atualizado, gerando resíduo medido em R$ 116,55 = R$ 49 × 0,45 +
+   * R$ 210 × 0,45 nos +259 do LUCIANO + AMAGES).
+   *
+   *  - D Despesa de Bonificação 5.1.03 (admin pagou pelo ajuste do passado)
+   *  - C Passivo Tokens a Resgatar 2.3.01 (aumento de passivo pra alinhar
+   *    com o saldo real)
+   *
+   * Idempotência via `origemTipo='RECONCILIACAO_HISTORICA' + origemId=
+   * '2026-06-23-FAXINA-D-v2-{cooperadoId}'`. Rodar 2× não duplica.
+   *
+   * naturezaAto='PROPRIO' por default (cooperado ATIVO Art. 79). Override
+   * permitido pra casos específicos (não esperado nesta sprint).
+   */
+  async lancarAjusteReconciliacao(
+    params: LancamentoTokenParams & { origemReconciliacaoId: string },
+  ) {
+    const contas = await this.garantirContas(params.cooperativaId);
+    const competencia = params.competencia || this.getCompetencia();
+    const valor = Math.round(params.valor * 100) / 100;
+    const naturezaAto = params.naturezaAto || 'PROPRIO';
+    if (valor <= 0) return null;
+    try {
+      const [debito, credito] = await this.prisma.$transaction([
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'DESPESA',
+            descricao: `[Token] D: Despesa Bonificação (ajuste reconciliação) — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_DESPESA_BONIFICACAO),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'RECONCILIACAO_HISTORICA',
+            origemId: params.origemReconciliacaoId,
+            observacoes: params.observacoes ?? 'Ajuste contábil reconciliação histórica (espelho do ledger v2)',
+          },
+        }),
+        this.prisma.lancamentoCaixa.create({
+          data: {
+            tipo: 'MUTACAO_PASSIVO',
+            descricao: `[Token] C: Passivo Tokens a Resgatar (ajuste reconciliação) — ${params.descricao}`,
+            valor,
+            competencia,
+            status: 'REALIZADO',
+            dataPagamento: new Date(),
+            planoContasId: contas.get(CONTA_PASSIVO_TOKEN),
+            naturezaAto,
+            cooperadoId: params.cooperadoId,
+            cooperativaId: params.cooperativaId,
+            origemTipo: 'RECONCILIACAO_HISTORICA_PASSIVO',
+            origemId: params.origemReconciliacaoId,
+            observacoes: params.observacoes ?? 'Ajuste contábil reconciliação histórica (aumento passivo)',
+          },
+        }),
+      ]);
+      this.logger.log(
+        `[token-contabil] AJUSTE RECONCILIAÇÃO: R$ ${valor} (${params.cooperativaId.slice(0, 8)}… origemId=${params.origemReconciliacaoId})`,
+      );
+      return { debito, credito };
+    } catch (err) {
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.RECONCILIACAO_HISTORICA,
+        OrigemLancamento.RECONCILIACAO_HISTORICA_PASSIVO,
+        params.origemReconciliacaoId,
+        'lancarAjusteReconciliacao',
+      );
+    }
+  }
+
+  /**
+   * Sprint M52b F4 F1 (24/06/2026) — fix multitenant P1 + financeiro P3:
+   * verificar AMBAS pernas D+C do par dupla-partida no fallback de
+   * idempotência. Antes só verificava o origemTipo D → half-write
+   * hipotético (D commitado mas C não) era declarado "idempotente" e
+   * a perna C nunca era recriada — livro desbalanceado silenciosamente.
+   *
+   * Agora: P2002 → findFirst D AND findFirst C. Se ambos existem,
+   * idempotência completa. Se só um existe (half-write detectado),
+   * THROW EXPLÍCITO — alerta forte pra cron de invariante detectar.
+   *
+   * Tipo `OrigemLancamento` (não string) — fix mt P2 (eliminar `as any`).
+   */
+  private async idempotencyFallback(
+    err: unknown,
+    cooperativaId: string,
+    debitoOrigemTipo: OrigemLancamento,
+    creditoOrigemTipo: OrigemLancamento,
+    origemId: string,
+    metodo: string,
+  ) {
+    const isUniqueViolation =
+      typeof err === 'object' &&
+      err !== null &&
+      (err as { code?: string }).code === 'P2002';
+    if (!isUniqueViolation) throw err;
+    const [debito, credito] = await Promise.all([
+      this.prisma.lancamentoCaixa.findFirst({
+        where: { origemTipo: debitoOrigemTipo, origemId, cooperativaId },
+        select: { id: true },
+      }),
+      this.prisma.lancamentoCaixa.findFirst({
+        where: { origemTipo: creditoOrigemTipo, origemId, cooperativaId },
+        select: { id: true },
+      }),
+    ]);
+    if (debito && credito) {
+      // Idempotência completa (ambas pernas commitadas).
+      this.logger.log(
+        `${metodo}: idempotência hit (origemId=${origemId.slice(0, 8)}…) — par D+C completo`,
+      );
+      return { debito, credito };
+    }
+    // Half-write detectado — uma perna existe sem a outra. NÃO silenciar.
+    // Throw original do P2002 com contexto adicional pra cron de invariante
+    // contábil↔saldo (M52b Fatia 2) detectar e alertar admin.
+    this.logger.error(
+      `[${metodo}] HALF-WRITE detectado pra origemId=${origemId.slice(0, 8)}… ` +
+        `cooperativaId=${cooperativaId.slice(0, 8)}… ` +
+        `(D=${debito ? 'OK' : 'MISSING'}, C=${credito ? 'OK' : 'MISSING'}). ` +
+        `Livro desbalanceado — invariante contábil↔saldo vai detectar. ` +
+        `Não silenciado pra forçar visibilidade.`,
+    );
+    throw err;
   }
 }

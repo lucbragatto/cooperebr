@@ -57,7 +57,7 @@ import { AsaasPixOutService } from '../financeiro/asaas-pix-out.service';
 // (D Despesa de Bonificacao / C Passivo Tokens). NAO reusar o evento
 // COOPER_TOKEN_EVENTS.EMITIDO porque ele dispara lancarEmissaoFaturaCheia
 // (template errado de "Custo Desconto Concedido").
-import { TokenContabilService } from '../financeiro/token-contabil.service';
+import { TokenContabilService, isMeltAtivado } from '../financeiro/token-contabil.service';
 // Sprint D2.1 v2 (16/06/2026) — disclaimer versionado (entidade global
 // default + override tenant). Service exportado pelo DisclaimerSaqueModule.
 import { DisclaimerSaqueService } from '../disclaimer-saque/disclaimer-saque.service';
@@ -96,6 +96,18 @@ interface CreditarParams {
    * Sem override, SOCIAL fica PROPRIO (cooperado-only, conservador).
    */
   naturezaAtoOverride?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
+
+  /**
+   * Sprint M52b F4 F9 (24/06/2026) — fix conformidade P2 D4 do re-review
+   * M52b. Quando override `NAO_COOPERATIVO` é forçado (risco fiscal Art.
+   * 86-87), o AuditLog precisa identificar o usuário humano que tomou a
+   * decisão (não só `'SYSTEM_SERVICE'`). Caller que tem `req.user.id`
+   * (controllers) deve propagar; callers programáticos (cron, listeners)
+   * passam undefined e o AuditLog grava 'SYSTEM_SERVICE'.
+   */
+  auditUsuarioId?: string;
+  /** Motivo opcional do override (preenchido pelo admin via UI futura). */
+  auditMotivoOverride?: string;
 }
 
 interface DebitarParams {
@@ -444,6 +456,13 @@ export class CooperTokenService {
     const forcarDisponivel = params.forcarDisponivel === true;
     const deveSerDisponivel = forcarDisponivel || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS';
 
+    // Sprint M52b F3 (23/06/2026) — fix financeiro-token P2-03:
+    // valorReais calculado ANTES do tx pra que PROVISIONAL entre dentro
+    // do mesmo $transaction (saldo + ledger + PROVISIONAL atomic).
+    const valorReaisLedger = valorEmissao != null
+      ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100
+      : null;
+
     const ledger = await this.prisma.$transaction(async (tx) => {
       // Buscar ou criar saldo
       let saldo = await tx.cooperTokenSaldo.findUnique({
@@ -490,7 +509,7 @@ export class CooperTokenService {
           operacao: CooperTokenOperacao.CREDITO,
           quantidade: quantidadeLiquida,
           saldoApos: novoValor,
-          valorReais: valorEmissao != null ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100 : null,
+          valorReais: valorReaisLedger,
           referenciaId,
           referenciaTabela,
           expiracaoEm,
@@ -503,6 +522,28 @@ export class CooperTokenService {
       this.logger.log(
         `Creditado ${quantidadeLiquida} tokens líquidos (${tipo}) para cooperado ${cooperadoId} | Split: bruto=${quantidade}, taxa=${taxaEmissao}`,
       );
+
+      // Sprint M52b F3 — PROVISIONAL DENTRO da tx (fix financeiro-token
+      // P2-03 M52a v2). Antes ficava fora → crash entre commit do ledger
+      // e PROVISIONAL deixava 2 estados divergentes (ledger criado +
+      // sem registro PROVISIONAL pro listener canônico encontrar). Agora
+      // atomic: ou tudo commita ou nada.
+      if (valorReaisLedger != null && valorReaisLedger > 0) {
+        const competencia = new Date().toISOString().slice(0, 7);
+        await tx.lancamentoCaixa.create({
+          data: {
+            tipo: 'PROVISIONAL',
+            descricao: `Emissão ${tipo}: ${quantidadeLiquida} tokens (R$ ${valorReaisLedger.toFixed(2)})`,
+            valor: valorReaisLedger,
+            competencia,
+            status: 'PROVISIONAL',
+            naturezaClube: 'PROVISIONAL_TOKEN_EMISSAO',
+            cooperTokenLedgerId: entry.id,
+            cooperadoId,
+            cooperativaId,
+          },
+        });
+      }
 
       return entry;
     });
@@ -535,11 +576,43 @@ export class CooperTokenService {
       defaultSugerido: classificacao.naturezaAtoSugerida,
     });
 
-    // Auditoria pra SOCIAL com override NAO_COOPERATIVO (risco fiscal explicitado).
+    // Sprint M52b F3 (23/06/2026) — fix conformidade P2 M52a v2:
+    // AuditLog PERSISTIDO (não só logger.warn) pra override NAO_COOPERATIVO
+    // em SOCIAL. Reclassificação de ato com risco fiscal (Art. 86-87
+    // tributação plena) exige trilha forense, não log volátil.
+    // Best-effort: falha no AuditLog NÃO desfaz o crédito (já commitado).
     if (tipo === 'SOCIAL' && naturezaAto === 'NAO_COOPERATIVO') {
       this.logger.warn(
-        `[SOCIAL] cooperado=${cooperadoId} qty=${quantidadeLiquida} natureza=NAO_COOPERATIVO (override SA) — tributação plena PIS/COFINS+IRPJ Art. 86-87. Audit recomendado.`,
+        `[SOCIAL] cooperado=${cooperadoId} qty=${quantidadeLiquida} natureza=NAO_COOPERATIVO (override SA) — tributação plena PIS/COFINS+IRPJ Art. 86-87.`,
       );
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            cooperativaId,
+            acao: 'cooper-token.override-natureza-forcado',
+            recurso: 'CooperTokenLedger',
+            recursoId: ledger?.id ?? null,
+            // M52b F4 F9 (24/06): usuarioId real quando o caller propaga
+            // (via auditUsuarioId em CreditarParams); senão 'SYSTEM_SERVICE'.
+            usuarioId: params.auditUsuarioId ?? 'SYSTEM_SERVICE',
+            usuarioPerfil: params.auditUsuarioId ? 'ADMIN_OU_SA' : 'SYSTEM',
+            metadata: {
+              cooperadoId,
+              tipo,
+              quantidade: quantidadeLiquida,
+              valorReais,
+              naturezaAtoForcada: 'NAO_COOPERATIVO',
+              naturezaSugeridaHelper: classificacao.naturezaAtoSugerida,
+              fiscalRisk: 'Art. 86-87 — tributação plena PIS/COFINS+IRPJ',
+              motivoOverride: params.auditMotivoOverride ?? null,
+            } as any,
+          },
+        });
+      } catch (errAudit) {
+        this.logger.error(
+          `[SOCIAL] AuditLog override-natureza-forcado falhou pra cooperado ${cooperadoId}: ${(errAudit as Error).message}`,
+        );
+      }
     }
 
     if (classificacao.categoria === 'INGRESSO_PAGO') {
@@ -562,27 +635,8 @@ export class CooperTokenService {
       );
     }
 
-    // Sprint 9: contabilidade preparatória — LancamentoCaixa PROVISIONAL
-    if (valorReais > 0) {
-      try {
-        const competencia = new Date().toISOString().slice(0, 7);
-        await this.prisma.lancamentoCaixa.create({
-          data: {
-            tipo: 'PROVISIONAL',
-            descricao: `Emissão ${tipo}: ${quantidadeLiquida} tokens (R$ ${valorReais.toFixed(2)})`,
-            valor: valorReais,
-            competencia,
-            status: 'PROVISIONAL',
-            naturezaClube: 'PROVISIONAL_TOKEN_EMISSAO',
-            cooperTokenLedgerId: ledger?.id || null,
-            cooperadoId,
-            cooperativaId,
-          },
-        });
-      } catch (err) {
-        this.logger.warn(`LancamentoCaixa PROVISIONAL falhou: ${(err as Error).message}`);
-      }
-    }
+    // PROVISIONAL agora dentro da $transaction acima — atomicidade
+    // saldo + ledger + PROVISIONAL (M52b F3, fix financeiro-token P2-03).
 
     return ledger;
   }
@@ -614,6 +668,19 @@ export class CooperTokenService {
         `debitar: quantidade deve ser número finito > 0 (recebido ${quantidade}). Direção via operacao=DEBITO.`,
       );
     }
+
+    // Sprint M52b F4 F5 (24/06): PROVISIONAL agora atomic dentro do tx
+    // (simetria com creditar). valorTokenReais calculado ANTES do tx
+    // (config não muda durante a operação; getConfig usa this.prisma).
+    const tipoDebito = params.tipo ?? 'GERACAO_EXCEDENTE';
+    const natureza = tipoDebito === 'DESCONTO_FATURA'
+      ? 'PROVISIONAL_TOKEN_ABATIMENTO'
+      : tipoDebito === 'PAGAMENTO_QR'
+      ? 'PROVISIONAL_TOKEN_TRANSFERENCIA'
+      : 'PROVISIONAL_TOKEN_ABATIMENTO';
+    const configDebit = await this.getConfig(cooperativaId);
+    const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
+    const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
 
     return this.prisma.$transaction(async (tx) => {
       const saldo = await tx.cooperTokenSaldo.findUnique({
@@ -662,26 +729,13 @@ export class CooperTokenService {
         `Debitado ${quantidade} tokens do cooperado ${cooperadoId}`,
       );
 
-      // Sprint 9: contabilidade preparatória — débito gera LancamentoCaixa PROVISIONAL
-      const tipoDebito = params.tipo ?? 'GERACAO_EXCEDENTE';
-      const natureza = tipoDebito === 'DESCONTO_FATURA'
-        ? 'PROVISIONAL_TOKEN_ABATIMENTO'
-        : tipoDebito === 'PAGAMENTO_QR'
-        ? 'PROVISIONAL_TOKEN_TRANSFERENCIA'
-        : 'PROVISIONAL_TOKEN_ABATIMENTO';
-
-      try {
+      // Sprint M52b F4 F5 (24/06): PROVISIONAL DENTRO do tx (atomic) —
+      // fix financeiro-token P2-3 do re-review M52b. Antes ficava fora,
+      // com try/catch + logger.warn → ledger commitado + PROVISIONAL
+      // ausente em caso de falha (drift entre ledger e contábil).
+      if (valorEstimado > 0) {
         const competencia = new Date().toISOString().slice(0, 7);
-        // F4 Bloco C.1 FIN-7 (12/06/2026) — antes era 0.20 chumbado.
-        // valorTokenReais vem da config do tenant (fallback 0.45 = mesmo
-        // default usado em calcularDesconto e processarPagamentoQr).
-        // debitar() é genérico (cron de excedente, etc), então usa config
-        // direto — quando vier do usarNaFatura (caminho com plano), o
-        // valorToken correto é refletido lá pelo inline (espelho mantido).
-        const configDebit = await this.getConfig(cooperativaId);
-        const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
-        const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
-        await this.prisma.lancamentoCaixa.create({
+        await tx.lancamentoCaixa.create({
           data: {
             tipo: 'PROVISIONAL',
             descricao: `Débito ${tipoDebito}: ${quantidade} tokens`,
@@ -694,8 +748,6 @@ export class CooperTokenService {
             cooperativaId,
           },
         });
-      } catch (err) {
-        this.logger.warn(`LancamentoCaixa PROVISIONAL débito falhou: ${(err as Error).message}`);
       }
 
       return ledger;
@@ -2513,17 +2565,20 @@ export class CooperTokenService {
       config,
     );
 
-    // F6 Bloco B — guard taxa>0 análogo ao F3 GAP-F3-4: bloqueado até
-    // D-novo-TAXA-RESGATE-DESTINO definir destino contábil.
-    if (taxaTokens > 0) {
-      throw new BadRequestException(
-        `Resgate em PIX está bloqueado enquanto a taxa de resgate > 0 (atual: ${taxaTokens} tokens). ` +
-          `Definir destino contábil da taxa de resgate exige decisão produto (ver D-novo-TAXA-RESGATE-DESTINO P2 — análogo a D-novo-TAXA-TRANSFER-DESTINO). ` +
-          `Setar taxaResgatePerc=0 em /cooper-token/admin/config até o gate ser definido.`,
-      );
-    }
-    const valorTaxaReais = 0; // Por design v1 — taxa zero.
-    const valorLiquidoReais = valorBrutoReais;
+    // Sprint M52b Bloco F MELT (23/06/2026) — destravamento do guard
+    // taxa>0 (substitui F6 Bloco B / D-novo-TAXA-RESGATE-DESTINO). Gate
+    // dual `isMeltAtivado(config)` controla a COBRANÇA da taxa, não só o
+    // lançamento (ajuste 1 do orquestrador):
+    //  - Gate OFF: libera valor cheio sem spread (taxa=0, líquido=bruto).
+    //    Mata o bloqueio histórico — admin pode setar taxaResgatePerc>0
+    //    sem quebrar resgate (a config só "ativa" quando o melt liga).
+    //  - Gate ON: cobra pela config + lancarMeltSpreadResgate dispara
+    //    quando webhook PIX confirmar.
+    const meltAtivado = isMeltAtivado(config);
+    const taxaEfetivaTokens = meltAtivado ? Number(taxaTokens) : 0;
+    const liquidoEfetivoTokens = meltAtivado ? Number(liquidoTokens) : quantidade;
+    const valorTaxaReais = Math.round(taxaEfetivaTokens * valorTokenReais * 100) / 100;
+    const valorLiquidoReais = Math.round(liquidoEfetivoTokens * valorTokenReais * 100) / 100;
     const tier = calcularTier(valorBrutoReais);
 
     // ── Guard 3: tier ALTO exige OTP step-up ──
@@ -2663,8 +2718,14 @@ export class CooperTokenService {
             cooperadoEstabelecimentoId: estabelecimentoCooperadoId,
             clientRequestId,
             valorBrutoTokens: quantidade,
-            valorTaxaTokens: taxaTokens,
-            valorLiquidoTokens: liquidoTokens,
+            // Sprint M52b F4 F4 (24/06): fix code MEDIUM-1 + financeiro
+            // P2-1: persistir valores EFETIVOS pós-gate. Antes guardava
+            // taxaTokens/liquidoTokens da config (PRE-gate), o que criava
+            // inconsistência: gate OFF + config taxa>0 deixava o recibo
+            // com taxa nominal cheia mas valorTaxaReais=0 (porque o
+            // bloqueio do saldo foi `quantidade` cheia, sem desconto).
+            valorTaxaTokens: taxaEfetivaTokens,
+            valorLiquidoTokens: liquidoEfetivoTokens,
             valorBrutoReais,
             valorTaxaReais,
             valorLiquidoReais,
@@ -3103,6 +3164,39 @@ export class CooperTokenService {
         this.logger.log(
           `[F6 D2] LancamentoCaixa D Passivo/C Caixa emitido pra recibo=${recibo.numeroRecibo} valor=R$ ${Number(recibo.valorLiquidoReais).toFixed(2)}`,
         );
+
+        // Sprint M52b Bloco F MELT (23/06/2026) — perna spread (haircut).
+        // Recibo guarda valorTaxaReais (= spread); se gate dual ON e taxa>0,
+        // lança D Passivo / C Receita Spread 1.2.10. Idempotente via
+        // recibo.id. Falha tratada como warn (mesmo padrão lancarResgatePix).
+        //
+        // P3 mt re-review M52b (24/06/2026) — DECISÃO INTENCIONAL: gate
+        // dual NÃO é re-verificado aqui. O `valorTaxaReais` no recibo
+        // congela o spread no momento do `solicitarResgate` (que JÁ aplicou
+        // o gate). Recibo é contrato firmado — gate desligado entre
+        // criação e webhook NÃO retroage. Se admin quiser anular spread
+        // de recibo pendente, deve cancelar o recibo, não desligar o gate.
+        const valorSpread = Math.round(Number(recibo.valorTaxaReais ?? 0) * 100) / 100;
+        if (valorSpread > 0) {
+          try {
+            await this.tokenContabilService.lancarMeltSpreadResgate({
+              cooperativaId: recibo.cooperativaId,
+              cooperadoId: recibo.cooperadoEstabelecimentoId,
+              valor: valorSpread,
+              descricao: `Spread resgate recibo ${recibo.numeroRecibo}`,
+              observacoes: `Spread (face − líquido) do recibo ${recibo.numeroRecibo}`,
+              naturezaAto: 'PROPRIO',
+              resgateReciboId: recibo.id,
+            });
+            this.logger.log(
+              `[F6 melt] LancamentoCaixa Spread emitido pra recibo=${recibo.numeroRecibo} valor=R$ ${valorSpread.toFixed(2)}`,
+            );
+          } catch (errSpread) {
+            this.logger.warn(
+              `[F6 melt] Spread contábil FALHOU recibo=${recibo.numeroRecibo}: ${(errSpread as Error).message} (cron invariante detecta)`,
+            );
+          }
+        }
       } catch (errContabil) {
         const msgContabil =
           errContabil instanceof Error ? errContabil.message : 'erro desconhecido';
@@ -3683,12 +3777,21 @@ export class CooperTokenService {
 
       if (reducaoReal <= 0) continue;
 
-      await this.prisma.$transaction(async (tx) => {
+      // Sprint M52b Bloco F MELT (23/06/2026) — gate dual `isMeltAtivado`
+      // controla apenas o LANÇAMENTO CONTÁBIL. A oxidação em si (ledger +
+      // saldo) já está sob `OXIDACAO_PRODUCAO_LIBERADA` (linha 3605); se
+      // chegamos aqui, o admin/operador autorizou o decay. O gate melt é
+      // adicional: só dispara perna contábil (D 2.3.01 / C 1.2.12) quando
+      // env+config dizem sim.
+      const meltAtivado = isMeltAtivado(config);
+      const valorMeltReais = Math.round(reducaoReal * Number(config.valorTokenReais ?? 0.45) * 100) / 100;
+
+      const ledgerOxidacao = await this.prisma.$transaction(async (tx) => {
         await tx.cooperTokenSaldo.update({
           where: { cooperadoId: s.cooperadoId },
           data: { saldoDisponivel: novoSaldo },
         });
-        await tx.cooperTokenLedger.create({
+        return tx.cooperTokenLedger.create({
           data: {
             cooperadoId: s.cooperadoId,
             cooperativaId,
@@ -3700,8 +3803,29 @@ export class CooperTokenService {
               `Oxidacao DECAY_CONTINUO ${percMes}% sobre elegivel ${saldoElegivel}` +
               ` (graca ${gracaDias}d, piso ${piso}) — reducao ${reducaoReal}`,
           },
+          select: { id: true },
         });
       });
+
+      // Perna contábil FORA da tx do saldo (idempotente; melhor isolada
+      // pra não amarrar tx longa). Falha aqui NÃO desfaz oxidação — cron
+      // de invariante contábil↔saldo do M52b Fatia 2 detecta e alerta.
+      if (meltAtivado && this.tokenContabilService && valorMeltReais > 0) {
+        try {
+          await this.tokenContabilService.lancarMeltOxidacao({
+            cooperativaId,
+            cooperadoId: s.cooperadoId,
+            valor: valorMeltReais,
+            descricao: `Oxidação ${reducaoReal} tokens cooperado ${s.cooperadoId.slice(0, 8)}…`,
+            naturezaAto: 'PROPRIO', // default cooperado ATIVO → Art. 79
+            ledgerOxidacaoId: ledgerOxidacao.id,
+          });
+        } catch (err) {
+          this.logger.warn(
+            `[oxidacao] melt contábil falhou pra cooperado ${s.cooperadoId.slice(0, 8)}…: ${(err as Error).message} (cron invariante detectará)`,
+          );
+        }
+      }
 
       cooperadosAfetados += 1;
       totalTokensReduzidos = Math.round((totalTokensReduzidos + reducaoReal) * 10000) / 10000;
@@ -3850,17 +3974,27 @@ export class CooperTokenService {
     // processarQrParceiro reusa { taxa, quantidadeLiquida } daqui sem
     // reaplicar (F0 preservado).
     const configQr = await this.getConfig(recebedorCooperativaId);
-    const { taxa, liquido: quantidadeLiquida } = calcularTaxa(
+    const { taxa: taxaConfig, liquido: liquidoConfig } = calcularTaxa(
       'qr',
       decoded.quantidade,
       configQr,
     );
+
+    // Sprint M52b Bloco F MELT (23/06/2026) — GATE DUAL controla COBRANÇA
+    // da taxa, não só o lançamento (ajuste 1 do orquestrador).
+    // Gate OFF: liquido=bruto (taxa IGNORADA) — mata o leak ativo do
+    // taxaQrPerc=1 que evaporava 1% por transação.
+    // Gate ON: cobra pela config + dispara lancarMeltTaxaQR ao final da tx.
+    const meltAtivado = isMeltAtivado(configQr);
+    const taxa = meltAtivado ? taxaConfig : 0;
+    const quantidadeLiquida = meltAtivado ? liquidoConfig : decoded.quantidade;
 
     // F4 Bloco C — valor R$ pra tier (usa valorTokenReais da config; fallback
     // 0.45 igual aos demais paths). Calculado fora da tx (read-only).
     const valorTokenReais = Number(configQr?.valorTokenReais ?? 0.45);
     const valorReaisEstimado =
       Math.round(decoded.quantidade * valorTokenReais * 100) / 100;
+    const valorTaxaReais = Math.round(taxa * valorTokenReais * 100) / 100;
 
     // F4 Bloco C.1 FIN-1 — limite por transação / diário do PAGADOR ANTES da tx.
     await this.assertLimite({
@@ -3870,7 +4004,7 @@ export class CooperTokenService {
       origem: 'processarPagamentoQr',
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // F4 Bloco C.1 MT-5 — saldo do pagador filtrado por cooperativaId
       // (defesa em profundidade; JWT do QR já trouxe cooperativaId, mas se
       // alguém forjar pagadorId apontando pra outra tenant, o filtro barra).
@@ -4007,6 +4141,29 @@ export class CooperTokenService {
         tier: tokenTx.tier,
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    // Sprint M52b Bloco F MELT (23/06/2026) — perna contábil da taxa QR
+    // FORA da $transaction principal (Serializable) pra evitar nested-tx.
+    // Idempotente via tokenTransacaoId. Falha aqui NÃO desfaz pagamento;
+    // cron de invariante contábil↔saldo detecta divergência.
+    if (meltAtivado && this.tokenContabilService && valorTaxaReais > 0 && result.tokenTransacaoId) {
+      try {
+        await this.tokenContabilService.lancarMeltTaxaQR({
+          cooperativaId: decoded.cooperativaId,
+          cooperadoId: decoded.pagadorId,
+          valor: valorTaxaReais,
+          descricao: `Taxa QR ${taxa} tokens (R$ ${valorTaxaReais.toFixed(2)}) — pagador ${decoded.pagadorId.slice(0, 8)}… → recebedor ${recebedorId.slice(0, 8)}…`,
+          naturezaAto: 'PROPRIO',
+          tokenTransacaoId: result.tokenTransacaoId,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[F4-C melt] lancarMeltTaxaQR falhou pra tx=${result.tokenTransacaoId.slice(0, 8)}…: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return result;
   }
 
   // ── Parceiro: Saldo ──

@@ -6342,7 +6342,19 @@ Contas `1.2.10/11/12` criadas, métodos preparados, mas **disparo de receita rea
 
 #### D-novo-FAXINA-DELTA-COOPEREBR — Delta −729.86 pré-existente (P2)
 
-Renomeação de `D-novo-FUNDACAO-DELTA-COOPEREBR` (M49 verificação). Tenant CoopereBR Σ saldos=1127.46 vs Σ ledger=1857.32 (delta=−729.86). Não causado por M49 nem M50. **Status:** ABERTO. **Fecha em:** Faxina Fase D (reconciliação + investigar fonte cron). **Bloqueia:** ativação saque PIX em produção.
+Renomeação de `D-novo-FUNDACAO-DELTA-COOPEREBR` (M49 verificação). Tenant CoopereBR Σ saldos=1127.46 vs Σ ledger=1857.32 (delta=−729.86). Não causado por M49 nem M50. **Status:** ABERTO. **Fecha em:** Faxina Fase D (reconciliação + investigar fonte cron). **Bloqueia:** ativação saque PIX em produção. **RESOLVIDO no M52a v2 (23/06/2026)** — root-cause: bug no cálculo do invariante (comparava só `saldoDisponivel` ignorando pendente+bloqueado) + emissões pré-M50 sem espelho contábil. Reconciliação ledger v2: LUCIANO +49 + AMAGES +210 aplicada. Resíduo contábil R$ 858,34 vira D-novo-FAXINA-CONTABIL-LEDGER-ALIGN (abaixo).
+
+#### D-novo-FAXINA-CONTABIL-LEDGER-ALIGN — Passivo contábil 2.3.01 não alinha com saldo (P1)
+
+Medição pós-M52a v2 via `scripts/check-invariante-contabil-tenant.ts` (23/06/2026): Σ saldoTotal=2114,32 tokens × R$ 0,45 = R$ 951,44 (esperado) vs R$ 93,10 (contábil em 13 lançamentos 2.3.01) = **resíduo R$ 858,34**. Causa dupla: (a) reconciliação ledger v2 foi APPEND-only no ledger sem espelho contábil → R$ 116,55 dos R$ 858; (b) emissões pré-M50 via `creditar()` direto sem `lancarEmissao*` → R$ 741,79 históricos. **Status:** RESOLVIDO PARCIAL no M52b Fatia 2 — (a) `lancarAjusteReconciliacao` + script `aplicar-ajuste-reconciliacao-v2.ts` escritura R$ 116,55 pós-merge (classificação D 5.1.03 confirmada favorável por Luciano 23/06, contador+advogado); (b) remanescente vira D-novo-FAXINA-PASSIVO-PRE-M50 abaixo. Cron novo `reconciliarInvariantesContabil` (`@Cron('45 4 * * *')`) monitora AMBOS invariantes (ledger↔saldo + contábil↔saldo) descontando baseline pré-M50 documentado em `BASELINES_CONTABIL_PRE_M50`. **Fecha quando:** sprint de escrituração retrospectiva do pré-M50 rodar.
+
+#### D-novo-FAXINA-NATUREZA-RETROATIVA — `aplicarOxidacao`/expiração hardcoda `naturezaAto='PROPRIO'` ignorando origem dos tokens (P3)
+
+Apontado pelo `cooperebr-analista-conformidade` no re-review M52b (24/06/2026). Em `cooper-token.service.ts:aplicarOxidacao` e equivalente em `expirarVencidos/CooperTokenExpiradoEvent`, o `naturezaAto` é hardcoded `'PROPRIO'` no momento do melt. Risco originalmente apontado: se o token foi emitido via SOCIAL com `naturezaAtoOverride='NAO_COOPERATIVO'`, a receita de quebra também deveria ser tributada. **Severidade rebaixada P1 → P3** após confirmação Luciano 23/06 (contador+advogado): tributação do melt é favorável como ato cooperativo típico (Art. 79 + STF Tema 536) — caso SOCIAL/NAO_COOPERATIVO é raro e não bloqueia ativação do melt. Fix futuro: helper `resolverNaturezaAtoLedger(ledgerId)` que consulta `naturezaAto` original. **Status:** ABERTO P3. **NÃO bloqueia:** ativação do melt nem desenvolvimento.
+
+#### D-novo-FAXINA-PASSIVO-PRE-M50 — Passivo histórico não-escriturado pré-M50 (~R$ 741) (P2)
+
+Emissões de tokens via `cooper-token.service.ts:creditar()` antes do M50 (22/06/2026) NÃO disparavam listener contábil. Ledger gravado corretamente, saldo atualizado, mas zero `LancamentoCaixa` em 2.3.01. Resultado: passivo contábil ~R$ 741 menor que o real em CoopereBR. **Status:** REGULARIZAÇÃO FAVORÁVEL confirmada (Luciano 23/06 — contador+advogado). **Severidade rebaixada P1 → P2** — é tarefa de código, não bloqueador de conformidade. Salvaguarda técnica: cron `reconciliarInvariantesContabil` desconta `BASELINES_CONTABIL_PRE_M50[CoopereBR]=741.79` (constante documentada em `backend/src/cooper-token/cooper-token.ledger-utils.ts`) — alerta só divergência NOVA além disso. **Fecha em:** sprint de escrituração retrospectiva (M52c ou posterior). **Decisão consolidada:** `docs/conformidade/parecer-walter-passivo-pre-m50-RESOLVIDO.md`.
 
 #### D-novo-PLANOCONTAS-CODIGO-NAO-MULTITENANT — RESOLVIDO no M50
 

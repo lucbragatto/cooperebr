@@ -87,7 +87,16 @@ export class CooperTokenController {
     );
   }
 
+  // Sprint M52b F3 (23/06/2026) — fix multitenant P3 M52a v2:
+  // operação financeira manual cross-tenant precisa trilha forense.
+  // SUPER_ADMIN podia creditar tokens em qualquer cooperado sem rastro;
+  // agora todo crédito manual fica em AuditLog (acao, cooperativaId,
+  // recurso=CooperTokenLedger, metadata com cooperadoId/quantidade/tipo).
   @Roles(ADMIN, SUPER_ADMIN)
+  @AuditLog({
+    acao: 'cooper-token.creditar-manual',
+    recurso: 'CooperTokenLedger',
+  })
   @Post('admin/creditar-manual')
   async creditarManual(
     @Req() req: any,

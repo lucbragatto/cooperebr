@@ -50,6 +50,9 @@ interface SetupOpts {
   configValorTokenReais?: number;
   contadorPagador?: number;
   contadorPagadorRecebedor?: number;
+  // M52b F1 (24/06): gate dual MELT controla cobrança da taxa QR/Transfer.
+  // Default false. Specs que validam cobrança real precisam true.
+  configMeltAtivado?: boolean;
 }
 
 function setup(opts: SetupOpts = {}) {
@@ -110,13 +113,15 @@ function setup(opts: SetupOpts = {}) {
     $transaction: transactionFn,
     configCooperToken: {
       findUnique: jest.fn().mockResolvedValue(
-        (opts.configTransfTaxa !== undefined || opts.configValorTokenReais !== undefined)
+        (opts.configTransfTaxa !== undefined || opts.configValorTokenReais !== undefined || opts.configMeltAtivado !== undefined)
           ? {
               taxaTransferenciaPerc: opts.configTransfTaxa ?? 0,
               taxaTransferenciaFixa: 0,
               taxaQrPerc: 1,
               taxaQrFixa: 0,
               valorTokenReais: opts.configValorTokenReais ?? 0.45,
+              // M52b F1: gate dual — default false (gate OFF, líquido=bruto).
+              meltAtivado: opts.configMeltAtivado ?? false,
             }
           : null,
       ),
@@ -244,8 +249,11 @@ describe('F4 Bloco C — processarPagamentoQr (PIN opcional + Serializable + hel
     );
   });
 
-  it('F0 INTOCÁVEL — taxa QR 1× sobre o bruto (fallback 1% sem config)', async () => {
-    const { service, txCreateTokenTransacao } = setup();
+  it('F0 INTOCÁVEL — taxa QR 1× sobre o bruto (gate ON via meltAtivado)', async () => {
+    // M52b F1 (24/06): cobrança da taxa QR agora gateada por meltAtivado.
+    // Pra exercitar o F0 conformidade original (1% sobre bruto), gate ON.
+    // Gate OFF (default) seria validado em outro test — está em `M52b melt`.
+    const { service, txCreateTokenTransacao } = setup({ configMeltAtivado: true });
     const r: any = await service.processarPagamentoQr({
       qrToken: gerarQrToken(100),
       recebedorId: 'recebedor-1',

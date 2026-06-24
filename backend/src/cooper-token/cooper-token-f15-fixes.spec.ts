@@ -135,7 +135,9 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
         },
       };
       const prisma: any = {
-        configCooperToken: { findUnique: jest.fn().mockResolvedValue(null) },
+        // M52b F1 (24/06): gate dual MELT — meltAtivado=true pra exercitar
+        // cobrança da taxa QR (config fallback 1%). Default false zeraria taxa.
+        configCooperToken: { findUnique: jest.fn().mockResolvedValue({ meltAtivado: true }) },
         $transaction: jest.fn((cb: any) => cb(tx)),
       };
       service = new CooperTokenService(prisma, { emit: jest.fn() } as any);
@@ -165,6 +167,7 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
       (service as any).prisma.configCooperToken.findUnique.mockResolvedValue({
         taxaQrPerc: 0.5,
         taxaQrFixa: 0,
+        meltAtivado: true, // M52b F1: gate ON pra exercitar cobrança da taxa
       });
       const qrToken = jwt.sign(
         { pagadorId: 'pagador', cooperativaId: 'coop-A', quantidade: 200, tipo: 'COOPER_TOKEN_QR' },
