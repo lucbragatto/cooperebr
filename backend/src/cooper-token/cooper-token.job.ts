@@ -8,7 +8,7 @@ import { AsPlatform } from '../common/tenant-context';
 // Sprint M52a v2 (23/06/2026) — re-review code (a)+(b): helper extraída
 // pra arquivo dedicado sem dependência NestJS, importável por scripts e
 // specs sem carregar a classe Job inteira.
-import { sinalDaOperacao } from './cooper-token.ledger-utils';
+import { sinalDaOperacao, getBaselineContabilPreM50 } from './cooper-token.ledger-utils';
 // Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026): gate juridico da oxidacao.
 import { isAmbienteReal } from '../common/safety/ambiente';
 // Sprint C Hardening (17/06/2026) — D-novo-RECONCILIACAO-CONTABIL-CRON P2.
@@ -540,6 +540,12 @@ export class CooperTokenJob {
           },
         });
 
+        // Sprint M52b F3 (23/06/2026) — fix N+1: 1 groupBy ao invés de
+        // N findMany. CoopereBR tem ~12 cooperados com saldo mas o pattern
+        // escala — Santi e próximas vão pra centenas. Era O(N) queries
+        // por tenant; agora é O(1) por tenant.
+        const ledgersAgg = await this.somarLedgerPorTenant(tenant.id);
+
         const cooperadosAnomalosTenant: ReconciliacaoInvarianteAnomalia[] = [];
         let somaAbsTenant = new Prisma.Decimal(0);
 
@@ -549,10 +555,7 @@ export class CooperTokenJob {
           const saldoTotal = new Prisma.Decimal(s.saldoDisponivel)
             .plus(s.saldoPendente)
             .plus(s.saldoBloqueadoResgate);
-          const somaLedger = await this.somarLedgerPorCooperado(
-            s.cooperadoId,
-            tenant.id,
-          );
+          const somaLedger = ledgersAgg.get(s.cooperadoId) ?? new Prisma.Decimal(0);
           const delta = saldoTotal.minus(somaLedger);
 
           if (delta.abs().lessThan(tolerancia)) continue;
@@ -630,39 +633,222 @@ export class CooperTokenJob {
     return resumo;
   }
 
-  // Fix re-review orquestrador 23/06 — financeiro-token P1 + code HIGH:
-  // switch EXAUSTIVO sobre CooperTokenOperacao. Versão anterior tinha `else`
-  // cego que subtraía cegamente operações de CRÉDITO (COMPRA_PARCEIRO,
-  // DOACAO_RECEBIDA fora do `if`) — corrompia o invariante.
+  // Sprint M52b F3 (23/06/2026) — fix N+1 (code MEDIUM M52a v2):
+  // 1 groupBy ao invés de N findMany por cooperado. Retorna Map
+  // cooperadoId → Σ ledger (signed via sinalDaOperacao exaustivo).
   //
   // Classificação canônica (sinal sobre o saldo do cooperado/parceiro):
   //   ENTRA (+): CREDITO, DOACAO_RECEBIDA, COMPRA_PARCEIRO
   //   SAI   (−): DEBITO, EXPIRACAO, DOACAO_ENVIADA, ABATIMENTO_ENERGIA,
   //               TRANSFERENCIA_PARCEIRO, RESGATE_CLUBE, OXIDACAO
   //
-  // `quantidade` é SEMPRE positiva (fix estrutural M52a creditar/debitar
-  // guard); a direção vem 100% da operacao via este switch.
+  // `quantidade` é SEMPRE positiva (fix estrutural M52a); direção vem 100%
+  // da operacao via `sinalDaOperacao`.
   //
-  // `cooperativaId` adicionado como parâmetro pra defense-in-depth M45
-  // (não-functional necessário porque cooperadoId é globally unique CUID,
-  // mas blinda refactors futuros que chamem isoladamente).
-  private async somarLedgerPorCooperado(
-    cooperadoId: string,
+  // Multi-tenant: scope explícito por `cooperativaId` no where (defense-
+  // in-depth M45). cooperadoId é globally unique CUID, mas blinda refactors
+  // futuros.
+  private async somarLedgerPorTenant(
     cooperativaId: string,
-  ): Promise<Prisma.Decimal> {
-    const ledgers = await this.prisma.cooperTokenLedger.findMany({
-      where: { cooperadoId, cooperativaId },
-      select: { operacao: true, quantidade: true },
+  ): Promise<Map<string, Prisma.Decimal>> {
+    const agg = await this.prisma.cooperTokenLedger.groupBy({
+      by: ['cooperadoId', 'operacao'],
+      where: { cooperativaId },
+      _sum: { quantidade: true },
+    });
+    const mapa = new Map<string, Prisma.Decimal>();
+    for (const linha of agg) {
+      const q = new Prisma.Decimal(linha._sum.quantidade ?? 0).abs();
+      if (q.isZero()) continue;
+      const sinal = sinalDaOperacao(linha.operacao);
+      const atual = mapa.get(linha.cooperadoId) ?? new Prisma.Decimal(0);
+      const novo = sinal === 1 ? atual.plus(q) : atual.minus(q);
+      mapa.set(linha.cooperadoId, novo);
+    }
+    return mapa;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Sprint M52b Fatia 2 (23/06/2026) — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+  //
+  //  Cron diário 04:45 (15min depois do invariante ledger↔saldo, pra não
+  //  competir por scan). Mede o invariante CONTÁBIL↔SALDO (FUNDACAO §4#1):
+  //
+  //    Passivo 2.3.01 contábil == Σ saldoTotal × valorTokenReais − baseline_pre_M50
+  //
+  //  Por que descontar o baseline: o passivo histórico não-escriturado
+  //  pré-M50 (R$ 741,79 em CoopereBR) é falso-positivo conhecido. Está
+  //  catalogado como D-novo-FAXINA-PASSIVO-PRE-M50 P1 → DECISÃO WALTER.
+  //  Sem o desconto, o cron alarma todo dia sobre os R$ 741 parados.
+  //
+  //  Reporta SÓ divergência NOVA além do baseline (tolerância R$ 0,01).
+  //  Quando Walter responder e o baseline cair pra zero, este cron passa
+  //  a alarmar sobre qualquer divergência.
+  // ════════════════════════════════════════════════════════════════════
+  @Cron('45 4 * * *')
+  @AsPlatform()
+  async reconciliarInvariantesContabil(): Promise<ReconciliacaoContabilResultado> {
+    const inicio = Date.now();
+    this.logger.log('[invariante-contabil] Iniciando varredura passivo 2.3.01 × Σ saldo × face...');
+
+    const tenants = await this.prisma.cooperativa.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true },
     });
 
-    let total = new Prisma.Decimal(0);
-    for (const l of ledgers) {
-      const q = new Prisma.Decimal(l.quantidade).abs();
-      const sinal = sinalDaOperacao(l.operacao);
-      total = sinal === 1 ? total.plus(q) : total.minus(q);
+    const tolerancia = new Prisma.Decimal('0.01'); // 1 centavo
+
+    const resumo: ReconciliacaoContabilResultado = {
+      cooperativasVarridas: tenants.length,
+      tenantsAnomalos: 0,
+      anomalias: [],
+    };
+
+    for (const tenant of tenants) {
+      try {
+        // 1) Σ saldoTotal × valorTokenReais
+        const saldosAgg = await this.prisma.cooperTokenSaldo.aggregate({
+          where: { cooperativaId: tenant.id },
+          _sum: {
+            saldoDisponivel: true,
+            saldoPendente: true,
+            saldoBloqueadoResgate: true,
+          },
+        });
+        const totalFace = new Prisma.Decimal(saldosAgg._sum.saldoDisponivel ?? 0)
+          .plus(saldosAgg._sum.saldoPendente ?? 0)
+          .plus(saldosAgg._sum.saldoBloqueadoResgate ?? 0);
+
+        if (totalFace.isZero()) continue;
+
+        const plano = await this.prisma.plano.findFirst({
+          where: { cooperativaId: tenant.id, cooperTokenAtivo: true },
+          select: { valorTokenReais: true },
+        });
+        const valorToken = plano?.valorTokenReais != null
+          ? new Prisma.Decimal(plano.valorTokenReais)
+          : new Prisma.Decimal('0.45');
+        const passivoEsperado = totalFace.times(valorToken).toDecimalPlaces(2);
+
+        // 2) Passivo 2.3.01 contábil (Σ MUTACAO_PASSIVO na conta 2.3.01)
+        const contaPassivo = await this.prisma.planoContas.findFirst({
+          where: { cooperativaId: tenant.id, codigo: '2.3.01' },
+          select: { id: true },
+        });
+        if (!contaPassivo) continue; // tenant sem 2.3.01 ainda — skip
+
+        const lancsPassivo = await this.prisma.lancamentoCaixa.findMany({
+          where: {
+            cooperativaId: tenant.id,
+            planoContasId: contaPassivo.id,
+            status: { not: 'CANCELADO' },
+          },
+          select: { valor: true, descricao: true },
+        });
+        let creditoPassivo = new Prisma.Decimal(0);
+        let debitoPassivo = new Prisma.Decimal(0);
+        for (const l of lancsPassivo) {
+          const v = new Prisma.Decimal(l.valor);
+          const desc = l.descricao || '';
+          // C Passivo (aumenta) — descricao começa com '[Token] C: '
+          // D Passivo (baixa) — descricao começa com '[Token] D: ' ou 'Resgate PIX'
+          if (desc.includes('C: Passivo') || desc.includes('C Passivo')) {
+            creditoPassivo = creditoPassivo.plus(v);
+          } else if (
+            desc.includes('D: Baixa Passivo') ||
+            desc.includes('Resgate PIX') ||
+            desc.includes('D Passivo')
+          ) {
+            debitoPassivo = debitoPassivo.plus(v);
+          }
+        }
+        const passivoContabil = creditoPassivo.minus(debitoPassivo).toDecimalPlaces(2);
+
+        // 3) Resíduo bruto = esperado − contábil
+        const residuoBruto = passivoEsperado.minus(passivoContabil);
+
+        // 4) Descontar baseline pré-M50 documentado (D-novo-FAXINA-PASSIVO-PRE-M50)
+        const baseline = new Prisma.Decimal(getBaselineContabilPreM50(tenant.id));
+        const residuoLiquido = residuoBruto.minus(baseline);
+
+        // 5) Reporta SÓ se divergência NOVA além do baseline > tolerância
+        if (residuoLiquido.abs().lessThan(tolerancia)) continue;
+
+        resumo.tenantsAnomalos += 1;
+        resumo.anomalias.push({
+          cooperativaId: tenant.id,
+          cooperativaNome: tenant.nome,
+          passivoEsperado: passivoEsperado.toFixed(2),
+          passivoContabil: passivoContabil.toFixed(2),
+          residuoBruto: residuoBruto.toFixed(2),
+          baselinePreM50: baseline.toFixed(2),
+          residuoLiquido: residuoLiquido.toFixed(2),
+        });
+
+        this.logger.warn(
+          `[invariante-contabil] ${tenant.nome}: resíduo NOVO R$ ${residuoLiquido.toFixed(2)} (bruto R$ ${residuoBruto.toFixed(2)} − baseline pré-M50 R$ ${baseline.toFixed(2)})`,
+        );
+
+        // AuditLog forense
+        try {
+          await this.prisma.auditLog.create({
+            data: {
+              cooperativaId: tenant.id,
+              acao: 'cooper-token.invariante-contabil.divergencia-nova',
+              recurso: 'LancamentoCaixa',
+              usuarioId: 'SYSTEM_CRON',
+              usuarioPerfil: 'SYSTEM',
+              metadata: {
+                passivoEsperado: passivoEsperado.toFixed(2),
+                passivoContabil: passivoContabil.toFixed(2),
+                residuoBruto: residuoBruto.toFixed(2),
+                baselinePreM50: baseline.toFixed(2),
+                residuoLiquido: residuoLiquido.toFixed(2),
+              } as any,
+            },
+          });
+        } catch (errAudit) {
+          this.logger.error(
+            `[invariante-contabil] AuditLog falhou pra ${tenant.nome}: ${(errAudit as Error).message}`,
+          );
+        }
+
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('cooper-token.invariante-contabil-quebrado', {
+            cooperativaId: tenant.id,
+            cooperativaNome: tenant.nome,
+            residuoLiquidoReais: Number(residuoLiquido),
+          });
+        }
+      } catch (err) {
+        this.logger.error(
+          `[invariante-contabil] Falha em ${tenant.nome}: ${err instanceof Error ? err.message : 'erro desconhecido'}`,
+        );
+      }
     }
-    return total;
+
+    const duracaoMs = Date.now() - inicio;
+    this.logger.log(
+      `[invariante-contabil] Varredura concluída em ${duracaoMs}ms — ${resumo.cooperativasVarridas} tenants, ${resumo.tenantsAnomalos} anômalo(s)`,
+    );
+    return resumo;
   }
+}
+
+export interface ReconciliacaoContabilAnomalia {
+  cooperativaId: string;
+  cooperativaNome: string;
+  passivoEsperado: string;
+  passivoContabil: string;
+  residuoBruto: string;
+  baselinePreM50: string;
+  residuoLiquido: string;
+}
+
+export interface ReconciliacaoContabilResultado {
+  cooperativasVarridas: number;
+  tenantsAnomalos: number;
+  anomalias: ReconciliacaoContabilAnomalia[];
 }
 
 export interface ReconciliacaoInvarianteAnomalia {

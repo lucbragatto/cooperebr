@@ -1559,6 +1559,18 @@ enum OrigemLancamento {
   // idempotência do D Passivo no abate de fatura. origemId = cobrancaId.
   // Impede double-baixa em retry do listener.
   COBRANCA_ABATE_FATURA
+  // Sprint M52b Bloco F MELT (23/06/2026) — 6 origens × 3 lançamentos
+  // (1 par contábil D+C por melt). Idempotentes via @@unique abaixo.
+  LEDGER_OXIDACAO              // D Passivo (oxidação) — origemId = ledger.id
+  LEDGER_OXIDACAO_RECEITA      // C Receita 1.2.12 — origemId = ledger.id
+  TOKEN_TRANSACAO_TAXA         // D Passivo (taxa QR) — origemId = tokenTransacao.id
+  TOKEN_TRANSACAO_TAXA_RECEITA // C Receita 1.2.11 — origemId = tokenTransacao.id
+  RESGATE_RECIBO_SPREAD        // D Passivo (spread resgate) — origemId = resgateRecibo.id
+  RESGATE_RECIBO_SPREAD_RECEITA // C Receita 1.2.10 — origemId = resgateRecibo.id
+  // Sprint M52b Fatia 2 (23/06/2026) — espelho contábil da reconciliação v2
+  // (LUCIANO +49 + AMAGES +210). 1 par contábil por cooperado ajustado.
+  RECONCILIACAO_HISTORICA      // D Despesa Bonificação 5.1.03 — origemId = '2026-06-23-FAXINA-D-v2-{cooperadoId}'
+  RECONCILIACAO_HISTORICA_PASSIVO // C Passivo 2.3.01 — origemId mesmo
 }
 
 model LancamentoCaixa {
@@ -3289,6 +3301,15 @@ model ConfigCooperToken {
   oxidacaoPeriodoGracaDias  Int       @default(0)
   oxidacaoPiso              Decimal   @default(0) @db.Decimal(10, 4)
   oxidacaoAtivadaEm         DateTime?
+
+  // Sprint M52b (23/06/2026) — Gate dual MELT (parecer Walter pendente).
+  // OFF por default — bloqueia QUALQUER cobrança de melt em prod:
+  //  - oxidação: cron já gated por OXIDACAO_PRODUCAO_LIBERADA (mantém)
+  //  - taxa QR: liquido=bruto (taxaQrPerc IGNORADA, mata o leak ativo)
+  //  - spread resgate: libera valor cheio (remove bloqueio histórico)
+  // Gate ON exige AMBOS: env MELT_PRODUCAO_LIBERADA=true E meltAtivado=true.
+  // Quando ON, dispara os 3 métodos lancarMelt* (D 2.3.01 / C 1.2.1x).
+  meltAtivado               Boolean   @default(false)
 
   cooperativaId     String      @unique
   cooperativa       Cooperativa @relation(fields: [cooperativaId], references: [id])
