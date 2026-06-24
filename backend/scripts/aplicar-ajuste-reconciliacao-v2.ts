@@ -1,39 +1,27 @@
 /**
  * ════════════════════════════════════════════════════════════════════
  *  Sprint M52b Fatia 2 — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+ *  F12 REVISADO (24/06/2026 — orquestrador confirmou):
  *
- *  ⛔ APPLY BLOQUEADO até parecer Walter (F12 orquestrador 24/06/2026).
+ *  Classificação contábil D 5.1.03 Despesa Bonificação / C 2.3.01 RESOLVIDA
+ *  E FAVORÁVEL — Luciano confirmou (23/06, 2× — contador + advogado) que
+ *  a abordagem está aceita. APPLY LIBERADO pós-merge.
  *
  *  Aplica espelho contábil dos 2 ledgers da reconciliação v2:
  *    - LUCIANO COSTA BRAGATTO +49 tokens → R$ 22,05
  *    - AMAGES +210 tokens → R$ 94,50
  *  Total: R$ 116,55 escriturados em D 5.1.03 / C 2.3.01.
  *
- *  POR QUE BLOQUEADO: a CLASSIFICAÇÃO contábil dessa correção
- *  retrospectiva (DESPESA Bonificação 5.1.03 vs ajuste retrospectivo
- *  de patrimônio — NBC TG 1000 item 10.6) aguarda decisão Walter (W1
- *  do parecer-walter-passivo-pre-m50-PENDENTE.md). Escriturar como
- *  DESPESA antes da decisão pode distorcer o DRE de 2026 com despesa
- *  de natureza retrospectiva, criando inconsistência se Walter
- *  decidir pelo lançamento em patrimônio.
- *
- *  RODAR só após:
- *    1. Walter assinar parecer respondendo W1 (classificação ajuste).
- *    2. Se Walter pedir conta de patrimônio em vez de 5.1.03: ajustar
- *       o método `lancarAjusteReconciliacao` no token-contabil.service
- *       pra usar a conta correta + reviewers + merge antes do APPLY.
- *    3. Se Walter aprovar 5.1.03 como-está: rodar APPLY direto.
- *
- *  Após APPLY: baseline cai de R$ 858,34 → R$ 741,79 (pré-M50 que
- *  ainda aguarda decisão temporal/abertura de balanço do Walter).
+ *  Após APPLY: resíduo CONTÁBIL↔SALDO cai de R$ 858,34 → R$ 741,79
+ *  (passivo histórico pré-M50 — sprint de escrituração retrospectiva).
  *
  *  Idempotência: rodar 2x não duplica (findFirst antes do create).
  *
  *  Uso:
- *    # DRY-RUN (sempre permitido — útil pra conferir cálculo):
+ *    # DRY-RUN (útil pra conferir cálculo):
  *    node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
  *
- *    # APPLY (apenas pós-parecer Walter + ajuste de método se necessário):
+ *    # APPLY (pós-merge):
  *    FAXINA_AJUSTE_APPLY=1 node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
  * ════════════════════════════════════════════════════════════════════
  */
@@ -41,7 +29,6 @@ import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const APPLY = process.env.FAXINA_AJUSTE_APPLY === '1';
-const WALTER_OK = process.env.WALTER_PARECER_OK === '1';
 
 // F8 LOW-1: warn explícito se fallback hardcoded (sem env). Evita silent
 // operate em ambiente diferente do esperado.
@@ -63,21 +50,6 @@ async function main(): Promise<void> {
   console.log('========================================================================');
   console.log(`MODO: ${APPLY ? 'APLICAR' : 'DRY-RUN'}`);
   console.log(`TENANT: CoopereBR (${TENANT_COOPEREBR})`);
-
-  // F12 orquestrador (24/06): bloqueio runtime do APPLY até Walter responder.
-  // DRY-RUN sempre permitido (útil pra conferir cálculo).
-  if (APPLY && !WALTER_OK) {
-    console.log('\n⛔ APPLY BLOQUEADO — aguardando parecer Walter (W1 classificação ajuste).');
-    console.log('   Decisão pendente: lançamento como DESPESA 5.1.03 (DRE corrente) vs');
-    console.log('   ajuste retrospectivo de patrimônio (NBC TG 1000 item 10.6).');
-    console.log('');
-    console.log('   Pra desbloquear DEPOIS do parecer + ajuste de método (se necessário):');
-    console.log('     WALTER_PARECER_OK=1 FAXINA_AJUSTE_APPLY=1 node ...');
-    console.log('');
-    console.log('   Detalhe: docs/conformidade/parecer-walter-passivo-pre-m50-PENDENTE.md');
-    process.exitCode = 1;
-    return;
-  }
 
   // 1) Buscar os ledgers v2 já aplicados pelo script faxina-d
   const ledgersV2 = await prisma.cooperTokenLedger.findMany({
@@ -217,9 +189,9 @@ async function main(): Promise<void> {
   console.log('========================================================================');
 
   if (!APPLY) {
-    console.log('\nDRY-RUN — nada gravado. APPLY bloqueado até parecer Walter (W1).');
-    console.log('Após parecer + ajuste de método (se Walter pedir conta de patrimônio):');
-    console.log('  WALTER_PARECER_OK=1 FAXINA_AJUSTE_APPLY=1 ...');
+    console.log('\nDRY-RUN — nada gravado. Pra aplicar:');
+    console.log('  FAXINA_AJUSTE_APPLY=1 node ...');
+    console.log('Classificação 5.1.03 resolvida e favorável (Luciano 23/06 — contador+advogado).');
     return;
   }
 

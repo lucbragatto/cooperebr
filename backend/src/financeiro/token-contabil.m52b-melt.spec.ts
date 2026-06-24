@@ -361,8 +361,8 @@ describe('M52b — isMeltAtivado (gate dual)', () => {
 });
 
 describe('M52b — getBaselineContabilPreM50 (baseline documentado)', () => {
-  it('CoopereBR retorna R$ 858,34 (baseline COMPLETO atual, F12 24/06 — inclui R$ 116,55 cuja classificação aguarda Walter)', () => {
-    expect(getBaselineContabilPreM50('cmn0ho8bx0000uox8wu96u6fd')).toBe(858.34);
+  it('CoopereBR retorna R$ 741,79 (resíduo PÓS-apply da reconciliação v2; F12 revisado 24/06 — classificação resolvida favorável)', () => {
+    expect(getBaselineContabilPreM50('cmn0ho8bx0000uox8wu96u6fd')).toBe(741.79);
   });
 
   it('tenant desconhecido retorna 0 (sem baseline)', () => {

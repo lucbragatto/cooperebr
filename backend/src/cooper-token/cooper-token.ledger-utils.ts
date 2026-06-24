@@ -12,41 +12,33 @@
 import { CooperTokenOperacao, OrigemLancamento } from '@prisma/client';
 
 // ════════════════════════════════════════════════════════════════════
-//  Sprint M52b Fatia 2 (23/06/2026) + F12 orquestrador (24/06/2026):
-//  D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+//  Sprint M52b Fatia 2 (23/06/2026) — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+//  F12 REVISADO (24/06/2026 — orquestrador confirmou):
 //
-//  BASELINE CONTÁBIL TOTAL aguardando parecer Walter — inclui:
-//   (a) R$ 741,79 passivo histórico pré-M50 não-escriturado
-//       (D-novo-FAXINA-PASSIVO-PRE-M50 — placeholder Walter dedicado);
-//   (b) R$ 116,55 da reconciliação v2 (LUCIANO +49 + AMAGES +210), cuja
-//       CLASSIFICAÇÃO contábil (Despesa 5.1.03 vs ajuste retrospectivo
-//       de patrimônio) aguarda decisão Walter — C3/W1 do re-review M52b.
-//   Total: R$ 858,34 (resíduo COMPLETO atual).
+//  BASELINE PRÉ-M50 = R$ 741,79 (resíduo PÓS-apply do ajuste v2).
 //
-//  Medição via `scripts/check-invariante-contabil-tenant.ts` (pós-merge
-//  M52a v2):
-//   - Σ saldoTotal face   = 2.114,32 tokens
-//   - valorTokenReais     = R$ 0,45
-//   - Passivo ESPERADO    = R$ 951,44
-//   - Passivo CONTÁBIL    = R$ 93,10 (13 lançamentos 2.3.01 ativos)
-//   - RESÍDUO total       = R$ 858,34 ← baseline atual
+//  Luciano confirmou (23/06, 2× — contador + advogado) que a classificação
+//  contábil dos R$ 116,55 da reconciliação v2 (LUCIANO +49 + AMAGES +210)
+//  como D 5.1.03 Despesa Bonificação / C 2.3.01 está RESOLVIDA E FAVORÁVEL.
+//  O APPLY do `aplicar-ajuste-reconciliacao-v2.ts` está LIBERADO — roda
+//  pós-merge e o baseline já antecipa o estado pós-apply.
+//
+//  Estado esperado pós-apply do script:
+//   - Σ saldoTotal face            = 2.114,32 tokens
+//   - valorTokenReais              = R$ 0,45
+//   - Passivo ESPERADO             = R$ 951,44
+//   - Passivo CONTÁBIL pós-apply   = R$ 209,65 (R$ 93,10 + R$ 116,55)
+//   - RESÍDUO pós-apply            = R$ 741,79 ← este baseline
+//
+//  O R$ 741,79 remanescente é passivo histórico pré-M50 não-escriturado
+//  (catalogado como D-novo-FAXINA-PASSIVO-PRE-M50 P1). É **tarefa de
+//  código** — Luciano confirmou que a abordagem está resolvida na sua
+//  ponta (regularização contábil retrospectiva favorável). Quando o
+//  sprint de escrituração rodar (M52c ou posterior), este baseline cai
+//  pra zero.
 //
 //  O cron `reconciliarInvariantesContabil` (M52b Fatia 2) DESCONTA esse
-//  baseline ao reportar — só alerta divergência NOVA além dele. Sem o
-//  desconto, o cron alarmava todo dia sobre o resíduo histórico parado
-//  aguardando Walter.
-//
-//  F12 (24/06 orquestrador): baseline subiu de R$ 741,79 → R$ 858,34
-//  porque o APPLY do `aplicar-ajuste-reconciliacao-v2.ts` foi ADIADO
-//  pra DEPOIS do parecer Walter — não faz sentido escriturar R$ 116,55
-//  como Despesa 5.1.03 antes de Walter dizer se essa é a classificação
-//  correta (W1) ou se exige conta de ajuste retrospectivo de patrimônio.
-//
-//  Quando Walter responder:
-//   - W1 (classificação ajuste): baseline cai pra R$ 741,79 após APPLY
-//     do script (com método ajustado se Walter pedir conta de patrimônio).
-//   - W1 + decisão pré-M50: baseline cai pra zero (ou valor de transição
-//     se Walter optar por escrituração parcial).
+//  baseline ao reportar — só alerta divergência NOVA além dos R$ 741,79.
 // ════════════════════════════════════════════════════════════════════
 export interface BaselineContabilTenant {
   cooperativaId: string;
@@ -57,8 +49,8 @@ export interface BaselineContabilTenant {
 export const BASELINES_CONTABIL_PRE_M50: readonly BaselineContabilTenant[] = [
   {
     cooperativaId: 'cmn0ho8bx0000uox8wu96u6fd', // CoopereBR
-    baselineReais: 858.34,
-    documentacao: 'Resíduo completo aguardando Walter: R$ 741,79 pré-M50 (D-novo-FAXINA-PASSIVO-PRE-M50) + R$ 116,55 da reconciliação v2 cuja classificação (Despesa vs ajuste retrospectivo) aguarda W1 do parecer Walter (docs/conformidade/parecer-walter-passivo-pre-m50-PENDENTE.md). APPLY do aplicar-ajuste-reconciliacao-v2.ts BLOQUEADO até decisão.',
+    baselineReais: 741.79,
+    documentacao: 'Resíduo pós-apply da reconciliação v2 — passivo histórico pré-M50 (D-novo-FAXINA-PASSIVO-PRE-M50). Classificação contábil resolvida e favorável (contador+advogado, Luciano 23/06). Cai pra zero quando o sprint de escrituração retrospectiva rodar.',
   },
 ];
 

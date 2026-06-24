@@ -1,14 +1,17 @@
-# Parecer Walter — Passivo Histórico Pré-M50 (CoopereBR)
+# Parecer Walter — Passivo Histórico Pré-M50 (CoopereBR) — **RESOLVIDO**
 
-**Status:** PLACEHOLDER — aguardando entrega do parecer técnico assinado.
+**Status:** ✅ **RESOLVIDO E FAVORÁVEL** — Luciano confirmou (23/06/2026, 2× — contador + advogado consultados separadamente) que a abordagem está aceita.
 
-**Data prevista:** TBD (catalogado em Sprint M52b — Faxina Contábil Bloco F + Resíduo, 23/06/2026).
+**Decisão consolidada (24/06/2026 — F12 revisado do M52b):**
+- **Classificação contábil** dos R$ 116,55 da reconciliação v2: D 5.1.03 Despesa Bonificação / C 2.3.01 Passivo — **APROVADA**. O script `aplicar-ajuste-reconciliacao-v2.ts` está LIBERADO pra rodar pós-merge.
+- **Tributação do melt** (oxidação 1.2.12, taxa QR 1.2.11, spread 1.2.10): **FAVORÁVEL** — receita de melt isenta como ato cooperativo típico (Art. 79 + STF Tema 536) quando a taxa for ligada.
+- **Passivo histórico pré-M50** (~R$ 741): regularização contábil retrospectiva **FAVORÁVEL** na abordagem proposta — vira tarefa de código no próximo sprint de escrituração (M52c ou posterior).
 
-**Autor previsto:** Dr. Walter — contador externo cooperativo de referência da CoopereBR.
+**Consultor:** Walter (contador externo cooperativo) + advogado — pareceres em registro pessoal de Luciano. Análise técnica abaixo mantida pra rastreabilidade — é o material que sustentou as consultas.
 
 ---
 
-## Por que este parecer existe
+## Por que esta análise foi feita
 
 A faxina contábil M52a v2 alinhou o invariante **LEDGER↔SALDO** (Σ saldoTotal = Σ ledger = 0) via reconciliação APPEND-ONLY (LUCIANO +49 + AMAGES +210 tokens = R$ 116,55).
 
