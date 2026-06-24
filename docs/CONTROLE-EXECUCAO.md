@@ -75,6 +75,30 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-24 (Orquestrador — M52b Faxina Contábil melt Bloco F + resíduo R$858 parcial — merge na main + apply verificado no banco)
+
+**Marco M52b entregue.** Merge `0b58a74` (branch `feature/faxina-contabil-m52b-melt`, 5 commits). Padrão
+maker(Code)→4 reviewers→orquestrador (re-review independente no código + queries próprias no banco fatia a fatia).
+- **Melt (Bloco F):** 3 métodos `lancarMeltOxidacao/TaxaQR/SpreadResgate` (D Passivo 2.3.01 / C Receita
+  1.2.10/11/12), gate dual (`MELT_PRODUCAO_LIBERADA` + `ConfigCooperToken.meltAtivado`) controlando a
+  **COBRANÇA** (não só o registro). **Gate OFF = no-op + mata o leak do QR 1%.** Construído e DESLIGADO
+  (Luciano liga a % quando decidir cobrar — decisão de negócio, não legal).
+- **Apply VERIFICADO:** R$ 116,55 escriturado (LUCIANO R$ 22,05 + AMAGES R$ 94,50, D 5.1.03 / C 2.3.01,
+  idempotente). Passivo contábil R$ 93,10 → **R$ 209,65**; resíduo R$ 858,34 → **R$ 741,79** (= baseline).
+  Orquestrador conferiu no banco com query própria derivada do zero: **bate 100%**.
+- **Decisão Luciano (23/06, 2ª vez): contador + advogado RESOLVIDOS e FAVORÁVEIS** → classificação DESPESA
+  5.1.03 aceita, apply liberado. Registrado em `docs/conformidade/parecer-walter-passivo-pre-m50-RESOLVIDO.md`.
+- **Reviewers 4/4** + 12 fixes (F1-F12). Re-review orquestrador confirmou os sensíveis: F1 (idempotencyFallback
+  checa AMBAS pernas D+C, half-write THROW), F2 (cron usa `origemTipo` enum + warn `NAO_CLASSIFICADO`, sem
+  silent-drop), F4 (recibo grava taxa/líquido EFETIVOS pós-gate).
+- **Débitos:** `D-novo-FAXINA-CONTABIL-LEDGER-ALIGN` resolvido PARCIAL (R$ 116,55); `D-novo-FAXINA-PASSIVO-
+  PRE-M50` **P2** (R$ 741,79 histórico → sprint escrituração retrospectiva M52c+, tarefa de CÓDIGO não legal);
+  `D-novo-FAXINA-NATUREZA-RETROATIVA` **P3**.
+- **Próximo:** Luciano escolhe a frente (ver FRASE DE RETOMADA). Detalhe:
+  `docs/sessoes/2026-06-24-m52b-faxina-contabil-melt.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-23 (Orquestrador — M52a Faxina Contábil Fases C-G: integridade + reconciliação v2 + painel passivo — merge na main; fechamento via git por 500 do Code)
 
 **Marco M52a entregue.** Integridade contábil do token (Fases G+D+C+E). Merge `83a507c` (feat `b57246a`).
@@ -3762,25 +3786,30 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **M52a FAXINA CONTÁBIL C-G FECHADO** (integridade + reconciliação v2 + painel
-passivo). Merge `83a507c` — JÁ NA MAIN, NÃO RE-APLICAR. Invariante ledger↔saldo=0.
+🟢 **M52b FAXINA CONTÁBIL MELT (Bloco F) FECHADO + VERIFICADO** — merge `0b58a74`, JÁ NA
+MAIN, NÃO RE-APLICAR. Melt construído e DESLIGADO (gate dual controla a COBRANÇA; OFF = no-op
++ mata o leak do QR 1%). Apply dos R$ 116,55 escriturado e conferido no banco pelo orquestrador
+(passivo 2.3.01 R$ 209,65; resíduo 858,34→741,79=baseline). Invariantes ledger↔saldo=0 +
+contábil↔saldo=baseline pré-M50.
 
-Convênio cooperativizado COMPLETO (M44+M46+M47+M48+M49) + Faxina A/B (M50) +
-Hardening Lateral (M51, túnel tenant-safe) + Faxina C-G integridade (M52a). ✅
+Convênio cooperativizado COMPLETO (M44+M46+M47+M48+M49) + Faxina A/B (M50) + Hardening
+Lateral (M51) + Faxina C-G (M52a) + Melt (M52b). ✅ Contador+advogado RESOLVIDOS/FAVORÁVEIS
+(Luciano 23/06 — apply liberado, classificação DESPESA aceita).
 
-⚠️ CORREÇÃO da frase do M51: o "TÚNEL PRONTO" cobre SÓ o tenant-spoof. As **3 PORTAS
-DE CONFIG** seguem ABERTAS e são o ÚNICO bloqueador de exposição: (1) `AMBIENTE_REAL=true`
-(desliga impersonate — verificado 23/06 que NÃO está setado → impersonate ATIVO); (2)
-`SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. São ações de CONFIG do
-Luciano, não sprint. NÃO subir túnel antes.
+⚠️ As **3 PORTAS DE CONFIG** seguem o ÚNICO bloqueador de exposição pública: (1)
+`AMBIENTE_REAL=true` (desliga impersonate — verificado 23/06 NÃO setado → impersonate ATIVO);
+(2) `SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. Ações de CONFIG do Luciano.
 
-PRÓXIMO = **ESCOLHA DO ORQUESTRADOR/LUCIANO** entre:
-- **M52b** = Bloco F (melt: oxidação→quebra + QR→taxa + resgate→spread) + follow-ups
-  (Art 79/88 default→Walter, soft-delete contábil, D-novo-FAXINA-CONTABIL-LEDGER-ALIGN,
-  N+1 cron). Melt CONSTRÓI + fica pronto; taxa é config que o Luciano liga (contábil
-  favorável per Luciano 23/06; parecer Walter vai em docs/conformidade/).
-- **As 3 portas de config** (pra efetivamente abrir o cadastro público / onboarding Santi).
-- **Vitrines do funil** (Camadas 2/3 — desbloqueadas pelo M51).
+PRÓXIMO = **ESCOLHA DO LUCIANO** entre 4 frentes:
+- **(recomendada) Teste integral E2E do funil pelas páginas** (admin/cadastro/perfil/tela
+  sem-UC) — `docs/relatorios/2026-06-23-investigacao-funil-captacao-roteador-m48.md` §7;
+  agent `e2e-runner` pronto pra automatizar upload de fatura + assert no banco.
+- **3 portas de config** (abrir cadastro público / onboarding Santi).
+- **Vitrines do funil** (Camadas 2/3 — spec do orquestrador necessária; motor M48 já roteia).
+- **M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
+
+> As opções (A)/(B) e o bloco "Hardening Lateral" ABAIXO são HISTÓRICO pré-M52 — Hardening
+> Lateral=M51 ✅, Faxina C-G=M52a ✅, Melt=M52b ✅ já feitos. Vale a frase acima.
 
 PRÓXIMO = **ESCOLHA DO ORQUESTRADOR** entre:
 
