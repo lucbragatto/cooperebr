@@ -61,6 +61,11 @@ function buildPrisma(opts: {
             saldoApos: 98,
           }),
         },
+        // Sprint M52b F3 (24/06): PROVISIONAL agora dentro do tx do creditar
+        // (fix financeiro-token P2-03 M52a v2). Mock precisa do create.
+        lancamentoCaixa: {
+          create: jest.fn().mockResolvedValue({ id: 'lanc-provisional' }),
+        },
       };
       return cb(tx);
     }),
@@ -306,6 +311,10 @@ describe('CooperTokenService.processarPagamentoCompraPj — F2 Bloco 3', () => {
             },
             cooperTokenLedger: {
               create: jest.fn().mockResolvedValue({ id: 'ledger-1', quantidade: 98, saldoApos: 98 }),
+            },
+            // M52b F3 (24/06): PROVISIONAL agora dentro do tx do creditar.
+            lancamentoCaixa: {
+              create: jest.fn().mockResolvedValue({ id: 'lanc-provisional' }),
             },
           };
           return cb(tx);

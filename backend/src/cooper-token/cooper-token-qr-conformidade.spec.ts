@@ -164,9 +164,13 @@ describe('CooperTokenService — F0 conformidade QR (peer + parceiro)', () => {
   // (b) Taxa QR contada EXATAMENTE 1× sobre o bruto
   // ──────────────────────────────────────────────────────────────
   it('(b) processarPagamentoQr cobra taxa 1× sobre o BRUTO (bruto 100 → taxa 1 → liquido 99)', async () => {
+    // M52b F1 (24/06): gate dual MELT controla cobrança. Pra simular gate ON,
+    // passar `config.meltAtivado=true`. Sem config (default null), gate OFF
+    // força líquido=bruto (taxa=0) — mata o leak ativo do taxaQrPerc=1.
     const { prisma } = buildPrisma({
       saldoPagador: 100,
       saldoRecebedorExiste: false,
+      config: { meltAtivado: true },
     });
     const service = buildService(prisma);
 
@@ -188,10 +192,12 @@ describe('CooperTokenService — F0 conformidade QR (peer + parceiro)', () => {
   //     e taxa retornada === resultado.taxa (sem reaplicar TAXA_QR)
   // ──────────────────────────────────────────────────────────────
   it('(c) processarQrParceiro credita parceiro = resultado.quantidadeLiquida (taxa NAO eh reaplicada)', async () => {
+    // M52b F1 — gate ON via config.meltAtivado pra exercitar taxa>0.
     const { prisma, tx } = buildPrisma({
       saldoPagador: 100,
       saldoRecebedorExiste: false,
       saldoParceiroExiste: false,
+      config: { meltAtivado: true },
     });
     const service = buildService(prisma);
 
@@ -224,9 +230,11 @@ describe('CooperTokenService — F0 conformidade QR (peer + parceiro)', () => {
     // bruto 33 — produz taxa 0,33 e liquido 32,67. Sem rounding, 33 * 0.01
     // gera 0.33000000000000007 em JS (ruido float). O codigo usa
     // Math.round(... * 10000) / 10000 — tokens com 4 casas.
+    // M52b F1 — gate ON via config.meltAtivado pra exercitar taxa>0.
     const { prisma } = buildPrisma({
       saldoPagador: 33,
       saldoRecebedorExiste: false,
+      config: { meltAtivado: true },
     });
     const service = buildService(prisma);
 
