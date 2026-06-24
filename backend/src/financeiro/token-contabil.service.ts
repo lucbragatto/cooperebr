@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, OrigemLancamento } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { isAmbienteReal } from '../common/safety/ambiente';
 
@@ -685,7 +685,14 @@ export class TokenContabilService {
       );
       return { baixaPassivo, receita };
     } catch (err) {
-      return this.idempotencyFallback(err, params.cooperativaId, 'LEDGER_OXIDACAO', params.ledgerOxidacaoId, 'lancarMeltOxidacao');
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.LEDGER_OXIDACAO,
+        OrigemLancamento.LEDGER_OXIDACAO_RECEITA,
+        params.ledgerOxidacaoId,
+        'lancarMeltOxidacao',
+      );
     }
   }
 
@@ -751,7 +758,14 @@ export class TokenContabilService {
       );
       return { baixaPassivo, receita };
     } catch (err) {
-      return this.idempotencyFallback(err, params.cooperativaId, 'TOKEN_TRANSACAO_TAXA', params.tokenTransacaoId, 'lancarMeltTaxaQR');
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.TOKEN_TRANSACAO_TAXA,
+        OrigemLancamento.TOKEN_TRANSACAO_TAXA_RECEITA,
+        params.tokenTransacaoId,
+        'lancarMeltTaxaQR',
+      );
     }
   }
 
@@ -816,7 +830,14 @@ export class TokenContabilService {
       );
       return { baixaPassivo, receita };
     } catch (err) {
-      return this.idempotencyFallback(err, params.cooperativaId, 'RESGATE_RECIBO_SPREAD', params.resgateReciboId, 'lancarMeltSpreadResgate');
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.RESGATE_RECIBO_SPREAD,
+        OrigemLancamento.RESGATE_RECIBO_SPREAD_RECEITA,
+        params.resgateReciboId,
+        'lancarMeltSpreadResgate',
+      );
     }
   }
 
@@ -889,18 +910,35 @@ export class TokenContabilService {
       );
       return { debito, credito };
     } catch (err) {
-      return this.idempotencyFallback(err, params.cooperativaId, 'RECONCILIACAO_HISTORICA', params.origemReconciliacaoId, 'lancarAjusteReconciliacao');
+      return this.idempotencyFallback(
+        err,
+        params.cooperativaId,
+        OrigemLancamento.RECONCILIACAO_HISTORICA,
+        OrigemLancamento.RECONCILIACAO_HISTORICA_PASSIVO,
+        params.origemReconciliacaoId,
+        'lancarAjusteReconciliacao',
+      );
     }
   }
 
   /**
-   * Helper compartilhado pros 3 métodos de melt: trata P2002 retry +
-   * cooperativaId no fallback findFirst (lição M52a v2 P1).
+   * Sprint M52b F4 F1 (24/06/2026) — fix multitenant P1 + financeiro P3:
+   * verificar AMBAS pernas D+C do par dupla-partida no fallback de
+   * idempotência. Antes só verificava o origemTipo D → half-write
+   * hipotético (D commitado mas C não) era declarado "idempotente" e
+   * a perna C nunca era recriada — livro desbalanceado silenciosamente.
+   *
+   * Agora: P2002 → findFirst D AND findFirst C. Se ambos existem,
+   * idempotência completa. Se só um existe (half-write detectado),
+   * THROW EXPLÍCITO — alerta forte pra cron de invariante detectar.
+   *
+   * Tipo `OrigemLancamento` (não string) — fix mt P2 (eliminar `as any`).
    */
   private async idempotencyFallback(
     err: unknown,
     cooperativaId: string,
-    origemTipo: string,
+    debitoOrigemTipo: OrigemLancamento,
+    creditoOrigemTipo: OrigemLancamento,
     origemId: string,
     metodo: string,
   ) {
@@ -909,16 +947,33 @@ export class TokenContabilService {
       err !== null &&
       (err as { code?: string }).code === 'P2002';
     if (!isUniqueViolation) throw err;
-    const existente = await this.prisma.lancamentoCaixa.findFirst({
-      where: { origemTipo: origemTipo as any, origemId, cooperativaId },
-      select: { id: true },
-    });
-    if (existente) {
+    const [debito, credito] = await Promise.all([
+      this.prisma.lancamentoCaixa.findFirst({
+        where: { origemTipo: debitoOrigemTipo, origemId, cooperativaId },
+        select: { id: true },
+      }),
+      this.prisma.lancamentoCaixa.findFirst({
+        where: { origemTipo: creditoOrigemTipo, origemId, cooperativaId },
+        select: { id: true },
+      }),
+    ]);
+    if (debito && credito) {
+      // Idempotência completa (ambas pernas commitadas).
       this.logger.log(
-        `${metodo}: idempotência hit (origemId=${origemId.slice(0, 8)}…)`,
+        `${metodo}: idempotência hit (origemId=${origemId.slice(0, 8)}…) — par D+C completo`,
       );
-      return existente;
+      return { debito, credito };
     }
+    // Half-write detectado — uma perna existe sem a outra. NÃO silenciar.
+    // Throw original do P2002 com contexto adicional pra cron de invariante
+    // contábil↔saldo (M52b Fatia 2) detectar e alertar admin.
+    this.logger.error(
+      `[${metodo}] HALF-WRITE detectado pra origemId=${origemId.slice(0, 8)}… ` +
+        `cooperativaId=${cooperativaId.slice(0, 8)}… ` +
+        `(D=${debito ? 'OK' : 'MISSING'}, C=${credito ? 'OK' : 'MISSING'}). ` +
+        `Livro desbalanceado — invariante contábil↔saldo vai detectar. ` +
+        `Não silenciado pra forçar visibilidade.`,
+    );
     throw err;
   }
 }

@@ -96,6 +96,18 @@ interface CreditarParams {
    * Sem override, SOCIAL fica PROPRIO (cooperado-only, conservador).
    */
   naturezaAtoOverride?: 'PROPRIO' | 'AUXILIAR' | 'NAO_COOPERATIVO';
+
+  /**
+   * Sprint M52b F4 F9 (24/06/2026) — fix conformidade P2 D4 do re-review
+   * M52b. Quando override `NAO_COOPERATIVO` é forçado (risco fiscal Art.
+   * 86-87), o AuditLog precisa identificar o usuário humano que tomou a
+   * decisão (não só `'SYSTEM_SERVICE'`). Caller que tem `req.user.id`
+   * (controllers) deve propagar; callers programáticos (cron, listeners)
+   * passam undefined e o AuditLog grava 'SYSTEM_SERVICE'.
+   */
+  auditUsuarioId?: string;
+  /** Motivo opcional do override (preenchido pelo admin via UI futura). */
+  auditMotivoOverride?: string;
 }
 
 interface DebitarParams {
@@ -580,8 +592,10 @@ export class CooperTokenService {
             acao: 'cooper-token.override-natureza-forcado',
             recurso: 'CooperTokenLedger',
             recursoId: ledger?.id ?? null,
-            usuarioId: 'SYSTEM_SERVICE',
-            usuarioPerfil: 'SYSTEM',
+            // M52b F4 F9 (24/06): usuarioId real quando o caller propaga
+            // (via auditUsuarioId em CreditarParams); senão 'SYSTEM_SERVICE'.
+            usuarioId: params.auditUsuarioId ?? 'SYSTEM_SERVICE',
+            usuarioPerfil: params.auditUsuarioId ? 'ADMIN_OU_SA' : 'SYSTEM',
             metadata: {
               cooperadoId,
               tipo,
@@ -590,6 +604,7 @@ export class CooperTokenService {
               naturezaAtoForcada: 'NAO_COOPERATIVO',
               naturezaSugeridaHelper: classificacao.naturezaAtoSugerida,
               fiscalRisk: 'Art. 86-87 — tributação plena PIS/COFINS+IRPJ',
+              motivoOverride: params.auditMotivoOverride ?? null,
             } as any,
           },
         });
@@ -654,6 +669,19 @@ export class CooperTokenService {
       );
     }
 
+    // Sprint M52b F4 F5 (24/06): PROVISIONAL agora atomic dentro do tx
+    // (simetria com creditar). valorTokenReais calculado ANTES do tx
+    // (config não muda durante a operação; getConfig usa this.prisma).
+    const tipoDebito = params.tipo ?? 'GERACAO_EXCEDENTE';
+    const natureza = tipoDebito === 'DESCONTO_FATURA'
+      ? 'PROVISIONAL_TOKEN_ABATIMENTO'
+      : tipoDebito === 'PAGAMENTO_QR'
+      ? 'PROVISIONAL_TOKEN_TRANSFERENCIA'
+      : 'PROVISIONAL_TOKEN_ABATIMENTO';
+    const configDebit = await this.getConfig(cooperativaId);
+    const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
+    const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
+
     return this.prisma.$transaction(async (tx) => {
       const saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
@@ -701,26 +729,13 @@ export class CooperTokenService {
         `Debitado ${quantidade} tokens do cooperado ${cooperadoId}`,
       );
 
-      // Sprint 9: contabilidade preparatória — débito gera LancamentoCaixa PROVISIONAL
-      const tipoDebito = params.tipo ?? 'GERACAO_EXCEDENTE';
-      const natureza = tipoDebito === 'DESCONTO_FATURA'
-        ? 'PROVISIONAL_TOKEN_ABATIMENTO'
-        : tipoDebito === 'PAGAMENTO_QR'
-        ? 'PROVISIONAL_TOKEN_TRANSFERENCIA'
-        : 'PROVISIONAL_TOKEN_ABATIMENTO';
-
-      try {
+      // Sprint M52b F4 F5 (24/06): PROVISIONAL DENTRO do tx (atomic) —
+      // fix financeiro-token P2-3 do re-review M52b. Antes ficava fora,
+      // com try/catch + logger.warn → ledger commitado + PROVISIONAL
+      // ausente em caso de falha (drift entre ledger e contábil).
+      if (valorEstimado > 0) {
         const competencia = new Date().toISOString().slice(0, 7);
-        // F4 Bloco C.1 FIN-7 (12/06/2026) — antes era 0.20 chumbado.
-        // valorTokenReais vem da config do tenant (fallback 0.45 = mesmo
-        // default usado em calcularDesconto e processarPagamentoQr).
-        // debitar() é genérico (cron de excedente, etc), então usa config
-        // direto — quando vier do usarNaFatura (caminho com plano), o
-        // valorToken correto é refletido lá pelo inline (espelho mantido).
-        const configDebit = await this.getConfig(cooperativaId);
-        const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
-        const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
-        await this.prisma.lancamentoCaixa.create({
+        await tx.lancamentoCaixa.create({
           data: {
             tipo: 'PROVISIONAL',
             descricao: `Débito ${tipoDebito}: ${quantidade} tokens`,
@@ -733,8 +748,6 @@ export class CooperTokenService {
             cooperativaId,
           },
         });
-      } catch (err) {
-        this.logger.warn(`LancamentoCaixa PROVISIONAL débito falhou: ${(err as Error).message}`);
       }
 
       return ledger;
@@ -2705,8 +2718,14 @@ export class CooperTokenService {
             cooperadoEstabelecimentoId: estabelecimentoCooperadoId,
             clientRequestId,
             valorBrutoTokens: quantidade,
-            valorTaxaTokens: taxaTokens,
-            valorLiquidoTokens: liquidoTokens,
+            // Sprint M52b F4 F4 (24/06): fix code MEDIUM-1 + financeiro
+            // P2-1: persistir valores EFETIVOS pós-gate. Antes guardava
+            // taxaTokens/liquidoTokens da config (PRE-gate), o que criava
+            // inconsistência: gate OFF + config taxa>0 deixava o recibo
+            // com taxa nominal cheia mas valorTaxaReais=0 (porque o
+            // bloqueio do saldo foi `quantidade` cheia, sem desconto).
+            valorTaxaTokens: taxaEfetivaTokens,
+            valorLiquidoTokens: liquidoEfetivoTokens,
             valorBrutoReais,
             valorTaxaReais,
             valorLiquidoReais,
@@ -3150,6 +3169,13 @@ export class CooperTokenService {
         // Recibo guarda valorTaxaReais (= spread); se gate dual ON e taxa>0,
         // lança D Passivo / C Receita Spread 1.2.10. Idempotente via
         // recibo.id. Falha tratada como warn (mesmo padrão lancarResgatePix).
+        //
+        // P3 mt re-review M52b (24/06/2026) — DECISÃO INTENCIONAL: gate
+        // dual NÃO é re-verificado aqui. O `valorTaxaReais` no recibo
+        // congela o spread no momento do `solicitarResgate` (que JÁ aplicou
+        // o gate). Recibo é contrato firmado — gate desligado entre
+        // criação e webhook NÃO retroage. Se admin quiser anular spread
+        // de recibo pendente, deve cancelar o recibo, não desligar o gate.
         const valorSpread = Math.round(Number(recibo.valorTaxaReais ?? 0) * 100) / 100;
         if (valorSpread > 0) {
           try {

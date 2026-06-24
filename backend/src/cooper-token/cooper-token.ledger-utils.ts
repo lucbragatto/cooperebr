@@ -9,33 +9,44 @@
  * Zero dependência NestJS — pode ser importado por scripts standalone
  * via `ts-node` sem bootstrapping da aplicação.
  */
-import { CooperTokenOperacao } from '@prisma/client';
+import { CooperTokenOperacao, OrigemLancamento } from '@prisma/client';
 
 // ════════════════════════════════════════════════════════════════════
-//  Sprint M52b Fatia 2 (23/06/2026) — D-novo-FAXINA-PASSIVO-PRE-M50.
+//  Sprint M52b Fatia 2 (23/06/2026) + F12 orquestrador (24/06/2026):
+//  D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
 //
-//  BASELINE PRÉ-M50 documentado: passivo histórico não-escriturado do
-//  tenant CoopereBR antes da implantação do modelo voucher CPC 47 (M50).
+//  BASELINE CONTÁBIL TOTAL aguardando parecer Walter — inclui:
+//   (a) R$ 741,79 passivo histórico pré-M50 não-escriturado
+//       (D-novo-FAXINA-PASSIVO-PRE-M50 — placeholder Walter dedicado);
+//   (b) R$ 116,55 da reconciliação v2 (LUCIANO +49 + AMAGES +210), cuja
+//       CLASSIFICAÇÃO contábil (Despesa 5.1.03 vs ajuste retrospectivo
+//       de patrimônio) aguarda decisão Walter — C3/W1 do re-review M52b.
+//   Total: R$ 858,34 (resíduo COMPLETO atual).
 //
-//  Medição via `scripts/check-invariante-contabil-tenant.ts` (23/06/2026
-//  pós-merge M52a v2):
-//   - Σ saldoTotal face   = 2114,32 tokens
-//   - Passivo ESPERADO    = R$ 951,44 (2114,32 × R$ 0,45)
+//  Medição via `scripts/check-invariante-contabil-tenant.ts` (pós-merge
+//  M52a v2):
+//   - Σ saldoTotal face   = 2.114,32 tokens
+//   - valorTokenReais     = R$ 0,45
+//   - Passivo ESPERADO    = R$ 951,44
 //   - Passivo CONTÁBIL    = R$ 93,10 (13 lançamentos 2.3.01 ativos)
-//   - RESÍDUO total       = R$ 858,34
-//   - Após Fatia 2 APPLY  = R$ 858,34 − R$ 116,55 = R$ 741,79 (baseline)
+//   - RESÍDUO total       = R$ 858,34 ← baseline atual
 //
 //  O cron `reconciliarInvariantesContabil` (M52b Fatia 2) DESCONTA esse
-//  baseline ao reportar — só alerta divergência NOVA além dele. Senão
-//  o cron dispara alarme todo dia sobre os R$ 741 parados aguardando
-//  Walter (D-novo-FAXINA-PASSIVO-PRE-M50 P1 catalogado).
+//  baseline ao reportar — só alerta divergência NOVA além dele. Sem o
+//  desconto, o cron alarmava todo dia sobre o resíduo histórico parado
+//  aguardando Walter.
 //
-//  NÃO escriturar cego os R$ 741 — exige parecer Walter sobre como
-//  lançar passivo histórico de exercícios anteriores (NBC TG 1000 item
-//  10.6 — correção retrospectiva vs lançamento de abertura de balanço).
+//  F12 (24/06 orquestrador): baseline subiu de R$ 741,79 → R$ 858,34
+//  porque o APPLY do `aplicar-ajuste-reconciliacao-v2.ts` foi ADIADO
+//  pra DEPOIS do parecer Walter — não faz sentido escriturar R$ 116,55
+//  como Despesa 5.1.03 antes de Walter dizer se essa é a classificação
+//  correta (W1) ou se exige conta de ajuste retrospectivo de patrimônio.
 //
-//  Quando Walter responder, este baseline vira ZERO (ou um valor
-//  específico de transição) — ajustar aqui + commit + reviewer.
+//  Quando Walter responder:
+//   - W1 (classificação ajuste): baseline cai pra R$ 741,79 após APPLY
+//     do script (com método ajustado se Walter pedir conta de patrimônio).
+//   - W1 + decisão pré-M50: baseline cai pra zero (ou valor de transição
+//     se Walter optar por escrituração parcial).
 // ════════════════════════════════════════════════════════════════════
 export interface BaselineContabilTenant {
   cooperativaId: string;
@@ -46,8 +57,8 @@ export interface BaselineContabilTenant {
 export const BASELINES_CONTABIL_PRE_M50: readonly BaselineContabilTenant[] = [
   {
     cooperativaId: 'cmn0ho8bx0000uox8wu96u6fd', // CoopereBR
-    baselineReais: 741.79,
-    documentacao: 'D-novo-FAXINA-PASSIVO-PRE-M50 — passivo histórico não-escriturado pré-M50. Aguarda parecer Walter (docs/conformidade/parecer-walter-passivo-pre-m50-PENDENTE.md).',
+    baselineReais: 858.34,
+    documentacao: 'Resíduo completo aguardando Walter: R$ 741,79 pré-M50 (D-novo-FAXINA-PASSIVO-PRE-M50) + R$ 116,55 da reconciliação v2 cuja classificação (Despesa vs ajuste retrospectivo) aguarda W1 do parecer Walter (docs/conformidade/parecer-walter-passivo-pre-m50-PENDENTE.md). APPLY do aplicar-ajuste-reconciliacao-v2.ts BLOQUEADO até decisão.',
   },
 ];
 
@@ -59,6 +70,86 @@ export const BASELINES_CONTABIL_PRE_M50: readonly BaselineContabilTenant[] = [
 export function getBaselineContabilPreM50(cooperativaId: string): number {
   const baseline = BASELINES_CONTABIL_PRE_M50.find((b) => b.cooperativaId === cooperativaId);
   return baseline?.baselineReais ?? 0;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Sprint M52b F4 F2 (24/06/2026) — fix financeiro-token P2 + multitenant
+//  P2 (re-review M52b): cron `reconciliarInvariantesContabil` usava
+//  `descricao.includes()` pra discriminar D/C do passivo 2.3.01 — frágil
+//  a renames + silent-drop pra lançamentos sem padrão conhecido.
+//
+//  Substituído por `classificarPartidaPassivo(lanc)` que usa `origemTipo`
+//  (enum dedicado) como classificador primário + fallback descricao apenas
+//  pra lançamentos legados pré-M52a sem origemTipo. NAO_CLASSIFICADO
+//  reporta warn explícito (sem silent-drop).
+// ════════════════════════════════════════════════════════════════════
+
+export type LancamentoCaixaPartidaPassivo =
+  | 'CREDITO_PASSIVO' // aumenta 2.3.01 (emissão de tokens)
+  | 'DEBITO_PASSIVO'  // baixa 2.3.01 (uso/expiração/melt/resgate)
+  | 'NAO_CLASSIFICADO'; // sem padrão reconhecido — caller deve alertar
+
+/**
+ * Mapa de `OrigemLancamento` que CREDITA o passivo 2.3.01 (aumenta).
+ * Inclui apenas valores que apontam pra perna C de 2.3.01.
+ *
+ * Atualmente só `RECONCILIACAO_HISTORICA_PASSIVO` (M52b Fatia 2 — quando
+ * APPLY do script `aplicar-ajuste-reconciliacao-v2.ts` rodar pós-Walter).
+ *
+ * Emissões antigas (`lancarIngressoEmissaoPaga`/`lancarEmissaoFaturaCheia`/
+ * `lancarEmissaoAdminLote`) NÃO populam origemTipo na perna C — caem no
+ * fallback descricao no helper abaixo.
+ */
+const ORIGEMTIPO_CREDITO_PASSIVO = new Set<OrigemLancamento>([
+  'RECONCILIACAO_HISTORICA_PASSIVO',
+]);
+
+/**
+ * Mapa de `OrigemLancamento` que DEBITA o passivo 2.3.01 (baixa).
+ * Inclui apenas valores que apontam pra perna D de 2.3.01.
+ */
+const ORIGEMTIPO_DEBITO_PASSIVO = new Set<OrigemLancamento>([
+  'COBRANCA_ABATE_FATURA',       // M50 — D 2.3.01 no abate de fatura
+  'TOKEN_TRANSACAO',              // M50 — D 2.3.01 no resgate PIX
+  'LEDGER_OXIDACAO',              // M52b — D 2.3.01 melt oxidação
+  'TOKEN_TRANSACAO_TAXA',         // M52b — D 2.3.01 melt taxa QR
+  'RESGATE_RECIBO_SPREAD',        // M52b — D 2.3.01 melt spread
+]);
+
+/**
+ * Classifica um lançamento de `LancamentoCaixa` (que JÁ foi filtrado por
+ * `planoContasId=2.3.01`) como crédito ou débito do passivo.
+ *
+ * Estratégia:
+ *  1. Se `origemTipo` está num dos Sets acima, usa o classificador enum
+ *     (forma robusta).
+ *  2. Senão, fallback pra padrão `descricao` `'[Token] C:' / '[Token] D:'`
+ *     (retro-compat lançamentos M50 sem origemTipo na perna C).
+ *  3. Senão, retorna `NAO_CLASSIFICADO` — caller DEVE logar warn.
+ */
+export function classificarPartidaPassivo(lanc: {
+  origemTipo: OrigemLancamento | null | undefined;
+  descricao: string | null | undefined;
+}): LancamentoCaixaPartidaPassivo {
+  if (lanc.origemTipo && ORIGEMTIPO_CREDITO_PASSIVO.has(lanc.origemTipo)) {
+    return 'CREDITO_PASSIVO';
+  }
+  if (lanc.origemTipo && ORIGEMTIPO_DEBITO_PASSIVO.has(lanc.origemTipo)) {
+    return 'DEBITO_PASSIVO';
+  }
+  // Fallback retrocompat — lançamentos pré-M52b sem origemTipo populado.
+  const desc = lanc.descricao ?? '';
+  if (desc.includes('C: Passivo') || desc.includes('C Passivo')) {
+    return 'CREDITO_PASSIVO';
+  }
+  if (
+    desc.includes('D: Baixa Passivo') ||
+    desc.includes('Resgate PIX') ||
+    desc.includes('D Passivo')
+  ) {
+    return 'DEBITO_PASSIVO';
+  }
+  return 'NAO_CLASSIFICADO';
 }
 
 /**

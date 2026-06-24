@@ -1,27 +1,53 @@
 /**
- * Sprint M52b Fatia 2 (23/06/2026) — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
+ * ════════════════════════════════════════════════════════════════════
+ *  Sprint M52b Fatia 2 — D-novo-FAXINA-CONTABIL-LEDGER-ALIGN.
  *
- * Aplica espelho contábil dos 2 ledgers da reconciliação v2:
- *   - LUCIANO COSTA BRAGATTO +49 tokens → R$ 22,05
- *   - AMAGES +210 tokens → R$ 94,50
- * Total: R$ 116,55 escriturados em 2.3.01 (passivo) e 5.1.03 (despesa).
+ *  ⛔ APPLY BLOQUEADO até parecer Walter (F12 orquestrador 24/06/2026).
  *
- * APPEND-ONLY, idempotente. Após APPLY, o invariante contábil↔saldo
- * cai dos R$ 858,34 medidos para ~R$ 741,79 (o pré-M50 documentado
- * em D-novo-FAXINA-PASSIVO-PRE-M50 — não escriturar sem Walter).
+ *  Aplica espelho contábil dos 2 ledgers da reconciliação v2:
+ *    - LUCIANO COSTA BRAGATTO +49 tokens → R$ 22,05
+ *    - AMAGES +210 tokens → R$ 94,50
+ *  Total: R$ 116,55 escriturados em D 5.1.03 / C 2.3.01.
  *
- * Uso:
- *   # DRY-RUN (default):
- *   node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
+ *  POR QUE BLOQUEADO: a CLASSIFICAÇÃO contábil dessa correção
+ *  retrospectiva (DESPESA Bonificação 5.1.03 vs ajuste retrospectivo
+ *  de patrimônio — NBC TG 1000 item 10.6) aguarda decisão Walter (W1
+ *  do parecer-walter-passivo-pre-m50-PENDENTE.md). Escriturar como
+ *  DESPESA antes da decisão pode distorcer o DRE de 2026 com despesa
+ *  de natureza retrospectiva, criando inconsistência se Walter
+ *  decidir pelo lançamento em patrimônio.
  *
- *   # APPLY (somente após OK do orquestrador):
- *   FAXINA_AJUSTE_APPLY=1 node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
+ *  RODAR só após:
+ *    1. Walter assinar parecer respondendo W1 (classificação ajuste).
+ *    2. Se Walter pedir conta de patrimônio em vez de 5.1.03: ajustar
+ *       o método `lancarAjusteReconciliacao` no token-contabil.service
+ *       pra usar a conta correta + reviewers + merge antes do APPLY.
+ *    3. Se Walter aprovar 5.1.03 como-está: rodar APPLY direto.
+ *
+ *  Após APPLY: baseline cai de R$ 858,34 → R$ 741,79 (pré-M50 que
+ *  ainda aguarda decisão temporal/abertura de balanço do Walter).
+ *
+ *  Idempotência: rodar 2x não duplica (findFirst antes do create).
+ *
+ *  Uso:
+ *    # DRY-RUN (sempre permitido — útil pra conferir cálculo):
+ *    node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
+ *
+ *    # APPLY (apenas pós-parecer Walter + ajuste de método se necessário):
+ *    FAXINA_AJUSTE_APPLY=1 node -e "require('dotenv').config({path:'.env'}); require('ts-node').register({transpileOnly:true}); require('./scripts/aplicar-ajuste-reconciliacao-v2.ts');"
+ * ════════════════════════════════════════════════════════════════════
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const APPLY = process.env.FAXINA_AJUSTE_APPLY === '1';
+const WALTER_OK = process.env.WALTER_PARECER_OK === '1';
 
+// F8 LOW-1: warn explícito se fallback hardcoded (sem env). Evita silent
+// operate em ambiente diferente do esperado.
+if (!process.env.TENANT_COOPEREBR_ID) {
+  console.warn('[WARN] TENANT_COOPEREBR_ID não definido — usando hardcoded default CoopereBR prod.');
+}
 const TENANT_COOPEREBR = process.env.TENANT_COOPEREBR_ID ?? 'cmn0ho8bx0000uox8wu96u6fd';
 const MARCA_REF_TABELA = 'RECONCILIACAO_HISTORICA';
 const MARCA_REF_ID_V2 = '2026-06-23-FAXINA-D-v2';
@@ -37,6 +63,21 @@ async function main(): Promise<void> {
   console.log('========================================================================');
   console.log(`MODO: ${APPLY ? 'APLICAR' : 'DRY-RUN'}`);
   console.log(`TENANT: CoopereBR (${TENANT_COOPEREBR})`);
+
+  // F12 orquestrador (24/06): bloqueio runtime do APPLY até Walter responder.
+  // DRY-RUN sempre permitido (útil pra conferir cálculo).
+  if (APPLY && !WALTER_OK) {
+    console.log('\n⛔ APPLY BLOQUEADO — aguardando parecer Walter (W1 classificação ajuste).');
+    console.log('   Decisão pendente: lançamento como DESPESA 5.1.03 (DRE corrente) vs');
+    console.log('   ajuste retrospectivo de patrimônio (NBC TG 1000 item 10.6).');
+    console.log('');
+    console.log('   Pra desbloquear DEPOIS do parecer + ajuste de método (se necessário):');
+    console.log('     WALTER_PARECER_OK=1 FAXINA_AJUSTE_APPLY=1 node ...');
+    console.log('');
+    console.log('   Detalhe: docs/conformidade/parecer-walter-passivo-pre-m50-PENDENTE.md');
+    process.exitCode = 1;
+    return;
+  }
 
   // 1) Buscar os ledgers v2 já aplicados pelo script faxina-d
   const ledgersV2 = await prisma.cooperTokenLedger.findMany({
@@ -110,14 +151,16 @@ async function main(): Promise<void> {
     // 4) Aplicar via service (D + C atomic)
     const competencia = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
-    // garantir contas
-    const contasNec = ['5.1.03', '2.3.01', '5.1.10', '1.2.02', '1.2.10', '1.2.11', '1.2.12'];
+    // F8 P2-4 (24/06): log honesto — script NÃO cria contas. Se uma conta
+    // ausente, lança erro abaixo (linha do throw). Script standalone não
+    // tem acesso ao garantirContas do TokenContabilService (cross-module).
+    const contasNec = ['5.1.03', '2.3.01'];
     for (const codigo of contasNec) {
       const existing = await prisma.planoContas.findFirst({
         where: { codigo, cooperativaId: TENANT_COOPEREBR },
       });
       if (!existing) {
-        console.log(`  [warn] conta ${codigo} não existia — criando default`);
+        console.log(`  [check] conta ${codigo} AUSENTE — este script NÃO cria. Rodar uma operação contábil real (e.g., emissão admin lote) antes pra disparar garantirContas().`);
       }
     }
 
@@ -174,12 +217,18 @@ async function main(): Promise<void> {
   console.log('========================================================================');
 
   if (!APPLY) {
-    console.log('\nDRY-RUN — nada gravado. Aguardando re-review do orquestrador.');
-    console.log('Pra aplicar: FAXINA_AJUSTE_APPLY=1 ...');
+    console.log('\nDRY-RUN — nada gravado. APPLY bloqueado até parecer Walter (W1).');
+    console.log('Após parecer + ajuste de método (se Walter pedir conta de patrimônio):');
+    console.log('  WALTER_PARECER_OK=1 FAXINA_AJUSTE_APPLY=1 ...');
     return;
   }
 
-  console.log('\n[OK] Espelho contábil aplicado. Rodar check-invariante-contabil-tenant.ts pra ver redução do resíduo.');
+  // F8 MEDIUM-3 (24/06): resumo final no APPLY pra evitar aplicação parcial
+  // silenciosa caso uma iteração falhe a meio caminho.
+  console.log('\n========================================================================');
+  console.log(`[RESUMO APPLY] aplicados=${totalAplicar} | skip=${totalSkipIdempotencia} | Σ R$ ${fmt(totalReais)}`);
+  console.log('Rodar check-invariante-contabil-tenant.ts pra confirmar redução do resíduo.');
+  console.log('========================================================================');
 }
 
 main()

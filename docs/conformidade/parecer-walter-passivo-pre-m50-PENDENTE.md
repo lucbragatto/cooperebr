@@ -34,7 +34,38 @@ Histórico de emissões de tokens via `cooper-token.service.ts:creditar()` **ant
 
 Hoje, esses cooperados têm saldo "real" mas o passivo contábil 2.3.01 **subestima a obrigação** da cooperativa em ~R$ 741.
 
-## Pendências objetivas pro Walter
+## Pendências objetivas pro Walter — TOR CONSOLIDADO M52b (24/06/2026)
+
+Re-review do orquestrador M52b consolidou as 7 perguntas em um único TOR pra evitar idas e vindas. Walter responde os 7 itens; cada um destrava uma frente.
+
+### W1 — Classificação contábil da reconciliação v2 (R$ 116,55 já executável)
+
+Os R$ 116,55 (LUCIANO +49 + AMAGES +210) devem ser lançados como:
+- **Alternativa A:** D 5.1.03 (Despesa Bonificação) / C 2.3.01 — entra no DRE de junho/2026 como despesa nova. Simples, defensável pra cooperativas PE.
+- **Alternativa B:** D conta de patrimônio (ajuste de exercícios anteriores) / C 2.3.01 — fora do DRE, aderente ao NBC TG 1000 item 10.6 (erro de período anterior material).
+
+**Bloqueia:** APPLY do `aplicar-ajuste-reconciliacao-v2.ts` (gated em F12 do M52b).
+
+### W2 — Tributação 1.2.12 Quebra Oxidação
+
+A receita de quebra (token vencido sem uso) é isenta de PIS/COFINS+IRPJ por ser ato cooperativo típico (Lei 5.764/71 Art. 79 + STF Tema 536)?
+
+**Caso especial:** tokens emitidos via `SOCIAL` com `naturezaAtoOverride='NAO_COOPERATIVO'` que oxidam — receita tributável ou também isenta?
+- Se tributável, o caller `aplicarOxidacao` precisa consultar o `naturezaAto` do ledger ORIGINAL de emissão (hoje hardcoda `'PROPRIO'`). Catalogado como **D-novo-FAXINA-NATUREZA-RETROATIVA** P1.
+
+### W3 — Tributação 1.2.11 Receita Taxa Circulação QR
+
+A "receita de taxa" da cooperativa em transferência P2P entre cooperados é classificada pela:
+- Natureza do **pagador** (cooperado/não-cooperado), OU
+- Relação **cooperativa-cooperado** (sempre Art. 79 se ambos são associados)?
+
+Risco: se o pagador for não-cooperado (raro mas possível via SOCIAL), a taxa muda de regime?
+
+### W4 — Tributação 1.2.10 Spread Resgate
+
+Confirmar que spread de cooperado ATIVO resgatando tokens gerados por ato cooperativo típico é isento (Art. 79). Hoje só cooperados ATIVOS podem resgatar via PIX (guard no `solicitarResgate`), então a hipótese é "spread sempre PROPRIO".
+
+### W5 — Passivo histórico pré-M50 (R$ 741,79 — não escriturar sem resposta)
 
 1. **Reconhecimento retrospectivo de erro vs lançamento de abertura de balanço:**
    - NBC TG 1000 item 10.6: erro de período anterior → reapresentar comparativos retrospectivamente.
@@ -54,6 +85,11 @@ Hoje, esses cooperados têm saldo "real" mas o passivo contábil 2.3.01 **subest
 
 5. **Documentação interna:**
    - Ata de assembleia ou política da cooperativa registrando a regularização contábil retrospectiva (boa-fé cooperativa + transparência com cooperados).
+
+6. **Impacto na DRE e apresentação para assembleia (Lei 5.764/71 Art. 87-89):**
+   - Se lançado como despesa no exercício corrente (5.1.03 — Alternativa A do W1), o ajuste aparece no demonstrativo de resultado do ano corrente — precisa de explicação na assembleia anual de prestação de contas (cooperados podem questionar "por que minha cooperativa teve R$ 858 a mais de despesa este ano?").
+   - Se lançado como ajuste de patrimônio retrospectivo (Alternativa B), a apresentação à assembleia é mais limpa (não afeta o resultado do exercício corrente), mas exige nota explicativa sobre reapresentação de exercícios anteriores.
+   - Walter avalia qual abordagem favorece a transparência cooperativa.
 
 ## O que JÁ está pronto no SISGD (não bloqueia o parecer)
 

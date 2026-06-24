@@ -23,7 +23,10 @@ import {
   CONTA_DESPESA_BONIFICACAO,
   isMeltAtivado,
 } from './token-contabil.service';
-import { getBaselineContabilPreM50 } from '../cooper-token/cooper-token.ledger-utils';
+import {
+  getBaselineContabilPreM50,
+  classificarPartidaPassivo,
+} from '../cooper-token/cooper-token.ledger-utils';
 
 function setup() {
   const contasMap = new Map<string, { id: string; codigo: string; nome: string; tipo: string; grupo: string }>();
@@ -234,6 +237,74 @@ describe('M52b Fatia 2 — lancarAjusteReconciliacao (D 5.1.03 / C 2.3.01)', () 
     expect(lancamentoCaixaCreate.mock.calls[0][0].data.naturezaAto).toBe('PROPRIO');
     expect(lancamentoCaixaCreate.mock.calls[1][0].data.naturezaAto).toBe('PROPRIO');
   });
+
+  // M52b F4 F6 (24/06): spec idempotência (LOW-2 code-reviewer).
+  it('P2002 com ambas pernas existentes → idempotência hit (retorna { debito, credito })', async () => {
+    const { service, prisma, lancamentoCaixaCreate, lancamentoCaixaFindFirst } = setup();
+    // Primeiro create lança P2002 (unique violation simulada)
+    const p2002Err: any = new Error('Unique constraint failed');
+    p2002Err.code = 'P2002';
+    // Substitui o $transaction pra simular P2002 no batch
+    prisma.$transaction = jest.fn().mockRejectedValueOnce(p2002Err);
+    // findFirst retorna registros pra D e C (ambas pernas já existentes)
+    lancamentoCaixaFindFirst
+      .mockResolvedValueOnce({ id: 'lanc-debito-existente' })
+      .mockResolvedValueOnce({ id: 'lanc-credito-existente' });
+
+    const r = await service.lancarAjusteReconciliacao({
+      cooperativaId: TENANT,
+      cooperadoId: COOPERADO,
+      valor: 22.05,
+      descricao: 'retry idempotente',
+      origemReconciliacaoId: 'ajuste-retry-001',
+    });
+    expect(r).toEqual({
+      debito: { id: 'lanc-debito-existente' },
+      credito: { id: 'lanc-credito-existente' },
+    });
+  });
+
+  // M52b F4 F1 (24/06): half-write detectado lança erro (fix mt P1 + fin P3).
+  it('P2002 com apenas perna D existente (half-write) → THROW original (não silencia)', async () => {
+    const { service, prisma, lancamentoCaixaFindFirst } = setup();
+    const p2002Err: any = new Error('Unique constraint failed');
+    p2002Err.code = 'P2002';
+    prisma.$transaction = jest.fn().mockRejectedValueOnce(p2002Err);
+    // findFirst: D existe, C NÃO existe (half-write hipotético)
+    lancamentoCaixaFindFirst
+      .mockResolvedValueOnce({ id: 'lanc-debito-orphan' })
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      service.lancarAjusteReconciliacao({
+        cooperativaId: TENANT,
+        cooperadoId: COOPERADO,
+        valor: 22.05,
+        descricao: 'half-write D',
+        origemReconciliacaoId: 'ajuste-halfwrite-d',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('P2002 com apenas perna C existente (half-write) → THROW original', async () => {
+    const { service, prisma, lancamentoCaixaFindFirst } = setup();
+    const p2002Err: any = new Error('Unique constraint failed');
+    p2002Err.code = 'P2002';
+    prisma.$transaction = jest.fn().mockRejectedValueOnce(p2002Err);
+    lancamentoCaixaFindFirst
+      .mockResolvedValueOnce(null) // D ausente
+      .mockResolvedValueOnce({ id: 'lanc-credito-orphan' }); // C presente
+
+    await expect(
+      service.lancarAjusteReconciliacao({
+        cooperativaId: TENANT,
+        cooperadoId: COOPERADO,
+        valor: 22.05,
+        descricao: 'half-write C',
+        origemReconciliacaoId: 'ajuste-halfwrite-c',
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 describe('M52b — isMeltAtivado (gate dual)', () => {
@@ -290,8 +361,8 @@ describe('M52b — isMeltAtivado (gate dual)', () => {
 });
 
 describe('M52b — getBaselineContabilPreM50 (baseline documentado)', () => {
-  it('CoopereBR retorna R$ 741,79 (baseline documentado em M52a v2)', () => {
-    expect(getBaselineContabilPreM50('cmn0ho8bx0000uox8wu96u6fd')).toBe(741.79);
+  it('CoopereBR retorna R$ 858,34 (baseline COMPLETO atual, F12 24/06 — inclui R$ 116,55 cuja classificação aguarda Walter)', () => {
+    expect(getBaselineContabilPreM50('cmn0ho8bx0000uox8wu96u6fd')).toBe(858.34);
   });
 
   it('tenant desconhecido retorna 0 (sem baseline)', () => {
@@ -300,5 +371,112 @@ describe('M52b — getBaselineContabilPreM50 (baseline documentado)', () => {
 
   it('string vazia retorna 0', () => {
     expect(getBaselineContabilPreM50('')).toBe(0);
+  });
+});
+
+// M52b F4 F7 — fix HIGH-1 do code-reviewer (falso-positivo).
+// Trava a classificação correta dos lançamentos 2.3.01 pelo cron contábil.
+describe('M52b F2 — classificarPartidaPassivo (substitui descricao.includes)', () => {
+  describe('via origemTipo (caminho principal)', () => {
+    it('LEDGER_OXIDACAO (D 2.3.01) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'LEDGER_OXIDACAO',
+          descricao: '[Token] D: Baixa Passivo (oxidação)',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+
+    it('TOKEN_TRANSACAO_TAXA (D 2.3.01 taxa QR) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'TOKEN_TRANSACAO_TAXA',
+          descricao: '[Token] D: Baixa Passivo (taxa QR)',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+
+    it('RESGATE_RECIBO_SPREAD (D 2.3.01 spread) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'RESGATE_RECIBO_SPREAD',
+          descricao: '[Token] D: Baixa Passivo (spread resgate)',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+
+    it('COBRANCA_ABATE_FATURA (D 2.3.01 abate) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'COBRANCA_ABATE_FATURA',
+          descricao: '[Token] D: Baixa Passivo (abate na fatura)',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+
+    it('TOKEN_TRANSACAO (D 2.3.01 resgate PIX) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'TOKEN_TRANSACAO',
+          descricao: '[Token] Resgate PIX — RES-001',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+
+    it('RECONCILIACAO_HISTORICA_PASSIVO (C 2.3.01) → CREDITO_PASSIVO (trava HIGH-1 falso-positivo)', () => {
+      // Esta é a perna C do lancarAjusteReconciliacao. Code-reviewer
+      // apontou HIGH-1 dizendo que a D não bate com padrão `descricao`.
+      // Falso-positivo: a perna D está em 5.1.03 (não 2.3.01), então
+      // não entra no scan. Esta spec trava o comportamento correto da C.
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'RECONCILIACAO_HISTORICA_PASSIVO',
+          descricao: '[Token] C: Passivo Tokens a Resgatar (ajuste reconciliação)',
+        }),
+      ).toBe('CREDITO_PASSIVO');
+    });
+  });
+
+  describe('fallback descricao (lançamentos legados sem origemTipo)', () => {
+    it('descricao "[Token] C: Passivo" (legado) → CREDITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: null,
+          descricao: '[Token] C: Passivo Tokens a Resgatar — emissão fatura cheia',
+        }),
+      ).toBe('CREDITO_PASSIVO');
+    });
+
+    it('descricao "[Token] D: Baixa Passivo" (legado) → DEBITO_PASSIVO', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: null,
+          descricao: '[Token] D: Baixa Passivo (expiração)',
+        }),
+      ).toBe('DEBITO_PASSIVO');
+    });
+  });
+
+  describe('NAO_CLASSIFICADO (sem padrão reconhecido)', () => {
+    it('origemTipo null + descricao não-padrão → NAO_CLASSIFICADO (caller deve warn)', () => {
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: null,
+          descricao: 'Lançamento manual sem padrão Token',
+        }),
+      ).toBe('NAO_CLASSIFICADO');
+    });
+
+    it('origemTipo válido mas em conta diferente de passivo → NAO_CLASSIFICADO (defesa)', () => {
+      // RECONCILIACAO_HISTORICA aponta pra perna D em 5.1.03; se por engano
+      // o caller filtrar e mandar isso pro classificador, NÃO bate em nenhum
+      // dos dois Sets → cai no fallback descricao → NAO_CLASSIFICADO.
+      expect(
+        classificarPartidaPassivo({
+          origemTipo: 'RECONCILIACAO_HISTORICA',
+          descricao: '[Token] D: Despesa Bonificação (ajuste reconciliação)',
+        }),
+      ).toBe('NAO_CLASSIFICADO');
+    });
   });
 });

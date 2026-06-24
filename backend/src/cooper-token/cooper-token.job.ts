@@ -8,7 +8,11 @@ import { AsPlatform } from '../common/tenant-context';
 // Sprint M52a v2 (23/06/2026) — re-review code (a)+(b): helper extraída
 // pra arquivo dedicado sem dependência NestJS, importável por scripts e
 // specs sem carregar a classe Job inteira.
-import { sinalDaOperacao, getBaselineContabilPreM50 } from './cooper-token.ledger-utils';
+import {
+  sinalDaOperacao,
+  getBaselineContabilPreM50,
+  classificarPartidaPassivo,
+} from './cooper-token.ledger-utils';
 // Sprint Clube P1 — Fase 1.5 Bloco 3 (10/06/2026): gate juridico da oxidacao.
 import { isAmbienteReal } from '../common/safety/ambiente';
 // Sprint C Hardening (17/06/2026) — D-novo-RECONCILIACAO-CONTABIL-CRON P2.
@@ -737,30 +741,38 @@ export class CooperTokenJob {
         });
         if (!contaPassivo) continue; // tenant sem 2.3.01 ainda — skip
 
+        // Sprint M52b F4 F2 (24/06/2026) — fix financeiro-token P2 + mt P2:
+        // classificador via `origemTipo` (enum dedicado) — robusto a renames
+        // de descricao. Fallback descricao só pra lançamentos legados
+        // pré-M52b sem origemTipo. NAO_CLASSIFICADO loga warn explícito.
         const lancsPassivo = await this.prisma.lancamentoCaixa.findMany({
           where: {
             cooperativaId: tenant.id,
             planoContasId: contaPassivo.id,
             status: { not: 'CANCELADO' },
           },
-          select: { valor: true, descricao: true },
+          select: { valor: true, descricao: true, origemTipo: true },
         });
         let creditoPassivo = new Prisma.Decimal(0);
         let debitoPassivo = new Prisma.Decimal(0);
+        let naoClassificados = 0;
         for (const l of lancsPassivo) {
           const v = new Prisma.Decimal(l.valor);
-          const desc = l.descricao || '';
-          // C Passivo (aumenta) — descricao começa com '[Token] C: '
-          // D Passivo (baixa) — descricao começa com '[Token] D: ' ou 'Resgate PIX'
-          if (desc.includes('C: Passivo') || desc.includes('C Passivo')) {
+          const partida = classificarPartidaPassivo(l);
+          if (partida === 'CREDITO_PASSIVO') {
             creditoPassivo = creditoPassivo.plus(v);
-          } else if (
-            desc.includes('D: Baixa Passivo') ||
-            desc.includes('Resgate PIX') ||
-            desc.includes('D Passivo')
-          ) {
+          } else if (partida === 'DEBITO_PASSIVO') {
             debitoPassivo = debitoPassivo.plus(v);
+          } else {
+            naoClassificados += 1;
           }
+        }
+        if (naoClassificados > 0) {
+          // Sem silent-drop: avisa explícito quando há lançamentos sem
+          // classificação pra evitar drift contábil silencioso.
+          this.logger.warn(
+            `[invariante-contabil] ${tenant.nome}: ${naoClassificados} lançamento(s) 2.3.01 sem classificação (origemTipo + descricao não-padrão). Investigar com query manual.`,
+          );
         }
         const passivoContabil = creditoPassivo.minus(debitoPassivo).toDecimalPlaces(2);
 
