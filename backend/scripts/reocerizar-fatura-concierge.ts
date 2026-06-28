@@ -54,7 +54,7 @@ import * as path from 'path';
 import * as ExcelJS from 'exceljs';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const OCR_TIMEOUT_MS = 120_000; // 2 min — OCR rico pode demorar mais
 const MAX_TOKENS = 8192;
 

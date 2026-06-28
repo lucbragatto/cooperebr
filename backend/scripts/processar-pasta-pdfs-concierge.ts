@@ -36,7 +36,7 @@ import * as path from 'path';
 import * as ExcelJS from 'exceljs';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS = 8192;
 
 const PROMPT_CONCIERGE = `Você está analisando uma fatura de energia elétrica brasileira pra auditoria tributária Concierge.

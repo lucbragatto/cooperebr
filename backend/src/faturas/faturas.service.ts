@@ -35,7 +35,11 @@ function projetarEconomia(valorEconomiaMes: number): {
 
 const BUCKET = 'documentos-cooperados';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+// Fix OCR (28/06/2026 — bug E2E do orquestrador): modelo `claude-sonnet-4-20250514`
+// foi aposentado pela Anthropic → 404 not_found em TODA fatura, fallback manual
+// silencioso. Padrão configurável via env (espelha COOPEREAI_MODEL) pra evitar
+// re-quebra quando o modelo atual também for aposentado. Default: claude-sonnet-4-6.
+const CLAUDE_MODEL = process.env.OCR_MODEL || 'claude-sonnet-4-6';
 
 /**
  * Normaliza string de UC removendo tudo que não for dígito.

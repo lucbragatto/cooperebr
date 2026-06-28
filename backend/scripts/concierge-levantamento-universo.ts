@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   ];
 
   console.log('\n=== ESTIMATIVA DE CUSTO OCR ===');
-  console.log(`Modelo: claude-sonnet-4-20250514`);
+  console.log(`Modelo: claude-sonnet-4-6`);
   console.log(
     `Custo unitario: ~US$ ${custoPorFaturaUsd.toFixed(3)} = R$ ${custoPorFaturaBrl.toFixed(
       2,
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
     },
     histogramaFaturasPorCooperado: histograma,
     estimativaCusto: {
-      modelo: 'claude-sonnet-4-20250514',
+      modelo: 'claude-sonnet-4-6',
       custoPorFaturaUsd,
       custoPorFaturaBrl,
       cenarios,
