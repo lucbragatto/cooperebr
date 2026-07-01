@@ -114,8 +114,33 @@ interface CooperadoCompleto {
   representanteLegalNome: string | null; representanteLegalCpf: string | null; representanteLegalCargo: string | null;
   codigoIndicacao?: string; cooperadoIndicadorId?: string | null;
   protocoloConcessionaria: string | null;
+  // Sprint Funil M48 (22/06/2026) — decisão advisory do motor roteador A/B/C.
+  // roteamentoTenantAlvo é omitido pela API (backend service:311, multitenant).
+  roteamentoCaminho?: string | null;
+  roteamentoRazao?: string | null;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
+
+// FIX B.3 Frente 2 vitrines mínimas (01/07/2026) — badge visual pra decisão
+// do motor roteador M48. Só aparece quando há sinal humano-relevante.
+// Duplicação intencional com list page (escopo contido, sem componente shared).
+const ROTEAMENTO_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
+  A_MIGRACAO: {
+    emoji: '🎯',
+    label: 'Lead de captação',
+    color: 'bg-green-100 text-green-800 border-green-300',
+  },
+  B_REDIRECT_PARCEIRO: {
+    emoji: '↪️',
+    label: 'Outro parceiro SISGD',
+    color: 'bg-blue-100 text-blue-700 border-blue-200',
+  },
+  AMBIGUO_ADMIN: {
+    emoji: '❓',
+    label: 'Revisar',
+    color: 'bg-yellow-100 text-yellow-900 border-yellow-300',
+  },
+};
 
 // ─── Zod schema — Editar Cooperado ──────────────────────────────────────────
 
@@ -1081,12 +1106,21 @@ export default function CooperadoPerfilPage() {
       {/* Header */}
       <div className="bg-white border rounded-xl px-6 py-5 flex items-start justify-between gap-4">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-gray-900">{cooperado.nomeCompleto}</h1>
             <Badge className={statusCoopColors[cooperado.status]}>{statusCoopLabel[cooperado.status] ?? cooperado.status}</Badge>
             <Badge className={tipoCooperadoColors[cooperado.tipoCooperado] ?? 'bg-gray-100 text-gray-800 border-gray-200'}>
               {tipoCooperadoLabel[cooperado.tipoCooperado] ?? cooperado.tipoCooperado}
             </Badge>
+            {cooperado.roteamentoCaminho && ROTEAMENTO_CONFIG[cooperado.roteamentoCaminho] && (
+              <Badge
+                className={`cursor-help ${ROTEAMENTO_CONFIG[cooperado.roteamentoCaminho].color}`}
+                title={cooperado.roteamentoRazao ?? 'Decisão do motor roteador do funil'}
+              >
+                {ROTEAMENTO_CONFIG[cooperado.roteamentoCaminho].emoji}{' '}
+                {ROTEAMENTO_CONFIG[cooperado.roteamentoCaminho].label}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-gray-500">
             {cooperado.tipoDocumento ?? 'CPF'}: {cooperado.cpf}

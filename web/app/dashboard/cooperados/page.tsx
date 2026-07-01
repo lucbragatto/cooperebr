@@ -48,6 +48,10 @@ interface CooperadoLista {
   // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — pendência visível do motor.
   pendenciaMotorMsg?: string | null;
   pendenciaMotorEm?: string | null;
+  // Sprint Funil M48 (22/06/2026) — decisão advisory do motor roteador A/B/C.
+  // roteamentoTenantAlvo é omitido pela API por multitenant (backend service:311).
+  roteamentoCaminho?: string | null;
+  roteamentoRazao?: string | null;
   progressaoClube?: {
     nivelAtual: string;
     indicadosAtivos: number;
@@ -58,6 +62,30 @@ interface CooperadoLista {
   tipoParceiro?: string;
   cooperativaId?: string;
 }
+
+// FIX B.3 Frente 2 vitrines mínimas (01/07/2026) — badge visual pra decisão do
+// motor roteador M48. Só aparece quando há sinal humano-relevante:
+//   A_MIGRACAO      → lead de captação (vendas deve agir)
+//   B_REDIRECT_PARCEIRO → outro parceiro SISGD (informativo)
+//   AMBIGUO_ADMIN   → decisão manual do admin
+// C_NOVO (caso comum) NÃO renderiza badge — é o ruído padrão.
+const ROTEAMENTO_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
+  A_MIGRACAO: {
+    emoji: '🎯',
+    label: 'Lead de captação',
+    color: 'bg-green-100 text-green-800 border-green-300',
+  },
+  B_REDIRECT_PARCEIRO: {
+    emoji: '↪️',
+    label: 'Outro parceiro SISGD',
+    color: 'bg-blue-100 text-blue-700 border-blue-200',
+  },
+  AMBIGUO_ADMIN: {
+    emoji: '❓',
+    label: 'Revisar',
+    color: 'bg-yellow-100 text-yellow-900 border-yellow-300',
+  },
+};
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   ATIVO_RECEBENDO_CREDITOS: { label: 'Ativo', color: 'bg-green-100 text-green-800 border-green-200' },
@@ -302,6 +330,15 @@ function TabelaCooperados({
                           ⚠️ Cadastro incompleto
                         </Badge>
                       )}
+                      {c.roteamentoCaminho && ROTEAMENTO_CONFIG[c.roteamentoCaminho] && (
+                        <Badge
+                          className={`ml-2 cursor-help ${ROTEAMENTO_CONFIG[c.roteamentoCaminho].color}`}
+                          title={c.roteamentoRazao ?? 'Decisão do motor roteador do funil'}
+                        >
+                          {ROTEAMENTO_CONFIG[c.roteamentoCaminho].emoji}{' '}
+                          {ROTEAMENTO_CONFIG[c.roteamentoCaminho].label}
+                        </Badge>
+                      )}
                       <button
                         title="Observar este membro"
                         className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
@@ -403,6 +440,9 @@ export default function CooperadosPage() {
   const [cooperados, setCooperados] = useState<CooperadoLista[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroParceiro, setFiltroParceiro] = useState<string | null>(null);
+  // FIX B.4 Frente 2 vitrines mínimas (01/07/2026) — filtro por status
+  // client-side (mesmo padrão de filtroParceiro). Vazio = todos os status.
+  const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -486,16 +526,18 @@ export default function CooperadosPage() {
   const cooperadosFiltrados = (filtroParceiro
     ? cooperados.filter(c => c.cooperativaId === filtroParceiro)
     : cooperados
-  ).filter(c => {
-    if (!busca.trim()) return true;
-    const termo = busca.toLowerCase();
-    return (
-      c.nomeCompleto.toLowerCase().includes(termo) ||
-      c.cpf.toLowerCase().includes(termo) ||
-      c.email.toLowerCase().includes(termo) ||
-      (c.telefone && c.telefone.toLowerCase().includes(termo))
-    );
-  });
+  )
+    .filter(c => (filtroStatus ? c.status === filtroStatus : true))
+    .filter(c => {
+      if (!busca.trim()) return true;
+      const termo = busca.toLowerCase();
+      return (
+        c.nomeCompleto.toLowerCase().includes(termo) ||
+        c.cpf.toLowerCase().includes(termo) ||
+        c.email.toLowerCase().includes(termo) ||
+        (c.telefone && c.telefone.toLowerCase().includes(termo))
+      );
+    });
 
   async function buscarContratosAtivos(cooperadoId: string) {
     setCarregandoContratos(true);
@@ -701,14 +743,36 @@ export default function CooperadosPage() {
                 </span>
               )}
             </CardTitle>
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar por nome, CPF, email ou telefone..."
-                value={busca}
-                onChange={(e) => handleBuscaChange(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex items-center gap-3 w-full max-w-lg">
+              <select
+                value={filtroStatus ?? ''}
+                onChange={(e) => setFiltroStatus(e.target.value || null)}
+                className="rounded border border-gray-300 text-sm px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                title="Filtrar por status"
+              >
+                <option value="">Todos os status</option>
+                <option value="PENDENTE">Pendente</option>
+                <option value="PENDENTE_ASSINATURA">Pend. Assinatura</option>
+                <option value="PENDENTE_DOCUMENTOS">Pend. Documentos</option>
+                <option value="PENDENTE_VALIDACAO">Pend. Validação</option>
+                <option value="AGUARDANDO_CONCESSIONARIA">Aguard. Concess.</option>
+                <option value="APROVADO">Aprovado</option>
+                <option value="ATIVO">Ativo</option>
+                <option value="ATIVO_RECEBENDO_CREDITOS">Ativo (recebendo)</option>
+                <option value="SUSPENSO">Suspenso</option>
+                <option value="ENCERRADO">Encerrado</option>
+                <option value="PENDENTE_MIGRACAO">Pend. Migração</option>
+                <option value="DESLIGADO">Desligado</option>
+              </select>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar por nome, CPF, email ou telefone..."
+                  value={busca}
+                  onChange={(e) => handleBuscaChange(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
