@@ -75,6 +75,27 @@
 
 ---
 
+## ONDE PARAMOS — 2026-06-28 (Code — fix OCR modelo Anthropic aposentado, bug descoberto em E2E do funil)
+
+**Fix cirúrgico, push direto no main.** Doc-sessão retroativa criada em 2026-07-01 no ritual de retomada.
+- **Bug:** `faturas.service.ts` chumbava `claude-sonnet-4-20250514` (modelo aposentado pela Anthropic) →
+  API `404 not_found` → toda fatura falhava no cadastro público + pipeline IMAP → fallback manual
+  silencioso (sem sinal de erro pra ninguém).
+- **Descoberto pelo orquestrador** ao rodar teste E2E do funil (frente recomendada da FRASE DE
+  RETOMADA do M52b — `docs/relatorios/2026-06-23-investigacao-funil-captacao-roteador-m48.md` §7).
+- **Fix:** `CLAUDE_MODEL = process.env.OCR_MODEL || 'claude-sonnet-4-6'` (espelha `COOPEREAI_MODEL`,
+  evita re-quebrar na próxima aposentadoria). 4 scripts concierge idem. `.env.example` documenta `OCR_MODEL`.
+- **Verificado E2E** com `edp-luciano-gd.pdf` (nome/cpf/uc/distribuidora/consumo/histórico/temCreditosInjetados=true ✅).
+- **Commit:** `443ea09 fix(ocr): modelo Anthropic configuravel + atual (claude-sonnet-4-6)`.
+- **Débitos:** nenhum novo, nenhum resolvido formalmente (bug latente sem catalogação prévia).
+- **Ritual:** violação leve da regra inegociável bilateral 13/05/2026 — commit no main sem doc-sessão
+  correspondente. Fechamento retroativo aplicado em 2026-07-01. Regra reforçada: todo commit push-ado
+  no main precisa de doc-sessão, mesmo em fixes pequenos.
+- **Próximo passo:** ESCOLHA do Luciano entre as 4 frentes da FRASE DE RETOMADA do M52b — inalterada.
+- Detalhe: `docs/sessoes/2026-06-28-fix-ocr-modelo-anthropic.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-24 (Orquestrador — M52b Faxina Contábil melt Bloco F + resíduo R$858 parcial — merge na main + apply verificado no banco)
 
 **Marco M52b entregue.** Merge `0b58a74` (branch `feature/faxina-contabil-m52b-melt`, 5 commits). Padrão
