@@ -118,6 +118,11 @@ interface CooperadoCompleto {
   // roteamentoTenantAlvo é omitido pela API (backend service:311, multitenant).
   roteamentoCaminho?: string | null;
   roteamentoRazao?: string | null;
+  // Sprint Onboarding Bloco 1 Fatia 1.2 (06/06/2026) — snapshot dos dados
+  // extraídos por OCR no cadastro público, quando o motor detectou fatura
+  // com créditos GD injetados (persistido em vez de criar FaturaProcessada
+  // completa — decisão custo/benefício). Chega tipado como Json opaco.
+  consumoStashOcr?: Record<string, unknown> | null;
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
 
@@ -1253,6 +1258,39 @@ export default function CooperadoPerfilPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* B5 Frente 2 vitrines mínimas (01/07/2026) — snapshot OCR do cadastro.
+              Só aparece quando o motor persistiu dados brutos da fatura no
+              cadastro público (Cooperado.consumoStashOcr). Existe no banco mas
+              não aparecia em NENHUMA tela antes deste fix. */}
+          {cooperado.consumoStashOcr && Object.keys(cooperado.consumoStashOcr).length > 0 && (
+            <Card className="border-amber-200 bg-amber-50/30">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+                  <FileText className="h-4 w-4" />
+                  Dados extraídos da fatura no cadastro (OCR)
+                </CardTitle>
+                <p className="text-xs text-amber-700/80 mt-1">
+                  Snapshot bruto detectado no momento do cadastro público — útil pra proposta
+                  personalizada ou triagem de captação.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {Object.entries(cooperado.consumoStashOcr).map(([chave, valor]) => {
+                    if (valor === null || valor === undefined || valor === '') return null;
+                    const valorFormatado =
+                      typeof valor === 'number'
+                        ? valor.toLocaleString('pt-BR')
+                        : typeof valor === 'object'
+                          ? JSON.stringify(valor)
+                          : String(valor);
+                    return <Campo key={chave} label={chave} value={valorFormatado} />;
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Resumo de contratos com usina */}
           {cooperado.contratos.length > 0 && (
