@@ -75,6 +75,51 @@
 
 ---
 
+## ONDE PARAMOS — 2026-07-01 (3ª passagem — Frente Jornada do Cooperado: unificação de visibilidade, aguarda re-review)
+
+**Frente Jornada entregue em 4 commits limpos** (2f8bfdd + 4967e8c + 153b412 + 3051e1f) push
+OK — aguarda re-review do Luciano antes de considerar mergeado (regra do prompt).
+- **Fase 1 read-only** confirmou que 3 das 4 peças já existiam no schema (StatusCooperado
+  rico, ListaEspera, EnvioListaConcessionaria/EnvioListaCooperado); faltava (a) o campo de
+  origem e (b) juntar tudo na tela do cooperado. Escopo contido: unificação, não construção.
+- **Schema** (2f8bfdd): novo enum `CanalCadastro { CADASTRO_PUBLICO, CADASTRO_SEM_UC,
+  ADMIN_MANUAL, INDICACAO }` + `Cooperado.canalCadastro CanalCadastro?` nullable (preserva
+  100% do histórico). Aplicado via `prisma db push` com backend parado.
+- **Writers** (2f8bfdd): 8 pontos gravam o canal. `publico.controller.cadastroWebV2 →
+  CADASTRO_PUBLICO`; `cadastroSemUc → CADASTRO_SEM_UC`; `autoInscrever (convite) → INDICACAO`;
+  `cooperados.controller POST /cooperados + cadastroCompleto → ADMIN_MANUAL`;
+  `preCadastroProxy → INDICACAO`; `lead-expansao converter → ADMIN_MANUAL`; `convenios
+  cooperadoSemUc → ADMIN_MANUAL`. Institucional e whatsapp mantêm null (intencional).
+- **findOne** (4967e8c): amplia include com `listaEspera(AGUARDANDO)` + `enviosLista(3
+  últimos, com envio-mãe)`. `findAll` ganha counts binários `temListaEspera` + `temEnvioListaAndamento`
+  pros ícones da lista.
+- **Specs** (4967e8c): 3 novos cobrindo findOne include + multi-tenant preservado +
+  canalCadastro no create. Suite `src/cooperados/` + `src/lead-expansao/` + `src/publico/` +
+  `src/convenios/` **518/518 verde** (era 501/518 com regressões pré-existentes de sprints
+  M31/M45/M48 sem cobertura). **3 caronas informais** fechadas (stub RoteamentoCadastroService
+  + providers acumulados no service.spec/controller.spec + findFirst delegando findUnique
+  no guard-ativacao). Zero regressão real.
+- **Smoke E2E** (153b412): assertion nova no `smoke-funil-frente2.mjs` valida
+  `canalCadastro=CADASTRO_PUBLICO` via HTTP real. **Run 01/07 7/7 verde**.
+- **Frontend** (3051e1f):
+  - **Detalhe `/dashboard/cooperados/[id]`**: card "Jornada do Cooperado" novo no topo do bloco
+    geral com 4 linhas condicionais: ① Origem (badge canalCadastro; null → 📜 Histórico);
+    ② Timeline visual (7 marcos linear StatusCooperado; terminais caem em badge fallback);
+    ③ Fila (só se listaEspera[0] existir — Posição #N + kWh + link); ④ Lista concess. (só se
+    enviosLista[] existir — cada linha com número + statusIndividual + status envio-mãe + link
+    pro envio).
+  - **Lista `/dashboard/cooperados`**: ícones inline ⏳ (fila) + 📋 (envio andando) ao lado
+    do badge de roteamento M48. Novo dropdown "Filtrar por origem" ao lado do filtro de
+    status (padrão UX select nativo 19/05). filtroCanal client-side.
+- **Verificação**: TSC backend limpo nos meus arquivos; TSC web exit 0; rebuild backend +
+  rebuild frontend + `prisma db push` + `pm2 restart` nos dois; smoke E2E 7/7.
+- **Débitos**: nenhum novo formal. 3 caronas informais fechadas.
+- **Próximo passo**: **re-review Luciano** obrigatório (padrão do prompt); depois smoke visual
+  manual das UIs; depois escolha entre as 3 alternativas abertas na FRASE DE RETOMADA do M52b.
+- Detalhe: `docs/sessoes/2026-07-01-jornada-cooperado.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-07-01 (2ª passagem — Frente 2 EXTENSÃO: B5 consumoStashOcr + C6 fix converter multi-tenant SUPER_ADMIN + C7 botão Converter + smoke E2E funil)
 
 **Frente 2 fechada ponta a ponta em 4 commits limpos** após o Luciano estender o escopo da mesma
