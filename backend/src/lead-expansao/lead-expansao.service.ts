@@ -267,6 +267,9 @@ export class LeadExpansaoService {
               status: (dadosCooperado.status ?? 'PENDENTE') as any,
               cooperativaId,
               tipoCooperado: 'COM_UC' as any,
+              // Frente Jornada (01/07/2026) — converter é ação do admin no
+              // painel; o lead veio do bot mas o cooperado nasce via ADMIN.
+              canalCadastro: 'ADMIN_MANUAL',
             },
           });
 

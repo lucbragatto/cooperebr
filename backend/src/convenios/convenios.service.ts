@@ -68,6 +68,9 @@ export class ConveniosService {
           tipoCooperado: 'SEM_UC',
           status: 'ATIVO',
           cooperativaId,
+          // Frente Jornada (01/07/2026) — cooperadoSemUc criado pelo admin
+          // como pagador PJ do convênio empresarial.
+          canalCadastro: 'ADMIN_MANUAL',
         },
       });
       conveniadoId = cooperadoSemUc.id;

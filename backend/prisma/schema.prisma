@@ -248,6 +248,9 @@ model Cooperado {
   estado                  String?
   // Segurança LGPD em dev: true = não dispara notificações reais
   ambienteTeste           Boolean                    @default(false)
+  // Frente Jornada do Cooperado (01/07/2026) — origem do cadastro no funil.
+  // Nullable: cadastros históricos ficam null (frontend mostra "histórico").
+  canalCadastro           CanalCadastro?
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
   ucs                     Uc[]
@@ -485,6 +488,18 @@ enum StatusDocumento {
   PENDENTE
   APROVADO
   REPROVADO
+}
+
+// Frente Jornada do Cooperado (01/07/2026) — origem do cadastro no funil.
+// Aditivo, nullable no Cooperado: cadastros históricos (pré-Frente) ficam
+// null e o frontend renderiza "Origem: histórico". Escrita nos 5 canais
+// principais listados pelo Luciano; escritores auxiliares (whatsapp bot,
+// cooperado institucional fantasma) mantêm null intencionalmente.
+enum CanalCadastro {
+  CADASTRO_PUBLICO   // /cadastro público wizard
+  CADASTRO_SEM_UC    // fluxo indicador puro (sem UC)
+  ADMIN_MANUAL       // POST /cooperados admin ou wizard admin
+  INDICACAO          // convite público (auto-inscrever) ou pre-cadastro-proxy MLM
 }
 
 enum StatusCooperado {

@@ -870,6 +870,8 @@ export class PublicoController {
                 status: 'PENDENTE',
                 tipoCooperado: 'SEM_UC',
                 cooperativaId,
+                // Frente Jornada (01/07/2026) — convite público (MLM/indicação).
+                canalCadastro: 'INDICACAO',
                 termoAdesaoAceito: true,
                 termoAdesaoAceitoEm: new Date(),
               },
@@ -1101,6 +1103,8 @@ export class PublicoController {
             status: 'PENDENTE',
             tipoCooperado,
             cooperativaId,
+            // Frente Jornada (01/07/2026) — origem do funil.
+            canalCadastro: 'CADASTRO_PUBLICO',
             modoRemuneracao: modoRemuneracao as any,
             termoAdesaoAceito: true,
             termoAdesaoAceitoEm: new Date(),
@@ -1790,6 +1794,8 @@ export class PublicoController {
           tipoCooperado: 'SEM_UC',
           status: 'PENDENTE',
           cooperativaId,
+          // Frente Jornada (01/07/2026) — cadastro sem UC (indicador puro).
+          canalCadastro: 'CADASTRO_SEM_UC',
           modoRemuneracao: 'CLUBE',
           termoAdesaoAceito: true,
           termoAdesaoAceitoEm: new Date(),

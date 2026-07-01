@@ -324,6 +324,20 @@ export class CooperadosService {
           select: {
             faturasProcessadas: true,
             contratos: { where: { status: { in: ['PENDENTE_ATIVACAO', 'ATIVO', 'LISTA_ESPERA'] } } },
+            // Frente Jornada do Cooperado (01/07/2026) — flags binárias na
+            // lista pra renderizar ícones ⏳ (fila de espera ativa) e 📋
+            // (envio à concessionária em andamento — não fechado). Barato:
+            // só um count por linha, sem carregar objetos inteiros.
+            listaEspera: { where: { status: 'AGUARDANDO' } },
+            enviosLista: {
+              where: {
+                envio: {
+                  status: {
+                    in: ['RASCUNHO', 'VALIDADA', 'PRONTA_PARA_ENVIO', 'ENVIADA', 'PROTOCOLADA'],
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -397,6 +411,12 @@ export class CooperadosService {
         // LIMPADO na Fatia 1.3 quando construirMembroCompleto cria o contrato.
         pendenciaMotorMsg: (c as any).pendenciaMotorMsg ?? null,
         pendenciaMotorEm: (c as any).pendenciaMotorEm ?? null,
+        // Frente Jornada do Cooperado (01/07/2026) — origem + flags binárias
+        // pros ícones na lista. Consumidos pelo frontend em
+        // /dashboard/cooperados (lista) e [id]/page.tsx (detalhe).
+        canalCadastro: (c as any).canalCadastro ?? null,
+        temListaEspera: ((c as any)._count?.listaEspera ?? 0) > 0,
+        temEnvioListaAndamento: ((c as any)._count?.enviosLista ?? 0) > 0,
         // SUPER_ADMIN: info do parceiro (quando sem filtro cooperativaId)
         ...(!cooperativaId && (c as any).cooperativa ? {
           nomeParceiro: (c as any).cooperativa.nome,
@@ -426,6 +446,30 @@ export class CooperadosService {
         },
         documentos: { orderBy: { createdAt: 'desc' } },
         ocorrencias: { orderBy: { createdAt: 'desc' }, take: 20 },
+        // Frente Jornada do Cooperado (01/07/2026) — unificação de visibilidade.
+        // ListaEspera do cooperado (0-N registros — 1 por contrato aguardando).
+        listaEspera: {
+          where: { status: 'AGUARDANDO' },
+          orderBy: { posicao: 'asc' },
+        },
+        // Últimos 3 envios à concessionária que incluem este cooperado, com
+        // o número do envio + status do envio-mãe (contexto do statusIndividual).
+        enviosLista: {
+          orderBy: { createdAt: 'desc' },
+          take: 3,
+          include: {
+            envio: {
+              select: {
+                id: true,
+                numeroInterno: true,
+                status: true,
+                geradaEm: true,
+                enviadaEm: true,
+                liberadaEm: true,
+              },
+            },
+          },
+        },
       },
     });
     if (!cooperado) throw new NotFoundException(`Cooperado com id ${id} não encontrado`);
@@ -464,6 +508,8 @@ export class CooperadosService {
     roteamentoTenantAlvo?: string | null;
     roteamentoRazao?: string;
     roteamentoDecididoEm?: Date;
+    // Frente Jornada do Cooperado (01/07/2026) — origem do funil.
+    canalCadastro?: 'CADASTRO_PUBLICO' | 'CADASTRO_SEM_UC' | 'ADMIN_MANUAL' | 'INDICACAO';
   }) {
     let cooperado;
     try {
@@ -519,6 +565,8 @@ export class CooperadosService {
           cooperativaId: cooperativaIdAlvo,
           preferenciaCobranca: dto.preferenciaCobranca,
           cotaKwhMensal: dto.cotaKwhMensal ?? undefined,
+          // Frente Jornada (01/07/2026) — wizard admin cadastroCompleto.
+          canalCadastro: 'ADMIN_MANUAL',
         },
       });
 
@@ -1686,6 +1734,9 @@ export class CooperadosService {
         cooperativaId: data.cooperativaId,
         cidade: data.cidade,
         estado: data.estado,
+        // Frente Jornada (01/07/2026) — pre-cadastro-proxy é criado pelo
+        // indicador (MLM), cooperado real assina depois via magic link.
+        canalCadastro: 'INDICACAO',
       },
     });
 

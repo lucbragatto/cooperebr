@@ -224,6 +224,9 @@ export class CooperadosController {
       roteamentoTenantAlvo: roteamento.tenantAlvo ?? null,
       roteamentoRazao: roteamento.razao,
       roteamentoDecididoEm: new Date(),
+      // Frente Jornada (01/07/2026) — admin criando cooperado direto (não
+      // wizard cadastroCompleto, que também é ADMIN_MANUAL mas via outro path).
+      canalCadastro: 'ADMIN_MANUAL',
       ...(req.user?.perfil === AGREGADOR && req.user.administradoraId
         ? { administradoraId: req.user.administradoraId }
         : {}),
