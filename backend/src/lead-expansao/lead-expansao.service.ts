@@ -157,13 +157,19 @@ export class LeadExpansaoService {
 
   /**
    * Sprint Funil M48 (22/06/2026) — Camada 1 Fatia E.
+   * Frente 2 vitrines mínimas (01/07/2026) — extensão SUPER_ADMIN + lead órfão.
    *
    * Converte LeadExpansao em Cooperado cadastrado:
-   *  - Multi-tenant: lead.cooperativaId DEVE bater com cooperativaId do JWT
-   *    (controller passa direto, sem fallback).
-   *  - Cria Cooperado no tenant atual com dados mínimos do lead + dados extras
-   *    do admin (DTO).
-   *  - Atualiza LeadExpansao.status='CONVERTIDO' (estado terminal).
+   *  - Multi-tenant ADMIN/OPERADOR: lead.cooperativaId DEVE bater com
+   *    cooperativaId do JWT (controller passa direto, sem fallback).
+   *  - SUPER_ADMIN + lead órfão (cooperativaId=null): controller passa
+   *    `permitirAdotarLeadOrfao=true` e o findFirst aceita leads sem
+   *    tenant OU no tenant alvo (validado no controller). Adota o lead
+   *    gravando cooperativaId no update E no Cooperado criado.
+   *  - Cria Cooperado no tenant efetivo com dados mínimos do lead + dados
+   *    extras do admin (DTO).
+   *  - Atualiza LeadExpansao.status='CONVERTIDO' (estado terminal) +
+   *    grava cooperativaId (adoção).
    *  - Idempotente: rejeita se lead já está CONVERTIDO.
    *
    * Erros tipados (H1 code-reviewer 22/06): controller pega por instanceof,
@@ -179,10 +185,20 @@ export class LeadExpansaoService {
       telefone?: string;
       status?: string;
     },
+    opts: { permitirAdotarLeadOrfao?: boolean } = {},
   ): Promise<{ cooperadoId: string; leadId: string }> {
+    const permitirAdotarOrfao = opts.permitirAdotarLeadOrfao ?? false;
+
+    // Frente 2 (01/07/2026) — no modo adoção (SUPER_ADMIN), aceita lead órfão
+    // (cooperativaId=null) OU no tenant alvo. Bloqueia cross-tenant (impede
+    // "roubo" de lead entre parceiros ativos via body).
+    const whereClause = permitirAdotarOrfao
+      ? { id: leadId, OR: [{ cooperativaId: null }, { cooperativaId }] }
+      : { id: leadId, cooperativaId };
+
     const lead = await this.prisma.leadExpansao.findFirst({
-      where: { id: leadId, cooperativaId },
-      select: { id: true, telefone: true, status: true, distribuidora: true },
+      where: whereClause,
+      select: { id: true, telefone: true, status: true, distribuidora: true, cooperativaId: true },
     });
     if (!lead) {
       throw new LeadNaoEncontradoError('LeadExpansao não encontrado neste tenant');
@@ -205,10 +221,17 @@ export class LeadExpansaoService {
         },
       });
       // P2 multitenant 22/06: defense-in-depth — update inclui cooperativaId
-      // no where (findFirst acima já validou posse).
+      // no where quando o lead JÁ pertencia ao tenant. Frente 2 (01/07):
+      // quando é adoção de órfão (lead.cooperativaId=null), o where usa só o
+      // id (senão o update falha) e o data grava cooperativaId pra encerrar
+      // o estado órfão. findFirst acima já validou posse/adoção.
+      const ehAdocaoOrfao = lead.cooperativaId === null && permitirAdotarOrfao;
       await tx.leadExpansao.update({
-        where: { id: leadId, cooperativaId },
-        data: { status: 'CONVERTIDO' },
+        where: ehAdocaoOrfao ? { id: leadId } : { id: leadId, cooperativaId },
+        data: {
+          status: 'CONVERTIDO',
+          ...(ehAdocaoOrfao ? { cooperativaId } : {}),
+        },
       });
       return cooperado;
     });

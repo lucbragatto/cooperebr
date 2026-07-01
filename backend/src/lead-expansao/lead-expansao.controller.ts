@@ -106,8 +106,13 @@ export class LeadExpansaoController {
   }
 
   // Sprint Funil M48 (22/06/2026) — Camada 1 Fatia E.
-  // Converte LeadExpansao em Cooperado. cooperativaId SEMPRE do JWT (lição M45);
-  // service rejeita se lead.cooperativaId != JWT.
+  // Frente 2 vitrines mínimas (01/07/2026) — SUPER_ADMIN + lead órfão:
+  //  - ADMIN/OPERADOR: cooperativaId do JWT (obrigatório), lead precisa bater.
+  //  - SUPER_ADMIN: cooperativaIdAlvo obrigatório NO BODY, validado contra
+  //    Cooperativa ativa (padrão anti-spoof M45); permite adotar lead órfão
+  //    (LeadExpansao.cooperativaId=null vindo do POST público via bot WA).
+  //  - SUPER_ADMIN NÃO pode roubar lead de outro tenant ativo (findFirst OR
+  //    no service exige que lead.cooperativaId seja null OU bata com o alvo).
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @AuditLog({ acao: 'lead.converter', recurso: 'LeadExpansao', recursoIdParam: 'id' })
   @Post(':id/converter')
@@ -119,22 +124,57 @@ export class LeadExpansaoController {
       email: string;
       telefone?: string;
       status?: string;
+      // Frente 2 (01/07/2026) — só usado quando perfil=SUPER_ADMIN.
+      // Em ADMIN/OPERADOR o body.cooperativaIdAlvo é IGNORADO
+      // (destructure-discard padrão M45).
+      cooperativaIdAlvo?: string;
     },
     @Req() req: any,
   ) {
-    const cooperativaId: string | undefined = req.user?.cooperativaId;
-    if (!cooperativaId) {
-      throw new ForbiddenException(
-        'cooperativaId obrigatório no JWT pra converter lead.',
-      );
-    }
     if (!body.nomeCompleto?.trim() || !body.cpf?.trim() || !body.email?.trim()) {
       throw new BadRequestException(
         'nomeCompleto + cpf + email obrigatórios pra criar Cooperado.',
       );
     }
+
+    const ehSuperAdmin = req.user?.perfil === PerfilUsuario.SUPER_ADMIN;
+    let cooperativaIdEfetivo: string;
+    let permitirAdotarLeadOrfao = false;
+
+    if (ehSuperAdmin) {
+      if (!body.cooperativaIdAlvo?.trim()) {
+        throw new BadRequestException(
+          'SUPER_ADMIN deve informar cooperativaIdAlvo no body pra converter lead.',
+        );
+      }
+      const coop = await this.prisma.cooperativa.findUnique({
+        where: { id: body.cooperativaIdAlvo },
+        select: { id: true, ativo: true },
+      });
+      if (!coop || !coop.ativo) {
+        throw new NotFoundException('Cooperativa alvo não encontrada ou inativa.');
+      }
+      cooperativaIdEfetivo = coop.id;
+      permitirAdotarLeadOrfao = true;
+    } else {
+      // Destructure-discard padrão M45: ADMIN/OPERADOR NÃO pode passar
+      // cooperativaIdAlvo (evita spoof cross-tenant via body).
+      const { cooperativaIdAlvo: _ignored, ...rest } = body;
+      // Reatribui pra manter body limpo abaixo (defense-in-depth).
+      body = rest as typeof body;
+      const cooperativaIdJwt: string | undefined = req.user?.cooperativaId;
+      if (!cooperativaIdJwt) {
+        throw new ForbiddenException(
+          'cooperativaId obrigatório no JWT pra converter lead.',
+        );
+      }
+      cooperativaIdEfetivo = cooperativaIdJwt;
+    }
+
     try {
-      return await this.service.converter(id, cooperativaId, body);
+      return await this.service.converter(id, cooperativaIdEfetivo, body, {
+        permitirAdotarLeadOrfao,
+      });
     } catch (err) {
       // H1 code-reviewer 22/06: mapeamento por instanceof (não substring).
       if (err instanceof LeadNaoEncontradoError) {
