@@ -2,15 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { getUsuario } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Globe, Loader2, Bell, TrendingUp, Star, DollarSign, Users } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
+import { Globe, Loader2, Bell, TrendingUp, Star, DollarSign, Users, UserPlus } from 'lucide-react';
 
 interface ResumoItem {
   distribuidora: string;
@@ -20,6 +26,11 @@ interface ResumoItem {
   economiaMesMedia: number;
   receitaLatenteAnual: number;
 }
+
+// Frente 2 vitrines mínimas — C7 (01/07/2026): status do lead + cooperativaId
+// (opcional; null pra leads órfãos do bot público). Compatível com listagem
+// existente — campos aditivos.
+type StatusLead = 'AGUARDANDO' | 'NOTIFICADO' | 'CONVERTIDO';
 
 interface LeadItem {
   id: string;
@@ -31,7 +42,20 @@ interface LeadItem {
   intencaoConfirmada: boolean;
   score: number;
   createdAt: string;
+  status?: StatusLead;
+  cooperativaId?: string | null;
 }
+
+interface CooperativaOption {
+  id: string;
+  nome: string;
+}
+
+const STATUS_LEAD_CONFIG: Record<StatusLead, { label: string; color: string }> = {
+  AGUARDANDO: { label: 'Aguardando', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+  NOTIFICADO: { label: 'Notificado', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  CONVERTIDO: { label: 'Convertido', color: 'bg-green-100 text-green-800 border-green-300' },
+};
 
 function ScoreBadge({ score }: { score: number }) {
   const config = score >= 8
@@ -62,9 +86,34 @@ export default function ExpansaoPage() {
   const [carregando, setCarregando] = useState(true);
   const [notificando, setNotificando] = useState<string | null>(null);
 
+  // Frente 2 vitrines mínimas — C7 (01/07/2026): estado do Dialog de conversão.
+  const usuario = getUsuario() as { perfil?: string } | null;
+  const ehSuperAdmin = usuario?.perfil === 'SUPER_ADMIN';
+  const [leadEmConversao, setLeadEmConversao] = useState<LeadItem | null>(null);
+  const [formConverter, setFormConverter] = useState({
+    nomeCompleto: '',
+    cpf: '',
+    email: '',
+    telefone: '',
+    cooperativaIdAlvo: '',
+  });
+  const [convertendo, setConvertendo] = useState(false);
+  const [erroConverter, setErroConverter] = useState<string | null>(null);
+  const [cooperativas, setCooperativas] = useState<CooperativaOption[]>([]);
+
   useEffect(() => {
     buscar();
   }, []);
+
+  useEffect(() => {
+    // Carrega lista de cooperativas ativas quando o admin é SUPER_ADMIN —
+    // usada só no Dialog de conversão quando o lead é órfão.
+    if (ehSuperAdmin) {
+      api.get('/cooperativas')
+        .then((r) => setCooperativas(Array.isArray(r.data) ? r.data : []))
+        .catch(() => {});
+    }
+  }, [ehSuperAdmin]);
 
   function buscar() {
     setCarregando(true);
@@ -90,6 +139,73 @@ export default function ExpansaoPage() {
       alert('Erro ao notificar leads.');
     } finally {
       setNotificando(null);
+    }
+  }
+
+  function abrirDialogConverter(lead: LeadItem) {
+    setLeadEmConversao(lead);
+    setFormConverter({
+      nomeCompleto: lead.nomeCompleto ?? '',
+      cpf: '',
+      email: '',
+      telefone: lead.telefone ?? '',
+      cooperativaIdAlvo: '',
+    });
+    setErroConverter(null);
+  }
+
+  function fecharDialogConverter() {
+    setLeadEmConversao(null);
+    setErroConverter(null);
+    setConvertendo(false);
+  }
+
+  async function confirmarConversao() {
+    if (!leadEmConversao) return;
+    const { nomeCompleto, cpf, email, telefone, cooperativaIdAlvo } = formConverter;
+
+    if (!nomeCompleto.trim() || !cpf.trim() || !email.trim()) {
+      setErroConverter('Nome completo, CPF e email são obrigatórios.');
+      return;
+    }
+
+    // Só exige seletor quando é SUPER_ADMIN E o lead é órfão (sem cooperativaId).
+    const precisaSeletorTenant = ehSuperAdmin && !leadEmConversao.cooperativaId;
+    if (precisaSeletorTenant && !cooperativaIdAlvo.trim()) {
+      setErroConverter('Selecione o parceiro-alvo pra adotar este lead.');
+      return;
+    }
+
+    setConvertendo(true);
+    setErroConverter(null);
+    try {
+      const payload: Record<string, unknown> = {
+        nomeCompleto: nomeCompleto.trim(),
+        cpf: cpf.trim(),
+        email: email.trim(),
+      };
+      if (telefone.trim()) payload.telefone = telefone.trim();
+      // SUPER_ADMIN sempre precisa passar cooperativaIdAlvo — mesmo quando o
+      // lead já tem tenant (backend valida contra Cooperativa ativa).
+      if (ehSuperAdmin) {
+        payload.cooperativaIdAlvo = cooperativaIdAlvo || leadEmConversao.cooperativaId || '';
+      }
+
+      await api.post(`/lead-expansao/${leadEmConversao.id}/converter`, payload);
+
+      // Marca localmente como CONVERTIDO (não recarrega tudo — barato).
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadEmConversao.id ? { ...l, status: 'CONVERTIDO' as const } : l)),
+      );
+      fecharDialogConverter();
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? ((err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+            'Erro ao converter lead.')
+          : 'Erro ao converter lead.';
+      setErroConverter(String(message));
+      setConvertendo(false);
     }
   }
 
@@ -244,41 +360,168 @@ export default function ExpansaoPage() {
                     <TableHead>UF</TableHead>
                     <TableHead className="text-right">Valor Fatura</TableHead>
                     <TableHead className="text-center">Intencao</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
                     <TableHead>Data</TableHead>
+                    <TableHead className="text-center">Acoes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {leads.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-gray-400 py-8">
+                      <TableCell colSpan={10} className="text-center text-gray-400 py-8">
                         Nenhum lead registrado.
                       </TableCell>
                     </TableRow>
                   )}
-                  {leads.map((l) => (
-                    <TableRow key={l.id}>
-                      <TableCell className="text-center"><ScoreBadge score={l.score} /></TableCell>
-                      <TableCell className="font-medium">{l.nomeCompleto || '—'}</TableCell>
-                      <TableCell>{l.telefone}</TableCell>
-                      <TableCell>{l.distribuidora}</TableCell>
-                      <TableCell>{l.estado || '—'}</TableCell>
-                      <TableCell className="text-right">
-                        {l.valorFatura ? formatarMoeda(Number(l.valorFatura)) : '—'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {l.intencaoConfirmada ? (
-                          <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-gray-400">Nao</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{new Date(l.createdAt).toLocaleDateString('pt-BR')}</TableCell>
-                    </TableRow>
-                  ))}
+                  {leads.map((l) => {
+                    const statusCfg = l.status ? STATUS_LEAD_CONFIG[l.status] : STATUS_LEAD_CONFIG.AGUARDANDO;
+                    const jaConvertido = l.status === 'CONVERTIDO';
+                    return (
+                      <TableRow key={l.id} className={jaConvertido ? 'opacity-60' : ''}>
+                        <TableCell className="text-center"><ScoreBadge score={l.score} /></TableCell>
+                        <TableCell className="font-medium">{l.nomeCompleto || '—'}</TableCell>
+                        <TableCell>{l.telefone}</TableCell>
+                        <TableCell>{l.distribuidora}</TableCell>
+                        <TableCell>{l.estado || '—'}</TableCell>
+                        <TableCell className="text-right">
+                          {l.valorFatura ? formatarMoeda(Number(l.valorFatura)) : '—'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {l.intencaoConfirmada ? (
+                            <Badge className="bg-green-100 text-green-700 border-green-200">Sim</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-gray-400">Nao</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
+                        </TableCell>
+                        <TableCell>{new Date(l.createdAt).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={jaConvertido}
+                            onClick={() => abrirDialogConverter(l)}
+                          >
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            Converter
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
+
+          {/* C7 Frente 2 vitrines mínimas (01/07/2026) — Dialog de conversão
+              LeadExpansao → Cooperado. Seletor de parceiro só aparece quando
+              o admin é SUPER_ADMIN e o lead é órfão (sem cooperativaId). */}
+          <Dialog
+            open={leadEmConversao !== null}
+            onOpenChange={(aberto) => !aberto && fecharDialogConverter()}
+          >
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Converter lead em cooperado</DialogTitle>
+                <DialogDescription>
+                  Cria um Cooperado no parceiro-alvo e marca o lead como CONVERTIDO.
+                  Este passo é definitivo.
+                </DialogDescription>
+              </DialogHeader>
+              {leadEmConversao && (
+                <div className="space-y-3 py-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Nome completo *</Label>
+                      <Input
+                        value={formConverter.nomeCompleto}
+                        onChange={(e) => setFormConverter({ ...formConverter, nomeCompleto: e.target.value })}
+                        placeholder="Nome do cooperado"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">CPF/CNPJ *</Label>
+                      <Input
+                        value={formConverter.cpf}
+                        onChange={(e) => setFormConverter({ ...formConverter, cpf: e.target.value })}
+                        placeholder="00000000000"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Email *</Label>
+                      <Input
+                        type="email"
+                        value={formConverter.email}
+                        onChange={(e) => setFormConverter({ ...formConverter, email: e.target.value })}
+                        placeholder="email@exemplo.com"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Telefone</Label>
+                      <Input
+                        value={formConverter.telefone}
+                        onChange={(e) => setFormConverter({ ...formConverter, telefone: e.target.value })}
+                        placeholder="5527999999999"
+                      />
+                    </div>
+                  </div>
+
+                  {ehSuperAdmin && (
+                    <div>
+                      <Label className="text-xs">
+                        Parceiro-alvo {!leadEmConversao.cooperativaId && '*'}
+                      </Label>
+                      <select
+                        value={formConverter.cooperativaIdAlvo}
+                        onChange={(e) => setFormConverter({ ...formConverter, cooperativaIdAlvo: e.target.value })}
+                        className="w-full rounded border border-gray-300 text-sm px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 mt-1"
+                      >
+                        <option value="">
+                          {leadEmConversao.cooperativaId
+                            ? '(manter tenant atual do lead)'
+                            : '— selecione o parceiro —'}
+                        </option>
+                        {cooperativas.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {leadEmConversao.cooperativaId
+                          ? 'Lead já está vinculado a um parceiro. Deixe vazio pra manter, ou selecione outro pra transferir (validado no backend).'
+                          : 'Lead veio do bot público sem tenant — escolha qual parceiro adota este lead.'}
+                      </p>
+                    </div>
+                  )}
+
+                  {erroConverter && (
+                    <div className="bg-red-50 border border-red-200 rounded p-2 text-sm text-red-700">
+                      {erroConverter}
+                    </div>
+                  )}
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={fecharDialogConverter} disabled={convertendo}>
+                  Cancelar
+                </Button>
+                <Button onClick={confirmarConversao} disabled={convertendo}>
+                  {convertendo ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Convertendo...
+                    </>
+                  ) : (
+                    'Confirmar conversão'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>
