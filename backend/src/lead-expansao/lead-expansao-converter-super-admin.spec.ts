@@ -13,9 +13,14 @@
  *    exige cooperativaId=null OU bater com o alvo).
  *  - ADMIN NÃO consegue passar cooperativaIdAlvo pelo body (destructure-discard).
  */
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { LeadExpansaoController } from './lead-expansao.controller';
-import { LeadNaoEncontradoError } from './lead-expansao.service';
+import { LeadAdocaoConcorrenteError, LeadNaoEncontradoError } from './lead-expansao.service';
 
 function setup() {
   const serviceConverter = jest.fn().mockResolvedValue({ cooperadoId: 'coop-novo', leadId: 'lead-1' });
@@ -153,6 +158,20 @@ describe('LeadExpansaoController.converter — Frente 2 SUPER_ADMIN + órfão (0
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  // ─── P1 multitenant-reviewer — serialization conflict → 409 ──────
+
+  it('LeadAdocaoConcorrenteError do service → 409 ConflictException', async () => {
+    const { controller, serviceConverter } = setup();
+    serviceConverter.mockRejectedValueOnce(
+      new LeadAdocaoConcorrenteError('Lead já foi adotado por outra ação simultânea.'),
+    );
+    await expect(
+      controller.converter('lead-1', DADOS_BASE, {
+        user: { perfil: 'ADMIN', cooperativaId: 'tenant-A' },
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -179,10 +198,12 @@ describe('LeadExpansaoService.converter — Frente 2 adoção de lead órfão (0
     jest.clearAllMocks();
     cooperadoCreate.mockResolvedValue({ id: 'coop-novo' });
     leadUpdate.mockResolvedValue({});
-    transaction.mockImplementation(async (fn: any) =>
+    // Frente 2 (01/07/2026) P1: findFirst agora roda DENTRO da tx Serializable.
+    // Mock do tx precisa expor leadExpansao.findFirst também.
+    transaction.mockImplementation(async (fn: any, _opts?: any) =>
       fn({
         cooperado: { create: cooperadoCreate },
-        leadExpansao: { update: leadUpdate },
+        leadExpansao: { update: leadUpdate, findFirst: leadFindFirst },
       }),
     );
   });
@@ -230,7 +251,10 @@ describe('LeadExpansaoService.converter — Frente 2 adoção de lead órfão (0
     await expect(
       service.converter('lead-1', 'TENANT-ALVO', dados, { permitirAdotarLeadOrfao: true }),
     ).rejects.toThrow(/não encontrado/);
-    expect(transaction).not.toHaveBeenCalled();
+    // Frente 2 (01/07/2026) P1: findFirst agora roda DENTRO da tx — a tx é
+    // iniciada mas cooperadoCreate/leadUpdate NÃO são chamados.
+    expect(cooperadoCreate).not.toHaveBeenCalled();
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 
   it('modo pré-existente (opts vazio) mantém where estrito por cooperativaId', async () => {
@@ -273,5 +297,90 @@ describe('LeadExpansaoService.converter — Frente 2 adoção de lead órfão (0
       where: { id: 'lead-1', cooperativaId: 'TENANT-ALVO' },
       data: { status: 'CONVERTIDO' },
     });
+  });
+
+  // ─── P1 multitenant-reviewer — Serializable + retry ──────────────
+
+  it('tx é iniciada com isolationLevel Serializable', async () => {
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      telefone: '5527999998888',
+      status: 'AGUARDANDO',
+      distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
+    });
+
+    await service.converter('lead-1', 'tenant-A', dados);
+
+    // 2º argumento do $transaction = opts { isolationLevel: 'Serializable' }.
+    expect(transaction).toHaveBeenCalled();
+    const optsArg = transaction.mock.calls[0][1];
+    expect(optsArg).toEqual(expect.objectContaining({ isolationLevel: 'Serializable' }));
+  });
+
+  it('serialization conflict 1x → retry sucesso', async () => {
+    let chamadas = 0;
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      telefone: '5527999998888',
+      status: 'AGUARDANDO',
+      distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
+    });
+    // 1ª tentativa: tx aborta com 40001. 2ª tentativa: sucesso normal.
+    transaction.mockImplementation(async (fn: any) => {
+      chamadas++;
+      if (chamadas === 1) {
+        const err: any = new Error('could not serialize access due to concurrent update');
+        err.code = '40001';
+        throw err;
+      }
+      return fn({
+        cooperado: { create: cooperadoCreate },
+        leadExpansao: { update: leadUpdate, findFirst: leadFindFirst },
+      });
+    });
+
+    const r = await service.converter('lead-1', 'tenant-A', dados);
+    expect(chamadas).toBe(2);
+    expect(r).toEqual({ cooperadoId: 'coop-novo', leadId: 'lead-1' });
+  });
+
+  it('serialization conflict 2x → LeadAdocaoConcorrenteError (retry esgotado)', async () => {
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      telefone: '5527999998888',
+      status: 'AGUARDANDO',
+      distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
+    });
+    transaction.mockImplementation(async () => {
+      const err: any = new Error('could not serialize access');
+      err.code = '40001';
+      throw err;
+    });
+
+    await expect(service.converter('lead-1', 'tenant-A', dados)).rejects.toBeInstanceOf(
+      LeadAdocaoConcorrenteError,
+    );
+    // Chamou 2 vezes: 1 original + 1 retry.
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('erro NÃO-serialization no meio do tx → não faz retry, propaga original', async () => {
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      telefone: '5527999998888',
+      status: 'AGUARDANDO',
+      distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
+    });
+    const erroDb = new Error('P2002 unique constraint');
+    (erroDb as any).code = 'P2002';
+    transaction.mockRejectedValueOnce(erroDb);
+
+    await expect(service.converter('lead-1', 'tenant-A', dados)).rejects.toBe(erroDb);
+    // NÃO retenta (erro estranho não deve mascarar bugs).
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 });

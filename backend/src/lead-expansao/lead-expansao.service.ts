@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 
 /**
@@ -20,6 +21,37 @@ export class LeadJaConvertidoError extends Error {
     super(msg);
     this.name = 'LeadJaConvertidoError';
   }
+}
+
+/**
+ * Frente 2 vitrines mínimas (01/07/2026) — P1 multitenant-reviewer.
+ * Serialization conflict entre 2 SUPER_ADMINs adotando o MESMO lead órfão
+ * pra tenants diferentes. Após 1 retry esgotado, controller mapeia pra
+ * ConflictException com mensagem clara pro admin recarregar a lista.
+ */
+export class LeadAdocaoConcorrenteError extends Error {
+  readonly code = 'LEAD_ADOPTION_CONCURRENT';
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'LeadAdocaoConcorrenteError';
+  }
+}
+
+const SERIALIZABLE_TX = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+} as const;
+
+// Postgres 40001 (serialization_failure) — Prisma expõe via
+// PrismaClientUnknownRequestError OU code direto no meta. Padrão herdado
+// de publico.controller.ts:926 (auto-inscrever).
+function ehSerializationConflict(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code === '40001') return true;
+  if (err instanceof Prisma.PrismaClientUnknownRequestError) return true;
+  return /serialization|serializable|could not serialize|concurrent update/i.test(
+    e.message ?? '',
+  );
 }
 
 @Injectable()
@@ -196,47 +228,85 @@ export class LeadExpansaoService {
       ? { id: leadId, OR: [{ cooperativaId: null }, { cooperativaId }] }
       : { id: leadId, cooperativaId };
 
-    const lead = await this.prisma.leadExpansao.findFirst({
-      where: whereClause,
-      select: { id: true, telefone: true, status: true, distribuidora: true, cooperativaId: true },
-    });
-    if (!lead) {
-      throw new LeadNaoEncontradoError('LeadExpansao não encontrado neste tenant');
-    }
-    if (lead.status === 'CONVERTIDO') {
-      throw new LeadJaConvertidoError('Lead já foi convertido');
+    // Frente 2 (01/07/2026) — P1 multitenant-reviewer.
+    // Encapsula findFirst + create + update DENTRO da $transaction Serializable
+    // pra fechar a corrida "2 SUPER_ADMINs adotam MESMO lead órfão pra tenants
+    // diferentes". No isolamento anterior (findFirst fora da tx, sem isolation
+    // level), os 2 podiam ler AGUARDANDO em paralelo e commitar last-write-wins.
+    // Postgres 40001 aborta o 2º; retry 1x pega janelas curtas naturais; se
+    // reincidir, controller mapeia LeadAdocaoConcorrenteError → 409 com msg
+    // clara ("lead já foi adotado, recarregue").
+    const MAX_RETRIES = 1;
+    let ultimoErro: unknown = null;
+    for (let tentativa = 0; tentativa <= MAX_RETRIES; tentativa++) {
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          const lead = await tx.leadExpansao.findFirst({
+            where: whereClause,
+            select: {
+              id: true,
+              telefone: true,
+              status: true,
+              distribuidora: true,
+              cooperativaId: true,
+            },
+          });
+          if (!lead) {
+            throw new LeadNaoEncontradoError('LeadExpansao não encontrado neste tenant');
+          }
+          if (lead.status === 'CONVERTIDO') {
+            throw new LeadJaConvertidoError('Lead já foi convertido');
+          }
+
+          const cooperado = await tx.cooperado.create({
+            data: {
+              nomeCompleto: dadosCooperado.nomeCompleto.trim(),
+              cpf: dadosCooperado.cpf.replace(/\D/g, ''),
+              email: dadosCooperado.email.trim().toLowerCase(),
+              telefone: dadosCooperado.telefone?.replace(/\D/g, '') ?? lead.telefone,
+              status: (dadosCooperado.status ?? 'PENDENTE') as any,
+              cooperativaId,
+              tipoCooperado: 'COM_UC' as any,
+            },
+          });
+
+          // P2 multitenant 22/06 + Frente 2 (01/07): defense-in-depth.
+          // Quando é adoção real (lead.cooperativaId=null), where só por id
+          // + data grava cooperativaId pra encerrar estado órfão. Senão,
+          // mantém where estrito.
+          const ehAdocaoOrfao = lead.cooperativaId === null && permitirAdotarOrfao;
+          await tx.leadExpansao.update({
+            where: ehAdocaoOrfao ? { id: leadId } : { id: leadId, cooperativaId },
+            data: {
+              status: 'CONVERTIDO',
+              ...(ehAdocaoOrfao ? { cooperativaId } : {}),
+            },
+          });
+          return cooperado;
+        }, SERIALIZABLE_TX);
+
+        return { cooperadoId: result.id, leadId };
+      } catch (err) {
+        // Erros de negócio saem direto — não faz sentido retry.
+        if (err instanceof LeadNaoEncontradoError || err instanceof LeadJaConvertidoError) {
+          throw err;
+        }
+        if (ehSerializationConflict(err)) {
+          ultimoErro = err;
+          if (tentativa < MAX_RETRIES) continue;
+          throw new LeadAdocaoConcorrenteError(
+            'Lead já foi adotado por outra ação simultânea. Recarregue a lista.',
+          );
+        }
+        throw err;
+      }
     }
 
-    // Cria Cooperado + atualiza lead atomicamente.
-    const result = await this.prisma.$transaction(async (tx) => {
-      const cooperado = await tx.cooperado.create({
-        data: {
-          nomeCompleto: dadosCooperado.nomeCompleto.trim(),
-          cpf: dadosCooperado.cpf.replace(/\D/g, ''),
-          email: dadosCooperado.email.trim().toLowerCase(),
-          telefone: dadosCooperado.telefone?.replace(/\D/g, '') ?? lead.telefone,
-          status: (dadosCooperado.status ?? 'PENDENTE') as any,
-          cooperativaId,
-          tipoCooperado: 'COM_UC' as any,
-        },
-      });
-      // P2 multitenant 22/06: defense-in-depth — update inclui cooperativaId
-      // no where quando o lead JÁ pertencia ao tenant. Frente 2 (01/07):
-      // quando é adoção de órfão (lead.cooperativaId=null), o where usa só o
-      // id (senão o update falha) e o data grava cooperativaId pra encerrar
-      // o estado órfão. findFirst acima já validou posse/adoção.
-      const ehAdocaoOrfao = lead.cooperativaId === null && permitirAdotarOrfao;
-      await tx.leadExpansao.update({
-        where: ehAdocaoOrfao ? { id: leadId } : { id: leadId, cooperativaId },
-        data: {
-          status: 'CONVERTIDO',
-          ...(ehAdocaoOrfao ? { cooperativaId } : {}),
-        },
-      });
-      return cooperado;
-    });
-
-    return { cooperadoId: result.id, leadId };
+    // unreachable — o loop acima ou retorna dentro do try, ou lança. Guarda
+    // defensiva pra TS + safeguard contra reintrodução de bugs.
+    throw ultimoErro instanceof Error
+      ? ultimoErro
+      : new Error('LeadExpansaoService.converter: loop de retry escapou sem retornar');
   }
 
   async notificarLeadsPorDistribuidora(distribuidora: string, cooperativaId?: string) {

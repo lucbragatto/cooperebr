@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Query, Req, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Req, ForbiddenException, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   LeadExpansaoService,
   LeadNaoEncontradoError,
   LeadJaConvertidoError,
+  LeadAdocaoConcorrenteError,
 } from './lead-expansao.service';
 import { PrismaService } from '../prisma.service';
 import { Roles } from '../auth/roles.decorator';
@@ -114,7 +115,19 @@ export class LeadExpansaoController {
   //  - SUPER_ADMIN NÃO pode roubar lead de outro tenant ativo (findFirst OR
   //    no service exige que lead.cooperativaId seja null OU bata com o alvo).
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
-  @AuditLog({ acao: 'lead.converter', recurso: 'LeadExpansao', recursoIdParam: 'id' })
+  // Frente 2 vitrines mínimas (01/07/2026) — P2 multitenant-reviewer.
+  // cooperativaIdSource garante que o AuditLog registre o tenant EFETIVO
+  // (body.cooperativaIdAlvo) quando o SA converte um lead. Sem isso, toda
+  // conversão de SA gravava cooperativaId=null no AuditLog (JWT do SA não
+  // tem tenant), perdendo rastro. Interceptor usa esse valor SÓ quando o
+  // JWT está vazio — ADMIN/OPERADOR continuam auditando pelo JWT (defense-
+  // in-depth: SA malicioso não pula pra outro tenant pelo body).
+  @AuditLog({
+    acao: 'lead.converter',
+    recurso: 'LeadExpansao',
+    recursoIdParam: 'id',
+    cooperativaIdSource: 'body:cooperativaIdAlvo',
+  })
   @Post(':id/converter')
   async converter(
     @Param('id') id: string,
@@ -182,6 +195,13 @@ export class LeadExpansaoController {
       }
       if (err instanceof LeadJaConvertidoError) {
         throw new BadRequestException('Lead já foi convertido.');
+      }
+      // Frente 2 (01/07/2026) — P1 multitenant-reviewer. Serialization
+      // conflict pós-retry → 409 com mensagem clara pro admin recarregar.
+      if (err instanceof LeadAdocaoConcorrenteError) {
+        throw new ConflictException(
+          'Este lead foi adotado por outra ação simultânea. Recarregue a lista.',
+        );
       }
       throw err;
     }

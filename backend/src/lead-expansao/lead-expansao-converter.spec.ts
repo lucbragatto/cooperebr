@@ -31,14 +31,16 @@ describe('LeadExpansaoService.converter — Sprint Funil M48 Camada 1 Fatia E', 
       telefone: '5527999998888',
       status: 'AGUARDANDO',
       distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
     });
     cooperadoCreate.mockResolvedValue({ id: 'coop-novo' });
     leadUpdate.mockResolvedValue({});
-    // tx callback executes the provided fn with the mock tx
-    transaction.mockImplementation(async (fn: any) =>
+    // Frente 2 (01/07/2026) P1: findFirst agora roda DENTRO da tx Serializable.
+    // Mock do tx precisa expor leadExpansao.findFirst também.
+    transaction.mockImplementation(async (fn: any, _opts?: any) =>
       fn({
         cooperado: { create: cooperadoCreate },
-        leadExpansao: { update: leadUpdate },
+        leadExpansao: { update: leadUpdate, findFirst: leadFindFirst },
       }),
     );
   });
@@ -82,17 +84,21 @@ describe('LeadExpansaoService.converter — Sprint Funil M48 Camada 1 Fatia E', 
     ).rejects.toThrow(/não encontrado/);
   });
 
-  it('idempotência: lead já CONVERTIDO → rejeita', async () => {
+  it('idempotência: lead já CONVERTIDO → rejeita (dentro da tx Serializable)', async () => {
     leadFindFirst.mockResolvedValue({
       id: 'lead-1',
       telefone: '5527999998888',
       status: 'CONVERTIDO',
       distribuidora: 'EDP_ES',
+      cooperativaId: 'tenant-A',
     });
     await expect(
       service.converter('lead-1', 'tenant-A', dadosBase),
     ).rejects.toThrow(/já foi convertido/);
-    expect(transaction).not.toHaveBeenCalled();
+    // Frente 2 (01/07/2026) P1: check acontece DENTRO da tx agora — a tx é
+    // iniciada mas cooperadoCreate/leadUpdate NÃO são chamados.
+    expect(cooperadoCreate).not.toHaveBeenCalled();
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 
   it('body.telefone tem prioridade sobre lead.telefone se passado', async () => {
