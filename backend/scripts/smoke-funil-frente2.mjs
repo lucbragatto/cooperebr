@@ -69,6 +69,9 @@ async function main() {
       roteamentoCaminho: true, roteamentoRazao: true, roteamentoTenantAlvo: true,
       jaRecebeCreditosGd: true, fornecedorGdAtual: true,
       consumoStashOcr: true,
+      // Frente Jornada (01/07/2026) — canalCadastro deve vir CADASTRO_PUBLICO
+      // no fluxo cadastroWebV2 (tela pública com créditos injetados).
+      canalCadastro: true,
     },
   });
 
@@ -88,6 +91,10 @@ async function main() {
   );
   assert(!!cooperado?.roteamentoRazao, 'roteamentoRazao populado');
   assert(!!cooperado?.consumoStashOcr, 'consumoStashOcr populado (dadosOcr no payload)');
+  assert(
+    cooperado?.canalCadastro === 'CADASTRO_PUBLICO',
+    `canalCadastro=CADASTRO_PUBLICO (foi: ${cooperado?.canalCadastro})`,
+  );
 
   console.log(`\n[SMOKE] OK (${oks.length}):`);
   oks.forEach((m) => console.log(`  ✅ ${m}`));
