@@ -16,6 +16,11 @@ describe('CooperadosService — guard de ativação (Fase D)', () => {
     prisma = {
       cooperado: {
         findUnique: jest.fn(),
+        // Carona Frente Jornada (01/07/2026) — Sprint intermediária trocou
+        // findUnique por findFirst no update() (padrão multi-tenant M45+).
+        // findFirst delega no mesmo mock de findUnique — cada spec setup
+        // continua usando findUnique.mockResolvedValue e as 2 refletem.
+        findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'coop-1', nomeCompleto: 'Teste', status: 'ATIVO', cooperativaId: 'coop-X' }),
       },
       uc: {
@@ -34,6 +39,17 @@ describe('CooperadosService — guard de ativação (Fase D)', () => {
       },
       $transaction: jest.fn(async (cb: any) => cb(prisma)),
     };
+
+    // findFirst reflete o valor mais recente do findUnique — todos os
+    // testes já configuram findUnique.mockResolvedValue(...); assim as 2
+    // pernas ficam sincronizadas sem refactor invasivo.
+    prisma.cooperado.findFirst.mockImplementation(() => {
+      const chamadas = prisma.cooperado.findUnique.mock.results;
+      const ultimo = chamadas[chamadas.length - 1];
+      if (ultimo) return ultimo.value;
+      // Se ainda não foi chamado, delega pra próxima chamada de findUnique.
+      return prisma.cooperado.findUnique();
+    });
 
     service = Object.create(CooperadosService.prototype);
     (service as any).prisma = prisma;

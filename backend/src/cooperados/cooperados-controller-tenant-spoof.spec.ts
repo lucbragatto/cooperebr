@@ -22,10 +22,22 @@ describe('CooperadosController — D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF P0'
     cooperativa: { findUnique: cooperativaFindUnique },
   } as any;
 
+  // Carona Frente Jornada (01/07/2026) — Sprint M48 (22/06) introduziu
+  // RoteamentoCadastroService no construtor (7º arg) mas esses specs pré-
+  // existentes ficaram com 5 args. Regressão latente exposta agora.
+  const roteamentoStub = {
+    decidirCaminho: jest.fn().mockResolvedValue({
+      caminho: 'C_NOVO',
+      tenantAlvo: undefined,
+      razao: 'stub spec',
+    }),
+  };
+
   const controller = new CooperadosController(
     { create: serviceCreate } as any,
     prismaMock,
-    {} as any, {} as any, {} as any,
+    {} as any, {} as any, {} as any, {} as any,
+    roteamentoStub as any,
   );
 
   const bodyBase = {
@@ -50,6 +62,9 @@ describe('CooperadosController — D-novo-COOPERADOS-CONTROLLER-TENANT-SPOOF P0'
     expect(arg.cooperativaId).toBe('tenant-A');
     expect(arg.cooperativaId).not.toBe('tenant-B-MALICIOSO');
     expect(cooperativaFindUnique).not.toHaveBeenCalled();
+    // Frente Jornada (01/07/2026) — canalCadastro=ADMIN_MANUAL gravado
+    // pelo controller no create (origem: POST /cooperados admin).
+    expect(arg.canalCadastro).toBe('ADMIN_MANUAL');
   });
 
   it('OPERADOR: idem ADMIN — JWT manda, body é descartado', async () => {
