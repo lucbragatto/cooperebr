@@ -75,6 +75,41 @@
 
 ---
 
+## ONDE PARAMOS — 2026-07-01 (Code — Frente 2 Vitrines Mínimas do Funil FECHADA: FIX A elo OCR→captação + FIX B badges roteamento + filtro status)
+
+**Frente 2 entregue em 2 commits limpos** após o ritual canônico de retomada (incluindo
+fechamento retroativo do commit órfão 28/06 fix OCR).
+- **FIX A** (`d343666`) elo OCR→captação: web/app/cadastro tela especial "Sua conta já tem
+  energia solar!" agora coleta "Quem fornece sua energia hoje?" + payload manda
+  `jaRecebeCreditosGd=true` + `fornecedorGdAtual`; backend/publico.controller captura retorno
+  de `cadastroWebV2` e dispara `notificarAdminRoteamentoCaptacao` fire-and-forget quando
+  `roteamento.caminho === 'A_MIGRACAO' || 'AMBIGUO_ADMIN'` (antes o motor gravava metadata
+  mas admin NUNCA era avisado). Nova função com mensagens contextuais (🎯 lead de captação
+  / ❓ cadastro ambíguo). Função legada `notificarAdminCreditosInjetados` mantida intacta.
+- **FIX A specs** (6/6 verde) — `publico.controller.roteamento-captacao.spec.ts`. Suite
+  `src/publico/` 67/67 verde (carona: 4 regressões PRÉ-EXISTENTES do Sprint M48 22/06
+  latentes fechadas — mock stub `roteamentoCadastroService` + 4 assertions atualizadas
+  pro 3º arg `roteamento`).
+- **FIX B** (`4c16ef8`) vitrines: `CooperadoLista` + `CooperadoCompleto` ganham
+  `roteamentoCaminho?/roteamentoRazao?`; nova constante `ROTEAMENTO_CONFIG` (A_MIGRACAO 🎯
+  verde "Lead de captação" / B_REDIRECT_PARCEIRO ↪️ azul "Outro parceiro SISGD" /
+  AMBIGUO_ADMIN ❓ amarelo "Revisar"; C_NOVO SEM badge — evita ruído). Badge inline na lista
+  (TableCell do nome, ao lado de SEM_UC/Cadastro incompleto) + badge no header do detalhe
+  (linha 1085). Filtro por status client-side com `<select>` nativo (padrão memória
+  `solucao_select_nativo_dentro_dialog_19_05`) — 12 opções cobrindo enum operacional.
+- **Verificação**: TSC backend limpo nos meus arquivos; TSC web exit 0; rebuild backend +
+  `pm2 start` + rebuild web + `pm2 restart cooperebr-frontend`; smoke visual pendente do
+  Luciano (login + testar UI).
+- **Débitos**: nenhum novo formal. Carona informal — 4 regressões M48 sem cobertura.
+- **Escopo contido explícito** (marcado no prompt): NÃO fizemos dashboard agregado, coluna
+  contagem docs, Camada 3 completa (marketplace/vitrine pública) nem ConviteConvenioMembro.
+- **Próximo passo recomendado**: rodar o **teste integral E2E do funil pelas páginas**
+  (frente #1 da FRASE DE RETOMADA do M52b), agora com as vitrines novas como observatório
+  visual. Alternativas abertas: 3 portas de config / Camadas 2/3 completas / M52c retro.
+- Detalhe: `docs/sessoes/2026-07-01-frente2-vitrines-minimas.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-06-28 (Code — fix OCR modelo Anthropic aposentado, bug descoberto em E2E do funil)
 
 **Fix cirúrgico, push direto no main.** Doc-sessão retroativa criada em 2026-07-01 no ritual de retomada.
@@ -3807,26 +3842,38 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **M52b FAXINA CONTÁBIL MELT (Bloco F) FECHADO + VERIFICADO** — merge `0b58a74`, JÁ NA
-MAIN, NÃO RE-APLICAR. Melt construído e DESLIGADO (gate dual controla a COBRANÇA; OFF = no-op
-+ mata o leak do QR 1%). Apply dos R$ 116,55 escriturado e conferido no banco pelo orquestrador
-(passivo 2.3.01 R$ 209,65; resíduo 858,34→741,79=baseline). Invariantes ledger↔saldo=0 +
-contábil↔saldo=baseline pré-M50.
+🟢 **FRENTE 2 (Vitrines Mínimas do Funil) FECHADA em 01/07** — 2 commits limpos na main
+(FIX A `d343666` + FIX B `4c16ef8`), JÁ PUSHED, NÃO RE-APLICAR.
+- **FIX A elo OCR→captação**: `web/app/cadastro/page.tsx` tela especial "créditos injetados"
+  ganha input "Quem fornece sua energia hoje?" + payload manda `jaRecebeCreditosGd=true` +
+  `fornecedorGdAtual`. Backend `publico.controller.cadastroWeb` V2 captura retorno de
+  `cadastroWebV2` e dispara `notificarAdminRoteamentoCaptacao` fire-and-forget quando
+  `roteamento.caminho === 'A_MIGRACAO' || 'AMBIGUO_ADMIN'`. Antes o motor M48 gravava
+  metadata mas admin NUNCA era avisado — bug latente descoberto pelo orquestrador em E2E.
+  Specs 6/6 verde + carona 4 regressões M48 latentes fechadas. Suite `src/publico/` 67/67.
+- **FIX B vitrines**: badges de roteamento (🎯 A_MIGRACAO / ↪️ B_REDIRECT_PARCEIRO /
+  ❓ AMBIGUO_ADMIN; C_NOVO SEM badge — evita ruído) na lista `/dashboard/cooperados` E no
+  detalhe `[id]`. Tooltip com `roteamentoRazao`. Filtro por status na lista via `<select>`
+  nativo (12 opções, padrão memória 19/05). Zero schema delta. TSC web exit 0. Rebuild feito.
 
 Convênio cooperativizado COMPLETO (M44+M46+M47+M48+M49) + Faxina A/B (M50) + Hardening
-Lateral (M51) + Faxina C-G (M52a) + Melt (M52b). ✅ Contador+advogado RESOLVIDOS/FAVORÁVEIS
-(Luciano 23/06 — apply liberado, classificação DESPESA aceita).
+Lateral (M51) + Faxina C-G (M52a) + Melt (M52b) + Frente 2 vitrines mínimas (01/07).
+✅ Contador+advogado RESOLVIDOS/FAVORÁVEIS (Luciano 23/06 — apply liberado).
 
 ⚠️ As **3 PORTAS DE CONFIG** seguem o ÚNICO bloqueador de exposição pública: (1)
 `AMBIENTE_REAL=true` (desliga impersonate — verificado 23/06 NÃO setado → impersonate ATIVO);
 (2) `SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. Ações de CONFIG do Luciano.
 
-PRÓXIMO = **ESCOLHA DO LUCIANO** entre 4 frentes:
-- **(recomendada) Teste integral E2E do funil pelas páginas** (admin/cadastro/perfil/tela
-  sem-UC) — `docs/relatorios/2026-06-23-investigacao-funil-captacao-roteador-m48.md` §7;
-  agent `e2e-runner` pronto pra automatizar upload de fatura + assert no banco.
+PRÓXIMO = **ESCOLHA DO LUCIANO** entre 4 frentes (Frente 2 saiu; sobram 3+smoke UI):
+- **(recomendada agora) Teste integral E2E do funil pelas páginas** usando as vitrines
+  NOVAS como observatório visual (admin/cadastro/perfil/tela sem-UC) —
+  `docs/relatorios/2026-06-23-investigacao-funil-captacao-roteador-m48.md` §7; agent
+  `e2e-runner` pronto pra automatizar upload de fatura + assert no banco. **Sub-passo
+  antes**: smoke visual manual das vitrines (login admin → lista cooperados → validar
+  badges + filtro status).
 - **3 portas de config** (abrir cadastro público / onboarding Santi).
-- **Vitrines do funil** (Camadas 2/3 — spec do orquestrador necessária; motor M48 já roteia).
+- **Vitrines COMPLETAS do funil** (Camadas 2/3 — spec do orquestrador necessária; motor
+  M48 já roteia; Frente 2 fez só o mínimo — falta marketplace/vitrine pública).
 - **M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
 
 > As opções (A)/(B) e o bloco "Hardening Lateral" ABAIXO são HISTÓRICO pré-M52 — Hardening
