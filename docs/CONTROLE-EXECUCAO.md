@@ -75,6 +75,51 @@
 
 ---
 
+## ONDE PARAMOS — 2026-07-01 (2ª passagem — Frente 2 EXTENSÃO: B5 consumoStashOcr + C6 fix converter multi-tenant SUPER_ADMIN + C7 botão Converter + smoke E2E funil)
+
+**Frente 2 fechada ponta a ponta em 4 commits limpos** após o Luciano estender o escopo da mesma
+sessão do dia (FIX A + FIX B pela manhã na 1ª passagem foram entregues antes; o prompt novo
+adicionou B5 + C6 + C7 + smoke E2E).
+- **B5** (`b80cd8f`): card "Dados extraídos da fatura no cadastro (OCR)" no detalhe do cooperado.
+  Expõe `Cooperado.consumoStashOcr` que existia no banco desde 06/06 (Bloco 1 Fatia 1.2) mas
+  NÃO aparecia em NENHUMA tela (confirmado por grep). Renderiza cada chave do JSON como Campo,
+  com formatação leve. Zero backend (findUnique já retornava). Zero schema delta.
+- **C6** (`c31d4eb`): fix backend obrigatório do converter LeadExpansao → Cooperado. Bug latente
+  M48: SUPER_ADMIN normalmente não tem cooperativaId no JWT (é de plataforma), então o guard
+  antigo bloqueava até o dono do SISGD. Refactor: SUPER_ADMIN exige `cooperativaIdAlvo` no body
+  validado via `Cooperativa.findUnique(ativo:true)` (padrão anti-spoof M45) + passa
+  `permitirAdotarLeadOrfao=true` pro service. ADMIN/OPERADOR: mantém JWT + destructure-discard
+  do body. Service: `findFirst` com OR `[{cooperativaId:null},{cooperativaId:alvo}]` aceita
+  órfão OU já-no-tenant; bloqueia cross-tenant ativo. Update do lead: quando adoção real
+  (`lead.cooperativaId===null`), where só por id + data grava cooperativaId. **14 specs novos**
+  (controller: SUPER_ADMIN happy/erro/anti-spoof + ADMIN destructure; service: adoção órfão +
+  bloqueio cross-tenant + retrocompat). Suite `src/lead-expansao/` 23/23 verde (era 9/9).
+- **C7** (`a6cb7ba`): botão "Converter" no `/dashboard/relatorios/expansao`. Duas colunas novas
+  (Status: AGUARDANDO/NOTIFICADO/CONVERTIDO badge + Ações: botão). Dialog de conversão com form
+  obrigatório (nome/CPF/email) + telefone opcional (prefill do lead) + seletor de parceiro
+  condicional (só aparece pra SUPER_ADMIN; obrigatório quando lead é órfão, opcional quando já
+  tem tenant). SUPER_ADMIN carrega `GET /cooperativas` no mount. Após POST OK, marca CONVERTIDO
+  local.
+- **Smoke E2E do funil** (`b5db215`): script `backend/scripts/smoke-funil-frente2.mjs`
+  reproduzível. Executa POST HTTP real no `/publico/cadastro-web?tenant=` com payload carregado
+  (temCreditosInjetados + jaRecebeCreditosGd + fornecedorGdAtual + dadosOcr) e verifica 6
+  invariantes no banco. **Run 01/07 6/6 verde**: motor classificou "Cooperativa Solar Verde"
+  como A_MIGRACAO com razão _"Fornecedor não bate com nenhum parceiro SISGD — concorrente fora
+  da plataforma. Considerar fluxo de migração (M47)."_ Notificação admin disparou fire-and-forget
+  (regra 14/05: ADMIN_WHATSAPP_NUMBER default = número do Luciano).
+- **Decisões de produto travadas** pelo Luciano no prompt: A_MIGRACAO/AMBIGUO_ADMIN fica DENTRO
+  do tenant capturador (NÃO alimenta LeadExpansao cross-tenant; fluxos separados propositalmente).
+  Botão Converter entra na fatia (não fica pra depois).
+- **Verificação**: TSC backend limpo nos meus arquivos; TSC web exit 0; rebuild backend +
+  rebuild frontend + pm2 restart nos dois; smoke programático 6/6.
+- **Débitos**: nenhum novo formal. Nenhum débito formal resolvido (bugs latentes sem catalogação).
+- **Próximo passo**: smoke visual manual (opcional — programático já cobriu). 3 alternativas
+  abertas da FRASE DE RETOMADA do M52b: 3 portas de config / vitrines COMPLETAS Camadas 2/3 /
+  M52c escrituração retro.
+- Detalhe: `docs/sessoes/2026-07-01-frente2-bloco-b5-c-pipeline-captacao.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-07-01 (Code — Frente 2 Vitrines Mínimas do Funil FECHADA: FIX A elo OCR→captação + FIX B badges roteamento + filtro status)
 
 **Frente 2 entregue em 2 commits limpos** após o ritual canônico de retomada (incluindo
@@ -3842,8 +3887,23 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **FRENTE 2 (Vitrines Mínimas do Funil) FECHADA em 01/07** — 2 commits limpos na main
-(FIX A `d343666` + FIX B `4c16ef8`), JÁ PUSHED, NÃO RE-APLICAR.
+🟢 **FRENTE 2 (Vitrines Mínimas + Pipeline de Captação) FECHADA PONTA A PONTA em 01/07** —
+7 commits limpos na main JÁ PUSHED, NÃO RE-APLICAR. 1ª passagem (manhã): FIX A `d343666` +
+FIX B `4c16ef8`. 2ª passagem (tarde): B5 `b80cd8f` + C6 `c31d4eb` + C7 `a6cb7ba` +
+smoke E2E `b5db215`. Doc-sessão retroativa 28/06 (`b9ddd99`).
+- **B5** card `consumoStashOcr` no detalhe do cooperado — snapshot OCR existia no banco desde
+  06/06 mas não aparecia em nenhuma tela.
+- **C6** fix backend converter multi-tenant SUPER_ADMIN — bug latente M48 que bloqueava até
+  o dono do SISGD. SUPER_ADMIN passa `cooperativaIdAlvo` validado (padrão M45) + service adota
+  lead órfão (findFirst com OR aceita `cooperativaId=null`). ADMIN mantém JWT + destructure-discard.
+  14 specs novos, suite `src/lead-expansao/` 23/23 verde.
+- **C7** botão Converter no `/dashboard/relatorios/expansao` — Dialog com form obrigatório +
+  seletor de parceiro condicional (só SUPER_ADMIN + lead órfão).
+- **Smoke E2E do funil 6/6 verde** — motor M48 classificou "Cooperativa Solar Verde" como
+  A_MIGRACAO com razão humano-legível + notificação admin no WA disparou em tempo real
+  (regra contatos teste 14/05 respeitada).
+- **Decisões travadas**: A_MIGRACAO/AMBIGUO_ADMIN fica DENTRO do tenant capturador (NÃO
+  alimenta LeadExpansao — fluxos separados). Botão Converter entrou nesta fatia.
 - **FIX A elo OCR→captação**: `web/app/cadastro/page.tsx` tela especial "créditos injetados"
   ganha input "Quem fornece sua energia hoje?" + payload manda `jaRecebeCreditosGd=true` +
   `fornecedorGdAtual`. Backend `publico.controller.cadastroWeb` V2 captura retorno de
@@ -3864,17 +3924,18 @@ Lateral (M51) + Faxina C-G (M52a) + Melt (M52b) + Frente 2 vitrines mínimas (01
 `AMBIENTE_REAL=true` (desliga impersonate — verificado 23/06 NÃO setado → impersonate ATIVO);
 (2) `SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. Ações de CONFIG do Luciano.
 
-PRÓXIMO = **ESCOLHA DO LUCIANO** entre 4 frentes (Frente 2 saiu; sobram 3+smoke UI):
-- **(recomendada agora) Teste integral E2E do funil pelas páginas** usando as vitrines
-  NOVAS como observatório visual (admin/cadastro/perfil/tela sem-UC) —
-  `docs/relatorios/2026-06-23-investigacao-funil-captacao-roteador-m48.md` §7; agent
-  `e2e-runner` pronto pra automatizar upload de fatura + assert no banco. **Sub-passo
-  antes**: smoke visual manual das vitrines (login admin → lista cooperados → validar
-  badges + filtro status).
-- **3 portas de config** (abrir cadastro público / onboarding Santi).
-- **Vitrines COMPLETAS do funil** (Camadas 2/3 — spec do orquestrador necessária; motor
-  M48 já roteia; Frente 2 fez só o mínimo — falta marketplace/vitrine pública).
+PRÓXIMO = **ESCOLHA DO LUCIANO** entre 3 frentes (Frente 2 SAIU ponta a ponta com smoke E2E
+verde; sobram):
+- **3 portas de config** (abrir cadastro público / onboarding Santi — ação de CONFIG do Luciano,
+  não é código).
+- **Vitrines COMPLETAS do funil** (Camadas 2/3 — marketplace SISGD + vitrine pública do
+  parceiro — spec do orquestrador necessária; motor M48 já roteia; Frente 2 fez só o
+  observatório interno).
 - **M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
+
+**Sub-passo opcional antes**: smoke visual manual das vitrines novas (login SUPER_ADMIN →
+`/dashboard/cooperados` badges/filtro/detalhe consumoStashOcr → `/dashboard/relatorios/expansao`
+botão Converter/Dialog/seletor tenant). Smoke programático já rodou 6/6 verde.
 
 > As opções (A)/(B) e o bloco "Hardening Lateral" ABAIXO são HISTÓRICO pré-M52 — Hardening
 > Lateral=M51 ✅, Faxina C-G=M52a ✅, Melt=M52b ✅ já feitos. Vale a frase acima.
