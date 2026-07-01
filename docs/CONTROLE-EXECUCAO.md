@@ -112,6 +112,22 @@ adicionou B5 + C6 + C7 + smoke E2E).
   Botão Converter entra na fatia (não fica pra depois).
 - **Verificação**: TSC backend limpo nos meus arquivos; TSC web exit 0; rebuild backend +
   rebuild frontend + pm2 restart nos dois; smoke programático 6/6.
+- **Ajustes pós-review multitenant-reviewer** (`29ce545`) — 2 achados reais fechados como
+  carona do C6:
+  - **P1** service.converter: findFirst + create + update movidos pra DENTRO da `$transaction`
+    Serializable (padrão `SERIALIZABLE_TX` de contratos.service.ts:11). Fecha corrida "2
+    SUPER_ADMINs adotam MESMO lead órfão pra tenants diferentes ao mesmo tempo". Nova classe
+    `LeadAdocaoConcorrenteError` + retry 1x + reconhecedor de conflito 40001 (herdado de
+    publico.controller.ts:926). Controller mapeia pra 409 com msg humana.
+  - **P2** controller.converter: `@AuditLog` ganha `cooperativaIdSource: 'body:cooperativaIdAlvo'`
+    (mecanismo D-novo-AUDITLOG-TENANT-ALVO-SA existe desde M51 23/06). SUPER_ADMIN
+    convertendo lead antes gravava AuditLog cooperativaId=null (JWT sem tenant); agora usa o
+    body validado quando JWT vazio. Defense-in-depth preservada (interceptor consulta source
+    SÓ quando JWT vazio; ADMIN não pula tenant via body).
+  - Suite `src/lead-expansao/` 28/28 verde (era 23/23; +5 novos: isolationLevel Serializable
+    no tx opts, retry 1x sucesso, retry esgotado → LeadAdocaoConcorrenteError, erro
+    não-serialization propaga sem retry, controller propagação → 409). Smoke E2E funil
+    re-rodado 6/6 verde.
 - **Débitos**: nenhum novo formal. Nenhum débito formal resolvido (bugs latentes sem catalogação).
 - **Próximo passo**: smoke visual manual (opcional — programático já cobriu). 3 alternativas
   abertas da FRASE DE RETOMADA do M52b: 3 portas de config / vitrines COMPLETAS Camadas 2/3 /

@@ -144,4 +144,63 @@ LeadExpansao) respeitadas.
 
 ## Próximo passo único e claro
 Luciano decide entre as 3 alternativas acima (Frente 2 fechada em 2 passagens
-neste dia: FIX A + FIX B pela manhã, B5 + C6 + C7 + smoke E2E à tarde).
+neste dia: FIX A + FIX B pela manhã, B5 + C6 + C7 + smoke E2E à tarde,
+ajustes P1+P2 do multitenant-reviewer no fim da tarde).
+
+---
+
+## Adendo — ajustes pós-review multitenant-reviewer (fim de tarde 01/07)
+
+Após C6 pushado, o `multitenant-reviewer` levantou 2 achados reais (não é o padrão
+tenant-spoof clássico — esse já estava fechado):
+
+### P1 — serialization da corrida de adoção de lead órfão
+
+- **Sintoma latente**: `findFirst` rodava FORA da `$transaction` sem
+  `isolationLevel`. 2 SUPER_ADMINs adotando o MESMO lead órfão pra tenants
+  diferentes ao mesmo tempo podiam ambos commitar → Cooperado duplicado +
+  last-write-wins no lead.
+- **Fix** (`lead-expansao.service.ts`):
+  - `findFirst` + `create` + `update` DENTRO de `$transaction(..., { isolationLevel: 'Serializable' })`.
+    Padrão `SERIALIZABLE_TX` herdado de `contratos.service.ts:11`.
+  - Nova classe `LeadAdocaoConcorrenteError` (mesmo padrão dos erros tipados
+    LeadNaoEncontrado/JaConvertido).
+  - **Retry 1x automático** pra tolerar janelas curtas naturais. Após esgotado,
+    controller mapeia pra `ConflictException(409)` com mensagem clara pro admin
+    ("Este lead foi adotado por outra ação simultânea. Recarregue a lista.").
+  - Erros de negócio (LeadNaoEncontrado/JaConvertido) saem direto do loop (não
+    faz sentido retry). Erros DB não-serialização propagam sem retry.
+  - Reconhecedor de conflito (`ehSerializationConflict`): code `'40001'` |
+    `PrismaClientUnknownRequestError` | regex message — herdado de
+    `publico.controller.ts:926` (auto-inscrever atômico).
+
+### P2 — rastreabilidade multi-tenant no AuditLog
+
+- **Sintoma latente**: `@AuditLog` do converter não usava `cooperativaIdSource`.
+  SUPER_ADMIN convertendo lead → AuditLog gravava `cooperativaId=null` (JWT sem
+  tenant), perdendo rastro do parceiro afetado.
+- **Fix** (`lead-expansao.controller.ts`):
+  - `@AuditLog({ ..., cooperativaIdSource: 'body:cooperativaIdAlvo' })`. Mecanismo
+    existe desde `D-novo-AUDITLOG-TENANT-ALVO-SA` (Sprint M51, 23/06/2026).
+  - Interceptor usa `body.cooperativaIdAlvo` SÓ quando JWT vazio (defense-in-depth:
+    ADMIN/OPERADOR seguem auditando pelo JWT — SA malicioso não pula tenants por
+    spoof de body porque o próprio findUnique anti-spoof já validou o alvo antes
+    do dispatch).
+
+### Verificação P1+P2
+
+- **Suite `src/lead-expansao/`** 28/28 verde (era 23/23; +5 specs novos):
+  - controller: `LeadAdocaoConcorrenteError` → 409 ConflictException.
+  - service: `tx` recebe `{ isolationLevel: 'Serializable' }` no 2º arg.
+  - service: serialization conflict 1x → retry sucesso.
+  - service: serialization conflict 2x → `LeadAdocaoConcorrenteError` (retry esgotado).
+  - service: erro NÃO-serialização (P2002 etc) → não faz retry, propaga original.
+- **2 specs pré-existentes ajustadas** (findFirst agora dentro da tx exige mock de
+  `tx.leadExpansao.findFirst`; assertion de `transaction.not.toHaveBeenCalled()`
+  virou `cooperadoCreate.not.toHaveBeenCalled()` porque a tx é iniciada mas o check
+  interno lança).
+- **Smoke E2E do funil re-rodado 6/6 verde** — motor + notificação admin OK.
+- **TSC limpo** nos meus arquivos. Zero schema delta.
+
+### Commit
+- `29ce545` fix(funil): P1+P2 multitenant-reviewer no converter (Serializable + auditLog tenant)
