@@ -771,6 +771,11 @@ function CadastroPageInner() {
           };
         })(),
         temCreditosInjetados: true,
+        // FIX A (Frente 2 vitrines mínimas, 01/07/2026) — a tela especial de
+        // créditos injetados é intrinsecamente "já recebe créditos GD" (foi o
+        // OCR que detectou). Persistir pra o motor roteador M48 classificar
+        // corretamente como A_MIGRACAO ou AMBIGUO_ADMIN e notificar admin.
+        jaRecebeCreditosGd: true,
         dadosOcr: {
           energiaFornecidaKwh: ocrDados.energiaFornecidaKwh || 0,
           energiaInjetadaKwh: ocrDados.energiaInjetadaKwh || 0,
@@ -779,6 +784,10 @@ function CadastroPageInner() {
           valorTotalFatura: ocrDados.totalAPagar || 0,
         },
       };
+
+      if (fornecedorGdAtual.trim()) {
+        payload.fornecedorGdAtual = fornecedorGdAtual.trim();
+      }
 
       if (refCode) {
         payload.codigoRef = refCode;
@@ -1648,6 +1657,18 @@ function CadastroPageInner() {
                     placeholder="seu@email.com"
                     type="email"
                   />
+                </div>
+                <div>
+                  <Label className="text-sm">Quem fornece sua energia hoje? (opcional)</Label>
+                  <Input
+                    value={fornecedorGdAtual}
+                    onChange={(e) => setFornecedorGdAtual(e.target.value)}
+                    maxLength={200}
+                    placeholder="Ex.: Cooperativa Solar Verde / Usina Sertão"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Nos ajuda a preparar a melhor proposta pra sua situação.
+                  </p>
                 </div>
               </div>
 

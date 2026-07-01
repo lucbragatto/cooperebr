@@ -38,6 +38,16 @@ describe('PublicoController — D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1', () => 
 
     cadastroWebV2Mock = jest.fn().mockResolvedValue({ ok: true });
     (controller as any).cadastroWebV2 = cadastroWebV2Mock;
+
+    // Carona FIX A.2 (01/07/2026) — Sprint M48 (22/06) introduziu chamada a
+    // `roteamentoCadastroService.decidirCaminho` no cadastroWeb V2. Stub
+    // C_NOVO (não notifica admin — não é foco deste spec).
+    (controller as any).roteamentoCadastroService = {
+      decidirCaminho: jest.fn().mockResolvedValue({
+        caminho: 'C_NOVO',
+        razao: 'stub spec',
+      }),
+    };
   });
 
   afterEach(() => {
@@ -66,8 +76,17 @@ describe('PublicoController — D-novo-CADASTRO-PUBLICO-TENANT-SPOOF P1', () => 
 
       await controller.cadastroWeb(body as any, 'tenant-valido');
 
-      expect(cadastroWebV2Mock).toHaveBeenCalledWith(body, 'tenant-valido');
-      expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(body, 'tenant-spoof');
+      // Carona FIX A.2 — Sprint M48 (22/06) adicionou 3º arg `roteamento`.
+      expect(cadastroWebV2Mock).toHaveBeenCalledWith(
+        body,
+        'tenant-valido',
+        expect.objectContaining({ caminho: expect.any(String) }),
+      );
+      expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(
+        body,
+        'tenant-spoof',
+        expect.anything(),
+      );
     });
 
     it('?tenant= inexistente → NotFoundException', async () => {

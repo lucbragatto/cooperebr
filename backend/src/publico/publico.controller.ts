@@ -311,11 +311,37 @@ export class PublicoController {
         cooperativaIdSugerida: cooperativaId,
       });
 
-      return this.cadastroWebV2(
+      const resultV2 = await this.cadastroWebV2(
         body as Parameters<PublicoController['cadastroWebV2']>[0],
         cooperativaId,
         roteamento,
       );
+
+      // FIX A.2 Frente 2 vitrines mínimas (01/07/2026) — notificar admin
+      // quando o motor detecta caminho A_MIGRACAO (lead de captação) ou
+      // AMBIGUO_ADMIN (caso ambíguo — decisão manual). Sem esse disparo o
+      // link OCR→captação ficava quebrado: motor gravava metadata mas admin
+      // NUNCA recebia aviso. Fire-and-forget (não bloqueia resposta).
+      const precisaAvisarAdmin =
+        roteamento.caminho === 'A_MIGRACAO' ||
+        roteamento.caminho === 'AMBIGUO_ADMIN';
+
+      if (precisaAvisarAdmin && resultV2?.data?.cooperadoId) {
+        this.notificarAdminRoteamentoCaptacao({
+          cooperadoId: resultV2.data.cooperadoId,
+          nome: body.nome,
+          numeroUC: body.instalacao?.numeroUC,
+          caminho: roteamento.caminho,
+          razao: roteamento.razao,
+        }).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : 'erro desconhecido';
+          this.logger.error(
+            `Erro ao notificar admin roteamento V2 (${roteamento.caminho}): ${message}`,
+          );
+        });
+      }
+
+      return resultV2;
     }
 
     const cpfLimpo = (body.cpf || '').replace(/\D/g, '');
@@ -1464,6 +1490,50 @@ export class PublicoController {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido';
       this.logger.error(`Falha ao enviar notificação admin créditos injetados: ${message}`);
+    }
+  }
+
+  // FIX A.2 Frente 2 vitrines mínimas (01/07/2026) — dispara no caminho V2
+  // quando o motor roteador M48 classifica como A_MIGRACAO ou AMBIGUO_ADMIN.
+  // Public pra viabilizar mock em specs Jest do wiring.
+  async notificarAdminRoteamentoCaptacao(params: {
+    cooperadoId: string;
+    nome: string;
+    numeroUC?: string;
+    caminho: string;
+    razao: string;
+  }) {
+    const adminPhone = process.env.ADMIN_WHATSAPP_NUMBER ?? '5527981341348';
+    const { cooperadoId, nome, numeroUC, caminho, razao } = params;
+
+    const cabecalho =
+      caminho === 'A_MIGRACAO'
+        ? '🎯 Novo lead de CAPTAÇÃO detectado pelo motor!'
+        : '❓ Novo cadastro AMBÍGUO — revisar!';
+
+    const rodape =
+      caminho === 'A_MIGRACAO'
+        ? 'Vendas: entrar em contato para proposta de migração.'
+        : 'Admin: revisar manualmente — motor não conseguiu decidir.';
+
+    const msg =
+      `${cabecalho}\n` +
+      `Nome: ${nome}\n` +
+      `UC: ${numeroUC || 'não informada'}\n` +
+      `Cooperado ID: ${cooperadoId}\n` +
+      `Razão: ${razao}\n` +
+      rodape;
+
+    try {
+      await this.sender.enviarMensagem(adminPhone, msg);
+      this.logger.log(
+        `Notificação de roteamento (${caminho}) enviada ao admin para cooperado ${cooperadoId}`,
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.logger.error(
+        `Falha ao enviar notificação admin roteamento (${caminho}): ${message}`,
+      );
     }
   }
 

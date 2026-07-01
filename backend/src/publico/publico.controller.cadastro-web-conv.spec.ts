@@ -56,6 +56,17 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
 
     cadastroWebV2Mock = jest.fn().mockResolvedValue({ ok: true });
     (controller as any).cadastroWebV2 = cadastroWebV2Mock;
+
+    // Carona FIX A.2 (01/07/2026) — Sprint M48 (22/06) introduziu chamada a
+    // `roteamentoCadastroService.decidirCaminho` no cadastroWeb V2 mas não
+    // mockou o serviço nesse spec pré-existente. Regressão latente exposta
+    // pela sprint da Frente 2. Mock stub com caminho C_NOVO (não notifica).
+    (controller as any).roteamentoCadastroService = {
+      decidirCaminho: jest.fn().mockResolvedValue({
+        caminho: 'C_NOVO',
+        razao: 'stub spec',
+      }),
+    };
   });
 
   afterEach(() => {
@@ -88,7 +99,12 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
       select: { cooperativaId: true },
     });
     expect(cadastroWebV2Mock).toHaveBeenCalledTimes(1);
-    expect(cadastroWebV2Mock).toHaveBeenCalledWith(body, 'coop-derivada-do-convite');
+    // Carona FIX A.2 — Sprint M48 (22/06) adicionou 3º arg `roteamento`.
+    expect(cadastroWebV2Mock).toHaveBeenCalledWith(
+      body,
+      'coop-derivada-do-convite',
+      expect.objectContaining({ caminho: expect.any(String), razao: expect.any(String) }),
+    );
   });
 
   // ─── Cenário 2 — anti-spoof: convite sobrepõe body.cooperativaId ─
@@ -105,9 +121,21 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
 
     await controller.cadastroWeb(body as any, 'tenant-via-query-spoof');
 
-    expect(cadastroWebV2Mock).toHaveBeenCalledWith(body, 'coop-real-do-convite');
-    expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(body, 'coop-spoofed-pelo-client');
-    expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(body, 'tenant-via-query-spoof');
+    expect(cadastroWebV2Mock).toHaveBeenCalledWith(
+      body,
+      'coop-real-do-convite',
+      expect.objectContaining({ caminho: expect.any(String) }),
+    );
+    expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(
+      body,
+      'coop-spoofed-pelo-client',
+      expect.anything(),
+    );
+    expect(cadastroWebV2Mock).not.toHaveBeenCalledWith(
+      body,
+      'tenant-via-query-spoof',
+      expect.anything(),
+    );
   });
 
   // ─── Cenário 3 — token inválido sem fallback ─────────────────────
@@ -170,7 +198,11 @@ describe('PublicoController.cadastroWeb — resolução de tenant via convite (?
       where: { id: 'tenant-via-query' },
       select: { id: true, ativo: true },
     });
-    expect(cadastroWebV2Mock).toHaveBeenCalledWith(body, 'tenant-via-query');
+    expect(cadastroWebV2Mock).toHaveBeenCalledWith(
+      body,
+      'tenant-via-query',
+      expect.objectContaining({ caminho: expect.any(String) }),
+    );
   });
 });
 
