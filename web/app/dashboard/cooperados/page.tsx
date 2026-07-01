@@ -52,6 +52,12 @@ interface CooperadoLista {
   // roteamentoTenantAlvo é omitido pela API por multitenant (backend service:311).
   roteamentoCaminho?: string | null;
   roteamentoRazao?: string | null;
+  // Frente Jornada do Cooperado (01/07/2026) — origem + flags binárias na
+  // lista. Ícones ⏳ (fila) e 📋 (envio concess. andando) no TableCell do
+  // nome + filtro por canal na barra de busca.
+  canalCadastro?: string | null;
+  temListaEspera?: boolean;
+  temEnvioListaAndamento?: boolean;
   progressaoClube?: {
     nivelAtual: string;
     indicadosAtivos: number;
@@ -62,6 +68,15 @@ interface CooperadoLista {
   tipoParceiro?: string;
   cooperativaId?: string;
 }
+
+// Frente Jornada (01/07/2026) — origem do funil como label no dropdown de
+// filtro. Coincide com o dropdown de status (padrão UX select nativo 19/05).
+const CANAL_CADASTRO_LABEL: Record<string, string> = {
+  CADASTRO_PUBLICO: '🌐 Público',
+  CADASTRO_SEM_UC: '💤 Sem UC',
+  ADMIN_MANUAL: '🧑‍💼 Admin',
+  INDICACAO: '🤝 Indicação',
+};
 
 // FIX B.3 Frente 2 vitrines mínimas (01/07/2026) — badge visual pra decisão do
 // motor roteador M48. Só aparece quando há sinal humano-relevante:
@@ -339,6 +354,23 @@ function TabelaCooperados({
                           {ROTEAMENTO_CONFIG[c.roteamentoCaminho].label}
                         </Badge>
                       )}
+                      {/* Frente Jornada (01/07/2026) — ícones binários. */}
+                      {c.temListaEspera && (
+                        <span
+                          className="ml-1 text-amber-600 cursor-help text-sm"
+                          title="Na fila de espera por capacidade de usina"
+                        >
+                          ⏳
+                        </span>
+                      )}
+                      {c.temEnvioListaAndamento && (
+                        <span
+                          className="ml-1 text-blue-600 cursor-help text-sm"
+                          title="Envio à concessionária em andamento"
+                        >
+                          📋
+                        </span>
+                      )}
                       <button
                         title="Observar este membro"
                         className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
@@ -443,6 +475,9 @@ export default function CooperadosPage() {
   // FIX B.4 Frente 2 vitrines mínimas (01/07/2026) — filtro por status
   // client-side (mesmo padrão de filtroParceiro). Vazio = todos os status.
   const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
+  // Frente Jornada (01/07/2026) — filtro por canal de cadastro. Vazio =
+  // todos. 'HISTORICO' = cadastros null (pré-Frente).
+  const [filtroCanal, setFiltroCanal] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -528,6 +563,12 @@ export default function CooperadosPage() {
     : cooperados
   )
     .filter(c => (filtroStatus ? c.status === filtroStatus : true))
+    .filter(c => {
+      // Frente Jornada (01/07/2026) — filtro por canal.
+      if (!filtroCanal) return true;
+      if (filtroCanal === 'HISTORICO') return !c.canalCadastro;
+      return c.canalCadastro === filtroCanal;
+    })
     .filter(c => {
       if (!busca.trim()) return true;
       const termo = busca.toLowerCase();
@@ -743,7 +784,7 @@ export default function CooperadosPage() {
                 </span>
               )}
             </CardTitle>
-            <div className="flex items-center gap-3 w-full max-w-lg">
+            <div className="flex items-center gap-3 w-full max-w-xl">
               <select
                 value={filtroStatus ?? ''}
                 onChange={(e) => setFiltroStatus(e.target.value || null)}
@@ -763,6 +804,19 @@ export default function CooperadosPage() {
                 <option value="ENCERRADO">Encerrado</option>
                 <option value="PENDENTE_MIGRACAO">Pend. Migração</option>
                 <option value="DESLIGADO">Desligado</option>
+              </select>
+              <select
+                value={filtroCanal ?? ''}
+                onChange={(e) => setFiltroCanal(e.target.value || null)}
+                className="rounded border border-gray-300 text-sm px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                title="Filtrar por origem do cadastro"
+              >
+                <option value="">Todas as origens</option>
+                <option value="CADASTRO_PUBLICO">🌐 Público</option>
+                <option value="CADASTRO_SEM_UC">💤 Sem UC</option>
+                <option value="ADMIN_MANUAL">🧑‍💼 Admin</option>
+                <option value="INDICACAO">🤝 Indicação</option>
+                <option value="HISTORICO">📜 Histórico</option>
               </select>
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />

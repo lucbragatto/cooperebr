@@ -101,6 +101,25 @@ interface OcorrenciaItem {
   id: string; tipo: string; descricao: string; status: string;
   prioridade: string; resolucao: string | null; createdAt: string;
 }
+interface ListaEsperaItem {
+  id: string;
+  posicao: number;
+  kwhNecessario: number | string;
+  status: string;
+}
+interface EnvioListaCooperadoDetalhe {
+  id: string;
+  statusIndividual: 'PENDENTE' | 'HOMOLOGADO' | 'REJEITADO';
+  envio: {
+    id: string;
+    numeroInterno: string;
+    status: string;
+    geradaEm: string;
+    enviadaEm: string | null;
+    liberadaEm: string | null;
+  };
+}
+
 interface CooperadoCompleto {
   id: string; nomeCompleto: string; cpf: string; email: string; telefone: string | null;
   status: string; cotaKwhMensal: number | string | null;
@@ -123,8 +142,60 @@ interface CooperadoCompleto {
   // com créditos GD injetados (persistido em vez de criar FaturaProcessada
   // completa — decisão custo/benefício). Chega tipado como Json opaco.
   consumoStashOcr?: Record<string, unknown> | null;
+  // Frente Jornada do Cooperado (01/07/2026) — unificação de visibilidade:
+  // origem do funil + fila de espera + envios à concessionária.
+  canalCadastro?: 'CADASTRO_PUBLICO' | 'CADASTRO_SEM_UC' | 'ADMIN_MANUAL' | 'INDICACAO' | null;
+  listaEspera?: ListaEsperaItem[];
+  enviosLista?: EnvioListaCooperadoDetalhe[];
   ucs: UCItem[]; contratos: Contrato[]; documentos: DocumentoCooperado[]; ocorrencias: OcorrenciaItem[];
 }
+
+// Frente Jornada do Cooperado (01/07/2026) — origem do funil renderizada
+// no topo do detalhe. Cadastros pré-Frente ficam null → mostra "Histórico".
+const CANAL_CADASTRO_CONFIG: Record<string, { emoji: string; label: string; color: string }> = {
+  CADASTRO_PUBLICO: {
+    emoji: '🌐',
+    label: 'Cadastro público',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
+  },
+  CADASTRO_SEM_UC: {
+    emoji: '💤',
+    label: 'Sem UC (indicador puro)',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
+  },
+  ADMIN_MANUAL: {
+    emoji: '🧑‍💼',
+    label: 'Cadastro admin',
+    color: 'bg-slate-100 text-slate-800 border-slate-200',
+  },
+  INDICACAO: {
+    emoji: '🤝',
+    label: 'Indicação (MLM)',
+    color: 'bg-green-100 text-green-800 border-green-200',
+  },
+};
+
+// Timeline visual do StatusCooperado. Cadastros terminais (SUSPENSO/
+// ENCERRADO/DESLIGADO/PENDENTE_MIGRACAO) NÃO entram na sequência linear;
+// caem no fallback de badge no card (linha "Status: ..."), já que quebrar
+// a timeline com esses estados só confunde visualmente.
+const STATUS_TIMELINE = [
+  { key: 'PENDENTE_ASSINATURA', label: 'Assinatura' },
+  { key: 'PENDENTE', label: 'Pendente' },
+  { key: 'PENDENTE_DOCUMENTOS', label: 'Documentos' },
+  { key: 'PENDENTE_VALIDACAO', label: 'Validação' },
+  { key: 'AGUARDANDO_CONCESSIONARIA', label: 'Concessionária' },
+  { key: 'APROVADO', label: 'Aprovado' },
+  { key: 'ATIVO', label: 'Ativo' },
+] as const;
+
+const STATUS_TERMINAL_LABELS: Record<string, string> = {
+  ATIVO_RECEBENDO_CREDITOS: 'Ativo — Recebendo créditos',
+  SUSPENSO: 'Suspenso',
+  ENCERRADO: 'Encerrado',
+  DESLIGADO: 'Desligado',
+  PENDENTE_MIGRACAO: 'Migração em andamento',
+};
 
 // FIX B.3 Frente 2 vitrines mínimas (01/07/2026) — badge visual pra decisão
 // do motor roteador M48. Só aparece quando há sinal humano-relevante.
@@ -1199,6 +1270,130 @@ export default function CooperadoPerfilPage() {
       {/* ── Aba 1: Visão Geral ── */}
       {aba === 'geral' && (
         <div className="space-y-4">
+          {/* Frente Jornada do Cooperado (01/07/2026) — unificação de
+              visibilidade. Junta origem do funil (canalCadastro) + timeline
+              visual do status + fila de espera + envios à concessionária.
+              Cada linha só aparece se houver dado — sem ruído. */}
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-slate-600" />
+                Jornada do Cooperado
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* ① Origem */}
+              <div className="flex items-start gap-3 flex-wrap">
+                <span className="text-xs text-gray-500 font-medium min-w-[70px] mt-1">Origem</span>
+                {cooperado.canalCadastro && CANAL_CADASTRO_CONFIG[cooperado.canalCadastro] ? (
+                  <Badge className={CANAL_CADASTRO_CONFIG[cooperado.canalCadastro].color}>
+                    {CANAL_CADASTRO_CONFIG[cooperado.canalCadastro].emoji}{' '}
+                    {CANAL_CADASTRO_CONFIG[cooperado.canalCadastro].label}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-gray-100 text-gray-600 border-gray-200" title="Cadastro anterior ao registro de canal (pré-01/07/2026)">
+                    📜 Histórico
+                  </Badge>
+                )}
+              </div>
+
+              {/* ② Timeline de status */}
+              <div className="flex items-start gap-3">
+                <span className="text-xs text-gray-500 font-medium min-w-[70px] mt-1">Status</span>
+                <div className="flex-1">
+                  {(() => {
+                    const idxAtual = STATUS_TIMELINE.findIndex((s) => s.key === cooperado.status);
+                    const terminal = STATUS_TERMINAL_LABELS[cooperado.status];
+                    if (idxAtual === -1 && terminal) {
+                      return (
+                        <Badge className={statusCoopColors[cooperado.status] ?? 'bg-gray-100 text-gray-600 border-gray-200'}>
+                          {terminal}
+                        </Badge>
+                      );
+                    }
+                    return (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {STATUS_TIMELINE.map((etapa, i) => {
+                          const alcancada = idxAtual >= i;
+                          const atual = idxAtual === i;
+                          return (
+                            <div key={etapa.key} className="flex items-center gap-1">
+                              <div
+                                className={`text-xs px-2 py-1 rounded-full border ${
+                                  atual
+                                    ? 'bg-green-100 text-green-800 border-green-300 font-semibold'
+                                    : alcancada
+                                      ? 'bg-green-50 text-green-600 border-green-200'
+                                      : 'bg-gray-50 text-gray-400 border-gray-200'
+                                }`}
+                              >
+                                {alcancada ? '✓ ' : ''}{etapa.label}
+                              </div>
+                              {i < STATUS_TIMELINE.length - 1 && (
+                                <span className={`text-xs ${alcancada ? 'text-green-400' : 'text-gray-300'}`}>→</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* ③ Lista de espera (se houver entrada AGUARDANDO) */}
+              {cooperado.listaEspera && cooperado.listaEspera.length > 0 && (
+                <div className="flex items-start gap-3 flex-wrap">
+                  <span className="text-xs text-gray-500 font-medium min-w-[70px] mt-1">Fila</span>
+                  <div className="flex items-center gap-3 flex-wrap flex-1">
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                      ⏳ Posição #{cooperado.listaEspera[0].posicao}
+                    </Badge>
+                    <span className="text-sm text-gray-700">
+                      Precisa de{' '}
+                      <strong>{Number(cooperado.listaEspera[0].kwhNecessario).toLocaleString('pt-BR')} kWh</strong>
+                    </span>
+                    <Link
+                      href="/dashboard/motor-proposta/lista-espera"
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Ver fila completa →
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* ④ Envios à concessionária (se houver algum) */}
+              {cooperado.enviosLista && cooperado.enviosLista.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <span className="text-xs text-gray-500 font-medium min-w-[70px] mt-1">Lista concess.</span>
+                  <div className="flex-1 space-y-1">
+                    {cooperado.enviosLista.map((elc) => {
+                      const cfg =
+                        elc.statusIndividual === 'HOMOLOGADO'
+                          ? 'bg-green-100 text-green-800 border-green-200'
+                          : elc.statusIndividual === 'REJEITADO'
+                            ? 'bg-red-100 text-red-800 border-red-200'
+                            : 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                      return (
+                        <div key={elc.id} className="flex items-center gap-3 flex-wrap text-sm">
+                          <Link
+                            href={`/dashboard/listas-concessionaria/${elc.envio.id}`}
+                            className="text-blue-600 hover:underline font-mono text-xs"
+                          >
+                            📋 {elc.envio.numeroInterno}
+                          </Link>
+                          <Badge className={cfg}>{elc.statusIndividual}</Badge>
+                          <span className="text-xs text-gray-500">envio: {elc.envio.status}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Checklist + Botão Ativar */}
           {checklist && (
             <Card className={checklist.pronto && cooperado.status === 'PENDENTE' ? 'border-green-400 bg-green-50/30' : ''}>
