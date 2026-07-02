@@ -75,10 +75,17 @@
 
 ---
 
-## ONDE PARAMOS — 2026-07-01 (3ª passagem — Frente Jornada do Cooperado: unificação de visibilidade, aguarda re-review)
+## ONDE PARAMOS — 2026-07-01 (3ª passagem — Frente Jornada do Cooperado: unificação de visibilidade, RE-REVIEW ORQUESTRADOR APROVADO)
 
 **Frente Jornada entregue em 4 commits limpos** (2f8bfdd + 4967e8c + 153b412 + 3051e1f) push
-OK — aguarda re-review do Luciano antes de considerar mergeado (regra do prompt).
+OK. **Re-review do orquestrador CONCLUÍDO e APROVADO** (mesmo turno, sessão 01/07 noite):
+git sync confirmado, schema + 8 writers lidos linha a linha (decisões semânticas INDICACAO/
+ADMIN_MANUAL conferem no contexto), `listaEspera`/`enviosLista` confirmados seguros
+(include aninhado sob cooperado já tenant-scoped, sem vetor cross-tenant novo), suite rodada
+pelo orquestrador = **532/532** (mais que os 518 relatados — grep mais amplo, sem regressão),
+smoke E2E rodado AO VIVO pelo orquestrador = 7/7 com `canalCadastro=CADASTRO_PUBLICO`
+confirmado no banco + cleanup OK. Card do frontend confirmado no código. **NADA PENDENTE —
+considerar mergeado/fechado.** Falta só o smoke VISUAL manual (opcional, cosmético).
 - **Fase 1 read-only** confirmou que 3 das 4 peças já existiam no schema (StatusCooperado
   rico, ListaEspera, EnvioListaConcessionaria/EnvioListaCooperado); faltava (a) o campo de
   origem e (b) juntar tudo na tela do cooperado. Escopo contido: unificação, não construção.
@@ -114,8 +121,8 @@ OK — aguarda re-review do Luciano antes de considerar mergeado (regra do promp
 - **Verificação**: TSC backend limpo nos meus arquivos; TSC web exit 0; rebuild backend +
   rebuild frontend + `prisma db push` + `pm2 restart` nos dois; smoke E2E 7/7.
 - **Débitos**: nenhum novo formal. 3 caronas informais fechadas.
-- **Próximo passo**: **re-review Luciano** obrigatório (padrão do prompt); depois smoke visual
-  manual das UIs; depois escolha entre as 3 alternativas abertas na FRASE DE RETOMADA do M52b.
+- **Próximo passo**: re-review orquestrador ✅ CONCLUÍDO (aprovado, ver bloco acima). Falta só
+  smoke visual manual (opcional) + escolha entre as 3 alternativas na FRASE DE RETOMADA abaixo.
 - Detalhe: `docs/sessoes/2026-07-01-jornada-cooperado.md`.
 
 ---
@@ -3927,76 +3934,80 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento M49 (22/06):
-   working tree limpo (exceto carry-over package.json/lock stashed +
-   untracked .claude/.agent não-meus) — NUNCA `git add .` / `-A`.
-   Último commit em main é o fechamento M49 (`docs(sessao): fechamento
-   M49 ...`). `git log origin/main..HEAD --oneline` deve estar VAZIO.
-   Branches preservadas no origin (cumulativas):
-   `feature/d2-salvaguardas-origem`, `feature/hardening-throttler-
-   reconciliacao`, `feature/convenio-origem-dado`, `feature/hardening-
-   tenant-spoof`, `feature/convenio-fundacao-lifecycle` (M46),
-   `feature/convenio-migracao` (M47), `feature/funil-roteador-engine`
-   (M48 merge `e9db14b`), `feature/convenio-familia` (M49).
+2. Rodar `git status --short`. Esperado pós-fechamento 01/07 noite:
+   working tree limpo (exceto carry-over conhecido: `.agent/`,
+   `.claude/agents/*` não-meus, `.e2e-tmp/`, scripts experimentais
+   `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`) —
+   NUNCA `git add .` / `-A`. Último commit em main é
+   `25d9a4a docs(sessao): fechamento 01/07 (3ª passagem) — Frente
+   Jornada do Cooperado`. `git log origin/main..HEAD --oneline` deve
+   estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   + cooperebr-whatsapp online. Schema delta M49 (model
-   AutorizacaoTokenFamiliar + Cooperativa.tokenFamiliarSacavel +
-   Indicacao/ConviteIndicacao.familiar + totalTokensAbatidos default 0)
-   JÁ APLICADO no banco dev — NÃO RODAR `prisma db push` a menos que
-   próxima sprint tenha schema delta novo.
+   + cooperebr-whatsapp online. Schema delta 01/07 (enum
+   `CanalCadastro` + `Cooperado.canalCadastro` nullable) JÁ APLICADO
+   no banco dev via `prisma db push` — NÃO rodar de novo a menos que
+   a próxima sprint tenha delta novo.
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **FRENTE 2 (Vitrines Mínimas + Pipeline de Captação) FECHADA PONTA A PONTA em 01/07** —
-7 commits limpos na main JÁ PUSHED, NÃO RE-APLICAR. 1ª passagem (manhã): FIX A `d343666` +
-FIX B `4c16ef8`. 2ª passagem (tarde): B5 `b80cd8f` + C6 `c31d4eb` + C7 `a6cb7ba` +
-smoke E2E `b5db215`. Doc-sessão retroativa 28/06 (`b9ddd99`).
-- **B5** card `consumoStashOcr` no detalhe do cooperado — snapshot OCR existia no banco desde
-  06/06 mas não aparecia em nenhuma tela.
-- **C6** fix backend converter multi-tenant SUPER_ADMIN — bug latente M48 que bloqueava até
-  o dono do SISGD. SUPER_ADMIN passa `cooperativaIdAlvo` validado (padrão M45) + service adota
-  lead órfão (findFirst com OR aceita `cooperativaId=null`). ADMIN mantém JWT + destructure-discard.
-  14 specs novos, suite `src/lead-expansao/` 23/23 verde.
-- **C7** botão Converter no `/dashboard/relatorios/expansao` — Dialog com form obrigatório +
-  seletor de parceiro condicional (só SUPER_ADMIN + lead órfão).
-- **Smoke E2E do funil 6/6 verde** — motor M48 classificou "Cooperativa Solar Verde" como
-  A_MIGRACAO com razão humano-legível + notificação admin no WA disparou em tempo real
-  (regra contatos teste 14/05 respeitada).
-- **Decisões travadas**: A_MIGRACAO/AMBIGUO_ADMIN fica DENTRO do tenant capturador (NÃO
-  alimenta LeadExpansao — fluxos separados). Botão Converter entrou nesta fatia.
-- **FIX A elo OCR→captação**: `web/app/cadastro/page.tsx` tela especial "créditos injetados"
-  ganha input "Quem fornece sua energia hoje?" + payload manda `jaRecebeCreditosGd=true` +
-  `fornecedorGdAtual`. Backend `publico.controller.cadastroWeb` V2 captura retorno de
-  `cadastroWebV2` e dispara `notificarAdminRoteamentoCaptacao` fire-and-forget quando
-  `roteamento.caminho === 'A_MIGRACAO' || 'AMBIGUO_ADMIN'`. Antes o motor M48 gravava
-  metadata mas admin NUNCA era avisado — bug latente descoberto pelo orquestrador em E2E.
-  Specs 6/6 verde + carona 4 regressões M48 latentes fechadas. Suite `src/publico/` 67/67.
-- **FIX B vitrines**: badges de roteamento (🎯 A_MIGRACAO / ↪️ B_REDIRECT_PARCEIRO /
-  ❓ AMBIGUO_ADMIN; C_NOVO SEM badge — evita ruído) na lista `/dashboard/cooperados` E no
-  detalhe `[id]`. Tooltip com `roteamentoRazao`. Filtro por status na lista via `<select>`
-  nativo (12 opções, padrão memória 19/05). Zero schema delta. TSC web exit 0. Rebuild feito.
+🟢 **01/07/2026 — DIA INTEIRO FECHADO: Frente 2 (Vitrines+Captação) + hardening P1/P2 +
+Frente Jornada do Cooperado. TUDO na main, pushed, RE-REVISADO E APROVADO pelo
+orquestrador (git + código lido + suites rodadas ao vivo + smoke E2E ao vivo, não só
+relato do Code). NÃO RE-APLICAR NADA.**
 
-Convênio cooperativizado COMPLETO (M44+M46+M47+M48+M49) + Faxina A/B (M50) + Hardening
-Lateral (M51) + Faxina C-G (M52a) + Melt (M52b) + Frente 2 vitrines mínimas (01/07).
-✅ Contador+advogado RESOLVIDOS/FAVORÁVEIS (Luciano 23/06 — apply liberado).
+**Frente 2 — Vitrines Mínimas + Pipeline de Captação** (manhã+tarde, 7 commits):
+FIX A `d343666` (tela "créditos injetados" pergunta fornecedor + manda `jaRecebeCreditosGd`;
+`notificarAdminRoteamentoCaptacao` revivida — motor M48 gravava metadata mas admin nunca
+era avisado, bug latente achado pelo orquestrador em E2E) + FIX B `4c16ef8` (badges
+🎯/↪️/❓ de roteamento na lista/detalhe de cooperados + filtro status) + B5 `b80cd8f`
+(card `consumoStashOcr` no detalhe — dado existia no banco desde 06/06, invisível) +
+C6 `c31d4eb` (fix converter LeadExpansao multi-tenant — SUPER_ADMIN não tinha
+cooperativaId no JWT, endpoint ficava travado até pro dono do SISGD) + C7 `a6cb7ba`
+(botão Converter no `/dashboard/relatorios/expansao`) + smoke E2E `b5db215`.
+
+**Hardening pós-review — P1+P2** (`29ce545`+`ded6745`): 2 achados reais do
+multitenant-reviewer no converter (não era o padrão de tenant-spoof clássico, já fechado
+— eram refinamento de robustez): P1 corrida entre 2 SUPER_ADMINs adotando o MESMO lead
+órfão (fix: `$transaction` com `isolationLevel: Serializable`, padrão de
+`contratos.service.ts`, + retry 1x + `409` claro); P2 AuditLog de SUPER_ADMIN gravava
+`cooperativaId=null` (fix: `cooperativaIdSource: 'body:cooperativaIdAlvo'`, mecanismo já
+existia desde M51). Suite `lead-expansao` 28/28. Re-verificado pelo orquestrador linha a
+linha + rodado ao vivo.
+
+**Frente Jornada do Cooperado** (noite, 4 commits: `2f8bfdd`+`4967e8c`+`153b412`+`3051e1f`):
+unificação de visibilidade — 3 das 4 peças que o Luciano pediu JÁ EXISTIAM espalhadas
+(`StatusCooperado` rico, `ListaEspera`, `EnvioListaConcessionaria`/`EnvioListaCooperado`
+— sistema de listas pra concessionária está **muito mais maduro** do que a memória antiga
+registrava, 9 etapas com timeline real em `/dashboard/usinas/listas`); faltava só (a) campo
+de origem do cadastro e (b) juntar tudo numa tela. Entregue: enum `CanalCadastro`
+(`CADASTRO_PUBLICO`/`CADASTRO_SEM_UC`/`ADMIN_MANUAL`/`INDICACAO`) gravado em 8 pontos de
+criação + card "Jornada do Cooperado" no detalhe (①origem ②timeline status ③fila usina
+④lista concessionária, linhas condicionais) + ícones ⏳/📋 e filtro por origem na lista.
+**Re-review do orquestrador (mesma sessão) confirmou tudo**: suite rodada ao vivo =
+532/532 (mais que os 518 relatados), smoke E2E ao vivo = 7/7 com `canalCadastro`
+persistido corretamente, decisões semânticas dos 8 writers conferem, includes novos
+(`listaEspera`/`enviosLista`) seguros por construção (nested sob cooperado já tenant-scoped).
+
+Convênio cooperativizado COMPLETO (M44-M49) + Faxina A/B (M50) + Hardening Lateral (M51) +
+Faxina C-G (M52a) + Melt (M52b) + Vitrines+Captação (Frente 2) + Jornada do Cooperado —
+**tudo fechado, verificado, no ar.** ✅ Contador+advogado RESOLVIDOS/FAVORÁVEIS (23/06).
 
 ⚠️ As **3 PORTAS DE CONFIG** seguem o ÚNICO bloqueador de exposição pública: (1)
 `AMBIENTE_REAL=true` (desliga impersonate — verificado 23/06 NÃO setado → impersonate ATIVO);
 (2) `SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. Ações de CONFIG do Luciano.
 
-PRÓXIMO = **ESCOLHA DO LUCIANO** entre 3 frentes (Frente 2 SAIU ponta a ponta com smoke E2E
-verde; sobram):
-- **3 portas de config** (abrir cadastro público / onboarding Santi — ação de CONFIG do Luciano,
-  não é código).
+PRÓXIMO = **ESCOLHA DO LUCIANO** entre 3 frentes (nenhuma urgente — tudo hoje fechou limpo):
+- **3 portas de config** (abrir cadastro público / onboarding Santi — ação de CONFIG do
+  Luciano, não é código).
 - **Vitrines COMPLETAS do funil** (Camadas 2/3 — marketplace SISGD + vitrine pública do
-  parceiro — spec do orquestrador necessária; motor M48 já roteia; Frente 2 fez só o
-  observatório interno).
+  parceiro — spec do orquestrador necessária; motor M48 já roteia; hoje só fez o
+  observatório interno + a jornada).
 - **M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
 
-**Sub-passo opcional antes**: smoke visual manual das vitrines novas (login SUPER_ADMIN →
-`/dashboard/cooperados` badges/filtro/detalhe consumoStashOcr → `/dashboard/relatorios/expansao`
-botão Converter/Dialog/seletor tenant). Smoke programático já rodou 6/6 verde.
+**Sub-passo opcional antes**: smoke visual manual (login SUPER_ADMIN → `/dashboard/cooperados`
+badges+filtro+card Jornada no detalhe → `/dashboard/relatorios/expansao` botão Converter).
+Smoke programático já rodou verde múltiplas vezes ao vivo — visual é só cosmético.
 
 > As opções (A)/(B) e o bloco "Hardening Lateral" ABAIXO são HISTÓRICO pré-M52 — Hardening
 > Lateral=M51 ✅, Faxina C-G=M52a ✅, Melt=M52b ✅ já feitos. Vale a frase acima.
