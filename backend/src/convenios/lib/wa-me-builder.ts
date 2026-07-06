@@ -67,12 +67,16 @@ export function montarMensagemConvite(p: WaMeConviteParams): string {
     );
   }
   // Default = CONVENIO_EMPRESA
+  // Texto aprovado por Luciano 05/07/2026 — enfatiza o benefício ("quem ganha
+  // é você", desconto até 100%) e explica a mecânica (fatura do último mês).
   return (
     `Olá, ${nome}!\n\n` +
-    `A empresa *${p.empresaNome}* convidou você para fazer parte do programa de ` +
-    `custeio de energia (CoopereBR).\n\n` +
-    `Acesse este link para concluir seu cadastro:\n${p.linkConvite}\n\n` +
-    `Validade: 7 dias.`
+    `A empresa *${p.empresaNome}* firmou convênio com a *CoopereBR* e quem ganha é você!\n\n` +
+    `A partir de agora, você pode fazer parte do *Clube de Vantagens CoopereBR* e ter ` +
+    `desconto que pode chegar a *100%* da(s) sua(s) fatura(s) de energia mensal!\n\n` +
+    `Para isso, precisamos que você acesse o link, se cadastre e envie sua fatura de ` +
+    `energia do último mês, seguindo os passos indicados:\n${p.linkConvite}\n\n` +
+    `Esse link é pessoal e expira em 7 dias.`
   );
 }
 

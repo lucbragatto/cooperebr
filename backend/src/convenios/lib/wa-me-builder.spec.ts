@@ -11,12 +11,19 @@ describe('wa-me-builder — LOTE.5', () => {
     linkConvite: 'https://sisgd.app/cadastro?conv=abc123',
   };
 
-  it('CONVENIO_EMPRESA (default): mensagem cita empresa + link + validade', () => {
+  it('CONVENIO_EMPRESA (default): mensagem cita empresa + link + benefício + validade', () => {
+    // Texto aprovado por Luciano 05/07/2026 — versão "quem ganha é você"
+    // com Clube de Vantagens + 100% + fatura último mês + expira em 7 dias.
     const msg = montarMensagemConvite(baseParams);
     expect(msg).toContain('Olá, Dra. Ana');
     expect(msg).toContain('*Clínica X*');
+    expect(msg).toContain('*CoopereBR*');
+    expect(msg).toContain('quem ganha é você');
+    expect(msg).toContain('*Clube de Vantagens CoopereBR*');
+    expect(msg).toContain('*100%*');
+    expect(msg).toContain('fatura de energia do último mês');
     expect(msg).toContain('https://sisgd.app/cadastro?conv=abc123');
-    expect(msg).toContain('Validade: 7 dias');
+    expect(msg).toContain('expira em 7 dias');
   });
 
   it('INDICACAO_COOPERADO: cita indicador e fala em economia', () => {
@@ -42,11 +49,16 @@ describe('wa-me-builder — LOTE.5', () => {
     const r = buildWaMeConviteUrl(baseParams);
     expect(r.urlWa).toMatch(/^https:\/\/wa\.me\/5527999990001\?text=/);
     expect(r.telefoneNormalizado).toBe('5527999990001');
-    // Decodifica e compara
+    // URL.searchParams.get() JÁ decoda a query string. Não passar por
+    // decodeURIComponent de novo — texto com '%' literal (ex: "100%") vira
+    // '%25' no encoding; get decoda pra '%'; um segundo decode explode em
+    // "URI malformed" porque '%' isolado não é escape válido. (FIX 06/07)
     const url = new URL(r.urlWa);
-    const decoded = decodeURIComponent(url.searchParams.get('text') ?? '');
+    const decoded = url.searchParams.get('text') ?? '';
     expect(decoded).toBe(r.mensagem);
     expect(decoded).toContain('Clínica X');
+    // Sanity: o URL bruto contém a versão encoded do '%' (100% → 100%25)
+    expect(r.urlWa).toContain('100%25');
   });
 
   it('normalização: tira (, ), -, espaços, +', () => {

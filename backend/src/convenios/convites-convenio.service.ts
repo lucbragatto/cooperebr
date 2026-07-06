@@ -11,8 +11,12 @@ import * as crypto from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 // Sprint Convite-Lote LOTE.5 (07/06/2026) — helper reusável de wa.me.
+// FIX texto convite (06/07/2026) — montarMensagemConvite passa a ser fonte
+// única do texto no caminho automático (enviarLinkPorWhatsapp), eliminando
+// a string duplicada que estava desincronizada com o texto do wa.me.
 import {
   buildWaMeConviteUrl,
+  montarMensagemConvite,
   type WaMeConviteParams,
 } from './lib/wa-me-builder';
 // Sprint Token-WA Fase 2 F2.2 (07/06/2026) — OTP helpers extraídos pra reuso
@@ -1038,12 +1042,15 @@ export class ConvitesConvenioService {
     cooperativaId: string;
   }): Promise<{ enviado: boolean; erro?: string }> {
     const { telefone, link, nomeConvidado, empresaNome, cooperativaId } = input;
-    const texto =
-      `Olá, ${nomeConvidado}!\n\n` +
-      `A empresa *${empresaNome}* convidou você para fazer parte do programa de custeio de energia ` +
-      `(CoopereBR).\n\n` +
-      `Acesse este link para concluir seu cadastro:\n${link}\n\n` +
-      `Validade: 7 dias.`;
+    // FIX texto convite (06/07/2026) — fonte única em wa-me-builder.
+    // Uma mudança de texto agora atualiza os 2 caminhos (auto + wa.me manual).
+    const texto = montarMensagemConvite({
+      telefoneDestinatario: telefone,
+      nomeDestinatario: nomeConvidado,
+      empresaNome,
+      linkConvite: link,
+      variante: 'CONVENIO_EMPRESA',
+    });
     try {
       // Bug A (10/06/2026) — sender pode retornar { enviado:false, motivo } SEM throw
       // em DEV/whitelist ou número-protegido. Antes (até M28) o helper ignorava o
