@@ -406,6 +406,14 @@ export class ConveniosService {
       data.planoClubeId = dto.planoClubeId || null;
     }
 
+    // Sprint Máscara de e-mail por convênio (06/07/2026) — alias editável.
+    // Normaliza '' → null (desvincular). DTO valida regex antes.
+    if (dto.emailAliasCampanha !== undefined) {
+      data.emailAliasCampanha = dto.emailAliasCampanha
+        ? dto.emailAliasCampanha.toLowerCase()
+        : null;
+    }
+
     const updated = await this.prisma.contratoConvenio.update({
       where: { id },
       data,

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, IsEnum, IsArray, ValidateNested, Min, Max, MinLength, MaxLength, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, IsEnum, IsArray, ValidateNested, Min, Max, MinLength, MaxLength, IsDateString, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum TipoConvenioDto {
@@ -380,6 +380,17 @@ export class UpdateConvenioDto {
   @IsOptional()
   @IsString()
   planoClubeId?: string | null;
+
+  // Sprint Máscara de e-mail por convênio (06/07/2026). Alias `<localMailbox>+
+  // <sufixo>@<domain>` pra captação de faturas de funcionários DE CAMPANHA
+  // (pré-cadastro). Regex: minúsculas + dígitos + hifens, 2–30 chars.
+  // Enviar string vazia '' ou null pra desvincular.
+  @IsOptional()
+  @Matches(/^[a-z0-9-]{2,30}$|^$/, {
+    message:
+      'emailAliasCampanha deve conter só minúsculas/dígitos/hifens (2-30 chars) ou string vazia pra desvincular',
+  })
+  emailAliasCampanha?: string | null;
 }
 
 export class AddMembroDto {

@@ -4,7 +4,13 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { PrismaService } from '../prisma.service';
 import { FaturasService } from '../faturas/faturas.service';
-import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';import { AsPlatform } from '../common/tenant-context';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
+import { FaturasCampanhaService } from './faturas-campanha.service';
+import {
+  matchAliasCampanha,
+  localPartDoMailboxTenant,
+} from './lib/campanha-alias';
+import { AsPlatform } from '../common/tenant-context';
 
 
 interface AnexoPdf {
@@ -17,6 +23,10 @@ interface EmailProcessado {
   assunto: string;
   anexos: AnexoPdf[];
   textoCorpo: string;
+  // Sprint Máscara (06/07/2026) — todos os destinatários do header To
+  // (parsed.to.value). Usado pra detectar `<local>+<alias>@<domain>` e
+  // rotear pro ramo campanha antes do fluxo cooperado normal.
+  destinatarios: string[];
 }
 
 @Injectable()
@@ -28,6 +38,9 @@ export class EmailMonitorService {
     private readonly prisma: PrismaService,
     private readonly faturasService: FaturasService,
     private readonly whatsappSender: WhatsappSenderService,
+    // Sprint Máscara (06/07/2026) — ramo campanha (fatura de funcionário
+    // pré-cadastro via alias contato+X@).
+    private readonly faturasCampanhaService: FaturasCampanhaService,
   ) {}
 
   // ── Config helpers (com isolamento por tenant) ─────────────────────
@@ -135,12 +148,46 @@ export class EmailMonitorService {
       try {
         const msgs = client.fetch({ seen: false }, { envelope: true, source: true, uid: true });
 
+        // Sprint Máscara (06/07/2026) — cachea alias→convênio pra evitar N
+        // queries no loop de mensagens. Uma consulta por ciclo do monitor.
+        const conveniosCampanha = await this.carregarConveniosCampanhaAtivos(cooperativaId);
+        const localMailbox = localPartDoMailboxTenant(
+          await this.getConfigFromDb('email.monitor.user', cooperativaId),
+        );
+
         for await (const msg of msgs) {
           try {
             const email = await this.extrairEmail(msg);
             if (!email) continue;
 
             if (email.anexos.length === 0) continue;
+
+            // Sprint Máscara (06/07/2026) — ANTES do fluxo cooperado normal,
+            // verificar se algum destinatário casa com alias de campanha
+            // configurado no tenant. Alias é sinal explícito e mais forte
+            // que a heurística `pareceSerFaturaConcessionaria` (RH pode não
+            // usar palavras-chave no assunto). EXCLUSÃO MÚTUA com o fluxo
+            // cooperado: se bater, roteia pro ramo campanha e pula o resto.
+            const matchCampanha = this.detectarConvenioDeCampanha(
+              email.destinatarios,
+              localMailbox,
+              conveniosCampanha,
+            );
+            if (matchCampanha) {
+              const houveErro = await this.processarRamoCampanha(
+                email,
+                matchCampanha,
+                cooperativaId,
+                resultado,
+              );
+              await client.messageMove(
+                msg.uid,
+                houveErro ? 'Pendentes' : 'Processados',
+                { uid: true },
+              );
+              continue;
+            }
+
             if (!this.pareceSerFaturaConcessionaria(email)) continue;
 
             // Tentar identificar cooperado por e-mail do remetente ou UC no corpo
@@ -440,6 +487,11 @@ export class EmailMonitorService {
     const assunto = parsed.subject || '';
     const textoCorpo = parsed.text || '';
 
+    // Sprint Máscara (06/07/2026) — coleta TODOS os destinatários do header
+    // To (parsed.to pode ser AddressObject único ou array). Alias
+    // `contato+X@` normalmente aparece aqui, não no envelope.
+    const destinatarios = this.extrairDestinatariosDoTo(parsed.to);
+
     const anexos: AnexoPdf[] = [];
     if (parsed.attachments) {
       for (const att of parsed.attachments) {
@@ -455,7 +507,26 @@ export class EmailMonitorService {
       }
     }
 
-    return { remetente, assunto, anexos, textoCorpo };
+    return { remetente, assunto, anexos, textoCorpo, destinatarios };
+  }
+
+  /**
+   * Sprint Máscara (06/07/2026) — normaliza `parsed.to` do simpleParser
+   * (que pode ser AddressObject único, array de AddressObject, ou
+   * undefined) em uma lista plana de endereços.
+   */
+  private extrairDestinatariosDoTo(to: unknown): string[] {
+    if (!to) return [];
+    const array = Array.isArray(to) ? to : [to];
+    const enderecos: string[] = [];
+    for (const item of array) {
+      const values = (item as { value?: Array<{ address?: string }> })?.value;
+      if (!values) continue;
+      for (const v of values) {
+        if (v.address) enderecos.push(v.address);
+      }
+    }
+    return enderecos;
   }
 
   private pareceSerFaturaConcessionaria(email: EmailProcessado): boolean {
@@ -549,5 +620,136 @@ export class EmailMonitorService {
     } catch {
       // Pasta já existe — ignorar
     }
+  }
+
+  // ── Sprint Máscara de e-mail por convênio (06/07/2026) — RAMO CAMPANHA ─
+  //
+  // Detecção de fatura de funcionário de campanha empresarial (pré-cadastro)
+  // via alias `<local>+<sufixo>@<domain>`. Exclusão mútua com o fluxo cooperado
+  // normal — se um destinatário casar com alias configurado, o e-mail é
+  // ROTEADO pro ramo campanha e NÃO segue pra `identificarCooperado`.
+  // Acréscimo A do orquestrador: o local-part vem da config do monitor DO
+  // TENANT (email.monitor.user), não hardcoda 'contato' — pronto pra novos
+  // parceiros com caixa própria.
+
+  private async carregarConveniosCampanhaAtivos(cooperativaId: string): Promise<
+    Array<{ id: string; empresaNome: string; emailAliasCampanha: string }>
+  > {
+    const convenios = await this.prisma.contratoConvenio.findMany({
+      where: {
+        cooperativaId,
+        status: 'ATIVO',
+        emailAliasCampanha: { not: null },
+      },
+      select: { id: true, empresaNome: true, emailAliasCampanha: true },
+    });
+    return convenios
+      .filter((c): c is typeof c & { emailAliasCampanha: string } => !!c.emailAliasCampanha)
+      .map((c) => ({
+        id: c.id,
+        empresaNome: c.empresaNome,
+        emailAliasCampanha: c.emailAliasCampanha.toLowerCase(),
+      }));
+  }
+
+  /**
+   * Encontra convênio cujo alias bate com algum destinatário do e-mail.
+   * Retorna o primeiro match (raramente há múltiplos aliases no mesmo To).
+   */
+  private detectarConvenioDeCampanha(
+    destinatarios: string[],
+    localMailbox: string | null,
+    convenios: Array<{ id: string; empresaNome: string; emailAliasCampanha: string }>,
+  ): { id: string; empresaNome: string; emailAliasCampanha: string } | null {
+    if (!localMailbox || convenios.length === 0) return null;
+    for (const conv of convenios) {
+      const r = matchAliasCampanha(destinatarios, localMailbox, conv.emailAliasCampanha);
+      if (r.bateu) return conv;
+    }
+    return null;
+  }
+
+  /**
+   * Processa TODOS os anexos PDF de um e-mail casado ao ramo campanha.
+   * Cada anexo vira 1 FaturaCampanhaConvenio (dedupe semântica por UC no
+   * service). Notifica admin via WA no fim. Retorna true se HOUVE erro
+   * (move msg pra Pendentes em vez de Processados).
+   */
+  private async processarRamoCampanha(
+    email: EmailProcessado,
+    convenio: { id: string; empresaNome: string; emailAliasCampanha: string },
+    cooperativaId: string,
+    resultado: { processados: number; pendentes: number; erros: number },
+  ): Promise<boolean> {
+    let houveErro = false;
+    let ultimoResult: {
+      id: string;
+      status: string;
+      upserted: string;
+      nomeExtraido?: string | null;
+      numeroUC?: string | null;
+      consumoMedioKwh?: number | null;
+    } | null = null;
+
+    for (const anexo of email.anexos) {
+      try {
+        const r = await this.faturasCampanhaService.processarFaturaCampanha({
+          convenioId: convenio.id,
+          cooperativaId,
+          emailRemetente: email.remetente,
+          emailAssunto: email.assunto,
+          anexo: { filename: anexo.filename, content: anexo.content },
+        });
+
+        // Recarrega os campos exibíveis pra montar a notificação humana.
+        const registro = await this.prisma.faturaCampanhaConvenio.findUnique({
+          where: { id: r.id },
+          select: { id: true, nomeExtraido: true, numeroUC: true, consumoMedioKwh: true, status: true },
+        });
+        if (registro) {
+          ultimoResult = {
+            id: r.id,
+            status: r.status,
+            upserted: r.upserted,
+            nomeExtraido: registro.nomeExtraido,
+            numeroUC: registro.numeroUC,
+            consumoMedioKwh: registro.consumoMedioKwh ? Number(registro.consumoMedioKwh) : null,
+          };
+        }
+
+        if (r.status === 'OCR_FALHOU') {
+          resultado.pendentes++;
+        } else {
+          resultado.processados++;
+        }
+
+        this.logger.log(
+          `[campanha] Fatura processada — convenio=${convenio.empresaNome}, alias=${convenio.emailAliasCampanha}, UC=${registro?.numeroUC ?? '?'}, status=${r.status}, upserted=${r.upserted}`,
+        );
+      } catch (err) {
+        houveErro = true;
+        resultado.erros++;
+        this.logger.warn(
+          `[campanha] Erro ao processar anexo ${anexo.filename} pro convenio ${convenio.empresaNome}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // Notificação humana pro admin — 1 mensagem por e-mail processado.
+    if (ultimoResult) {
+      const nome = ultimoResult.nomeExtraido ?? '(nome não extraído)';
+      const kwh = ultimoResult.consumoMedioKwh != null
+        ? `${ultimoResult.consumoMedioKwh.toLocaleString('pt-BR')} kWh`
+        : 'consumo não extraído';
+      const statusEmoji = ultimoResult.status === 'OCR_OK' ? '📥' : '⚠️';
+      await this.notificarAdminWhatsApp(
+        cooperativaId,
+        `${statusEmoji} Fatura de campanha [${convenio.empresaNome}]: ${nome} — ${kwh}\n\n` +
+          `Status: ${ultimoResult.status}${ultimoResult.upserted === 'UPDATED' ? ' (atualização)' : ''}\n` +
+          `Convênio: ${convenio.emailAliasCampanha}`,
+      );
+    }
+
+    return houveErro;
   }
 }

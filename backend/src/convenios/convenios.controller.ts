@@ -21,6 +21,9 @@ import { CreateConvenioDto, UpdateConvenioDto, AddMembroDto, UpdateMembroDto } f
 import { RegistrarMovimentoConvenioContratoDto } from './dto/registrar-movimento-convenio-contrato.dto';
 import { ConfigBeneficio } from './convenios-progressao.service';
 import { ContabilidadeTributariaService } from '../contabilidade-tributaria/contabilidade-tributaria.service';
+// Sprint Máscara de e-mail por convênio (06/07/2026) — endpoints admin de
+// faturas de campanha capturadas via alias.
+import { FaturasCampanhaService } from '../email-monitor/faturas-campanha.service';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR } = PerfilUsuario;
 
@@ -37,6 +40,8 @@ export class ConveniosController {
     private readonly convitesService: ConvitesConvenioService,
     // Sprint Convite-Convênio Fatia 3 — fluxo aprovação 3 portas
     private readonly aprovacaoService: ConvenioAprovacaoService,
+    // Sprint Máscara de e-mail por convênio (06/07/2026).
+    private readonly faturasCampanhaService: FaturasCampanhaService,
   ) {}
 
   // ─── CRUD Convênio ──────────────────────────────────────────────────────
@@ -109,6 +114,42 @@ export class ConveniosController {
     await this.conveniosService.findOne(id, req.user.cooperativaId);
     // Hardening Lateral 23/06 — passa cooperativaId pro service DiD.
     return this.conveniosService.remove(id, req.user.cooperativaId);
+  }
+
+  // ─── Sprint Máscara de e-mail por convênio (06/07/2026) ──────────────
+  //
+  // Endpoints admin pra visualizar faturas de campanha capturadas pelo
+  // email-monitor via alias `<localMailbox>+<sufixo>@<domain>` +
+  // decidir DESCARTAR ou VINCULAR ao cooperado após o cadastro real.
+  //
+  // cooperativaId sempre do JWT (M45). Guard multi-tenant fica no service
+  // (findFirst com cooperativaId em todas as queries).
+
+  @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @Get(':id/faturas-campanha')
+  listarFaturasCampanha(@Param('id') id: string, @Req() req: any) {
+    return this.faturasCampanhaService.listarPorConvenio(id, req.user.cooperativaId);
+  }
+
+  @Roles(SUPER_ADMIN, ADMIN)
+  @AuditLog({ acao: 'convenio.fatura-campanha.status', recurso: 'FaturaCampanhaConvenio', recursoIdParam: 'fid' })
+  @Patch(':id/faturas-campanha/:fid')
+  atualizarStatusFaturaCampanha(
+    @Param('id') convenioId: string,
+    @Param('fid') fid: string,
+    @Body() body: { status: 'DESCARTADA' | 'VINCULADA'; cooperadoId?: string },
+    @Req() req: any,
+  ) {
+    if (body.status !== 'DESCARTADA' && body.status !== 'VINCULADA') {
+      throw new BadRequestException('status deve ser DESCARTADA ou VINCULADA');
+    }
+    return this.faturasCampanhaService.atualizarStatus({
+      convenioId,
+      faturaId: fid,
+      cooperativaId: req.user.cooperativaId,
+      status: body.status,
+      cooperadoId: body.cooperadoId,
+    });
   }
 
   // ─── Membros ────────────────────────────────────────────────────────────

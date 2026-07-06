@@ -26,12 +26,18 @@ describe('ConveniosController — D-FISCAL-2.4.4b endpoints', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Sprint Máscara (06/07/2026) — construtor ganhou ConvitesConvenio,
+    // ConvenioAprovacao e FaturasCampanha nas sprints anteriores + nesta.
+    // Stubs vazios são suficientes pra este spec (testa custeio).
     controller = new ConveniosController(
       conveniosServiceMock,
       membrosServiceMock,
       progressaoServiceMock,
       contabilidadeMock,
       custeioMock as any,
+      {} as any, // ConvitesConvenioService
+      {} as any, // ConvenioAprovacaoService
+      {} as any, // FaturasCampanhaService (Sprint Máscara 06/07)
     );
   });
 

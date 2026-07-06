@@ -23,6 +23,10 @@ import { PlanoClubeModule } from '../plano-clube/plano-clube.module';
 import { MembroBuilderService } from './membro-builder.service';
 import { MotorPropostaModule } from '../motor-proposta/motor-proposta.module';
 import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module';
+// Sprint Máscara de e-mail por convênio (06/07/2026) — endpoints admin de
+// faturas de campanha vivem no convenios.controller e consomem
+// FaturasCampanhaService, exportado por EmailMonitorModule.
+import { EmailMonitorModule } from '../email-monitor/email-monitor.module';
 
 @Module({
   // D-FISCAL-2.2: importa ContabilidadeTributariaModule pra ter
@@ -49,6 +53,9 @@ import { ClubeVantagensModule } from '../clube-vantagens/clube-vantagens.module'
     // ClubeVantagensModule NÃO tem ciclo com Convenios — import direto.
     forwardRef(() => MotorPropostaModule),
     ClubeVantagensModule,
+    // Sprint Máscara (06/07/2026) — forwardRef pra evitar ciclo circular
+    // (EmailMonitorModule → FaturasModule → CooperadosModule → ... → ConveniosModule).
+    forwardRef(() => EmailMonitorModule),
   ],
   controllers: [ConveniosPortalController, ConveniosController],
   providers: [

@@ -16,7 +16,8 @@ describe('EmailMonitorService — T5 hotfix campo UC', () => {
     const prismaMock = { uc: { findFirst: ucFindFirst } } as any;
     const empty = {} as any;
 
-    const service = new EmailMonitorService(prismaMock, empty, empty);
+    // Sprint Máscara (06/07/2026) — construtor ganhou FaturasCampanhaService.
+    const service = new EmailMonitorService(prismaMock, empty, empty, empty);
 
     await (service as any).identificarPorOcr(
       { numeroUC: '12345678' },
@@ -50,7 +51,8 @@ describe('EmailMonitorService — T5 hotfix campo UC', () => {
     } as any;
     const empty = {} as any;
 
-    const service = new EmailMonitorService(prismaMock, empty, empty);
+    // Sprint Máscara (06/07/2026) — construtor ganhou FaturasCampanhaService.
+    const service = new EmailMonitorService(prismaMock, empty, empty, empty);
     // Mock de extrairNumerosUC pra retornar um número conhecido
     (service as any).extrairNumerosUC = jest.fn().mockReturnValue(['99887766']);
 

@@ -12,6 +12,9 @@ import Link from 'next/link';
 import { GestaoConvitesSection } from '@/components/convenios/GestaoConvitesSection';
 import { MembrosPendentesSection } from '@/components/convenios/MembrosPendentesSection';
 import { EnvioLoteSection } from '@/components/convenios/EnvioLoteSection';
+// Sprint Máscara de e-mail por convênio (06/07/2026) — captação de faturas
+// de campanha (pré-cadastro) via alias `<localMailbox>+<sufixo>@<domain>`.
+import { CampanhaFaturasSection } from '@/components/convenios/CampanhaFaturasSection';
 
 const NATUREZA_LABEL: Record<string, string> = {
   PROPRIO: 'PRÓPRIO (Art. 79 — isento)',
@@ -290,6 +293,10 @@ export default function ConvenioDetalhePage() {
         refreshKey={refreshKey}
         onAcaoConcluida={carregarComBump}
       />
+
+      {/* Sprint Máscara de e-mail por convênio (06/07/2026) — captação
+          de faturas de campanha (pré-cadastro) via alias configurável. */}
+      <CampanhaFaturasSection convenioId={id} onAliasSalvo={carregarComBump} />
 
       {/* Membros ATIVOS (tabela legacy) */}
       <Card>

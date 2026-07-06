@@ -47,7 +47,9 @@ describe('ConveniosMembrosService — origem (Fatia 2)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ConveniosMembrosService(prismaMock, progressaoMock);
+    // Carona Sprint Máscara (06/07/2026) — construtor ganhou
+    // WhatsappSenderService (sprint anterior) sem atualizar este spec.
+    service = new ConveniosMembrosService(prismaMock, progressaoMock, {} as any);
 
     findUniqueConvenio.mockResolvedValue({
       id: 'conv1',
