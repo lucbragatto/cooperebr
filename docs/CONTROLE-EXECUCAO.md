@@ -75,6 +75,53 @@
 
 ---
 
+## ONDE PARAMOS — 2026-07-14 (Code — FIX texto convite na main + Sprint Máscara de e-mail preservada em branch, aguardando Bloco F + re-review)
+
+**Sessão entregou 2 blocos independentes** em 1 commit na main + 1 SHA preservado em branch dedicada.
+- **FIX texto convite** (`71b4202` na main): texto aprovado 05/07 aplicado em
+  `wa-me-builder.ts` branch CONVENIO_EMPRESA (quem ganha é você + Clube de Vantagens +
+  100% + fatura último mês + expira em 7 dias) + refactor de `enviarLinkPorWhatsapp` pra
+  reusar `montarMensagemConvite` (elimina drift entre auto-send WA e Modo B wa.me).
+  Suite `src/convenios/lib/wa-me-builder` + `src/convenios/convites-convenio` **97/97
+  verde**. Fix carona no spec: double-decode `URI malformed` quando texto tem `%`
+  literal — usar só `URL.searchParams.get` (já decoda).
+- **Sprint Máscara de e-mail por convênio Blocos A-E + G** (`7745082` em
+  `feature/mascara-email-convenio`): pipeline completo pra captação de faturas de
+  funcionários de campanha empresarial via alias Gmail
+  `<localMailbox>+<sufixo>@<domain>` — genérico multi-tenant (Acréscimo A: local-part
+  vem do `email.monitor.user` do tenant), pré-cadastro (não auto-cria Cooperado). 16
+  arquivos: schema (`emailAliasCampanha`+`FaturaCampanhaConvenio`+enum
+  `StatusFaturaCampanha`), helpers puros (`matchAliasCampanha`+`sanitizarTextoOcr`+
+  `sanitizarNumeroUc`), `FaturasCampanhaService` (guard 15MB, dedupe semântica,
+  anexos em `uploads/campanha/<convenioId>/<hash>.pdf`), integração no email-monitor
+  (exclusão mútua — bateu alias → ramo campanha, senão fluxo antigo intacto),
+  endpoints admin (GET `/convenios/:id/faturas-campanha` + PATCH status
+  DESCARTADA/VINCULADA), UI (`CampanhaFaturasSection` com banner help + input +
+  contadores + tabela), 31 specs novos + 2 caronas fechadas. Suite `src/convenios/` +
+  `src/email-monitor/` + `src/publico/` + `src/lead-expansao/` + `src/cooperados/`
+  **554/554 verdes**. Piloto CV-SANTI-001 `emailAliasCampanha='santi'` seedeado no
+  banco dev (Bloco G).
+- **Pausa aplicada** por instrução expressa do Luciano após o Sprint Máscara: commit
+  `7745082` foi push-ado durante execução e imediatamente DESFEITO da main via
+  `git reset --hard 71b4202` + `git push origin main --force-with-lease`. Branch
+  `feature/mascara-email-convenio` preservou o trabalho pra retomada futura.
+  Backend + frontend rebuildaram a partir da main revertida e voltaram online
+  (`backend=400` esperado + `frontend=307` esperado; PID e status confirmados).
+- **Schema DEV continua com a delta aplicada** — código da main revertida NÃO seleciona
+  os novos campos (`emailAliasCampanha`, `FaturaCampanhaConvenio`, `StatusFaturaCampanha`)
+  e roda normalmente. Zero rollback de banco necessário. Piloto Santi fica lá dormindo.
+- **Débitos**: nenhum novo formal. 2 caronas de spec pré-existentes fechadas.
+- **Ritual bilateral respeitado**: preservação real (branch commitada + pushed) em vez
+  de perder trabalho por rollback duro.
+- **Próximo passo**: (opção A) retomar Sprint Máscara — Bloco F reviewers
+  (`cooperebr-multitenant-reviewer` + `code-reviewer`) → re-review orquestrador →
+  merge → smoke real INBOUND com `contato+santi@`; (opção B/C/D) alternativas
+  ainda abertas da FRASE DE RETOMADA do M52b: 3 portas de config / Camadas 2/3
+  completas / M52c retro.
+- Detalhe: `docs/sessoes/2026-07-14-fix-convite-e-sprint-mascara-preservado.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-07-01 (3ª passagem — Frente Jornada do Cooperado: unificação de visibilidade, RE-REVIEW ORQUESTRADOR APROVADO)
 
 **Frente Jornada entregue em 4 commits limpos** (2f8bfdd + 4967e8c + 153b412 + 3051e1f) push
@@ -3934,27 +3981,72 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
    na lista de agents. Se não aparecer, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento 01/07 noite:
+2. Rodar `git status --short`. Esperado pós-fechamento 14/07:
    working tree limpo (exceto carry-over conhecido: `.agent/`,
    `.claude/agents/*` não-meus, `.e2e-tmp/`, scripts experimentais
-   `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`) —
-   NUNCA `git add .` / `-A`. Último commit em main é
-   `25d9a4a docs(sessao): fechamento 01/07 (3ª passagem) — Frente
-   Jornada do Cooperado`. `git log origin/main..HEAD --oneline` deve
-   estar VAZIO.
+   `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`,
+   sobra `backend/node_modules/.prisma/client/query_engine-windows.dll.node.old`
+   do troubleshooting Prisma) — NUNCA `git add .` / `-A`. Último commit em main
+   deve ser `docs(sessao): fechamento M53 — ...`. `git log origin/main..HEAD
+   --oneline` deve estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online. Schema delta 01/07 (enum
    `CanalCadastro` + `Cooperado.canalCadastro` nullable) JÁ APLICADO
-   no banco dev via `prisma db push` — NÃO rodar de novo a menos que
-   a próxima sprint tenha delta novo.
+   no banco dev via `prisma db push`. **Schema delta 14/07 (Sprint
+   Máscara — `emailAliasCampanha` + `FaturaCampanhaConvenio` + enum
+   `StatusFaturaCampanha`) TAMBÉM aplicado no banco dev, MAS o código
+   na main NÃO conhece esses campos** (Sprint Máscara vive na branch
+   `feature/mascara-email-convenio`; ver PASSO 1). Runtime da main
+   ignora os campos novos e roda normalmente. NÃO rodar `prisma db push`
+   de novo a menos que a próxima sprint tenha delta novo.
 
 PASSO 1 — Frase COMANDANTE:
 
-🟢 **01/07/2026 — DIA INTEIRO FECHADO: Frente 2 (Vitrines+Captação) + hardening P1/P2 +
-Frente Jornada do Cooperado. TUDO na main, pushed, RE-REVISADO E APROVADO pelo
-orquestrador (git + código lido + suites rodadas ao vivo + smoke E2E ao vivo, não só
-relato do Code). NÃO RE-APLICAR NADA.**
+🟢 **14/07/2026 — FIX texto convite na main + Sprint Máscara PRESERVADA em branch.**
+
+Sessão entregou 2 blocos INDEPENDENTES:
+
+**FIX texto convite** (`71b4202` na main, PUSHED, NÃO RE-APLICAR): texto novo aprovado
+05/07 em `wa-me-builder.ts` branch CONVENIO_EMPRESA (quem ganha é você / Clube de
+Vantagens / 100% / fatura último mês / expira em 7 dias) + `enviarLinkPorWhatsapp`
+refatorado pra CHAMAR `montarMensagemConvite` (helper puro agora é fonte única). Suite
+`src/convenios/lib/wa-me-builder` + `src/convenios/convites-convenio` 97/97 verde. Fix
+carona: double-decode `URI malformed` no spec (URLSearchParams já decoda + '%25' de
+`100%` explodia no `decodeURIComponent` extra).
+
+**Sprint Máscara de e-mail por convênio Blocos A-E + G** (`7745082` em
+`origin/feature/mascara-email-convenio`, PRESERVADA, **NÃO NA MAIN**): pipeline
+completo pra captação de faturas de funcionários de campanha empresarial via alias
+Gmail `<localMailbox>+<sufixo>@<domain>` — genérico multi-tenant (Acréscimo A:
+local-part vem do `email.monitor.user` do tenant, NÃO hardcoda 'contato'),
+pré-cadastro (não auto-cria Cooperado; humano vincula depois). 16 arquivos: schema
+(`ContratoConvenio.emailAliasCampanha` + `FaturaCampanhaConvenio` + enum
+`StatusFaturaCampanha`), helpers puros (`matchAliasCampanha` + `sanitizarTextoOcr` +
+`sanitizarNumeroUc`), `FaturasCampanhaService` (guard 15MB + dedupe semântica + anexo
+`uploads/campanha/<convenioId>/<hash>.pdf`), integração email-monitor (exclusão mútua
+— bateu alias → ramo campanha, senão fluxo antigo intacto), endpoints admin (GET
+`/convenios/:id/faturas-campanha` + PATCH status) com AuditLog, UI
+`CampanhaFaturasSection` (banner help + input alias + contadores + tabela). 31 specs
+novos + 2 caronas fechadas — suite `src/convenios/`+`src/email-monitor/`+`src/publico/`+
+`src/lead-expansao/`+`src/cooperados/` **554/554 verdes**. Piloto **CV-SANTI-001
+`emailAliasCampanha='santi'`** seedeado no banco dev (Bloco G — smoke real inbound com
+`contato+santi@cooperebr.com.br` pronto pra rodar quando merge acontecer).
+
+**Pausa aplicada por instrução expressa do Luciano** após o commit — `git reset --hard
+71b4202` + `git push origin main --force-with-lease` desfez o merge; branch
+`feature/mascara-email-convenio` preservou o trabalho pra retomada futura. Backend +
+frontend rebuildaram a partir da main revertida e voltaram online no estado mergeado
+oficial.
+
+**Ao retomar Sprint Máscara** (opção A do próximo passo):
+```
+git fetch origin
+git checkout feature/mascara-email-convenio
+# rodar Bloco F: cooperebr-multitenant-reviewer + code-reviewer
+# aguardar re-review do orquestrador (git + código lido + suites ao vivo)
+# se OK: merge --no-ff pra main + push + smoke real INBOUND com contato+santi@
+```
 
 **Frente 2 — Vitrines Mínimas + Pipeline de Captação** (manhã+tarde, 7 commits):
 FIX A `d343666` (tela "créditos injetados" pergunta fornecedor + manda `jaRecebeCreditosGd`;
@@ -3997,17 +4089,18 @@ Faxina C-G (M52a) + Melt (M52b) + Vitrines+Captação (Frente 2) + Jornada do Co
 `AMBIENTE_REAL=true` (desliga impersonate — verificado 23/06 NÃO setado → impersonate ATIVO);
 (2) `SUPER_ADMIN_SECRET_KEY` forte; (3) senha super-admin forte. Ações de CONFIG do Luciano.
 
-PRÓXIMO = **ESCOLHA DO LUCIANO** entre 3 frentes (nenhuma urgente — tudo hoje fechou limpo):
-- **3 portas de config** (abrir cadastro público / onboarding Santi — ação de CONFIG do
-  Luciano, não é código).
-- **Vitrines COMPLETAS do funil** (Camadas 2/3 — marketplace SISGD + vitrine pública do
-  parceiro — spec do orquestrador necessária; motor M48 já roteia; hoje só fez o
-  observatório interno + a jornada).
-- **M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
-
-**Sub-passo opcional antes**: smoke visual manual (login SUPER_ADMIN → `/dashboard/cooperados`
-badges+filtro+card Jornada no detalhe → `/dashboard/relatorios/expansao` botão Converter).
-Smoke programático já rodou verde múltiplas vezes ao vivo — visual é só cosmético.
+PRÓXIMO = **ESCOLHA DO LUCIANO** entre 4 frentes:
+- **(A) Retomar Sprint Máscara na branch** — checkout + Bloco F reviewers
+  (`cooperebr-multitenant-reviewer` + `code-reviewer`) → re-review do orquestrador
+  (git + código lido + suíte 554 rodada ao vivo + smoke E2E ao vivo) → merge --no-ff
+  na main → smoke real INBOUND com `contato+santi@cooperebr.com.br`. Piloto
+  CV-SANTI-001 já seedeado; basta o merge chegar pra alias funcionar.
+- **(B) 3 portas de config** (abrir cadastro público / onboarding Santi — ação de
+  CONFIG do Luciano, não é código).
+- **(C) Vitrines COMPLETAS do funil** (Camadas 2/3 — marketplace SISGD + vitrine
+  pública do parceiro — spec do orquestrador necessária; motor M48 já roteia; até
+  agora só o observatório interno + a jornada foram feitos).
+- **(D) M52c escrituração retrospectiva** (R$ 741 passivo pré-M50 — tarefa de CÓDIGO).
 
 > As opções (A)/(B) e o bloco "Hardening Lateral" ABAIXO são HISTÓRICO pré-M52 — Hardening
 > Lateral=M51 ✅, Faxina C-G=M52a ✅, Melt=M52b ✅ já feitos. Vale a frase acima.
