@@ -33,7 +33,7 @@ import { CooperTokenModule } from '../cooper-token/cooper-token.module';
 import { CooperadosModule } from '../cooperados/cooperados.module';
 
 @Module({
-  imports: [FaturasModule, MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule), CooperTokenModule, forwardRef(() => CooperadosModule)],
+  imports: [forwardRef(() => FaturasModule), MotorPropostaModule, ConfigTenantModule, IndicacoesModule, GatewayPagamentoModule, EmailModule, CepModule, NotificacoesModule, forwardRef(() => ConviteIndicacaoModule), CooperTokenModule, forwardRef(() => CooperadosModule)],
   controllers: [WhatsappFaturaController, WhatsappSimulacaoController],
   providers: [
     WhatsappFaturaService,

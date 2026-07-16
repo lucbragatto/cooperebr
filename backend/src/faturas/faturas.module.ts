@@ -7,9 +7,16 @@ import { NotificacoesModule } from '../notificacoes/notificacoes.module';
 import { ConfigTenantModule } from '../config-tenant/config-tenant.module';
 import { EmailModule } from '../email/email.module';
 import { CooperTokenModule } from '../cooper-token/cooper-token.module';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
-  imports: [NotificacoesModule, ConfigTenantModule, EmailModule, CooperTokenModule],
+  imports: [
+    NotificacoesModule,
+    ConfigTenantModule,
+    EmailModule,
+    CooperTokenModule,
+    forwardRef(() => WhatsappModule),
+  ],
   controllers: [FaturasController],
   providers: [FaturasService, RelatorioFaturaService, PrismaService],
   exports: [FaturasService, RelatorioFaturaService],

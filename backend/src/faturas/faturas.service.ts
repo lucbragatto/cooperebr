@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Optional, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo, DistribuidoraEnum } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -11,6 +11,7 @@ import { UploadDocumentoDto } from './dto/upload-documento.dto';
 import { UploadConcessionariaDto } from './dto/upload-concessionaria.dto';
 import { RelatorioFaturaService } from './relatorio-fatura.service';
 import { CooperTokenService } from '../cooper-token/cooper-token.service';
+import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { calcularTarifaContratual } from '../motor-proposta/lib/calcular-tarifa-contratual';
 
 /**
@@ -277,8 +278,6 @@ export class FaturasService {
   private readonly logger = new Logger(FaturasService.name);
   private supabase: SupabaseClient;
 
-  private readonly waBaseUrl: string;
-
   constructor(
     private prisma: PrismaService,
     private notificacoes: NotificacoesService,
@@ -286,8 +285,13 @@ export class FaturasService {
     private emailService: EmailService,
     private relatorioService: RelatorioFaturaService,
     private cooperTokenService: CooperTokenService,
+    // WhatsappSenderService é REQUIRED. Se o wiring do módulo quebrar,
+    // NestJS deve falhar no boot — não silenciar via undefined + o
+    // .catch(() => {}) do único caller (linha 824). Ver corretiva
+    // 2026-07-16 Achado 2 (revisão do Luciano).
+    @Inject(forwardRef(() => WhatsappSenderService))
+    private waSender: WhatsappSenderService,
   ) {
-    this.waBaseUrl = process.env.WHATSAPP_SERVICE_URL ?? 'http://localhost:3002';
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_KEY!,
@@ -981,7 +985,11 @@ export class FaturasService {
         this.logger.log(`Email relatório enviado para ${cooperado.email}`);
       }
 
-      // WhatsApp
+      // WhatsApp — via fachada (WhatsappSenderService). Sucesso só com 2xx
+      // verificado dentro do sender (D-novo-WA-DEV-FALSE-OK precedente +
+      // corretiva 2026-07-16 Achado 2): endpoint anterior /api/send não
+      // existia no whatsapp-service, todo envio retornava 404 e era logado
+      // como sucesso silencioso.
       if (cooperado.telefone) {
         const economia = relatorio.economia.economiaReais.toFixed(2);
         const economiaPerc = relatorio.economia.economiaPercentual.toFixed(0);
@@ -992,15 +1000,17 @@ export class FaturasService {
         const mensagem = `Olá ${nome}! Sua fatura de ${mesLabel} está disponível. Você economizou R$${economia} (${economiaPerc}%) este mês! Ver relatório completo: ${portalUrl}`;
 
         try {
-          await fetch(`${this.waBaseUrl}/api/send`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone: cooperado.telefone.replace(/\D/g, ''),
-              message: mensagem,
-            }),
+          const resultado = await this.waSender.enviarMensagem(cooperado.telefone, mensagem, {
+            tipoDisparo: 'RELATORIO_POS_APROVACAO',
+            disparoId: faturaId,
+            cooperadoId: cooperado.id,
+            cooperativaId: cooperado.cooperativaId ?? undefined,
           });
-          this.logger.log(`WA relatório enviado para ${cooperado.telefone}`);
+          if (resultado.enviado) {
+            this.logger.log(`WA relatório enviado para ${cooperado.telefone}`);
+          } else {
+            this.logger.log(`WA relatório NÃO enviado para ${cooperado.telefone} (motivo: ${resultado.motivo})`);
+          }
         } catch (err) {
           this.logger.warn(`Falha ao enviar WA para ${cooperado.telefone}: ${(err as Error).message}`);
         }

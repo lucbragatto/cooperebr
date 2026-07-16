@@ -377,6 +377,28 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-WA-SENDER-CICLO-BILATERAL — `WhatsappSenderService` acoplado a `WhatsappModule` obriga `forwardRef` bilateral com `FaturasModule`; cenário produz injeção `undefined` dependente de ordem de boot
+
+**Severidade:** P2 — hoje mitigado por injeção obrigatória (sem `@Optional`) e specs `new FaturasService(...)` que passam stub explícito. Sem correção, o próximo módulo que precisar do sender vai reforçar o padrão do ciclo bilateral e o risco cresce.
+
+**Origem:** Corretiva de segurança 2026-07-16, Achado 2 (revisão do Luciano). Achado 2 rota `FaturasService.enviarRelatorioAposAprovacao` pra `WhatsappSenderService`. Como `WhatsappModule` já importava `FaturasModule`, o import inverso exigiu `forwardRef` dos DOIS lados + `@Inject(forwardRef(...))` no construtor de `FaturasService`.
+
+**Cenário de falha silenciosa (o motivo do débito existir):**
+
+`forwardRef` bilateral entre módulos + `@Optional` no construtor = NestJS pode resolver o token DEPOIS do boot do consumidor, injetando `undefined`. Se combinado com `.catch(() => {})` no caller externo (linha 824 do `faturas.service.ts` — fire-and-forget), o modo de falha da correção do Achado 2 vira o próprio bug do Achado 2 de novo: nada enviado, nada registrado, silêncio.
+
+Neste commit foi mitigado removendo `@Optional` (falha no boot em vez de silenciosa em runtime), mas o padrão do ciclo bilateral persiste como armadilha estrutural.
+
+**Solução limpa (fora do escopo desta corretiva):**
+
+Extrair `WhatsappSenderService` (278 linhas, standalone) pra um `WhatsappSenderModule` sem dependência de `FaturasModule`. `WhatsappModule` mantém os controllers/services de mais alto nível; `WhatsappSenderModule` só exporta a fachada. `FaturasModule` importa `WhatsappSenderModule` direto — sem ciclo, sem `forwardRef`, sem `@Optional`.
+
+Custo estimado: 1-2h (mover 1 arquivo + 1 arquivo de spec novo + ajustar 4 módulos que importam `WhatsappModule` só pra pegar o sender: `motor-proposta`, `cooperados`, `cobrancas`, `convenios` — verificar antes de mover).
+
+**Como testar que a solução resolveu:** módulo `FaturasModule` importa `WhatsappSenderModule` SEM `forwardRef`. `WhatsappSenderService` no construtor de `FaturasService` sem `@Inject(forwardRef(...))`. `npm run start` sobe. Suíte de faturas verde.
+
+**Status:** ABERTO. Catalogado durante a corretiva 2026-07-16 Achado 2. Não bloqueia produção — mitigação atual (`@Optional` removido) faz NestJS quebrar no boot se o wiring cair.
+
 ### D-novo-EMISSAO-ADMIN-CONTABIL — Conta `5.1.02` tipada DESPESA (deveria PASSIVO) + template F2 errado + F3/F6/clube sem `LancamentoCaixa` (sprint contábil dedicada, depende de D3 Modelo C)
 
 **Severidade:** P2 — token-passivo MAL escriturado na contabilidade preparatória. Não afeta funcionalidade nem cálculos reais (valores R$ canônicos vivem em `ResgateRecibo`/`LancamentoCaixa`/`Cobranca`), mas **bate no item 3 do alvo do Modelo C** ("escriturar token como passivo" — relatório FLUXO-EMISSAO-TOKEN-CONVENIO 15/06/2026). Balanço fica errado em 4 pernas distintas.

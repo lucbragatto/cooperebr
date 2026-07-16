@@ -26,6 +26,8 @@ describe('FaturasService.vincularFaturaManual — BQ.3 A1 IDOR', () => {
     service = new FaturasService(
       prismaMock,
       {} as any, {} as any, {} as any, {} as any, {} as any,
+      // waSender — não é exercitado por vincularFaturaManual, stub inerte.
+      { enviarMensagem: jest.fn() } as any,
     );
     coopFindFirst.mockResolvedValue({ id: 'coop1', nomeCompleto: 'X' });
     ucFindFirst.mockResolvedValue(null);
