@@ -1217,6 +1217,9 @@ export class ConvitesConvenioService {
       await this.waSender.enviarMensagem(convite.telefone, texto, {
         tipoDisparo: 'convite_convenio_otp',
         cooperativaId: convite.cooperativaId,
+        // Corretiva 2026-07-16 Achado 1 — OTP não pode ser espelhado
+        // para o SUPER_ADMIN_PHONE (evita vazamento do 2º fator).
+        sensivel: true,
       });
     } catch (err) {
       whatsappEnviado = false;

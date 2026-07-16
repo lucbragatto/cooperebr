@@ -134,13 +134,20 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
         where: { id: 'conv1' },
         data: { dadosTemp: { definirPinDesafioId: 'd1' } },
       });
+      // Corretiva 2026-07-16 Achado 1 — emissor OTP passa `sensivel: true`
+      // pra evitar espelhamento pro SUPER_ADMIN_PHONE.
       expect(enviarMensagem).toHaveBeenCalledWith(
         '5527981341348',
         expect.stringContaining('123456'),
+        expect.objectContaining({
+          tipoDisparo: 'definir_pin_otp',
+          sensivel: true,
+        }),
       );
       expect(enviarMensagem).toHaveBeenCalledWith(
         '5527981341348',
         expect.stringMatching(/últimos 4 dígitos do CPF/),
+        expect.objectContaining({ sensivel: true }),
       );
     });
   });

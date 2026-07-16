@@ -1721,6 +1721,14 @@ export class WhatsappFluxoMotorService {
     await this.sender.enviarMensagem(
       conversa.telefone,
       `🔐 *Cadastrar PIN*\n\nSeu código: *${desafio.codigo}*\n\nPra confirmar que é você mesmo, digite o código + os *últimos 4 dígitos do CPF* cadastrado, separados por espaço.\n\nExemplo: \`${desafio.codigo} 1234\`\n\nO código expira em 10 minutos.`,
+      {
+        tipoDisparo: 'definir_pin_otp',
+        cooperadoId: conversa.cooperadoId ?? undefined,
+        cooperativaId: conversa.cooperativaId ?? undefined,
+        // Corretiva 2026-07-16 Achado 1 — OTP não pode ser espelhado
+        // para o SUPER_ADMIN_PHONE (evita vazamento do 2º fator).
+        sensivel: true,
+      },
     );
 
     this.logger.log(

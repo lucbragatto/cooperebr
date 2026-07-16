@@ -23,6 +23,37 @@ export interface WhatsappMensagemEnviadaEvent {
  *
  * Em PROD (`AMBIENTE_REAL=true`), nenhum skip dev acontece — só falha real
  * vira `{ enviado: false, motivo: 'erro-runtime' }` ou throw (HTTP 4xx/5xx).
+ *
+ * ─── Corretiva 2026-07-16, Achado 1 (Flag `sensivel`) ──────────────────
+ *
+ * O espelho super-admin (SUPER_ADMIN_PHONE) copia integralmente TODA
+ * mensagem enviada. Hoje dormente (env não setada), mas ativo por desenho.
+ * Se um OTP for espelhado, o segundo fator vaza pro admin.
+ *
+ * Fix: classificação NA ORIGEM (não regex). Quem envia OTP passa
+ * `sensivel: true` em `opcoes`. O bloco do espelho pula quando sensível,
+ * loga `[ESPELHO SKIP: sensivel]`. Envios normais logam `[ESPELHO] enviado`.
+ *
+ * Emissores OTP-por-WA ATIVOS hoje que passam `sensivel: true`:
+ *  - `convenios/convites-convenio.service.ts` — OTP convite convênio
+ *  - `whatsapp/whatsapp-fluxo-motor.service.ts` — código "definir PIN"
+ *
+ * TODO (carry-over — não enviam WA hoje, ficam pendentes):
+ *  - `cooperados/aparelho-vinculado.service.ts` — retorna código plain;
+ *    quando algum caller consumir `iniciarAtivacao` + enviar WA, PASSAR
+ *    `sensivel: true` na chamada.
+ *  - `cooper-token step-up` — carry-over Bloco D; quando
+ *    `TokenNotificacaoService.enviarOtpAltoValor` for wireado pra WA,
+ *    PASSAR `sensivel: true`.
+ *
+ * Cobertura da fachada pelo `sensivel` (completude V1 — 16/07/2026):
+ *  - `enviarMensagem`     — espelha; filtra via `sensivel`. ✓
+ *  - `enviarMenuComBotoes` — delega a `enviarMensagem`, herda o filtro.
+ *    Tipo do 3º arg alargado pra aceitar `sensivel` e propagar. ✓
+ *  - `enviarListaMensagem` — fetch direto pra /send-list, NÃO espelha.
+ *    Sem risco de vazamento pelo super-admin. Nenhuma mudança necessária.
+ *  - `enviarPdfWhatsApp`  — fetch direto pra /send-document, NÃO espelha.
+ *    Sem risco de vazamento pelo super-admin. Nenhuma mudança necessária.
  */
 export type WhatsappEnvioMotivo =
   | 'whitelist-dev'      // pulou por whitelist em DEV (regra 18/05)
@@ -94,7 +125,20 @@ export class WhatsappSenderService {
   async enviarMensagem(
     telefone: string,
     texto: string,
-    opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
+    opcoes?: {
+      tipoDisparo?: string;
+      disparoId?: string;
+      cooperadoId?: string;
+      cooperativaId?: string;
+      /**
+       * Corretiva 2026-07-16 Achado 1 — quando `true`, o espelho pro
+       * SUPER_ADMIN_PHONE é PULADO. Default `false` preserva compat com os
+       * ~43 callers existentes. Só emissores de OTP/2FA setam `true`.
+       * Classificação NA ORIGEM (não regex) — quem sabe que o conteúdo é
+       * sensível é quem constrói a mensagem.
+       */
+      sensivel?: boolean;
+    },
   ): Promise<WhatsappEnvioResult> {
     // Bloquear envio para números de teste/anonimizados
     if (this.isNumeroProtegido(telefone)) {
@@ -129,18 +173,26 @@ export class WhatsappSenderService {
       direcao: 'ENVIADA',
     } as WhatsappMensagemEnviadaEvent);
 
-    // Espelhar para o super admin (exceto se já for ele o destinatário)
+    // Espelhar para o super admin (exceto se já for ele o destinatário
+    // OU se a mensagem for sensível — corretiva 2026-07-16 Achado 1).
     if (this.SUPER_ADMIN_PHONE && telefone.replace(/\D/g, '') !== this.SUPER_ADMIN_PHONE.replace(/\D/g, '')) {
-      const espelho = `📋 *[ESPELHO]* → para *${telefone}*:\n\n${texto}`;
-      try {
-        await fetch(`${this.baseUrl}/send-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: this.SUPER_ADMIN_PHONE, text: espelho }),
-        });
-      } catch (err) {
-        this.logger.warn(`Falha ao espelhar mensagem para super admin: ${err.message}`);
-        // Espelhamento é best-effort — não invalida o envio principal.
+      if (opcoes?.sensivel === true) {
+        // Auditoria do próprio espelho: registra que pulou por sensibilidade.
+        this.logger.log(`[ESPELHO SKIP: sensivel] tipoDisparo=${opcoes?.tipoDisparo ?? '(none)'} destino=${telefone}`);
+      } else {
+        const espelho = `📋 *[ESPELHO]* → para *${telefone}*:\n\n${texto}`;
+        try {
+          await fetch(`${this.baseUrl}/send-message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: this.SUPER_ADMIN_PHONE, text: espelho }),
+          });
+          // Auditoria do próprio espelho: registra que espelhou.
+          this.logger.log(`[ESPELHO] enviado tipoDisparo=${opcoes?.tipoDisparo ?? '(none)'} destino=${telefone}`);
+        } catch (err) {
+          this.logger.warn(`Falha ao espelhar mensagem para super admin: ${err.message}`);
+          // Espelhamento é best-effort — não invalida o envio principal.
+        }
       }
     }
 
@@ -160,7 +212,19 @@ export class WhatsappSenderService {
   async enviarMenuComBotoes(
     telefone: string,
     menu: MenuInterativo,
-    opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string },
+    opcoes?: {
+      tipoDisparo?: string;
+      disparoId?: string;
+      cooperadoId?: string;
+      cooperativaId?: string;
+      /**
+       * Corretiva 2026-07-16 Achado 1 (V1 completude) — propaga a flag pro
+       * `enviarMensagem` que roda por baixo. Se algum dia rolar menu com
+       * conteúdo sensível (código embutido, PIN provisório), o caller
+       * consegue evitar o espelho pro SUPER_ADMIN_PHONE.
+       */
+      sensivel?: boolean;
+    },
   ): Promise<void> {
     if (this.isNumeroProtegido(telefone)) {
       this.logger.warn(`[BLOQUEADO] Menu para número protegido: ${telefone}`);
