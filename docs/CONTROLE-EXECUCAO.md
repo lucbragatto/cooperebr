@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-06-22 (Code) — M48 Sprint Funil Camada 1 MOTOR FECHADO — Roteador A/B/C advisory + AliasParceiroSisgd + LeadExpansao.converter**. Camada 1 do Funil de Aquisição (motor backend). **PASSIVO/ADVISORY only**: decide caminho + grava metadata em 4 campos do Cooperado. NÃO bloqueia, NÃO redireciona, NÃO dispara migração. Enforcement vem nas Camadas 2/3 (vitrines parceiro + SISGD marketplace). Schema delta aditivo: `AliasParceiroSisgd` (tenant-aware, 6 seeds CoopereBR) + `Cooperado.roteamento*` 4 campos + `FaturaProcessada.classificacaoScee` (hook deferido). Matcher: CNPJ direto com validação DV oficial Receita Federal (H2 — evita telefone como CNPJ) + alias ILIKE substring nos 2 sentidos. Cross-tenant lookup intencional documentado — retorno opaco (só tenantAlvo+razao). `LeadExpansao.converter()` fecha gap M47 com typed errors. 23 specs Jest + smoke E2E REAL 3/3 PASS (motor silencioso — D-novo-WA-DEV-FALSE-OK não se aplica). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (2 HIGH + 3 P2 + 2 M + 2 L fixes pré-merge). Commits: `26201d8` (feat) + `e9db14b` (merge --no-ff). Feature branch `feature/funil-roteador-engine` PRESERVADA. **CONVÊNIO COOPERATIVIZADO COMPLETO** (M44 + M46 + M47 + M48). Próximo: **Sprint FAMÍLIA (Fase 2 G1+G4) com conversibilidade de token CONFIGURÁVEL** (abate-fatura não-conversível default + saque gated reusa D2/M41). DEPENDE spec orquestrador. **Camadas 2/3 do Funil (vitrines) BLOQUEADAS pelo Hardening Lateral** (4 P1 M45 + 2 P2 M46 + 2 P2 M47 + 1 P1 M48 LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF — 3ª ocorrência mesmo spoof M45 — pré-requisito obrigatório de exposição pública). Detalhe: `docs/sessoes/2026-06-22-m48-sprint-funil-camada-1-motor.md`.
+> Última atualização: **2026-07-16 (Code) — Corretiva SEG Mensageria WhatsApp 5/7 achados FECHADOS, ZERO push (aguardando revisão Luciano)**. Achados 2, 1, 5, 6, 7 fechados em 6 commits locais (`d5003f4..43fe3f8`) + 1 commit de débito reclassificado (`17501eb`). Achados 3 e 4 pendentes pra próxima sessão. Padrão de correção: classificação NA ORIGEM (não regex), teste do PAR com canal ATIVO via env mockada, prova por mutação obrigatória antes de aprovar. Higiene histórica aplicada: 14 OTPs em claro redigidos no tenant CoopereBR PRINCIPAL (`cmn0ho8b...`, 307 cooperados), todos smoke/canário expirados, metadados 100% preservados. Contagens preventivas: A6 = 263 inbound / 0 PIN residente; A7 = 43 conversas / 0 PIN residente. NENHUM cooperado exposto. 2 débitos novos catalogados (P2 CICLO-BILATERAL + P3 SUPORTE-CORPO-EM-LOG); 1 débito reclassificado (P2 HISTORICO-OVERFETCH RESOLVIDO no A7). Lição de método: os 3 achados mais graves (5, 6, 7) vieram de perguntar "onde mais esse dado vai parar?" após cada correção — não da auditoria original. Regra derivada: todo achado de vazamento aciona varredura de propagação. 34 suites Jest verdes (741 testes) + tsc exit 0. Regra contatos de teste 100% respeitada. Detalhe: `docs/sessoes/2026-07-16-corretiva-seguranca-mensageria-wa.md`.
+>
+> Histórico anterior: **2026-06-22 (Code) — M48 Sprint Funil Camada 1 MOTOR FECHADO**. Camada 1 do Funil de Aquisição (motor backend). **PASSIVO/ADVISORY only**: decide caminho + grava metadata em 4 campos do Cooperado. NÃO bloqueia, NÃO redireciona, NÃO dispara migração. Enforcement vem nas Camadas 2/3 (vitrines parceiro + SISGD marketplace). Schema delta aditivo: `AliasParceiroSisgd` (tenant-aware, 6 seeds CoopereBR) + `Cooperado.roteamento*` 4 campos + `FaturaProcessada.classificacaoScee` (hook deferido). Matcher: CNPJ direto com validação DV oficial Receita Federal (H2 — evita telefone como CNPJ) + alias ILIKE substring nos 2 sentidos. Cross-tenant lookup intencional documentado — retorno opaco (só tenantAlvo+razao). `LeadExpansao.converter()` fecha gap M47 com typed errors. 23 specs Jest + smoke E2E REAL 3/3 PASS (motor silencioso — D-novo-WA-DEV-FALSE-OK não se aplica). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (2 HIGH + 3 P2 + 2 M + 2 L fixes pré-merge). Commits: `26201d8` (feat) + `e9db14b` (merge --no-ff). Feature branch `feature/funil-roteador-engine` PRESERVADA. **CONVÊNIO COOPERATIVIZADO COMPLETO** (M44 + M46 + M47 + M48). Próximo: **Sprint FAMÍLIA (Fase 2 G1+G4) com conversibilidade de token CONFIGURÁVEL** (abate-fatura não-conversível default + saque gated reusa D2/M41). DEPENDE spec orquestrador. **Camadas 2/3 do Funil (vitrines) BLOQUEADAS pelo Hardening Lateral** (4 P1 M45 + 2 P2 M46 + 2 P2 M47 + 1 P1 M48 LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF — 3ª ocorrência mesmo spoof M45 — pré-requisito obrigatório de exposição pública). Detalhe: `docs/sessoes/2026-06-22-m48-sprint-funil-camada-1-motor.md`.
 
 > Histórico: **2026-06-21 (Code) — M47 Sprint Convênio MIGRAÇÃO FECHADO — G2 estados + G5 doc + ciclo admin-manual + smoke real**. Sprint Fase 3 do design 19/06 que FINALIZA o **convênio cooperativizado COMPLETO** (M44 + M46 + M47). Mecânica admin-manual de migração de cooperado de distribuidora/cooperativa CONCORRENTE → SISGD. **Sem roteador A/B/C** (deferido como Sprint Roteador+Funil — aguarda spec do orquestrador + decisão de produto Luciano). Schema delta aditivo (StatusCooperado += PENDENTE_MIGRACAO + DESLIGADO; MigracaoUsina += 5 campos opcionais + 2 indexes), 3 endpoints admin sob `/cooperados/:id/migrar*` com `cooperativaId` SEMPRE do JWT (lição M45), 2 guards billing MUST-FIX (cobrancas + convenios-custeio), cron timeout 30d + AuditLog + WA admin, seed ModeloDocumento DESLIGAMENTO_CONCORRENTE tenant-agnóstico (`{{provedora.*}}` em branco — princípio multi-tenant 17/05). E3 confirmado: cooperado em PENDENTE_MIGRACAO tem saldo CONGELADO via STATUS_PERMITIDOS_CREDITO (7 pontos do circuito). 30 specs Jest + smoke E2E REAL (2 WAs reais ENVIADA pro whitelist 27981341348). Reviewers multitenant + financeiro-token + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (fixes pré-merge aplicados). Commits: `5ee0aff` (feat) + `f36782b` (merge --no-ff). Feature branch `feature/convenio-migracao` PRESERVADA. **Convênio cooperativizado COMPLETO. Família (Fase 2 G1) DEFERIDA até parecer trabalhista.** Próximo: **Sprint ROTEADOR + FUNIL** (depende formalização da spec + decisão produto Luciano sobre vitrine SISGD marketplace). **2 débitos DESTACADOS pra fechar antes de escalar pra 2º parceiro real**: D-novo-M47-DESLIGADO-SALDO-RESIDUAL P2 (inconsistência E1 — tokens travados no DESLIGADO) + D-novo-M47-MSG-MULTI-TENANT-PARCEIRO P2 (mensagens WA hardcodam "CoopereBR" — bloqueia onboarding Consórcio/Associação/Condomínio). Detalhe: `docs/sessoes/2026-06-21-m47-sprint-convenio-migracao.md`.
 
@@ -72,6 +74,52 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-07-16 (Code — Corretiva SEG Mensageria WhatsApp 5/7 achados fechados, ZERO push, aguardando revisão)
+
+**Sessão maratona de segurança pós-auditoria read-only 2026-07-16** do pipeline
+de mensageria WhatsApp. **5 dos 7 achados fechados, 2 pendentes** (Achado 3
+secret webhook na query; Achado 4 sessão Baileys em texto claro). Os achados 5,
+6 e 7 nasceram DURANTE a corretiva — verificações V2, V3 e V4 escalaram
+achados dormentes/latentes em ativos. Todos os fixes usam o mesmo padrão:
+**classificação NA ORIGEM (não regex)**, flag/estado sensível como contexto,
+teste do PAR (não-sensível + sensível) com espelho/canal ATIVO via env
+mockada, e **prova por mutação** demonstrada antes de aprovar.
+
+**6 commits locais em `main`, ZERO push** — instrução explícita "sem push" a
+cada achado, aguardando revisão final do Luciano antes de subir pra origem.
+
+- `d5003f4` — Achado 2 (faturas via fachada + 2xx-only)
+- `efc276b` — Achado 1 (flag `sensivel` no espelho super-admin)
+- `ee54a12` — Achado 5 (REDACTED-OTP no registrarMensagem) + higiene histórica 14 linhas
+- `17501eb` — `docs(debitos)` P2 over-fetching (RECLASSIFICADO no A7 como resolvido)
+- `34f3a57` — Achado 6 (inbound sensível redigido em mensagens_whatsapp)
+- `43fe3f8` — Achado 7 (select + cron + zeragem + hash defesa em prof)
+
+**Higiene histórica aplicada** (operação de dados) — 2026-07-17T00:32 UTC (21:32 BRT 16/07),
+filtro fechado `tipoDisparo IN ('convite_convenio_otp', 'definir_pin_otp') AND conteudo <> '[REDACTED-OTP]'`,
+**14 linhas redigidas** no tenant `cmn0ho8bx0000uox8wu96u6fd` = **CoopereBR PRINCIPAL** (307 cooperados,
+NÃO o "CoopereBR Teste"), janela 2026-06-03 a 2026-06-18 todas expiradas, dados de smoke/canário.
+Metadados 100% preservados. Confirmação pós-UPDATE: em claro = **0**, `[REDACTED-OTP]` = **14**.
+Contagens preventivas dos outros achados: A6 = 263 inbound / 0 PIN; A7 = 43 conversas / 0 residente.
+**Nenhum cooperado foi exposto em nenhum dos 7 achados.**
+
+**Débitos:** P2 novo `D-novo-WA-SENDER-CICLO-BILATERAL` (forwardRef bilateral Faturas↔Whatsapp) · P3 novo `D-novo-WA-SUPORTE-CORPO-EM-LOG` · P2 `D-novo-WA-HISTORICO-OVERFETCH` **RECLASSIFICADO** de "over-fetching cosmético" para "canal de vazamento — ✅ RESOLVIDO no A7".
+
+**Testes**: 34 suites Jest verdes (741 testes) + tsc `--noEmit -p tsconfig.build.json` exit 0. Regra contatos de teste 100% respeitada — ZERO envio real de WA por testes.
+
+**Lição de método catalogada** (não é anedota): 3 dos 5 achados fechados (5, 6, 7) vieram de perguntar "onde mais esse dado vai parar?" DEPOIS de cada correção — não da auditoria original. O `findMany` sem `select` (`17501eb`) foi catalogado por nós como "P2 over-fetching cosmético" quando era o canal de entrega do PIN pro browser. **Regra derivada:** todo achado de vazamento aciona varredura de propagação (cópia visível + cópia de trabalho + logs + payload JSON + histórico). Achado individual sem varredura é meia correção.
+
+**Próximo passo**: retomar corretiva nos Achados 3 (secret webhook query → header + scripts) e 4 (auth_info icacls + README). Detalhado no doc-sessão.
+
+**Pendências FORA da corretiva** (registrar pra não perder):
+- 4 manuais em `docs/manual/` escritos e NÃO commitados (`cadastro-publico-cooperado.md` etc + pastas de imagens; PDFs em Downloads).
+- 2 despesas de demonstração na usina-linhares (E-Solares) — IPTU/ITR R$1.200 + MANUTENCAO_CORRETIVA R$850, resp=PROPRIETARIO. Decisão pendente: manter (demo) ou remover.
+- Investigação mensageria WhatsApp × JurIAG (6 blocos + tabela + recomendação máscara vs. canal próprio) existe só no chat do orquestrador — não está no repo. Fonte da norma "sucesso só com artefato" desta corretiva.
+
+Detalhe: `docs/sessoes/2026-07-16-corretiva-seguranca-mensageria-wa.md`.
 
 ---
 
