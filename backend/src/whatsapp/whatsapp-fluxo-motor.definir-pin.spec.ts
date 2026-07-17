@@ -8,6 +8,7 @@
  *  - CONFIRMAR_PIN_DEFINICAO: confere igualdade + definirPin + zera dadosTemp
  */
 import { WhatsappFluxoMotorService } from './whatsapp-fluxo-motor.service';
+import { hashOtp } from '../common/security/otp-helper';
 
 describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
   let service: WhatsappFluxoMotorService;
@@ -242,21 +243,30 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
       expect(conversaUpdate).not.toHaveBeenCalled();
     });
 
-    it('PIN forte -> guarda em dadosTemp + transita pra AGUARDANDO_CONFIRMACAO', async () => {
+    it('PIN forte -> guarda HASH+SALT (Achado 7) em dadosTemp + transita pra AGUARDANDO_CONFIRMACAO', async () => {
       conversaFindUnique.mockResolvedValueOnce({
         dadosTemp: { definirPinDesafioId: 'd1' },
       });
       await (service as any).executarReceberNovoPinDefinicao(conversa, '482173');
+      // Achado 7 parte 4 — dadosTemp NÃO grava mais o PIN em claro; grava
+      // hash+salt reusando otp-helper (defesa em profundidade). O salt é
+      // aleatório (crypto.randomBytes) — assertamos SHAPE, não valores.
       expect(conversaUpdate).toHaveBeenCalledWith({
         where: { id: 'conv1' },
         data: {
           estado: 'DEFINIR_PIN_AGUARDANDO_CONFIRMACAO',
-          dadosTemp: {
+          dadosTemp: expect.objectContaining({
             definirPinDesafioId: 'd1',
-            definirPinPropostoTemp: '482173',
-          },
+            definirPinPropostoHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+            definirPinPropostoSalt: expect.stringMatching(/^[a-f0-9]{32}$/),
+          }),
         },
       });
+      // PIN em claro NÃO aparece no dadosTemp.
+      const call = conversaUpdate.mock.calls[0][0];
+      const dadosGravados = call.data.dadosTemp as Record<string, unknown>;
+      expect(dadosGravados).not.toHaveProperty('definirPinPropostoTemp');
+      expect(JSON.stringify(dadosGravados)).not.toContain('482173');
       expect(enviarMensagem).toHaveBeenCalledWith(
         '5527981341348',
         expect.stringMatching(/mesmo PIN/),
@@ -268,9 +278,17 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
   // CONFIRMAR_PIN_DEFINICAO
   // ─────────────────────────────────────────────────────────────
   describe('CONFIRMAR_PIN_DEFINICAO', () => {
-    it('Confirmacao NAO bate -> recusa + mantem estado', async () => {
+    it('Confirmacao NAO bate -> Achado 7 parte 3: ZERA dadosTemp E volta pra AGUARDANDO_PIN', async () => {
+      // Achado 7 — antes o caminho de divergência NÃO zerava dadosTemp
+      // (deixava o PIN proposto residente até SAIR/INICIO). Agora limpa
+      // hash+salt e transita pra DEFINIR_PIN_AGUARDANDO_PIN pra reinício.
+      const SALT_TESTE = 'a'.repeat(32);
       conversaFindUnique.mockResolvedValueOnce({
-        dadosTemp: { definirPinPropostoTemp: '482173' },
+        dadosTemp: {
+          definirPinPropostoHash: hashOtp('482173', SALT_TESTE),
+          definirPinPropostoSalt: SALT_TESTE,
+          outroCampo: 'preservar',
+        },
       });
       await (service as any).executarConfirmarPinDefinicao(conversa, '482174');
 
@@ -279,13 +297,22 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
         '5527981341348',
         expect.stringMatching(/não conferem/),
       );
-      expect(conversaUpdate).not.toHaveBeenCalled();
+      // Update AGORA acontece — zeragem defensiva do PIN proposto.
+      expect(conversaUpdate).toHaveBeenCalledWith({
+        where: { id: 'conv1' },
+        data: {
+          estado: 'DEFINIR_PIN_AGUARDANDO_PIN',
+          dadosTemp: { outroCampo: 'preservar' },
+        },
+      });
     });
 
     it('Confirmacao BATE -> chama definirPin + zera dadosTemp.definirPin* + volta MENU_COOPERTOKENS', async () => {
+      const SALT_TESTE = 'b'.repeat(32);
       conversaFindUnique.mockResolvedValueOnce({
         dadosTemp: {
-          definirPinPropostoTemp: '482173',
+          definirPinPropostoHash: hashOtp('482173', SALT_TESTE),
+          definirPinPropostoSalt: SALT_TESTE,
           definirPinDesafioId: 'd1',
           outroCampo: 'preservar',
         },
@@ -303,7 +330,7 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
         where: { id: 'conv1' },
         data: {
           estado: 'MENU_COOPERTOKENS',
-          dadosTemp: { outroCampo: 'preservar' }, // higiene: PIN proposto + desafioId zerados
+          dadosTemp: { outroCampo: 'preservar' }, // higiene: hash+salt+desafioId zerados
         },
       });
       expect(enviarMensagem).toHaveBeenCalledWith(
@@ -313,8 +340,12 @@ describe('WhatsappFluxoMotorService - DEFINIR_PIN fluxo (F1)', () => {
     });
 
     it('Multi-tenant: cooperadoId+cooperativaId passados pra definirPin vem da conversa (JWT-equivalente do bot)', async () => {
+      const SALT_TESTE = 'c'.repeat(32);
       conversaFindUnique.mockResolvedValueOnce({
-        dadosTemp: { definirPinPropostoTemp: '273981' },
+        dadosTemp: {
+          definirPinPropostoHash: hashOtp('273981', SALT_TESTE),
+          definirPinPropostoSalt: SALT_TESTE,
+        },
       });
       pinDefinir.mockResolvedValueOnce(undefined);
 

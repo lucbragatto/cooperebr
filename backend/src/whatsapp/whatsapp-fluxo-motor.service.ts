@@ -14,6 +14,7 @@ import { PinCooperadoService } from '../cooperados/pin-cooperado.service';
 import { LimiteTokenService } from '../cooper-token/limite-token.service';
 // F1 (09/06/2026) — Fluxo "Definir PIN" no submenu CooperTokens (3 estados).
 import { OtpDesafioService } from '../common/security/otp-desafio.service';
+import { compararOtp, gerarSaltOtp, hashOtp } from '../common/security/otp-helper';
 import { isPinFraco } from '../meu-perfil/pin-fraco.helper';
 // Sprint "Qual cadastro?" Fix 1 (08/06/2026)
 import {
@@ -1878,11 +1879,27 @@ export class WhatsappFluxoMotorService {
       select: { dadosTemp: true },
     }))?.dadosTemp ?? {}) as Record<string, unknown>;
 
+    // Corretiva 2026-07-16 Achado 7 — DEFESA EM PROFUNDIDADE, NÃO
+    // CONTENÇÃO. Hasheamos o PIN proposto com sha256+salt (reuso
+    // otp-helper — já auditado + timingSafeEqual), MAS 6 dígitos = 10^6
+    // combinações; um admin com {hash, salt} bruta em ~0.1s. A
+    // contenção real desta ameaça é o `select` explícito no endpoint
+    // /whatsapp/conversas (Achado 7 parte 1) — o hash é seguro-por-
+    // atraso caso o select vaze no futuro por regressão.
+    // NUNCA reusar Cooperado.pinSalt: gravaríamos o mesmo hash da
+    // credencial real no dadosTemp (que vai pro browser via findMany).
+    const propostoSalt = gerarSaltOtp();
+    const propostoHash = hashOtp(pin, propostoSalt);
+
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
       data: {
         estado: 'DEFINIR_PIN_AGUARDANDO_CONFIRMACAO',
-        dadosTemp: { ...dadosTemp, definirPinPropostoTemp: pin } as any,
+        dadosTemp: {
+          ...dadosTemp,
+          definirPinPropostoHash: propostoHash,
+          definirPinPropostoSalt: propostoSalt,
+        } as any,
       },
     });
     await this.sender.enviarMensagem(
@@ -1918,16 +1935,36 @@ export class WhatsappFluxoMotorService {
       where: { id: conversa.id },
       select: { dadosTemp: true },
     }))?.dadosTemp ?? {}) as Record<string, unknown>;
-    const pinProposto = dadosTemp.definirPinPropostoTemp as string | undefined;
-    if (!pinProposto) {
+    // Achado 7 — recupera hash+salt (não mais o PIN em claro).
+    const propostoHash = dadosTemp.definirPinPropostoHash as string | undefined;
+    const propostoSalt = dadosTemp.definirPinPropostoSalt as string | undefined;
+    if (!propostoHash || !propostoSalt) {
       await this.cancelarDefinirPin(conversa, 'estado-perdido');
       return;
     }
 
-    if (pin !== pinProposto) {
+    // Comparação timing-safe via otp-helper.compararOtp.
+    if (!compararOtp(pin, propostoSalt, propostoHash)) {
+      // Achado 7 parte 3 — antes NÃO zerava o dadosTemp aqui, deixando o
+      // PIN proposto residente no banco até SAIR/INICIO. Agora limpa
+      // TAMBÉM no caminho de divergência.
+      const dadosLimpos = { ...dadosTemp };
+      delete (dadosLimpos as any).definirPinPropostoHash;
+      delete (dadosLimpos as any).definirPinPropostoSalt;
+      delete (dadosLimpos as any).definirPinDesafioId;
+      await this.prisma.conversaWhatsapp.update({
+        where: { id: conversa.id },
+        data: {
+          // Volta pro AGUARDANDO_PIN pra o cooperado reiniciar a escolha
+          // (não faz sentido pedir "digite o mesmo PIN" se não temos mais
+          // o que era o "mesmo").
+          estado: 'DEFINIR_PIN_AGUARDANDO_PIN',
+          dadosTemp: dadosLimpos as any,
+        },
+      });
       await this.sender.enviarMensagem(
         conversa.telefone,
-        '❌ Os PINs não conferem. Digite o mesmo PIN escolhido na etapa anterior, ou *0* pra cancelar.',
+        '❌ Os PINs não conferem. Escolha o PIN de novo (6 dígitos), ou *0* pra cancelar.',
       );
       return;
     }
@@ -1945,9 +1982,10 @@ export class WhatsappFluxoMotorService {
       return;
     }
 
-    // Zera credenciais transitórias no dadosTemp (PIN proposto + desafioId).
+    // Zera credenciais transitórias no dadosTemp (hash+salt do PIN + desafioId).
     const dadosLimpos = { ...dadosTemp };
-    delete (dadosLimpos as any).definirPinPropostoTemp;
+    delete (dadosLimpos as any).definirPinPropostoHash;
+    delete (dadosLimpos as any).definirPinPropostoSalt;
     delete (dadosLimpos as any).definirPinDesafioId;
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },
@@ -1980,7 +2018,11 @@ export class WhatsappFluxoMotorService {
       select: { dadosTemp: true },
     }))?.dadosTemp ?? {}) as Record<string, unknown>;
     const limpo = { ...dadosTemp };
+    // Achado 7 — limpa hash+salt (o PIN em claro `definirPinPropostoTemp`
+    // não é mais gravado; delete permanece pra higiene de linhas antigas).
     delete (limpo as any).definirPinPropostoTemp;
+    delete (limpo as any).definirPinPropostoHash;
+    delete (limpo as any).definirPinPropostoSalt;
     delete (limpo as any).definirPinDesafioId;
     await this.prisma.conversaWhatsapp.update({
       where: { id: conversa.id },

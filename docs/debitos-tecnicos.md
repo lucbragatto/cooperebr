@@ -377,30 +377,15 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
-### D-novo-WA-HISTORICO-OVERFETCH — `whatsapp-fatura.controller.ts:278` `getHistorico` faz `findMany` sem `select` — retorna row inteira num endpoint que expõe `conteudo` de mensagem
+### D-novo-WA-HISTORICO-OVERFETCH — ✅ RESOLVIDO 2026-07-16 no Achado 7 (reclassificado — era canal de vazamento, não higiene)
 
-**Severidade:** P2 — surface enlargement em endpoint que já expõe conteúdo de mensagem. Não bloqueia produção (endpoint gated `@Roles(SUPER_ADMIN, ADMIN)` + tenant-isolated), mas o over-fetching amplia o blast radius: qualquer campo novo em `MensagemWhatsapp` (ex.: futura coluna `hash`, `metadata`, `preview_link`) vai leakar automaticamente sem revisão.
+**Status:** ✅ RESOLVIDO em 2026-07-16 (dentro do commit do Achado 7).
 
-**Origem:** Corretiva de segurança 2026-07-16, varredura do Achado 5 (persistência de OTP em claro). Ao mapear os endpoints que expõem `conteudo`, os outros 3 leitores usam `select` explícito e este não.
+**Reclassificação (2026-07-16, revisão do Luciano):** o débito foi originalmente catalogado como "surface enlargement / higiene P2" quando descoberto durante o Achado 5. A varredura V4 do Achado 6 evoluiu pro Achado 7 (PIN persistido em `ConversaWhatsapp.dadosTemp` — hash+salt), e ficou claro que o `findMany` sem `select` **não é over-fetching cosmético; é o CANAL DE ENTREGA do vazamento**. `dadosTemp` é scratchpad por design — hoje tem hash+salt do PIN, amanhã tem o que o próximo fluxo puser. O `select` explícito é a **fronteira de contenção**.
 
-**Onde:**
+**Fix aplicado:** `select` explícito em `getConversas` (`:170`), `getHistorico` (`:278`) e `getHistoricoContato` (`:313`). Campos = shape que a UI usa (ver `web/app/dashboard/whatsapp/page.tsx` interface `Conversa` L29-38 e `ConversaHistoricoMsg` L40-49). Qualquer coluna nova em `MensagemWhatsapp` ou `ConversaWhatsapp` (hash, metadata, preview_link, dadosTemp) NÃO leaka automaticamente sem revisão.
 
-Comparação dos 4 endpoints em `backend/src/whatsapp/whatsapp-fatura.controller.ts` que leem `MensagemWhatsapp`:
-
-| Endpoint | Linha | `select`? | Comportamento |
-|---|---|---|---|
-| `getConversas` (últimas 3 mensagens por conversa) | 194 | ✓ `{ telefone, conteudo, direcao, enviadaEm }` | OK |
-| `getConversaHistorico` | 235 | ✓ 9 campos explícitos | OK |
-| **`getHistorico`** | **278** | **✗ `findMany({ where, orderBy, take, skip })`** | **Retorna row inteira** |
-| `getHistoricoContato` | 313 | ✗ `findMany({ where, orderBy })` sem select | Mesmo problema, menor surface |
-
-**Fix (baixo custo):**
-
-Adicionar `select: { id, telefone, direcao, tipo, conteudo, status, tipoDisparo, disparoId, enviadaEm, entregueEm, lidaEm, createdAt }` — mesmo shape do `getConversaHistorico` (linha 235). Zero mudança de UI.
-
-**Como testar que o fix cobriu:** spec que muta o schema Prisma adicionando um campo `secret` fictício e assert que `getHistorico` NÃO retorna ele. Sem `select` explícito, o teste falharia. Alternativa mais barata: revisão manual da resposta.
-
-**Status:** ABERTO. Catalogado durante a corretiva 2026-07-16 Achado 5. Não bloqueia produção — endpoint já é privilegiado.
+**Como o Achado 7 provou que o fix cobriu:** spec `whatsapp-fatura.controller.achado7.spec.ts` assert que `getConversas` NÃO retorna `dadosTemp`. Prova por mutação: remover o `select` → o teste falha mostrando o payload com `dadosTemp`.
 
 ### D-novo-WA-SENDER-CICLO-BILATERAL — `WhatsappSenderService` acoplado a `WhatsappModule` obriga `forwardRef` bilateral com `FaturasModule`; cenário produz injeção `undefined` dependente de ordem de boot
 

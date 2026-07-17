@@ -167,12 +167,32 @@ export class WhatsappFaturaController {
       }
     }
 
+    // Corretiva 2026-07-16 Achado 7 parte 1 — select EXPLÍCITO.
+    // Antes: findMany sem select retornava a row inteira, incluindo
+    // `dadosTemp` (scratchpad JSON usado pelo fluxo motor pra guardar
+    // hash/salt do PIN proposto durante DEFINIR_PIN — e QUALQUER coisa
+    // que um fluxo futuro colocar lá). O `dadosTemp` chegava no browser
+    // via JSON e ficava legível pelo DevTools de qualquer ADMIN do tenant.
+    // O select é a fronteira de contenção — sem ele, o hash+salt do PIN
+    // proposto (Achado 7 parte 4) vazaria e 10^6 sha256s == PIN em 0.1s.
+    //
+    // Campos incluídos = exatamente os que a UI usa (ver
+    // `web/app/dashboard/whatsapp/page.tsx` interface Conversa L29-38).
+    const CAMPOS_CONVERSA_UI = {
+      id: true,
+      telefone: true,
+      estado: true,
+      cooperadoId: true,
+      cooperativaId: true,
+      updatedAt: true,
+    } as const;
     const [conversas, total] = await Promise.all([
       this.prisma.conversaWhatsapp.findMany({
         where,
         orderBy: { updatedAt: 'desc' },
         take,
         skip,
+        select: CAMPOS_CONVERSA_UI,
       }),
       this.prisma.conversaWhatsapp.count({ where }),
     ]);
@@ -274,12 +294,34 @@ export class WhatsappFaturaController {
     if (direcao && ['ENTRADA', 'SAIDA'].includes(direcao)) where.direcao = direcao;
     if (perfil !== SUPER_ADMIN && cooperativaId) where.cooperativaId = cooperativaId;
 
+    // Corretiva 2026-07-16 Achado 7 parte 1 — select EXPLÍCITO.
+    // Mesmo padrão do getConversas: expor só o shape que a UI consome,
+    // pra qualquer coluna nova em `MensagemWhatsapp` (hash, metadata,
+    // preview_link, etc.) NÃO leakar automaticamente sem revisão.
+    // Absorve o débito P2 D-novo-WA-HISTORICO-OVERFETCH catalogado no
+    // commit 17501eb (reclassificado — era canal de vazamento, não
+    // higiene).
+    const CAMPOS_MENSAGEM_UI = {
+      id: true,
+      telefone: true,
+      direcao: true,
+      tipo: true,
+      conteudo: true,
+      status: true,
+      tipoDisparo: true,
+      disparoId: true,
+      enviadaEm: true,
+      entregueEm: true,
+      lidaEm: true,
+      createdAt: true,
+    } as const;
     const [mensagens, total] = await Promise.all([
       this.prisma.mensagemWhatsapp.findMany({
         where,
         orderBy: { enviadaEm: 'desc' },
         take,
         skip,
+        select: CAMPOS_MENSAGEM_UI,
       }),
       this.prisma.mensagemWhatsapp.count({ where }),
     ]);
@@ -310,9 +352,25 @@ export class WhatsappFaturaController {
     const where: any = { telefone: { contains: telefoneNorm } };
     if (perfil !== SUPER_ADMIN && cooperativaId) where.cooperativaId = cooperativaId;
 
+    // Corretiva 2026-07-16 Achado 7 parte 1 — mesmo select do getHistorico.
+    const CAMPOS_MENSAGEM_UI = {
+      id: true,
+      telefone: true,
+      direcao: true,
+      tipo: true,
+      conteudo: true,
+      status: true,
+      tipoDisparo: true,
+      disparoId: true,
+      enviadaEm: true,
+      entregueEm: true,
+      lidaEm: true,
+      createdAt: true,
+    } as const;
     return this.prisma.mensagemWhatsapp.findMany({
       where,
       orderBy: { enviadaEm: 'asc' },
+      select: CAMPOS_MENSAGEM_UI,
     });
   }
 

@@ -3,6 +3,27 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { WhatsappSenderService } from './whatsapp-sender.service';
 import { AsPlatform } from '../common/tenant-context';
+import { ESTADOS_INBOUND_SENSIVEL } from './whatsapp-bot.service';
+
+/**
+ * Corretiva 2026-07-16 Achado 7 parte 2 — estados que devem ser cobertos
+ * pelo cron `resetarConversasInativas`. O filtro anterior
+ * `startsWith('AGUARDANDO_')` deixava buraco: `DEFINIR_PIN_AGUARDANDO_*`
+ * e `ALTERAR_LIMITE_AGUARDANDO_*` NÃO batem o prefixo, e o PIN proposto
+ * (mesmo hasheado — Achado 7 parte 4) ficaria residente indefinidamente
+ * no `dadosTemp` da conversa. Agora usa lista canônica reutilizando
+ * ESTADOS_INBOUND_SENSIVEL (todo estado que recebe credencial).
+ *
+ * Regra: se um estado recebe credencial no inbound (ver constante do
+ * Achado 6), o cron também zera após 24h. Sinergia: garante que a
+ * higiene do inbound (Achado 6) e a higiene da scratchpad de trabalho
+ * (Achado 7) andam juntas.
+ */
+const ESTADOS_AGUARDANDO_INPUT: ReadonlySet<string> = new Set<string>([
+  ...ESTADOS_INBOUND_SENSIVEL,
+  // Estados dinâmicos legados que já eram cobertos pelo startsWith(): manter
+  // por segurança (a lista canônica é fonte de verdade daqui pra frente).
+]);
 
 @Injectable()
 export class WhatsappConversaJob {
@@ -31,7 +52,19 @@ export class WhatsappConversaJob {
     const { count } = await this.prisma.conversaWhatsapp.updateMany({
       where: {
         AND: [
-          { estado: { startsWith: 'AGUARDANDO_' } },
+          {
+            OR: [
+              // Estados legados dinâmicos (AGUARDANDO_*, ex. MOTOR/gatilhos
+              // do FluxoEtapa criados via banco — WA-16 22/05).
+              { estado: { startsWith: 'AGUARDANDO_' } },
+              // Corretiva 2026-07-16 Achado 7 parte 2 — estados nomeados que
+              // recebem credencial (DEFINIR_PIN_AGUARDANDO_*,
+              // ALTERAR_LIMITE_AGUARDANDO_PIN). Lista canônica em
+              // ESTADOS_AGUARDANDO_INPUT reusa ESTADOS_INBOUND_SENSIVEL do
+              // bot service (fonte única).
+              { estado: { in: [...ESTADOS_AGUARDANDO_INPUT] } },
+            ],
+          },
           { estado: { notIn: ['AGENDADO_RETORNO', 'ENCERRADO'] } },
         ],
         updatedAt: { lt: limite },
