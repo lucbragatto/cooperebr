@@ -14,6 +14,7 @@ import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { PerfilUsuario } from './perfil.enum';
 import { randomUUID } from 'crypto';
 import { STATUS_COOPERADO_ATIVOS } from '../cooperados/cooperado-matcher.helper';
+import { isAmbienteReal, isSupabaseConfigurado } from '../common/safety/ambiente';
 
 @Injectable()
 export class AuthService {
@@ -95,6 +96,35 @@ export class AuthService {
       }
 
       email = usuario.email;
+    }
+
+    // Dev local sem Supabase: senha fixa + usuário no Postgres (ver scripts/seed-dev-local-auth.ts)
+    if (!isSupabaseConfigurado() && !isAmbienteReal()) {
+      const devPassword = process.env.DEV_AUTH_PASSWORD || 'Teste@123';
+      if (senha !== devPassword) {
+        throw new UnauthorizedException('Credenciais inválidas');
+      }
+
+      const usuario: any = await this.prisma.usuario.findUnique({
+        where: { email },
+      });
+      if (!usuario) {
+        throw new UnauthorizedException('Credenciais inválidas');
+      }
+
+      const cooperadoWhere: any[] = [{ email: usuario.email }];
+      if (usuario.cpf) cooperadoWhere.push({ cpf: usuario.cpf });
+      const cooperado = await (this.prisma.cooperado as any).findFirst({
+        where: { OR: cooperadoWhere },
+        select: { id: true, cooperativaId: true },
+      });
+
+      const token = this.assinarToken(usuario.id, usuario.email, usuario.perfil, {
+        cooperadoId: cooperado?.id ?? undefined,
+        cooperativaId: cooperado?.cooperativaId ?? usuario.cooperativaId ?? undefined,
+        administradoraId: usuario.administradoraId ?? undefined,
+      });
+      return { token, usuario: this.formatarUsuario(usuario) };
     }
 
     const { data: supabaseData, error } =
