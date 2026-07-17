@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/cooperebr/app}"
-BRANCH="${BRANCH:-deploy/azure-test}"
+BRANCH="${BRANCH:-deploy/clube-cooperebr}"
 
 cd "$APP_DIR"
 git fetch origin "$BRANCH"

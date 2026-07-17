@@ -10,4 +10,4 @@ packages:
   - postgresql-contrib
 
 runcmd:
-  - [bash, -lc, "mkdir -p /opt/cooperebr && git clone --depth 1 --branch deploy/azure-test https://github.com/lucbragatto/cooperebr.git /opt/cooperebr/app && DB_PASSWORD='__DB_PASSWORD__' JWT_SECRET='__JWT_SECRET__' SUPER_ADMIN_SECRET_KEY='__SUPER_ADMIN_SECRET_KEY__' WHATSAPP_WEBHOOK_SECRET='__WHATSAPP_WEBHOOK_SECRET__' PUBLIC_IP='__PUBLIC_IP__' BRANCH='deploy/azure-test' bash /opt/cooperebr/app/deploy/azure-vm/bootstrap.sh"]
+  - [bash, -lc, "mkdir -p /opt/cooperebr && git clone --depth 1 --branch deploy/clube-cooperebr https://github.com/lucbragatto/cooperebr.git /opt/cooperebr/app && DB_PASSWORD='__DB_PASSWORD__' JWT_SECRET='__JWT_SECRET__' SUPER_ADMIN_SECRET_KEY='__SUPER_ADMIN_SECRET_KEY__' WHATSAPP_WEBHOOK_SECRET='__WHATSAPP_WEBHOOK_SECRET__' PUBLIC_IP='__PUBLIC_IP__' BRANCH='deploy/clube-cooperebr' bash /opt/cooperebr/app/deploy/azure-vm/bootstrap.sh"]

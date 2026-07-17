@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_DIR=/opt/cooperebr/app
 REPO_URL=https://github.com/lucbragatto/cooperebr.git
-BRANCH="${BRANCH:-deploy/azure-test}"
+BRANCH="${BRANCH:-deploy/clube-cooperebr}"
 DB_PASSWORD="${DB_PASSWORD:?DB_PASSWORD required}"
 JWT_SECRET="${JWT_SECRET:?JWT_SECRET required}"
 SUPER_ADMIN_SECRET_KEY="${SUPER_ADMIN_SECRET_KEY:?SUPER_ADMIN_SECRET_KEY required}"
@@ -32,7 +32,7 @@ SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_KEY=your-service-key
 JWT_SECRET=${JWT_SECRET}
 SUPER_ADMIN_SECRET_KEY=${SUPER_ADMIN_SECRET_KEY}
-DEV_AUTH_PASSWORD=Teste@123
+DEV_AUTH_PASSWORD=Clube@123
 PORT=3000
 NODE_ENV=production
 AMBIENTE_REAL=false

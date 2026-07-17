@@ -1,5 +1,5 @@
 /**
- * Seed mínimo para login local sem Supabase.
+ * Seed minimo para login local sem Supabase.
  * Uso: npx ts-node -r dotenv/config --project tsconfig.seed.json scripts/seed-dev-local-auth.ts
  */
 import { PrismaClient, PerfilUsuario } from '@prisma/client';
@@ -7,16 +7,16 @@ import { PrismaClient, PerfilUsuario } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const COOP_CNPJ = '00000000000191';
-const SENHA_INFO = 'Teste@123';
+const SENHA_INFO = 'Clube@123';
 
 async function main() {
-  console.log('[seed-dev-local-auth] Criando tenant + usuários de teste...');
+  console.log('[seed-dev-local-auth] Criando tenant + usuarios do Clube CoopereBR...');
 
   const cooperativa = await prisma.cooperativa.upsert({
     where: { cnpj: COOP_CNPJ },
-    update: { nome: 'CoopereBR Teste', statusSaas: 'TRIAL' },
+    update: { nome: 'Clube CoopereBR', statusSaas: 'TRIAL' },
     create: {
-      nome: 'CoopereBR Teste',
+      nome: 'Clube CoopereBR',
       cnpj: COOP_CNPJ,
       statusSaas: 'TRIAL',
     },
@@ -37,13 +37,13 @@ async function main() {
     },
     {
       email: 'admin@cooperebr.com.br',
-      nome: 'Administrador CoopereBR',
+      nome: 'Administrador Clube CoopereBR',
       perfil: PerfilUsuario.ADMIN,
       cooperativaId: cooperativa.id,
     },
     {
-      email: 'teste@cooperebr.com',
-      nome: 'Cooperado Teste',
+      email: 'cooperado@cooperebr.com.br',
+      nome: 'Cooperado Clube',
       perfil: PerfilUsuario.COOPERADO,
       cooperativaId: null,
     },
@@ -65,16 +65,16 @@ async function main() {
   }
 
   const cooperado = await prisma.cooperado.upsert({
-    where: { email: 'teste@cooperebr.com' },
+    where: { email: 'cooperado@cooperebr.com.br' },
     update: {
-      nomeCompleto: 'Luciano Teste',
+      nomeCompleto: 'Cooperado Clube',
       status: 'ATIVO',
       cooperativaId: cooperativa.id,
     },
     create: {
-      nomeCompleto: 'Luciano Teste',
+      nomeCompleto: 'Cooperado Clube',
       cpf: '12345678901',
-      email: 'teste@cooperebr.com',
+      email: 'cooperado@cooperebr.com.br',
       telefone: '27981341348',
       status: 'ATIVO',
       cooperativaId: cooperativa.id,
@@ -85,11 +85,11 @@ async function main() {
   console.log(`[OK] Cooperado: ${cooperado.nomeCompleto} (${cooperado.email})`);
 
   console.log('');
-  console.log('Login local (sem Supabase):');
+  console.log('Login Clube CoopereBR (sem Supabase):');
   console.log(`  Senha para todos: ${SENHA_INFO}`);
-  console.log('  superadmin@cooperebr.com.br  → SUPER_ADMIN');
-  console.log('  admin@cooperebr.com.br      → ADMIN');
-  console.log('  teste@cooperebr.com         → COOPERADO');
+  console.log('  superadmin@cooperebr.com.br  -> SUPER_ADMIN');
+  console.log('  admin@cooperebr.com.br       -> ADMIN');
+  console.log('  cooperado@cooperebr.com.br   -> COOPERADO');
 }
 
 main()
