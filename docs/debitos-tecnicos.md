@@ -377,6 +377,31 @@ Cobranças PAGAS recentes (5 últimas, 23-27/04) são de cooperados **não indic
 
 ## P2 — Tem mitigação mas precisa resolver antes de produção pública
 
+### D-novo-WA-HISTORICO-OVERFETCH — `whatsapp-fatura.controller.ts:278` `getHistorico` faz `findMany` sem `select` — retorna row inteira num endpoint que expõe `conteudo` de mensagem
+
+**Severidade:** P2 — surface enlargement em endpoint que já expõe conteúdo de mensagem. Não bloqueia produção (endpoint gated `@Roles(SUPER_ADMIN, ADMIN)` + tenant-isolated), mas o over-fetching amplia o blast radius: qualquer campo novo em `MensagemWhatsapp` (ex.: futura coluna `hash`, `metadata`, `preview_link`) vai leakar automaticamente sem revisão.
+
+**Origem:** Corretiva de segurança 2026-07-16, varredura do Achado 5 (persistência de OTP em claro). Ao mapear os endpoints que expõem `conteudo`, os outros 3 leitores usam `select` explícito e este não.
+
+**Onde:**
+
+Comparação dos 4 endpoints em `backend/src/whatsapp/whatsapp-fatura.controller.ts` que leem `MensagemWhatsapp`:
+
+| Endpoint | Linha | `select`? | Comportamento |
+|---|---|---|---|
+| `getConversas` (últimas 3 mensagens por conversa) | 194 | ✓ `{ telefone, conteudo, direcao, enviadaEm }` | OK |
+| `getConversaHistorico` | 235 | ✓ 9 campos explícitos | OK |
+| **`getHistorico`** | **278** | **✗ `findMany({ where, orderBy, take, skip })`** | **Retorna row inteira** |
+| `getHistoricoContato` | 313 | ✗ `findMany({ where, orderBy })` sem select | Mesmo problema, menor surface |
+
+**Fix (baixo custo):**
+
+Adicionar `select: { id, telefone, direcao, tipo, conteudo, status, tipoDisparo, disparoId, enviadaEm, entregueEm, lidaEm, createdAt }` — mesmo shape do `getConversaHistorico` (linha 235). Zero mudança de UI.
+
+**Como testar que o fix cobriu:** spec que muta o schema Prisma adicionando um campo `secret` fictício e assert que `getHistorico` NÃO retorna ele. Sem `select` explícito, o teste falharia. Alternativa mais barata: revisão manual da resposta.
+
+**Status:** ABERTO. Catalogado durante a corretiva 2026-07-16 Achado 5. Não bloqueia produção — endpoint já é privilegiado.
+
 ### D-novo-WA-SENDER-CICLO-BILATERAL — `WhatsappSenderService` acoplado a `WhatsappModule` obriga `forwardRef` bilateral com `FaturasModule`; cenário produz injeção `undefined` dependente de ordem de boot
 
 **Severidade:** P2 — hoje mitigado por injeção obrigatória (sem `@Optional`) e specs `new FaturasService(...)` que passam stub explícito. Sem correção, o próximo módulo que precisar do sender vai reforçar o padrão do ciclo bilateral e o risco cresce.
