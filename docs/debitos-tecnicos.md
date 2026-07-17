@@ -1063,6 +1063,31 @@ populada retroativamente (script de migração one-shot ou cron de backfill).
 
 ## P3 — Pequeno, não bloqueia mas é dívida técnica
 
+### D-novo-WA-SUPORTE-CORPO-EM-LOG — `whatsapp-bot.service.ts:1121` loga corpo em PM2 no estado `AGUARDANDO_ATENDENTE`
+
+**Severidade:** P3 — não vaza credencial (o estado não recebe PIN/OTP), mas pode logar conteúdo privado que o cooperado escreveu no chat de suporte (queixa financeira, saúde, dados pessoais). Logs PM2 ficam em `%LOCALAPPDATA%\pm2\logs` acessíveis pelo usuário Windows do serviço.
+
+**Origem:** Corretiva de segurança 2026-07-16, varredura V3 do Achado 6 (inbound sensível). Ao mapear onde o corpo do inbound é exposto, o log de PM2 apareceu como canal paralelo à persistência em `mensagens_whatsapp`.
+
+**Onde:** `backend/src/whatsapp/whatsapp-bot.service.ts:1121` — `handleAguardandoAtendente`:
+
+```typescript
+// Registrar a mensagem de suporte
+this.logger.log(`Mensagem de suporte de ${telefone}: ${corpo}`);
+```
+
+Único ponto em todo o pipeline WA (bot + sender + whatsapp-service/index.mjs + controller do webhook) que loga `corpo`. Todos os outros logam só `telefone` + `tipo`.
+
+**Fix (baixo custo, 1 linha):**
+
+Remover o `: ${corpo}` do log ou trocar por um preview mascarado:
+```typescript
+this.logger.log(`Mensagem de suporte de ${telefone} (${corpo.length} chars)`);
+```
+A mensagem original continua persistida em `mensagens_whatsapp` (privilegiada, tenant-isolated); o log PM2 fica com metadado só.
+
+**Status:** ABERTO. Não bloqueia produção — logs PM2 são locais e o estado `AGUARDANDO_ATENDENTE` não recebe credencial.
+
 ### [NOVOS — sessão 11/06 Sprint Clube P1 Fase 2 pós-fixes-P1 re-review APROVADO]
 
 #### D-novo-LEDGER-UNIQUE-CONSTRAINT — Endurecer idempotência no banco do CooperTokenLedger

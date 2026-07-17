@@ -14,6 +14,39 @@ import { ConviteIndicacaoService } from '../convite-indicacao/convite-indicacao.
 import { CoopereAiService } from './coopere-ai.service';
 import { coerceDistribuidora } from '../ucs/ucs.service';
 
+/**
+ * Corretiva 2026-07-16 Achado 6 — conjunto de estados de conversa em
+ * que a resposta do cooperado é credencial (PIN, OTP+CPF, valor de
+ * transação sensível).
+ *
+ * Quando `ConversaWhatsapp.estado` bate um destes ANTES de o inbound
+ * ser gravado em `mensagens_whatsapp`, o `conteudo` vira a sentinel
+ * CONTEUDO_REDACTED_INBOUND — os metadados (telefone, direcao, tipo,
+ * status, enviadaEm) ficam intactos.
+ *
+ * Rede de segurança: o spec `whatsapp-bot.service.achado6.spec.ts`
+ * varre todos os estados do fluxo motor e FALHA se existir estado
+ * casando /PIN|OTP|SENHA|LIMITE/i fora desta lista. Heurística vale
+ * no teste, NÃO no runtime — a fonte da verdade é ESTA constante.
+ *
+ * Novo estado sensível entra aqui.
+ */
+export const ESTADOS_INBOUND_SENSIVEL: ReadonlySet<string> = new Set([
+  // DEFINIR_PIN — fluxo do submenu CooperTokens (F1 09/06/2026)
+  'DEFINIR_PIN_AGUARDANDO_OTP',        // resposta = "codigo 4dígCPF" (OTP + CPF)
+  'DEFINIR_PIN_AGUARDANDO_PIN',        // resposta = PIN novo (6 dígitos)
+  'DEFINIR_PIN_AGUARDANDO_CONFIRMACAO',// resposta = PIN novo (confirmação)
+  // ALTERAR_LIMITE — fluxo tier ALTO CooperToken
+  'ALTERAR_LIMITE_AGUARDANDO_PIN',     // resposta = PIN atual (6 dígitos)
+]);
+
+/**
+ * Sentinel gravada em `mensagens_whatsapp.conteudo` quando o inbound
+ * chega em estado sensível. Distinta de `[REDACTED-OTP]` (usada pelo
+ * sender no Achado 5) para a auditoria diferenciar direção.
+ */
+export const CONTEUDO_REDACTED_INBOUND = '[REDACTED-SENSIVEL]';
+
 // Emojis em unicode escape para evitar problemas de encoding no WhatsApp
 const E = {
   oi: '\uD83D\uDC4B',        // 👋
@@ -148,24 +181,45 @@ export class WhatsappBotService {
     return texto;
   }
 
-  async processarMensagem(msg: MensagemRecebida): Promise<void> {
+  /**
+   * Achado 6 (2026-07-16) — grava o inbound em `mensagens_whatsapp`.
+   * Se a conversa está num estado de credencial (PIN/OTP+CPF), redige o
+   * conteúdo com sentinel `[REDACTED-SENSIVEL]`. Metadados intactos.
+   *
+   * Consulta do estado ANTES da gravação; ordem crítica pra o fix não
+   * virar no-op. Método extraído pra ser testado isoladamente sem stub
+   * de todos os deps de `processarMensagem`.
+   */
+  private async gravarInbound(msg: MensagemRecebida, corpo: string): Promise<void> {
     const { telefone } = msg;
-    const corpo = this.respostaEfetiva(msg);
+    const conversaAtual = await this.prisma.conversaWhatsapp.findUnique({
+      where: { telefone },
+      select: { estado: true },
+    });
+    const inboundSensivel =
+      conversaAtual !== null && ESTADOS_INBOUND_SENSIVEL.has(conversaAtual.estado);
 
-    // Registrar mensagem recebida
     try {
       await this.prisma.mensagemWhatsapp.create({
         data: {
           telefone,
           direcao: 'ENTRADA',
           tipo: msg.tipo ?? 'texto',
-          conteudo: corpo || null,
+          conteudo: inboundSensivel ? CONTEUDO_REDACTED_INBOUND : (corpo || null),
           status: 'RECEBIDA',
         },
       });
     } catch (err) {
       this.logger.warn(`Falha ao registrar mensagem recebida: ${err.message}`);
     }
+  }
+
+  async processarMensagem(msg: MensagemRecebida): Promise<void> {
+    const { telefone } = msg;
+    const corpo = this.respostaEfetiva(msg);
+
+    // Registrar mensagem recebida (redigindo se estado sensível — Achado 6).
+    await this.gravarInbound(msg, corpo);
 
     // Espelhar para observadores ativos (Modo Observador) via evento
     this.eventEmitter.emit('whatsapp.mensagem.recebida', {
