@@ -139,3 +139,123 @@ describe('WhatsappSenderService — espelho super-admin + flag `sensivel` (Achad
     expect(espelhouLogs).toHaveLength(0);
   });
 });
+
+/**
+ * Corretiva de segurança 2026-07-16 — Achado 5 (severidade mais alta dos 5).
+ *
+ * `WhatsappSenderService.registrarMensagem` grava o texto completo da
+ * mensagem em `mensagens_whatsapp.conteudo` (`String? @db.Text`). Como o
+ * texto do OTP inclui o código em claro (ex.: "*123456*"), o segundo fator
+ * fica lookupável pra QUALQUER `ADMIN` do tenant via o painel de conversas
+ * (whatsapp-fatura.controller.ts:194/235/278/313 → ConversaDetalhe.tsx:159
+ * renderiza texto integral).
+ *
+ * Contradiz o design catalogado no próprio schema:
+ *   - Convite.otpCodigoHash (schema.prisma:1897) — "NUNCA plain"
+ *   - OtpDesafio.codigoHash (schema.prisma:4167) — "NUNCA armazenar plain"
+ *
+ * Fix: `registrarMensagem` reusa a MESMA flag `sensivel` construída no
+ * Achado 1 (classificação NA ORIGEM). Se `true`, grava sentinel
+ * `[REDACTED-OTP]` no `conteudo`; TODOS os metadados ficam intactos
+ * (direcao, status, tipoDisparo, disparoId, cooperadoId, cooperativaId,
+ * tipo, telefone). Prova de envio permanece; segundo fator some do banco.
+ *
+ * NÃO filtrar por `tipoDisparo` — isso é regex/detecção-por-padrão, o que
+ * o Achado 1 explicitamente proibiu. `tipoDisparo` foi usado one-off pra
+ * redigir o histórico (14 linhas), não pro fluxo vivo.
+ */
+describe('WhatsappSenderService — persistência REDACTED em OTP (Achado 5)', () => {
+  const DESTINO_COOPERADO = '5527981341348';
+  const originalFetch = global.fetch;
+  const originalSuperAdmin = process.env.SUPER_ADMIN_PHONE;
+
+  function response200(): Response {
+    return {
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ ok: true }),
+    } as unknown as Response;
+  }
+
+  function buildSut() {
+    global.fetch = jest.fn(() => Promise.resolve(response200())) as unknown as typeof fetch;
+    const create = jest.fn().mockResolvedValue({ id: 'msg' });
+    const prisma = {
+      mensagemWhatsapp: { create },
+      cooperativa: { findUnique: jest.fn().mockResolvedValue({ nome: 'CoopereBR' }) },
+    };
+    const eventEmitter = { emit: jest.fn() };
+    const sut = new WhatsappSenderService(prisma as any, eventEmitter as any);
+    return { sut, create };
+  }
+
+  beforeEach(() => {
+    // Espelho DESATIVADO — o foco deste describe é a persistência em
+    // `mensagens_whatsapp`, não o espelho super-admin (Achado 1).
+    delete process.env.SUPER_ADMIN_PHONE;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (originalSuperAdmin === undefined) {
+      delete process.env.SUPER_ADMIN_PHONE;
+    } else {
+      process.env.SUPER_ADMIN_PHONE = originalSuperAdmin;
+    }
+    jest.clearAllMocks();
+  });
+
+  it('PAR (1/2) — mensagem NÃO-sensível → conteudo gravado INTEGRAL no banco', async () => {
+    const { sut, create } = buildSut();
+    const TEXTO = 'Olá! Sua fatura de Julho/2026 está disponível. Ver: https://app.cooperebr.com.br';
+
+    await sut.enviarMensagem(DESTINO_COOPERADO, TEXTO, {
+      tipoDisparo: 'RELATORIO_POS_APROVACAO',
+      cooperadoId: 'coop-1',
+      cooperativaId: 'tenant-A',
+      // sensivel omitido → default false
+    });
+
+    // Persistência ocorre 1× (status=ENVIADA).
+    expect(create).toHaveBeenCalledTimes(1);
+    const dataGravada = create.mock.calls[0][0].data;
+    // Conteúdo INTEGRAL (prova que o teste exercita o caminho de gravação).
+    expect(dataGravada.conteudo).toBe(TEXTO);
+    // Metadados canônicos preservados.
+    expect(dataGravada.telefone).toBe(DESTINO_COOPERADO);
+    expect(dataGravada.direcao).toBe('SAIDA');
+    expect(dataGravada.status).toBe('ENVIADA');
+    expect(dataGravada.tipoDisparo).toBe('RELATORIO_POS_APROVACAO');
+    expect(dataGravada.cooperadoId).toBe('coop-1');
+    expect(dataGravada.cooperativaId).toBe('tenant-A');
+  });
+
+  it('PAR (2/2) — mensagem SENSÍVEL (OTP) → conteudo = "[REDACTED-OTP]", metadados INTACTOS', async () => {
+    const { sut, create } = buildSut();
+    const CODIGO_OTP = '842197'; // 6 dígitos aleatórios
+    const TEXTO = `Seu código de confirmação CoopereBR (convênio *Grupo Mule*):\n\n*${CODIGO_OTP}*\n\nVálido por 10 minutos.`;
+
+    await sut.enviarMensagem(DESTINO_COOPERADO, TEXTO, {
+      tipoDisparo: 'convite_convenio_otp',
+      disparoId: 'convite-abc',
+      cooperadoId: 'coop-1',
+      cooperativaId: 'tenant-A',
+      sensivel: true,
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const dataGravada = create.mock.calls[0][0].data;
+    // Conteúdo REDIGIDO — o código NÃO pode aparecer.
+    expect(dataGravada.conteudo).toBe(WhatsappSenderService.CONTEUDO_REDACTED);
+    expect(dataGravada.conteudo).not.toContain(CODIGO_OTP);
+    expect(dataGravada.conteudo).not.toContain('código');
+    // Metadados canônicos preservados (rastreabilidade não é sacrificada).
+    expect(dataGravada.telefone).toBe(DESTINO_COOPERADO);
+    expect(dataGravada.direcao).toBe('SAIDA');
+    expect(dataGravada.status).toBe('ENVIADA');
+    expect(dataGravada.tipoDisparo).toBe('convite_convenio_otp');
+    expect(dataGravada.disparoId).toBe('convite-abc');
+    expect(dataGravada.cooperadoId).toBe('coop-1');
+    expect(dataGravada.cooperativaId).toBe('tenant-A');
+  });
+});

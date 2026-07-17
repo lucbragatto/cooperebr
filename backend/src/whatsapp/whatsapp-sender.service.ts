@@ -315,11 +315,35 @@ export class WhatsappSenderService {
     await this.registrarMensagem(telefone, `[PDF: ${nomeArquivo}] ${caption}`, 'ENVIADA', { ...opcoes, tipo: 'documento' });
   }
 
+  /**
+   * Marcador usado em `mensagens_whatsapp.conteudo` quando a mensagem é
+   * sensível (OTP/2FA). Exportado como constante pra reuso no UPDATE de
+   * redação histórica e nos specs. NÃO trocar o valor sem migrar
+   * histórico + specs juntos.
+   */
+  static readonly CONTEUDO_REDACTED = '[REDACTED-OTP]';
+
   private async registrarMensagem(
     telefone: string,
     conteudo: string,
     status: string,
-    opcoes?: { tipoDisparo?: string; disparoId?: string; cooperadoId?: string; cooperativaId?: string; tipo?: string },
+    opcoes?: {
+      tipoDisparo?: string;
+      disparoId?: string;
+      cooperadoId?: string;
+      cooperativaId?: string;
+      tipo?: string;
+      /**
+       * Corretiva 2026-07-16 Achado 5 — quando `true`, o `conteudo` não
+       * é persistido em claro. Grava sentinel `[REDACTED-OTP]` e mantém
+       * TODOS os metadados intactos (direcao, status, tipoDisparo,
+       * disparoId, cooperadoId, cooperativaId, tipo, telefone). Prova
+       * de envio permanece; segundo fator não fica lookupável no banco.
+       * Classificação NA ORIGEM via a mesma flag do espelho super-admin
+       * (não regex, não tipoDisparo — mesma decisão do Achado 1).
+       */
+      sensivel?: boolean;
+    },
   ): Promise<void> {
     try {
       await this.prisma.mensagemWhatsapp.create({
@@ -327,7 +351,7 @@ export class WhatsappSenderService {
           telefone,
           direcao: 'SAIDA',
           tipo: opcoes?.tipo ?? 'texto',
-          conteudo,
+          conteudo: opcoes?.sensivel === true ? WhatsappSenderService.CONTEUDO_REDACTED : conteudo,
           status,
           tipoDisparo: opcoes?.tipoDisparo ?? null,
           disparoId: opcoes?.disparoId ?? null,
