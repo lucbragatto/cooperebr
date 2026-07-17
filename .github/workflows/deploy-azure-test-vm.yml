@@ -21,5 +21,6 @@ jobs:
           username: ${{ secrets.AZURE_TEST_USER }}
           key: ${{ secrets.AZURE_TEST_SSH_KEY }}
           script_stop: true
+          command_timeout: 30m
           script: |
-            APP_DIR=/opt/cooperebr/app BRANCH=deploy/azure-test bash /opt/cooperebr/app/deploy/azure-vm/deploy.sh
+            sudo APP_DIR=/opt/cooperebr/app BRANCH=deploy/azure-test bash /opt/cooperebr/app/deploy/azure-vm/deploy.sh
