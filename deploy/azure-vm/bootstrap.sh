@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR=/opt/cooperebr/app
+REPO_URL=https://github.com/lucbragatto/cooperebr.git
+BRANCH="${BRANCH:-deploy/azure-test}"
+DB_PASSWORD="${DB_PASSWORD:?DB_PASSWORD required}"
+JWT_SECRET="${JWT_SECRET:?JWT_SECRET required}"
+SUPER_ADMIN_SECRET_KEY="${SUPER_ADMIN_SECRET_KEY:?SUPER_ADMIN_SECRET_KEY required}"
+WHATSAPP_WEBHOOK_SECRET="${WHATSAPP_WEBHOOK_SECRET:?WHATSAPP_WEBHOOK_SECRET required}"
+PUBLIC_IP="${PUBLIC_IP:?PUBLIC_IP required}"
+
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs ca-certificates curl git nginx postgresql postgresql-contrib
+npm install -g pm2
+
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='cooperebr'" | grep -q 1 || sudo -u postgres psql -c "CREATE USER cooperebr WITH PASSWORD '${DB_PASSWORD}';"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='cooperebr'" | grep -q 1 || sudo -u postgres createdb -O cooperebr cooperebr
+sudo -u postgres psql -d cooperebr -c "GRANT ALL PRIVILEGES ON DATABASE cooperebr TO cooperebr;"
+sudo -u postgres psql -d cooperebr -c "GRANT ALL ON SCHEMA public TO cooperebr;"
+
+mkdir -p /opt/cooperebr
+if [ ! -d "$APP_DIR/.git" ]; then
+  git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+fi
+
+cat > "$APP_DIR/backend/.env" <<ENV
+DATABASE_URL=postgresql://cooperebr:${DB_PASSWORD}@localhost:5432/cooperebr
+DIRECT_URL=postgresql://cooperebr:${DB_PASSWORD}@localhost:5432/cooperebr
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-key
+JWT_SECRET=${JWT_SECRET}
+SUPER_ADMIN_SECRET_KEY=${SUPER_ADMIN_SECRET_KEY}
+DEV_AUTH_PASSWORD=Teste@123
+PORT=3000
+NODE_ENV=production
+AMBIENTE_REAL=false
+CORS_ORIGINS=http://localhost:3001,http://localhost:3000,http://${PUBLIC_IP},http://${PUBLIC_IP}:3001
+FRONTEND_URL=http://${PUBLIC_IP}
+WHATSAPP_SERVICE_URL=http://localhost:3002
+WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
+EMAIL_USER=
+IMAP_USER=
+BLOQUEIO_MODELOS_NAO_FIXO=true
+SAQUE_COLABORADOR_PRODUCAO_LIBERADO=false
+MELT_PRODUCAO_LIBERADA=false
+ANTHROPIC_API_KEY=
+OCR_MODEL=claude-sonnet-4-6
+COOPEREAI_MODEL=claude-haiku-4-5-20251001
+COOPEREAI_MAX_TOKENS=512
+ENV
+
+cat > "$APP_DIR/web/.env" <<ENV
+NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}/api
+NEXT_PUBLIC_WHATSAPP_URL=http://${PUBLIC_IP}/wa
+NEXT_PUBLIC_MODO_TESTE=false
+NEXT_PUBLIC_AMBIENTE_REAL=false
+ENV
+
+cat > "$APP_DIR/whatsapp-service/.env" <<ENV
+PORT=3002
+WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
+BACKEND_WEBHOOK_URL=http://localhost:3000/whatsapp/webhook-incoming
+COOPERE_AI_URL=http://localhost:18789/api/sessions/send
+ENV
+
+cat > "$APP_DIR/ecosystem.azure.config.cjs" <<'ENV'
+module.exports = {
+  apps: [
+    {
+      name: 'cooperebr-backend',
+      cwd: '/opt/cooperebr/app/backend',
+      script: 'dist/src/main.js',
+      env: { NODE_ENV: 'production', AMBIENTE_REAL: 'false', PORT: '3000' },
+    },
+    {
+      name: 'cooperebr-frontend',
+      cwd: '/opt/cooperebr/app/web',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3001',
+      env: { NODE_ENV: 'production', PORT: '3001' },
+    },
+    {
+      name: 'cooperebr-whatsapp',
+      cwd: '/opt/cooperebr/app/whatsapp-service',
+      script: 'index.mjs',
+      interpreter: 'node',
+      env: { NODE_ENV: 'production', PORT: '3002' },
+    },
+  ],
+};
+ENV
+
+cat > /etc/nginx/sites-available/cooperebr <<'ENV'
+server {
+  listen 80 default_server;
+  server_name _;
+
+  client_max_body_size 50m;
+
+  location /api/ {
+    proxy_pass http://127.0.0.1:3000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /wa/ {
+    proxy_pass http://127.0.0.1:3002/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location / {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+ENV
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/cooperebr /etc/nginx/sites-enabled/cooperebr
+nginx -t
+systemctl reload nginx
+
+APP_DIR="$APP_DIR" BRANCH="$BRANCH" bash "$APP_DIR/deploy/azure-vm/deploy.sh"
