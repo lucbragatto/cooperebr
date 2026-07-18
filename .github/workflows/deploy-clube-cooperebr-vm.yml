@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - deploy/clube-cooperebr
+      - main
+      - master
 
 concurrency:
   group: clube-cooperebr-vm
@@ -23,4 +24,4 @@ jobs:
           script_stop: true
           command_timeout: 30m
           script: |
-            sudo APP_DIR=/opt/cooperebr/app BRANCH=deploy/clube-cooperebr bash /opt/cooperebr/app/deploy/azure-vm/deploy.sh
+            sudo APP_DIR=/opt/cooperebr/app BRANCH=${{ github.ref_name }} bash /opt/cooperebr/app/deploy/azure-vm/deploy.sh
