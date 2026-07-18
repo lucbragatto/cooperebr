@@ -37,7 +37,7 @@ PORT=3000
 NODE_ENV=production
 AMBIENTE_REAL=false
 CORS_ORIGINS=http://localhost:3001,http://localhost:3000,http://${PUBLIC_IP},http://${PUBLIC_IP}:3001
-FRONTEND_URL=http://${PUBLIC_IP}
+FRONTEND_URL=https://clube.cooperebr.com.br
 WHATSAPP_SERVICE_URL=http://localhost:3002
 WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
 EMAIL_USER=
@@ -52,10 +52,10 @@ COOPEREAI_MAX_TOKENS=512
 ENV
 
 cat > "$APP_DIR/web/.env" <<ENV
-NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}/api
-NEXT_PUBLIC_WHATSAPP_URL=http://${PUBLIC_IP}/wa
+NEXT_PUBLIC_API_URL=https://clube.cooperebr.com.br/api
+NEXT_PUBLIC_WHATSAPP_URL=https://clube.cooperebr.com.br/wa
 NEXT_PUBLIC_MODO_TESTE=false
-NEXT_PUBLIC_AMBIENTE_REAL=false
+NEXT_PUBLIC_AMBIENTE_REAL=true
 ENV
 
 cat > "$APP_DIR/whatsapp-service/.env" <<ENV
