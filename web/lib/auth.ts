@@ -20,6 +20,14 @@ const COOKIE_OPTS = {
   },
 };
 
+const SITE_PUBLICO_URL =
+  process.env.NEXT_PUBLIC_SITE_PUBLICO_URL || 'https://clube.cooperebr.com.br';
+
+function destinoLogout(): string {
+  if (typeof window === 'undefined') return '/';
+  return window.location.hostname === 'localhost' ? '/' : SITE_PUBLICO_URL;
+}
+
 export async function login(identificador: string, senha: string): Promise<void> {
   const { data } = await api.post<AuthResponse>('/auth/login', { identificador, senha });
   Cookies.set(TOKEN_KEY, data.token, COOKIE_OPTS);
@@ -43,7 +51,7 @@ export function logout(): void {
   Cookies.remove(USUARIO_KEY);
   localStorage.removeItem('contexto_ativo');
   localStorage.removeItem('contexto_ativo_id');
-  window.location.href = '/login';
+  window.location.href = destinoLogout();
 }
 
 export function logoutPortal(): void {
@@ -51,7 +59,7 @@ export function logoutPortal(): void {
   Cookies.remove(USUARIO_KEY);
   localStorage.removeItem('contexto_ativo');
   localStorage.removeItem('contexto_ativo_id');
-  window.location.href = '/portal/login';
+  window.location.href = destinoLogout();
 }
 
 export function getUsuario(): Usuario | null {
