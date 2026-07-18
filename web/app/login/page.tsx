@@ -2,12 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowLeft, Leaf, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 import { login } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+const SITE_PUBLICO_URL =
+  process.env.NEXT_PUBLIC_SITE_PUBLICO_URL || 'https://clube.cooperebr.com.br';
 
 // Sprint Portal Empresa 9.0 (04/06/2026) + ajuste Fatia F-G1 (05/06/2026):
 // box dev-only com 2 contas pra acelerar testes — SUPER_ADMIN (acesso a
@@ -75,17 +80,90 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-green-700 tracking-tight">SISGD</h1>
-          <p className="text-gray-500 mt-1 text-sm">Painel Administrativo</p>
-        </div>
+    <div className="min-h-screen bg-[#f6f8f2] text-[#111814]">
+      <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="hidden min-h-screen flex-col justify-between overflow-hidden bg-[#101510] p-10 text-white lg:flex">
+          <div className="relative z-10">
+            <Link
+              href={SITE_PUBLICO_URL}
+              className="inline-flex items-center gap-2 text-sm font-medium text-white/68 transition hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar ao Clube
+            </Link>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Entrar</CardTitle>
-            <CardDescription>Use seu email, CPF ou telefone</CardDescription>
+          <div className="relative z-10 max-w-2xl">
+            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/8 px-4 py-2 text-sm text-white/76 backdrop-blur">
+              <Sparkles className="h-4 w-4 text-[#d7ff65]" />
+              Clube CoopereBR
+            </p>
+            <h1 className="text-5xl font-semibold leading-tight tracking-normal">
+              Acesse sua area do Clube CoopereBR.
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-8 text-white/66">
+              Consulte sua jornada, acompanhe beneficios, Cooper Tokens, indicacoes e as
+              informacoes da sua participacao no ecossistema de energia solar.
+            </p>
+          </div>
+
+          <div className="relative z-10 grid grid-cols-3 gap-3 border-t border-white/14 pt-6 text-sm text-white/68">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-[#d7ff65]" />
+              Acesso seguro
+            </div>
+            <div className="flex items-center gap-2">
+              <Leaf className="h-4 w-4 text-[#d7ff65]" />
+              Energia limpa
+            </div>
+            <div className="flex items-center gap-2">
+              <LockKeyhole className="h-4 w-4 text-[#d7ff65]" />
+              Dados protegidos
+            </div>
+          </div>
+
+          <div
+            className="absolute inset-0 opacity-55"
+            style={{
+              backgroundImage:
+                "linear-gradient(120deg, rgba(16,21,16,0.98) 0%, rgba(16,21,16,0.84) 45%, rgba(16,21,16,0.38) 100%), url('https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1800&q=85')",
+              backgroundPosition: 'center',
+              backgroundSize: 'cover',
+            }}
+          />
+        </section>
+
+        <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
+          <div className="w-full max-w-md">
+            <div className="mb-7 flex justify-center lg:hidden">
+              <Link href={SITE_PUBLICO_URL} className="text-sm font-medium text-[#166534]">
+                Voltar ao Clube CoopereBR
+              </Link>
+            </div>
+
+            <Card className="border-[#dfe5d8] bg-white/92 shadow-xl shadow-[#101510]/5 backdrop-blur">
+              <CardHeader className="space-y-5 text-center">
+                <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border border-[#dfe5d8] bg-white shadow-sm">
+                  <Image
+                    src="/brand/logo-cooperebr.jpg"
+                    alt="Logo CoopereBR"
+                    width={112}
+                    height={112}
+                    priority
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64715b]">
+                    Clube CoopereBR
+                  </p>
+                  <CardTitle className="mt-2 text-2xl text-[#101510]">
+                    Entrar na area do cliente
+                  </CardTitle>
+                  <CardDescription className="mt-2 text-[#667062]">
+                    Use seu email, CPF ou telefone para acessar o sistema do Clube.
+                  </CardDescription>
+                </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,7 +172,7 @@ export default function LoginPage() {
                 <Input
                   id="identificador"
                   type="text"
-                  placeholder="exemplo@email.com"
+                  placeholder="email, CPF ou telefone"
                   value={identificador}
                   onChange={(e) => setIdentificador(e.target.value)}
                   required
@@ -119,7 +197,7 @@ export default function LoginPage() {
               )}
 
               <Button type="submit" className="w-full" disabled={carregando}>
-                {carregando ? 'Entrando...' : 'Entrar'}
+                {carregando ? 'Entrando...' : 'Acessar Clube CoopereBR'}
               </Button>
 
               <div className="text-center">
@@ -184,6 +262,13 @@ export default function LoginPage() {
             )}
           </CardContent>
         </Card>
+
+            <p className="mt-6 text-center text-xs leading-5 text-[#7b8576]">
+              Voce esta acessando o ambiente do Clube CoopereBR. Para conhecer o clube,
+              beneficios e assinatura, volte para o site principal.
+            </p>
+      </div>
+        </section>
       </div>
     </div>
   );

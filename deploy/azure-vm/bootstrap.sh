@@ -54,6 +54,7 @@ ENV
 cat > "$APP_DIR/web/.env" <<ENV
 NEXT_PUBLIC_API_URL=https://cliente.clube.cooperebr.com.br/api
 NEXT_PUBLIC_WHATSAPP_URL=https://cliente.clube.cooperebr.com.br/wa
+NEXT_PUBLIC_SITE_PUBLICO_URL=https://clube.cooperebr.com.br
 NEXT_PUBLIC_MODO_TESTE=false
 NEXT_PUBLIC_AMBIENTE_REAL=true
 ENV
