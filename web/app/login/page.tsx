@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Leaf, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Leaf, LockKeyhole, ShieldCheck, Sparkles, UserPlus } from 'lucide-react';
 import { login } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -199,6 +199,18 @@ export default function LoginPage() {
               <Button type="submit" className="w-full" disabled={carregando}>
                 {carregando ? 'Entrando...' : 'Acessar Clube COOPERE-BR'}
               </Button>
+
+              <div className="rounded-xl border border-[#dfe5d8] bg-[#f6f8f2] p-3 text-center">
+                <p className="text-sm font-medium text-[#101510]">Ainda nao faz parte do clube?</p>
+                <Link
+                  href="/entrar"
+                  className="mt-2 inline-flex items-center justify-center gap-2 text-sm font-semibold text-[#166534] hover:underline"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Fazer cadastro
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
 
               <div className="text-center">
                 <Link href="/esqueci-senha" className="text-sm text-green-700 hover:underline">
