@@ -44,10 +44,22 @@ const etapas = [
   'Receba beneficios e acompanhe tudo online',
 ];
 
-const planos = [
-  { nome: 'Essencial', valor: 'R$ 19', detalhe: 'entrada no clube + beneficios digitais' },
-  { nome: 'Solar+', valor: 'R$ 39', detalhe: 'beneficios ampliados + prioridade em campanhas' },
-  { nome: 'Familia', valor: 'R$ 59', detalhe: 'experiencia compartilhada para multiplos membros' },
+const modelosAdesao = [
+  {
+    titulo: 'Plano configuravel',
+    destaque: 'por cooperativa',
+    texto: 'Cada cooperativa define nome, descricao, valor mensal, status e se o plano cobra ou nao cobra mensalidade.',
+  },
+  {
+    titulo: 'Clube gratis ou pago',
+    destaque: 'cobra: sim/nao',
+    texto: 'Quando cobra, a mensalidade entra separada na cobranca. Quando nao cobra, o membro participa sem linha adicional.',
+  },
+  {
+    titulo: 'Individual ou convenio',
+    destaque: 'cliente ou empresa',
+    texto: 'O cooperado pode aderir individualmente; em convenio, a empresa pode custear todos os membros ativos.',
+  },
 ];
 
 export default function Home() {
@@ -286,8 +298,13 @@ export default function Home() {
               Assinatura
             </p>
             <h2 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight text-[#101510] sm:text-5xl">
-              Planos simples para entrar, evoluir e participar mais.
+              Planos do clube configurados conforme cada parceria.
             </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#667062]">
+              O sistema nao trabalha com uma tabela publica fixa. O valor e as regras do plano
+              sao definidos no painel, por cooperativa ou convenio, e aparecem discriminados na
+              cobranca quando houver mensalidade.
+            </p>
           </div>
           <Link
             href={`${CLIENTE_URL}/entrar`}
@@ -299,14 +316,14 @@ export default function Home() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          {planos.map((plano) => (
-            <article key={plano.nome} className="rounded-2xl border border-[#dce2d4] bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold text-[#5b6c50]">{plano.nome}</p>
-              <p className="mt-4 text-4xl font-semibold text-[#101510]">{plano.valor}</p>
-              <p className="mt-3 min-h-12 text-sm leading-6 text-[#667062]">{plano.detalhe}</p>
+          {modelosAdesao.map((modelo) => (
+            <article key={modelo.titulo} className="rounded-2xl border border-[#dce2d4] bg-white p-6 shadow-sm">
+              <p className="text-sm font-semibold text-[#5b6c50]">{modelo.titulo}</p>
+              <p className="mt-4 text-3xl font-semibold text-[#101510]">{modelo.destaque}</p>
+              <p className="mt-3 min-h-20 text-sm leading-6 text-[#667062]">{modelo.texto}</p>
               <div className="mt-6 h-px bg-[#dce2d4]" />
               <p className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8a9385]">
-                beneficios ajustaveis por campanha
+                beneficios e tiers ajustaveis no painel
               </p>
             </article>
           ))}
