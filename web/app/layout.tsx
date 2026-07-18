@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Clube CoopereBR | Energia solar e beneficios",
+  title: "Clube COOPERE-BR | Energia solar e beneficios",
   description:
     "Clube de energia solar compartilhada, assinatura, beneficios e Cooper Tokens.",
 };

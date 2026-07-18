@@ -33,7 +33,7 @@ const CRED_SUPER_ADMIN: CredTeste = {
 const CRED_ADMIN: CredTeste = {
   email: 'admin@cooperebr.com.br',
   senha: 'Teste@123',
-  titulo: 'ADMIN — CoopereBR',
+  titulo: 'ADMIN — COOPERE-BR',
   desc: 'Admin da cooperativa · /parceiro (gestão tenant) · também acessa /dashboard',
 };
 const CRED_COOPERADO: CredTeste = {
@@ -96,10 +96,10 @@ export default function LoginPage() {
           <div className="relative z-10 max-w-2xl">
             <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/8 px-4 py-2 text-sm text-white/76 backdrop-blur">
               <Sparkles className="h-4 w-4 text-[#d7ff65]" />
-              Clube CoopereBR
+              Clube COOPERE-BR
             </p>
             <h1 className="text-5xl font-semibold leading-tight tracking-normal">
-              Acesse sua area do Clube CoopereBR.
+              Acesse sua area do Clube COOPERE-BR.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-white/66">
               Consulte sua jornada, acompanhe beneficios, Cooper Tokens, indicacoes e as
@@ -137,7 +137,7 @@ export default function LoginPage() {
           <div className="w-full max-w-md">
             <div className="mb-7 flex justify-center lg:hidden">
               <Link href={SITE_PUBLICO_URL} className="text-sm font-medium text-[#166534]">
-                Voltar ao Clube CoopereBR
+                Voltar ao Clube COOPERE-BR
               </Link>
             </div>
 
@@ -146,7 +146,7 @@ export default function LoginPage() {
                 <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border border-[#dfe5d8] bg-white shadow-sm">
                   <Image
                     src="/brand/logo-cooperebr.jpg"
-                    alt="Logo CoopereBR"
+                    alt="Logo COOPERE-BR"
                     width={112}
                     height={112}
                     priority
@@ -155,7 +155,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64715b]">
-                    Clube CoopereBR
+                    Clube COOPERE-BR
                   </p>
                   <CardTitle className="mt-2 text-2xl text-[#101510]">
                     Entrar na area do cliente
@@ -197,7 +197,7 @@ export default function LoginPage() {
               )}
 
               <Button type="submit" className="w-full" disabled={carregando}>
-                {carregando ? 'Entrando...' : 'Acessar Clube CoopereBR'}
+                {carregando ? 'Entrando...' : 'Acessar Clube COOPERE-BR'}
               </Button>
 
               <div className="text-center">
@@ -264,7 +264,7 @@ export default function LoginPage() {
         </Card>
 
             <p className="mt-6 text-center text-xs leading-5 text-[#7b8576]">
-              Voce esta acessando o ambiente do Clube CoopereBR. Para conhecer o clube,
+              Voce esta acessando o ambiente do Clube COOPERE-BR. Para conhecer o clube,
               beneficios e assinatura, volte para o site principal.
             </p>
       </div>

@@ -77,13 +77,13 @@ export default function Home() {
         </div>
 
         <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <Link href="/" className="flex items-center gap-3" aria-label="Clube CoopereBR">
+          <Link href="/" className="flex items-center gap-3" aria-label="Clube COOPERE-BR">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-[#166534]">
               <Sun className="h-5 w-5" />
             </span>
             <span>
               <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-white/62">
-                CoopereBR
+                COOPERE-BR
               </span>
               <span className="block text-base font-semibold">Clube Solar</span>
             </span>
@@ -334,7 +334,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 md:flex-row md:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d7ff65]">
-              Clube CoopereBR
+              Clube COOPERE-BR
             </p>
             <h2 className="mt-3 max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
               A porta de entrada para economia, comunidade e beneficios solares.

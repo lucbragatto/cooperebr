@@ -69,7 +69,7 @@ function EntrarContent() {
 
   function compartilhar() {
     const texto = encodeURIComponent(
-      'Conheça a CoopereBR! Energia solar sem investimento, 100% digital. Economize até 20% na conta de luz 👉 ' +
+      'Conheça a COOPERE-BR! Energia solar sem investimento, 100% digital. Economize até 20% na conta de luz 👉 ' +
         window.location.origin +
         '/entrar',
     );
@@ -82,7 +82,7 @@ function EntrarContent() {
       <header className="py-6 px-4 text-center">
         <div className="flex items-center justify-center gap-2">
           <Sun className="h-8 w-8 text-green-600" />
-          <h1 className="text-2xl font-bold text-green-700">CoopereBR</h1>
+          <h1 className="text-2xl font-bold text-green-700">COOPERE-BR</h1>
         </div>
         <p className="text-sm text-gray-500 mt-1">Energia solar sem investimento</p>
       </header>
@@ -184,7 +184,7 @@ function EntrarContent() {
 
       {/* Footer */}
       <footer className="py-4 text-center text-xs text-gray-400 border-t">
-        CoopereBR — Cooperativa de Energia Solar
+        COOPERE-BR — Cooperativa de Energia Solar
       </footer>
     </div>
   );
