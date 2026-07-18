@@ -36,8 +36,8 @@ DEV_AUTH_PASSWORD=Clube@123
 PORT=3000
 NODE_ENV=production
 AMBIENTE_REAL=false
-CORS_ORIGINS=http://localhost:3001,http://localhost:3000,http://${PUBLIC_IP},http://${PUBLIC_IP}:3001
-FRONTEND_URL=https://clube.cooperebr.com.br
+CORS_ORIGINS=http://localhost:3001,http://localhost:3000,http://${PUBLIC_IP},http://${PUBLIC_IP}:3001,https://clube.cooperebr.com.br,https://cliente.clube.cooperebr.com.br
+FRONTEND_URL=https://cliente.clube.cooperebr.com.br
 WHATSAPP_SERVICE_URL=http://localhost:3002
 WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
 EMAIL_USER=
@@ -52,8 +52,8 @@ COOPEREAI_MAX_TOKENS=512
 ENV
 
 cat > "$APP_DIR/web/.env" <<ENV
-NEXT_PUBLIC_API_URL=https://clube.cooperebr.com.br/api
-NEXT_PUBLIC_WHATSAPP_URL=https://clube.cooperebr.com.br/wa
+NEXT_PUBLIC_API_URL=https://cliente.clube.cooperebr.com.br/api
+NEXT_PUBLIC_WHATSAPP_URL=https://cliente.clube.cooperebr.com.br/wa
 NEXT_PUBLIC_MODO_TESTE=false
 NEXT_PUBLIC_AMBIENTE_REAL=true
 ENV
@@ -95,7 +95,7 @@ ENV
 cat > /etc/nginx/sites-available/cooperebr <<'ENV'
 server {
   listen 80 default_server;
-  server_name _;
+  server_name clube.cooperebr.com.br cliente.clube.cooperebr.com.br;
 
   client_max_body_size 50m;
 

@@ -6,9 +6,10 @@ Ultima atualizacao: 2026-07-18.
 
 ## Ambiente Atual
 
-- URL publica: `https://clube.cooperebr.com.br`
-- Login administrativo: `https://clube.cooperebr.com.br/login`
-- Captacao publica: `https://clube.cooperebr.com.br/entrar`
+- URL publica do clube: `https://clube.cooperebr.com.br`
+- URL do sistema/cliente: `https://cliente.clube.cooperebr.com.br`
+- Login administrativo: `https://cliente.clube.cooperebr.com.br/login`
+- Captacao publica do sistema: `https://cliente.clube.cooperebr.com.br/entrar`
 - Azure resource group: `rg-clube-cooperebr`
 - Azure VM: `vm-clube-cooperebr`
 - IP publico: `20.226.32.2`
@@ -36,7 +37,7 @@ Fluxo de acesso:
 
 ```text
 Internet
-  -> https://clube.cooperebr.com.br
+  -> https://clube.cooperebr.com.br ou https://cliente.clube.cooperebr.com.br
   -> Nginx
   -> /      para frontend Next.js 3001
   -> /api   para backend NestJS 3000
@@ -53,17 +54,27 @@ Nome: clube
 Valor: 20.226.32.2
 ```
 
+E tambem:
+
+```text
+Tipo: A
+Nome: cliente.clube
+Valor: 20.226.32.2
+```
+
 Para validar:
 
 ```powershell
 Resolve-DnsName clube.cooperebr.com.br -Type A -Server 8.8.8.8
-curl.exe -I https://clube.cooperebr.com.br/login
+Resolve-DnsName cliente.clube.cooperebr.com.br -Type A -Server 8.8.8.8
+curl.exe -I https://cliente.clube.cooperebr.com.br/login
 ```
 
 Resultado esperado:
 
 ```text
 clube.cooperebr.com.br -> 20.226.32.2
+cliente.clube.cooperebr.com.br -> 20.226.32.2
 HTTP/1.1 200 OK
 ```
 
@@ -125,8 +136,8 @@ gh secret list --repo lucbragatto/cooperebr
 Validar HTTP/HTTPS:
 
 ```powershell
-curl.exe -I https://clube.cooperebr.com.br/login
-curl.exe -I http://clube.cooperebr.com.br/login
+curl.exe -I https://cliente.clube.cooperebr.com.br/login
+curl.exe -I http://cliente.clube.cooperebr.com.br/login
 ```
 
 Esperado:
@@ -137,7 +148,7 @@ Esperado:
 Validar que credenciais de desenvolvimento nao aparecem publicamente:
 
 ```powershell
-$html = (Invoke-WebRequest -UseBasicParsing https://clube.cooperebr.com.br/login).Content
+$html = (Invoke-WebRequest -UseBasicParsing https://cliente.clube.cooperebr.com.br/login).Content
 $html -match 'superadmin@cooperebr.com.br'
 $html -match 'Credenciais de teste'
 ```
@@ -190,6 +201,7 @@ O certificado foi emitido com Let's Encrypt para:
 
 ```text
 clube.cooperebr.com.br
+cliente.clube.cooperebr.com.br
 ```
 
 Comandos uteis na VM:
@@ -208,8 +220,8 @@ O Certbot instala renovacao automatica via timer do systemd.
 Frontend publicado:
 
 ```text
-NEXT_PUBLIC_API_URL=https://clube.cooperebr.com.br/api
-NEXT_PUBLIC_WHATSAPP_URL=https://clube.cooperebr.com.br/wa
+NEXT_PUBLIC_API_URL=https://cliente.clube.cooperebr.com.br/api
+NEXT_PUBLIC_WHATSAPP_URL=https://cliente.clube.cooperebr.com.br/wa
 NEXT_PUBLIC_MODO_TESTE=false
 NEXT_PUBLIC_AMBIENTE_REAL=true
 ```
@@ -335,7 +347,8 @@ Principais fatos da implantacao inicial:
 - Criado workflow `Deploy Clube CoopereBR VM`.
 - Configurado deploy automatico por push na branch `deploy/clube-cooperebr`.
 - Configurado DNS `clube.cooperebr.com.br` apontando para `20.226.32.2`.
+- Configurado DNS `cliente.clube.cooperebr.com.br` apontando para `20.226.32.2`.
 - Instalado HTTPS com Let's Encrypt.
 - Removidos recursos e secrets antigos com nome de teste.
-- Validado `https://clube.cooperebr.com.br/login` com `200 OK`.
+- Validado `https://cliente.clube.cooperebr.com.br/login` com `200 OK`.
 - Validado que a pagina `/login` nao mostra credenciais dev no ambiente publicado.
