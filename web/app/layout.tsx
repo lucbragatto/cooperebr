@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SISGD | Painel Administrativo",
-  description: "Painel administrativo da cooperativa de energia SISGD",
+  title: "Clube CoopereBR | Energia solar e beneficios",
+  description:
+    "Clube de energia solar compartilhada, assinatura, beneficios e Cooper Tokens.",
 };
 
 export default function RootLayout({
