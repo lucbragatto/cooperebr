@@ -50,6 +50,8 @@ documento novo na raiz `docs/` sem justificativa.
 |---|---|
 | **[sessoes/](sessoes/)** | Resumos de sessões Code e claude.ai (cronológico) |
 | **[playbooks/](playbooks/)** | Playbooks executáveis (Fase C.3, etc.) |
+| **[playbooks/deploy-azure-clube-cooperebr.md](playbooks/deploy-azure-clube-cooperebr.md)** | Deploy Azure em VM unica: como publicar, validar e manter memoria do ambiente `clube.cooperebr.com.br` |
+| **[playbooks/memoria-fluxo-branches-deploy.md](playbooks/memoria-fluxo-branches-deploy.md)** | Memoria operacional: `develop` para testar/validar e `main`/`master` para refletir em producao |
 | **[relatorios/](relatorios/)** | Investigações pontuais (auditoria 11/05, mapeamento 12/05) |
 | **[historico/](historico/)** | Docs movidos pra histórico (SISGD-VISAO 26/04, etc.) |
 

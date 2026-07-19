@@ -1,0 +1,27 @@
+name: Deploy Clube CoopereBR VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: clube-cooperebr-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.AZURE_CLUBE_HOST }}
+          username: ${{ secrets.AZURE_CLUBE_USER }}
+          key: ${{ secrets.AZURE_CLUBE_SSH_KEY }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            sudo APP_DIR=/opt/cooperebr/app BRANCH=${{ github.ref_name }} bash /opt/cooperebr/app/deploy/azure-vm/deploy.sh

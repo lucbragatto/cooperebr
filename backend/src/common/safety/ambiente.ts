@@ -21,3 +21,12 @@
 export function isAmbienteReal(): boolean {
   return process.env.AMBIENTE_REAL === 'true';
 }
+
+/** Supabase com placeholders do .env.example = não configurado (dev local). */
+export function isSupabaseConfigurado(): boolean {
+  const url = process.env.SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_KEY ?? '';
+  if (!url || !key) return false;
+  const placeholders = ['your-project', 'your-service-key', 'your-anon-key'];
+  return !placeholders.some((p) => url.includes(p) || key.includes(p));
+}
