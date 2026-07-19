@@ -15,8 +15,39 @@ if (!WHATSAPP_WEBHOOK_SECRET) {
   console.error('❌ WHATSAPP_WEBHOOK_SECRET não definido no .env — abortando');
   process.exit(1);
 }
-const BACKEND_WEBHOOK_URL =
-  process.env.BACKEND_WEBHOOK_URL || `http://localhost:3000/whatsapp/webhook-incoming?secret=${WHATSAPP_WEBHOOK_SECRET}`;
+// Corretiva 2026-07-16 Achado 3 — secret vai no HEADER `x-whatsapp-secret`,
+// não mais na query string. Query em URL vaza pra log de proxy, histórico
+// de shell, referer e agora sobretudo pra qualquer `.log` do próprio
+// whatsapp-service que ecoe a URL de destino. Receptor aceita ambos na
+// janela de compat (warna quando usa query), mas o emissor não usa mais.
+//
+// ⚠️ Se `BACKEND_WEBHOOK_URL` do .env vier com `?secret=` embutido de setup
+// antigo, o fetch envia HEADER **E** query — o header autoriza primeiro
+// no receptor, o warn de deprecação NÃO dispara, e o secret continua
+// vazando invisível na URL. O sanity check abaixo detecta e limpa.
+function limparSecretDaUrl(raw) {
+  try {
+    const u = new URL(raw);
+    if (!u.searchParams.has('secret')) return raw;
+    u.searchParams.delete('secret');
+    const s = u.toString();
+    return s.endsWith('?') ? s.slice(0, -1) : s;
+  } catch {
+    return raw;
+  }
+}
+const BACKEND_WEBHOOK_URL_RAW =
+  process.env.BACKEND_WEBHOOK_URL || `http://localhost:3000/whatsapp/webhook-incoming`;
+const BACKEND_WEBHOOK_URL = limparSecretDaUrl(BACKEND_WEBHOOK_URL_RAW);
+if (BACKEND_WEBHOOK_URL_RAW !== BACKEND_WEBHOOK_URL) {
+  console.warn(
+    '⚠️  BACKEND_WEBHOOK_URL do .env tinha `?secret=` embutido — REMOVIDO em memória.\n' +
+    '    O secret vai só no header `x-whatsapp-secret` (Corretiva Achado 3).\n' +
+    '    LIMPE o .env: BACKEND_WEBHOOK_URL deve ser só a URL, sem query string.\n' +
+    '    Enquanto o .env tiver query, o warn de migração no backend NÃO dispara\n' +
+    '    (header vence primeiro) → vazamento fica invisível.',
+  );
+}
 const AUTH_DIR = './auth_info';
 
 const logger = pino({ level: 'warn' });
@@ -276,7 +307,10 @@ async function startBaileys() {
 
         await fetch(BACKEND_WEBHOOK_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-whatsapp-secret': WHATSAPP_WEBHOOK_SECRET,
+          },
           body: JSON.stringify(payload),
         });
       } catch (err) {
@@ -559,6 +593,11 @@ app.post('/send-document', async (req, res) => {
 // ─── Iniciar servidor ────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 WhatsApp Service rodando na porta ${PORT}`);
-  console.log(`📡 Webhook: ${BACKEND_WEBHOOK_URL}\n`);
+  // Corretiva 2026-07-16 Achado 3 — a URL logada AQUI já passou pelo
+  // `limparSecretDaUrl` na inicialização, então NÃO tem `?secret=`. O
+  // replace abaixo é defesa em profundidade: se alguém no futuro trocar
+  // a inicialização e o secret voltar pra URL, o startup log do PM2
+  // ainda assim não guarda o valor em disco.
+  console.log(`📡 Webhook: ${BACKEND_WEBHOOK_URL.replace(/secret=[^&]*/gi, 'secret=***REDACTED***')}\n`);
   startBaileys();
 });

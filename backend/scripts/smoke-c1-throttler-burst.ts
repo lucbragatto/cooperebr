@@ -35,11 +35,16 @@ function fail(msg: string) {
   failCount++;
 }
 
-async function callOnce(method: string, p: string, body?: any): Promise<number> {
+async function callOnce(
+  method: string,
+  p: string,
+  body?: any,
+  extraHeaders?: Record<string, string>,
+): Promise<number> {
   try {
     const res = await fetch(`${API}${p}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(extraHeaders ?? {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
     return res.status;
@@ -60,6 +65,7 @@ async function burst(
   p: string,
   body: any,
   n: number,
+  extraHeaders?: Record<string, string>,
 ): Promise<BurstResult> {
   // Burst sequencial — throttler conta requests dentro do mesmo IP.
   const result: BurstResult = {
@@ -69,7 +75,7 @@ async function burst(
     primeiro429: null,
   };
   for (let i = 1; i <= n; i++) {
-    const status = await callOnce(method, p, body);
+    const status = await callOnce(method, p, body, extraHeaders);
     if (status === 429) {
       result.total429++;
       if (result.primeiro429 === null) result.primeiro429 = i;
@@ -143,11 +149,15 @@ async function main() {
 
   // ─── Caso 5: webhook WhatsApp absorve burst ───
   console.log('\n[CASO 5] /whatsapp/webhook-incoming (tier webhook 600/min) — burst 200');
-  const wa = await burst('POST', '/whatsapp/webhook-incoming?secret=invalid', {
+  // Corretiva 2026-07-16 Achado 3 — secret vai no header, não mais na
+  // query. Vale "invalid" mesmo — o objetivo do smoke é o throttler
+  // absorver 200 requests (não é 429), a auth já retorna 401 e conta no
+  // rate no mesmo passo. O teste não deve depender da auth passar.
+  const wa = await burst('POST', '/whatsapp/webhook-incoming', {
     telefone: '+5500000000000',
     tipo: 'texto',
     corpo: 'burst',
-  }, 200);
+  }, 200, { 'x-whatsapp-secret': 'invalid' });
   console.log(`  Resultado: sucesso=${wa.totalSucesso} not429=${wa.totalNot429} 429=${wa.total429} primeiro429=${wa.primeiro429}`);
   if (wa.total429 === 0) {
     pass(`WhatsApp webhook ABSORVE 200 requests sem 429`);

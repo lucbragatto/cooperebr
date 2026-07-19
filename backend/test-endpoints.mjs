@@ -5,10 +5,17 @@ const BASE = 'http://localhost:3000';
 const RESULTS = [];
 let TOKEN = null;
 
+// Corretiva 2026-07-16 Achado 3 — secret do webhook WhatsApp vai no
+// header `x-whatsapp-secret`, não mais na query. O emissor real
+// (whatsapp-service/index.mjs) faz o mesmo. Se `WHATSAPP_WEBHOOK_SECRET`
+// não estiver no env, os testes de webhook batem sem secret e caem em
+// 401 esperado (mantém o comportamento antigo do script).
+const WA_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || '';
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function req(method, path, body = null, useAuth = true) {
-  const headers = { 'Content-Type': 'application/json' };
+async function req(method, path, body = null, useAuth = true, extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
   if (useAuth && TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
@@ -225,13 +232,14 @@ async function testWhatsappCooperadosDisparo() {
 
 async function testWebhookTexto() {
   console.log('\n=== POST /whatsapp/webhook-incoming (texto) ===');
+  const waHeaders = WA_WEBHOOK_SECRET ? { 'x-whatsapp-secret': WA_WEBHOOK_SECRET } : {};
   for (let i = 1; i <= 3; i++) {
     try {
       const r = await req('POST', '/whatsapp/webhook-incoming', {
         telefone: '5511999990001',
         tipo: 'texto',
         corpo: 'Olá, gostaria de informações sobre energia solar',
-      }, false);
+      }, false, waHeaders);
       const ok = r.status === 200 || r.status === 201;
       record('POST /whatsapp/webhook-incoming (texto)', i, r.status, ok,
         ok ? '' : (r.data?.message || JSON.stringify(r.data)));
@@ -243,6 +251,7 @@ async function testWebhookTexto() {
 
 async function testWebhookDocumento() {
   console.log('\n=== POST /whatsapp/webhook-incoming (documento) ===');
+  const waHeaders = WA_WEBHOOK_SECRET ? { 'x-whatsapp-secret': WA_WEBHOOK_SECRET } : {};
   for (let i = 1; i <= 3; i++) {
     try {
       const r = await req('POST', '/whatsapp/webhook-incoming', {
@@ -250,7 +259,7 @@ async function testWebhookDocumento() {
         tipo: 'documento',
         mimeType: 'application/pdf',
         mediaBase64: 'dGVzdGU=', // fake base64, just structure test
-      }, false);
+      }, false, waHeaders);
       const ok = r.status === 200 || r.status === 201;
       record('POST /whatsapp/webhook-incoming (documento)', i, r.status, ok,
         ok ? '' : (r.data?.message || JSON.stringify(r.data)),
