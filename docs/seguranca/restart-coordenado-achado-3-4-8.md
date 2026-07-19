@@ -331,6 +331,95 @@ if ($warns) {
 }
 ```
 
+#### 3.3.2b — IGUALDADE do secret WA entre os DOIS `.env` (sem ecoar valor)
+
+**Por que:** o 3.3.2 acima prova "receptor aceita o header que EU mando"
+— NÃO prova "emissor manda o mesmo secret que o receptor espera". O
+`WHATSAPP_WEBHOOK_SECRET` mora em 2 arquivos (`backend/.env` +
+`whatsapp-service/.env`). Se a rotação do Bloco 3.1 gravar só num
+deles, todo inbound REAL vira 401 silencioso (bot fica mudo pra
+cooperados), e o smoke 3.3.2 passa mesmo assim — porque o clipboard tem
+o valor "novo" que casa com o receptor, mas o emissor (`index.mjs`)
+continua mandando o "antigo". Falso-sucesso.
+
+**Warn ausente NÃO pega esse caso** — secret errado dá 401 (`autorizado
+= false` → `throw`), não fallback de query → warn nunca dispara em
+nenhum cenário de secret errado.
+
+**Comparação estrutural, sem imprimir valor:**
+
+```powershell
+$b = (Select-String -Path C:\Users\Luciano\cooperebr\backend\.env `
+                    -Pattern '^WHATSAPP_WEBHOOK_SECRET=(.+)$' `
+      | Select-Object -First 1).Matches.Groups[1].Value
+$w = (Select-String -Path C:\Users\Luciano\cooperebr\whatsapp-service\.env `
+                    -Pattern '^WHATSAPP_WEBHOOK_SECRET=(.+)$' `
+      | Select-Object -First 1).Matches.Groups[1].Value
+
+if (-not $b -or -not $w) {
+  Write-Host "FALHA: uma das linhas WHATSAPP_WEBHOOK_SECRET ausente/vazia (backend=$($b.Length) chars, wa=$($w.Length) chars)"
+} elseif ($b -eq $w) {
+  Write-Host "OK: secrets iguais nos 2 .env (length=$($b.Length))"
+} else {
+  Write-Host "PARAR: secrets divergem — backend=$($b.Length) chars, wa=$($w.Length) chars"
+  Write-Host "       reeditar o .env que ficou pra tras (Bloco 3.1) e refazer 3.3.2 + 3.3.2b."
+}
+```
+
+Se `PARAR` → a rotação vazou pela metade. Corrigir o `.env` faltoso
+com o mesmo valor do outro (**não gerar novo** — ambos têm que casar
+com o valor que já foi propagado pra runtime do backend no restart do
+Bloco 3.2, senão precisa refazer o restart).
+
+#### 3.3.2c — Round-trip REAL emissor→receptor (confirmação ouro, opcional)
+
+**Só o 3.3.2b compara arquivos.** A prova definitiva de que
+`whatsapp-service/index.mjs` (emissor rodando) manda um header que
+`whatsapp-fatura.controller` (receptor rodando) aceita é uma mensagem
+REAL entrando pelo bot.
+
+**Regra de contato de teste (14/05/2026, inegociável):** usar SÓ o
+número whitelistado `27981341348` (Luciano) — nenhum outro cooperado.
+
+**Procedimento (Luciano executa, controlado):**
+
+1. Do WhatsApp mobile no `+55 27 98134-1348`, enviar UMA mensagem
+   qualquer (ex: `"ping"`) pro número do bot da CoopereBR.
+2. Aguardar ~3s pro Baileys receber + `index.mjs` encaminhar pro
+   backend.
+3. Verificar log do backend:
+
+```powershell
+pm2 logs cooperebr-backend --lines 40 --nostream 2>$null `
+  | Select-String "Mensagem recebida de 5527981341348|UnauthorizedException.*Webhook secret"
+```
+
+Esperado:
+- Linha `"Mensagem recebida de 5527981341348 (texto)"` → **processado**
+  (secret ok, receptor aceitou header do emissor).
+- **Nenhuma** linha com `UnauthorizedException` do webhook secret.
+
+Se sair 401 (`UnauthorizedException: Webhook secret inválido`) →
+emissor e receptor divergem em runtime. Isso só é possível se um dos
+processos não recarregou o `.env` após a edição. Cenários:
+
+- Restart do backend não pegou o `.env` novo → refazer Bloco 3.2.
+- `pm2 restart cooperebr-whatsapp` não aconteceu depois da edição do
+  `whatsapp-service/.env` → rodar agora e repetir 3.3.2c.
+- O emissor está com o valor antigo em memória por outro motivo →
+  `pm2 delete cooperebr-whatsapp` + `pm2 start` a partir do
+  ecosystem/comando canônico (última opção; force reload).
+
+Se sair `"Mensagem recebida"` → cadeia inteira valida em runtime real.
+**Este é o único teste que prova o par emissor↔receptor no cenário de
+produção.** 3.3.2 e 3.3.2b são pré-requisitos; sem 3.3.2c, o smoke
+inteiro só descarta ⅔ dos vetores.
+
+**Cleanup:** nenhum. A mensagem `"ping"` ou similar cai no bot como
+qualquer outra mensagem — o próprio bot decide o que fazer com ela
+(provavelmente cai no autoatendimento ou fallback CoopereAI). Não
+precisa apagar nada.
+
 #### 3.3.3 — QR CooperToken — round-trip FUNCIONAL (Achado 9)
 
 Prova que o `COOPERTOKEN_QR_SECRET` que o backend usa em runtime é
@@ -498,6 +587,11 @@ Tarefa registrada pra ciclo dedicado quando for prioritário.
 - [ ] **Achado 3** — backend rebuildado, porta 3000 livre antes
 - [ ] **Achado 3** — smoke 3.3.2: 401 sem secret, 200 com header novo,
       SEM warn de deprecação no log logo depois
+- [ ] **Achado 3** — smoke 3.3.2b: `WHATSAPP_WEBHOOK_SECRET` **idêntico**
+      nos 2 `.env` (comparação estrutural sem ecoar valor)
+- [ ] **Achado 3** — smoke 3.3.2c (ouro): mensagem real do
+      `27981341348` entra no bot e sai como `"Mensagem recebida"` no
+      log (nenhum `UnauthorizedException`)
 - [ ] **Achado 9** — smoke 3.3.3: QR round-trip PASSA (`node -e jwt.verify`
       contra `.env` valida assinatura gerada pelo runtime — prova que
       runtime e `.env` batem)
