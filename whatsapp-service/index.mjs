@@ -8,12 +8,26 @@ import {
 } from 'baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
+import crypto from 'crypto';
 
 const PORT = process.env.PORT || 3002;
 const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET;
 if (!WHATSAPP_WEBHOOK_SECRET) {
   console.error('❌ WHATSAPP_WEBHOOK_SECRET não definido no .env — abortando');
   process.exit(1);
+}
+
+// Corretiva 2026-07-19 — auth pros /send-* de emissão.
+// Mesma lógica do receptor do webhook-incoming (backend
+// whatsapp-fatura.controller.ts): length-check ANTES do timingSafeEqual
+// (RangeError com buffers de tamanhos diferentes vira 500), fonte única
+// pros callers.
+function secretConfere(candidato) {
+  if (!candidato) return false;
+  const got = Buffer.from(candidato);
+  const exp = Buffer.from(WHATSAPP_WEBHOOK_SECRET);
+  if (got.length !== exp.length) return false;
+  return crypto.timingSafeEqual(got, exp);
 }
 // Corretiva 2026-07-16 Achado 3 — secret vai no HEADER `x-whatsapp-secret`,
 // não mais na query string. Query em URL vaza pra log de proxy, histórico
@@ -323,11 +337,28 @@ async function startBaileys() {
 // ─── Express API ─────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: '50mb' }));
-app.use((_req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (_req.method === 'OPTIONS') return res.sendStatus(204);
+
+// Corretiva 2026-07-19 — CORS `*` removido. Serviço vira loopback-only
+// (ver `app.listen(..., '127.0.0.1', ...)` no fim do arquivo). Nada de
+// outra origem via browser alcança a porta — CORS deixa de ter
+// significado prático. Chamador único agora é o backend NestJS (Node
+// server, sem preflight CORS).
+
+// Corretiva 2026-07-19 — Middleware auth pros /send-*.
+// Emissão de mensagem é o vetor de abuso (WhatsApp em nome da CoopereBR
+// pra qualquer telefone). /status e /reconnect ficam sem secret — não
+// mandam mensagem, e estão atrás do bind loopback de qualquer jeito.
+// fail-closed: se por absurdo `WHATSAPP_WEBHOOK_SECRET` sumir do env
+// em runtime, `secretConfere` retorna false → 401. Boot já teria
+// abortado (linha 15), mas é defesa em profundidade.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/send-')) return next();
+  const header = req.headers['x-whatsapp-secret'];
+  const candidato = Array.isArray(header) ? header[0] : header;
+  if (!secretConfere(candidato)) {
+    console.warn(`⚠️  /send-* sem secret válido — bloqueado. path=${req.path} ip=${req.ip}`);
+    return res.status(401).json({ error: 'x-whatsapp-secret ausente ou inválido' });
+  }
   next();
 });
 
@@ -591,8 +622,15 @@ app.post('/send-document', async (req, res) => {
 });
 
 // ─── Iniciar servidor ────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀 WhatsApp Service rodando na porta ${PORT}`);
+// Corretiva 2026-07-19 — bind LOOPBACK (127.0.0.1) fecha exposição de rede.
+// Backend NestJS fala com o wa-service via `http://localhost:3002` (ver
+// `WhatsappSenderService.baseUrl`). Cross-host chamada não é caso de uso.
+// Consequência conhecida: `web/app/dashboard/whatsapp/page.tsx:139` faz
+// GET :3002/status direto do BROWSER — quebra (browser não alcança 127.0.0.1
+// do serviço). Fix separado: migrar o card pra GET /whatsapp/status do
+// backend (já existe: whatsapp-fatura.controller.ts:123).
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`\n🚀 WhatsApp Service rodando em 127.0.0.1:${PORT} (loopback-only)`);
   // Corretiva 2026-07-16 Achado 3 — a URL logada AQUI já passou pelo
   // `limparSecretDaUrl` na inicialização, então NÃO tem `?secret=`. O
   // replace abaixo é defesa em profundidade: se alguém no futuro trocar

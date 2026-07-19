@@ -83,6 +83,24 @@ export class WhatsappSenderService {
   private readonly logger = new Logger(WhatsappSenderService.name);
   private readonly baseUrl = process.env.WHATSAPP_SERVICE_URL || 'http://localhost:3002';
 
+  /**
+   * Corretiva 2026-07-19 — header `x-whatsapp-secret` obrigatório nos
+   * `/send-*` do wa-service (bind loopback + middleware secret).
+   * Reusa o MESMO `WHATSAPP_WEBHOOK_SECRET` do webhook-incoming — auth
+   * mútua na fronteira backend↔wa-service. Se o env estiver ausente, o
+   * boot do wa-service já teria abortado; aqui a leitura vazia vira
+   * header vazio, `secretConfere` do wa-service devolve false, request
+   * falha 401 — fail-closed simétrico.
+   */
+  private readonly waSecret = process.env.WHATSAPP_WEBHOOK_SECRET ?? '';
+  private authHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'x-whatsapp-secret': this.waSecret,
+      ...(extra ?? {}),
+    };
+  }
+
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
@@ -152,7 +170,7 @@ export class WhatsappSenderService {
     }
     const res = await fetch(`${this.baseUrl}/send-message`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.authHeaders(),
       body: JSON.stringify({ to: telefone, text: texto }),
     });
     if (!res.ok) {
@@ -184,7 +202,7 @@ export class WhatsappSenderService {
         try {
           await fetch(`${this.baseUrl}/send-message`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this.authHeaders(),
             body: JSON.stringify({ to: this.SUPER_ADMIN_PHONE, text: espelho }),
           });
           // Auditoria do próprio espelho: registra que espelhou.
@@ -262,7 +280,7 @@ export class WhatsappSenderService {
     }
     const res = await fetch(`${this.baseUrl}/send-list`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.authHeaders(),
       body: JSON.stringify({
         to: telefone,
         text: texto,
@@ -297,7 +315,7 @@ export class WhatsappSenderService {
     }
     const res = await fetch(`${this.baseUrl}/send-document`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.authHeaders(),
       body: JSON.stringify({
         to: telefone,
         filePath: pdfPath,
