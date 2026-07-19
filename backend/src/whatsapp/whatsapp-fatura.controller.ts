@@ -1,5 +1,24 @@
-import { Controller, Post, Body, Get, Put, Delete, Logger, Req, Query, Param, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, Delete, Headers, Logger, Req, Query, Param, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import * as crypto from 'crypto';
+
+// Corretiva 2026-07-16 Achado 3 — fonte única de validação do secret webhook.
+//
+// Length-check ANTES do timingSafeEqual: `crypto.timingSafeEqual` LANÇA
+// RangeError com buffers de tamanhos diferentes — sem a guarda, um
+// candidato de tamanho errado vira 500 (stack trace no log do emissor)
+// em vez de 401 limpo. A guarda converte "secret de tamanho errado" em
+// falha silenciosa de auth (cenário C5 da spec).
+//
+// Usada pelos DOIS caminhos de entrada (header x-whatsapp-secret + query
+// `?secret=` na janela de compat) — fonte única impede que uma correção
+// futura conserte um caminho e esqueça o outro.
+function secretConfere(candidato: string | undefined, expected: string): boolean {
+  if (!candidato) return false;
+  const got = Buffer.from(candidato);
+  const exp = Buffer.from(expected);
+  if (got.length !== exp.length) return false;
+  return crypto.timingSafeEqual(got, exp);
+}
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { WhatsappFaturaService } from './whatsapp-fatura.service';
 import { WhatsappBotService } from './whatsapp-bot.service';
@@ -45,14 +64,21 @@ export class WhatsappFaturaController {
   // SkipThrottle({default:true}) desativa o tier default 100/min.
   // Baileys pode mandar burst em broadcast/lista de transmissão
   // (cooperebr é dono do Baileys — não há atacante externo
-  // legítimo neste endpoint). Auth via secret query validado
-  // abaixo.
+  // legítimo neste endpoint).
+  //
+  // Corretiva 2026-07-16 Achado 3 — auth via HEADER `x-whatsapp-secret`
+  // (preferencial). Query `?secret=` mantida como fallback na janela de
+  // compat — emite warn quando usada. Precedência: header > query.
+  // "Header presente" = não-vazio: string vazia cai pro fallback pra não
+  // travar emissor legado que ainda manda por query. Auth validada via
+  // helper único `secretConfere` (length-check + timingSafeEqual).
   @Public()
   @SkipThrottle({ default: true })
   @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook-incoming')
   async webhookIncoming(
-    @Query('secret') secret: string,
+    @Headers('x-whatsapp-secret') secretHeader: string | undefined,
+    @Query('secret') secretQuery: string | undefined,
     @Body() body: {
       telefone: string;
       tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'sticker' | 'location';
@@ -67,11 +93,24 @@ export class WhatsappFaturaController {
     if (!expectedSecret) {
       throw new UnauthorizedException('Webhook secret não configurado');
     }
-    // P3 review security Sprint C (17/06): timingSafeEqual constant-time
-    // pra eliminar vetor de timing attack mesmo em endpoint interno.
-    const got = Buffer.from(secret ?? '');
-    const exp = Buffer.from(expectedSecret);
-    if (got.length !== exp.length || !crypto.timingSafeEqual(got, exp)) {
+    let autorizado = false;
+    if (secretHeader && secretHeader.length > 0) {
+      autorizado = secretConfere(secretHeader, expectedSecret);
+    }
+    if (!autorizado && secretQuery && secretQuery.length > 0) {
+      autorizado = secretConfere(secretQuery, expectedSecret);
+      if (autorizado) {
+        // Warn SÓ quando o fallback query foi EFETIVAMENTE usado (não
+        // quando o header também estava presente e válido). Um warn por
+        // request, sem duplicação — cenário C3 da spec.
+        this.logger.warn(
+          '[WA-WEBHOOK] Secret via query string (deprecated). ' +
+          'Migre o emissor pra header `x-whatsapp-secret`. ' +
+          'A compat será removida em versão futura.',
+        );
+      }
+    }
+    if (!autorizado) {
       throw new UnauthorizedException('Webhook secret inválido');
     }
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);
