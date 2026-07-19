@@ -186,24 +186,72 @@ $novo = ([Convert]::ToBase64String($bytes)) -replace '[+/=]', '_'
 $novo | Set-Clipboard    # clipboard só, NÃO escrever em disco temporário
 Write-Host "Secret novo gerado ($($novo.Length) chars) — no clipboard."
 
-# Editar os DOIS .env manualmente (Notepad, VS Code, etc):
+# Editar os DOIS .env manualmente (Notepad, VS Code, etc) na MESMA
+# passada. Uma edição só por arquivo:
+#
 #   1) C:\Users\Luciano\cooperebr\backend\.env
-#        → WHATSAPP_WEBHOOK_SECRET=<colar do clipboard>
+#        a) WHATSAPP_WEBHOOK_SECRET=<colar do clipboard>
+#        b) CONSOLIDAR COOPERTOKEN_QR_SECRET (Achado 9, ver adiante):
+#           - APAGAR linha 73 (valor de 48 chars, órfão)
+#           - APAGAR linha 75 (string vazia)
+#           - MANTER linha 76 (44 chars — é o valor que o runtime já usa
+#             desde 06/08/2026, provado por simulação dotenv)
+#
 #   2) C:\Users\Luciano\cooperebr\whatsapp-service\.env
-#        → WHATSAPP_WEBHOOK_SECRET=<colar do clipboard>
-#        + LIMPAR BACKEND_WEBHOOK_URL: remover "?secret=..." se ainda
-#          estiver embutido. Deve ficar apenas:
-#          BACKEND_WEBHOOK_URL=http://localhost:3000/whatsapp/webhook-incoming
+#        a) WHATSAPP_WEBHOOK_SECRET=<colar do clipboard>
+#        b) LIMPAR BACKEND_WEBHOOK_URL: remover "?secret=..." se ainda
+#           estiver embutido. Deve ficar apenas:
+#           BACKEND_WEBHOOK_URL=http://localhost:3000/whatsapp/webhook-incoming
 #
 # Ao editar: NÃO deixar `.env.bak` ou `.env.old` com valor antigo no
 # mesmo diretório (grep de secret continua encontrando).
 
 # Confirmar visualmente antes de sair do editor:
-Get-Content C:\Users\Luciano\cooperebr\backend\.env          | Select-String "^WHATSAPP_WEBHOOK_SECRET="
+Get-Content C:\Users\Luciano\cooperebr\backend\.env          | Select-String "^WHATSAPP_WEBHOOK_SECRET=|^COOPERTOKEN_QR_SECRET="
+# Esperado: 1 linha WHATSAPP + 1 linha COOPERTOKEN (SÓ UMA — não 3)
 Get-Content C:\Users\Luciano\cooperebr\whatsapp-service\.env | Select-String "^WHATSAPP_WEBHOOK_SECRET=|^BACKEND_WEBHOOK_URL="
 # BACKEND_WEBHOOK_URL não deve conter "?secret="
 # Ambos WHATSAPP_WEBHOOK_SECRET devem ter o MESMO valor novo.
 ```
+
+### 3.1b — Consolidação `COOPERTOKEN_QR_SECRET` (Achado 9)
+
+**Comportamento-zero, incluído aqui só pra aproveitar a mesma edição
+cuidadosa do `.env` do backend.** Não rotaciona — só remove
+duplicações inconsistentes.
+
+**Estado hoje (`backend/.env`):**
+
+| Linha | Tamanho | Ação |
+|---|---|---|
+| 73 | 48 chars | APAGAR (valor órfão — provável rotação anterior; se estava em backup, é uma segunda cadeia de assinatura não intencional) |
+| 75 | 0 chars | APAGAR (string vazia — bomba silenciosa se virasse a última via reorder) |
+| 76 | 44 chars | **MANTER** (o runtime usa este) |
+
+**Prova de qual valor está ativo** (executada 2026-07-19, read-only):
+
+- `.env` last modified `06/08/2026` (5+ semanas antes do boot atual do backend, uptime 3h).
+- Simulação `require('dotenv').config()` no CWD `C:\Users\Luciano\cooperebr\backend` (mesmo path que `ConfigModule` do NestJS resolve) → `process.env.COOPERTOKEN_QR_SECRET.length = 44`.
+- `[System.Environment]::GetEnvironmentVariable("COOPERTOKEN_QR_SECRET", "User"|"Machine")` = ambos `null` → sem override do SO.
+- 44 chars bate exatamente com linha 76 do `.env`.
+
+**Não restart necessário.** O backend já roda com o valor da linha 76. A
+edição só limpa o arquivo. Ainda assim, a edição acontece no meio da
+janela de restart de qualquer modo (rebuild + `pm2 restart` do Bloco 3.2),
+então o processo vai recarregar o `.env` — reconfirmação passiva de que a
+linha 76 continua sendo a fonte.
+
+**Verificação pós-edit (dentro do Bloco 3.3):**
+
+```powershell
+(Get-Content C:\Users\Luciano\cooperebr\backend\.env | Select-String "^COOPERTOKEN_QR_SECRET=" | Measure-Object).Count
+# Esperado: 1 (não 3)
+```
+
+**Se algum código já tinha assinado tokens com o valor da linha 73** (48
+chars), esses tokens deixam de validar assim que a linha 73 for apagada.
+Como o runtime NUNCA usou linha 73 (dotenv "última vence" desde jun/08),
+nenhum token ativo foi assinado com ela — a remoção é segura.
 
 **Não colar o valor novo em nenhum report, doc-sessão, memória, ou log
 do Code.** Só reportar: "rotacionado".
@@ -311,6 +359,8 @@ zero valores):
 - `COOPERTOKEN_QR_SECRET` (aparece 3× no arquivo — provável
   duplicação, revisar)
 - `WHATSAPP_WEBHOOK_SECRET` (**rotacionado** no Bloco 3 desta corretiva)
+- `COOPERTOKEN_QR_SECRET` (**consolidado** no Bloco 3.1b — Achado 9,
+  não rotacionado, só remove as 2 linhas órfãs)
 
 Tarefa registrada pra ciclo dedicado quando for prioritário.
 
@@ -326,6 +376,8 @@ Tarefa registrada pra ciclo dedicado quando for prioritário.
 - [ ] **Achado 3** — `BACKEND_WEBHOOK_URL` sem query string
 - [ ] **Achado 3** — backend rebuildado, porta 3000 livre antes
 - [ ] **Achado 3** — smoke: 401 sem secret, 200 com header novo
+- [ ] **Achado 9** — `backend/.env` tem SÓ 1 linha `COOPERTOKEN_QR_SECRET=`
+      (não 3), valor de 44 chars mantido
 - [ ] Clipboard limpo (`Set-Clipboard -Value ''`)
 - [ ] Nenhum `.env.bak` / `.env.old` com valor antigo esquecido em disco
 - [ ] Monitor warn=0 rodando (registrar data pra checar em 24h)
