@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,12 @@ import GerenciarListas from '@/components/whatsapp/GerenciarListas';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 
-const WHATSAPP_SERVICE_URL = process.env.NEXT_PUBLIC_WHATSAPP_URL ?? 'http://localhost:3002';
+// Corretiva 2026-07-20 — status e reconnect do wa-service passam pelo
+// backend (GET /whatsapp/status, POST /whatsapp/reconnect). Antes o
+// browser batia direto em :3002 (constante WHATSAPP_SERVICE_URL removida);
+// com o bind loopback do wa-service (Tarefa 2 2026-07-19), o browser nao
+// alcanca mais 127.0.0.1 do servidor. O backend ja fala com :3002 por
+// localhost (WhatsappSenderService.getStatus/reconnect com header secret).
 
 interface StatusBaileys {
   status: 'awaiting_qr' | 'connected' | 'disconnected' | 'failed' | string;
@@ -133,10 +137,10 @@ export default function WhatsAppPage() {
   // Auto-refresh ref
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Buscar status direto do serviço WhatsApp (:3002)
+  // Corretiva 2026-07-20 — via backend proxy (regressao bind loopback T2).
   const fetchStatus = useCallback(async () => {
     try {
-      const { data } = await axios.get<StatusBaileys>(`${WHATSAPP_SERVICE_URL}/status`);
+      const { data } = await api.get<StatusBaileys>('/whatsapp/status');
       setStatus(data);
       return data;
     } catch {
@@ -199,7 +203,8 @@ export default function WhatsAppPage() {
   async function reconnect() {
     setReconnecting(true);
     try {
-      await axios.post(`${WHATSAPP_SERVICE_URL}/reconnect`);
+      // Corretiva 2026-07-20 — via backend proxy (regressao bind loopback T2).
+      await api.post('/whatsapp/reconnect');
       setTimeout(() => { fetchStatus(); setReconnecting(false); }, 2000);
     } catch {
       setReconnecting(false);

@@ -164,6 +164,15 @@ export class WhatsappFaturaController {
     return this.sender.getStatus();
   }
 
+  // Corretiva 2026-07-20 — proxy pra /reconnect do wa-service.
+  // Frontend (page.tsx:202) chamava :3002/reconnect direto, quebrou com
+  // bind loopback (Tarefa 2). Backend proxeia — mesmo Roles do getStatus.
+  @Roles(SUPER_ADMIN, ADMIN)
+  @Post('reconnect')
+  async reconnect() {
+    return this.sender.reconnect();
+  }
+
   // Conversas ativas (tenant-isolated)
   @Roles(SUPER_ADMIN, ADMIN)
   @Get('conversas')

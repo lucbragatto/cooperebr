@@ -124,6 +124,21 @@ export class WhatsappSenderService {
     return res.json();
   }
 
+  /**
+   * Corretiva 2026-07-20 — proxy pra /reconnect do wa-service.
+   * Frontend chamava direto :3002/reconnect (page.tsx:202), quebrou com
+   * o bind loopback da Corretiva 2026-07-19 (Tarefa 2). Backend passa a
+   * fazer o proxy — mesmo padrao do getStatus. Header secret exigido
+   * (Tarefa 2 Middleware).
+   */
+  async reconnect(): Promise<{ ok?: boolean; message?: string; error?: string }> {
+    const res = await fetch(`${this.baseUrl}/reconnect`, {
+      method: 'POST',
+      headers: this.authHeaders(),
+    });
+    return res.json();
+  }
+
   // Número do super admin — recebe cópia de todas as mensagens enviadas pelo sistema
   private readonly SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || null;
 
